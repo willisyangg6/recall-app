@@ -1,0 +1,311 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { loadFixture } from './fsis/fixtures';
+import type { FsisRawRecord } from './fsis/parse';
+import { runFsisIngest } from './pipeline';
+import { MemoryStore } from './store/memory-store';
+
+const NOW = () => new Date('2026-08-21T12:00:00Z');
+
+function input(records: FsisRawRecord[]) {
+  return {
+    records,
+    fetchedAt: NOW().toISOString(),
+    sourceUrl: 'https://www.fsis.usda.gov/fsis/api/recall/v/1?field_translation_language=en',
+  };
+}
+
+/**
+ * Derive a "before" variant of a real record to model a source transition.
+ * Derivations are subtractive/synthetic test inputs only — never displayed or
+ * persisted as recall data outside these tests.
+ */
+function derive(fixture: string, patch: Partial<FsisRawRecord>): FsisRawRecord {
+  return { ...loadFixture(fixture), ...patch };
+}
+
+test('fresh ingest creates cases, records, snapshots, and initial notifications', async () => {
+  const store = new MemoryStore();
+  const records = [
+    loadFixture('recall-active-nationwide-017-2026'),
+    loadFixture('recall-active-stated-states-016-2026'),
+    loadFixture('pha-active-nationwide-pha-08082026-01'),
+  ];
+  const summary = await runFsisIngest(store, input(records), { now: NOW });
+
+  assert.equal(summary.newCases, 3);
+  assert.equal(summary.quarantined.length, 0);
+  assert.equal(store.cases.size, 3);
+  assert.equal(store.sourceRecords.size, 3);
+  assert.equal(store.snapshots.length, 3);
+  // All three published within 30 days of NOW → real initial notifications.
+  assert.equal(summary.notifications.initial, 3);
+  assert.equal(summary.notifications.suppressed, 0);
+
+  // The PHA stays a distinctly labeled notice type, never relabeled as a recall.
+  const pha = [...store.cases.values()].find(
+    (c) => c.projection.noticeType === 'public_health_alert',
+  );
+  assert.ok(pha);
+  assert.equal(pha.projection.classification.value, 'not_applicable_pha');
+});
+
+test('repeat identical ingestion is fully idempotent', async () => {
+  const store = new MemoryStore();
+  const records = [
+    loadFixture('recall-active-nationwide-017-2026'),
+    loadFixture('pha-active-nationwide-pha-08082026-01'),
+  ];
+  await runFsisIngest(store, input(records), { now: NOW });
+  const secondSummary = await runFsisIngest(store, input(records), { now: NOW });
+
+  assert.equal(secondSummary.unchanged, 2);
+  assert.equal(secondSummary.newCases, 0);
+  assert.equal(secondSummary.changedCases, 0);
+  assert.equal(store.cases.size, 2);
+  assert.equal(store.sourceRecords.size, 2);
+  assert.equal(store.snapshots.length, 2); // hash-gated: no duplicate snapshots
+  assert.equal(store.notifications.size, 2); // no duplicate notification events
+});
+
+test('old records at discovery get backfill-suppressed initial notifications', async () => {
+  const store = new MemoryStore();
+  const summary = await runFsisIngest(
+    store,
+    input([loadFixture('recall-closed-dirty-number-034-2024')]), // published 2024-12-20
+    { now: NOW },
+  );
+  assert.equal(summary.newCases, 1);
+  assert.equal(summary.notifications.initial, 0);
+  assert.equal(summary.notifications.suppressed, 1);
+  const event = [...store.notifications.values()][0];
+  assert.equal(event.kind, 'initial');
+  assert.equal(event.suppressed, 'backfill');
+});
+
+test('an in-place source change snapshots but does not notify without a material diff', async () => {
+  const store = new MemoryStore();
+  const original = loadFixture('recall-active-nationwide-017-2026');
+  await runFsisIngest(store, input([original]), { now: NOW });
+
+  // FSIS updates quantity-recovered in place (source contract §4.1) — a Layer-1
+  // change with no consumer-relevant meaning.
+  const edited = derive('recall-active-nationwide-017-2026', {
+    field_qty_recovered: '1,626 lbs',
+  });
+  const summary = await runFsisIngest(store, input([edited]), { now: NOW });
+
+  assert.equal(store.snapshots.length, 2); // new snapshot: the source did change
+  assert.equal(summary.changedCases, 1);
+  assert.equal(
+    [...store.notifications.values()].filter((n) => n.kind === 'material_update').length,
+    0,
+  );
+  // The change is still auditable on the timeline.
+  const recallCase = [...store.cases.values()][0];
+  assert.ok(recallCase.timeline.some((t) => t.kind === 'source_updated' && !t.material));
+});
+
+test('an expansion record joins its parent case and produces one material notification', async () => {
+  // Clock chosen so the expansion's last activity (2026-04-15) is recent.
+  const april = () => new Date('2026-04-20T12:00:00Z');
+  const store = new MemoryStore();
+  await runFsisIngest(store, input([loadFixture('recall-closed-parent-005-2026')]), {
+    now: april,
+  });
+  const summary = await runFsisIngest(
+    store,
+    input([
+      loadFixture('recall-closed-parent-005-2026'),
+      loadFixture('recall-closed-expansion-005-2026-exp'),
+    ]),
+    { now: april },
+  );
+
+  // One coherent case, two government records — not two cards.
+  assert.equal(store.cases.size, 1);
+  assert.equal(store.sourceRecords.size, 2);
+  const expansionRecord = await store.getSourceRecordByNativeId('fsis_api', '005-2026-EXP');
+  assert.equal(expansionRecord?.linkMethod, 'expansion_prefix');
+
+  const updates = [...store.notifications.values()].filter((n) => n.kind === 'material_update');
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].triggerRuleId, 'expansion_products');
+  assert.equal(updates[0].suppressed, null);
+  assert.equal(summary.notifications.materialUpdate, 1);
+
+  // Re-running the same feed must not repeat the logical event.
+  await runFsisIngest(
+    store,
+    input([
+      loadFixture('recall-closed-parent-005-2026'),
+      loadFixture('recall-closed-expansion-005-2026-exp'),
+    ]),
+    { now: april },
+  );
+  assert.equal(
+    [...store.notifications.values()].filter((n) => n.kind === 'material_update').length,
+    1,
+  );
+});
+
+test('closure updates lifecycle without notifying', async () => {
+  const store = new MemoryStore();
+  // Subtractive derivation: the same real record before FSIS closed it.
+  const whileActive = derive('recall-closed-parent-005-2026', {
+    field_recall_type: 'Active Recall',
+    field_closed_year: '',
+    field_archive_recall: 'False',
+  });
+  await runFsisIngest(store, input([whileActive]), { now: NOW });
+  assert.equal([...store.cases.values()][0].projection.state, 'active');
+
+  await runFsisIngest(store, input([loadFixture('recall-closed-parent-005-2026')]), { now: NOW });
+  const recallCase = [...store.cases.values()][0];
+  assert.equal(recallCase.projection.state, 'closed');
+  assert.equal(recallCase.projection.closedYear, '2026');
+  assert.ok(recallCase.timeline.some((t) => t.kind === 'closed' && !t.material));
+  assert.equal(
+    [...store.notifications.values()].filter((n) => n.kind === 'material_update').length,
+    0,
+  );
+});
+
+test('classification assignment is material and notification-eligible', async () => {
+  const store = new MemoryStore();
+  // Derived pre-classification state of a real record (blank classification).
+  const unclassified = derive('recall-active-nationwide-017-2026', {
+    field_recall_classification: '',
+    field_risk_level: '',
+  });
+  await runFsisIngest(store, input([unclassified]), { now: NOW });
+  assert.equal([...store.cases.values()][0].projection.classification.value, 'not_yet_classified');
+
+  const summary = await runFsisIngest(
+    store,
+    input([loadFixture('recall-active-nationwide-017-2026')]),
+    { now: NOW },
+  );
+  assert.equal([...store.cases.values()][0].projection.classification.value, 'class_I');
+  assert.equal(summary.notifications.materialUpdate, 1);
+  const update = [...store.notifications.values()].find((n) => n.kind === 'material_update');
+  assert.equal(update?.triggerRuleId, 'classification_assigned');
+});
+
+test('classification upgrade (Class III → Class I) is material', async () => {
+  const store = new MemoryStore();
+  const classIII = derive('recall-active-nationwide-017-2026', {
+    field_recall_classification: 'Class III',
+    field_risk_level: 'Marginal - Class III',
+  });
+  await runFsisIngest(store, input([classIII]), { now: NOW });
+  const summary = await runFsisIngest(
+    store,
+    input([loadFixture('recall-active-nationwide-017-2026')]),
+    { now: NOW },
+  );
+  assert.equal(summary.notifications.materialUpdate, 1);
+  const update = [...store.notifications.values()].find((n) => n.kind === 'material_update');
+  assert.equal(update?.triggerRuleId, 'classification_upgraded');
+});
+
+test('classification downgrade (Class I → Class II) is material and notification-eligible', async () => {
+  const store = new MemoryStore();
+  await runFsisIngest(store, input([loadFixture('recall-active-nationwide-017-2026')]), {
+    now: NOW,
+  }); // real record is Class I
+  const downgraded = derive('recall-active-nationwide-017-2026', {
+    field_recall_classification: 'Class II',
+    field_risk_level: 'Low - Class II',
+  });
+  const summary = await runFsisIngest(store, input([downgraded]), { now: NOW });
+
+  assert.equal(summary.notifications.materialUpdate, 1);
+  const update = [...store.notifications.values()].find((n) => n.kind === 'material_update');
+  assert.equal(update?.triggerRuleId, 'classification_downgraded');
+  assert.equal(update?.suppressed, null);
+});
+
+test('coalescing marks delivery-suppressed but keeps the classification event in the ledger', async () => {
+  const store = new MemoryStore();
+  const unclassified = derive('recall-active-nationwide-017-2026', {
+    field_recall_classification: '',
+    field_risk_level: '',
+  });
+  await runFsisIngest(store, input([unclassified]), { now: NOW });
+
+  // First material change today: classification assigned (Class I) — delivered.
+  await runFsisIngest(store, input([loadFixture('recall-active-nationwide-017-2026')]), {
+    now: NOW,
+  });
+  // Second material change within 24h: classification changed to Class II.
+  const downgraded = derive('recall-active-nationwide-017-2026', {
+    field_recall_classification: 'Class II',
+    field_risk_level: 'Low - Class II',
+  });
+  const summary = await runFsisIngest(store, input([downgraded]), { now: NOW });
+
+  // The 24h rate guard coalesces delivery… (summary counts it as suppressed)
+  assert.equal(summary.notifications.materialUpdate, 0);
+  assert.equal(summary.notifications.suppressed, 1);
+  // …but the underlying classification-change event MUST remain auditable.
+  const events = [...store.notifications.values()].filter((n) => n.kind === 'material_update');
+  assert.deepEqual(events.map((e) => e.triggerRuleId).sort(), [
+    'classification_assigned',
+    'classification_downgraded',
+  ]);
+  const coalesced = events.find((e) => e.triggerRuleId === 'classification_downgraded');
+  assert.equal(coalesced?.suppressed, 'coalesced');
+});
+
+test('a PHA retraction retracts the case and always notifies', async () => {
+  // Clock near the real retraction date (2026-04-06) so it is not backfill.
+  const april = () => new Date('2026-04-08T12:00:00Z');
+  const store = new MemoryStore();
+  // Derived pre-retraction state of the real record: FSIS mutated this record
+  // in place when it retracted the alert (observed live; contract §4.1).
+  const retraction = loadFixture('pha-retraction-pha-04012026-01');
+  const beforeRetraction = derive('pha-retraction-pha-04012026-01', {
+    field_title: retraction.field_title.replace(
+      /^FSIS Retracts Public Health Alert/,
+      'FSIS Issues Public Health Alert',
+    ),
+    field_recall_date: '2026-04-01',
+  });
+  await runFsisIngest(store, input([beforeRetraction]), { now: april });
+  assert.equal([...store.cases.values()][0].projection.state, 'active');
+
+  const summary = await runFsisIngest(store, input([retraction]), { now: april });
+  const recallCase = [...store.cases.values()][0];
+  assert.equal(recallCase.projection.state, 'retracted');
+  assert.equal(summary.notifications.materialUpdate, 1);
+  const update = [...store.notifications.values()].find((n) => n.kind === 'material_update');
+  assert.equal(update?.triggerRuleId, 'retraction');
+  assert.equal(update?.suppressed, null);
+});
+
+test('unparseable records are quarantined without aborting the run', async () => {
+  const store = new MemoryStore();
+  const broken = derive('recall-active-stated-states-016-2026', { field_recall_number: '' });
+  const summary = await runFsisIngest(
+    store,
+    input([broken, loadFixture('recall-active-nationwide-017-2026')]),
+    { now: NOW },
+  );
+  assert.equal(summary.quarantined.length, 1);
+  assert.equal(summary.newCases, 1); // the healthy record still ingested
+  const run = [...store.ingestRuns.values()][0];
+  assert.equal(run.outcome, 'succeeded');
+  assert.equal(run.quarantined?.length, 1);
+});
+
+test('unknown geography survives the whole pipeline honestly', async () => {
+  const store = new MemoryStore();
+  await runFsisIngest(store, input([loadFixture('recall-closed-unknown-geography-006-2025')]), {
+    now: NOW,
+  });
+  const projection = [...store.cases.values()][0].projection;
+  assert.equal(projection.geography.scope, 'unknown');
+  assert.deepEqual(projection.geography.states, []);
+});

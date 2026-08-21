@@ -10,6 +10,7 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="index" options={{ title: 'Recall Alerts' }} />
+        <Stack.Screen name="recall/[id]" options={{ title: 'Recall Details' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

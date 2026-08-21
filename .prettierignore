@@ -3,3 +3,5 @@ dist/
 .expo/
 package-lock.json
 assets/
+# Supabase CLI machine-local state (created by `supabase link`; gitignored)
+supabase/.temp

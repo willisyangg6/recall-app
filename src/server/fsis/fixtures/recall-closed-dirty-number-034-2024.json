@@ -1,0 +1,36 @@
+{
+  "field_title": "Impero Foods &amp; Meats, Inc. Recalls Raw Pork Sausage Products Produced Without Benefit of Inspection",
+  "field_recall_number_export": " 034-2024",
+  "field_recall_url": "http://www.fsis.usda.gov/recalls-alerts/impero-foods-meats-inc--recalls-raw-pork-sausage-products-produced-without-benefit",
+  "field_active_notice": "False",
+  "field_states": ["Delaware", "Maryland", "Pennsylvania"],
+  "field_archive_recall": "True",
+  "field_closed_year": "2025",
+  "field_company_media_contact": [
+    "\n  Company Contact\n  \n    VP/Owner, Impero Foods &amp; Meats, Inc.\n    Jerry Vitale\n        443-695-5750\n              jerry@imperofoods.com\n      \n\n"
+  ],
+  "field_distro_list": ["RC-034-2024-Retail-List.pdf"],
+  "field_en_press_release": [],
+  "field_establishment": ["Impero Foods &amp; Meats, Inc."],
+  "field_labels": ["Recall-034-2024-Label"],
+  "field_media_contact": "Meredith Carothers",
+  "field_risk_level": "High - Class I",
+  "field_last_modified_date": "2024-12-27",
+  "field_press_release": [],
+  "field_processing": ["Raw - Non Intact"],
+  "field_product_items": [
+    "•\t10-lb. white cardboard box cases containing a plastic bag of “Old World Italian Sausage” with “rope” handwritten on the case.  ",
+    "•\t10-lb. white cardboard box cases containing a plastic bag of “Old World Italian Sausage” with “link” handwritten on the case.  "
+  ],
+  "field_qty_recovered": "290 lbs",
+  "field_recall_classification": "Class I",
+  "field_recall_date": "2024-12-20",
+  "field_recall_number": " 034-2024",
+  "field_recall_reason": ["Produced Without Benefit of Inspection"],
+  "field_recall_type": "Closed Recall",
+  "field_related_to_outbreak": "False",
+  "field_summary": "<p><strong>WASHINGTON, Dec. 20, 2024 – </strong>Impero Foods &amp; Meats, Inc., a Baltimore, Md. establishment, is recalling approximately 7,485 pounds of raw pork sausage products that were produced without the benefit of federal inspection, the U.S. Department of Agriculture’s Food Safety and Inspection Service (FSIS) announced today.</p>\n<p>The raw Italian pork sausage items were produced from October 3, 2024, through December 19, 2024. The following products are subject to recall [<a href=\"https://www.fsis.usda.gov/sites/default/files/food_label_pdf/2024-12/Recall-034-2024-Label.pdf\">view labels</a>]:</p>\n<ul>\n<li>10-lb. white cardboard box cases containing a plastic bag of “Old World Italian Sausage” with “rope” handwritten on the case.&nbsp;</li>\n<li>10-lb. white cardboard box cases containing a plastic bag of “Old World Italian Sausage” with “link” handwritten on the case.&nbsp;</li>\n</ul>\n<p>The products subject to recall bear establishment number “EST. 10827” inside the USDA mark of inspection. These items were shipped to restaurants and retail locations in Delaware, Maryland, and Pennsylvania. Some products may have been sold at retail deli counters without labels or other identification.&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;</p>\n<p>The problem was discovered when FSIS was performing surveillance activities at a retailer after notification that items may have been produced at a facility that had a suspended grant of inspection. After further investigation, it was determined that the items were produced without the benefit of FSIS inspection.</p>\n<p>There have been no confirmed reports of adverse reactions due to consumption of these products. Anyone concerned about a reaction should contact a healthcare provider.&nbsp;&nbsp;</p>\n<p>FSIS is concerned that some product may be in retailers’ or restaurants’ refrigerators or freezers. Retailers and restaurants are urged not to sell or serve these products. These products should be thrown away or returned to the place of purchase.</p>\n<p>FSIS routinely conducts recall effectiveness checks to verify recalling firms notify their<strong> </strong>customers of the recall and that steps are taken to make certain that the product is no longer available to consumers. When available, the retail distribution list(s) will be posted on the FSIS website at&nbsp;<a href=\"http://www.fsis.usda.gov/recalls\">www.fsis.usda.gov/recalls</a>.</p>\n<p>Consumers and members of the media with questions about the recall can contact Jerry Vitale, VP/Owner, Impero Foods &amp; Meats, Inc., at 443-695-5750 or <a href=\"mailto:jerry@imperofoods.com\">jerry@imperofoods.com</a>.</p>\n<p>Consumers with food safety questions can call the toll-free USDA Meat and Poultry Hotline at 888-MPHotline (888-674-6854) or send a question via email to <a href=\"mailto:MPHotline@usda.gov\">MPHotline@usda.gov</a>. For consumers that need to report a problem with a meat, poultry, or egg product, the online Electronic Consumer Complaint Monitoring System can be accessed 24 hours a day at <a href=\"https://foodcomplaint.fsis.usda.gov/eCCF/\">https://foodcomplaint.fsis.usda.gov/eCCF/.</a></p>\n",
+  "field_year": "2024",
+  "langcode": "English",
+  "field_has_spanish": "True"
+}

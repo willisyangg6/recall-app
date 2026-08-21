@@ -1,0 +1,35 @@
+{
+  "field_title": "FSIS Retracts Public Health Alert for Frozen, Ready-to-Eat Chicken Nuggets Due to Updated Laboratory Result",
+  "field_recall_number_export": "PHA-04012026-01",
+  "field_recall_url": "http://www.fsis.usda.gov/recalls-alerts/fsis-issues-public-health-alert-frozen-dinosaur-shaped-ready-eat-chicken-nuggets-due",
+  "field_active_notice": "False",
+  "field_states": ["Nationwide"],
+  "field_archive_recall": "False",
+  "field_closed_year": "",
+  "field_company_media_contact": [
+    "\n  Company Contact\n  \n    Dorada Foods\n    John Patrick Lopez\n              john.patrick@lopezdorada.com\n      \n\n"
+  ],
+  "field_distro_list": [],
+  "field_en_press_release": [],
+  "field_establishment": ["Dorada Foods"],
+  "field_labels": ["PHA-04012026-01.pdf"],
+  "field_media_contact": "Bailey McWilliams",
+  "field_risk_level": "Public Health Alert",
+  "field_last_modified_date": "2026-04-06",
+  "field_press_release": [],
+  "field_processing": ["Fully Cooked - Not Shelf Stable"],
+  "field_product_items": [
+    "29-oz. plastic bags containing approx. 36 “GREAT VALUE FULLY COOKED DINO SHAPED CHICKEN BREAST NUGGETS” with “BEST IF USED BY” date “FEB 10 2027,” lot code” 0416DPO1215,” and establishment number “P44164” printed on the back of the bag."
+  ],
+  "field_qty_recovered": "",
+  "field_recall_classification": "Public Health Alert",
+  "field_recall_date": "2026-04-06",
+  "field_recall_number": "PHA-04012026-01",
+  "field_recall_reason": ["Product Contamination"],
+  "field_recall_type": "Public Health Alert",
+  "field_related_to_outbreak": "False",
+  "field_summary": "<p><strong>WASHINGTON, April 6, 2026</strong> – The U.S. Department of Agriculture’s Food Safety and Inspection Service (FSIS) is retracting the public health alert issued on April 1, 2026, for Walmart Great Value Fully Cooked Dino Shaped Chicken Breast Nuggets with “Best If Used By” date “Feb 10 2027” &nbsp;produced by Dorada Foods after confirming that the product does not pose a public health concern.&nbsp;</p>\n<p>The public health alert was originally issued based on routine surveillance sampling conducted by the New York State Department of Public Health that indicated elevated trace levels of lead. Because this product is commonly consumed by children, FSIS issued the alert to inform consumers of a potential risk.</p>\n<p>Following the alert, additional sampling was conducted by the New York State Department of Public Health and the producing establishment, Dorada Foods. As part of that process, the original lot of product was tested as well as additional lots.</p>\n<p>All follow‑up testing, including testing of the original lot, found no elevated levels of lead in the product.</p>\n<p>FSIS subsequently reviewed the underlying laboratory data in coordination with the New York State Department of Health and determined that the initial result was a false positive, caused by&nbsp;sporadic lead contamination at the laboratory during analysis, not contamination of the product itself. Follow up testing confirmed no elevated levels of lead were present in any of the products tested.</p>\n<p>FSIS has therefore concluded that the product does not pose a public health concern.</p>\n<p>FSIS has notified the company and is updating this page to ensure consumers have accurate and up-to-date information.</p>\n",
+  "field_year": "2026",
+  "langcode": "English",
+  "field_has_spanish": "False"
+}
