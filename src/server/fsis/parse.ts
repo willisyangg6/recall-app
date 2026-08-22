@@ -12,8 +12,10 @@
  * - http:// official URLs
  */
 
+import { classifyIllnessReport } from '../../domain/illness';
 import type { Geography, HazardCategory } from '../../domain/recall-types';
 import type { NormalizedSourceRecord } from '../../domain/source-record';
+import { CONSUMER_ACTION_PATTERN, joinSentences, splitSentences } from '../../domain/text';
 
 /** Raw shape of one FSIS API record. All values are strings or string arrays (§4.1). */
 export interface FsisRawRecord {
@@ -176,28 +178,21 @@ export function deriveHazardCategory(reasons: string[], text: string): HazardCat
   return 'unknown';
 }
 
-function splitSentences(text: string): string[] {
-  return text
-    .replace(/\n+/g, ' ')
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
-
-const CONSUMER_ACTION_PATTERN =
-  /urged not to|should not (consume|eat|use|serve)|do not (consume|eat|use|serve)|should be (thrown away|discarded)|thrown away or returned|return(ed)? to the place of purchase/i;
-
 export function extractConsumerAction(summaryText: string): string | null {
   const matches = splitSentences(summaryText).filter((s) => CONSUMER_ACTION_PATTERN.test(s));
   if (matches.length === 0) return null;
-  return matches.slice(0, 2).join(' ');
+  return joinSentences(matches.slice(0, 2));
 }
 
+/**
+ * Illness statement per the three-way semantics (architecture Part 4):
+ * verbatim report-status sentences only — never disease education, healthcare
+ * advice, or discovery prose. null = the source is silent (unknown).
+ */
 export function extractIllnessStatement(summaryText: string): string | null {
-  const match = splitSentences(summaryText).find((s) =>
-    /illness|adverse reaction|injur|hospitaliz/i.test(s),
-  );
-  return match ?? null;
+  const report = classifyIllnessReport(summaryText);
+  if (report.statements.length === 0) return null;
+  return joinSentences(report.statements);
 }
 
 function parseGeography(states: string[]): Geography {
@@ -219,9 +214,12 @@ function parseFirm(raw: FsisRawRecord): { displayName: string | null; rawVariant
       (raw.field_establishment ?? []).map((e) => decodeEntities(e).trim()).filter((e) => e !== ''),
     ),
   ];
-  const title = decodeEntities(raw.field_title ?? '');
+  // Titles carry dirty leading whitespace (verified live: " FSIS Issues…"),
+  // so trim BEFORE the agency-prefix guard — the agency is never the firm.
+  const title = decodeEntities(raw.field_title ?? '').trim();
   const titleMatch = title.match(/^(.{3,80}?)\s+(?:Recalls|Expands|Issues)\b/);
-  const titleFirm = titleMatch && !/^FSIS\b/i.test(titleMatch[1]) ? titleMatch[1].trim() : null;
+  const candidate = titleMatch ? titleMatch[1].trim() : null;
+  const titleFirm = candidate && !/^(FSIS|USDA)\b/i.test(candidate) ? candidate : null;
   if (titleFirm && !variants.includes(titleFirm)) variants.push(titleFirm);
   return { displayName: variants[0] ?? null, rawVariants: variants };
 }

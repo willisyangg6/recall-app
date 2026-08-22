@@ -6,21 +6,27 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { classifyIllnessReport, healthEducationText } from '@/domain/illness';
+import type { AffectedProduct } from '@/domain/recall-types';
 import {
-  companyDisplayName,
+  companyLine,
+  extractAttachmentLinks,
+  humanizeAllCaps,
   parseProductLine,
   productSummaryFromTitle,
 } from '@/lib/consumer-summary';
+import { buildWhatHappened } from '@/lib/what-happened';
 import { fetchCaseDetail, type CaseDetail } from '@/lib/recall-feed';
 import {
+  consumerActionDisplay,
   formatDate,
   geographyDetail,
+  illnessDisplay,
   noticeTypeLabel,
   reasonLine,
   riskPresentation,
   stateLabel,
 } from '@/lib/recall-display';
-import type { AffectedProduct } from '@/domain/recall-types';
 
 type LoadState =
   | { status: 'loading' }
@@ -40,10 +46,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /**
- * One affected-product row: label name emphasized, package and identifying
- * details (dates, lot codes, establishment numbers) preserved beneath it.
- * Lines the deterministic parser can't split are shown verbatim — never
- * dropped or truncated.
+ * One affected product as a "check your package" block: label name
+ * emphasized, package described, identifiers (use-by dates, lots,
+ * establishment numbers) as labeled rows, placement noted. Lines the
+ * deterministic parser can't split are shown verbatim — never dropped — and
+ * unconsumed source prose is preserved as a residual line.
  */
 function ProductRow({ product }: { product: AffectedProduct }) {
   const parsed = parseProductLine(product.rawText);
@@ -56,15 +63,25 @@ function ProductRow({ product }: { product: AffectedProduct }) {
   }
   return (
     <ThemedView type="backgroundElement" style={styles.productRow}>
-      <ThemedText style={styles.productName}>{parsed.name}</ThemedText>
+      <ThemedText style={styles.productName}>{humanizeAllCaps(parsed.name)}</ThemedText>
       {parsed.packageText ? (
         <ThemedText type="small" themeColor="textSecondary">
-          {parsed.packageText}
+          Package: {parsed.packageText}
         </ThemedText>
       ) : null}
-      {parsed.detailText ? (
+      {parsed.identifiers.map((identifier, index) => (
+        <ThemedText key={index} type="small">
+          {identifier.label}: {identifier.value}
+        </ThemedText>
+      ))}
+      {parsed.locationText ? (
         <ThemedText type="small" themeColor="textSecondary">
-          {parsed.detailText}
+          Where: {parsed.locationText}
+        </ThemedText>
+      ) : null}
+      {parsed.residualText ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {parsed.residualText}
         </ThemedText>
       ) : null}
     </ThemedView>
@@ -113,19 +130,27 @@ export default function RecallDetailScreen() {
   const { projection, affectedProducts } = state.detail;
   const risk = riskPresentation(projection.classification.value);
   const product = productSummaryFromTitle(projection.title) ?? projection.title;
-  const company = companyDisplayName(projection.recallingFirm.displayName);
+  const company = companyLine(projection.recallingFirm.displayName, projection.title);
   const reason = reasonLine(
     projection.reasonText,
     projection.hazardCategory,
     projection.pathogenOrAllergen,
   );
-  // Show the identified concern separately only when the reason line doesn't
-  // already name it — no repeated information.
-  const concernShownInReason =
-    projection.pathogenOrAllergen !== null &&
-    (reason ?? '')
-      .toLowerCase()
-      .includes(projection.pathogenOrAllergen.toLowerCase().replace(/^undeclared\s+/, ''));
+  // Structured, source-grounded summary — never raw press-release prose. The
+  // authoritative legal firm name and full source text stay in the projection.
+  const happened = buildWhatHappened({
+    title: projection.title,
+    noticeType: projection.noticeType,
+    reasonText: projection.reasonText,
+    hazardCategory: projection.hazardCategory,
+    pathogenOrAllergen: projection.pathogenOrAllergen,
+    firmDisplayName: projection.recallingFirm.displayName,
+    summaryText: projection.summaryText,
+  });
+  const illness = illnessDisplay(classifyIllnessReport(projection.summaryText));
+  const education = healthEducationText(projection.summaryText);
+  const action = consumerActionDisplay(projection.consumerAction);
+  const attachments = extractAttachmentLinks(projection.summaryHtml);
   const agencyLabel = projection.sourceAgency === 'FSIS' ? 'USDA FSIS' : 'FDA';
 
   return (
@@ -140,7 +165,7 @@ export default function RecallDetailScreen() {
             : ''}
         </ThemedText>
         <ThemedText type="title">{product}</ThemedText>
-        {company ? <ThemedText themeColor="textSecondary">{company}</ThemedText> : null}
+        <ThemedText themeColor="textSecondary">{company}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           Announced {formatDate(projection.publishedAt)}
           {projection.lastPublicActivityAt > projection.publishedAt
@@ -156,11 +181,12 @@ export default function RecallDetailScreen() {
           </ThemedView>
         ) : null}
 
-        <Section title="Why">
-          <ThemedText>{reason ?? 'Reason not stated — see the official notice.'}</ThemedText>
-          {projection.pathogenOrAllergen && !concernShownInReason ? (
-            <ThemedText themeColor="textSecondary">
-              Identified concern: {projection.pathogenOrAllergen}
+        <Section title="What happened">
+          {reason ? <ThemedText style={styles.reasonLead}>{reason}</ThemedText> : null}
+          <ThemedText>{happened.text}</ThemedText>
+          {happened.update ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              {happened.update}
             </ThemedText>
           ) : null}
         </Section>
@@ -174,42 +200,53 @@ export default function RecallDetailScreen() {
           </Section>
         ) : null}
 
-        <Section title="Where sold">
+        <Section title="Where it was sold">
           <ThemedText>{geographyDetail(projection.geography)}</ThemedText>
         </Section>
 
-        <Section title="What to do">
-          <ThemedText>
-            {projection.consumerAction ??
-              'No specific instructions were extracted — check the official notice.'}
-          </ThemedText>
-        </Section>
-
-        {projection.illnessStatement ? (
-          <Section title="Reported illnesses">
-            <ThemedText>{projection.illnessStatement}</ThemedText>
-          </Section>
-        ) : null}
-
-        <Section title="Affected products">
+        <Section title="Check your package">
           {affectedProducts.length === 0 ? (
             <ThemedText themeColor="textSecondary">
-              The product list is only in the official notice (often as an attachment) — open it
-              below.
+              {attachments.length > 0
+                ? 'The affected-product list is in the official attachment below.'
+                : 'The product list is only in the official notice — open it below.'}
             </ThemedText>
           ) : (
             affectedProducts.map((item, index) => <ProductRow key={index} product={item} />)
           )}
+          {attachments.map((attachment) => (
+            <ThemedText
+              key={attachment.url}
+              themeColor="link"
+              accessibilityRole="link"
+              onPress={() => Linking.openURL(attachment.url)}>
+              {attachment.label}
+            </ThemedText>
+          ))}
         </Section>
 
-        {projection.recallingFirm.displayName ? (
-          <Section title="Company">
-            <ThemedText>{company ?? projection.recallingFirm.displayName}</ThemedText>
-            {company && company !== projection.recallingFirm.displayName ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                Legal name: {projection.recallingFirm.displayName}
-              </ThemedText>
-            ) : null}
+        <Section title="What you should do">
+          <ThemedText>
+            {action?.primary ??
+              'No specific instructions were extracted — check the official notice.'}
+          </ThemedText>
+          {action?.secondary ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              {action.secondary}
+            </ThemedText>
+          ) : null}
+        </Section>
+
+        <Section title="Illness reports">
+          <ThemedText>{illness.headline}</ThemedText>
+          {illness.detail ? (
+            <ThemedText themeColor="textSecondary">{illness.detail}</ThemedText>
+          ) : null}
+        </Section>
+
+        {education ? (
+          <Section title="Health risk">
+            <ThemedText themeColor="textSecondary">{education}</ThemedText>
           </Section>
         ) : null}
 
@@ -237,8 +274,8 @@ export default function RecallDetailScreen() {
 const styles = StyleSheet.create({
   // No alignItems: 'center' here — centering the cross axis made the
   // ScrollView size to its content's intrinsic width, so long text defined a
-  // canvas wider than the screen (the observed right-edge clipping) instead of
-  // wrapping. Width is constrained by the content container instead.
+  // canvas wider than the screen instead of wrapping. Width is constrained by
+  // the content container.
   container: {
     flex: 1,
   },
@@ -271,6 +308,9 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     borderRadius: Radii.medium,
     marginTop: Spacing.two,
+  },
+  reasonLead: {
+    fontWeight: '600',
   },
   productRow: {
     padding: Spacing.two,

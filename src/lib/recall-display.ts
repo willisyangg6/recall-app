@@ -4,7 +4,9 @@
  * a guessed default.
  */
 
+import type { IllnessReport } from '@/domain/illness';
 import type { CaseProjection } from '@/domain/recall-types';
+import { cleanDisplayText, joinSentences } from '@/domain/text';
 
 export function noticeTypeLabel(noticeType: 'recall' | 'public_health_alert'): string {
   return noticeType === 'public_health_alert' ? 'Public Health Alert' : 'Recall';
@@ -153,6 +155,63 @@ export function geographyDetail(geography: CaseProjection['geography']): string 
   }
 }
 
+/**
+ * Standardized illness-report presentation (three-way semantics, Part 4).
+ * Source silence is presented as "not provided" — NEVER as zero.
+ */
+export function illnessDisplay(report: IllnessReport): { headline: string; detail: string | null } {
+  switch (report.status) {
+    case 'none_reported':
+      return { headline: 'No illnesses have been reported.', detail: null };
+    case 'reported':
+      return {
+        headline: 'Illnesses have been reported.',
+        detail: cleanDisplayText(joinSentences(report.statements)),
+      };
+    case 'unknown':
+      return { headline: 'No illness count is provided in this notice.', detail: null };
+  }
+}
+
+export interface ActionDisplay {
+  /** The consumer instruction, standardized when functionally equivalent. */
+  primary: string;
+  /** Retailer/institution guidance, secondary to the consumer action. */
+  secondary: string | null;
+  /** True when primary is our standardized wording (source preserved in data). */
+  standardized: boolean;
+}
+
+/**
+ * Standardize functionally-equivalent consumer instructions ("thrown away or
+ * returned to the place of purchase" appears in ~75% of FSIS notices) while
+ * preserving genuinely different instructions verbatim.
+ */
+export function consumerActionDisplay(sourceText: string | null): ActionDisplay | null {
+  if (!sourceText) return null;
+  const throwAway = /thrown away|throw (it|them|the product) away|discard/i.test(sourceText);
+  const returnable = /returned? to the place of purchase/i.test(sourceText);
+  const destroy = /destroy/i.test(sourceText);
+  const retailer = /(do not|should not|urged not to) (sell|serve|use or serve)\b/i.test(sourceText);
+
+  let primary: string | null = null;
+  if (throwAway && returnable) {
+    primary = 'Do not eat this product. Throw it away or return it to the place of purchase.';
+  } else if (destroy) {
+    primary = 'Do not eat this product. Destroy it.';
+  } else if (throwAway) {
+    primary = 'Do not eat this product. Throw it away.';
+  } else if (returnable) {
+    primary = 'Do not eat this product. Return it to the place of purchase.';
+  }
+  const standardized = primary !== null;
+  return {
+    primary: primary ?? cleanDisplayText(sourceText),
+    secondary: retailer ? 'Restaurants and retailers should not sell or serve it.' : null,
+    standardized,
+  };
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "Aug 17, 2026" from an ISO date, without timezone surprises. */
@@ -168,10 +227,4 @@ export function timingLine(publishedAt: string, lastPublicActivityAt: string): s
   return lastPublicActivityAt > publishedAt
     ? `${published} · Updated ${formatDate(lastPublicActivityAt)}`
     : published;
-}
-
-/** Recency display tiers (architecture Part 2.3). */
-export function isRecent(lastPublicActivityAt: string, now: Date = new Date()): boolean {
-  const activity = new Date(`${lastPublicActivityAt.slice(0, 10)}T00:00:00Z`).getTime();
-  return now.getTime() - activity <= 60 * 24 * 60 * 60 * 1000;
 }

@@ -112,6 +112,41 @@ instructions.
 - Read model exposed to the app via the Supabase Data API with row-level
   security: the mobile client can only read `recall_cases` and
   `affected_products`; all writes are service-role only.
+- Consumer presentation layer (deterministic, display-only — the canonical
+  projection is never altered): product-first summaries that preserve
+  upstream-ingredient relationships ("…Containing Recalled FDA-Regulated
+  Jalapeños"), un-shouted company/product names, structured "check your
+  package" identifiers (use-by/best-by/sell-by dates, lots, case codes,
+  establishment numbers — labeled only when the source wording says so),
+  template-built "What happened" summaries (deterministic reason templates
+  over structured source fields — never assembled from raw press-release
+  prose; Editor's Notes become normalized Update lines or are omitted),
+  standardized consumer instructions, and official product-list/label PDF
+  links extracted from the notice's own HTML (links only; no PDF parsing).
+- Honest illness semantics: explicit zero → "No illnesses have been
+  reported."; source-stated counts shown verbatim; source silence → "No
+  illness count is provided" — never converted to zero. Disease education and
+  discovery prose are never presented as illness reports.
+- Feed relevance separated from source lifecycle: FSIS keeps Public Health
+  Alerts "active" for years (live: 167 of 178 active cases are PHAs back to
+  2014), so Home shows recent activity first and collapses older agency-active
+  notices into a clearly labeled section — nothing is hidden or relabeled.
+- Extraction-quality benchmark: 66 verbatim real records
+  ([src/server/fsis/fixtures/benchmark-records.json](src/server/fsis/fixtures/benchmark-records.json))
+  with hand-verified expectations and aggregate coverage floors, run as part
+  of `npm test`.
+
+### Ready for personalization/filters (not yet built)
+
+The read model already answers every planned filter through the Data API
+(verified against the live project): notice type, classification, hazard, and
+dates are generated columns; state relevance uses
+`projection->geography->states=cs.["California"]` plus
+`projection->geography->>scope=eq.nationwide` (unknown-distribution cases are
+shown in a labeled section, never silently excluded); product/company search
+uses `title=ilike.*…*`. Future "Affects me" views organize the feed but never
+hide the full national feed; user state arrives via manual input, not location
+permissions.
 
 ## Intentionally not implemented yet
 

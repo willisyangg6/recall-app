@@ -6,11 +6,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { companyDisplayName, productSummaryFromTitle } from '@/lib/consumer-summary';
+import { companyLine, productSummaryFromTitle } from '@/lib/consumer-summary';
+import { buildFeedSections } from '@/lib/feed-relevance';
 import { fetchCurrentFeed, isFeedConfigured, type FeedItem } from '@/lib/recall-feed';
 import {
   geographyLabel,
-  isRecent,
   noticeTypeLabel,
   reasonLine,
   riskPresentation,
@@ -71,7 +71,7 @@ function Badge({ label, emphasized }: { label: string; emphasized?: boolean }) {
 function FeedCard({ item }: { item: FeedItem }) {
   const risk = riskPresentation(item.classificationValue);
   const product = productSummaryFromTitle(item.title) ?? item.title;
-  const company = companyDisplayName(item.firmName);
+  const company = companyLine(item.firmName, item.title);
   const reason = reasonLine(item.reasonText, item.hazardCategory, item.pathogenOrAllergen);
   return (
     <Link href={{ pathname: '/recall/[id]', params: { id: item.id } }} asChild>
@@ -85,11 +85,9 @@ function FeedCard({ item }: { item: FeedItem }) {
             {risk ? <Badge label={risk.label} /> : null}
           </View>
           <ThemedText type="subtitle">{product}</ThemedText>
-          {company ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              {company}
-            </ThemedText>
-          ) : null}
+          <ThemedText type="small" themeColor="textSecondary">
+            {company}
+          </ThemedText>
           {reason ? <ThemedText type="small">{reason}</ThemedText> : null}
           <ThemedText type="small">{geographyLabel(item.geography)}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -117,6 +115,7 @@ function CenteredMessage({ title, body }: { title: string; body: string }) {
 export default function HomeScreen() {
   const { state, refreshing, refresh } = useFeed();
   const insets = useSafeAreaInsets();
+  const [showOlder, setShowOlder] = useState(false);
 
   if (!isFeedConfigured()) {
     return (
@@ -145,11 +144,15 @@ export default function HomeScreen() {
     );
   }
 
-  const recent = state.items.filter((item) => isRecent(item.lastPublicActivityAt));
-  const older = state.items.filter((item) => !isRecent(item.lastPublicActivityAt));
+  // Consumer relevance is a display tier, never a lifecycle change: old
+  // agency-active PHAs stay truthful and accessible, but collapsed so they
+  // cannot visually compete with newly announced notices.
+  const { recent, olderActive } = buildFeedSections(state.items);
   const sections = [
-    ...(recent.length > 0 ? [{ title: 'Recent', data: recent }] : []),
-    ...(older.length > 0 ? [{ title: 'Ongoing, older', data: older }] : []),
+    ...(recent.length > 0 ? [{ key: 'recent', title: 'Recent activity', data: recent }] : []),
+    ...(olderActive.length > 0
+      ? [{ key: 'older', title: 'Older active notices', data: showOlder ? olderActive : [] }]
+      : []),
   ];
 
   return (
@@ -158,13 +161,29 @@ export default function HomeScreen() {
         sections={sections}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <FeedCard item={item} />}
-        renderSectionHeader={({ section }) => (
-          <ThemedView style={styles.sectionHeader}>
-            <ThemedText type="small" themeColor="textSecondary">
-              {section.title.toUpperCase()}
-            </ThemedText>
-          </ThemedView>
-        )}
+        renderSectionHeader={({ section }) =>
+          section.key === 'older' ? (
+            <ThemedView style={styles.sectionHeader}>
+              <ThemedText type="small" themeColor="textSecondary">
+                {section.title.toUpperCase()} ({olderActive.length})
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Still listed as active by USDA FSIS, but announced more than 60 days ago.
+              </ThemedText>
+              <Pressable accessibilityRole="button" onPress={() => setShowOlder((value) => !value)}>
+                <ThemedText type="small" themeColor="link">
+                  {showOlder ? 'Hide older notices' : `Show all ${olderActive.length}`}
+                </ThemedText>
+              </Pressable>
+            </ThemedView>
+          ) : (
+            <ThemedView style={styles.sectionHeader}>
+              <ThemedText type="small" themeColor="textSecondary">
+                {section.title.toUpperCase()}
+              </ThemedText>
+            </ThemedView>
+          )
+        }
         contentContainerStyle={[
           styles.listContent,
           { paddingBottom: Spacing.four + insets.bottom },
@@ -205,6 +224,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     paddingTop: Spacing.two,
     paddingBottom: Spacing.one,
+    gap: Spacing.one,
   },
   card: {
     gap: Spacing.one,

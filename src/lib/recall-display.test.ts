@@ -2,7 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { CaseProjection } from '@/domain/recall-types';
-import { geographyDetail, geographyLabel, reasonLine, riskPresentation } from './recall-display';
+import {
+  consumerActionDisplay,
+  geographyDetail,
+  geographyLabel,
+  illnessDisplay,
+  reasonLine,
+  riskPresentation,
+} from './recall-display';
 
 test('risk presentation is concise, standardized, and never invents a class', () => {
   assert.deepEqual(riskPresentation('class_I'), {
@@ -49,6 +56,59 @@ test('reason line maps structured FSIS reasons to consumer wording', () => {
   // Unmapped reasons pass through verbatim — never weakened, never dropped.
   assert.equal(reasonLine('Some Future Reason', 'unknown', null), 'Some Future Reason');
   assert.equal(reasonLine(null, 'unknown', null), null);
+});
+
+test('illness display maps the three states to standardized consumer wording', () => {
+  assert.deepEqual(
+    illnessDisplay({ status: 'none_reported', statements: ['There have been no…'] }),
+    {
+      headline: 'No illnesses have been reported.',
+      detail: null,
+    },
+  );
+  const reported = illnessDisplay({
+    status: 'reported',
+    statements: ['As of July 25, 2024, 34 sick people have been identified in 13 states.'],
+  });
+  assert.equal(reported.headline, 'Illnesses have been reported.');
+  assert.match(reported.detail ?? '', /34 sick people/);
+  // Silence stays unknown — never "0".
+  assert.deepEqual(illnessDisplay({ status: 'unknown', statements: [] }), {
+    headline: 'No illness count is provided in this notice.',
+    detail: null,
+  });
+});
+
+test('equivalent consumer actions standardize; special actions survive', () => {
+  // The dominant FSIS instruction (verbatim from real records).
+  const standard = consumerActionDisplay(
+    'Consumers who have purchased these products are urged not to consume them. These products should be thrown away or returned to the place of purchase.',
+  );
+  assert.equal(
+    standard?.primary,
+    'Do not eat this product. Throw it away or return it to the place of purchase.',
+  );
+  assert.equal(standard?.standardized, true);
+
+  // Destroy-only instruction keeps its distinct meaning.
+  const destroy = consumerActionDisplay(
+    'Consumers are urged to destroy the product. Do not open the package.',
+  );
+  assert.equal(destroy?.primary, 'Do not eat this product. Destroy it.');
+
+  // Retailer guidance is secondary, never the primary consumer action.
+  const withRetail = consumerActionDisplay(
+    'Consumers are urged not to consume these products and retailers are urged not to sell them. These products should be thrown away or returned to the place of purchase.',
+  );
+  assert.match(withRetail?.secondary ?? '', /should not sell or serve/);
+
+  // Unrecognized instructions pass through verbatim (cleaned), not dropped.
+  const special = consumerActionDisplay(
+    'Consumers with weakened immune systems should consult a physician before handling this product.',
+  );
+  assert.equal(special?.standardized, false);
+  assert.match(special?.primary ?? '', /consult a physician/);
+  assert.equal(consumerActionDisplay(null), null);
 });
 
 test('geography stays honest in both compact and detail forms', () => {

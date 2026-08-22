@@ -92,7 +92,7 @@ const FEED_SELECT = [
  * Current items, most recent public activity first (architecture Part 2.3:
  * "current" = active; ordering by source-published activity, not fetch time).
  */
-export async function fetchCurrentFeed(limit = 100): Promise<FeedItem[]> {
+export async function fetchCurrentFeed(limit = 500): Promise<FeedItem[]> {
   const rows = await restGet<FeedRow[]>(
     `recall_cases?select=${FEED_SELECT}` +
       `&state=eq.active` +

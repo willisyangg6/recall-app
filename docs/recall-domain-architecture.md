@@ -72,6 +72,8 @@ Three persisted states, each solving a real source problem — plus one internal
 - **Ongoing, older** — active but quiet for >60 days. Shown after Recent, clearly dated ("Announced 5 months ago"). This tier absorbs the FDA cases with no termination semantics: they never silently vanish, they age visibly. The 60-day boundary is a display default to tune with real usage, not a data-model constant.
 - **Closed / Retracted** — accessible via filter, badged, never in the default scroll.
 
+**Correction (2026-08-21, from live data): agency-active ≠ consumer-current.** FSIS has no closure mechanism for Public Health Alerts, so they stay `Active` indefinitely — verified live: 167 of 178 active cases were PHAs, dating back to 2014. An earlier reading of this section implicitly equated "FSIS Active" with primary-feed placement; that is wrong for consumers. The rule is: **source lifecycle** (`active`, truthful, never changed by us based on age) and **consumer feed relevance** (a display tier) are separate concerns. The Home feed shows the Recent tier as the primary experience and presents older agency-active items in a clearly separated, collapsed-by-default section with honest ages — never terminated, hidden, or relabeled.
+
 Every card shows its authoritative date ("Announced Aug 18" / "Updated Mar 9") plus a global "sources last checked" indicator from ingestion run metadata — freshness honesty is part of the trust proposition.
 
 ---
@@ -432,6 +434,12 @@ Contents:
 
 **Milestone 2:** `fda_announcements` adapter (discovery + cases, no reconciliation yet — unlinked FDA cases are already correct per Part 6.1). **Milestone 3:** `openfda_enforcement` adapter + reconciliation Tiers 0–2 + the Part 7 benchmark (fixtures built before the matcher). **Milestone 4:** notification delivery.
 
-**Explicitly postponed:** LLM match assist (Tier 3); FSIS label-PDF URL recovery and retail-list PDFs; FDA announcement photo harvesting beyond stored HTML; retailer/establishment parsing; outbreak (CORE) enrichment; Spanish localization; iRES API; CPSC/NHTSA; any onboarding/personalization UI; historical backfill beyond each feed's natural window.
+**Explicitly postponed:** LLM match assist (Tier 3); parsing the _contents_ of FSIS label/product-list PDFs (the PDF **links** are now surfaced from summary HTML — implemented 2026-08-21 as deterministic href extraction, no PDF parsing/OCR; extracting the product rows inside those PDFs is the specifically prioritized follow-up for PHAs whose product list exists only as an attachment); FDA announcement photo harvesting beyond stored HTML; retailer/establishment parsing; outbreak (CORE) enrichment; Spanish localization; iRES API; CPSC/NHTSA; any onboarding/personalization UI; historical backfill beyond each feed's natural window.
+
+**Implementation notes added 2026-08-21 (consumer data-quality pass):**
+
+- **Illness-report semantics** follow the Part 4 three-way rule via a deterministic sentence classifier (`src/domain/illness.ts`): explicit-zero boilerplate → standardized "No illnesses have been reported."; positive reports → the source's own count sentences verbatim; source silence → "No illness count is provided" (never zero). Disease education ("…can cause salmonellosis…"), healthcare advice, and discovery prose ("problem was discovered during surveillance…") are excluded from illness reporting; education may appear separately as "Health risk".
+- **Upstream-ingredient notices** (PHAs for FSIS products containing an FDA-recalled ingredient — a recurring family, 21 live records) keep the causal ingredient in the consumer product summary ("…Products Containing Recalled FDA-Regulated Jalapeños"), never collapsing to a bare product-category label; when no single firm represents the notice, the display says "Multiple products and brands" only when the source title states that scope, else "Company not specified" — never a fabricated organization.
+- **Consumer feed relevance vs lifecycle** — see the §2.3 correction above.
 
 **Unresolved risks carried into implementation** (from §9, still open): undocumented fda.gov JSON endpoint stability; FSIS Akamai fingerprint drift; announcement URL churn semantics on updates; FSIS publish→API latency; no SLA anywhere for FDA classification timing. All are mitigated by design (RSS cross-check, fingerprint retries, retitle detection, stale-source alarms, honest not-yet-classified state) — none is eliminated.

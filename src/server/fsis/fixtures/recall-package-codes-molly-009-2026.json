@@ -1,0 +1,44 @@
+{
+  "field_title": "Reser’s Fine Foods, Inc. Recalls Ready-To-Eat Pasta Salad Product Due to Misbranding and Undeclared Allergens",
+  "field_recall_number_export": "009-2026",
+  "field_recall_url": "http://www.fsis.usda.gov/recalls-alerts/resers-fine-foods-inc--recalls-ready-eat-pasta-salad-product-due-misbranding-and",
+  "field_active_notice": "False",
+  "field_states": [
+    "Alabama",
+    "Florida",
+    "North Carolina",
+    "New Jersey",
+    "South Carolina",
+    "Tennessee",
+    "Virginia"
+  ],
+  "field_archive_recall": "False",
+  "field_closed_year": "",
+  "field_company_media_contact": [
+    "\n  Company Contact\n  \n    Reser’s Fine Foods, Inc.\n    Consumer Affairs \n        888-223-2127 \n              consumeraffairs@resers.com\n      \n\n",
+    "\n  Company Contact\n  \n    Reser’s Fine Foods, Inc.\n    Raquel Tadlock, Publicity Associate\n        619-234-0345 \n              Resers@HavasFormula.com\n      \n\n"
+  ],
+  "field_distro_list": ["RC-009-2026-Retail-List.pdf"],
+  "field_en_press_release": [],
+  "field_establishment": ["Reser&#039;s Fine Foods"],
+  "field_labels": ["Recall-009-2026-Labels.pdf"],
+  "field_media_contact": "Meredith Carothers",
+  "field_risk_level": "High - Class I",
+  "field_last_modified_date": "2026-06-25",
+  "field_press_release": [],
+  "field_processing": ["Fully Cooked - Not Shelf Stable"],
+  "field_product_items": [
+    "5-lb. plastic tub packages of “Molly’s Kitchen California Style Pasta Salad” with “USE BY JUL/16/26 430” printed on the side of the plastic tub."
+  ],
+  "field_qty_recovered": "",
+  "field_recall_classification": "Class I",
+  "field_recall_date": "2026-06-25",
+  "field_recall_number": "009-2026",
+  "field_recall_reason": ["Misbranding", "Unreported Allergens"],
+  "field_recall_type": "Active Recall",
+  "field_related_to_outbreak": "False",
+  "field_summary": "<p><strong>WASHINGTON, June 25, 2026</strong> – Reser’s Fine Foods, Inc., a Halifax, N.C. establishment, is recalling approximately 5,300 pounds of a&nbsp;ready-to-eat (RTE) product labeled as a pasta salad due to misbranding and undeclared allergens, the U.S. Department of Agriculture’s Food Safety and Inspection Service (FSIS) announced today. The product labeled as pasta salad may actually contain chicken salad, which contains egg and milk, known allergens, that are not declared on the product label.</p>\n<p>The RTE product labeled as pasta salad that may contain chicken salad was&nbsp;produced on June 11, 2026. The following product is subject to recall [<a href=\"/sites/default/files/food_label_pdf/2026-06/Recall-009-2026-Labels.pdf\">view labels</a>]:&nbsp;</p>\n<ul type=\"disc\">\n<li>5-lb. plastic tub packages of “Molly’s Kitchen California Style Pasta Salad” with “USE BY JUL/16/26 430” printed on the side of the plastic tub.</li>\n</ul>\n<p>The product subject to recall bears establishment number “P-00874” printed on the side of the plastic tub. This item was shipped to distributors in Alabama, Florida, North Carolina, New Jersey, South Carolina, Tennessee, and Virginia for further distribution to foodservice locations.&nbsp;</p>\n<p>The problem was discovered when the establishment notified FSIS that they mislabeled RTE chicken salad products as RTE pasta salad products.</p>\n<p>There have been no confirmed reports of adverse reactions due to consumption of this product.&nbsp;Anyone concerned about a reaction should contact a healthcare provider.&nbsp;</p>\n<p>FSIS is concerned that some product may be in consumers’ refrigerators.&nbsp;Consumers who have purchased these products are urged not to consume them. These products should be thrown away or returned to the place of purchase.</p>\n<p>FSIS routinely conducts recall effectiveness checks to verify recalling firms notify their customers of the recall and that steps are taken to make certain that the product is no longer available to consumers. When available, the retail distribution lists will be posted on the FSIS website at&nbsp;<a href=\"http://www.fsis.usda.gov/recalls\">www.fsis.usda.gov/recalls</a>.&nbsp;</p>\n<p>Consumers with questions about the recall can contact&nbsp;Reser’s Fine Foods, Inc., Consumer Affairs at 888-223-2127 or&nbsp;<a href=\"mailto:consumeraffairs@resers.com\">consumeraffairs@resers.com</a>. Members of the media with questions about the recall can contact&nbsp;Raquel Tadlock, Publicity Associate, Reser’s Fine Foods, Inc., at 619-234-0345 or&nbsp;<a href=\"mailto:Resers@HavasFormula.com\">Resers@HavasFormula.com</a>.</p>\n<p>Consumers with food safety questions can call the toll-free USDA Meat and Poultry Hotline at 888-MPHotline (888-674-6854) or send a question via email to&nbsp;<a href=\"mailto:MPHotline@usda.gov\">MPHotline@usda.gov</a>.&nbsp;For consumers that need to report a problem with a meat, poultry, or egg product, the online Electronic Consumer Complaint Monitoring System can be accessed 24 hours a day at&nbsp;<a href=\"https://foodcomplaint.fsis.usda.gov/eCCF/\">https://foodcomplaint.fsis.usda.gov/eCCF/</a>.</p>\n",
+  "field_year": "2026",
+  "langcode": "English",
+  "field_has_spanish": "False"
+}
