@@ -440,3 +440,114 @@ test('a declared FDA expansion joins its parent case through the evidence search
   );
   assert.equal(ambiguous?.linkMethod, 'self');
 });
+
+test('a declared FDA revision joins the recall it corrects — one case, one initial notification', async () => {
+  const { runSourceIngest } = await import('./pipeline');
+  const { isExpansionOfSameEvent, isRevisionOfSameEvent } = await import('./duplicates');
+  // The live Momchipz shape (verified 2026-08-25): FDA republished the
+  // announcement under a fresh slug because the corrected title renamed the
+  // allergen (gluten → wheat); the new body opens with an editorial revision
+  // note; the old slug left the listing and 301-redirects to the new one.
+  const glutenBody =
+    'August 14, 2026, Exotique Foods Inc in Ontario, Canada is recalling Momchipz Veggie Chips Broccoli Florets & Cauliflower because it may contain undeclared gluten. People who have an allergy or severe sensitivity to gluten run the risk of serious or life-threatening allergic reaction if they consume this product. The Momchipz Veggie Chips Broccoli Florets & Cauliflower was sold to 49 U.S. customers through Amazon.com between March 2026 and June 2026 Product information as follows: Brand: Momchipz Product: Veggie Chips – Broccoli Florets & Cauliflower Size: 3oz (85 g) UPC: 6 28634 44216 6 Best Before: 2026 AUGUST 31 No illnesses have been reported to date. This recall was initiated based on a retail sample result provided by the Canadian Food Inspection Agency.';
+  const base = (overrides: Record<string, unknown>) => ({
+    sourceSystem: 'fda_announcement' as const,
+    sourceAgency: 'FDA' as const,
+    rawNativeId: '/safety/x',
+    noticeType: 'recall' as const,
+    lifecycle: 'active' as const,
+    closedYear: null,
+    classification: { value: 'not_yet_classified' as const, sourceText: null },
+    expansionOfNativeId: null,
+    isRetractionNotice: false,
+    retractsNativeIds: [],
+    summaryHtml: null,
+    reasonText: null,
+    hazardCategory: 'allergen' as const,
+    firmDisplayName: 'Exotique Foods Inc',
+    firmRawVariants: ['Exotique Foods Inc'],
+    brands: [],
+    productDescription: null,
+    imageUrls: [],
+    geography: {
+      scope: 'unknown' as const,
+      states: [],
+      confidence: 'inferred' as const,
+      sourceText: null,
+    },
+    retailerNames: [],
+    heroImageUrl: null,
+    productLines: [],
+    quantityText: null,
+    illnessStatement: null,
+    consumerAction: null,
+    contactText: null,
+    officialUrl: 'https://www.fda.gov/x',
+    lastModifiedAt: null,
+    ...overrides,
+  });
+  const original = base({
+    nativeId:
+      'exotique-foods-inc-recalls-momchipz-veggie-chips-broccoli-florets-cauliflower-due-undeclared-gluten',
+    title:
+      'Exotique Foods Inc Recalls Momchipz Veggie Chips Broccoli Florets & Cauliflower Due to Undeclared Gluten',
+    summaryText: glutenBody,
+    pathogenOrAllergen: 'undeclared gluten',
+    publishedAt: '2026-08-19',
+    declaresExpansion: false,
+    declaresRevision: false,
+  });
+  const revision = base({
+    nativeId:
+      'exotique-foods-inc-recalls-momchipz-veggie-chips-broccoli-florets-cauliflower-due-undeclared-wheat',
+    title:
+      'Exotique Foods Inc Recalls Momchipz Veggie Chips Broccoli Florets & Cauliflower Due to Undeclared Wheat',
+    summaryText:
+      '“On 8/24/2026, the recalling firm updated their press release to correctly identify wheat, rather than gluten, as the allergen.” ' +
+      glutenBody.replace(/gluten/g, 'wheat'),
+    pathogenOrAllergen: 'undeclared wheat',
+    publishedAt: '2026-08-24',
+    declaresExpansion: false,
+    declaresRevision: true,
+  });
+
+  const LATER = () => new Date('2026-08-25T12:00:00Z');
+  const store = new MemoryStore();
+  type Rec = Parameters<typeof isExpansionOfSameEvent>[0];
+  const guard = (child: Rec, parent: Rec) =>
+    isExpansionOfSameEvent(child, parent) || isRevisionOfSameEvent(child, parent);
+  const ingest = (items: unknown[]) =>
+    runSourceIngest(
+      store,
+      {
+        sourceSystem: 'fda_announcement',
+        items: items.map((normalized) => ({ raw: normalized, normalized })) as never,
+        quarantined: [],
+        itemsSeen: items.length,
+        fetchedAt: LATER().toISOString(),
+      },
+      { now: LATER, expansionReferenceGuard: guard },
+    );
+
+  await ingest([original]);
+  const second = await ingest([revision]);
+  // One real-world recall, one case: the correction joined the original.
+  assert.equal(second.newCases, 0);
+  assert.equal(store.cases.size, 1);
+  const linked = await store.getSourceRecordByNativeId(
+    'fda_announcement',
+    'exotique-foods-inc-recalls-momchipz-veggie-chips-broccoli-florets-cauliflower-due-undeclared-wheat',
+  );
+  assert.equal(linked?.linkMethod, 'expansion_prefix');
+  // The merged case speaks with the corrected voice, keeps the original
+  // announce date, and names the corrected allergen.
+  const recallCase = await store.getCase(linked!.recallCaseId);
+  assert.match(recallCase!.projection.title, /Undeclared Wheat/);
+  assert.equal(recallCase!.projection.publishedAt, '2026-08-19');
+  assert.equal(recallCase!.projection.pathogenOrAllergen, 'undeclared wheat');
+  // Exactly ONE initial notification ever — the correction is an update to
+  // the recall the user already heard about, never a second "new recall".
+  const initials = [...store.notifications.values()].filter((n) => n.kind === 'initial');
+  assert.equal(initials.length, 1);
+  assert.match(initials[0].payloadSummary, /Undeclared Gluten/);
+});

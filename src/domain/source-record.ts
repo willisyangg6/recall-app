@@ -37,6 +37,15 @@ export interface NormalizedSourceRecord {
    * field existed; absence means unknown, never true.
    */
   declaresExpansion?: boolean;
+  /**
+   * True when the record's body opens with FDA's editorial revision note
+   * ("…the recalling firm updated their press release to…"): a corrected
+   * re-publication of an existing announcement, under a fresh slug whenever
+   * the correction changed the title. The pipeline searches for the original
+   * under an evidence gate, exactly as for a declared expansion. Absent on
+   * records normalized before this field existed; absence means unknown.
+   */
+  declaresRevision?: boolean;
   /** True when this record announces the retraction of a notice. */
   isRetractionNotice: boolean;
   /** Native ids referenced by a retraction notice, excluding this record's own. */

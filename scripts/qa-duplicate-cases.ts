@@ -68,6 +68,7 @@ async function main(): Promise<void> {
   const deterministic = candidates.filter((c) => c.verdict === 'deterministic');
   const review = candidates.filter((c) => c.verdict === 'review');
   const expansionPairs = candidates.filter((c) => c.signals.includes('expansion-language'));
+  const revisionPairs = candidates.filter((c) => c.signals.includes('revision-language'));
   const slugPairs = candidates.filter((c) => c.signals.includes('slug-collision'));
 
   console.log(
@@ -77,7 +78,7 @@ async function main(): Promise<void> {
   console.log(`  manual-review candidates: ${review.length}`);
   console.log(`  auto-coalesced by this report: 0 (this report never merges)`);
   console.log(
-    `  by lineage signal: slug-collision ${slugPairs.length}, declared-expansion ${expansionPairs.length}`,
+    `  by lineage signal: slug-collision ${slugPairs.length}, declared-expansion ${expansionPairs.length}, declared-revision ${revisionPairs.length}`,
   );
 
   const show = (label: string, list: typeof candidates) => {

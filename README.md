@@ -251,7 +251,11 @@ Veterinary` co-tags) is deliberately deferred, not silently included.
   pipeline searches for the parent and requires product identity (a shared UPC
   or the expansion title naming the parent's product) plus body corroboration,
   linking only when exactly one case qualifies; the merged case speaks with
-  the expansion's declared scope.
+  the expansion's declared scope. Retitled corrections — republished under a
+  fresh URL because the corrected title changed the slug, opening with FDA's
+  "updated their press release" editorial note (Momchipz, gluten→wheat) —
+  link through the same search under their own gate: the revision note plus
+  a shared UPC plus near-copy body overlap.
 - **Closed variant identity and shared fields.** A version card's name must be
   a product distinction — never a date, a state, a code, a field label, or a
   serialized source row (`src/lib/variant-identity.ts` gates construction and

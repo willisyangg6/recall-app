@@ -14,8 +14,10 @@ import { collisionBaseIdentity } from './fda/parse';
 import {
   bodySimilarity,
   declaresExpansion,
+  declaresRevision,
   findDuplicateCandidates,
   isExpansionOfSameEvent,
+  isRevisionOfSameEvent,
   isSameRecallEvent,
   normalizeFirmName,
   titlesRelate,
@@ -300,4 +302,145 @@ test('candidate classification: a declared-expansion pair is deterministic, with
   assert.equal(candidates[0].verdict, 'deterministic');
   assert.ok(candidates[0].signals.includes('expansion-language'));
   assert.ok(candidates[0].signals.includes('upc-overlap'));
+});
+
+// ── Declared revisions (retitled corrections) ───────────────────────────────
+// Live shape, verified 2026-08-25: FDA republished the Momchipz announcement
+// under a fresh slug ("…due-undeclared-gluten" → "…due-undeclared-wheat")
+// because the correction changed the title; the new body opens with an
+// editorial note declaring the update, and the old URL 301-redirects to the
+// new one. The old mechanisms missed it: no slug suffix, no expansion
+// wording — which produced a second case and a second initial notification.
+
+const MOMCHIPZ_GLUTEN_BODY =
+  'August 14, 2026, Exotique Foods Inc in Ontario , Canada is recalling Momchipz Veggie Chips Broccoli Florets & Cauliflower because it may contain undeclared gluten. People who have an allergy or severe sensitivity to gluten run the risk of serious or life-threatening allergic reaction if they consume this product. The Momchipz Veggie Chips Broccoli Florets & Cauliflower was sold to 49 U.S. customers through Amazon.com between March 2026 and June 2026 Product information as follows: Brand: Momchipz Product: Veggie Chips – Broccoli Florets & Cauliflower Size: 3oz (85 g) UPC: 6 28634 44216 6 Best Before: 2026 AUGUST 31 No illnesses have been reported to date. This recall was initiated based on a retail sample result provided by the Canadian Food Inspection Agency. Consumers who have purchased this product and have an allergy or severe sensitivity to gluten are urged to not consume the product and should discard or return product to the place of purchase for a full refund. Consumers with questions may call the company at 1-647-528-7080 from Monday-Thursday, 9 AM to 12 PM EST. The recall is being made with the knowledge of the U.S. Food and Drug Administration.';
+
+const MOMCHIPZ_WHEAT_BODY =
+  '“On 8/24/2026, the recalling firm updated their press release to correctly identify wheat, rather than gluten, as the allergen.” ' +
+  MOMCHIPZ_GLUTEN_BODY.replace(/gluten/g, 'wheat');
+
+function momchipzGluten(): NormalizedSourceRecord {
+  return record({
+    nativeId:
+      'exotique-foods-inc-recalls-momchipz-veggie-chips-broccoli-florets-cauliflower-due-undeclared-gluten',
+    title:
+      'Exotique Foods Inc Recalls Momchipz Veggie Chips Broccoli Florets & Cauliflower Due to Undeclared Gluten',
+    summaryText: MOMCHIPZ_GLUTEN_BODY,
+    firmDisplayName: 'Exotique Foods Inc',
+    hazardCategory: 'allergen',
+    pathogenOrAllergen: 'undeclared gluten',
+    publishedAt: '2026-08-19',
+  });
+}
+
+function momchipzWheat(): NormalizedSourceRecord {
+  return record({
+    nativeId:
+      'exotique-foods-inc-recalls-momchipz-veggie-chips-broccoli-florets-cauliflower-due-undeclared-wheat',
+    title:
+      'Exotique Foods Inc Recalls Momchipz Veggie Chips Broccoli Florets & Cauliflower Due to Undeclared Wheat',
+    summaryText: MOMCHIPZ_WHEAT_BODY,
+    firmDisplayName: 'Exotique Foods Inc',
+    hazardCategory: 'allergen',
+    pathogenOrAllergen: 'undeclared wheat',
+    publishedAt: '2026-08-24',
+  });
+}
+
+test('golden Momchipz: a retitled correction links as a declared revision', () => {
+  const gluten = momchipzGluten();
+  const wheat = momchipzWheat();
+  assert.ok(declaresRevision(wheat.summaryText));
+  assert.ok(!declaresRevision(gluten.summaryText));
+  // The revision wording is not expansion wording; only the new gate links it.
+  assert.ok(!declaresExpansion(wheat.title, wheat.summaryText));
+  assert.ok(isRevisionOfSameEvent(wheat, gluten));
+  // Direction matters: the original does not "revise" its own correction.
+  assert.ok(!isRevisionOfSameEvent(gluten, wheat));
+});
+
+test('every observed FDA revision-note phrasing is detected in the body opening', () => {
+  const phrasings = [
+    '“Press release was updated on August 18, 2026, to identify the ingredient supplier.” The Hampton Grocer, Inc. is recalling…',
+    'This press release was updated on November 19, 2025; it replaces an earlier version issued on November 11, 2025.',
+    '“The press release has been updated to reflect the removal of products that were not available to customers.”',
+    '“This press release is an update to the company’s press release, previously issued on 07/25/2025, to include corrected product codes.”',
+    'An earlier version of this press release was issued on 7/10/25. This press release was updated to include six additional lots.',
+    'A previous press release was issued 08/19/2024. This updated press release includes information on the addition of Gutierrez brand ground cinnamon.',
+  ];
+  for (const opening of phrasings) {
+    assert.ok(declaresRevision(opening), opening);
+  }
+});
+
+test('the old page’s "Link to Updated Press Release" navigation link is not a revision note', () => {
+  // The phrase lacks the declarative shape entirely…
+  assert.ok(!declaresRevision('Link to Updated Press Release Company Contact Information'));
+  // …and on real old pages it also sits far past the opening window.
+  const oldPage = `${MOMCHIPZ_GLUTEN_BODY} Link to Updated Press Release Company Contact Information`;
+  assert.ok(!declaresRevision(oldPage));
+});
+
+test('revision note alone never links: a shared barcode and near-copy body are required', () => {
+  const gluten = momchipzGluten();
+  // Same firm, hazard, and window, note present — but no barcode overlap.
+  const noSharedUpc = momchipzWheat();
+  noSharedUpc.summaryText = MOMCHIPZ_WHEAT_BODY.replace('6 28634 44216 6', '9 99999 99999 9');
+  assert.ok(!isRevisionOfSameEvent(noSharedUpc, gluten));
+  // Shared barcode but a genuinely different announcement (a second event
+  // whose page happens to open with a note): body overlap below the
+  // near-copy floor never links.
+  const differentEvent = momchipzWheat();
+  differentEvent.summaryText =
+    '“This press release was updated to include additional retail distribution details.” Exotique Foods Inc is announcing a voluntary recall of Momchipz Sweet Potato Crisps after routine internal testing identified the potential presence of foreign material in select bags. The affected crisps carry UPC 6 28634 44216 6 and were shipped to distributors in the northeastern United States during July 2026. Retailers have been instructed to remove the product from shelves immediately, and the company has suspended the production line involved while equipment inspections are completed.';
+  assert.ok(bodySimilarity(differentEvent.summaryText, gluten.summaryText) < 0.8);
+  assert.ok(!isRevisionOfSameEvent(differentEvent, gluten));
+});
+
+test('FSIS records never link by revision wording — recall numbers are authoritative', () => {
+  const gluten = momchipzGluten();
+  const wheat = momchipzWheat();
+  gluten.sourceSystem = 'fsis_api';
+  gluten.sourceAgency = 'FSIS';
+  wheat.sourceSystem = 'fsis_api';
+  wheat.sourceAgency = 'FSIS';
+  assert.ok(!isRevisionOfSameEvent(wheat, gluten));
+});
+
+test('candidate classification: a declared-revision pair is deterministic, with the evidence named', () => {
+  const gluten = {
+    caseId: 'gluten-case',
+    title:
+      'Exotique Foods Inc Recalls Momchipz Veggie Chips Broccoli Florets & Cauliflower Due to Undeclared Gluten',
+    firm: 'Exotique Foods Inc',
+    hazardCategory: 'allergen',
+    publishedAt: '2026-08-19',
+    sourceIds: [
+      'exotique-foods-inc-recalls-momchipz-veggie-chips-broccoli-florets-cauliflower-due-undeclared-gluten',
+    ],
+    summaryText: MOMCHIPZ_GLUTEN_BODY,
+    agency: 'FDA',
+  };
+  const wheat = {
+    caseId: 'wheat-case',
+    title:
+      'Exotique Foods Inc Recalls Momchipz Veggie Chips Broccoli Florets & Cauliflower Due to Undeclared Wheat',
+    firm: 'Exotique Foods Inc',
+    hazardCategory: 'allergen',
+    publishedAt: '2026-08-24',
+    sourceIds: [
+      'exotique-foods-inc-recalls-momchipz-veggie-chips-broccoli-florets-cauliflower-due-undeclared-wheat',
+    ],
+    summaryText: MOMCHIPZ_WHEAT_BODY,
+    agency: 'FDA',
+  };
+  const candidates = findDuplicateCandidates([gluten, wheat]);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].verdict, 'deterministic');
+  assert.ok(candidates[0].signals.includes('revision-language'));
+  assert.ok(candidates[0].signals.includes('upc-overlap'));
+  assert.ok(candidates[0].signals.some((s) => s.startsWith('revision-body')));
+  // Neither of the old identity signals applies — this is the third mechanism.
+  assert.ok(!candidates[0].signals.includes('slug-collision'));
+  assert.ok(!candidates[0].signals.includes('expansion-language'));
 });

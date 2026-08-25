@@ -3,8 +3,8 @@
  * authoritative source artifacts.
  *
  * FDA has no recall number, so identity is the announcement URL slug — and
- * FDA publishes revisions of one recall under NEW identities in two verified
- * ways:
+ * FDA publishes revisions of one recall under NEW identities in three
+ * verified ways:
  *
  *   1. Slug collision: re-publishing a revised announcement whose title
  *      slugifies identically appends a suffix ("…-health-risk" →
@@ -15,20 +15,28 @@
  *      recall…"), published under a fresh slug. Verified live on Eridanous
  *      (Lidl), OLA-OLA Pounded Yam (Fayus), and Glutinous Rice Balls
  *      (Khong Guan).
+ *   3. Retitled correction: a corrected re-publication whose TITLE changed,
+ *      so the slug changed with it, opening with an FDA editorial note that
+ *      declares the revision ("On 8/24/2026, the recalling firm updated
+ *      their press release to correctly identify wheat, rather than gluten,
+ *      as the allergen."). The old slug leaves the listing and 301-redirects
+ *      to the new one. Verified live on Momchipz (Exotique Foods,
+ *      gluten→wheat, 2026-08-25) and Lewis Bake Shop (Hartford Bakery).
  *
  * Read as separate identities, one real recall becomes two Home cards.
  *
  * The linkers here are deliberately conservative (a false merge is worse than
- * a temporary duplicate): neither a slug collision nor expansion wording alone
- * ever merges. The records must corroborate — same firm, same hazard, a
- * bounded publication window, and shared content: substantial body overlap
- * for a collision, and product identity (overlapping UPCs or the expansion
- * title naming the parent's product) for a declared expansion. Title
- * similarity by itself remains insufficient evidence everywhere: identical
- * titles are exactly why slugs collide, and a firm that recalls the same
- * product twice reuses its own headline. Anything below the bar founds its
- * own case and is only FLAGGED by the development duplicate-candidate report,
- * never auto-merged.
+ * a temporary duplicate): neither a slug collision nor expansion nor revision
+ * wording alone ever merges. The records must corroborate — same firm, same
+ * hazard, a bounded publication window, and shared content: substantial body
+ * overlap for a collision, product identity (overlapping UPCs or the
+ * expansion title naming the parent's product) for a declared expansion, and
+ * an overlapping UPC plus near-copy body overlap for a declared revision.
+ * Title similarity by itself remains insufficient evidence everywhere:
+ * identical titles are exactly why slugs collide, and a firm that recalls the
+ * same product twice reuses its own headline. Anything below the bar founds
+ * its own case and is only FLAGGED by the development duplicate-candidate
+ * report, never auto-merged.
  */
 
 import type { NormalizedSourceRecord } from '../domain/source-record';
@@ -170,6 +178,66 @@ export function isExpansionOfSameEvent(
   return bodySimilarity(child.summaryText, parent.summaryText) >= EXPANSION_BODY_SIMILARITY;
 }
 
+// ── Declared revisions (retitled corrections) ───────────────────────────────
+
+/**
+ * FDA's editorial revision note: the body opens by declaring that this page
+ * updates/replaces an earlier press release. Every live occurrence sits in
+ * the first ~200 characters ("This press release was updated on…", "The
+ * press release has been updated…", "…the recalling firm updated their press
+ * release to…", "This press release is an update to the company's press
+ * release…", "This updated press release includes…"). Bounded to "press
+ * release" vocabulary: a bare "updated" also opens genuinely new events, and
+ * the old page's trailing "Link to Updated Press Release" navigation link
+ * sits far outside the opening window this detector reads.
+ */
+const REVISION_BODY =
+  /\bpress\s+release\b[^.\n]{0,80}?\b(?:was|has\s+been|is\s+being)\s+(?:updated|revised|corrected)\b|\bpress\s+release\s+is\s+an\s+update\b|\b(?:updated|revised|corrected)\s+(?:their|its|the\s+company['’]s|the)\s+press\s+release\b|\bthis\s+(?:updated|revised|corrected)\s+press\s+release\b|\breplaces\s+an\s+earlier\s+(?:version|release)\b/i;
+
+/** True when a record's body opens with an FDA editorial revision note. */
+export function declaresRevision(summaryText?: string | null): boolean {
+  return REVISION_BODY.test((summaryText ?? '').slice(0, 600));
+}
+
+/**
+ * A revision is a re-publication, not a new document: its body is a
+ * near-copy of the original's. This floor must sit decisively above the
+ * slug-collision threshold (0.6), which two genuinely distinct events by the
+ * same firm about similar products can reach on shared boilerplate alone.
+ * Verified live: Momchipz gluten→wheat scored 0.91.
+ */
+const REVISION_BODY_SIMILARITY = 0.8;
+
+/**
+ * Deterministic gate for a DECLARED-revision pair: the child's body opens by
+ * declaring it a revision of an earlier press release, firm and hazard match,
+ * publication dates sit within the expansion window (either order — FDA
+ * re-dates edited pages), the two bodies share a barcode, and the body is a
+ * near-copy of the parent's. A revision title has no "recall of …" phrase to
+ * name its parent's product, so the barcode requirement is absolute here —
+ * a revision pair without shared UPCs stays a review candidate for a human.
+ */
+export function isRevisionOfSameEvent(
+  child: NormalizedSourceRecord,
+  parent: NormalizedSourceRecord,
+): boolean {
+  // FDA only, for the same reasons as declared expansions: FSIS lineage
+  // rests on agency-assigned recall numbers, never on wording.
+  if (child.sourceAgency !== 'FDA' || parent.sourceAgency !== 'FDA') return false;
+  if (!declaresRevision(child.summaryText)) return false;
+  const firmA = normalizeFirmName(child.firmDisplayName);
+  const firmB = normalizeFirmName(parent.firmDisplayName);
+  if (firmA === '' || firmB === '' || firmA !== firmB) return false;
+  if (child.hazardCategory !== parent.hazardCategory) return false;
+  const ageMs = Math.abs(Date.parse(child.publishedAt) - Date.parse(parent.publishedAt));
+  if (!(ageMs <= EXPANSION_WINDOW_DAYS * 24 * 60 * 60 * 1000)) return false;
+
+  const childUpcs = upcDigitsIn(child.summaryText);
+  const parentUpcs = upcDigitsIn(parent.summaryText);
+  if (![...childUpcs].some((upc) => parentUpcs.has(upc))) return false;
+  return bodySimilarity(child.summaryText, parent.summaryText) >= REVISION_BODY_SIMILARITY;
+}
+
 /**
  * Deterministic same-real-world-recall gate for a slug-collision pair. Every
  * clause must hold; failing any one leaves the records as separate cases.
@@ -261,19 +329,21 @@ export function findDuplicateCandidates(cases: CaseFingerprint[]): DuplicateCand
           Math.abs(Date.parse(a.publishedAt) - Date.parse(b.publishedAt)) / 86_400_000;
         if (daysApart <= SAME_EVENT_WINDOW_DAYS) signals.push('close-dates');
 
-        // Declared-expansion lineage: one case's own announcement says it
-        // expands a recall, and the pair shares product identity. FDA only —
-        // FSIS lineage rests on authoritative recall numbers, never wording.
+        // Declared lineage: one case's own announcement says it expands a
+        // recall, or opens with FDA's editorial revision note, and the pair
+        // shares product identity. FDA only — FSIS lineage rests on
+        // authoritative recall numbers, never wording.
         const fdaPair = a.agency !== 'FSIS' && b.agency !== 'FSIS';
+        const upcsA = upcDigitsIn(a.summaryText);
+        const upcsB = upcDigitsIn(b.summaryText);
+        const upcOverlap = [...upcsA].some((upc) => upcsB.has(upc));
         const expansionChild = fdaPair
           ? [a, b].find((item) => declaresExpansion(item.title, item.summaryText))
           : undefined;
         const expansionParent = expansionChild === a ? b : a;
         if (expansionChild) {
           signals.push('expansion-language');
-          const upcsChild = upcDigitsIn(expansionChild.summaryText);
-          const upcsParent = upcDigitsIn(expansionParent.summaryText);
-          if ([...upcsChild].some((upc) => upcsParent.has(upc))) signals.push('upc-overlap');
+          if (upcOverlap) signals.push('upc-overlap');
           const phrase = expansionProductPhrase(expansionChild.title);
           if (
             phrase !== '' &&
@@ -288,11 +358,24 @@ export function findDuplicateCandidates(cases: CaseFingerprint[]): DuplicateCand
             signals.push(`expansion-body-${similarity.toFixed(2)}`);
           }
         }
+        const revisionChild = fdaPair
+          ? [a, b].find((item) => declaresRevision(item.summaryText))
+          : undefined;
+        if (revisionChild) {
+          signals.push('revision-language');
+          if (upcOverlap && !signals.includes('upc-overlap')) signals.push('upc-overlap');
+          if (similarity >= REVISION_BODY_SIMILARITY) {
+            signals.push(`revision-body-${similarity.toFixed(2)}`);
+          }
+        }
 
         // Body similarity is required — a title prefix is vacuous for a
         // slug collision, because an identical title is why slugs collide.
         // A declared expansion additionally needs product identity: another
         // recall by the same firm is not an expansion just for being nearby.
+        // A declared revision needs both a shared barcode and a near-copy
+        // body: a revision is a re-publication, and 0.6-level similarity is
+        // reachable by two distinct events sharing firm boilerplate.
         const expansionDaysApart = daysApart <= EXPANSION_WINDOW_DAYS;
         const deterministic =
           (signals.includes('slug-collision') &&
@@ -303,7 +386,12 @@ export function findDuplicateCandidates(cases: CaseFingerprint[]): DuplicateCand
             signals.includes('same-hazard') &&
             expansionDaysApart &&
             (signals.includes('upc-overlap') || signals.includes('product-overlap')) &&
-            signals.some((s) => s.startsWith('expansion-body')));
+            signals.some((s) => s.startsWith('expansion-body'))) ||
+          (signals.includes('revision-language') &&
+            signals.includes('same-hazard') &&
+            expansionDaysApart &&
+            signals.includes('upc-overlap') &&
+            signals.some((s) => s.startsWith('revision-body')));
         // Review = an identity signal without content corroboration (a
         // possible second distinct event behind one title), or near-identical
         // titles AND bodies without the identity signal. Same-firm pairs with
@@ -316,6 +404,7 @@ export function findDuplicateCandidates(cases: CaseFingerprint[]): DuplicateCand
           (signals.includes('slug-collision') ||
             (signals.includes('expansion-language') &&
               (signals.includes('product-overlap') || signals.includes('upc-overlap'))) ||
+            (signals.includes('revision-language') && signals.includes('upc-overlap')) ||
             (signals.includes('title-prefix') &&
               signals.some((s) => s.startsWith('body-similarity'))));
         const verdict: DuplicateVerdict = deterministic

@@ -118,6 +118,26 @@ Four distinct FDA-side artifacts exist for the same underlying recall activity. 
 > (Khong Guan's base was edited one day AFTER its expansion published), so
 > a case's consumer voice prefers an expansion-titled record within a
 > 30-day window of the newest record.
+>
+> **(e) Retitled corrections under fresh slugs [VERIFIED 2026-08-25]:** the
+> slug is derived from the title, so when a CORRECTION changes the title,
+> the announcement moves to a new URL — verified live on Momchipz (Exotique
+> Foods): "…Due to Undeclared **Gluten**" (published 08/19) was republished
+> as "…Due to Undeclared **Wheat**" (08/24) after the firm corrected the
+> allergen identification. Three authoritative signals mark the move: the
+> new body OPENS with an FDA editorial note ("On 8/24/2026, the recalling
+> firm updated their press release to correctly identify wheat, rather than
+> gluten, as the allergen."), the old slug leaves the listing JSON entirely,
+> and the old URL 301-redirects to the new one. The same opening-note shape
+> appears corpus-wide ("This press release was updated on…", "…is an update
+> to the company's press release…", verified on Hartford Bakery, ByHeart,
+> Tropicale, H-E-B, and others); the old page, while it still exists,
+> carries a trailing "Link to Updated Press Release" navigation link. The
+> pipeline links a declared revision through the same one-qualifying-case
+> search as (d), under its own gate: revision note in the body opening +
+> same firm + same hazard + ≤120 days + an overlapping UPC + body overlap
+> ≥0.8 (a revision is a near-copy re-publication; 0.6-level overlap is
+> reachable by two distinct events sharing firm boilerplate). FDA only.
 
 **Identifier situation [VERIFIED]:** Announcements carry **no recall number and no event ID**. The only stable-ish key is the announcement URL path. There is no machine-readable link from an announcement to its later enforcement record; even firm names differ across the two ("Albertsons" vs "Albertsons Companies LLC"). iRES (§3.3) holds a "Press Release URL(s)" field internally, but behind an auth-gated API. **Joining announcements to enforcement records must be fuzzy** (firm + product text + dates) **[INFERENCE from verified absence of any shared key]**.
 

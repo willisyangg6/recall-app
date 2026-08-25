@@ -82,12 +82,14 @@ export interface IngestOptions {
    */
   expansionGuard?: (child: NormalizedSourceRecord, parent: NormalizedSourceRecord) => boolean;
   /**
-   * Evidence gate for a record that DECLARES itself an expansion without
-   * naming a linkable parent id ("Lidl US Expands Recall of…"). The pipeline
-   * searches recent records of the same source for a parent this gate
-   * accepts; the record links only when exactly ONE existing case qualifies,
-   * and founds its own case otherwise. FDA passes `isExpansionOfSameEvent`;
-   * FSIS passes none (its expansions carry the parent's recall number).
+   * Evidence gate for a record that DECLARES itself an expansion ("Lidl US
+   * Expands Recall of…") or a revision ("…updated their press release to…")
+   * without naming a linkable parent id. The pipeline searches recent
+   * records of the same source for a parent this gate accepts; the record
+   * links only when exactly ONE existing case qualifies, and founds its own
+   * case otherwise. FDA passes `isExpansionOfSameEvent` OR
+   * `isRevisionOfSameEvent`; FSIS passes none (its expansions carry the
+   * parent's recall number).
    */
   expansionReferenceGuard?: (
     child: NormalizedSourceRecord,
@@ -316,13 +318,18 @@ async function ingestOne(
       linkMethod = 'expansion_prefix';
     }
   }
-  // A record that declares itself an expansion without naming a parent id
-  // ("…Expands Recall of…") searches recent records of this source for one.
-  // The link happens only when the evidence gate accepts a parent AND every
-  // accepted parent belongs to the SAME case — two qualifying cases mean the
-  // lineage is ambiguous, and ambiguity founds a separate case for a human to
-  // reconcile rather than guessing which recall was expanded.
-  if (!targetCase && normalized.declaresExpansion && expansionReferenceGuard) {
+  // A record that declares itself an expansion ("…Expands Recall of…") or a
+  // revision (FDA's "updated their press release" note) without naming a
+  // parent id searches recent records of this source for one. The link
+  // happens only when the evidence gate accepts a parent AND every accepted
+  // parent belongs to the SAME case — two qualifying cases mean the lineage
+  // is ambiguous, and ambiguity founds a separate case for a human to
+  // reconcile rather than guessing which recall was extended.
+  if (
+    !targetCase &&
+    (normalized.declaresExpansion || normalized.declaresRevision) &&
+    expansionReferenceGuard
+  ) {
     const windowStart = new Date(
       Date.parse(normalized.publishedAt) - EXPANSION_SEARCH_WINDOW_DAYS * 24 * 60 * 60 * 1000,
     ).toISOString();

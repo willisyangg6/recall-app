@@ -24,7 +24,7 @@ import {
 import { classifyIllnessReport } from '../../domain/illness';
 import { extractRetailerNames } from '../../domain/retailer';
 import { statesInText } from '../../domain/us-geography';
-import { declaresExpansion } from '../duplicates';
+import { declaresExpansion, declaresRevision } from '../duplicates';
 import { extractProductPhotos, primaryPhoto } from '../../lib/product-photos';
 import type { Classification, Geography, HazardCategory } from '../../domain/recall-types';
 import type { NormalizedSourceRecord } from '../../domain/source-record';
@@ -591,8 +591,11 @@ export function parseFdaAnnouncement(source: FdaAnnouncementSource): NormalizedS
     // parent; the pipeline's evidence gate decides whether they link.
     expansionOfNativeId: collisionBaseIdentity(nativeId),
     // A declared expansion ("…Expands Recall of…") has no linkable parent id;
-    // the pipeline searches for the parent under its own evidence gate.
+    // the pipeline searches for the parent under its own evidence gate. Same
+    // for a declared revision (FDA's "updated their press release" editorial
+    // note), whose slug changes whenever the correction retitled the page.
     declaresExpansion: declaresExpansion(title, bodyText),
+    declaresRevision: declaresRevision(bodyText),
     isRetractionNotice: false,
     retractsNativeIds: [],
     title,

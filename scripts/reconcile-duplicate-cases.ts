@@ -31,6 +31,7 @@ import type { NormalizedSourceRecord } from '../src/domain/source-record';
 import {
   findDuplicateCandidates,
   isExpansionOfSameEvent,
+  isRevisionOfSameEvent,
   isSameRecallEvent,
   type CaseFingerprint,
 } from '../src/server/duplicates';
@@ -113,9 +114,10 @@ async function main(): Promise<void> {
     const survivor = absorbed === pair.a ? pair.b : pair.a;
 
     // Re-verify against the full normalized records, not just projections.
-    // A pair qualifies through EITHER lineage mechanism, in either direction:
-    // a slug-collision re-publication (isSameRecallEvent) or a declared
-    // expansion (isExpansionOfSameEvent).
+    // A pair qualifies through ANY lineage mechanism, in either direction:
+    // a slug-collision re-publication (isSameRecallEvent), a declared
+    // expansion (isExpansionOfSameEvent), or a declared revision — a
+    // retitled correction under a fresh slug (isRevisionOfSameEvent).
     const records = await client
       .from('source_records')
       .select('id, native_id, recall_case_id, normalized')
@@ -127,7 +129,9 @@ async function main(): Promise<void> {
       isSameRecallEvent(a, b) ||
       isSameRecallEvent(b, a) ||
       isExpansionOfSameEvent(a, b) ||
-      isExpansionOfSameEvent(b, a);
+      isExpansionOfSameEvent(b, a) ||
+      isRevisionOfSameEvent(a, b) ||
+      isRevisionOfSameEvent(b, a);
     const verified = absorbedRecords.every((child) =>
       survivorRecords.some((parent) =>
         sameEvent(

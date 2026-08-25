@@ -18,7 +18,7 @@
  */
 
 import type { NormalizedSourceRecord } from '../../domain/source-record';
-import { isExpansionOfSameEvent, isSameRecallEvent } from '../duplicates';
+import { isExpansionOfSameEvent, isRevisionOfSameEvent, isSameRecallEvent } from '../duplicates';
 import {
   contentHash,
   runSourceIngest,
@@ -289,12 +289,14 @@ export async function runFdaIngest(
       itemsSeen: input.listing.items.length,
       fetchedAt: input.listing.fetchedAt,
     },
-    // Slug-collision parents ("…-health-risk-0") and declared expansions
-    // ("…Expands Recall of…") must corroborate before one consumer case
-    // absorbs both announcements.
+    // Slug-collision parents ("…-health-risk-0"), declared expansions
+    // ("…Expands Recall of…"), and declared revisions ("…updated their press
+    // release to…") must corroborate before one consumer case absorbs both
+    // announcements.
     {
       expansionGuard: isSameRecallEvent,
-      expansionReferenceGuard: isExpansionOfSameEvent,
+      expansionReferenceGuard: (child, parent) =>
+        isExpansionOfSameEvent(child, parent) || isRevisionOfSameEvent(child, parent),
       ...options,
     },
   );

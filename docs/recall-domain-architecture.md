@@ -928,3 +928,28 @@ name a version, or occupy two roles at once. This pass closes those.
   both lineage signals; the reconcile script (dry-run by default) verifies
   each pair at record level before any merge and picks the earlier-founded
   case as survivor for expansion pairs.
+
+**Declared-revision lineage (2026-08-25, seventh pass).** The Momchipz pair
+(Exotique Foods) exposed a third verified way FDA republishes one recall
+under a new identity: a RETITLED CORRECTION. The slug derives from the
+title, so a correction that changes the title moves the announcement to a
+fresh URL — "…Due to Undeclared Gluten" (08/19) became "…Due to Undeclared
+Wheat" (08/24), the old slug left the listing, and the old URL now
+301-redirects to the new one. Neither existing mechanism could see it (no
+slug suffix, no expansion wording), so one recall became two cases and TWO
+initial notifications. The authoritative in-band signal is FDA's editorial
+note opening the new body ("On 8/24/2026, the recalling firm updated their
+press release to correctly identify wheat, rather than gluten, as the
+allergen." — the same shape opens Hartford Bakery, ByHeart, Tropicale,
+H-E-B, and others). `declaresRevision` detects that note in the body's
+first 600 characters (the old page's trailing "Link to Updated Press
+Release" navigation link never qualifies); `isRevisionOfSameEvent` gates
+the link on same firm + same hazard + ≤120 days + an overlapping UPC + body
+overlap ≥0.8 — a revision is a near-copy re-publication, and the 0.8 floor
+sits decisively above the 0.6 that two distinct events by one firm can
+reach on shared boilerplate. The pipeline reuses the declared-expansion
+search (link only when exactly one case qualifies), `qa:duplicates` reports
+a `declared-revision` lineage count, and the reconcile script accepts the
+new gate in its record-level verification. Alongside this, `projectCase`
+now selects `pathogenOrAllergen` newest-first instead of input-order-first,
+so a merged correction names the corrected allergen deterministically.
