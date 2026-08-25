@@ -3,10 +3,11 @@ import { Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-
 import { Link } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PhotoThumbnail } from '@/components/photo-gallery';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { companyLine, productSummaryFromTitle } from '@/lib/consumer-summary';
+import { brandLine, companyLine, productDisplayName } from '@/lib/consumer-summary';
 import { buildFeedSections } from '@/lib/feed-relevance';
 import { fetchCurrentFeed, isFeedConfigured, type FeedItem } from '@/lib/recall-feed';
 import {
@@ -70,9 +71,11 @@ function Badge({ label, emphasized }: { label: string; emphasized?: boolean }) {
  */
 function FeedCard({ item }: { item: FeedItem }) {
   const risk = riskPresentation(item.classificationValue);
-  const product = productSummaryFromTitle(item.title) ?? item.title;
+  const product = productDisplayName(item.productDescription, item.title);
   const company = companyLine(item.firmName, item.title);
+  const brands = brandLine(item.brands, item.firmName, product);
   const reason = reasonLine(item.reasonText, item.hazardCategory, item.pathogenOrAllergen);
+  const sourceLabel = item.sourceAgency === 'FDA' ? 'FDA' : 'USDA FSIS';
   return (
     <Link href={{ pathname: '/recall/[id]', params: { id: item.id } }} asChild>
       <Pressable accessibilityRole="button">
@@ -82,16 +85,29 @@ function FeedCard({ item }: { item: FeedItem }) {
               label={noticeTypeLabel(item.noticeType)}
               emphasized={item.noticeType === 'public_health_alert'}
             />
-            {risk ? <Badge label={risk.label} /> : null}
+            {/* A badge only for an actual assigned class: "pending" on every
+                fresh FDA card reads as unfinished; the hazard line below is
+                the prominent risk information. The truthful pending state
+                stays on the detail screen. */}
+            {risk && item.classificationValue.startsWith('class_') ? (
+              <Badge label={risk.label} />
+            ) : null}
           </View>
-          <ThemedText type="subtitle">{product}</ThemedText>
+          {/* Product identity stays dominant; the photo is a recognition aid
+              beside it, and the row collapses cleanly when there is none. */}
+          <View style={styles.cardBody}>
+            <View style={styles.cardText}>
+              <ThemedText type="subtitle">{product}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {brands ? `${company} · Brand: ${brands}` : company}
+              </ThemedText>
+              {reason ? <ThemedText type="small">{reason}</ThemedText> : null}
+              <ThemedText type="small">{geographyLabel(item.geography)}</ThemedText>
+            </View>
+            <PhotoThumbnail uri={item.heroImageUrl} alt={product} />
+          </View>
           <ThemedText type="small" themeColor="textSecondary">
-            {company}
-          </ThemedText>
-          {reason ? <ThemedText type="small">{reason}</ThemedText> : null}
-          <ThemedText type="small">{geographyLabel(item.geography)}</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {timingLine(item.publishedAt, item.lastPublicActivityAt)} · Source: USDA FSIS
+            {timingLine(item.publishedAt, item.lastPublicActivityAt)} · Source: {sourceLabel}
           </ThemedText>
         </ThemedView>
       </Pressable>
@@ -168,7 +184,7 @@ export default function HomeScreen() {
                 {section.title.toUpperCase()} ({olderActive.length})
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                Still listed as active by USDA FSIS, but announced more than 60 days ago.
+                Still listed as active by the issuing agency, but announced more than 60 days ago.
               </ThemedText>
               <Pressable accessibilityRole="button" onPress={() => setShowOlder((value) => !value)}>
                 <ThemedText type="small" themeColor="link">
@@ -193,7 +209,7 @@ export default function HomeScreen() {
         ListEmptyComponent={
           <CenteredMessage
             title="No current recalls loaded"
-            body="Run the FSIS ingest against your backend, then pull to refresh."
+            body="Run the FSIS or FDA ingest against your backend, then pull to refresh."
           />
         }
       />
@@ -231,6 +247,18 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     borderRadius: Radii.medium,
     marginBottom: Spacing.two,
+  },
+  cardBody: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
+  },
+  // flexShrink lets long product names wrap instead of pushing the thumbnail
+  // off the card.
+  cardText: {
+    flex: 1,
+    flexShrink: 1,
+    gap: Spacing.one,
   },
   badgeRow: {
     flexDirection: 'row',

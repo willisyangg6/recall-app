@@ -18,6 +18,7 @@ export function isFeedConfigured(): boolean {
 
 export interface FeedItem {
   id: string;
+  sourceAgency: 'FDA' | 'FSIS';
   noticeType: 'recall' | 'public_health_alert';
   state: 'active' | 'closed' | 'retracted';
   title: string;
@@ -28,8 +29,27 @@ export interface FeedItem {
   reasonText: string | null;
   pathogenOrAllergen: string | null;
   firmName: string | null;
+  /** Source-structured brands (FDA); empty for FSIS/older rows. */
+  brands: string[];
+  /** Source-structured product description (FDA); null for FSIS/older rows. */
+  productDescription: string | null;
+  /** Source-stated retailers ("Sold at") — future store-preference signal. */
+  retailerNames: string[];
+  /** Lead product photo for card recognition; null when none is available. */
+  heroImageUrl: string | null;
   geography: CaseProjection['geography'];
   officialUrl: string;
+}
+
+/** A hosted visual rendered from an official source document (FSIS labels). */
+export interface CaseVisual {
+  url: string;
+  role: string;
+  page: number;
+  width: number | null;
+  height: number | null;
+  /** The official document this image was rendered from. */
+  sourceUrl: string;
 }
 
 export interface CaseDetail {
@@ -37,6 +57,8 @@ export interface CaseDetail {
   projection: CaseProjection;
   timeline: TimelineEntry[];
   affectedProducts: AffectedProduct[];
+  /** Rendered official-document visuals; [] until the backend generates them. */
+  visuals: CaseVisual[];
 }
 
 async function restGet<T>(pathAndQuery: string): Promise<T> {
@@ -58,6 +80,7 @@ async function restGet<T>(pathAndQuery: string): Promise<T> {
 
 interface FeedRow {
   id: string;
+  source_agency: FeedItem['sourceAgency'];
   notice_type: FeedItem['noticeType'];
   state: FeedItem['state'];
   title: string;
@@ -68,12 +91,17 @@ interface FeedRow {
   reason_text: string | null;
   pathogen_or_allergen: string | null;
   firm_name: string | null;
+  brands: string[] | null;
+  product_description: string | null;
+  retailer_names: string[] | null;
+  hero_image_url: string | null;
   geography: CaseProjection['geography'];
   official_url: string;
 }
 
 const FEED_SELECT = [
   'id',
+  'source_agency',
   'notice_type',
   'state',
   'title',
@@ -84,6 +112,10 @@ const FEED_SELECT = [
   'reason_text:projection->>reasonText',
   'pathogen_or_allergen:projection->>pathogenOrAllergen',
   'firm_name:projection->recallingFirm->>displayName',
+  'brands:projection->brands',
+  'product_description:projection->>productDescription',
+  'retailer_names:projection->retailerNames',
+  'hero_image_url:projection->>heroImageUrl',
   'geography:projection->geography',
   'official_url:projection->>officialUrl',
 ].join(',');
@@ -101,6 +133,7 @@ export async function fetchCurrentFeed(limit = 500): Promise<FeedItem[]> {
   );
   return rows.map((row) => ({
     id: row.id,
+    sourceAgency: row.source_agency,
     noticeType: row.notice_type,
     state: row.state,
     title: row.title,
@@ -111,6 +144,11 @@ export async function fetchCurrentFeed(limit = 500): Promise<FeedItem[]> {
     reasonText: row.reason_text,
     pathogenOrAllergen: row.pathogen_or_allergen,
     firmName: row.firm_name,
+    // Older persisted projections predate these fields; absent means unknown.
+    brands: row.brands ?? [],
+    productDescription: row.product_description ?? null,
+    retailerNames: row.retailer_names ?? [],
+    heroImageUrl: row.hero_image_url ?? null,
     geography: row.geography,
     officialUrl: row.official_url,
   }));
@@ -127,6 +165,40 @@ interface DetailRow {
     raw_text: string;
     extraction_confidence: AffectedProduct['extractionConfidence'];
   }[];
+}
+
+interface VisualRow {
+  url: string;
+  role: string;
+  page: number;
+  width: number | null;
+  height: number | null;
+  source_url: string;
+}
+
+/**
+ * Rendered official-document visuals for a case. A separate, fault-tolerant
+ * request: the table arrives with the FSIS label pipeline's migration, and a
+ * backend that does not have it yet must degrade to "no visuals", never break
+ * the detail screen.
+ */
+async function fetchCaseVisuals(id: string): Promise<CaseVisual[]> {
+  try {
+    const rows = await restGet<VisualRow[]>(
+      `product_visuals?select=url,role,page,width,height,source_url` +
+        `&recall_case_id=eq.${encodeURIComponent(id)}&order=page.asc`,
+    );
+    return rows.map((row) => ({
+      url: row.url,
+      role: row.role,
+      page: row.page,
+      width: row.width,
+      height: row.height,
+      sourceUrl: row.source_url,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchCaseDetail(id: string): Promise<CaseDetail | null> {
@@ -148,5 +220,6 @@ export async function fetchCaseDetail(id: string): Promise<CaseDetail | null> {
         rawText: p.raw_text,
         extractionConfidence: p.extraction_confidence,
       })),
+    visuals: await fetchCaseVisuals(id),
   };
 }

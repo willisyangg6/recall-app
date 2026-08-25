@@ -94,3 +94,40 @@ test('illness statement three-way semantics', () => {
     true,
   );
 });
+
+test('an expansion-titled record keeps the voice over a re-dated base page', () => {
+  // Verified live on Khong Guan: FDA edited the BASE announcement one day
+  // after publishing the expansion (removing customer names), re-dating it
+  // past the expansion. The expansion's own words are the agency's latest
+  // statement of what is recalled, so it stays the consumer voice.
+  const base = parseFsisRecord(loadFixture('recall-active-stated-states-016-2026'));
+  const original: NormalizedSourceRecord = {
+    ...base,
+    nativeId: 'khong-guan-issues-recall-glutinous-rice-balls',
+    title: 'Khong Guan Corporation Issues Recall of Glutinous Rice Balls',
+    summaryText: 'Original announcement, updated to remove customer names.',
+    publishedAt: '2026-07-16',
+  };
+  const expansion: NormalizedSourceRecord = {
+    ...base,
+    nativeId: 'khong-guan-issues-expanded-recall-glutinous-rice-balls',
+    title:
+      'Khong Guan Corporation Issues Expanded Recall of Glutinous Rice Balls to Include Black & White Glutinous Rice Balls',
+    summaryText: 'Expansion announcement listing both affected products.',
+    publishedAt: '2026-07-15',
+  };
+  const projected = projectCase([original, expansion]);
+  assert.equal(projected.title, expansion.title);
+  assert.equal(projected.summaryText, expansion.summaryText);
+  // The case's announce date stays the earliest record's.
+  assert.equal(projected.publishedAt, '2026-07-15');
+  // A genuinely newer announcement months later still supersedes.
+  const muchLater: NormalizedSourceRecord = {
+    ...original,
+    nativeId: 'khong-guan-final-update',
+    title: 'Khong Guan Corporation Recall Update',
+    summaryText: 'Final update.',
+    publishedAt: '2026-11-20',
+  };
+  assert.equal(projectCase([original, expansion, muchLater]).title, muchLater.title);
+});

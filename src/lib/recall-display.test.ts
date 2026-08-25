@@ -6,6 +6,7 @@ import {
   consumerActionDisplay,
   geographyDetail,
   geographyLabel,
+  healthRiskSummary,
   illnessDisplay,
   reasonLine,
   riskPresentation,
@@ -25,8 +26,10 @@ test('risk presentation is concise, standardized, and never invents a class', ()
     explanation: 'Health problems are not expected.',
   });
   assert.equal(riskPresentation('class_I')?.label.includes('FSIS'), false);
-  // Unclassified is shown honestly as pending, never blank or guessed.
-  assert.equal(riskPresentation('not_yet_classified')?.label, 'Risk level pending');
+  // Unclassified stays truthful but reads as an intentional state, not
+  // missing data — the normal condition for fresh FDA announcements.
+  assert.equal(riskPresentation('not_yet_classified')?.label, 'Not yet assigned');
+  assert.match(riskPresentation('not_yet_classified')?.explanation ?? '', /later in its process/);
   // PHAs must never be assigned a class.
   assert.equal(riskPresentation('not_applicable_pha'), null);
   assert.equal(riskPresentation('unexpected_value'), null);
@@ -47,15 +50,104 @@ test('reason line maps structured FSIS reasons to consumer wording', () => {
     'Produced without inspection',
   );
   assert.equal(reasonLine('Import Violation', 'other_regulatory', null), 'Import violation');
-  // Multi-reason records (real: 006-2025) keep every reason.
+  // Multi-reason records (real: 006-2025) keep every reason, hazard first.
   assert.equal(
     reasonLine('Misbranding, Unreported Allergens', 'allergen', 'undeclared milk'),
-    'Misbranding · Undeclared milk',
+    'Undeclared milk allergen · Misbranding',
   );
   assert.equal(reasonLine('Unreported Allergens', 'allergen', null), 'Undeclared allergen');
   // Unmapped reasons pass through verbatim — never weakened, never dropped.
   assert.equal(reasonLine('Some Future Reason', 'unknown', null), 'Some Future Reason');
   assert.equal(reasonLine(null, 'unknown', null), null);
+});
+
+test('reason labels are standardized across FDA source casing variants (founder Part 6)', () => {
+  // FDA reason descriptions carry inconsistent casing; the structured hazard
+  // slots drive a consistent consumer label. Raw text stays in the projection.
+  assert.equal(
+    reasonLine('Possible E. Coli Contamination', 'microbial_contamination', 'E. coli'),
+    'Possible E. coli contamination',
+  );
+  assert.equal(
+    reasonLine('May Contain Undeclared Soy', 'allergen', 'undeclared soybean'),
+    'Undeclared soy allergen',
+  );
+  assert.equal(
+    reasonLine('undeclared gluten', 'allergen', 'undeclared gluten'),
+    'Undeclared gluten',
+  );
+  assert.equal(
+    reasonLine('Undeclared milk and sesame', 'allergen', 'undeclared milk and sesame'),
+    'Undeclared milk and sesame allergens',
+  );
+  assert.equal(
+    reasonLine('Undeclared cashews and pistachios', 'allergen', 'undeclared tree nuts'),
+    'Undeclared tree nut allergen',
+  );
+  assert.equal(
+    reasonLine('Possible foreign material contamination with glass', 'foreign_material', null),
+    'Possible glass contamination',
+  );
+  assert.equal(
+    reasonLine('Due to Elevated Levels of Lead', 'chemical_contamination', 'lead'),
+    'Possible lead contamination',
+  );
+  assert.equal(
+    reasonLine(
+      'Due to possible radionuclide contamination.',
+      'chemical_contamination',
+      'Cesium-137',
+    ),
+    'Possible Cesium-137 contamination',
+  );
+  // Scientific organism names keep their correct casing.
+  assert.equal(
+    reasonLine('Listeria', 'microbial_contamination', 'Listeria monocytogenes'),
+    'Possible Listeria monocytogenes contamination',
+  );
+});
+
+test('health risk is a concise deterministic template, never source prose (founder Part 7)', () => {
+  const ecoli = healthRiskSummary('microbial_contamination', 'E. coli', null);
+  assert.match(ecoli ?? '', /^E\. coli can cause severe stomach cramps/);
+  const listeria = healthRiskSummary('microbial_contamination', 'Listeria monocytogenes', null);
+  assert.equal(
+    listeria,
+    'Listeria can cause serious illness, especially in pregnant people, older adults, newborns, and people with weakened immune systems.',
+  );
+  const soy = healthRiskSummary('allergen', 'undeclared soybean', null);
+  assert.equal(
+    soy,
+    'People with a soy allergy or severe sensitivity risk a serious or life-threatening allergic reaction if they consume this product.',
+  );
+  const multi = healthRiskSummary('allergen', 'undeclared milk and sesame', null);
+  assert.match(multi ?? '', /milk or sesame allergy/);
+  const gluten = healthRiskSummary('allergen', 'undeclared gluten', null);
+  assert.match(gluten ?? '', /celiac disease/);
+  const glass = healthRiskSummary(
+    'foreign_material',
+    null,
+    'Possible foreign material contamination with glass',
+  );
+  assert.equal(
+    glass,
+    'Swallowing pieces of glass can injure the mouth, throat, or digestive tract.',
+  );
+  const lead = healthRiskSummary('chemical_contamination', 'lead', null);
+  assert.match(lead ?? '', /^Lead exposure can be harmful/);
+
+  // Concise: every template stays within the 20–50 word target band.
+  for (const text of [ecoli, listeria, soy, multi, gluten, glass, lead]) {
+    const words = (text ?? '').split(/\s+/).length;
+    assert.ok(words >= 10 && words <= 50, `${words} words: ${text}`);
+    assert.match(text ?? '', /^[A-Z]/);
+    assert.match(text ?? '', /\.$/);
+  }
+
+  // No safe mapping → omitted, never broken prose or boilerplate.
+  assert.equal(healthRiskSummary('other_regulatory', null, 'Import Violation'), null);
+  assert.equal(healthRiskSummary('unknown', null, null), null);
+  assert.equal(healthRiskSummary('microbial_contamination', null, null), null);
 });
 
 test('illness display maps the three states to standardized consumer wording', () => {

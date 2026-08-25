@@ -88,6 +88,22 @@ export class SupabaseStore implements RecallStore {
     return data ? this.toSourceRecordRow(data) : null;
   }
 
+  async listSourceRecordsSince(
+    sourceSystem: SourceSystem,
+    publishedAfterIso: string,
+  ): Promise<SourceRecordRow[]> {
+    // publishedAt lives inside the normalized payload; ISO strings compare
+    // lexicographically, and the caller passes a date-only lower bound so a
+    // date-only publishedAt on the boundary day still qualifies.
+    const { data, error } = await this.client
+      .from('source_records')
+      .select('*')
+      .eq('source_system', sourceSystem)
+      .gte('normalized->>publishedAt', publishedAfterIso.slice(0, 10));
+    if (error || !data) this.fail('listSourceRecordsSince', error);
+    return data.map((row) => this.toSourceRecordRow(row));
+  }
+
   async insertSourceRecord(row: Omit<SourceRecordRow, 'id'>): Promise<SourceRecordRow> {
     const { data, error } = await this.client
       .from('source_records')

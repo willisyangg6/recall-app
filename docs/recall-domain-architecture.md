@@ -442,4 +442,489 @@ Contents:
 - **Upstream-ingredient notices** (PHAs for FSIS products containing an FDA-recalled ingredient — a recurring family, 21 live records) keep the causal ingredient in the consumer product summary ("…Products Containing Recalled FDA-Regulated Jalapeños"), never collapsing to a bare product-category label; when no single firm represents the notice, the display says "Multiple products and brands" only when the source title states that scope, else "Company not specified" — never a fabricated organization.
 - **Consumer feed relevance vs lifecycle** — see the §2.3 correction above.
 
+**Implementation notes added 2026-08-21 (Milestone 2 — FDA announcement discovery):**
+
+- The pipeline core is now source-agnostic (`runSourceIngest`): adapters hand
+  it already-normalized records plus raw payloads; FSIS and FDA share
+  snapshots, identity upserts, case projection, material-change detection, and
+  the notification ledger unchanged. No schema migration was needed — the
+  Milestone 1 schema was already source-agnostic.
+- **FDA announcement identity (Phase A):** the announcement URL slug with the
+  observed update-churn prefixes (`updated-`, `update-`, `updated-release-`)
+  stripped; the full path is retained as the raw identity and in
+  `officialUrl`/snapshots. This is explicitly the identity of the
+  _announcement_, not the eventual enforcement event — Phase B reconciliation
+  gets the preserved path, title, firm, dates, and body verbatim to match on.
+  Residual risk (accepted): a retitle whose slug truncates differently than
+  the original would found a duplicate case — duplicate-but-true, per Part
+  1.2's failure-mode ranking.
+- **FDA lifecycle in Phase A is always `active`:** the listing JSON exposes no
+  closure signal; truthful closure arrives with openFDA reconciliation.
+  Announcements are pre-classification (`not_yet_classified`) unless the page
+  itself states a class; hazard language never implies one.
+- The listing item's `changed` timestamp moves on any page edit, so the
+  listing row is the content-hash key and detail pages are fetched only for
+  new/changed records; the stored snapshot carries the listing row plus the
+  page's `<main>` region (per Part 12.3, extended to every FDA case since the
+  body holds distribution/illness/codes needed for the consumer projection).
+- RSS is corroborating discovery, never a second identity: an RSS item missing
+  from the listing is an operational warning and is ingested from its official
+  page (scoped by the page's own Product Type field); one seen in both
+  channels is one source record.
+- Pet food (listing rows co-tagged `Animal & Veterinary`) is excluded and
+  counted, pending an explicit product decision — deferred, not silently
+  dropped or included.
+- `hazardCategory` gained `chemical_contamination` (lead, Cesium-137 — real
+  FDA reason categories with no honest home in the original enum);
+  `NormalizedSourceRecord`/`CaseProjection` gained source-structured `brands`,
+  `productDescription`, and (normalized-record only) `imageUrls` — fields FDA
+  structures but FSIS does not; older persisted rows omit them and readers
+  treat absence as unknown.
+
+**Product decisions recorded 2026-08-22 (FDA consumer-UX pass):**
+
+- **The government source is provenance, not required reading.** The app must
+  answer "does this apply to me?" itself: package identifiers, distribution,
+  instructions, and health context are extracted into the app wherever the
+  official source states them in machine-readable form. UX copy never directs
+  a user to the official notice as part of the normal task flow; the official
+  link remains at the bottom of every case for credibility and verification.
+- **Future Home default is "Affects me", with "All recalls" always available.**
+  Once user preferences exist (state, allergens, stores — manual input, no
+  location APIs, no accounts yet), the default feed organizes by personal
+  relevance; the full national feed is never deleted or permanently hidden,
+  and unknown-distribution cases surface as their own labeled category per
+  Part 5.3. The read model already answers these filters (geography scope and
+  states, `pathogenOrAllergen` → canonical allergen tokens via
+  `domain/hazard.normalizedAllergenTokens`, source-stated
+  `projection.retailerNames`); `lib/relevance.ts` proves the matching
+  semantics without any stored preferences or fake badges.
+- **Company, brand, and retailer are three distinct consumer roles.**
+  `recallingFirm` (who recalled), `brands` (what the package says), and
+  `retailerNames` (where the source says it was sold — deterministic
+  extraction from sold-at/shipped-to/distributed-to constructions in
+  `domain/retailer.ts`, never inferred from retail footprints). Persisted
+  projections that predate `retailerNames` omit the key; the display layer
+  re-derives it from preserved source text, so no re-ingestion is needed.
+- **Package identification is progressive.** "Check your package" shows a
+  recognizable summary (product, brand, package description) with identifiers
+  (UPCs, lots, date codes, on-package locations — extracted at display time
+  by `lib/package-check.ts` from structured product lines plus label-driven
+  prose patterns) behind an explicit "Do you have this product?" expansion.
+  Lot-specific detail never appears in the always-visible consumer action.
+  Benchmark telemetry distinguishes "source states no identifiers" from
+  "parser missed stated identifiers".
+- **Classification pending is an intentional state.** Cards carry a class
+  badge only when a class is assigned; the detail page shows
+  "FDA classification: Not yet assigned" with a one-line explanation. The
+  hazard line ("Possible E. coli contamination", "Undeclared soy allergen" —
+  standardized casing over the structured hazard slots) is the prominent risk
+  information until Phase B enrichment arrives.
+- **Health risk is template-built.** 1–2 sentence deterministic hazard-family
+  templates (pathogens, allergens, foreign material, chemical agents) replace
+  source-prose education excerpts; when no safe template exists the section is
+  omitted. Illness-report semantics are unchanged and never contaminated by
+  education text.
+
+**Consumer Projection V2 (2026-08-22): a semantic layer between source data and UI.**
+
+Manual review kept finding a different defect on every recall inspected, and the
+common cause was architectural: the app was rendering _source shapes_ (an FDA
+table column, a press-release heading) instead of _consumer concepts_. V2 adds
+the missing layer:
+
+```
+source data → parsed facts → consumer concepts → UI
+```
+
+- **Concept routing** (`src/lib/consumer-concepts.ts`): every extracted fact is
+  routed into one of our concepts (variant, package size, packaging, package
+  color, best/use/sell-by, expiration, barcode, lot, case code, establishment
+  number, identifier location, distribution, brand, company, quantity). Source
+  headings never become UI sections: `Intended use` / `Condition` / `Shelf life`
+  route to deliberately-not-displayed concepts, and `See Image Below` routes to
+  `layout_artifact`, which is dropped everywhere. Unmatched labels become
+  `unknown` rather than being guessed.
+- **Table orientation detection** (`src/lib/source-tables.ts`): FDA publishes
+  both standard tables (header row, one variant per row) and **transposed**
+  tables (field labels down the first column, one variant per column — Grand
+  Central Bakery). Misreading the transposed form is what produced the
+  "product name repeated before every value" defect, because row labels were
+  mistaken for product names. Orientation is now detected explicitly, colspan
+  values are applied to every variant they cover, and each variant carries its
+  own facts.
+- **Grid reconstruction before meaning**: `rowspan` cells are expanded into
+  their real grid positions before any cell is labelled (a barcode spanning
+  five lot rows otherwise slides every later row left, presenting each row's
+  LOT number as a barcode), header cells that carry their own value
+  (`BEST IF USED BY 09/23/2023` over a column of codes) are split so the codes
+  beneath are not labelled as dates, and a repeated sub-heading row
+  (`Affected Lot Codes:`) labels the block under it.
+- **Aggregation and dedup**: repeated values collapse into one concept row
+  (`Net weight: 12 oz, 20 oz`), layout artifacts (`None`, `No Packaging`) are
+  dropped, and grouping is by **canonical identity** rather than display
+  string, so a date the notice spelled two ways (`2026 AUGUST 31` in a caption,
+  `August 31, 2026` in prose) renders once instead of as two dates joined by
+  "and". Dates additionally sort chronologically.
+- **Prose identifiers** (`src/lib/prose-identifiers.ts`): most announcements use
+  no table at all. Label-driven extraction handles the recurring inline shapes,
+  including labels split across a line break (`UPC: … Best` / `Before: 2026
+AUGUST 31`), value lists, clause-separated values, and barcodes stated in a
+  photo caption. Notices that state they carry _no_ codes are recognized as
+  honest source silence, never counted as extraction failures.
+- **Product photography** (`src/lib/product-photos.ts`): official images are
+  primary recognition information and are shown in-app, referenced at their
+  authoritative agency URLs (never rehosted), deduplicated, with page furniture
+  excluded and code close-ups reserved for the package checker.
+- **Progressive package checking**: the checker states what matching means,
+  shows a recognizable summary, and keeps identifiers behind "Do you have this
+  product?" — with a second disclosure step for large code sets (Outshine: 54
+  batch codes with their date pairing preserved). Small sets stay inline.
+- **Persistence boundary**: V2 is entirely display-layer, derived from
+  `summaryText`/`summaryHtml` already stored with every case, so all 712
+  persisted FDA cases improved with **no re-ingestion**. The one exception is
+  `heroImageUrl` (a short string for feed-card thumbnails, which cannot carry
+  announcement HTML); existing rows simply render without a thumbnail until a
+  routine ingest populates it.
+
+**Relationship preservation (2026-08-22, second pass).** Extraction quality was
+by then good; what remained was facts losing their _semantic role_ on the way
+to the UI. The root cause was structural: `summaryText` flattens the
+announcement's own tables into the body, so every table cell was read twice —
+once by the table interpreter, which knows which product row it belongs to, and
+once by the prose extractor, which does not. The second reading is where
+relationships died, and it is what turned one loaf's barcode into a recall-wide
+barcode. Prose is now read only outside the tables, and the projection carries
+relationships end to end:
+
+- **Evidence-bound facts**: every `SemanticFact` records what supported it
+  (`table` / `prose` / `caption` / `legacy`), the authoritative raw value, and
+  the `scope` (source row) it belongs to when the source establishes one.
+- **Affected versions own their identifiers** (`AffectedVariant`): each version
+  keeps its own dates, barcode, size, codes, and photo. A value a version owns
+  is never restated as a recall-wide identifier; where ownership is genuinely
+  uncertain the value stays at case level rather than being invented onto a
+  version. Versions are named from a product column, a photo caption, a
+  transposed table's column headers (`Sura Tanmen (Unit)` / `(Case)`), or —
+  when rows differ only by brand — the brand.
+- **Photos carry identity**: when a table's product cells say only
+  "See Image Below" and the row count matches the number of recognizable
+  product photos, the agency's own ordering pairs them, and each caption names
+  its version and barcode. Elsewhere, a caption naming a product is matched to
+  that version by name, most specific first.
+- **Code ↔ calendar date**: codes the source printed with their date keep the
+  pairing, in every observed shape — dash-separated (`LLA616903 – 30 SEP
+2027`), parenthesized (`26192 (07/11/26)`), across a row, and down a column.
+  Consumer-facing dates lead with the readable calendar date; the opaque
+  printed code stays available beneath it, mapped to that date. Where a Julian
+  pack code resolves to the same day as one reading of an ambiguous numeric
+  date, the notice has stated the day twice and proved its own ordering — the
+  only condition under which such a date is reformatted.
+- **Honest labels**: barcode lengths are fixed (8/12/13/14 digits), so a
+  source-labelled "UPC" that is not one is shown as a `Product code` rather
+  than as something a scanner would recognize. A label longer than six words is
+  a product line, not a field name, and never routes by keyword.
+- **Distribution hierarchy**: specific geography, then named retailers, then
+  ecommerce platforms, then generic channels — composed into one grammatical
+  sentence instead of concatenated capitalized fragments
+  ("Distributed in Texas and sold at Costco."). Named-store list blocks
+  (a heading plus one store per line) are extracted, so twelve Seattle stores
+  are no longer compressed into "grocery stores"; long lists sit behind
+  "View all retailers" rather than crowding the paragraph. Retailers appear in
+  "Where it was sold" only — never repeated in the detail header.
+- **Image roles**, not keep/reject: `package_front`, `package_full`,
+  `package_back`, `package_label`, `product_only`, `barcode_closeup`,
+  `code_closeup`, `other_supporting`, assigned from the source's own alt text,
+  published dimensions, filename, and position. A crop counts as a code shot
+  only when its caption describes nothing but a code **and** the image is small
+  — so a photograph of a package label that happens to include a barcode (the
+  only visual the Dairyland Produce jalapeño notice supplies) stays a primary
+  recognition image, while Outshine's 172×80 barcode macros move to the package
+  checker. Feed thumbnails can only ever be recognition images. Galleries size
+  each tile to its published aspect ratio, so a 93×619 bread-bag label does not
+  leave most of its tile empty.
+- **Shared value formatting**: measurements get their space back (`3oz` →
+  `3 oz`) everywhere, through one formatter rather than per-case string fixes;
+  codes are exempt by design, since their characters are what a consumer
+  compares.
+
+**Standardization (2026-08-22, third pass).** Extraction was by then strong, but
+presentation still varied with how each notice happened to phrase things. The
+contract is now that the same semantic fact always means the same thing, passes
+type validation, uses the same words and format, and appears in the same place —
+or is omitted rather than rendered wrongly.
+
+- **Semantic type validation** (`src/lib/fact-types.ts`): a source label says
+  what a value is _meant_ to be, not what it is. A shifted column is enough to
+  file a net weight under a date heading, and `Use by: 58 oz` is worse than
+  showing nothing — a shopper looks for that date, never finds it, and
+  concludes they are safe. Every value is now checked against the kind of thing
+  its concept promises; rejection removes it from display only, never from the
+  preserved source.
+- **One date standard**: `February 14, 2026`, from every shape notices print
+  (`02/14/2026`, `2/14/26`, `14FEB2026`, `2026 FEBRUARY 14`, ISO). Numeric dates
+  read month-first — the convention of every US federal notice — and a first
+  component above 12 is rejected rather than guessed. Ranges standardize to
+  `July 13–August 11, 2026`, stating the year twice only when it changes.
+  Qualifiers are meaning, not formatting, so `through February 27, 2026` becomes
+  `Through February 27, 2026` rather than collapsing to a single day. Lists
+  split into one date each, sorted; dates sharing a month collapse into
+  `July 11, 15, 16, 18, and 22, 2026`.
+- **Code location as a model, not a phrase**: surface, position, relationship,
+  and appearance are recognized separately and the sentence is composed from
+  them, so the same physical arrangement always reads the same way
+  (`On the bottom of the package.`, `At the top of the label.`, `On the jar cap,
+directly beneath the expiration date.`) instead of being concatenated into
+  `Located on at the top of the label`. How a code _looks_ is a second line
+  (`Look for: Black printed text.`). Every candidate must name a real surface or
+  position and is rejected if it carries recall narrative, a firm address, or a
+  cross-reference between versions — the NatureBest regression, where a
+  free-text search produced "located in Missouri City, TX … is voluntarily
+  recalling products containing", is now structurally impossible. No location is
+  better than a wrong one.
+- **One location, one place**: a location true of every affected version is
+  hoisted and stated once; per-version locations survive only when they
+  genuinely differ.
+- **Checker images**: the checker already prints each barcode as text, so a
+  macro photograph of that barcode is excluded there as it is from the gallery —
+  while a package or label photograph that happens to contain a barcode stays.
+  Once most versions carry their own picture, no central image repeats one.
+- **Distribution describes distribution**: in-store placement ("sold in the
+  frozen section") is merchandising and never enters "Where it was sold". A
+  specific name supersedes the generic word for the same route, so Amazon is
+  named once and "sold at Publix and also through retail stores" loses the
+  category Publix already is.
+- **Health-risk completeness**: templates are matched against the reason text as
+  well as the pathogen field, because the pathogen is frequently null even when
+  the notice names the organism outright. A recognized hazard with an approved
+  template must always render one.
+- **Recall quantity** is read at display time when ingest did not capture it —
+  only from an explicit statement, never inferred from a package size, and never
+  from a count of illnesses.
+
+**Closed consumer schemas (2026-08-22, fourth pass).** The three passes above
+made extraction strong and presentation consistent, but the projection was still
+_open_: any source label that routed to a concept could reach the screen through
+a generic `label: value` renderer. Across the 160-announcement corpus that
+produced **nineteen** different package field labels, including `Details`,
+`Item number`, `Case code`, and `Product code` — and, in one record, two hundred
+store addresses rendered as a single `Details` row. Every one of those was a
+source fact faithfully extracted and then rendered somewhere it did not belong.
+
+The architecture is now:
+
+```
+source → broad extraction → typed fact inventory → CLOSED CONSUMER SCHEMA → UI
+                                                          ↓
+                                          rejected facts stay as provenance
+```
+
+- **The app decides the display schema** (`src/lib/consumer-schema.ts`). A
+  package card may render exactly nine fields — Best by, Use by, Sell by,
+  Expiration, Size, Packaging, Barcode (UPC), Lot code, Batch code — always in
+  that order. `PackageField.label` can only come from a closed table, so no
+  parser, heading, or table column can introduce a tenth. There is no
+  catch-all field and no generic renderer; the UI component accepts
+  `PackageField[]`, not arbitrary label/value pairs.
+- **One destination per fact.** `CONCEPT_DESTINATION` states where each kind of
+  fact is allowed to appear: a recall total only in What happened, geography and
+  sellers only in Where it was sold, dates and codes only in Check your package.
+  Facts with no approved consumer field (`Item number`, `Case code`, a bare
+  `Product code`, `Package color`, `Establishment number`) are preserved,
+  classified, and counted — never rendered.
+- **Explicit UPCs stay UPCs.** A number the source publishes under a `UPC`
+  heading reaches the consumer as `Barcode (UPC)` even when it is shorter than a
+  scannable barcode: Publix prints `41415-06453` on the box and Zion Market
+  prints `8541200408`, and relabelling either sends a shopper looking for a
+  field their package does not carry. Ten digits is the floor, below which the
+  number is a lot code a mis-read sentence attached to the word "UPC".
+- **The kill switch.** Check your package renders only when a useful approved
+  fact survives — a field, a variant photo, or a code set. A bare list of
+  product names is not package identification, and an empty section is better
+  than a residual blob (25 of 160 FDA records, 34 of 66 FSIS records).
+- **Structured distribution.** Where it was sold is now typed concepts —
+  area, retailers, retail locations, online platforms, broad channels — with no
+  free-text path at all. The old "prefer the source's richer sentence" fallback
+  is gone: it was what carried a lot number and a two-week shipping window into
+  the answer to "did this reach my store?". The generic shop words
+  ("retail stores", "grocery stores", "supermarkets") are absent from the
+  approved channel set, so specific retailer evidence can never be compressed
+  into them. Store addresses paired with a store name become their own
+  disclosure.
+- **Complete instructions only.** A source action must actually instruct the
+  reader; "Consumers who have purchased Sura Tanmen." falls back to our own
+  recommendation rather than rendering a fragment the reader will believe.
+
+**Automated consumer-projection QA** (`src/lib/consumer-qa.ts`, `npm run qa:fda`):
+a 160-announcement corpus sampled deterministically across years and hazard
+families, audited against invariants encoding every anti-pattern review found —
+external-notice referrals, layout artifacts, raw source headings, repeated
+product names, duplicate values, distribution inside the package checker, firm
+address as distribution, uncollapsed code walls, codes in the action or in
+"What happened", malformed sentences, unknown geography becoming nationwide,
+illness education counted as reports, missing photos, and source-missing vs
+parser-missed identifiers. `src/server/fda/qa-harness.test.ts` keeps critical
+violations at zero and caps the documented remainder.
+
+The harness also tests **semantic relationships**, not just extraction: orphan
+identifiers (a value the source scoped to one version rendered globally), raw
+and normalized spellings of one fact rendered together, placement phrases left
+inside identifier values, code↔date pairs split apart, variant relationships
+flattened into parallel global lists, values labelled as barcodes that are not,
+named retailers or metro geography lost to generic distribution text, code
+crops in the primary gallery, useful label images rejected, and feed thumbnails
+chosen from a code image.
+
+Alongside it runs a **source → projection completeness report**: every fact the
+source supports is classified as retained, normalized, aggregated,
+relationship-preserved, intentionally suppressed, or dropped by the projection.
+This is a development instrument, not a runtime system, and its purpose is to
+make information loss countable rather than something someone has to notice.
+
+Standardization is measured the same way: dates normalized versus raw-format
+leaks, semantic type mismatches, code-location candidates shown versus rejected
+as unusable, recognized hazards rendering a health-risk template, and stated
+recall quantities surfaced versus missed.
+
 **Unresolved risks carried into implementation** (from §9, still open): undocumented fda.gov JSON endpoint stability; FSIS Akamai fingerprint drift; announcement URL churn semantics on updates; FSIS publish→API latency; no SLA anywhere for FDA classification timing. All are mitigated by design (RSS cross-check, fingerprint retries, retitle detection, stale-source alarms, honest not-yet-classified state) — none is eliminated.
+
+**Source semantics and identity (2026-08-22, fifth pass).** The closed schemas
+above stay closed; this pass fixed what flows into them and how many cases one
+real-world recall produces.
+
+- **One canonical U.S. geography module** (`src/domain/us-geography.ts`): state
+  names, postal codes, and a curated city/borough gazetteer, shared by the FDA
+  parser, the display projection, the retailer extractor, and QA. Postal codes
+  count as states only in geographic shapes — the ", XX" address form or a code
+  list after a locality preposition ("throughout MI, MN, and ND") — with every
+  listed state retained; "in NE Ohio" never becomes Nebraska, and a code inside
+  a product string never becomes a state. Display-time distribution UNIONS the
+  persisted geography with the states the notice's own distribution sentences
+  name, so parser improvements (and prose that names more states than an FSIS
+  structured field) reach stored cases without re-ingestion. A union can only
+  widen; stated Nationwide is never second-guessed.
+- **A closed distribution entity taxonomy.** Every consumer-visible
+  distribution entity is typed as exactly one of state / area / retailer /
+  retail location / online platform / channel. Retailer classification requires
+  retailer evidence (a sold-at construction with a venue word, a store-list
+  heading, a table's Retailer column) — capitalization alone never qualifies,
+  and known cities, boroughs, states, and language names are rejected outright.
+  City lists after a venue word ("Market of Choice stores in Ashland, Bend, …
+  in Oregon") and bare gazetteer-known place lists ("distributed in Brooklyn,
+  Queens, Bronx…") are typed as AREAS and render in their own block. The
+  retailer → geography relationships the source states ("PCC Markets in
+  Washington") are preserved internally as `distribution.coverage` for future
+  store personalization.
+- **Source-declared product lists are structural** (`src/lib/source-lists.ts`).
+  A bullet list under a declaring lead-in ("The affected products include … the
+  following formats:") is read like a table: one variant per item, each owning
+  the identifiers its own item states (the White Cheddar gift box keeps
+  088594-2-1; the 1.6 oz jars keep 088594-7-1), with a lead-in size ("The
+  following 4-count tamales") applied to every item.
+- **Zero orphan package fields in variant mode.** When versions own identifying
+  fields, a case-level value of a kind any version carries either matches a
+  version by canonical identity (code lists split into individual codes first)
+  or is suppressed as `ambiguous-scope` — it never renders as a loose row below
+  the cards. A field kind no version carries may still render once for the
+  whole recall.
+- **Month/year date granularity.** "05/27" renders as `May 2027` — never given
+  an invented day — with canonical identity `month:2027-05` and chronological
+  sorting beside full dates. QA counts invented days and holds them at zero.
+- **Recall-case identity across FDA re-publications.** FDA's CMS appends a
+  slug-collision suffix ("…-health-risk-0") when a revised announcement's title
+  slugifies identically. The parser proposes the base slug as a candidate
+  parent; the pipeline links the two into ONE case only when the evidence gate
+  passes — same firm, same hazard, ≤180 days apart, and ≥0.6 body overlap.
+  Title similarity alone is deliberately insufficient: an identical title is
+  why the slug collided, and a firm that recalls the same product twice reuses
+  its headline (verified live: JFE Franchising cucumbers, two distinct events).
+  A rejected candidate founds its own case; a false merge is worse than a
+  temporary duplicate. Merged cases keep both source records, the original
+  announcement date, the newest content, and an untouched notification ledger;
+  the absorbed row is preserved with `merged_into` set and hidden by RLS.
+  `npm run qa:duplicates` reports deterministic/review/distinct candidate pairs
+  without merging; `npm run reconcile:duplicates` (dry-run by default) performs
+  only deterministic, record-level-verified merges.
+- **FSIS label PDFs become product visuals** (`src/server/fsis/labels.ts`,
+  `npm run labels:fsis:dry` / `labels:fsis`). Official label PDFs are
+  rasterized once, server-side (pdfjs + @napi-rs/canvas — no OCR, no models),
+  to WebP pages under content-addressed storage keys
+  (`fsis-labels/<pdf-sha>/p<n>.webp`), deduplicated per page, capped at six
+  pages and 15 MB per document, and recorded in the additive `product_visuals`
+  table (migration `20260822120000_product_visuals.sql`, public-read bucket
+  `product-visuals`). The app merges them into the ordinary Product Photos
+  gallery with role `package_label`; the PDF link remains the provenance
+  artifact, and the Check Your Package section still hides itself when no
+  approved structured metadata exists — photos and package metadata are
+  independent concepts.
+
+**Closed value, identity, and role contracts (2026-08-24, sixth pass).** The
+closed FIELD schema held; the remaining drift was in what could fill a field,
+name a version, or occupy two roles at once. This pass closes those.
+
+- **A closed variant-identity contract** (`src/lib/variant-identity.ts`),
+  enforced where variants are built and audited by QA. A variant name must be
+  a product distinction; it can never be a date ("Best by 12/14/2026" —
+  Aquafaba's date list read as products), geography ("California" … "Texas" —
+  Pounded Yam's distribution list read as products), a code, a field label, or
+  a serialized source row ("Item name : Birch Benders…" — a property list read
+  as four products). A row with valid facts but no valid identity attaches its
+  facts to the parent product scope; nothing is lost and nothing is invented.
+  The "Affected versions:" line renders only with ≥2 valid product names.
+- **List ROLE classification before interpretation**
+  (`classifyListRole` in `src/lib/source-lists.ts`). A declared list is typed
+  as affected products, geography, identifiers, or single-product properties —
+  from its lead-in noun and its items' own shapes — before any item becomes a
+  variant. Geography lists under a distribution lead-in feed the distribution
+  states; identifier lists and property lists flow through prose extraction to
+  case-level fields (property rows split on "•" bullets, so "Lot code : 5 265
+  • Best-If-Used-By date: MAR 24, 2027" is two clean facts).
+- **Package field VALUE contracts.** A supported key with an invalid value
+  renders nothing: dates require a digit and semantic completeness (a bound
+  that dangles — "between November 2028 through" — is rejected outright, while
+  a complete year-less marking like "11-28 thru 12-15" stays raw), and
+  separator artifacts (bullets, stranded conjunctions) never survive into a
+  value. Identifiers inside a supplier-recall reference sentence ("…after
+  notification that Rooted in Rare Aquafaba powder … was recalled") belong to
+  the OTHER product and are withheld from extraction entirely.
+- **One agency-neutral consumer date model** (`src/lib/identifiers.ts`).
+  Bounded spans parse as ranges ("between July 20, 2026 and August 17, 2026" →
+  `July 20–August 17, 2026`; splitting that on "and" had told egg buyers only
+  the two endpoint days were affected), month-granular spans keep month
+  granularity at both ends ("November 2028–May 2029"), a range's single stated
+  year lends itself to the start, "up to" renders as Through, and the Canadian
+  bilingual month symbols on imported product ("2028 FE 04", corroborated by
+  the notice's own production date) normalize like any other date. Safe
+  textual values flow through one shared renderer (`sentenceCaseValue`), so
+  FSIS's "vacuum package" and FDA's "glass jars" both read as consumer copy.
+- **Shared package fields, explicitly** (`packageCheck.sharedFields`). In
+  variant mode a fact has exactly two legal scopes: a version card, or the
+  proven-shared block rendered ABOVE the cards ("Applies to all affected
+  versions"). Proof is either unanimity — every version's own row states the
+  identical value (all thirty-three egg rows carry `July 20–August 17, 2026`;
+  both Aller-C rows carry `May 2027`) — or a scope-less recall-level prose
+  statement of a kind no version carries ("Sura Tanmen with lot code
+  1226183"). Row-scoped residue is suppressed as `ambiguous-scope`; shared
+  scope is never inferred from a fact merely being unassigned, and nothing
+  ever renders loosely after the cards.
+- **Mutually exclusive distribution roles.** An entity this projection types
+  as geography — a state, a city, a metro phrase, a directional region
+  ("Southern California") — is thereby excluded from RETAILERS, at both the
+  extractor (regions and state-runs fail `isRetailerName`) and the projection
+  boundary (a hard filter against the typed geography). Bear Stewart renders
+  states + AREAS Southern California/Southern Nevada + RETAILER Target, and
+  QA holds every geography∩retailer intersection at zero.
+- **Recall lineage beyond slug collisions.** FDA also publishes revisions as
+  NEW announcements that declare themselves expansions ("Lidl US Expands
+  Recall of Eridanous Shortbread Cookies…"). The parser flags declared
+  expansions; the pipeline searches recent records for the parent under a
+  stricter gate (`isExpansionOfSameEvent`: expansion wording + same firm +
+  same hazard + ≤120 days + UPC overlap or the expansion title naming the
+  parent's product + ≥0.45 body overlap) and links only when exactly ONE case
+  qualifies — ambiguity founds a separate case for the reconcile flow. Because
+  FDA re-dates a base page when editing it, a case's consumer voice prefers an
+  expansion-titled record within 30 days of the newest record, so a merged
+  case always states the widest declared scope. `qa:duplicates` classifies
+  both lineage signals; the reconcile script (dry-run by default) verifies
+  each pair at record level before any merge and picks the earlier-founded
+  case as survivor for expansion pairs.

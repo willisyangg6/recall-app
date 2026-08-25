@@ -12,10 +12,21 @@
  * - http:// official URLs
  */
 
+import { extractPathogenOrAllergen, PATHOGENS } from '../../domain/hazard';
 import { classifyIllnessReport } from '../../domain/illness';
 import type { Geography, HazardCategory } from '../../domain/recall-types';
 import type { NormalizedSourceRecord } from '../../domain/source-record';
-import { CONSUMER_ACTION_PATTERN, joinSentences, splitSentences } from '../../domain/text';
+import {
+  CONSUMER_ACTION_PATTERN,
+  decodeEntities,
+  joinSentences,
+  splitSentences,
+  stripHtml,
+} from '../../domain/text';
+
+// Re-exported for existing consumers; implementations moved to domain/text so
+// the FDA adapter can share them without importing FSIS code.
+export { decodeEntities, stripHtml };
 
 /** Raw shape of one FSIS API record. All values are strings or string arrays (§4.1). */
 export interface FsisRawRecord {
@@ -51,39 +62,6 @@ export class FsisParseError extends Error {
   }
 }
 
-const NAMED_ENTITIES: Record<string, string> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: ' ',
-  rsquo: '’',
-  lsquo: '‘',
-  rdquo: '”',
-  ldquo: '“',
-  ndash: '–',
-  mdash: '—',
-  hellip: '…',
-  deg: '°',
-};
-
-export function decodeEntities(text: string): string {
-  return text
-    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
-    .replace(/&([a-z]+);/gi, (match, name) => NAMED_ENTITIES[name.toLowerCase()] ?? match);
-}
-
-export function stripHtml(html: string): string {
-  return decodeEntities(
-    html.replace(/<(br|\/p|\/li|\/h[1-6])[^>]*>/gi, '\n').replace(/<[^>]+>/g, ' '),
-  )
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\s*\n\s*/g, '\n')
-    .trim();
-}
-
 /** "" and [] mean "not stated", never false/none (§4.1). */
 function emptyToNull(value: string): string | null {
   const trimmed = value?.trim() ?? '';
@@ -110,38 +88,7 @@ export function splitRecallNumber(raw: string): { nativeId: string; baseId: stri
   return { nativeId, baseId: base === nativeId ? null : base };
 }
 
-const PATHOGENS = [
-  'Listeria monocytogenes',
-  'Listeria',
-  'Salmonella',
-  'E. coli O157:H7',
-  'E. coli',
-  'Clostridium botulinum',
-  'Campylobacter',
-];
-const ALLERGENS = [
-  'milk',
-  'egg',
-  'fish',
-  'shellfish',
-  'tree nut',
-  'peanut',
-  'wheat',
-  'soy',
-  'sesame',
-];
 const FOREIGN_MATERIALS = ['metal', 'plastic', 'glass', 'wood', 'rubber', 'bone fragment'];
-
-function extractPathogenOrAllergen(text: string): string | null {
-  for (const pathogen of PATHOGENS) {
-    if (new RegExp(`\\b${pathogen.replace(/[.]/g, '\\.')}\\b`, 'i').test(text)) return pathogen;
-  }
-  const allergenMatch = ALLERGENS.find((a) =>
-    new RegExp(`undeclared[^.]{0,60}\\b${a}`, 'i').test(text),
-  );
-  if (allergenMatch) return `undeclared ${allergenMatch}`;
-  return null;
-}
 
 /**
  * Deterministic lookup from FSIS's structured 9-value reason enum (§4.1), with

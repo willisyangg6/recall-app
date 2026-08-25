@@ -19,10 +19,13 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { classifyIllnessReport, type IllnessReportStatus } from '../../domain/illness';
+import { buildConsumerCase } from '../../lib/consumer-projection';
+import { PACKAGE_FIELD_LABEL } from '../../lib/consumer-schema';
 import { projectCase } from '../../domain/projection';
 import type { CaseProjection } from '../../domain/recall-types';
 import { CONSUMER_ACTION_PATTERN } from '../../domain/text';
 import { companyLine, parseProductLine, productSummaryFromTitle } from '../../lib/consumer-summary';
+import { buildPackageCheck } from '../../lib/package-check';
 import { reasonLine } from '../../lib/recall-display';
 import { buildWhatHappened, type WhatHappened } from '../../lib/what-happened';
 import { parseFsisRecord, type FsisRawRecord } from './parse';
@@ -249,6 +252,19 @@ test('benchmark: aggregate coverage floors (usefulness must not regress)', () =>
       ` | illness: ${JSON.stringify(illnessCounts)}`,
   );
 
+  // Package-identification coverage over preserved source text (shared
+  // display extractor; 43 structured / 12 partial / 10 source-silent /
+  // 1 keyword false-positive at recording).
+  const packageCoverage = { structured: 0, partial: 0, source_silent: 0, parser_missed: 0 };
+  for (const row of all) {
+    packageCoverage[
+      buildPackageCheck(row.projection.summaryText, row.projection.affectedProducts).coverage
+    ] += 1;
+  }
+  console.log(`benchmark package coverage: ${JSON.stringify(packageCoverage)}`);
+  assert.ok(packageCoverage.structured >= 38, `package coverage: ${packageCoverage.structured}`);
+  assert.ok(packageCoverage.parser_missed <= 3, `parser missed: ${packageCoverage.parser_missed}`);
+
   // Floors set below current performance (66/66, 66/66, 93/107 at recording)
   // to allow benign drift while catching real regressions.
   assert.ok(summaryFallbacks.length <= 6, `product-summary fallbacks: ${summaryFallbacks.length}`);
@@ -276,4 +292,37 @@ test('benchmark: aggregate coverage floors (usefulness must not regress)', () =>
       assert.ok(row.projection.geography.states.length > 0, row.nativeId);
     }
   }
+});
+
+test('FSIS: the closed consumer schema holds, and City Foods case codes stay hidden', () => {
+  const approved = new Set(Object.values(PACKAGE_FIELD_LABEL));
+  let hidden = 0;
+  for (const raw of records) {
+    const projection = projectCase([parseFsisRecord(raw)]);
+    const consumer = buildConsumerCase(projection, projection.affectedProducts);
+    if (!consumer.packageCheck.render) hidden += 1;
+    const labels = [
+      ...consumer.packageCheck.fields,
+      ...consumer.packageCheck.variants.flatMap((v) => v.fields),
+    ].map((field) => field.label);
+    for (const label of labels) {
+      assert.ok(approved.has(label), `${projection.title}: unapproved field ${label}`);
+    }
+
+    // City Foods' only package identifier is a case code — a warehouse
+    // reference no shopper reads off a package. It is preserved internally and
+    // the section is hidden rather than filled with it.
+    if (/City Foods/i.test(projection.title)) {
+      assert.equal(consumer.packageCheck.render, false);
+      assert.ok(
+        consumer.packageCheck.rejected.some((r) => r.concept === 'case_code'),
+        'case code should be recorded as held back',
+      );
+      assert.ok(!labels.includes('Case code'));
+    }
+  }
+  // FSIS notices rarely publish consumer package identifiers, so the section
+  // is absent far more often than on FDA — which is the honest outcome, not a
+  // gap to fill with establishment numbers.
+  assert.ok(hidden > 20, `FSIS checkers hidden: ${hidden}`);
 });

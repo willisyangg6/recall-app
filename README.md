@@ -2,12 +2,13 @@
 
 A consumer mobile app for US product recall alerts, starting with food recalls.
 
-**Current status:** the FSIS vertical slice is implemented. The app can ingest
-real USDA FSIS recall and Public Health Alert data through the full canonical
+**Current status:** the FSIS vertical slice and FDA announcement discovery
+(Phase A) are implemented. The app ingests real USDA FSIS recall/Public Health
+Alert data and real FDA food recall announcements through one shared canonical
 pipeline (raw snapshots → normalized records → recall cases → material-change
-detection → notification ledger) and render it on a basic dashboard. FDA
-ingestion, push notification delivery, accounts, and personalization are not
-implemented yet.
+detection → notification ledger) and renders both agencies on the same
+dashboard. openFDA enforcement reconciliation (FDA Phase B), push notification
+delivery, accounts, and personalization are not implemented yet.
 
 Design documents:
 
@@ -30,8 +31,8 @@ src/
   constants/    # theme tokens (placeholder — final branding undecided)
   domain/       # canonical model: types, projection, material-change rules
   lib/          # client-safe read path + display formatting
-  server/       # server-only: FSIS adapter, ingestion pipeline, stores
-scripts/        # explicitly invoked commands (live FSIS ingest)
+  server/       # server-only: FSIS + FDA adapters, ingestion pipeline, stores
+scripts/        # explicitly invoked commands (live FSIS/FDA ingest)
 supabase/       # Supabase CLI config + SQL migrations
 docs/           # design documents
 ```
@@ -53,17 +54,24 @@ npm run typecheck    # TypeScript
 npm run lint         # ESLint
 npm test             # domain/pipeline tests against recorded real FSIS fixtures
 npm run check        # all three
+npm run qa:fda       # consumer-projection QA report over 160 recorded real
+                     # FDA announcements (offline, development-only)
 ```
 
 The test suite never touches the network: it runs against real FSIS API
-records recorded in [src/server/fsis/fixtures/](src/server/fsis/fixtures/).
+records recorded in [src/server/fsis/fixtures/](src/server/fsis/fixtures/) and
+real FDA announcements recorded in
+[src/server/fda/fixtures/](src/server/fda/fixtures/).
 
-### Live FSIS ingestion (explicit, never automatic)
+### Live ingestion (explicit, never automatic)
 
 ```bash
 npm run ingest:fsis:dry   # fetch live FSIS data, run the full pipeline in memory,
                           # persist nothing — works with zero configuration
 npm run ingest:fsis       # same, but persists to your Supabase project (needs .env)
+npm run ingest:fda:dry    # fetch live FDA announcement data (listing + RSS
+                          # cross-check + detail pages), persist nothing
+npm run ingest:fda        # same, but persists to your Supabase project
 ```
 
 ### Backend setup (one-time)
@@ -79,7 +87,7 @@ npm run ingest:fsis       # same, but persists to your Supabase project (needs .
    dashboard (Project Settings → API). `SUPABASE_SECRET_KEY` is server-only:
    it is used by the ingest script and must never appear in app code or in any
    `EXPO_PUBLIC_*` variable.
-4. Run `npm run ingest:fsis` to load current FSIS data.
+4. Run `npm run ingest:fsis` and `npm run ingest:fda` to load current data.
 
 ### Run the app
 
@@ -88,10 +96,10 @@ npm start            # dev server (press i for iOS Simulator)
 npm run ios
 ```
 
-With `.env` configured, the home screen shows current FSIS recalls and Public
-Health Alerts (newest activity first); tapping an item opens a detail view with
-the official USDA FSIS source link. Without configuration it shows setup
-instructions.
+With `.env` configured, the home screen shows current FSIS and FDA recalls and
+FSIS Public Health Alerts (newest activity first, source-labeled); tapping an
+item opens a detail view with the official government source link. Without
+configuration it shows setup instructions.
 
 ## What the FSIS slice supports
 
@@ -136,6 +144,135 @@ instructions.
   with hand-verified expectations and aggregate coverage floors, run as part
   of `npm test`.
 
+## What the FDA slice supports (Phase A: announcement discovery)
+
+- Discovers new FDA food recall announcements from the official listing JSON
+  backend (fresh to the previous day; unsorted; undocumented — shape drift and
+  staleness raise ingest warnings), with the official food-safety RSS as an
+  independent cross-check: an announcement seen in both channels is one case,
+  an announcement missing from the listing is warned about and ingested from
+  its official page.
+- Announcement identity is the URL slug with the verified update-churn
+  prefixes (`updated-`, `update-`, `updated-release-`) stripped, so a retitled
+  re-publish updates the existing case instead of duplicating it — whether the
+  new row replaces the original or coexists with it (both patterns observed
+  live).
+- Food-only scope is explicit and tested: items tagged `Food & Beverages`
+  (including food-tagged dietary supplements); pet food (`Animal &
+Veterinary` co-tags) is deliberately deferred, not silently included.
+- Fetches the official announcement page for new/changed records only and
+  preserves its `<main>` content region in the snapshot store (dates,
+  press-release body, product tables, photo URLs).
+- Announcements are pre-classification by design: cases render honestly as
+  "Risk level pending" until enforcement enrichment arrives in Phase B; a
+  class is never inferred from hazard language.
+- Deterministic consumer extraction from the announcement's own words:
+  distribution (nationwide / named states / honest unknown with source text),
+  three-way illness semantics with FDA-specific wording patterns, standardized
+  consumer instructions, product tables → "check your package" lines labeled
+  by the source's own column headers, and stated recall quantities preserved
+  verbatim ("120 cases of Enoki Mushroom 150g") — a founder-valued field.
+- FDA reason categories map into the same structured hazard slots (allergen /
+  microbial / foreign material / chemical contamination) feeding the shared
+  template-built "What happened" system, with standardized consumer reason
+  labels ("Possible E. coli contamination", "Undeclared soy allergen") and
+  concise template-built "Health risk" summaries — never raw press-release
+  styling or prose fragments.
+- The official notice is provenance, not required reading: package
+  identifiers (UPCs, lots, best-by/expiration dates, on-package locations)
+  are extracted into the app from the announcement's own tables and
+  label-driven prose, presented as a progressive "Do you have this product?"
+  package checker — identifiers stay out of the always-visible page and out
+  of the consumer action. When FDA genuinely states no identifiers, the app
+  says so honestly instead of sending the user to the FDA page.
+- **Consumer Projection V2** — a semantic layer (source data → parsed facts →
+  consumer concepts → UI) so government table columns never dictate app
+  sections. It reconstructs the source's own table grid (orientation, colspan,
+  rowspan, headers that carry their own value) before giving any cell a
+  meaning, routes every fact into our own concepts, deduplicates by canonical
+  identity rather than by display string, orders identifiers by how easily a
+  person can check them (version → date → size → barcode → lot code),
+  collapses large code sets behind a second disclosure step, and shows
+  official product photography in-app. It runs entirely at display time over
+  preserved source data, so it improved all persisted cases with no
+  re-ingestion. See
+  [docs/recall-domain-architecture.md](docs/recall-domain-architecture.md).
+- **Relationships survive into the projection.** When a notice states which
+  values belong together — this flavor's barcode, this row's dates, this
+  code's calendar date — the app keeps that association instead of flattening
+  it into parallel global lists. Each affected version owns its own
+  identifiers, codes, and photo; a value one version owns is never restated as
+  a recall-wide identifier, and where ownership is genuinely uncertain the
+  value stays at recall level rather than being invented onto a version.
+- Official FDA product photos are surfaced directly in the app (horizontal
+  gallery on the detail screen, package-comparison shots inside the checker,
+  modest thumbnails on Home cards) — referenced at their authoritative agency
+  URLs, never rehosted, and absent images simply render nothing. Images carry
+  a semantic **role**, so barcode macros move to the package checker (where a
+  consumer is comparing codes) while a photograph of a package label that
+  happens to contain a barcode stays a primary recognition image.
+- **One consumer presentation contract.** The same semantic fact always means
+  the same thing, is validated against its type, and reads the same way: every
+  date becomes `February 14, 2026` (ranges and qualifiers included), code
+  locations are composed from surface and position rather than concatenated
+  from source fragments, and a value that fails its type check is omitted
+  rather than rendered wrongly — `Use by: 58 oz` cannot occur.
+- **Closed consumer schemas.** The parser may extract anything the notice
+  states, but the UI renders a fixed vocabulary the app defines: a package card
+  holds exactly nine approved fields (Best by, Use by, Sell by, Expiration,
+  Size, Packaging, Barcode (UPC), Lot code, Batch code), always in the same
+  order, and there is no generic `label: value` renderer for a source heading to
+  slip through. Facts with no approved field are preserved and counted, never
+  shown. Every fact has one allowed destination — a recall total only in "What
+  happened", geography and sellers only in "Where it was sold", dates and codes
+  only in "Check your package" — and the section hides itself entirely when
+  nothing useful survives, rather than filling with residual source text.
+- Automated consumer-projection QA (`npm run qa:fda`) audits a
+  160-announcement corpus against the anti-patterns manual review found —
+  including semantic-relationship loss, not just junk strings — and reports
+  source → projection completeness so information loss is measurable.
+  `src/server/fda/qa-harness.test.ts` keeps critical violations at zero.
+- Company, brand, and sold-at retailer are distinct consumer roles; retailers
+  are shown only when the source's own text states the relationship (never
+  inferred from store footprints).
+- **Typed distribution geography.** One canonical US geography module (states,
+  postal codes, a curated city gazetteer) is shared by ingest, display, and QA:
+  a clause like "throughout MI, MN, and ND" keeps all three states, and a known
+  city or borough can never be classified as a retailer — city lists render in
+  their own AREAS block, with source-stated retailer → geography relationships
+  preserved internally.
+- **One case per real-world recall.** FDA re-publications that collide on URL
+  slug ("…-health-risk-0") link to the original case only through a
+  deterministic evidence gate (same firm, hazard, window, and high body
+  overlap); `npm run qa:duplicates` reports duplicate candidates without
+  merging, and a firm that recalls the same product twice stays two cases.
+  Announcements that declare themselves expansions under a fresh URL ("Lidl US
+  Expands Recall of Eridanous Shortbread Cookies…") link the same way — the
+  pipeline searches for the parent and requires product identity (a shared UPC
+  or the expansion title naming the parent's product) plus body corroboration,
+  linking only when exactly one case qualifies; the merged case speaks with
+  the expansion's declared scope.
+- **Closed variant identity and shared fields.** A version card's name must be
+  a product distinction — never a date, a state, a code, a field label, or a
+  serialized source row (`src/lib/variant-identity.ts` gates construction and
+  QA audits the result). Source lists are role-classified before
+  interpretation, so a distribution-states list or a "best buy dates" list
+  never becomes product variants. In variant mode a package fact renders in
+  exactly two places: the version card that owns it, or a proven-shared
+  "Applies to all affected versions" block above the cards — never as a loose
+  row after them. Field values are validated too: incomplete date ranges are
+  suppressed rather than rendered ("between November 2028 through" cannot
+  occur), and FDA and FSIS share one date model and one text renderer, so
+  "vacuum package" reads `Vacuum package` and "between July 20, 2026 and
+  August 17, 2026" reads `July 20–August 17, 2026`.
+- **FSIS label visuals.** Official label PDFs are rasterized once, server-side
+  (no OCR), into content-addressed WebP pages that join the ordinary Product
+  Photos gallery (`npm run labels:fsis:dry` for the bounded local dry run); the
+  PDF link remains as provenance.
+- Extraction-quality benchmark over recorded real announcements
+  ([src/server/fda/fixtures/](src/server/fda/fixtures/)) with hand-verified
+  expectations and coverage floors, run as part of `npm test`.
+
 ### Ready for personalization/filters (not yet built)
 
 The read model already answers every planned filter through the Data API
@@ -144,15 +281,21 @@ dates are generated columns; state relevance uses
 `projection->geography->states=cs.["California"]` plus
 `projection->geography->>scope=eq.nationwide` (unknown-distribution cases are
 shown in a labeled section, never silently excluded); product/company search
-uses `title=ilike.*…*`. Future "Affects me" views organize the feed but never
-hide the full national feed; user state arrives via manual input, not location
-permissions.
+uses `title=ilike.*…*`. The intended future default Home experience is an
+"Affects me" feed (user state, allergen preferences via
+`normalizedAllergenTokens`, stores via source-stated `retailerNames`) with
+"All recalls" always one tap away — personalization organizes the full truth
+and never hides the national feed ([src/lib/relevance.ts](src/lib/relevance.ts)
+proves the matching semantics; no preferences are stored yet). User state
+arrives via manual input, not location permissions.
 
 ## Intentionally not implemented yet
 
-FDA ingestion (announcements + openFDA reconciliation), push delivery and
-notification permissions, accounts, state-based personalization, retailer/label
-PDF parsing, Spanish records, CPSC/NHTSA, analytics, final visual design.
+openFDA enforcement reconciliation (FDA Phase B: classification enrichment,
+event grouping, announcement↔enforcement matching, FDA lifecycle/closure),
+push delivery and notification permissions, accounts, state-based
+personalization, pet-food scope, retailer/label PDF parsing, Spanish records,
+CPSC/NHTSA, analytics, final visual design.
 
 See [AGENTS.md](AGENTS.md) for standing rules for coding agents working in this
 repository.

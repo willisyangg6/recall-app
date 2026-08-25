@@ -67,6 +67,39 @@ export function productSummaryFromTitle(title: string): string | null {
   return null;
 }
 
+/**
+ * The consumer product name for cards and detail headers. A source-structured
+ * product description (FDA's `field_product_description`) beats deterministic
+ * title parsing; the official title is the last resort and is always preserved
+ * elsewhere.
+ */
+export function productDisplayName(
+  productDescription: string | null | undefined,
+  title: string,
+): string {
+  const described = (productDescription ?? '').replace(/[\s.]+$/, '').trim();
+  if (described.length >= 3) return described;
+  return productSummaryFromTitle(title) ?? title;
+}
+
+/**
+ * Brands worth showing separately: those not already readable in the company
+ * name or the product name. Null when brands add nothing ("Prince" next to
+ * "Prince Bakery" is noise; "HEB" next to "NatureBest Precut & Produce" is
+ * information).
+ */
+export function brandLine(
+  brands: string[] | undefined,
+  companyName: string | null,
+  productName: string,
+): string | null {
+  const context = `${companyName ?? ''} ${productName}`.toLowerCase();
+  const novel = (brands ?? [])
+    .map((b) => b.trim())
+    .filter((b) => b.length >= 2 && !context.includes(b.toLowerCase()));
+  return novel.length > 0 ? novel.join(', ') : null;
+}
+
 /** Acronyms/stylizations preserved verbatim when un-shouting all-caps text. */
 const KEEP_UPPER = new Set([
   'USDA',
@@ -150,7 +183,9 @@ export function companyDisplayName(raw: string | null): string | null {
   }
   const stripped = base
     .replace(LEGAL_SUFFIX, '')
-    .replace(/[\s,]+$/, '')
+    // Suffix removal can strand a connective ("Slade Gorton & Co., Inc." →
+    // "Slade Gorton &") — drop it with the punctuation.
+    .replace(/[\s,&]+$|\s+and$/i, '')
     .trim();
   return humanizeAllCaps(stripped.length >= 3 ? stripped : base);
 }
@@ -310,7 +345,38 @@ function cleanResidual(text: string): string | null {
  * Unconsumed prose is preserved as residualText (graceful improvement, never
  * destructive parsing; identifying details are safety-critical).
  */
+/**
+ * FDA product-table lines arrive pre-labeled by the source's own column
+ * headers ("<product> | Batch Code/Best Before Date: … | UPC: …" — built by
+ * the FDA adapter from the announcement's tables). The labels are the
+ * source's words, so they are shown as-is; nothing is relabeled or guessed.
+ */
+function parseLabeledProductLine(rawText: string): ProductLineDisplay | null {
+  if (!rawText.includes(' | ')) return null;
+  const segments = rawText.split(' | ').map((s) => s.trim());
+  if (segments.length < 2) return null;
+  const labeled = segments.map((segment) => {
+    const match = segment.match(/^([^:]{2,60}):\s+(.+)$/s);
+    return match ? { label: match[1].trim(), value: match[2].trim() } : null;
+  });
+  // The first unlabeled segment is the product itself; without one, the first
+  // labeled product-ish segment serves.
+  const nameIndex = labeled.findIndex((l) => l === null);
+  const name =
+    nameIndex >= 0
+      ? segments[nameIndex]
+      : (labeled.find((l) => /product|description|brand|flavor|item/i.test(l!.label))?.value ??
+        null);
+  if (!name || name.length < 2) return null;
+  const identifiers = labeled
+    .map((l, index) => (l !== null && index !== nameIndex ? l : null))
+    .filter((l): l is ProductIdentifier => l !== null && l.value !== name);
+  return { name, packageText: null, identifiers, locationText: null, residualText: null };
+}
+
 export function parseProductLine(rawText: string): ProductLineDisplay | null {
+  const labeled = parseLabeledProductLine(rawText);
+  if (labeled) return labeled;
   const quotes = [...rawText.matchAll(QUOTED)];
   if (quotes.length === 0 || quotes[0].index === undefined) return null;
   const name = quotes[0][1].replace(/[\s.,]+$/, '').trim();

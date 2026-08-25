@@ -309,3 +309,134 @@ test('unknown geography survives the whole pipeline honestly', async () => {
   assert.equal(projection.geography.scope, 'unknown');
   assert.deepEqual(projection.geography.states, []);
 });
+
+test('a declared FDA expansion joins its parent case through the evidence search', async () => {
+  const { runSourceIngest } = await import('./pipeline');
+  const { isExpansionOfSameEvent } = await import('./duplicates');
+  const base = (overrides: Record<string, unknown>) => ({
+    sourceSystem: 'fda_announcement' as const,
+    sourceAgency: 'FDA' as const,
+    rawNativeId: '/safety/x',
+    noticeType: 'recall' as const,
+    lifecycle: 'active' as const,
+    closedYear: null,
+    classification: { value: 'not_yet_classified' as const, sourceText: null },
+    expansionOfNativeId: null,
+    isRetractionNotice: false,
+    retractsNativeIds: [],
+    summaryHtml: null,
+    reasonText: null,
+    hazardCategory: 'allergen' as const,
+    pathogenOrAllergen: 'undeclared milk',
+    firmDisplayName: 'Fayus, Inc.',
+    firmRawVariants: ['Fayus, Inc.'],
+    brands: [],
+    productDescription: null,
+    imageUrls: [],
+    geography: {
+      scope: 'unknown' as const,
+      states: [],
+      confidence: 'inferred' as const,
+      sourceText: null,
+    },
+    retailerNames: [],
+    heroImageUrl: null,
+    productLines: [],
+    quantityText: null,
+    illnessStatement: null,
+    consumerAction: null,
+    contactText: null,
+    officialUrl: 'https://www.fda.gov/x',
+    lastModifiedAt: null,
+    ...overrides,
+  });
+  const original = base({
+    nativeId: 'fayus-inc-recalls-ola-ola-pounded-yam',
+    title:
+      'Fayus Inc., dba Yusol International Foods Recalls OLA-OLA POUNDED YAM Due to Undeclared Milk Allergen',
+    summaryText:
+      'Fayus Inc. is voluntarily recalling OLA-OLA POUNDED YAM because the product may contain undeclared milk in the form of sodium caseinate, which is not declared on the label. The recall is being initiated as a result of an internal investigation discovering that some packaged OLA-OLA POUNDED YAM had been distributed in packaging that did not disclose the presence of sodium caseinate derived from milk. Consumers who have purchased the product are urged to return it to the place of purchase.',
+    publishedAt: '2026-07-07',
+    declaresExpansion: false,
+  });
+  const expansion = base({
+    nativeId: 'fayus-inc-expands-recall-ola-ola-pounded-yam',
+    title:
+      'Fayus Inc., dba Yusol International Foods Expands Recall of OLA-OLA POUNDED YAM Due to Undeclared Milk Allergen',
+    summaryText:
+      'Fayus Inc. is expanding its recall of OLA-OLA POUNDED YAM to include product sizes 2lbs, 4lbs, 5lbs, and 10lbs due to product labeling omission of an undeclared milk allergen for sodium caseinate, a milk derivative. The recall was initiated, and later expanded, as a result of an internal investigation discovering that some packaged OLA-OLA POUNDED YAM had been distributed in packaging that did not disclose the presence of sodium caseinate derived from milk. Consumers who have purchased the product are urged to return it to the place of purchase.',
+    publishedAt: '2026-07-17',
+    declaresExpansion: true,
+  });
+
+  const store = new MemoryStore();
+  const ingest = (items: unknown[]) =>
+    runSourceIngest(
+      store,
+      {
+        sourceSystem: 'fda_announcement',
+        items: items.map((normalized) => ({ raw: normalized, normalized })) as never,
+        quarantined: [],
+        itemsSeen: items.length,
+        fetchedAt: NOW().toISOString(),
+      },
+      { now: NOW, expansionReferenceGuard: isExpansionOfSameEvent },
+    );
+
+  await ingest([original]);
+  const first = await ingest([expansion]);
+  // One real-world recall, one case: the expansion joined its parent.
+  assert.equal(first.newCases, 0);
+  assert.equal(store.cases.size, 1);
+  const linked = await store.getSourceRecordByNativeId(
+    'fda_announcement',
+    'fayus-inc-expands-recall-ola-ola-pounded-yam',
+  );
+  assert.equal(linked?.linkMethod, 'expansion_prefix');
+  // The merged case speaks with the expansion's voice and keeps the original
+  // announce date.
+  const recallCase = await store.getCase(linked!.recallCaseId);
+  assert.match(recallCase!.projection.title, /Expands Recall/);
+  assert.equal(recallCase!.projection.publishedAt, '2026-07-07');
+
+  // Ambiguity founds a separate case: with TWO qualifying parent cases, the
+  // lineage is not decidable and nothing is guessed.
+  const store2 = new MemoryStore();
+  const originalB = base({
+    nativeId: 'fayus-inc-recalls-ola-ola-pounded-yam-second',
+    title:
+      'Fayus Inc., dba Yusol International Foods Recalls OLA-OLA POUNDED YAM Due to Undeclared Milk Allergen',
+    summaryText: (original as unknown as { summaryText: string }).summaryText,
+    publishedAt: '2026-07-08',
+    declaresExpansion: false,
+  });
+  await runSourceIngest(
+    store2,
+    {
+      sourceSystem: 'fda_announcement',
+      items: [original, originalB].map((normalized) => ({ raw: normalized, normalized })) as never,
+      quarantined: [],
+      itemsSeen: 2,
+      fetchedAt: NOW().toISOString(),
+    },
+    { now: NOW, expansionReferenceGuard: isExpansionOfSameEvent },
+  );
+  assert.equal(store2.cases.size, 2);
+  await runSourceIngest(
+    store2,
+    {
+      sourceSystem: 'fda_announcement',
+      items: [{ raw: expansion, normalized: expansion }] as never,
+      quarantined: [],
+      itemsSeen: 1,
+      fetchedAt: NOW().toISOString(),
+    },
+    { now: NOW, expansionReferenceGuard: isExpansionOfSameEvent },
+  );
+  assert.equal(store2.cases.size, 3);
+  const ambiguous = await store2.getSourceRecordByNativeId(
+    'fda_announcement',
+    'fayus-inc-expands-recall-ola-ola-pounded-yam',
+  );
+  assert.equal(ambiguous?.linkMethod, 'self');
+});

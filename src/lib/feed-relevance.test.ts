@@ -9,6 +9,7 @@ const NOW = new Date('2026-08-21T12:00:00Z');
 function item(overrides: Partial<FeedItem>): FeedItem {
   return {
     id: overrides.publishedAt ?? 'id',
+    sourceAgency: 'FSIS',
     noticeType: 'recall',
     state: 'active',
     title: 'Test',
@@ -19,6 +20,10 @@ function item(overrides: Partial<FeedItem>): FeedItem {
     reasonText: null,
     pathogenOrAllergen: null,
     firmName: null,
+    brands: [],
+    productDescription: null,
+    retailerNames: [],
+    heroImageUrl: null,
     geography: { scope: 'unknown', states: [], confidence: 'stated', sourceText: null },
     officialUrl: 'https://example.gov',
     ...overrides,

@@ -8,7 +8,7 @@
 
 export type SourceAgency = 'FDA' | 'FSIS';
 
-export type SourceSystem = 'fsis_api'; // open set; 'fda_announcement' | 'openfda_enforcement' arrive in later milestones
+export type SourceSystem = 'fsis_api' | 'fda_announcement'; // open set; 'openfda_enforcement' arrives with reconciliation
 
 export type NoticeType = 'recall' | 'public_health_alert';
 
@@ -28,6 +28,7 @@ export type HazardCategory =
   | 'allergen'
   | 'microbial_contamination'
   | 'foreign_material'
+  | 'chemical_contamination'
   | 'product_integrity'
   | 'other_regulatory'
   | 'unknown';
@@ -95,6 +96,23 @@ export interface CaseProjection {
   pathogenOrAllergen: string | null;
   recallingFirm: { displayName: string | null; rawVariants: string[] };
   brands: string[];
+  /** Source-structured consumer product description (FDA listing provides one;
+   * FSIS does not — null there). Projections persisted before this field
+   * existed lack the key; readers must treat `undefined` as null. */
+  productDescription: string | null;
+  /** Source-stated retailers ("Sold at") — distinct from recalling firm and
+   * brand; the future store-preference personalization signal. Projections
+   * persisted before this field existed lack the key (readers default to [],
+   * and the display layer re-derives from preserved source text). */
+  retailerNames: string[];
+  /**
+   * Authoritative agency-hosted URL of the lead product photo, for feed-card
+   * recognition. Kept as a single short string because a list card cannot
+   * carry the announcement HTML the detail screen derives its gallery from.
+   * Projections persisted before this field existed lack the key; cards
+   * render cleanly without a thumbnail and gain one at the next ingest.
+   */
+  heroImageUrl: string | null;
   geography: Geography;
   affectedProducts: AffectedProduct[];
   quantityText: string | null;

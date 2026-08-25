@@ -5,3 +5,5 @@ package-lock.json
 assets/
 # Supabase CLI machine-local state (created by `supabase link`; gitignored)
 supabase/.temp
+# Recorded real FDA announcement pages (verbatim source bytes; never reformat)
+src/server/fda/fixtures/pages/

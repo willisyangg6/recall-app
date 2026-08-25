@@ -1,11 +1,13 @@
 /**
- * FSIS ingestion pipeline (architecture Part 8):
+ * Source-agnostic ingestion pipeline (architecture Part 8):
  *
  *   fetch result → ingest run → parse/normalize (quarantine on failure)
  *   → identity upsert → snapshot (hash-gated) → case linking
  *   → canonical projection → material-change detection
  *   → notification eligibility → consumer read model
  *
+ * Adapters (FSIS, FDA) own all source quirks and hand this pipeline
+ * already-normalized records; nothing here knows a source field name.
  * Idempotent by construction: re-running on identical input performs no
  * writes beyond ingest-run bookkeeping.
  */
@@ -14,7 +16,12 @@ import { createHash } from 'node:crypto';
 
 import { detectChanges, fingerprint } from '../domain/material-change';
 import { projectCase } from '../domain/projection';
-import type { MaterialChange, TimelineEntry, TimelineKind } from '../domain/recall-types';
+import type {
+  MaterialChange,
+  SourceSystem,
+  TimelineEntry,
+  TimelineKind,
+} from '../domain/recall-types';
 import type { NormalizedSourceRecord } from '../domain/source-record';
 import { FsisParseError, parseFsisRecord, type FsisRawRecord } from './fsis/parse';
 import type { RecallStore, SourceRecordRow } from './store/types';
@@ -31,7 +38,7 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function contentHash(value: unknown): string {
+export function contentHash(value: unknown): string {
   return createHash('sha256').update(canonicalJson(value)).digest('hex');
 }
 
@@ -65,29 +72,71 @@ export interface IngestOptions {
   now?: () => Date;
   /** Cases older than this at discovery get their initial notification suppressed as backfill. */
   backfillHorizonDays?: number;
+  /**
+   * Evidence gate for linking a record to its `expansionOfNativeId` parent's
+   * case. FSIS recall numbers are agency-assigned, so FSIS passes none; FDA's
+   * candidate parents come from URL-slug collisions and must corroborate
+   * (same firm, same hazard, related titles) before one consumer case absorbs
+   * both. A rejected candidate founds its own case — a false merge is worse
+   * than a temporary duplicate.
+   */
+  expansionGuard?: (child: NormalizedSourceRecord, parent: NormalizedSourceRecord) => boolean;
+  /**
+   * Evidence gate for a record that DECLARES itself an expansion without
+   * naming a linkable parent id ("Lidl US Expands Recall of…"). The pipeline
+   * searches recent records of the same source for a parent this gate
+   * accepts; the record links only when exactly ONE existing case qualifies,
+   * and founds its own case otherwise. FDA passes `isExpansionOfSameEvent`;
+   * FSIS passes none (its expansions carry the parent's recall number).
+   */
+  expansionReferenceGuard?: (
+    child: NormalizedSourceRecord,
+    parent: NormalizedSourceRecord,
+  ) => boolean;
 }
 
-interface FetchInput {
-  records: FsisRawRecord[];
+/** How far back a declared expansion searches for its parent announcement. */
+const EXPANSION_SEARCH_WINDOW_DAYS = 120;
+
+/** One already-normalized record plus the raw payload to preserve. */
+export interface ParsedSourceItem {
+  /** The raw payload stored in the snapshot (audit trail to source bytes). */
+  raw: unknown;
+  normalized: NormalizedSourceRecord;
+  /**
+   * Value hashed for change detection. Defaults to `raw`. FDA passes the
+   * listing item alone: its `changed` timestamp moves on any page edit, while
+   * the stored payload also carries the (re)fetched detail HTML.
+   */
+  contentKey?: unknown;
+}
+
+export interface SourceIngestInput {
+  sourceSystem: SourceSystem;
+  items: ParsedSourceItem[];
+  /** Items that failed adapter parsing — reported, never silently dropped. */
+  quarantined: { rawNativeId: string | null; reason: string }[];
+  /** Raw items seen before parsing/filtering, for run bookkeeping. */
+  itemsSeen: number;
   fetchedAt: string;
-  sourceUrl: string;
 }
 
-export async function runFsisIngest(
+/** Run the shared pipeline over one adapter's parsed output. */
+export async function runSourceIngest(
   store: RecallStore,
-  input: FetchInput,
+  input: SourceIngestInput,
   options: IngestOptions = {},
 ): Promise<IngestSummary> {
   const now = options.now ?? (() => new Date());
   const backfillHorizonDays = options.backfillHorizonDays ?? 30;
   const startedAt = now().toISOString();
-  const runId = await store.createIngestRun('fsis_api', startedAt);
+  const runId = await store.createIngestRun(input.sourceSystem, startedAt);
 
   const summary: IngestSummary = {
     runId,
-    itemsSeen: input.records.length,
-    itemsParsed: 0,
-    quarantined: [],
+    itemsSeen: input.itemsSeen,
+    itemsParsed: input.items.length,
+    quarantined: [...input.quarantined],
     unchanged: 0,
     newCases: 0,
     changedCases: 0,
@@ -96,26 +145,8 @@ export async function runFsisIngest(
   };
 
   try {
-    // Parse everything first; failures are quarantined with their raw payload
-    // retained in the run record — a parse bug must never hide a recall silently.
-    const parsed: { raw: FsisRawRecord; normalized: NormalizedSourceRecord }[] = [];
-    for (const raw of input.records) {
-      if (typeof raw?.langcode === 'string' && raw.langcode !== '' && raw.langcode !== 'English') {
-        continue; // English-only in this milestone; Spanish records attach later.
-      }
-      try {
-        parsed.push({ raw, normalized: parseFsisRecord(raw) });
-      } catch (error) {
-        summary.quarantined.push({
-          rawNativeId:
-            typeof raw?.field_recall_number === 'string' ? raw.field_recall_number : null,
-          reason: error instanceof FsisParseError ? error.message : String(error),
-        });
-      }
-    }
-    summary.itemsParsed = parsed.length;
     summary.newestPublishedAt =
-      parsed
+      input.items
         .map((p) => p.normalized.publishedAt)
         .sort()
         .at(-1) ?? null;
@@ -124,7 +155,7 @@ export async function runFsisIngest(
     // resolve within a single run; oldest first for stable timelines.
     const orderRank = (r: NormalizedSourceRecord) =>
       r.isRetractionNotice ? 2 : r.expansionOfNativeId !== null ? 1 : 0;
-    parsed.sort(
+    const parsed = [...input.items].sort(
       (a, b) =>
         orderRank(a.normalized) - orderRank(b.normalized) ||
         a.normalized.publishedAt.localeCompare(b.normalized.publishedAt) ||
@@ -132,14 +163,20 @@ export async function runFsisIngest(
     );
 
     // The feed occasionally repeats an identity; last occurrence wins.
-    const byNativeId = new Map<
-      string,
-      { raw: FsisRawRecord; normalized: NormalizedSourceRecord }
-    >();
+    const byNativeId = new Map<string, ParsedSourceItem>();
     for (const item of parsed) byNativeId.set(item.normalized.nativeId, item);
 
-    for (const { raw, normalized } of byNativeId.values()) {
-      await ingestOne(store, raw, normalized, input, summary, now, backfillHorizonDays);
+    for (const item of byNativeId.values()) {
+      await ingestOne(
+        store,
+        item,
+        input,
+        summary,
+        now,
+        backfillHorizonDays,
+        options.expansionGuard,
+        options.expansionReferenceGuard,
+      );
     }
 
     await store.finishIngestRun(runId, {
@@ -164,18 +201,63 @@ export async function runFsisIngest(
   }
 }
 
+interface FetchInput {
+  records: FsisRawRecord[];
+  fetchedAt: string;
+  sourceUrl: string;
+}
+
+/** FSIS adapter entry point: parse + quarantine, then the shared pipeline. */
+export async function runFsisIngest(
+  store: RecallStore,
+  input: FetchInput,
+  options: IngestOptions = {},
+): Promise<IngestSummary> {
+  // Parse everything first; failures are quarantined with their raw payload
+  // retained in the run record — a parse bug must never hide a recall silently.
+  const items: ParsedSourceItem[] = [];
+  const quarantined: SourceIngestInput['quarantined'] = [];
+  for (const raw of input.records) {
+    if (typeof raw?.langcode === 'string' && raw.langcode !== '' && raw.langcode !== 'English') {
+      continue; // English-only in this milestone; Spanish records attach later.
+    }
+    try {
+      items.push({ raw, normalized: parseFsisRecord(raw) });
+    } catch (error) {
+      quarantined.push({
+        rawNativeId: typeof raw?.field_recall_number === 'string' ? raw.field_recall_number : null,
+        reason: error instanceof FsisParseError ? error.message : String(error),
+      });
+    }
+  }
+  return runSourceIngest(
+    store,
+    {
+      sourceSystem: 'fsis_api',
+      items,
+      quarantined,
+      itemsSeen: input.records.length,
+      fetchedAt: input.fetchedAt,
+    },
+    options,
+  );
+}
+
 async function ingestOne(
   store: RecallStore,
-  raw: FsisRawRecord,
-  normalized: NormalizedSourceRecord,
-  input: FetchInput,
+  item: ParsedSourceItem,
+  input: SourceIngestInput,
   summary: IngestSummary,
   now: () => Date,
   backfillHorizonDays: number,
+  expansionGuard?: IngestOptions['expansionGuard'],
+  expansionReferenceGuard?: IngestOptions['expansionReferenceGuard'],
 ): Promise<void> {
+  const { raw, normalized } = item;
+  const sourceSystem = input.sourceSystem;
   const nowIso = now().toISOString();
-  const existing = await store.getSourceRecordByNativeId('fsis_api', normalized.nativeId);
-  const hash = contentHash(raw);
+  const existing = await store.getSourceRecordByNativeId(sourceSystem, normalized.nativeId);
+  const hash = contentHash(item.contentKey ?? raw);
 
   if (existing) {
     const latestHash = await store.getLatestSnapshotHash(existing.id);
@@ -213,7 +295,7 @@ async function ingestOne(
 
   if (normalized.isRetractionNotice) {
     for (const retractedId of normalized.retractsNativeIds) {
-      const target = await store.getSourceRecordByNativeId('fsis_api', retractedId);
+      const target = await store.getSourceRecordByNativeId(sourceSystem, retractedId);
       if (target) {
         targetCase = { id: target.recallCaseId };
         linkMethod = 'retraction_reference';
@@ -223,22 +305,48 @@ async function ingestOne(
   }
   if (!targetCase && normalized.expansionOfNativeId) {
     const parent = await store.getSourceRecordByNativeId(
-      'fsis_api',
+      sourceSystem,
       normalized.expansionOfNativeId,
     );
-    if (parent) {
+    // The guard decides whether a candidate parent is the same real-world
+    // recall. Without corroboration the record founds its own case; nothing
+    // is ever merged on identity shape alone.
+    if (parent && (!expansionGuard || expansionGuard(normalized, parent.normalized))) {
       targetCase = { id: parent.recallCaseId };
+      linkMethod = 'expansion_prefix';
+    }
+  }
+  // A record that declares itself an expansion without naming a parent id
+  // ("…Expands Recall of…") searches recent records of this source for one.
+  // The link happens only when the evidence gate accepts a parent AND every
+  // accepted parent belongs to the SAME case — two qualifying cases mean the
+  // lineage is ambiguous, and ambiguity founds a separate case for a human to
+  // reconcile rather than guessing which recall was expanded.
+  if (!targetCase && normalized.declaresExpansion && expansionReferenceGuard) {
+    const windowStart = new Date(
+      Date.parse(normalized.publishedAt) - EXPANSION_SEARCH_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const candidates = await store.listSourceRecordsSince(sourceSystem, windowStart);
+    const parents = candidates.filter(
+      (candidate) =>
+        candidate.nativeId !== normalized.nativeId &&
+        expansionReferenceGuard(normalized, candidate.normalized),
+    );
+    const caseIds = new Set(parents.map((parent) => parent.recallCaseId));
+    if (caseIds.size === 1) {
+      targetCase = { id: parents[0].recallCaseId };
       linkMethod = 'expansion_prefix';
     }
   }
 
   if (!targetCase) {
     const projection = projectCase([normalized]);
+    const agencyLabel = normalized.sourceAgency === 'FSIS' ? 'FSIS' : normalized.sourceAgency;
     const timeline: TimelineEntry[] = [
       {
         occurredAt: normalized.publishedAt,
         kind: 'published',
-        summary: `${normalized.noticeType === 'public_health_alert' ? 'Public health alert' : 'Recall'} published by FSIS.`,
+        summary: `${normalized.noticeType === 'public_health_alert' ? 'Public health alert' : 'Recall'} published by ${agencyLabel}.`,
         causedBySnapshotIds: [],
         material: false,
       },
@@ -250,7 +358,7 @@ async function ingestOne(
       lastChangedAt: nowIso,
     });
     const record = await store.insertSourceRecord({
-      sourceSystem: 'fsis_api',
+      sourceSystem,
       nativeId: normalized.nativeId,
       recallCaseId: recallCase.id,
       linkMethod: 'self',
@@ -300,7 +408,7 @@ async function ingestOne(
 
   // Record joins an existing case.
   const record = await store.insertSourceRecord({
-    sourceSystem: 'fsis_api',
+    sourceSystem,
     nativeId: normalized.nativeId,
     recallCaseId: targetCase.id,
     linkMethod,

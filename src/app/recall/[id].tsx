@@ -1,26 +1,34 @@
 import { useEffect, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ComparePhotos, PhotoGallery } from '@/components/photo-gallery';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { classifyIllnessReport, healthEducationText } from '@/domain/illness';
-import type { AffectedProduct } from '@/domain/recall-types';
+import { classifyIllnessReport } from '@/domain/illness';
 import {
+  brandLine,
   companyLine,
   extractAttachmentLinks,
   humanizeAllCaps,
-  parseProductLine,
-  productSummaryFromTitle,
+  productDisplayName,
 } from '@/lib/consumer-summary';
+import {
+  buildConsumerCase,
+  joinValues,
+  type ConsumerDistribution,
+  type LotCodeSet,
+} from '@/lib/consumer-projection';
+import type { PackageField } from '@/lib/consumer-schema';
+import type { CodeLocation } from '@/lib/fact-types';
+import type { PhotoRole, ProductPhoto } from '@/lib/product-photos';
 import { buildWhatHappened } from '@/lib/what-happened';
 import { fetchCaseDetail, type CaseDetail } from '@/lib/recall-feed';
 import {
-  consumerActionDisplay,
   formatDate,
-  geographyDetail,
+  healthRiskSummary,
   illnessDisplay,
   noticeTypeLabel,
   reasonLine,
@@ -46,51 +54,229 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /**
- * One affected product as a "check your package" block: label name
- * emphasized, package described, identifiers (use-by dates, lots,
- * establishment numbers) as labeled rows, placement noted. Lines the
- * deterministic parser can't split are shown verbatim — never dropped — and
- * unconsumed source prose is preserved as a residual line.
+ * A collapsed set of printed codes. Large sets stay behind their own step —
+ * useful, never a wall of codes — and when the source paired each code with a
+ * calendar date, both are shown: the date is what a person can read, the code
+ * is what is actually stamped on their package.
  */
-function ProductRow({ product }: { product: AffectedProduct }) {
-  const parsed = parseProductLine(product.rawText);
-  if (!parsed) {
-    return (
-      <ThemedView type="backgroundElement" style={styles.productRow}>
-        <ThemedText type="small">{product.rawText.trim()}</ThemedText>
-      </ThemedView>
-    );
-  }
+function CodeSet({
+  codes,
+  expanded,
+  onToggle,
+}: {
+  codes: LotCodeSet | null;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  if (!codes) return null;
   return (
-    <ThemedView type="backgroundElement" style={styles.productRow}>
-      <ThemedText style={styles.productName}>{humanizeAllCaps(parsed.name)}</ThemedText>
-      {parsed.packageText ? (
-        <ThemedText type="small" themeColor="textSecondary">
-          Package: {parsed.packageText}
+    <View style={styles.step}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={onToggle}>
+        <ThemedText themeColor="link" type="small">
+          {expanded
+            ? `Hide ${codes.label.toLowerCase()}s`
+            : `${codes.label}s · ${codes.count} affected — view`}
         </ThemedText>
+      </Pressable>
+      {expanded ? (
+        <ThemedView type="backgroundElement" style={styles.identifierRow}>
+          {codes.pairs.length > 0 ? (
+            codes.pairs.map((pair) => (
+              <ThemedText key={pair.code} type="small">
+                {pair.code} · {pair.date}
+              </ThemedText>
+            ))
+          ) : (
+            <ThemedText type="small">{codes.codes.join(', ')}</ThemedText>
+          )}
+        </ThemedView>
       ) : null}
-      {parsed.identifiers.map((identifier, index) => (
-        <ThemedText key={index} type="small">
-          {identifier.label}: {identifier.value}
+    </View>
+  );
+}
+
+/**
+ * The approved package fields, and nothing else.
+ *
+ * This component accepts `PackageField[]` rather than arbitrary label/value
+ * pairs on purpose: every label it can print comes from a closed table, so no
+ * source heading, table column, or parser heuristic can introduce a field here.
+ * Missing values simply do not appear — the structure never changes shape.
+ */
+function PackageFields({ fields }: { fields: PackageField[] }) {
+  return (
+    <>
+      {fields.map((field) => (
+        <ThemedText key={field.key} type="small">
+          {field.label}: {field.value}
         </ThemedText>
       ))}
-      {parsed.locationText ? (
+    </>
+  );
+}
+
+/**
+ * Where a recall reached, as structured facts rather than one generated
+ * paragraph: the places first, then the named sellers, then the platforms, then
+ * the broad routes. Each block appears only when the source supported it.
+ */
+function WhereItWasSold({
+  distribution,
+  showAll,
+  onToggleAll,
+  showLocations,
+  onToggleLocations,
+}: {
+  distribution: ConsumerDistribution;
+  showAll: boolean;
+  onToggleAll: () => void;
+  showLocations: boolean;
+  onToggleLocations: () => void;
+}) {
+  const retailers = showAll ? distribution.retailers : distribution.retailersShown;
+  const locations = distribution.retailLocations;
+  return (
+    <>
+      {distribution.areaText ? <ThemedText>{distribution.areaText}</ThemedText> : null}
+      {distribution.scopeType === 'states' && distribution.states.length > LISTED_STATES ? (
         <ThemedText type="small" themeColor="textSecondary">
-          Where: {parsed.locationText}
+          {joinValues(distribution.states)}
         </ThemedText>
       ) : null}
-      {parsed.residualText ? (
+
+      {/* City/borough places, typed as geography by the projection — a name
+          can appear here only through the closed place taxonomy, never
+          because it looked like a proper noun. */}
+      {distribution.areas.length > 0 ? (
+        <View style={styles.step}>
+          <ThemedText type="small" themeColor="textSecondary">
+            AREAS
+          </ThemedText>
+          <ThemedText type="small">{joinValues(distribution.areas)}.</ThemedText>
+        </View>
+      ) : null}
+
+      {distribution.retailers.length > 0 ? (
+        <View style={styles.step}>
+          <ThemedText type="small" themeColor="textSecondary">
+            {distribution.retailersHidden > 0
+              ? 'RETAILERS INCLUDE'
+              : distribution.retailers.length === 1
+                ? 'RETAILER'
+                : 'RETAILERS'}
+          </ThemedText>
+          {retailers.map((retailer) => (
+            <ThemedText key={retailer} type="small">
+              {retailer}
+            </ThemedText>
+          ))}
+          {distribution.retailersHidden > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showAll }}
+              onPress={onToggleAll}>
+              <ThemedText themeColor="link" type="small">
+                {showAll
+                  ? 'Show fewer retailers'
+                  : `View all ${distribution.retailers.length} retailers`}
+              </ThemedText>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* Specific store addresses are the most useful thing a notice can say
+          about reach, and the least readable to leave open by default. */}
+      {locations.length > 0 ? (
+        <View style={styles.step}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showLocations }}
+            onPress={onToggleLocations}>
+            <ThemedText themeColor="link" type="small">
+              {showLocations
+                ? 'Hide locations'
+                : `${locations.length} location${locations.length === 1 ? '' : 's'} — view`}
+            </ThemedText>
+          </Pressable>
+          {showLocations ? (
+            <ThemedView type="backgroundElement" style={styles.identifierRow}>
+              {locations.slice(0, LISTED_LOCATIONS).map((location) => (
+                <ThemedText key={location} type="small">
+                  {location}
+                </ThemedText>
+              ))}
+              {locations.length > LISTED_LOCATIONS ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  + {locations.length - LISTED_LOCATIONS} more
+                </ThemedText>
+              ) : null}
+            </ThemedView>
+          ) : null}
+        </View>
+      ) : null}
+
+      {distribution.onlinePlatforms.length > 0 ? (
+        <View style={styles.step}>
+          <ThemedText type="small" themeColor="textSecondary">
+            ONLINE
+          </ThemedText>
+          <ThemedText type="small">{joinValues(distribution.onlinePlatforms)}</ThemedText>
+        </View>
+      ) : null}
+
+      {distribution.channels.length > 0 ? (
         <ThemedText type="small" themeColor="textSecondary">
-          {parsed.residualText}
+          Also sold through {joinValues(distribution.channels)}.
         </ThemedText>
       ) : null}
-    </ThemedView>
+    </>
+  );
+}
+
+/** Above this many states, the lead line states a count and the list follows. */
+const LISTED_STATES = 12;
+/** A disclosure of two hundred addresses is not a disclosure. */
+const LISTED_LOCATIONS = 25;
+
+/**
+ * Where to look on the package, and what the code looks like — two different
+ * questions, so they get two lines rather than one run-on phrase.
+ */
+function FindTheCode({ location, plural }: { location: CodeLocation | null; plural: boolean }) {
+  if (!location) return null;
+  return (
+    <View style={styles.step}>
+      <ThemedText type="small" themeColor="textSecondary">
+        {plural ? 'FIND THE CODES' : 'FIND THE CODE'}
+      </ThemedText>
+      <ThemedText type="small">{location.text}</ThemedText>
+      {location.appearance ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Look for: {location.appearance}
+        </ThemedText>
+      ) : null}
+    </View>
   );
 }
 
 export default function RecallDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
+  // Progressive disclosure: package-specific identifiers appear only after
+  // the user asks "do I have this product?" — never as always-visible clutter.
+  const [showChecker, setShowChecker] = useState(false);
+  // Nested disclosure: large code sets stay collapsed even inside the checker,
+  // keyed by the version they belong to so each opens independently.
+  const [openCodeSets, setOpenCodeSets] = useState<Set<string>>(new Set());
+  const [showAllRetailers, setShowAllRetailers] = useState(false);
+  const [showLocations, setShowLocations] = useState(false);
+  const toggleCodeSet = (key: string) =>
+    setOpenCodeSets((prior) => {
+      const next = new Set(prior);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -129,8 +315,11 @@ export default function RecallDetailScreen() {
 
   const { projection, affectedProducts } = state.detail;
   const risk = riskPresentation(projection.classification.value);
-  const product = productSummaryFromTitle(projection.title) ?? projection.title;
+  // `?? null`: projections persisted before productDescription/brands existed
+  // omit the keys; absence means unknown.
+  const product = productDisplayName(projection.productDescription ?? null, projection.title);
   const company = companyLine(projection.recallingFirm.displayName, projection.title);
+  const brands = brandLine(projection.brands ?? [], projection.recallingFirm.displayName, product);
   const reason = reasonLine(
     projection.reasonText,
     projection.hazardCategory,
@@ -146,12 +335,39 @@ export default function RecallDetailScreen() {
     pathogenOrAllergen: projection.pathogenOrAllergen,
     firmDisplayName: projection.recallingFirm.displayName,
     summaryText: projection.summaryText,
+    productDescription: projection.productDescription ?? null,
   });
   const illness = illnessDisplay(classifyIllnessReport(projection.summaryText));
-  const education = healthEducationText(projection.summaryText);
-  const action = consumerActionDisplay(projection.consumerAction);
+  // Deterministic hazard-family template — never source prose fragments.
+  const healthRisk = healthRiskSummary(
+    projection.hazardCategory,
+    projection.pathogenOrAllergen,
+    projection.reasonText,
+  );
   const attachments = extractAttachmentLinks(projection.summaryHtml);
   const agencyLabel = projection.sourceAgency === 'FSIS' ? 'USDA FSIS' : 'FDA';
+  // Consumer Projection V2: photos, distribution, package identification, and
+  // the consumer action, all derived from data already persisted with the case
+  // (no re-ingestion) and routed into our own semantic concepts rather than
+  // whatever the source happened to call its columns.
+  const consumer = buildConsumerCase(projection, affectedProducts);
+  const classificationPending = projection.classification.value === 'not_yet_classified';
+  // Official label pages the backend rendered from source PDFs (FSIS) join
+  // the same Product Photos experience as FDA photography — no PDF-specific
+  // component, and the original PDF stays linked as provenance.
+  const labelVisuals: ProductPhoto[] = state.detail.visuals.map((visual, index) => ({
+    url: visual.url,
+    alt: 'Official product label',
+    order: consumer.photos.length + index,
+    role: visual.role as PhotoRole,
+    width: visual.width,
+    height: visual.height,
+    aspectRatio:
+      visual.width !== null && visual.height !== null && visual.height > 0
+        ? visual.width / visual.height
+        : null,
+  }));
+  const gallery = [...consumer.photos, ...labelVisuals];
 
   return (
     <ThemedView style={styles.container}>
@@ -166,6 +382,14 @@ export default function RecallDetailScreen() {
         </ThemedText>
         <ThemedText type="title">{product}</ThemedText>
         <ThemedText themeColor="textSecondary">{company}</ThemedText>
+        {brands ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            Brand: {brands}
+          </ThemedText>
+        ) : null}
+        {/* Retailers belong to "Where it was sold" and appear there only.
+            Repeating them here made the header's shape vary from recall to
+            recall and said the same thing twice. */}
         <ThemedText type="small" themeColor="textSecondary">
           Announced {formatDate(projection.publishedAt)}
           {projection.lastPublicActivityAt > projection.publishedAt
@@ -175,10 +399,16 @@ export default function RecallDetailScreen() {
 
         {projection.state === 'retracted' ? (
           <ThemedView type="backgroundSelected" style={styles.callout}>
-            <ThemedText>
-              {agencyLabel} has retracted this notice. See the official page for details.
-            </ThemedText>
+            <ThemedText>{agencyLabel} has retracted this notice.</ThemedText>
           </ThemedView>
+        ) : null}
+
+        {/* Official product photography is primary recognition information,
+            so it sits above the explanation rather than behind a control. */}
+        {gallery.length > 0 ? (
+          <Section title={gallery.length > 1 ? 'Product photos' : 'Product photo'}>
+            <PhotoGallery photos={gallery} />
+          </Section>
         ) : null}
 
         <Section title="What happened">
@@ -189,50 +419,166 @@ export default function RecallDetailScreen() {
               {happened.update}
             </ThemedText>
           ) : null}
+          {/* How much was recalled has exactly one consumer home, and
+              this is it. FSIS quantityText is the amount RECOVERED — a
+              different fact — and is deliberately not shown. */}
+          {projection.sourceAgency === 'FDA' &&
+          consumer.quantityText &&
+          !happened.text.includes(consumer.quantityText.match(/[\d,]+/)?.[0] ?? '\u0000') ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              The recall covers {consumer.quantityText}.
+            </ThemedText>
+          ) : null}
         </Section>
 
         {risk ? (
-          <Section title="Risk level">
+          <Section title={classificationPending ? `${agencyLabel} classification` : 'Risk level'}>
             <ThemedText>{risk.label}</ThemedText>
             {risk.explanation ? (
-              <ThemedText themeColor="textSecondary">{risk.explanation}</ThemedText>
+              <ThemedText
+                type={classificationPending ? 'small' : 'default'}
+                themeColor="textSecondary">
+                {risk.explanation}
+              </ThemedText>
             ) : null}
           </Section>
         ) : null}
 
         <Section title="Where it was sold">
-          <ThemedText>{geographyDetail(projection.geography)}</ThemedText>
+          <WhereItWasSold
+            distribution={consumer.distribution}
+            showAll={showAllRetailers}
+            onToggleAll={() => setShowAllRetailers((value) => !value)}
+            showLocations={showLocations}
+            onToggleLocations={() => setShowLocations((value) => !value)}
+          />
         </Section>
 
-        <Section title="Check your package">
-          {affectedProducts.length === 0 ? (
-            <ThemedText themeColor="textSecondary">
-              {attachments.length > 0
-                ? 'The affected-product list is in the official attachment below.'
-                : 'The product list is only in the official notice — open it below.'}
+        {/* Hidden entirely when nothing a person can actually check survived
+            the schema. A clean omission beats a residual blob of source text. */}
+        {consumer.packageCheck.render ? (
+          <Section title="Check your package">
+            {/* The task the section exists for, stated plainly, then a
+                recognizable summary. Identifiers stay behind the control so the
+                page never reads as a wall of codes. */}
+            <ThemedText type="small" themeColor="textSecondary">
+              {consumer.packageCheck.scopeStatement}
             </ThemedText>
-          ) : (
-            affectedProducts.map((item, index) => <ProductRow key={index} product={item} />)
-          )}
-          {attachments.map((attachment) => (
-            <ThemedText
-              key={attachment.url}
-              themeColor="link"
-              accessibilityRole="link"
-              onPress={() => Linking.openURL(attachment.url)}>
-              {attachment.label}
-            </ThemedText>
-          ))}
-        </Section>
+            <ThemedText style={styles.productName}>{humanizeAllCaps(product)}</ThemedText>
+            {consumer.variantNames.length > 0 ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                Affected versions: {joinValues(consumer.variantNames)}
+                {consumer.packageCheck.variants.length > consumer.variantNames.length
+                  ? ` · ${consumer.packageCheck.variants.length} affected packages`
+                  : ''}
+              </ThemedText>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showChecker }}
+              onPress={() => setShowChecker((value) => !value)}>
+              <ThemedText themeColor="link">
+                {showChecker ? 'Hide package details' : 'Do you have this product?'}
+              </ThemedText>
+            </Pressable>
+
+            {showChecker ? (
+              <View style={styles.checker}>
+                <ComparePhotos photos={consumer.packageCheck.photos} />
+
+                {/* Facts proven to apply to every affected version — every
+                    version's own source row states the same value — render
+                    once, here, above the cards. In variant mode this block
+                    and the cards are the ONLY places a package fact can
+                    appear; nothing renders loosely after the cards. */}
+                {consumer.packageCheck.sharedFields.length > 0 ? (
+                  <ThemedView type="backgroundElement" style={styles.productRow}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Applies to all affected versions
+                    </ThemedText>
+                    <PackageFields fields={consumer.packageCheck.sharedFields} />
+                  </ThemedView>
+                ) : null}
+
+                {/* Every version card has the same shape, drawn from the same
+                    closed field vocabulary. A version missing a value simply
+                    omits that line; it never gains a different one because
+                    another source table had another column. */}
+                {consumer.packageCheck.variants.map((variant, index) => (
+                  <ThemedView key={index} type="backgroundElement" style={styles.productRow}>
+                    <ThemedText style={styles.productName}>{variant.name}</ThemedText>
+                    {variant.photo ? <PhotoGallery photos={[variant.photo]} size={110} /> : null}
+                    <PackageFields fields={variant.fields} />
+                    <CodeSet
+                      codes={variant.lotCodes}
+                      expanded={openCodeSets.has(`v${index}`)}
+                      onToggle={() => toggleCodeSet(`v${index}`)}
+                    />
+                    {/* Only reached when this version's codes sit somewhere the
+                        others' do not; a shared location is shown once below. */}
+                    {variant.codeLocation ? (
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {variant.codeLocation.text}
+                      </ThemedText>
+                    ) : null}
+                  </ThemedView>
+                ))}
+                {consumer.packageCheck.fields.length > 0 ? (
+                  <ThemedView type="backgroundElement" style={styles.productRow}>
+                    <PackageFields fields={consumer.packageCheck.fields} />
+                  </ThemedView>
+                ) : null}
+
+                {/* Production codes are opaque, so the calendar dates they
+                    stand for lead and the codes follow behind a tap. */}
+                {consumer.packageCheck.productionDates ? (
+                  <ThemedText type="small">
+                    Affected production dates: {consumer.packageCheck.productionDates}
+                  </ThemedText>
+                ) : null}
+                <CodeSet
+                  codes={consumer.packageCheck.productionCodes}
+                  expanded={openCodeSets.has('production')}
+                  onToggle={() => toggleCodeSet('production')}
+                />
+                <CodeSet
+                  codes={consumer.packageCheck.lotCodes}
+                  expanded={openCodeSets.has('lot')}
+                  onToggle={() => toggleCodeSet('lot')}
+                />
+
+                {/* Where the codes are, stated once when it is true of every
+                    affected version. Omitted entirely when the notice never
+                    says — a wrong place to look is worse than none. */}
+                <FindTheCode
+                  location={consumer.packageCheck.codeLocation}
+                  plural={consumer.packageCheck.variants.length > 1}
+                />
+
+                {attachments.map((attachment) => (
+                  <ThemedText
+                    key={attachment.url}
+                    themeColor="link"
+                    accessibilityRole="link"
+                    onPress={() => Linking.openURL(attachment.url)}>
+                    {attachment.label}
+                  </ThemedText>
+                ))}
+              </View>
+            ) : null}
+          </Section>
+        ) : null}
 
         <Section title="What you should do">
-          <ThemedText>
-            {action?.primary ??
-              'No specific instructions were extracted — check the official notice.'}
-          </ThemedText>
-          {action?.secondary ? (
+          <ThemedText>{consumer.action.text}</ThemedText>
+          {consumer.action.origin === 'app' ? (
             <ThemedText type="small" themeColor="textSecondary">
-              {action.secondary}
+              This is our recommendation — the notice did not state a consumer instruction.
+            </ThemedText>
+          ) : null}
+          {consumer.action.secondary ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              {consumer.action.secondary}
             </ThemedText>
           ) : null}
         </Section>
@@ -244,9 +590,9 @@ export default function RecallDetailScreen() {
           ) : null}
         </Section>
 
-        {education ? (
+        {healthRisk ? (
           <Section title="Health risk">
-            <ThemedText themeColor="textSecondary">{education}</ThemedText>
+            <ThemedText themeColor="textSecondary">{healthRisk}</ThemedText>
           </Section>
         ) : null}
 
@@ -263,7 +609,10 @@ export default function RecallDetailScreen() {
             </ThemedText>
           ) : null}
           <ThemedText type="small" themeColor="textSecondary">
-            Source: U.S. Department of Agriculture
+            Source:{' '}
+            {projection.sourceAgency === 'FSIS'
+              ? 'U.S. Department of Agriculture'
+              : 'U.S. Food and Drug Administration'}
           </ThemedText>
         </Section>
       </ScrollView>
@@ -311,6 +660,18 @@ const styles = StyleSheet.create({
   },
   reasonLead: {
     fontWeight: '600',
+  },
+  checker: {
+    gap: Spacing.one,
+    marginTop: Spacing.one,
+  },
+  step: {
+    gap: Spacing.half,
+    marginTop: Spacing.one,
+  },
+  identifierRow: {
+    padding: Spacing.two,
+    borderRadius: Radii.small,
   },
   productRow: {
     padding: Spacing.two,

@@ -40,15 +40,22 @@ const DISCOVERY =
 
 /** Words that make a sentence about human harm at all. */
 const HARM =
-  /\b(illness(es)?|ill|sick(ened)?|adverse reactions?|injur(y|ies)|hospitaliz\w*|deaths?|case-patients?|infections? (have|has) been)\b/i;
+  /\b(illness(es)?|ill|sick(ened)?|adverse (reactions?|events?)|allergic reactions?|injur(y|ies)|hospitaliz\w*|deaths?|case-patients?|infections? (have|has) been|infected)\b/i;
 
-/** Explicit-zero statements. */
+/** Explicit-zero statements. "No OTHER/additional reports" is a none-shaped
+ * qualifier that implies a prior report stated elsewhere on the page — it is
+ * excluded from report sentences here, and the primary report sentence (which
+ * the REPORTED patterns catch) decides the record's status. */
 const EXPLICIT_NONE =
-  /\b(there (have|has) been no|no (confirmed )?(reports?|illness(es)?|adverse reactions?|injuries)|not (received any|aware of any))\b[^.]*\b(report|confirm|illness|adverse|injur|associat|received|aware)/i;
+  /\b(there (have|has) been no|no (other |additional |further )?(confirmed )?(reports?|illness(es)?|adverse reactions?|injuries)|not (received any|aware of any))\b[^.]*\b(report|confirm|illness|adverse|injur|associat|received|aware)/i;
 
-/** Positive-report statements (counts or explicit reports). */
+/** Positive-report statements (counts or explicit reports). The last two
+ * alternations cover FDA announcement wording verified in recorded fixtures:
+ * "a total of 345 people infected with the outbreak strain … have been
+ * reported from 27 states" and "were associated with reported salmonellosis
+ * illnesses", plus "The FDA continues to receive adverse event reports". */
 const REPORTED =
-  /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|several|multiple)\b[^.]{0,120}\b(sick (people|persons?)|ill(ness(es)?)?|hospitaliz\w*|deaths?|case-patients?)\b[^.]{0,120}\b(identified|reported|confirmed|linked|occurred)|\b(illness(es)?|adverse reactions?|injur(y|ies)|hospitalizations?|deaths?)\b[^.]{0,80}\b(have|has) been (reported|confirmed|received|identified)|\b(received|there (are|have been)) (reports? of|confirmed)\b[^.]{0,60}\b(illness|adverse|injur|sick)/i;
+  /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|several|multiple)\b[^.]{0,120}\b(sick (people|persons?)|ill(ness(es)?)?|hospitaliz\w*|deaths?|case-patients?)\b[^.]{0,120}\b(identified|reported|confirmed|linked|occurred)|\b(illness(es)?|adverse reactions?|injur(y|ies)|hospitalizations?|deaths?)\b[^.]{0,80}\b(have|has) been (reported|confirmed|received|identified)|\b(received|there (are|have been)) (reports? of|confirmed)\b[^.]{0,60}\b(illness|adverse|injur|sick)|\b\d+\b[^.]{0,60}\b(people|persons?|individuals)\b[^.]{0,80}\b(infected|sickened)\b[^.]{0,120}\b(reported|confirmed)|\bassociated with\b[^.]{0,40}\breported\b[^.]{0,60}\b(illness|salmonellosis|listeriosis|infections?)|\b(receives?|continues to receive)\b[^.]{0,50}\b(adverse event|illness|injury) reports?|\b(a |one |an? )?(consumer|customer|person|individual)s?\b[^.]{0,60}\breported\b[^.]{0,60}\b(allergic reaction|illness|injur|adverse)/i;
 
 function isReportSentence(sentence: string): boolean {
   if (ADVICE.test(sentence) || DISCOVERY.test(sentence)) return false;

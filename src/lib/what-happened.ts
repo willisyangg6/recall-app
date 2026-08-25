@@ -11,6 +11,7 @@
  * source text is never mutated and remains fully preserved in the projection.
  */
 
+import { allergenDisplayPhrase } from '@/domain/hazard';
 import { cleanDisplayText } from '@/domain/text';
 import { companyDisplayName, productSummaryFromTitle } from './consumer-summary';
 
@@ -22,6 +23,8 @@ export interface WhatHappenedInput {
   pathogenOrAllergen: string | null;
   firmDisplayName: string | null;
   summaryText: string | null;
+  /** Source-structured product description (FDA provides one; FSIS null). */
+  productDescription?: string | null;
 }
 
 export interface WhatHappened {
@@ -45,7 +48,10 @@ function escapeRegex(text: string): string {
  * words, and corrupting identity is worse than mid-sentence Title Case.
  * The stripped word "products" is restored when the title used it.
  */
-function productPhrase(title: string): string | null {
+function productPhrase(title: string, productDescription?: string | null): string | null {
+  // A source-structured product description beats title parsing (FDA).
+  const described = (productDescription ?? '').replace(/[\s.]+$/, '').trim();
+  if (described.length >= 3) return described;
   let phrase = productSummaryFromTitle(title);
   if (!phrase) return null;
   // "Notification Report 054-2018 (Ham Products)" → the parenthetical product.
@@ -93,8 +99,12 @@ function reasonClause(input: WhatHappenedInput): ReasonClause | null {
     input.pathogenOrAllergen && !/^undeclared/i.test(input.pathogenOrAllergen)
       ? input.pathogenOrAllergen
       : null;
-  const allergen = input.pathogenOrAllergen?.match(/^undeclared\s+(.+)$/i)?.[1] ?? null;
-  const upstream = /\b(containing|made with)\b/i.test(productPhrase(input.title) ?? '');
+  const allergenRaw = input.pathogenOrAllergen?.match(/^undeclared\s+(.+)$/i)?.[1] ?? null;
+  // Label vocabulary for consistency ("soybean" → "soy", "eggs" → "egg").
+  const allergen = allergenRaw ? allergenDisplayPhrase(allergenRaw) : null;
+  const upstream = /\b(containing|made with)\b/i.test(
+    productPhrase(input.title, input.productDescription) ?? '',
+  );
 
   // Contamination (pathogen or foreign material).
   if (reasons.includes('product contamination')) {
@@ -169,16 +179,68 @@ function reasonClause(input: WhatHappenedInput): ReasonClause | null {
   if (reasons.includes('misbranding')) {
     return { clause: 'because the products were misbranded', context: null };
   }
+
+  // Source-agnostic hazard tier: FDA reason categories don't use the FSIS
+  // enum strings, but they normalize into the same structured hazard slots.
+  // Every clause below is grounded in a structured field or a verified
+  // source-text keyword — never free prose.
+  if (input.hazardCategory === 'microbial_contamination' && pathogen) {
+    return {
+      clause: upstream
+        ? `because of possible ${pathogen} contamination`
+        : `because the products may be contaminated with ${pathogen}`,
+      context: null,
+    };
+  }
+  if (input.hazardCategory === 'allergen') {
+    if (allergen) {
+      const plural = /,| and /.test(allergen);
+      return {
+        clause: plural
+          ? `because the products may contain ${allergen}, allergens that are not declared on the label`
+          : `because the products may contain ${allergen}, an allergen that is not declared on the label`,
+        context: null,
+      };
+    }
+    return { clause: 'because the products may contain an undeclared allergen', context: null };
+  }
+  if (input.hazardCategory === 'foreign_material') {
+    const material = FOREIGN_MATERIALS.find((m) =>
+      new RegExp(`\\b${m}\\b`, 'i').test(`${input.reasonText ?? ''}\n${summary}`),
+    );
+    return {
+      clause: material
+        ? `because the products may contain pieces of ${material}`
+        : 'because the products may contain foreign material',
+      context: null,
+    };
+  }
+  if (input.hazardCategory === 'chemical_contamination') {
+    const agent = input.pathogenOrAllergen;
+    return {
+      clause: agent
+        ? `because the products may be contaminated with ${agent}`
+        : 'because the products may be contaminated with a chemical substance',
+      context: null,
+    };
+  }
   return null;
 }
 
-/** "The recall covers approximately 1,626 pounds of product." when stated. */
+/**
+ * "The recall covers approximately 1,626 pounds of product." /
+ * "The recall covers 120 cases." — only from a direct "recalling <N> <unit>"
+ * source statement; package sizes and unrelated numbers never qualify.
+ */
 function quantitySentence(input: WhatHappenedInput): string | null {
   if (input.noticeType !== 'recall') return null;
   const match = input.summaryText?.match(
-    /recall(?:ing|ed)? (?:of )?approximately ([\d,]+) pounds/i,
+    /recall(?:ing|ed)? (?:of )?(approximately |about |a total of )?([\d,]+) (pounds|cases|units|packages|bags|boxes|jars|bottles|containers|pouches|cartons)\b/i,
   );
-  return match ? `The recall covers approximately ${match[1]} pounds of product.` : null;
+  if (!match) return null;
+  const qualifier = match[1]?.toLowerCase() ?? '';
+  const suffix = match[3].toLowerCase() === 'pounds' ? ' of product' : '';
+  return `The recall covers ${qualifier}${match[2]} ${match[3].toLowerCase()}${suffix}.`;
 }
 
 const MONTH_ABBREVIATIONS: Record<string, string> = {
@@ -254,7 +316,7 @@ function wordCount(text: string): number {
 
 export function buildWhatHappened(input: WhatHappenedInput): WhatHappened {
   const update = normalizedUpdate(input.summaryText);
-  const product = productPhrase(input.title);
+  const product = productPhrase(input.title, input.productDescription);
 
   // Retraction notices explain the retraction, not the original event.
   if (/\bretracts?\b/i.test(input.title)) {
@@ -287,7 +349,17 @@ export function buildWhatHappened(input: WhatHappenedInput): WhatHappened {
       return { text: cleanDisplayText(text), update, source: 'template' };
     }
     // Generic product frame: reason family unknown but the event is stateable.
-    const reasonSuffix = input.reasonText ? ` because of ${input.reasonText.toLowerCase()}` : '';
+    // FDA reason descriptions are free text ("Due to Elevated Levels of Lead",
+    // "Product contains toxic yellow oleander.") — normalize the connective
+    // deterministically without rewriting the source's own words.
+    let reasonSuffix = '';
+    if (input.reasonText) {
+      const reason = input.reasonText.replace(/[.\s]+$/, '').replace(/^due to\s+/i, '');
+      const contains = reason.match(/^products? contains?\s+(.+)$/i);
+      reasonSuffix = contains
+        ? ` because the products contain ${contains[1].toLowerCase()}`
+        : ` because of ${reason.toLowerCase()}`;
+    }
     return {
       text: cleanDisplayText(`${frame(input, product)}${reasonSuffix}.`),
       update,

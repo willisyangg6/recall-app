@@ -71,6 +71,54 @@ Four distinct FDA-side artifacts exist for the same underlying recall activity. 
 
 **Critical access constraint [VERIFIED]:** `www.fda.gov` returns **404 to non-browser user agents**. All fda.gov polling must send a browser-like User-Agent. (api.fda.gov and open.fda.gov have no such restriction.)
 
+> **Re-verification addendum (2026-08-21, FDA Phase A implementation).** All
+> §3.1 discovery channels re-verified live before coding: listing JSON 200 with
+> 1,026 items (744 food-tagged), still unsorted, fresh to the previous day;
+> food RSS fresh (newest item 2 days old, 20-item window); detail pages
+> byte-stable across repeated fetches (content hashing is meaningful). Two
+> deltas from the original research: (a) the **non-browser-UA 404 was not
+> enforced** at re-verification (curl's default UA got 200) — browser-like
+> headers are still sent since the gate has been observed before; (b) URL churn
+> on updates has **two coexisting patterns**: a retitled re-publish can
+> _replace_ the original listing row (`updated-…` slug, old slug gone —
+> Dreyer's Outshine) or _coexist_ with it (`update-…` and `updated-release-…`
+> rows alongside the originals — Albertsons bowtie pasta, Southwind shrimp).
+> Stripping those prefixes from the slug yields a stable announcement identity
+> for every observed case. Also verified: the listing's `changed` timestamp
+> (Drupal node edit time) moves on any page edit, making the listing row a
+> reliable change-detection key for the detail page; the listing exposes **no
+> closure/terminated flag** in its JSON fields.
+>
+> **(c) Slug-collision suffixes [VERIFIED 2026-08-22]:** a revised
+> re-publication whose title slugifies identically gets a Drupal alias
+> collision suffix — `…-health-risk` + `…-health-risk-0` (Primavera Nueva
+> tamales: the `-0` page is the same recall revised to add a seasonal item;
+> Hans Kissle's `-0` body even opens "A previous version of this press release
+> was issued on 8/5/2025"). The suffix is only a **candidate** same-event
+> signal: the same collision also occurs when a firm recalls the same product
+> twice with the identical headline (JFE Franchising cucumbers, Dec 2024 vs
+> May 2025 — two distinct events). The pipeline therefore links a `-N` slug to
+> its base **only** through an evidence gate (same firm + same hazard +
+> ≤180 days + ≥0.6 body overlap); title similarity alone never merges.
+>
+> **(d) Declared expansions under fresh slugs [VERIFIED 2026-08-24]:** FDA
+> also re-publishes one recall as a NEW announcement whose own words declare
+> the lineage — "Lidl US **Expands Recall of** Eridanous Shortbread
+> Cookies…", "…is expanding its July 24, 2026 recall…" (verified live:
+> Eridanous/Lidl, OLA-OLA Pounded Yam/Fayus, Glutinous Rice Balls/Khong
+> Guan, Savencia, Sprout Organics, Kalo Foods, Infinite Herbs basil). The
+> URL differs entirely, so slug analysis cannot see these. The pipeline
+> links a declared expansion by SEARCHING recent records of the same source
+> under a stricter gate: expansion wording in the record's own title/body +
+> same firm + same hazard + ≤120 days + **product identity** (an overlapping
+> UPC, or the expansion title naming the parent's product) + body overlap
+> ≥0.45 — and only when exactly ONE existing case qualifies. FDA only; FSIS
+> expansions carry the parent's recall number and never need wording. One
+> more Drupal quirk feeds this: FDA re-dates a BASE page when it edits it
+> (Khong Guan's base was edited one day AFTER its expansion published), so
+> a case's consumer voice prefers an expansion-titled record within a
+> 30-day window of the newest record.
+
 **Identifier situation [VERIFIED]:** Announcements carry **no recall number and no event ID**. The only stable-ish key is the announcement URL path. There is no machine-readable link from an announcement to its later enforcement record; even firm names differ across the two ("Albertsons" vs "Albertsons Companies LLC"). iRES (§3.3) holds a "Press Release URL(s)" field internally, but behind an auth-gated API. **Joining announcements to enforcement records must be fuzzy** (firm + product text + dates) **[INFERENCE from verified absence of any shared key]**.
 
 ### 3.2 openFDA Food Enforcement endpoint

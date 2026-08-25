@@ -38,6 +38,9 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# local dry-run output of scripts/render-fsis-labels.ts
+.fsis-label-dryrun/
+
 # generated native folders
 /ios
 /android

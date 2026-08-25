@@ -69,6 +69,15 @@ export interface RecallStore {
     sourceSystem: SourceSystem,
     nativeId: string,
   ): Promise<SourceRecordRow | null>;
+  /**
+   * Records of one source published on/after `publishedAfterIso` — the
+   * candidate pool a declared-expansion record searches for its parent.
+   * Bounded by the caller's window; never a full-table scan in practice.
+   */
+  listSourceRecordsSince(
+    sourceSystem: SourceSystem,
+    publishedAfterIso: string,
+  ): Promise<SourceRecordRow[]>;
   insertSourceRecord(row: Omit<SourceRecordRow, 'id'>): Promise<SourceRecordRow>;
   updateSourceRecord(
     id: string,
