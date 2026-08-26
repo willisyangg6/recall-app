@@ -17,7 +17,12 @@
 
 import { normalizedAllergenTokens } from '@/domain/hazard';
 import type { AffectedProduct, CaseProjection } from '@/domain/recall-types';
-import { extractRetailerNames, isRetailerName, retailersWithPlaces } from '@/domain/retailer';
+import {
+  extractRetailerNames,
+  isRetailerName,
+  looksLikeColumnHeading,
+  retailersWithPlaces,
+} from '@/domain/retailer';
 import { cleanDisplayText, stripHtml } from '@/domain/text';
 import {
   isUsCityName,
@@ -1492,14 +1497,30 @@ export function extractRetailerListBlock(summaryText: string | null): string[] {
       // The block ends at a blank line, a sentence, or another heading.
       if (line === '' || line.endsWith(':') || line.split(/\s+/).length > 6) break;
       if (!/^[A-Z0-9]/.test(line)) break;
+      // A block that OPENS with a column heading is a table the source
+      // flattened into one line per cell — "PRODUCT / UPC / EXP. DATES", or
+      // "Store Number / Store Street Address / Store City & State". Its rows
+      // are products and addresses, so the whole block is abandoned: no shape
+      // test can tell a salad from a delicatessen once the heading is gone.
+      if (next === index + 1 && looksLikeColumnHeading(line)) break;
       // A period ends the block — unless it is the abbreviation inside a legal
       // name. "Golden Touch Trading Inc." used to end the list, silently
       // dropping the ten stores listed after it.
       if (/[.!?]$/.test(line) && !/\b(?:Inc|LLC|L\.L\.C|Ltd|Co|Corp)\.$/i.test(line)) break;
+      // The town a notice puts in parentheses is geography, and its comma
+      // would otherwise split one store into fragments: "Buds Marketplace
+      // (Eagle, ID)" was becoming a shop called "Buds Marketplace (Eagle".
+      const withoutPlaces = line
+        .replace(/\([^)]*\)?/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (withoutPlaces === '') continue;
       // "H-Mart Kakaako, LLC" is one store, not two. A comma only separates
       // names when neither side is a bare corporate suffix.
-      const parts = line.split(/\s*,\s*/);
-      const names = parts.some((part) => CORPORATE_SUFFIX.test(part.trim())) ? [line] : parts;
+      const parts = withoutPlaces.split(/\s*,\s*/);
+      const names = parts.some((part) => CORPORATE_SUFFIX.test(part.trim()))
+        ? [withoutPlaces]
+        : parts;
       for (const name of names) {
         const cleaned = name.replace(/\s+/g, ' ').trim();
         if (cleaned.length < 3 || cleaned.length > 44) continue;

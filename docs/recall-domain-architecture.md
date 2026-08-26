@@ -503,9 +503,17 @@ Contents:
   `recallingFirm` (who recalled), `brands` (what the package says), and
   `retailerNames` (where the source says it was sold — deterministic
   extraction from sold-at/shipped-to/distributed-to constructions in
-  `domain/retailer.ts`, never inferred from retail footprints). Persisted
-  projections that predate `retailerNames` omit the key; the display layer
-  re-derives it from preserved source text, so no re-ingestion is needed.
+  `domain/retailer.ts`, never inferred from retail footprints). Since C3.1
+  `projectCase` owns the field via `domain/retailer-evidence.ts`, so FDA and
+  FSIS derive it identically with no adapter-specific retailer system, and a
+  re-projection recomputes rather than erases it. Only the verb-gated
+  sentence seam may populate it: the display layer additionally reads source
+  tables and block store lists, which a live census showed carry product
+  rows, barcodes, addresses, and column headings — safe to show beside the
+  official source, not safe to persist as the claim push notifications match
+  on. Projections that predate the field omit the key; the display layer
+  re-derives from preserved source text, and `npm run backfill:retailers`
+  repairs the stored value without re-ingestion.
 - **Package identification is progressive.** "Check your package" shows a
   recognizable summary (product, brand, package description) with identifiers
   (UPCs, lots, date codes, on-package locations — extracted at display time

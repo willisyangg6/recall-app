@@ -63,6 +63,8 @@
     "reconcile:duplicates": "tsx scripts/reconcile-duplicate-cases.ts",
     "backfill:fda-images:dry": "tsx scripts/backfill-fda-images.ts",
     "backfill:fda-images": "tsx scripts/backfill-fda-images.ts --apply",
+    "backfill:retailers:dry": "tsx scripts/backfill-retailers.ts",
+    "backfill:retailers": "tsx scripts/backfill-retailers.ts --apply",
     "labels:fsis:dry": "tsx scripts/render-fsis-labels.ts",
     "labels:fsis": "tsx scripts/render-fsis-labels.ts --apply"
   },

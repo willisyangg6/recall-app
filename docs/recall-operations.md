@@ -118,6 +118,55 @@ replacement atomic and auditable). Per-URL failures live in
 the FDA image backfill stays a maintenance tool and is deliberately **not**
 scheduled (normal FDA parsing derives hero images).
 
+## Retailer evidence: a one-time historical repair
+
+```
+npm run backfill:retailers:dry    # report only, writes nothing
+npm run backfill:retailers        # apply
+npm run backfill:retailers:dry    # verify: "would update" must be 0
+```
+
+`projection.retailerNames` is derived by `projectCase` (C3.1), so every new
+and re-projected case carries it automatically. Cases stored _before_ that
+existed will never be revisited by normal ingestion — the snapshot hash gate
+skips unchanged pages by design — hence a one-time repair.
+
+Safety shape, identical to the FDA image backfill: dry-run by default,
+explicit `--apply`, **zero network requests** (the derivation reads text
+already persisted with the case), and a single-field write that carries
+`timeline` and `lastChangedAt` through untouched. It therefore bypasses the
+pipeline's re-projection path entirely — no material-change detection, no
+NotificationEvent, no new or merged cases, no moved dates. A historical
+projection repair is not public activity.
+
+Conflicts are **reported, never resolved**: a case carrying stored evidence
+the hardened contract rejects is listed and left completely alone. Deleting
+stored evidence is a decision for a human, not a maintenance script.
+
+The operation is idempotent and resumable — every decision is made from
+current state — so the dry run doubles as the post-apply verification report.
+
+### Running it alongside scheduled ingestion
+
+Safe, and deliberately so: the FDA and FSIS jobs tick every 30 minutes and a
+run over ~1,900 cases takes minutes, so the two WILL overlap. The repair
+loads every case up front, and a plain `updateCase` writes the whole row back
+from that copy — which would roll back an ingest's projection, timeline, and
+`last_changed_at` together.
+
+So each write goes through `updateCaseRetailerNames`, which patches the
+projection column alone and only while the row still carries the
+`last_changed_at` it was read with (every real projection write moves it —
+`pipeline.reprojectCase` sets it to `now`). An ingest landing mid-run makes
+the update match no row; the repair then re-reads that case, re-derives from
+the **newer** text, and retries once. Anything still moving is counted under
+"Changed by ingest mid-run" and left for the next run.
+
+The repair takes **no job lease** on purpose. Holding the FDA and FSIS leases
+for the length of a maintenance pass would stall the agency feeds, and a
+crash mid-pass would strand them until the TTL expired — a worse failure than
+skipping a handful of cases that the next run picks up anyway.
+
 ## Enforcement: weekly-gated
 
 The daily job reads the one-request openFDA bulk manifest and compares its

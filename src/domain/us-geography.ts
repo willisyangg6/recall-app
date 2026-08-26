@@ -564,6 +564,13 @@ const US_CITIES: string[] = [
   'washington dc',
   'jamestown',
   'west allis',
+  // Texas towns a live Walmart store-location table printed WITHOUT their
+  // state code, so the "City ST" rule could not see them and they rendered
+  // as shops. Added as observed evidence, not as the start of a gazetteer:
+  // the neighbouring rows ("DALLAS TX", "GARLAND TX") were already handled.
+  'gilmer',
+  'longview',
+  'sulphur springs',
 ];
 
 const CITY_SET = new Set(US_CITIES);

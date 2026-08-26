@@ -85,7 +85,13 @@ export const RETAILER_CATALOG: CanonicalRetailer[] = [
   { id: 'pick-n-save', name: "Pick 'n Save", aliases: ['pick n save'] },
   { id: 'gerbes', name: 'Gerbes' },
   { id: 'jay-c', name: 'Jay C', aliases: ['jay c food', 'jay c food plus'] },
-  { id: 'pay-less-supermarkets', name: 'Pay Less Supermarkets', aliases: ['pay less'] },
+  {
+    id: 'pay-less-supermarkets',
+    name: 'Pay Less Supermarkets',
+    // Notices spell the banner both ways; both are the source's own wording,
+    // so both are exact aliases rather than a fuzzy match.
+    aliases: ['pay less', 'payless', 'payless supermarkets'],
+  },
   { id: 'owens', name: "Owen's", aliases: ['owens'] },
   { id: 'ruler-foods', name: 'Ruler Foods', aliases: ['ruler'] },
   { id: 'bakers', name: "Baker's", aliases: ['bakers'] },
@@ -167,7 +173,7 @@ export function normalizeRetailerText(raw: string): string {
  * is itself a known alias, so "Central Market" can never decay to "Central".
  */
 const VENUE_TAIL =
-  /\s+(?:stores?|markets?|supermarkets?|locations?|clubs?|retail|grocery|drugstores?)$/;
+  /\s+(?:stores?|markets?|supermarkets?|locations?|clubs?|retail|grocery|convenience|drugstores?)$/;
 
 const ALIAS_TO_ID = new Map<string, string>();
 for (const retailer of RETAILER_CATALOG) {
@@ -184,17 +190,29 @@ for (const retailer of RETAILER_CATALOG) {
   }
 }
 
-/** Exact alias lookup with bounded venue-tail stripping. */
+/**
+ * A possessive the source wrote and normalization flattened: "Costco's"
+ * becomes "costcos". Stripping is lookup-driven exactly as the venue tail is
+ * — the shortened form counts only when it is itself a known alias — so this
+ * can only ever REMOVE a letter the source supplied. It never adds one, which
+ * is why "Baker" stays unresolved instead of being guessed into "Baker's".
+ */
+const POSSESSIVE_TAIL = /s$/;
+
+/** Exact alias lookup with bounded venue-tail and possessive stripping. */
 function lookupNormalized(normalized: string): string | null {
   let candidate = normalized;
   for (let i = 0; i < 3; i += 1) {
     const hit = ALIAS_TO_ID.get(candidate);
     if (hit) return hit;
     const stripped = candidate.replace(VENUE_TAIL, '');
-    if (stripped === candidate) return null;
+    if (stripped === candidate) break;
     candidate = stripped;
   }
-  return ALIAS_TO_ID.get(candidate) ?? null;
+  const hit = ALIAS_TO_ID.get(candidate);
+  if (hit) return hit;
+  const depossessed = candidate.replace(POSSESSIVE_TAIL, '');
+  return depossessed === candidate ? null : (ALIAS_TO_ID.get(depossessed) ?? null);
 }
 
 /**

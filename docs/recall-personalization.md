@@ -137,18 +137,113 @@ All other C2 rails are untouched: global activation horizon, suppressed
 events never deliver, per-pair idempotency, ticket/receipt honesty, bounded
 retries.
 
-## Retailer evidence: one rule, one known gap
+## Retailer evidence (C3.1)
 
-Personalization matches on the **persisted** `projection.retailerNames` —
-the same field everywhere (feed chips, detail personal lines, push
-eligibility), so app and server can never disagree about a decision. The
-detail screen's "Where it was sold" section derives richer retailer facts at
-render time (store-list blocks, table columns); QA measures the gap
-(census 2026-08-26: 283 cases carry display-derivable retailer evidence vs 4
-with persisted `retailerNames`, because most stored projections predate the
-field). The follow-up that closes it is ingest-time enrichment of
-`retailerNames` (re-projection), which lifts every surface through the same
-seam at once — deliberately not part of C3.
+Personalization matches on the **persisted** `projection.retailerNames` — the
+same field everywhere (feed chips, detail personal lines, push eligibility),
+so app and server can never disagree about a decision.
+
+### What the field means
+
+> The authoritative source stated, in a high-confidence sold-at /
+> shipped-to / distributed-to construction, that the product was associated
+> with this retailer.
+
+Only that **verb-gated sentence seam** (`domain/retailer.ts`) may populate it.
+The detail screen's "Where it was sold" section also reads source TABLES and
+block store lists, and a live census proved those seams unsafe to persist:
+they carry product rows, barcodes, package weights, store street addresses,
+export-country lists, and column headings alongside real store names. A
+notice's product table flattened to text is indistinguishable from a store
+list once the heading is gone, and no shape test tells "Chef Salad" from a
+delicatessen.
+
+Display can show an uncertain string beside the official source link. This
+field cannot: it drives push notifications, and a false "Sold at Costco" is
+worse than no retailer at all. Measured trade: the verb-gated seam alone
+reaches 222 of the 283 retailer-bearing cases and **165 of the 162**
+catalog-matchable ones — more than the unsafe derivation managed, because
+preserving source possessives ("Baker's", not "Baker") resolves banners that
+truncation was destroying.
+
+### Where it is derived
+
+`domain/retailer-evidence.ts` — one function, called from `projectCase`
+itself, so the case-level projection is authoritative:
+
+- **Both agencies, one contract.** FSIS previously never set `retailerNames`
+  at any point; it now derives them from the same place FDA does, with no
+  adapter-specific retailer system. The FDA parse-time field remains and
+  unions in, subject to the same gate.
+- **Self-healing.** Because the derivation runs during projection rather than
+  being stored by an adapter, a later legitimate re-projection recomputes the
+  same answer instead of erasing a repaired one.
+- **Aliases are not authority.** The curated catalog resolves exact
+  normalized aliases for _matching_; it never asserts that a recall was sold
+  at a chain. Evidence that resolves to nothing is still real evidence — it
+  displays, and simply never matches a preference. Ambiguity stays ambiguous:
+  a bare "Giant" matches neither Giant Food nor The GIANT Company. Stripping
+  is one-directional — "Costco's" reduces to a known alias, but "Baker" is
+  never guessed up into "Baker's".
+
+The gate `isRetailerName` is shared by every seam, so hardening it fixed the
+display path too: column headings, addresses, countries, state abbreviations,
+`City ST` localities, barcodes, package rows, phone numbers, distribution
+centres, generic venue categories ("Asian markets"), and mid-sentence
+fragments no longer render as somewhere to shop.
+
+### Historical repair
+
+`npm run backfill:retailers:dry` / `npm run backfill:retailers` — see
+`docs/recall-operations.md`. A projection repair is **not** a material recall
+change: `detectChanges` does not diff `retailerNames` under any rule, so a
+retailer-only difference cannot produce a NotificationEvent even through the
+normal path — and the repair does not use the normal path, writing one field
+while carrying `timeline` and `lastChangedAt` through untouched.
+
+### Role, not shape
+
+Some strings pass every shape test and are still not shops. "C&S Wholesale
+Grocers" and "Russ Davis Wholesale" are grocery wholesalers; "Ardmore" and
+"Blair" are the towns a distribution centre sits in; "Elevation Foods" was
+sent labels _in error_. What disqualifies each is the ROLE the source gives
+it, so `contextRejectsRetailer` reads the sentence around a name rather than
+the name alone, and rejects it when the notice says:
+
+| Source wording                                             | Role                         |
+| ---------------------------------------------------------- | ---------------------------- |
+| "Wakefern distribution centers in Elizabeth, NJ"           | warehouse                    |
+| "AMD Imports Inc., **a distributor** in Houston"           | distributor, stated          |
+| "TRIMAR USA LLC … **who further distributed** the product" | intermediary                 |
+| "distributed through Russ Davis **Wholesale.**"            | the wholesale trade          |
+| "HRI Commercial **Food Service** locations"                | institutional channel        |
+| "PGA **golf events** in Minneapolis"                       | an event                     |
+| "shipped to Elevation Foods **in error**"                  | not a distribution statement |
+| "grocery stores mainly in **these cities:** Sunnyvale, …"  | a place list                 |
+| "Cleveland and Youngstown, **Ohio** Foodbanks"             | a city in its state          |
+| "Army **&** Air Force Exchange Services"                   | half a name                  |
+
+Any such mention disqualifies the name, because a false "Sold at" is worse
+than a missing one. Two guards keep that from over-reaching, both driven by
+the source's own words: a warehouse mention is ignored when a retail venue
+word is named first ("Costco, Foodmaxx, Kroger, Safeway and other retail
+stores and distribution centers" keeps all four), and a name is kept outright
+when the notice attaches it directly to a venue ("shipped to Costco
+distribution centers … and may have been further distributed to **Costco
+retail locations**"). "Aldi distribution centers", with no such clause, stays
+rejected — the source never said it reached a shop.
+
+The word "Wholesale" alone decides nothing: what follows it does. "C&S
+Wholesale **Grocers**" is a supplier; **Costco Wholesale** and **BJ's
+Wholesale Club** are shops, and both remain valid.
+
+Known residuals, deliberately not chased: a handful of genuinely ambiguous
+consignees the source labels no further ("Bally Produce", "Shapiro Produce",
+"Kilduff", "Foodhold", "Cedraui") stay in place, because guessing at an
+unstated role is exactly what this layer refuses to do; and truncations of
+real chains ("Great Wall Super", "Heinen's Locations", "Texas HEB") name a
+real shop imperfectly rather than a wrong one. None can produce a false
+preference match, which requires an exact catalog alias.
 
 ## Privacy
 

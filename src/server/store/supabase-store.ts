@@ -286,6 +286,26 @@ export class SupabaseStore implements RecallStore {
     return data ? this.toCaseRow(data) : null;
   }
 
+  async listCases(): Promise<RecallCaseRow[]> {
+    // Paginated for the same reason listSourceRecords is: PostgREST caps an
+    // unbounded select, and a maintenance repair must see every case. The
+    // page is half the size used for source records because a case row
+    // carries its whole projection, announcement HTML included — a
+    // 1000-row page was large enough for the transfer to stall and drop.
+    const pageSize = 500;
+    const rows: RecallCaseRow[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await this.client
+        .from('recall_cases')
+        .select('id, projection, timeline, created_at, last_changed_at')
+        .order('id')
+        .range(from, from + pageSize - 1);
+      if (error || !data) this.fail('listCases', error);
+      rows.push(...data.map((row) => this.toCaseRow(row)));
+      if (data.length < pageSize) return rows;
+    }
+  }
+
   async insertCase(row: Omit<RecallCaseRow, 'id'>): Promise<RecallCaseRow> {
     const { data, error } = await this.client
       .from('recall_cases')
@@ -314,6 +334,30 @@ export class SupabaseStore implements RecallStore {
       })
       .eq('id', id);
     if (error) this.fail('updateCase', error);
+  }
+
+  async updateCaseRetailerNames(
+    id: string,
+    retailerNames: string[],
+    expectedLastChangedAt: string,
+  ): Promise<boolean> {
+    // Re-read immediately before the write, so the merge happens against the
+    // freshest projection rather than one the caller may have loaded minutes
+    // ago. This is what keeps a concurrently-written field (an image
+    // backfill's heroImageUrl) from being rolled back by our own merge.
+    const current = await this.getCase(id);
+    if (!current || current.lastChangedAt !== expectedLastChangedAt) return false;
+    // The `last_changed_at` predicate makes the write itself conditional, so
+    // an ingest landing between that read and this update loses nothing: the
+    // update matches no row and we report a conflict instead.
+    const { data, error } = await this.client
+      .from('recall_cases')
+      .update({ projection: { ...current.projection, retailerNames } })
+      .eq('id', id)
+      .eq('last_changed_at', expectedLastChangedAt)
+      .select('id');
+    if (error) this.fail('updateCaseRetailerNames', error);
+    return (data?.length ?? 0) > 0;
   }
 
   async replaceProducts(recallCaseId: string, products: AffectedProduct[]): Promise<void> {

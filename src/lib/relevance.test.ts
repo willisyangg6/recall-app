@@ -330,3 +330,33 @@ test('push: unknown geography delivers only with a personal signal', () => {
   assert.equal(pushEligible(item({ pathogenOrAllergen: 'undeclared sesame' }), CALIFORNIAN), true);
   assert.equal(pushEligible(item({ retailerNames: ['Costco'] }), CALIFORNIAN), true);
 });
+
+test('C3.1: enriching retailerNames leaves geographic and allergen semantics alone', () => {
+  // Retailer evidence is a positive signal only. Adding it must never widen,
+  // narrow, or otherwise disturb the two dimensions decided in C3 — a case
+  // excluded by geography stays excluded, and an allergen match is unmoved.
+  const excluded = { geography: geo('states', ['Texas']), pathogenOrAllergen: 'undeclared milk' };
+  const before = evaluatePersonalRelevance(item({ ...excluded }), CALIFORNIAN);
+  const after = evaluatePersonalRelevance(
+    item({ ...excluded, retailerNames: ['Costco'] }),
+    CALIFORNIAN,
+  );
+  assert.equal(before.geographic, after.geographic);
+  assert.deepEqual(before.matchedAllergens, after.matchedAllergens);
+  // Exclusion still beats every signal, retailer included.
+  assert.equal(after.affectsMe, false);
+
+  // And on a matching geography the allergen verdict is likewise unchanged.
+  const included = {
+    geography: geo('states', ['California']),
+    pathogenOrAllergen: 'undeclared sesame',
+  };
+  const plain = evaluatePersonalRelevance(item({ ...included }), CALIFORNIAN);
+  const enriched = evaluatePersonalRelevance(
+    item({ ...included, retailerNames: ['Costco'] }),
+    CALIFORNIAN,
+  );
+  assert.equal(plain.geographic, enriched.geographic);
+  assert.deepEqual(plain.matchedAllergens, enriched.matchedAllergens);
+  assert.equal(plain.affectsMe, enriched.affectsMe);
+});

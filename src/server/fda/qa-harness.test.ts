@@ -98,10 +98,20 @@ test('QA corpus: package identification is projected wherever the source states 
   assert.equal(m.photosShown, m.photosSourcePresent);
   assert.ok(m.photosShown >= 140, `photos shown: ${m.photosShown}`);
   // Retailers are extracted wherever a named store is stated. The denominator
-  // counts every sentence shape that names one, including the two the parser
-  // still cannot read, so this is a real proportion rather than a tautology.
+  // counts every sentence shape that names one, including the three the
+  // parser still cannot read, so this is a real proportion rather than a
+  // tautology.
+  //
+  // The third arrived with C3.1 and is a deliberate trade: "distributed
+  // through Aldi's Haines City, Florida Distribution Center, which services
+  // select Aldi stores in Florida" used to yield a shop called "Aldi's
+  // Haines". That is a warehouse wearing half a city's name, and a false
+  // "Sold at" is worse than a missing one, so the sentence now yields
+  // nothing. Reading "Aldi" back out of the trailing "services select Aldi
+  // stores" clause would need a new verb shape; until then this is an honest
+  // miss rather than a wrong answer.
   assert.ok(
-    m.retailerExtracted >= m.retailerSourcePresent - 2,
+    m.retailerExtracted >= m.retailerSourcePresent - 3,
     `retailers ${m.retailerExtracted}/${m.retailerSourcePresent}`,
   );
   // Every record gets a usable consumer action, from the source or from us.

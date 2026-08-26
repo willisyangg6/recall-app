@@ -155,11 +155,37 @@ export interface RecallStore {
   }): Promise<string>;
 
   getCase(id: string): Promise<RecallCaseRow | null>;
+  /**
+   * Every RecallCase, paginated. Used by maintenance repairs that must visit
+   * cases whatever source records they carry (retailer enrichment covers FDA
+   * and FSIS alike); the ingestion path itself never enumerates the table.
+   */
+  listCases(): Promise<RecallCaseRow[]>;
   insertCase(row: Omit<RecallCaseRow, 'id'>): Promise<RecallCaseRow>;
   updateCase(
     id: string,
     patch: Pick<RecallCaseRow, 'projection' | 'timeline' | 'lastChangedAt'>,
   ): Promise<void>;
+  /**
+   * Compare-and-set ONE projection field: `retailerNames`.
+   *
+   * Maintenance repairs run for minutes against a corpus that scheduled
+   * ingestion is writing to every 30 minutes, and `updateCase` replaces the
+   * whole row from whatever the caller last read — so a repair that read a
+   * case before an ingest and wrote it after would silently roll back the
+   * projection, the timeline, and `last_changed_at` together.
+   *
+   * This writes the projection column only, and only while the row still
+   * carries `expectedLastChangedAt` — the value every real projection write
+   * moves (pipeline.reprojectCase sets it to now). Returns false when a
+   * concurrent write moved it; the caller reports that case rather than
+   * overwriting the newer data.
+   */
+  updateCaseRetailerNames(
+    id: string,
+    retailerNames: string[],
+    expectedLastChangedAt: string,
+  ): Promise<boolean>;
   replaceProducts(recallCaseId: string, products: AffectedProduct[]): Promise<void>;
 
   /** Returns false (and stores nothing) when the dedup key already exists. */
