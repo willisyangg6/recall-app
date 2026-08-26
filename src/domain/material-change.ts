@@ -7,6 +7,7 @@
 
 import type { CaseProjection, MaterialChange } from './recall-types';
 import { classificationSeverityRank } from './projection';
+import { classSetKey, officialClassesOf, officialClassListText } from './risk-tier';
 
 /** Small deterministic string hash (FNV-1a) — fingerprints, not security. */
 export function fingerprint(input: string): string {
@@ -99,31 +100,48 @@ export function detectChanges(prev: CaseProjection, next: CaseProjection): Chang
   // Classification assigned or changed (founder rule, corrected 2026-08-21:
   // ANY authoritative classification assignment or change — upgrades AND
   // downgrades — is consumer-relevant and notification-eligible).
-  const prevClass = prev.classification.value;
-  const nextClass = next.classification.value;
-  if (prevClass !== nextClass) {
-    const label = nextClass.replace('class_', 'Class ');
-    if (!nextClass.startsWith('class_')) {
+  //
+  // The comparison is between authoritative class SETS, because that is the
+  // authoritative fact. {I, III} → {I, II} leaves the consumer tier at High
+  // and is still a real regulatory change; {II} → {II} arrived at by a
+  // different route is not. The consumer tier is derived from this transition
+  // and never generates an event of its own, so one classification change is
+  // always exactly one notification.
+  const prevClasses = officialClassesOf(prev.classification);
+  const nextClasses = officialClassesOf(next.classification);
+  const prevKey = classSetKey(prevClasses);
+  const nextKey = classSetKey(nextClasses);
+  if (prevKey !== nextKey) {
+    const label = officialClassListText(nextClasses);
+    if (nextClasses.length === 0) {
       // Losing a class (e.g. a data regression to unclassified) is not an
       // authoritative classification statement — timeline only.
-      nonMaterial.push(`Classification changed (${prevClass} → ${nextClass}).`);
-    } else if (!prevClass.startsWith('class_')) {
+      nonMaterial.push(
+        `Classification changed (${prev.classification.value} → ${next.classification.value}).`,
+      );
+    } else if (prevClasses.length === 0) {
       material.push({
         ruleId: 'classification_assigned',
         summary: `The agency classified this recall (${label}).`,
-        fingerprint: fingerprint(`classified:${nextClass}`),
+        fingerprint: fingerprint(`classified:${nextKey}`),
       });
-    } else if (classificationSeverityRank(nextClass) < classificationSeverityRank(prevClass)) {
+    } else if (prevClasses.length === 1 && nextClasses.length === 1) {
+      const moreSevere =
+        classificationSeverityRank(nextClasses[0]) < classificationSeverityRank(prevClasses[0]);
       material.push({
-        ruleId: 'classification_upgraded',
-        summary: `Classification changed to ${label} (more severe than before).`,
-        fingerprint: fingerprint(`upgraded:${prevClass}->${nextClass}`),
+        ruleId: moreSevere ? 'classification_upgraded' : 'classification_downgraded',
+        summary: `Classification changed to ${label} (${moreSevere ? 'more' : 'less'} severe than before).`,
+        fingerprint: fingerprint(
+          `${moreSevere ? 'upgraded' : 'downgraded'}:${prevKey}->${nextKey}`,
+        ),
       });
     } else {
+      // A set changed. "Upgrade"/"downgrade" would claim a direction that is
+      // not defined between sets, so neither is asserted.
       material.push({
-        ruleId: 'classification_downgraded',
-        summary: `Classification changed to ${label} (less severe than before).`,
-        fingerprint: fingerprint(`downgraded:${prevClass}->${nextClass}`),
+        ruleId: 'classification_changed',
+        summary: `The agency's classification of this recall changed (now ${label}).`,
+        fingerprint: fingerprint(`classes:${prevKey}->${nextKey}`),
       });
     }
   }

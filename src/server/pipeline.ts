@@ -49,6 +49,7 @@ const RULE_TO_TIMELINE_KIND: Record<MaterialChange['ruleId'], TimelineKind> = {
   classification_assigned: 'classified',
   classification_upgraded: 'classified',
   classification_downgraded: 'classified',
+  classification_changed: 'classified',
   health_impact: 'source_updated',
   instructions_changed: 'source_updated',
   retraction: 'retracted',

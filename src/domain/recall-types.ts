@@ -8,20 +8,40 @@
 
 export type SourceAgency = 'FDA' | 'FSIS';
 
-export type SourceSystem = 'fsis_api' | 'fda_announcement'; // open set; 'openfda_enforcement' arrives with reconciliation
+export type SourceSystem = 'fsis_api' | 'fda_announcement' | 'openfda_enforcement';
 
 export type NoticeType = 'recall' | 'public_health_alert';
 
 /** Consumer lifecycle states (architecture Part 2). */
 export type LifecycleState = 'active' | 'closed' | 'retracted';
 
+/** The three authoritative agency classes. Only an agency may assign one. */
+export type OfficialClass = 'class_I' | 'class_II' | 'class_III';
+
 export type ClassificationValue =
-  'class_I' | 'class_II' | 'class_III' | 'not_yet_classified' | 'not_applicable_pha';
+  | OfficialClass
+  | 'not_yet_classified'
+  | 'not_applicable_pha'
+  /**
+   * A CASE whose authoritative records carry more than one official class
+   * (FDA classifies per product, not per announcement). It never appears on a
+   * source record. The scalar deliberately refuses to name one class here:
+   * every reader that assumes a case has a single class gets an unmistakable
+   * value instead of a quietly-promoted "Class I".
+   */
+  | 'multiple_classes';
 
 export interface Classification {
   value: ClassificationValue;
   /** Raw source wording, e.g. "High - Class I" — always displayed with the agency label. */
   sourceText: string | null;
+  /**
+   * Every DISTINCT authoritative class on this case, most severe first — the
+   * canonical representation. A source record carries at most one and may omit
+   * this; projections persisted before Phase B lack the key, so readers must
+   * treat `undefined` as "derive from `value`" (src/domain/risk-tier.ts does).
+   */
+  officialClasses?: OfficialClass[];
 }
 
 export type HazardCategory =
@@ -138,6 +158,12 @@ export type MaterialChangeRuleId =
   | 'classification_assigned'
   | 'classification_upgraded'
   | 'classification_downgraded'
+  /**
+   * The authoritative class SET changed in a way that "upgraded"/"downgraded"
+   * cannot honestly describe (e.g. {Class I} → {Class I, Class II}). Ordering
+   * between sets is not defined, so no direction is claimed.
+   */
+  | 'classification_changed'
   | 'health_impact'
   | 'instructions_changed'
   | 'retraction';

@@ -3,9 +3,10 @@ import { test } from 'node:test';
 
 import { loadFixture } from '../server/fsis/fixtures';
 import { parseFsisRecord } from '../server/fsis/parse';
-import { detectChanges } from './material-change';
+import { detectChanges, fingerprint } from './material-change';
 import { projectCase } from './projection';
-import type { CaseProjection } from './recall-types';
+import type { CaseProjection, OfficialClass } from './recall-types';
+import { classSetKey, consumerRiskTier } from './risk-tier';
 
 /** Base projections come from real records; tests mutate copies to model transitions. */
 function base(): CaseProjection {
@@ -105,6 +106,120 @@ test('classification assignment, upgrade, and downgrade are all material (correc
 
   // Distinct transitions must have distinct fingerprints (distinct dedup keys).
   assert.notEqual(downgraded.material[0].fingerprint, upgraded.material[0].fingerprint);
+});
+
+/** A case projection carrying an authoritative class SET. */
+function withClasses(classes: OfficialClass[]): CaseProjection {
+  return withChanges(base(), {
+    classification: {
+      value:
+        classes.length === 0
+          ? 'not_yet_classified'
+          : classes.length === 1
+            ? classes[0]
+            : 'multiple_classes',
+      sourceText: null,
+      officialClasses: classes,
+    },
+  });
+}
+
+test('classification changes are detected on the authoritative class SET', () => {
+  const pending = withClasses([]);
+  const one = withClasses(['class_I']);
+  const mixed = withClasses(['class_I', 'class_II']);
+
+  // pending → single, pending → mixed: one assignment each.
+  assert.deepEqual(
+    detectChanges(pending, one).material.map((m) => m.ruleId),
+    ['classification_assigned'],
+  );
+  const assignedMixed = detectChanges(pending, mixed);
+  assert.deepEqual(
+    assignedMixed.material.map((m) => m.ruleId),
+    ['classification_assigned'],
+  );
+  assert.match(assignedMixed.material[0].summary, /Class I and Class II/);
+
+  // single → mixed and mixed → single are real regulatory changes, but no
+  // direction is claimed between sets.
+  assert.deepEqual(
+    detectChanges(one, mixed).material.map((m) => m.ruleId),
+    ['classification_changed'],
+  );
+  assert.deepEqual(
+    detectChanges(mixed, one).material.map((m) => m.ruleId),
+    ['classification_changed'],
+  );
+});
+
+test('a changed class set is material even when the consumer tier is unchanged', () => {
+  // {I, III} → {I, II} is High → High for consumers, and still an official
+  // classification change: the SET is the authoritative fact.
+  const before = withClasses(['class_I', 'class_III']);
+  const after = withClasses(['class_I', 'class_II']);
+  assert.equal(consumerRiskTier(before.classification), consumerRiskTier(after.classification));
+  const changed = detectChanges(before, after);
+  assert.deepEqual(
+    changed.material.map((m) => m.ruleId),
+    ['classification_changed'],
+  );
+});
+
+test('one classification transition is exactly one material change', () => {
+  // The consumer tier is derived, so it can never add a second event of its
+  // own — Pending → Critical is one notification, not two.
+  const transitions: [OfficialClass[], OfficialClass[]][] = [
+    [[], ['class_I']],
+    [[], ['class_I', 'class_II']],
+    [['class_II'], ['class_I']],
+    [['class_I'], ['class_I', 'class_II']],
+    [['class_I', 'class_II'], ['class_I']],
+    [['class_II', 'class_III'], ['class_II']],
+    [
+      ['class_I', 'class_III'],
+      ['class_I', 'class_II'],
+    ],
+  ];
+  for (const [from, to] of transitions) {
+    const result = detectChanges(withClasses(from), withClasses(to));
+    assert.equal(result.material.length, 1, `${classSetKey(from)} → ${classSetKey(to)}`);
+    assert.ok(result.material[0].ruleId.startsWith('classification_'));
+  }
+});
+
+test('an unchanged class set produces no classification event', () => {
+  for (const classes of [[], ['class_I'], ['class_I', 'class_II']] as OfficialClass[][]) {
+    const result = detectChanges(withClasses(classes), withClasses(classes));
+    assert.equal(
+      result.material.filter((m) => m.ruleId.startsWith('classification_')).length,
+      0,
+      classSetKey(classes),
+    );
+  }
+});
+
+test('single-class dedup keys are unchanged by the set migration', () => {
+  // Already-ledgered assignments must not re-fire: the fingerprint of a
+  // single-class transition has to be byte-identical to the pre-set version.
+  assert.equal(
+    detectChanges(withClasses([]), withClasses(['class_II'])).material[0].fingerprint,
+    fingerprint('classified:class_II'),
+  );
+  assert.equal(
+    detectChanges(withClasses(['class_II']), withClasses(['class_I'])).material[0].fingerprint,
+    fingerprint('upgraded:class_II->class_I'),
+  );
+  assert.equal(
+    detectChanges(withClasses(['class_I']), withClasses(['class_II'])).material[0].fingerprint,
+    fingerprint('downgraded:class_I->class_II'),
+  );
+});
+
+test('losing every official class is a data regression, never a notification', () => {
+  const result = detectChanges(withClasses(['class_I', 'class_II']), withClasses([]));
+  assert.equal(result.material.length, 0);
+  assert.ok(result.nonMaterial.some((n) => n.includes('Classification changed')));
 });
 
 test('closure is dashboard-visible but never a notification', () => {

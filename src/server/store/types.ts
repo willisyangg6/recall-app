@@ -18,7 +18,7 @@ import type {
 } from '../../domain/recall-types';
 import type { NormalizedSourceRecord } from '../../domain/source-record';
 
-export type LinkMethod = 'self' | 'expansion_prefix' | 'retraction_reference';
+export type LinkMethod = 'self' | 'expansion_prefix' | 'retraction_reference' | 'enforcement_match';
 
 export interface SourceRecordRow {
   id: string;

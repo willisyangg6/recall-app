@@ -13,7 +13,7 @@ function item(overrides: Partial<FeedItem>): FeedItem {
     noticeType: 'recall',
     state: 'active',
     title: 'Test',
-    classificationValue: 'class_I',
+    classification: { value: 'class_I', sourceText: 'Class I', officialClasses: ['class_I'] },
     hazardCategory: 'unknown',
     publishedAt: '2026-08-17',
     lastPublicActivityAt: '2026-08-17',

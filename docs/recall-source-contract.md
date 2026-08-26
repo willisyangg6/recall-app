@@ -168,6 +168,28 @@ Four distinct FDA-side artifacts exist for the same underlying recall activity. 
 - **Access [VERIFIED]:** free API key; with key **240 requests/min, 120,000/day**; keyless "240/min, 1,000/day" limits still published and keyless calls worked, though the auth page now says a key "is required". Bulk download: single ~5.5 MB zip via `https://api.fda.gov/download.json` manifest (export dated 2026-08-19).
 - **License [VERIFIED]:** CC0 1.0 Universal public-domain dedication ("copy, modify, distribute … even for commercial purposes, all without asking permission"); attribution requested but not required; no endorsement implication allowed. Per-response disclaimer: "assume all results are unvalidated."
 
+> **Phase B re-verification [VERIFIED 2026-08-25]:** dataset re-checked at
+> implementation time: `meta.last_updated` 2026-08-19 (weekly cadence
+> holding), 29,317 records. `recall_number` is **globally unique**
+> (29,317/29,317) — the stable record identity; `event_id` groups one
+> recall event's per-product records (7,837 events; 2,761 multi-record;
+> max 409 records). **175 events carry MIXED classifications** (128× I+II,
+> 34× II+III, 10× I+II+III, 3× I+III) — per-product risk differences are
+> real, so case-level classification aggregation is a policy decision, not
+> a passthrough. recall_initiation→report lag: p50 46d, p90 127d, p99 449d
+> — enforcement is an ENRICHMENT source, arriving weeks after our
+> announcements, exactly as designed. Announcement↔enforcement firm strings
+> drift ("Danone U.S." vs "DANONE US LLC"; "Kroger" vs "The Kroger Co";
+> "Meijer" vs "Meijer, Inc #816 - Grand River Packaging…"), and UPC digits
+> appear only as prose inside product_description/code_info (10,970/29,316
+> records carry UPC-like digit runs). Exactly one record lacks a
+> recall_number (the lone "Not Yet Classified" one) — quarantined. One
+> record carries an impossible initiation date (year 0212) — source typo,
+> harmlessly outside every matching window. CRITICAL trap, measured: staple
+> products keep their UPC across DISTINCT recalls years apart (Gold Medal
+> flour 2016 and 2023, Green Sprouts alfalfa 2016 and 2024 — identical
+> UPCs), so firm+UPC alone must never match without a date window.
+
 **FDA classification definitions [VERIFIED]** ([Recalls Background and Definitions](https://www.fda.gov/safety/industry-guidance-recalls/recalls-background-and-definitions)): Class I — "reasonable probability that … use … will cause serious adverse health consequences or death"; Class II — "may cause temporary or medically reversible adverse health consequences or where the probability of serious adverse health consequences is remote"; Class III — "not likely to cause adverse health consequences."
 
 ### 3.3 FDA Enforcement Reports / iRES (Recall Enterprise System)

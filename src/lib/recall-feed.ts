@@ -7,7 +7,12 @@
  * recall_cases and affected_products. There is no write path from the app.
  */
 
-import type { AffectedProduct, CaseProjection, TimelineEntry } from '@/domain/recall-types';
+import type {
+  AffectedProduct,
+  CaseProjection,
+  Classification,
+  TimelineEntry,
+} from '@/domain/recall-types';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -22,7 +27,13 @@ export interface FeedItem {
   noticeType: 'recall' | 'public_health_alert';
   state: 'active' | 'closed' | 'retracted';
   title: string;
-  classificationValue: string;
+  /**
+   * The whole authoritative classification, not just its scalar: a case may
+   * carry several official classes, and the card's risk tier is derived from
+   * the SET. Selecting `classification_value` alone would have made a mixed
+   * case indistinguishable from a uniform one on the card.
+   */
+  classification: Classification;
   hazardCategory: string;
   publishedAt: string;
   lastPublicActivityAt: string;
@@ -84,7 +95,7 @@ interface FeedRow {
   notice_type: FeedItem['noticeType'];
   state: FeedItem['state'];
   title: string;
-  classification_value: string;
+  classification: Classification;
   hazard_category: string;
   published_at: string;
   last_public_activity_at: string;
@@ -105,7 +116,7 @@ const FEED_SELECT = [
   'notice_type',
   'state',
   'title',
-  'classification_value',
+  'classification:projection->classification',
   'hazard_category',
   'published_at',
   'last_public_activity_at',
@@ -137,7 +148,7 @@ export async function fetchCurrentFeed(limit = 500): Promise<FeedItem[]> {
     noticeType: row.notice_type,
     state: row.state,
     title: row.title,
-    classificationValue: row.classification_value,
+    classification: row.classification,
     hazardCategory: row.hazard_category,
     publishedAt: row.published_at,
     lastPublicActivityAt: row.last_public_activity_at,

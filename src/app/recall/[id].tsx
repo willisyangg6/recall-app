@@ -4,6 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ComparePhotos, PhotoGallery } from '@/components/photo-gallery';
+import { RiskBadge } from '@/components/risk-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
@@ -26,13 +27,13 @@ import type { CodeLocation } from '@/lib/fact-types';
 import type { PhotoRole, ProductPhoto } from '@/lib/product-photos';
 import { buildWhatHappened } from '@/lib/what-happened';
 import { fetchCaseDetail, type CaseDetail } from '@/lib/recall-feed';
+import { agencyLabel as agencyLabelFor, riskView } from '@/lib/risk-display';
 import {
   formatDate,
   healthRiskSummary,
   illnessDisplay,
   noticeTypeLabel,
   reasonLine,
-  riskPresentation,
   stateLabel,
 } from '@/lib/recall-display';
 
@@ -314,7 +315,9 @@ export default function RecallDetailScreen() {
   }
 
   const { projection, affectedProducts } = state.detail;
-  const risk = riskPresentation(projection.classification.value);
+  // Two layers: the consumer tier leads the screen, the agency's own
+  // classification is preserved verbatim further down.
+  const risk = riskView(projection.classification, projection.sourceAgency);
   // `?? null`: projections persisted before productDescription/brands existed
   // omit the keys; absence means unknown.
   const product = productDisplayName(projection.productDescription ?? null, projection.title);
@@ -345,13 +348,12 @@ export default function RecallDetailScreen() {
     projection.reasonText,
   );
   const attachments = extractAttachmentLinks(projection.summaryHtml);
-  const agencyLabel = projection.sourceAgency === 'FSIS' ? 'USDA FSIS' : 'FDA';
+  const agencyLabel = agencyLabelFor(projection.sourceAgency);
   // Consumer Projection V2: photos, distribution, package identification, and
   // the consumer action, all derived from data already persisted with the case
   // (no re-ingestion) and routed into our own semantic concepts rather than
   // whatever the source happened to call its columns.
   const consumer = buildConsumerCase(projection, affectedProducts);
-  const classificationPending = projection.classification.value === 'not_yet_classified';
   // Official label pages the backend rendered from source PDFs (FSIS) join
   // the same Product Photos experience as FDA photography — no PDF-specific
   // component, and the original PDF stays linked as provenance.
@@ -397,6 +399,25 @@ export default function RecallDetailScreen() {
             : ''}
         </ThemedText>
 
+        {/* Consumer risk tier — the primary risk language, prominent and
+            near the top. Text always carries the meaning; the color is a
+            second channel only. */}
+        {risk.headlineLabel ? (
+          <View style={styles.riskBlock}>
+            <RiskBadge
+              tier={risk.tier}
+              label={risk.headlineLabel}
+              accessibilityLabel={risk.accessibilityLabel}
+              size="large"
+            />
+            {risk.note ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {risk.note}
+              </ThemedText>
+            ) : null}
+          </View>
+        ) : null}
+
         {projection.state === 'retracted' ? (
           <ThemedView type="backgroundSelected" style={styles.callout}>
             <ThemedText>{agencyLabel} has retracted this notice.</ThemedText>
@@ -430,19 +451,6 @@ export default function RecallDetailScreen() {
             </ThemedText>
           ) : null}
         </Section>
-
-        {risk ? (
-          <Section title={classificationPending ? `${agencyLabel} classification` : 'Risk level'}>
-            <ThemedText>{risk.label}</ThemedText>
-            {risk.explanation ? (
-              <ThemedText
-                type={classificationPending ? 'small' : 'default'}
-                themeColor="textSecondary">
-                {risk.explanation}
-              </ThemedText>
-            ) : null}
-          </Section>
-        ) : null}
 
         <Section title="Where it was sold">
           <WhereItWasSold
@@ -596,6 +604,19 @@ export default function RecallDetailScreen() {
           </Section>
         ) : null}
 
+        {/* Regulatory language, kept deeper in the page and never collapsed
+            into one class when the agency assigned several. */}
+        {risk.official ? (
+          <Section title={risk.official.heading}>
+            <ThemedText>{risk.official.text}</ThemedText>
+            {risk.official.note ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {risk.official.note}
+              </ThemedText>
+            ) : null}
+          </Section>
+        ) : null}
+
         <Section title="Official source">
           <ThemedText
             themeColor="link"
@@ -656,6 +677,10 @@ const styles = StyleSheet.create({
   callout: {
     padding: Spacing.three,
     borderRadius: Radii.medium,
+    marginTop: Spacing.two,
+  },
+  riskBlock: {
+    gap: Spacing.one,
     marginTop: Spacing.two,
   },
   reasonLead: {

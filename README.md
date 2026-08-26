@@ -7,8 +7,10 @@ A consumer mobile app for US product recall alerts, starting with food recalls.
 Alert data and real FDA food recall announcements through one shared canonical
 pipeline (raw snapshots → normalized records → recall cases → material-change
 detection → notification ledger) and renders both agencies on the same
-dashboard. openFDA enforcement reconciliation (FDA Phase B), push notification
-delivery, accounts, and personalization are not implemented yet.
+dashboard. FDA Phase B (openFDA enforcement reconciliation — the official
+Class I/II/III arriving weeks later onto the same case) is implemented behind
+explicit maintenance commands. Push notification delivery, accounts, and
+personalization are not implemented yet.
 
 Design documents:
 
@@ -164,7 +166,7 @@ Veterinary` co-tags) is deliberately deferred, not silently included.
   preserves its `<main>` content region in the snapshot store (dates,
   press-release body, product tables, photo URLs).
 - Announcements are pre-classification by design: cases render honestly as
-  "Risk level pending" until enforcement enrichment arrives in Phase B; a
+  "Risk pending" until enforcement enrichment supplies the official class; a
   class is never inferred from hazard language.
 - Deterministic consumer extraction from the announcement's own words:
   distribution (nationwide / named states / honest unknown with source text),
@@ -269,6 +271,32 @@ Veterinary` co-tags) is deliberately deferred, not silently included.
   occur), and FDA and FSIS share one date model and one text renderer, so
   "vacuum package" reads `Vacuum package` and "between July 20, 2026 and
   August 17, 2026" reads `July 20–August 17, 2026`.
+- **FDA classification enrichment (Phase B).** Fast announcements reach the
+  app weeks before FDA assigns the formal Class I/II/III, so cases honestly
+  say "Not yet assigned" until openFDA's enforcement data publishes the
+  official class. `npm run reconcile:fda-enforcement` (dry-run by default)
+  reconciles announcements to enforcement records through an evidence-gated
+  matcher — same firm, a measured date window, and shared UPC digits or
+  decisive product-name agreement; ambiguity is preserved, never forced, and
+  a labeled real-data benchmark holds accepted-match false positives at
+  zero. A match links the enforcement records to the case (raw payloads
+  snapshotted, human-readable evidence stored) and only the classification
+  reaches the consumer: never the voice, the dates, or the Home ordering.
+  Classification assignments and official reclassifications are material
+  changes; historical backfill suppresses their notifications as backfill.
+  `npm run qa:fda-enforcement` reports source, match, and classification QA.
+- **Consumer risk tier, separate from the regulatory class.** FDA classifies
+  per affected product, so one recall can carry several official classes.
+  Cards and the top of the detail screen lead with Recall's own five-level
+  language (Critical / High / Moderate / Low / Minimal, plus Pending and
+  Unrated), derived deterministically from the authoritative class SET —
+  {Class I} is Critical, a mixed set containing Class I is High, {Class II}
+  is Moderate, {Class II, Class III} is Low, {Class III} is Minimal. No
+  averaging, no heuristic scoring, and never a tier before an official
+  classification exists. The agency's own wording is preserved exactly and
+  shown deeper in the detail screen ("Official FDA classifications — Class I
+  and Class II"). Risk is never carried by color alone: every badge has
+  visible text and a spoken label.
 - **FSIS label visuals.** Official label PDFs are rasterized once, server-side
   (no OCR), into content-addressed WebP pages that join the ordinary Product
   Photos gallery (`npm run labels:fsis:dry` for the bounded local dry run); the

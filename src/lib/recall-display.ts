@@ -12,43 +12,9 @@ export function noticeTypeLabel(noticeType: 'recall' | 'public_health_alert'): s
   return noticeType === 'public_health_alert' ? 'Public Health Alert' : 'Recall';
 }
 
-export interface RiskPresentation {
-  /** Concise standardized label, e.g. "Class I · High risk". */
-  label: string;
-  /** One-sentence consumer explanation; null when there is nothing honest to add. */
-  explanation: string | null;
-}
-
-/**
- * Consumer presentation of the authoritative FSIS classification. These are
- * display simplifications only — the underlying classification value is never
- * changed, and PHAs are never assigned a class (null = show nothing).
- */
-export function riskPresentation(value: string): RiskPresentation | null {
-  switch (value) {
-    case 'class_I':
-      return { label: 'Class I · High risk', explanation: 'Serious health effects are possible.' };
-    case 'class_II':
-      return {
-        label: 'Class II · Lower risk',
-        explanation: 'Health effects are possible, but unlikely.',
-      };
-    case 'class_III':
-      return { label: 'Class III · Low risk', explanation: 'Health problems are not expected.' };
-    case 'not_yet_classified':
-      // Normal for fresh FDA recalls (classification arrives weeks later):
-      // presented as an intentional state, never as missing data. The hazard
-      // itself carries the prominent risk information.
-      return {
-        label: 'Not yet assigned',
-        explanation: 'The agency assigns a formal recall classification later in its process.',
-      };
-    case 'not_applicable_pha':
-      return null; // PHAs are not classified; showing nothing is the honest state.
-    default:
-      return null;
-  }
-}
+// Risk wording lives in src/lib/risk-display.ts: the consumer tier and the
+// official agency classification are two separate layers, and the label that
+// used to live here ("Class I · High risk") merged them into one.
 
 /** Consumer wording for FSIS's structured reason values. Unmapped → verbatim. */
 const REASON_DISPLAY: Record<string, string> = {

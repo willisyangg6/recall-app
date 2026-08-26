@@ -514,12 +514,12 @@ Contents:
   Lot-specific detail never appears in the always-visible consumer action.
   Benchmark telemetry distinguishes "source states no identifiers" from
   "parser missed stated identifiers".
-- **Classification pending is an intentional state.** Cards carry a class
-  badge only when a class is assigned; the detail page shows
-  "FDA classification: Not yet assigned" with a one-line explanation. The
-  hazard line ("Possible E. coli contamination", "Undeclared soy allergen" —
+- **Classification pending is an intentional state.** Cards carry a risk
+  badge only when a tier is rated; the detail page shows "Official FDA
+  classification: Not yet assigned" with a one-line explanation. The hazard
+  line ("Possible E. coli contamination", "Undeclared soy allergen" —
   standardized casing over the structured hazard slots) is the prominent risk
-  information until Phase B enrichment arrives.
+  information until an official classification arrives.
 - **Health risk is template-built.** 1–2 sentence deterministic hazard-family
   templates (pathogens, allergens, foreign material, chemical agents) replace
   source-prose education excerpts; when no safe template exists the section is
@@ -991,3 +991,118 @@ maintenance path with a much narrower contract than ingestion:
 (also the post-apply verification report) and `npm run backfill:fda-images`.
 Two read-only store methods were added for it (`listSourceRecords`,
 `getLatestSnapshotPayload`); the ingestion path is unchanged.
+
+**FDA enforcement reconciliation (2026-08-25, Phase B).** Fast FDA
+announcements reach consumers weeks before FDA assigns the formal Class
+I/II/III (measured: recall-initiation→enforcement-report lag p50 46 days).
+Phase B enriches the SAME RecallCase when openFDA's Food Enforcement data
+(weekly mirror of FDA's Recall Enterprise System) publishes the official
+classification — precision first: a wrong class is worse than "Not yet
+assigned" persisting.
+
+- **Source & identity.** openFDA bulk export (one ~5.5 MB zip names the
+  whole 29k-record dataset — politer and more mutation-proof than paging
+  the query API). `recall_number` is the globally unique record identity;
+  `event_id` groups one event's per-product records; both verified against
+  the full corpus. Records mutate in place; ingestion is hash-gated.
+- **Data model.** Matched enforcement records are ordinary source_records
+  (source_system 'openfda_enforcement', native_id = recall_number,
+  link_method 'enforcement_match' — one additive CHECK migration) with raw
+  payloads preserved as snapshots. `projectCase` partitions notice vs
+  enforcement records: enforcement contributes ONLY the classification —
+  never the voice, dates, identifiers, firm variants, products, or Home
+  ordering. Unmatched enforcement records are not persisted: the corpus is
+  re-fetchable, matching is deterministic, and only records that influence
+  consumer data need provenance in our store.
+- **Matching.** Blocking: cleaned-firm-token prefix equality (absorbs
+  measured drift like "The Kroger Co"/"Meijer #816…") + a date window,
+  publishedAt−initiation ∈ [−45,+90] days, derived from UPC-confirmed pairs
+  (p5=−15, p95=+44) and excluding every measured recurring-product false
+  friend (nearest at +229 days; Gold Medal flour reuses UPCs across recalls
+  YEARS apart, so firm+UPC without the window is forbidden). Evidence:
+  code identity (shared UPC digit runs) accepts outright, several events may
+  each accept (expansions span events — Total Nutrition 99317+99072); name
+  identity (distinctive product-token agreement ≥0.6, both directions —
+  title→description and description→full announcement, ingredient lists
+  stripped) accepts only a SOLE qualifying event; two name-qualified events
+  stay `ambiguous`, never forced. Match states: unmatched / candidate /
+  matched_deterministic / ambiguous. Every accepted match stores
+  human-readable evidence + method + matcher version + timestamp inside the
+  linked record's normalized payload — "why does this say Class I?" is
+  answerable from the row.
+- **Benchmark.** 24 labeled real case↔corpus entries
+  (src/server/fda-enforcement/fixtures/match-benchmark.json.gz): UPC and
+  name positives, multi-product hard positives, multi-event expansions,
+  recurring-product negatives, in-window same-firm different-recall
+  negatives (Conagra's Birds Eye at d=73, Gellert's artichokes at d=48),
+  not-yet-published entries. Measured: precision 1.0 (0 false accepts —
+  the hard gate), recall 20/23 labeled truth events; the two misses are a
+  body that under-names one of two events (stays candidate) and a genuinely
+  inseparable overlapping-product pair (stays ambiguous).
+- **Enrichment & notifications.** Accepted matches re-project the case
+  (classification is the only diff by construction), append a 'classified'
+  timeline entry dated by FDA's center_classification_date, and write
+  ledger notifications through the existing dedup keys. Classification
+  older than 30 days at attach time is suppressed 'backfill' — the full
+  historical backfill plans 394 suppressed vs 6 deliverable notifications,
+  no storm. Official reclassifications (record mutated in place) flow
+  through classification_upgraded/downgraded and always notify. A
+  recall_number already linked to a different case is a reported conflict,
+  never re-linked — the 17 events matched by two cases each are exactly the
+  unmerged duplicate-review pairs, which stay unclassified until merged.
+- **Deliberately out of scope, by decision:** enforcement status/termination
+  never drives consumer lifecycle (FDA's own disclaimer calls it untimely);
+  enforcement prose never overwrites Phase A consumer projection; and the
+  ~7,400 enforcement events with no announcement in our corpus are
+  quantified but NOT surfaced as consumer cases (a future bounded task).
+
+**Consumer risk tier vs official classification (2026-08-25).** Phase B made
+one thing unavoidable: FDA classifies per affected PRODUCT, so a single
+RecallCase can legitimately hold several official classes (measured: 175 of
+7,836 openFDA events; 16 of our 400 matched cases). Presenting the most severe
+of them as though the whole recall were uniformly Class I states something the
+agency did not. The app therefore carries two separate layers.
+
+- **Official classification — source truth, preserved as a SET.**
+  `classification.officialClasses` holds every distinct authoritative class,
+  most severe first. The scalar `classification.value` stays for single-class
+  cases (and for the non-class states), but a MIXED case sets it to
+  `multiple_classes`: any reader that assumes one class gets an unmistakable
+  value instead of a silently promoted "Class I". A source record still
+  carries at most one class; the set is a case-level fact. Projections
+  persisted before the set exists derive it from the scalar
+  (`officialClassesOf`), so no backfill is required for correct display.
+- **Consumer risk tier — derived product semantics, never persisted.**
+  Five levels (Critical, High, Moderate, Low, Minimal) plus two non-scale
+  states (Pending, Unrated), computed from the class set alone by
+  `src/domain/risk-tier.ts`:
+  {I}→Critical · {I,II}/{I,III}/{I,II,III}→High · {II}→Moderate ·
+  {II,III}→Low · {III}→Minimal · {} with a class still expected→Pending ·
+  {} where none is ever expected (FSIS public health alerts)→Unrated.
+  This is deliberate interpolation between categorical regulatory classes,
+  NOT arithmetic: averaging would let nine Class III products make one
+  Class I product look mild. Pure Class I is Critical because EVERY affected
+  product carries the most serious class; a mixed set containing Class I is
+  High, and the official classes stay visible in the detail view. Nothing
+  infers a tier from hazard, pathogen, allergen, illness counts, or our
+  Health Risk copy — before an authoritative classification exists, an FDA
+  recall is Pending. Because the tier is a pure function of the set, it is
+  derived at read time and never stored: a second copy could only drift.
+- **Where each appears.** Home cards and the top of Recall Detail lead with
+  the consumer tier (badge + "HIGH RISK"), never with a regulatory class.
+  The agency's own wording lives deeper in the detail screen ("Official FDA
+  classifications — Class I and Class II", with "FDA assigned different
+  classifications to different affected products." when mixed). Matcher
+  internals — scores, evidence, event_id, recall_number — never reach a
+  consumer surface. Risk is never communicated by color alone: every chip
+  carries visible text plus a spoken "Risk level: …" label, and the tokens
+  live in one place (`RiskColors`, no green anywhere in the scale).
+- **Material change compares SETS.** {I,III} → {I,II} keeps the consumer tier
+  at High and is still a real regulatory change, so the authoritative class
+  set — not the tier, and not the scalar — is what `detectChanges` diffs.
+  Single-class transitions keep their existing rule ids and byte-identical
+  fingerprints (already-ledgered events cannot re-fire); transitions
+  involving a set use `classification_changed`, which claims no direction
+  because none is defined between sets. The derived tier never emits an
+  event of its own, so one classification transition is always exactly one
+  NotificationEvent, and historical suppression is unchanged.

@@ -9,31 +9,10 @@ import {
   healthRiskSummary,
   illnessDisplay,
   reasonLine,
-  riskPresentation,
 } from './recall-display';
 
-test('risk presentation is concise, standardized, and never invents a class', () => {
-  assert.deepEqual(riskPresentation('class_I'), {
-    label: 'Class I · High risk',
-    explanation: 'Serious health effects are possible.',
-  });
-  assert.deepEqual(riskPresentation('class_II'), {
-    label: 'Class II · Lower risk',
-    explanation: 'Health effects are possible, but unlikely.',
-  });
-  assert.deepEqual(riskPresentation('class_III'), {
-    label: 'Class III · Low risk',
-    explanation: 'Health problems are not expected.',
-  });
-  assert.equal(riskPresentation('class_I')?.label.includes('FSIS'), false);
-  // Unclassified stays truthful but reads as an intentional state, not
-  // missing data — the normal condition for fresh FDA announcements.
-  assert.equal(riskPresentation('not_yet_classified')?.label, 'Not yet assigned');
-  assert.match(riskPresentation('not_yet_classified')?.explanation ?? '', /later in its process/);
-  // PHAs must never be assigned a class.
-  assert.equal(riskPresentation('not_applicable_pha'), null);
-  assert.equal(riskPresentation('unexpected_value'), null);
-});
+// Risk wording moved to risk-display.ts (consumer tier vs official
+// classification are two layers now); its goldens live in risk-display.test.ts.
 
 test('reason line maps structured FSIS reasons to consumer wording', () => {
   assert.equal(

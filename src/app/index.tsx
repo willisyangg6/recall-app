@@ -4,19 +4,15 @@ import { Link } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PhotoThumbnail } from '@/components/photo-gallery';
+import { RiskBadge } from '@/components/risk-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { brandLine, companyLine, productDisplayName } from '@/lib/consumer-summary';
 import { buildFeedSections } from '@/lib/feed-relevance';
 import { fetchCurrentFeed, isFeedConfigured, type FeedItem } from '@/lib/recall-feed';
-import {
-  geographyLabel,
-  noticeTypeLabel,
-  reasonLine,
-  riskPresentation,
-  timingLine,
-} from '@/lib/recall-display';
+import { riskView } from '@/lib/risk-display';
+import { geographyLabel, noticeTypeLabel, reasonLine, timingLine } from '@/lib/recall-display';
 
 type LoadState =
   | { status: 'loading' }
@@ -70,7 +66,9 @@ function Badge({ label, emphasized }: { label: string; emphasized?: boolean }) {
  * headline never appears here (it stays available on the detail screen).
  */
 function FeedCard({ item }: { item: FeedItem }) {
-  const risk = riskPresentation(item.classificationValue);
+  // Consumer risk tier leads the card; the regulatory class it was derived
+  // from lives on the detail screen, never here.
+  const risk = riskView(item.classification, item.sourceAgency);
   const product = productDisplayName(item.productDescription, item.title);
   const company = companyLine(item.firmName, item.title);
   const brands = brandLine(item.brands, item.firmName, product);
@@ -81,17 +79,22 @@ function FeedCard({ item }: { item: FeedItem }) {
       <Pressable accessibilityRole="button">
         <ThemedView type="backgroundElement" style={styles.card}>
           <View style={styles.badgeRow}>
+            {/* Consumer risk first — it is the primary risk language. A badge
+                only for a rated tier: "pending" on every fresh FDA card reads
+                as unfinished, and the hazard line below is the prominent risk
+                information until a class arrives. The truthful pending state
+                stays on the detail screen. */}
+            {risk.badgeLabel ? (
+              <RiskBadge
+                tier={risk.tier}
+                label={risk.badgeLabel}
+                accessibilityLabel={risk.accessibilityLabel}
+              />
+            ) : null}
             <Badge
               label={noticeTypeLabel(item.noticeType)}
               emphasized={item.noticeType === 'public_health_alert'}
             />
-            {/* A badge only for an actual assigned class: "pending" on every
-                fresh FDA card reads as unfinished; the hazard line below is
-                the prominent risk information. The truthful pending state
-                stays on the detail screen. */}
-            {risk && item.classificationValue.startsWith('class_') ? (
-              <Badge label={risk.label} />
-            ) : null}
           </View>
           {/* Product identity stays dominant; the photo is a recognition aid
               beside it, and the row collapses cleanly when there is none. */}

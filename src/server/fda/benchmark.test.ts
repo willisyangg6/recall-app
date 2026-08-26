@@ -26,12 +26,8 @@ import {
   productDisplayName,
 } from '../../lib/consumer-summary';
 import { buildPackageCheck, type PackageCheckModel } from '../../lib/package-check';
-import {
-  consumerActionDisplay,
-  healthRiskSummary,
-  reasonLine,
-  riskPresentation,
-} from '../../lib/recall-display';
+import { consumerActionDisplay, healthRiskSummary, reasonLine } from '../../lib/recall-display';
+import { riskView } from '../../lib/risk-display';
 import { buildWhatHappened, type WhatHappened } from '../../lib/what-happened';
 import { loadDetailPage, loadListingItems } from './fixtures';
 import { foodScope, parseFdaAnnouncement, slugFromPath, type FdaListingItem } from './parse';
@@ -481,7 +477,10 @@ test('benchmark: GreenWise blueberries / Publix — roles distinct, casing stand
   // …while the illness status stays separate and honest (source is silent).
   assert.equal(row.illness, 'unknown');
   // Classification pending is intentional, not missing data.
-  assert.equal(riskPresentation(row.projection.classification.value)?.label, 'Not yet assigned');
+  assert.equal(
+    riskView(row.projection.classification, row.projection.sourceAgency).official?.text,
+    'Not yet assigned',
+  );
   // UPCs are inside the app — no reading the FDA notice required.
   assert.ok(
     row.packageCheck.identifiers.some((i) => i.label === 'UPC' && i.value === '41415-06453'),
@@ -499,7 +498,10 @@ test('benchmark: Momchipz — formatting, roles, and no required external readin
     brandLine(row.projection.brands, row.projection.recallingFirm.displayName, row.product),
     'Momchipz',
   );
-  assert.equal(riskPresentation(row.projection.classification.value)?.label, 'Not yet assigned');
+  assert.equal(
+    riskView(row.projection.classification, row.projection.sourceAgency).official?.text,
+    'Not yet assigned',
+  );
   // The UPC is extracted from prose — the in-app checker works and the user
   // is never told to go read the FDA page.
   assert.deepEqual(row.packageCheck.identifiers, [{ label: 'UPC', value: '6 28634 44216 6' }]);

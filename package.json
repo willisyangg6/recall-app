@@ -45,6 +45,8 @@
     "check": "npm run typecheck && npm run lint && npm run test",
     "qa:fda": "tsx scripts/qa-consumer-projection.ts",
     "qa:duplicates": "tsx scripts/qa-duplicate-cases.ts",
+    "reconcile:fda-enforcement": "tsx scripts/reconcile-fda-enforcement.ts",
+    "qa:fda-enforcement": "tsx scripts/qa-fda-enforcement.ts",
     "reconcile:duplicates": "tsx scripts/reconcile-duplicate-cases.ts",
     "backfill:fda-images:dry": "tsx scripts/backfill-fda-images.ts",
     "backfill:fda-images": "tsx scripts/backfill-fda-images.ts --apply",
