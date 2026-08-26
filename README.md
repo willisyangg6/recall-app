@@ -65,16 +65,28 @@ records recorded in [src/server/fsis/fixtures/](src/server/fsis/fixtures/) and
 real FDA announcements recorded in
 [src/server/fda/fixtures/](src/server/fda/fixtures/).
 
-### Live ingestion (explicit, never automatic)
+### Live ingestion (production jobs, also runnable by hand)
+
+Every ingestion path goes through one production job layer
+(`scripts/run-job.ts`): a Postgres job lease (no two instances of the same
+job run at once, scheduled or manual), an unchanged-source skip gate, source
+plausibility guards, and per-run operational metrics on `ingest_runs`. GitHub
+Actions runs the same commands on a schedule — see
+[docs/recall-operations.md](docs/recall-operations.md).
 
 ```bash
-npm run ingest:fsis:dry   # fetch live FSIS data, run the full pipeline in memory,
-                          # persist nothing — works with zero configuration
-npm run ingest:fsis       # same, but persists to your Supabase project (needs .env)
-npm run ingest:fda:dry    # fetch live FDA announcement data (listing + RSS
-                          # cross-check + detail pages), persist nothing
-npm run ingest:fda        # same, but persists to your Supabase project
+npm run jobs:fda            # FDA announcements (ingest:fda is an alias)
+npm run jobs:fsis           # FSIS recalls/PHAs (ingest:fsis is an alias)
+npm run jobs:labels         # FSIS label visuals, recent window (incremental)
+npm run jobs:labels -- --full   # daily full sweep + failure retries
+npm run jobs:enforcement    # openFDA reconcile, gated on the weekly export date
+npm run ops:health          # source/job health from the database, non-zero when unhealthy
 ```
+
+`--dry-run` on `jobs:fda`/`jobs:fsis` runs the full pipeline in memory and
+persists nothing (zero configuration needed); on `jobs:labels`/
+`jobs:enforcement` it reads the live database and writes nothing. `--force`
+bypasses the unchanged-source gate after a code change.
 
 ### Backend setup (one-time)
 

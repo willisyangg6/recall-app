@@ -26,9 +26,9 @@ import { join } from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import type { NormalizedSourceRecord } from '../src/domain/source-record';
+import { SupabaseLabelStore } from '../src/server/fsis/label-store';
 import {
   extractLabelPdfUrls,
-  labelAssetKey,
   renderLabelPdf,
   sha256,
   MAX_PDF_BYTES,
@@ -190,42 +190,17 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // APPLY: upload each page and record it.
-    for (const page of pages) {
-      const key = labelAssetKey(pdfHash, page.page);
-      const upload = await client.storage
-        .from('product-visuals')
-        .upload(key, page.bytes, { contentType: 'image/webp', upsert: false });
-      if (upload.error && !/already exists|duplicate/i.test(upload.error.message)) {
-        throw new Error(`upload ${key} failed: ${upload.error.message}`);
-      }
-      const publicUrl = client.storage.from('product-visuals').getPublicUrl(key).data.publicUrl;
-      const inserted = await client.from('product_visuals').upsert(
-        {
-          recall_case_id: source.recallCaseId,
-          source_record_id: source.sourceRecordId,
-          source_url: source.pdfUrl,
-          source_sha256: pdfHash,
-          page: page.page,
-          url: publicUrl,
-          role: 'package_label',
-          width: page.width,
-          height: page.height,
-          content_hash: page.contentHash,
-        },
-        { onConflict: 'source_url,source_sha256,page' },
-      );
-      if (inserted.error) throw new Error(inserted.error.message);
-      uploaded += 1;
-    }
-    // Stale revisions of this URL are superseded; drop their rows (the
-    // objects remain content-addressed in storage for audit).
-    const stale = await client
-      .from('product_visuals')
-      .delete()
-      .eq('source_url', source.pdfUrl)
-      .neq('source_sha256', pdfHash);
-    if (stale.error) throw new Error(stale.error.message);
+    // APPLY: upload pages, record rows, retire stale revisions — through the
+    // one shared storage implementation (also used by the scheduled sync).
+    uploaded += await new SupabaseLabelStore(client).storePages(
+      {
+        recallCaseId: source.recallCaseId,
+        sourceRecordId: source.sourceRecordId,
+        pdfUrl: source.pdfUrl,
+        pdfSha: pdfHash,
+      },
+      pages,
+    );
   }
 
   console.log(`\n${'─'.repeat(60)}`);

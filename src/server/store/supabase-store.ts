@@ -14,6 +14,9 @@ import type {
 import type { NormalizedSourceRecord } from '../../domain/source-record';
 import type {
   IngestRunPatch,
+  IngestRunSource,
+  JobRunAnnotation,
+  JobRunRow,
   NotificationEventInput,
   RecallCaseRow,
   RecallStore,
@@ -35,7 +38,7 @@ export class SupabaseStore implements RecallStore {
     throw new Error(`SupabaseStore.${operation} failed: ${error?.message ?? 'unknown error'}`);
   }
 
-  async createIngestRun(sourceSystem: SourceSystem, startedAt: string): Promise<string> {
+  async createIngestRun(sourceSystem: IngestRunSource, startedAt: string): Promise<string> {
     const { data, error } = await this.client
       .from('ingest_runs')
       .insert({ source_system: sourceSystem, started_at: startedAt })
@@ -58,6 +61,58 @@ export class SupabaseStore implements RecallStore {
       })
       .eq('id', runId);
     if (error) this.fail('finishIngestRun', error);
+  }
+
+  async annotateIngestRun(runId: string, annotation: JobRunAnnotation): Promise<void> {
+    const update: Record<string, unknown> = {
+      job_name: annotation.jobName,
+      metrics: annotation.metrics,
+      version: annotation.version,
+    };
+    if (annotation.outcome) update.outcome = annotation.outcome;
+    const { error } = await this.client.from('ingest_runs').update(update).eq('id', runId);
+    if (error) this.fail('annotateIngestRun', error);
+  }
+
+  async listRecentJobRuns(jobName: string, limit: number): Promise<JobRunRow[]> {
+    const { data, error } = await this.client
+      .from('ingest_runs')
+      .select(
+        'id, job_name, source_system, started_at, finished_at, outcome, metrics, version, error',
+      )
+      .eq('job_name', jobName)
+      .order('started_at', { ascending: false })
+      .limit(limit);
+    if (error || !data) this.fail('listRecentJobRuns', error);
+    return data.map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      jobName: (row.job_name as string | null) ?? null,
+      sourceSystem: row.source_system as string,
+      startedAt: row.started_at as string,
+      finishedAt: (row.finished_at as string | null) ?? null,
+      outcome: (row.outcome as JobRunRow['outcome']) ?? null,
+      metrics: (row.metrics as Record<string, unknown> | null) ?? null,
+      version: (row.version as string | null) ?? null,
+      error: (row.error as string | null) ?? null,
+    }));
+  }
+
+  async acquireJobLease(jobName: string, holder: string, ttlSeconds: number): Promise<boolean> {
+    const { data, error } = await this.client.rpc('acquire_job_lease', {
+      p_job_name: jobName,
+      p_holder: holder,
+      p_ttl_seconds: ttlSeconds,
+    });
+    if (error) this.fail('acquireJobLease', error);
+    return data === true;
+  }
+
+  async releaseJobLease(jobName: string, holder: string): Promise<void> {
+    const { error } = await this.client.rpc('release_job_lease', {
+      p_job_name: jobName,
+      p_holder: holder,
+    });
+    if (error) this.fail('releaseJobLease', error);
   }
 
   private toSourceRecordRow(data: Record<string, unknown>): SourceRecordRow {

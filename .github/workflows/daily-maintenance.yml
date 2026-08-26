@@ -1,0 +1,47 @@
+# Slow-channel maintenance, daily at 09:15 UTC (~4–5am ET, before the US
+# morning):
+#
+# - openFDA enforcement reconciliation. The source updates WEEKLY, so the job
+#   first reads the one-request bulk-export manifest and runs the full
+#   download + reconcile only when the export date moved — most days this is
+#   seconds. (docs/recall-source-contract.md §3.2/§9: daily checks catch the
+#   weekly refresh promptly at trivial cost.)
+# - FSIS label full sweep: every missing label PDF, failure retries with
+#   backoff, and the bounded recent-window byte re-verification. Already-
+#   rendered PDFs are not re-fetched.
+#
+# Same secrets and overlap layering as scheduled-ingest.yml.
+
+name: daily-maintenance
+
+on:
+  schedule:
+    - cron: '15 9 * * *' # UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: daily-maintenance
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  maintain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: FDA enforcement (weekly-gated)
+        run: npm run jobs:enforcement
+      - name: FSIS label visuals (full sweep)
+        if: ${{ !cancelled() }}
+        run: npm run jobs:labels -- --full

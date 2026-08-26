@@ -61,9 +61,54 @@ export interface IngestRunPatch {
   error: string | null;
 }
 
+/**
+ * What a run row can record beyond the domain SourceSystems: the FSIS label
+ * job produces no source records, but its runs live in the same ledger.
+ */
+export type IngestRunSource = SourceSystem | 'fsis_labels';
+
+export type JobRunOutcome = 'succeeded' | 'partial' | 'failed';
+
+/** Job-level facts attached to an ingest run by the production job runner. */
+export interface JobRunAnnotation {
+  jobName: string;
+  /** Compact operational facts (counts, hashes) — never logs. */
+  metrics: Record<string, unknown>;
+  /** Code version (git SHA or 'local') for correlating a bad run with code. */
+  version: string;
+  /** Overrides the pipeline-recorded outcome (e.g. downgrade to 'partial'). */
+  outcome?: JobRunOutcome;
+}
+
+export interface JobRunRow {
+  id: string;
+  jobName: string | null;
+  sourceSystem: string;
+  startedAt: string;
+  finishedAt: string | null;
+  outcome: JobRunOutcome | null;
+  metrics: Record<string, unknown> | null;
+  version: string | null;
+  error: string | null;
+}
+
 export interface RecallStore {
-  createIngestRun(sourceSystem: SourceSystem, startedAt: string): Promise<string>;
+  createIngestRun(sourceSystem: IngestRunSource, startedAt: string): Promise<string>;
   finishIngestRun(runId: string, patch: IngestRunPatch): Promise<void>;
+  /** Attach job-level facts to a run (the production runner's bookkeeping). */
+  annotateIngestRun(runId: string, annotation: JobRunAnnotation): Promise<void>;
+  /** Newest-first runs of one production job — skip gates and health read these. */
+  listRecentJobRuns(jobName: string, limit: number): Promise<JobRunRow[]>;
+
+  /**
+   * Job mutual exclusion. Acquire succeeds when the lease is free, expired,
+   * or already held by this holder; a crashed holder's lease expires after
+   * `ttlSeconds`, so a stuck job can never block ingestion permanently.
+   * Manual and scheduled execution go through the same lease.
+   */
+  acquireJobLease(jobName: string, holder: string, ttlSeconds: number): Promise<boolean>;
+  /** Releases only if still held by `holder`; otherwise a no-op. */
+  releaseJobLease(jobName: string, holder: string): Promise<void>;
 
   getSourceRecordByNativeId(
     sourceSystem: SourceSystem,

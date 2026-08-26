@@ -1,0 +1,58 @@
+# Fast-channel ingestion: FDA announcements + FSIS recalls/PHAs every 30
+# minutes (UTC), plus the recent-window FSIS label sync. Steady state each
+# tick is ~1 minute: one listing/API fetch per source, and the unchanged-
+# source gate skips per-record processing when the feed content is identical.
+#
+# Cadence follows docs/recall-source-contract.md §9: both fast channels are
+# one cheap request, fresh to the current/previous day, and far below any
+# verified rate limit. Agency polling runs around the clock — quiet hours are
+# a notification-delivery concern (Phase C2), never an ingestion one.
+#
+# Overlap safety is layered: this concurrency group queues runs at the
+# scheduler, and every job additionally takes a Postgres lease (job_leases),
+# which also covers manual runs from a laptop. A failed step does not stop
+# later steps; any failure marks the workflow failed (GitHub emails on
+# scheduled-workflow failure).
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL, SUPABASE_SECRET_KEY   — server-only; never in the app bundle.
+#
+# NOTE: GitHub disables cron workflows after 60 days without repo activity,
+# and schedule ticks can lag a few minutes at busy times — acceptable here.
+
+name: scheduled-ingest
+
+on:
+  schedule:
+    - cron: '*/30 * * * *' # UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: scheduled-ingest
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: FDA announcements
+        run: npm run jobs:fda
+      - name: FSIS recalls/PHAs
+        if: ${{ !cancelled() }}
+        run: npm run jobs:fsis
+      - name: FSIS label visuals (recent)
+        if: ${{ !cancelled() }}
+        run: npm run jobs:labels

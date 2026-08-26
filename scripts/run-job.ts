@@ -1,0 +1,120 @@
+/**
+ * Production job entry point — the ONE orchestration layer for scheduled and
+ * manual execution alike (both obey the same job lease and record the same
+ * run bookkeeping):
+ *
+ *   npm run jobs:fda                       # FDA announcements ingest
+ *   npm run jobs:fsis                      # FSIS recalls/PHAs ingest
+ *   npm run jobs:labels                    # FSIS label visuals (recent window)
+ *   npm run jobs:labels -- --full          # daily full sweep + failure retries
+ *   npm run jobs:enforcement               # openFDA reconcile (weekly-gated)
+ *
+ * Flags:
+ *   --dry-run   fda/fsis: full pipeline in memory, nothing persisted.
+ *               labels/enforcement: read the live DB, write nothing.
+ *   --force     ignore the unchanged-source skip gate.
+ *
+ * Persistent modes need SUPABASE_URL and SUPABASE_SECRET_KEY in .env locally,
+ * or in the environment (GitHub Actions repo secrets in production). Secrets
+ * are never printed. A failed job exits non-zero so the scheduler shows red.
+ */
+
+import { hostname } from 'node:os';
+
+import { runEnforcementJob } from '../src/server/jobs/enforcement-job';
+import { runFdaJob } from '../src/server/jobs/fda-job';
+import { runFsisJob } from '../src/server/jobs/fsis-job';
+import { runLabelsJob } from '../src/server/jobs/labels-job';
+import type { JobContext, JobReport } from '../src/server/jobs/runner';
+import { SupabaseLabelStore } from '../src/server/fsis/label-store';
+import { MemoryStore } from '../src/server/store/memory-store';
+import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
+
+const JOB_NAMES = ['fda', 'fsis', 'labels', 'enforcement'] as const;
+type JobArg = (typeof JOB_NAMES)[number];
+
+function loadDotEnv(): void {
+  try {
+    process.loadEnvFile('.env');
+  } catch {
+    // No .env file — environment variables may be set another way.
+  }
+}
+
+function requireSupabaseEnv(): { url: string; secretKey: string } {
+  loadDotEnv();
+  const url = process.env.SUPABASE_URL;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !secretKey) {
+    console.error(
+      'Missing SUPABASE_URL and/or SUPABASE_SECRET_KEY.\n' +
+        'Copy .env.example to .env and fill in your Supabase project values,\n' +
+        'or (fda/fsis only) run with --dry-run to test the pipeline without a database.',
+    );
+    process.exit(1);
+  }
+  return { url, secretKey };
+}
+
+async function main(): Promise<void> {
+  const [, , jobArg, ...flags] = process.argv;
+  if (!JOB_NAMES.includes(jobArg as JobArg)) {
+    console.error(`Usage: run-job.ts <${JOB_NAMES.join('|')}> [--dry-run] [--force] [--full]`);
+    process.exit(1);
+  }
+  const job = jobArg as JobArg;
+  const dryRun = flags.includes('--dry-run');
+  const force = flags.includes('--force');
+  const labelsMode: 'recent' | 'full' = flags.includes('--full') ? 'full' : 'recent';
+
+  const version = process.env.GITHUB_SHA?.slice(0, 12) ?? 'local';
+  const ctx: JobContext = {
+    // Dry runs keep lease/run bookkeeping in memory: a simulation must not
+    // write operational state (and must work before the ops migration lands).
+    store: new MemoryStore(),
+    now: () => new Date(),
+    version,
+    holder: `${hostname()}:${process.pid}:${version}`,
+  };
+
+  let report: JobReport;
+  if (job === 'fda' || job === 'fsis') {
+    if (!dryRun) {
+      const env = requireSupabaseEnv();
+      ctx.store = new SupabaseStore(createSupabaseServerClient(env.url, env.secretKey));
+    }
+    report =
+      job === 'fda'
+        ? await runFdaJob(ctx, { dryRun, force })
+        : await runFsisJob(ctx, { dryRun, force });
+  } else {
+    const env = requireSupabaseEnv();
+    const client = createSupabaseServerClient(env.url, env.secretKey);
+    const supabaseStore = new SupabaseStore(client);
+    if (!dryRun) ctx.store = supabaseStore;
+    report =
+      job === 'labels'
+        ? await runLabelsJob(ctx, {
+            mode: labelsMode,
+            dryRun,
+            labelStore: new SupabaseLabelStore(client),
+          })
+        : await runEnforcementJob(ctx, {
+            dryRun,
+            force,
+            client,
+            dataStore: supabaseStore,
+          });
+  }
+
+  console.log(
+    `\n[${report.jobName}] ${report.outcome}${report.error ? ` — ${report.error}` : ''}` +
+      `${dryRun ? ' (dry run)' : ''}`,
+  );
+  if (report.outcome === 'failed') process.exit(1);
+}
+
+main().catch((error) => {
+  console.error('Job failed:', error instanceof Error ? error.message : error);
+  process.exit(1);
+});
