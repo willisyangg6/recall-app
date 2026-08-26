@@ -277,6 +277,32 @@ async function main(): Promise<void> {
     if (oldestPending.data?.created_at) {
       console.log(`  oldest unsent delivery: ${oldestPending.data.created_at}`);
     }
+    // Personalization (Phase C3) — aggregate counts only, never contents.
+    // Deliberately NOT a head-only count: PostgREST answers HEAD on a missing
+    // table with 204/no error, which would print a misleading "0" while the
+    // migration is unapplied. A ranged select 404s honestly.
+    const prefsTotal = await client
+      .from('installation_preferences')
+      .select('installation_id', { count: 'exact' })
+      .limit(0);
+    if (prefsTotal.error) {
+      if (!/installation_preferences/.test(prefsTotal.error.message)) {
+        console.error(`installation_preferences query failed: ${prefsTotal.error.message}`);
+        process.exit(1);
+      }
+      console.log(
+        '  preferences:         not installed (installation_preferences migration pending)',
+      );
+    } else {
+      const prefsWithState = await client
+        .from('installation_preferences')
+        .select('installation_id', { count: 'exact' })
+        .not('state_code', 'is', null)
+        .limit(0);
+      console.log(
+        `  preferences:         ${prefsTotal.count ?? 0} installation(s), ${prefsWithState.count ?? 0} with a state`,
+      );
+    }
     for (const note of pushNotes) console.log(`    · ${note}`);
     console.log('');
   }

@@ -57,11 +57,63 @@ class FakeTransport implements PushTransport {
   }
 }
 
+function fixtureProjection(
+  overrides: {
+    title?: string;
+    geography?: { scope: 'states' | 'nationwide' | 'unknown'; states: string[] };
+    pathogenOrAllergen?: string | null;
+    retailerNames?: string[];
+  } = {},
+) {
+  return {
+    sourceAgency: 'FDA' as const,
+    noticeType: 'recall' as const,
+    state: 'active' as const,
+    closedYear: null,
+    classification: { value: 'not_yet_classified' as const, sourceText: null },
+    title: overrides.title ?? 'Acme Recalls Trail Mix',
+    summaryText: '',
+    summaryHtml: null,
+    reasonText: null,
+    hazardCategory: 'allergen' as const,
+    pathogenOrAllergen:
+      overrides.pathogenOrAllergen === undefined ? 'peanut' : overrides.pathogenOrAllergen,
+    recallingFirm: { displayName: 'Acme', rawVariants: [] },
+    brands: [],
+    productDescription: 'Trail Mix',
+    retailerNames: overrides.retailerNames ?? [],
+    heroImageUrl: null,
+    geography: {
+      scope: overrides.geography?.scope ?? ('unknown' as const),
+      states: overrides.geography?.states ?? [],
+      confidence: 'stated' as const,
+      sourceText: null,
+    },
+    affectedProducts: [],
+    quantityText: null,
+    illnessStatement: null,
+    reportsIllness: false,
+    consumerAction: null,
+    contactText: null,
+    officialUrl: 'https://example.gov',
+    otherOfficialUrls: [],
+    sourceIdentifiers: [],
+    publishedAt: '2026-09-01',
+    lastPublicActivityAt: '2026-09-01',
+  };
+}
+
 let eventCounter = 0;
 function addEvent(
   store: MemoryPushStore,
   createdAtMs: number,
-  overrides: { suppressed?: string | null; title?: string } = {},
+  overrides: {
+    suppressed?: string | null;
+    title?: string;
+    geography?: { scope: 'states' | 'nationwide' | 'unknown'; states: string[] };
+    pathogenOrAllergen?: string | null;
+    retailerNames?: string[];
+  } = {},
 ): string {
   eventCounter += 1;
   const id = `${String(eventCounter).padStart(8, '0')}-0000-4000-8000-000000000000`;
@@ -73,36 +125,7 @@ function addEvent(
     payloadSummary: 'summary',
     createdAt: iso(createdAtMs),
     suppressed: overrides.suppressed ?? null,
-    projection: {
-      sourceAgency: 'FDA',
-      noticeType: 'recall',
-      state: 'active',
-      closedYear: null,
-      classification: { value: 'not_yet_classified', sourceText: null },
-      title: overrides.title ?? 'Acme Recalls Trail Mix',
-      summaryText: '',
-      summaryHtml: null,
-      reasonText: null,
-      hazardCategory: 'allergen',
-      pathogenOrAllergen: 'peanut',
-      recallingFirm: { displayName: 'Acme', rawVariants: [] },
-      brands: [],
-      productDescription: 'Trail Mix',
-      retailerNames: [],
-      heroImageUrl: null,
-      geography: { scope: 'unknown', states: [], confidence: 'inferred', sourceText: null },
-      affectedProducts: [],
-      quantityText: null,
-      illnessStatement: null,
-      reportsIllness: false,
-      consumerAction: null,
-      contactText: null,
-      officialUrl: 'https://example.gov',
-      otherOfficialUrls: [],
-      sourceIdentifiers: [],
-      publishedAt: '2026-09-01',
-      lastPublicActivityAt: '2026-09-01',
-    },
+    projection: fixtureProjection(overrides),
   });
   return id;
 }
@@ -457,7 +480,11 @@ test('eligibility seam: the later of activation and enabled_at wins', () => {
       enabledAt: iso(-HOUR),
     },
   ];
-  const eligible = eligibleSubscriptions({ createdAt: iso(HOUR) }, subscriptions, iso(0));
+  const eligible = eligibleSubscriptions(
+    { createdAt: iso(HOUR), projection: fixtureProjection() },
+    subscriptions,
+    iso(0),
+  );
   assert.deepEqual(
     eligible.map((s) => s.id),
     ['s1'],
@@ -469,4 +496,253 @@ test('retry backoff grows exponentially and caps at 6 hours', () => {
   assert.equal(retryBackoffMs(2), HOUR);
   assert.equal(retryBackoffMs(3), 2 * HOUR);
   assert.equal(retryBackoffMs(10), 6 * HOUR);
+});
+
+// ── Phase C3: personalized eligibility ───────────────────────────────────────
+
+function subIdFor(store: MemoryPushStore, installationId: string): string {
+  const row = [...store.subscriptions.values()].find((s) => s.installationId === installationId);
+  assert.ok(row, `no subscription for ${installationId}`);
+  return row.id;
+}
+
+test('personalized: a state-matching event delivers to the matching state only', async () => {
+  const { store, transport, runAt } = setup(0);
+  const ca = 'a'.repeat(32);
+  const tx = 'b'.repeat(32);
+  store.register(ca, 'ExponentPushToken[ca]', 'ios', iso(HOUR));
+  store.register(tx, 'ExponentPushToken[tx]', 'ios', iso(HOUR));
+  store.setPreferences(ca, { stateCode: 'CA', allergens: [], retailerIds: [] }, iso(HOUR));
+  store.setPreferences(tx, { stateCode: 'TX', allergens: [], retailerIds: [] }, iso(HOUR));
+  addEvent(store, 2 * HOUR, { geography: { scope: 'states', states: ['California'] } });
+
+  // Dry run first: exactly one candidate, zero writes, zero traffic.
+  const dry = await runAt(3 * HOUR, true);
+  assert.equal(dry.metrics.deliveriesCreated, 1);
+  assert.equal(dry.metrics.preferenceSkipped, 1);
+  assert.equal(store.deliveries.size, 0);
+
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.deliveriesCreated, 1);
+  assert.equal(result.metrics.sent, 1);
+  assert.equal(result.metrics.preferenceSkipped, 1);
+  const delivery = [...store.deliveries.values()][0];
+  assert.equal(delivery.subscriptionId, subIdFor(store, ca));
+  assert.equal(transport.sentMessages.length, 1);
+  assert.equal(transport.sentMessages[0].to, 'ExponentPushToken[ca]');
+});
+
+test('personalized: two matching users get one delivery candidate each', async () => {
+  const { store, runAt } = setup(0);
+  const one = 'a'.repeat(32);
+  const two = 'b'.repeat(32);
+  store.register(one, 'ExponentPushToken[a]', 'ios', iso(HOUR));
+  store.register(two, 'ExponentPushToken[b]', 'android', iso(HOUR));
+  store.setPreferences(one, { stateCode: 'CA', allergens: [], retailerIds: [] }, iso(HOUR));
+  store.setPreferences(two, { stateCode: 'CA', allergens: [], retailerIds: [] }, iso(HOUR));
+  addEvent(store, 2 * HOUR, { geography: { scope: 'nationwide', states: [] } });
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.deliveriesCreated, 2);
+  assert.equal(result.metrics.sent, 2);
+
+  // Scheduler retry: the unique (event, subscription) pairs stay unique.
+  const rerun = await runAt(3 * HOUR + 30 * MINUTE);
+  assert.equal(rerun.metrics.deliveriesCreated, 0);
+  assert.equal(rerun.metrics.sent, 0);
+  assert.equal(store.deliveries.size, 2);
+});
+
+test('personalized: unknown geography delivers only with an allergen/retailer signal', async () => {
+  const { store, transport, runAt } = setup(0);
+  const withRetailer = 'a'.repeat(32);
+  const stateOnly = 'b'.repeat(32);
+  const withAllergen = 'c'.repeat(32);
+  for (const [installation, token] of [
+    [withRetailer, 'ExponentPushToken[r]'],
+    [stateOnly, 'ExponentPushToken[s]'],
+    [withAllergen, 'ExponentPushToken[al]'],
+  ] as const) {
+    store.register(installation, token, 'ios', iso(HOUR));
+  }
+  store.setPreferences(
+    withRetailer,
+    { stateCode: 'CA', allergens: [], retailerIds: ['costco'] },
+    iso(HOUR),
+  );
+  store.setPreferences(stateOnly, { stateCode: 'CA', allergens: [], retailerIds: [] }, iso(HOUR));
+  store.setPreferences(
+    withAllergen,
+    { stateCode: 'CA', allergens: ['peanut'], retailerIds: [] },
+    iso(HOUR),
+  );
+  addEvent(store, 2 * HOUR, {
+    geography: { scope: 'unknown', states: [] },
+    pathogenOrAllergen: 'undeclared peanuts',
+    retailerNames: ['Costco'],
+  });
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.deliveriesCreated, 2);
+  assert.equal(result.metrics.preferenceSkipped, 1);
+  const recipients = transport.sentMessages.map((m) => m.to).sort();
+  assert.deepEqual(recipients, ['ExponentPushToken[al]', 'ExponentPushToken[r]']);
+});
+
+test('no state chosen: allergen/retailer-only preferences keep deliver-all behavior', async () => {
+  const { store, runAt } = setup(0);
+  const installation = 'a'.repeat(32);
+  store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
+  store.setPreferences(
+    installation,
+    { stateCode: null, allergens: ['sesame'], retailerIds: [] },
+    iso(HOUR),
+  );
+  // A Salmonella event with no allergen match still delivers: preferences
+  // without a state never become exclusion filters.
+  addEvent(store, 2 * HOUR, { pathogenOrAllergen: 'Salmonella' });
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.deliveriesCreated, 1);
+  assert.equal(result.metrics.sent, 1);
+});
+
+test('changing state never backfills: old events stay behind the preference horizon', async () => {
+  const { store, transport, runAt } = setup(0);
+  const installation = 'a'.repeat(32);
+  store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
+  store.setPreferences(
+    installation,
+    { stateCode: 'CA', allergens: [], retailerIds: [] },
+    iso(HOUR),
+  );
+  addEvent(store, 2 * HOUR, { geography: { scope: 'states', states: ['Texas'] } });
+
+  const before = await runAt(3 * HOUR);
+  assert.equal(before.metrics.deliveriesCreated, 0);
+  assert.equal(before.metrics.preferenceSkipped, 1);
+
+  // The user moves to Texas. The Texas-only event from before the change must
+  // never become newly deliverable.
+  store.setPreferences(
+    installation,
+    { stateCode: 'TX', allergens: [], retailerIds: [] },
+    iso(4 * HOUR),
+  );
+  const after = await runAt(5 * HOUR);
+  assert.equal(after.metrics.deliveriesCreated, 0);
+  assert.equal(after.metrics.preferenceHorizonSkipped, 1);
+  assert.equal(transport.sends.length, 0);
+
+  // A Texas event created after the change delivers normally.
+  addEvent(store, 6 * HOUR, { geography: { scope: 'states', states: ['Texas'] } });
+  const future = await runAt(7 * HOUR);
+  assert.equal(future.metrics.deliveriesCreated, 1);
+  assert.equal(future.metrics.sent, 1);
+});
+
+test('adding an allergen never backfills; future matching events deliver', async () => {
+  const { store, runAt } = setup(0);
+  const installation = 'a'.repeat(32);
+  store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
+  store.setPreferences(
+    installation,
+    { stateCode: 'CA', allergens: [], retailerIds: [] },
+    iso(HOUR),
+  );
+  addEvent(store, 2 * HOUR, {
+    geography: { scope: 'unknown', states: [] },
+    pathogenOrAllergen: 'undeclared peanuts',
+  });
+  const before = await runAt(3 * HOUR);
+  assert.equal(before.metrics.deliveriesCreated, 0);
+
+  store.setPreferences(
+    installation,
+    { stateCode: 'CA', allergens: ['peanut'], retailerIds: [] },
+    iso(4 * HOUR),
+  );
+  const after = await runAt(5 * HOUR);
+  assert.equal(after.metrics.deliveriesCreated, 0);
+  assert.equal(after.metrics.preferenceHorizonSkipped, 1);
+
+  addEvent(store, 6 * HOUR, {
+    geography: { scope: 'unknown', states: [] },
+    pathogenOrAllergen: 'undeclared peanut',
+  });
+  const future = await runAt(7 * HOUR);
+  assert.equal(future.metrics.deliveriesCreated, 1);
+});
+
+test('removing a retailer stops the positive signal for future events', async () => {
+  const { store, runAt } = setup(0);
+  const installation = 'a'.repeat(32);
+  store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
+  store.setPreferences(
+    installation,
+    { stateCode: 'CA', allergens: [], retailerIds: ['costco'] },
+    iso(HOUR),
+  );
+  addEvent(store, 2 * HOUR, {
+    geography: { scope: 'unknown', states: [] },
+    retailerNames: ['Costco'],
+  });
+  const before = await runAt(3 * HOUR);
+  assert.equal(before.metrics.deliveriesCreated, 1);
+
+  store.setPreferences(
+    installation,
+    { stateCode: 'CA', allergens: [], retailerIds: [] },
+    iso(4 * HOUR),
+  );
+  addEvent(store, 5 * HOUR, {
+    geography: { scope: 'unknown', states: [] },
+    retailerNames: ['Costco'],
+  });
+  const after = await runAt(6 * HOUR);
+  assert.equal(after.metrics.deliveriesCreated, 0);
+  assert.equal(after.metrics.preferenceSkipped, 1);
+});
+
+test('re-syncing identical preferences keeps the horizon: pending eligibility unaffected', async () => {
+  const { store, runAt } = setup(0);
+  const installation = 'a'.repeat(32);
+  store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
+  store.setPreferences(
+    installation,
+    { stateCode: 'CA', allergens: [], retailerIds: [] },
+    iso(HOUR),
+  );
+  addEvent(store, 2 * HOUR, { geography: { scope: 'states', states: ['California'] } });
+  // App-launch re-sync writes identical values AFTER the event was created.
+  store.setPreferences(
+    installation,
+    { stateCode: 'CA', allergens: [], retailerIds: [] },
+    iso(2 * HOUR + 30 * MINUTE),
+  );
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.deliveriesCreated, 1);
+  assert.equal(result.metrics.preferenceHorizonSkipped, 0);
+});
+
+test('personalization respects the untouched C2 safety rails', async () => {
+  const { store, transport, runAt } = setup(2 * HOUR);
+  const installation = 'a'.repeat(32);
+  // Preferences existed long before activation and before enabling alerts.
+  store.setPreferences(
+    installation,
+    { stateCode: 'CA', allergens: [], retailerIds: [] },
+    iso(-HOUR),
+  );
+  store.register(installation, 'ExponentPushToken[a]', 'ios', iso(4 * HOUR));
+
+  addEvent(store, HOUR, { geography: { scope: 'states', states: ['California'] } }); // pre-activation
+  addEvent(store, 3 * HOUR, { geography: { scope: 'states', states: ['California'] } }); // pre-enable
+  addEvent(store, 5 * HOUR, {
+    geography: { scope: 'states', states: ['California'] },
+    suppressed: 'backfill',
+  });
+
+  const result = await runAt(6 * HOUR);
+  assert.equal(result.metrics.skippedPreActivation, 1);
+  assert.equal(result.metrics.subscriptionHorizonSkipped, 1);
+  assert.equal(result.metrics.deliveriesCreated, 0);
+  assert.equal(transport.sends.length, 0);
 });

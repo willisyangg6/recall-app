@@ -24,6 +24,23 @@ export interface PushSubscription {
   enabledAt: string;
 }
 
+/**
+ * One installation's personalization preferences (Phase C3), read by the
+ * delivery worker. `updatedAt` is a delivery-safety horizon exactly like the
+ * C2 enabled_at horizons: eligibility requires the event to be created on or
+ * after it, so preference changes can never make old events newly deliverable.
+ */
+export interface InstallationPreferences {
+  installationId: string;
+  /** Two-letter code ('CA'); null = no home state chosen. */
+  stateCode: string | null;
+  /** Canonical allergen tokens. */
+  allergens: string[];
+  /** Canonical retailer catalog ids. */
+  retailerIds: string[];
+  updatedAt: string;
+}
+
 /** A deliverable ledger event joined with its case's current projection. */
 export interface DeliverableEvent {
   id: string;
@@ -76,6 +93,9 @@ export interface PushStore {
   listEnabledSubscriptions(): Promise<PushSubscription[]>;
   /** DeviceNotRegistered / operational disable. Historical deliveries stay. */
   disableSubscription(id: string, reason: string, at: string): Promise<void>;
+
+  /** All stored installation preferences (Phase C3 eligibility input). */
+  listPreferences(): Promise<InstallationPreferences[]>;
 
   /**
    * Deliverable (unsuppressed) ledger events created on/after `sinceIso`,

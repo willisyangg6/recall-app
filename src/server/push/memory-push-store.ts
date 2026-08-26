@@ -14,6 +14,7 @@ import type {
   DeliveryPatch,
   DeliveryRow,
   DeliveryStatus,
+  InstallationPreferences,
   PushStore,
   PushSubscription,
 } from './types';
@@ -32,6 +33,7 @@ export class MemoryPushStore implements PushStore {
   subscriptions = new Map<string, SubscriptionRow>();
   events: StoredEvent[] = [];
   deliveries = new Map<string, DeliveryRow>();
+  preferences = new Map<string, InstallationPreferences>();
 
   // ── Test setup helpers ─────────────────────────────────────────────────────
 
@@ -82,6 +84,36 @@ export class MemoryPushStore implements PushStore {
     });
   }
 
+  /**
+   * The set_installation_preferences RPC's semantics, mirrored: values are
+   * normalized to sorted distinct arrays, and writing IDENTICAL values is a
+   * strict no-op — updated_at (the delivery-safety horizon) does not move.
+   */
+  setPreferences(
+    installationId: string,
+    prefs: { stateCode: string | null; allergens: string[]; retailerIds: string[] },
+    nowIso: string,
+  ): void {
+    const allergens = [...new Set(prefs.allergens)].sort();
+    const retailerIds = [...new Set(prefs.retailerIds)].sort();
+    const existing = this.preferences.get(installationId);
+    if (
+      existing &&
+      existing.stateCode === prefs.stateCode &&
+      existing.allergens.join('|') === allergens.join('|') &&
+      existing.retailerIds.join('|') === retailerIds.join('|')
+    ) {
+      return;
+    }
+    this.preferences.set(installationId, {
+      installationId,
+      stateCode: prefs.stateCode,
+      allergens,
+      retailerIds,
+      updatedAt: nowIso,
+    });
+  }
+
   /** The disable_push_subscription RPC's semantics, mirrored. */
   userDisable(installationId: string, nowIso: string): void {
     for (const row of this.subscriptions.values()) {
@@ -109,6 +141,10 @@ export class MemoryPushStore implements PushStore {
     row.enabled = false;
     row.disabledAt = at;
     row.disabledReason = reason;
+  }
+
+  async listPreferences(): Promise<InstallationPreferences[]> {
+    return [...this.preferences.values()].map((p) => ({ ...p }));
   }
 
   async listDeliverableEventsSince(sinceIso: string, limit: number): Promise<DeliverableEvent[]> {

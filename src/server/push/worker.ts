@@ -1,5 +1,5 @@
 /**
- * Push delivery worker (Phase C2).
+ * Push delivery worker (Phase C2; personalized eligibility Phase C3).
  *
  * Consumes the authoritative NotificationEvent ledger — it never decides
  * whether an event should exist, only which active subscriptions receive an
@@ -11,7 +11,12 @@
  * - Global horizon: only events created ON/AFTER push_enabled_at are ever
  *   considered — the pre-C2 deliverable backlog is structurally unreachable.
  * - Per-subscription horizon: a device enabled on Sept 5 never receives an
- *   event created Sept 1 (eligibleSubscriptions, the one C3 seam).
+ *   event created Sept 1 (classifySubscriptionsForEvent, the ONE seam).
+ * - Preference horizon: an installation's preferences_updated_at joins those
+ *   horizons, so changing preferences (new allergen, new state) can never
+ *   make an older event newly deliverable — no retroactive blast.
+ * - Personalized matching happens only in that same seam, via the SAME pure
+ *   relevance evaluation the app renders (src/lib/relevance).
  * - Idempotency: the (event, subscription) unique row is created before any
  *   send; reruns and scheduler retries cannot re-enqueue, and a delivery that
  *   already holds a ticket is never re-sent.
@@ -26,12 +31,15 @@
  *   delivery goes retryable rather than silently counting as delivered.
  */
 
+import type { UserRecallPreferences } from '../../domain/preferences';
+import { pushEligible, type RelevanceInput } from '../../lib/relevance';
 import type { JobRunOutcome } from '../store/types';
 import { buildPushMessage } from './format';
 import { MAX_MESSAGES_PER_REQUEST, MAX_RECEIPT_IDS_PER_REQUEST } from './expo-transport';
 import type {
   DeliverableEvent,
   DeliveryRow,
+  InstallationPreferences,
   PushReceipt,
   PushStore,
   PushSubscription,
@@ -72,22 +80,92 @@ export function isPermanentPushError(code: string | undefined): boolean {
   return code !== undefined && PERMANENT_ERROR_CODES.has(code);
 }
 
+/** The case facts personalization reads, adapted from the joined projection. */
+function relevanceInput(event: Pick<DeliverableEvent, 'projection'>): RelevanceInput {
+  return {
+    geography: event.projection.geography,
+    pathogenOrAllergen: event.projection.pathogenOrAllergen ?? null,
+    // Projections persisted before the field existed lack the key.
+    retailerNames: event.projection.retailerNames ?? [],
+  };
+}
+
+function toUserPreferences(prefs: InstallationPreferences): UserRecallPreferences {
+  return { state: prefs.stateCode, allergens: prefs.allergens, retailers: prefs.retailerIds };
+}
+
+export interface EventEligibility {
+  eligible: PushSubscription[];
+  /** Excluded by the C2 horizons (activation / subscription enabled_at). */
+  horizonSkipped: number;
+  /**
+   * Excluded because the event predates the installation's last preference
+   * change — the no-retroactive-blast guarantee: adding an allergen or
+   * moving states can never make an OLD event newly deliverable.
+   */
+  preferenceHorizonSkipped: number;
+  /** Excluded by personalized matching (state / allergen / retailer). */
+  preferenceSkipped: number;
+}
+
 /**
- * THE eligibility seam (C3 personalization lands here and only here).
- * Today: every enabled subscription whose own horizon — the later of global
- * activation and its enabled_at — precedes the event. Later: state, allergen,
- * retailer, and preference filters.
+ * THE eligibility seam — every per-subscription delivery decision happens
+ * here and only here (C3: personalization included; nothing else in the
+ * worker filters subscriptions).
+ *
+ * Per subscription, in order:
+ * 1. Horizons. The event must be created on/after ALL of: global activation,
+ *    the subscription's enabled_at, and — when preferences exist — the
+ *    preferences' updated_at. The last one makes preference changes safe:
+ *    events older than the change were already decided under the previous
+ *    preferences (or never qualified), and never become newly deliverable.
+ * 2. Preference matching (src/lib/relevance `pushEligible` — the same
+ *    evaluation the app renders): with a chosen state, deliver on geographic
+ *    match (nationwide always matches) or unknown geography with an
+ *    allergen/retailer signal; an authoritative geographic exclusion never
+ *    delivers. Without a chosen state, pre-C3 deliver-all behavior stands.
  */
-export function eligibleSubscriptions(
-  event: Pick<DeliverableEvent, 'createdAt'>,
+export function classifySubscriptionsForEvent(
+  event: Pick<DeliverableEvent, 'createdAt' | 'projection'>,
   subscriptions: PushSubscription[],
   pushEnabledAt: string,
+  preferences: Map<string, InstallationPreferences>,
+): EventEligibility {
+  const result: EventEligibility = {
+    eligible: [],
+    horizonSkipped: 0,
+    preferenceHorizonSkipped: 0,
+    preferenceSkipped: 0,
+  };
+  const input = relevanceInput(event);
+  for (const subscription of subscriptions) {
+    if (!subscription.enabled) continue;
+    const prefs = preferences.get(subscription.installationId) ?? null;
+    const c2Horizon =
+      subscription.enabledAt > pushEnabledAt ? subscription.enabledAt : pushEnabledAt;
+    const horizon = prefs && prefs.updatedAt > c2Horizon ? prefs.updatedAt : c2Horizon;
+    if (event.createdAt < horizon) {
+      if (event.createdAt >= c2Horizon) result.preferenceHorizonSkipped += 1;
+      else result.horizonSkipped += 1;
+      continue;
+    }
+    if (!pushEligible(input, prefs ? toUserPreferences(prefs) : null)) {
+      result.preferenceSkipped += 1;
+      continue;
+    }
+    result.eligible.push(subscription);
+  }
+  return result;
+}
+
+/** The seam's original shape — the eligible list alone. */
+export function eligibleSubscriptions(
+  event: Pick<DeliverableEvent, 'createdAt' | 'projection'>,
+  subscriptions: PushSubscription[],
+  pushEnabledAt: string,
+  preferences: Map<string, InstallationPreferences> = new Map(),
 ): PushSubscription[] {
-  return subscriptions.filter((subscription) => {
-    if (!subscription.enabled) return false;
-    const horizon = subscription.enabledAt > pushEnabledAt ? subscription.enabledAt : pushEnabledAt;
-    return event.createdAt >= horizon;
-  });
+  return classifySubscriptionsForEvent(event, subscriptions, pushEnabledAt, preferences).eligible;
 }
 
 export interface PushWorkerOptions {
@@ -131,13 +209,20 @@ export async function runPushDelivery(
     };
   }
 
+  const preferences = await store.listPreferences();
+  const preferencesByInstallation = new Map(preferences.map((p) => [p.installationId, p]));
+
   const metrics = {
     activation: pushEnabledAt,
     subscriptionsActive: subscriptions.length,
+    preferencesStored: preferences.length,
+    preferencesWithState: preferences.filter((p) => p.stateCode !== null).length,
     eventsExamined: 0,
     skippedPreActivation: 0,
     suppressedSkipped: 0,
     subscriptionHorizonSkipped: 0,
+    preferenceHorizonSkipped: 0,
+    preferenceSkipped: 0,
     deliveriesCreated: 0,
     sent: 0,
     ticketsAccepted: 0,
@@ -270,10 +355,16 @@ export async function runPushDelivery(
 
   const eventById = new Map(events.map((e) => [e.id, e]));
   for (const event of events) {
-    const eligible = eligibleSubscriptions(event, subscriptions, pushEnabledAt);
-    metrics.subscriptionHorizonSkipped +=
-      subscriptions.filter((s) => s.enabled).length - eligible.length;
-    for (const subscription of eligible) {
+    const classified = classifySubscriptionsForEvent(
+      event,
+      subscriptions,
+      pushEnabledAt,
+      preferencesByInstallation,
+    );
+    metrics.subscriptionHorizonSkipped += classified.horizonSkipped;
+    metrics.preferenceHorizonSkipped += classified.preferenceHorizonSkipped;
+    metrics.preferenceSkipped += classified.preferenceSkipped;
+    for (const subscription of classified.eligible) {
       if (dryRun) {
         if (!existingPairs.has(`${event.id}:${subscription.id}`)) metrics.deliveriesCreated += 1;
       } else if (await store.createDeliveryIfAbsent(event.id, subscription.id, nowIso())) {
@@ -463,6 +554,12 @@ export async function runPushDelivery(
     `  horizons: activation ${pushEnabledAt} — ${metrics.skippedPreActivation} pre-activation ` +
       `deliverable event(s) excluded, ${metrics.suppressedSkipped} suppressed excluded, ` +
       `${metrics.subscriptionHorizonSkipped} subscription-horizon exclusion(s).`,
+  );
+  console.log(
+    `  personalization: ${metrics.preferencesStored} preference record(s) ` +
+      `(${metrics.preferencesWithState} with a state) — ` +
+      `${metrics.preferenceSkipped} preference exclusion(s), ` +
+      `${metrics.preferenceHorizonSkipped} preference-horizon exclusion(s).`,
   );
 
   return {

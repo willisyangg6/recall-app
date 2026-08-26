@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { DarkTheme, DefaultTheme, Link, Stack, ThemeProvider } from 'expo-router';
 import { Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -5,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ThemedText } from '@/components/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
+import { flushPreferencesSync } from '@/lib/preferences-store';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -12,6 +14,10 @@ export default function RootLayout() {
   // upkeep. Never triggers a permission prompt (that stays behind the
   // explicit control in Settings → Alerts).
   usePushNotifications();
+  useEffect(() => {
+    // Retry a preference sync that failed offline. Silent, launch never blocks.
+    void flushPreferencesSync();
+  }, []);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

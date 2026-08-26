@@ -53,6 +53,14 @@ NEW horizon, so nothing from a dark period is sent as catch-up.
 never receives Sept 1 events. Idempotent re-registration keeps the horizon;
 re-enabling after a disable moves it forward.
 
+**Preference horizon (Phase C3).** When an installation has stored
+preferences, `installation_preferences.updated_at` joins the max above, so
+changing preferences (new allergen, new state) can never make an OLDER event
+newly deliverable. Personalized matching itself — state / allergen /
+retailer, same evaluation the app renders — happens inside the same
+eligibility seam. See
+[docs/recall-personalization.md](recall-personalization.md).
+
 ## Data model (all additive — migration `20260828000000_push_delivery.sql`)
 
 - `push_delivery_config` — one row: the activation horizon.

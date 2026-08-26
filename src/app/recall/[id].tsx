@@ -25,8 +25,16 @@ import {
 import type { PackageField } from '@/lib/consumer-schema';
 import type { CodeLocation } from '@/lib/fact-types';
 import type { PhotoRole, ProductPhoto } from '@/lib/product-photos';
+import {
+  allergenLabelForToken,
+  stateNameForCode,
+  type UserRecallPreferences,
+} from '@/domain/preferences';
+import { retailerById } from '@/domain/retailer-catalog';
 import { buildWhatHappened } from '@/lib/what-happened';
+import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
 import { fetchCaseDetail, type CaseDetail } from '@/lib/recall-feed';
+import { evaluatePersonalRelevance } from '@/lib/relevance';
 import { agencyLabel as agencyLabelFor, riskView } from '@/lib/risk-display';
 import {
   formatDate,
@@ -272,6 +280,7 @@ export default function RecallDetailScreen() {
   const [openCodeSets, setOpenCodeSets] = useState<Set<string>>(new Set());
   const [showAllRetailers, setShowAllRetailers] = useState(false);
   const [showLocations, setShowLocations] = useState(false);
+  const [prefs, setPrefs] = useState<UserRecallPreferences | null>(null);
   const toggleCodeSet = (key: string) =>
     setOpenCodeSets((prior) => {
       const next = new Set(prior);
@@ -299,6 +308,12 @@ export default function RecallDetailScreen() {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    // Read-only preference load for the "Why this may affect you" section;
+    // never prompts for anything.
+    if (preferencesAvailable()) void loadPreferences().then(setPrefs);
+  }, []);
 
   if (state.status !== 'ready') {
     return (
@@ -371,6 +386,40 @@ export default function RecallDetailScreen() {
   }));
   const gallery = [...consumer.photos, ...labelVisuals];
 
+  // Personal relevance lines, grounded only in preferences + case facts.
+  // Preference wording, not medical advice ("your selected allergen", never
+  // "dangerous for you"); a retailer line only when the notice itself names
+  // the store; and geographic exclusion renders nothing at all.
+  const personalLines: string[] = [];
+  if (prefs !== null) {
+    const relevance = evaluatePersonalRelevance(
+      {
+        geography: projection.geography,
+        pathogenOrAllergen: projection.pathogenOrAllergen,
+        retailerNames: projection.retailerNames ?? [],
+      },
+      prefs,
+    );
+    if (relevance.reasons.length > 0) {
+      for (const token of relevance.matchedAllergens) {
+        personalLines.push(`Contains your selected allergen: ${allergenLabelForToken(token)}`);
+      }
+      for (const retailerId of relevance.matchedRetailers) {
+        const retailer = retailerById(retailerId);
+        if (retailer) personalLines.push(`Sold at ${retailer.name}`);
+      }
+      if (projection.geography.scope === 'nationwide') {
+        personalLines.push('Distributed nationwide');
+      } else if (relevance.geographic === 'matches' && prefs.state !== null) {
+        personalLines.push(`Sold in ${stateNameForCode(prefs.state)}`);
+      } else if (relevance.geographic === 'unknown' && personalLines.length > 0) {
+        personalLines.push(
+          'Distribution details are limited — the notice doesn’t say where it was sold',
+        );
+      }
+    }
+  }
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView
@@ -422,6 +471,17 @@ export default function RecallDetailScreen() {
           <ThemedView type="backgroundSelected" style={styles.callout}>
             <ThemedText>{agencyLabel} has retracted this notice.</ThemedText>
           </ThemedView>
+        ) : null}
+
+        {/* Personal relevance: only rendered when there is something true and
+            personal to say. Never an empty box, and never a "doesn't affect
+            you" — absence of a match is not proof of safety. */}
+        {personalLines.length > 0 ? (
+          <Section title="Why this may affect you">
+            {personalLines.map((line) => (
+              <ThemedText key={line}>· {line}</ThemedText>
+            ))}
+          </Section>
         ) : null}
 
         {/* Official product photography is primary recognition information,

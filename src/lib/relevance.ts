@@ -1,76 +1,143 @@
 /**
- * Personal-relevance matching — the foundation for the future default Home
- * experience (founder product decision: once preferences exist, Home defaults
- * to "Affects me", with "All recalls" always one tap away; personalization
- * organizes the full truth and never deletes or permanently hides it).
+ * Personal relevance (Phase C3): ONE deterministic evaluation shared by the
+ * Home "Affects me" feed, the detail screen's "Why this may affect you"
+ * section, and push delivery eligibility — so what the app shows and what the
+ * server sends can never disagree.
  *
- * This module is deliberately pure and UI-free: no preferences are stored
- * anywhere yet, and nothing renders relevance badges until real user
- * preferences exist. It exists so the read model's shape is proven against
- * the intended filters (state, allergens, retailers) before onboarding is
- * built.
- *
- * Geographic semantics follow architecture Part 5.3: unknown distribution is
- * surfaced as its own labeled category — never silently excluded, because a
- * wrong "doesn't affect you" is dangerous.
+ * Principles (architecture Part 5.3 + C3 brief):
+ * - Geography is tri-state. `unknown` is never treated as "does not affect
+ *   you" — a wrong "doesn't affect you" is dangerous.
+ * - Allergen and retailer matches are POSITIVE signals only. Their absence
+ *   proves nothing: retailer and allergen metadata is incomplete at the
+ *   source. They never exclude a recall.
+ * - Authoritative geographic exclusion wins over personal signals: a recall
+ *   stated to be sold only in Maine is not "affects me" for a California
+ *   user, undeclared peanuts or not.
+ * - No inference: no headquarters geography, no retail-footprint knowledge,
+ *   no allergy severity. Facts come from the case; choices from preferences.
  */
 
 import { normalizedAllergenTokens } from '@/domain/hazard';
-import type { FeedItem } from './recall-feed';
+import {
+  allergenLabelForToken,
+  CONSUMER_ALLERGENS,
+  stateNameForCode,
+  type UserRecallPreferences,
+} from '@/domain/preferences';
+import type { Geography } from '@/domain/recall-types';
+import { canonicalRetailerIds, retailerById } from '@/domain/retailer-catalog';
 
-/** Future user preferences (manual input at onboarding — never location APIs). */
-export interface RelevanceProfile {
-  /** Full state name, e.g. "California". */
-  state?: string | null;
-  /** Canonical allergen tokens from domain/hazard normalizedAllergenTokens. */
-  allergens?: string[];
-  /** Store names the user shops at, matched against source-stated retailers. */
-  retailers?: string[];
+/** Tri-state geographic relevance. `unknown` preserves source uncertainty. */
+export type GeographicRelevance = 'matches' | 'does_not_match' | 'unknown';
+
+export type PersonalReasonKind =
+  'allergen' | 'retailer' | 'state' | 'nationwide' | 'unknown_geography';
+
+/** One user-facing, source-grounded reason ("Your allergen · Sesame"). */
+export interface PersonalReason {
+  kind: PersonalReasonKind;
+  label: string;
 }
 
-export type GeographicRelevance = 'affects_area' | 'unknown_distribution' | 'not_matched';
-
-export interface CaseRelevance {
+export interface PersonalRelevance {
   geographic: GeographicRelevance;
-  /** Why this case is personally relevant (empty = no personal signal). */
-  signals: string[];
+  /** Selected allergen tokens the case authoritatively involves. */
+  matchedAllergens: string[];
+  /** Selected canonical retailer ids the case's stated retailers resolve to. */
+  matchedRetailers: string[];
+  /** Belongs in the primary "Affects me" list / qualifies for delivery. */
+  affectsMe: boolean;
+  /**
+   * Chip-ready reasons, strongest first (allergen, retailer, geography).
+   * Empty when there is nothing personal to say — an authoritative
+   * geographic exclusion, or unknown geography with no personal signal —
+   * so no UI ever renders an empty or misleading personalization block.
+   */
+  reasons: PersonalReason[];
 }
 
-type RelevanceInput = Pick<
-  FeedItem,
-  'geography' | 'pathogenOrAllergen' | 'retailerNames' | 'sourceAgency'
->;
+/** The case facts relevance reads — satisfied by FeedItem and CaseProjection. */
+export interface RelevanceInput {
+  geography: Geography;
+  pathogenOrAllergen: string | null;
+  retailerNames: string[];
+}
 
-export function caseRelevance(item: RelevanceInput, profile: RelevanceProfile): CaseRelevance {
-  const signals: string[] = [];
+const ALLERGEN_ORDER = new Map(CONSUMER_ALLERGENS.map((a, index) => [a.token, index]));
 
-  let geographic: GeographicRelevance;
-  if (item.geography.scope === 'nationwide') {
-    geographic = 'affects_area';
-    signals.push('Distributed nationwide');
-  } else if (item.geography.scope === 'unknown') {
-    geographic = 'unknown_distribution';
-  } else if (profile.state && item.geography.states.includes(profile.state)) {
-    geographic = 'affects_area';
-    signals.push(`Affects ${profile.state}`);
-  } else if (!profile.state) {
-    geographic = 'unknown_distribution';
-  } else {
-    geographic = 'not_matched';
-  }
+function geographicRelevance(geography: Geography, stateName: string | null): GeographicRelevance {
+  // Nationwide affects every state — true whether or not one is selected.
+  if (geography.scope === 'nationwide') return 'matches';
+  if (geography.scope === 'unknown') return 'unknown';
+  // A known state list can only be assessed against a chosen state.
+  if (stateName === null) return 'unknown';
+  return geography.states.includes(stateName) ? 'matches' : 'does_not_match';
+}
 
-  const allergens = normalizedAllergenTokens(item.pathogenOrAllergen);
-  const matched = allergens.filter((a) => (profile.allergens ?? []).includes(a));
-  if (matched.length > 0) {
-    signals.push(`Matches your allergen preference: ${matched.join(', ')}`);
-  }
+/**
+ * Evaluate one case against one set of preferences. Pure and deterministic.
+ *
+ * "Affects me" semantics:
+ * - state chosen:   geography matches, OR geography unknown with at least one
+ *   allergen/retailer signal. An authoritative exclusion is final — personal
+ *   signals never override it (the match data stays available internally).
+ * - no state chosen: geographic relevance cannot be personal, so only
+ *   allergen/retailer signals qualify (nationwide items remain in All
+ *   Recalls, and the UI asks for a state instead of pretending).
+ */
+export function evaluatePersonalRelevance(
+  input: RelevanceInput,
+  prefs: UserRecallPreferences,
+): PersonalRelevance {
+  const stateName = stateNameForCode(prefs.state);
+  const geographic = geographicRelevance(input.geography, stateName);
 
-  const retailerMatch = item.retailerNames.find((name) =>
-    (profile.retailers ?? []).some((r) => name.toLowerCase().includes(r.toLowerCase())),
+  const caseAllergens = normalizedAllergenTokens(input.pathogenOrAllergen);
+  const matchedAllergens = caseAllergens
+    .filter((token) => prefs.allergens.includes(token))
+    .sort((a, b) => (ALLERGEN_ORDER.get(a) ?? 99) - (ALLERGEN_ORDER.get(b) ?? 99));
+
+  const matchedRetailers = canonicalRetailerIds(input.retailerNames).filter((id) =>
+    prefs.retailers.includes(id),
   );
-  if (retailerMatch) {
-    signals.push(`Sold at ${retailerMatch}`);
+
+  const hasSignal = matchedAllergens.length > 0 || matchedRetailers.length > 0;
+  const affectsMe =
+    geographic === 'does_not_match'
+      ? false
+      : stateName !== null && geographic === 'matches'
+        ? true
+        : hasSignal;
+
+  const reasons: PersonalReason[] = [];
+  if (geographic !== 'does_not_match') {
+    for (const token of matchedAllergens) {
+      reasons.push({ kind: 'allergen', label: `Your allergen · ${allergenLabelForToken(token)}` });
+    }
+    for (const id of matchedRetailers) {
+      const retailer = retailerById(id);
+      if (retailer) reasons.push({ kind: 'retailer', label: `Sold at ${retailer.name}` });
+    }
+    if (input.geography.scope === 'nationwide') {
+      reasons.push({ kind: 'nationwide', label: 'Nationwide recall' });
+    } else if (geographic === 'matches' && stateName !== null) {
+      reasons.push({ kind: 'state', label: `Affects ${stateName}` });
+    } else if (geographic === 'unknown' && hasSignal) {
+      // Context for the signals above — never a reason on its own.
+      reasons.push({ kind: 'unknown_geography', label: 'Location not specified' });
+    }
   }
 
-  return { geographic, signals };
+  return { geographic, matchedAllergens, matchedRetailers, affectsMe, reasons };
+}
+
+/**
+ * Push delivery policy (C3 §24): personalization gates delivery only once a
+ * state is chosen. Until then the pre-C3 behavior stands — every deliverable
+ * event qualifies — because allergen/retailer preferences alone are positive
+ * signals, not exclusion filters, and recalls are safety information.
+ */
+export function pushEligible(input: RelevanceInput, prefs: UserRecallPreferences | null): boolean {
+  if (prefs === null || prefs.state === null) return true;
+  return evaluatePersonalRelevance(input, prefs).affectsMe;
 }

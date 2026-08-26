@@ -15,12 +15,14 @@ import type {
   DeliveryPatch,
   DeliveryRow,
   DeliveryStatus,
+  InstallationPreferences,
   PushStore,
   PushSubscription,
 } from './types';
 
 const UNIQUE_VIOLATION = '23505';
-const MIGRATION_PENDING = /push_delivery_config|push_subscriptions|notification_deliveries/;
+const MIGRATION_PENDING =
+  /push_delivery_config|push_subscriptions|notification_deliveries|installation_preferences/;
 
 const DELIVERY_STATUSES: DeliveryStatus[] = [
   'pending',
@@ -53,8 +55,11 @@ export class SupabasePushStore implements PushStore {
 
   private migrationPending(operation: string, message: string): boolean {
     if (!MIGRATION_PENDING.test(message)) return false;
+    const migration = /installation_preferences/.test(message)
+      ? '20260830000000_installation_preferences.sql'
+      : '20260828000000_push_delivery.sql';
     console.warn(
-      `  ${operation}: push_delivery migration pending — treating as empty (apply supabase/migrations/20260828000000_push_delivery.sql).`,
+      `  ${operation}: migration pending — treating as empty (apply supabase/migrations/${migration}).`,
     );
     return true;
   }
@@ -92,6 +97,25 @@ export class SupabasePushStore implements PushStore {
       this.fail('listEnabledSubscriptions', error);
     }
     return data.map((row) => this.toSubscription(row));
+  }
+
+  async listPreferences(): Promise<InstallationPreferences[]> {
+    const { data, error } = await this.client
+      .from('installation_preferences')
+      .select('installation_id, state_code, allergens, retailer_ids, updated_at');
+    if (error || !data) {
+      // The C3 migration may not be applied yet — degrade to "no preferences"
+      // (pre-C3 delivery behavior) with a warning, exactly like the C2 reads.
+      if (error && this.migrationPending('listPreferences', error.message)) return [];
+      this.fail('listPreferences', error);
+    }
+    return data.map((row) => ({
+      installationId: row.installation_id as string,
+      stateCode: (row.state_code as string | null) ?? null,
+      allergens: (row.allergens as string[] | null) ?? [],
+      retailerIds: (row.retailer_ids as string[] | null) ?? [],
+      updatedAt: row.updated_at as string,
+    }));
   }
 
   async disableSubscription(id: string, reason: string, at: string): Promise<void> {

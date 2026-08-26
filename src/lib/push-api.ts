@@ -1,9 +1,10 @@
 /**
- * The app's ONLY backend write path: push-subscription registration via two
- * narrowly scoped SECURITY DEFINER RPCs (see the push_delivery migration).
+ * The app's ONLY backend write path: narrowly scoped SECURITY DEFINER RPCs
+ * (see the push_delivery and installation_preferences migrations).
  * Client-safe configuration only (EXPO_PUBLIC_* + publishable key); the
- * client can register or disable its own opaque subscription and nothing
- * else — tokens are never readable through this key.
+ * client can register/disable its own opaque subscription and set its own
+ * preferences, and nothing else — tokens and other installations' rows are
+ * never readable through this key.
  */
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -43,4 +44,23 @@ export async function registerPushSubscription(input: {
 
 export async function disablePushSubscription(installationId: string): Promise<void> {
   await rpcPost('disable_push_subscription', { p_installation_id: installationId });
+}
+
+/**
+ * Sync this installation's preferences to the server (push eligibility input).
+ * The RPC is a strict no-op when the values are unchanged, so retries and
+ * app-launch re-syncs never move the server-side preference horizon.
+ */
+export async function setInstallationPreferences(input: {
+  installationId: string;
+  stateCode: string | null;
+  allergens: string[];
+  retailerIds: string[];
+}): Promise<void> {
+  await rpcPost('set_installation_preferences', {
+    p_installation_id: input.installationId,
+    p_state_code: input.stateCode,
+    p_allergens: input.allergens,
+    p_retailer_ids: input.retailerIds,
+  });
 }

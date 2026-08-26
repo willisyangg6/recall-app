@@ -58,6 +58,8 @@ npm test             # domain/pipeline tests against recorded real FSIS fixtures
 npm run check        # all three
 npm run qa:fda       # consumer-projection QA report over 160 recorded real
                      # FDA announcements (offline, development-only)
+npm run qa:personalization  # geography/allergen/retailer coverage report
+                            # (read-only against the live DB)
 ```
 
 The test suite never touches the network: it runs against real FSIS API
@@ -106,6 +108,22 @@ predating each device's own opt-in). In the app, alerts are opt-in via
 Home → Alerts → "Enable recall alerts" — the permission prompt never fires on
 launch. Design, safety model, and device-setup steps:
 [docs/recall-push-delivery.md](docs/recall-push-delivery.md).
+
+### Personalization (Phase C3)
+
+Home offers **Affects me** / **All recalls**: one home state, allergen
+selections (the nine major US allergens), and a searchable canonical store
+catalog, all edited in the same Alerts screen and autosaved. Relevance is one
+deterministic evaluation ([src/lib/relevance.ts](src/lib/relevance.ts))
+shared by the feed, the detail screen's "Why this may affect you" section,
+and push eligibility: nationwide always matches the chosen state, an
+authoritative state list is respected in both directions, and unknown
+distribution is never treated as "doesn't affect you" — allergen/retailer
+matches are positive signals that never become exclusion filters. Changing
+preferences can never push historical events (a preference-updated horizon
+joins the C2 activation/subscription horizons). All recalls always remains
+one tap away. Design and safety proofs:
+[docs/recall-personalization.md](docs/recall-personalization.md).
 
 ### Backend setup (one-time)
 
@@ -346,29 +364,20 @@ Veterinary` co-tags) is deliberately deferred, not silently included.
   ([src/server/fda/fixtures/](src/server/fda/fixtures/)) with hand-verified
   expectations and coverage floors, run as part of `npm test`.
 
-### Ready for personalization/filters (not yet built)
+### Personalization (built in Phase C3)
 
-The read model already answers every planned filter through the Data API
-(verified against the live project): notice type, classification, hazard, and
-dates are generated columns; state relevance uses
-`projection->geography->states=cs.["California"]` plus
-`projection->geography->>scope=eq.nationwide` (unknown-distribution cases are
-shown in a labeled section, never silently excluded); product/company search
-uses `title=ilike.*…*`. The intended future default Home experience is an
-"Affects me" feed (user state, allergen preferences via
-`normalizedAllergenTokens`, stores via source-stated `retailerNames`) with
-"All recalls" always one tap away — personalization organizes the full truth
-and never hides the national feed ([src/lib/relevance.ts](src/lib/relevance.ts)
-proves the matching semantics; no preferences are stored yet). User state
-arrives via manual input, not location permissions.
+The "Affects me" experience is live in the app: user state, allergen
+preferences via `normalizedAllergenTokens`, and stores via the canonical
+retailer catalog, with "All recalls" always one tap away — personalization
+organizes the full truth and never hides the national feed. State arrives
+via manual input, not location permissions. See
+[docs/recall-personalization.md](docs/recall-personalization.md).
 
 ## Intentionally not implemented yet
 
-openFDA enforcement reconciliation (FDA Phase B: classification enrichment,
-event grouping, announcement↔enforcement matching, FDA lifecycle/closure),
-push delivery and notification permissions, accounts, state-based
-personalization, pet-food scope, retailer/label PDF parsing, Spanish records,
-CPSC/NHTSA, analytics, final visual design.
+Accounts/auth, onboarding flow, quiet hours and other notification
+preferences, ingest-time retailer enrichment of stored projections, pet-food
+scope, Spanish records, CPSC/NHTSA, analytics, final visual design.
 
 See [AGENTS.md](AGENTS.md) for standing rules for coding agents working in this
 repository.
