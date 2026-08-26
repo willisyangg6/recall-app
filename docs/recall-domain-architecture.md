@@ -953,3 +953,41 @@ a `declared-revision` lineage count, and the reconcile script accepts the
 new gate in its record-level verification. Alongside this, `projectCase`
 now selects `pathogenOrAllergen` newest-first instead of input-order-first,
 so a merged correction names the corrected allergen deterministically.
+
+**Maintenance backfills (2026-08-25, eighth pass).** Ingestion's hash gate is
+a correctness feature — it refuses to re-fetch pages the agency has not
+changed — but it means any field the parser learns to extract LATER never
+reaches older records. `heroImageUrl` hit this exactly: extraction worked,
+yet only 16 of 701 FDA cases carried an image, because only those 17 records
+had happened to change since the field was added. The fix is not to weaken
+the gate (that would re-crawl the agency for nothing and re-open
+material-change detection on unchanged content) but to add an explicit
+maintenance path with a much narrower contract than ingestion:
+
+- **Snapshots are the source, not the network.** Every snapshot preserves the
+  raw payload its record was parsed from, including the announcement's detail
+  HTML (Part 12). Re-running the canonical parser over those archived bytes
+  reproduces exactly what ingestion would have produced. Measured live: 714
+  FDA records, 0 missing detail HTML, 0 parse failures, **0 network
+  requests**. A refetch path was therefore never built — there is no evidence
+  it is needed, and an unnecessary crawler is a liability.
+- **One canonical extractor.** The backfill calls `parseFdaAnnouncement` and
+  reads only its image fields; case-level precedence is delegated to
+  `projectCase` itself, so a merged multi-record case resolves its hero the
+  way a real re-projection would. No second image parser exists to drift.
+- **Minimum write surface.** `normalized.heroImageUrl`/`imageUrls` on the
+  record, `projection.heroImageUrl` on the case — timeline, `lastChangedAt`,
+  dates, identity, link method, and the notification ledger are all carried
+  through untouched. The record is updated alongside the projection on
+  purpose: the projection must remain a pure function of its records, or the
+  next legitimate re-projection would silently erase the backfilled image.
+- **Honest coverage.** Success is coverage among cases that HAVE usable
+  imagery, never total/total: 86 of 701 FDA announcements publish no product
+  photo at all. Cases whose snapshot could not be read are counted separately
+  as _undetermined_ rather than folded into "no photo" — absence of evidence
+  is not evidence of absence.
+
+`src/server/fda/image-backfill.ts`, commands `npm run backfill:fda-images:dry`
+(also the post-apply verification report) and `npm run backfill:fda-images`.
+Two read-only store methods were added for it (`listSourceRecords`,
+`getLatestSnapshotPayload`); the ingestion path is unchanged.

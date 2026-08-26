@@ -273,6 +273,16 @@ Veterinary` co-tags) is deliberately deferred, not silently included.
   (no OCR), into content-addressed WebP pages that join the ordinary Product
   Photos gallery (`npm run labels:fsis:dry` for the bounded local dry run); the
   PDF link remains as provenance.
+- **Maintenance backfills are explicit, never folded into ingestion.** Fields
+  derived at parse time only reach older records when something re-parses
+  them, and incremental ingestion deliberately skips unchanged pages. A
+  backfill therefore re-derives from the preserved snapshots — the archived
+  source bytes — through the same canonical parser, with no network fetch and
+  no second extractor: `npm run backfill:fda-images:dry` reports what would
+  change (it doubles as the post-apply verification report),
+  `npm run backfill:fda-images` writes only `heroImageUrl` and the record's
+  image fields. It cannot create a case, write a notification, re-date a
+  recall, or touch FSIS, and re-running it is a no-op.
 - Extraction-quality benchmark over recorded real announcements
   ([src/server/fda/fixtures/](src/server/fda/fixtures/)) with hand-verified
   expectations and coverage floors, run as part of `npm test`.

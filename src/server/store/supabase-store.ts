@@ -104,6 +104,24 @@ export class SupabaseStore implements RecallStore {
     return data.map((row) => this.toSourceRecordRow(row));
   }
 
+  async listSourceRecords(sourceSystem: SourceSystem): Promise<SourceRecordRow[]> {
+    // Paginated: PostgREST caps an unbounded select, and a maintenance
+    // backfill must see every record, not the first page of them.
+    const pageSize = 1000;
+    const rows: SourceRecordRow[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await this.client
+        .from('source_records')
+        .select('*')
+        .eq('source_system', sourceSystem)
+        .order('id')
+        .range(from, from + pageSize - 1);
+      if (error || !data) this.fail('listSourceRecords', error);
+      rows.push(...data.map((row) => this.toSourceRecordRow(row)));
+      if (data.length < pageSize) return rows;
+    }
+  }
+
   async insertSourceRecord(row: Omit<SourceRecordRow, 'id'>): Promise<SourceRecordRow> {
     const { data, error } = await this.client
       .from('source_records')
@@ -157,6 +175,18 @@ export class SupabaseStore implements RecallStore {
       .maybeSingle();
     if (error) this.fail('getLatestSnapshotHash', error);
     return (data?.content_hash as string | undefined) ?? null;
+  }
+
+  async getLatestSnapshotPayload(sourceRecordId: string): Promise<unknown | null> {
+    const { data, error } = await this.client
+      .from('source_snapshots')
+      .select('raw_payload')
+      .eq('source_record_id', sourceRecordId)
+      .order('seq', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) this.fail('getLatestSnapshotPayload', error);
+    return data?.raw_payload ?? null;
   }
 
   async insertSnapshot(snapshot: {

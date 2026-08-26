@@ -78,6 +78,12 @@ export interface RecallStore {
     sourceSystem: SourceSystem,
     publishedAfterIso: string,
   ): Promise<SourceRecordRow[]>;
+  /**
+   * Every record of one source, paginated. Used by maintenance backfills that
+   * must visit records normal incremental ingestion deliberately skips; the
+   * ingestion path itself never enumerates a whole source.
+   */
+  listSourceRecords(sourceSystem: SourceSystem): Promise<SourceRecordRow[]>;
   insertSourceRecord(row: Omit<SourceRecordRow, 'id'>): Promise<SourceRecordRow>;
   updateSourceRecord(
     id: string,
@@ -88,6 +94,12 @@ export interface RecallStore {
   getSourceRecordsForCase(recallCaseId: string): Promise<SourceRecordRow[]>;
 
   getLatestSnapshotHash(sourceRecordId: string): Promise<string | null>;
+  /**
+   * The newest preserved raw payload for a record — the archived source bytes
+   * (architecture Part 12). Lets a backfill re-derive a field the parser has
+   * since learned to extract without re-fetching the agency page.
+   */
+  getLatestSnapshotPayload(sourceRecordId: string): Promise<unknown | null>;
   insertSnapshot(snapshot: {
     sourceRecordId: string;
     fetchedAt: string;

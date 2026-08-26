@@ -46,6 +46,8 @@
     "qa:fda": "tsx scripts/qa-consumer-projection.ts",
     "qa:duplicates": "tsx scripts/qa-duplicate-cases.ts",
     "reconcile:duplicates": "tsx scripts/reconcile-duplicate-cases.ts",
+    "backfill:fda-images:dry": "tsx scripts/backfill-fda-images.ts",
+    "backfill:fda-images": "tsx scripts/backfill-fda-images.ts --apply",
     "labels:fsis:dry": "tsx scripts/render-fsis-labels.ts",
     "labels:fsis": "tsx scripts/render-fsis-labels.ts --apply"
   },
