@@ -186,6 +186,101 @@ async function main(): Promise<void> {
     console.log('');
   }
 
+  // ── Push delivery (Phase C2) ───────────────────────────────────────────────
+  // Before founder activation the correct status is "disabled", not
+  // unhealthy; after activation the push job is held to the fast-job bar.
+  const pushConfig = await client.from('push_delivery_config').select('push_enabled_at');
+  if (pushConfig.error) {
+    if (!/push_delivery_config/.test(pushConfig.error.message)) {
+      console.error(`push_delivery_config query failed: ${pushConfig.error.message}`);
+      process.exit(1);
+    }
+    console.log('Push delivery: not installed (push_delivery migration pending).\n');
+  } else {
+    const pushEnabledAt = (pushConfig.data?.[0]?.push_enabled_at as string | undefined) ?? null;
+    const pushRuns = await client
+      .from('ingest_runs')
+      .select('started_at, outcome, metrics, error')
+      .eq('job_name', 'push_delivery')
+      .order('started_at', { ascending: false })
+      .limit(25);
+    const runs = (pushRuns.data ?? []) as RunRow[];
+    const lastRun = runs[0] ?? null;
+    const lastSuccess =
+      runs.find((run) => run.outcome === 'succeeded' || run.outcome === 'partial') ?? null;
+
+    const subs = await client
+      .from('push_subscriptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('enabled', true);
+    const disabledDead = await client
+      .from('push_subscriptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('disabled_reason', 'device_not_registered');
+    const statusCounts: Record<string, number> = {};
+    for (const s of [
+      'pending',
+      'sending',
+      'ticket_accepted',
+      'retryable_failure',
+      'permanent_failure',
+    ]) {
+      const { count } = await client
+        .from('notification_deliveries')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', s);
+      if (count) statusCounts[s] = count;
+    }
+    const oldestPending = await client
+      .from('notification_deliveries')
+      .select('created_at')
+      .in('status', ['pending', 'retryable_failure'])
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    let pushStatus = 'disabled (not activated)';
+    const pushNotes: string[] = [];
+    if (pushEnabledAt) {
+      pushStatus = 'healthy';
+      if (!lastSuccess) {
+        pushStatus = 'UNHEALTHY';
+        pushNotes.push(lastRun ? 'no successful push run recorded' : 'push job never ran');
+      } else if (hoursAgo(lastSuccess.started_at) > 3) {
+        pushStatus = 'UNHEALTHY';
+        pushNotes.push(
+          `no success in ${hoursAgo(lastSuccess.started_at).toFixed(1)}h (threshold 3h)`,
+        );
+      }
+      if (lastRun?.outcome === 'failed' && pushStatus === 'healthy') {
+        pushStatus = 'degraded';
+        pushNotes.push(`latest run FAILED: ${lastRun.error ?? 'no error recorded'}`);
+      }
+      if (pushStatus === 'UNHEALTHY') unhealthy += 1;
+    }
+
+    console.log(`Push delivery`);
+    console.log(
+      `  activation:          ${pushEnabledAt ? `ACTIVE since ${pushEnabledAt}` : 'not activated (no-send state)'}`,
+    );
+    console.log(`  status:              ${pushStatus}`);
+    console.log(
+      `  last run:            ${lastRun ? `${lastRun.started_at} (${lastRun.outcome ?? 'running'})` : '—'}`,
+    );
+    console.log(`  active subscriptions: ${subs.count ?? 0}`);
+    console.log(
+      `  deliveries:          pending ${statusCounts.pending ?? 0}, sending ${statusCounts.sending ?? 0}, ` +
+        `awaiting receipt ${statusCounts.ticket_accepted ?? 0}, retryable ${statusCounts.retryable_failure ?? 0}, ` +
+        `permanent failures ${statusCounts.permanent_failure ?? 0}`,
+    );
+    console.log(`  dead tokens disabled: ${disabledDead.count ?? 0}`);
+    if (oldestPending.data?.created_at) {
+      console.log(`  oldest unsent delivery: ${oldestPending.data.created_at}`);
+    }
+    for (const note of pushNotes) console.log(`    · ${note}`);
+    console.log('');
+  }
+
   // Deliverable notification flow (informational — C2 consumes these).
   const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const deliverable = await client

@@ -19,7 +19,8 @@
 import { canonicalJson, contentHash } from '../pipeline';
 import type { IngestRunSource, JobRunOutcome, RecallStore } from '../store/types';
 
-export type JobName = 'fda_announcements' | 'fsis_ingest' | 'fsis_labels' | 'fda_enforcement';
+export type JobName =
+  'fda_announcements' | 'fsis_ingest' | 'fsis_labels' | 'fda_enforcement' | 'push_delivery';
 
 export interface JobSpec {
   jobName: JobName;

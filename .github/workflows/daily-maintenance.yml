@@ -45,3 +45,9 @@ jobs:
       - name: FSIS label visuals (full sweep)
         if: ${{ !cancelled() }}
         run: npm run jobs:labels -- --full
+      # Enforcement reconciliation can create classification NotificationEvents;
+      # delivering here means risk updates go out in the same daily cycle
+      # instead of waiting for the next 30-minute tick.
+      - name: Push delivery + receipts
+        if: ${{ !cancelled() }}
+        run: npm run jobs:push

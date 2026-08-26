@@ -8,10 +8,12 @@
  *   npm run jobs:labels                    # FSIS label visuals (recent window)
  *   npm run jobs:labels -- --full          # daily full sweep + failure retries
  *   npm run jobs:enforcement               # openFDA reconcile (weekly-gated)
+ *   npm run jobs:push                      # push delivery + receipt processing
  *
  * Flags:
  *   --dry-run   fda/fsis: full pipeline in memory, nothing persisted.
- *               labels/enforcement: read the live DB, write nothing.
+ *               labels/enforcement/push: read the live DB, write nothing
+ *               (push additionally sends nothing to Expo).
  *   --force     ignore the unchanged-source skip gate.
  *
  * Persistent modes need SUPABASE_URL and SUPABASE_SECRET_KEY in .env locally,
@@ -25,12 +27,15 @@ import { runEnforcementJob } from '../src/server/jobs/enforcement-job';
 import { runFdaJob } from '../src/server/jobs/fda-job';
 import { runFsisJob } from '../src/server/jobs/fsis-job';
 import { runLabelsJob } from '../src/server/jobs/labels-job';
+import { runPushJob } from '../src/server/jobs/push-job';
 import type { JobContext, JobReport } from '../src/server/jobs/runner';
 import { SupabaseLabelStore } from '../src/server/fsis/label-store';
+import { ExpoPushTransport } from '../src/server/push/expo-transport';
+import { SupabasePushStore } from '../src/server/push/push-store';
 import { MemoryStore } from '../src/server/store/memory-store';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
 
-const JOB_NAMES = ['fda', 'fsis', 'labels', 'enforcement'] as const;
+const JOB_NAMES = ['fda', 'fsis', 'labels', 'enforcement', 'push'] as const;
 type JobArg = (typeof JOB_NAMES)[number];
 
 function loadDotEnv(): void {
@@ -99,12 +104,20 @@ async function main(): Promise<void> {
             dryRun,
             labelStore: new SupabaseLabelStore(client),
           })
-        : await runEnforcementJob(ctx, {
-            dryRun,
-            force,
-            client,
-            dataStore: supabaseStore,
-          });
+        : job === 'push'
+          ? await runPushJob(ctx, {
+              dryRun,
+              pushStore: new SupabasePushStore(client),
+              // EXPO_ACCESS_TOKEN is optional (enhanced push security);
+              // server-only, never printed, never in the app bundle.
+              transport: new ExpoPushTransport({ accessToken: process.env.EXPO_ACCESS_TOKEN }),
+            })
+          : await runEnforcementJob(ctx, {
+              dryRun,
+              force,
+              client,
+              dataStore: supabaseStore,
+            });
   }
 
   console.log(

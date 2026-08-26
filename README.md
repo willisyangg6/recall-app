@@ -80,13 +80,32 @@ npm run jobs:fsis           # FSIS recalls/PHAs (ingest:fsis is an alias)
 npm run jobs:labels         # FSIS label visuals, recent window (incremental)
 npm run jobs:labels -- --full   # daily full sweep + failure retries
 npm run jobs:enforcement    # openFDA reconcile, gated on the weekly export date
+npm run jobs:push           # push delivery + Expo receipt processing
 npm run ops:health          # source/job health from the database, non-zero when unhealthy
 ```
 
 `--dry-run` on `jobs:fda`/`jobs:fsis` runs the full pipeline in memory and
 persists nothing (zero configuration needed); on `jobs:labels`/
-`jobs:enforcement` it reads the live database and writes nothing. `--force`
-bypasses the unchanged-source gate after a code change.
+`jobs:enforcement`/`jobs:push` it reads the live database and writes nothing
+(`jobs:push` additionally sends nothing to Expo). `--force` bypasses the
+unchanged-source gate after a code change.
+
+### Push notifications (Phase C2)
+
+Deliverable NotificationEvents become real device pushes via the Expo Push
+Service — but only after the founder explicitly activates delivery:
+
+```bash
+npm run push:activate                       # show state; --confirm activates
+npm run push:test -- --subscription <id>    # ONE labeled test push to ONE device
+```
+
+Until `push:activate -- --confirm` runs, `jobs:push` is a no-send no-op, and
+events created before activation are permanently excluded (as are events
+predating each device's own opt-in). In the app, alerts are opt-in via
+Home → Alerts → "Enable recall alerts" — the permission prompt never fires on
+launch. Design, safety model, and device-setup steps:
+[docs/recall-push-delivery.md](docs/recall-push-delivery.md).
 
 ### Backend setup (one-time)
 

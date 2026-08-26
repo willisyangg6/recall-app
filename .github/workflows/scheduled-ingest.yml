@@ -56,3 +56,10 @@ jobs:
       - name: FSIS label visuals (recent)
         if: ${{ !cancelled() }}
         run: npm run jobs:labels
+      # Push delivery runs after ingestion so events created THIS tick are
+      # delivered in the same cycle; receipts from the previous tick (30 min
+      # ago) satisfy Expo's check-after-15-minutes guidance. Until the founder
+      # runs push:activate this step is a no-send no-op.
+      - name: Push delivery + receipts
+        if: ${{ !cancelled() }}
+        run: npm run jobs:push

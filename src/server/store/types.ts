@@ -63,9 +63,10 @@ export interface IngestRunPatch {
 
 /**
  * What a run row can record beyond the domain SourceSystems: the FSIS label
- * job produces no source records, but its runs live in the same ledger.
+ * and push-delivery jobs produce no source records, but their runs live in
+ * the same ledger.
  */
-export type IngestRunSource = SourceSystem | 'fsis_labels';
+export type IngestRunSource = SourceSystem | 'fsis_labels' | 'push_delivery';
 
 export type JobRunOutcome = 'succeeded' | 'partial' | 'failed';
 

@@ -32,12 +32,13 @@ warning email precedes it; any commit re-arms it).
 
 ## Job units and schedules (all UTC)
 
-| Job               | Command                    | Schedule                               | Why this cadence                                                                                                                                 |
-| ----------------- | -------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FDA announcements | `npm run jobs:fda`         | every 30 min                           | Fast consumer channel; one listing fetch + one RSS fetch per tick (source contract §9 recommends 30–60 min).                                     |
-| FSIS recalls/PHAs | `npm run jobs:fsis`        | every 30 min                           | Same: one API call returns the whole feed.                                                                                                       |
-| FSIS labels       | `npm run jobs:labels`      | every 30 min (recent) + daily `--full` | New notices get visuals within a tick; the daily sweep retries failures and re-verifies the recent window.                                       |
-| FDA enforcement   | `npm run jobs:enforcement` | daily 09:15                            | The source updates **weekly**; the daily run is one manifest request, and the full download + reconcile happens only when the export date moves. |
+| Job               | Command                    | Schedule                               | Why this cadence                                                                                                                                                                         |
+| ----------------- | -------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FDA announcements | `npm run jobs:fda`         | every 30 min                           | Fast consumer channel; one listing fetch + one RSS fetch per tick (source contract §9 recommends 30–60 min).                                                                             |
+| FSIS recalls/PHAs | `npm run jobs:fsis`        | every 30 min                           | Same: one API call returns the whole feed.                                                                                                                                               |
+| FSIS labels       | `npm run jobs:labels`      | every 30 min (recent) + daily `--full` | New notices get visuals within a tick; the daily sweep retries failures and re-verifies the recent window.                                                                               |
+| FDA enforcement   | `npm run jobs:enforcement` | daily 09:15                            | The source updates **weekly**; the daily run is one manifest request, and the full download + reconcile happens only when the export date moves.                                         |
+| Push delivery     | `npm run jobs:push`        | end of both workflows                  | Events created in a tick are delivered the same cycle; the next tick reads receipts (≥15 min, per Expo guidance). No-send no-op until `push:activate`. See docs/recall-push-delivery.md. |
 
 Workflows: `.github/workflows/scheduled-ingest.yml` (the 30-min tick, running
 fda → fsis → labels as independent steps) and
@@ -131,9 +132,11 @@ fails on a hard gate.
 
 ## Secrets
 
-Production jobs use exactly two environment variables — `SUPABASE_URL` and
+Production jobs use two environment variables — `SUPABASE_URL` and
 `SUPABASE_SECRET_KEY` — supplied as GitHub Actions repo secrets (Settings →
-Secrets and variables → Actions), locally via `.env` (gitignored). They are
+Secrets and variables → Actions), locally via `.env` (gitignored). A third,
+`EXPO_ACCESS_TOKEN`, is optional and only needed if enhanced push security is
+enabled on the Expo account (docs/recall-push-delivery.md). All are
 server-only, never in any `EXPO_PUBLIC_*` variable, never printed by any job,
 and the iOS export is grepped for secret markers as a standing gate.
 
