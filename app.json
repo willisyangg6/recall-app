@@ -8,7 +8,8 @@
     "scheme": "recallapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.willisyang.recall"
     },
     "android": {
       "adaptiveIcon": {
@@ -39,6 +40,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c81f13ab-2408-43b7-9cfd-2df84055725c"
+      }
+    },
+    "owner": "willisyangg6"
   }
 }
