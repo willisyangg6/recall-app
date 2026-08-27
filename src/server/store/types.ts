@@ -54,7 +54,13 @@ export interface NotificationEventInput {
 
 export interface IngestRunPatch {
   finishedAt: string;
-  outcome: 'succeeded' | 'failed';
+  /**
+   * `null` records a run that started and finished having deliberately done
+   * no work — today only a lease skip. The column is nullable and its CHECK
+   * passes on NULL, so this needs no migration, and every reader that asks
+   * for a successful outcome (`succeeded` / `partial`) correctly excludes it.
+   */
+  outcome: 'succeeded' | 'failed' | null;
   itemsSeen: number;
   itemsChanged: number;
   quarantined: { rawNativeId: string | null; reason: string }[];

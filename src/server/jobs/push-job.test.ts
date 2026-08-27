@@ -10,7 +10,7 @@ import { MemoryPushStore } from '../push/memory-push-store';
 import type { PushMessage, PushReceipt, PushTicket, PushTransport } from '../push/types';
 import { MemoryStore } from '../../server/store/memory-store';
 import { PUSH_JOB, runPushJob } from './push-job';
-import type { JobContext } from './runner';
+import { isLeaseSkip, type JobContext } from './runner';
 
 class NullTransport implements PushTransport {
   async send(messages: PushMessage[]): Promise<PushTicket[]> {
@@ -61,7 +61,12 @@ test('a held lease skips the run safely; a stale lease is recovered', async () =
     dryRun: false,
   });
   assert.equal(skipped.outcome, 'skipped_lease');
-  assert.equal((await store.listRecentJobRuns('push_delivery', 10)).length, 0);
+  // The skip is recorded as an attempt — outcome-less, so it can never pass
+  // for a delivered push — and the other holder's lease is left alone.
+  const afterSkip = await store.listRecentJobRuns('push_delivery', 10);
+  assert.equal(afterSkip.length, 1);
+  assert.equal(isLeaseSkip(afterSkip[0]), true);
+  assert.equal(afterSkip[0].outcome, null);
   assert.equal(store.leases.get('push_delivery')?.holder, 'other-host:2:sha');
 
   // The other holder crashed: after the TTL the lease is free again.

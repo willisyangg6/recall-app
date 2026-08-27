@@ -3,15 +3,23 @@
  *
  *   npm run ops:health
  *
- * For each production job: last run, last success, and a status derived from
- * job-specific freshness expectations (FDA/FSIS tick every 30 minutes; the
- * enforcement source itself updates weekly; labels sweep daily). Exits
- * non-zero when anything is UNHEALTHY, so it can gate other automation.
+ * For each production job: the most recent attempt, the last success, and a
+ * status derived from job-specific freshness expectations (FDA/FSIS tick twice
+ * an hour; the enforcement source itself updates weekly; labels sweep daily).
+ * Exits non-zero when anything is UNHEALTHY, so it can gate other automation.
+ *
+ * "Attempt" and "success" are deliberately separate: a run that stood down
+ * because another worker held the lease is an attempt but not a success, and
+ * that is what lets this distinguish a silent scheduler from lease contention.
+ * The classification lives in src/server/jobs/health.ts so it can be tested;
+ * this script is presentation and I/O.
  *
  * Requires SUPABASE_URL / SUPABASE_SECRET_KEY (server-only). Prints no secrets.
  */
 
 import { createClient } from '@supabase/supabase-js';
+
+import { summarizeJobRuns, type HealthRun } from '../src/server/jobs/health';
 
 interface JobHealthSpec {
   jobName: string;
@@ -101,30 +109,24 @@ async function main(): Promise<void> {
     }
 
     const runs = (data ?? []) as RunRow[];
+    const summary = summarizeJobRuns(
+      runs.map((run): HealthRun => ({
+        startedAt: run.started_at,
+        outcome: run.outcome,
+        metrics: run.metrics,
+        error: run.error,
+      })),
+      spec.staleAfterHours,
+      Date.now(),
+    );
     const lastRun = runs[0] ?? null;
     const lastSuccess =
       runs.find((run) => run.outcome === 'succeeded' || run.outcome === 'partial') ?? null;
 
-    const notes: string[] = [];
-    let status = 'healthy';
-
-    if (!lastSuccess) {
-      status = 'UNHEALTHY';
-      notes.push(lastRun ? 'no successful run recorded' : 'never ran');
-    } else if (hoursAgo(lastSuccess.started_at) > spec.staleAfterHours) {
-      status = 'UNHEALTHY';
-      notes.push(
-        `no success in ${hoursAgo(lastSuccess.started_at).toFixed(1)}h (threshold ${spec.staleAfterHours}h)`,
-      );
-    }
-    if (lastRun && lastRun.outcome === 'failed' && status === 'healthy') {
-      status = 'degraded';
-      notes.push(`latest run FAILED: ${lastRun.error ?? 'no error recorded'}`);
-    }
-    if (lastRun && lastRun.outcome === 'partial' && status === 'healthy') {
-      status = 'degraded';
-      notes.push('latest run partial (item-level failures — see run metrics)');
-    }
+    const notes: string[] = [...summary.notes];
+    // Widened beyond JobHealthStatus: the source/export checks below add their
+    // own states, which are presentation-only and never gate the exit code.
+    let status: string = summary.status;
 
     const successMetrics = lastSuccess?.metrics ?? null;
     if (spec.sourceStaleDays && typeof successMetrics?.newestPublishedAt === 'string') {
@@ -155,9 +157,15 @@ async function main(): Promise<void> {
     if (status === 'UNHEALTHY') unhealthy += 1;
     console.log(`${spec.label}`);
     console.log(
-      `  last run:            ${lastRun ? `${lastRun.started_at} (${lastRun.outcome ?? 'running'}${lastRun.version ? `, ${lastRun.version}` : ''})` : '—'}`,
+      `  most recent attempt: ${lastRun ? `${lastRun.started_at} (${summary.lastAttemptKind}${lastRun.version ? `, ${lastRun.version}` : ''})` : '—'}`,
     );
     console.log(`  last successful run: ${lastSuccess ? lastSuccess.started_at : '—'}`);
+    if (summary.leaseSkipsSinceSuccess > 0) {
+      console.log(
+        `  lease skips:         ${summary.leaseSkipsSinceSuccess} of ` +
+          `${summary.attemptsSinceSuccess} attempt(s) since the last success`,
+      );
+    }
     console.log(`  status:              ${status}`);
     for (const note of notes) console.log(`    · ${note}`);
     console.log('');

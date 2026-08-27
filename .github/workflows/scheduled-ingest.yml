@@ -1,6 +1,6 @@
-# Fast-channel ingestion: FDA announcements + FSIS recalls/PHAs every 30
-# minutes (UTC), plus the recent-window FSIS label sync. Steady state each
-# tick is ~1 minute: one listing/API fetch per source, and the unchanged-
+# Fast-channel ingestion: FDA announcements + FSIS recalls/PHAs twice an hour
+# at :07 and :37 (UTC), plus the recent-window FSIS label sync. Steady state
+# each tick is ~1 minute: one listing/API fetch per source, and the unchanged-
 # source gate skips per-record processing when the feed content is identical.
 #
 # Cadence follows docs/recall-source-contract.md §9: both fast channels are
@@ -17,14 +17,22 @@
 # Secrets (Settings → Secrets and variables → Actions):
 #   SUPABASE_URL, SUPABASE_SECRET_KEY   — server-only; never in the app bundle.
 #
-# NOTE: GitHub disables cron workflows after 60 days without repo activity,
-# and schedule ticks can lag a few minutes at busy times — acceptable here.
+# NOTE: GitHub disables cron workflows after 60 days without repo activity.
+#
+# The offset is deliberate. `*/30` fires at :00 and :30 — the slots GitHub
+# documents as most contended — and measured delivery on this repository was
+# 16 of 67 expected ticks (24%) over 2026-08-26/27, with a median gap of 64
+# min and a worst gap of 664 min. Schedule events are dropped, not queued, so
+# a missed tick is simply lost. :07/:37 keeps the twice-hourly cadence while
+# moving off the congested boundaries. Delivery is under observation — see
+# docs/recall-operations.md; do not treat the offset as proven until the
+# 24-hour window there completes.
 
 name: scheduled-ingest
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # UTC
+    - cron: '7,37 * * * *' # UTC — offset off :00/:30 on purpose (see above)
   workflow_dispatch: {}
 
 concurrency:

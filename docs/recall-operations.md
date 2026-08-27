@@ -26,25 +26,98 @@ Why this and not something else:
 - Portability is trivial: the jobs are plain npm scripts. If runs outgrow
   Actions, point Railway/Fly/Render at the same commands.
 
-Known platform caveats (accepted): cron ticks can lag minutes at busy times,
-and GitHub disables cron workflows after 60 days without repo activity (a
-warning email precedes it; any commit re-arms it).
+Known platform caveats (accepted): GitHub disables cron workflows after 60
+days without repo activity (a warning email precedes it; any commit re-arms
+it), and — measured, not assumed — **scheduled ticks are dropped rather than
+delayed**, at rates high enough to matter. See the `:07`/`:37` decision below;
+this is the sharpest edge of the Actions choice and the one to watch.
 
 ## Job units and schedules (all UTC)
 
-| Job               | Command                    | Schedule                               | Why this cadence                                                                                                                                                                         |
-| ----------------- | -------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FDA announcements | `npm run jobs:fda`         | every 30 min                           | Fast consumer channel; one listing fetch + one RSS fetch per tick (source contract §9 recommends 30–60 min).                                                                             |
-| FSIS recalls/PHAs | `npm run jobs:fsis`        | every 30 min                           | Same: one API call returns the whole feed.                                                                                                                                               |
-| FSIS labels       | `npm run jobs:labels`      | every 30 min (recent) + daily `--full` | New notices get visuals within a tick; the daily sweep retries failures and re-verifies the recent window.                                                                               |
-| FDA enforcement   | `npm run jobs:enforcement` | daily 09:15                            | The source updates **weekly**; the daily run is one manifest request, and the full download + reconcile happens only when the export date moves.                                         |
-| Push delivery     | `npm run jobs:push`        | end of both workflows                  | Events created in a tick are delivered the same cycle; the next tick reads receipts (≥15 min, per Expo guidance). No-send no-op until `push:activate`. See docs/recall-push-delivery.md. |
+| Job               | Command                    | Schedule                              | Why this cadence                                                                                                                                                                         |
+| ----------------- | -------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FDA announcements | `npm run jobs:fda`         | `:07` and `:37`                       | Fast consumer channel; one listing fetch + one RSS fetch per tick (source contract §9 recommends 30–60 min).                                                                             |
+| FSIS recalls/PHAs | `npm run jobs:fsis`        | `:07` and `:37`                       | Same: one API call returns the whole feed.                                                                                                                                               |
+| FSIS labels       | `npm run jobs:labels`      | `:07`/`:37` (recent) + daily `--full` | New notices get visuals within a tick; the daily sweep retries failures and re-verifies the recent window.                                                                               |
+| FDA enforcement   | `npm run jobs:enforcement` | daily 09:15                           | The source updates **weekly**; the daily run is one manifest request, and the full download + reconcile happens only when the export date moves.                                         |
+| Push delivery     | `npm run jobs:push`        | end of both workflows                 | Events created in a tick are delivered the same cycle; the next tick reads receipts (≥15 min, per Expo guidance). No-send no-op until `push:activate`. See docs/recall-push-delivery.md. |
 
-Workflows: `.github/workflows/scheduled-ingest.yml` (the 30-min tick, running
-fda → fsis → labels as independent steps) and
+Workflows: `.github/workflows/scheduled-ingest.yml` (the twice-hourly tick,
+running fda → fsis → labels as independent steps) and
 `.github/workflows/daily-maintenance.yml` (enforcement → labels `--full`).
 Agency polling runs around the clock — quiet hours are a notification-
 delivery concern (Phase C2), never an ingestion one.
+
+### Why `:07`/`:37` and not `*/30` [DECISION] (2026-08-27)
+
+GitHub delivers `schedule` events on a best-effort basis and documents the
+top of the hour as its most contended window. A missed tick is **dropped, not
+queued**, so it is simply lost. Measured on this repository while the cron was
+`*/30` (which fires at `:00` and `:30`, the two worst slots):
+
+|                                                      |                        |
+| ---------------------------------------------------- | ---------------------- |
+| ticks expected 2026-08-26 04:55Z → 2026-08-27 14:34Z | 67                     |
+| ticks actually delivered                             | **16 (24%)**           |
+| median gap                                           | 64 min (requested: 30) |
+| worst gap                                            | 664 min                |
+| gaps inside tolerance (≤35 min)                      | 1 of 16                |
+
+`daily-maintenance` was hit the same way — its 09:15Z run arrived at 19:51Z on
+2026-08-27 — so this was never specific to ingestion. The offset keeps the
+cadence at twice hourly and only moves it off the boundary; frequency is
+unchanged, and raising it would make dropped ticks more likely, not less.
+
+**This is a hypothesis under observation, not a proven fix.** GitHub does not
+publish its contention model, and the offset is an inference from documented
+behaviour plus the measurement above. See the verification procedure below
+before treating it as settled.
+
+The cron is pinned by `src/server/jobs/workflow-schedule.test.ts`, which also
+asserts `workflow_dispatch` survives on both workflows — it is the recovery
+path for a missed tick, and the only way to run CI on demand.
+
+### Verifying the offset — 24-hour window
+
+Start the clock at the first push that carries the new cron. Do not claim the
+offset works before this completes; a single good tick proves nothing about a
+probabilistic drop.
+
+1. **T+1h.** `npm run ops:health` — FDA/FSIS `healthy`, and the most recent
+   attempt should carry a `:07`/`:37` minute. Confirm in GitHub → Actions that
+   `scheduled-ingest` runs are appearing with event `schedule` (not just the
+   manual dispatch).
+2. **T+24h.** Re-measure delivery the same way the baseline was measured —
+   count `fda_announcements` runs over the window and compare against 48
+   expected ticks. Record median and worst gap.
+3. **Judge against the baseline, not against perfection.** 24% was the
+   failure. Sustained **≥ 80%** delivery with a worst gap under ~2 h means the
+   offset worked. **50–80%** is an improvement that has not solved the
+   problem. **≤ 40%** means the slot was never the cause — reopen the
+   diagnosis rather than trying another offset.
+4. **Watch `daily-maintenance` in the same window** without changing it. Its
+   09:15Z slot is already off the hour, so it is the control: if it arrives on
+   time while ingest still drops ticks, the congestion theory is wrong and the
+   difference is frequency, not placement.
+5. **Confirm the new observability on real data.** Any lease skip recorded in
+   the window should show up on the `lease skips:` line without moving the
+   last successful run and without degrading status.
+
+If a gap re-opens past the 3 h threshold, `ops:health` now says which of the
+two causes it is — read that line before touching anything.
+
+#### When to reconsider external scheduling
+
+Not after one incident, and not on the strength of this measurement alone. The
+bar is: the offset has run its 24-hour window, delivery is still ≤ 40%, and
+`ops:health` attributes the gaps to scheduler silence rather than lease
+contention — i.e. GitHub is demonstrably not starting the workflow, at a rate
+that keeps recalls stale past 3 h. Only then does the trade become worth it,
+because every alternative (self-hosted runner, external cron hitting a
+dispatch endpoint, a hosted scheduler) adds a credential, a host, and a new
+thing that can fail silently — against a workflow that is otherwise correct.
+An additional shifted cron entry inside the same workflow is the cheaper next
+step and should be tried first.
 
 ### The unchanged-source skip gate
 
@@ -71,21 +144,49 @@ the workflow `concurrency` group — keeps the scheduler itself from stacking
 runs. An attempt that finds the lease held **skips** (exit 0): overlap is
 normal, not a failure.
 
+A skip still records an `ingest_runs` row, marked `metrics.skippedLease` and
+carrying the turned-away holder. That row is the whole point: without it, "the
+scheduler never started us" and "we started and stood down" are the same
+observation — nothing — and telling them apart is what the 2026-08-27 stall
+turned on. The row is deliberately **outcome-less**: `succeeded` would conceal
+the skip and reset freshness, `failed` would page an operator over a healthy
+overlap, and `partial` would claim work that was never attempted. `finished_at`
+IS set, which is what separates a skip from an in-flight or crashed run. Lease
+TTL, acquisition, takeover, and release are untouched, and a skip runs no job
+body — so it can produce no source records, RecallCases, NotificationEvents, or
+deliveries.
+
 ## Run bookkeeping and health
 
 Every job execution ends as exactly one `ingest_runs` row (the pipeline's own
 row for FDA/FSIS full runs, a runner-created row otherwise) carrying:
-`job_name`, `outcome` (`succeeded` / `partial` / `failed`), compact `metrics`
-(counts, feed hash, newest source date, notification tallies — never logs),
-`version` (git SHA), and `error`. `partial` means completed with item-level
-failures (quarantined records, failed detail fetches, failed label PDFs).
+`job_name`, `outcome` (`succeeded` / `partial` / `failed`, or **none** for a
+lease skip), compact `metrics` (counts, feed hash, newest source date,
+notification tallies — never logs), `version` (git SHA), and `error`.
+`partial` means completed with item-level failures (quarantined records,
+failed detail fetches, failed label PDFs).
 
-`npm run ops:health` answers, from the database alone: last run and last
-success per job, staleness against per-job expectations (fast jobs 3 h,
-labels/enforcement ~daily, enforcement export ≤ 10 days old), newest-source
-staleness (a silent feed alarm at 14 days), the label-failure backlog, and
-the 7-day deliverable/suppressed notification flow. Non-zero exit when
-anything is UNHEALTHY.
+`npm run ops:health` answers, from the database alone: the most recent
+**attempt** and the last **success** per job, staleness against per-job
+expectations (fast jobs 3 h, labels/enforcement ~daily, enforcement export ≤ 10
+days old), newest-source staleness (a silent feed alarm at 14 days), the
+label-failure backlog, and the 7-day deliverable/suppressed notification flow.
+Non-zero exit when anything is UNHEALTHY.
+
+Attempt and success are separate on purpose, because two very different
+outages present with the identical symptom `no success in Nh`:
+
+| Reading                                                           | What it means                                                          | Where to look                                                                                                       |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `no attempt recorded since the last success`                      | **Scheduler silence.** GitHub never created or started the workflow.   | GitHub Actions: is the workflow enabled, are `schedule` runs being created, is Actions billing blocked?             |
+| `all N attempt(s) since the last success skipped on a held lease` | **Lease contention.** The scheduler is fine; a worker holds the lease. | `job_leases` — expect self-recovery within the 25-min TTL; a lease older than that means a holder is not releasing. |
+
+The five attempt states `ops:health` distinguishes are `succeeded`, `partial`,
+`failed`, `skipped_lease`, and `running` (outcome-less and not a skip: in
+flight, or a process that died before recording). A lease skip never counts as
+a success, so it can never satisfy freshness, and never reads as a source
+failure. The classification is pure and lives in `src/server/jobs/health.ts`
+(tested in `health.test.ts`); the script is presentation.
 
 ## Client feed completeness
 

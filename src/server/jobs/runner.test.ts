@@ -3,9 +3,11 @@ import { test } from 'node:test';
 
 import { MemoryStore } from '../store/memory-store';
 import {
+  isLeaseSkip,
   latestJobMetric,
   orderInsensitiveFeedHash,
   runJob,
+  SKIPPED_LEASE_METRIC,
   type JobContext,
   type JobSpec,
 } from './runner';
@@ -25,8 +27,107 @@ test('a concurrent attempt at the same job is skipped, not failed', async () => 
     throw new Error('body must not run while the lease is held elsewhere');
   });
   assert.equal(report.outcome, 'skipped_lease');
-  // A skip records nothing and leaves the original lease in place.
-  assert.equal(store.ingestRuns.size, 0);
+  // The skip leaves the original lease untouched — it belongs to someone else.
+  assert.equal(store.leases.get('fsis_ingest')!.holder, 'other-host:9:local');
+});
+
+test('a lease skip leaves durable evidence that the runner started', async () => {
+  const store = new MemoryStore();
+  await store.acquireJobLease('fsis_ingest', 'other-host:9:local', 1500);
+  await runJob(SPEC, context(store), async () => {
+    throw new Error('body must not run');
+  });
+
+  const [run] = await store.listRecentJobRuns('fsis_ingest', 10);
+  // Without this row, "GitHub never started us" and "we started and stood
+  // down" are the same observation: nothing.
+  assert.ok(run, 'a skip must record a run row');
+  assert.equal(isLeaseSkip(run), true);
+  assert.equal(run.metrics![SKIPPED_LEASE_METRIC], true);
+  assert.equal(run.metrics!.holder, 'test-host:1:local');
+  assert.equal(run.version, 'abc123def456');
+  assert.ok(run.finishedAt, 'a finished_at separates a skip from an in-flight run');
+});
+
+test('a lease skip is not succeeded, partial, or failed', async () => {
+  const store = new MemoryStore();
+  await store.acquireJobLease('fsis_ingest', 'other-host:9:local', 1500);
+  await runJob(SPEC, context(store), async () => {
+    throw new Error('body must not run');
+  });
+
+  const [run] = await store.listRecentJobRuns('fsis_ingest', 10);
+  // Outcome-less on purpose: 'succeeded' would conceal the skip and reset
+  // freshness, 'failed' would page someone over a healthy overlap.
+  assert.equal(run.outcome, null);
+  assert.notEqual(run.outcome, 'succeeded');
+  assert.equal(run.error, null);
+});
+
+test('a lease skip runs no body and touches no consumer data', async () => {
+  const store = new MemoryStore();
+  await store.acquireJobLease('fsis_ingest', 'other-host:9:local', 1500);
+
+  let bodyRuns = 0;
+  await runJob(SPEC, context(store), async () => {
+    bodyRuns += 1;
+    return { pipelineRunId: null, outcome: 'succeeded', metrics: {} };
+  });
+
+  assert.equal(bodyRuns, 0);
+  // No body means no ingestion and therefore no duplicate work of any kind.
+  assert.equal(store.sourceRecords.size, 0);
+  assert.equal(store.cases.size, 0);
+  assert.equal(store.notifications.size, 0);
+  assert.equal(store.snapshots.length, 0);
+});
+
+test('a lease skip does not move last-success freshness', async () => {
+  const store = new MemoryStore();
+  const ctx = context(store);
+  await runJob(SPEC, ctx, async () => ({
+    pipelineRunId: null,
+    outcome: 'succeeded',
+    metrics: { itemsSeen: 5 },
+  }));
+
+  // Someone else takes the lease; the next two attempts stand down.
+  await store.acquireJobLease('fsis_ingest', 'other-host:9:local', 1500);
+  const later = { ...ctx, now: () => new Date('2026-08-26T18:00:00Z') };
+  await runJob(SPEC, later, async () => ({
+    pipelineRunId: null,
+    outcome: 'succeeded',
+    metrics: {},
+  }));
+  await runJob(SPEC, later, async () => ({
+    pipelineRunId: null,
+    outcome: 'succeeded',
+    metrics: {},
+  }));
+
+  const runs = await store.listRecentJobRuns('fsis_ingest', 10);
+  assert.equal(runs.length, 3);
+  assert.equal(runs.filter(isLeaseSkip).length, 2);
+  const successes = runs.filter((run) => run.outcome === 'succeeded' || run.outcome === 'partial');
+  assert.equal(successes.length, 1);
+  assert.equal(successes[0].startedAt, '2026-08-26T12:00:00.000Z');
+  // Skip gates read the newest non-failed run — a skip must not shadow it.
+  assert.equal(await latestJobMetric(store, 'fsis_ingest', 'itemsSeen'), 5);
+});
+
+test('a bookkeeping failure cannot turn a benign overlap into a job failure', async () => {
+  const store = new MemoryStore();
+  await store.acquireJobLease('fsis_ingest', 'other-host:9:local', 1500);
+  store.createIngestRun = async () => {
+    throw new Error('database unreachable');
+  };
+
+  const report = await runJob(SPEC, context(store), async () => {
+    throw new Error('body must not run');
+  });
+  assert.equal(report.outcome, 'skipped_lease');
+  assert.equal(report.error, null);
+  // And the other worker's lease is still its own.
   assert.equal(store.leases.get('fsis_ingest')!.holder, 'other-host:9:local');
 });
 
