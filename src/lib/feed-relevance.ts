@@ -21,13 +21,23 @@ export type FeedTier = 'recent' | 'older_active';
 /** Display default from architecture Part 2.3 — tune with real usage. */
 export const RECENT_WINDOW_DAYS = 60;
 
+/**
+ * The 60-day boundary itself, applied to whichever activity date the caller
+ * considers authoritative. All Recalls uses `lastPublicActivityAt` (below);
+ * "Affects me" uses material activity (lib/affects-me-ranking.ts), so the two
+ * views share one window definition and can never drift apart on it.
+ */
+export function tierForActivityDate(activityDate: string, now: Date = new Date()): FeedTier {
+  const activity = new Date(`${activityDate.slice(0, 10)}T00:00:00Z`).getTime();
+  const ageMs = now.getTime() - activity;
+  return ageMs <= RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000 ? 'recent' : 'older_active';
+}
+
 export function feedTier(
   item: Pick<FeedItem, 'lastPublicActivityAt'>,
   now: Date = new Date(),
 ): FeedTier {
-  const activity = new Date(`${item.lastPublicActivityAt.slice(0, 10)}T00:00:00Z`).getTime();
-  const ageMs = now.getTime() - activity;
-  return ageMs <= RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000 ? 'recent' : 'older_active';
+  return tierForActivityDate(item.lastPublicActivityAt, now);
 }
 
 export interface FeedSections {

@@ -16,18 +16,30 @@
  *             matches on) and the detail screen's richer derivation.
  * AFFECTS ME  live coverage for representative states: how the active feed
  *             splits into matches / unknown / excluded per state.
+ * RANKING     (C3.2) the deterministic Affects-me order for the representative
+ *             profile, with the priority behind every position, plus the
+ *             invariants: eligibility unchanged by ranking, sections disjoint,
+ *             All Recalls untouched.
  *
  * Everything is deterministic; nothing is written anywhere.
  */
 
 import { normalizedAllergenTokens } from '../src/domain/hazard';
-import type { CaseProjection } from '../src/domain/recall-types';
+import { materialActivityAt } from '../src/domain/material-activity';
+import type { CaseProjection, TimelineEntry } from '../src/domain/recall-types';
 import {
   canonicalRetailerIds,
   retailerById,
   RETAILER_CATALOG,
 } from '../src/domain/retailer-catalog';
+import {
+  buildAffectsMeSections,
+  explainAffectsMePriority,
+  type AffectsMeRankable,
+} from '../src/lib/affects-me-ranking';
 import { buildDistribution } from '../src/lib/consumer-projection';
+import { productDisplayName } from '../src/lib/consumer-summary';
+import { feedTier } from '../src/lib/feed-relevance';
 import { interpretTables } from '../src/lib/source-tables';
 import { evaluatePersonalRelevance } from '../src/lib/relevance';
 import { createSupabaseServerClient } from '../src/server/store/supabase-store';
@@ -38,6 +50,7 @@ interface Row {
   state: string;
   hazard_category: string;
   projection: CaseProjection;
+  timeline: TimelineEntry[] | null;
 }
 
 function loadDotEnv(): void {
@@ -61,7 +74,7 @@ async function fetchAllCases(): Promise<Row[]> {
   for (let from = 0; ; from += 500) {
     const { data, error } = await client
       .from('recall_cases')
-      .select('id, source_agency, state, hazard_category, projection')
+      .select('id, source_agency, state, hazard_category, projection, timeline')
       .range(from, from + 499);
     if (error) {
       console.error(`recall_cases query failed: ${error.message}`);
@@ -275,6 +288,116 @@ async function main(): Promise<void> {
   console.log(
     `  example profile (CA + sesame/peanut + Costco/Trader Joe's): ` +
       `affects ${affects} of ${active.length} active (${viaSignal} via allergen/retailer signal on unknown geography)`,
+  );
+
+  // ── Ranking (C3.2) ─────────────────────────────────────────────────────────
+  //
+  // Review diagnostic only. Nothing below is consumer UI: sort keys, tuple
+  // positions, and the priority explanation are internal by design.
+  console.log('\nAFFECTS ME RANKING (deterministic lexicographic order, C3.2)');
+  console.log('  profile: California · Sesame + Peanuts · Costco + Trader Joe’s');
+
+  const PROFILE = {
+    state: 'CA',
+    allergens: ['sesame', 'peanut'],
+    retailers: ['costco', 'trader-joes'],
+  };
+
+  interface Candidate extends AffectsMeRankable {
+    projection: CaseProjection;
+  }
+  const candidates: Candidate[] = active.map((row) => ({
+    id: row.id,
+    classification: row.projection.classification,
+    publishedAt: row.projection.publishedAt,
+    timeline: row.timeline ?? [],
+    projection: row.projection,
+  }));
+  const relevanceOf = (candidate: Candidate) =>
+    evaluatePersonalRelevance(
+      {
+        geography: candidate.projection.geography,
+        pathogenOrAllergen: candidate.projection.pathogenOrAllergen,
+        retailerNames: candidate.projection.retailerNames ?? [],
+      },
+      PROFILE,
+    );
+
+  const ranked = buildAffectsMeSections(candidates, relevanceOf, { stateChosen: true });
+  console.log(
+    `  sections: affects ${ranked.affects.length}, location not specified ${ranked.unknown.length}, ` +
+      `older active ${ranked.older.length}`,
+  );
+
+  console.log(`\n  top ${Math.min(10, ranked.affects.length)} recent Affects Me results:`);
+  for (const [index, candidate] of ranked.affects.slice(0, 10).entries()) {
+    const relevance = relevanceOf(candidate);
+    const priority = ranked.priorityById.get(candidate.id)!;
+    const product = productDisplayName(
+      candidate.projection.productDescription ?? null,
+      candidate.projection.title,
+    );
+    const geographyReason =
+      relevance.reasons.find((r) => r.kind !== 'allergen' && r.kind !== 'retailer')?.label ??
+      'none';
+    const signals =
+      relevance.reasons
+        .filter((r) => r.kind === 'allergen' || r.kind === 'retailer')
+        .map((r) => r.label)
+        .join(' + ') || 'none';
+    console.log(
+      `  ${String(index + 1).padStart(2)}. ${product.slice(0, 68)}${product.length > 68 ? '…' : ''}`,
+    );
+    console.log(
+      `      risk ${priority.riskTier} · ${geographyReason} · signals: ${signals}` +
+        ` · announced ${priority.publishedAt} · material activity ${priority.materialActivityAt}`,
+    );
+    console.log(`      priority: ${explainAffectsMePriority(priority)}`);
+  }
+
+  // ── Ranking invariants ─────────────────────────────────────────────────────
+  console.log('\n  invariants');
+  const eligible = candidates.filter((candidate) => relevanceOf(candidate).affectsMe);
+  const sectioned = [...ranked.affects, ...ranked.older];
+  console.log(
+    `    eligibility unchanged by ranking: ${eligible.length} qualify, ` +
+      `${sectioned.length} placed (gate: equal) — ${eligible.length === sectioned.length ? 'OK' : 'MISMATCH — FIX'}`,
+  );
+  const placedIds = [...ranked.affects, ...ranked.unknown, ...ranked.older].map((c) => c.id);
+  console.log(
+    `    duplicates across sections: ${placedIds.length - new Set(placedIds).size} (gate: 0)`,
+  );
+  const excludedPlaced = placedIds.filter(
+    (id) => relevanceOf(candidates.find((c) => c.id === id)!).geographic === 'does_not_match',
+  );
+  console.log(
+    `    geographically excluded cases placed anywhere: ${excludedPlaced.length} (gate: 0)`,
+  );
+
+  // Recency source: material activity vs the All Recalls date. The delta is the
+  // point of the milestone — cases whose only recent movement was bookkeeping.
+  const byPublicActivity = eligible.filter(
+    (candidate) =>
+      feedTier({ lastPublicActivityAt: candidate.projection.lastPublicActivityAt }) === 'recent',
+  ).length;
+  console.log(
+    `    recent qualifying by lastPublicActivityAt: ${byPublicActivity}; ` +
+      `by material activity: ${ranked.affects.length} ` +
+      `(${byPublicActivity - ranked.affects.length} demoted — bookkeeping-only movement)`,
+  );
+  const raised = ranked.affects.filter((candidate) => {
+    const priority = ranked.priorityById.get(candidate.id)!;
+    return priority.materialActivityAt > priority.publishedAt;
+  }).length;
+  console.log(`    recent qualifying raised by a post-announcement material event: ${raised}`);
+
+  // All Recalls: the untouched sectioning, reported so the review can see it
+  // did not move. `buildFeedSections` is unchanged by C3.2.
+  const allRecent = active.filter(
+    (row) => feedTier({ lastPublicActivityAt: row.projection.lastPublicActivityAt }) === 'recent',
+  ).length;
+  console.log(
+    `    All Recalls (unchanged): recent ${allRecent}, older active ${active.length - allRecent}`,
   );
 }
 

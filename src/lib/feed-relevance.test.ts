@@ -26,6 +26,7 @@ function item(overrides: Partial<FeedItem>): FeedItem {
     heroImageUrl: null,
     geography: { scope: 'unknown', states: [], confidence: 'stated', sourceText: null },
     officialUrl: 'https://example.gov',
+    timeline: [],
     ...overrides,
   };
 }

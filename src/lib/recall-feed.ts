@@ -50,6 +50,14 @@ export interface FeedItem {
   heroImageUrl: string | null;
   geography: CaseProjection['geography'];
   officialUrl: string;
+  /**
+   * The case timeline, carried on the card row because "Affects me" ranks and
+   * tiers by MATERIAL activity (domain/material-activity.ts) and the material
+   * verdict lives per entry. Measured live: ~257 bytes per active case, so a
+   * 500-row feed grows by ~130 KB — the only alternative would be a persisted
+   * derived date, i.e. a second truth able to drift from the timeline.
+   */
+  timeline: TimelineEntry[];
 }
 
 /** A hosted visual rendered from an official source document (FSIS labels). */
@@ -108,6 +116,7 @@ interface FeedRow {
   hero_image_url: string | null;
   geography: CaseProjection['geography'];
   official_url: string;
+  timeline: TimelineEntry[] | null;
 }
 
 const FEED_SELECT = [
@@ -129,6 +138,7 @@ const FEED_SELECT = [
   'hero_image_url:projection->>heroImageUrl',
   'geography:projection->geography',
   'official_url:projection->>officialUrl',
+  'timeline',
 ].join(',');
 
 /**
@@ -162,6 +172,7 @@ export async function fetchCurrentFeed(limit = 500): Promise<FeedItem[]> {
     heroImageUrl: row.hero_image_url ?? null,
     geography: row.geography,
     officialUrl: row.official_url,
+    timeline: row.timeline ?? [],
   }));
 }
 

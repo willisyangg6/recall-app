@@ -76,6 +76,8 @@ Three persisted states, each solving a real source problem — plus one internal
 
 Every card shows its authoritative date ("Announced Aug 18" / "Updated Mar 9") plus a global "sources last checked" indicator from ingestion run metadata — freshness honesty is part of the trust proposition.
 
+**Refinement (2026-08-26, C3.2): two activity dates, one window.** `lastPublicActivityAt` is source-published, but it is `max(publishedAt, lastModifiedAt)` across a case's records, so it also moves on wording edits and `field_last_modified_date` churn — measured live, ahead of the last material event on 354 of 895 active cases. All Recalls keeps using it (a source edit IS public activity, and that view makes no relevance claim). The personalized "Affects me" view applies the same 60-day boundary to **material activity** instead: `max(publishedAt, latest material timeline entry)`, i.e. Part 9 Layer-2 verdicts only. A recall may therefore re-enter recent activity on a genuine expansion or classification, but never on bookkeeping — and never on our own maintenance writes, which append no timeline entry at all. Because every material entry is stamped with the source-published activity date, material activity ≤ `lastPublicActivityAt` always, so the personalized window is a strict tightening of the general one. See `docs/recall-personalization.md` for the full ordering model.
+
 ---
 
 ## Part 3 — Canonical domain model

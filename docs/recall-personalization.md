@@ -81,6 +81,119 @@ Lifecycle and freshness stay authoritative and untouched: personalization
 composes with the existing recent/older tiers, and a closed recall never
 looks active because it matches a preference.
 
+## Affects Me ordering (C3.2)
+
+Qualifying is not enough: once dozens of notices affect one person, the order
+IS the product. One pure function ranks them (`src/lib/affects-me-ranking.ts`),
+used by every Affects-me surface, so ordering can never depend on which
+component rendered. It changes ORDER ONLY — eligibility, geography tri-state
+semantics, allergen/retailer matching, push eligibility, All Recalls, and
+NotificationEvent behavior are all untouched.
+
+### A lexicographic tuple, never an additive score
+
+Each dimension fully decides before the next is consulted:
+
+```
+risk priority → geographic confidence → personal signal → material activity
+              → announcement date → case id
+```
+
+A points model was rejected outright: with weights, two retailer matches could
+out-rank a Critical classification, and no one could explain afterwards why a
+card placed second. Here every position answers in one sentence.
+
+| #   | Dimension             | Order                                                            |
+| --- | --------------------- | ---------------------------------------------------------------- |
+| 1   | Consumer risk         | Critical → High → Moderate → **Pending/Unrated** → Low → Minimal |
+| 2   | Geographic confidence | confirmed (state **or** nationwide) → unknown-with-signal        |
+| 3   | Personal signal       | allergen+retailer → allergen → retailer → neither                |
+| 4   | Material activity     | newest authoritative event first                                 |
+| 5   | Announcement date     | newest first                                                     |
+| 6   | Case id               | ascending — a total order, so renders never reshuffle            |
+
+**Pending and Unrated share one position, and are never relabeled.** A notice
+the agency has not classified yet, or never will (a public health alert), must
+not sink below one the agency actively rated Low or Minimal — but it is not
+Moderate either, and nothing infers a preliminary level from hazard text. They
+are grouped for sequence only; `riskView` still says "Pending" / "Not rated"
+and still refuses to badge them as a rated tier. This is deliberately separate
+from `RISK_TIER_RANK` (domain/risk-tier.ts), which ranks them `null` precisely
+because they have no severity.
+
+**Explicit state and nationwide are the same confidence** — both are the agency
+saying the product reached the user's area. Which one it was is carried by the
+reason chip ("Affects California" / "Nationwide recall"), never by position.
+An authoritative geographic **exclusion** never enters Affects Me at all, so it
+cannot be out-ranked by any personal signal.
+
+**Signals are Boolean categories, never counts.** Matching three selected
+retailers is the same fact as matching one: the user shops there. Allergen
+outranks retailer because an allergen match is a direct hazard relationship
+with the product, while a retailer match only says the user shops where it was
+sold — it never implies they bought it.
+
+### Material activity: the one date allowed to make a recall feel current
+
+`src/domain/material-activity.ts`. Neither existing date answers the question:
+
+- `lastChangedAt` is OUR write time — it moves for retailer backfills and image
+  enrichment. Never consumer information.
+- `lastPublicActivityAt` is source-published and much better, but it is
+  `max(publishedAt, lastModifiedAt)` across the case's records, so it also
+  moves on wording edits, HTML cleanup, and `field_last_modified_date` churn.
+  Measured live 2026-08-26: **ahead of the last material event on 354 of 895
+  active cases**.
+
+The trustworthy signal is the case timeline, which already records the Layer-2
+verdict per entry: `material: true` means a fixed rule fired (expansion,
+broadening correction, classification assigned/upgraded/downgraded/changed,
+first illnesses, instructions changed, retraction). Those are exactly the
+notification-eligible events, so "what can raise a recall's prominence" and
+"what can notify a user" stay one definition instead of two that drift.
+
+```
+materialActivityAt = max(publishedAt, {occurredAt of material timeline entries})
+```
+
+`publishedAt` seeds it because the original announcement is itself an
+authoritative event — the pipeline records it as a `published` entry with
+`material: false` (a founding fact, not a change to one), so seeding rather
+than counting keeps that distinction intact. Deliberately excluded:
+`source_updated` bookkeeping, agency closure (dashboard-visible, never
+notification-eligible), and our own maintenance writes, which append no
+timeline entry at all.
+
+Because every material entry is stamped with the source-published activity date
+of the re-projection that created it, material activity is always
+≤ `lastPublicActivityAt`. The Affects-me 60-day window is therefore a strict
+**tightening** of the All Recalls one, never a widening — the same
+`RECENT_WINDOW_DAYS` boundary applied to a stricter date. Live delta for the
+representative profile: 22 recent by public activity → 21 by material activity
+(one demoted for bookkeeping-only movement), with 8 of the 21 raised above
+their announcement date by a genuine authoritative event.
+
+The feed row therefore carries `timeline` (~257 bytes per active case, ~130 KB
+over a 500-row feed). The alternative — a persisted derived date — would be a
+second truth able to drift from the timeline it was derived from.
+
+### Sections and copy
+
+The structure is unchanged: recent qualifying notices, "Location not
+specified", then older active collapsed. Only the recency date changed, and
+all three sections are ordered by the one comparator, so nothing jumps between
+renders. Sections are disjoint by construction — qualifying cases split by one
+boundary into recent/older, and only non-qualifying unknown-geography cases
+enter "Location not specified".
+
+A card's "Updated …" half reads the **material** activity date in Affects Me
+(All Recalls keeps `lastPublicActivityAt`), so a card can only claim an update
+when an authoritative event actually happened. The announcement date is always
+stated separately, so nothing ever implies an old recall was announced today.
+Cards still show risk tier, dates, and at most two reason chips; no numeric
+score, sort key, purchase claim, or safety claim about excluded items is ever
+exposed.
+
 ## Preferences: storage and sync
 
 Preferences are **installation-level application state**, deliberately
@@ -259,7 +372,17 @@ for future account ownership; no auth work was done.
 distribution, allergen token coverage and unmapped agents, retailer
 canonicalization compatibility (persisted vs display-derived, resolved vs
 unresolved, alias and ambiguity proofs), and live Affects-Me coverage for
-representative states. The deterministic relevance matrix (nationwide /
-state match / state exclusion / unknown+signal / unknown+none, §-C3 cases
-A–H) lives in `src/lib/relevance.test.ts`; delivery safety (no-backfill,
-horizons, idempotency) in `src/server/push/worker.test.ts`.
+representative states. C3.2 adds a bounded **ranking diagnostic** for the
+representative profile (California · Sesame + Peanuts · Costco + Trader Joe's):
+the top 10 recent Affects-me results with product, risk tier, geography reason,
+signals, announcement date, material activity date, and the resulting priority
+— review material only, never consumer UI — followed by the invariants
+(eligibility unchanged by ranking, zero duplicates across sections, zero
+excluded cases placed anywhere, the recency delta, All Recalls counts).
+
+The deterministic relevance matrix (nationwide / state match / state exclusion
+/ unknown+signal / unknown+none, §-C3 cases A–H) lives in
+`src/lib/relevance.test.ts`; the ranking hierarchy and its invariants in
+`src/lib/affects-me-ranking.test.ts` and `src/domain/material-activity.test.ts`;
+delivery safety (no-backfill, horizons, idempotency) in
+`src/server/push/worker.test.ts`.

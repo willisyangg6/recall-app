@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { hasAnyPreference, type UserRecallPreferences } from '@/domain/preferences';
+import { buildAffectsMeSections, type AffectsMePriority } from '@/lib/affects-me-ranking';
 import { brandLine, companyLine, productDisplayName } from '@/lib/consumer-summary';
 import { buildFeedSections } from '@/lib/feed-relevance';
 import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
@@ -99,7 +100,22 @@ function Badge({ label, emphasized }: { label: string; emphasized?: boolean }) {
  * strongest first (allergen, retailer, then geography) — and risk stays in
  * its own badge, visually separate.
  */
-function FeedCard({ item, personalReasons }: { item: FeedItem; personalReasons?: string[] }) {
+function FeedCard({
+  item,
+  personalReasons,
+  activityDate,
+}: {
+  item: FeedItem;
+  personalReasons?: string[];
+  /**
+   * The date the card's "Updated …" half should report. "Affects me" passes
+   * the MATERIAL activity date, so a card can only claim an update when an
+   * authoritative event actually happened; All Recalls omits it and keeps
+   * `lastPublicActivityAt`. Neither ever implies the recall was announced
+   * today — the announcement date is always stated separately.
+   */
+  activityDate?: string;
+}) {
   // Consumer risk tier leads the card; the regulatory class it was derived
   // from lives on the detail screen, never here.
   const risk = riskView(item.classification, item.sourceAgency);
@@ -151,7 +167,8 @@ function FeedCard({ item, personalReasons }: { item: FeedItem; personalReasons?:
             <PhotoThumbnail uri={item.heroImageUrl} alt={product} />
           </View>
           <ThemedText type="small" themeColor="textSecondary">
-            {timingLine(item.publishedAt, item.lastPublicActivityAt)} · Source: {sourceLabel}
+            {timingLine(item.publishedAt, activityDate ?? item.lastPublicActivityAt)} · Source:{' '}
+            {sourceLabel}
           </ThemedText>
         </ThemedView>
       </Pressable>
@@ -244,7 +261,7 @@ export default function HomeScreen() {
   const personalized = tab === 'affects_me' && prefs !== null && hasAnyPreference(prefs);
   const relevanceById = new Map<string, PersonalRelevance>();
   if (personalized) {
-    for (const item of [...recent, ...olderActive]) {
+    for (const item of state.items) {
       relevanceById.set(
         item.id,
         evaluatePersonalRelevance(
@@ -261,20 +278,18 @@ export default function HomeScreen() {
 
   let sections: HomeSection[];
   let affectsCounts = { affects: 0, unknown: 0, older: 0 };
+  // Sort keys, kept only to source the card's "Updated …" date. Nothing here
+  // is ever rendered as a score.
+  let priorityById = new Map<string, AffectsMePriority>();
   if (personalized) {
-    const affects = recent.filter((item) => relevanceById.get(item.id)?.affectsMe);
-    // Honest uncertainty, kept visible but separate: notices that state no
-    // distribution are never labeled "doesn't affect you" — they sit behind
-    // their own disclosure. Only meaningful once a state is chosen (without
-    // one, geography is unknowable for almost everything).
-    const unknown =
-      prefs.state !== null
-        ? recent.filter((item) => {
-            const relevance = relevanceById.get(item.id);
-            return relevance?.geographic === 'unknown' && !relevance.affectsMe;
-          })
-        : [];
-    const older = olderActive.filter((item) => relevanceById.get(item.id)?.affectsMe);
+    // One deterministic ranking for the whole tab (lib/affects-me-ranking.ts) —
+    // eligibility, geography semantics, and section membership rules are
+    // exactly as before; only the order and the recency date changed.
+    const ranked = buildAffectsMeSections(state.items, (item) => relevanceById.get(item.id)!, {
+      stateChosen: prefs.state !== null,
+    });
+    const { affects, unknown, older } = ranked;
+    priorityById = ranked.priorityById;
     affectsCounts = { affects: affects.length, unknown: unknown.length, older: older.length };
     sections = [
       ...(affects.length > 0
@@ -353,6 +368,7 @@ export default function HomeScreen() {
                 ? relevanceById.get(item.id)?.reasons.map((reason) => reason.label)
                 : undefined
             }
+            activityDate={personalized ? priorityById.get(item.id)?.materialActivityAt : undefined}
           />
         )}
         renderSectionHeader={({ section }) =>
