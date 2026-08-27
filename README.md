@@ -60,6 +60,8 @@ npm run qa:fda       # consumer-projection QA report over 160 recorded real
                      # FDA announcements (offline, development-only)
 npm run qa:personalization  # geography/allergen/retailer coverage report
                             # (read-only against the live DB)
+npm run qa:feed      # feed-completeness QA: drives the real Home loader and
+                     # proves it holds every active case (read-only, live DB)
 ```
 
 The test suite never touches the network: it runs against real FSIS API

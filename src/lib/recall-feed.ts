@@ -13,6 +13,7 @@ import type {
   Classification,
   TimelineEntry,
 } from '@/domain/recall-types';
+import { loadAllPages, type LoadAllPagesOptions } from './feed-pagination';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -141,18 +142,8 @@ const FEED_SELECT = [
   'timeline',
 ].join(',');
 
-/**
- * Current items, most recent public activity first (architecture Part 2.3:
- * "current" = active; ordering by source-published activity, not fetch time).
- */
-export async function fetchCurrentFeed(limit = 500): Promise<FeedItem[]> {
-  const rows = await restGet<FeedRow[]>(
-    `recall_cases?select=${FEED_SELECT}` +
-      `&state=eq.active` +
-      `&order=last_public_activity_at.desc,published_at.desc` +
-      `&limit=${limit}`,
-  );
-  return rows.map((row) => ({
+function toFeedItem(row: FeedRow): FeedItem {
+  return {
     id: row.id,
     sourceAgency: row.source_agency,
     noticeType: row.notice_type,
@@ -173,7 +164,41 @@ export async function fetchCurrentFeed(limit = 500): Promise<FeedItem[]> {
     geography: row.geography,
     officialUrl: row.official_url,
     timeline: row.timeline ?? [],
-  }));
+  };
+}
+
+/**
+ * One page of active cases after `cursor`, ordered by the immutable primary
+ * key. Exported for the completeness QA script, which drives the real loader
+ * rather than reimplementing the query.
+ */
+export function fetchFeedPage(cursor: string | null, pageSize: number): Promise<FeedItem[]> {
+  const after = cursor ? `&id=gt.${encodeURIComponent(cursor)}` : '';
+  return restGet<FeedRow[]>(
+    `recall_cases?select=${FEED_SELECT}` +
+      `&state=eq.active${after}` +
+      `&order=id.asc` +
+      `&limit=${pageSize}`,
+  ).then((rows) => rows.map(toFeedItem));
+}
+
+/**
+ * THE canonical Home feed loader: every active case, or an error.
+ *
+ * "Current" = `state = active` (architecture Part 2.3). Completeness is the
+ * contract — All Recalls, "affects me" eligibility and ranking, the recent /
+ * older split, and every section count are all computed client-side over this
+ * one set, so a short read would corrupt all of them at once and none of them
+ * visibly. It therefore either returns the whole corpus or throws; see
+ * lib/feed-pagination.ts for why the cursor is the case id and why the page
+ * size is not a ceiling.
+ *
+ * Rows come back in cursor (id) order. Display order belongs to the section
+ * builders — `buildFeedSections` for All Recalls, `buildAffectsMeSections` for
+ * the personalized tab — each of which imposes its own total order.
+ */
+export function fetchCurrentFeed(options?: LoadAllPagesOptions): Promise<FeedItem[]> {
+  return loadAllPages(fetchFeedPage, options);
 }
 
 interface DetailRow {

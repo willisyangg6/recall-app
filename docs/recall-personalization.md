@@ -380,6 +380,20 @@ signals, announcement date, material activity date, and the resulting priority
 (eligibility unchanged by ranking, zero duplicates across sections, zero
 excluded cases placed anywhere, the recency delta, All Recalls counts).
 
+Both this report and `npm run qa:feed` (architecture §2.4) measure the same
+corpus — `state = active AND merged_into IS NULL`, the client's RLS contract —
+so their counts are directly comparable. Before C5.1 this report swept merged
+duplicates too, which inflated it to 895 cases against the 882 a phone can
+actually see; the two now agree exactly.
+
+Ranking correctness depends on completeness. The lexicographic order is only
+meaningful over the whole active corpus: evaluated per server page it would put
+lower-priority cards above higher-priority ones purely because they loaded
+first. Until C5.1 the client held 500 of 882 cases, so 120 of this profile's
+320 qualifying cases could not be ranked at all. `qa:feed` re-derives this
+profile's eligibility and section totals from the real loader's output and
+gates on them.
+
 The deterministic relevance matrix (nationwide / state match / state exclusion
 / unknown+signal / unknown+none, §-C3 cases A–H) lives in
 `src/lib/relevance.test.ts`; the ranking hierarchy and its invariants in

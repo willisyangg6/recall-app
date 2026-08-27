@@ -47,12 +47,33 @@ export interface FeedSections {
   olderActive: FeedItem[];
 }
 
+/**
+ * All Recalls display order for the recent tier: newest public activity first.
+ *
+ * This is the order the server used to sort by (`last_public_activity_at desc,
+ * published_at desc`) and is unchanged as product behavior. It moved to the
+ * client in C5.1 because the feed is now paged by case id — the server can no
+ * longer be the one to order it — and because the old server order was not
+ * actually total: 230 of 882 active cases share their (activity, published)
+ * pair with another case, and PostgREST guarantees nothing about how tied rows
+ * fall. The `id` tie-break settles exactly those ties and nothing else, so the
+ * list stops being able to reshuffle between refreshes.
+ */
+function compareRecentFirst(a: FeedItem, b: FeedItem): number {
+  return (
+    b.lastPublicActivityAt.localeCompare(a.lastPublicActivityAt) ||
+    b.publishedAt.localeCompare(a.publishedAt) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
 export function buildFeedSections(items: FeedItem[], now: Date = new Date()): FeedSections {
   const recent: FeedItem[] = [];
   const olderActive: FeedItem[] = [];
   for (const item of items) {
     (feedTier(item, now) === 'recent' ? recent : olderActive).push(item);
   }
+  recent.sort(compareRecentFirst);
   olderActive.sort(
     (a, b) => b.publishedAt.localeCompare(a.publishedAt) || a.id.localeCompare(b.id),
   );

@@ -78,6 +78,32 @@ Every card shows its authoritative date ("Announced Aug 18" / "Updated Mar 9") p
 
 **Refinement (2026-08-26, C3.2): two activity dates, one window.** `lastPublicActivityAt` is source-published, but it is `max(publishedAt, lastModifiedAt)` across a case's records, so it also moves on wording edits and `field_last_modified_date` churn — measured live, ahead of the last material event on 354 of 895 active cases. All Recalls keeps using it (a source edit IS public activity, and that view makes no relevance claim). The personalized "Affects me" view applies the same 60-day boundary to **material activity** instead: `max(publishedAt, latest material timeline entry)`, i.e. Part 9 Layer-2 verdicts only. A recall may therefore re-enter recent activity on a genuine expansion or classification, but never on bookkeeping — and never on our own maintenance writes, which append no timeline entry at all. Because every material entry is stamped with the source-published activity date, material activity ≤ `lastPublicActivityAt` always, so the personalized window is a strict tightening of the general one. See `docs/recall-personalization.md` for the full ordering model.
 
+### 2.4 The complete-feed contract **[DECISION]** (2026-08-27, C5.1)
+
+Everything above computes on the client — the recent/older split, section counts, "affects me" eligibility, the ranking — over one array of active cases. That makes **completeness a correctness property, not a performance one**: a feed missing its tail produces a wrong answer in every one of those places at once, and produces it silently.
+
+**The defect this replaced.** Home issued a single request with `limit=500` against 882 consumer-visible active cases. 382 cases — 43% of the corpus — never reached the phone. All Recalls omitted them, "affects me" could not evaluate them (120 of the representative profile's 320 qualifying cases were outside the window), and the older-section count reported the size of the page rather than the size of the corpus. Nothing errored, because nothing could tell the difference.
+
+**Raising the number is not the fix.** PostgREST enforces a server-side `max_rows` ceiling — measured live at 1000 on this project. A request for `limit=5000` returns exactly 1000 rows, and the response body is indistinguishable from a complete one. Any single-request design is a silent-truncation bug waiting for the corpus to grow into it.
+
+**The contract:**
+
+|                      |                                                                                                                                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Canonical loader** | `fetchCurrentFeed` (`src/lib/recall-feed.ts`) — the only Home feed read path. It is `loadAllPages(fetchFeedPage)`; no caller may issue a bare, unpaged query.                       |
+| **Pagination**       | Keyset on the case `id`, ascending: each page asks `id=gt.<last id of the previous page>`.                                                                                          |
+| **Page size**        | `FEED_PAGE_SIZE = 500` — a **transfer bound, never a total**. The loader keeps paging until a page returns short. There is no total-row ceiling at any layer.                       |
+| **Completion**       | Only a short page ends the scan. A page that exactly fills costs one more request, which correctly returns empty.                                                                   |
+| **Failure**          | Complete or throw. A page failure is retried (3 attempts, same cursor); if it still fails, the loader rejects rather than resolving with what it has.                               |
+| **Display order**    | Imposed client-side by `buildFeedSections` / `buildAffectsMeSections`, each a total order ending in `id`.                                                                           |
+| **Scope**            | `state = active AND merged_into IS NULL` — the second half is the client's RLS policy, so a merged duplicate is not missing from the feed, it is represented by its surviving case. |
+
+**Why the cursor is the `id` and not the activity date.** Ingestion runs every 30 minutes and rewrites `last_public_activity_at` on existing rows. Under offset/range paging that is a correctness bug: a row whose activity date jumps to today moves onto page 1 while the client is reading page 3, every later row shifts by one, and exactly one active case is skipped — invisibly, because a short page never happens. Paging on a date is worse still here, because the dates are not unique: 230 of 882 active cases share their `(lastPublicActivityAt, publishedAt)` pair with another case, in groups of up to 5. The `id` is an immutable uuid primary key, so a row's position in an id-ordered scan cannot change while we page. That removes the failure mode instead of narrowing it, and it costs nothing, because display order was never the server's job.
+
+The residual races are benign and self-correcting on the next refresh: a case inserted behind the cursor mid-scan, or one whose lifecycle state flips mid-scan. Neither can corrupt what the client already holds, and duplicates are collapsed by case id regardless.
+
+**As the corpus grows.** Cost is linear and bounded by page count, not by a ceiling: 882 cases load in 2 requests, ~1.23 MB, ~600 ms — measured faster than the single truncated 500-row request it replaced (~1160 ms for 43% less data). At 5,000 active cases this is 10 requests and ~7 MB. The number to watch is total payload, not row count, and the first lever is the feed projection, not the page size: `timeline` (17.6% of bytes) and `geography` (17.2%) dominate, and `timeline` is carried only to derive one date per case (§2.3). Nothing detail-only — full HTML, label data, affected-product rows — is on the feed row today, and none should be added.
+
 ---
 
 ## Part 3 — Canonical domain model

@@ -72,9 +72,19 @@ async function fetchAllCases(): Promise<Row[]> {
   const client = createSupabaseServerClient(url, secretKey);
   const rows: Row[] = [];
   for (let from = 0; ; from += 500) {
+    // Two constraints the earlier sweep was missing (C5.1):
+    //   `merged_into is null` is the consumer read contract (the client's RLS
+    //   policy). Counting merged duplicates made this report disagree with
+    //   what a user can actually see — 895 rows here against 882 on the phone,
+    //   with the duplicates also inflating every coverage percentage.
+    //   `order(id)` makes the range windows deterministic; unordered paging
+    //   may repeat or skip rows, which is the same class of bug C5.1 fixes in
+    //   the app itself.
     const { data, error } = await client
       .from('recall_cases')
       .select('id, source_agency, state, hazard_category, projection, timeline')
+      .is('merged_into', null)
+      .order('id', { ascending: true })
       .range(from, from + 499);
     if (error) {
       console.error(`recall_cases query failed: ${error.message}`);

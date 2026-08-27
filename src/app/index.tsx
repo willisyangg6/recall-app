@@ -18,6 +18,11 @@ import { evaluatePersonalRelevance, type PersonalRelevance } from '@/lib/relevan
 import { riskView } from '@/lib/risk-display';
 import { geographyLabel, noticeTypeLabel, reasonLine, timingLine } from '@/lib/recall-display';
 
+/**
+ * `ready` always means COMPLETE: `fetchCurrentFeed` pages to exhaustion and
+ * throws rather than resolving with part of the corpus, so nothing downstream
+ * has to reason about a feed that might be missing its tail.
+ */
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
@@ -28,16 +33,21 @@ type FeedTab = 'affects_me' | 'all';
 function useFeed() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
+  /** Set when a refresh failed over a feed we still hold — see below. */
+  const [staleMessage, setStaleMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const items = await fetchCurrentFeed();
       setState({ status: 'ready', items });
+      setStaleMessage(null);
     } catch (error) {
-      setState({
-        status: 'error',
-        message: error instanceof Error ? error.message : 'Could not load recalls.',
-      });
+      const message = error instanceof Error ? error.message : 'Could not load recalls.';
+      // A failed refresh must never cost the user a complete feed they already
+      // have: keep showing it, and say plainly that it may be out of date.
+      // Only a failure with nothing loaded becomes the full error screen.
+      setState((current) => (current.status === 'ready' ? current : { status: 'error', message }));
+      setStaleMessage(message);
     }
   }, []);
 
@@ -48,13 +58,15 @@ function useFeed() {
     if (isFeedConfigured()) void load();
   }, [load]);
 
+  // Always safe to repeat: each attempt re-pages from scratch and replaces the
+  // feed only on complete success.
   const refresh = useCallback(async () => {
     setRefreshing(true);
     await load();
     setRefreshing(false);
   }, [load]);
 
-  return { state, refreshing, refresh };
+  return { state, refreshing, refresh, staleMessage };
 }
 
 /**
@@ -214,7 +226,7 @@ interface HomeSection {
 }
 
 export default function HomeScreen() {
-  const { state, refreshing, refresh } = useFeed();
+  const { state, refreshing, refresh, staleMessage } = useFeed();
   const insets = useSafeAreaInsets();
   const [showOlder, setShowOlder] = useState(false);
   const [showUnknown, setShowUnknown] = useState(false);
@@ -414,13 +426,26 @@ export default function HomeScreen() {
           )
         }
         ListHeaderComponent={
-          tab === 'affects_me' && prefs !== null ? (
-            !hasAnyPreference(prefs) ? (
-              <PersonalizeCta />
-            ) : prefs.state === null ? (
-              <PersonalizeCta compact />
-            ) : null
-          ) : null
+          <>
+            {/* The feed on screen is complete but possibly out of date — said
+                plainly, because silently showing stale counts as current is
+                the failure this milestone exists to prevent. */}
+            {staleMessage ? (
+              <ThemedView type="backgroundElement" style={styles.noticeCard}>
+                <ThemedText type="small">
+                  Showing the last complete update — couldn’t refresh just now. Pull down to try
+                  again.
+                </ThemedText>
+              </ThemedView>
+            ) : null}
+            {tab === 'affects_me' && prefs !== null ? (
+              !hasAnyPreference(prefs) ? (
+                <PersonalizeCta />
+              ) : prefs.state === null ? (
+                <PersonalizeCta compact />
+              ) : null
+            ) : null}
+          </>
         }
         contentContainerStyle={[
           styles.listContent,
@@ -482,6 +507,11 @@ const styles = StyleSheet.create({
   },
   ctaCard: {
     gap: Spacing.one,
+    padding: Spacing.three,
+    borderRadius: Radii.medium,
+    marginBottom: Spacing.two,
+  },
+  noticeCard: {
     padding: Spacing.three,
     borderRadius: Radii.medium,
     marginBottom: Spacing.two,

@@ -87,6 +87,32 @@ staleness (a silent feed alarm at 14 days), the label-failure backlog, and
 the 7-day deliverable/suppressed notification flow. Non-zero exit when
 anything is UNHEALTHY.
 
+## Client feed completeness
+
+`npm run qa:feed` (read-only) answers the one question the app cannot answer
+about itself: does Home actually hold every active recall? A truncated feed is
+indistinguishable from a complete one from inside the app — sections render,
+counts look plausible, nothing errors — so it is checked against an independent
+authority. The script counts the consumer read contract
+(`state = active AND merged_into IS NULL`) server-side via the service role,
+then **drives the real client loader** (`fetchFeedPage` + `loadAllPages`, which
+together are `fetchCurrentFeed`) under the anon key and RLS, and re-derives
+every downstream number from what the loader returned. Hard gates, non-zero
+exit: missing active ids, duplicate ids, loaded ids that are not active, All
+Recalls omitting an active case, "affects me" eligibility not matching
+placement, and any case in two sections.
+
+Current baseline (2026-08-27): 882 consumer-visible active cases, loaded in 2
+pages, 0 missing, 0 duplicates, ~590 ms, 12 ms to section and sort. The 13-case
+gap between 895 total active rows and 882 visible ones is the merged-duplicate
+set, hidden by RLS by design; the script prints both numbers so the distinction
+is never silently absorbed into the baseline.
+
+Operationally the loader is linear in corpus size with no ceiling — see
+architecture §2.4 for the pagination contract and the growth budget. Watch
+total payload rather than row count; the alarm to raise is a rising page count
+against flat coverage.
+
 ## Failure semantics
 
 **SOURCE EMPTY is SOURCE FAILED.** A feed returning zero items — or under
