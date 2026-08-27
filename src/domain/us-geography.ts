@@ -168,9 +168,64 @@ const LOCALITY_CODE_RUN =
   /\b(?:in|to|throughout|across|within)\s+([A-Z]{2}\b(?:\s*(?:,|and|or|&)\s*(?:and\s+)?[A-Z]{2}\b)*)/g;
 
 /**
- * Every U.S. state a text names, deterministically: full names anywhere,
- * postal codes only in genuinely geographic shapes (", XX" address form, or a
- * code list after a locality preposition). Arbitrary two-letter uppercase
+ * A separated run of two or more postal codes, wherever it appears:
+ * "SD, ND, MN, IA, WY", "(AZ, CA, CO, CT)", "AL, AR, FL, GA & TX".
+ *
+ * A locality preposition is not always what introduces a declared state list.
+ * Sources write "…in the following states: SD, ND, MN, IA, WY", "…seventeen
+ * states (AZ, CA, …)", "Distribution Areas: AZ, CA, …" — and the preposition
+ * rule below then reads only the codes that happen to follow a comma, so the
+ * FIRST state of the list is silently dropped. Measured across the live
+ * corpus: 54 sentences, including a Trader Joe's dressing recall stored
+ * without Arkansas. A missing state is not a harmless gap — it turns a
+ * shopper in that state from "not sure" into "does not affect you".
+ *
+ * Safe because a run only reads as states when EVERY token in it resolves,
+ * which is what keeps "SM, MD, LG" and "grades AA, AB" out.
+ */
+const CODE_RUN = /\b[A-Z]{2}\b(?:\s*(?:,|and|or|&)\s*(?:and\s+)?\b[A-Z]{2}\b)+/g;
+
+/** Longest first, so "West Virginia" is claimed before "Virginia" can be. */
+const NAMES_LONGEST_FIRST = [...STATE_NAMES].sort((a, b) => b.length - a.length);
+
+/**
+ * Full state names a text contains, ignoring any whose only occurrence sits
+ * INSIDE a longer state name.
+ *
+ * "shipped to retail locations in West Virginia" used to yield Virginia AND
+ * West Virginia, because `\bVirginia\b` matches inside "West Virginia". That
+ * is a false geographic positive — the worst failure this domain has, since it
+ * tells a Virginia shopper a recall reached them when the source never said
+ * so. Positions are claimed longest-name-first, so the containment can only
+ * resolve one way.
+ */
+function namedStates(text: string): { name: string; onlyInsideLongerName: boolean }[] {
+  const claimed: { start: number; end: number }[] = [];
+  const out: { name: string; onlyInsideLongerName: boolean }[] = [];
+  for (const name of NAMES_LONGEST_FIRST) {
+    let standalone = 0;
+    let contained = 0;
+    for (const match of text.matchAll(new RegExp(`\\b${name}\\b`, 'g'))) {
+      const start = match.index!;
+      const end = start + name.length;
+      if (claimed.some((span) => start >= span.start && end <= span.end)) {
+        contained += 1;
+        continue;
+      }
+      claimed.push({ start, end });
+      standalone += 1;
+    }
+    if (standalone > 0) out.push({ name, onlyInsideLongerName: false });
+    else if (contained > 0) out.push({ name, onlyInsideLongerName: true });
+  }
+  return out;
+}
+
+/**
+ * Every U.S. state a text names, deterministically: full names anywhere (never
+ * one merely embedded in a longer state's name), postal codes only in
+ * genuinely geographic shapes (", XX" address form, an all-resolving code run,
+ * or a code list after a locality preposition). Arbitrary two-letter uppercase
  * strings — product codes, initialisms — never qualify.
  *
  * This is the one multi-state reader. "distributed in retail grocery stores
@@ -179,12 +234,18 @@ const LOCALITY_CODE_RUN =
  */
 export function statesInText(text: string): string[] {
   const found = new Set<string>();
-  for (const name of STATE_NAMES) {
-    if (new RegExp(`\\b${name}\\b`).test(text)) found.add(name);
+  for (const { name, onlyInsideLongerName } of namedStates(text)) {
+    if (!onlyInsideLongerName) found.add(name);
   }
   for (const match of text.matchAll(ADDRESS_CODE)) {
     const state = POSTAL_TO_STATE[match[1]];
     if (state) found.add(state);
+  }
+  for (const match of text.matchAll(CODE_RUN)) {
+    const codes = match[0].match(/\b[A-Z]{2}\b/g) ?? [];
+    const states = codes.map((code) => POSTAL_TO_STATE[code]).filter((s): s is string => !!s);
+    // A list only reads as states when every token is one.
+    if (states.length === codes.length) for (const state of states) found.add(state);
   }
   for (const match of text.matchAll(LOCALITY_CODE_RUN)) {
     const codes = match[1].match(/\b[A-Z]{2}\b/g) ?? [];
@@ -197,10 +258,23 @@ export function statesInText(text: string): string[] {
       if (states.length === 1) found.add(states[0]);
       continue;
     }
-    // A list only reads as states when every token is one.
     if (states.length === codes.length) for (const state of states) found.add(state);
   }
   return [...found].sort();
+}
+
+/**
+ * True when the text mentions this state's name ONLY inside a longer state
+ * name — "Virginia" in a notice that says nothing but "West Virginia".
+ *
+ * The historical repair uses this and nothing else to justify REMOVING a
+ * stored state. Any other disagreement between stored and re-derived
+ * geography is reported for a human, never silently applied: dropping a state
+ * a source really stated would exclude the people it was meant to warn.
+ */
+export function isContainedStateArtifact(state: string, text: string): boolean {
+  const entry = namedStates(text).find((s) => s.name === state);
+  return entry?.onlyInsideLongerName === true;
 }
 
 /**

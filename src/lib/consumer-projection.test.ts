@@ -14,6 +14,7 @@ import {
   parseProseFacts,
   parseProseVariants,
   proseOutsideTables,
+  retailerHeadOfCellLine,
 } from './consumer-projection';
 import type { SemanticFact } from './source-tables';
 
@@ -166,6 +167,88 @@ test('distribution aggregates channels and never uses the firm address', () => {
   assert.deepEqual(momchipz.onlinePlatforms, ['Amazon.com']);
   assert.equal(momchipz.areaText, '');
   assert.equal(momchipz.states.length, 0);
+});
+
+test('a flattened State/Retailer cell becomes real stores, not one malformed name', () => {
+  // The live Ukrop's table: ten stores in ONE cell, separated by the source's
+  // own line breaks. Read flat, the shortest cell passed the retailer gate and
+  // the section rendered a single shop called "Food Lion-NC Kroger-VA WVA",
+  // hiding every other store on the page.
+  const cell = [
+    'Food Lion -VA, NC',
+    'Harris Teeter-Wmsbg.VA',
+    'Kroger-VA, WVA',
+    'Libbie Market-VA',
+    'Publix-VA',
+    'Ukrop’s Market Hall',
+  ];
+  const ukrops = buildDistribution(projection({ summaryText: 'Ukrop’s is recalling six items.' }), [
+    {
+      concept: 'distribution',
+      sourceLabel: 'State/Retailer',
+      value: cell.join(' '),
+      valueLines: cell,
+      scope: 't0r0',
+    },
+  ]);
+  // Every store the existing retailer contract accepts, now named on its own.
+  // ("Libbie Market" is rejected by that contract, unchanged here, for the
+  // same reason it always was — a singular "<word> Market" is not a chain.)
+  for (const store of ['Food Lion', 'Kroger', 'Publix', 'Ukrop’s Market Hall']) {
+    assert.ok(ukrops.retailers.includes(store), `${store} — got ${ukrops.retailers.join(' | ')}`);
+  }
+  // The malformed hybrid is gone, and no state token is presented as a store.
+  assert.ok(!ukrops.retailers.some((name) => /WVA|-VA|-NC/.test(name)), ukrops.retailers.join('|'));
+});
+
+test('a wrapped "Sold At" sentence is one value, never split into extra stores', () => {
+  // Only a column the source labels with a state role holds one entry per
+  // line. This cell wraps a single sentence across three lines.
+  const lines = ['Sold direct to customers at Grand', 'Central Bakery Cafés', 'and wholesalers'];
+  const potato = buildDistribution(projection({ summaryText: 'Bread was recalled.' }), [
+    {
+      concept: 'distribution',
+      sourceLabel: 'Sold At',
+      value: lines.join(' '),
+      valueLines: lines,
+      scope: 't0c0',
+    },
+  ]);
+  assert.ok(!potato.retailers.includes('Central Bakery Cafés'), potato.retailers.join(' | '));
+});
+
+test('a "Store City & State" address cell is a location, never a store name', () => {
+  // The live Walmart 34-store table. Stripping the state off "ALLEN, TX"
+  // would present 34 Texas towns as 34 retailers.
+  const walmart = buildDistribution(
+    projection({ summaryText: 'Available at 34 Walmart stores located in Texas.' }),
+    [
+      {
+        concept: 'distribution',
+        sourceLabel: 'Store City & State',
+        value: 'ALLEN, TX',
+        scope: 'r0',
+      },
+      {
+        concept: 'distribution',
+        sourceLabel: 'Store City & State',
+        value: 'CANTON, TX',
+        scope: 'r1',
+      },
+    ],
+  );
+  for (const town of ['ALLEN', 'CANTON', 'Allen', 'Canton']) {
+    assert.ok(!walmart.retailers.includes(town), `${town} — got ${walmart.retailers.join(' | ')}`);
+  }
+});
+
+test('a trailing period belongs to the store name, not to a state token', () => {
+  assert.equal(retailerHeadOfCellLine('Duluth Candy Co.'), 'Duluth Candy Co.');
+  assert.equal(retailerHeadOfCellLine('Food Lion -VA, NC'), 'Food Lion');
+  assert.equal(retailerHeadOfCellLine('Harris Teeter-Wmsbg.VA'), 'Harris Teeter-Wmsbg');
+  assert.equal(retailerHeadOfCellLine('Ukrop’s Market Hall'), 'Ukrop’s Market Hall');
+  // A store whose NAME contains a state is never truncated.
+  assert.equal(retailerHeadOfCellLine('Texas Roadhouse'), 'Texas Roadhouse');
 });
 
 test('unknown distribution stops at the honest statement — never an external referral', () => {

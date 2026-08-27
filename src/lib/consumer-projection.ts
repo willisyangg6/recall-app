@@ -23,6 +23,7 @@ import {
   looksLikeColumnHeading,
   retailersWithPlaces,
 } from '@/domain/retailer';
+import { distributionTableStates } from '@/domain/geography-evidence';
 import { cleanDisplayText, stripHtml } from '@/domain/text';
 import {
   isUsCityName,
@@ -1583,6 +1584,54 @@ export function tableRetailLocations(tableFacts: SemanticFact[]): string[] {
     .filter((value) => isValidForConcept('retail_location', value));
 }
 
+/**
+ * The store name at the head of one "State/Retailer" cell line.
+ *
+ * A live FDA table writes each store as "Food Lion -VA, NC" — the shop, then
+ * the states it carried the product in. Read whole, that string is neither a
+ * usable store name nor geography; read as the shop up to its first state
+ * code, it is exactly the store the source named.
+ *
+ * Only a POSTAL CODE ends the name. A full state name does not, because
+ * "Texas Roadhouse" and "Ohio Valley Market" are stores, and a cell that is
+ * nothing but spelled-out state names fails the retailer gate on its own.
+ */
+export function retailerHeadOfCellLine(line: string): string {
+  for (const match of line.matchAll(/(?:^|[^A-Za-z])([A-Z]{2})(?![A-Za-z])/g)) {
+    if (normalizeStateToken(match[1]) === null) continue;
+    return line
+      .slice(0, match.index! + match[0].length - match[1].length)
+      .replace(/[\s,\-–—_/.]+$/, '')
+      .trim();
+  }
+  // No state to cut: only a dangling separator left by the source's own line
+  // wrap is removed. A trailing period belongs to the name ("Duluth Candy Co.").
+  return line.replace(/[\s,\-–—_/]+$/, '').trim();
+}
+
+/** A table column the source labels with a state role ("State/Retailer"). */
+const STATE_ROLE_LABEL = /\bstates?\b/i;
+
+/**
+ * A column of street addresses, whose "City & State" cell is a location, not a
+ * shop. Stripping the state off "ALLEN, TX" would turn 34 Walmart store
+ * addresses into 34 retailers called ALLEN, CANTON, COMMERCE…
+ */
+const ADDRESS_ROLE_LABEL = /\baddress\b|\bcity\b|\bstreet\b|\bzip\b/i;
+
+/**
+ * A single cell holding a LIST of stores, one per source line — the shape that
+ * flattened into "Food Lion-NC Kroger-VA WVA". A one-line cell is left exactly
+ * as it was: whatever it is, the source did not write a list there.
+ */
+function isFlattenedStoreList(fact: SemanticFact): boolean {
+  return (
+    (fact.valueLines?.length ?? 0) > 1 &&
+    STATE_ROLE_LABEL.test(fact.sourceLabel) &&
+    !ADDRESS_ROLE_LABEL.test(fact.sourceLabel)
+  );
+}
+
 /** How many states read as a list before a count plus disclosure reads better. */
 const STATES_LISTED = 12;
 
@@ -1640,10 +1689,16 @@ export function buildDistribution(
   const summary = projection.summaryText ?? '';
   const distributionText = distributionRegion(summary);
 
-  // A "Retailer" column names stores as surely as a sentence does.
+  // A "Retailer" column names stores as surely as a sentence does — and a
+  // state/retailer cell holding one store per source line is read line by
+  // line, with the state the source attached to each store removed, because a
+  // state is geography and one entity has exactly one role.
   const tableRetailers = tableFacts
     .filter((fact) => fact.concept === 'distribution')
-    .map((fact) => cleanDisplayText(fact.value))
+    .flatMap((fact) =>
+      isFlattenedStoreList(fact) ? fact.valueLines!.map(retailerHeadOfCellLine) : [fact.value],
+    )
+    .map((value) => cleanDisplayText(value))
     .filter((value) => isRetailerName(value) && value.length <= 44);
   const sentenceRetailers =
     projection.retailerNames?.length > 0
@@ -1716,6 +1771,10 @@ export function buildDistribution(
           ...statesInText(distributionText),
           ...places.states,
           ...extractDistributionListStates(projection.summaryHtml),
+          // A state-role table column is a distribution statement too, and it
+          // is read here through the same canonical function that persists
+          // the field, so display and stored geography cannot disagree.
+          ...distributionTableStates(projection.summaryHtml).states,
         ];
   const states = [...new Set([...geography.states, ...supplemental])].sort();
 

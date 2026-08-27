@@ -53,6 +53,16 @@ export interface SemanticFact {
   pairedDate?: string;
   /** For a calendar date the source printed alongside its printed code. */
   pairedCode?: string;
+  /**
+   * The cell's own lines, when the source broke its value across several.
+   *
+   * A "State/Retailer" cell holds one store per `<br>`; joined into a single
+   * string it becomes "Food Lion-NC Kroger-VA WVA", which reads as one
+   * malformed shop name and hides the other stores entirely. `value` stays
+   * flattened so every existing reader is unaffected; a reader that needs the
+   * source's own rows asks for these.
+   */
+  valueLines?: string[];
 }
 
 export interface TableVariant {
@@ -76,6 +86,8 @@ export interface InterpretedTable {
 
 interface Cell {
   text: string;
+  /** The same text split on the source's own line breaks inside the cell. */
+  lines: string[];
   isHeader: boolean;
   colspan: number;
   rowspan: number;
@@ -88,11 +100,19 @@ function cellsOf(rowHtml: string): Cell[] {
       const value = match[2].match(new RegExp(`${name}\\s*=\\s*"?(\\d+)"?`, 'i'));
       return value ? Math.max(1, Number(value[1])) : 1;
     };
+    // stripHtml renders <br> and </p> as newlines. Inside one cell those are
+    // the source's own rows, so they are kept alongside the flattened text
+    // rather than only collapsed away.
+    const stripped = stripHtml(match[3]);
     cells.push({
-      text: stripHtml(match[3])
+      text: stripped
         .replace(/\s*\n\s*/g, ' ')
         .replace(/\s+/g, ' ')
         .trim(),
+      lines: stripped
+        .split('\n')
+        .map((line) => line.replace(/\s+/g, ' ').trim())
+        .filter((line) => line !== ''),
       isHeader: match[1].toLowerCase() === 'h',
       colspan: span('colspan'),
       rowspan: span('rowspan'),
@@ -181,7 +201,12 @@ function detectOrientation(rows: Cell[][]): 'standard' | 'transposed' {
   return 'standard';
 }
 
-function fact(sourceLabel: string, value: string, scope: string): SemanticFact | null {
+function fact(
+  sourceLabel: string,
+  value: string,
+  scope: string,
+  lines?: string[],
+): SemanticFact | null {
   const cleaned = decodeEntities(value).trim();
   if (cleaned === '' || isLayoutArtifactValue(cleaned)) return null;
   let label = sourceLabel.trim();
@@ -199,6 +224,9 @@ function fact(sourceLabel: string, value: string, scope: string): SemanticFact |
       concept = inlineConcept;
     }
   }
+  const sourceLines = (lines ?? [])
+    .map((line) => decodeEntities(line).trim())
+    .filter((l) => l !== '');
   return {
     concept,
     sourceLabel: label,
@@ -206,6 +234,7 @@ function fact(sourceLabel: string, value: string, scope: string): SemanticFact |
     raw: cleaned,
     evidence: 'table',
     scope,
+    ...(sourceLines.length > 1 ? { valueLines: sourceLines } : {}),
   };
 }
 
@@ -299,7 +328,7 @@ export function interpretTable(tableHtml: string, tableIndex = 0): InterpretedTa
           const target = variants[column + offset];
           // A spanning cell applies to every variant it covers, but each copy
           // is scoped to its own variant so ownership stays unambiguous.
-          const entry = fact(label, cell.text, target.scope);
+          const entry = fact(label, cell.text, target.scope, cell.lines);
           if (entry) target.facts.push(entry);
         }
         column += cell.colspan;
@@ -333,7 +362,12 @@ export function interpretTable(tableHtml: string, tableIndex = 0): InterpretedTa
     row.forEach((cell, column) => {
       const label = subHeading[column] ?? header[column]?.label ?? '';
       // Unlabeled first column of a product table is the variant itself.
-      const entry = fact(label === '' && column === 0 ? 'product' : label, cell.text, scope);
+      const entry = fact(
+        label === '' && column === 0 ? 'product' : label,
+        cell.text,
+        scope,
+        cell.lines,
+      );
       if (entry) facts.push(entry);
       // A header that carried its own value ("BEST IF USED BY 09/23/2023")
       // states a fact about this whole column; every row under it shares it.

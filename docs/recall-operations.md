@@ -294,6 +294,56 @@ for the length of a maintenance pass would stall the agency feeds, and a
 crash mid-pass would strand them until the TTL expired — a worse failure than
 skipping a handful of cases that the next run picks up anyway.
 
+## Geography: a one-time historical repair (C5.2A)
+
+```
+npm run repair:geography:dry    # report only, writes nothing
+npm run repair:geography        # apply
+npm run repair:geography:dry    # verify: "would update" must be 0
+```
+
+`projection.geography` is derived by `projectCase` from
+`domain/geography-evidence.ts` (C5.2A), so every new and re-projected case
+carries the canonical answer automatically. Cases stored _before_ that existed
+will never be revisited by normal ingestion — the snapshot hash gate skips
+unchanged pages by design — hence a one-time repair.
+
+Same safety shape as the retailer backfill above: dry-run by default, explicit
+`--apply`, **zero network requests**, and a single-field write through
+`updateCaseGeography` that carries `timeline` and `lastChangedAt` through
+untouched. It bypasses the pipeline's re-projection path entirely — no
+material-change detection, no NotificationEvent, no new or merged cases, no
+moved dates. This matters more here than for retailers: `detectChanges` DOES
+diff geography, and a widening would fire `expansion_geography` and push a
+"recall expanded" alert for a notice that has not changed since publication.
+Reading evidence an older parser could not is not an agency announcement.
+
+Narrowing is **refused, not applied**. Any state that would disappear turns the
+case into a reported conflict, untouched, except one proven case: a state whose
+name occurs in the notice only inside a longer state's name ("Virginia" read
+out of "West Virginia"). Every removal is printed with its case id.
+
+The dry run is the verification report. Read it for:
+
+- `scope/state-list contradictions: 0 → 0` — the hard gate.
+- `Conflicts` and `Failures` — both should be 0.
+- `Table fragments NOT interpreted` — `WVA`, `RS` today. These are fragments
+  the derivation refused to guess; if a future notice depends on one, it shows
+  up here rather than silently going missing.
+- `Effect on representative profiles` — matches/unknown/excluded per state,
+  before and after. Cases moving from `unknown` into a state list that excludes
+  a profile is the expected, correct direction: the source's own list is now
+  being read.
+
+Concurrency, lease behaviour and the single retry are identical to the
+retailer backfill — see "Running it alongside scheduled ingestion" above; the
+repair takes no job lease for the same reasons.
+
+Note the case count: the repair uses `listCases()` and so also visits cases
+merged into a duplicate (1,912 vs the 1,899 a consumer can read). Repairing a
+merged row's geography is harmless and keeps it consistent if it is ever
+unmerged; this matches the retailer backfill's behaviour.
+
 ## Enforcement: weekly-gated
 
 The daily job reads the one-request openFDA bulk manifest and compares its

@@ -434,6 +434,56 @@ test('the comparator never reports two distinct cases as equal', () => {
   );
 });
 
+test('a geography correction moves a case by exactly one tier, and nothing else', () => {
+  // C5.2A repairs `projection.geography` only. The ranking rules are
+  // untouched, so a corrected case moves for exactly the reason its geography
+  // changed — from "unknown, kept by a personal signal" to "confirmed" — and
+  // every other case holds its place.
+  const other = item({ geography: geo('states', ['California']), publishedAt: '2026-07-01' });
+  const beforeRepair = item({
+    geography: geo('unknown'),
+    retailerNames: ['Costco'],
+    publishedAt: RECENT_DAY,
+  });
+  const afterRepair: FeedItem = {
+    ...beforeRepair,
+    geography: geo('states', ['California']),
+  };
+
+  const before = affectsMePriority(beforeRepair, relevanceOf(CALIFORNIAN)(beforeRepair));
+  const after = affectsMePriority(afterRepair, relevanceOf(CALIFORNIAN)(afterRepair));
+  assert.equal(before.geographyPriority, 1, 'unknown geography, kept by the retailer signal');
+  assert.equal(after.geographyPriority, 0, 'the source’s own state list, once it is read');
+  // The geography tier is the ONLY dimension that moved.
+  assert.deepEqual({ ...before, geographyPriority: 0 }, { ...after, geographyPriority: 0 });
+
+  // Eligibility is unchanged — the case affected this user before and after —
+  // and it simply overtakes the older confirmed case it used to rank behind.
+  assert.deepEqual(order([other, beforeRepair]), [other.id, beforeRepair.id]);
+  assert.deepEqual(order([other, afterRepair]), [afterRepair.id, other.id]);
+});
+
+test('a corrected state list that excludes the user is final, as it always was', () => {
+  // The repair can also move a case OUT: once the source's own state list is
+  // read, a user outside it is authoritatively excluded, and no personal
+  // signal overrides that. Same rule as before — new input, not new behavior.
+  const unknown = item({
+    geography: geo('unknown'),
+    pathogenOrAllergen: 'Undeclared sesame',
+    retailerNames: ['Costco'],
+  });
+  const corrected: FeedItem = { ...unknown, geography: geo('states', ['Ohio', 'Indiana']) };
+  const before = rank([unknown]);
+  assert.deepEqual(
+    before.affects.map((entry) => entry.id),
+    [unknown.id],
+    'unknown geography plus a personal signal still qualifies',
+  );
+  const after = rank([corrected]);
+  assert.equal(after.affects.length, 0, 'an authoritative exclusion is final');
+  assert.equal(after.unknown.length, 0, 'and it is not honest uncertainty either');
+});
+
 // ── Sections ─────────────────────────────────────────────────────────────────
 
 test('every case appears in at most one section', () => {

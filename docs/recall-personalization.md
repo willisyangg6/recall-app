@@ -250,6 +250,85 @@ All other C2 rails are untouched: global activation horizon, suppressed
 events never deliver, per-pair idempotency, ticket/receipt honesty, bounded
 retries.
 
+## Geography evidence (C5.2A)
+
+Personalization matches on the **persisted** `projection.geography`. Before
+C5.2A that field was written once by whichever adapter parsed the record first
+(FDA prose, FSIS `field_states`) and then frozen — incremental ingestion
+re-projects a case only when its source page's content hash moves. So a parser
+improvement never reached a stored case, and the detail screen quietly
+compensated with a display-time supplement the feed card and push eligibility
+could not see. Manual QA found the result: a notice whose own sentence says the
+bread was sold "within the Seattle and Tacoma Metro areas in WA" carried
+`unknown` and rendered as **"Distribution not specified"**.
+
+### What the field means
+
+> The authoritative source stated, in a distribution construction, that the
+> recalled product went to these places.
+
+### Where it is derived
+
+`domain/geography-evidence.ts` — one function, called from `projectCase`,
+exactly like `retailerNames`. Live ingestion and the historical repair run the
+same code; there is no repair-only parser. Three kinds of evidence, all
+explicit:
+
+| Evidence      | Example                                                                                              |
+| ------------- | ---------------------------------------------------------------------------------------------------- |
+| prose         | "…were sold at grocery stores … within the Seattle and Tacoma Metro areas in WA"                     |
+| declared list | "…and the following United States:" then one state per bullet                                        |
+| table         | a column whose HEADER assigns it a state role — `State/Retailer`, `US Distribution States`, `States` |
+
+**Structure decides, never content.** A table full of state abbreviations is
+not a distribution table: the "State" column of a 30-row store-address table
+(Address / City / State / Zip) contributes nothing, and a column headed
+`Distributed to` earns its states only if the column holds nothing but states —
+a live one holds Walmart, UNFI and Sprouts, and a retailer's footprint is not
+geography.
+
+Never geography, however many place names they contain: the recalling firm's
+own address, a headquarters, a manufacturing facility, a contact block, a
+store-address table, a retailer footprint, or a bare city the source never
+attached a state to.
+
+### Widening only, with one proven exception
+
+- `nationwide` is returned untouched; it is never re-derived or narrowed.
+- A carried state always survives. The planner carries a second guard on top
+  of the derivation's own rule: any state that would disappear turns the case
+  into a reported **conflict** and leaves it untouched.
+- The one removal: a state whose name occurs in the notice **only inside a
+  longer state's name**. `\bVirginia\b` matches inside "West Virginia", so 16
+  stored cases claimed a Virginia distribution their source never stated.
+
+A missing state is not a harmless gap. `unknown` is non-negative — the user is
+told the location is not specified — but a state **list** that omits a state
+turns a shopper there from "not sure" into "does not affect you". That is why
+a declared list must keep its first entry: sources write "…in the following
+states: SD, ND, MN, IA, WY", and reading only the comma-preceded codes dropped
+`SD` in 54 sentences corpus-wide, including a Trader Joe's dressing recall
+stored without Arkansas.
+
+### Deliberately not interpreted
+
+`WVA` (Ukrop's) and `RS` (Military Resale Store) are reported by the dry run
+as unresolved fragments and never guessed. Only conventional postal codes and
+full state names resolve; there is no traditional-abbreviation table and no
+fuzzy matching. In the one notice where `WVA` appears, the same column spells
+West Virginia conventionally three times, so refusing to guess costs it
+nothing — and the dry run names any fragment it declined, so a future notice
+that depends on one is visible rather than silent.
+
+### Historical repair
+
+`npm run repair:geography:dry` / `npm run repair:geography` — see
+`docs/recall-operations.md`. A projection repair is **not** a material recall
+change. `detectChanges` would classify a widening as `expansion_geography` and
+notify, which is exactly why the repair does not use that path: finding
+evidence an older parser could not read is not the agency announcing that a
+recall grew.
+
 ## Retailer evidence (C3.1)
 
 Personalization matches on the **persisted** `projection.retailerNames` — the

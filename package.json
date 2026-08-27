@@ -66,6 +66,8 @@
     "backfill:fda-images": "tsx scripts/backfill-fda-images.ts --apply",
     "backfill:retailers:dry": "tsx scripts/backfill-retailers.ts",
     "backfill:retailers": "tsx scripts/backfill-retailers.ts --apply",
+    "repair:geography:dry": "tsx scripts/repair-geography.ts",
+    "repair:geography": "tsx scripts/repair-geography.ts --apply",
     "labels:fsis:dry": "tsx scripts/render-fsis-labels.ts",
     "labels:fsis": "tsx scripts/render-fsis-labels.ts --apply"
   },

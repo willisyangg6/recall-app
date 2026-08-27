@@ -11,6 +11,7 @@
 import type {
   AffectedProduct,
   CaseProjection,
+  Geography,
   NotificationKind,
   NotificationSuppression,
   SourceSystem,
@@ -190,6 +191,17 @@ export interface RecallStore {
   updateCaseRetailerNames(
     id: string,
     retailerNames: string[],
+    expectedLastChangedAt: string,
+  ): Promise<boolean>;
+  /**
+   * The same narrow contract for `projection.geography` (C5.2A). A separate
+   * method rather than a generic field patch on purpose: these are the only
+   * two projection fields a maintenance repair is allowed to write, and a
+   * caller cannot reach any other one through this port.
+   */
+  updateCaseGeography(
+    id: string,
+    geography: Geography,
     expectedLastChangedAt: string,
   ): Promise<boolean>;
   replaceProducts(recallCaseId: string, products: AffectedProduct[]): Promise<void>;

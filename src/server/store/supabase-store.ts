@@ -8,6 +8,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type {
   AffectedProduct,
   CaseProjection,
+  Geography,
   SourceSystem,
   TimelineEntry,
 } from '../../domain/recall-types';
@@ -357,6 +358,28 @@ export class SupabaseStore implements RecallStore {
       .eq('last_changed_at', expectedLastChangedAt)
       .select('id');
     if (error) this.fail('updateCaseRetailerNames', error);
+    return (data?.length ?? 0) > 0;
+  }
+
+  async updateCaseGeography(
+    id: string,
+    geography: Geography,
+    expectedLastChangedAt: string,
+  ): Promise<boolean> {
+    // Identical contract to updateCaseRetailerNames above: re-read so the
+    // merge happens against the freshest projection, then make the write
+    // itself conditional on `last_changed_at`, so an ingest landing in
+    // between loses nothing — the update matches no row and we report a
+    // conflict rather than rolling its work back.
+    const current = await this.getCase(id);
+    if (!current || current.lastChangedAt !== expectedLastChangedAt) return false;
+    const { data, error } = await this.client
+      .from('recall_cases')
+      .update({ projection: { ...current.projection, geography } })
+      .eq('id', id)
+      .eq('last_changed_at', expectedLastChangedAt)
+      .select('id');
+    if (error) this.fail('updateCaseGeography', error);
     return (data?.length ?? 0) > 0;
   }
 

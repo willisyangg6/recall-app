@@ -125,8 +125,10 @@ const EXPECTED: Record<
   'PHA-05242026-01': { illness: 'reported' },
   // Retraction PHA: no illness statement → unknown, never zero.
   'PHA-04012026-01': { illness: 'unknown' },
-  // Unknown geography survives (empty field_states).
-  '006-2025': { geographyScope: 'unknown', illness: 'none_reported' },
+  // `field_states` is empty, but the summary says the items were distributed
+  // "in the state of Washington" — the canonical derivation (C5.2A) reads the
+  // notice's own words, so this is `states`, not a blank.
+  '006-2025': { geographyScope: 'states', illness: 'none_reported' },
   // Dirty recall numbers still produce full consumer rows.
   '034-2024': { company: 'Impero Foods & Meats', illness: 'none_reported' },
   '008': { productSummary: 'Pork' },

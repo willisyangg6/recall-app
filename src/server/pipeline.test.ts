@@ -300,11 +300,32 @@ test('unparseable records are quarantined without aborting the run', async () =>
   assert.equal(run.quarantined?.length, 1);
 });
 
-test('unknown geography survives the whole pipeline honestly', async () => {
+test('an empty structured state field is recovered from the notice’s own prose', async () => {
   const store = new MemoryStore();
+  // 006-2025 carries `field_states: []`, yet its summary says the items "were
+  // distributed to vending machines in office buildings in the state of
+  // Washington". Reading only the structured field left a Washington shopper
+  // looking at "Distribution not specified" about a recall in their state.
   await runFsisIngest(store, input([loadFixture('recall-closed-unknown-geography-006-2025')]), {
     now: NOW,
   });
+  const projection = [...store.cases.values()][0].projection;
+  assert.equal(projection.geography.scope, 'states');
+  assert.deepEqual(projection.geography.states, ['Washington']);
+});
+
+test('unknown geography survives the whole pipeline honestly', async () => {
+  const store = new MemoryStore();
+  // The same record with every distribution statement removed: no structured
+  // states, no prose, no table. Unknown is then the only honest answer, and
+  // it must never be rounded to nationwide or to an empty state list.
+  const silent = derive('recall-closed-unknown-geography-006-2025', {
+    field_summary:
+      '<p>LPK1, a Renton, Wash. establishment, is recalling approximately 303 pounds ' +
+      'of ready-to-eat chicken Caesar wrap products due to misbranding and an ' +
+      'undeclared allergen.</p>',
+  });
+  await runFsisIngest(store, input([silent]), { now: NOW });
   const projection = [...store.cases.values()][0].projection;
   assert.equal(projection.geography.scope, 'unknown');
   assert.deepEqual(projection.geography.states, []);
