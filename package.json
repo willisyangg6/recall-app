@@ -59,6 +59,7 @@
     "qa:personalization": "tsx scripts/qa-personalization.ts",
     "qa:feed": "tsx scripts/qa-feed-completeness.ts",
     "qa:duplicates": "tsx scripts/qa-duplicate-cases.ts",
+    "qa:categories": "tsx scripts/qa-categories.ts",
     "reconcile:fda-enforcement": "tsx scripts/reconcile-fda-enforcement.ts",
     "qa:fda-enforcement": "tsx scripts/qa-fda-enforcement.ts",
     "reconcile:duplicates": "tsx scripts/reconcile-duplicate-cases.ts",
