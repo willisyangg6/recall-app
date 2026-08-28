@@ -1,5 +1,5 @@
 /**
- * Reviewed lexical data for food-category matching (Phase C5.3B).
+ * Reviewed lexical data for food-category matching (Phases C5.3B / C5.3B-2).
  *
  * This file is DATA. It holds no matching logic — that lives in
  * food-category-matcher.ts — so the vocabulary of product language can be
@@ -30,6 +30,19 @@
  * span the compounds left, and the LAST surviving match in a phrase wins —
  * English puts the head noun last, so "Dark Chocolate Cherry Granola" is
  * granola, not chocolate and not cherries.
+ *
+ * ## Structural roles (C5.3B-2)
+ *
+ * The C5.3B locked evaluation failed (74.2% against a 95% gate), and the
+ * failure analysis showed the losses were STRUCTURAL, not lexical: English
+ * productively forms dish names ("meat pie", "chicken fried rice", "turkey
+ * stuffed pastry") whose head noun is a staple, and FDA marketing names
+ * postpose flavours ("Iced Tea Lemon"). A flat word list cannot express
+ * either. The role exports below give the matcher a small ontology —
+ * which staples form dishes with a protein, which categories treat a fruit
+ * word as a flavour, which markers mark a meat analogue or an infant
+ * audience — so those patterns are handled by RULES that generalize, not by
+ * memorizing one title at a time.
  */
 
 import type { FoodCategoryId } from './food-category';
@@ -61,7 +74,12 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
   { term: 'shrimp (?:meat|paste|scampi|skewers?)', category: 'seafood' },
   { term: 'cocktail shrimp', category: 'seafood', note: 'cocktail is a serving style' },
   { term: 'shrimp cocktail', category: 'seafood' },
-  { term: 'crab meat', category: 'seafood' },
+  { term: 'crab ?meats?', category: 'seafood' },
+  {
+    term: '(?:claw|lump|leg) meats?',
+    category: 'seafood',
+    note: 'crab-grade names; "meat" here is never butcher meat',
+  },
   { term: 'imitation crab', category: 'seafood' },
   {
     term: 'ice cream (?:bars?|cakes?|sandwich(?:es)?|cones?|cups?|products?|treats?)',
@@ -100,7 +118,16 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
     term: 'chocolate (?:bars?|chips?|chunks?|nonpareils?|pareils?|truffles?|raisins?|almonds?|peanuts?|pretzels?|nuts?|cherries|macadamias?)',
     category: 'snacks_candy',
   },
-  { term: 'chocolate covered [a-z]+', category: 'snacks_candy' },
+  {
+    term: '(?:chocolate|yogurt|candy)[- ]?(?:covered|filled|dipped|coated) [a-z]+',
+    category: 'snacks_candy',
+    note: 'the coating or filling is the confection; the covered thing is not the category',
+  },
+  {
+    term: "cookies (?:and|&|'?n'?) cream",
+    category: 'dairy_eggs',
+    note: 'a flavour name of a dairy product, not cookies plus cream',
+  },
   { term: 'butter ?milk', category: 'dairy_eggs' },
   { term: 'corn dogs?', category: 'meat_poultry' },
   { term: 'hot ?dogs?', category: 'meat_poultry' },
@@ -131,8 +158,23 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
     category: 'meat_poultry',
   },
   { term: 'turkey burgers?', category: 'meat_poultry' },
-  { term: 'beef (?:jerky|patt(?:y|ies)|tallow|sticks?)', category: 'meat_poultry' },
+  { term: 'beef (?:jerky|patt(?:y|ies)|sticks?)', category: 'meat_poultry' },
   { term: 'corned beef', category: 'meat_poultry' },
+  {
+    term: '(?:beef|pork|duck|chicken) (?:tallows?|lards?|fats?)',
+    category: 'pantry',
+    note: 'rendered cooking fats are shelved with oils, not cuts of meat',
+  },
+  {
+    term: 'blood (?:curds?|tofu|cakes?|sausages?)',
+    category: 'meat_poultry',
+    note: 'blood curd/tofu is a meat product; no dairy curd involved',
+  },
+  {
+    term: '(?:luncheon|olive|pickle|pimento) lo(?:af|aves)',
+    category: 'meat_poultry',
+    note: 'deli luncheon loaves are sliced meats, not bakery',
+  },
   { term: 'croutons?', category: 'bakery' },
   { term: 'bread ?crumbs?', category: 'bakery' },
   { term: 'potato bread', category: 'bakery' },
@@ -163,6 +205,11 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
     category: 'pantry',
   },
   { term: 'salad dressings?', category: 'pantry' },
+  {
+    term: '(?:cilantro|chipotle|jalape[nñ]o|garlic|avocado|lime) crema',
+    category: 'pantry',
+    note: 'a flavoured crema is a table sauce; bare crema stays the dairy staple',
+  },
 
   // ── Composed dishes: a single dish, never its parts ──────────────────────
   { term: "macaroni (?:and|&|n'?) cheese", category: 'prepared' },
@@ -217,6 +264,25 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
   },
   { term: 'sushi (?:rolls?|products?)?', category: 'prepared' },
   { term: 'breakfast (?:sandwich(?:es)?|burritos?|bowls?)', category: 'prepared' },
+  {
+    term: 'fried (?:rice|noodles?)',
+    category: 'prepared',
+    note: 'a dish name whatever precedes it',
+  },
+  { term: 'lo mein|chow mein|pad thai|chow fun', category: 'prepared' },
+  { term: 'sh(?:u|iu) ?mai|siu ?mai', category: 'prepared', note: 'dim-sum dumpling names' },
+  { term: 'banh mi', category: 'prepared' },
+  {
+    term: 'banh pia',
+    category: 'bakery',
+    note: 'a Vietnamese filled pastry, like adding "mooncake"',
+  },
+  {
+    term: 'store[- ]?(?:prepared|made) (?:items?|foods?|products?|meals?|dish(?:es)?)',
+    category: 'prepared',
+    note: 'deli-counter language for made-on-site dishes',
+  },
+  { term: 'salad mix(?:es)?', category: 'produce', note: 'bagged mixes, like salad kits' },
 
   // ── Baby: only where the product is sold for infants ─────────────────────
   { term: '(?:infant|baby|toddler) formula', category: 'baby' },
@@ -268,6 +334,35 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
   { term: 'trail mix(?:es)?', category: 'snacks_candy' },
   { term: 'party mix(?:es)?', category: 'snacks_candy' },
   { term: 'popcorn', category: 'snacks_candy' },
+  {
+    term: '(?:popped )?water lily seeds?',
+    category: 'snacks_candy',
+    note: 'makhana — popped and eaten like popcorn, not a pantry seed',
+  },
+  {
+    term: 'onion (?:flavou?red )?rings?',
+    category: 'snacks_candy',
+    note: 'shelf-stable snack rings; the flavour word sits inside the name',
+  },
+  {
+    term: '(?:waffle|sugar|ice cream) cones?',
+    category: 'snacks_candy',
+    note: 'cones sold as a treat component, filled or empty',
+  },
+
+  // ── Pantry goods whose head word is a false friend ───────────────────────
+  {
+    term: '(?:processing|curing|brining) kits?',
+    category: 'pantry',
+    note: 'a seasoning/curing kit is a pantry good, not a meal kit',
+  },
+
+  // ── Baby audience stated in the name ─────────────────────────────────────
+  {
+    term: 'nursery water',
+    category: 'baby',
+    note: 'water sold explicitly for preparing infant feeds',
+  },
 ];
 
 /**
@@ -303,11 +398,11 @@ export const HEAD_TERMS: readonly LexiconEntry[] = [
     category: 'produce',
   },
   {
-    term: 'broccoli|cauliflower|peppers?|jalapenos?|jalapeños?|squash(?:es)?|zucchinis?|cabbages?|asparagus|beets?|radish(?:es)?|leeks?|scallions?',
+    term: 'broccoli|cauliflower|peppers?|jalapenos?|jalapeños?|squash(?:es)?|zucchinis?|cabbages?|asparagus|beets?|radish(?:es)?|leeks?|scallions?|peas?|florets?|corn',
     category: 'produce',
   },
   {
-    term: 'mushrooms?|enoki|garlic|ginger|eggplants?|okra|artichokes?|yams?|cassava|plantains?|shallots?',
+    term: 'mushrooms?|enoki|garlic|ginger|eggplants?|okra|artichokes?|yams?|cassava|plantains?|shallots?|coconuts?',
     category: 'produce',
   },
   { term: 'vegetables?|veggies?|produce|greens', category: 'produce' },
@@ -317,12 +412,17 @@ export const HEAD_TERMS: readonly LexiconEntry[] = [
 
   // ── Meat & poultry ───────────────────────────────────────────────────────
   {
-    term: 'beef|steaks?|briskets?|veal|bison|meatloaf|meatballs?|koftas?|sliders?',
+    term: 'beef|steaks?|briskets?|veal|bison|meatloaf|meatballs?|koftas?',
     category: 'meat_poultry',
   },
   {
-    term: 'pork|bacon|hams?|chorizos?|sausages?|cracklings?|prosciutto|pepperoni|salam[ei]|carnitas|charcuterie|kielbasa|bratwurst',
+    term: 'pork|bacon|hams?|chorizos?|sausages?|prosciutto|pepperoni|salam[ei]|carnitas|charcuterie|kielbasa|bratwurst',
     category: 'meat_poultry',
+  },
+  {
+    term: 'franks?|links?|patt(?:y|ies)|nuggets?',
+    category: 'meat_poultry',
+    note: 'generic butcher-counter forms; analogue markers move plant versions to Prepared',
   },
   { term: 'chicken|turkey|poultry|ducks?|hens?|quail', category: 'meat_poultry' },
   { term: 'goat|lamb|mutton|rabbits?|venison|elk|goose', category: 'meat_poultry' },
@@ -392,6 +492,12 @@ export const HEAD_TERMS: readonly LexiconEntry[] = [
     category: 'prepared',
   },
   {
+    term: 'risotto|paella|biryani|fritters?|coneys?|sliders?',
+    category: 'prepared',
+    note: 'dish names; a slider or coney is a made sandwich, not a cut of meat',
+  },
+  { term: 'pot ?stickers?|gyozas?|pelmeni', category: 'prepared' },
+  {
     term: 'sandwich(?:es)?|subs?|burgers?|cheeseburgers?|wraps?|paninis?|kimbap|gyros?',
     category: 'prepared',
   },
@@ -408,9 +514,13 @@ export const HEAD_TERMS: readonly LexiconEntry[] = [
   },
 
   // ── Snacks & candy ───────────────────────────────────────────────────────
-  { term: 'chips?|pretzels?|puffs?|crisps?|snacks?|nachos?|bars?', category: 'snacks_candy' },
   {
-    term: 'chocolates?|cand(?:y|ies)|confections?|confectionar(?:y|ies)|confectioner(?:y|ies)|gumm(?:y|ies)|nonpareils?|truffles?|fudge|marshmallows?|toffee|caramels?|brittle|bark|bonbons?|licorice',
+    term: 'chips?|pretzels?|puffs?|crisps?|snacks?|nachos?|bars?|cracklings?',
+    category: 'snacks_candy',
+    note: 'cracklings sit with pork rinds and chicharrones in the snack aisle',
+  },
+  {
+    term: 'chocolates?|cand(?:y|ies)|confections?|confectionar(?:y|ies)|confectioner(?:y|ies)|gumm(?:y|ies)|nonpareils?|truffles?|fudge|marshmallows?|toffee|caramels?|brittle|bark|bonbons?|licorice|pops?',
     category: 'snacks_candy',
   },
 
@@ -423,7 +533,7 @@ export const HEAD_TERMS: readonly LexiconEntry[] = [
   { term: 'cereals?|granola|oatmeal|muesli|oats', category: 'pantry' },
   { term: 'flours?|cornmeal|semolina|starch|atta|meal', category: 'pantry' },
   {
-    term: 'pastas?|noodles?|spaghetti|macaroni|orzo|campanelle|vermicelli|linguini?|fettuccine|penne|rigatoni|bowtie',
+    term: 'pastas?|noodles?|spaghetti|macaroni|orzo|campanelle|vermicelli|linguini?|fettuccine|penne|rigatoni|bowtie|raviolis?|tortellini|gnocchi',
     category: 'pantry',
   },
   {
@@ -438,7 +548,7 @@ export const HEAD_TERMS: readonly LexiconEntry[] = [
     term: 'seasonings?|spices?|cinnamon|paprika|turmeric|cumin|asafoetida|herbs?|salt|pepper',
     category: 'pantry',
   },
-  { term: 'oils?|shortening|lard', category: 'pantry' },
+  { term: 'oils?|shortening|lards?|tallows?|fats?', category: 'pantry' },
   {
     term: 'honey|syrups?|sugar|molasses|jams?|jell(?:y|ies)|preserves?|spreads?',
     category: 'pantry',
@@ -499,6 +609,7 @@ export const FLAVOUR_MARKERS: readonly string[] = [
   'substitute',
   'alternative',
   'imitation',
+  'based',
 ];
 
 /**
@@ -573,20 +684,134 @@ export const DESCRIPTOR_WORDS: readonly string[] = [
   'sizes',
   'premium',
   'deluxe',
+  'for',
+  'glazed',
+  'seasoned',
+  'marinated',
+  'smoked',
+  'cured',
+  'breaded',
+  'battered',
 ];
 
 /**
- * Categories that can be an INGREDIENT of a prepared dish, so a bare mention of
- * one beside a dish is absorbed into it ("meat and poultry dumplings" is a
- * dumpling). Produce is deliberately absent: a contaminated-produce notice
- * routinely recalls the raw item and the prepared foods made from it as two
- * genuinely separate products ("cucumbers and salads").
+ * Categories that can MODIFY another product's name, so a bare mention of one
+ * before a modified head is a modifier, not a product ("cheese and garlic
+ * croutons" recalls croutons). Produce is deliberately absent: a
+ * contaminated-produce notice routinely recalls the raw item and the prepared
+ * foods made from it as two genuinely separate products ("cucumbers and
+ * salads").
  */
 export const COMPONENT_CATEGORY_IDS: readonly FoodCategoryId[] = [
   'meat_poultry',
   'seafood',
   'dairy_eggs',
   'pantry',
+];
+
+/**
+ * Categories a prepared dish absorbs when they stand bare beside it ("meat and
+ * poultry dumplings" is a dumpling). Narrower than COMPONENT_CATEGORY_IDS:
+ * pantry is excluded because a condiment beside a dish is usually its own
+ * recalled product ("salsa and salads" recalls both), while a bare protein or
+ * dairy word beside a dish is what the dish is made of.
+ */
+export const ABSORBABLE_CATEGORY_IDS: readonly FoodCategoryId[] = [
+  'meat_poultry',
+  'seafood',
+  'dairy_eggs',
+];
+
+/**
+ * Categories that FORM A DISH when they modify a dishable staple: "meat pie",
+ * "chicken fried rice", "turkey stuffed pastry", "beef and cheese tortilla".
+ * Dairy alone does not ("cheese biscuits" are bakery); produce alone does not
+ * ("mushroom tortillas" are tortillas).
+ */
+export const PROTEIN_CATEGORY_IDS: readonly FoodCategoryId[] = ['meat_poultry', 'seafood'];
+
+/**
+ * Staple head nouns that name a DISH once a protein modifies them or is listed
+ * as their ingredient. Matched against the head noun's own text, whole-word:
+ * a compound like "apple pie" has already claimed its span and is never
+ * re-read here.
+ */
+export const DISHABLE_STAPLE_TERMS: readonly string[] = [
+  'rice',
+  'noodles?',
+  'pastas?',
+  'spaghetti',
+  'macaroni',
+  'vermicelli',
+  'raviolis?',
+  'tortellini',
+  'pies?',
+  'pastr(?:y|ies)',
+  'turnovers?',
+  'tortillas?',
+  'biscuits?',
+];
+
+/**
+ * Dish-class words that cannot be an INGREDIENT of the thing before them, so
+ * when one heads the clause after "with" it is the head of the whole name
+ * ("Spaghetti Loops With Meat Sauce Entrée Products" is an entrée). "Soup" is
+ * deliberately absent — an instant-noodle cup comes "with soup base", and the
+ * soup packet is an ingredient.
+ */
+export const DISH_CLASS_TERMS: readonly string[] = [
+  'entr[eé]es?',
+  'meals?',
+  'dinners?',
+  'bowls?',
+  'kits?',
+  'platters?',
+  'trays?',
+];
+
+/**
+ * Categories whose product names take a produce word as a FLAVOUR, wherever it
+ * sits: "Iced Tea Lemon" is tea, "Pear, Kiwi, Spinach & Pea Baby Food" is baby
+ * food, "Apple, Cherry, and Peach Pies" are pies. Prepared and meat are
+ * deliberately absent — beside those, produce is usually a genuinely recalled
+ * second product.
+ */
+export const FLAVOURABLE_TARGET_IDS: readonly FoodCategoryId[] = [
+  'bakery',
+  'snacks_candy',
+  'dairy_eggs',
+  'seafood',
+  'supplements',
+  'baby',
+  'beverages',
+];
+
+/**
+ * Markers proving a meat or seafood word names a plant-based analogue. The
+ * product is sold as a ready alternative — Prepared meals — because
+ * Meat & poultry is for meat products. Note the asymmetry with dairy:
+ * "dairy-free yogurt" is still yogurt (Dairy & eggs), but "plant-based
+ * chik'n nuggets" contain no chicken at all.
+ */
+export const ANALOGUE_MARKERS: readonly string[] = [
+  'plant[- ]?based',
+  'meat[- ]?less',
+  'meat[- ]free',
+  'vegan',
+  'veggie',
+  'vegetarian',
+];
+
+/**
+ * The product text itself stating an infant audience. This is not audience
+ * INFERENCE (which stays forbidden — a brand aimed at parents proves nothing);
+ * it is the name saying "for baby", which is the Baby food & formula
+ * definition verbatim.
+ */
+export const BABY_AUDIENCE_MARKERS: readonly string[] = [
+  'for bab(?:y|ies)',
+  'for infants?',
+  'for toddlers?',
 ];
 
 /** Words that, when they follow a term, negate it ("dairy-free", "sugar free"). */

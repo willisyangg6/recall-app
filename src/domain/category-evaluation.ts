@@ -1,17 +1,21 @@
 /**
- * Gold-set evaluation for food-category matching (Phase C5.3B).
+ * Gold-set evaluation for food-category matching (Phases C5.3B / C5.3B-2).
  *
  * Pure and shared: the `qa:categories` command and the test suite run THIS
  * code, so a threshold can never pass in a test and fail in the report, or
  * vice versa. The gates live here too, as data, for the same reason.
  *
- * ## Why two splits
+ * ## Why three splits
  *
  * A lexicon tuned against every case it is measured on is a lookup table with
  * extra steps, and its reported accuracy means nothing. The fixture therefore
- * carries a `development` portion, which the lexicon was written against, and
- * an `evaluation` portion, which is measured once at the end. Only the second
- * number is a claim about future notices.
+ * carries a `development` portion — everything the matcher was ever tuned or
+ * debugged against, INCLUDING the two spent evaluation attempts of C5.3B —
+ * and two final holdouts drawn in C5.3B-2 from cases no split had ever
+ * touched: `final_natural`, sampled to resemble the real corpus, and
+ * `final_challenge`, selected by source structure to concentrate the hard
+ * families. Only the final holdouts are claims about future notices, and they
+ * are measured exactly once against the frozen matcher.
  *
  * ## Why exact-set accuracy leads
  *
@@ -28,10 +32,17 @@ import {
   MAX_CATEGORIES_PER_CASE,
   type FoodCategoryId,
 } from './food-category';
+import { COMPACT_CATEGORY_IDS, toCompactCategories } from './food-category-compact';
 import { categoriesForCase, type ProductTextBasis } from './food-category-matcher';
 import type { SourceAgency } from './recall-types';
 
-export type GoldSplit = 'development' | 'evaluation';
+export type GoldSplit = 'development' | 'final_natural' | 'final_challenge';
+
+export const GOLD_SPLITS: readonly GoldSplit[] = [
+  'development',
+  'final_natural',
+  'final_challenge',
+];
 
 /** One reviewed gold-set row. Mirrors the fixture schema exactly. */
 export interface GoldRow {
@@ -66,17 +77,17 @@ export interface CategoryFailure {
   sourceId: string;
   agency: SourceAgency;
   productText: string;
-  expected: FoodCategoryId[];
-  actual: FoodCategoryId[];
+  expected: string[];
+  actual: string[];
   /** Predicted but not expected. */
-  overClassified: FoodCategoryId[];
+  overClassified: string[];
   /** Expected but not predicted. */
-  missed: FoodCategoryId[];
+  missed: string[];
   note?: string;
 }
 
 export interface PerCategoryMetric {
-  category: FoodCategoryId;
+  category: string;
   truePositives: number;
   falsePositives: number;
   falseNegatives: number;
@@ -87,7 +98,7 @@ export interface PerCategoryMetric {
 }
 
 export interface CategoryEvaluation {
-  split: GoldSplit | 'all';
+  split: string;
   total: number;
   exactSetMatches: number;
   exactSetAccuracy: number;
@@ -123,9 +134,23 @@ function sameSet(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
-export function evaluateRows(rows: GoldRow[], split: GoldSplit | 'all'): CategoryEvaluation {
-  const perCategory = new Map<FoodCategoryId, PerCategoryMetric>(
-    FOOD_CATEGORY_IDS.map((category) => [
+interface EvaluationPair {
+  row: GoldRow;
+  expected: string[];
+  actual: string[];
+}
+
+/**
+ * The metric arithmetic, shared verbatim by the eleven-category evaluation and
+ * the compact diagnostic so the two can never drift apart.
+ */
+function evaluatePairs(
+  pairs: EvaluationPair[],
+  split: string,
+  vocabulary: readonly string[],
+): CategoryEvaluation {
+  const perCategory = new Map<string, PerCategoryMetric>(
+    vocabulary.map((category) => [
       category,
       {
         category,
@@ -153,10 +178,7 @@ export function evaluateRows(rows: GoldRow[], split: GoldSplit | 'all'): Categor
   let overClassifications = 0;
   let missedCategories = 0;
 
-  for (const row of rows) {
-    const actual = predict(row);
-    const expected = row.expected;
-
+  for (const { row, expected, actual } of pairs) {
     if (actual.length > 0) categorized++;
     else actualZero++;
     if (expected.length === 0) expectedZero++;
@@ -207,13 +229,13 @@ export function evaluateRows(rows: GoldRow[], split: GoldSplit | 'all'): Categor
 
   return {
     split,
-    total: rows.length,
+    total: pairs.length,
     exactSetMatches,
-    exactSetAccuracy: rows.length === 0 ? 0 : exactSetMatches / rows.length,
+    exactSetAccuracy: pairs.length === 0 ? 0 : exactSetMatches / pairs.length,
     microPrecision: predictedTotal === 0 ? 1 : truePositives / predictedTotal,
     microRecall: expectedTotal === 0 ? 1 : truePositives / expectedTotal,
     categorized,
-    categorizedCoverage: rows.length === 0 ? 0 : categorized / rows.length,
+    categorizedCoverage: pairs.length === 0 ? 0 : categorized / pairs.length,
     expectedZero,
     actualZero,
     expectedMulti,
@@ -226,12 +248,108 @@ export function evaluateRows(rows: GoldRow[], split: GoldSplit | 'all'): Categor
   };
 }
 
+/** Eleven-category evaluation: the matcher's own vocabulary. */
+export function evaluateRows(rows: GoldRow[], split: string): CategoryEvaluation {
+  return evaluatePairs(
+    rows.map((row) => ({ row, expected: row.expected, actual: predict(row) })),
+    split,
+    FOOD_CATEGORY_IDS,
+  );
+}
+
+/**
+ * The compact seven-category DIAGNOSTIC: the same rows and the same
+ * predictions, mechanically merged through the predeclared mapping on both
+ * sides. Nothing is re-predicted and nothing is relabeled.
+ */
+export function evaluateCompactRows(rows: GoldRow[], split: string): CategoryEvaluation {
+  return evaluatePairs(
+    rows.map((row) => ({
+      row,
+      expected: toCompactCategories(row.expected),
+      actual: toCompactCategories(predict(row)),
+    })),
+    split,
+    COMPACT_CATEGORY_IDS,
+  );
+}
+
+// ── Deterministic cross-validation ──────────────────────────────────────────
+
+export interface CrossValidation {
+  folds: CategoryEvaluation[];
+  meanExactSet: number;
+  minExactSet: number;
+  maxExactSet: number;
+  /** Population standard deviation of fold exact-set accuracy. */
+  stdevExactSet: number;
+  meanMicroPrecision: number;
+  meanMicroRecall: number;
+}
+
+/**
+ * Deterministic stratified folds over the development rows. Strata are
+ * (agency, first expected category), rows are ordered by caseId inside each
+ * stratum, and folds are dealt round-robin — no randomness, so every machine
+ * computes the same folds.
+ *
+ * Because the lexicon was reviewed against ALL development rows, fold accuracy
+ * is NOT a held-out estimate; the folds measure how stable the score is across
+ * subsamples and which failure families recur. Only the final holdouts
+ * estimate generalization.
+ */
+export function crossValidate(rows: GoldRow[], foldCount = 5): CrossValidation {
+  const strata = new Map<string, GoldRow[]>();
+  for (const row of [...rows].sort((a, b) => a.caseId.localeCompare(b.caseId))) {
+    const key = `${row.agency}:${row.expected[0] ?? 'none'}`;
+    const stratum = strata.get(key) ?? [];
+    stratum.push(row);
+    strata.set(key, stratum);
+  }
+
+  const folds: GoldRow[][] = Array.from({ length: foldCount }, () => []);
+  let dealt = 0;
+  for (const key of [...strata.keys()].sort()) {
+    for (const row of strata.get(key)!) folds[dealt++ % foldCount].push(row);
+  }
+
+  const evaluations = folds.map((fold, index) => evaluateRows(fold, `fold ${index + 1}`));
+  const exact = evaluations.map((e) => e.exactSetAccuracy);
+  const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length;
+  const meanExactSet = mean(exact);
+  return {
+    folds: evaluations,
+    meanExactSet,
+    minExactSet: Math.min(...exact),
+    maxExactSet: Math.max(...exact),
+    stdevExactSet: Math.sqrt(mean(exact.map((v) => (v - meanExactSet) ** 2))),
+    meanMicroPrecision: mean(evaluations.map((e) => e.microPrecision)),
+    meanMicroRecall: mean(evaluations.map((e) => e.microRecall)),
+  };
+}
+
 // ── Gates ───────────────────────────────────────────────────────────────────
 
-export const GATES = {
+export interface GateThresholds {
+  exactSetAccuracy: number;
+  microPrecision: number;
+  microRecall: number;
+  /** Per-agency exact-set floor; absent means agencies are not gated. */
+  agencyExactSetAccuracy?: number;
+  perCategoryMinSupport?: number;
+  perCategoryRecall?: number;
+  perCategoryPrecision?: number;
+}
+
+/**
+ * The natural-distribution gates. Set by the milestone; never weakened after
+ * results are seen.
+ */
+export const GATES: GateThresholds = {
   exactSetAccuracy: 0.95,
   microPrecision: 0.95,
   microRecall: 0.95,
+  agencyExactSetAccuracy: 0.95,
   /**
    * A per-category floor only applies once a category has enough expected
    * occurrences for a percentage to mean anything. Below it, the brief
@@ -243,49 +361,68 @@ export const GATES = {
   perCategoryPrecision: 0.8,
 } as const;
 
+/** The boundary-challenge gates: deliberately hard cases, a slightly lower bar. */
+export const CHALLENGE_GATES: GateThresholds = {
+  exactSetAccuracy: 0.9,
+  microPrecision: 0.9,
+  microRecall: 0.9,
+} as const;
+
 /**
  * Every gate the evaluation misses, as human-readable lines. Empty means the
- * matcher passed. The caller decides what to do about it; nothing here exits.
+ * split passed its thresholds. The caller decides what to do about it;
+ * nothing here exits.
  */
 export function gateFailures(
   overall: CategoryEvaluation,
   byAgency: { agency: SourceAgency; evaluation: CategoryEvaluation }[],
+  thresholds: GateThresholds = GATES,
 ): string[] {
   const failures: string[] = [];
   const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
-  if (overall.exactSetAccuracy < GATES.exactSetAccuracy) {
+  if (overall.exactSetAccuracy < thresholds.exactSetAccuracy) {
     failures.push(
-      `overall exact-set accuracy ${pct(overall.exactSetAccuracy)} < ${pct(GATES.exactSetAccuracy)}`,
+      `overall exact-set accuracy ${pct(overall.exactSetAccuracy)} < ${pct(thresholds.exactSetAccuracy)}`,
     );
   }
-  if (overall.microPrecision < GATES.microPrecision) {
+  if (overall.microPrecision < thresholds.microPrecision) {
     failures.push(
-      `overall micro precision ${pct(overall.microPrecision)} < ${pct(GATES.microPrecision)}`,
+      `overall micro precision ${pct(overall.microPrecision)} < ${pct(thresholds.microPrecision)}`,
     );
   }
-  if (overall.microRecall < GATES.microRecall) {
-    failures.push(`overall micro recall ${pct(overall.microRecall)} < ${pct(GATES.microRecall)}`);
+  if (overall.microRecall < thresholds.microRecall) {
+    failures.push(
+      `overall micro recall ${pct(overall.microRecall)} < ${pct(thresholds.microRecall)}`,
+    );
   }
-  for (const { agency, evaluation } of byAgency) {
-    if (evaluation.total > 0 && evaluation.exactSetAccuracy < GATES.exactSetAccuracy) {
-      failures.push(
-        `${agency} exact-set accuracy ${pct(evaluation.exactSetAccuracy)} < ${pct(GATES.exactSetAccuracy)}`,
-      );
+  if (thresholds.agencyExactSetAccuracy !== undefined) {
+    for (const { agency, evaluation } of byAgency) {
+      if (evaluation.total > 0 && evaluation.exactSetAccuracy < thresholds.agencyExactSetAccuracy) {
+        failures.push(
+          `${agency} exact-set accuracy ${pct(evaluation.exactSetAccuracy)} < ${pct(thresholds.agencyExactSetAccuracy)}`,
+        );
+      }
     }
   }
-  for (const metric of overall.perCategory) {
-    if (metric.support < GATES.perCategoryMinSupport) continue;
-    if (metric.recall !== null && metric.recall < GATES.perCategoryRecall) {
-      failures.push(
-        `category ${metric.category} recall ${metric.truePositives}/${metric.support} < ${pct(GATES.perCategoryRecall)}`,
-      );
-    }
-    const predicted = metric.truePositives + metric.falsePositives;
-    if (metric.precision !== null && metric.precision < GATES.perCategoryPrecision) {
-      failures.push(
-        `category ${metric.category} precision ${metric.truePositives}/${predicted} < ${pct(GATES.perCategoryPrecision)}`,
-      );
+  if (
+    thresholds.perCategoryMinSupport !== undefined &&
+    thresholds.perCategoryRecall !== undefined &&
+    thresholds.perCategoryPrecision !== undefined
+  ) {
+    for (const metric of overall.perCategory) {
+      if (metric.support < thresholds.perCategoryMinSupport) continue;
+      if (metric.recall !== null && metric.recall < thresholds.perCategoryRecall) {
+        failures.push(
+          `category ${metric.category} recall ${metric.truePositives}/${metric.support} < ${pct(thresholds.perCategoryRecall)}`,
+        );
+      }
+      const predicted = metric.truePositives + metric.falsePositives;
+      if (metric.precision !== null && metric.precision < thresholds.perCategoryPrecision) {
+        failures.push(
+          `category ${metric.category} precision ${metric.truePositives}/${predicted} < ${pct(thresholds.perCategoryPrecision)}`,
+        );
+      }
     }
   }
   if (overall.maxCategoriesAssigned > MAX_CATEGORIES_PER_CASE) {
@@ -296,11 +433,47 @@ export function gateFailures(
   return failures;
 }
 
+export type FinalVerdict = 'GREEN' | 'YELLOW' | 'NOT_PASSING';
+
+/**
+ * The decision rule of the milestone, as data: GREEN only when the
+ * eleven-category matcher passes BOTH final gates (and the run is
+ * deterministic with an intact freeze); YELLOW when eleven fails but the
+ * predeclared compact merge passes the same gates on the same predictions —
+ * a founder decision, never an automatic adoption; NOT_PASSING otherwise.
+ * Only GREEN maps to a zero exit.
+ */
+export function finalVerdict(input: {
+  elevenNaturalFailures: string[];
+  elevenChallengeFailures: string[];
+  compactNaturalFailures: string[];
+  compactChallengeFailures: string[];
+  deterministic: boolean;
+  freezeIntact: boolean;
+}): FinalVerdict {
+  const sound = input.deterministic && input.freezeIntact;
+  if (
+    sound &&
+    input.elevenNaturalFailures.length === 0 &&
+    input.elevenChallengeFailures.length === 0
+  ) {
+    return 'GREEN';
+  }
+  if (
+    sound &&
+    input.compactNaturalFailures.length === 0 &&
+    input.compactChallengeFailures.length === 0
+  ) {
+    return 'YELLOW';
+  }
+  return 'NOT_PASSING';
+}
+
 // ── Fixture validation ──────────────────────────────────────────────────────
 
 /**
- * Structural validation of the fixture. A gold set that has silently lost its
- * evaluation rows, gained a duplicate case, or acquired an unknown category id
+ * Structural validation of the fixture. A gold set that has silently lost a
+ * final split, gained a duplicate case, or acquired an unknown category id
  * would otherwise report a cheerful, meaningless pass.
  */
 export function validateGoldSet(goldSet: GoldSet): string[] {
@@ -318,7 +491,7 @@ export function validateGoldSet(goldSet: GoldSet): string[] {
     if (row.agency !== 'FDA' && row.agency !== 'FSIS') {
       problems.push(`${where}: unknown agency ${String(row.agency)}`);
     }
-    if (row.split !== 'development' && row.split !== 'evaluation') {
+    if (!GOLD_SPLITS.includes(row.split)) {
       problems.push(`${where}: unknown split ${String(row.split)}`);
     }
     if (typeof row.productText !== 'string' || row.productText.trim() === '') {
@@ -345,10 +518,10 @@ export function validateGoldSet(goldSet: GoldSet): string[] {
     }
   }
 
-  for (const split of ['development', 'evaluation'] as const) {
+  for (const split of GOLD_SPLITS) {
     const rows = goldSet.rows.filter((row) => row.split === split);
     if (rows.length === 0) {
-      problems.push(`${split} split is empty — evaluation cannot be silently omitted`);
+      problems.push(`${split} split is empty — a final evaluation cannot be silently omitted`);
       continue;
     }
     for (const agency of ['FDA', 'FSIS'] as const) {
@@ -356,17 +529,31 @@ export function validateGoldSet(goldSet: GoldSet): string[] {
         problems.push(`${split} split has no ${agency} rows`);
       }
     }
+  }
+
+  // The development split must exercise everything, including uncategorized
+  // rows. The final holdout requires every category and a multi-category case
+  // across the UNION of its two splits: the natural sample is drawn blind to
+  // category (forcing coverage would un-naturalize it), and the untouched
+  // corpus pool contained no remaining non-food or product-class-free case,
+  // so a final uncategorized row is impossible — disclosed, not hidden.
+  const development = goldSet.rows.filter((row) => row.split === 'development');
+  const finalRows = goldSet.rows.filter((row) => row.split !== 'development');
+  for (const [name, rows] of [
+    ['development', development],
+    ['final holdout', finalRows],
+  ] as const) {
     for (const category of FOOD_CATEGORY_IDS) {
       if (!rows.some((row) => row.expected.includes(category))) {
-        problems.push(`${split} split has no rows expecting ${category}`);
+        problems.push(`${name} has no rows expecting ${category}`);
       }
     }
-    if (!rows.some((row) => row.expected.length === 0)) {
-      problems.push(`${split} split has no uncategorized rows`);
-    }
     if (!rows.some((row) => row.expected.length > 1)) {
-      problems.push(`${split} split has no multi-category rows`);
+      problems.push(`${name} has no multi-category rows`);
     }
+  }
+  if (!development.some((row) => row.expected.length === 0)) {
+    problems.push(`development has no uncategorized rows`);
   }
   return problems;
 }

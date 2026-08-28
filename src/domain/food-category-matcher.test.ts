@@ -163,24 +163,25 @@ test('co-equal products in a long list are all kept', () => {
 });
 
 /**
- * KNOWN LIMITATION, asserted so it stays visible rather than being discovered
- * in production. "Cheese and garlic croutons" and "frozen waffle and turkey
- * sausage products" are the same shape — bare term, conjunction, modifier plus
- * head — but the first coordinates modifiers of one product and the second
- * lists two. Nothing in the text distinguishes them, so the matcher applies the
- * modifier reading and drops the waffles. See docs/recall-food-categories.md.
+ * The C5.3B known limitation, resolved structurally in C5.3B-2: "cheese and
+ * garlic croutons" and "frozen waffle and turkey sausage products" share a
+ * shape, but the KIND of word decides — a component-category word (cheese) can
+ * modify a head; a bakery word (waffle) beside a modified head is its own
+ * product.
  */
-test('KNOWN LIMITATION: a co-equal product before a modified head is dropped', () => {
-  assert.deepEqual(of('Frozen Waffle and Turkey Sausage Products'), ['meat_poultry']);
+test('a co-equal bakery product before a modified head survives; a component does not', () => {
+  assert.deepEqual(of('Frozen Waffle and Turkey Sausage Products'), ['meat_poultry', 'bakery']);
+  assert.deepEqual(of('Cheese and Garlic Croutons'), ['bakery']);
 });
 
 /**
- * KNOWN LIMITATION. Component absorption reads a bare staple beside a dish as
- * an ingredient of it, which is right for "meat and poultry dumplings" and
- * wrong here: the salsa is a third recalled product, not a salad ingredient.
+ * The C5.3B absorption over-reach, resolved in C5.3B-2: a dish absorbs bare
+ * meat/seafood/dairy beside it, but NOT pantry — a condiment beside a dish is
+ * usually its own recalled product.
  */
-test('KNOWN LIMITATION: a bare staple beside a dish is read as its ingredient', () => {
-  assert.deepEqual(of('Fresh cucumbers, salsa and salads'), ['produce', 'prepared']);
+test('a bare condiment beside a dish stays a product; a bare protein is absorbed', () => {
+  assert.deepEqual(of('Fresh cucumbers, salsa and salads'), ['produce', 'prepared', 'pantry']);
+  assert.deepEqual(of('Meat and Poultry Dumplings'), ['prepared']);
 });
 
 test('a genuinely multi-category recall carries each category, in display order', () => {
@@ -307,6 +308,120 @@ test('normalization keeps hyphens so bound words survive splitting', () => {
 test('phrase splitting separates products but not ingredients', () => {
   assert.deepEqual(splitProductPhrases('cucumbers and salads'), ['cucumbers', 'salads']);
   assert.deepEqual(splitProductPhrases('salads containing cucumbers'), ['salads']);
+});
+
+// ── Structural precedence rules (C5.3B-2) ───────────────────────────────────
+
+test('a protein modifier turns a dishable staple head into a dish', () => {
+  assert.deepEqual(of('Meat Pie Products'), ['prepared']);
+  assert.deepEqual(of('Chicken Fried Rice Products'), ['prepared']);
+  assert.deepEqual(of('Frozen Ready-To-Eat Turkey Stuffed Pastry Products'), ['prepared']);
+  assert.deepEqual(of('Beef and Cheese Tortilla Products'), ['prepared']);
+});
+
+test('a protein in the ingredient clause also forms the dish', () => {
+  assert.deepEqual(of('Canned Spaghetti With Sausage Products'), ['prepared']);
+});
+
+test('without a protein, a dishable staple keeps its own aisle', () => {
+  assert.deepEqual(of('Apple Pie'), ['bakery']);
+  assert.deepEqual(of('Cheese Biscuits'), ['bakery']);
+});
+
+test('rendered fats are pantry goods, never cuts of meat', () => {
+  assert.deepEqual(of('Pork Lard & Beef Tallow Products'), ['pantry']);
+  assert.deepEqual(of('Meat and Poultry Fat and Lard Products'), ['pantry']);
+});
+
+test('a postposed fruit word is a flavour of the product before it', () => {
+  assert.deepEqual(of('Iced Tea Lemon, Iced Tea Diet Lemon, Diet Lemonade and Fruit Punch'), [
+    'beverages',
+  ]);
+});
+
+test('a multi-word produce head is a product name, immune to postposed-flavour', () => {
+  assert.deepEqual(of('Queso Crunch Salad Kit'), ['produce']);
+});
+
+test('produce-only phrases beside a confection or baby food are its flavour list', () => {
+  assert.deepEqual(of('Jolly Rancher Green Apple, Blue Raspberry, Grape Frozen Confection Pop'), [
+    'snacks_candy',
+  ]);
+  assert.deepEqual(of('Pear, Kiwi, Spinach & Pea Baby Food pouches'), ['baby']);
+});
+
+test('produce beside a PREPARED dish stays a real product — never a flavour', () => {
+  assert.deepEqual(of('Fresh cucumbers, salsa and salads'), ['produce', 'prepared', 'pantry']);
+});
+
+test('a plant-based analogue of a meat product is Prepared, not Meat & poultry', () => {
+  assert.deepEqual(of("Plant Based Buffalo Chik'n Nuggets and Hot and Spicy Sausage Patties"), [
+    'prepared',
+  ]);
+  assert.deepEqual(of('Chicken Nuggets'), ['meat_poultry']);
+});
+
+test('a name that itself says "for baby" is an infant-feeding product', () => {
+  assert.deepEqual(of('Comforts FOR BABY Purified Water with Fluoride'), ['baby']);
+});
+
+test('in a list, a phrase ending in an unknown word is a variety name and stays silent', () => {
+  assert.deepEqual(
+    of(
+      'Southwest Chopped Salad Kit, Bacon Ranch Crunch Kit, Fresh Mex Chopped Kit, Queso Crunch Salad Kit',
+    ),
+    ['produce'],
+  );
+});
+
+test('a single-product text still trusts its last interior match', () => {
+  assert.deepEqual(of('Ground Beef Chubs'), ['meat_poultry']);
+});
+
+test('packaging and size words never hide the real head noun', () => {
+  assert.deepEqual(of('Whole Nutrition Infant formula 24 oz cans and 0.6oz packets'), ['baby']);
+  assert.deepEqual(of('Original Sliders, frozen, 4 count carton'), ['prepared']);
+});
+
+test('an ingredient-with-provenance tail is never rescued into a category', () => {
+  assert.deepEqual(
+    of('Victory Kitchens Ltd. Recalls Products Containing Chicken From An Ineligible Country'),
+    [],
+  );
+  // The rescue itself still works when the tail names the recalled product.
+  assert.deepEqual(of('Multiple items with cucumbers'), ['produce']);
+});
+
+test('an unknown product name stays honestly uncategorized', () => {
+  assert.deepEqual(of('Banh Ba Xa'), []);
+  assert.deepEqual(of('Nem Chua Products'), []);
+});
+
+test('a long co-equal list of dishes resolves to Prepared once, not to its toppings', () => {
+  assert.deepEqual(
+    of(
+      'Cheeseburgers, Spicy Chicken Sandwich, Italian Mini Subs, Pepperoni Pizza Sub, Chili Cheese Coney and BBQ Riblets',
+    ),
+    ['prepared'],
+  );
+});
+
+test('a comma inside a word is mangled encoding, not a product list', () => {
+  assert.deepEqual(of('Canadian Liver P,tE Products'), ['meat_poultry']);
+});
+
+test('a trailing dish-class word after "with" heads the whole name; soup does not', () => {
+  assert.deepEqual(of('Spaghetti Loops With Meat Sauce Entrée Products'), ['prepared']);
+  assert.deepEqual(of('Saimin Noodles with Soup & Garnishes'), ['pantry']);
+});
+
+test('generic dish vocabulary covers common non-English product names', () => {
+  assert.deepEqual(of('Frozen Mushroom Risotto Products'), ['prepared']);
+  assert.deepEqual(of('Raw, Frozen Chicken and Vegetable Potsticker Products'), ['prepared']);
+});
+
+test('cracklings and sliders live where shoppers find them', () => {
+  assert.deepEqual(of('Ineligible Pork Cracklings Products'), ['snacks_candy']);
 });
 
 // ── Anti-overfitting contract ───────────────────────────────────────────────

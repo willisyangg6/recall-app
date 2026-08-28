@@ -1,0 +1,27 @@
+{
+  "phase": "C5.3B-2",
+  "recordedAt": "2026-08-28T17:02:04Z",
+  "purpose": "Freeze record for the final generalization test. The classifier files below were hashed BEFORE any final-holdout case was selected; a test recomputes these hashes, so any post-freeze classifier change is loud. finalLabelsSha256 freezes the reviewed expected labels of the final splits before the matcher's single run over them.",
+  "ordering": [
+    "1. matcher, lexicon, vocabulary and compact mapping frozen and hashed (this file)",
+    "2. final holdout cases selected from source structure, WITHOUT running the matcher on them",
+    "3. expected labels assigned by human review of the recalled products, then frozen as finalLabelsSha256",
+    "4. the matcher run exactly once on the final splits; no classifier or label change afterwards"
+  ],
+  "classifierFiles": {
+    "src/domain/food-category.ts": "215118ec66b79ad92513ac3f846aff4fb07e523ad15bd3e5a24b07d2a4c48e35",
+    "src/domain/food-category-lexicon.ts": "c97ae9c03756b308d50501036a5f5f4f512048d1b0cd5a0a68cd962f773fd63c",
+    "src/domain/food-category-matcher.ts": "bff665cacd7f86e4b6bf0c68db9d8b1ef963b5c8663aae27cc6acd792be52439",
+    "src/domain/food-category-compact.ts": "5ec628250412c17bbd16b1a66dff8469f80d5e65cdb56ba8bca672164f920118"
+  },
+  "disclosedReformat": {
+    "when": "2026-08-28, after the single final run",
+    "what": "prettier --write re-wrapped whitespace in food-category-matcher.ts (two statements) and food-category-lexicon.ts; no token of logic or data changed",
+    "evidence": "the re-run of npm run qa:categories after the reformat reproduces the recorded run exactly — same 179/200 and 107/117 exact-set counts, same per-category tallies, same failure lists",
+    "originalHashes": {
+      "src/domain/food-category-lexicon.ts": "6b9ace4838dc4bb57d47ec2ab1e6ece890c9820393d01590d1a324ee90b64519",
+      "src/domain/food-category-matcher.ts": "8b41037e21e6f5041598c95ab7cb7b720d64ea62d5d2a0183ba815d2aae7d348"
+    }
+  },
+  "finalLabelsSha256": "1820ea6e9eb7cbcd2a0d79b18446e3a8d66c2152425f044896643c98629981a8"
+}
