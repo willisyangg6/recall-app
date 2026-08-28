@@ -63,6 +63,7 @@ function fixtureProjection(
     geography?: { scope: 'states' | 'nationwide' | 'unknown'; states: string[] };
     pathogenOrAllergen?: string | null;
     retailerNames?: string[];
+    hazardCategory?: string;
   } = {},
 ) {
   return {
@@ -75,7 +76,7 @@ function fixtureProjection(
     summaryText: '',
     summaryHtml: null,
     reasonText: null,
-    hazardCategory: 'allergen' as const,
+    hazardCategory: (overrides.hazardCategory ?? 'allergen') as 'allergen',
     pathogenOrAllergen:
       overrides.pathogenOrAllergen === undefined ? 'peanut' : overrides.pathogenOrAllergen,
     recallingFirm: { displayName: 'Acme', rawVariants: [] },
@@ -113,6 +114,7 @@ function addEvent(
     geography?: { scope: 'states' | 'nationwide' | 'unknown'; states: string[] };
     pathogenOrAllergen?: string | null;
     retailerNames?: string[];
+    hazardCategory?: string;
   } = {},
 ): string {
   eventCounter += 1;
@@ -575,16 +577,47 @@ test('personalized: unknown geography delivers only with an allergen/retailer si
     { stateCode: 'CA', allergens: ['peanut'], retailerIds: [] },
     iso(HOUR),
   );
+  // A PEANUT-only recall, sold at Costco, with no stated distribution.
   addEvent(store, 2 * HOUR, {
     geography: { scope: 'unknown', states: [] },
     pathogenOrAllergen: 'undeclared peanuts',
     retailerNames: ['Costco'],
   });
   const result = await runAt(3 * HOUR);
-  assert.equal(result.metrics.deliveriesCreated, 2);
-  assert.equal(result.metrics.preferenceSkipped, 1);
+  // Only the peanut subscriber. C5.2B: an identified allergen-only recall that
+  // matches none of a subscriber's selected allergens is withheld, and the
+  // Costco preference cannot resurrect it — delivery agrees with Home.
+  assert.equal(result.metrics.deliveriesCreated, 1);
+  assert.equal(result.metrics.preferenceSkipped, 2);
   const recipients = transport.sentMessages.map((m) => m.to).sort();
-  assert.deepEqual(recipients, ['ExponentPushToken[al]', 'ExponentPushToken[r]']);
+  assert.deepEqual(recipients, ['ExponentPushToken[al]']);
+});
+
+test('personalized: a GENERAL hazard with no location still reaches the retailer subscriber', async () => {
+  const { store, transport, runAt } = setup(0);
+  const withRetailer = 'a'.repeat(32);
+  const stateOnly = 'b'.repeat(32);
+  store.register(withRetailer, 'ExponentPushToken[r]', 'ios', iso(HOUR));
+  store.register(stateOnly, 'ExponentPushToken[s]', 'ios', iso(HOUR));
+  store.setPreferences(
+    withRetailer,
+    { stateCode: 'CA', allergens: ['peanut'], retailerIds: ['costco'] },
+    iso(HOUR),
+  );
+  store.setPreferences(stateOnly, { stateCode: 'CA', allergens: [], retailerIds: [] }, iso(HOUR));
+  // Salmonella, not an allergen: the allergen-only rule must not touch it.
+  addEvent(store, 2 * HOUR, {
+    geography: { scope: 'unknown', states: [] },
+    hazardCategory: 'microbial_contamination',
+    pathogenOrAllergen: 'Salmonella',
+    retailerNames: ['Costco'],
+  });
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.deliveriesCreated, 1);
+  assert.deepEqual(
+    transport.sentMessages.map((m) => m.to),
+    ['ExponentPushToken[r]'],
+  );
 });
 
 test('no state chosen: allergen/retailer-only preferences keep deliver-all behavior', async () => {

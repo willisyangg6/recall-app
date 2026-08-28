@@ -87,6 +87,10 @@ function relevanceInput(event: Pick<DeliverableEvent, 'projection'>): RelevanceI
     pathogenOrAllergen: event.projection.pathogenOrAllergen ?? null,
     // Projections persisted before the field existed lack the key.
     retailerNames: event.projection.retailerNames ?? [],
+    // The allergen-only rule reads these; passing them here is what keeps
+    // delivery agreeing with what Home shows for the same recall.
+    hazardCategory: event.projection.hazardCategory,
+    reasonText: event.projection.reasonText,
   };
 }
 

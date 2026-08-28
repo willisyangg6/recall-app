@@ -55,7 +55,8 @@ deterministic core shared by the Home "Affects me" feed, the detail screen's
   Californian sesame allergy (the match stays available internally, but
   never overrides the agency's own distribution statement). With no state
   chosen — only personal signals qualify, and the UI asks for a state
-  instead of pretending to know geography.
+  instead of pretending to know geography. And since C5.2B one further
+  exclusion applies after geography: a **known allergen-only mismatch**.
 - `reasons`: chip-ready, priority-ordered (allergen, retailer, geography):
   "Your allergen · Sesame", "Sold at Costco", "Affects California",
   "Nationwide recall", "Location not specified". Empty when there is nothing
@@ -71,15 +72,111 @@ permission). Within Affects me:
 
 - AFFECTS ME — recent items where `affectsMe` holds, each carrying up to two
   reason chips (risk tier stays in its own badge, visually separate).
-- LOCATION NOT SPECIFIED — recent unknown-geography items with no personal
-  signal, collapsed behind their own disclosure with honest copy ("these
-  notices don't say where products were sold — they may still affect you").
-  Never labeled "doesn't affect you". Only shown once a state is chosen.
 - OLDER ACTIVE NOTICES — the existing collapsed tier, filtered the same way.
+
+There is no third section. The generic **"Location not specified" section was
+removed in C5.2B**: heading, count, copy, disclosure control and membership.
+A notice with unknown geography and no allergen or retailer match said nothing
+about this user, and a permanently-collapsed list of them neither answered
+"does this affect me" nor could be acted on. Such a notice now appears **zero
+times** in Affects Me — and is NOT moved into Older Active Notices, which hold
+qualifying notices only. All Recalls remains the complete safety net.
+
+An unknown-location notice that DOES match an allergen or a retailer still
+ranks in the main flow, carrying its honest "Location not specified" context
+chip. A state is never inferred.
 
 Lifecycle and freshness stay authoritative and untouched: personalization
 composes with the existing recent/older tiers, and a closed recall never
 looks active because it matches a preference.
+
+## Affects Me eligibility (C5.2B)
+
+### The truth table
+
+| User                       | Notice                                          | Affects Me |
+| -------------------------- | ----------------------------------------------- | ---------: |
+| CA + Milk                  | CA milk-only recall                             |    **Yes** |
+| CA + Milk                  | nationwide milk-only recall                     |    **Yes** |
+| CA + Milk                  | unknown-location milk-only recall               |    **Yes** |
+| CA + Milk                  | explicit TX-only milk recall                    |         No |
+| CA + Peanut                | CA milk-only recall                             |         No |
+| CA + Peanut                | nationwide wheat-only recall                    |         No |
+| CA + Peanut + Costco       | CA Costco milk-only recall                      |         No |
+| CA + Peanut                | allergen-only recall naming no allergen         |    **Yes** |
+| CA + Peanut                | sulfites-only recall (not selectable)           |         No |
+| CA (no allergens selected) | any identified allergen-only recall             |         No |
+| CA + Peanut                | CA Salmonella recall                            |    **Yes** |
+| CA + Peanut                | nationwide foreign-material recall              |    **Yes** |
+| CA + Peanut                | CA Salmonella + undeclared milk recall          |    **Yes** |
+| CA + Peanut                | unknown-location Salmonella, no retailer signal |         No |
+| CA + Peanut + Costco       | unknown-location Salmonella sold at Costco      |    **Yes** |
+| any                        | explicit state list excluding the user's state  |         No |
+
+Read as an ordered rule: **geographic exclusion is final first**, then a known
+allergen-only mismatch, then the positive signals. A retailer or state match
+can never resurrect a recall the source proves does not involve the user's
+allergens.
+
+### Known allergen-only mismatch
+
+A milk-only recall is not information a peanut-allergic shopper needs, however
+close to home it happened — and before C5.2B every one of them qualified on
+geography alone. Measured on the live active corpus, that was **97 of 357**
+qualifying notices for a California + Peanut + Costco profile.
+
+The determination is deliberately timid, because a wrong answer hides a safety
+notice. `domain/allergen-only.ts` reads only canonical fields the ingestion
+layer already derived — never announcement prose, never keyword guessing — and
+all three of these must hold:
+
+1. The agency's own `hazardCategory` is `allergen`.
+2. No non-allergen hazard is stated: not a pathogen (via the canonical
+   `extractPathogen`), and not one of FSIS's structured non-allergen reason
+   labels (`Product Contamination`, `Insanitary Conditions`, `Processing
+Defect`, `Unfit for Human Consumption`). `Misbranding` and `Mislabeling` are
+   deliberately absent — they are how an undeclared allergen is REPORTED, not a
+   second hazard.
+3. `normalizedAllergenTokens` names at least one allergen.
+
+Anything short of that returns `unidentified` and **preserves location-based
+eligibility exactly**. A notice saying only "undeclared allergen" could be the
+user's own, so it is never a mismatch — 46 active cases rely on this.
+
+### General and mixed hazards are never suppressed
+
+Location alone still qualifies Salmonella, E. coli, Listeria, foreign material,
+metal, chemical contamination, spoilage and every other non-allergen hazard. A
+recall carrying BOTH an allergen and a general hazard is not allergen-only.
+Proven by corpus diff: of the 97 notices this rule removed for the
+representative profile, **97 were `hazardCategory: allergen` and none was a
+general or mixed hazard**, and **zero** notices were added.
+
+### Non-selectable substances
+
+Sulfites and gluten are real, identified allergen hazards that the supported
+nine-allergen vocabulary cannot express (16 active sulfites-only cases; no
+active gluten-only cases). They are confidently identified and can match
+nothing, so the same rule withholds them from Affects Me with no special case.
+They remain in All Recalls.
+
+### Household-aware allergen copy
+
+The Settings label and helper are exactly:
+
+> **Allergens to watch**
+> Select any allergens relevant to you or anyone you shop or cook for.
+
+Copy only. One shared allergen list, as before — no person names, no child or
+household-member records, no new preference field, no account, no schema
+change. The wording lives in `lib/personalization-copy.ts` so it is a tested
+contract rather than a string that can drift.
+
+### All Recalls is the safety net
+
+All Recalls is unchanged in membership, order, sectioning and count. It never
+reads preferences, so nothing personalization decides can remove a notice from
+the product — only from one person's shortlist.
 
 ## Affects Me ordering (C3.2)
 
@@ -436,6 +533,30 @@ unstated role is exactly what this layer refuses to do; and truncations of
 real chains ("Great Wall Super", "Heinen's Locations", "Texas HEB") name a
 real shop imperfectly rather than a wrong one. None can produce a false
 preference match, which requires an exact catalog alias.
+
+## Future filter contract (documented, NOT implemented)
+
+Recorded here so the next milestone starts from a settled contract. None of
+this exists in the app today.
+
+- **`All` and `Affects Me` are mutually exclusive scopes** — one or the other,
+  never both, and never neither.
+- **`Location`, `Category` and `Risk` are composable filters** that apply
+  within the chosen scope.
+- **Within one filter, selections OR together**: Critical OR High.
+- **Between filters, AND**: (Critical OR High) AND (Location = CA).
+- **Applied dimensions stay active while others are added** — adding a Risk
+  filter must not silently clear a Location one.
+- **Filter chips may scroll horizontally** rather than wrapping or truncating.
+- **Rated risk values are Critical, High, Moderate, Low, Minimal.** `Pending`
+  and `Not rated` are neutral ADDITIONAL states, never folded into a rated
+  value and never inferred from hazard text (see `domain/risk-tier.ts`).
+- **Category vocabulary requires its own corpus audit** before any UI is
+  designed; `hazardCategory` is an ingestion-side classification, not a
+  consumer-facing taxonomy.
+- **Allergen filtering is TBD** and deliberately unresolved: allergens
+  currently drive Affects Me eligibility, so exposing them as a filter as well
+  needs a decision about whether the two interact or one replaces the other.
 
 ## Privacy
 

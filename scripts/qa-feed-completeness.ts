@@ -175,16 +175,18 @@ async function main(): Promise<void> {
         geography: item.geography,
         pathogenOrAllergen: item.pathogenOrAllergen,
         retailerNames: item.retailerNames,
+        hazardCategory: item.hazardCategory,
+        reasonText: item.reasonText,
       },
       PROFILE,
     );
 
   const rankStarted = Date.now();
-  const sections = buildAffectsMeSections(items, relevanceOf, { stateChosen: true });
+  const sections = buildAffectsMeSections(items, relevanceOf);
   const rankMs = Date.now() - rankStarted;
 
   const qualifying = items.filter((item) => relevanceOf(item).affectsMe);
-  const placed = [...sections.affects, ...sections.unknown, ...sections.older];
+  const placed = [...sections.affects, ...sections.older];
   const placedIds = new Set(placed.map((i) => i.id));
 
   console.log(
@@ -199,7 +201,6 @@ async function main(): Promise<void> {
     `  eligibility unaccounted for:    ${qualifying.length - sections.affects.length - sections.older.length}  (gate: 0)`,
   );
   console.log(`  affects me (recent):            ${sections.affects.length}`);
-  console.log(`  location not specified:         ${sections.unknown.length}`);
   console.log(`  older active:                   ${sections.older.length}`);
   console.log(`  duplicates across sections:     ${placed.length - placedIds.size}  (gate: 0)`);
   console.log(`  ranking over ${items.length} cases:        ${rankMs} ms`);

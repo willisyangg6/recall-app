@@ -397,6 +397,8 @@ export default function RecallDetailScreen() {
         geography: projection.geography,
         pathogenOrAllergen: projection.pathogenOrAllergen,
         retailerNames: projection.retailerNames ?? [],
+        hazardCategory: projection.hazardCategory,
+        reasonText: projection.reasonText,
       },
       prefs,
     );

@@ -14,6 +14,10 @@ function item(overrides: Partial<RelevanceInput> = {}): RelevanceInput {
     geography: geo('unknown'),
     pathogenOrAllergen: null,
     retailerNames: [],
+    // A general hazard by default: these cases test geography and positive
+    // signals, and the allergen-only rule must not silently rewrite them.
+    hazardCategory: 'unknown',
+    reasonText: null,
     ...overrides,
   };
 }
@@ -359,4 +363,247 @@ test('C3.1: enriching retailerNames leaves geographic and allergen semantics alo
   assert.equal(plain.geographic, enriched.geographic);
   assert.deepEqual(plain.matchedAllergens, enriched.matchedAllergens);
   assert.equal(plain.affectsMe, enriched.affectsMe);
+});
+
+// ── C5.2B: known allergen-only mismatches are withheld ───────────────────────
+
+/** An allergen-only recall the source names: category, reason and agent agree. */
+function allergenOnly(agent: string, overrides: Partial<RelevanceInput> = {}): RelevanceInput {
+  return item({
+    hazardCategory: 'allergen',
+    reasonText: 'Unreported Allergens',
+    pathogenOrAllergen: agent,
+    ...overrides,
+  });
+}
+
+/** California + Milk — the household case: someone shops for a milk allergy. */
+const MILK_USER = prefs({ state: 'CA', allergens: ['milk'] });
+/** California + Peanut, so every milk recall below is a known mismatch. */
+const PEANUT_USER = prefs({ state: 'CA', allergens: ['peanut'] });
+
+test('C5.2B truth table: matching allergen-only recalls stay in, whatever the geography', () => {
+  for (const [label, geography] of [
+    ['state match', geo('states', ['California'])],
+    ['nationwide', geo('nationwide')],
+    ['unknown location', geo('unknown')],
+  ] as const) {
+    const r = evaluatePersonalRelevance(allergenOnly('undeclared milk', { geography }), MILK_USER);
+    assert.equal(r.affectsMe, true, label);
+    assert.ok(
+      r.reasons.some((reason) => reason.label === 'Your allergen · Milk'),
+      `${label} explains itself`,
+    );
+  }
+  // An explicit state list WITHOUT the user's state still excludes it.
+  const texasOnly = evaluatePersonalRelevance(
+    allergenOnly('undeclared milk', { geography: geo('states', ['Texas']) }),
+    MILK_USER,
+  );
+  assert.equal(texasOnly.affectsMe, false);
+});
+
+test('C5.2B truth table: a known nonmatching allergen-only recall is out, whatever the geography', () => {
+  for (const [label, geography] of [
+    ['state match', geo('states', ['California'])],
+    ['nationwide', geo('nationwide')],
+    ['unknown location', geo('unknown')],
+  ] as const) {
+    const r = evaluatePersonalRelevance(
+      allergenOnly('undeclared milk', { geography }),
+      PEANUT_USER,
+    );
+    assert.equal(r.affectsMe, false, label);
+    // Nothing personal to say about a recall we are not showing.
+    assert.deepEqual(r.reasons, [], label);
+  }
+});
+
+test('C5.2B: a retailer match cannot resurrect a known allergen mismatch', () => {
+  const r = evaluatePersonalRelevance(
+    allergenOnly('undeclared milk', {
+      geography: geo('states', ['California']),
+      retailerNames: ['Costco'],
+    }),
+    prefs({ state: 'CA', allergens: ['peanut'], retailers: ['costco'] }),
+  );
+  assert.equal(r.affectsMe, false);
+  assert.deepEqual(r.reasons, []);
+  // The match data is still computed — it is the VERDICT that is final.
+  assert.deepEqual(r.matchedRetailers, ['costco']);
+});
+
+test('C5.2B: with no allergens selected, allergen-only recalls are not this user’s news', () => {
+  const stateOnly = prefs({ state: 'CA' });
+  assert.equal(
+    evaluatePersonalRelevance(
+      allergenOnly('undeclared milk', { geography: geo('states', ['California']) }),
+      stateOnly,
+    ).affectsMe,
+    false,
+  );
+  // …while a general hazard in the same state still qualifies on location.
+  assert.equal(
+    evaluatePersonalRelevance(
+      item({
+        geography: geo('states', ['California']),
+        hazardCategory: 'microbial_contamination',
+        pathogenOrAllergen: 'Salmonella',
+      }),
+      stateOnly,
+    ).affectsMe,
+    true,
+  );
+});
+
+test('C5.2B: multiple household allergens need only one match', () => {
+  const household = prefs({ state: 'CA', allergens: ['milk', 'peanut', 'sesame'] });
+  const oneMatch = evaluatePersonalRelevance(
+    allergenOnly('undeclared soy and sesame', { geography: geo('nationwide') }),
+    household,
+  );
+  assert.equal(oneMatch.affectsMe, true);
+  assert.deepEqual(oneMatch.matchedAllergens, ['sesame']);
+
+  const noMatch = evaluatePersonalRelevance(
+    allergenOnly('undeclared soy and wheat', { geography: geo('nationwide') }),
+    household,
+  );
+  assert.equal(noMatch.affectsMe, false);
+});
+
+test('C5.2B: an unidentified allergen never creates a false negative', () => {
+  // "undeclared allergen" could be the user's own — location still qualifies.
+  const r = evaluatePersonalRelevance(
+    allergenOnly('undeclared allergen', { geography: geo('states', ['California']) }),
+    PEANUT_USER,
+  );
+  assert.equal(r.affectsMe, true);
+  const nullAgent = evaluatePersonalRelevance(
+    allergenOnly(null as unknown as string, { geography: geo('nationwide') }),
+    PEANUT_USER,
+  );
+  assert.equal(nullAgent.affectsMe, true);
+});
+
+test('C5.2B: a non-selectable allergen-only notice is withheld from Affects Me', () => {
+  const r = evaluatePersonalRelevance(
+    allergenOnly('undeclared sulfites', { geography: geo('states', ['California']) }),
+    MILK_USER,
+  );
+  assert.equal(r.affectsMe, false);
+  assert.deepEqual(r.reasons, []);
+});
+
+test('C5.2B: general and mixed hazards are never suppressed by an allergen mismatch', () => {
+  const inCalifornia = geo('states', ['California']);
+  const cases: [string, RelevanceInput][] = [
+    [
+      'Salmonella',
+      item({
+        geography: inCalifornia,
+        hazardCategory: 'microbial_contamination',
+        pathogenOrAllergen: 'Salmonella',
+      }),
+    ],
+    [
+      'E. coli',
+      item({
+        geography: inCalifornia,
+        hazardCategory: 'microbial_contamination',
+        pathogenOrAllergen: 'E. coli O157:H7',
+      }),
+    ],
+    [
+      'Listeria',
+      item({
+        geography: inCalifornia,
+        hazardCategory: 'microbial_contamination',
+        pathogenOrAllergen: 'Listeria monocytogenes',
+      }),
+    ],
+    [
+      'foreign material / metal',
+      item({
+        geography: geo('nationwide'),
+        hazardCategory: 'foreign_material',
+        reasonText: 'Product Contamination',
+        pathogenOrAllergen: null,
+      }),
+    ],
+    [
+      'mixed pathogen + undeclared milk',
+      item({
+        geography: inCalifornia,
+        hazardCategory: 'microbial_contamination',
+        reasonText: 'Product Contamination, Unreported Allergens',
+        pathogenOrAllergen: 'Salmonella',
+      }),
+    ],
+    [
+      'mixed, mislabelled by the source as allergen',
+      item({
+        geography: inCalifornia,
+        hazardCategory: 'allergen',
+        reasonText: 'Product Contamination, Unreported Allergens',
+        pathogenOrAllergen: 'undeclared milk',
+      }),
+    ],
+  ];
+  for (const [label, input] of cases) {
+    assert.equal(evaluatePersonalRelevance(input, PEANUT_USER).affectsMe, true, label);
+  }
+});
+
+test('C5.2B: unknown geography still needs a real signal, and a match still counts', () => {
+  const silent = item({ geography: geo('unknown') });
+  assert.equal(evaluatePersonalRelevance(silent, PEANUT_USER).affectsMe, false);
+  assert.deepEqual(evaluatePersonalRelevance(silent, PEANUT_USER).reasons, []);
+
+  const allergenMatch = evaluatePersonalRelevance(
+    allergenOnly('undeclared peanuts', { geography: geo('unknown') }),
+    PEANUT_USER,
+  );
+  assert.equal(allergenMatch.affectsMe, true);
+  assert.ok(allergenMatch.reasons.some((r) => r.label === 'Location not specified'));
+
+  const retailerMatch = evaluatePersonalRelevance(
+    item({
+      geography: geo('unknown'),
+      hazardCategory: 'microbial_contamination',
+      pathogenOrAllergen: 'Salmonella',
+      retailerNames: ['Costco'],
+    }),
+    prefs({ state: 'CA', allergens: ['peanut'], retailers: ['costco'] }),
+  );
+  assert.equal(retailerMatch.affectsMe, true);
+  assert.ok(retailerMatch.reasons.some((r) => r.label === 'Location not specified'));
+});
+
+test('C5.2B: Home and push reach the same verdict for every case in the table', () => {
+  const inputs: RelevanceInput[] = [
+    allergenOnly('undeclared milk', { geography: geo('states', ['California']) }),
+    allergenOnly('undeclared milk', { geography: geo('nationwide') }),
+    allergenOnly('undeclared milk', { geography: geo('unknown') }),
+    allergenOnly('undeclared peanuts', { geography: geo('nationwide') }),
+    allergenOnly('undeclared allergen', { geography: geo('states', ['California']) }),
+    item({
+      geography: geo('states', ['California']),
+      hazardCategory: 'microbial_contamination',
+      pathogenOrAllergen: 'Salmonella',
+    }),
+    item({ geography: geo('states', ['Texas']), pathogenOrAllergen: 'undeclared peanuts' }),
+  ];
+  for (const [user, label] of [
+    [MILK_USER, 'milk user'],
+    [PEANUT_USER, 'peanut user'],
+  ] as const) {
+    for (const input of inputs) {
+      assert.equal(
+        pushEligible(input, user),
+        evaluatePersonalRelevance(input, user).affectsMe,
+        `${label} · ${input.pathogenOrAllergen} · ${input.geography.scope}`,
+      );
+    }
+  }
 });

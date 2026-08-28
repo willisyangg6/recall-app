@@ -21,6 +21,7 @@ import {
 import { retailerById, searchRetailers } from '@/domain/retailer-catalog';
 import { useTheme } from '@/hooks/use-theme';
 import type { AlertStatus } from '@/lib/alert-status';
+import { ALLERGEN_SECTION_HELPER, ALLERGEN_SECTION_LABEL } from '@/lib/personalization-copy';
 import { loadPreferences, preferencesAvailable, savePreferences } from '@/lib/preferences-store';
 import { disableRecallAlerts, enableRecallAlerts, getAlertStatus } from '@/lib/push-registration';
 
@@ -328,10 +329,12 @@ export default function SettingsScreen() {
                 onChange={(code) => update({ ...prefs, state: code })}
               />
 
-              <SectionLabel>Your allergens</SectionLabel>
+              {/* Household-aware copy (C5.2B), owned by lib/personalization-copy
+                  so the exact wording is a tested contract rather than a string
+                  that can drift. Copy only: no names, profiles, or new fields. */}
+              <SectionLabel>{ALLERGEN_SECTION_LABEL}</SectionLabel>
               <ThemedText type="small" themeColor="textSecondary">
-                Recalls involving these get flagged for you. This is a preference, not medical
-                advice — and a recall without a match can still matter.
+                {ALLERGEN_SECTION_HELPER}
               </ThemedText>
               <View style={styles.chipRow}>
                 {CONSUMER_ALLERGENS.map((option) => {

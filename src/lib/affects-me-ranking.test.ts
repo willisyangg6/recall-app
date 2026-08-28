@@ -123,16 +123,15 @@ function relevanceOf(prefs: UserRecallPreferences) {
         geography: candidate.geography,
         pathogenOrAllergen: candidate.pathogenOrAllergen,
         retailerNames: candidate.retailerNames,
+        hazardCategory: candidate.hazardCategory,
+        reasonText: candidate.reasonText,
       },
       prefs,
     );
 }
 
 function rank(items: FeedItem[], prefs: UserRecallPreferences = CALIFORNIAN) {
-  return buildAffectsMeSections(items, relevanceOf(prefs), {
-    stateChosen: prefs.state !== null,
-    now: NOW,
-  });
+  return buildAffectsMeSections(items, relevanceOf(prefs), { now: NOW });
 }
 
 function order(items: FeedItem[], prefs: UserRecallPreferences = CALIFORNIAN): string[] {
@@ -249,7 +248,6 @@ test('an authoritative geographic exclusion still overrides every personal signa
     sections.affects.map((i) => i.id),
     [ordinary.id],
   );
-  assert.deepEqual(sections.unknown, []);
   assert.deepEqual(sections.older, []);
 });
 
@@ -481,7 +479,7 @@ test('a corrected state list that excludes the user is final, as it always was',
   );
   const after = rank([corrected]);
   assert.equal(after.affects.length, 0, 'an authoritative exclusion is final');
-  assert.equal(after.unknown.length, 0, 'and it is not honest uncertainty either');
+  assert.equal(after.older.length, 0, 'and it does not leak into older notices either');
 });
 
 // ── Sections ─────────────────────────────────────────────────────────────────
@@ -503,35 +501,36 @@ test('every case appears in at most one section', () => {
       timeline: [published(OLD_DAY)],
     }),
   ];
-  const { affects, unknown, older } = rank(items);
-  const seen = [...affects, ...unknown, ...older].map((i) => i.id);
+  const { affects, older } = rank(items);
+  const seen = [...affects, ...older].map((i: FeedItem) => i.id);
   assert.equal(new Set(seen).size, seen.length);
-  // The excluded Maine case and the stale unknown-geography case appear nowhere.
-  assert.equal(seen.length, 4);
+  // Excluded Maine, and BOTH unknown-geography cases with no personal signal,
+  // appear nowhere: only the California case, the Costco one, and the older
+  // nationwide one qualify.
+  assert.equal(seen.length, 3);
 });
 
-test('unknown geography with no personal signal stays in its own section, never in Affects me', () => {
+test('unknown geography with no personal signal appears in NO Affects Me section', () => {
+  // C5.2B removed the generic "Location not specified" section: a notice that
+  // says nothing about this user is not placed at all, and All Recalls holds it.
   const silent = item({ geography: geo('unknown') });
-  const { affects, unknown } = rank([silent]);
+  const { affects, older } = rank([silent]);
   assert.deepEqual(affects, []);
-  assert.deepEqual(
-    unknown.map((i) => i.id),
-    [silent.id],
-  );
+  assert.deepEqual(older, []);
   // And the relevance layer still refuses to claim anything about it.
   assert.deepEqual(relevanceOf(CALIFORNIAN)(silent).reasons, []);
 });
 
-test('without a chosen state there is no Location-not-specified section', () => {
+test('an unknown-location notice with a real match ranks in the main flow', () => {
   const prefs: UserRecallPreferences = { state: null, allergens: ['sesame'], retailers: [] };
   const silent = item({ geography: geo('unknown') });
   const matching = item({ geography: geo('unknown'), pathogenOrAllergen: 'Undeclared sesame' });
   const sections = rank([silent, matching], prefs);
-  assert.deepEqual(sections.unknown, []);
   assert.deepEqual(
     sections.affects.map((i) => i.id),
     [matching.id],
   );
+  assert.deepEqual(sections.older, []);
 });
 
 // ── Invariants: what C3.2 must NOT have changed ──────────────────────────────
@@ -578,6 +577,105 @@ test('All Recalls sectioning and ordering are untouched by material activity', (
   );
 });
 
+test('C5.2B: All Recalls is byte-identical — personalization cannot touch it', () => {
+  // All Recalls never sees preferences at all, so the strongest statement is
+  // the direct one: the same input produces the same output, deeply equal,
+  // including for the cases Affects Me now withholds.
+  const corpus = [
+    item({ geography: geo('states', ['California']) }),
+    item({ geography: geo('unknown') }),
+    item({ geography: geo('states', ['Maine']), pathogenOrAllergen: 'undeclared sesame' }),
+    // Known allergen mismatch for every profile below.
+    item({
+      geography: geo('nationwide'),
+      hazardCategory: 'allergen',
+      reasonText: 'Unreported Allergens',
+      pathogenOrAllergen: 'undeclared milk',
+    }),
+    item({ publishedAt: OLD_DAY, timeline: [published(OLD_DAY)], geography: geo('nationwide') }),
+  ];
+  const baseline = buildFeedSections(corpus, NOW);
+
+  for (const prefs of [
+    CALIFORNIAN,
+    { state: 'CA', allergens: [], retailers: [] } as UserRecallPreferences,
+    { state: null, allergens: ['milk'], retailers: [] } as UserRecallPreferences,
+  ]) {
+    // Ranking the same corpus for a profile must not disturb All Recalls.
+    rank(corpus, prefs);
+    const after = buildFeedSections(corpus, NOW);
+    assert.deepEqual(after, baseline, JSON.stringify(prefs));
+  }
+  // Membership and count are complete: every case is in exactly one section.
+  assert.equal(baseline.recent.length + baseline.olderActive.length, corpus.length);
+});
+
+test('C5.2B: a withheld allergen-only recall appears in NO Affects Me section', () => {
+  const milkOnly = item({
+    geography: geo('states', ['California']),
+    hazardCategory: 'allergen',
+    reasonText: 'Unreported Allergens',
+    pathogenOrAllergen: 'undeclared milk',
+  });
+  const staleMilkOnly = item({
+    geography: geo('states', ['California']),
+    hazardCategory: 'allergen',
+    reasonText: 'Unreported Allergens',
+    pathogenOrAllergen: 'undeclared milk',
+    publishedAt: OLD_DAY,
+    timeline: [published(OLD_DAY)],
+  });
+  const sections = rank([milkOnly, staleMilkOnly]);
+  // Not in the recent list, and — the leak this guards — not in older either.
+  assert.deepEqual(sections.affects, []);
+  assert.deepEqual(sections.older, []);
+});
+
+test('C5.2B: every placed notice has an explainable qualifying reason', () => {
+  const corpus = [
+    item({ geography: geo('states', ['California']) }),
+    item({ geography: geo('nationwide') }),
+    item({ geography: geo('unknown'), retailerNames: ['Costco'] }),
+    item({ geography: geo('unknown'), pathogenOrAllergen: 'Undeclared sesame' }),
+    item({ geography: geo('unknown') }),
+    item({ geography: geo('states', ['Maine']), pathogenOrAllergen: 'Undeclared sesame' }),
+    item({
+      geography: geo('nationwide'),
+      hazardCategory: 'allergen',
+      reasonText: 'Unreported Allergens',
+      pathogenOrAllergen: 'undeclared milk',
+    }),
+  ];
+  const { affects, older } = rank(corpus);
+  const placed = [...affects, ...older];
+  for (const entry of placed) {
+    const reasons = relevanceOf(CALIFORNIAN)(entry).reasons;
+    assert.ok(reasons.length > 0, `${entry.id} must explain why it is here`);
+  }
+  // Exactly once, and only the qualifying ones.
+  const ids = placed.map((entry) => entry.id);
+  assert.equal(new Set(ids).size, ids.length);
+  const qualifying = corpus.filter((entry) => relevanceOf(CALIFORNIAN)(entry).affectsMe);
+  assert.equal(placed.length, qualifying.length);
+});
+
+test('C5.2B: ranking of the notices that remain is unchanged', () => {
+  // The comparator is untouched; only the eligible SET changed. With every
+  // case eligible for this profile, the order is exactly the C3.2 order.
+  const critical = item({ classification: classes('class_I'), geography: geo('nationwide') });
+  const moderate = item({ classification: classes('class_II'), geography: geo('nationwide') });
+  const unknownWithSignal = item({
+    classification: classes('class_I'),
+    geography: geo('unknown'),
+    retailerNames: ['Costco'],
+  });
+  assert.deepEqual(order([moderate, unknownWithSignal, critical]), [
+    critical.id,
+    unknownWithSignal.id,
+    moderate.id,
+  ]);
+});
+
 test('push eligibility is unchanged: ranking is not part of the delivery decision', () => {
   const nationwideCritical = item({
     classification: classes('class_I'),
@@ -591,6 +689,8 @@ test('push eligibility is unchanged: ranking is not part of the delivery decisio
     geography: i.geography,
     pathogenOrAllergen: i.pathogenOrAllergen,
     retailerNames: i.retailerNames,
+    hazardCategory: i.hazardCategory,
+    reasonText: i.reasonText,
   });
   assert.equal(pushEligible(facts(nationwideCritical), CALIFORNIAN), true);
   assert.equal(pushEligible(facts(excludedWithSignal), CALIFORNIAN), false);

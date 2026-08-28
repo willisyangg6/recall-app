@@ -220,7 +220,7 @@ function PersonalizeCta({ compact }: { compact?: boolean }) {
 }
 
 interface HomeSection {
-  key: 'affects' | 'unknown' | 'recent' | 'older';
+  key: 'affects' | 'recent' | 'older';
   title: string;
   data: FeedItem[];
 }
@@ -229,7 +229,6 @@ export default function HomeScreen() {
   const { state, refreshing, refresh, staleMessage } = useFeed();
   const insets = useSafeAreaInsets();
   const [showOlder, setShowOlder] = useState(false);
-  const [showUnknown, setShowUnknown] = useState(false);
   const [tab, setTab] = useState<FeedTab>('all');
   const prefs = usePreferences(
     useCallback((loaded: UserRecallPreferences) => {
@@ -281,6 +280,8 @@ export default function HomeScreen() {
             geography: item.geography,
             pathogenOrAllergen: item.pathogenOrAllergen,
             retailerNames: item.retailerNames,
+            hazardCategory: item.hazardCategory,
+            reasonText: item.reasonText,
           },
           prefs,
         ),
@@ -289,32 +290,21 @@ export default function HomeScreen() {
   }
 
   let sections: HomeSection[];
-  let affectsCounts = { affects: 0, unknown: 0, older: 0 };
+  let affectsCounts = { affects: 0, older: 0 };
   // Sort keys, kept only to source the card's "Updated …" date. Nothing here
   // is ever rendered as a score.
   let priorityById = new Map<string, AffectsMePriority>();
   if (personalized) {
-    // One deterministic ranking for the whole tab (lib/affects-me-ranking.ts) —
-    // eligibility, geography semantics, and section membership rules are
-    // exactly as before; only the order and the recency date changed.
-    const ranked = buildAffectsMeSections(state.items, (item) => relevanceById.get(item.id)!, {
-      stateChosen: prefs.state !== null,
-    });
-    const { affects, unknown, older } = ranked;
+    // One deterministic ranking for the whole tab (lib/affects-me-ranking.ts).
+    // Two sections only (C5.2B): a notice that says nothing about this user
+    // appears zero times here and stays in All recalls.
+    const ranked = buildAffectsMeSections(state.items, (item) => relevanceById.get(item.id)!);
+    const { affects, older } = ranked;
     priorityById = ranked.priorityById;
-    affectsCounts = { affects: affects.length, unknown: unknown.length, older: older.length };
+    affectsCounts = { affects: affects.length, older: older.length };
     sections = [
       ...(affects.length > 0
         ? [{ key: 'affects' as const, title: 'Affects me', data: affects }]
-        : []),
-      ...(unknown.length > 0
-        ? [
-            {
-              key: 'unknown' as const,
-              title: 'Location not specified',
-              data: showUnknown ? unknown : [],
-            },
-          ]
         : []),
       ...(older.length > 0
         ? [{ key: 'older' as const, title: 'Older active notices', data: showOlder ? older : [] }]
@@ -376,7 +366,7 @@ export default function HomeScreen() {
           <FeedCard
             item={item}
             personalReasons={
-              personalized && section.key !== 'unknown'
+              personalized
                 ? relevanceById.get(item.id)?.reasons.map((reason) => reason.label)
                 : undefined
             }
@@ -398,22 +388,6 @@ export default function HomeScreen() {
                   {showOlder
                     ? 'Hide older notices'
                     : `Show all ${personalized ? affectsCounts.older : olderActive.length}`}
-                </ThemedText>
-              </Pressable>
-            </ThemedView>
-          ) : section.key === 'unknown' ? (
-            <ThemedView style={styles.sectionHeader}>
-              <ThemedText type="small" themeColor="textSecondary">
-                {section.title.toUpperCase()} ({affectsCounts.unknown})
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                These notices don’t say where products were sold — they may still affect you.
-              </ThemedText>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setShowUnknown((value) => !value)}>
-                <ThemedText type="small" themeColor="link">
-                  {showUnknown ? 'Hide these notices' : `Show all ${affectsCounts.unknown}`}
                 </ThemedText>
               </Pressable>
             </ThemedView>

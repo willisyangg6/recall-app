@@ -261,22 +261,30 @@ async function main(): Promise<void> {
     let matches = 0;
     let unknown = 0;
     let excluded = 0;
+    let eligible = 0;
     for (const row of active) {
       const relevance = evaluatePersonalRelevance(
         {
           geography: row.projection.geography,
           pathogenOrAllergen: row.projection.pathogenOrAllergen,
           retailerNames: row.projection.retailerNames ?? [],
+          hazardCategory: row.projection.hazardCategory,
+          reasonText: row.projection.reasonText,
         },
         { state, allergens: [], retailers: [] },
       );
       if (relevance.geographic === 'matches') matches += 1;
       else if (relevance.geographic === 'unknown') unknown += 1;
       else excluded += 1;
+      if (relevance.affectsMe) eligible += 1;
     }
+    // Geographic relevance and Affects Me eligibility are DIFFERENT numbers
+    // since C5.2B: a state-only profile no longer qualifies for an identified
+    // allergen-only recall, because it selected no allergen those can match.
     console.log(
-      `    ${state}: affects ${matches} (${pct(matches, active.length)}), ` +
-        `location unknown ${unknown}, excluded ${excluded}`,
+      `    ${state}: geography matches ${matches} (${pct(matches, active.length)}), ` +
+        `location unknown ${unknown}, excluded ${excluded} · ` +
+        `AFFECTS ME ${eligible} (${pct(eligible, active.length)})`,
     );
   }
   let affects = 0;
@@ -287,6 +295,8 @@ async function main(): Promise<void> {
         geography: row.projection.geography,
         pathogenOrAllergen: row.projection.pathogenOrAllergen,
         retailerNames: row.projection.retailerNames ?? [],
+        hazardCategory: row.projection.hazardCategory,
+        reasonText: row.projection.reasonText,
       },
       { state: 'CA', allergens: ['sesame', 'peanut'], retailers: ['costco', 'trader-joes'] },
     );
@@ -329,15 +339,14 @@ async function main(): Promise<void> {
         geography: candidate.projection.geography,
         pathogenOrAllergen: candidate.projection.pathogenOrAllergen,
         retailerNames: candidate.projection.retailerNames ?? [],
+        hazardCategory: candidate.projection.hazardCategory,
+        reasonText: candidate.projection.reasonText,
       },
       PROFILE,
     );
 
-  const ranked = buildAffectsMeSections(candidates, relevanceOf, { stateChosen: true });
-  console.log(
-    `  sections: affects ${ranked.affects.length}, location not specified ${ranked.unknown.length}, ` +
-      `older active ${ranked.older.length}`,
-  );
+  const ranked = buildAffectsMeSections(candidates, relevanceOf);
+  console.log(`  sections: affects ${ranked.affects.length}, older active ${ranked.older.length}`);
 
   console.log(`\n  top ${Math.min(10, ranked.affects.length)} recent Affects Me results:`);
   for (const [index, candidate] of ranked.affects.slice(0, 10).entries()) {
@@ -373,7 +382,7 @@ async function main(): Promise<void> {
     `    eligibility unchanged by ranking: ${eligible.length} qualify, ` +
       `${sectioned.length} placed (gate: equal) — ${eligible.length === sectioned.length ? 'OK' : 'MISMATCH — FIX'}`,
   );
-  const placedIds = [...ranked.affects, ...ranked.unknown, ...ranked.older].map((c) => c.id);
+  const placedIds = sectioned.map((c) => c.id);
   console.log(
     `    duplicates across sections: ${placedIds.length - new Set(placedIds).size} (gate: 0)`,
   );

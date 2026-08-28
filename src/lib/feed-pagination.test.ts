@@ -318,6 +318,8 @@ function relevanceFor(i: FeedItem) {
       geography: i.geography,
       pathogenOrAllergen: i.pathogenOrAllergen,
       retailerNames: i.retailerNames,
+      hazardCategory: i.hazardCategory,
+      reasonText: i.reasonText,
     },
     CA_PROFILE,
   );
@@ -341,10 +343,7 @@ test('the highest-ranked Affects Me case is found even when it lives on a later 
   const corpus = [...filler, buried];
 
   const loaded = await loadAllPages(backend(corpus).fetchPage, { pageSize: 500, delay: noDelay });
-  const { affects } = buildAffectsMeSections(loaded, relevanceFor, {
-    stateChosen: true,
-    now: NOW,
-  });
+  const { affects } = buildAffectsMeSections(loaded, relevanceFor, { now: NOW });
 
   assert.equal(affects.length, 1301);
   assert.equal(affects[0].id, buried.id, 'ranking must see the whole corpus, not page 1');
@@ -370,21 +369,17 @@ test('Affects Me eligibility and order are identical whether the corpus arrives 
     ),
   ];
 
-  const direct = buildAffectsMeSections(corpus, relevanceFor, { stateChosen: true, now: NOW });
+  const direct = buildAffectsMeSections(corpus, relevanceFor, { now: NOW });
   const paged = buildAffectsMeSections(
     await loadAllPages(backend(corpus).fetchPage, { pageSize: 250, delay: noDelay }),
     relevanceFor,
-    { stateChosen: true, now: NOW },
+    { now: NOW },
   );
 
   assert.deepEqual(
     paged.affects.map((r) => r.id),
     direct.affects.map((r) => r.id),
     'ranking is unchanged by how the rows arrived',
-  );
-  assert.deepEqual(
-    paged.unknown.map((r) => r.id),
-    direct.unknown.map((r) => r.id),
   );
   assert.deepEqual(
     paged.older.map((r) => r.id),
@@ -408,12 +403,9 @@ test('section counts equal the complete input set, with every case placed at mos
     }),
   );
   const loaded = await loadAllPages(backend(corpus).fetchPage, { delay: noDelay });
-  const { affects, unknown, older } = buildAffectsMeSections(loaded, relevanceFor, {
-    stateChosen: true,
-    now: NOW,
-  });
+  const { affects, older } = buildAffectsMeSections(loaded, relevanceFor, { now: NOW });
 
-  const placed = [...affects, ...unknown, ...older].map((r) => r.id);
+  const placed = [...affects, ...older].map((r) => r.id);
   assert.equal(new Set(placed).size, placed.length, 'no case in two sections');
 
   const qualifying = loaded.filter((i) => relevanceFor(i).affectsMe);

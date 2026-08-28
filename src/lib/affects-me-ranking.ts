@@ -166,13 +166,6 @@ export function explainAffectsMePriority(priority: AffectsMePriority): string {
 export interface AffectsMeSections<T> {
   /** Qualifying notices with recent material activity — the primary list. */
   affects: T[];
-  /**
-   * Recent notices that state no distribution and match nothing personal.
-   * Kept visible behind their own disclosure, never labeled "doesn't affect
-   * you" — the existing honest-uncertainty treatment, now deterministically
-   * ordered like everything else.
-   */
-  unknown: T[];
   /** Qualifying notices whose last authoritative event is older than 60 days. */
   older: T[];
 }
@@ -183,7 +176,7 @@ export interface AffectsMeSectionsResult<T> extends AffectsMeSections<T> {
 }
 
 /**
- * Partition the active feed into the three Affects-me sections and rank each.
+ * Partition the active feed into the two Affects-me sections and rank each.
  *
  * Recency uses MATERIAL activity, not `lastPublicActivityAt`: an authoritative
  * expansion or classification today legitimately returns an older recall to the
@@ -192,18 +185,27 @@ export interface AffectsMeSectionsResult<T> extends AffectsMeSections<T> {
  * activity date, material activity is always ≤ `lastPublicActivityAt`, so this
  * window is a strict tightening of the All Recalls one, never a widening.
  *
- * Sections are disjoint by construction: `affects` and `older` take exactly the
- * qualifying cases, split by one boundary, and `unknown` takes only cases that
- * do not qualify. Every case lands in at most one.
+ * There is no third "Location not specified" section (removed in C5.2B). A
+ * notice that states no distribution and matches nothing personal said nothing
+ * about this user, and a section of them was a large, permanently-collapsed
+ * list that neither answered "does this affect me" nor could be acted on. It
+ * is not moved into Older Active Notices either — those hold QUALIFYING
+ * notices. All Recalls remains the complete, unfiltered safety net, and an
+ * unknown-location notice that DOES match an allergen or retailer still ranks
+ * in the main flow, carrying its honest "Location not specified" context.
+ *
+ * Sections are disjoint and exhaustive over the qualifying set by
+ * construction: `affects` and `older` take exactly the cases where
+ * `affectsMe` holds, split by one boundary. Every other case appears in
+ * neither.
  */
 export function buildAffectsMeSections<T extends AffectsMeRankable>(
   items: readonly T[],
   relevanceOf: (item: T) => PersonalRelevance,
-  options: { stateChosen: boolean; now?: Date },
+  options: { now?: Date } = {},
 ): AffectsMeSectionsResult<T> {
   const now = options.now ?? new Date();
   const affects: T[] = [];
-  const unknown: T[] = [];
   const older: T[] = [];
   const priorityById = new Map<string, AffectsMePriority>();
 
@@ -211,28 +213,15 @@ export function buildAffectsMeSections<T extends AffectsMeRankable>(
     const relevance = relevanceOf(item);
     const priority = affectsMePriority(item, relevance);
     priorityById.set(item.id, priority);
-    if (relevance.affectsMe) {
-      const tier = tierForActivityDate(priority.materialActivityAt, now);
-      (tier === 'recent' ? affects : older).push(item);
-      continue;
-    }
-    // Honest uncertainty is only meaningful once a state is chosen; without
-    // one nearly everything reads as unknown and the section would be the
-    // whole feed under a misleading heading.
-    if (
-      options.stateChosen &&
-      relevance.geographic === 'unknown' &&
-      tierForActivityDate(priority.materialActivityAt, now) === 'recent'
-    ) {
-      unknown.push(item);
-    }
+    if (!relevance.affectsMe) continue;
+    const tier = tierForActivityDate(priority.materialActivityAt, now);
+    (tier === 'recent' ? affects : older).push(item);
   }
 
   const byPriority = (a: T, b: T) =>
     compareAffectsMePriority(priorityById.get(a.id)!, priorityById.get(b.id)!);
   affects.sort(byPriority);
-  unknown.sort(byPriority);
   older.sort(byPriority);
 
-  return { affects, unknown, older, priorityById };
+  return { affects, older, priorityById };
 }

@@ -181,6 +181,8 @@ async function main(): Promise<void> {
             geography: which === 'after' ? entry.after : entry.projection.geography,
             pathogenOrAllergen: entry.projection.pathogenOrAllergen,
             retailerNames: entry.projection.retailerNames ?? [],
+            hazardCategory: entry.projection.hazardCategory,
+            reasonText: entry.projection.reasonText,
           },
           { state: code, allergens: [], retailers: [] },
         );

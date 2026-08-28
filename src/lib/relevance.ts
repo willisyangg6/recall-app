@@ -9,14 +9,22 @@
  *   you" — a wrong "doesn't affect you" is dangerous.
  * - Allergen and retailer matches are POSITIVE signals only. Their absence
  *   proves nothing: retailer and allergen metadata is incomplete at the
- *   source. They never exclude a recall.
+ *   source. They never exclude a recall — with exactly one exception, below.
  * - Authoritative geographic exclusion wins over personal signals: a recall
  *   stated to be sold only in Maine is not "affects me" for a California
  *   user, undeclared peanuts or not.
+ * - THE ONE EXCLUSION (C5.2B): a recall the source proves is allergen-only,
+ *   with its allergens named, and none of them selected. A milk-only recall
+ *   is not information a peanut-allergic shopper needs, however close to home
+ *   it happened. This is narrow on purpose — it needs the agency's own hazard
+ *   category AND a named allergen (domain/allergen-only.ts). A general or
+ *   mixed hazard is never withheld, and everything withheld stays in All
+ *   Recalls.
  * - No inference: no headquarters geography, no retail-footprint knowledge,
  *   no allergy severity. Facts come from the case; choices from preferences.
  */
 
+import { isKnownAllergenMismatch, type HazardFacts } from '@/domain/allergen-only';
 import { normalizedAllergenTokens } from '@/domain/hazard';
 import {
   allergenLabelForToken,
@@ -56,10 +64,17 @@ export interface PersonalRelevance {
   reasons: PersonalReason[];
 }
 
-/** The case facts relevance reads — satisfied by FeedItem and CaseProjection. */
-export interface RelevanceInput {
+/**
+ * The case facts relevance reads — satisfied by FeedItem and CaseProjection.
+ *
+ * `hazardCategory` and `reasonText` are REQUIRED, not optional, so a surface
+ * physically cannot evaluate relevance without the facts the allergen-only
+ * rule needs. That is what keeps Home, the detail screen and push classifying
+ * a recall the same way; an optional field would let one of them silently
+ * fall back to the pre-C5.2B answer.
+ */
+export interface RelevanceInput extends HazardFacts {
   geography: Geography;
-  pathogenOrAllergen: string | null;
   retailerNames: string[];
 }
 
@@ -84,6 +99,10 @@ function geographicRelevance(geography: Geography, stateName: string | null): Ge
  * - no state chosen: geographic relevance cannot be personal, so only
  *   allergen/retailer signals qualify (nationwide items remain in All
  *   Recalls, and the UI asks for a state instead of pretending).
+ * - known allergen mismatch: withheld regardless of geography or retailer.
+ *   Order matters — this is applied AFTER geographic exclusion and BEFORE the
+ *   positive signals, so a retailer match can never resurrect a recall the
+ *   source proves does not involve the user's allergens.
  */
 export function evaluatePersonalRelevance(
   input: RelevanceInput,
@@ -102,15 +121,22 @@ export function evaluatePersonalRelevance(
   );
 
   const hasSignal = matchedAllergens.length > 0 || matchedRetailers.length > 0;
+  // The source proves this recall is about allergens, names them, and none is
+  // one the user selected. Geography and retailer cannot speak to that.
+  const knownAllergenMismatch = isKnownAllergenMismatch(input, prefs.allergens);
   const affectsMe =
     geographic === 'does_not_match'
       ? false
-      : stateName !== null && geographic === 'matches'
-        ? true
-        : hasSignal;
+      : knownAllergenMismatch
+        ? false
+        : stateName !== null && geographic === 'matches'
+          ? true
+          : hasSignal;
 
   const reasons: PersonalReason[] = [];
-  if (geographic !== 'does_not_match') {
+  // A withheld recall has no personalized reason to give: "Sold at Costco" on
+  // a milk recall a peanut user was never shown would explain nothing.
+  if (geographic !== 'does_not_match' && !knownAllergenMismatch) {
     for (const token of matchedAllergens) {
       reasons.push({ kind: 'allergen', label: `Your allergen · ${allergenLabelForToken(token)}` });
     }
