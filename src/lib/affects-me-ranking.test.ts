@@ -109,6 +109,7 @@ function item(overrides: Partial<FeedItem> = {}): FeedItem {
     productDescription: null,
     retailerNames: [],
     heroImageUrl: null,
+    productNames: [],
     geography: geo('unknown'),
     officialUrl: 'https://example.gov',
     timeline: [published(publishedAt)],

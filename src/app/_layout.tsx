@@ -26,19 +26,20 @@ export default function RootLayout() {
           name="index"
           options={{
             title: 'Recall Alerts',
+            // C6: the header entry now opens Profile, which links on to the
+            // unchanged Settings screen. The /settings route itself (and any
+            // deep link to it) is preserved exactly.
             headerRight: () => (
-              <Link href="/settings" asChild>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Alert settings"
-                  hitSlop={8}>
-                  <ThemedText themeColor="link">Alerts</ThemedText>
+              <Link href="/profile" asChild>
+                <Pressable accessibilityRole="button" accessibilityLabel="Profile" hitSlop={8}>
+                  <ThemedText themeColor="link">Profile</ThemedText>
                 </Pressable>
               </Link>
             ),
           }}
         />
         <Stack.Screen name="recall/[id]" options={{ title: 'Recall Details' }} />
+        <Stack.Screen name="profile" options={{ title: 'Profile' }} />
         <Stack.Screen name="settings" options={{ title: 'Alerts' }} />
       </Stack>
       <StatusBar style="auto" />

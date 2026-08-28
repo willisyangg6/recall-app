@@ -49,6 +49,15 @@ export interface FeedItem {
   retailerNames: string[];
   /** Lead product photo for card recognition; null when none is available. */
   heroImageUrl: string | null;
+  /**
+   * Affected product lines (`affected_products.name`, ordinal order) — the
+   * searchable product/variant text, which also carries source-stated UPC,
+   * lot/batch and case codes for identifier search (C6). Measured live:
+   * 3,607 lines across the 882 active cases, ~376 KB over the whole load —
+   * accepted so a code printed on a package can find its recall from Home.
+   * Empty for the ~490 cases whose notices name no per-product lines.
+   */
+  productNames: string[];
   geography: CaseProjection['geography'];
   officialUrl: string;
   /**
@@ -115,6 +124,7 @@ interface FeedRow {
   product_description: string | null;
   retailer_names: string[] | null;
   hero_image_url: string | null;
+  product_names: { name: string }[] | null;
   geography: CaseProjection['geography'];
   official_url: string;
   timeline: TimelineEntry[] | null;
@@ -137,6 +147,8 @@ const FEED_SELECT = [
   'product_description:projection->>productDescription',
   'retailer_names:projection->retailerNames',
   'hero_image_url:projection->>heroImageUrl',
+  // Embedded relation (same anon-readable table the detail screen loads).
+  'product_names:affected_products(name)',
   'geography:projection->geography',
   'official_url:projection->>officialUrl',
   'timeline',
@@ -161,6 +173,7 @@ function toFeedItem(row: FeedRow): FeedItem {
     productDescription: row.product_description ?? null,
     retailerNames: row.retailer_names ?? [],
     heroImageUrl: row.hero_image_url ?? null,
+    productNames: (row.product_names ?? []).map((product) => product.name),
     geography: row.geography,
     officialUrl: row.official_url,
     timeline: row.timeline ?? [],
@@ -178,6 +191,7 @@ export function fetchFeedPage(cursor: string | null, pageSize: number): Promise<
     `recall_cases?select=${FEED_SELECT}` +
       `&state=eq.active${after}` +
       `&order=id.asc` +
+      `&affected_products.order=ordinal.asc` +
       `&limit=${pageSize}`,
   ).then((rows) => rows.map(toFeedItem));
 }

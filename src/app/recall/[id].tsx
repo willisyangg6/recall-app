@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -36,6 +36,7 @@ import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
 import { fetchCaseDetail, type CaseDetail } from '@/lib/recall-feed';
 import { evaluatePersonalRelevance } from '@/lib/relevance';
 import { agencyLabel as agencyLabelFor, riskView } from '@/lib/risk-display';
+import { buildShareMessage } from '@/lib/share-message';
 import {
   formatDate,
   healthRiskSummary,
@@ -686,6 +687,35 @@ export default function RecallDetailScreen() {
             onPress={() => Linking.openURL(projection.officialUrl)}>
             View the official {agencyLabel} notice
           </ThemedText>
+          {/* Native share (C6): canonical facts + the official URL only —
+              built by lib/share-message (tested contract), never including
+              the reader's personalization or any claim they are affected.
+              Cancellation and platforms without a share sheet (some web
+              browsers) reject the promise; both are silently absorbed so the
+              detail page can never crash from sharing. */}
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              const share = buildShareMessage({
+                productName: product,
+                firmDisplayName: projection.recallingFirm.displayName,
+                brands: projection.brands ?? [],
+                whatHappened: happened.text,
+                consumerAction: consumer.action.origin === 'source' ? consumer.action.text : null,
+                agencyLabel,
+                officialUrl: projection.officialUrl,
+              });
+              Share.share(
+                { title: share.title, message: share.message },
+                { subject: share.title },
+              ).catch(() => {
+                // Dismissed, or no share sheet on this platform — never an error.
+              });
+            }}>
+            <ThemedView type="backgroundElement" style={styles.shareButton}>
+              <ThemedText>Share this recall</ThemedText>
+            </ThemedView>
+          </Pressable>
           {product !== projection.title ? (
             <ThemedText type="small" themeColor="textSecondary">
               Official title: “{projection.title}”
@@ -767,5 +797,11 @@ const styles = StyleSheet.create({
   },
   productName: {
     fontWeight: '600',
+  },
+  shareButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
+    borderRadius: Radii.medium,
   },
 });

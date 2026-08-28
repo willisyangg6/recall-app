@@ -54,7 +54,7 @@ export interface AffectsMeRankable {
  * risk level is inferred for them anywhere (see lib/risk-display.ts, which
  * still badges them "Pending" / "Not rated").
  */
-const RISK_PRIORITY: Record<ConsumerRiskTier, number> = {
+export const RISK_PRIORITY: Record<ConsumerRiskTier, number> = {
   critical: 0,
   high: 1,
   moderate: 2,

@@ -1,5 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  SectionList,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { Link, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,14 +17,30 @@ import { RiskBadge } from '@/components/risk-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { hasAnyPreference, type UserRecallPreferences } from '@/domain/preferences';
+import {
+  hasAnyPreference,
+  stateNameForCode,
+  SUPPORTED_STATE_CODES,
+  type UserRecallPreferences,
+} from '@/domain/preferences';
+import { useTheme } from '@/hooks/use-theme';
 import { buildAffectsMeSections, type AffectsMePriority } from '@/lib/affects-me-ranking';
+import {
+  activeFilterCount,
+  applyFeedFilters,
+  EMPTY_FEED_FILTERS,
+  hasActiveFilters,
+  orderByLocationTiers,
+  RISK_FILTER_TIERS,
+  type FeedFilterState,
+} from '@/lib/feed-filters';
+import { buildSearchEntry, filterBySearch, type SearchEntry } from '@/lib/feed-search';
 import { brandLine, companyLine, productDisplayName } from '@/lib/consumer-summary';
 import { buildFeedSections } from '@/lib/feed-relevance';
 import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
 import { fetchCurrentFeed, isFeedConfigured, type FeedItem } from '@/lib/recall-feed';
 import { evaluatePersonalRelevance, type PersonalRelevance } from '@/lib/relevance';
-import { riskView } from '@/lib/risk-display';
+import { riskTierWord, riskView } from '@/lib/risk-display';
 import { geographyLabel, noticeTypeLabel, reasonLine, timingLine } from '@/lib/recall-display';
 
 /**
@@ -102,6 +127,112 @@ function Badge({ label, emphasized }: { label: string; emphasized?: boolean }) {
         {label}
       </ThemedText>
     </ThemedView>
+  );
+}
+
+/** One chip in the horizontally scrollable filter bar (temporary UI). */
+function FilterChip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}>
+      <ThemedView type={active ? 'backgroundSelected' : 'backgroundElement'} style={styles.tab}>
+        <ThemedText style={active ? styles.badgeEmphasized : undefined}>{label}</ThemedText>
+      </ThemedView>
+    </Pressable>
+  );
+}
+
+/** The Location sheet's 52 canonical jurisdictions, alphabetical by name. */
+const LOCATION_OPTIONS = SUPPORTED_STATE_CODES.map((code) => ({
+  value: code,
+  label: stateNameForCode(code) as string,
+})).sort((a, b) => a.label.localeCompare(b.label));
+
+/** The Risk sheet's canonical tiers, existing labels only. */
+const RISK_OPTIONS = RISK_FILTER_TIERS.map((tier) => ({
+  value: tier as string,
+  label: riskTierWord(tier),
+}));
+
+/**
+ * Temporary modal multi-select for one filter dimension. Selections are a
+ * DRAFT until Apply — Cancel discards, Clear empties the dimension. This is
+ * browsing state for the current session, never a saved preference.
+ */
+function FilterSheet({
+  title,
+  options,
+  selected,
+  onApply,
+  onClose,
+}: {
+  title: string;
+  options: { value: string; label: string }[];
+  selected: string[];
+  onApply: (next: string[]) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState<string[]>(selected);
+  const toggle = (value: string) =>
+    setDraft((prior) =>
+      prior.includes(value) ? prior.filter((v) => v !== value) : [...prior, value],
+    );
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.sheetBackdrop}>
+        <ThemedView style={styles.sheet}>
+          <ThemedText type="subtitle">{title}</ThemedText>
+          <ScrollView style={styles.sheetList} keyboardShouldPersistTaps="handled">
+            {options.map((option) => {
+              const isSelected = draft.includes(option.value);
+              return (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: isSelected }}
+                  onPress={() => toggle(option.value)}>
+                  <ThemedText style={styles.sheetItem}>
+                    {isSelected ? `✓ ${option.label}` : option.label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <View style={styles.sheetActions}>
+            <Pressable accessibilityRole="button" onPress={onClose}>
+              <ThemedView type="backgroundElement" style={styles.sheetButton}>
+                <ThemedText>Cancel</ThemedText>
+              </ThemedView>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => setDraft([])}>
+              <ThemedView type="backgroundElement" style={styles.sheetButton}>
+                <ThemedText>Clear</ThemedText>
+              </ThemedView>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                onApply(draft);
+                onClose();
+              }}>
+              <ThemedView type="backgroundSelected" style={styles.sheetButton}>
+                <ThemedText style={styles.badgeEmphasized}>Apply</ThemedText>
+              </ThemedView>
+            </Pressable>
+          </View>
+        </ThemedView>
+      </View>
+    </Modal>
   );
 }
 
@@ -228,14 +359,41 @@ interface HomeSection {
 export default function HomeScreen() {
   const { state, refreshing, refresh, staleMessage } = useFeed();
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const [showOlder, setShowOlder] = useState(false);
   const [tab, setTab] = useState<FeedTab>('all');
+  // Browsing state (C6): session-only, in memory, never persisted, never part
+  // of the personalization profile. Filters apply to All Recalls; switching to
+  // Affects me ignores them TEMPORARILY while preserving the selections.
+  const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState<FeedFilterState>(EMPTY_FEED_FILTERS);
+  const [openSheet, setOpenSheet] = useState<'location' | 'risk' | null>(null);
   const prefs = usePreferences(
     useCallback((loaded: UserRecallPreferences) => {
       // Default to the personalized view only when personalization exists.
       if (hasAnyPreference(loaded)) setTab('affects_me');
     }, []),
   );
+
+  // Search index: built once per loaded corpus, matched per keystroke.
+  const readyItems = state.status === 'ready' ? state.items : null;
+  const searchEntries = useMemo(() => {
+    const entries = new Map<string, SearchEntry>();
+    for (const item of readyItems ?? []) entries.set(item.id, buildSearchEntry(item));
+    return entries;
+  }, [readyItems]);
+  const entryOf = useCallback(
+    (item: FeedItem) => searchEntries.get(item.id) ?? buildSearchEntry(item),
+    [searchEntries],
+  );
+
+  // Applying a browsing filter while viewing Affects me switches to All —
+  // the filters describe the complete feed, never the personal one. The
+  // selection itself survives mode switches in `filters` untouched.
+  const applyDimension = useCallback((dimension: 'stateCodes' | 'riskTiers', next: string[]) => {
+    setFilters((prior) => ({ ...prior, [dimension]: next }) as FeedFilterState);
+    if (next.length > 0) setTab('all');
+  }, []);
 
   if (!isFeedConfigured()) {
     return (
@@ -267,7 +425,22 @@ export default function HomeScreen() {
   // Consumer relevance is a display tier, never a lifecycle change: old
   // agency-active PHAs stay truthful and accessible, but collapsed so they
   // cannot visually compete with newly announced notices.
-  const { recent, olderActive } = buildFeedSections(state.items);
+  //
+  // All Recalls view = complete corpus → browsing filters → search. Both
+  // stages are strict no-ops when inactive (they return the same array), so
+  // with nothing active buildFeedSections receives exactly what
+  // fetchCurrentFeed produced — sectioning and ordering byte-for-byte. The
+  // loaded corpus itself is never mutated or truncated by any of this.
+  const allVisible = filterBySearch(applyFeedFilters(state.items, filters), query, entryOf);
+  const sectioned = buildFeedSections(allVisible);
+  // C6.1: with a jurisdiction selected, order WITHIN each existing section so
+  // notices that explicitly name a selected state lead the nationwide ones
+  // that merely also reach it. Section membership is untouched — an old
+  // notice is never promoted into Recent activity by matching the location —
+  // and with no jurisdiction selected these return the same array instances,
+  // so All Recalls is byte-for-byte its pre-C6 self.
+  const recent = orderByLocationTiers(sectioned.recent, filters.stateCodes);
+  const olderActive = orderByLocationTiers(sectioned.olderActive, filters.stateCodes);
 
   const personalized = tab === 'affects_me' && prefs !== null && hasAnyPreference(prefs);
   const relevanceById = new Map<string, PersonalRelevance>();
@@ -297,9 +470,14 @@ export default function HomeScreen() {
   if (personalized) {
     // One deterministic ranking for the whole tab (lib/affects-me-ranking.ts).
     // Two sections only (C5.2B): a notice that says nothing about this user
-    // appears zero times here and stays in All recalls.
+    // appears zero times here and stays in All recalls. Eligibility and
+    // ranking run over the COMPLETE corpus exactly as before; search then
+    // narrows the already-eligible, already-ranked output (order-preserving),
+    // so it can never surface an ineligible notice or reorder an eligible one.
+    // Location/Risk browsing filters are deliberately NOT applied here.
     const ranked = buildAffectsMeSections(state.items, (item) => relevanceById.get(item.id)!);
-    const { affects, older } = ranked;
+    const affects = filterBySearch(ranked.affects, query, entryOf);
+    const older = filterBySearch(ranked.older, query, entryOf);
     priorityById = ranked.priorityById;
     affectsCounts = { affects: affects.length, older: older.length };
     sections = [
@@ -332,25 +510,33 @@ export default function HomeScreen() {
   }
 
   const showTabs = preferencesAvailable() && prefs !== null;
+  const filtersActive = hasActiveFilters(filters);
+  const searchActive = query.trim() !== '';
 
   return (
     <ThemedView style={styles.container}>
+      {/* ── FEED MODE CONTROL (C6.1) ──────────────────────────────────────
+          The top-level choice: WHICH feed you are looking at. All and
+          Affects me are mutually exclusive scopes, so they get their own
+          segmented control rather than sitting among the filter chips that
+          merely refine All. */}
       {showTabs ? (
-        <View style={styles.tabBar}>
+        <View style={styles.modeControl}>
           {(
             [
+              { key: 'all', label: 'All' },
               { key: 'affects_me', label: 'Affects me' },
-              { key: 'all', label: 'All recalls' },
             ] as const
           ).map(({ key, label }) => (
             <Pressable
               key={key}
               accessibilityRole="button"
               accessibilityState={{ selected: tab === key }}
+              style={styles.modeSegment}
               onPress={() => setTab(key)}>
               <ThemedView
                 type={tab === key ? 'backgroundSelected' : 'backgroundElement'}
-                style={styles.tab}>
+                style={styles.modeSegmentInner}>
                 <ThemedText style={tab === key ? styles.badgeEmphasized : undefined}>
                   {label}
                 </ThemedText>
@@ -358,6 +544,103 @@ export default function HomeScreen() {
             </Pressable>
           ))}
         </View>
+      ) : null}
+      {/* ── END FEED MODE CONTROL ─────────────────────────────────────────*/}
+      <View style={styles.searchRow}>
+        <TextInput
+          style={[styles.searchInput, { color: theme.text }]}
+          placeholder="Search product, company, brand, or code"
+          placeholderTextColor={theme.textSecondary}
+          value={query}
+          onChangeText={setQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+          accessibilityLabel="Search recalls"
+        />
+      </View>
+      {/* ── ALL-ONLY FILTER ROW (C6.1) ────────────────────────────────────
+          Location and Risk refine the All Recalls feed and NOTHING else, so
+          they live at their own level, below the feed-mode control, and are
+          rendered only while All is the active mode. In Affects me they —
+          and their counts and Clear all — are absent entirely: they cannot
+          be opened, read, or cleared from there, while the selections stay
+          untouched in session state for the return to All.
+
+          Category is deliberately absent from this row: the deterministic
+          product-category matcher failed its frozen generalization gates
+          (docs/recall-food-categories.md), and a filter that miscategorizes
+          one recall in ten HIDES recalls. */}
+      {tab === 'all' ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterBar}
+          contentContainerStyle={styles.filterBarContent}>
+          <FilterChip
+            label={
+              filters.stateCodes.length > 0 ? `Location · ${filters.stateCodes.length}` : 'Location'
+            }
+            active={filters.stateCodes.length > 0}
+            onPress={() => setOpenSheet('location')}
+          />
+          <FilterChip
+            label={filters.riskTiers.length > 0 ? `Risk · ${filters.riskTiers.length}` : 'Risk'}
+            active={filters.riskTiers.length > 0}
+            onPress={() => setOpenSheet('risk')}
+          />
+          {filtersActive ? (
+            <FilterChip
+              label="Clear all"
+              active={false}
+              onPress={() => setFilters(EMPTY_FEED_FILTERS)}
+            />
+          ) : null}
+        </ScrollView>
+      ) : null}
+      {tab === 'all' && filtersActive ? (
+        <View style={styles.searchRow}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Filtering All recalls · {activeFilterCount(filters)} selection
+            {activeFilterCount(filters) === 1 ? '' : 's'}
+          </ThemedText>
+        </View>
+      ) : null}
+      {/* ── END ALL-ONLY FILTER ROW ───────────────────────────────────────*/}
+      {/* Affects me says what it is scoped by and offers the way to change
+          it. Not an instruction, and no preference logic of its own — the
+          link opens the one existing personalization screen. */}
+      {tab === 'affects_me' && showTabs ? (
+        <View style={[styles.searchRow, styles.contextRow]}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Based on your personalization
+          </ThemedText>
+          <Link href="/settings" asChild>
+            <Pressable accessibilityRole="button" hitSlop={8}>
+              <ThemedText type="small" themeColor="link">
+                Edit
+              </ThemedText>
+            </Pressable>
+          </Link>
+        </View>
+      ) : null}
+      {openSheet === 'location' ? (
+        <FilterSheet
+          title="Location"
+          options={LOCATION_OPTIONS}
+          selected={filters.stateCodes}
+          onApply={(next) => applyDimension('stateCodes', next)}
+          onClose={() => setOpenSheet(null)}
+        />
+      ) : null}
+      {openSheet === 'risk' ? (
+        <FilterSheet
+          title="Risk level"
+          options={RISK_OPTIONS}
+          selected={filters.riskTiers}
+          onApply={(next) => applyDimension('riskTiers', next)}
+          onClose={() => setOpenSheet(null)}
+        />
       ) : null}
       <SectionList
         sections={sections}
@@ -428,7 +711,16 @@ export default function HomeScreen() {
         style={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
         ListEmptyComponent={
-          personalized ? (
+          searchActive || (tab === 'all' && filtersActive) ? (
+            <CenteredMessage
+              title="No matching recalls"
+              body={
+                searchActive
+                  ? 'Nothing matches this search. Check the spelling, or clear the search and filters to see everything.'
+                  : 'No current recalls match these filters. Clear all to see the complete feed.'
+              }
+            />
+          ) : personalized ? (
             <CenteredMessage
               title="No current recalls match your preferences"
               body="Nothing right now affects your state or matches your allergens and stores. Check All recalls for the national picture."
@@ -465,12 +757,57 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     gap: Spacing.two,
   },
-  tabBar: {
-    flexDirection: 'row',
-    gap: Spacing.two,
+  searchRow: {
     maxWidth: MaxContentWidth,
     width: '100%',
     alignSelf: 'center',
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+  },
+  // The two scope segments share the row equally, so the control reads as one
+  // either/or choice rather than as two chips among many.
+  modeControl: {
+    flexDirection: 'row',
+    gap: Spacing.one,
+    maxWidth: MaxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+  },
+  modeSegment: {
+    flex: 1,
+  },
+  modeSegmentInner: {
+    alignItems: 'center',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
+    borderRadius: Radii.medium,
+  },
+  contextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  searchInput: {
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Radii.small,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#8884',
+  },
+  // Horizontally scrollable so all chips stay reachable on small viewports;
+  // flexGrow: 0 keeps the bar its content height instead of stealing the list's.
+  filterBar: {
+    flexGrow: 0,
+    maxWidth: MaxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  filterBarContent: {
+    flexDirection: 'row',
+    gap: Spacing.two,
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.two,
   },
@@ -535,5 +872,35 @@ const styles = StyleSheet.create({
   },
   centeredText: {
     textAlign: 'center',
+  },
+  sheetBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: '#0006',
+  },
+  sheet: {
+    maxWidth: MaxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+    borderTopLeftRadius: Radii.medium,
+    borderTopRightRadius: Radii.medium,
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  sheetList: {
+    maxHeight: 340,
+  },
+  sheetItem: {
+    paddingVertical: Spacing.one,
+  },
+  sheetActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: Spacing.two,
+  },
+  sheetButton: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
+    borderRadius: Radii.medium,
   },
 });

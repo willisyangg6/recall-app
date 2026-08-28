@@ -45,6 +45,7 @@ function item(n: number, overrides: Partial<FeedItem> = {}): FeedItem {
     productDescription: null,
     retailerNames: [],
     heroImageUrl: null,
+    productNames: [],
     geography: { scope: 'unknown', states: [], confidence: 'stated', sourceText: null },
     officialUrl: 'https://example.gov',
     timeline: [],
