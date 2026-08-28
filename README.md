@@ -17,6 +17,17 @@ Design documents:
 - [docs/recall-source-contract.md](docs/recall-source-contract.md) — verified behavior of the official FDA/FSIS data sources
 - [docs/recall-domain-architecture.md](docs/recall-domain-architecture.md) — the canonical domain model and ingestion architecture
 
+Trust & App Store preparation (C7): the in-app trust center renders the
+structured documents in `src/content/` (sources & methodology, Affects-Me
+semantics, risk vocabulary, disclaimer, corrections, privacy behavior,
+attributions), pinned to the implementation by
+`src/content/*.test.ts`. The code-backed audits and drafts live in
+[docs/recall-data-flow-audit.md](docs/recall-data-flow-audit.md),
+[docs/recall-app-store-readiness.md](docs/recall-app-store-readiness.md),
+[docs/recall-privacy-policy-draft.md](docs/recall-privacy-policy-draft.md)
+(draft — not published), and
+[docs/recall-launch-blockers.md](docs/recall-launch-blockers.md).
+
 ## Tech stack
 
 - [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/) / React Native, TypeScript (strict), [Expo Router](https://docs.expo.dev/router/introduction/)

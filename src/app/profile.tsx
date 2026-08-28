@@ -1,35 +1,34 @@
 /**
- * Minimal Profile (C6) — structural preparation in the temporary visual
- * language, NOT the final Profile design.
+ * Profile (C7) — the trust center, still in the temporary visual language.
  *
- * This screen deliberately owns NO business logic and NO state: it is a set
- * of links into the areas that already function. Personalization and
+ * This screen deliberately owns NO business logic and NO state: it is
+ * navigation into things that already function. Personalization and
  * notification controls stay exactly where they live today — the Settings
- * screen (route `/settings`, title "Alerts"), with its preference store,
- * serial save queue, local-first persistence, and server mirror untouched and
- * unduplicated. Push deep links and every existing `/settings` reference keep
- * working unchanged.
+ * screen (route `/settings`, title "Alerts") — untouched and unduplicated,
+ * and every existing `/settings` reference keeps working unchanged.
  *
- * Restyling/moving later: because this file is only navigation + an About
- * block, the final design can restyle it, move its rows into tabs, or split
- * Settings into separate Personalization/Notifications screens without
- * touching any preference or push logic — none of it lives here. The only
- * coupling is the `/settings` href and the header entry in `_layout.tsx`.
+ * The About & Safety / Privacy & Data / Legal rows come from the trust
+ * document registry (src/content): the rows, their order, and their wording
+ * are the registry's, so Profile can never invent a destination or leave a
+ * finished document unreachable (enforced by the trust-document tests).
  *
- * Deliberately absent (functioning destinations do not exist yet): privacy/
- * data controls, methodology, legal, help/contact. No dead filler pages; rows
- * appear here only once a real screen exists behind them.
+ * Deliberately absent, because no functioning destination exists yet: a
+ * Privacy Policy (draft blocked on founder/legal inputs — see
+ * docs/recall-launch-blockers.md), Terms/EULA, and a Support row (no real
+ * contact destination exists). No dead filler rows; a row appears here only
+ * once a real screen exists behind it.
  */
 
 import Constants from 'expo-constants';
-import { Link } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Link, type Href } from 'expo-router';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { documentBySlug, PROFILE_DOCUMENT_GROUPS } from '@/content';
 
-function LinkRow({ label, detail, href }: { label: string; detail: string; href: '/settings' }) {
+function LinkRow({ label, detail, href }: { label: string; detail: string; href: Href }) {
   return (
     <Link href={href} asChild>
       <Pressable accessibilityRole="button">
@@ -44,6 +43,14 @@ function LinkRow({ label, detail, href }: { label: string; detail: string; href:
   );
 }
 
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+      {children.toUpperCase()}
+    </ThemedText>
+  );
+}
+
 export default function ProfileScreen() {
   // Runtime-truthful version: the installed binary's version when running
   // native, the configured app version in Expo Go / web / dev.
@@ -52,31 +59,47 @@ export default function ProfileScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={styles.content}>
-        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
-          SETTINGS
-        </ThemedText>
-        <LinkRow
-          label="Personalization"
-          detail="Your state, allergens to watch, and stores — powers “Affects me.”"
-          href="/settings"
-        />
-        <LinkRow label="Notifications" detail="Recall alerts for this device." href="/settings" />
+      <ScrollView style={styles.scroll}>
+        <View style={styles.content}>
+          <SectionLabel>Personal settings</SectionLabel>
+          <LinkRow
+            label="Personalization"
+            detail="Your state, allergens to watch, and stores — powers “Affects me.”"
+            href="/settings"
+          />
+          <LinkRow label="Notifications" detail="Recall alerts for this device." href="/settings" />
 
-        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
-          ABOUT
-        </ThemedText>
-        <ThemedView type="backgroundElement" style={styles.row}>
-          <ThemedText>App version</ThemedText>
+          {PROFILE_DOCUMENT_GROUPS.map((group) => (
+            <View key={group.title} style={styles.group}>
+              <SectionLabel>{group.title}</SectionLabel>
+              {group.slugs.map((slug) => {
+                const doc = documentBySlug(slug);
+                if (!doc) return null; // Unreachable: the registry tests pin every slug.
+                return (
+                  <LinkRow
+                    key={doc.slug}
+                    label={doc.title}
+                    detail={doc.summary}
+                    href={{ pathname: '/document/[slug]', params: { slug: doc.slug } }}
+                  />
+                );
+              })}
+            </View>
+          ))}
+
+          <SectionLabel>Help</SectionLabel>
+          <ThemedView type="backgroundElement" style={styles.row}>
+            <ThemedText>App version</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {version ? `${version}${build ? ` (${build})` : ''}` : 'Development build'}
+            </ThemedText>
+          </ThemedView>
           <ThemedText type="small" themeColor="textSecondary">
-            {version ? `${version}${build ? ` (${build})` : ''}` : 'Development build'}
+            Recall information comes from official FDA and USDA FSIS notices; every recall links to
+            its government source.
           </ThemedText>
-        </ThemedView>
-        <ThemedText type="small" themeColor="textSecondary">
-          Recall information comes from official FDA and USDA FSIS notices; every recall links to
-          its government source.
-        </ThemedText>
-      </View>
+        </View>
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -85,11 +108,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  scroll: {
+    flex: 1,
+    width: '100%',
+  },
   content: {
     maxWidth: MaxContentWidth,
     width: '100%',
     alignSelf: 'center',
     padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  group: {
     gap: Spacing.two,
   },
   sectionLabel: {

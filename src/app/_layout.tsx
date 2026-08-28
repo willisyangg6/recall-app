@@ -41,6 +41,9 @@ export default function RootLayout() {
         <Stack.Screen name="recall/[id]" options={{ title: 'Recall Details' }} />
         <Stack.Screen name="profile" options={{ title: 'Profile' }} />
         <Stack.Screen name="settings" options={{ title: 'Alerts' }} />
+        {/* C7 trust documents: one reusable screen; each document sets its
+            own title from the content registry. */}
+        <Stack.Screen name="document/[slug]" options={{ title: 'About' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
