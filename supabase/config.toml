@@ -385,6 +385,13 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# O1 scheduler watchdog. verify_jwt is off because Supabase Cron cannot send
+# a user JWT; the function authenticates every request itself with the
+# dedicated x-watchdog-secret header (see supabase/functions/ingest-watchdog).
+[functions.ingest-watchdog]
+enabled = true
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

@@ -68,10 +68,16 @@ queued**, so it is simply lost. Measured on this repository while the cron was
 cadence at twice hourly and only moves it off the boundary; frequency is
 unchanged, and raising it would make dropped ticks more likely, not less.
 
-**This is a hypothesis under observation, not a proven fix.** GitHub does not
-publish its contention model, and the offset is an inference from documented
-behaviour plus the measurement above. See the verification procedure below
-before treating it as settled.
+**OUTCOME (2026-08-28): the offset did not work.** The 22-hour window under
+`:07/:37` delivered at most 4 of 44 expected ticks (~9%, worse than the 24%
+baseline; median gap 386 min, worst 694 min), none of the observed starts
+landed on a scheduled minute, and `ops:health` attributed every gap to
+scheduler silence — the reconsideration bar below was met. The fix is the
+**Supabase scheduler watchdog** (docs/recall-scheduler-watchdog.md): Supabase
+Cron → Edge Function → atomic claim → `workflow_dispatch` on this same
+workflow whenever FDA/FSIS freshness lapses. The cron entry stays as a free
+best-effort extra tick during the watchdog observation period; do not rely on
+it for freshness.
 
 The cron is pinned by `src/server/jobs/workflow-schedule.test.ts`, which also
 asserts `workflow_dispatch` survives on both workflows — it is the recovery
@@ -118,6 +124,11 @@ dispatch endpoint, a hosted scheduler) adds a credential, a host, and a new
 thing that can fail silently — against a workflow that is otherwise correct.
 An additional shifted cron entry inside the same workflow is the cheaper next
 step and should be tried first.
+
+**That bar was met on 2026-08-28** (≈9% delivery, all scheduler silence), and
+the external scheduler exists: see docs/recall-scheduler-watchdog.md for the
+architecture, activation, rollback, and the new `Scheduler watchdog` section
+in `ops:health` plus `npm run scheduler:status` / `npm run scheduler:probe`.
 
 ### The unchanged-source skip gate
 
@@ -365,6 +376,13 @@ Secrets and variables → Actions), locally via `.env` (gitignored). A third,
 enabled on the Expo account (docs/recall-push-delivery.md). All are
 server-only, never in any `EXPO_PUBLIC_*` variable, never printed by any job,
 and the iOS export is grepped for secret markers as a standing gate.
+
+The scheduler watchdog adds two Supabase-side credentials — a fine-grained
+GitHub token (`GITHUB_ACTIONS_TOKEN`, Edge Function secret only) and the
+cron shared secret (`WATCHDOG_SHARED_SECRET`, Edge Function secret + Vault +
+optionally local `.env` for the probe CLI). Neither is a repo secret, neither
+appears in any table, log, or migration; docs/recall-scheduler-watchdog.md
+§Credentials has scopes and rotation.
 
 ## Activation (founder steps — nothing is deployed until these run)
 

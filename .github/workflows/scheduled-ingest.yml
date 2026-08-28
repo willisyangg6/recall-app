@@ -19,14 +19,17 @@
 #
 # NOTE: GitHub disables cron workflows after 60 days without repo activity.
 #
-# The offset is deliberate. `*/30` fires at :00 and :30 — the slots GitHub
-# documents as most contended — and measured delivery on this repository was
-# 16 of 67 expected ticks (24%) over 2026-08-26/27, with a median gap of 64
-# min and a worst gap of 664 min. Schedule events are dropped, not queued, so
-# a missed tick is simply lost. :07/:37 keeps the twice-hourly cadence while
-# moving off the congested boundaries. Delivery is under observation — see
-# docs/recall-operations.md; do not treat the offset as proven until the
-# 24-hour window there completes.
+# The schedule below is BEST-EFFORT ONLY. Measured delivery on this
+# repository: 16 of 67 expected ticks (24%) under `*/30` (2026-08-26/27), and
+# at most 4 of 44 (9%) under the `:07`/`:37` offset (2026-08-27/28) — the
+# offset did not fix it. Schedule events are dropped, not queued, so a missed
+# tick is simply lost. Freshness is therefore owned by the Supabase scheduler
+# watchdog (supabase/functions/ingest-watchdog +
+# docs/recall-scheduler-watchdog.md), which calls workflow_dispatch on this
+# workflow whenever FDA/FSIS ingestion goes stale. The cron stays as a free
+# extra chance at a tick; do NOT rely on it, and do not remove it until the
+# watchdog has production evidence (see the observation-period notes in the
+# watchdog doc).
 
 name: scheduled-ingest
 
@@ -50,8 +53,12 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # v7 majors: current stable, node24 action runtime (v4 ran the
+      # deprecated node20 runtime). Verified against the actions' official
+      # READMEs 2026-08-28: no input we use changed behaviour, and the v7
+      # fork-PR safety default cannot apply (no pull_request_target here).
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm

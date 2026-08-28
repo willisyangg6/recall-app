@@ -54,6 +54,8 @@
     "push:activate": "tsx scripts/push-activate.ts",
     "push:test": "tsx scripts/push-test.ts",
     "ops:health": "tsx scripts/ops-health.ts",
+    "scheduler:status": "tsx scripts/scheduler-status.ts",
+    "scheduler:probe": "tsx scripts/scheduler-probe.ts",
     "check": "npm run typecheck && npm run lint && npm run test",
     "qa:fda": "tsx scripts/qa-consumer-projection.ts",
     "qa:personalization": "tsx scripts/qa-personalization.ts",

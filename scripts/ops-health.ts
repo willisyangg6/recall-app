@@ -20,6 +20,11 @@
 import { createClient } from '@supabase/supabase-js';
 
 import { summarizeJobRuns, type HealthRun } from '../src/server/jobs/health';
+import {
+  asWatchdogQueryClient,
+  formatWatchdogSection,
+  loadWatchdogReport,
+} from '../src/server/watchdog/report';
 
 interface JobHealthSpec {
   jobName: string;
@@ -314,6 +319,19 @@ async function main(): Promise<void> {
     for (const note of pushNotes) console.log(`    · ${note}`);
     console.log('');
   }
+
+  // ── Scheduler watchdog (O1) ────────────────────────────────────────────────
+  // The Supabase-owned dispatcher that covers for GitHub's dropped scheduled
+  // ticks. Pre-activation ("not installed") is a first-class state and never
+  // gates the exit code; once activated, a dead cron, a configuration error,
+  // repeated dispatch failures, or an expired GitHub token are UNHEALTHY.
+  // Classification: src/server/watchdog/health.ts; loading/presentation:
+  // src/server/watchdog/report.ts (shared with npm run scheduler:status).
+  const watchdogReport = await loadWatchdogReport(asWatchdogQueryClient(client), Date.now());
+  console.log('Scheduler watchdog');
+  for (const line of formatWatchdogSection(watchdogReport)) console.log(line);
+  if (watchdogReport?.summary.unhealthy) unhealthy += 1;
+  console.log('');
 
   // Deliverable notification flow (informational — C2 consumes these).
   const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
