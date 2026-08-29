@@ -215,6 +215,72 @@ export function fetchCurrentFeed(options?: LoadAllPagesOptions): Promise<FeedIte
   return loadAllPages(fetchFeedPage, options);
 }
 
+/**
+ * One manifest row per consumer-visible active case (C8): the case id plus an
+ * opaque version token computed server-side over the exact client-visible
+ * representation (see supabase/migrations/20260904000000_consumer_feed_manifest.sql).
+ * Tokens are compared for equality only — the client never derives them.
+ */
+export interface FeedManifestEntry {
+  id: string;
+  version: string;
+}
+
+/**
+ * Manifest rows are ~100 bytes each, so a single request comfortably covers
+ * corpora several times today's size while staying under the measured
+ * 1000-row PostgREST ceiling. Like the feed itself, the manifest is paged by
+ * immutable id cursor and is complete-or-throw.
+ */
+export const MANIFEST_PAGE_SIZE = 1000;
+
+export function fetchManifestPage(
+  cursor: string | null,
+  pageSize: number,
+): Promise<FeedManifestEntry[]> {
+  const after = cursor ? `&id=gt.${encodeURIComponent(cursor)}` : '';
+  return restGet<FeedManifestEntry[]>(
+    `consumer_feed_manifest?select=id,version${after}&order=id.asc&limit=${pageSize}`,
+  );
+}
+
+/** The complete manifest, or a throw — never a silently short list. */
+export function fetchCurrentManifest(): Promise<FeedManifestEntry[]> {
+  return loadAllPages(fetchManifestPage, { pageSize: MANIFEST_PAGE_SIZE });
+}
+
+/**
+ * How many case ids one changed-row request carries. 60 uuids keep the URL
+ * around 3 KB — far below request-line limits — while a typical incremental
+ * sync (a handful of changed cases) still needs exactly one request.
+ */
+export const FEED_IDS_CHUNK_SIZE = 60;
+
+/**
+ * The full feed rows for specific case ids — the incremental half of the C8
+ * sync. Same SELECT, same `state=eq.active` contract, same RLS as the paged
+ * loader, so a row this returns is byte-identical to the one a cold load
+ * would have produced. An id that comes back missing is authoritatively no
+ * longer consumer-visible (closed, retracted, or merged) — the sync engine
+ * removes it; this function never throws for missing rows, only for failed
+ * requests.
+ */
+export async function fetchFeedItemsByIds(ids: string[]): Promise<FeedItem[]> {
+  const items: FeedItem[] = [];
+  for (let from = 0; from < ids.length; from += FEED_IDS_CHUNK_SIZE) {
+    const chunk = ids.slice(from, from + FEED_IDS_CHUNK_SIZE);
+    const rows = await restGet<FeedRow[]>(
+      `recall_cases?select=${FEED_SELECT}` +
+        `&state=eq.active` +
+        `&id=in.(${chunk.map((id) => encodeURIComponent(id)).join(',')})` +
+        `&order=id.asc` +
+        `&affected_products.order=ordinal.asc`,
+    );
+    items.push(...rows.map(toFeedItem));
+  }
+  return items;
+}
+
 interface DetailRow {
   id: string;
   projection: CaseProjection;

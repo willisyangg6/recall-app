@@ -37,8 +37,16 @@ import {
 import { buildSearchEntry, filterBySearch, type SearchEntry } from '@/lib/feed-search';
 import { brandLine, companyLine, productDisplayName } from '@/lib/consumer-summary';
 import { buildFeedSections } from '@/lib/feed-relevance';
+import { createFeedCacheStore } from '@/lib/feed-cache-store';
+import { createFeedSession, type FeedSession } from '@/lib/feed-sync';
 import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
-import { fetchCurrentFeed, isFeedConfigured, type FeedItem } from '@/lib/recall-feed';
+import {
+  fetchCurrentFeed,
+  fetchCurrentManifest,
+  fetchFeedItemsByIds,
+  isFeedConfigured,
+  type FeedItem,
+} from '@/lib/recall-feed';
 import { evaluatePersonalRelevance, type PersonalRelevance } from '@/lib/relevance';
 import { riskTierWord, riskView } from '@/lib/risk-display';
 import { geographyLabel, noticeTypeLabel, reasonLine, timingLine } from '@/lib/recall-display';
@@ -55,16 +63,40 @@ type LoadState =
 
 type FeedTab = 'affects_me' | 'all';
 
+/**
+ * One feed session for the app process (C8): it owns the persistent cache
+ * and coalesces concurrent reconciliations, so a remount, the launch
+ * revalidation, and a pull-to-refresh share one in-flight sync instead of
+ * issuing duplicate request storms. Created lazily because the module loads
+ * before env configuration is checked.
+ */
+let feedSession: FeedSession | null = null;
+function getFeedSession(): FeedSession {
+  if (feedSession === null) {
+    feedSession = createFeedSession({
+      store: createFeedCacheStore(),
+      transport: {
+        fetchManifest: fetchCurrentManifest,
+        fetchAll: fetchCurrentFeed,
+        fetchByIds: fetchFeedItemsByIds,
+      },
+    });
+  }
+  return feedSession;
+}
+
 function useFeed() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
   /** Set when a refresh failed over a feed we still hold — see below. */
   const [staleMessage, setStaleMessage] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  // A sync resolves with a COMPLETE corpus or throws — the reconciliation
+  // never hands back part of a feed, so `ready` keeps meaning complete.
+  const revalidate = useCallback(async () => {
     try {
-      const items = await fetchCurrentFeed();
-      setState({ status: 'ready', items });
+      const outcome = await getFeedSession().sync();
+      setState({ status: 'ready', items: outcome.items });
       setStaleMessage(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not load recalls.';
@@ -77,19 +109,36 @@ function useFeed() {
   }, []);
 
   useEffect(() => {
-    // Fetch-on-mount: state updates happen after the network await resolves,
-    // not synchronously in the effect body.
+    // Cached-first render: the last complete corpus appears without waiting
+    // on the network, then the background reconciliation replaces it. The
+    // cache only ever fills a not-yet-ready state, so a sync that resolves
+    // first is never overwritten by older cached items.
+    if (!isFeedConfigured()) return;
+    let cancelled = false;
+    void getFeedSession()
+      .getCached()
+      .then((cachedItems) => {
+        if (cancelled || cachedItems === null) return;
+        setState((current) =>
+          current.status === 'ready' ? current : { status: 'ready', items: cachedItems },
+        );
+      });
+    // State updates happen after the network await resolves, not
+    // synchronously in the effect body.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (isFeedConfigured()) void load();
-  }, [load]);
+    void revalidate();
+    return () => {
+      cancelled = true;
+    };
+  }, [revalidate]);
 
-  // Always safe to repeat: each attempt re-pages from scratch and replaces the
-  // feed only on complete success.
+  // Pull-to-refresh runs a real reconciliation (or joins the one in flight);
+  // the feed is replaced only on complete success.
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    await load();
+    await revalidate();
     setRefreshing(false);
-  }, [load]);
+  }, [revalidate]);
 
   return { state, refreshing, refresh, staleMessage };
 }

@@ -225,6 +225,35 @@ architecture §2.4 for the pagination contract and the growth budget. Watch
 total payload rather than row count; the alarm to raise is a rising page count
 against flat coverage.
 
+## Egress (Phase C8)
+
+The Supabase project outgrew the Free plan's 5 GB egress; C8 measured where
+the bytes actually went and fixed the two repeatable sources — full detail in
+docs/recall-feed-sync.md. Operationally:
+
+- **Ingest reads are identity-slices now.** The per-item hash gate and
+  retraction targeting read `select('id, recall_case_id')` instead of full
+  source-record rows (~19 KB each on FDA). A full FDA run's per-record reads
+  fell from ~12.7 MB to ~84 KB decompressed (estimate from measured row
+  sizes). The expansion-parent lookup still reads the full row — its
+  evidence guard needs `normalized`.
+- **The client feed syncs incrementally** against the anon-readable
+  `consumer_feed_manifest` view (id + content-hash token per visible case).
+  Activation requires `supabase db push` of
+  `20260904000000_consumer_feed_manifest.sql`; until then clients fall back
+  to exactly the pre-C8 complete load.
+- **`npm run qa:egress`** (read-only) is the standing measurement: cold-load
+  bytes and completeness, manifest hidden-id gate, warm-refresh
+  zero-full-rows and ≥80%-reduction gates, and scheduled-job estimates from
+  `ingest_runs` history. It exits non-zero while the manifest migration is
+  unapplied.
+- **Founder QA/maintenance commands read the corpus at full weight on
+  purpose** (audit quality over transfer): `qa:personalization` ~11 MB,
+  `qa:duplicates` ~11 MB, `qa:fda-enforcement` ~18 MB, image backfill
+  ~57–63 MB, `repair:geography` ~2×26 MB per pass. These are per-invocation
+  costs, not schedules — during heavy development weeks they were plausibly
+  the largest single egress driver.
+
 ## Failure semantics
 
 **SOURCE EMPTY is SOURCE FAILED.** A feed returning zero items — or under

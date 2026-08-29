@@ -259,7 +259,12 @@ async function ingestOne(
   const { raw, normalized } = item;
   const sourceSystem = input.sourceSystem;
   const nowIso = now().toISOString();
-  const existing = await store.getSourceRecordByNativeId(sourceSystem, normalized.nativeId);
+  // Identity slice only (C8): this lookup runs once per feed item on every
+  // changed run — ~700–1,200 times — and the hash gate below needs the
+  // record id and case link, never the stored normalized payload. The full
+  // row (~19 KB for FDA vs ~0.1 KB for the slice) stays reserved for the
+  // expansion path, whose evidence guard genuinely reads `normalized`.
+  const existing = await store.getSourceRecordLinkByNativeId(sourceSystem, normalized.nativeId);
   const hash = contentHash(item.contentKey ?? raw);
 
   if (existing) {
@@ -298,7 +303,9 @@ async function ingestOne(
 
   if (normalized.isRetractionNotice) {
     for (const retractedId of normalized.retractsNativeIds) {
-      const target = await store.getSourceRecordByNativeId(sourceSystem, retractedId);
+      // Only the case link is needed to attach a retraction — same narrow
+      // slice as the hash gate above.
+      const target = await store.getSourceRecordLinkByNativeId(sourceSystem, retractedId);
       if (target) {
         targetCase = { id: target.recallCaseId };
         linkMethod = 'retraction_reference';

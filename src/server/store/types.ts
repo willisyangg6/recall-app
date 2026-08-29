@@ -33,6 +33,20 @@ export interface SourceRecordRow {
   lastSeenAt: string;
 }
 
+/**
+ * The identity-only slice of a source record (C8): enough to hash-gate an
+ * unchanged record and to resolve which case a record belongs to, WITHOUT
+ * transferring the normalized payload (whose summaryHtml dominates row
+ * size). Measured live: a full FDA source-record row averages ~19 KB while
+ * this slice is ~0.1 KB, and the ingest hot path reads one row per feed
+ * item (~700–1,200 per changed run) — this slice is what makes a changed
+ * tick cost kilobytes instead of megabytes.
+ */
+export interface SourceRecordLink {
+  id: string;
+  recallCaseId: string;
+}
+
 export interface RecallCaseRow {
   id: string;
   projection: CaseProjection;
@@ -122,6 +136,16 @@ export interface RecallStore {
     sourceSystem: SourceSystem,
     nativeId: string,
   ): Promise<SourceRecordRow | null>;
+  /**
+   * The identity slice alone — for the per-item hash gate and retraction
+   * targeting, which need the record id and its case but never the
+   * normalized payload. Callers that will read `normalized` (the expansion
+   * evidence guard) must use `getSourceRecordByNativeId` instead.
+   */
+  getSourceRecordLinkByNativeId(
+    sourceSystem: SourceSystem,
+    nativeId: string,
+  ): Promise<SourceRecordLink | null>;
   /**
    * Records of one source published on/after `publishedAfterIso` — the
    * candidate pool a declared-expansion record searches for its parent.

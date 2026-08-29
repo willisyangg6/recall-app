@@ -104,6 +104,8 @@ The residual races are benign and self-correcting on the next refresh: a case in
 
 **As the corpus grows.** Cost is linear and bounded by page count, not by a ceiling: 882 cases load in 2 requests, ~1.23 MB, ~600 ms — measured faster than the single truncated 500-row request it replaced (~1160 ms for 43% less data). At 5,000 active cases this is 10 requests and ~7 MB. The number to watch is total payload, not row count, and the first lever is the feed projection, not the page size: `timeline` (17.6% of bytes) and `geography` (17.2%) dominate, and `timeline` is carried only to derive one date per case (§2.3). Nothing detail-only — full HTML, label data, affected-product rows — is on the feed row today, and none should be added.
 
+**C8 addendum (2026-08-29).** The complete cold load above is no longer the every-refresh cost: the client keeps the last complete corpus in a persistent on-device cache and reconciles it against a lightweight per-case token manifest (`consumer_feed_manifest`, id + content hash), re-downloading only changed/new rows and removing vanished ones. Every commit is still a complete corpus — the loader above remains the cold path and the fallback, and every guarantee in this section is unchanged. Design, consistency model, and measurements: docs/recall-feed-sync.md.
+
 ---
 
 ## Part 3 — Canonical domain model

@@ -87,7 +87,14 @@ configuration only (`@supabase/supabase-js` is imported exclusively by
 `src/server/` and `scripts/` — never bundled into the app):
 
 1. `GET {SUPABASE_URL}/rest/v1/recall_cases…` and `…affected_products` embed —
-   feed pages (`src/lib/recall-feed.ts`). Publishable key only.
+   feed pages (`src/lib/recall-feed.ts`). Publishable key only. Since C8 the
+   same module also issues `GET …/rest/v1/consumer_feed_manifest?select=id,version`
+   (per-case sync tokens, no recall content) and by-id `recall_cases` fetches
+   for changed rows — same tables, same RLS, no new data category. The synced
+   corpus is cached on-device in the app's private cache directory
+   (`src/lib/feed-cache-store.ts`); the cache document holds public recall
+   content only — the no-identity pin is tested
+   (`src/lib/feed-cache.test.ts`).
 2. `GET …/rest/v1/recall_cases?id=eq.…` + `…/rest/v1/product_visuals…` —
    detail screen.
 3. `POST …/rest/v1/rpc/register_push_subscription | disable_push_subscription

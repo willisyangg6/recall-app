@@ -21,6 +21,7 @@ import type {
   NotificationEventInput,
   RecallCaseRow,
   RecallStore,
+  SourceRecordLink,
   SourceRecordRow,
 } from './types';
 
@@ -142,6 +143,24 @@ export class SupabaseStore implements RecallStore {
       .maybeSingle();
     if (error) this.fail('getSourceRecordByNativeId', error);
     return data ? this.toSourceRecordRow(data) : null;
+  }
+
+  async getSourceRecordLinkByNativeId(
+    sourceSystem: SourceSystem,
+    nativeId: string,
+  ): Promise<SourceRecordLink | null> {
+    // Identity columns only — never `normalized`, whose summaryHtml makes a
+    // full row ~100× this response. The ingest hot path calls this once per
+    // feed item, so the column list here is what a changed tick's egress
+    // scales by (C8).
+    const { data, error } = await this.client
+      .from('source_records')
+      .select('id, recall_case_id')
+      .eq('source_system', sourceSystem)
+      .eq('native_id', nativeId)
+      .maybeSingle();
+    if (error) this.fail('getSourceRecordLinkByNativeId', error);
+    return data ? { id: data.id as string, recallCaseId: data.recall_case_id as string } : null;
   }
 
   async listSourceRecordsSince(
