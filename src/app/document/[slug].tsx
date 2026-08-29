@@ -14,6 +14,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { InstallationResetSection } from '@/components/installation-reset-section';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
@@ -87,6 +88,10 @@ export default function DocumentScreen() {
             ))}
           </View>
         ))}
+        {/* C7.1: the one destructive data control lives at the bottom of
+            Privacy & Data Controls — and only there (frozen product
+            decision; pinned by the trust-center tests). */}
+        {doc.slug === 'privacy-data-controls' ? <InstallationResetSection /> : null}
       </ScrollView>
     </ThemedView>
   );

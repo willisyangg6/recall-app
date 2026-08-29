@@ -4,15 +4,17 @@
  * (that draft lives in docs/recall-privacy-policy-draft.md and is withheld
  * from the app until its founder/legal inputs are resolved).
  *
- * Every statement here was verified against the shipped code in C7:
+ * Every statement here was verified against the shipped code in C7/C7.1:
  * preferences-store.ts / installation-id.ts / push-registration.ts /
- * push-api.ts / recall-feed.ts, the Supabase migrations (RLS + RPCs), and
- * the dependency lock (no analytics/advertising/crash SDK exists — pinned by
- * trust-documents tests against package.json). The known product gap — no
- * complete server-side reset control — is stated as a gap, never papered
- * over.
+ * push-api.ts / recall-feed.ts / installation-reset*.ts, the Supabase
+ * migrations (RLS + RPCs + delete_installation_data), and the dependency
+ * lock (no analytics/advertising/crash SDK exists — pinned by
+ * trust-documents tests against package.json). The reset action label is
+ * imported from the one copy contract the UI renders, so this document and
+ * the control can never drift apart.
  */
 
+import { RESET_ACTION_LABEL } from '@/lib/installation-reset';
 import { bullets, paragraph, type TrustDocument } from './document-model';
 
 export const PRIVACY_DATA_CONTROLS: TrustDocument = {
@@ -91,8 +93,8 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
         paragraph(
           'Turning off recall alerts stops delivery immediately: the app clears its local ' +
             'alerts-on flag and marks this installation’s push registration disabled on the server. ' +
-            'Your personalization choices are kept, and the disabled registration record is not ' +
-            'currently deleted.',
+            'Your personalization choices are kept, and the disabled registration record itself is ' +
+            `not deleted — deleting it is what “${RESET_ACTION_LABEL}” below is for.`,
         ),
       ],
     },
@@ -101,19 +103,29 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       blocks: [
         bullets([
           'You can clear each personalization choice in Settings; the cleared (empty) state syncs to the server mirror.',
-          'The app does not yet offer a single “delete everything about this installation from the server” control. Until it exists, clearing preferences and turning alerts off is the strongest reset available in the app.',
+          `For a complete reset, use “${RESET_ACTION_LABEL}” at the bottom of this screen. It deletes this installation’s server records — the preference mirror, the push registration, and its alert delivery records — then clears your choices, the alerts setting, and the installation identifier from this device and creates a fresh identifier. The app returns to its default, unpersonalized state and stays fully usable; alerts stay off until you enable them again.`,
+          'The reset asks for confirmation first, and cancelling changes nothing. If the deletion cannot reach the server, nothing is changed on this device either — you can simply try again.',
         ]),
+        paragraph(
+          'Two honest limits: standard, short-lived infrastructure logs at our hosting providers ' +
+            '(routine connection details such as IP addresses) are outside what the app can delete ' +
+            'directly — they expire on the provider’s schedule. And if you reinstalled the app in ' +
+            'the past, a registration left by the earlier installation is kept under a different, ' +
+            'now-unused identifier; it is disabled and no longer receives anything, and it is not ' +
+            'reachable by this reset.',
+        ),
       ],
     },
     {
       title: 'Deleting the app',
       blocks: [
         paragraph(
-          'Deleting the app removes it from your device, but two limits are worth knowing: ' +
-            'entries in the device’s secure storage (your choices and the installation identifier) ' +
-            'can persist in the operating system keychain and survive a reinstall, depending on the ' +
-            'platform — and server records for the installation are not automatically deleted. A ' +
-            'reinstall that re-enables alerts re-uses or replaces the old registration rather than ' +
+          'Uninstalling the app alone is not treated as a request to delete your server data: the ' +
+            'app gets no chance to run, and entries in the device’s secure storage (your choices ' +
+            'and the installation identifier) can persist in the operating system keychain and ' +
+            'survive a reinstall, depending on the platform. To remove your data, use ' +
+            `“${RESET_ACTION_LABEL}” on this screen first, then uninstall. A reinstall that ` +
+            're-enables alerts re-uses or replaces the old registration rather than ' +
             'double-registering the device.',
         ),
       ],

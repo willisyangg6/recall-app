@@ -23,11 +23,17 @@ Identity & destinations (currently none of these exist — none were invented):
 
 Product decisions with policy consequences:
 
-- [ ] Retention/deletion promises: how long disabled push registrations,
-      delivery records, and preference mirrors are kept; whether to ship a
-      purge job and/or an in-app "reset my data" control (each needs its own
-      future migration/milestone — audited state keeps everything
-      indefinitely, and the consumer document says so).
+- [ ] Retention promises for what the C7.1 reset cannot reach: **the in-app
+      "Reset app and delete my data" control now ships** (C7.1 — atomic
+      `delete_installation_data` RPC + local reset; migration
+      `20260902000000_installation_deletion.sql`, pending production apply),
+      so self-service deletion of an installation's own rows is resolved.
+      Still open: how long rows persist for installations that never reset —
+      disabled `token_reassigned` rows from pre-reinstall installs
+      (unreachable by the reset RPC), abandoned installations, and delivery
+      history — i.e. whether to ship an automatic retention/purge job (its
+      own future migration). The consumer document states the current
+      behavior honestly.
 - [ ] Allergen-data architecture, after counsel input: keep the server
       mirror (and disclose as health data if so advised) or move allergen
       matching fully on-device and drop the column (changes push-eligibility
@@ -80,9 +86,11 @@ the following hold (the trust-center tests enforce the app-side half):
 
 1. Every `⟦…⟧` placeholder in `recall-privacy-policy-draft.md` is resolved
    with real values — no invented entity, email, address, domain, or date.
-2. The retention/deletion section describes behavior the system actually has
-   (either current behavior stated honestly, or the founder-chosen
-   retention/reset features are shipped first).
+2. The retention/deletion section describes behavior the system actually has.
+   C7.1 shipped the in-app "Reset app and delete my data" control (and its
+   RPC must be applied to production before the policy describes it as
+   live); automatic retention windows for never-reset installations remain a
+   founder decision to make — or to disclose as absent — before publication.
 3. The health-data section reflects counsel's determinations (Apple type,
    HBNR, state laws).
 4. Counsel review of the full text is complete (and is never described as

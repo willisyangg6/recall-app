@@ -61,6 +61,25 @@ retailer, same evaluation the app renders — happens inside the same
 eligibility seam. See
 [docs/recall-personalization.md](recall-personalization.md).
 
+**Deletion interacts safely with all three (C7.1).**
+`delete_installation_data` removes an installation's subscription rows and
+their `notification_deliveries`. That cannot resurrect old sends: delivery
+eligibility is decided by the horizon seam, not by delivery-row dedup. A
+post-deletion re-registration — same id string or a new one — always takes
+the RPC's fresh-insert path (the old row is gone), producing a **new
+subscription uuid with `enabled_at = now()`**, so every event created before
+the reset stays structurally undeliverable
+(`src/server/push/installation-deletion.test.ts`, the NO BACKFILL proof).
+The `(event_id, subscription_id)` unique pair continues to make reruns
+idempotent for surviving subscriptions. Inside the RPC, a `FOR UPDATE` lock
+on the installation's subscription rows keeps a concurrently ticking worker
+from inserting a delivery row between the two deletes (FK `KEY SHARE`
+conflicts with `FOR UPDATE`), so the single transaction cannot fail
+half-way through a tick. One bounded edge, same class as the worker's
+documented crash window: a worker that already read a delivery row into
+memory before the deletion commits may still complete that one send — it
+cannot recreate any row.
+
 ## Data model (all additive — migration `20260828000000_push_delivery.sql`)
 
 - `push_delivery_config` — one row: the activation horizon.

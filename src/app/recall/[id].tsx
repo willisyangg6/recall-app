@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ComparePhotos, PhotoGallery } from '@/components/photo-gallery';
@@ -310,11 +310,15 @@ export default function RecallDetailScreen() {
     };
   }, [id]);
 
-  useEffect(() => {
-    // Read-only preference load for the "Why this may affect you" section;
-    // never prompts for anything.
-    if (preferencesAvailable()) void loadPreferences().then(setPrefs);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      // Read-only preference load for the "Why this may affect you" section;
+      // never prompts for anything. On focus (not just mount) so a detail
+      // screen beneath the stack cannot keep stale personalization after a
+      // Settings edit or a C7.1 data reset.
+      if (preferencesAvailable()) void loadPreferences().then(setPrefs);
+    }, []),
+  );
 
   if (state.status !== 'ready') {
     return (

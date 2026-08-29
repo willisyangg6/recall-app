@@ -1,8 +1,10 @@
-# Recall data-flow & SDK audit (C7)
+# Recall data-flow & SDK audit (C7, revised C7.1)
 
-Audited 2026-08-28 at HEAD `5cef70d` (clean tree). Every fact below was
-verified from production code, migrations, configuration, and the dependency
-lock — not from README copy. File references are the evidence trail.
+Audited 2026-08-28 at HEAD `5cef70d` (clean tree); deletion/reset sections
+revised for C7.1 (installation data deletion) at HEAD `c069199`. Every fact
+below was verified from production code, migrations, configuration, and the
+dependency lock — not from README copy. File references are the evidence
+trail.
 
 Scope: everything the shipped app and its backend collect, store, process,
 sync, and delete — plus the SDK/privacy-manifest inventory and the exported
@@ -58,20 +60,20 @@ serve the request; Recall's schema stores none of it.
 
 ## 2. Data element inventory
 
-| Field                               |                   Collected? | Source                                         | Local storage                                                                       | Server storage                                                                   | Purpose                                             | Linked to installation? | Shared processor                      | Retention                                                               | User deletion/reset path                           |
-| ----------------------------------- | ---------------------------: | ---------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------: | ------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------- |
-| Installation id                     |                          Yes | Generated on device (`expo-crypto` randomUUID) | SecureStore `recall.installation-id` (keychain; survives reinstall per OS behavior) | `installation_preferences.installation_id`, `push_subscriptions.installation_id` | Key the installation's own rows (bearer capability) |       Is the identifier | Supabase                              | Indefinite (no purge job)                                               | None in-app (gap; see §7)                          |
-| State preference                    |                          Yes | User pick in Settings                          | SecureStore `recall.preferences`                                                    | `installation_preferences.state_code`                                            | Affects Me + push eligibility                       |                     Yes | Supabase                              | Indefinite                                                              | Clear in Settings → empty value syncs; row remains |
-| Allergen preferences                |                          Yes | User pick (9-token closed set)                 | Same                                                                                | `installation_preferences.allergens`                                             | Affects Me + push eligibility                       |                     Yes | Supabase                              | Indefinite                                                              | Same as state                                      |
-| Retailer preferences                |                          Yes | User pick (catalog ids)                        | Same                                                                                | `installation_preferences.retailer_ids`                                          | Affects Me + push eligibility                       |                     Yes | Supabase                              | Indefinite                                                              | Same as state                                      |
-| Push token                          |                 Yes (opt-in) | `expo-notifications` `getExpoPushTokenAsync`   | Not persisted by app code                                                           | `push_subscriptions.expo_push_token`                                             | Alert delivery                                      |                     Yes | Supabase, Expo push service, APNs/FCM | Indefinite; row disabled (not deleted) on opt-out/`DeviceNotRegistered` | "Turn off alerts" disables row                     |
-| Push-enabled timestamps             |                 Yes (opt-in) | Server `now()`                                 | `recall.alerts-enabled` flag ('1')                                                  | `enabled_at`, `registered_at`, `last_seen_at`, `disabled_at`                     | Delivery-safety horizons (no catch-up blasts)       |                     Yes | Supabase                              | Indefinite                                                              | Same                                               |
-| Platform + app version              |                 Yes (opt-in) | `Platform.OS`, `expo-constants`                | —                                                                                   | `push_subscriptions.platform`, `.app_version`                                    | Delivery formatting/diagnostics                     |                     Yes | Supabase                              | Indefinite                                                              | Same                                               |
-| Delivery records                    |                Yes (derived) | Server push worker                             | —                                                                                   | `notification_deliveries` (status, attempts, ticket id, failure code)            | Idempotent delivery + receipts                      |     Via subscription id | Supabase, Expo                        | Indefinite (no purge job)                                               | None                                               |
-| Recall interactions (views, shares) |                       **No** | —                                              | —                                                                                   | —                                                                                | —                                                   |                       — | —                                     | —                                                                       | —                                                  |
-| Search terms / filter state         | **No** (never leaves device) | User input                                     | In-memory React state only                                                          | —                                                                                | Client-side browse                                  |                       — | —                                     | Session only                                                            | Clear search / Clear all / app restart             |
-| Preference dirty flag               |                   Local only | Sync failure                                   | SecureStore `recall.preferences-dirty`                                              | —                                                                                | Retry a failed mirror sync                          |                       — | —                                     | Until sync succeeds                                                     | Automatic                                          |
-| Logs / diagnostics / crash reports  |                       **No** | —                                              | —                                                                                   | —                                                                                | —                                                   |                       — | —                                     | —                                                                       | —                                                  |
+| Field                               |                   Collected? | Source                                         | Local storage                                                                       | Server storage                                                                   | Purpose                                             | Linked to installation? | Shared processor                      | Retention                                                               | User deletion/reset path                                             |
+| ----------------------------------- | ---------------------------: | ---------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------: | ------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Installation id                     |                          Yes | Generated on device (`expo-crypto` randomUUID) | SecureStore `recall.installation-id` (keychain; survives reinstall per OS behavior) | `installation_preferences.installation_id`, `push_subscriptions.installation_id` | Key the installation's own rows (bearer capability) |       Is the identifier | Supabase                              | Until C7.1 reset; no automatic purge                                    | Reset control (C7.1; see §7)                                         |
+| State preference                    |                          Yes | User pick in Settings                          | SecureStore `recall.preferences`                                                    | `installation_preferences.state_code`                                            | Affects Me + push eligibility                       |                     Yes | Supabase                              | Indefinite                                                              | Clear in Settings (row remains, emptied) or C7.1 reset (row deleted) |
+| Allergen preferences                |                          Yes | User pick (9-token closed set)                 | Same                                                                                | `installation_preferences.allergens`                                             | Affects Me + push eligibility                       |                     Yes | Supabase                              | Indefinite                                                              | Same as state                                                        |
+| Retailer preferences                |                          Yes | User pick (catalog ids)                        | Same                                                                                | `installation_preferences.retailer_ids`                                          | Affects Me + push eligibility                       |                     Yes | Supabase                              | Indefinite                                                              | Same as state                                                        |
+| Push token                          |                 Yes (opt-in) | `expo-notifications` `getExpoPushTokenAsync`   | Not persisted by app code                                                           | `push_subscriptions.expo_push_token`                                             | Alert delivery                                      |                     Yes | Supabase, Expo push service, APNs/FCM | Indefinite; row disabled (not deleted) on opt-out/`DeviceNotRegistered` | "Turn off alerts" disables row; C7.1 reset deletes it                |
+| Push-enabled timestamps             |                 Yes (opt-in) | Server `now()`                                 | `recall.alerts-enabled` flag ('1')                                                  | `enabled_at`, `registered_at`, `last_seen_at`, `disabled_at`                     | Delivery-safety horizons (no catch-up blasts)       |                     Yes | Supabase                              | Indefinite                                                              | Same                                                                 |
+| Platform + app version              |                 Yes (opt-in) | `Platform.OS`, `expo-constants`                | —                                                                                   | `push_subscriptions.platform`, `.app_version`                                    | Delivery formatting/diagnostics                     |                     Yes | Supabase                              | Indefinite                                                              | Same                                                                 |
+| Delivery records                    |                Yes (derived) | Server push worker                             | —                                                                                   | `notification_deliveries` (status, attempts, ticket id, failure code)            | Idempotent delivery + receipts                      |     Via subscription id | Supabase, Expo                        | Until C7.1 reset; no automatic purge                                    | C7.1 reset (deleted with their subscription)                         |
+| Recall interactions (views, shares) |                       **No** | —                                              | —                                                                                   | —                                                                                | —                                                   |                       — | —                                     | —                                                                       | —                                                                    |
+| Search terms / filter state         | **No** (never leaves device) | User input                                     | In-memory React state only                                                          | —                                                                                | Client-side browse                                  |                       — | —                                     | Session only                                                            | Clear search / Clear all / app restart                               |
+| Preference dirty flag               |                   Local only | Sync failure                                   | SecureStore `recall.preferences-dirty`                                              | —                                                                                | Retry a failed mirror sync                          |                       — | —                                     | Until sync succeeds                                                     | Automatic                                                            |
+| Logs / diagnostics / crash reports  |                       **No** | —                                              | —                                                                                   | —                                                                                | —                                                   |                       — | —                                     | —                                                                       | —                                                                    |
 
 Notification ledger (`notification_events`) and ingest bookkeeping
 (`ingest_runs`, `job_leases`, `product_visual_failures`, watchdog tables) are
@@ -221,14 +223,35 @@ grep of the emitted JS/HTML):
   installation id causes the backend to disable the stale row when the same
   push token re-registers (`register_push_subscription`'s token-reassignment
   branch).
-- **A complete "reset my data" operation does not exist.** There is no client
-  RPC to delete `installation_preferences` or `push_subscriptions` rows, and
-  no retention job prunes them or `notification_deliveries`. This is the
-  principal product gap for the privacy story; the consumer document states
-  it honestly, and the founder decision (in-app delete control and/or
-  server-side retention windows) is tracked in `recall-launch-blockers.md`.
-  Any future purge job or delete RPC would require a migration and is
-  explicitly **not** part of C7.
+- **"Reset app and delete my data" (C7.1)** — the comprehensive self-service
+  deletion, at the bottom of Privacy & Data Controls. The
+  `delete_installation_data` RPC (migration
+  `20260902000000_installation_deletion.sql`; **not yet applied to
+  production**) atomically and idempotently deletes the installation's
+  `installation_preferences` row, `push_subscriptions` rows, and their
+  `notification_deliveries`, authorized by possession of the opaque
+  installation id (the existing bearer-capability model; void return, no
+  existence oracle). On success the client clears its SecureStore state
+  (`recall.preferences`, `recall.preferences-dirty`, `recall.alerts-enabled`,
+  `recall.installation-id`) and mints a fresh id; on failure it clears
+  nothing, so the credential needed to retry is never lost. All
+  installation mutations (saves, launch flush, push registration writes,
+  reset) share one serial queue (`src/lib/installation-lifecycle.ts`), so a
+  queued autosave or silent push refresh can never recreate deleted rows.
+  Re-registration after deletion is backfill-safe: the fresh subscription's
+  `enabled_at = now()` horizon structurally excludes every pre-reset event
+  (proofs in `src/server/push/installation-deletion.test.ts` and
+  `src/lib/installation-reset.test.ts`).
+- **Remaining residue after a reset** (stated honestly in the consumer
+  document): provider-controlled short-lived infrastructure logs (standard
+  connection metadata at Supabase/Expo/Apple/Google — outside the app's
+  reach, expiring on provider schedules); rows left by a pre-reinstall
+  installation under a different, credential-less id (disabled
+  `token_reassigned` — not reachable by this RPC; retention remains a
+  founder decision); and aggregate counts in past `ingest_runs.metrics`
+  (numbers only, no identifiers). Uninstalling alone is **not** treated as a
+  deletion request — the app never gets to run; the consumer copy says to
+  reset first, then uninstall.
 
 ## 8. Out-of-scope observations (reported, not acted on)
 
@@ -238,6 +261,9 @@ grep of the emitted JS/HTML):
   the app uses only exempt (OS/HTTPS) encryption, so the standard `false`
   declaration is expected at release preparation — tracked in the readiness
   checklist, deliberately not added in C7.
-- `notification_deliveries` / disabled `push_subscriptions` rows accumulate
-  without retention; a founder-approved retention promise (and its migration)
-  is a prerequisite for the final Privacy Policy's retention section.
+- C7.1 gives users self-service deletion of their own installation's rows,
+  but no AUTOMATIC retention window exists: rows for installations that never
+  reset (including disabled `token_reassigned` rows from pre-reinstall
+  installs, unreachable by the reset RPC) accumulate until a founder-approved
+  retention promise (and its purge migration) exists — still a prerequisite
+  for the final Privacy Policy's retention section.

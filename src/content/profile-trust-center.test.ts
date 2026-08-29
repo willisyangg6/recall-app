@@ -12,6 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { RESET_ACTION_LABEL } from '@/lib/installation-reset';
 import { documentPlainText } from './document-model';
 import { documentBySlug, PROFILE_DOCUMENT_GROUPS, TRUST_DOCUMENTS } from './index';
 
@@ -120,11 +121,51 @@ test('the no-advertising/no-tracking claim is proven by the dependency graph', (
   }
 });
 
-test('documents never claim a data-reset control that does not exist', () => {
+test('the data-reset control the document describes actually ships, under its exact label (C7.1)', () => {
   const privacy = documentBySlug('privacy-data-controls');
   assert.ok(privacy);
   const text = documentPlainText(privacy);
-  // The gap is stated, not papered over.
-  assert.match(text, /does not yet offer a single/i);
-  assert.doesNotMatch(text, /delete (all|everything) (your|about)[^.]*\bby tapping\b/i);
+  // The document names the control by its frozen label — imported from the
+  // same constant the UI renders, and pinned here to the frozen wording.
+  assert.equal(RESET_ACTION_LABEL, 'Reset app and delete my data');
+  assert.ok(text.includes(RESET_ACTION_LABEL));
+  // Honest scope: what it deletes, what it cannot reach, and that uninstalling
+  // alone is not a deletion request.
+  assert.match(text, /preference mirror, the push registration, and its alert delivery records/);
+  assert.match(text, /outside what the app can delete directly/);
+  assert.match(text, /Uninstalling the app alone is not treated as a request to delete/);
+  // Failure honesty: a failed deletion changes nothing and is retryable.
+  assert.match(text, /nothing is changed on this device either/);
+});
+
+test('exactly one deletion action exists — on Privacy & Data Controls, nowhere else (C7.1)', () => {
+  // The document screen mounts the destructive section for the privacy slug
+  // and only that slug.
+  const documentScreen = read('document', '[slug].tsx');
+  assert.match(
+    documentScreen,
+    /doc\.slug === 'privacy-data-controls' \? <InstallationResetSection \/> : null/,
+  );
+  // Profile gains no extra row and no redundant prominent personalization
+  // reset; Home and Settings don't grow one either.
+  for (const file of ['profile.tsx', 'index.tsx', 'settings.tsx']) {
+    const source = read(file);
+    assert.ok(!source.includes('InstallationResetSection'), `${file} must not mount the reset`);
+    assert.ok(!source.includes(RESET_ACTION_LABEL), `${file} must not duplicate the action`);
+    assert.doesNotMatch(source, /Clear all selections/i, `${file} adds an out-of-scope reset`);
+  }
+  // The reset introduces no account, household, or authentication concept.
+  const resetSources = [
+    readFileSync(join(ROOT, 'src', 'lib', 'installation-reset.ts'), 'utf8'),
+    readFileSync(join(ROOT, 'src', 'lib', 'installation-reset-runner.ts'), 'utf8'),
+    readFileSync(join(ROOT, 'src', 'components', 'installation-reset-section.tsx'), 'utf8'),
+  ];
+  for (const source of resetSources) {
+    for (const forbidden of ['account', 'household', 'email', 'password', 'displayName']) {
+      assert.ok(
+        !source.toLowerCase().includes(forbidden.toLowerCase()),
+        `reset implementation references ${forbidden}`,
+      );
+    }
+  }
 });

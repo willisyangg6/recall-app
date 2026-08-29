@@ -23,3 +23,5 @@ export async function savePreferences(_prefs: UserRecallPreferences): Promise<Sa
 }
 
 export async function flushPreferencesSync(): Promise<void> {}
+
+export async function deleteLocalPreferenceState(): Promise<void> {}

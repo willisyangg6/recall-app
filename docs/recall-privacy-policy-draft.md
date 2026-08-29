@@ -98,23 +98,27 @@ changes accordingly.⟧
 ## Retention and deletion
 
 ⟦FOUNDER+LEGAL: this section may not promise anything the system does not
-do. As audited (2026-08-28): preference and registration rows persist
-indefinitely; turning off alerts disables (does not delete) the
-registration; no automatic purge exists; no in-app full-reset control
-exists. Either (a) ship the retention/deletion behavior you want to promise
-— retention windows, purge job, in-app reset — and then describe it, or
-(b) describe the current behavior honestly. Do not publish aspirational
-promises.⟧
+do. As audited (2026-08-28, revised C7.1): an in-app "Reset app and delete
+my data" control now exists (Profile → Privacy & Data Controls) and deletes
+the installation's server records — preference mirror, push registration,
+delivery records — then resets the device to a fresh installation identity.
+Its migration must be applied to production before this policy describes it
+as live. Rows for installations that never use the reset (including
+registrations left by pre-reinstall installations under old identifiers)
+persist with no automatic purge; either ship a retention window first or
+disclose the absence honestly. Do not publish aspirational promises.⟧
 
 - You can clear each personalization choice in the app; the cleared state
   syncs to our server.
 - You can turn alerts off at any time in the app or in system settings;
   delivery stops.
-- Deleting the app removes it from your device; secure-storage entries can
-  persist in the operating system keychain per platform behavior, and server
-  records are not automatically deleted. ⟦FOUNDER: decide and document the
-  manual deletion path — e.g. "email us to have your installation's records
-  deleted" — only once a real contact address exists.⟧
+- You can delete this installation's data entirely with "Reset app and
+  delete my data" in the app (Profile → Privacy & Data Controls).
+- Deleting the app alone removes it from your device but is not a deletion
+  request we can act on; use the in-app reset first. Secure-storage entries
+  can persist in the operating system keychain per platform behavior.
+  ⟦FOUNDER: decide whether to also offer a manual deletion path — e.g.
+  "email us" — only once a real contact address exists.⟧
 
 ## Children
 

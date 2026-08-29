@@ -316,6 +316,41 @@ identity (`src/lib/installation-id.ts`); no second device identity exists.
   a strict no-op for identical values — including `updated_at` — which
   matters below.
 
+### Deletion and reset (C7.1)
+
+"Reset app and delete my data" (bottom of Privacy & Data Controls) is the
+one comprehensive lifecycle exit. It calls `delete_installation_data`
+(migration `20260902000000_installation_deletion.sql`) — the same
+bearer-capability model: possession of the opaque installation id authorizes
+deleting exactly that installation's rows (`installation_preferences`,
+`push_subscriptions`, their `notification_deliveries`) in one atomic,
+idempotent, void-returning transaction, then clears local state and mints a
+fresh installation id through the canonical path
+(`src/lib/installation-reset.ts` + `installation-reset-runner.ts`).
+
+Ordering is the safety property, in both directions:
+
+- **Server first.** Local state is cleared only after the server deletion
+  succeeds; a failure changes nothing on the device, so the id — the only
+  credential able to retry the deletion — is never lost while server rows
+  exist. The RPC's idempotency makes an ambiguous outcome (server committed,
+  response lost) safe to retry.
+- **One mutation queue.** Every installation-scoped mutation — preference
+  saves, the launch dirty-flag flush, push registration/refresh/disable
+  server writes, and the reset — now shares ONE serial queue
+  (`src/lib/installation-lifecycle.ts`). A save or silent push refresh in
+  flight when the user confirms deletion completes first and its rows are
+  deleted; anything queued later runs against the fresh identity. The
+  save-vs-save last-request-wins ordering is unchanged (same
+  `createSerialQueue` chain, proofs in `serial-queue.test.ts`; deletion
+  interplay proofs in `installation-reset.test.ts`).
+
+Uninstalling the app alone is **not** a deletion request — the app never
+gets to run. Rows left by a pre-reinstall installation (a different, now
+credential-less id, disabled `token_reassigned`) are not reachable by this
+RPC; their retention remains a founder decision
+(docs/recall-launch-blockers.md).
+
 ## Push eligibility (the one seam)
 
 All per-subscription delivery decisions happen in

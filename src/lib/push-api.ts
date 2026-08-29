@@ -2,9 +2,10 @@
  * The app's ONLY backend write path: narrowly scoped SECURITY DEFINER RPCs
  * (see the push_delivery and installation_preferences migrations).
  * Client-safe configuration only (EXPO_PUBLIC_* + publishable key); the
- * client can register/disable its own opaque subscription and set its own
- * preferences, and nothing else — tokens and other installations' rows are
- * never readable through this key.
+ * client can register/disable its own opaque subscription, set its own
+ * preferences, and delete its own installation's data (C7.1), and nothing
+ * else — tokens and other installations' rows are never readable through
+ * this key.
  */
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -63,4 +64,14 @@ export async function setInstallationPreferences(input: {
     p_allergens: input.allergens,
     p_retailer_ids: input.retailerIds,
   });
+}
+
+/**
+ * Delete every server row keyed by this installation id (C7.1): its
+ * preference mirror, its push registrations, and their delivery records —
+ * one atomic, idempotent transaction on the backend. Returns nothing and
+ * reveals nothing about whether the installation existed.
+ */
+export async function deleteInstallationData(installationId: string): Promise<void> {
+  await rpcPost('delete_installation_data', { p_installation_id: installationId });
 }

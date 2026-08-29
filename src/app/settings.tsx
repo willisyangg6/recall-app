@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   Linking,
   Platform,
@@ -213,10 +214,15 @@ export default function SettingsScreen() {
     if (preferencesAvailable()) setPrefs(await loadPreferences());
   }, []);
 
-  useEffect(() => {
-    // Read-only status check on mount; resolves after the async gap.
-    void load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      // Read-only status + preference load on every focus (not just mount):
+      // after the C7.1 data reset ran on the Privacy & Data Controls screen,
+      // popping back here must show the cleared state, not a stale in-memory
+      // copy. Same convention Home already uses.
+      void load();
+    }, [load]),
+  );
 
   const run = useCallback(async (action: () => Promise<AlertStatus>) => {
     setState((prev) => (prev.status === 'ready' ? { ...prev, busy: true, error: null } : prev));

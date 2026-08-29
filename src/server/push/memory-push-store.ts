@@ -125,6 +125,31 @@ export class MemoryPushStore implements PushStore {
     }
   }
 
+  /**
+   * The delete_installation_data RPC's semantics (C7.1 migration), mirrored:
+   * shape-validate the id, then — atomically in SQL — delete the
+   * installation's delivery rows, its subscription rows, and its preference
+   * row, in FK order. Idempotent, void, and scope-exact: rows keyed by any
+   * OTHER installation id, and the shared events, are never touched. All
+   * mutations here are synchronous, mirroring the single-transaction
+   * all-or-nothing property.
+   */
+  deleteInstallationData(installationId: string): void {
+    if (!/^[A-Za-z0-9-]{16,64}$/.test(installationId)) {
+      throw new Error('invalid installation id');
+    }
+    const subscriptionIds = new Set(
+      [...this.subscriptions.values()]
+        .filter((row) => row.installationId === installationId)
+        .map((row) => row.id),
+    );
+    for (const [id, delivery] of this.deliveries) {
+      if (subscriptionIds.has(delivery.subscriptionId)) this.deliveries.delete(id);
+    }
+    for (const id of subscriptionIds) this.subscriptions.delete(id);
+    this.preferences.delete(installationId);
+  }
+
   // ── PushStore ──────────────────────────────────────────────────────────────
 
   async getPushEnabledAt(): Promise<string | null> {

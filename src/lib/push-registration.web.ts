@@ -20,3 +20,5 @@ export async function disableRecallAlerts(): Promise<AlertStatus> {
 }
 
 export async function refreshRegistrationIfEnabled(): Promise<void> {}
+
+export async function clearLocalAlertState(): Promise<void> {}

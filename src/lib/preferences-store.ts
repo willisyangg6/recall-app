@@ -24,8 +24,8 @@ import {
   type UserRecallPreferences,
 } from '@/domain/preferences';
 import { getOrCreateInstallationId } from './installation-id';
+import { enqueueInstallationMutation } from './installation-lifecycle';
 import { setInstallationPreferences } from './push-api';
-import { createSerialQueue } from './serial-queue';
 
 const PREFS_KEY = 'recall.preferences';
 /** '1' while the last server sync failed and a retry is owed. */
@@ -69,8 +69,14 @@ export interface SaveResult {
  * last and silently revert the user's latest choice (locally and on the
  * mirror). Ordering/rejection-resilience proofs live in serial-queue.test.ts
  * — SecureStore makes this file itself unimportable under the test harness.
+ *
+ * C7.1: the queue is the SHARED installation mutation queue, so saves — and
+ * the launch flush below — also serialize against push registration writes
+ * and "Reset app and delete my data". A save queued before a reset finishes
+ * before the deletion runs; one queued after runs against the fresh
+ * installation identity. Save-vs-save ordering is exactly what it was.
  */
-const enqueueSave = createSerialQueue();
+const enqueueSave = enqueueInstallationMutation;
 
 /**
  * Persist preferences: local write first (never lost to a network error),
@@ -97,13 +103,29 @@ async function writePreferences(prefs: UserRecallPreferences): Promise<SaveResul
 /**
  * Retry a previously failed server sync (called once at app launch).
  * No-op when the last sync succeeded; silent — launch is never blocked.
+ * Queued (C7.1) so a launch-time flush can never interleave with a save or
+ * with data deletion — unqueued, a flush in flight during a reset could
+ * re-upsert the just-deleted server row under the old installation id.
  */
-export async function flushPreferencesSync(): Promise<void> {
-  try {
-    if ((await SecureStore.getItemAsync(DIRTY_KEY)) !== '1') return;
-    await syncToServer(await loadPreferences());
-    await SecureStore.deleteItemAsync(DIRTY_KEY);
-  } catch {
-    // Still offline: the flag stays set for the next launch or save.
-  }
+export function flushPreferencesSync(): Promise<void> {
+  return enqueueSave(async () => {
+    try {
+      if ((await SecureStore.getItemAsync(DIRTY_KEY)) !== '1') return;
+      await syncToServer(await loadPreferences());
+      await SecureStore.deleteItemAsync(DIRTY_KEY);
+    } catch {
+      // Still offline: the flag stays set for the next launch or save.
+    }
+  });
+}
+
+/**
+ * Remove the locally persisted preference state — the preference blob and
+ * the retry flag (C7.1 reset). Local-only: never touches the server, and
+ * deliberately NOT queued — the reset orchestrator calls it inside its own
+ * queue turn, after the server deletion for the old id succeeded.
+ */
+export async function deleteLocalPreferenceState(): Promise<void> {
+  await SecureStore.deleteItemAsync(PREFS_KEY);
+  await SecureStore.deleteItemAsync(DIRTY_KEY);
 }

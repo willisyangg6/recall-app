@@ -13,6 +13,7 @@ import { Platform } from 'react-native';
 
 import { alertStatus, type AlertStatus } from './alert-status';
 import { getOrCreateInstallationId } from './installation-id';
+import { enqueueInstallationMutation } from './installation-lifecycle';
 import { disablePushSubscription, registerPushSubscription } from './push-api';
 
 /** Set once the user enables alerts here; silent refresh only acts when set. */
@@ -66,7 +67,10 @@ async function obtainAndRegisterToken(): Promise<void> {
 
 /**
  * The user tapped "Enable recall alerts". The one and only place the system
- * permission prompt can fire.
+ * permission prompt can fire. The prompt itself stays OUTSIDE the shared
+ * installation queue (queueing a user dialog would stall every queued save
+ * behind it); only the server registration + flag write are queued (C7.1),
+ * so enabling serializes with saves, refreshes, and data deletion.
  */
 export async function enableRecallAlerts(): Promise<AlertStatus> {
   await ensureAndroidChannel();
@@ -80,36 +84,60 @@ export async function enableRecallAlerts(): Promise<AlertStatus> {
       await hasEnabledFlag(),
     );
   }
-  await obtainAndRegisterToken();
-  await SecureStore.setItemAsync(ENABLED_FLAG_KEY, '1');
-  return 'enabled';
+  return enqueueInstallationMutation<AlertStatus>(async () => {
+    await obtainAndRegisterToken();
+    await SecureStore.setItemAsync(ENABLED_FLAG_KEY, '1');
+    return 'enabled';
+  });
 }
 
 /** The user turned alerts off. Local flag + backend row, both disabled. */
-export async function disableRecallAlerts(): Promise<AlertStatus> {
-  await SecureStore.deleteItemAsync(ENABLED_FLAG_KEY);
-  try {
-    await disablePushSubscription(await getOrCreateInstallationId());
-  } catch {
-    // Offline is fine: the local flag stops silent refresh, and the backend
-    // row dies at the next DeviceNotRegistered receipt if the token expires.
-  }
-  return 'not_enabled';
+export function disableRecallAlerts(): Promise<AlertStatus> {
+  return enqueueInstallationMutation<AlertStatus>(async () => {
+    await SecureStore.deleteItemAsync(ENABLED_FLAG_KEY);
+    try {
+      await disablePushSubscription(await getOrCreateInstallationId());
+    } catch {
+      // Offline is fine: the local flag stops silent refresh, and the backend
+      // row dies at the next DeviceNotRegistered receipt if the token expires.
+    }
+    return 'not_enabled';
+  });
 }
 
 /**
  * Silent refresh on app start and on Expo token rotation: keeps the backend
  * token current and last_seen_at moving. No-op unless the user enabled
  * alerts here and permission is still granted. Never prompts.
+ *
+ * Queued (C7.1): unqueued, a slow launch refresh could re-register the OLD
+ * installation on the server after "Reset app and delete my data" deleted
+ * it. On the shared queue a refresh either runs before the reset (and its
+ * row is deleted with everything else) or after it (the flag is gone — the
+ * refresh is a no-op).
  */
-export async function refreshRegistrationIfEnabled(): Promise<void> {
-  try {
-    if (!(await hasEnabledFlag())) return;
-    const permission = await Notifications.getPermissionsAsync();
-    if (!permission.granted) return;
-    await ensureAndroidChannel();
-    await obtainAndRegisterToken();
-  } catch {
-    // Best-effort: a failed silent refresh must never surface at launch.
-  }
+export function refreshRegistrationIfEnabled(): Promise<void> {
+  return enqueueInstallationMutation(async () => {
+    try {
+      if (!(await hasEnabledFlag())) return;
+      const permission = await Notifications.getPermissionsAsync();
+      if (!permission.granted) return;
+      await ensureAndroidChannel();
+      await obtainAndRegisterToken();
+    } catch {
+      // Best-effort: a failed silent refresh must never surface at launch.
+    }
+  });
+}
+
+/**
+ * Remove the locally persisted alerts-enabled flag (C7.1 reset). Local-only
+ * and deliberately NOT queued — the reset orchestrator calls it inside its
+ * own queue turn, after the server deletion succeeded. With the flag gone,
+ * silent refresh cannot re-register, and the OS-level notification
+ * permission (which the app cannot revoke) no longer reads as "enabled":
+ * alerts stay off until the user explicitly enables them again.
+ */
+export async function clearLocalAlertState(): Promise<void> {
+  await SecureStore.deleteItemAsync(ENABLED_FLAG_KEY);
 }
