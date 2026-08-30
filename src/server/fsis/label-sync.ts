@@ -107,18 +107,24 @@ export function failureBackoffMs(attempts: number): number {
   return Math.min(BACKOFF_BASE_MS * 2 ** Math.max(0, attempts - 1), BACKOFF_CAP_MS);
 }
 
-/** Default PDF fetch — same UA and size cap the backfill uses. */
+/**
+ * Default PDF fetch — same UA and size cap the backfill uses, routed
+ * through the bounded allowlisted fetcher (C9): approved FSIS hosts only,
+ * every redirect re-validated, size cap enforced while streaming, and the
+ * payload's own bytes must be a PDF — an HTML error page can never reach
+ * the renderer.
+ */
 export async function fetchLabelPdf(url: string): Promise<Uint8Array> {
   const { MAX_PDF_BYTES } = await import('./labels');
-  const response = await fetch(url, {
+  const { safeFetchBinary } = await import('../safe-fetch');
+  const { FSIS_HOSTS } = await import('../../lib/official-urls');
+  const result = await safeFetchBinary(url, {
+    approvedHosts: FSIS_HOSTS,
+    kind: 'pdf',
+    maxBytes: MAX_PDF_BYTES,
     headers: { 'User-Agent': 'recall-app label renderer (contact: dev)' },
   });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > MAX_PDF_BYTES) {
-    throw new Error(`over size cap (${bytes.byteLength} bytes)`);
-  }
-  return bytes;
+  return result.bytes;
 }
 
 export async function syncFsisLabels(

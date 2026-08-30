@@ -177,6 +177,17 @@ test('full-mode re-verification: unchanged bytes store nothing, changed bytes re
   assert.equal(swept.attempted, 0);
 });
 
+test('a sync run reports label metrics only — no hero bookkeeping exists to report', async () => {
+  const store = new FakeLabelStore();
+  store.candidates = [candidate('https://fsis.example/one.pdf')];
+  const metrics = await sync(store);
+  assert.equal(metrics.rendered, 1);
+  // C9 frozen policy: the sync stores detail evidence; card heroes are not
+  // its business. A heroesSet-style metric reappearing means a promotion
+  // path was reintroduced.
+  assert.ok(!('heroesSet' in metrics), 'no hero metric may exist on a label sync');
+});
+
 test('the per-run cap defers overflow with an explicit count, and dry runs fetch nothing', async () => {
   const store = new FakeLabelStore();
   store.candidates = [

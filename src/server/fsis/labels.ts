@@ -24,6 +24,8 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { FSIS_HOSTS, resolveOfficialUrl } from '../../lib/official-urls';
+
 export interface RenderedLabelPage {
   /** 1-based page number in the source PDF (source order preserved). */
   page: number;
@@ -35,8 +37,16 @@ export interface RenderedLabelPage {
   contentHash: string;
 }
 
-/** Operational bounds. A label PDF is a handful of pages; anything huge is wrong. */
-export const MAX_PDF_BYTES = 15 * 1024 * 1024;
+/**
+ * Operational bounds. A label PDF is a handful of pages — but those pages
+ * are frequently raw scans, and the C9 failure audit measured five real
+ * FSIS label documents between 21 MB and 52 MB rejected by the previous
+ * 15 MB cap. The cap bounds a single download, not the output: rendering
+ * stays capped at MAX_PAGES_RENDERED whatever the document size, each PDF
+ * is fetched once per content revision, and anything past 64 MB is not a
+ * label sheet.
+ */
+export const MAX_PDF_BYTES = 64 * 1024 * 1024;
 export const MAX_PAGES_RENDERED = 6;
 /** Rendered page width target, px. Labels stay readable; files stay small. */
 const TARGET_WIDTH = 1024;
@@ -48,16 +58,22 @@ const MIN_ENCODED_BYTES = 2048;
  * fsis.usda.gov-hosted label PDFs qualify (`food_label_pdf` path or a
  * label-named file) — the distribution-list PDFs are tabular documents, not
  * visuals.
+ *
+ * Resolution goes through the one canonical resolver (lib/official-urls),
+ * which classifies absolute, protocol-relative, root-relative, and ordinary
+ * relative hrefs per WHATWG semantics and repairs the historical
+ * duplicated-host defect (`https://www.fsis.usda.gov//www.fsis.usda.gov/…`)
+ * that a protocol-relative href used to produce here.
  */
 export function extractLabelPdfUrls(summaryHtml: string | null): string[] {
   if (!summaryHtml) return [];
   const out: string[] = [];
   const seen = new Set<string>();
   for (const match of summaryHtml.matchAll(/href="([^"]+\.pdf(?:[?#][^"]*)?)"/gi)) {
-    let url = match[1].replace(/&amp;/g, '&').trim();
-    if (url.startsWith('/')) url = `https://www.fsis.usda.gov${url}`;
-    url = url.replace(/^http:\/\//, 'https://');
-    if (!/^https:\/\/www\.fsis\.usda\.gov\//i.test(url)) continue;
+    const raw = match[1].replace(/&amp;/g, '&').trim();
+    const resolved = resolveOfficialUrl(raw, { approvedHosts: FSIS_HOSTS });
+    if (!resolved) continue;
+    const url = resolved.url;
     if (!/food_label_pdf|labels?[^/]*\.pdf$/i.test(url)) continue;
     if (/distro_list|distribution/i.test(url)) continue;
     if (seen.has(url)) continue;

@@ -102,7 +102,12 @@ configuration only (`@supabase/supabase-js` is imported exclusively by
    (`src/lib/push-api.ts`).
 4. Image loads: FDA-hosted product photos (`www.fda.gov/files/…`, referenced
    not rehosted — `src/lib/product-photos.ts`) and Supabase Storage
-   `product-visuals` bucket (rendered FSIS label pages).
+   `product-visuals` bucket (rendered FSIS label pages, detail screen
+   only). The feed card's `heroImageUrl` holds exclusively official FDA
+   photographs (C9 frozen policy: label renders are detail evidence, never
+   automatic card heroes); provenance rules and the additive (unapplied)
+   `product_visual_provenance` migration are documented in
+   docs/recall-imagery.md.
 5. `Linking.openURL` to official notice URLs and notice attachments;
    OS share sheet with canonical facts + official URL only
    (`src/lib/share-message.ts` — input type has no personal fields).

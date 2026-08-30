@@ -285,6 +285,41 @@ replacement atomic and auditable). Per-URL failures live in
 the FDA image backfill stays a maintenance tool and is deliberately **not**
 scheduled (normal FDA parsing derives hero images).
 
+C9 (2026-08-29) hardened this pipeline at two seams (docs/recall-imagery.md):
+href resolution goes through the canonical resolver in
+`src/lib/official-urls.ts` (protocol-relative hrefs used to become the
+duplicated-host 404s recorded in `product_visual_failures`), and the PDF
+fetch goes through the bounded allowlisted fetcher
+`src/server/safe-fetch.ts` (redirect revalidation, streaming size cap,
+content-type + magic-byte checks) with the per-document cap raised
+15 → 64 MB (five real 21–52 MB scanned label sheets were failing on size
+alone). Of the eight ledgered failures, seven recover on the next `--full`
+sweep; 047-2023 is a dead link at FSIS itself. Rendered pages are
+DETAIL-SCREEN EVIDENCE only: under the C9 frozen policy the sync never
+touches `projection.heroImageUrl` — professional card-hero sourcing is
+C9.1 (docs/recall-imagery.md).
+
+## Imagery: standing QA, no repair command (C9)
+
+```
+npm run qa:imagery            # read-only gates: frozen policy, provenance, URLs, GTINs
+```
+
+Three coverage concepts are distinct and never conflated: CARD HERO
+coverage (`projection.heroImageUrl` — today exclusively official FDA
+photographs under the historical selection, ~619 active), DETAIL VISUAL
+coverage (a hero and/or rendered label pages in product_visuals), and
+PROFESSIONAL PACKSHOT coverage (not yet measured — C9.1 defines it).
+`qa:imagery` gates on the frozen interim policy — zero label renders
+promoted to card hero, zero unknown-provenance heroes, zero
+URL-normalization drift — with bounded live probes only, never a corpus
+download. There is deliberately NO imagery repair command: the only
+historical repair C9 contemplated was blanket hero promotion of ordinary
+label renders, which the professional-imagery objective forbids;
+`src/server/imagery-guards.test.ts` keeps every promotion path removed.
+Professional hero repair, if C9.1's classifier finds work, will be built
+there on the reserved `updateCaseHeroImage` compare-and-set seam.
+
 ## Retailer evidence: a one-time historical repair
 
 ```

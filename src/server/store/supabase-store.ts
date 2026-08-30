@@ -14,6 +14,7 @@ import type {
 } from '../../domain/recall-types';
 import type { NormalizedSourceRecord } from '../../domain/source-record';
 import type {
+  CaseVisualRow,
   IngestRunPatch,
   IngestRunSource,
   JobRunAnnotation,
@@ -400,6 +401,56 @@ export class SupabaseStore implements RecallStore {
       .select('id');
     if (error) this.fail('updateCaseGeography', error);
     return (data?.length ?? 0) > 0;
+  }
+
+  async updateCaseHeroImage(
+    id: string,
+    heroImageUrl: string | null,
+    expectedLastChangedAt: string,
+  ): Promise<boolean> {
+    // Identical contract to updateCaseRetailerNames: re-read so the merge
+    // happens against the freshest projection, then make the write itself
+    // conditional on `last_changed_at`, so an ingest landing in between
+    // loses nothing — the update matches no row and the caller reports a
+    // conflict rather than rolling newer data back.
+    const current = await this.getCase(id);
+    if (!current || current.lastChangedAt !== expectedLastChangedAt) return false;
+    const { data, error } = await this.client
+      .from('recall_cases')
+      .update({ projection: { ...current.projection, heroImageUrl } })
+      .eq('id', id)
+      .eq('last_changed_at', expectedLastChangedAt)
+      .select('id');
+    if (error) this.fail('updateCaseHeroImage', error);
+    return (data?.length ?? 0) > 0;
+  }
+
+  async listCaseVisuals(recallCaseId: string): Promise<CaseVisualRow[]> {
+    const { data, error } = await this.client
+      .from('product_visuals')
+      .select(
+        'recall_case_id, source_url, source_sha256, page, url, role, width, height, content_hash',
+      )
+      .eq('recall_case_id', recallCaseId)
+      .order('page')
+      .order('source_url');
+    if (error) {
+      // Pre-migration tolerance, mirroring SupabaseLabelStore.listFailures:
+      // a deployment without the visuals table simply has no candidates.
+      if (/product_visuals/.test(error.message)) return [];
+      this.fail('listCaseVisuals', error);
+    }
+    return (data ?? []).map((row) => ({
+      recallCaseId: row.recall_case_id as string,
+      sourceUrl: row.source_url as string,
+      sourceSha256: row.source_sha256 as string,
+      page: row.page as number,
+      url: row.url as string,
+      role: row.role as string,
+      width: (row.width as number | null) ?? null,
+      height: (row.height as number | null) ?? null,
+      contentHash: row.content_hash as string,
+    }));
   }
 
   async replaceProducts(recallCaseId: string, products: AffectedProduct[]): Promise<void> {

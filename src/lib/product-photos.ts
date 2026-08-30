@@ -23,6 +23,7 @@
  */
 
 import { decodeEntities } from '@/domain/text';
+import { FDA_HOSTS, resolveOfficialUrl } from './official-urls';
 
 /**
  * What an image is FOR. Assigned only from deterministic signals the source
@@ -155,11 +156,16 @@ export function extractProductPhotos(summaryHtml: string | null): ProductPhoto[]
     const src = html.match(/\bsrc\s*=\s*"([^"]+)"/i)?.[1];
     if (!src) continue;
     const raw = decodeEntities(src).trim();
-    if (raw.startsWith('data:')) continue; // tracking pixels / inline spacers
-    // Agency-hosted assets only; a relative /files/ path is the observed form.
-    if (!/^\/files\//.test(raw) && !/^https?:\/\/[^/]*\.fda\.gov\/files\//i.test(raw)) continue;
+    // Agency-hosted assets only, through the one canonical resolver
+    // (lib/official-urls): `data:` pixels, external hosts, and unsafe
+    // schemes all resolve to null; root-relative and protocol-relative
+    // forms resolve to the same https URL an absolute href yields.
+    const resolved = resolveOfficialUrl(raw, { approvedHosts: FDA_HOSTS });
+    if (!resolved) continue;
+    // FDA's asset area is /files/ — site chrome lives elsewhere.
+    if (!new URL(resolved.url).pathname.startsWith('/files/')) continue;
 
-    const url = raw.startsWith('http') ? raw : `https://www.fda.gov${raw}`;
+    const url = resolved.url;
     const alt = html.match(/\balt\s*=\s*"([^"]*)"/i)?.[1];
     const altText = alt ? decodeEntities(alt).replace(/\s+/g, ' ').trim() : '';
     const fileName = decodeURIComponent(url.replace(/\?.*$/, '').replace(/^.*\//, ''));

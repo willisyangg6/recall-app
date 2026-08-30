@@ -55,6 +55,25 @@ export interface RecallCaseRow {
   lastChangedAt: string;
 }
 
+/**
+ * One rendered page of an official label document (a product_visuals row).
+ * Detail-screen evidence; under the C9 frozen policy these never become
+ * card heroes automatically (professional hero sourcing is C9.1).
+ */
+export interface CaseVisualRow {
+  recallCaseId: string;
+  /** The official source document (provenance). */
+  sourceUrl: string;
+  sourceSha256: string;
+  page: number;
+  /** Public URL of the hosted rendered image. */
+  url: string;
+  role: string;
+  width: number | null;
+  height: number | null;
+  contentHash: string;
+}
+
 export interface NotificationEventInput {
   recallCaseId: string;
   kind: NotificationKind;
@@ -220,7 +239,7 @@ export interface RecallStore {
   /**
    * The same narrow contract for `projection.geography` (C5.2A). A separate
    * method rather than a generic field patch on purpose: these are the only
-   * two projection fields a maintenance repair is allowed to write, and a
+   * projection fields a maintenance repair is allowed to write, and a
    * caller cannot reach any other one through this port.
    */
   updateCaseGeography(
@@ -228,6 +247,31 @@ export interface RecallStore {
     geography: Geography,
     expectedLastChangedAt: string,
   ): Promise<boolean>;
+  /**
+   * The same narrow contract for `projection.heroImageUrl` (C9). An
+   * image-only write: timeline and `last_changed_at` stay byte-identical,
+   * so it can never fire a notification, re-date a case, or appear as
+   * public activity — and the C8 manifest still detects it, because the
+   * sync token hashes projection content at read time.
+   *
+   * RESERVED INFRASTRUCTURE: under the C9 frozen policy nothing calls
+   * this in production — ordinary FSIS label renders are detail evidence,
+   * never automatic card heroes. It is the write path C9.1's
+   * professional-quality hero sourcing will use, and its semantics are
+   * pinned by tests now so that milestone inherits them proven.
+   */
+  updateCaseHeroImage(
+    id: string,
+    heroImageUrl: string | null,
+    expectedLastChangedAt: string,
+  ): Promise<boolean>;
+  /**
+   * A case's rendered label-document pages, in stable (page, source_url)
+   * order. Read-only; rows are written exclusively by the FSIS label
+   * sync. Like `updateCaseHeroImage`, this is C9.1's read seam — no
+   * production caller exists under the frozen policy.
+   */
+  listCaseVisuals(recallCaseId: string): Promise<CaseVisualRow[]>;
   replaceProducts(recallCaseId: string, products: AffectedProduct[]): Promise<void>;
 
   /** Returns false (and stores nothing) when the dedup key already exists. */

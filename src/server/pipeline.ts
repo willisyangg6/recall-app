@@ -454,6 +454,13 @@ async function ingestOne(
  * Re-project a case from all its linked records, detect consumer-relevant
  * changes (Layer 2), append timeline entries, and write eligible notification
  * events. A changed payload hash alone never produces a notification.
+ *
+ * `heroImageUrl` is exactly what `projectCase` derives from the records —
+ * an official agency photograph or nothing. FSIS label renders in
+ * product_visuals are detail-screen evidence and are deliberately NOT
+ * promoted to the feed hero here (C9 frozen policy: an ordinary
+ * regulatory label sheet is not card imagery; professional-quality hero
+ * sourcing is C9.1).
  */
 async function reprojectCase(
   store: RecallStore,
