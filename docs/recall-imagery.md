@@ -14,8 +14,8 @@ Two governing principles:
   card heroes. Documentary images (handheld photos, warehouse/pallet shots,
   sticker close-ups, ordinary regulatory label sheets) are valuable
   _evidence_ on the detail screen but do not automatically become Home card
-  heroes. Defining, classifying, and sourcing professional-quality heroes
-  is **C9.1**; C9 is the reliability and enrichment _foundation_.
+  heroes. **C9.1** researched defining, classifying, and sourcing
+  professional-quality heroes and **deferred** it — see §12.
 
 ## 1. Three coverage concepts — never conflated
 
@@ -26,8 +26,9 @@ Two governing principles:
   C9.1, and no existing production hero is changed or removed before then.
 - **Detail visual coverage**: cases with any evidence imagery at all — a
   hero and/or rendered label pages in `product_visuals`.
-- **Professional packshot coverage**: **not yet measured.** No classifier
-  exists; C9.1 defines it.
+- **Professional packshot coverage**: sampled by C9.1 research (§12) and
+  **not tracked in production**. No classifier ships, so no case is
+  asserted to have a professional hero.
 
 ## 2. Architecture
 
@@ -48,7 +49,7 @@ Two official image sources exist, and only two:
   Photos gallery. **They are never automatically promoted to
   `heroImageUrl`** — the frozen interim policy below.
 
-### Frozen interim policy (until C9.1)
+### Frozen interim policy (unchanged by C9.1)
 
 1. Existing FDA `heroImageUrl` behavior stays byte-identical.
 2. FSIS rendered label pages remain in `product_visuals` and the detail
@@ -92,7 +93,8 @@ inherits them proven.
 - FDA extraction is complete: the backfill dry run measures **618/618
   (100%) coverage among FDA cases whose source publishes any photo**; 87
   sources publish none; 0 undetermined, 0 parse failures. Whether those
-  photographs are _professional packshots_ has not been measured (C9.1).
+  photographs are _professional packshots_ is not tracked in production;
+  C9.1 sampled it as research only (§12).
 - Rendered pages: 0 missing dimensions, 0 under 50k px², 4 extreme-aspect
   (wide print-proof strips). All 32 cross-case duplicate hashes are
   byte-identical label sheets re-uploaded under different filenames for
@@ -192,7 +194,7 @@ objective the bar is higher still: the licensed brand-syndicated corpora
 founder-level contract decision. All of this is C9.1 material; the
 provenance schema (§8) is already prepared for whichever source clears it.
 
-## 8. Provenance schema (migration `20260906000000_product_visual_provenance.sql` — NOT applied)
+## 8. Provenance schema (migration `20260906000000_product_visual_provenance.sql` — applied)
 
 Additive columns on `product_visuals`: `provider` (closed set:
 `fsis_label_pdf` | `fda_announcement` | `catalog_exact_gtin`; default states
@@ -202,9 +204,14 @@ GTIN), `confidence` (`official_source` | `exact_gtin_match`), `attribution`
 catalog row without its GTIN is unrepresentable by CHECK. No RLS, policy,
 or grant changes in any direction (pinned by
 `src/server/visual-provenance-migration.test.ts`). Production code does not
-reference the new columns yet, so the migration can be applied whenever
-convenient with zero coordination — it exists precisely so C9.1 can record
-where professional imagery came from and what attribution it owes.
+reference the new columns, so the migration applied with zero coordination.
+
+**Applied to the live project.** Verified 2026-08-30: the columns exist on
+`product_visuals`, and `npx supabase db push --dry-run` reports
+`{"upToDate":true,…,"message":"Remote database is up to date."}` with no
+migrations pending. The columns are currently unwritten — they were
+prepared so a professional-imagery source could record where an image came
+from and what attribution it owes, and that sourcing is deferred (§12).
 
 ## 9. QA operations
 
@@ -223,7 +230,9 @@ compare-and-set infrastructure, with its own dry run.
 
 ## 10. Known limitations
 
-- Professional packshot coverage is unmeasured; no classifier exists.
+- No automatic professional-quality classifier exists. C9.1 measured that a
+  bounded one could not reach production-grade precision, and external
+  sourcing is deferred (§12).
 - One FSIS document (047-2023) is gone at the source; that case keeps its
   PDF link but can have no render until FSIS restores the file.
 - When several _distinct_ cases link one identical PDF, the visuals rows
@@ -247,3 +256,93 @@ Run `npx expo start --go --ios` (never `npm run ios`):
    reordering, or notification.
 4. Broken/absent images render nothing — never a broken-image placeholder.
 5. Web (`npx expo start --web`): same behavior.
+
+## 12. Professional card imagery: research findings and deferral (C9.1)
+
+Researched 2026-08-30. C9 established _where images come from_. C9.1 asked
+whether a better class of image — commercial packshots — could be sourced
+and identified reliably enough to lead a card. **The answer was no, so
+external professional-image sourcing is deferred indefinitely and no
+runtime, schema, or review machinery ships.** Card imagery behavior is
+exactly as committed in C9.
+
+The numbers below are a **dated research sample from 2026-08-30**, not a
+live production guarantee and not a corpus census. Scheduled ingestion
+moves the totals; the sampled visual classifications were model judgments
+(94.3% inter-rater agreement on the professional/non-professional split
+over a 35-image overlap). They are recorded to justify the decision, not to
+be quoted as facts about the current corpus.
+
+### What "professional" meant
+
+Deliberate commercial presentation, clear product recognition, controlled
+composition — **not** merely "white background". A flat label scan on pure
+white is regulatory evidence; a phone photo of a package on white paper is
+documentary. Hero-worthy: isolated retail packshots and marketing
+composites. Detail-only: documentary photos (pallets, shelves, handheld,
+sticker macros, lot-code crops) and regulatory label sheets.
+
+The trap that shaped everything: in the live corpus, a professional jar
+packshot and a produce-sticker macro **both** carry "label" in their FDA alt
+text and both extract with the `package_label` role. Role and caption do not
+separate professional from documentary.
+
+### Findings
+
+- **Existing card heroes are unchanged and continue to come from the
+  committed official FDA imagery path** (§2). Nothing in C9.1 altered hero
+  selection, ingestion, projection, or label sync.
+- **FSIS label renders remain detail evidence and never become card
+  heroes** — the frozen policy from C9, pinned by the committed guards in
+  `src/server/imagery-guards.test.ts`.
+- **Existing heroes are a mix.** In a 124-hero reviewed sample: ~53%
+  documentary, ~27% professional packshot, ~18% regulatory label, ~1%
+  commercial composite, ~1% logo/generic. Roughly a quarter to a third of
+  existing heroes appear genuinely professional.
+- **Same-notice alternatives are too sparse to matter.** Only 3 of 124
+  sampled hero cases had a clearly professional alternative already
+  published in the same official notice while showing a non-professional
+  hero. 95 of 136 sampled cases had no professional candidate at all.
+  Rebuilding hero selection for a ~2% improvement is not worth the risk to
+  a working path.
+- **An automatic quality classifier can reject, but cannot select.**
+  Deterministic metadata and pixel screens (border uniformity/luminance/
+  transparency, subject fill, centering, circle-likeness, saturation,
+  aspect, role and caption vocabulary) reliably rule images _out_. The best
+  bounded conjunction of nine signals reached only **52.1% precision at 24%
+  recall** for identifying professional positives, against a ≥95% precision
+  bar. Flat label artwork on white is geometrically indistinguishable from a
+  packshot. Professional quality is a semantic judgment, not a pixel one.
+- **Open Food Facts exact-GTIN matching is not precise enough.** Over 59
+  sampled GTIN cases (59 API requests within OFF's 15 req/min limit): 62.7%
+  returned a product, but **27% of hits contradicted the notice** — an
+  exact, check-digit-valid GTIN returned Trader Joe's waffles for a
+  TreeHouse recall, Aunt Jemima french toast for an FSIS pork alert,
+  Tillamook for a Fresh & Ready burrito. Of 21 available front images,
+  **1 was a professional packshot**; the rest were user phone photos on
+  counters, in hands, in refrigerators. For the 26 sampled cases with no
+  imagery at all — the cases that would benefit most — it yielded **zero**
+  professional images. Exact GTIN equality is necessary but not sufficient,
+  and OFF photos are CC BY-SA, requiring consumer-facing attribution.
+- **Manufacturer sites are not a viable automated source.** Across six
+  recall subjects: **0 of 6 publish a GTIN** on the product page and **0 of
+  6 grant third-party image reuse rights** (3 explicitly prohibit, 3 are
+  silent, which is refusal under default copyright; one disallows our
+  crawler by name in robots.txt, honored). Without a published GTIN any
+  match would be fuzzy title matching. Worse, recalls skew toward
+  discontinued SKUs: one recalled product had no page at all, and no page
+  carried a lot code or packaging revision.
+- **Scalable professional packshots require a licensed provider** — NIQ
+  Brandbank, Syndigo, or 1WorldSync. These are the only sources with a real
+  professional ceiling, and each needs an enterprise contract.
+
+### Decision
+
+**No paid provider will be pursued now**, and no free source qualifies. The
+product launches on existing official imagery plus designed fallbacks where
+appropriate, once the design system and food-category taxonomy exist.
+
+This is a deferral, not a dead end. It can be revisited later — with a
+licensed catalog, or with a classifier that clears the precision bar — and
+**revisiting it changes nothing about current hero behavior**, because
+nothing was built against it.
