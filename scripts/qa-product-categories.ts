@@ -20,6 +20,26 @@
  * The last one is the load-bearing product claim — Category is a discovery
  * tool, never a safety, relevance, risk or notification boundary — so it is
  * measured against the real loader over the real corpus rather than asserted.
+ *
+ * ## Derived vs PERSISTED (C10B)
+ *
+ * Everything above grades the DERIVATION — what the classifier would produce
+ * today. C10B ships a filter that reads what is actually STORED, and those are
+ * two different facts: a case can derive perfectly and hold nothing, which is
+ * exactly the state the historical backfill exists to fix. So this command now
+ * also grades the persisted column, against the RAW jsonb rather than the
+ * normalized read — `readProductCategories` repairs order, duplicates and
+ * unknown ids on the way out, so grading its output would report a clean bill
+ * of health over a corrupt column.
+ *
+ *   npm run qa:product-categories                  # persisted gates BLOCKING
+ *   npm run qa:product-categories -- --pre-backfill # missing-categories gate
+ *                                                    reported, not blocking
+ *
+ * `--pre-backfill` exists for exactly one moment: the pre-apply verification
+ * run, when "899 active cases hold no categories" is the CONDITION THE APPLY
+ * FIXES rather than a defect. It downgrades that one gate and nothing else,
+ * says so loudly, and must not appear in any post-apply or CI invocation.
  */
 
 import { buildAffectsMeSections } from '../src/lib/affects-me-ranking';
@@ -35,6 +55,10 @@ import {
   MAX_CATEGORIES_PER_CASE,
   type FoodCategoryId,
 } from '../src/domain/food-category';
+import {
+  HIDDEN_LAUNCH_CATEGORY_IDS,
+  LAUNCH_CATEGORY_IDS,
+} from '../src/domain/food-category-launch';
 import { categoryProductText } from '../src/domain/food-category-matcher';
 import { deriveProductCategories, readProductCategories } from '../src/domain/projection';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
@@ -60,6 +84,65 @@ interface Gate {
   label: string;
   value: number;
   limit: number;
+  /** Reported but not blocking; carries the reason it was downgraded. */
+  advisory?: string;
+}
+
+/**
+ * Only the pre-apply verification run may pass this. It downgrades exactly one
+ * gate — active cases with no stored categories — because before the
+ * historical backfill that count IS the work order, not a defect.
+ */
+const PRE_BACKFILL = process.argv.includes('--pre-backfill');
+
+/**
+ * Structural verdict on ONE raw stored value, straight off the jsonb column.
+ *
+ * Deliberately not `readProductCategories`: that reader exists to make a
+ * damaged column safe for the UI, so it silently repairs order, drops
+ * duplicates and unknown ids, and strips `other` from beside a real category.
+ * Grading its output would therefore report zero violations over a column full
+ * of them. This grades what is actually there.
+ */
+function inspectStored(raw: unknown): {
+  missing: boolean;
+  invalidId: boolean;
+  duplicate: boolean;
+  misordered: boolean;
+  otherMixed: boolean;
+  overCap: boolean;
+  ids: string[];
+} {
+  const blank = {
+    invalidId: false,
+    duplicate: false,
+    misordered: false,
+    otherMixed: false,
+    overCap: false,
+    ids: [] as string[],
+  };
+  // Absent, null, a non-array, or an empty list all mean "nothing stored".
+  // They are one condition, not five: the filter cannot place any of them.
+  if (raw === undefined || raw === null) return { missing: true, ...blank };
+  if (!Array.isArray(raw)) return { missing: true, ...blank, invalidId: true };
+  if (raw.length === 0) return { missing: true, ...blank };
+
+  const ids = raw.map((value) => String(value));
+  const known = raw.filter(
+    (v): v is FoodCategoryId => typeof v === 'string' && isFoodCategoryId(v),
+  );
+  const ordered = [...known].sort(
+    (a, b) => FOOD_CATEGORY_IDS.indexOf(a) - FOOD_CATEGORY_IDS.indexOf(b),
+  );
+  return {
+    missing: false,
+    invalidId: known.length !== raw.length,
+    duplicate: new Set(ids).size !== ids.length,
+    misordered: known.join('|') !== ordered.join('|'),
+    otherMixed: known.includes('other') && known.length > 1,
+    overCap: raw.length > MAX_CATEGORIES_PER_CASE,
+    ids,
+  };
 }
 
 /**
@@ -231,6 +314,50 @@ async function main(): Promise<void> {
   console.log(
     `  → backfill would write ${all.length - storedCount + staleCount} case(s); run backfill:product-categories:dry for the plan`,
   );
+
+  // ── Persisted column, graded raw (C10B) ───────────────────────────────────
+  const persisted = rows.map((row) => ({
+    id: row.id,
+    active: row.projection.state === 'active',
+    ...inspectStored((row.projection as { productCategories?: unknown }).productCategories),
+  }));
+  const activePersisted = persisted.filter((p) => p.active);
+  const count = (list: typeof persisted, key: keyof (typeof persisted)[number]) =>
+    list.filter((p) => p[key] === true).length;
+
+  console.log(`\nPERSISTED CATEGORIES (raw jsonb, all · active)`);
+  console.log(
+    `  cases holding a category list:   ${persisted.length - count(persisted, 'missing')} / ${persisted.length}` +
+      `  ·  ${activePersisted.length - count(activePersisted, 'missing')} / ${activePersisted.length}`,
+  );
+  console.log(
+    `  cases holding NOTHING:           ${count(persisted, 'missing')}  ·  ${count(activePersisted, 'missing')}`,
+  );
+
+  // What the launch filter can actually reach, from what is STORED.
+  console.log(`\nLAUNCH-VISIBLE COVERAGE (stored ids, active cases)`);
+  const activeStored = activePersisted.filter((p) => !p.missing);
+  for (const id of LAUNCH_CATEGORY_IDS) {
+    const n = activeStored.filter((p) => p.ids.includes(id)).length;
+    console.log(
+      `  ${foodCategoryLabel(id).padEnd(21)} ${String(n).padStart(5)} ${pct(n, activePersisted.length).padStart(7)}`,
+    );
+  }
+  const reachable = activeStored.filter((p) =>
+    p.ids.some((id) => (LAUNCH_CATEGORY_IDS as readonly string[]).includes(id)),
+  ).length;
+  console.log(`  ── hidden from the launch filter (still stored, still in All Recalls) ──`);
+  for (const id of HIDDEN_LAUNCH_CATEGORY_IDS) {
+    const n = activeStored.filter((p) => p.ids.includes(id)).length;
+    console.log(
+      `  ${foodCategoryLabel(id).padEnd(21)} ${String(n).padStart(5)} ${pct(n, activePersisted.length).padStart(7)}`,
+    );
+  }
+  console.log(
+    `\n  active cases reachable from at least one launch chip: ${reachable} / ${activePersisted.length} (${pct(reachable, activePersisted.length)})`,
+  );
+  console.log(`  the remainder are NOT hidden — they carry a hidden id, and every one of`);
+  console.log(`  them stays in the unfiltered feed, search, Affects Me and notifications.`);
 
   // ── Examples ──────────────────────────────────────────────────────────────
   const sorted = [...all].sort((a, b) => a.id.localeCompare(b.id));
@@ -433,21 +560,60 @@ async function main(): Promise<void> {
     { label: 'All Recalls membership/order changes', value: allRecallsDrift, limit: 0 },
     { label: 'Affects Me membership/order changes', value: affectsDrift, limit: 0 },
     { label: 'personal relevance changes', value: relevanceDrift, limit: 0 },
+    // ── Persisted data (C10B) ───────────────────────────────────────────────
+    // These grade what the SHIPPED FILTER READS, not what the classifier would
+    // produce. Everything above can be perfect while these fail.
+    {
+      label: 'ACTIVE cases with no stored categories',
+      value: count(activePersisted, 'missing'),
+      limit: 0,
+      ...(PRE_BACKFILL
+        ? {
+            advisory:
+              'downgraded by --pre-backfill: this count is the backfill work order, not a defect',
+          }
+        : {}),
+    },
+    { label: 'stored invalid category ids', value: count(persisted, 'invalidId'), limit: 0 },
+    { label: 'stored duplicate category ids', value: count(persisted, 'duplicate'), limit: 0 },
+    { label: 'stored lists out of display order', value: count(persisted, 'misordered'), limit: 0 },
+    {
+      label: "stored 'other' mixed with a real category",
+      value: count(persisted, 'otherMixed'),
+      limit: 0,
+    },
+    { label: 'stored lists over the cap', value: count(persisted, 'overCap'), limit: 0 },
   ];
 
   console.log(`\nGATES`);
+  if (PRE_BACKFILL) {
+    console.log(
+      `  ⚠  --pre-backfill: the ACTIVE-cases-with-no-stored-categories gate is\n` +
+        `     REPORTED BUT NOT BLOCKING. Valid only for the pre-apply verification\n` +
+        `     run. Never use it after the backfill, and never in CI.`,
+    );
+  }
   let failed = 0;
+  let advised = 0;
   for (const gate of gates) {
     const ok = gate.value <= gate.limit;
-    if (!ok) failed += 1;
+    const blocking = gate.advisory === undefined;
+    if (!ok && blocking) failed += 1;
+    if (!ok && !blocking) advised += 1;
+    const verdict = ok ? 'PASS' : blocking ? 'FAIL' : 'WARN';
     console.log(
-      `  ${ok ? 'PASS' : 'FAIL'}  ${gate.label.padEnd(46)} ${gate.value}  (gate: ${gate.limit})`,
+      `  ${verdict}  ${gate.label.padEnd(46)} ${gate.value}  (gate: ${gate.limit})` +
+        (!ok && !blocking ? `\n        ↳ ${gate.advisory}` : ''),
     );
   }
 
   console.log(
     failed === 0
-      ? `\nPASS: every case carries a valid, deterministic, hazard-blind category set, and attaching it changes nothing a consumer depends on.\n`
+      ? `\nPASS: every case carries a valid, deterministic, hazard-blind category set, the` +
+          `\n      persisted column is structurally sound, and attaching categories changes` +
+          `\n      nothing a consumer depends on.` +
+          (advised > 0 ? `\n      (${advised} advisory gate(s) breached — see WARN above.)` : '') +
+          `\n`
       : `\nFAIL: ${failed} gate(s) breached.\n`,
   );
   if (failed > 0) process.exitCode = 1;

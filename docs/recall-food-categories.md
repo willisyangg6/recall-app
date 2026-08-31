@@ -19,13 +19,22 @@ the harness**, drew the last 200-case holdout this corpus supports from the 618
 cases no split had touched, labelled it from full source evidence and measured
 **87.5%**.
 
-**C10A.2 STOPS.** Four of the five accuracy gates are missed and so is the new
-per-category floor. No failed case was patched, no further holdout may be drawn
-— the untouched pool cannot support another 200 — and the historical backfill
-is **not applied**. Three phases have now measured this classifier against
-three independent fresh holdouts, at 91.5%, 86.5% and 87.5%; the honest reading
-is that its true accuracy sits near the high 80s and that the remaining error is
-one boundary, not a scatter of lexical gaps.
+**C10A.2 STOPPED.** Four of the five accuracy gates are missed and so is the
+new per-category floor. No failed case was patched and no further holdout may
+be drawn — the untouched pool cannot support another 200. Three phases have now
+measured this classifier against three independent fresh holdouts, at 91.5%,
+86.5% and 87.5%; the honest reading is that its true accuracy sits near the
+high 80s and that the remaining error is one boundary, not a scatter of lexical
+gaps.
+
+**C10B then shipped it anyway, deliberately** (§8). Not by tuning, re-scoring
+or relabelling — the classifier is frozen and the numbers below are unchanged —
+but by narrowing the promise: Category is an optional discovery filter over All
+Recalls, every recall stays reachable without it, only **1.0%** of the final
+holdout was placed somewhere unreasonable, and the weakest category (Prepared
+foods, 64.8% recall) is hidden from the filter entirely. The historical
+backfill **was applied**. Sections 1–7 are the C10A.2 record and are unchanged;
+§8 and §9 carry the launch decision and its consequences.
 
 ---
 
@@ -552,7 +561,15 @@ measured it.
 
 ---
 
-## 7. Decision: STOP
+## 7. Decision: STOP (C10A.2 — superseded by §8)
+
+> **Superseded, not deleted.** This section is C10A.2's own decision, recorded
+> as it stood on 2026-08-31 before the founder made a product call. Its
+> measurements remain exactly true; its two forward-looking bullets do not.
+> **C10B applied the historical backfill and shipped the filter** — under a
+> narrower promise and with the weakest category hidden — for the reasons in
+> §8. Read the two together: §7 is why the classifier is not good enough for
+> the original brief, §8 is why a smaller brief was chosen instead.
 
 The fresh natural holdout misses four of the five accuracy gates and the new
 per-category floor. Under the milestone's own stop conditions:
@@ -608,53 +625,203 @@ and says so in a comment, and the gate is back to 0.
 
 ---
 
-## 8. Commands
+## 8. Founder acceptance and launch (C10B)
+
+C10A.2 stopped at §7 and recommended no further tuning. C10B did not resume
+tuning. It made a **product decision on the measurement as it stands** and
+shipped Category under a narrower promise than the original brief assumed.
+
+### The decision, and the number it actually rests on
+
+Accepted for launch, unchanged and unre-run:
+
+| Measure                                   |         Value |
+| ----------------------------------------- | ------------: |
+| final untouched holdout, exact-set        |     **87.5%** |
+| at-least-one-correct                      |     **88.0%** |
+| micro precision / recall                  | 88.0% / 87.1% |
+| human-reviewed **unreasonable** placement |      **1.0%** |
+
+The accuracy figure is not what decided it. **1.0% (2/200)** is: that is the
+share of the holdout a human judged to be placed where no reasonable shopper
+would look. The other 23 mismatches are near-misses between adjacent aisles,
+and 20 of the 25 are a single boundary — Prepared foods ↔ Meat & poultry —
+whose weaker side is **hidden from the launch filter** for exactly that reason.
+
+The argument is about what Category is permitted to do, not about the score:
+
+- it applies **only to All Recalls**, only on an explicit selection;
+- **every recall remains accessible through the unfiltered feed**, plus search,
+  Affects Me, risk, and push/notifications — none of which consults a category;
+- a miscategorized card is a **discovery miss with the whole feed behind it**.
+  A missed allergen match is a missed alert. Different failures, different
+  bars, and `category-invariance.test.ts` proves they share no input.
+
+**Category is an optional convenience filter, not a completeness or safety
+boundary.** Nothing in this document may be cited to relax the personalization
+or notification thresholds.
+
+### The research benchmarks stay missed
+
+87.5% against the original **95%** research bar and against the C10A.2 **90%**
+milestone bar. Both are still printed, neither was weakened, and neither gates
+release any more. No merge of the compact vocabulary, no re-score of a spent
+holdout, and no relabelling converts the high-80s into a ≥90% result.
+
+**No future accuracy claim without new independent evidence.** A newly drawn,
+blind-labelled holdout is the only thing that can move this number, and this
+corpus has no untouched 200 left — that requires corpus growth, not arithmetic.
+
+### Launch-visible allowlist
+
+`src/domain/food-category-launch.ts` is the one canonical list, separate from
+the frozen twelve-id vocabulary and **derived** from it, so chip order is the
+canonical display order by construction and no id can be silently neither
+offered nor hidden. Nine offered: Fruits & vegetables, Meat & poultry, Seafood,
+Dairy & eggs, Bakery, Snacks & sweets, Beverages, Pantry & staples, Baby food &
+formula.
+
+Three hidden — **valid internally, absent from the menu**:
+
+| ID               | Why hidden                                                                                                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prepared_foods` | Known recall weakness: **64.8% recall (35/54)** at 94.6% precision. About a third of genuine prepared-food recalls file elsewhere. High precision is why the id is still stored.              |
+| `supplements`    | Insufficient validation: the final holdout has **zero** supplement rows, so nothing is known about how the shipped classifier places them; an earlier phase filed one under Pantry & staples. |
+| `other`          | Internal fallback, not an aisle. It exists so the derivation is total; nobody browses for "Other".                                                                                            |
+
+Hidden ≠ deleted. Cases keep carrying these ids, the backfill keeps writing
+them, QA keeps reporting them, and every one of those recalls stays in the
+unfiltered feed. Un-hiding is a one-line change plus a QA acknowledgement.
+
+## 8b. Commands
 
 ```bash
-npm run qa:categories               # offline; product gates + legacy benchmark
-npm run qa:product-categories       # read-only; live distribution + structural gates
+npm run qa:categories               # offline; LAUNCH gate — exits 0 when sound
+npm run qa:categories:launch        # the same launch gate, named after its script
+npm run qa:categories:frozen        # offline; the frozen C10A.2 report, unmodified
+npm run qa:product-categories       # read-only; derivation + PERSISTED gates
 npm run backfill:product-categories:dry   # read-only; the historical write plan
-npm run backfill:product-categories       # APPLY — blocked: the gate is not met
+npm run backfill:product-categories       # APPLY — executed once by C10B
 ```
 
-`qa:categories` needs no database, no network and no credentials — the gold set
-is committed, so it produces identical numbers on any machine. It currently
-exits non-zero, which is correct: the classifier does not clear the bar the
-founder accepted.
+`qa:categories` needs no database, no network and no credentials. It now runs
+the **frozen** `scripts/qa-categories.ts` as a subprocess and reprints its
+output verbatim — that file is hash-recorded in the freeze manifest and was not
+edited — then adds the founder-accepted baseline, relabels the research bars as
+NOT MET, and gates on freeze integrity, determinism, the ≤3% unreasonable
+baseline, the production invariance suites, and the launch allowlist. It exits
+0 when the shipped classifier is still the one that was measured.
 
-`qa:product-categories` reads the live corpus and enforces the structural
-invariants: every case categorized, ids valid and ordered, `other` never mixed,
-derivation deterministic and hazard-blind (announcement included), and — the
-load-bearing one — zero change to All Recalls membership/order, Affects Me, or
-personal relevance when categories are attached. It passes.
+`qa:product-categories` reads the live corpus and enforces the derivation
+invariants (every case categorized, ids valid and ordered, `other` never mixed,
+deterministic, hazard-blind including the announcement, and zero change to All
+Recalls membership/order, Affects Me, or personal relevance) **and** the
+persisted-column gates over the raw jsonb. `-- --pre-backfill` downgrades only
+the missing-categories gate, for the single pre-apply run.
 
 ---
 
 ## 9. Handoff
 
-### The historical backfill, planned and NOT applied
+### The historical backfill — APPLIED (C10B)
 
-`npm run backfill:product-categories:dry`, run against the live corpus:
+Superseding C10A.2's "planned and NOT applied". Pre-apply dry run against the
+live corpus, immediately before the write:
 
-| Field                              | Value |
-| ---------------------------------- | ----: |
-| cases examined                     |  1914 |
-| already carrying categories        |    15 |
-| planned writes                     |  1899 |
-| would overwrite an existing list   |     0 |
-| unchanged                          |    15 |
-| case writes performed              |     0 |
-| network requests / timeline writes | 0 / 0 |
-| notification events / new cases    | 0 / 0 |
+| Field                               | Value |
+| ----------------------------------- | ----: |
+| cases examined                      |  1916 |
+| already carrying categories         |    17 |
+| planned writes                      |  1899 |
+| would overwrite an existing list    |     0 |
+| unchanged                           |    17 |
+| failures                            |     0 |
+| unresolved concurrent modifications |     0 |
+| network requests / timeline writes  | 0 / 0 |
+| notification events / new cases     | 0 / 0 |
 
-The 15 stored lists were written by **scheduled ingestion**, not by a backfill:
-`projectCase` has derived categories since C10A, so any case re-projected by a
-normal FDA/FSIS run gains the field. All 15 agree with the current derivation,
-so the plan overwrites none of them. That number will keep growing on its own
-while the backfill stays unapplied, and it is not a reason to apply it.
+The 17 pre-existing lists were written by **scheduled ingestion**, not a
+backfill: `projectCase` has derived categories since C10A, so any case
+re-projected by a normal FDA/FSIS run gains the field. All 17 agreed with the
+current derivation, so the plan overwrote none of them.
 
-**It must not be applied.** It would write 1,899 rows from a classifier that
-failed its gate.
+The apply ran while scheduled ingestion was live and needed **three
+invocations**, because it was interrupted twice by its environment rather than
+by anything in the data:
+
+| Pass |                                                  Writes | Ended by                                     |
+| ---- | ------------------------------------------------------: | -------------------------------------------- |
+| 1    |                                                   1,271 | tooling timeout (SIGTERM at 10 min)          |
+| 2    |                                                     504 | transient `fetch failed` on a `getCase` read |
+| 3    |                                                     124 | completed normally                           |
+|      | **1,899** total, 0 failures, 0 concurrent modifications |
+
+This is exactly the case the design was built for: every decision is made from
+current state, so re-running the same command resumes from live state instead
+of repeating work, and each pass's dry-run-equivalent plan shrinks to what is
+actually left (1,899 → 628 → 124 → 0). No CAS was bypassed and no failed case
+was patched. It is recorded here because "the apply was run exactly once" would
+be a less accurate sentence than this one.
+
+The interruptions also produced a stronger proof than a clean run would have.
+Measured at the pass-1 interruption point, with 1,271 category writes already
+landed, `notification_events` was unchanged **and** the
+`(id, last_changed_at, timeline)` digest over all 1,916 cases was
+byte-identical to the pre-apply baseline. An enrichment that cannot move those
+after 1,271 writes cannot move them after 1,899.
+
+### Post-apply verification
+
+| Check                               | Result                                  |
+| ----------------------------------- | --------------------------------------- |
+| dry run re-run                      | **would update: 0**, 1,916 unchanged    |
+| cases carrying categories           | **1,916 / 1,916** (active 899 / 899)    |
+| persisted QA (17 blocking gates)    | all PASS, including the raw-jsonb gates |
+| `notification_events`               | 2,347 → **2,347** (unchanged)           |
+| `notification_deliveries`           | 0 → **0**                               |
+| cases whose `last_changed_at` moved | **1 of 1,916** — see below              |
+| active job leases                   | 0                                       |
+| push activation                     | not activated, 0 subscriptions          |
+
+The one case that moved (`6061bbb8…`, an FDA allergy alert) changed at
+20:49:53, inside the `fda_announcements` run spanning 20:44:25→20:50:02 — a
+scheduled re-projection, which also added the single new timeline entry and
+gave the case its categories through `projectCase` in the normal way. **If the
+enrichment could move `last_changed_at`, that number would be ~1,899.** Material
+timeline entries were unchanged at 431, and no notification event was created
+by either the backfill or that re-projection.
+
+### Resulting distribution (all cases · active cases)
+
+| Category            | All | %     | Active | %     |
+| ------------------- | --: | ----- | -----: | ----- |
+| Meat & poultry      | 778 | 40.6% |     95 | 10.6% |
+| Prepared foods      | 429 | 22.4% |    171 | 19.0% |
+| Pantry & staples    | 170 | 8.9%  |    150 | 16.7% |
+| Fruits & vegetables | 129 | 6.7%  |    127 | 14.1% |
+| Snacks & sweets     | 120 | 6.3%  |    104 | 11.6% |
+| Dairy & eggs        |  85 | 4.4%  |     79 | 8.8%  |
+| Bakery              |  83 | 4.3%  |     79 | 8.8%  |
+| Seafood             |  79 | 4.1%  |     46 | 5.1%  |
+| Supplements         |  32 | 1.7%  |     32 | 3.6%  |
+| Baby food & formula |  20 | 1.0%  |     19 | 2.1%  |
+| Other               |  18 | 0.9%  |      9 | 1.0%  |
+| Beverages           |  13 | 0.7%  |     13 | 1.4%  |
+| _(multi-category)_  |  37 | 1.9%  |     23 | 2.6%  |
+
+Meat & poultry dominates the whole corpus (40.6%) and not the active slice
+(10.6%): FSIS recalls close, so the inactive history is meat-heavy while the
+live feed is much flatter. **700 of 899 active cases (77.9%)** are reachable
+from at least one launch-visible chip. The remaining 199 carry only hidden ids
+— 171 Prepared foods, 32 Supplements, 9 Other, overlapping slightly — and every
+one of them stays fully visible in the unfiltered feed, search, Affects Me and
+notifications. That 22.1% is the measured cost of hiding three categories, and
+it is a cost in _menu coverage_, never in recall availability.
+
+Egress cost of the new feed field, measured with `npm run qa:egress` over the
+complete 886-case active feed: **+33.8 KB decompressed (1728.8 → 1762.6 KB,
++2.0%)** and **+3.5 KB gzipped (330.3 → 333.8 KB, +1.1%)** — about 39 bytes
+per case.
 
 ### What a C10A.3 would own — and why it cannot be another holdout run
 
@@ -673,17 +840,34 @@ milestone therefore has to choose between:
 
 What it may **not** do is re-measure against `c10a2_natural`. It is spent.
 
-### What C10B still owns, unchanged
+### What C10B delivered
 
-- **Select the column in the feed loader.** `recall-feed.ts` does not yet add
-  `product_categories:projection->productCategories` to `FEED_SELECT`.
-- **Wire the UI.** `feed-filters.ts` already carries `categoryIds`,
-  `matchesCategoryFilter`, and the OR-within / AND-across composition, all
-  tested.
-- **Decide what an un-enriched case does in the UI.** 1,899 of 1,914 stored
-  cases lack the field, so any category selection returns a near-empty list.
-- **Designed no-image fallbacks**, which is what the taxonomy was wanted for.
+- **The column is selected in the feed loader.** `FEED_SELECT` carries
+  `product_categories:projection->productCategories` — the derived ids only,
+  never the classifier's inputs. Normalized by
+  `domain/product-categories-stored.ts`, a leaf module importing only the
+  frozen vocabulary, so the app bundle contains no classifier (proved by an
+  `expo export` marker scan of both the iOS and web bundles).
+- **The UI is wired.** A Category chip in the existing All-only filter row,
+  the existing sheet pattern, `Category · N` when active, multi-select with
+  Apply / Clear / Cancel. Selections are sanitized against the launch allowlist
+  at the state boundary, so a hidden or unknown id cannot enter the filter.
+- **Un-enriched cases are handled honestly.** Missing is not `['other']`: a
+  case with no stored categories matches no active selection and is never shown
+  under a chip, while remaining fully visible in the unfiltered feed. After the
+  backfill no active case is in that state, and persisted QA gates on it.
+- **The feed cache schema is bumped to 2**, so a pre-category cache cannot
+  masquerade as an enriched one.
 
-Order matters, and it has not changed: the accuracy question must be settled
-before the historical apply, and the apply must precede shipping the filter.
-C10A.2 did not settle it.
+### What is still open
+
+- **Designed no-image fallbacks**, which is what the taxonomy was originally
+  wanted for. Category ids are now available on every card to key them from.
+- **Prepared foods and Supplements are hidden**, not fixed. Un-hiding either
+  requires new evidence: for Prepared foods a materially better recall than
+  64.8%, for Supplements any holdout that actually contains supplement rows.
+- **Final visual polish** — Cheyenne's mockups restyle the chip row; the
+  filter logic lives in pure libs and is untouched by restyling.
+
+Order still matters and was followed: the accuracy question was settled (by
+decision, not by tuning), then the historical apply, then the filter shipped.

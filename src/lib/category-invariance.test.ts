@@ -1,11 +1,12 @@
 /**
- * Category cannot reach anything a consumer's safety depends on (C10A).
+ * Category cannot reach anything a consumer's safety depends on (C10A/C10B).
  *
- * The accepted classifier is ~91.5% accurate. That is fine for discovery and
- * would NOT be fine for deciding whether someone gets an allergen alert, so
- * the separation has to be structural rather than a promise. Each test below
- * attaches categories to the very objects a decision path consumes and
- * requires the decision to be byte-identical.
+ * The shipped classifier is 87.5% exact-set on its final holdout. That is
+ * accepted for discovery and would NOT be acceptable for deciding whether
+ * someone gets an allergen alert, so the separation has to be structural
+ * rather than a promise — and the lower the accuracy, the more load these
+ * tests carry. Each one attaches categories to the very objects a decision
+ * path consumes and requires the decision to be byte-identical.
  */
 
 import assert from 'node:assert/strict';

@@ -38,11 +38,12 @@ export interface FilterableRecall {
   classification: Classification;
   geography: Geography;
   /**
-   * Derived product categories (C10A). OPTIONAL: a case projected before the
-   * field existed carries none, and the loader does not select the column yet
-   * — C10B wires both. Absence means "not derived", never a category, so an
-   * un-enriched case is simply not placed by a Category selection rather than
-   * being mislabelled into one.
+   * Derived product categories (C10A; selected by the loader since C10B).
+   * OPTIONAL: absence means "not derived", never a category, so an un-enriched
+   * case is simply not placed by a Category selection rather than being
+   * mislabelled into one. After the C10B historical backfill every stored case
+   * carries a list, but the optionality stays — a row that somehow arrives
+   * without one must degrade, not crash or lie.
    */
   productCategories?: readonly FoodCategoryId[];
 }
@@ -55,14 +56,21 @@ export interface FeedFilterState {
   /**
    * Selected product categories. OR within, AND with the other dimensions.
    *
-   * DISCOVERY ONLY (C10A product decision). Category is not a safety,
+   * DISCOVERY ONLY (C10A/C10B product decision). Category is not a safety,
    * relevance, risk, notification or feed-eligibility boundary: it applies to
    * All Recalls, only when the user intentionally selects one, and it never
-   * touches Affects Me. The accepted classifier is measured at 91.5% natural
-   * exact-set / 92.0% at-least-one-correct, which is deliberately a WEAKER
-   * bar than the personalization and notification paths hold, because a
-   * miscategorized card is a discovery miss with All Recalls behind it, not a
-   * missed alert. See docs/recall-food-categories.md.
+   * touches Affects Me. The shipped classifier is measured at 87.5% natural
+   * exact-set / 88.0% at-least-one-correct on its final 200-case holdout, with
+   * 1.0% of that holdout placed where no reasonable shopper would look. That
+   * is deliberately a WEAKER bar than the personalization and notification
+   * paths hold, because a miscategorized card is a discovery miss with All
+   * Recalls behind it, not a missed alert. See docs/recall-food-categories.md.
+   *
+   * Values reaching here must already be sanitized against the launch
+   * allowlist (`domain/food-category-launch.ts`): the type admits any
+   * vocabulary id — including hidden ones a case may legitimately carry — so
+   * that this module stays a pure predicate over data, and the POLICY about
+   * which ids a user may select lives in exactly one place.
    */
   categoryIds: FoodCategoryId[];
 }
@@ -76,6 +84,41 @@ export const EMPTY_FEED_FILTERS: FeedFilterState = {
 export function hasActiveFilters(filters: FeedFilterState): boolean {
   return (
     filters.stateCodes.length > 0 || filters.riskTiers.length > 0 || filters.categoryIds.length > 0
+  );
+}
+
+/**
+ * Set equality for one dimension's selection.
+ *
+ * Compared as a SET, not as an array, because the sheet builds its draft by
+ * toggling: deselecting California and reselecting it yields `['TX', 'CA']`
+ * where `['CA', 'TX']` was applied before. Those are the same filter and must
+ * not read as a change. (Category ids arrive already in canonical order, so
+ * only Location and Risk can actually reorder — but one rule for all three is
+ * cheaper to hold than a rule with an exception.)
+ */
+function sameSelection(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const left = [...a].sort();
+  const right = [...b].sort();
+  return left.every((value, index) => value === right[index]);
+}
+
+/**
+ * Do two filter states select exactly the same thing?
+ *
+ * The question the Home screen asks before disturbing the reading position: an
+ * Apply that changes nothing must behave like Cancel. Comparing the SELECTION
+ * rather than the resulting list is deliberate — recomputing and diffing the
+ * rendered ids would also fire on a background refresh that changed the
+ * corpus, and a feed that jumps to the top on its own while you are reading is
+ * a worse bug than the one this prevents.
+ */
+export function sameFeedFilters(a: FeedFilterState, b: FeedFilterState): boolean {
+  return (
+    sameSelection(a.stateCodes, b.stateCodes) &&
+    sameSelection(a.riskTiers, b.riskTiers) &&
+    sameSelection(a.categoryIds, b.categoryIds)
   );
 }
 
@@ -96,13 +139,21 @@ export function activeFilterCount(filters: FeedFilterState): number {
  * is never hidden from the unfiltered feed, and it is never guessed into a
  * chip; the honest answer to "which aisle is this?" for an un-enriched case
  * is silence, and the user can clear the filter to see it.
+ *
+ * The `Array.isArray` guard is not redundant with the type. The loader
+ * normalizes the jsonb column before anything reaches here, but a persisted
+ * cache document written by another build, or a row hand-edited in the
+ * database, can put `null` or an object on this field at runtime — and the
+ * failure mode of a bare `.length` there is a crashed feed, i.e. the user
+ * loses every recall because one row was malformed. Treating anything that is
+ * not an array as "not derived" degrades exactly the way an absent field does.
  */
 export function matchesCategoryFilter(
   productCategories: readonly FoodCategoryId[] | undefined,
   categoryIds: readonly FoodCategoryId[],
 ): boolean {
   if (categoryIds.length === 0) return true;
-  if (productCategories === undefined || productCategories.length === 0) return false;
+  if (!Array.isArray(productCategories) || productCategories.length === 0) return false;
   return productCategories.some((id) => categoryIds.includes(id));
 }
 

@@ -59,6 +59,39 @@ test('a different schema version reads as no cache (rebuild, not misread)', () =
   assert.equal(parseFeedCache(JSON.stringify(future)), null);
 });
 
+test('the C10B bump discards every pre-category cache document (v1)', () => {
+  // Not hygiene — a correctness gate. A v1 document holds rows written by a
+  // build whose SELECT did not ask for productCategories, and those rows can
+  // be sitting under CURRENT manifest tokens (the old build re-downloaded them
+  // after the historical backfill without ever requesting the new column). If
+  // v1 were accepted, the sync would find every token matching, download
+  // nothing, and serve an un-enriched corpus that looks enriched — Category
+  // would return an empty feed for every chip, with no error anywhere.
+  assert.ok(FEED_CACHE_SCHEMA_VERSION > 1, 'the C10B cache bump must not be reverted');
+  const legacy = { ...document(), schemaVersion: 1 };
+  assert.equal(parseFeedCache(JSON.stringify(legacy)), null);
+  // Even a v1 document that is otherwise perfect — complete corpus, valid
+  // tokens — is discarded whole rather than partially trusted.
+  const legacyComplete = JSON.stringify({
+    ...document({ items: makeCorpus(50) }),
+    schemaVersion: 1,
+  });
+  assert.equal(parseFeedCache(legacyComplete), null);
+});
+
+test('a current-version document carrying categories round-trips them', () => {
+  const items = makeCorpus(4).map((item, index) => ({
+    ...item,
+    productCategories: index === 0 ? (['seafood'] as const) : undefined,
+  }));
+  const parsed = parseFeedCache(serializeFeedCache(document({ items: items as never })));
+  assert.ok(parsed);
+  assert.deepEqual(parsed.items[0].productCategories, ['seafood']);
+  // Absence survives absence: an un-enriched row does not gain a category by
+  // going through the cache.
+  assert.equal(parsed.items[1].productCategories, undefined);
+});
+
 test('duplicate case ids are corruption, not something to render twice', () => {
   const items = makeCorpus(5);
   const doubled = document({ items: [...items, items[2]] });

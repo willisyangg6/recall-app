@@ -299,51 +299,85 @@ DETAIL-SCREEN EVIDENCE only: under the C9 frozen policy the sync never
 touches `projection.heroImageUrl` — professional card-hero sourcing is
 C9.1 (docs/recall-imagery.md).
 
-## Product categories: derived, gate NOT met, NOT backfilled (C10A.1)
+## Product categories: derived, accepted, backfilled (C10B)
 
 ```
-npm run qa:categories                     # offline; product gates + legacy benchmark
-npm run qa:product-categories             # read-only; live distribution + invariants
+npm run qa:categories                     # offline; launch gate (exits 0 when sound)
+npm run qa:categories:launch              # the same launch gate, named after its script
+npm run qa:categories:frozen              # offline; the FROZEN C10A.2 report, verbatim
+npm run qa:product-categories             # read-only; live distribution + persisted gates
 npm run backfill:product-categories:dry   # read-only; the historical write plan
-npm run backfill:product-categories       # APPLY — BLOCKED, the gate is not met
+npm run backfill:product-categories       # APPLY — authorized and executed once (C10B)
 ```
 
 `projectCase` derives `projection.productCategories`, so new and re-projected
-cases carry categories automatically. **`npm run qa:categories` currently exits
-1 and that is correct**: C10A.1 measured the revised classifier once against a
-newly frozen 200-case holdout and got **86.5% exact-set / 87.5%
-at-least-one-correct / 87.1% micro P / 87.1% micro R**, missing every ≥90%
-product gate the founder accepted.
+cases carry categories automatically. C10B applied the historical backfill and
+shipped the Category filter — see docs/recall-food-categories.md §8.
 
-**The historical backfill has not been applied and must not be.** The dry run
-plans 1,914 writes (0 already carrying, 0 unchanged, 0 over an existing list)
-from a classifier that failed its gate. Authorizing it needs a classifier that
-clears the gate — see docs/recall-food-categories.md §9 for what a C10A.2 would
-have to do, and note that only 618 untouched cases remain for one more holdout.
+### `qa:categories` is a launch gate, not an accuracy gate
 
-`qa:categories` reports three distinct things and gates on only the first:
+Before C10B this command was **permanently red**: it asserted a ≥90% bar the
+classifier does not meet (87.5%), so it failed every run while telling nobody
+anything new, and a red command nobody can fix is a command everybody learns to
+ignore. The accuracy question was settled once, by a founder decision recorded
+in docs/recall-food-categories.md, and re-asserting it on every run is not
+oversight — it is noise.
 
-1. **Automated product regression gates (blocking).** ≥90% natural exact-set,
-   at-least-one-correct, micro precision and recall, plus determinism —
-   recomputed every run from the frozen gold set, so they really do detect
-   classifier drift. These decide the exit code, and they currently FAIL. They
-   are **intentionally weaker than the personalization and notification bar and
-   must never be cited to relax it**; those paths share no input with this one,
-   which `src/lib/category-invariance.test.ts` and `qa:product-categories`
-   enforce, and both still pass.
-2. **Legacy research benchmark: not met (informational).** The original 95%
-   threshold, at 86.5%. Every number is still printed and the threshold is
-   never weakened, but it gates nothing and is not rendered as a failure.
-3. **Frozen human-reviewed unfindable baseline: 4/200 = 2.0% (≤3%).** Newly
-   reviewed on the C10A.1 holdout; C10A's own 4/200 was retired when the
-   classifier changed. The assertion checks the frozen manifest, case ids,
-   reasoning records and arithmetic. It **cannot** detect a new unfindable
-   error after a classifier change — that judgement is not in the data.
+`scripts/qa-categories.ts` is a **frozen harness file** (its sha256 is in
+`category-freeze-manifest.json`, because C10A.1 proved an edited harness can
+move a headline number three points). It was therefore not edited.
+`scripts/qa-categories-launch.ts` **runs it and reprints its output verbatim**,
+then adds the launch baseline and the launch gate around it. Every measured
+number is still the frozen harness's own.
 
-`qa:categories` needs no database or credentials. The backfill performs zero
-network requests, writes exactly one projection field under a compare-and-set
-on `last_changed_at`, and can never create a case, a timeline entry or a
-notification.
+The gate blocks on the five things that can change **without anyone noticing**:
+
+1. frozen classifier / harness / final-label hashes still match the manifest;
+2. the derivation is still deterministic across repeated runs;
+3. the frozen human-reviewed unreasonable-placement baseline is ≤3% (it is
+   **1.0%, 2/200**) and its records still resolve to cases in the final split;
+4. every production invariance suite passes — Category cannot reach relevance,
+   ranking, risk, Affects Me, push, or material-change detection;
+5. the launch-visible allowlist is unchanged (nine visible, three hidden).
+
+The research bars are printed as **NOT MET** and gate nothing: 87.5% against
+both the original 95% and the C10A.2 90%. Nothing converts the high-80s into a
+≥90% result, and none of this may be cited to relax the personalization or
+notification bars, which are separate, stricter, and share no input.
+
+### `qa:product-categories` grades derivation AND persisted data
+
+The derivation gates (total, valid, ordered, deterministic, hazard-blind, zero
+effect on All Recalls / Affects Me / relevance) are unchanged. C10B adds gates
+over the **raw persisted jsonb** — deliberately not the normalized read, which
+repairs damage on the way out and would report a clean bill of health over a
+corrupt column: zero active cases missing categories, zero invalid ids, zero
+duplicates, zero ordering violations, zero `other` mixed with a real category,
+zero over the cap.
+
+`npm run qa:product-categories -- --pre-backfill` downgrades **only** the
+missing-categories gate to advisory. It exists for the single pre-apply
+verification run, where "882 active cases hold no categories" is the work order
+rather than a defect. It must not appear in a post-apply or CI invocation.
+
+### The backfill
+
+Zero network requests. Writes exactly one projection field under a
+compare-and-set on `last_changed_at`, takes no job lease (so it never blocks
+the agency feeds), and can never create a case, a timeline entry, or a
+notification — `detectChanges` does not diff `productCategories` under any
+rule, and this path does not go through the pipeline anyway.
+
+It is **idempotent and resumable**: every decision is made from current state,
+so a completed run is a no-op and an interrupted one simply resumes. C10B's
+apply was in fact interrupted partway (a tooling timeout, not an error) and was
+resumed by re-running the same command; the dry run afterwards is the
+verification report and must read `would update: 0`.
+
+Safe to run while scheduled ingestion is running. A case an ingest writes
+mid-run fails its CAS, is re-read, re-derived from the newer text and retried
+once; anything still moving is reported as concurrently modified and left for
+the next run. Never bypass CAS.
 
 ## Imagery: standing QA, no repair command (C9)
 

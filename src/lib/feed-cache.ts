@@ -26,8 +26,28 @@
 
 import type { FeedItem } from './recall-feed';
 
-/** Bump when the document shape changes; a mismatch triggers a cold rebuild. */
-export const FEED_CACHE_SCHEMA_VERSION = 1;
+/**
+ * Bump when the document shape changes; a mismatch triggers a cold rebuild.
+ *
+ * v2 (C10B) — feed rows gained `productCategories`. The bump is REQUIRED, not
+ * hygiene, and the reason is a race the manifest cannot see:
+ *
+ *   A v1 cache written by a pre-C10B build holds rows with no category key,
+ *   under the manifest tokens those rows carried at download time. If the
+ *   historical backfill lands and the user's client re-syncs BEFORE taking the
+ *   app update, the old build re-downloads every case (the token moved) and
+ *   re-caches it — still without the field, because the old SELECT does not
+ *   ask for it — now under the POST-backfill token. On the app update the new
+ *   build's sync would then find every token matching, download nothing, and
+ *   serve an un-enriched corpus that looks fully enriched. Category would
+ *   silently show an empty feed for every chip.
+ *
+ * The token cannot catch this: it hashes what the SERVER holds, and the server
+ * is correct — what changed is which columns the CLIENT asks for. A cache
+ * document is only interchangeable between builds that select the same fields,
+ * which is exactly what this version number means.
+ */
+export const FEED_CACHE_SCHEMA_VERSION = 2;
 
 export interface FeedCacheDocument {
   schemaVersion: typeof FEED_CACHE_SCHEMA_VERSION;

@@ -17,6 +17,8 @@ import { RiskBadge } from '@/components/risk-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import type { FoodCategoryId } from '@/domain/food-category';
+import { LAUNCH_CATEGORY_OPTIONS, sanitizeLaunchCategoryIds } from '@/domain/food-category-launch';
 import {
   hasAnyPreference,
   stateNameForCode,
@@ -32,6 +34,7 @@ import {
   hasActiveFilters,
   orderByLocationTiers,
   RISK_FILTER_TIERS,
+  sameFeedFilters,
   type FeedFilterState,
 } from '@/lib/feed-filters';
 import { buildSearchEntry, filterBySearch, type SearchEntry } from '@/lib/feed-search';
@@ -184,15 +187,26 @@ function FilterChip({
   label,
   active,
   onPress,
+  accessibilityLabel,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
+  /**
+   * Spoken name when the visible label is a compact badge. The chip reads
+   * "Category · 2", which is right on screen and ambiguous aloud; the sheet's
+   * own name plus the count is not.
+   */
+  accessibilityLabel?: string;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
+      accessibilityLabel={accessibilityLabel}
+      // The chip's own padding leaves it under the 44pt minimum on a compact
+      // row; hitSlop restores the touch target without changing the layout.
+      hitSlop={{ top: Spacing.two, bottom: Spacing.two, left: Spacing.one, right: Spacing.one }}
       onPress={onPress}>
       <ThemedView type={active ? 'backgroundSelected' : 'backgroundElement'} style={styles.tab}>
         <ThemedText style={active ? styles.badgeEmphasized : undefined}>{label}</ThemedText>
@@ -212,6 +226,14 @@ const RISK_OPTIONS = RISK_FILTER_TIERS.map((tier) => ({
   value: tier as string,
   label: riskTierWord(tier),
 }));
+
+/**
+ * The Category sheet's nine launch-visible aisles, in canonical display order.
+ * Imported whole from the one place the allowlist is defined — Prepared foods,
+ * Supplements and Other are absent because that module hides them, never
+ * because this screen filters them out (see domain/food-category-launch.ts).
+ */
+const CATEGORY_OPTIONS = LAUNCH_CATEGORY_OPTIONS.map((option) => ({ ...option }));
 
 /**
  * Temporary modal multi-select for one filter dimension. Selections are a
@@ -249,6 +271,7 @@ function FilterSheet({
                   key={option.value}
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: isSelected }}
+                  accessibilityLabel={option.label}
                   onPress={() => toggle(option.value)}>
                   <ThemedText style={styles.sheetItem}>
                     {isSelected ? `✓ ${option.label}` : option.label}
@@ -416,7 +439,7 @@ export default function HomeScreen() {
   // Affects me ignores them TEMPORARILY while preserving the selections.
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<FeedFilterState>(EMPTY_FEED_FILTERS);
-  const [openSheet, setOpenSheet] = useState<'location' | 'risk' | null>(null);
+  const [openSheet, setOpenSheet] = useState<'location' | 'risk' | 'category' | null>(null);
   const prefs = usePreferences(
     useCallback((loaded: UserRecallPreferences) => {
       // Default to the personalized view only when personalization exists.
@@ -436,13 +459,57 @@ export default function HomeScreen() {
     [searchEntries],
   );
 
+  // ── SCROLL POSITION ON FILTER CHANGE ────────────────────────────────────
+  //
+  // A filter change swaps the result set underneath a scroll offset that was
+  // measured against the OLD one. Scrolled to the bottom of Fruits &
+  // vegetables and then switching to Meat & poultry left the reader deep
+  // inside a different, usually shorter list — looking at the tail of results
+  // they never asked for, with the top of the new set above them.
+  //
+  // `getScrollResponder()` hands back the underlying ScrollView
+  // (react-native 0.86, Libraries/Lists/SectionList.d.ts). It is the smallest
+  // mechanism that fits: offset 0 resolves no index, so it is safe when the
+  // new result set is empty and it cannot hit `scrollToLocation`'s
+  // render-window caveat from far down an 800-row feed.
+  const listRef = useRef<SectionList<FeedItem, HomeSection>>(null);
+  const scrollFeedToTop = useCallback(() => {
+    listRef.current?.getScrollResponder()?.scrollTo({ y: 0, animated: false });
+  }, []);
+
   // Applying a browsing filter while viewing Affects me switches to All —
   // the filters describe the complete feed, never the personal one. The
   // selection itself survives mode switches in `filters` untouched.
-  const applyDimension = useCallback((dimension: 'stateCodes' | 'riskTiers', next: string[]) => {
-    setFilters((prior) => ({ ...prior, [dimension]: next }) as FeedFilterState);
-    if (next.length > 0) setTab('all');
-  }, []);
+  //
+  // An Apply that selects what was already applied is a COMPLETE no-op. That
+  // is what keeps the reading position safe from everything that is not a
+  // real change: Cancel never reaches here at all, and Apply-without-edits
+  // returns before touching state. Only a changed selection scrolls.
+  const applyDimension = useCallback(
+    (dimension: 'stateCodes' | 'riskTiers' | 'categoryIds', next: string[]) => {
+      // Category is the one dimension whose vocabulary is wider than what the
+      // UI offers, so every incoming selection crosses the launch allowlist
+      // before it becomes state. A hidden or unknown id therefore cannot enter
+      // the filter through the sheet, through a restored draft, or through any
+      // future path that reaches this callback.
+      const value =
+        dimension === 'categoryIds' ? (sanitizeLaunchCategoryIds(next) as FoodCategoryId[]) : next;
+      const updated = { ...filters, [dimension]: value } as FeedFilterState;
+      if (sameFeedFilters(filters, updated)) return;
+      setFilters(updated);
+      if (value.length > 0) setTab('all');
+      scrollFeedToTop();
+    },
+    [filters, scrollFeedToTop],
+  );
+
+  /** Clear all: the same rule — only a real change moves the reader. */
+  const clearAllFilters = useCallback(() => {
+    if (!hasActiveFilters(filters)) return;
+    setFilters(EMPTY_FEED_FILTERS);
+    scrollFeedToTop();
+  }, [filters, scrollFeedToTop]);
+  // ── END SCROLL POSITION ON FILTER CHANGE ────────────────────────────────
 
   if (!isFeedConfigured()) {
     return (
@@ -616,10 +683,11 @@ export default function HomeScreen() {
           be opened, read, or cleared from there, while the selections stay
           untouched in session state for the return to All.
 
-          Category is deliberately absent from this row: the deterministic
-          product-category matcher failed its frozen generalization gates
-          (docs/recall-food-categories.md), and a filter that miscategorizes
-          one recall in ten HIDES recalls. */}
+          Category (C10B) is a third peer in this row, deliberately last: it is
+          the only dimension whose values are DERIVED rather than stated by the
+          agency, so it sits after the two the source vouches for. It is an
+          optional discovery aid — every recall stays reachable with it
+          cleared — and it never applies to Affects me. */}
       {tab === 'all' ? (
         <ScrollView
           horizontal
@@ -638,12 +706,22 @@ export default function HomeScreen() {
             active={filters.riskTiers.length > 0}
             onPress={() => setOpenSheet('risk')}
           />
+          <FilterChip
+            label={
+              filters.categoryIds.length > 0
+                ? `Category · ${filters.categoryIds.length}`
+                : 'Category'
+            }
+            active={filters.categoryIds.length > 0}
+            accessibilityLabel={
+              filters.categoryIds.length > 0
+                ? `Category filter, ${filters.categoryIds.length} selected`
+                : 'Category filter'
+            }
+            onPress={() => setOpenSheet('category')}
+          />
           {filtersActive ? (
-            <FilterChip
-              label="Clear all"
-              active={false}
-              onPress={() => setFilters(EMPTY_FEED_FILTERS)}
-            />
+            <FilterChip label="Clear all" active={false} onPress={clearAllFilters} />
           ) : null}
         </ScrollView>
       ) : null}
@@ -691,7 +769,17 @@ export default function HomeScreen() {
           onClose={() => setOpenSheet(null)}
         />
       ) : null}
+      {openSheet === 'category' ? (
+        <FilterSheet
+          title="Category"
+          options={CATEGORY_OPTIONS}
+          selected={filters.categoryIds}
+          onApply={(next) => applyDimension('categoryIds', next)}
+          onClose={() => setOpenSheet(null)}
+        />
+      ) : null}
       <SectionList
+        ref={listRef}
         sections={sections}
         keyExtractor={(item) => item.id}
         renderItem={({ item, section }) => (
@@ -939,8 +1027,14 @@ const styles = StyleSheet.create({
   sheetList: {
     maxHeight: 340,
   },
+  // 44pt is the platform minimum touch target. The row previously sized to its
+  // text (~28pt), which is a real miss on every sheet, not just Category's —
+  // fixed here rather than duplicated per dimension. Layout is otherwise
+  // unchanged: the text still sits left, the type scale is untouched.
   sheetItem: {
     paddingVertical: Spacing.one,
+    minHeight: 44,
+    lineHeight: 44,
   },
   sheetActions: {
     flexDirection: 'row',

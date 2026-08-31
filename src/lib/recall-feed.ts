@@ -7,6 +7,13 @@
  * recall_cases and affected_products. There is no write path from the app.
  */
 
+import type { FoodCategoryId } from '@/domain/food-category';
+// The LEAF reader, not `domain/projection`'s: that module hosts the derivation
+// too, so importing it here put the whole classifier — matcher, lexicon,
+// non-food terms — plus projectCase and deriveGeography into the shipped iOS
+// and web bundles (measured with `expo export`). The two readers are pinned
+// equivalent by product-categories-stored.test.ts.
+import { readStoredProductCategories } from '@/domain/product-categories-stored';
 import type {
   AffectedProduct,
   CaseProjection,
@@ -68,6 +75,21 @@ export interface FeedItem {
    * derived date, i.e. a second truth able to drift from the timeline.
    */
   timeline: TimelineEntry[];
+  /**
+   * Derived product categories (C10B) — a small array of canonical ids and
+   * nothing else. No announcement text, no classifier input, no confidence,
+   * no fixture: the app receives the ANSWER, never the evidence, and the
+   * classifier itself never ships (proved by the bundle scan).
+   *
+   * OPTIONAL, and the optionality is load-bearing: `undefined` means "this
+   * case carries no derived categories", which is NOT the same as `['other']`
+   * ("derived, and the source never named the product"). An un-enriched row
+   * is therefore never swept into a chip — it is simply not placed by an
+   * active Category selection, and is never hidden from the unfiltered feed.
+   * `readProductCategories` collapses a stored empty list to the same
+   * `undefined`, so `[]` can never reach a consumer surface.
+   */
+  productCategories?: FoodCategoryId[];
 }
 
 /** A hosted visual rendered from an official source document (FSIS labels). */
@@ -128,6 +150,12 @@ interface FeedRow {
   geography: CaseProjection['geography'];
   official_url: string;
   timeline: TimelineEntry[] | null;
+  /**
+   * Raw JSON straight off the projection column. Typed `unknown` on purpose:
+   * nothing in Postgres constrains the shape of a jsonb key, so this is
+   * normalized by the canonical reader and is never trusted as-is.
+   */
+  product_categories: unknown;
 }
 
 const FEED_SELECT = [
@@ -152,9 +180,22 @@ const FEED_SELECT = [
   'geography:projection->geography',
   'official_url:projection->>officialUrl',
   'timeline',
+  // C10B: the derived category ids only — a JSON array of at most four short
+  // strings per case. Never the announcement text, the classifier's inputs, a
+  // confidence, or a fixture. Egress measured over the complete active feed
+  // with `npm run qa:egress`; see docs/recall-feed-usability.md.
+  'product_categories:projection->productCategories',
 ].join(',');
 
 function toFeedItem(row: FeedRow): FeedItem {
+  // The canonical stored-value reader, never a second parse here: it drops
+  // unknown ids, collapses duplicates, removes `other` where a real category
+  // survives, sorts into display order, caps the list, and returns null both
+  // for an absent key and for a list with nothing valid left. `?? undefined`
+  // then keeps "no derived categories" a single representation, so the filter
+  // never has to distinguish null from undefined from [] — and, critically,
+  // never confuses any of them with `['other']`.
+  const productCategories = readStoredProductCategories(row.product_categories) ?? undefined;
   return {
     id: row.id,
     sourceAgency: row.source_agency,
@@ -177,6 +218,7 @@ function toFeedItem(row: FeedRow): FeedItem {
     geography: row.geography,
     officialUrl: row.official_url,
     timeline: row.timeline ?? [],
+    productCategories,
   };
 }
 

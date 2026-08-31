@@ -11,7 +11,9 @@ Home renders **two conceptual levels**, not one row of peer chips:
 1. **Feed mode** — a segmented `All | Affects me` control. Which feed you are
    looking at. Mutually exclusive.
 2. **All-only filters** — a horizontally scrollable `Location · Risk ·
-Clear all` row, rendered **only while All is active**.
+Category · Clear all` row, rendered **only while All is active**. Category is
+   last because it is the only dimension whose values are _derived_ rather than
+   stated by the agency (C10B).
 
 In Affects me the filter row, its active counts, and Clear all are absent
 entirely — they cannot be opened, read, or cleared from there, and the earlier
@@ -23,17 +25,15 @@ Search stays visible in both modes and is never reset by a mode switch.
 
 ## Filter model
 
-Category exists as a derived projection field and a tested predicate, but is not yet wired into this UI (below).
-
 - **All / Affects me** are mutually exclusive feed modes, unchanged: the same
   default-mode rule (personalized once preferences exist, chosen once per
   session), the same eligibility (`lib/relevance.ts`), the same ranking
   (`lib/affects-me-ranking.ts`).
-- **Location / Risk** are browsing filters over the complete All Recalls feed
-  (`lib/feed-filters.ts`): multi-select sheets with Apply / Clear / Cancel,
-  a count on the chip when active, and a global Clear all chip. OR within a
-  dimension, AND across dimensions. They are session-only view state — never
-  persisted, never part of the personalization profile, never applied to
+- **Location / Risk / Category** are browsing filters over the complete All
+  Recalls feed (`lib/feed-filters.ts`): multi-select sheets with Apply / Clear
+  / Cancel, a count on the chip when active, and a global Clear all chip. OR
+  within a dimension, AND across dimensions. They are session-only view state —
+  never persisted, never part of the personalization profile, never applied to
   Affects me.
 - **Location semantics** (canonical tri-state geography): a selected
   jurisdiction matches notices explicitly distributed there and nationwide
@@ -95,45 +95,117 @@ substring, **never fuzzy**: one wrong digit does not match. Raw announcement
 HTML/prose is not searched; no external service is queried; empty search is a
 strict no-op (same array instance).
 
-## Category: accepted for discovery, foundation built, UI not wired
+## Category (C10B): shipped as an optional discovery filter
 
-"Category" (produce/poultry/dairy/prepared…) is now a canonical projection
-field, derived in `projectCase` from the recalled product's own text and never
-from the hazard, allergen, firm or retailer. The derivation has failed a 95%
-research gate twice on never-seen data:
+"Category" (produce/meat/dairy/bakery…) is a canonical projection field,
+derived server-side in `projectCase` from the recalled product's own text and
+never from the hazard, allergen, firm or retailer. C10B ships it as a filter
+chip and backfills every historical case.
 
-| Phase   | Vocabulary | Natural holdout | Research gate |
-| ------- | ---------- | --------------- | ------------- |
-| C5.3B-2 | 11         | 89.5%           | 95%           |
-| C10A    | 12         | **91.5%**       | 95%           |
+### The accuracy, stated plainly
 
-C10A ran the bounded milestone this section previously recommended — the
-extraction-policy change preferring structured product lines over
-jurisdiction-only FSIS titles, plus the catchable-gap list, then a fresh freeze
-and a fresh 200-case holdout. **The extraction change was measured and
-reverted**: scored against identical labels on the 60 rows it affects, the
-title grammar reached 80.0% and the product lines 50.0%, because FSIS product
-lines are packaging prose whose product names are brand-dominated. The residual
-error is concentrated — 59% of natural failures are one confusion,
-`prepared_foods` mislabelled `meat_poultry` on a jurisdiction-only title.
+The classifier **missed every research bar it was built against** and is
+shipped anyway, under a narrower purpose:
 
-The founder then accepted 91.5% for a NARROWER purpose than the original brief
-assumed. Category is an **optional discovery tool**: it applies to All Recalls,
-only when intentionally selected, and it never touches Affects Me, relevance,
-risk, ranking, push, notification eligibility, or membership of the unfiltered
-feed. Under that framing it clears separate ≥90% product gates, and the
-reviewed rate of "placed somewhere no shopper would look" is 2.0%. A
-miscategorized card is a discovery miss with the whole feed behind it; that is
-a different kind of failure from a missed allergen alert, and the two paths
-hold different bars on purpose.
+| Phase   | Vocabulary | Natural holdout | Bar | Met? |
+| ------- | ---------- | --------------- | --- | ---- |
+| C5.3B-2 | 11         | 89.5%           | 95% | no   |
+| C10A    | 12         | 91.5%           | 95% | no   |
+| C10A.1  | 12         | 86.5%           | 90% | no   |
+| C10A.2  | 12         | **87.5%**       | 90% | no   |
 
-Semantics, already implemented and tested in `feed-filters.ts`: OR within the
-selected categories, AND with Location and Risk, filtering picks the set and
-the existing comparator orders it, and a case with no derived categories
-matches no active selection while never being hidden from the unfiltered feed.
+Final holdout (200 previously untouched cases, labelled blind, measured once):
+**87.5% exact-set · 88.0% at-least-one-correct · 88.0% micro P · 87.1% micro
+R**. Three independent fresh draws read 91.5% / 86.5% / 87.5% — the honest
+summary is "high 80s", not any single figure.
 
-**The UI is still not wired** (C10B), and the historical backfill has not been
-applied — see docs/recall-food-categories.md §6 and §8.
+The number the founder actually decided on is a different one: **1.0% (2/200)**
+of the final holdout was placed somewhere no reasonable shopper would look.
+The rest of the error is a near-miss between two adjacent aisles, and 20 of the
+25 mismatches are a single boundary — Prepared foods vs Meat & poultry.
+
+### Optional discovery is not authoritative availability
+
+The decision rests entirely on what Category is allowed to do:
+
+- it applies **only to All Recalls**, and only when the user selects a chip;
+- **every recall stays reachable** with it cleared — the unfiltered feed,
+  search, Affects Me, risk and notifications are the authoritative surfaces
+  and none of them consults a category;
+- a miscategorized card is a **discovery miss with the whole feed behind it**;
+  a missed allergen match is a missed alert. The two paths hold deliberately
+  different bars and share no input, which `category-invariance.test.ts` and
+  `qa:product-categories` enforce structurally rather than by promise.
+
+**No future accuracy claim may be made without new independent evidence** — a
+newly drawn, blind-labelled holdout. This corpus has no untouched 200 left, so
+that requires corpus growth, not re-scoring a spent split and never rewriting
+an old label to improve an old number.
+
+### Launch-visible categories
+
+`domain/food-category-launch.ts` is the one canonical allowlist, separate from
+the twelve-id internal vocabulary and derived from it, so the chip order is the
+canonical display order by construction. Nine are offered:
+
+| ID                  | Label               |
+| ------------------- | ------------------- |
+| `produce`           | Fruits & vegetables |
+| `meat_poultry`      | Meat & poultry      |
+| `seafood`           | Seafood             |
+| `dairy_eggs`        | Dairy & eggs        |
+| `bakery_grains`     | Bakery              |
+| `snacks_sweets`     | Snacks & sweets     |
+| `beverages`         | Beverages           |
+| `pantry_condiments` | Pantry & staples    |
+| `baby_food_formula` | Baby food & formula |
+
+Three stay **valid internally but hidden from the filter**. Hidden is not
+deleted: cases keep carrying them, the backfill keeps writing them, QA keeps
+reporting them, and every one of those recalls stays in the unfiltered feed.
+
+- `prepared_foods` — the known weakness. 64.8% recall (35/54) against 94.6%
+  precision on the final holdout: about a third of genuine prepared-food
+  recalls are filed elsewhere, nearly always under Meat & poultry. A chip that
+  silently omits a third of its aisle is worse than no chip. High precision is
+  why the id is still worth storing.
+- `supplements` — the final holdout contains **zero** supplement rows, so there
+  is no evidence at all about how the shipped classifier places them, and
+  earlier phases recorded a supplement filed under Pantry & staples.
+- `other` — an internal fallback, not an aisle. It exists so the derivation can
+  be total; totality is a data property, and nobody browses for "Other".
+
+Hiding these does not narrow the feed. It narrows the menu.
+
+### Feed field and filter semantics
+
+`FEED_SELECT` gains `product_categories:projection->productCategories` — the
+derived ids only. No announcement text, no classifier input, no confidence, no
+fixture; the app receives the answer and never the evidence, and an `expo
+export` scan proves the classifier, gold set, holdouts, Node-only QA code and
+`@napi-rs/canvas` are absent from both the iOS and web bundles.
+
+Values are normalized by `domain/product-categories-stored.ts` — a leaf module
+that imports only the frozen vocabulary, so the feed loader cannot drag the
+classifier into the bundle, with a test pinning it equivalent to the
+server-side reader. **Missing is not `['other']`**: an absent key, `null`, `[]`
+and an all-invalid list all read as "no categories derived", which matches no
+active selection and is never shown under a chip.
+
+`FEED_CACHE_SCHEMA_VERSION` is bumped to 2, which is a correctness gate rather
+than hygiene. A v1 cache holds rows written by a build whose SELECT never asked
+for the column; if that build re-synced after the backfill it re-cached them
+under current manifest tokens, and the new build would then find every token
+matching, download nothing, and serve an un-enriched corpus that looks
+enriched — an empty result under every chip, with no error anywhere.
+
+Semantics (`feed-filters.ts`, tested): OR within the selected categories, AND
+with Location and Risk, filtering picks the **set** and the existing comparator
+orders it (so state-specific results still lead nationwide ones), and Category
+never touches Affects Me membership or ranking. Selections are sanitized
+against the launch allowlist at the state boundary, so a hidden, unknown,
+duplicate or malformed id cannot enter the filter through any path. With no
+category selected, All Recalls is byte-identical to its pre-C10B self.
 
 ## Sharing
 

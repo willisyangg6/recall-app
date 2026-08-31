@@ -16,7 +16,12 @@ import { test } from 'node:test';
 
 import type { Geography } from '@/domain/recall-types';
 import { buildAffectsMeSections } from './affects-me-ranking';
-import { applyFeedFilters, EMPTY_FEED_FILTERS, type FeedFilterState } from './feed-filters';
+import {
+  applyFeedFilters,
+  EMPTY_FEED_FILTERS,
+  sameFeedFilters,
+  type FeedFilterState,
+} from './feed-filters';
 import { buildSearchEntry, filterBySearch } from './feed-search';
 import type { FeedItem } from './recall-feed';
 import { evaluatePersonalRelevance } from './relevance';
@@ -91,7 +96,13 @@ test('Affects me offers no way to open or clear the All-only filters', () => {
 test('switching feed mode never clears the filter selections', () => {
   // The single filter reset is the Clear all handler; no setTab path touches
   // setFilters, so All → Affects me → All returns to the same selections.
-  assert.match(FILTER_BLOCK, /label="Clear all"[\s\S]*?setFilters\(EMPTY_FEED_FILTERS\)/);
+  //
+  // C10B closure moved the reset one level, from inline JSX into the guarded
+  // `clearAllFilters` callback (so clearing can also return the feed to the
+  // top, but only when something was actually applied). The chain is asserted
+  // rather than the inline call: Clear all → clearAllFilters → setFilters.
+  assert.match(FILTER_BLOCK, /label="Clear all"[\s\S]*?onPress=\{clearAllFilters\}/);
+  assert.match(HOME, /clearAllFilters = useCallback\([\s\S]*?setFilters\(EMPTY_FEED_FILTERS\)/);
   for (const handler of HOME.match(/onPress=\{\(\) => setTab\([^)]*\)\}/g) ?? []) {
     assert.ok(!handler.includes('setFilters'), `mode switch also resets filters: ${handler}`);
   }
@@ -243,4 +254,132 @@ test('search still narrows each mode independently of the other', () => {
 test('clearing filters returns All Recalls to its untouched baseline', () => {
   const corpus = [item({ geography: geo('states', ['California']) }), item()];
   assert.equal(applyFeedFilters(corpus, EMPTY_FEED_FILTERS), corpus);
+});
+
+// ── Scroll position on filter change (C10B closure) ─────────────────────────
+//
+// Applying a filter swaps the result set underneath a scroll offset measured
+// against the OLD one, leaving the reader deep inside a different list. The
+// decision of WHETHER that happened is pure and is tested as such; the wiring
+// that acts on it is pinned against the Home source, the same way the rest of
+// this file pins render guards. There is no React renderer in this suite and
+// this behaviour does not justify introducing one.
+
+const filterState = (overrides: Partial<FeedFilterState> = {}): FeedFilterState => ({
+  ...EMPTY_FEED_FILTERS,
+  ...overrides,
+});
+
+test('an unchanged selection is not a change, in any dimension', () => {
+  for (const applied of [
+    filterState(),
+    filterState({ stateCodes: ['CA'] }),
+    filterState({ riskTiers: ['critical'] }),
+    filterState({ categoryIds: ['produce'] }),
+    filterState({ stateCodes: ['CA', 'TX'], riskTiers: ['high'], categoryIds: ['seafood'] }),
+  ]) {
+    assert.equal(sameFeedFilters(applied, { ...applied }), true);
+  }
+});
+
+test('reselecting the same jurisdictions in a different order is not a change', () => {
+  // The sheet builds its draft by toggling, so deselecting California and
+  // reselecting it applies ['TX','CA'] where ['CA','TX'] stood. Same filter,
+  // same results — the reader must not be thrown back to the top for it.
+  assert.equal(
+    sameFeedFilters(
+      filterState({ stateCodes: ['CA', 'TX'] }),
+      filterState({ stateCodes: ['TX', 'CA'] }),
+    ),
+    true,
+  );
+  assert.equal(
+    sameFeedFilters(
+      filterState({ riskTiers: ['critical', 'high'] }),
+      filterState({ riskTiers: ['high', 'critical'] }),
+    ),
+    true,
+  );
+});
+
+test('a real change in any one dimension is a change', () => {
+  const base = filterState({
+    stateCodes: ['CA'],
+    riskTiers: ['critical'],
+    categoryIds: ['produce'],
+  });
+  assert.equal(sameFeedFilters(base, { ...base, stateCodes: ['TX'] }), false);
+  assert.equal(sameFeedFilters(base, { ...base, riskTiers: ['low'] }), false);
+  assert.equal(sameFeedFilters(base, { ...base, categoryIds: ['meat_poultry'] }), false);
+  // Swapping one category for another — the exact reported case.
+  assert.equal(
+    sameFeedFilters(
+      filterState({ categoryIds: ['produce'] }),
+      filterState({ categoryIds: ['meat_poultry'] }),
+    ),
+    false,
+  );
+});
+
+test('adding to, removing from, and clearing a dimension are all changes', () => {
+  const one = filterState({ categoryIds: ['produce'] });
+  assert.equal(sameFeedFilters(one, filterState({ categoryIds: ['produce', 'seafood'] })), false);
+  assert.equal(sameFeedFilters(filterState({ categoryIds: ['produce', 'seafood'] }), one), false);
+  assert.equal(sameFeedFilters(one, EMPTY_FEED_FILTERS), false);
+  assert.equal(sameFeedFilters(EMPTY_FEED_FILTERS, one), false);
+});
+
+test('Home scrolls to top only from the two explicit filter-change paths', () => {
+  const block = region('SCROLL POSITION ON FILTER CHANGE', 'END SCROLL POSITION ON FILTER CHANGE');
+  // The mechanism: a ref on the existing SectionList, and the documented
+  // ScrollView handle — not a second list, not a new scroll abstraction.
+  assert.ok(block.includes('useRef<SectionList'), 'scroll reset must use the existing list ref');
+  assert.ok(block.includes('getScrollResponder()'), 'expected the documented ScrollView handle');
+  assert.ok(HOME.includes('ref={listRef}'), 'the ref must be attached to the rendered list');
+
+  // Both explicit paths guard on a real change before scrolling.
+  assert.ok(block.includes('if (sameFeedFilters(filters, updated)) return;'));
+  assert.ok(block.includes('if (!hasActiveFilters(filters)) return;'));
+  // Exactly two call sites: the Apply path and the Clear all path.
+  assert.equal(block.match(/scrollFeedToTop\(\);/g)?.length, 2, 'apply + clear all only');
+  assert.equal(HOME.match(/scrollFeedToTop\(\);/g)?.length, 2, 'no third caller anywhere');
+
+  // Clear all goes through the guarded handler, never a bare setFilters.
+  assert.ok(HOME.includes('onPress={clearAllFilters}'));
+  assert.ok(
+    !/onPress=\{\(\) => setFilters\(EMPTY_FEED_FILTERS\)\}/.test(HOME),
+    'Clear all must not bypass the change guard',
+  );
+});
+
+test('nothing outside an explicit filter change can move the reading position', () => {
+  // The exclusion list, asserted structurally. Each of these legitimately
+  // rerenders the list while the reader is mid-feed, and none may scroll.
+  for (const [handler, why] of [
+    ['setShowOlder', 'expanding/collapsing Older Active Notices'],
+    ['setOpenSheet(null)', 'closing or cancelling a sheet'],
+    ['setQuery', 'typing in search'],
+    ['onRefresh', 'background/pull-to-refresh'],
+  ] as const) {
+    for (const after of HOME.split(handler).slice(1)) {
+      assert.ok(!after.slice(0, 160).includes('scrollFeedToTop'), `${why} must not reset scroll`);
+    }
+  }
+
+  // The feed-mode segmented control switches All ↔ Affects me without ever
+  // touching the scroll position. (Applying a filter FROM Affects me does
+  // switch to All and does scroll — but that is a filter change, and it lives
+  // in the filter-change block, not here.)
+  assert.ok(!MODE_BLOCK.includes('scrollFeedToTop'), 'mode switching must not reset scroll');
+
+  // Pull-to-refresh and pagination reach the list through the sync engine,
+  // never through the scroll handle.
+  for (const after of HOME.split('revalidate').slice(1)) {
+    assert.ok(!after.slice(0, 160).includes('scrollFeedToTop'), 'a refresh must not reset scroll');
+  }
+
+  // And the reset is not wired to an effect, which is how "ordinary rerender"
+  // and "returning from the detail screen" would start resetting it.
+  assert.ok(!/useEffect\([^)]*scrollFeedToTop/s.test(HOME));
+  assert.ok(!/useFocusEffect\([^)]*scrollFeedToTop/s.test(HOME));
 });
