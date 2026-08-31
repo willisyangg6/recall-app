@@ -393,4 +393,6 @@ preferences, ingest-time retailer enrichment of stored projections, pet-food
 scope, Spanish records, CPSC/NHTSA, analytics, final visual design.
 
 See [AGENTS.md](AGENTS.md) for standing rules for coding agents working in this
-repository.
+repository, and
+[docs/recall-agent-workflow.md](docs/recall-agent-workflow.md) for milestone
+prompt and report templates, context management, and model routing.
