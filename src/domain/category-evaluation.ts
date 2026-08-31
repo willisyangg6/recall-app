@@ -1,5 +1,6 @@
 /**
- * Gold-set evaluation for product-category matching (C5.3B / C5.3B-2 / C10A).
+ * Gold-set evaluation for product-category matching (C5.3B / C5.3B-2 / C10A /
+ * C10A.1).
  *
  * Pure and shared: the `qa:categories` command and the test suite run THIS
  * code, so a threshold can never pass in a test and fail in the report, or
@@ -11,18 +12,18 @@
  * extra steps, and its reported accuracy means nothing. The fixture therefore
  * carries a `development` portion — everything the matcher was ever tuned or
  * debugged against — and two holdouts drawn from cases no split had ever
- * touched: `c10a_natural`, sampled to resemble the real corpus, and
- * `c10a_challenge`, selected by source structure to concentrate the hard
- * families. Only the holdouts are claims about future notices, and they are
- * measured exactly once against the frozen matcher.
+ * touched: `c10a1_natural`, sampled to resemble the real corpus and carrying
+ * the binding gate, and `c10a1_challenge`, a smaller DIAGNOSTIC set screened
+ * for the sparse categories. Only the natural holdout is a claim about future
+ * notices, and both are measured exactly once against the frozen matcher.
  *
  * ## A holdout is spent when it is measured
  *
- * `development` therefore also contains the 317 rows of C5.3B-2's own final
- * holdout. Those measured the C5.3B-2 matcher once and cannot measure another:
- * C10A changed the classifier, so re-scoring them would report a tuning number
+ * `development` therefore also contains C5.3B-2's 317-row final holdout AND
+ * C10A's own 307 holdout rows. Each measured its own matcher once; C10A.1
+ * changes the classifier, so re-scoring either would report a tuning number
  * dressed as a generalization number. They keep `originSplit` so the history
- * stays legible, and C10A drew its own holdout from the 1,177 cases that no
+ * stays legible, and C10A.1 drew its own holdout from the 870 cases that no
  * split had touched.
  *
  * ## Why exact-set accuracy leads
@@ -46,16 +47,22 @@ import type { SourceAgency } from './recall-types';
 
 /**
  * `development` is everything the matcher may be tuned against. It includes
- * the two C5.3B-2 final holdouts: those were measured once under the frozen
- * C5.3B-2 matcher and are SPENT, and C10A changes the matcher, so they can
- * never measure it again. Each such row keeps `originSplit` for provenance.
+ * every SPENT holdout: C5.3B-2's two final splits and C10A's `c10a_natural`
+ * and `c10a_challenge`. Each measured its own frozen matcher exactly once, and
+ * C10A.1 changes the matcher, so none of them can ever measure another. Each
+ * such row keeps `originSplit` for provenance.
  *
- * `c10a_natural` and `c10a_challenge` are C10A's own holdouts, drawn from
- * cases NO split had ever touched and labelled from full source evidence.
+ * `c10a1_natural` and `c10a1_challenge` are C10A.1's own holdouts, drawn from
+ * the 870 cases NO split had ever touched, selected blind to any prediction
+ * and labelled from full source evidence.
  */
-export type GoldSplit = 'development' | 'c10a_natural' | 'c10a_challenge';
+export type GoldSplit = 'development' | 'c10a1_natural' | 'c10a1_challenge';
 
-export const GOLD_SPLITS: readonly GoldSplit[] = ['development', 'c10a_natural', 'c10a_challenge'];
+export const GOLD_SPLITS: readonly GoldSplit[] = [
+  'development',
+  'c10a1_natural',
+  'c10a1_challenge',
+];
 
 /** One reviewed gold-set row. Mirrors the fixture schema exactly. */
 export interface GoldRow {
@@ -68,6 +75,18 @@ export interface GoldRow {
   title: string;
   productDescription: string | null;
   productLines?: string[];
+  /**
+   * The announcement's own summary prose, verbatim.
+   *
+   * The classifier reads one bounded span of it (C10A.1), so the fixture has
+   * to carry it: an evaluation that omits an input the shipping derivation
+   * reads measures a classifier that does not ship. That is not hypothetical —
+   * C10A.1's first harness run omitted this field and scored a title-only arm
+   * three points below the real one. Absent or null means the announcement was
+   * not recorded for this row, and the derivation then behaves exactly as it
+   * did before the field existed.
+   */
+  announcementSummary?: string | null;
   /** The canonical product text this row was reviewed from. */
   productText: string;
   basis: ProductTextBasis;
@@ -137,13 +156,18 @@ export interface CategoryEvaluation {
   failures: CategoryFailure[];
 }
 
-/** Run the shipping matcher over one row. Never reads `expected`. */
+/**
+ * Run the shipping matcher over one row. Never reads `expected`, and passes
+ * every input the shipping derivation takes — including the announcement, or
+ * the gate would grade a classifier nobody runs.
+ */
 export function predict(row: GoldRow): FoodCategoryId[] {
   return categoriesForCase({
     sourceAgency: row.agency,
     title: row.title,
     productDescription: row.productDescription,
     productLines: row.productLines,
+    announcementSummary: row.announcementSummary ?? null,
   }).categories;
 }
 
@@ -426,23 +450,30 @@ export const PRODUCT_GATES: GateThresholds = {
  * a record of one review of one spent holdout — it does not generalize to a
  * changed classifier, and it must never be read as ongoing coverage.
  *
- * REFRESHING IT requires C10A.1 to draw a NEW holdout from untouched cases
- * and review it; the number below cannot be carried forward across a
- * classifier change.
+ * REFRESHING IT requires a LATER milestone to draw a NEW holdout from
+ * untouched cases and review it; the number below cannot be carried forward
+ * across a classifier change. C10A's own 4/200 was retired for exactly that
+ * reason when C10A.1 changed the classifier, and these four replace it.
  *
- * The other twelve zero-overlap failures are dishes filed under Meat &
- * poultry, which a shopper hunting a recalled chicken salad would plausibly
- * select; they are wrong, but they are not unfindable.
+ * The list below is C10A.1's review of the 27 failures on the c10a1_natural
+ * holdout. The other twenty-three land in an adjacent aisle a shopper would
+ * plausibly try — a chicken salad under Meat & poultry, a sandwich under
+ * Bakery, sprouted beans under Pantry & staples. They are wrong; they are not
+ * unfindable.
  */
 export const REVIEWED_UNFINDABLE_CASE_IDS: readonly string[] = [
-  // dairy_eggs → prepared_foods: an ice-cream sandwich under Prepared foods.
-  '4ed8ced9-33df-43c4-a673-41d28fee3dda',
-  // bakery_grains → produce: a Danish pastry under Fruits & vegetables.
-  'eadc07f9-aa27-4810-8bdf-5d88d6dfb138',
-  // supplements → produce: a supplement powder under Fruits & vegetables.
-  '572b71ca-95d9-4667-8b17-02d4e5b452b4',
-  // supplements → pantry_condiments: a cough syrup under Pantry & staples.
-  'caeafaff-f2ed-4f0e-8f26-a35b53021c39',
+  // snacks_sweets → pantry_condiments: a chocolate candy under Pantry &
+  // staples, because "almond" is the last word the lexicon knows.
+  'b5323fad-008b-4871-91d9-04406aeff54d',
+  // supplements → pantry_condiments: a dietary supplement under Pantry &
+  // staples, on the word "seed".
+  '4338cc6b-2dc4-4846-8e59-10a913b8dd49',
+  // supplements → snacks_sweets: a protein powder under Snacks & sweets,
+  // because a postposed flavour ("– Chocolate") outranks the product.
+  'a8554a5d-b1a0-4d22-a132-3e91e3c6ae9d',
+  // pantry_condiments → dairy_eggs: a chocolate-pistachio spread under
+  // Dairy & eggs, because "cream" names the style, not the ingredient.
+  '95c58f6c-559f-4c10-aca5-32f84bbc6b33',
 ];
 
 export const UNFINDABLE_RATE_LIMIT = 0.03;
@@ -633,21 +664,24 @@ export function validateGoldSet(goldSet: GoldSet): string[] {
   }
 
   /**
-   * Categories the C10A holdout provably cannot cover, and why.
+   * Categories the C10A.1 holdout provably cannot cover, and why.
    *
-   * The corpus holds 13 beverage and 20 infant-feeding cases in total, and the
-   * C5.3B-2 development set already contains every one of them, so no split
-   * drawn from untouched cases can contain either. A disclosed supplemental
-   * screen searched the remaining pool and found 1 beverage-shaped and 0
-   * infant-shaped candidates, neither of which reviewed as those categories.
-   * `other` is the same story from the other direction: the untouched pool
-   * held no case whose product the reviewer could not name.
+   * The corpus holds 20 infant-feeding cases in total and every one of them
+   * was already spent by an earlier split, so no draw from untouched cases can
+   * contain one; the disclosed sparse-category screen for infant-feeding words
+   * returned zero eligible rows. `other` is the same story from the other
+   * direction: the untouched pool held no case whose product a reviewer could
+   * not name.
+   *
+   * `beverages` was exempt under C10A and IS NO LONGER: the C10A.1 challenge
+   * screen found one, and it reviewed as a beverage. The exemption shrinks as
+   * the evidence allows and never the other way round.
    *
    * This is a real limit on what the holdout measures, so it is named here
-   * rather than absorbed by weakening the rule. Those three categories are
-   * exercised by the development split and by unit tests.
+   * rather than absorbed by weakening the rule. Both categories are exercised
+   * by the development split and by unit tests.
    */
-  const HOLDOUT_UNCOVERABLE = new Set<string>(['beverages', 'baby_food_formula', 'other']);
+  const HOLDOUT_UNCOVERABLE = new Set<string>(['baby_food_formula', 'other']);
 
   const development = goldSet.rows.filter((row) => row.split === 'development');
   const finalRows = goldSet.rows.filter((row) => row.split !== 'development');

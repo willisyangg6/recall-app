@@ -269,3 +269,94 @@ test('the material-change fingerprint of a real change ignores categories', () =
     b.map((m) => m.fingerprint),
   );
 });
+
+// ── C10A.1: the announcement summary reaches the classifier, bounded ────────
+
+const JURISDICTION_TITLE = 'A Firm Recalls Poultry Products Due to Possible Contamination';
+
+const announcement = (product: string, cause = 'Listeria monocytogenes'): string =>
+  `WASHINGTON, Jan. 2, 2026 - A Firm, a Springfield establishment, is recalling approximately ` +
+  `3,000 pounds of poultry products that may be contaminated with ${cause}, FSIS announced today.` +
+  `\nThe ${product} items were produced on Dec. 1, 2025. The following products are subject to recall.`;
+
+function fsisCase(product: string, cause?: string): CaseProjection {
+  return projectCase([
+    record({
+      sourceSystem: 'fsis_api',
+      sourceAgency: 'FSIS',
+      nativeId: 'example-fsis',
+      officialUrl: 'https://www.fsis.usda.gov/example',
+      title: JURISDICTION_TITLE,
+      productDescription: null,
+      summaryText: announcement(product, cause),
+    }),
+  ]);
+}
+
+test('a jurisdiction-only title is categorized from the announcement product sentence', () => {
+  assert.deepEqual(fsisCase('ready-to-eat curry chicken salad').productCategories, [
+    'prepared_foods',
+  ]);
+  // ... and generic evidence leaves the title's own reading alone.
+  assert.deepEqual(fsisCase('frozen, raw lamb').productCategories, ['meat_poultry']);
+});
+
+test('rewriting the cause in the announcement does not move the category', () => {
+  const base = fsisCase('ready-to-eat curry chicken salad').productCategories;
+  for (const cause of [
+    'Salmonella',
+    'undeclared milk, wheat and shellfish',
+    'extraneous metal materials',
+    'undeclared peanuts, a known allergen not declared on the label',
+  ]) {
+    assert.deepEqual(
+      fsisCase('ready-to-eat curry chicken salad', cause).productCategories,
+      base,
+      cause,
+    );
+  }
+});
+
+test('re-projecting a case with an announcement basis is still a fixed point', () => {
+  const first = fsisCase('frozen beef taquito');
+  const second = fsisCase('frozen beef taquito');
+  assert.deepEqual(first.productCategories, second.productCategories);
+  assert.deepEqual(
+    deriveProductCategories({
+      sourceAgency: first.sourceAgency,
+      title: first.title,
+      productDescription: first.productDescription,
+      affectedProducts: first.affectedProducts,
+      summaryText: first.summaryText,
+    }),
+    first.productCategories,
+  );
+});
+
+test('a derivation without summaryText is backward compatible, never a crash', () => {
+  const input = {
+    sourceAgency: 'FSIS' as const,
+    title: JURISDICTION_TITLE,
+    productDescription: null,
+    affectedProducts: [],
+  };
+  assert.deepEqual(deriveProductCategories(input), ['meat_poultry']);
+  assert.deepEqual(deriveProductCategories({ ...input, summaryText: null }), ['meat_poultry']);
+  assert.deepEqual(deriveProductCategories({ ...input, summaryText: '' }), ['meat_poultry']);
+});
+
+test('an announcement-only category change is still not material', () => {
+  const before = fsisCase('frozen, raw lamb');
+  const after = fsisCase('frozen beef taquito');
+  assert.notDeepEqual(before.productCategories, after.productCategories);
+  assert.deepEqual(
+    detectChanges({ ...before, summaryText: after.summaryText }, after),
+    detectChanges(
+      { ...before, summaryText: after.summaryText },
+      {
+        ...after,
+        productCategories: before.productCategories,
+      },
+    ),
+  );
+});

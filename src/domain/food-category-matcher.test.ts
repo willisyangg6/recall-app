@@ -468,17 +468,17 @@ test('a composed dish on a protein head is Prepared, not the protein', () => {
 });
 
 /**
- * A KNOWN, UNFIXED gap, pinned deliberately.
- *
- * "Sambusa" is the Somali spelling of samosa and appears in the C10A holdout;
- * the lexicon knows `samosa` and `samsa` but not `sambusa`, so the dish reads
- * as its protein. Adding the word now would be tuning the classifier on the
- * holdout that measured it, which the freeze protocol forbids — so the gap is
- * recorded here as the measured behaviour and left for the next milestone,
- * which must re-freeze and draw its own holdout before claiming the fix.
+ * C10A recorded this as a known, deliberately unfixed gap: "sambusa" is the
+ * Somali spelling of samosa, and adding it then would have tuned the
+ * classifier on the holdout that had already measured it. C10A.1 re-froze and
+ * drew its own holdout, so the word is now carried as general vocabulary —
+ * and it belongs to the DUMPLING family, not the pastry family, whatever the
+ * "-usa" ending suggests.
  */
-test('KNOWN GAP: "sambusa" is not in the lexicon and reads as its protein', () => {
-  assert.deepEqual(of('Beef Sambusa'), ['meat_poultry']);
+test('a sambusa is a filled savoury dumpling, not a pastry and not its protein', () => {
+  assert.deepEqual(of('Beef Sambusa'), ['prepared_foods']);
+  assert.deepEqual(of('Chicken Sambusa Products'), ['prepared_foods']);
+  assert.deepEqual(of('Vegetable Sambousas'), ['prepared_foods']);
 });
 
 test('pork skin is the snack, however the label spells it', () => {
@@ -547,4 +547,298 @@ test('product lines are still the fallback when the title names nothing', () => 
     productLines: ['15.25-oz. frozen microwavable dinners'],
   });
   assert.equal(derived.basis, 'product_lines');
+});
+
+// ── C10A.1: general vocabulary, and the announcement's product sentence ─────
+
+test('a pastry is Bakery under whatever name the shop uses', () => {
+  assert.deepEqual(of('Kringle'), ['bakery_grains']);
+  assert.deepEqual(of('Raspberry Kringle Danish'), ['bakery_grains']);
+  assert.deepEqual(of('Danish Pastries'), ['bakery_grains']);
+  assert.deepEqual(of('Cheese Danish'), ['bakery_grains']);
+  assert.deepEqual(of('Almond Danishes'), ['bakery_grains']);
+  // The plural is a count noun, and only pastries are counted.
+  assert.deepEqual(of('Danishes'), ['bakery_grains']);
+});
+
+test('"Danish" on its own is a nationality, and never moves a product to Bakery', () => {
+  assert.deepEqual(of('Danish Ham'), ['meat_poultry']);
+  assert.deepEqual(of('Danish Blue Cheese'), ['dairy_eggs']);
+  assert.deepEqual(of('Danish Style Feta Cheese'), ['dairy_eggs']);
+  assert.deepEqual(of('Danish Salami'), ['meat_poultry']);
+  // And a Danish-branded bakery item is bakery because of the item, not the word.
+  assert.deepEqual(of('Danish Butter Cookies'), ['bakery_grains']);
+});
+
+test('the filled-dumpling family is Prepared foods across its spellings', () => {
+  for (const dish of [
+    'Beef Sambusa',
+    'Vegetable Samosas',
+    'Lamb Samsa',
+    'Pork Dumplings',
+    'Chicken Potstickers',
+    'Pork Gyoza',
+    'Beef Ravioli',
+    'Chicken Tortellini',
+    'Meat Wontons',
+    'Beef Pierogies',
+  ]) {
+    assert.deepEqual(of(dish), ['prepared_foods'], dish);
+  }
+});
+
+test('a composed deli assortment is Prepared foods; a bare tray is packaging', () => {
+  assert.deepEqual(of('Party Trays'), ['prepared_foods']);
+  assert.deepEqual(of('Charcuterie Platter'), ['prepared_foods']);
+  assert.deepEqual(of('Deli Tray'), ['prepared_foods']);
+  assert.deepEqual(of('Deli Salads'), ['prepared_foods']);
+  assert.deepEqual(of('Turkey Wrap'), ['prepared_foods']);
+  // "meat tray" and "cheese tray" are deliberately NOT in the vocabulary:
+  // they also name packaging ("beef stew meat trays"), so they stay with the
+  // thing in the package.
+  assert.deepEqual(of('Beef Stew Meat Trays'), ['meat_poultry']);
+});
+
+test('a loaf named by its protein is a meat product, not bakery', () => {
+  assert.deepEqual(of('Ground Beef Loaf'), ['meat_poultry']);
+  assert.deepEqual(of('Ham Loaf'), ['meat_poultry']);
+  assert.deepEqual(of('Liver Loaf'), ['meat_poultry']);
+  // Bread keeps the word.
+  assert.deepEqual(of('Sourdough Loaves'), ['bakery_grains']);
+  assert.deepEqual(of('Artisan Style 1/2 Loaf'), ['bakery_grains']);
+});
+
+test('a fish steak is Seafood; "steak" alone is butcher meat', () => {
+  assert.deepEqual(of('Halibut Steaks'), ['seafood']);
+  assert.deepEqual(of('Catfish Steak'), ['seafood']);
+  assert.deepEqual(of('Salmon Steaks'), ['seafood']);
+  assert.deepEqual(of('Ribeye Steak'), ['meat_poultry']);
+});
+
+/**
+ * C10A.1 investigated a general "supplement powder" rule and REJECTED it: a
+ * powder's aisle comes from what is powdered, never from the form. Beet root
+ * powder is therefore still read as its plant — an acknowledged miss that the
+ * classifier prefers to a rule that would file every culinary powder under
+ * Supplements. These are the counterexamples that rejected it.
+ */
+test('a powder takes its aisle from what is powdered, not from being a powder', () => {
+  assert.deepEqual(of('Cinnamon Powder'), ['pantry_condiments']);
+  assert.deepEqual(of('Ground Cinnamon Powder'), ['pantry_condiments']);
+  assert.deepEqual(of('Asafoetida Yellow Powder'), ['pantry_condiments']);
+  assert.deepEqual(of('Aquafaba Powder'), ['pantry_condiments']);
+  assert.deepEqual(of('Powdered beverage mixes'), ['beverages']);
+  assert.deepEqual(of('Powdered Goat Milk Infant Formula'), ['baby_food_formula']);
+  // Supplement-ness comes from the reviewed supplement vocabulary, not "powder".
+  assert.deepEqual(of('Moringa Leaf Powder'), ['supplements']);
+  assert.deepEqual(of('Protein Powder'), ['supplements']);
+  assert.deepEqual(of('Kratom Powder'), ['supplements']);
+});
+
+test('a parenthesised state word is the same descriptor as the bare one', () => {
+  assert.deepEqual(
+    of('ready-to-eat (RTE) kale and broccoli slaw salad with chicken'),
+    of('ready-to-eat kale and broccoli slaw salad with chicken'),
+  );
+});
+
+// ── The announcement's canonical product-identification sentence ────────────
+
+const JURISDICTION_TITLE = 'A Firm Recalls Poultry Products Due to Possible Listeria Contamination';
+
+const productSentence = (product: string): string =>
+  `WASHINGTON, Jan. 2, 2026 - A Firm, a Springfield establishment, is recalling approximately ` +
+  `3,000 pounds of poultry products that may be contaminated with Listeria monocytogenes, FSIS ` +
+  `announced today.\nThe ${product} items were produced on Dec. 1, 2025. The following products ` +
+  `are subject to recall.`;
+
+test('a jurisdiction-only title yields to the announcement product sentence', () => {
+  const derived = categoryProductText({
+    sourceAgency: 'FSIS',
+    title: JURISDICTION_TITLE,
+    productDescription: null,
+    announcementSummary: productSentence('ready-to-eat curry chicken salad'),
+  });
+  assert.equal(derived.basis, 'summary_grammar');
+  assert.equal(derived.text, 'ready-to-eat curry chicken salad');
+  assert.deepEqual(of(derived.text), ['prepared_foods']);
+});
+
+test('a DESCRIPTIVE title is primary and the announcement is never consulted', () => {
+  const derived = categoryProductText({
+    sourceAgency: 'FSIS',
+    title: 'A Firm Recalls Chicken Salad Products Due to Possible Contamination',
+    productDescription: null,
+    announcementSummary: productSentence('frozen beef taquito'),
+  });
+  assert.equal(derived.basis, 'title_grammar');
+  assert.equal(derived.text, 'Chicken Salad Products');
+});
+
+test('a structured product description outranks the announcement sentence', () => {
+  const derived = categoryProductText({
+    sourceAgency: 'FDA',
+    title: 'A Firm Recalls Poultry Products',
+    productDescription: 'Whole Cantaloupe',
+    announcementSummary: productSentence('frozen beef taquito'),
+  });
+  assert.equal(derived.basis, 'product_description');
+});
+
+test('generic announcement evidence adds nothing and leaves the title in charge', () => {
+  for (const generic of ['frozen, raw lamb', 'ground beef', 'raw chicken']) {
+    const derived = categoryProductText({
+      sourceAgency: 'FSIS',
+      title: JURISDICTION_TITLE,
+      productDescription: null,
+      announcementSummary: productSentence(generic),
+    });
+    assert.equal(derived.basis, 'title_grammar', generic);
+    assert.deepEqual(
+      categoriesForCase({
+        sourceAgency: 'FSIS',
+        title: JURISDICTION_TITLE,
+        productDescription: null,
+        announcementSummary: productSentence(generic),
+      }).categories,
+      ['meat_poultry'],
+      generic,
+    );
+  }
+});
+
+test('an announcement sentence naming no regulated product is refused', () => {
+  // The grammar matches, but the span is a brand line: the recall is beef
+  // patties, and "Vidalia Onion" is not what was recalled.
+  const derived = categoryProductText({
+    sourceAgency: 'FSIS',
+    title: 'A Firm Recalls Beef Products Due To Possible Foreign Matter Contamination',
+    productDescription: null,
+    announcementSummary: productSentence('Store Choice Black Angus Vidalia Onion'),
+  });
+  assert.equal(derived.basis, 'title_grammar');
+});
+
+test('the product sentence may not run across a sentence boundary', () => {
+  // The establishment-number line ends in "EST. 12445" and is followed by
+  // "The products were produced on various dates" — a package and a plant,
+  // never a product.
+  const derived = categoryProductText({
+    sourceAgency: 'FSIS',
+    title: 'A Firm Recalls Pork Products Due To Misbranding',
+    productDescription: null,
+    announcementSummary:
+      'WASHINGTON, Nov. 9, 2026 - A Firm is recalling pork products because of misbranding. ' +
+      'The products bear the establishment number EST. 12445 inside the USDA mark of inspection ' +
+      'on the label. The products were produced on various dates between Feb. 6 and Oct. 8.',
+  });
+  assert.equal(derived.basis, 'title_grammar');
+  assert.equal(derived.text, 'Pork Products');
+});
+
+test('arbitrary announcement prose is not a basis', () => {
+  for (const prose of [
+    '',
+    'The problem was discovered during a routine label review by the firm.',
+    'These items were shipped to retail locations in California and Nevada.',
+    'Consumers who have purchased these products are urged not to consume them.',
+    'The recall was initiated after the firm received a consumer complaint about chicken salad.',
+    'There have been no confirmed reports of adverse reactions.',
+  ]) {
+    const derived = categoryProductText({
+      sourceAgency: 'FSIS',
+      title: JURISDICTION_TITLE,
+      productDescription: null,
+      announcementSummary: prose,
+    });
+    assert.equal(derived.basis, 'title_grammar', prose);
+  }
+});
+
+test('cause, pathogen, allergen, firm, retailer and geography never move a category', () => {
+  const product = 'ready-to-eat chicken bowl';
+  const variants = [
+    productSentence(product),
+    productSentence(product)
+      .replace('Listeria monocytogenes', 'Salmonella and undeclared milk, wheat and shellfish')
+      .replace('A Firm, a Springfield establishment', 'Dairy Bakery Seafood Co, a Fishtown plant'),
+    `${productSentence(product)}\nThese items were shipped to Whole Foods and Costco in Maine.` +
+      '\nThe problem was discovered after reports of illness. Consumers should discard them.',
+    productSentence(product).replace(
+      'poultry products that may be contaminated with Listeria monocytogenes',
+      'chocolate cake products that may contain undeclared peanuts',
+    ),
+  ];
+  const derive = (summary: string): FoodCategoryId[] =>
+    categoriesForCase({
+      sourceAgency: 'FSIS',
+      title: JURISDICTION_TITLE,
+      productDescription: null,
+      announcementSummary: summary,
+    }).categories;
+  const expected = derive(variants[0]);
+  assert.deepEqual(expected, ['prepared_foods']);
+  for (const variant of variants) assert.deepEqual(derive(variant), expected, variant);
+});
+
+test('FDA and FSIS derive identically from equivalent product evidence', () => {
+  const summary = productSentence('frozen beef taquito');
+  const fda = categoriesForCase({
+    sourceAgency: 'FDA',
+    title: JURISDICTION_TITLE,
+    productDescription: null,
+    announcementSummary: summary,
+  });
+  const fsis = categoriesForCase({
+    sourceAgency: 'FSIS',
+    title: JURISDICTION_TITLE,
+    productDescription: null,
+    announcementSummary: summary,
+  });
+  assert.deepEqual(fda, fsis);
+  assert.equal(fda.basis, 'summary_grammar');
+});
+
+test('an absent announcement summary derives exactly as before', () => {
+  const base = {
+    sourceAgency: 'FSIS' as const,
+    title: JURISDICTION_TITLE,
+    productDescription: null,
+  };
+  assert.deepEqual(
+    categoryProductText(base),
+    categoryProductText({ ...base, announcementSummary: null }),
+  );
+  assert.deepEqual(
+    categoryProductText(base),
+    categoryProductText({ ...base, announcementSummary: '' }),
+  );
+  assert.equal(categoryProductText(base).basis, 'title_grammar');
+});
+
+test('the announcement sentence never overrides the prohibited product-line preference', () => {
+  // Both a product line AND an announcement sentence are present. The line is
+  // still not a basis; only the bounded sentence is.
+  const derived = categoryProductText({
+    sourceAgency: 'FSIS',
+    title: JURISDICTION_TITLE,
+    productDescription: null,
+    productLines: ['Combo bins containing "Beef Trimmings, BNLS, 90 L"'],
+    announcementSummary: productSentence('ready-to-eat chicken bowl'),
+  });
+  assert.equal(derived.basis, 'summary_grammar');
+  assert.equal(derived.text, 'ready-to-eat chicken bowl');
+});
+
+test('the derivation stays deterministic and capped with the announcement basis', () => {
+  const input = {
+    sourceAgency: 'FSIS' as const,
+    title: JURISDICTION_TITLE,
+    productDescription: null,
+    announcementSummary: productSentence('beef taquito, chicken salad, pork tamale and fish stew'),
+  };
+  const first = categoriesForCase(input).categories;
+  assert.deepEqual(first, categoriesForCase(input).categories);
+  assert.ok(first.length <= MAX_CATEGORIES_PER_CASE);
+  assert.deepEqual(first, [...first].sort(() => 0).slice(0, MAX_CATEGORIES_PER_CASE));
 });

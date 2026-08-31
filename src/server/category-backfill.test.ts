@@ -246,3 +246,72 @@ test('the report counts distribution, multi-category and other-only cases', asyn
   assert.equal(report.distribution.meat_poultry, 1);
   assert.equal(report.distribution.other, 1);
 });
+
+// ── C10A.1: a mixed corpus, and the announcement the derivation reads ────────
+
+/**
+ * The realistic state at apply time: scheduled ingestion has re-projected SOME
+ * cases (so they already carry categories), others predate the field entirely,
+ * and a third group carries a list an older classifier wrote. One run must
+ * tell the three apart and plan writes for exactly two of them.
+ */
+test('a mixed corpus separates missing, unchanged and changed in one run', async () => {
+  const missing = legacyProjection({ nativeId: 'missing' });
+  const unchanged = projectCase([record({ nativeId: 'unchanged' })]);
+  const stale = {
+    ...projectCase([record({ nativeId: 'stale' })]),
+    productCategories: ['seafood' as const],
+  };
+  const { store } = await storeWith([missing, unchanged, stale]);
+
+  const report = await backfillProductCategories(store, { apply: false });
+  assert.equal(report.casesExamined, 3);
+  assert.equal(report.currentlyBearing, 2);
+  assert.equal(report.unchanged, 1);
+  assert.equal(report.wouldUpdate, 2);
+  assert.equal(report.updatesOverExisting, 1);
+  assert.equal(report.caseWrites, 0);
+
+  const applied = await backfillProductCategories(store, { apply: true });
+  assert.equal(applied.caseWrites, 2);
+  assert.equal(applied.timelineWrites, 0);
+  assert.equal(applied.notificationEvents, 0);
+  assert.equal(applied.newCases, 0);
+
+  // Idempotent: a hypothetical rerun plans nothing.
+  const rerun = await backfillProductCategories(store, { apply: false });
+  assert.equal(rerun.wouldUpdate, 0);
+  assert.equal(rerun.unchanged, 3);
+});
+
+test('the backfill re-derives through the announcement, like every other caller', async () => {
+  // A jurisdiction-only title whose announcement names the dish. If the
+  // backfill dropped `summaryText` it would become a second, weaker
+  // classifier and would write a different answer than a re-projection.
+  const jurisdiction = record({
+    sourceSystem: 'fsis_api',
+    sourceAgency: 'FSIS',
+    nativeId: 'jurisdiction-only',
+    officialUrl: 'https://www.fsis.usda.gov/example',
+    title: 'A Firm Recalls Poultry Products Due to Possible Contamination',
+    productDescription: null,
+    summaryText:
+      'WASHINGTON, Jan. 2, 2026 - A Firm is recalling poultry products that may be ' +
+      'contaminated with Listeria monocytogenes.\nThe ready-to-eat curry chicken salad ' +
+      'items were produced on Dec. 1, 2025.',
+  });
+  const projection = { ...projectCase([jurisdiction]) };
+  assert.deepEqual(projection.productCategories, ['prepared_foods']);
+
+  delete (projection as { productCategories?: unknown }).productCategories;
+  const { store, rows } = await storeWith([projection as CaseProjection]);
+  const plan = planCaseCategories(rows[0]);
+  assert.deepEqual(plan.next, ['prepared_foods']);
+  assert.equal(plan.outcome, 'update');
+
+  await backfillProductCategories(store, { apply: true });
+  const after = await store.getCase(rows[0].id);
+  assert.deepEqual(after?.projection.productCategories, ['prepared_foods']);
+  // …and a full re-projection agrees, which is what makes the write durable.
+  assert.deepEqual(projectCase([jurisdiction]).productCategories, ['prepared_foods']);
+});

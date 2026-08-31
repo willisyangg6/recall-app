@@ -152,6 +152,11 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
   { term: '(?:pork|beef|meat|turkey|chicken|venison|elk) snack sticks?', category: 'meat_poultry' },
   { term: 'ham (?:and )?cheese loaf', category: 'meat_poultry', note: 'a deli luncheon loaf' },
   { term: '(?:monkfish|cod|fish) livers?', category: 'seafood' },
+  {
+    term: '(?:fish|salmon|tuna|cod|halibut|swordfish|ahi|mahi[ -]?mahi|siluriformes|catfish|swai|tilapia|marlin|shark) steaks?',
+    category: 'seafood',
+    note: 'a cross-cut fish steak is a seafood form; "steak" alone is butcher meat',
+  },
   { term: 'soybean paste|bean paste', category: 'pantry_condiments' },
   {
     term: 'chicken (?:nuggets?|strips?|wings?|tenders?|patt(?:y|ies)|fingers?)',
@@ -171,9 +176,9 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
     note: 'blood curd/tofu is a meat product; no dairy curd involved',
   },
   {
-    term: '(?:luncheon|olive|pickle|pimento) lo(?:af|aves)',
+    term: '(?:luncheon|olive|pickle|pimento|ham|meat|beef|pork|turkey|chicken|veal|lamb|liver|bologna) lo(?:af|aves)',
     category: 'meat_poultry',
-    note: 'deli luncheon loaves are sliced meats, not bakery',
+    note: 'a loaf named by its protein is a formed meat product (meatloaf, ham loaf, liver loaf), never bakery',
   },
   { term: 'croutons?', category: 'bakery_grains' },
   { term: 'bread ?crumbs?', category: 'bakery_grains' },
@@ -244,7 +249,11 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
   },
   { term: 'ready ?meals?', category: 'prepared_foods' },
   { term: 'deli (?:items?|meals?|salads?)', category: 'prepared_foods' },
-  { term: 'party trays?', category: 'prepared_foods' },
+  {
+    term: '(?:party|deli|charcuterie|antipasto|appetizer|sandwich) (?:trays?|platters?)',
+    category: 'prepared_foods',
+    note: 'a composed assortment sold ready to serve. The modifier list stops at words that can only name the DISH: "meat tray" and "cheese tray" are excluded because they also name packaging ("beef stew meat trays"), and a bare tray is already a packaging word',
+  },
   { term: 'lunch kits?', category: 'prepared_foods' },
   {
     term: '(?:spaghetti|pasta|macaroni|noodles?) (?:and|&) (?:meatballs?|cheese|chicken|beef|pork|sauce|gravy)',
@@ -348,6 +357,40 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
   {
     term: '(?:apple|cherry|pumpkin|pecan|peach|berry|lemon) (?:pies?|tarts?|cakes?|turnovers?|strudels?|danishes?)',
     category: 'bakery_grains',
+  },
+
+  // ── "Danish": a pastry only where the product context says so ────────────
+  //
+  // Bare "Danish" is a DEMONYM far more often than a pastry noun in product
+  // language — Danish ham, Danish blue cheese, Danish butter cookies, Danish
+  // style feta — so the single word is deliberately NOT a bakery term and is
+  // left for the rest of the phrase to resolve. Three contexts make it the
+  // pastry, and each is a pattern rather than a product:
+  //
+  //   1. a pastry-form noun after it ("Danish pastries", "Danish kringle");
+  //   2. a filling or fruit modifier before it, which is how a filled pastry
+  //      is named ("cheese Danish", "raspberry Danish");
+  //   3. the plural, which is a count noun and only ever counts pastries
+  //      ("a tray of Danishes"). A nationality has no plural in a product name.
+  {
+    term: 'danish (?:pastr(?:y|ies)|kringles?|rolls?|braids?|twists?|squares?|puffs?|bars?|rings?|coffee cakes?)',
+    category: 'bakery_grains',
+    note: 'a pastry-form head noun after "Danish" makes it the pastry, not the country',
+  },
+  {
+    term: '(?:cheese|cream cheese|almond|raspberry|apple|cherry|blueberry|strawberry|apricot|pecan|lemon|fruit|custard|cinnamon|bear ?claw) danish(?:es)?',
+    category: 'bakery_grains',
+    note: 'a filling or fruit modifier is how a filled pastry is named',
+  },
+  {
+    term: 'danishes',
+    category: 'bakery_grains',
+    note: 'the plural is a count noun and counts pastries; a nationality is not pluralised in a product name',
+  },
+  {
+    term: 'kringles?',
+    category: 'bakery_grains',
+    note: 'a filled pastry ring; a compound so "raspberry kringle" is not read as fruit',
   },
   { term: 'granola (?:bars?|clusters?)', category: 'snacks_sweets' },
   { term: '(?:protein|snack|energy|nutrition|cereal|fruit) bars?', category: 'snacks_sweets' },
@@ -512,8 +555,9 @@ export const HEAD_TERMS: readonly LexiconEntry[] = [
 
   // ── Prepared meals ───────────────────────────────────────────────────────
   {
-    term: 'entr[eéçÇ]es?|meals?|dinners?|casseroles?|lasagnas?|enchiladas?|tamales?|burritos?|empanadas?|dumplings?|wontons?|pierogi(?:es)?|pirozhki|vareniki|singaras?|samosas?|samsas?|coxinhas?',
+    term: 'entr[eéçÇ]es?|meals?|dinners?|casseroles?|lasagnas?|enchiladas?|tamales?|burritos?|empanadas?|dumplings?|wontons?|pierogi(?:es)?|pirozhki|vareniki|singaras?|samosas?|samsas?|sambusas?|sambousas?|coxinhas?',
     category: 'prepared_foods',
+    note: 'sambusa/sambousa are the Somali and Levantine spellings of samosa — a filled savoury dumpling, never a pastry',
   },
   {
     term: 'soups?|broths?|stews?|chilis?|bisques?|chowders?|ramen|pho',

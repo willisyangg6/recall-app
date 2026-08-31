@@ -37,8 +37,8 @@ const goldSet: GoldSet = JSON.parse(readFileSync(FIXTURE, 'utf8'));
 const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
 
 const development = goldSet.rows.filter((row) => row.split === 'development');
-const natural = goldSet.rows.filter((row) => row.split === 'c10a_natural');
-const challenge = goldSet.rows.filter((row) => row.split === 'c10a_challenge');
+const natural = goldSet.rows.filter((row) => row.split === 'c10a1_natural');
+const challenge = goldSet.rows.filter((row) => row.split === 'c10a1_challenge');
 
 // ── Fixture schema ──────────────────────────────────────────────────────────
 
@@ -48,10 +48,22 @@ test('the committed gold set is structurally valid', () => {
 
 test('the gold set is large enough to measure anything', () => {
   assert.ok(development.length >= 400, `only ${development.length} development rows`);
+  // The natural split carries the binding gate and its size is fixed by the
+  // frozen selection procedure. The challenge split is DIAGNOSTIC and its size
+  // is whatever the frozen screens yield: C10A.1's six screens returned 52
+  // because three of them were exhausted below their cap (supplements 10,
+  // beverages 6, infant-feeding 0). The floor is a sanity check on the
+  // fixture, not a gate on the classifier.
   assert.ok(natural.length >= 200, `only ${natural.length} natural rows`);
-  assert.ok(challenge.length >= 100, `only ${challenge.length} challenge rows`);
+  assert.ok(challenge.length >= 50, `only ${challenge.length} challenge rows`);
 });
 
+/**
+ * The fixture's recorded basis must be what the SHIPPING extraction produces
+ * from the row's own stored inputs — the announcement included. This test is
+ * why C10A.1's harness defect surfaced at all: the first run omitted
+ * `announcementSummary` from `predict`, and the stored basis stopped matching.
+ */
 test('stored product text is exactly what extraction produces from the stored inputs', () => {
   for (const row of goldSet.rows) {
     const derived = categoryProductText({
@@ -59,10 +71,27 @@ test('stored product text is exactly what extraction produces from the stored in
       title: row.title,
       productDescription: row.productDescription,
       productLines: row.productLines,
+      announcementSummary: row.announcementSummary ?? null,
     });
     assert.equal(derived.text, row.productText, row.caseId);
     assert.equal(derived.basis, row.basis, row.caseId);
   }
+});
+
+test('the gold set carries every input the shipping derivation reads', () => {
+  // A fixture missing an input grades a classifier nobody runs.
+  for (const row of goldSet.rows) {
+    assert.equal(typeof row.announcementSummary, 'string', row.caseId);
+  }
+  // And `predict` must actually pass it: a row whose basis is the announcement
+  // has to derive differently once the announcement is withheld.
+  const viaSummary = goldSet.rows.find((row) => row.basis === 'summary_grammar');
+  assert.ok(viaSummary, 'no row derives from the announcement');
+  assert.notDeepEqual(
+    predict(viaSummary),
+    predict({ ...viaSummary, announcementSummary: null }),
+    viaSummary.caseId,
+  );
 });
 
 test('no gold row expects more categories than the cap', () => {
@@ -130,7 +159,7 @@ test('the classifier files still hash to the values frozen BEFORE final selectio
 
 test('the final expected labels still hash to the value frozen before the single run', () => {
   const finalLabels = goldSet.rows
-    .filter((row) => row.split === 'c10a_natural' || row.split === 'c10a_challenge')
+    .filter((row) => row.split === 'c10a1_natural' || row.split === 'c10a1_challenge')
     .map((row) => `${row.caseId}:${row.expected.join('+')}`)
     .sort()
     .join('\n');
@@ -158,7 +187,7 @@ function mutate(change: (rows: GoldRow[]) => GoldRow[]): GoldSet {
 }
 
 test('an omitted final split is caught, not silently skipped', () => {
-  for (const split of ['c10a_natural', 'c10a_challenge'] as const) {
+  for (const split of ['c10a1_natural', 'c10a1_challenge'] as const) {
     const problems = validateGoldSet(mutate((rows) => rows.filter((row) => row.split !== split)));
     assert.ok(
       problems.some((problem) => problem.includes(`${split} split is empty`)),
@@ -218,14 +247,14 @@ function rowOf(expected: GoldRow['expected'], productText: string): GoldRow {
     productText,
     basis: 'product_description',
     expected,
-    split: 'c10a_natural',
+    split: 'c10a1_natural',
   };
 }
 
 test('metrics count exact sets, over-classification and misses separately', () => {
   const result = evaluateRows(
     [rowOf(['bakery_grains'], 'Cookies'), rowOf(['seafood'], 'Cookies')],
-    'c10a_natural',
+    'c10a1_natural',
   );
   assert.equal(result.total, 2);
   assert.equal(result.exactSetMatches, 1);
@@ -237,7 +266,7 @@ test('metrics count exact sets, over-classification and misses separately', () =
 });
 
 test('per-category support is the reviewed denominator, so thin samples stay visible', () => {
-  const result = evaluateRows([rowOf(['beverages'], 'Instant coffee')], 'c10a_natural');
+  const result = evaluateRows([rowOf(['beverages'], 'Instant coffee')], 'c10a1_natural');
   const beverages = result.perCategory.find((metric) => metric.category === 'beverages')!;
   assert.equal(beverages.support, 1);
   assert.ok(beverages.support < (GATES.perCategoryMinSupport ?? 5));
@@ -290,7 +319,7 @@ test('the compact evaluation merges BOTH sides mechanically and is deterministic
 
 function evaluationWith(overrides: Partial<CategoryEvaluation>): CategoryEvaluation {
   return {
-    split: 'c10a_natural',
+    split: 'c10a1_natural',
     total: 100,
     exactSetMatches: 100,
     exactSetAccuracy: 1,

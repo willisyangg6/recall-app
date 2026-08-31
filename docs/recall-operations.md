@@ -299,39 +299,46 @@ DETAIL-SCREEN EVIDENCE only: under the C9 frozen policy the sync never
 touches `projection.heroImageUrl` — professional card-hero sourcing is
 C9.1 (docs/recall-imagery.md).
 
-## Product categories: integrated for discovery, NOT backfilled (C10A)
+## Product categories: derived, gate NOT met, NOT backfilled (C10A.1)
 
 ```
 npm run qa:categories                     # offline; product gates + legacy benchmark
 npm run qa:product-categories             # read-only; live distribution + invariants
 npm run backfill:product-categories:dry   # read-only; the historical write plan
-npm run backfill:product-categories       # APPLY — hold until C10A.1
+npm run backfill:product-categories       # APPLY — BLOCKED, the gate is not met
 ```
 
-`projectCase` now derives `projection.productCategories`, so new and
-re-projected cases carry categories automatically. **The historical backfill
-has not been applied**: as of the C10A dry run all 1,914 stored cases predate
-the field and would be written. Hold it until the C10A.1 refinement decision
-(docs/recall-food-categories.md §6) — applying now would write rows C10A.1
-would immediately rewrite.
+`projectCase` derives `projection.productCategories`, so new and re-projected
+cases carry categories automatically. **`npm run qa:categories` currently exits
+1 and that is correct**: C10A.1 measured the revised classifier once against a
+newly frozen 200-case holdout and got **86.5% exact-set / 87.5%
+at-least-one-correct / 87.1% micro P / 87.1% micro R**, missing every ≥90%
+product gate the founder accepted.
+
+**The historical backfill has not been applied and must not be.** The dry run
+plans 1,914 writes (0 already carrying, 0 unchanged, 0 over an existing list)
+from a classifier that failed its gate. Authorizing it needs a classifier that
+clears the gate — see docs/recall-food-categories.md §9 for what a C10A.2 would
+have to do, and note that only 618 untouched cases remain for one more holdout.
 
 `qa:categories` reports three distinct things and gates on only the first:
 
 1. **Automated product regression gates (blocking).** ≥90% natural exact-set,
    at-least-one-correct, micro precision and recall, plus determinism —
    recomputed every run from the frozen gold set, so they really do detect
-   classifier drift. These decide the exit code. They are **intentionally
-   weaker than the personalization and notification bar and must never be
-   cited to relax it**; those paths share no input with this one, which
-   `src/lib/category-invariance.test.ts` and `qa:product-categories` enforce.
+   classifier drift. These decide the exit code, and they currently FAIL. They
+   are **intentionally weaker than the personalization and notification bar and
+   must never be cited to relax it**; those paths share no input with this one,
+   which `src/lib/category-invariance.test.ts` and `qa:product-categories`
+   enforce, and both still pass.
 2. **Legacy research benchmark: not met (informational).** The original 95%
-   threshold, at 91.5%. Every number is still printed and the threshold is
+   threshold, at 86.5%. Every number is still printed and the threshold is
    never weakened, but it gates nothing and is not rendered as a failure.
-3. **Frozen human-reviewed unfindable baseline: 4/200 = 2.0% (≤3%).** The
-   assertion checks the frozen manifest, case ids, reasoning records and
-   arithmetic. It **cannot** detect a new unfindable error after a classifier
-   change — that judgement is not in the data. Refreshing it requires C10A.1
-   to review a newly drawn holdout.
+3. **Frozen human-reviewed unfindable baseline: 4/200 = 2.0% (≤3%).** Newly
+   reviewed on the C10A.1 holdout; C10A's own 4/200 was retired when the
+   classifier changed. The assertion checks the frozen manifest, case ids,
+   reasoning records and arithmetic. It **cannot** detect a new unfindable
+   error after a classifier change — that judgement is not in the data.
 
 `qa:categories` needs no database or credentials. The backfill performs zero
 network requests, writes exactly one projection field under a compare-and-set

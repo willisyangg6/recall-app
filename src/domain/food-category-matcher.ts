@@ -75,7 +75,7 @@ const FLAVOURABLE_TARGETS = new Set<FoodCategoryId>(FLAVOURABLE_TARGET_IDS);
 
 /** Which canonical field the product text came from. */
 export type ProductTextBasis =
-  'product_description' | 'title_grammar' | 'product_lines' | 'title_raw';
+  'product_description' | 'title_grammar' | 'summary_grammar' | 'product_lines' | 'title_raw';
 
 /**
  * The case facts category matching may read. Deliberately minimal — adding a
@@ -89,6 +89,17 @@ export interface CategoryCaseInput {
   productDescription: string | null;
   /** Structured product lines, used only as a conservative fallback. */
   productLines?: readonly string[];
+  /**
+   * The announcement's own summary prose (C10A.1).
+   *
+   * This is NOT a text the matcher may read. Exactly one bounded span of it is
+   * ever extracted — the announcement's canonical product-identification
+   * sentence — and only when the title has already proved non-descriptive. See
+   * `productSummaryEvidence`, which is the only function allowed to touch it,
+   * and which returns '' for every announcement whose prose does not fit that
+   * one grammar. Nothing else in this module receives the summary.
+   */
+  announcementSummary?: string | null;
 }
 
 export interface CategoryProductText {
@@ -151,20 +162,94 @@ const JURISDICTION_WORDS = new Set([
  * content word left after descriptors is a bare species word ("Poultry
  * Products", "Ready-To-Eat Beef Products", "Frozen, Raw Lamb Products").
  *
- * MEASURED AND NOT USED FOR EXTRACTION. See the note on `categoryProductText`:
- * this predicate identifies the family correctly (210 of 1,914 stored cases,
- * 11.0%), but switching those cases to their product lines was measured to
- * make them worse, so the switch was reverted. Kept because QA reports the
- * size of the family, and because a future milestone that finds a better
- * second basis needs this definition rather than a fresh guess at it.
+ * Such a title is DEMONSTRABLY NON-DESCRIPTIVE: it states what the agency
+ * regulates and never what the firm made. It is the one condition under which
+ * `categoryProductText` looks past the title, and it is also what QA uses to
+ * report the size of the family (210 of 1,914 stored cases, 11.0%).
  */
 export function isJurisdictionOnlyPhrase(phrase: string): boolean {
-  const words = phrase
+  const words = contentWordsOf(phrase);
+  return words.length > 0 && words.every((word) => JURISDICTION_WORDS.has(word));
+}
+
+/** A phrase's words with punctuation and state/provenance descriptors removed. */
+function contentWordsOf(phrase: string): string[] {
+  return phrase
     .toLowerCase()
     .replace(/[^a-z\s-]/g, ' ')
     .split(/[\s-]+/)
     .filter((word) => word !== '' && !DESCRIPTOR_SET.has(word));
-  return words.length > 0 && words.every((word) => JURISDICTION_WORDS.has(word));
+}
+
+// ── The announcement's canonical product-identification sentence (C10A.1) ───
+//
+// Both agencies' announcements are templated, and one sentence of the template
+// exists to name the recalled product and nothing else:
+//
+//     "The microwavable ready-to-eat chicken bowl items were produced on …"
+//     "The ready-to-eat steak and mushroom pie items were produced from …"
+//     "The ground beef item was produced on September 2, 2015."
+//
+// It is the ONLY span of announcement prose this module will read, and three
+// properties make reading it safe rather than a licence to parse prose:
+//
+//   1. The grammar is closed. The sentence must BEGIN with "The" and END at
+//      "items/products was/were produced", and the span between may not cross
+//      a sentence boundary. Announcements that do not fit yield nothing —
+//      measured over the live corpus, 59.0% of FSIS notices carry it and the
+//      rest simply fall through to the title.
+//   2. The span sits BEFORE the announcement pivots to why. Cause, pathogen,
+//      allergen, health risk, firm, retailer and geography all live in other
+//      sentences; measured over all 1,196 stored FSIS notices, zero extracted
+//      spans contain hazard or cause language.
+//   3. It is consulted ONLY when the title has already proved non-descriptive,
+//      and only when what it names still passes the two guards below. Title
+//      stays primary everywhere else.
+
+/**
+ * The canonical sentence. `[^.\n]` is load-bearing: without it the lazy span
+ * runs through a sentence boundary and reaches the establishment-number line
+ * ("The products bear the establishment number EST. 12445 … The products were
+ * produced …"), which names a package and a plant, not a product.
+ */
+const PRODUCT_SENTENCE =
+  /(?:^|[.\n]\s*)The\s+([^.\n]{3,200}?)\s+(?:items?|products?)\s+(?:was|were)\s+produced\b/i;
+
+/**
+ * Words proving the phrase still names what the notice is ABOUT. FSIS
+ * regulates meat, poultry, egg and Siluriformes products, so the recalled
+ * article contains one; a "product" sentence that names none of them has not
+ * found the product but a brand line ("The Sams Choice Black Angus Vidalia
+ * Onion items were produced…" — the recall is beef patties). Either a bare
+ * species word or a reviewed meat/seafood product word satisfies it, so
+ * "pork lard" and "steak and mushroom pie" both qualify while a brand does not.
+ */
+function namesRegulatedProduct(phrase: string): boolean {
+  if (contentWordsOf(phrase).some((word) => JURISDICTION_WORDS.has(word))) return true;
+  const read = phraseMatches(phrase);
+  return read !== null && read.matches.some((m) => PROTEIN_CATEGORIES.has(m.category));
+}
+
+/**
+ * The bounded product evidence an announcement summary may contribute, or ''.
+ *
+ * Every rejection below is a case where the summary would be guessing, and
+ * every one of them leaves the title in charge:
+ *
+ *   · no canonical sentence — the announcement is not templated this way;
+ *   · the sentence names only the jurisdiction again ("The frozen, raw lamb
+ *     items were produced…") — no new evidence, so nothing is gained by
+ *     switching, and in particular generic meat evidence can never become a
+ *     prepared-food reading;
+ *   · the sentence names no regulated product at all — the grammar matched
+ *     something that is not the product.
+ */
+export function productSummaryEvidence(summary: string): string {
+  const phrase = (PRODUCT_SENTENCE.exec(summary ?? '')?.[1] ?? '').trim().replace(/[,;]$/, '');
+  if (phrase === '') return '';
+  if (isJurisdictionOnlyPhrase(phrase)) return '';
+  if (!namesRegulatedProduct(phrase)) return '';
+  return phrase;
 }
 
 /**
@@ -179,34 +264,38 @@ export function titleProductPhrase(title: string): string {
 /**
  * Which basis names the product, in order of how much the source structured it.
  *
- * ## The jurisdiction-only correction C10A tried, measured, and reverted
+ * ## Title first, always — and the one exception (C10A.1)
  *
- * C5.3B-2 named one residual error family as its largest and blamed this
- * seam: FSIS titles that state only the agency's remit ("Poultry Products")
- * while the real product — a salad, an entrée — appears in the structured
- * product lines. Its recommendation was to prefer those lines whenever the
- * title reduces to bare species words.
+ * The title is primary and stays primary. It is overridden by exactly one
+ * thing, in exactly one situation: when the title's own grammar yields a
+ * phrase that names only the agency's jurisdiction ("Poultry Products"), the
+ * title has demonstrably not named a product, and the announcement's canonical
+ * product-identification sentence is consulted instead — bounded, guarded and
+ * measured, per `productSummaryEvidence`.
  *
- * C10A implemented exactly that and A/B-measured it on the 60 development
- * rows it affects, scoring BOTH arms against the same reviewed labels:
+ * ## The product-lines correction C10A tried, measured, and reverted
+ *
+ * C5.3B-2 named this same family as its largest residual error and blamed
+ * this seam, but recommended a DIFFERENT second basis: the structured product
+ * lines. C10A implemented that and A/B-measured it on the 60 development rows
+ * it affects, scoring both arms against the same reviewed labels:
  *
  *     title grammar   80.0% exact-set     product lines   50.0% exact-set
  *     title-only correct: 21              lines-only correct: 3
  *
- * The recommendation is wrong about this corpus. FSIS product lines are
- * packaging prose — "Combo bins containing 'Beef Trimmings, BNLS, 90 L'",
- * "12-oz. metal cans containing 'SPAM Classic'" — and the names inside them
- * are brand-dominated. Reading them turns confident, correct Meat & poultry
- * readings into `other`, into `pantry_condiments` (a fat percentage read as a
- * pantry good), and into wrong aisles (fish-skin crackers read as bakery).
- * Extracting only the quoted label span was also tried and scored 50.0%.
+ * That recommendation is wrong about this corpus and STAYS REVERTED. FSIS
+ * product lines are packaging prose — "Combo bins containing 'Beef Trimmings,
+ * BNLS, 90 L'", "12-oz. metal cans containing 'SPAM Classic'" — and the names
+ * inside them are brand-dominated. Reading them turns confident, correct Meat
+ * & poultry readings into `other`, into `pantry_condiments` (a fat percentage
+ * read as a pantry good), and into wrong aisles (fish-skin crackers read as
+ * bakery). Extracting only the quoted label span was also tried and scored
+ * 50.0%. A blanket preference for product lines is prohibited and a test
+ * pins it.
  *
- * Two of the three lines-only wins were cases whose title phrase was empty or
- * generic, which ALREADY fall through to the lines below. The true yield of
- * the switch was one case against a cost of twenty-one, so it is not here.
- *
- * The family is real and its cases are genuinely mislabelled; the fix is not
- * a different basis but richer source text, which this app does not have.
+ * The announcement sentence is not that. It is one closed grammar whose whole
+ * job is to name the product, it is read only where the title failed, and what
+ * it yields is discarded unless it adds real product-form evidence.
  */
 export function categoryProductText(input: CategoryCaseInput): CategoryProductText {
   const description = (input.productDescription ?? '').trim();
@@ -215,6 +304,10 @@ export function categoryProductText(input: CategoryCaseInput): CategoryProductTe
   const title = input.title ?? '';
   const phrase = titleProductPhrase(title);
   if (phrase !== '' && !EMPTY_PHRASE.test(phrase)) {
+    if (isJurisdictionOnlyPhrase(phrase)) {
+      const evidence = productSummaryEvidence(input.announcementSummary ?? '');
+      if (evidence !== '') return { text: evidence, basis: 'summary_grammar' };
+    }
     return { text: phrase, basis: 'title_grammar' };
   }
 
@@ -449,7 +542,19 @@ function hasRealModifier(conjunct: string): boolean {
   return read.phrase
     .slice(0, head.start)
     .split(/\s+/)
+    .map(bareWord)
     .some((word) => word !== '' && !DESCRIPTOR_SET.has(word));
+}
+
+/**
+ * A token stripped of the punctuation wrapped around it, so the descriptor
+ * test reads a word the same way wherever it appears. FSIS writes the same
+ * state word bare and parenthesised in one breath — "ready-to-eat (RTE) kale
+ * and broccoli slaw salad" — and without this the parenthesised copy counts
+ * as a content word, which makes a modifier run look like a second product.
+ */
+function bareWord(token: string): string {
+  return token.replace(/^[^a-z0-9$']+|[^a-z0-9$']+$/gi, '');
 }
 
 /** A reviewed compound covering the conjunction means the segment is one dish. */
@@ -474,6 +579,7 @@ function compoundSpansConjunction(raw: string): boolean {
 function isModifierRun(raw: string): boolean {
   const words = unhyphenate(raw)
     .split(/\s+/)
+    .map(bareWord)
     .filter((word) => word !== '' && !DESCRIPTOR_SET.has(word));
   if (words.length === 0) return false;
   const stripped = words.join(' ');

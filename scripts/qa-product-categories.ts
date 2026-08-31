@@ -62,6 +62,41 @@ interface Gate {
   limit: number;
 }
 
+/**
+ * Everything an announcement says EXCEPT its product-identification sentence,
+ * rewritten as loud nonsense (C10A.1).
+ *
+ * C10A.1 lets the classifier read ONE bounded span of the announcement — the
+ * sentence whose whole job is to name the product — and only where the title
+ * has already proved non-descriptive. This is how that claim is MEASURED
+ * rather than asserted: every other sentence is replaced with cause, pathogen,
+ * allergen, firm, retailer, geography and illness prose, and the derivation
+ * must come out byte-identical over the whole corpus. The product sentence is
+ * deliberately preserved — rewriting it would change the product, which is
+ * supposed to change the answer.
+ */
+const PRODUCT_SENTENCE_SHAPE =
+  /\bThe\s+[^.\n]{3,200}?\s+(?:items?|products?)\s+(?:was|were)\s+produced\b/i;
+
+const ANNOUNCEMENT_NOISE = [
+  'The recalled articles may be contaminated with Salmonella, Listeria monocytogenes and undeclared milk, wheat, shellfish and peanuts. ',
+  'Dairy Bakery Seafood Co, a Fishtown establishment, began the recall after a complaint about chocolate cake, cheese and shrimp. ',
+  'These articles were shipped to Whole Foods, Costco and Dairy Barn in Maine, California and Puerto Rico. ',
+  'There have been confirmed reports of illness and adverse reactions to the undeclared peanut allergen. ',
+];
+
+function poisonAnnouncement(summary: string): string {
+  let index = 0;
+  return summary
+    .split(/(?<=[.\n])/)
+    .map((chunk) =>
+      PRODUCT_SENTENCE_SHAPE.test(chunk)
+        ? chunk
+        : ANNOUNCEMENT_NOISE[index++ % ANNOUNCEMENT_NOISE.length],
+    )
+    .join('');
+}
+
 async function main(): Promise<void> {
   loadDotEnv();
   const url = process.env.SUPABASE_URL;
@@ -91,12 +126,14 @@ async function main(): Promise<void> {
       title: p.title,
       productDescription: p.productDescription ?? null,
       affectedProducts: p.affectedProducts ?? [],
+      summaryText: p.summaryText ?? null,
     };
     const categories = deriveProductCategories(input);
     const productText = categoryProductText({
       sourceAgency: p.sourceAgency,
       title: p.title,
       productDescription: p.productDescription ?? null,
+      announcementSummary: p.summaryText ?? null,
       productLines: (p.affectedProducts ?? []).map((a) => a.name),
     });
     derived.push({
@@ -150,7 +187,13 @@ async function main(): Promise<void> {
 
   // ── Derivation basis ──────────────────────────────────────────────────────
   console.log(`\nDERIVATION BASIS (what named the product)`);
-  for (const basis of ['product_description', 'title_grammar', 'product_lines', 'title_raw']) {
+  for (const basis of [
+    'product_description',
+    'title_grammar',
+    'summary_grammar',
+    'product_lines',
+    'title_raw',
+  ]) {
     const a = all.filter((d) => d.basis === basis).length;
     const b = active.filter((d) => d.basis === basis).length;
     console.log(
@@ -250,6 +293,7 @@ async function main(): Promise<void> {
       title: p.title,
       productDescription: p.productDescription ?? null,
       affectedProducts: p.affectedProducts ?? [],
+      summaryText: p.summaryText ?? null,
     });
     const poisoned = deriveProductCategories({
       ...({
@@ -263,6 +307,13 @@ async function main(): Promise<void> {
       title: p.title,
       productDescription: p.productDescription ?? null,
       affectedProducts: p.affectedProducts ?? [],
+      // C10A.1 reads ONE bounded span of the announcement, so the announcement
+      // is poisoned too: every cause, pathogen, allergen, firm, retailer and
+      // geography clause in it is rewritten to loud nonsense, and a sentence
+      // of pure hazard prose is appended. The product-identification sentence
+      // is left alone — rewriting THAT would be changing the product, which is
+      // supposed to change the answer.
+      summaryText: poisonAnnouncement(p.summaryText ?? ''),
     });
     if (base.join('|') !== poisoned.join('|')) hazardSensitive += 1;
   }

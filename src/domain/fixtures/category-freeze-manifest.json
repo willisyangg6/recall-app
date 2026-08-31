@@ -1,7 +1,7 @@
 {
-  "phase": "C10A",
-  "recordedAt": "2026-08-30T00:00:00Z",
-  "purpose": "Freeze record for C10A's generalization test. The classifier files below were hashed BEFORE any C10A holdout case was selected; a test recomputes these hashes, so any post-freeze classifier change is loud. finalLabelsSha256 freezes the reviewed expected labels of the c10a_natural and c10a_challenge splits before the matcher's single run over them.",
+  "phase": "C10A.1",
+  "recordedAt": "2026-08-31T00:00:00Z",
+  "purpose": "Freeze record for C10A.1's generalization test. The classifier files below were hashed BEFORE any C10A.1 holdout case was selected; a test recomputes these hashes, so any post-freeze classifier change is loud. finalLabelsSha256 freezes the reviewed expected labels of the c10a1_natural and c10a1_challenge splits before the matcher's single run over them.",
   "ordering": [
     "1. matcher, lexicon, vocabulary and compact mapping frozen and hashed (this file)",
     "2. final holdout cases selected from source structure, WITHOUT running the matcher on them",
@@ -10,49 +10,76 @@
   ],
   "classifierFiles": {
     "src/domain/food-category.ts": "f59665702a5db52c9e37c30ce1315fc05a294b0c37e1943befe4a31fefa41801",
-    "src/domain/food-category-lexicon.ts": "02b838a6e3ae6298ed538f9a25bf0ca3c5468042b0303fbb80c23bc70716107b",
-    "src/domain/food-category-matcher.ts": "9e6233583ace70394ed68649b9af034ee1b3851eabf8f4b2b9450b86931f5319",
+    "src/domain/food-category-lexicon.ts": "eb98e2afe4d76160942acc7b62687b57da82ccd4d96216647894c97165866598",
+    "src/domain/food-category-matcher.ts": "d9d24fa01127af9118d161e634eaa28b0f23a3f3f98797e41fc20f85d63edf4d",
     "src/domain/food-category-compact.ts": "94707872865a0d6ef2ef23334c227807118180305ca37b51959712db1a8cbede"
   },
   "gate": {
-    "binding": "exact-set >= 95%, micro precision >= 95%, micro recall >= 95% on c10a_natural",
-    "consequence": "Below the gate, C10A stops before projection integration and historical backfill. The gate is the founder's and was not weakened after results were seen.",
-    "result": "NOT MET. c10a_natural 91.5% exact-set (183/200), micro P 92.1%, micro R 91.6%, FDA 88.3%, FSIS 92.9%. c10a_challenge 89.7% (96/107) against a 90% gate. Nothing was integrated."
+    "binding": "PRODUCT_GATES on c10a1_natural: exact-set >= 90%, at-least-one-correct >= 90%, micro precision >= 90%, micro recall >= 90%, determinism, and a newly reviewed unfindable rate <= 3%",
+    "consequence": "Below the gate, C10A.1 stops and reports. No second holdout may be drawn and no classifier change may be made after the single run.",
+    "result": "NOT MET. c10a1_natural 86.5% exact-set (173/200), at-least-one-correct 87.5% (175/200), micro P 87.1%, micro R 87.1%, FDA 86.4% (51/59), FSIS 86.5% (122/141). Every accepted product gate is missed. c10a1_challenge (diagnostic) 92.3% (48/52). The newly reviewed unfindable rate is 4/200 = 2.0%, which does meet its <=3% gate, but it cannot rescue the accuracy gates. C10A.1 STOPS: nothing is integrated, the historical backfill is not applied, and no second holdout may be drawn."
   },
-  "whatChangedSinceC53B2": [
-    "vocabulary: eleven ids renamed to the C10A twelve, adding `other`; the derivation is now TOTAL",
-    "labels: bakery_grains reads 'Bakery' and pantry_condiments reads 'Pantry & staples', because grain staples derive pantry_condiments",
-    "lexicon: pork skin/porkskin, stuffed chicken, samsa, coxinha, mojibake-tolerant entree, pickled vegetables",
-    "extraction: the jurisdiction-only product-lines switch was implemented, A/B measured at 50.0% against the title grammar's 80.0% on the 60 rows it affects, and REVERTED; categoryProductText is otherwise unchanged from C5.3B-2",
-    "gold set: 13 rows that reviewed as no-category now read ['other']; 7 development rows whose original review saw only a jurisdiction-only title were relabelled from their own product lines, each carrying a note"
+  "whatChangedSinceC10A": [
+    "lexicon A (pastry): kringle; 'Danish' as a pastry only in pastry context (a pastry-form head after it, a filling/fruit modifier before it, or the plural count noun) — bare 'Danish' stays a demonym; sambusa/sambousa join the samosa dumpling family and are NOT pastry",
+    "lexicon B (prepared): the enumerated synonyms (samosa, samsa, dumpling, potsticker, gyoza, ravioli, tortellini, deli salad, wrap, sandwich, party tray) were audited and already derive Prepared foods; only sambusa was missing. Composed deli assortments gained '(party|deli|charcuterie|antipasto|appetizer|sandwich) (tray|platter)'. 'meat tray' and 'cheese tray' were deliberately EXCLUDED because they also name packaging ('beef stew meat trays')",
+    "lexicon C (supplement powders): REJECTED. No general product-form rule was retained. A powder's aisle comes from what is powdered; 'root powder' has a corpus support of one case and would misfile culinary root, leaf and bark powders. The beet-root example is left unresolved, and the counterexamples that rejected the rule are pinned by a test",
+    "lexicon (false-positive repairs found by D's audit): a loaf named by its protein is meat, not bakery; a fish steak is seafood, not butcher meat",
+    "matcher: the descriptor test is now punctuation-insensitive, so FSIS's 'ready-to-eat (RTE)' reads as the same descriptor as 'ready-to-eat'",
+    "matcher D (extraction): a NARROW announcement-summary fallback. When and only when the title's own grammar yields a jurisdiction-only phrase, the announcement's canonical product-identification sentence ('The <product> items were produced on <date>') is read instead, and only if the extracted span (a) does not cross a sentence boundary, (b) is not itself jurisdiction-only, and (c) still names a regulated product. Everything else about the announcement remains unreadable. Basis 'summary_grammar'",
+    "extraction: the BLANKET preference for structured product lines on jurisdiction-only titles stays REVERTED and prohibited; a test pins it",
+    "gold set: the spent c10a_natural (200) and c10a_challenge (107) splits were retired into development with originSplit preserved; C10A.1 drew its own holdout from the 870 cases no split had touched"
   ],
+  "developmentMeasurement": {
+    "note": "Development evidence only. The 1,044 C10A rows — including both SPENT C10A holdouts — are tuning evidence for C10A.1 and support no claim about it.",
+    "beforeC10A1": "977/1044 exact-set (93.6%)",
+    "afterVocabularyOnly": "979/1044 exact-set (93.8%)",
+    "afterVocabularyAndSummaryFallback": "976/1044 exact-set (93.5%)",
+    "summaryFallbackAgainstStoredLabels": "16 rows change: 6 fixed, 9 broken, 1 wrong-to-differently-wrong (net -3)",
+    "summaryFallbackReAdjudicated": "DISCLOSED JUDGEMENT, NOT A CLAIM. Re-reading the 16 changed rows against the frozen taxonomy's own written rules (an entrée is Prepared foods; a wrap is Prepared foods; rendered fats are pantry goods) finds 11 genuinely improved, 1 partly improved, 3 genuinely regressed and 1 wrong-to-differently-wrong. Six of the nine 'broken' rows carry a reviewed label that was itself assigned from the same jurisdiction-only title the fallback exists to look past — the identical artefact C10A corrected in seven development rows. Those labels were NOT corrected here: two of the six sit in spent holdouts, and rewriting a holdout label to flatter a change is the circularity the freeze protocol exists to prevent. The fresh holdout, labelled from full source evidence, is what decides.",
+    "residualRegressions": [
+      "a bare cut word conjoined to a species ('Siluriformes fish, both whole/gutted and steak') adds Meat & poultry beside Seafood",
+      "a component conjunct in a dish ('frozen beef patty and gravy') adds Pantry & staples",
+      "a raw cut on a stick ('raw chicken skewer') reads as the dish form rather than the cut"
+    ],
+    "hazardBlindness": "Zero of the 1,196 stored FSIS announcements yield an extracted span containing hazard or cause language. npm run qa:product-categories re-derives all 1,914 cases with every non-product sentence of the announcement rewritten as cause, pathogen, allergen, firm, retailer, geography and illness prose, and requires byte-identical output."
+  },
   "holdout": {
-    "c10a_natural": 200,
-    "c10a_challenge": 107,
-    "poolSize": 1177,
-    "selection": "Natural: largest-remainder proportional allocation over 9 source-structure strata (agency x lifecycle x has-productDescription x product-line-count bucket), ordered within each stratum by an FNV hash of the case id. Challenge: ten structural screens (jurisdiction-only title, conjunction, ingredient preposition, undeclared-allergen title, pathogen title, enumerated list, flavour words, long text, very short text, non-title basis), capped per screen. Neither consults the lexicon or any prediction.",
+    "poolSize": 870,
+    "poolDefinition": "Every stored case whose id appears in no C10A gold-set row. The C10A development, c10a_natural, c10a_challenge and compact-diagnostic splits are all drawn from the same 1,044 rows, so excluding those rows excludes every previously touched case.",
+    "selection": "FROZEN BEFORE THE DRAW. Natural: 200 by largest-remainder proportional allocation over the same source-structure strata C10A used — agency x lifecycle(active|inactive) x has-productDescription x product-line-count bucket(0 | 1-5 | 6+) — ordered within each stratum by FNV-1a(caseId) ascending, ties broken by caseId. Challenge: six screens applied in the order listed, each capped at 12 cases, skipping any case already drawn, ordered within a screen by FNV-1a(caseId): (1) supplement words, (2) beverage words, (3) infant-feeding words, (4) seafood words, (5) snack/sweet words, (6) a jurisdiction-only FSIS title carrying a canonical announcement product sentence. Screens 1-5 are plain-English keyword screens taken from the FROZEN CATEGORY DEFINITIONS in food-category.ts, not from the lexicon. No screen and no stratum consults the lexicon, the matcher's category output, or any prediction; screen 6 consults extraction structure only, which reveals no category. The challenge split is DIAGNOSTIC and never replaces the natural holdout.",
+    "c10a1_natural": 200,
+    "c10a1_challenge": 52,
     "disclosures": [
-      "The natural sample is drawn blind to category and contains no beverages, baby_food_formula or other row. This is not a sampling choice: the corpus holds only 13 beverage and 20 infant-feeding cases in total and the C5.3B-2 development set already contains all of them, so no fresh holdout can cover those categories. A supplemental screened draw for beverage-shaped, infant-shaped and unnameable cases found 1, 0 and 16 eligible respectively, and none reviewed as those categories.",
-      "Seven supplemental challenge rows were added by a disclosed structural screen; they landed on Notification Report titles, a real hard family. c10a_natural is untouched by any supplemental draw and carries the binding gate.",
-      "Development includes the two SPENT C5.3B-2 holdouts (317 rows) and 7 rows whose reviewed label C10A corrected from the case's own product lines."
+      "HARNESS DEFECT, DISCLOSED. The first execution of the evaluation harness did not pass the announcement to `predict`, so it graded a title-only arm and reported 85.0%. The classifier files and the reviewed labels were NOT touched — both still hash to the values frozen before selection — and the harness was corrected so the gate grades the derivation that actually ships. Both numbers miss every gate, so the correction changed the evidence, not the verdict. The gold set now carries `announcementSummary` on every row for the same reason: a fixture that omits an input the classifier reads measures a classifier nobody runs.",
+      "The natural sample is drawn blind to category and contains no baby_food_formula and no `other` row. The corpus holds 20 infant-feeding cases in total and every one was already spent by an earlier split; the disclosed infant-feeding screen returned zero eligible rows. The untouched pool held no case whose product a reviewer could not name. `beverages` was exempt under C10A and is NOT exempt now — the challenge screen found one and it reviewed as a beverage.",
+      "The natural sample holds exactly ONE reviewed multi-category row, so multi-label accuracy is effectively unmeasured on this draw.",
+      "The challenge split is 52 rows, not the 107 C10A drew: three of the six frozen screens were exhausted below their cap (supplements 10, beverages 6, infant-feeding 0). It is DIAGNOSTIC and carries no gate."
     ]
   },
-  "reconstruction": {
-    "when": "2026-08-30, after the single run",
-    "what": "An erroneous `git checkout -- src/domain/` during mutation testing discarded the uncommitted C10A working tree. The classifier, vocabulary, evaluation harness, gold-set migration and tests were reconstructed from the authoring steps; the holdout SELECTION (holdout-candidates.json) and the 307 REVIEWED LABELS were unaffected, having been kept outside the repository.",
-    "evidence": "finalLabelsSha256 recomputes to the value frozen before the original single run (0bddb35d4b88feec0b1348e60b8e9ebb95aa3586f02bcd01d71f3ee8f850bd78), and the re-run reproduces the recorded result exactly: c10a_natural 183/200, c10a_challenge 96/107, same per-category tallies and failure lists. No label was re-reviewed and no holdout case was re-selected, so the freeze ordering above still describes what happened."
-  },
   "supersedes": {
-    "phase": "C5.3B-2",
-    "recordedAt": "2026-08-28T17:02:04Z",
-    "result": "Measured once: final_natural 89.5% exact-set (gate 95%), final_challenge 91.5% (gate 90%). NOT PASSING; the Category filter was deferred. Both splits are SPENT and are recorded in the gold set as development with originSplit preserved.",
+    "phase": "C10A",
+    "recordedAt": "2026-08-30T00:00:00Z",
+    "result": "Measured once: c10a_natural 91.5% exact-set (183/200), micro P 92.1%, micro R 91.6%, FDA 88.3%, FSIS 92.9%; c10a_challenge 89.7% (96/107). The 95% research gate was NOT MET and was left intact. The founder accepted the measurement under separate >=90% product gates for Category as an optional discovery filter, and the reviewed-unfindable baseline was 4/200 = 2.0%. Both splits are SPENT and are recorded in the gold set as development with originSplit preserved.",
     "classifierFiles": {
-      "src/domain/food-category.ts": "215118ec66b79ad92513ac3f846aff4fb07e523ad15bd3e5a24b07d2a4c48e35",
-      "src/domain/food-category-lexicon.ts": "c97ae9c03756b308d50501036a5f5f4f512048d1b0cd5a0a68cd962f773fd63c",
-      "src/domain/food-category-matcher.ts": "bff665cacd7f86e4b6bf0c68db9d8b1ef963b5c8663aae27cc6acd792be52439",
-      "src/domain/food-category-compact.ts": "5ec628250412c17bbd16b1a66dff8469f80d5e65cdb56ba8bca672164f920118"
+      "src/domain/food-category.ts": "f59665702a5db52c9e37c30ce1315fc05a294b0c37e1943befe4a31fefa41801",
+      "src/domain/food-category-lexicon.ts": "02b838a6e3ae6298ed538f9a25bf0ca3c5468042b0303fbb80c23bc70716107b",
+      "src/domain/food-category-matcher.ts": "9e6233583ace70394ed68649b9af034ee1b3851eabf8f4b2b9450b86931f5319",
+      "src/domain/food-category-compact.ts": "94707872865a0d6ef2ef23334c227807118180305ca37b51959712db1a8cbede"
     },
-    "finalLabelsSha256": "1820ea6e9eb7cbcd2a0d79b18446e3a8d66c2152425f044896643c98629981a8"
+    "finalLabelsSha256": "0bddb35d4b88feec0b1348e60b8e9ebb95aa3586f02bcd01d71f3ee8f850bd78",
+    "supersedes": {
+      "phase": "C5.3B-2",
+      "recordedAt": "2026-08-28T17:02:04Z",
+      "result": "Measured once: final_natural 89.5% exact-set (gate 95%), final_challenge 91.5% (gate 90%). NOT PASSING; the Category filter was deferred.",
+      "finalLabelsSha256": "1820ea6e9eb7cbcd2a0d79b18446e3a8d66c2152425f044896643c98629981a8"
+    }
   },
-  "finalLabelsSha256": "0bddb35d4b88feec0b1348e60b8e9ebb95aa3586f02bcd01d71f3ee8f850bd78"
+  "finalLabelsSha256": "8c8358d89678f99455f8dfce05fcc78388334164443b8a56761f4e0c0a9bb421",
+  "foundAfterTheRun": [
+    "NOT FIXED, and recorded for a later milestone. `isJurisdictionOnlyPhrase` strips state and provenance descriptors but NOT conjunctions, so a coordinated jurisdiction title — 'Beef and Chicken Products', 'Poultry and Meat Products', 'Chicken, Pork and Beef Products' — does not read as jurisdiction-only and the announcement fallback never fires on it. Four of the 27 natural failures are that one gap, and a fifth (89006004) is its mirror image: 'frozen assorted meat and poultry' passes the not-jurisdiction-only guard on the word 'and' and is admitted as new evidence when it adds none.",
+    "NOT FIXED. The canonical-sentence grammar requires the noun 'items' or 'products' before 'was/were produced'. Announcements that name the product directly — 'The fried pork rinds were produced from...', 'The beef and chicken blintzes were produced on...' — do not match, and those cases fall back to a jurisdiction-only title.",
+    "NOT FIXED. Head-last reading loses marketing word order: 'Bao Curry Chicken' reads as chicken though 'bao' is in the lexicon, and 'Protein Powder - Chocolate' reads as chocolate because the flavour is postposed after a compound.",
+    "NOT FIXED. 'pasties' is absent from the lexicon.",
+    "Every one of these was found by reading the single run's failures. Acting on any of them requires a new freeze and a new holdout drawn from the 618 cases that remain untouched."
+  ]
 }

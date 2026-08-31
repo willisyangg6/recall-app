@@ -124,7 +124,7 @@ function verifyFreeze(): string[] {
   }
   const goldSet: GoldSet = JSON.parse(readFileSync(FIXTURE, 'utf8'));
   const finalLabels = goldSet.rows
-    .filter((row) => row.split === 'c10a_natural' || row.split === 'c10a_challenge')
+    .filter((row) => row.split === 'c10a1_natural' || row.split === 'c10a1_challenge')
     .map((row) => `${row.caseId}:${row.expected.join('+')}`)
     .sort()
     .join('\n');
@@ -162,8 +162,8 @@ function main(): void {
   }
 
   const development = goldSet.rows.filter((row) => row.split === 'development');
-  const natural = goldSet.rows.filter((row) => row.split === 'c10a_natural');
-  const challenge = goldSet.rows.filter((row) => row.split === 'c10a_challenge');
+  const natural = goldSet.rows.filter((row) => row.split === 'c10a1_natural');
+  const challenge = goldSet.rows.filter((row) => row.split === 'c10a1_challenge');
 
   // Development: cross-validation stability, never a claim.
   const cv = crossValidate(development, 5);
@@ -179,10 +179,10 @@ function main(): void {
     `  mean ${pct(cv.meanExactSet)} · min ${pct(cv.minExactSet)} · max ${pct(cv.maxExactSet)} · stdev ${(cv.stdevExactSet * 100).toFixed(2)}pp`,
   );
 
-  const naturalEval = evaluateRows(natural, 'c10a_natural');
+  const naturalEval = evaluateRows(natural, 'c10a1_natural');
   printEvaluation('C10A NATURAL HOLDOUT — twelve categories (THE accuracy)', naturalEval, natural);
 
-  const challengeEval = evaluateRows(challenge, 'c10a_challenge');
+  const challengeEval = evaluateRows(challenge, 'c10a1_challenge');
   printEvaluation('C10A CHALLENGE HOLDOUT — twelve categories', challengeEval, challenge);
 
   // Compact diagnostic: same frozen predictions and labels, merged 11 → 7.

@@ -127,6 +127,11 @@ export function planCaseCategories(row: RecallCaseRow): CategoryCasePlan {
     title: projection.title,
     productDescription: projection.productDescription ?? null,
     affectedProducts: projection.affectedProducts ?? [],
+    // C10A.1: the canonical derivation reads one bounded span of the
+    // announcement. Passing it here is what keeps an enriched case identical
+    // to what a full re-projection would have produced — omitting it would
+    // make the backfill a second, weaker classifier.
+    summaryText: projection.summaryText ?? null,
   });
 
   return {
