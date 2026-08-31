@@ -158,6 +158,13 @@ const JURISDICTION_WORDS = new Set([
 ]);
 
 /**
+ * Coordinating conjunctions. They JOIN content words; they never are one.
+ * ("&" and "+" are already punctuation to `contentWordsOf`, and so are commas,
+ * so this set only has to name the spelled-out forms.)
+ */
+const CONJUNCTION_WORDS = new Set(['and', 'or']);
+
+/**
  * True when a title phrase names ONLY the agency's jurisdiction — every
  * content word left after descriptors is a bare species word ("Poultry
  * Products", "Ready-To-Eat Beef Products", "Frozen, Raw Lamb Products").
@@ -165,20 +172,42 @@ const JURISDICTION_WORDS = new Set([
  * Such a title is DEMONSTRABLY NON-DESCRIPTIVE: it states what the agency
  * regulates and never what the firm made. It is the one condition under which
  * `categoryProductText` looks past the title, and it is also what QA uses to
- * report the size of the family (210 of 1,914 stored cases, 11.0%).
+ * report the size of the family.
+ *
+ * ## Coordination is not evidence (C10A.2)
+ *
+ * FSIS names its remit with a list as readily as with one word — "Beef and
+ * Chicken Products", "Poultry and Meat Products", "Chicken, Pork and Beef
+ * Products" — and those titles are exactly as non-descriptive as "Beef
+ * Products". `contentWordsOf` therefore drops coordinating conjunctions, so a
+ * coordinated species list reads as the jurisdiction it is. Measured over the
+ * live corpus this admits 55 distinct title phrases and every one of them is a
+ * bare species list; NONE names a product form, dish, cut, package or
+ * preparation, because the `every` below still fails the moment one word is
+ * not a species word ("Beef and Chicken Tamales", "Pork and Beans", "Chicken
+ * and Waffles" all stay descriptive).
+ *
+ * This cuts both ways ON PURPOSE, and the second direction matters as much as
+ * the first: `productSummaryEvidence` rejects a summary span that is itself
+ * jurisdiction-only, and before this change a coordinated span ("frozen
+ * assorted meat and poultry") slipped past that guard on the word "and" and
+ * was admitted as new evidence when it added none.
  */
 export function isJurisdictionOnlyPhrase(phrase: string): boolean {
   const words = contentWordsOf(phrase);
   return words.length > 0 && words.every((word) => JURISDICTION_WORDS.has(word));
 }
 
-/** A phrase's words with punctuation and state/provenance descriptors removed. */
+/**
+ * A phrase's words with punctuation, state/provenance descriptors and
+ * coordinating conjunctions removed.
+ */
 function contentWordsOf(phrase: string): string[] {
   return phrase
     .toLowerCase()
     .replace(/[^a-z\s-]/g, ' ')
     .split(/[\s-]+/)
-    .filter((word) => word !== '' && !DESCRIPTOR_SET.has(word));
+    .filter((word) => word !== '' && !DESCRIPTOR_SET.has(word) && !CONJUNCTION_WORDS.has(word));
 }
 
 // ── The announcement's canonical product-identification sentence (C10A.1) ───
@@ -211,9 +240,66 @@ function contentWordsOf(phrase: string): string[] {
  * runs through a sentence boundary and reaches the establishment-number line
  * ("The products bear the establishment number EST. 12445 … The products were
  * produced …"), which names a package and a plant, not a product.
+ *
+ * ## The noun is optional (C10A.2)
+ *
+ * C10A.1 required the literal noun "items" or "products" before the verb, so
+ * the same template sentence with the product as its own subject — "The fried
+ * pork rinds were produced from…", "The beef and chicken blintzes were
+ * produced on…" — did not match and those cases fell back to a
+ * jurisdiction-only title. The noun is now optional, which widens the subject
+ * from "a product noun preceded by modifiers" to "a noun phrase". Everything
+ * else about the grammar is unchanged: the sentence still must begin at "The",
+ * still must end at "was/were produced", and still may not cross a sentence
+ * boundary. What the wider subject costs is paid for by `namesProductSubject`
+ * below, which is the guard that keeps it a NAME rather than prose.
  */
-const PRODUCT_SENTENCE =
-  /(?:^|[.\n]\s*)The\s+([^.\n]{3,200}?)\s+(?:items?|products?)\s+(?:was|were)\s+produced\b/i;
+const PRODUCT_SENTENCE = /(?:^|[.\n]\s*)The\s+([^.\n]{3,200}?)\s+(?:was|were)\s+produced\b/i;
+
+/**
+ * Clause markers (C10A.2). A product NAME is a noun phrase. A relative
+ * pronoun, a finite verb or a subordinator proves the span is a sentence
+ * ABOUT the recall instead, and every one of these is a shape the corpus
+ * actually produces:
+ *
+ *     "The products subject to recall were produced…"
+ *     "The product labeled as chicken flavored base, which may actually
+ *      contain beef base, was produced…"
+ *     "The scope of this recall expansion now includes … which were produced…"
+ *     "The products included in this recall are adulterated because they
+ *      were produced…"
+ *
+ * Rejecting the span leaves the title in charge, which is exactly where the
+ * derivation was before the grammar widened — a rejection can only ever
+ * restore the C10A.1 answer, never invent a new one.
+ */
+const CLAUSE_MARKERS =
+  /\b(?:that|which|who|whose|is|are|was|were|be|been|being|has|have|had|may|might|will|would|can|could|should|appears?|contains?|includes?|including|included|intended|identified|affected|considered|labell?ed|labell?ing|subject|because|recalls?|recalled|expansion|expanded|shipped|distributed)\b/i;
+
+/**
+ * Cause, who and where (C10A.2). The classifier answers WHAT was recalled, so
+ * a span carrying pathogen, allergen, illness, firm, establishment or
+ * distribution language has not found the product even if a food word sits
+ * beside it.
+ *
+ * Measured over the live corpus this guard rejects NOTHING that the clause
+ * guard above does not already reject — the announcement template keeps cause
+ * in its own sentences — and it is kept anyway, because "the template happens
+ * not to do that" is an observation about today's prose and this is the
+ * property the module has to hold whatever the agencies write next.
+ */
+const CAUSE_OR_PARTY_CLAUSE =
+  /\b(?:salmonella|listeria|monocytogenes|botulism|clostridium|staphylococc\w*|coli|pathogens?|contaminat\w*|adulterat\w*|undeclared|allergens?|misbrand\w*|illnesse?s?|hospitaliz\w*|outbreaks?|deaths?|establishments?|facilit\w*|firms?|retailers?|distributors?|nationwide|statewide)\b/i;
+
+/**
+ * True when the extracted span reads as the recalled product's NAME rather
+ * than as prose about the recall. This is the guard that pays for the wider
+ * grammar above, and it is deliberately a rejection test rather than a
+ * recognition test: anything it is unsure about falls back to the title.
+ */
+function namesProductSubject(phrase: string): boolean {
+  return !CLAUSE_MARKERS.test(phrase) && !CAUSE_OR_PARTY_CLAUSE.test(phrase);
+}
 
 /**
  * Words proving the phrase still names what the notice is ABOUT. FSIS
@@ -237,16 +323,20 @@ function namesRegulatedProduct(phrase: string): boolean {
  * every one of them leaves the title in charge:
  *
  *   · no canonical sentence — the announcement is not templated this way;
+ *   · the subject is a clause, not a name — "products subject to recall",
+ *     "the scope of this recall expansion now includes…" — or it carries
+ *     cause, illness, firm, establishment or distribution language (C10A.2);
  *   · the sentence names only the jurisdiction again ("The frozen, raw lamb
  *     items were produced…") — no new evidence, so nothing is gained by
  *     switching, and in particular generic meat evidence can never become a
  *     prepared-food reading;
  *   · the sentence names no regulated product at all — the grammar matched
- *     something that is not the product.
+ *     something that is not the product, which is what rejects a brand line.
  */
 export function productSummaryEvidence(summary: string): string {
   const phrase = (PRODUCT_SENTENCE.exec(summary ?? '')?.[1] ?? '').trim().replace(/[,;]$/, '');
   if (phrase === '') return '';
+  if (!namesProductSubject(phrase)) return '';
   if (isJurisdictionOnlyPhrase(phrase)) return '';
   if (!namesRegulatedProduct(phrase)) return '';
   return phrase;
@@ -382,6 +472,15 @@ const INGREDIENT_CUT = /\s+(?:with|w\/|containing|contains|made with|made from|i
  */
 const PRODUCT_SEPARATOR = /[;,](?=\s)|\s+(?:such as|e\.g\.|including|includes)\s+/;
 
+/**
+ * A SPACED dash, which retail names use to postpose a variant (C10A.2).
+ *
+ * The dash must be spaced. A bare hyphen BINDS words — "ready-to-eat",
+ * "chocolate-covered", "mahi-mahi" — and is never a separator; that is why
+ * hyphens survive normalization and are only flattened inside `unhyphenate`.
+ */
+const VARIANT_DASH = /\s+-\s+/;
+
 /** Conjunctions, handled separately because they also coordinate MODIFIERS. */
 const CONJUNCTION = /\s+(?:and|&|\+)\s+/;
 
@@ -415,9 +514,10 @@ export function splitProductPhrases(normalized: string): string[] {
     new RegExp(`^.*?${PACKAGING_CONTAINING.source}`, 'i'),
     '',
   );
-  const [products, ...rest] = afterPackaging.split(INGREDIENT_CUT);
+  const named = cutPostposedVariant(afterPackaging);
+  const [products, ...rest] = named.split(INGREDIENT_CUT);
   const tail = rest.join(' ');
-  const dish = trailingDish(afterPackaging, tail);
+  const dish = trailingDish(named, tail);
   if (dish !== null) return [dish];
 
   const phrases = segmentsOf(products);
@@ -429,10 +529,48 @@ export function splitProductPhrases(normalized: string): string[] {
   // so it is left unrescued and the case stays honestly uncategorized.
   if (rest.length > 0 && !phrases.some((phrase) => headMatchOf(phrase) !== null)) {
     if (headMatchOf(tail) !== null && !/\bfrom\b/.test(tail)) {
-      return segmentsOf(afterPackaging);
+      return segmentsOf(named);
     }
   }
   return phrases;
+}
+
+/**
+ * "Protein Powder – Chocolate" is one supplement, not a confection (C10A.2).
+ *
+ * ## The pattern
+ *
+ * Retail product names postpose the VARIANT after a spaced dash — the flavour,
+ * the pack size, the format: "Protein Powder – Chocolate", "Cookies –
+ * Chocolate Chip", "Smoked Salmon Slices – toast sized, 8.1 oz". Head-last
+ * reading gets these backwards, because the thing after the dash is not a head
+ * at all; it distinguishes one SKU of a product from another. This is
+ * punctuation, not vocabulary: no word is preferred for being first or last,
+ * and the rule fires on the dash or not at all.
+ *
+ * ## The guard, and why the rule needs one
+ *
+ * The tail is cut ONLY when what precedes the dash already names a product.
+ * A dash also sits inside longer names, where the product is on the FAR side:
+ * "Ineligible Imported Raw Frozen New Orleans – Roasted Chicken Wings from the
+ * People's Republic of China" is chicken wings, and "New Orleans" names no
+ * product, so nothing is cut. Preferring the pre-dash text unconditionally
+ * would be exactly the "globally prefer the first word" rule this is not.
+ *
+ * ## What it does NOT do
+ *
+ * It never merges or splits products, never adds a category, and never reaches
+ * a phrase with no spaced dash in it. Across the 1,914 stored cases seven
+ * carry a spaced dash; the cut changes the answer for one of them and leaves
+ * the other six identical, because their variants were pack sizes the lexicon
+ * never matched anyway.
+ */
+function cutPostposedVariant(text: string): string {
+  const match = VARIANT_DASH.exec(text);
+  if (match === null) return text;
+  const head = text.slice(0, match.index).trim();
+  if (head === '' || headMatchOf(head) === null) return text;
+  return head;
 }
 
 function segmentsOf(text: string): string[] {

@@ -660,7 +660,10 @@ test('a jurisdiction-only title yields to the announcement product sentence', ()
     announcementSummary: productSentence('ready-to-eat curry chicken salad'),
   });
   assert.equal(derived.basis, 'summary_grammar');
-  assert.equal(derived.text, 'ready-to-eat curry chicken salad');
+  // C10A.2 made the "items"/"products" noun optional, so it now falls INSIDE
+  // the captured subject. It is a descriptor to every downstream rule, so the
+  // reading is unchanged — which is what the category assertion below pins.
+  assert.equal(derived.text, 'ready-to-eat curry chicken salad items');
   assert.deepEqual(of(derived.text), ['prepared_foods']);
 });
 
@@ -827,7 +830,8 @@ test('the announcement sentence never overrides the prohibited product-line pref
     announcementSummary: productSentence('ready-to-eat chicken bowl'),
   });
   assert.equal(derived.basis, 'summary_grammar');
-  assert.equal(derived.text, 'ready-to-eat chicken bowl');
+  assert.equal(derived.text, 'ready-to-eat chicken bowl items');
+  assert.deepEqual(of(derived.text), ['prepared_foods']);
 });
 
 test('the derivation stays deterministic and capped with the announcement basis', () => {
@@ -841,4 +845,250 @@ test('the derivation stays deterministic and capped with the announcement basis'
   assert.deepEqual(first, categoriesForCase(input).categories);
   assert.ok(first.length <= MAX_CATEGORIES_PER_CASE);
   assert.deepEqual(first, [...first].sort(() => 0).slice(0, MAX_CATEGORIES_PER_CASE));
+});
+
+// ── C10A.2 refinements ──────────────────────────────────────────────────────
+//
+// Every rule below is stated as product language and every one carries the
+// counterexamples that bound it. Rules the milestone PROPOSED and this phase
+// REJECTED are pinned too, at the bottom: a rejection that is not pinned is
+// an invitation to reintroduce the same bad rule later.
+
+// A. Coordination does not make a jurisdiction title descriptive.
+
+test('a coordinated species list is still only the agency jurisdiction', () => {
+  for (const phrase of [
+    'Beef and Chicken Products',
+    'Poultry and Meat Products',
+    'Chicken, Pork and Beef Products',
+    'Beef, Veal, And Bison Products',
+    'Ready-To-Eat Meat and Poultry Products',
+    'Frozen, Raw Beef and Lamb Products',
+    'Pork or Beef Products',
+  ]) {
+    assert.equal(isJurisdictionOnlyPhrase(phrase), true, phrase);
+  }
+});
+
+test('a coordinated title naming a real product is NOT jurisdiction-only', () => {
+  // One non-species content word is enough, wherever it sits: a dish, a cut,
+  // a preparation, a package or a staple all keep the title descriptive.
+  for (const phrase of [
+    'Beef and Chicken Tamales',
+    'Chicken and Waffles',
+    'Pork and Beans',
+    'Beef and Cheese Burritos',
+    'Chicken and Rice Bowls',
+    'Beef and Pork Sausage',
+    'Meat and Poultry Pasties',
+    'Ready-To-Eat Beef and Chicken Salad',
+    'Frozen Chicken and Beef Croquette Products',
+  ]) {
+    assert.equal(isJurisdictionOnlyPhrase(phrase), false, phrase);
+  }
+});
+
+test('the mere presence of meat words never proves a title is generic', () => {
+  // The rule is "every content word is a species word", not "some are".
+  assert.equal(isJurisdictionOnlyPhrase('Beef Jerky'), false);
+  assert.equal(isJurisdictionOnlyPhrase('Chicken Nuggets'), false);
+  assert.equal(isJurisdictionOnlyPhrase('Pork Rinds'), false);
+  assert.equal(isJurisdictionOnlyPhrase('Ground Beef Chubs'), false);
+});
+
+test('coordinated generic evidence is refused by the summary guard too', () => {
+  // The mirror image of the rule above, and the reason it is one change and
+  // not two: a coordinated span adds no evidence, so the title stays primary.
+  for (const generic of [
+    'frozen assorted meat and poultry',
+    'raw beef and pork',
+    'chicken, turkey and beef',
+  ]) {
+    const derived = categoryProductText({
+      sourceAgency: 'FSIS',
+      title: JURISDICTION_TITLE,
+      productDescription: null,
+      announcementSummary: productSentence(generic),
+    });
+    assert.equal(derived.basis, 'title_grammar', generic);
+  }
+});
+
+// B. The product may be the sentence's subject, without the noun.
+
+test('a directly named product subject is read without "items" or "products"', () => {
+  const directly = (product: string): string =>
+    `WASHINGTON, Jan. 2, 2026 - A Firm, a Springfield establishment, is recalling poultry ` +
+    `products, FSIS announced today.\nThe ${product} were produced on Dec. 1, 2025.`;
+  for (const [product, expected] of [
+    ['fried pork rinds', 'snacks_sweets'],
+    ['beef and chicken blintzes', 'prepared_foods'],
+    ['turkey bacon', 'meat_poultry'],
+    ['canned chicken gravy', 'pantry_condiments'],
+  ] as const) {
+    const derived = categoryProductText({
+      sourceAgency: 'FSIS',
+      title: JURISDICTION_TITLE,
+      productDescription: null,
+      announcementSummary: directly(product),
+    });
+    assert.equal(derived.basis, 'summary_grammar', product);
+    assert.deepEqual(of(derived.text), [expected], product);
+  }
+});
+
+test('a clause about the recall is not a product name', () => {
+  // Every one of these is a real shape from the corpus. A relative pronoun, a
+  // finite verb or a subordinator proves the span describes the recall rather
+  // than naming the article, and the title stays in charge.
+  for (const subject of [
+    'products subject to recall',
+    'following products being recalled',
+    'products included in this recall are adulterated because they',
+    'scope of this recall expansion now includes an additional 66 pounds of beef products, which',
+    'product labeled as chicken flavored base, which may actually contain beef base,',
+    'ready-to-eat salad products that contain meat',
+    'raw beef products intended for non-intact use',
+    'recall is limited to the chicken products identified below that',
+  ]) {
+    const derived = categoryProductText({
+      sourceAgency: 'FSIS',
+      title: JURISDICTION_TITLE,
+      productDescription: null,
+      announcementSummary: `A firm is recalling product.\nThe ${subject} were produced today.`,
+    });
+    assert.equal(derived.basis, 'title_grammar', subject);
+  }
+});
+
+test('a cause, illness, firm or distribution clause is not a product name', () => {
+  for (const subject of [
+    'beef patties contaminated with Salmonella',
+    'chicken items linked to an outbreak of illnesses',
+    'pork items from the Springfield establishment',
+    'beef items with undeclared milk allergens',
+    'chicken items sold nationwide by retailers',
+  ]) {
+    const derived = categoryProductText({
+      sourceAgency: 'FSIS',
+      title: JURISDICTION_TITLE,
+      productDescription: null,
+      announcementSummary: `A firm is recalling product.\nThe ${subject} were produced today.`,
+    });
+    assert.equal(derived.basis, 'title_grammar', subject);
+  }
+});
+
+test('the wider subject still may not cross a sentence boundary', () => {
+  const derived = categoryProductText({
+    sourceAgency: 'FSIS',
+    title: JURISDICTION_TITLE,
+    productDescription: null,
+    announcementSummary:
+      'The chicken salad bears the establishment number EST. 12445 on the label.\n' +
+      'The frozen, raw poultry were produced on various dates.',
+  });
+  assert.equal(derived.basis, 'title_grammar');
+});
+
+test('a descriptive title still outranks a directly named summary subject', () => {
+  const derived = categoryProductText({
+    sourceAgency: 'FSIS',
+    title: 'A Firm Recalls Chicken Salad Products Due to Possible Contamination',
+    productDescription: null,
+    announcementSummary: 'A firm is recalling.\nThe fried pork rinds were produced today.',
+  });
+  assert.equal(derived.basis, 'title_grammar');
+  assert.equal(derived.text, 'Chicken Salad Products');
+});
+
+// C. A variant postposed after a spaced dash is not the head.
+
+test('a variant after a spaced dash does not outrank the product before it', () => {
+  assert.deepEqual(of('Protein Powder – Chocolate'), ['supplements']);
+  assert.deepEqual(of('Cookies - Chocolate Chip'), ['bakery_grains']);
+  assert.deepEqual(of('Greek Yogurt - Strawberry'), ['dairy_eggs']);
+  assert.deepEqual(of('Smoked Salmon Slices – toast sized, 8.1 oz'), ['seafood']);
+});
+
+test('a dash inside a longer name leaves the product on the far side', () => {
+  // The cut needs the text BEFORE the dash to name a product. "New Orleans"
+  // and "Family Size" name none, so the dash is punctuation, not a variant
+  // boundary — preferring the first half unconditionally would be exactly the
+  // "always take the leading words" rule this is not.
+  assert.deepEqual(of('Imported Raw Frozen New Orleans – Roasted Chicken Wings'), ['meat_poultry']);
+  assert.deepEqual(of('Family Size - Beef Lasagna'), ['prepared_foods']);
+});
+
+test('a bare hyphen binds words and is never a variant boundary', () => {
+  assert.deepEqual(of('Ready-To-Eat Chicken Salad'), ['prepared_foods']);
+  assert.deepEqual(of('Chocolate-Covered Almonds'), ['snacks_sweets']);
+  assert.deepEqual(of('Mahi-Mahi Steaks'), ['seafood']);
+  assert.deepEqual(of('Dairy-Free Coconut Yogurt'), ['dairy_eggs']);
+});
+
+// D. Vocabulary.
+
+test('a pasty is a filled savoury turnover, filed with the dumplings', () => {
+  assert.deepEqual(of('Meat and Poultry Pasties'), ['prepared_foods']);
+  assert.deepEqual(of('Frozen Ready-To-Eat Beef Pasty'), ['prepared_foods']);
+});
+
+test('a pasty is not a pastry and not pasta', () => {
+  assert.deepEqual(of('Danish Pastries'), ['bakery_grains']);
+  assert.deepEqual(of('Puff Pastry Sheets'), ['bakery_grains']);
+  assert.deepEqual(of('Dried Pasta'), ['pantry_condiments']);
+});
+
+test('an offal cut named by its species is a meat product', () => {
+  assert.deepEqual(of('Frozen, raw beef tripe, beef feet, and lamb tripe items'), ['meat_poultry']);
+  assert.deepEqual(of('Beef Tongue'), ['meat_poultry']);
+  assert.deepEqual(of('Chicken Gizzards'), ['meat_poultry']);
+  assert.deepEqual(of('Pork Trotters'), ['meat_poultry']);
+});
+
+test('the species is what makes an offal cut a cut', () => {
+  // Without it the same nouns are produce, seafood or packaging words.
+  assert.deepEqual(of('Artichoke Hearts'), ['produce']);
+  assert.deepEqual(of('Fish Maw'), ['seafood']);
+  assert.deepEqual(of('Ears of Corn'), ['produce']);
+});
+
+// Rejected precedence rules, pinned with the counterexamples that rejected
+// them. See docs/recall-food-categories.md for the measurements.
+
+test('a leading product-form word does NOT outrank the head noun', () => {
+  // "Bao Curry Chicken" and "Spread Pistachio Cacao Cream" would each be
+  // repaired by preferring a leading dish or product-form word. These are the
+  // ordinary phrases that rule would break, so it was rejected.
+  assert.deepEqual(of('Sandwich Meat'), ['meat_poultry']);
+  assert.deepEqual(of('Burger Patties'), ['meat_poultry']);
+  assert.deepEqual(of('Taco Meat'), ['meat_poultry']);
+  assert.deepEqual(of('Sushi Grade Tuna'), ['seafood']);
+});
+
+test('"cream" is not demoted to a style word, and "spread" alone is not a rule', () => {
+  // A "cream describes texture" rule would repair one corpus case and break
+  // the twenty-four genuine dairy products that carry the same word.
+  assert.deepEqual(of('Sour Cream and Onion Cheese Curds'), ['dairy_eggs']);
+  assert.deepEqual(of('Peanut Butter Cup Ice Cream'), ['dairy_eggs']);
+  assert.deepEqual(of('Honey Cream Cheese'), ['dairy_eggs']);
+  assert.deepEqual(of('Whipped Cream'), ['dairy_eggs']);
+  // And a spread stays what the rest of the name makes it.
+  assert.deepEqual(of('Apulian Almond & Cocoa Spread'), ['pantry_condiments']);
+  assert.deepEqual(of('Cheese Spread'), ['dairy_eggs']);
+});
+
+test('"powder" alone still means nothing, and a compound still beats a later head', () => {
+  // The postposed-variant rule is punctuation-driven ON PURPOSE: without a
+  // dash, an ordinary modifier-then-head name reads head-last as before.
+  assert.deepEqual(of('Cinnamon Powder'), ['pantry_condiments']);
+  assert.deepEqual(of('Asafoetida Powder'), ['pantry_condiments']);
+  assert.deepEqual(of('Powdered Infant Formula'), ['baby_food_formula']);
+  assert.deepEqual(of('Peanut Butter Cookies'), ['bakery_grains']);
+  assert.deepEqual(of('Chocolate Cake'), ['bakery_grains']);
+  assert.deepEqual(of('Almond Milk'), ['beverages']);
+  assert.deepEqual(of('Cream Cheese'), ['dairy_eggs']);
+  assert.deepEqual(of('Ground Beef Loaf'), ['meat_poultry']);
+  assert.deepEqual(of('Halibut Steaks'), ['seafood']);
 });

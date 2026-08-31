@@ -66,17 +66,28 @@ interface Gate {
  * Everything an announcement says EXCEPT its product-identification sentence,
  * rewritten as loud nonsense (C10A.1).
  *
- * C10A.1 lets the classifier read ONE bounded span of the announcement — the
- * sentence whose whole job is to name the product — and only where the title
- * has already proved non-descriptive. This is how that claim is MEASURED
- * rather than asserted: every other sentence is replaced with cause, pathogen,
+ * The classifier reads ONE bounded span of the announcement — the sentence
+ * whose whole job is to name the product — and only where the title has
+ * already proved non-descriptive. This is how that claim is MEASURED rather
+ * than asserted: every other sentence is replaced with cause, pathogen,
  * allergen, firm, retailer, geography and illness prose, and the derivation
  * must come out byte-identical over the whole corpus. The product sentence is
  * deliberately preserved — rewriting it would change the product, which is
  * supposed to change the answer.
+ *
+ * ## This shape must track the classifier's (C10A.2)
+ *
+ * It did not, and the gap was loud rather than silent, which is the point of
+ * measuring. C10A.2 made the noun "items"/"products" optional, so the
+ * classifier began reading sentences like "The fried pork rinds were produced
+ * on…". This constant still required the noun, so the rewrite DELETED the
+ * product sentence on exactly those 12 cases and the gate reported them as
+ * hazard-sensitive. They were not: with the shipped shape preserved, zero of
+ * the 1,914 stored cases move. A shape that under-matches here does not test
+ * hazard blindness at all — it tests what happens when you erase the product
+ * name, which is supposed to change the answer.
  */
-const PRODUCT_SENTENCE_SHAPE =
-  /\bThe\s+[^.\n]{3,200}?\s+(?:items?|products?)\s+(?:was|were)\s+produced\b/i;
+const PRODUCT_SENTENCE_SHAPE = /\bThe\s+[^.\n]{3,200}?\s+(?:was|were)\s+produced\b/i;
 
 const ANNOUNCEMENT_NOISE = [
   'The recalled articles may be contaminated with Salmonella, Listeria monocytogenes and undeclared milk, wheat, shellfish and peanuts. ',
@@ -154,8 +165,10 @@ async function main(): Promise<void> {
     `Vocabulary (${FOOD_CATEGORIES.length}): ${FOOD_CATEGORIES.map((c) => foodCategoryLabel(c.id)).join(' · ')}`,
   );
   console.log(
-    `\nNOTE: accuracy is NOT measured here. The frozen classifier's measured accuracy is` +
-      `\n      91.5% natural exact-set / 92.0% at-least-one-correct — see npm run qa:categories.`,
+    `\nNOTE: accuracy is NOT measured here, and the classifier does NOT meet its gate.` +
+      `\n      C10A.2 measured 87.5% natural exact-set / 88.0% at-least-one-correct against a` +
+      `\n      90% bar on a 200-case holdout of previously untouched cases — see` +
+      `\n      npm run qa:categories, which exits non-zero for that reason.`,
   );
 
   // ── Distribution ──────────────────────────────────────────────────────────

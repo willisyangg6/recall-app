@@ -1,5 +1,5 @@
 /**
- * Food-category matcher QA (Phase C5.3B-2).
+ * Food-category matcher QA (Phases C5.3B-2 … C10A.2).
  *
  *   npm run qa:categories
  *
@@ -9,16 +9,16 @@
  * machine.
  *
  * Report structure:
- *   1. freeze integrity — the classifier files must still hash to the values
- *      recorded BEFORE the final holdout was selected, and the final labels
- *      must still hash to the value frozen before the matcher's single run
+ *   1. freeze integrity — the classifier AND HARNESS files must still hash to
+ *      the values recorded BEFORE the final holdout was selected, and the
+ *      final labels must still hash to the value frozen before the single run
  *   2. development cross-validation — stability only, never a claim
- *   3. C10A natural holdout, twelve categories — THE accuracy (95% gates)
- *   4. C10A challenge holdout, twelve categories (90% gates)
- *   5. compact seven-category diagnostic on the same frozen predictions
+ *   3. the natural holdout, twelve categories — THE accuracy
+ *   4. compact seven-category diagnostic on the same frozen predictions
  *
- * Exit code: 0 only when the ELEVEN-category matcher passes both final gates
- * (GREEN). A compact-only pass remains a product-decision YELLOW and exits 1.
+ * Exit code: 0 only when the twelve-category matcher passes the blocking
+ * product gates (GREEN). A compact-only pass remains a product-decision
+ * YELLOW and exits 1.
  */
 
 import { createHash } from 'node:crypto';
@@ -26,21 +26,22 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   atLeastOneCorrect,
-  CHALLENGE_GATES,
   crossValidate,
   evaluateCompactRows,
   evaluateRows,
+  FINAL_SPLIT,
   finalVerdict,
   gateFailures,
   GATES,
   PRODUCT_GATES,
-  REVIEWED_UNFINDABLE_CASE_IDS,
   UNFINDABLE_RATE_LIMIT,
+  unfindableBaseline,
   predict,
   validateGoldSet,
   type CategoryEvaluation,
   type GoldRow,
   type GoldSet,
+  type ReviewedUnfindable,
 } from '../src/domain/category-evaluation';
 import { foodCategoryLabel, FOOD_CATEGORIES } from '../src/domain/food-category';
 import type { SourceAgency } from '../src/domain/recall-types';
@@ -110,29 +111,38 @@ function printEvaluation(title: string, evaluation: CategoryEvaluation, rows: Go
 function verifyFreeze(): string[] {
   const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
   const problems: string[] = [];
-  for (const [file, expected] of Object.entries(
-    manifest.classifierFiles as Record<string, string>,
-  )) {
-    const actual = createHash('sha256')
-      .update(readFileSync(path.join(ROOT, file)))
-      .digest('hex');
-    if (actual !== expected) {
-      problems.push(
-        `${file} no longer matches its frozen hash — the classifier changed after the freeze`,
-      );
+  const hashed = (files: Record<string, string> | undefined, kind: string) => {
+    for (const [file, expected] of Object.entries(files ?? {})) {
+      const actual = createHash('sha256')
+        .update(readFileSync(path.join(ROOT, file)))
+        .digest('hex');
+      if (actual !== expected) {
+        problems.push(
+          `${file} no longer matches its frozen hash — the ${kind} changed after the freeze`,
+        );
+      }
     }
-  }
+  };
+  hashed(manifest.classifierFiles, 'classifier');
+  // C10A.1's headline number moved three points because of a HARNESS defect,
+  // not a classifier one. The harness is therefore frozen the same way.
+  hashed(manifest.harnessFiles, 'evaluation harness');
+
   const goldSet: GoldSet = JSON.parse(readFileSync(FIXTURE, 'utf8'));
-  const finalLabels = goldSet.rows
-    .filter((row) => row.split === 'c10a1_natural' || row.split === 'c10a1_challenge')
-    .map((row) => `${row.caseId}:${row.expected.join('+')}`)
-    .sort()
-    .join('\n');
-  const labelHash = createHash('sha256').update(finalLabels).digest('hex');
+  const labelHash = createHash('sha256').update(finalLabelText(goldSet)).digest('hex');
   if (labelHash !== manifest.finalLabelsSha256) {
     problems.push('final-split expected labels no longer match the frozen label hash');
   }
   return problems;
+}
+
+/** The exact bytes `finalLabelsSha256` is taken over. */
+export function finalLabelText(goldSet: GoldSet): string {
+  return goldSet.rows
+    .filter((row) => row.split === FINAL_SPLIT)
+    .map((row) => `${row.caseId}:${row.expected.join('+')}`)
+    .sort()
+    .join('\n');
 }
 
 function main(): void {
@@ -145,15 +155,16 @@ function main(): void {
     `Vocabulary (${FOOD_CATEGORIES.length}): ${FOOD_CATEGORIES.map((c) => foodCategoryLabel(c.id)).join(' · ')}`,
   );
 
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
   const freezeProblems = verifyFreeze();
   console.log(`\n── FREEZE INTEGRITY ──────────────────────────────────────────`);
   if (freezeProblems.length === 0) {
-    console.log(`  classifier hashes and final-label hash match the freeze manifest`);
+    console.log(`  classifier hashes, harness hashes and the final-label hash match the manifest`);
   } else {
     for (const problem of freezeProblems) console.log(`  · ${problem}`);
   }
 
-  const problems = validateGoldSet(goldSet);
+  const problems = validateGoldSet(goldSet, manifest.holdout?.uncoverableCategories ?? []);
   if (problems.length > 0) {
     console.log(`\nFIXTURE INVALID:`);
     for (const problem of problems) console.log(`  · ${problem}`);
@@ -162,8 +173,7 @@ function main(): void {
   }
 
   const development = goldSet.rows.filter((row) => row.split === 'development');
-  const natural = goldSet.rows.filter((row) => row.split === 'c10a1_natural');
-  const challenge = goldSet.rows.filter((row) => row.split === 'c10a1_challenge');
+  const natural = goldSet.rows.filter((row) => row.split === FINAL_SPLIT);
 
   // Development: cross-validation stability, never a claim.
   const cv = crossValidate(development, 5);
@@ -179,24 +189,15 @@ function main(): void {
     `  mean ${pct(cv.meanExactSet)} · min ${pct(cv.minExactSet)} · max ${pct(cv.maxExactSet)} · stdev ${(cv.stdevExactSet * 100).toFixed(2)}pp`,
   );
 
-  const naturalEval = evaluateRows(natural, 'c10a1_natural');
-  printEvaluation('C10A NATURAL HOLDOUT — twelve categories (THE accuracy)', naturalEval, natural);
+  const naturalEval = evaluateRows(natural, FINAL_SPLIT);
+  printEvaluation('FINAL NATURAL HOLDOUT — twelve categories (THE accuracy)', naturalEval, natural);
 
-  const challengeEval = evaluateRows(challenge, 'c10a1_challenge');
-  printEvaluation('C10A CHALLENGE HOLDOUT — twelve categories', challengeEval, challenge);
-
-  // Compact diagnostic: same frozen predictions and labels, merged 11 → 7.
-  const naturalCompact = evaluateCompactRows(natural, 'final_natural compact');
-  const challengeCompact = evaluateCompactRows(challenge, 'final_challenge compact');
+  // Compact diagnostic: same frozen predictions and labels, merged 12 → 7.
+  const naturalCompact = evaluateCompactRows(natural, 'final natural compact');
   console.log(`\n── COMPACT 7-CATEGORY DIAGNOSTIC (predeclared merge; no re-prediction) ──`);
-  for (const [name, e] of [
-    ['natural  ', naturalCompact],
-    ['challenge', challengeCompact],
-  ] as const) {
-    console.log(
-      `  ${name} exact ${pct(e.exactSetAccuracy)} (${e.exactSetMatches}/${e.total})  P ${pct(e.microPrecision)}  R ${pct(e.microRecall)}`,
-    );
-  }
+  console.log(
+    `  natural   exact ${pct(naturalCompact.exactSetAccuracy)} (${naturalCompact.exactSetMatches}/${naturalCompact.total})  P ${pct(naturalCompact.microPrecision)}  R ${pct(naturalCompact.microRecall)}`,
+  );
   const compactByAgency = (rows: GoldRow[]) =>
     (['FDA', 'FSIS'] as SourceAgency[]).map((agency) => ({
       agency,
@@ -226,9 +227,7 @@ function main(): void {
     }));
 
   const naturalFailures = gateFailures(naturalEval, byAgency(natural), GATES);
-  const challengeFailures = gateFailures(challengeEval, [], CHALLENGE_GATES);
   const compactNaturalFailures = gateFailures(naturalCompact, compactByAgency(natural), GATES);
-  const compactChallengeFailures = gateFailures(challengeCompact, [], CHALLENGE_GATES);
 
   console.log(`\n── PRODUCT REGRESSION GATES (blocking) ───────────────────────`);
   console.log(`  These decide PASS/FAIL and the exit code. They are the bar the founder`);
@@ -241,20 +240,19 @@ function main(): void {
   const productNatural = gateFailures(naturalEval, byAgency(natural), PRODUCT_GATES);
   const discovery = atLeastOneCorrect(natural);
   const discoveryRate = discovery.total === 0 ? 0 : discovery.matched / discovery.total;
-  const unfindable = REVIEWED_UNFINDABLE_CASE_IDS.filter((id) =>
-    natural.some((row) => row.caseId === id),
-  );
-  const unfindableRate = natural.length === 0 ? 0 : unfindable.length / natural.length;
+  const reviewed: ReviewedUnfindable[] = manifest.finalReview?.unfindable ?? [];
+  const unfindable = unfindableBaseline(reviewed, natural);
 
   const productFailures = [...productNatural];
   if (discoveryRate < 0.9) {
     productFailures.push(`at-least-one-correct ${(discoveryRate * 100).toFixed(1)}% < 90.0%`);
   }
-  if (unfindableRate > UNFINDABLE_RATE_LIMIT) {
+  if (unfindable.rate > UNFINDABLE_RATE_LIMIT) {
     productFailures.push(
-      `frozen human-reviewed unfindable baseline ${(unfindableRate * 100).toFixed(1)}% > ${(UNFINDABLE_RATE_LIMIT * 100).toFixed(1)}%`,
+      `frozen human-reviewed unfindable baseline ${(unfindable.rate * 100).toFixed(1)}% > ${(UNFINDABLE_RATE_LIMIT * 100).toFixed(1)}%`,
     );
   }
+  productFailures.push(...unfindable.problems);
 
   console.log(`  natural exact-set        ${pct(naturalEval.exactSetAccuracy)}  (gate ≥90.0%)`);
   console.log(
@@ -266,16 +264,32 @@ function main(): void {
   console.log(
     `  determinism              ${nondeterministic === 0 ? 'stable across repeated runs' : `UNSTABLE (${nondeterministic} rows)`}`,
   );
+  console.log(
+    `  per-category floor       precision and recall ≥80.0% for every category with support ≥${PRODUCT_GATES.perCategoryMinSupport}`,
+  );
+  for (const metric of naturalEval.perCategory) {
+    if (metric.support < (PRODUCT_GATES.perCategoryMinSupport ?? 20)) continue;
+    const predicted = metric.truePositives + metric.falsePositives;
+    console.log(
+      `    ${metric.category.padEnd(17)} support ${String(metric.support).padStart(3)}  ` +
+        `precision ${pct(metric.precision ?? 0)} (${metric.truePositives}/${predicted})  ` +
+        `recall ${pct(metric.recall ?? 0)} (${metric.truePositives}/${metric.support})`,
+    );
+  }
 
   console.log(`\n  Frozen human-reviewed unfindable baseline`);
   console.log(
-    `    ${pct(unfindableRate)}  (gate ≤${(UNFINDABLE_RATE_LIMIT * 100).toFixed(1)}%)  ${unfindable.length}/${natural.length} cases placed where no reasonable shopper would look`,
+    `    ${pct(unfindable.rate)}  (gate ≤${(UNFINDABLE_RATE_LIMIT * 100).toFixed(1)}%)  ${unfindable.matched}/${unfindable.total} cases placed where no reasonable shopper would look`,
   );
   console.log(`    This assertion verifies the frozen manifest, the recorded case ids, their`);
   console.log(`    reasoning records and the arithmetic. It CANNOT detect a NEW unfindable`);
   console.log(`    error introduced by a future classifier change — "would a shopper look`);
   console.log(`    here?" is a human judgement that is not present in the data. Refreshing`);
-  console.log(`    this measurement requires C10A.1 to review a NEWLY DRAWN holdout.`);
+  console.log(`    this measurement requires a LATER milestone to review a NEWLY DRAWN`);
+  console.log(`    holdout, and this corpus has no untouched 200 left to draw one from.`);
+  for (const record of reviewed) {
+    console.log(`      · ${record.caseId.slice(0, 8)} ${record.reason}`);
+  }
 
   const report = (name: string, failures: string[]) => {
     if (failures.length === 0) console.log(`\n  ${name}: PASS`);
@@ -303,15 +317,11 @@ function main(): void {
   console.log(`  The original 95% research threshold, retained for comparison and never`);
   console.log(`  weakened. It does not gate anything and does not affect the exit code.\n`);
   informational('natural (95%)', naturalFailures);
-  informational('challenge (90%)', challengeFailures);
   informational('compact natural diagnostic (95%)', compactNaturalFailures);
-  informational('compact challenge diagnostic (90%)', compactChallengeFailures);
 
   const researchVerdict = finalVerdict({
     primaryNaturalFailures: naturalFailures,
-    primaryChallengeFailures: challengeFailures,
     compactNaturalFailures,
-    compactChallengeFailures,
     deterministic: nondeterministic === 0,
     freezeIntact: freezeProblems.length === 0,
   });

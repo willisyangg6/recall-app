@@ -151,6 +151,11 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
   { term: 'meat snacks?', category: 'meat_poultry', note: 'jerky and sticks, not the snack aisle' },
   { term: '(?:pork|beef|meat|turkey|chicken|venison|elk) snack sticks?', category: 'meat_poultry' },
   { term: 'ham (?:and )?cheese loaf', category: 'meat_poultry', note: 'a deli luncheon loaf' },
+  {
+    term: '(?:beef|pork|lamb|veal|goat|mutton|bison|chicken|turkey|duck|calf|cow|pig|hog) (?:tripes?|feet|tongues?|hearts?|kidneys?|gizzards?|oxtails?|tails?|cheeks?|trotters?|chitterlings?|tendons?|maws?|snouts?|ears?|stomachs?|intestines?)',
+    category: 'meat_poultry',
+    note: 'offal and extremity cuts, named the way a butcher counter names them — <species> <cut>. The species is required: it is what separates "beef hearts" from "artichoke hearts", "pig ears" from "ears of corn", and "beef maw" from "fish maw"',
+  },
   { term: '(?:monkfish|cod|fish) livers?', category: 'seafood' },
   {
     term: '(?:fish|salmon|tuna|cod|halibut|swordfish|ahi|mahi[ -]?mahi|siluriformes|catfish|swai|tilapia|marlin|shark) steaks?',
@@ -558,6 +563,11 @@ export const HEAD_TERMS: readonly LexiconEntry[] = [
     term: 'entr[eéçÇ]es?|meals?|dinners?|casseroles?|lasagnas?|enchiladas?|tamales?|burritos?|empanadas?|dumplings?|wontons?|pierogi(?:es)?|pirozhki|vareniki|singaras?|samosas?|samsas?|sambusas?|sambousas?|coxinhas?',
     category: 'prepared_foods',
     note: 'sambusa/sambousa are the Somali and Levantine spellings of samosa — a filled savoury dumpling, never a pastry',
+  },
+  {
+    term: 'past(?:y|ies)',
+    category: 'prepared_foods',
+    note: 'a pasty is a filled savoury turnover — the same product family as the empanada, pierogi and samosa above, and filed with them rather than under Bakery. Distinct from "pastry": the word boundary keeps pastr(y|ies) with the bakery terms',
   },
   {
     term: 'soups?|broths?|stews?|chilis?|bisques?|chowders?|ramen|pho',

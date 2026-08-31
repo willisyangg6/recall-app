@@ -15,20 +15,25 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import {
-  CHALLENGE_GATES,
   crossValidate,
+  FINAL_SPLIT,
   evaluateCompactRows,
   evaluateRows,
   finalVerdict,
   gateFailures,
   GATES,
+  PRODUCT_GATES,
   predict,
+  UNFINDABLE_RATE_LIMIT,
+  unfindableBaseline,
   validateGoldSet,
   type CategoryEvaluation,
   type GoldRow,
   type GoldSet,
+  type ReviewedUnfindable,
 } from './category-evaluation';
 import { categoryProductText } from './food-category-matcher';
+import { deriveProductCategories } from './projection';
 import { FOOD_CATEGORY_IDS, MAX_CATEGORIES_PER_CASE } from './food-category';
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'category-gold-set.json');
@@ -37,25 +42,41 @@ const goldSet: GoldSet = JSON.parse(readFileSync(FIXTURE, 'utf8'));
 const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
 
 const development = goldSet.rows.filter((row) => row.split === 'development');
-const natural = goldSet.rows.filter((row) => row.split === 'c10a1_natural');
-const challenge = goldSet.rows.filter((row) => row.split === 'c10a1_challenge');
+const natural = goldSet.rows.filter((row) => row.split === FINAL_SPLIT);
+
+/**
+ * Categories the FINAL holdout provably cannot contain, taken from the freeze
+ * manifest rather than hardcoded: the disclosure is a datum produced by the
+ * draw, and the harness is frozen before the draw happens.
+ */
+const uncoverable: string[] = manifest.holdout?.uncoverableCategories ?? [];
 
 // ── Fixture schema ──────────────────────────────────────────────────────────
 
 test('the committed gold set is structurally valid', () => {
-  assert.deepEqual(validateGoldSet(goldSet), []);
+  // The disclosure comes from the manifest, not from this file: which
+  // categories a draw cannot cover is a datum the draw produces, and the
+  // harness is frozen before the draw happens.
+  assert.deepEqual(validateGoldSet(goldSet, uncoverable), []);
+});
+
+test('an undisclosed missing category is still caught', () => {
+  // The exemption is data, so this is what stops it from being a blanket
+  // waiver: drop the disclosure and the gap is reported.
+  const problems = validateGoldSet(goldSet, []);
+  assert.ok(
+    problems.some((problem) => problem.includes('final holdout has no rows expecting seafood')),
+    problems.join('; '),
+  );
 });
 
 test('the gold set is large enough to measure anything', () => {
   assert.ok(development.length >= 400, `only ${development.length} development rows`);
   // The natural split carries the binding gate and its size is fixed by the
-  // frozen selection procedure. The challenge split is DIAGNOSTIC and its size
-  // is whatever the frozen screens yield: C10A.1's six screens returned 52
-  // because three of them were exhausted below their cap (supplements 10,
-  // beverages 6, infant-feeding 0). The floor is a sanity check on the
-  // fixture, not a gate on the classifier.
+  // frozen selection procedure. C10A.2 drew no challenge split: C10A.1's was
+  // diagnostic, carried no gate, and another would have spent 52 more
+  // untouched cases on a number nothing depends on.
   assert.ok(natural.length >= 200, `only ${natural.length} natural rows`);
-  assert.ok(challenge.length >= 50, `only ${challenge.length} challenge rows`);
 });
 
 /**
@@ -94,38 +115,127 @@ test('the gold set carries every input the shipping derivation reads', () => {
   );
 });
 
+// ── Harness equivalence: the gate grades the derivation that ships ──────────
+//
+// `predict` is the harness's entry point and `deriveProductCategories` is the
+// one `projectCase`, the historical backfill and live QA all call. If those
+// two ever diverge, every number this file produces describes a classifier
+// nobody runs — which is not hypothetical: C10A.1's first harness execution
+// omitted the announcement and reported a title-only arm three points below
+// the real one. These tests are the standing proof that they have not
+// diverged, and the synthetic row below is the proof that they COULD.
+
+/** The row, as the canonical projection derivation would receive it. */
+const asProjectionInput = (row: GoldRow) => ({
+  sourceAgency: row.agency,
+  title: row.title,
+  productDescription: row.productDescription,
+  affectedProducts: (row.productLines ?? []).map((name) => ({ name })),
+  summaryText: row.announcementSummary ?? null,
+});
+
+test('predict and the canonical projection derivation agree on every fixture row', () => {
+  for (const row of goldSet.rows) {
+    assert.deepEqual(predict(row), deriveProductCategories(asProjectionInput(row)), row.caseId);
+  }
+});
+
+test('equivalence is a real constraint, not one that holds vacuously', () => {
+  // A harness that dropped the announcement would pass the row-by-row check
+  // above only if no row depended on it. This proves the dependency exists:
+  // withholding the summary from ONE path changes that path's answer, so the
+  // equivalence assertion would fail rather than pass quietly.
+  const viaSummary = goldSet.rows.filter((row) => row.basis === 'summary_grammar');
+  assert.ok(viaSummary.length > 0, 'no row derives from the announcement');
+  const divergent = viaSummary.filter(
+    (row) =>
+      JSON.stringify(predict(row)) !==
+      JSON.stringify(deriveProductCategories({ ...asProjectionInput(row), summaryText: null })),
+  );
+  assert.ok(
+    divergent.length > 0,
+    'withholding the announcement changed nothing — the harness cannot detect the C10A.1 defect',
+  );
+});
+
+test('a summary-dependent row fails equivalence the moment either path drops it', () => {
+  // Synthetic, so it holds even if the corpus one day carries no such row.
+  const row: GoldRow = {
+    caseId: 'synthetic-summary-dependent',
+    sourceId: 'synthetic',
+    agency: 'FSIS',
+    lifecycle: 'active',
+    recency: 'recent',
+    productCount: 0,
+    title: 'A Firm Recalls Poultry Products Due to Misbranding',
+    productDescription: null,
+    announcementSummary:
+      'A firm is recalling poultry products.\nThe frozen chicken tamale items were produced today.',
+    productText: 'frozen chicken tamale items',
+    basis: 'summary_grammar',
+    expected: ['prepared_foods'],
+    split: 'development',
+  };
+  // Both paths, given the same inputs, agree — and agree on the ANSWER THE
+  // ANNOUNCEMENT PRODUCES, not on the title's answer.
+  assert.deepEqual(predict(row), ['prepared_foods']);
+  assert.deepEqual(deriveProductCategories(asProjectionInput(row)), ['prepared_foods']);
+  // Withhold the announcement from either side and equivalence breaks loudly.
+  assert.deepEqual(predict({ ...row, announcementSummary: null }), ['meat_poultry']);
+  assert.deepEqual(deriveProductCategories({ ...asProjectionInput(row), summaryText: null }), [
+    'meat_poultry',
+  ]);
+  assert.notDeepEqual(predict(row), predict({ ...row, announcementSummary: null }));
+});
+
+test('the harness reads every field the projection input carries, and no other', () => {
+  // `predict` may not quietly gain an input the projection wrapper cannot
+  // supply, and the wrapper may not quietly gain one the classifier refuses.
+  const row = goldSet.rows[0];
+  assert.deepEqual(Object.keys(asProjectionInput(row)).sort(), [
+    'affectedProducts',
+    'productDescription',
+    'sourceAgency',
+    'summaryText',
+    'title',
+  ]);
+});
+
 test('no gold row expects more categories than the cap', () => {
   for (const row of goldSet.rows) {
     assert.ok(row.expected.length <= MAX_CATEGORIES_PER_CASE, row.caseId);
   }
 });
 
-/**
- * `beverages`, `baby_food_formula` and `other` are DISCLOSED as uncoverable by
- * any fresh holdout: the corpus holds 13 beverage and 20 infant-feeding cases
- * in total and the C5.3B-2 development set already contains all of them, and
- * the untouched pool held no case whose product a reviewer could not name.
- * The exemption is pinned here so it cannot silently widen.
- */
-const HOLDOUT_UNCOVERABLE = ['beverages', 'baby_food_formula', 'other'];
-
 test('every split covers both agencies; the holdout covers every coverable category', () => {
-  for (const rows of [development, natural, challenge]) {
+  for (const rows of [development, natural]) {
     assert.ok(rows.some((row) => row.agency === 'FDA'));
     assert.ok(rows.some((row) => row.agency === 'FSIS'));
   }
-  const finalRows = [...natural, ...challenge];
   for (const category of FOOD_CATEGORY_IDS) {
-    if (HOLDOUT_UNCOVERABLE.includes(category)) continue;
+    if (uncoverable.includes(category)) continue;
     assert.ok(
-      finalRows.some((row) => row.expected.includes(category)),
+      natural.some((row) => row.expected.includes(category)),
       `final holdout missing ${category}`,
     );
   }
-  assert.ok(finalRows.some((row) => row.expected.length > 1));
+  assert.ok(natural.some((row) => row.expected.length > 1));
 });
 
-test('the development split covers every category, including the uncoverable three', () => {
+test('a disclosed uncoverable category the holdout DOES cover is a stale disclosure', () => {
+  // The exemption may only ever shrink. This is the direction that matters:
+  // a disclosure kept after the evidence stopped supporting it understates
+  // what the holdout measured.
+  for (const category of uncoverable) {
+    assert.equal(
+      natural.some((row) => row.expected.includes(category as never)),
+      false,
+      `${category} is disclosed uncoverable but the holdout covers it`,
+    );
+  }
+});
+
+test('the development split covers every category, the uncoverable ones included', () => {
   for (const category of FOOD_CATEGORY_IDS) {
     assert.ok(
       development.some((row) => row.expected.includes(category)),
@@ -134,37 +244,75 @@ test('the development split covers every category, including the uncoverable thr
   }
 });
 
-test('the final splits are disjoint from the development split and each other', () => {
+test('the final split is disjoint from the development split', () => {
   const developmentIds = new Set(development.map((row) => row.caseId));
-  const naturalIds = new Set(natural.map((row) => row.caseId));
   for (const row of natural) assert.equal(developmentIds.has(row.caseId), false, row.caseId);
-  for (const row of challenge) {
-    assert.equal(developmentIds.has(row.caseId), false, row.caseId);
-    assert.equal(naturalIds.has(row.caseId), false, row.caseId);
+});
+
+test('every spent holdout was retired into development with its provenance', () => {
+  // A spent split that quietly kept its old name could be re-scored and
+  // reported as generalization. Retiring it into `development` is what makes
+  // that impossible; `originSplit` is what keeps the history legible.
+  const retired = development.filter((row) => row.originSplit !== undefined);
+  assert.ok(retired.length > 0);
+  for (const name of [
+    'final_natural',
+    'final_challenge',
+    'c10a_natural',
+    'c10a_challenge',
+    'c10a1_natural',
+    'c10a1_challenge',
+  ]) {
+    assert.ok(
+      retired.some((row) => row.originSplit === name),
+      `no rows retired from ${name}`,
+    );
   }
 });
 
 // ── Freeze integrity: selection order and label freezing are enforceable ────
 
+const sha256Of = (file: string): string =>
+  createHash('sha256')
+    .update(readFileSync(path.join(__dirname, '..', '..', file)))
+    .digest('hex');
+
 test('the classifier files still hash to the values frozen BEFORE final selection', () => {
   for (const [file, expected] of Object.entries(
     manifest.classifierFiles as Record<string, string>,
   )) {
-    const actual = createHash('sha256')
-      .update(readFileSync(path.join(__dirname, '..', '..', file)))
-      .digest('hex');
-    assert.equal(actual, expected, `${file} changed after the freeze`);
+    assert.equal(sha256Of(file), expected, `${file} changed after the freeze`);
+  }
+});
+
+test('the EVALUATION HARNESS still hashes to the value frozen before selection', () => {
+  // C10A.1's headline number moved three points because of a harness defect,
+  // not a classifier one, so the harness is frozen the same way. This is also
+  // why the reviewed-unfindable records and the uncoverable disclosure live in
+  // the manifest as data: both are produced AFTER the run, and neither may
+  // require editing a frozen file.
+  const harnessFiles = manifest.harnessFiles as Record<string, string> | undefined;
+  assert.ok(harnessFiles && Object.keys(harnessFiles).length > 0, 'no harness files are frozen');
+  for (const [file, expected] of Object.entries(harnessFiles)) {
+    assert.equal(sha256Of(file), expected, `${file} changed after the freeze`);
   }
 });
 
 test('the final expected labels still hash to the value frozen before the single run', () => {
   const finalLabels = goldSet.rows
-    .filter((row) => row.split === 'c10a1_natural' || row.split === 'c10a1_challenge')
+    .filter((row) => row.split === FINAL_SPLIT)
     .map((row) => `${row.caseId}:${row.expected.join('+')}`)
     .sort()
     .join('\n');
   const hash = createHash('sha256').update(finalLabels).digest('hex');
   assert.equal(hash, manifest.finalLabelsSha256);
+});
+
+test('the reviewed-unfindable baseline is a record of THIS holdout, with reasons', () => {
+  const reviewed = (manifest.finalReview?.unfindable ?? []) as ReviewedUnfindable[];
+  const baseline = unfindableBaseline(reviewed, natural);
+  assert.deepEqual(baseline.problems, []);
+  assert.ok(baseline.rate <= UNFINDABLE_RATE_LIMIT, `${baseline.matched}/${baseline.total}`);
 });
 
 test('the manifest records the required ordering: freeze, then selection, then labels, then one run', () => {
@@ -187,13 +335,14 @@ function mutate(change: (rows: GoldRow[]) => GoldRow[]): GoldSet {
 }
 
 test('an omitted final split is caught, not silently skipped', () => {
-  for (const split of ['c10a1_natural', 'c10a1_challenge'] as const) {
-    const problems = validateGoldSet(mutate((rows) => rows.filter((row) => row.split !== split)));
-    assert.ok(
-      problems.some((problem) => problem.includes(`${split} split is empty`)),
-      problems.join('; '),
-    );
-  }
+  const problems = validateGoldSet(
+    mutate((rows) => rows.filter((row) => row.split !== FINAL_SPLIT)),
+    uncoverable,
+  );
+  assert.ok(
+    problems.some((problem) => problem.includes(`${FINAL_SPLIT} split is empty`)),
+    problems.join('; '),
+  );
 });
 
 test('a duplicated case is caught', () => {
@@ -247,14 +396,14 @@ function rowOf(expected: GoldRow['expected'], productText: string): GoldRow {
     productText,
     basis: 'product_description',
     expected,
-    split: 'c10a1_natural',
+    split: FINAL_SPLIT,
   };
 }
 
 test('metrics count exact sets, over-classification and misses separately', () => {
   const result = evaluateRows(
     [rowOf(['bakery_grains'], 'Cookies'), rowOf(['seafood'], 'Cookies')],
-    'c10a1_natural',
+    FINAL_SPLIT,
   );
   assert.equal(result.total, 2);
   assert.equal(result.exactSetMatches, 1);
@@ -266,7 +415,7 @@ test('metrics count exact sets, over-classification and misses separately', () =
 });
 
 test('per-category support is the reviewed denominator, so thin samples stay visible', () => {
-  const result = evaluateRows([rowOf(['beverages'], 'Instant coffee')], 'c10a1_natural');
+  const result = evaluateRows([rowOf(['beverages'], 'Instant coffee')], FINAL_SPLIT);
   const beverages = result.perCategory.find((metric) => metric.category === 'beverages')!;
   assert.equal(beverages.support, 1);
   assert.ok(beverages.support < (GATES.perCategoryMinSupport ?? 5));
@@ -319,7 +468,7 @@ test('the compact evaluation merges BOTH sides mechanically and is deterministic
 
 function evaluationWith(overrides: Partial<CategoryEvaluation>): CategoryEvaluation {
   return {
-    split: 'c10a1_natural',
+    split: FINAL_SPLIT,
     total: 100,
     exactSetMatches: 100,
     exactSetAccuracy: 1,
@@ -402,16 +551,52 @@ test('exceeding the category cap is a gate failure', () => {
   assert.ok(failures.some((failure) => failure.includes('above the cap')));
 });
 
-test('challenge gates are the 90% thresholds and do not gate agencies or categories', () => {
-  assert.equal(CHALLENGE_GATES.exactSetAccuracy, 0.9);
-  assert.equal(CHALLENGE_GATES.microPrecision, 0.9);
-  assert.equal(CHALLENGE_GATES.microRecall, 0.9);
+test('the blocking product gates carry a per-category floor at support 20', () => {
+  // The overall number can clear 90% while one large category collapses:
+  // C10A.1's prepared-foods recall was 71.7% behind an 86.5% headline. This
+  // is the gate that makes that visible, and the support floor is what keeps
+  // a thin category from being reported as a percentage.
+  assert.equal(PRODUCT_GATES.perCategoryMinSupport, 20);
+  assert.equal(PRODUCT_GATES.perCategoryRecall, 0.8);
+  assert.equal(PRODUCT_GATES.perCategoryPrecision, 0.8);
+
+  const collapsed = {
+    category: 'prepared_foods',
+    truePositives: 43,
+    falsePositives: 1,
+    falseNegatives: 17,
+    support: 60,
+    precision: 43 / 44,
+    recall: 43 / 60,
+  };
+  const thin = {
+    category: 'beverages',
+    truePositives: 1,
+    falsePositives: 1,
+    falseNegatives: 18,
+    support: 19,
+    precision: 0.5,
+    recall: 1 / 19,
+  };
   const failures = gateFailures(
-    evaluationWith({ exactSetAccuracy: 0.91, microPrecision: 0.91, microRecall: 0.91 }),
-    [{ agency: 'FSIS', evaluation: evaluationWith({ exactSetAccuracy: 0.5 }) }],
-    CHALLENGE_GATES,
+    evaluationWith({
+      exactSetAccuracy: 0.95,
+      microPrecision: 0.95,
+      microRecall: 0.95,
+      perCategory: [collapsed, thin],
+    }),
+    [],
+    PRODUCT_GATES,
   );
-  assert.deepEqual(failures, []);
+  assert.ok(
+    failures.some((failure) => failure.includes('prepared_foods recall')),
+    failures.join('; '),
+  );
+  assert.equal(
+    failures.some((failure) => failure.includes('beverages')),
+    false,
+    'a support-19 category must not be gated on a percentage',
+  );
 });
 
 test('the natural gates are the values the milestone specified', () => {
@@ -426,13 +611,11 @@ test('the natural gates are the values the milestone specified', () => {
 const pass: string[] = [];
 const fail = ['overall exact-set accuracy 89.5% < 95.0%'];
 
-test('GREEN requires the eleven-category matcher to pass BOTH final gates', () => {
+test('GREEN requires the twelve-category matcher to pass the final natural gate', () => {
   assert.equal(
     finalVerdict({
       primaryNaturalFailures: pass,
-      primaryChallengeFailures: pass,
       compactNaturalFailures: fail,
-      compactChallengeFailures: fail,
       deterministic: true,
       freezeIntact: true,
     }),
@@ -444,9 +627,7 @@ test('a compact-only pass is YELLOW, never GREEN', () => {
   assert.equal(
     finalVerdict({
       primaryNaturalFailures: fail,
-      primaryChallengeFailures: pass,
       compactNaturalFailures: pass,
-      compactChallengeFailures: pass,
       deterministic: true,
       freezeIntact: true,
     }),
@@ -458,9 +639,7 @@ test('neither passing is NOT_PASSING', () => {
   assert.equal(
     finalVerdict({
       primaryNaturalFailures: fail,
-      primaryChallengeFailures: pass,
       compactNaturalFailures: fail,
-      compactChallengeFailures: pass,
       deterministic: true,
       freezeIntact: true,
     }),
@@ -476,9 +655,7 @@ test('nondeterminism or a broken freeze can never be GREEN or YELLOW', () => {
     assert.equal(
       finalVerdict({
         primaryNaturalFailures: pass,
-        primaryChallengeFailures: pass,
         compactNaturalFailures: pass,
-        compactChallengeFailures: pass,
         ...broken,
       }),
       'NOT_PASSING',
