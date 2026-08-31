@@ -1,27 +1,58 @@
 {
-  "phase": "C5.3B-2",
-  "recordedAt": "2026-08-28T17:02:04Z",
-  "purpose": "Freeze record for the final generalization test. The classifier files below were hashed BEFORE any final-holdout case was selected; a test recomputes these hashes, so any post-freeze classifier change is loud. finalLabelsSha256 freezes the reviewed expected labels of the final splits before the matcher's single run over them.",
+  "phase": "C10A",
+  "recordedAt": "2026-08-30T00:00:00Z",
+  "purpose": "Freeze record for C10A's generalization test. The classifier files below were hashed BEFORE any C10A holdout case was selected; a test recomputes these hashes, so any post-freeze classifier change is loud. finalLabelsSha256 freezes the reviewed expected labels of the c10a_natural and c10a_challenge splits before the matcher's single run over them.",
   "ordering": [
     "1. matcher, lexicon, vocabulary and compact mapping frozen and hashed (this file)",
     "2. final holdout cases selected from source structure, WITHOUT running the matcher on them",
-    "3. expected labels assigned by human review of the recalled products, then frozen as finalLabelsSha256",
+    "3. expected labels assigned by review of the recalled products, then frozen as finalLabelsSha256",
     "4. the matcher run exactly once on the final splits; no classifier or label change afterwards"
   ],
   "classifierFiles": {
-    "src/domain/food-category.ts": "215118ec66b79ad92513ac3f846aff4fb07e523ad15bd3e5a24b07d2a4c48e35",
-    "src/domain/food-category-lexicon.ts": "c97ae9c03756b308d50501036a5f5f4f512048d1b0cd5a0a68cd962f773fd63c",
-    "src/domain/food-category-matcher.ts": "bff665cacd7f86e4b6bf0c68db9d8b1ef963b5c8663aae27cc6acd792be52439",
-    "src/domain/food-category-compact.ts": "5ec628250412c17bbd16b1a66dff8469f80d5e65cdb56ba8bca672164f920118"
+    "src/domain/food-category.ts": "f59665702a5db52c9e37c30ce1315fc05a294b0c37e1943befe4a31fefa41801",
+    "src/domain/food-category-lexicon.ts": "02b838a6e3ae6298ed538f9a25bf0ca3c5468042b0303fbb80c23bc70716107b",
+    "src/domain/food-category-matcher.ts": "9e6233583ace70394ed68649b9af034ee1b3851eabf8f4b2b9450b86931f5319",
+    "src/domain/food-category-compact.ts": "94707872865a0d6ef2ef23334c227807118180305ca37b51959712db1a8cbede"
   },
-  "disclosedReformat": {
-    "when": "2026-08-28, after the single final run",
-    "what": "prettier --write re-wrapped whitespace in food-category-matcher.ts (two statements) and food-category-lexicon.ts; no token of logic or data changed",
-    "evidence": "the re-run of npm run qa:categories after the reformat reproduces the recorded run exactly — same 179/200 and 107/117 exact-set counts, same per-category tallies, same failure lists",
-    "originalHashes": {
-      "src/domain/food-category-lexicon.ts": "6b9ace4838dc4bb57d47ec2ab1e6ece890c9820393d01590d1a324ee90b64519",
-      "src/domain/food-category-matcher.ts": "8b41037e21e6f5041598c95ab7cb7b720d64ea62d5d2a0183ba815d2aae7d348"
-    }
+  "gate": {
+    "binding": "exact-set >= 95%, micro precision >= 95%, micro recall >= 95% on c10a_natural",
+    "consequence": "Below the gate, C10A stops before projection integration and historical backfill. The gate is the founder's and was not weakened after results were seen.",
+    "result": "NOT MET. c10a_natural 91.5% exact-set (183/200), micro P 92.1%, micro R 91.6%, FDA 88.3%, FSIS 92.9%. c10a_challenge 89.7% (96/107) against a 90% gate. Nothing was integrated."
   },
-  "finalLabelsSha256": "1820ea6e9eb7cbcd2a0d79b18446e3a8d66c2152425f044896643c98629981a8"
+  "whatChangedSinceC53B2": [
+    "vocabulary: eleven ids renamed to the C10A twelve, adding `other`; the derivation is now TOTAL",
+    "labels: bakery_grains reads 'Bakery' and pantry_condiments reads 'Pantry & staples', because grain staples derive pantry_condiments",
+    "lexicon: pork skin/porkskin, stuffed chicken, samsa, coxinha, mojibake-tolerant entree, pickled vegetables",
+    "extraction: the jurisdiction-only product-lines switch was implemented, A/B measured at 50.0% against the title grammar's 80.0% on the 60 rows it affects, and REVERTED; categoryProductText is otherwise unchanged from C5.3B-2",
+    "gold set: 13 rows that reviewed as no-category now read ['other']; 7 development rows whose original review saw only a jurisdiction-only title were relabelled from their own product lines, each carrying a note"
+  ],
+  "holdout": {
+    "c10a_natural": 200,
+    "c10a_challenge": 107,
+    "poolSize": 1177,
+    "selection": "Natural: largest-remainder proportional allocation over 9 source-structure strata (agency x lifecycle x has-productDescription x product-line-count bucket), ordered within each stratum by an FNV hash of the case id. Challenge: ten structural screens (jurisdiction-only title, conjunction, ingredient preposition, undeclared-allergen title, pathogen title, enumerated list, flavour words, long text, very short text, non-title basis), capped per screen. Neither consults the lexicon or any prediction.",
+    "disclosures": [
+      "The natural sample is drawn blind to category and contains no beverages, baby_food_formula or other row. This is not a sampling choice: the corpus holds only 13 beverage and 20 infant-feeding cases in total and the C5.3B-2 development set already contains all of them, so no fresh holdout can cover those categories. A supplemental screened draw for beverage-shaped, infant-shaped and unnameable cases found 1, 0 and 16 eligible respectively, and none reviewed as those categories.",
+      "Seven supplemental challenge rows were added by a disclosed structural screen; they landed on Notification Report titles, a real hard family. c10a_natural is untouched by any supplemental draw and carries the binding gate.",
+      "Development includes the two SPENT C5.3B-2 holdouts (317 rows) and 7 rows whose reviewed label C10A corrected from the case's own product lines."
+    ]
+  },
+  "reconstruction": {
+    "when": "2026-08-30, after the single run",
+    "what": "An erroneous `git checkout -- src/domain/` during mutation testing discarded the uncommitted C10A working tree. The classifier, vocabulary, evaluation harness, gold-set migration and tests were reconstructed from the authoring steps; the holdout SELECTION (holdout-candidates.json) and the 307 REVIEWED LABELS were unaffected, having been kept outside the repository.",
+    "evidence": "finalLabelsSha256 recomputes to the value frozen before the original single run (0bddb35d4b88feec0b1348e60b8e9ebb95aa3586f02bcd01d71f3ee8f850bd78), and the re-run reproduces the recorded result exactly: c10a_natural 183/200, c10a_challenge 96/107, same per-category tallies and failure lists. No label was re-reviewed and no holdout case was re-selected, so the freeze ordering above still describes what happened."
+  },
+  "supersedes": {
+    "phase": "C5.3B-2",
+    "recordedAt": "2026-08-28T17:02:04Z",
+    "result": "Measured once: final_natural 89.5% exact-set (gate 95%), final_challenge 91.5% (gate 90%). NOT PASSING; the Category filter was deferred. Both splits are SPENT and are recorded in the gold set as development with originSplit preserved.",
+    "classifierFiles": {
+      "src/domain/food-category.ts": "215118ec66b79ad92513ac3f846aff4fb07e523ad15bd3e5a24b07d2a4c48e35",
+      "src/domain/food-category-lexicon.ts": "c97ae9c03756b308d50501036a5f5f4f512048d1b0cd5a0a68cd962f773fd63c",
+      "src/domain/food-category-matcher.ts": "bff665cacd7f86e4b6bf0c68db9d8b1ef963b5c8663aae27cc6acd792be52439",
+      "src/domain/food-category-compact.ts": "5ec628250412c17bbd16b1a66dff8469f80d5e65cdb56ba8bca672164f920118"
+    },
+    "finalLabelsSha256": "1820ea6e9eb7cbcd2a0d79b18446e3a8d66c2152425f044896643c98629981a8"
+  },
+  "finalLabelsSha256": "0bddb35d4b88feec0b1348e60b8e9ebb95aa3586f02bcd01d71f3ee8f850bd78"
 }

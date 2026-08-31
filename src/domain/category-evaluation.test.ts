@@ -37,8 +37,8 @@ const goldSet: GoldSet = JSON.parse(readFileSync(FIXTURE, 'utf8'));
 const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
 
 const development = goldSet.rows.filter((row) => row.split === 'development');
-const natural = goldSet.rows.filter((row) => row.split === 'final_natural');
-const challenge = goldSet.rows.filter((row) => row.split === 'final_challenge');
+const natural = goldSet.rows.filter((row) => row.split === 'c10a_natural');
+const challenge = goldSet.rows.filter((row) => row.split === 'c10a_challenge');
 
 // ── Fixture schema ──────────────────────────────────────────────────────────
 
@@ -71,19 +71,38 @@ test('no gold row expects more categories than the cap', () => {
   }
 });
 
-test('every split covers both agencies; the final holdout covers every category', () => {
+/**
+ * `beverages`, `baby_food_formula` and `other` are DISCLOSED as uncoverable by
+ * any fresh holdout: the corpus holds 13 beverage and 20 infant-feeding cases
+ * in total and the C5.3B-2 development set already contains all of them, and
+ * the untouched pool held no case whose product a reviewer could not name.
+ * The exemption is pinned here so it cannot silently widen.
+ */
+const HOLDOUT_UNCOVERABLE = ['beverages', 'baby_food_formula', 'other'];
+
+test('every split covers both agencies; the holdout covers every coverable category', () => {
   for (const rows of [development, natural, challenge]) {
     assert.ok(rows.some((row) => row.agency === 'FDA'));
     assert.ok(rows.some((row) => row.agency === 'FSIS'));
   }
   const finalRows = [...natural, ...challenge];
   for (const category of FOOD_CATEGORY_IDS) {
+    if (HOLDOUT_UNCOVERABLE.includes(category)) continue;
     assert.ok(
       finalRows.some((row) => row.expected.includes(category)),
       `final holdout missing ${category}`,
     );
   }
   assert.ok(finalRows.some((row) => row.expected.length > 1));
+});
+
+test('the development split covers every category, including the uncoverable three', () => {
+  for (const category of FOOD_CATEGORY_IDS) {
+    assert.ok(
+      development.some((row) => row.expected.includes(category)),
+      `development missing ${category}`,
+    );
+  }
 });
 
 test('the final splits are disjoint from the development split and each other', () => {
@@ -111,7 +130,7 @@ test('the classifier files still hash to the values frozen BEFORE final selectio
 
 test('the final expected labels still hash to the value frozen before the single run', () => {
   const finalLabels = goldSet.rows
-    .filter((row) => row.split === 'final_natural' || row.split === 'final_challenge')
+    .filter((row) => row.split === 'c10a_natural' || row.split === 'c10a_challenge')
     .map((row) => `${row.caseId}:${row.expected.join('+')}`)
     .sort()
     .join('\n');
@@ -127,7 +146,7 @@ test('the manifest records the required ordering: freeze, then selection, then l
 });
 
 test('prediction never reads the expected labels', () => {
-  const honest = rowOf(['bakery'], 'Cookies');
+  const honest = rowOf(['bakery_grains'], 'Cookies');
   const lying = { ...honest, expected: ['seafood' as const] };
   assert.deepEqual(predict(honest), predict(lying));
 });
@@ -139,7 +158,7 @@ function mutate(change: (rows: GoldRow[]) => GoldRow[]): GoldSet {
 }
 
 test('an omitted final split is caught, not silently skipped', () => {
-  for (const split of ['final_natural', 'final_challenge'] as const) {
+  for (const split of ['c10a_natural', 'c10a_challenge'] as const) {
     const problems = validateGoldSet(mutate((rows) => rows.filter((row) => row.split !== split)));
     assert.ok(
       problems.some((problem) => problem.includes(`${split} split is empty`)),
@@ -156,17 +175,17 @@ test('a duplicated case is caught', () => {
 test('an unknown category id is caught', () => {
   const problems = validateGoldSet(
     mutate((rows) => {
-      rows[0] = { ...rows[0], expected: ['other' as never] };
+      rows[0] = { ...rows[0], expected: ['not_a_category' as never] };
       return rows;
     }),
   );
-  assert.ok(problems.some((problem) => problem.includes('unknown category other')));
+  assert.ok(problems.some((problem) => problem.includes('unknown category not_a_category')));
 });
 
 test('expected categories out of display order are caught', () => {
   const problems = validateGoldSet(
     mutate((rows) => {
-      rows[0] = { ...rows[0], expected: ['prepared', 'produce'] };
+      rows[0] = { ...rows[0], expected: ['prepared_foods', 'produce'] };
       return rows;
     }),
   );
@@ -199,26 +218,26 @@ function rowOf(expected: GoldRow['expected'], productText: string): GoldRow {
     productText,
     basis: 'product_description',
     expected,
-    split: 'final_natural',
+    split: 'c10a_natural',
   };
 }
 
 test('metrics count exact sets, over-classification and misses separately', () => {
   const result = evaluateRows(
-    [rowOf(['bakery'], 'Cookies'), rowOf(['seafood'], 'Cookies')],
-    'final_natural',
+    [rowOf(['bakery_grains'], 'Cookies'), rowOf(['seafood'], 'Cookies')],
+    'c10a_natural',
   );
   assert.equal(result.total, 2);
   assert.equal(result.exactSetMatches, 1);
   assert.equal(result.overClassifications, 1);
   assert.equal(result.missedCategories, 1);
   assert.equal(result.failures.length, 1);
-  assert.equal(result.failures[0].actual.join(), 'bakery');
+  assert.equal(result.failures[0].actual.join(), 'bakery_grains');
   assert.equal(result.failures[0].missed.join(), 'seafood');
 });
 
 test('per-category support is the reviewed denominator, so thin samples stay visible', () => {
-  const result = evaluateRows([rowOf(['beverages'], 'Instant coffee')], 'final_natural');
+  const result = evaluateRows([rowOf(['beverages'], 'Instant coffee')], 'c10a_natural');
   const beverages = result.perCategory.find((metric) => metric.category === 'beverages')!;
   assert.equal(beverages.support, 1);
   assert.ok(beverages.support < (GATES.perCategoryMinSupport ?? 5));
@@ -257,7 +276,7 @@ test('cross-validation folds are deterministic, cover every row once, and report
 // ── Compact diagnostic ──────────────────────────────────────────────────────
 
 test('the compact evaluation merges BOTH sides mechanically and is deterministic', () => {
-  const rows = [rowOf(['meat_poultry'], 'Salmon fillets'), rowOf(['bakery'], 'Cookies')];
+  const rows = [rowOf(['meat_poultry'], 'Salmon fillets'), rowOf(['bakery_grains'], 'Cookies')];
   const once = evaluateCompactRows(rows, 'compact');
   const twice = evaluateCompactRows(rows, 'compact');
   // Salmon predicts seafood; expected meat_poultry — DIFFERENT in eleven,
@@ -271,7 +290,7 @@ test('the compact evaluation merges BOTH sides mechanically and is deterministic
 
 function evaluationWith(overrides: Partial<CategoryEvaluation>): CategoryEvaluation {
   return {
-    split: 'final_natural',
+    split: 'c10a_natural',
     total: 100,
     exactSetMatches: 100,
     exactSetAccuracy: 1,
@@ -381,8 +400,8 @@ const fail = ['overall exact-set accuracy 89.5% < 95.0%'];
 test('GREEN requires the eleven-category matcher to pass BOTH final gates', () => {
   assert.equal(
     finalVerdict({
-      elevenNaturalFailures: pass,
-      elevenChallengeFailures: pass,
+      primaryNaturalFailures: pass,
+      primaryChallengeFailures: pass,
       compactNaturalFailures: fail,
       compactChallengeFailures: fail,
       deterministic: true,
@@ -395,8 +414,8 @@ test('GREEN requires the eleven-category matcher to pass BOTH final gates', () =
 test('a compact-only pass is YELLOW, never GREEN', () => {
   assert.equal(
     finalVerdict({
-      elevenNaturalFailures: fail,
-      elevenChallengeFailures: pass,
+      primaryNaturalFailures: fail,
+      primaryChallengeFailures: pass,
       compactNaturalFailures: pass,
       compactChallengeFailures: pass,
       deterministic: true,
@@ -409,8 +428,8 @@ test('a compact-only pass is YELLOW, never GREEN', () => {
 test('neither passing is NOT_PASSING', () => {
   assert.equal(
     finalVerdict({
-      elevenNaturalFailures: fail,
-      elevenChallengeFailures: pass,
+      primaryNaturalFailures: fail,
+      primaryChallengeFailures: pass,
       compactNaturalFailures: fail,
       compactChallengeFailures: pass,
       deterministic: true,
@@ -427,8 +446,8 @@ test('nondeterminism or a broken freeze can never be GREEN or YELLOW', () => {
   ]) {
     assert.equal(
       finalVerdict({
-        elevenNaturalFailures: pass,
-        elevenChallengeFailures: pass,
+        primaryNaturalFailures: pass,
+        primaryChallengeFailures: pass,
         compactNaturalFailures: pass,
         compactChallengeFailures: pass,
         ...broken,

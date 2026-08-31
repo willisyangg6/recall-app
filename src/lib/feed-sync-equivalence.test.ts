@@ -56,8 +56,8 @@ function consumerView(items: FeedItem[]): unknown {
   const entryOf = (item: FeedItem) => entries.get(item.id) ?? buildSearchEntry(item);
 
   const sections = buildFeedSections(items, NOW);
-  const locationFilter: FeedFilterState = { stateCodes: ['CA'], riskTiers: [] };
-  const riskFilter: FeedFilterState = { stateCodes: [], riskTiers: ['high'] };
+  const locationFilter: FeedFilterState = { stateCodes: ['CA'], riskTiers: [], categoryIds: [] };
+  const riskFilter: FeedFilterState = { stateCodes: [], riskTiers: ['high'], categoryIds: [] };
   const affectsMe = buildAffectsMeSections(items, relevanceOf, { now: NOW });
 
   return {

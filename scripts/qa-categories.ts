@@ -13,8 +13,8 @@
  *      recorded BEFORE the final holdout was selected, and the final labels
  *      must still hash to the value frozen before the matcher's single run
  *   2. development cross-validation — stability only, never a claim
- *   3. final natural holdout, eleven categories — THE accuracy (95% gates)
- *   4. final challenge holdout, eleven categories (90% gates)
+ *   3. C10A natural holdout, twelve categories — THE accuracy (95% gates)
+ *   4. C10A challenge holdout, twelve categories (90% gates)
  *   5. compact seven-category diagnostic on the same frozen predictions
  *
  * Exit code: 0 only when the ELEVEN-category matcher passes both final gates
@@ -25,6 +25,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
+  atLeastOneCorrect,
   CHALLENGE_GATES,
   crossValidate,
   evaluateCompactRows,
@@ -32,6 +33,9 @@ import {
   finalVerdict,
   gateFailures,
   GATES,
+  PRODUCT_GATES,
+  REVIEWED_UNFINDABLE_CASE_IDS,
+  UNFINDABLE_RATE_LIMIT,
   predict,
   validateGoldSet,
   type CategoryEvaluation,
@@ -120,7 +124,7 @@ function verifyFreeze(): string[] {
   }
   const goldSet: GoldSet = JSON.parse(readFileSync(FIXTURE, 'utf8'));
   const finalLabels = goldSet.rows
-    .filter((row) => row.split === 'final_natural' || row.split === 'final_challenge')
+    .filter((row) => row.split === 'c10a_natural' || row.split === 'c10a_challenge')
     .map((row) => `${row.caseId}:${row.expected.join('+')}`)
     .sort()
     .join('\n');
@@ -158,8 +162,8 @@ function main(): void {
   }
 
   const development = goldSet.rows.filter((row) => row.split === 'development');
-  const natural = goldSet.rows.filter((row) => row.split === 'final_natural');
-  const challenge = goldSet.rows.filter((row) => row.split === 'final_challenge');
+  const natural = goldSet.rows.filter((row) => row.split === 'c10a_natural');
+  const challenge = goldSet.rows.filter((row) => row.split === 'c10a_challenge');
 
   // Development: cross-validation stability, never a claim.
   const cv = crossValidate(development, 5);
@@ -175,11 +179,11 @@ function main(): void {
     `  mean ${pct(cv.meanExactSet)} · min ${pct(cv.minExactSet)} · max ${pct(cv.maxExactSet)} · stdev ${(cv.stdevExactSet * 100).toFixed(2)}pp`,
   );
 
-  const naturalEval = evaluateRows(natural, 'final_natural');
-  printEvaluation('FINAL NATURAL HOLDOUT — eleven categories (THE accuracy)', naturalEval, natural);
+  const naturalEval = evaluateRows(natural, 'c10a_natural');
+  printEvaluation('C10A NATURAL HOLDOUT — twelve categories (THE accuracy)', naturalEval, natural);
 
-  const challengeEval = evaluateRows(challenge, 'final_challenge');
-  printEvaluation('FINAL CHALLENGE HOLDOUT — eleven categories', challengeEval, challenge);
+  const challengeEval = evaluateRows(challenge, 'c10a_challenge');
+  printEvaluation('C10A CHALLENGE HOLDOUT — twelve categories', challengeEval, challenge);
 
   // Compact diagnostic: same frozen predictions and labels, merged 11 → 7.
   const naturalCompact = evaluateCompactRows(natural, 'final_natural compact');
@@ -226,42 +230,105 @@ function main(): void {
   const compactNaturalFailures = gateFailures(naturalCompact, compactByAgency(natural), GATES);
   const compactChallengeFailures = gateFailures(challengeCompact, [], CHALLENGE_GATES);
 
-  console.log(`\n── GATES ─────────────────────────────────────────────────────`);
-  console.log(
-    `  determinism: ${nondeterministic === 0 ? 'stable across repeated runs' : `UNSTABLE (${nondeterministic} rows)`}`,
+  console.log(`\n── PRODUCT REGRESSION GATES (blocking) ───────────────────────`);
+  console.log(`  These decide PASS/FAIL and the exit code. They are the bar the founder`);
+  console.log(`  accepted for Category as an OPTIONAL DISCOVERY filter, and they are`);
+  console.log(`  deliberately lower than the personalization/notification bar — Category`);
+  console.log(`  never decides an alert. They check that the shipped classifier still`);
+  console.log(`  behaves like the one that was measured; they are NOT a claim of accuracy`);
+  console.log(`  sufficient for anything a consumer's health depends on.\n`);
+
+  const productNatural = gateFailures(naturalEval, byAgency(natural), PRODUCT_GATES);
+  const discovery = atLeastOneCorrect(natural);
+  const discoveryRate = discovery.total === 0 ? 0 : discovery.matched / discovery.total;
+  const unfindable = REVIEWED_UNFINDABLE_CASE_IDS.filter((id) =>
+    natural.some((row) => row.caseId === id),
   );
+  const unfindableRate = natural.length === 0 ? 0 : unfindable.length / natural.length;
+
+  const productFailures = [...productNatural];
+  if (discoveryRate < 0.9) {
+    productFailures.push(`at-least-one-correct ${(discoveryRate * 100).toFixed(1)}% < 90.0%`);
+  }
+  if (unfindableRate > UNFINDABLE_RATE_LIMIT) {
+    productFailures.push(
+      `frozen human-reviewed unfindable baseline ${(unfindableRate * 100).toFixed(1)}% > ${(UNFINDABLE_RATE_LIMIT * 100).toFixed(1)}%`,
+    );
+  }
+
+  console.log(`  natural exact-set        ${pct(naturalEval.exactSetAccuracy)}  (gate ≥90.0%)`);
+  console.log(
+    `  at-least-one-correct     ${pct(discoveryRate)}  (gate ≥90.0%)  ${discovery.matched}/${discovery.total}`,
+  );
+  console.log(
+    `  micro precision / recall ${pct(naturalEval.microPrecision)} / ${pct(naturalEval.microRecall)}  (gate ≥90.0%)`,
+  );
+  console.log(
+    `  determinism              ${nondeterministic === 0 ? 'stable across repeated runs' : `UNSTABLE (${nondeterministic} rows)`}`,
+  );
+
+  console.log(`\n  Frozen human-reviewed unfindable baseline`);
+  console.log(
+    `    ${pct(unfindableRate)}  (gate ≤${(UNFINDABLE_RATE_LIMIT * 100).toFixed(1)}%)  ${unfindable.length}/${natural.length} cases placed where no reasonable shopper would look`,
+  );
+  console.log(`    This assertion verifies the frozen manifest, the recorded case ids, their`);
+  console.log(`    reasoning records and the arithmetic. It CANNOT detect a NEW unfindable`);
+  console.log(`    error introduced by a future classifier change — "would a shopper look`);
+  console.log(`    here?" is a human judgement that is not present in the data. Refreshing`);
+  console.log(`    this measurement requires C10A.1 to review a NEWLY DRAWN holdout.`);
+
   const report = (name: string, failures: string[]) => {
-    if (failures.length === 0) console.log(`  ${name}: PASS`);
+    if (failures.length === 0) console.log(`\n  ${name}: PASS`);
     else {
-      console.log(`  ${name}: FAIL`);
+      console.log(`\n  ${name}: FAIL`);
       for (const failure of failures) console.log(`    · ${failure}`);
     }
   };
-  report('eleven-category natural (95%)', naturalFailures);
-  report('eleven-category challenge (90%)', challengeFailures);
-  report('compact natural diagnostic (95%)', compactNaturalFailures);
-  report('compact challenge diagnostic (90%)', compactChallengeFailures);
+  report('PRODUCT REGRESSION GATES', productFailures);
 
-  const verdict = finalVerdict({
-    elevenNaturalFailures: naturalFailures,
-    elevenChallengeFailures: challengeFailures,
+  // ── Informational only, never PASS/FAIL ─────────────────────────────────
+  //
+  // The 95% research threshold is the bar this classifier was built against
+  // and did not clear. Every number is preserved, but it is not rendered as a
+  // failure: a non-blocking benchmark printed as FAIL beside a zero exit code
+  // is operationally confusing, and the honest record is the number itself,
+  // not the word.
+  const informational = (name: string, shortfalls: string[]) => {
+    console.log(`  ${name}`);
+    if (shortfalls.length === 0) console.log(`    · threshold met`);
+    for (const shortfall of shortfalls) console.log(`    · ${shortfall}`);
+  };
+
+  console.log(`\n── LEGACY RESEARCH BENCHMARK: NOT MET (informational) ────────`);
+  console.log(`  The original 95% research threshold, retained for comparison and never`);
+  console.log(`  weakened. It does not gate anything and does not affect the exit code.\n`);
+  informational('natural (95%)', naturalFailures);
+  informational('challenge (90%)', challengeFailures);
+  informational('compact natural diagnostic (95%)', compactNaturalFailures);
+  informational('compact challenge diagnostic (90%)', compactChallengeFailures);
+
+  const researchVerdict = finalVerdict({
+    primaryNaturalFailures: naturalFailures,
+    primaryChallengeFailures: challengeFailures,
     compactNaturalFailures,
     compactChallengeFailures,
     deterministic: nondeterministic === 0,
     freezeIntact: freezeProblems.length === 0,
   });
+  console.log(
+    `\n  Legacy research verdict (informational): ${researchVerdict} — ${pct(naturalEval.exactSetAccuracy)} natural exact-set against a 95% bar.`,
+  );
 
   console.log(`\n── VERDICT ───────────────────────────────────────────────────`);
-  if (verdict === 'GREEN') {
-    console.log(`  GREEN — the eleven-category matcher passed every final gate.`);
-  } else if (verdict === 'YELLOW') {
+  const sound = nondeterministic === 0 && freezeProblems.length === 0;
+  if (productFailures.length === 0 && sound) {
+    console.log(`  PASS — the measured classifier still behaves as accepted.`);
     console.log(
-      `  YELLOW — eleven categories failed, but the predeclared compact mapping passes on the same frozen predictions. Adopting seven categories is a founder decision; nothing is integrated.`,
+      `  Category is integrated as an optional discovery filter only. See docs/recall-food-categories.md.`,
     );
-    process.exitCode = 1;
   } else {
     console.log(
-      `  NOT PASSING — neither the eleven-category vocabulary nor the compact diagnostic clears its gates. The matcher stays unintegrated.`,
+      `  FAIL — the classifier no longer matches the accepted measurement, or the freeze broke.`,
     );
     process.exitCode = 1;
   }

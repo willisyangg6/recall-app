@@ -119,12 +119,101 @@ const FIRM_RECALLS = new RegExp(String.raw`\bRecalls?\s+(.+?)${CUT}`, 'i');
  */
 const EMPTY_PHRASE = /^(?:products?|items?|ineligible|various|certain|specific|multiple)$/i;
 
+/**
+ * Bare species and jurisdiction words — what FSIS REGULATES, never what a firm
+ * made. "Beef" in a title is the agency's remit; "beef tamales" is a product.
+ */
+const JURISDICTION_WORDS = new Set([
+  'beef',
+  'pork',
+  'poultry',
+  'chicken',
+  'turkey',
+  'meat',
+  'meats',
+  'lamb',
+  'veal',
+  'goat',
+  'mutton',
+  'bison',
+  'buffalo',
+  'duck',
+  'rabbit',
+  'siluriformes',
+  'fish',
+  'catfish',
+  'egg',
+  'eggs',
+]);
+
+/**
+ * True when a title phrase names ONLY the agency's jurisdiction — every
+ * content word left after descriptors is a bare species word ("Poultry
+ * Products", "Ready-To-Eat Beef Products", "Frozen, Raw Lamb Products").
+ *
+ * MEASURED AND NOT USED FOR EXTRACTION. See the note on `categoryProductText`:
+ * this predicate identifies the family correctly (210 of 1,914 stored cases,
+ * 11.0%), but switching those cases to their product lines was measured to
+ * make them worse, so the switch was reverted. Kept because QA reports the
+ * size of the family, and because a future milestone that finds a better
+ * second basis needs this definition rather than a fresh guess at it.
+ */
+export function isJurisdictionOnlyPhrase(phrase: string): boolean {
+  const words = phrase
+    .toLowerCase()
+    .replace(/[^a-z\s-]/g, ' ')
+    .split(/[\s-]+/)
+    .filter((word) => word !== '' && !DESCRIPTOR_SET.has(word));
+  return words.length > 0 && words.every((word) => JURISDICTION_WORDS.has(word));
+}
+
+/**
+ * The title phrase this case's grammar yields, or '' when the grammar does not
+ * apply. Exported so QA can report the extraction family sizes without
+ * re-deriving the regexes.
+ */
+export function titleProductPhrase(title: string): string {
+  return (FSIS_ALERT.exec(title)?.[1] ?? FIRM_RECALLS.exec(title)?.[1] ?? '').trim();
+}
+
+/**
+ * Which basis names the product, in order of how much the source structured it.
+ *
+ * ## The jurisdiction-only correction C10A tried, measured, and reverted
+ *
+ * C5.3B-2 named one residual error family as its largest and blamed this
+ * seam: FSIS titles that state only the agency's remit ("Poultry Products")
+ * while the real product — a salad, an entrée — appears in the structured
+ * product lines. Its recommendation was to prefer those lines whenever the
+ * title reduces to bare species words.
+ *
+ * C10A implemented exactly that and A/B-measured it on the 60 development
+ * rows it affects, scoring BOTH arms against the same reviewed labels:
+ *
+ *     title grammar   80.0% exact-set     product lines   50.0% exact-set
+ *     title-only correct: 21              lines-only correct: 3
+ *
+ * The recommendation is wrong about this corpus. FSIS product lines are
+ * packaging prose — "Combo bins containing 'Beef Trimmings, BNLS, 90 L'",
+ * "12-oz. metal cans containing 'SPAM Classic'" — and the names inside them
+ * are brand-dominated. Reading them turns confident, correct Meat & poultry
+ * readings into `other`, into `pantry_condiments` (a fat percentage read as a
+ * pantry good), and into wrong aisles (fish-skin crackers read as bakery).
+ * Extracting only the quoted label span was also tried and scored 50.0%.
+ *
+ * Two of the three lines-only wins were cases whose title phrase was empty or
+ * generic, which ALREADY fall through to the lines below. The true yield of
+ * the switch was one case against a cost of twenty-one, so it is not here.
+ *
+ * The family is real and its cases are genuinely mislabelled; the fix is not
+ * a different basis but richer source text, which this app does not have.
+ */
 export function categoryProductText(input: CategoryCaseInput): CategoryProductText {
   const description = (input.productDescription ?? '').trim();
   if (description !== '') return { text: description, basis: 'product_description' };
 
   const title = input.title ?? '';
-  const phrase = (FSIS_ALERT.exec(title)?.[1] ?? FIRM_RECALLS.exec(title)?.[1] ?? '').trim();
+  const phrase = titleProductPhrase(title);
   if (phrase !== '' && !EMPTY_PHRASE.test(phrase)) {
     return { text: phrase, basis: 'title_grammar' };
   }
@@ -277,7 +366,7 @@ function trailingDish(full: string, tail: string): string | null {
   const read = phraseMatches(tail);
   if (read === null || read.matches.length === 0) return null;
   const head = read.matches[read.matches.length - 1];
-  if (head.category !== 'prepared') return null;
+  if (head.category !== 'prepared_foods') return null;
   const headWords = read.phrase.slice(head.start, head.end).split(/\s+/);
   return DISH_CLASS_WORD.test(headWords[headWords.length - 1]) ? tail.trim() : null;
 }
@@ -326,7 +415,7 @@ function resolveConjuncts(segment: string): string[] {
     }
   }
   const targetCategory = target >= 0 ? heads[target]!.category : null;
-  const dishIndex = heads.findIndex((head) => head?.category === 'prepared');
+  const dishIndex = heads.findIndex((head) => head?.category === 'prepared_foods');
 
   return conjuncts.filter((conjunct, index) => {
     const head = heads[index];
@@ -336,7 +425,7 @@ function resolveConjuncts(segment: string): string[] {
       if (
         head.category === 'produce' &&
         targetCategory !== null &&
-        (targetCategory === 'prepared' || FLAVOURABLE_TARGETS.has(targetCategory))
+        (targetCategory === 'prepared_foods' || FLAVOURABLE_TARGETS.has(targetCategory))
       ) {
         return false;
       }
@@ -608,7 +697,7 @@ function readPhrase(raw: string, context: PhraseContext): PhraseReading | null {
     DISHABLE_HEAD.test(headText) &&
     (context.proteinNearby || matches.some((m) => PROTEIN_CATEGORIES.has(m.category)))
   ) {
-    category = 'prepared';
+    category = 'prepared_foods';
   }
 
   // Postposed flavour applies only to a BARE produce word in head position
@@ -623,7 +712,7 @@ function readPhrase(raw: string, context: PhraseContext): PhraseReading | null {
   }
 
   if (context.analogue && (category === 'meat_poultry' || category === 'seafood')) {
-    category = 'prepared';
+    category = 'prepared_foods';
   }
 
   return { category, produceOnly: matches.every((m) => m.category === 'produce') };
@@ -664,7 +753,9 @@ export function categoryOfPhrase(phrase: string): FoodCategoryId | null {
  */
 export function matchFoodCategories(text: string): FoodCategoryId[] {
   const normalized = normalizeProductText(text);
-  if (normalized === '') return [];
+  // Empty text goes through the canonical funnel like every other outcome, so
+  // the derivation is total: `orderFoodCategories([])` is `['other']`.
+  if (normalized === '') return orderFoodCategories([]);
 
   const phrases = splitProductPhrases(normalized);
   // "In a list" means more than one phrase the lexicon RECOGNISES — a size
@@ -686,7 +777,7 @@ export function matchFoodCategories(text: string): FoodCategoryId[] {
   const kept = readings.filter((r) => !(flavourList && r.produceOnly && r.category === 'produce'));
 
   let categories = kept.map((r) => r.category);
-  if (categories.length > 0 && BABY_AUDIENCE.test(normalized)) categories = ['baby'];
+  if (categories.length > 0 && BABY_AUDIENCE.test(normalized)) categories = ['baby_food_formula'];
   return orderFoodCategories(categories);
 }
 

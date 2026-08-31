@@ -299,6 +299,45 @@ DETAIL-SCREEN EVIDENCE only: under the C9 frozen policy the sync never
 touches `projection.heroImageUrl` — professional card-hero sourcing is
 C9.1 (docs/recall-imagery.md).
 
+## Product categories: integrated for discovery, NOT backfilled (C10A)
+
+```
+npm run qa:categories                     # offline; product gates + legacy benchmark
+npm run qa:product-categories             # read-only; live distribution + invariants
+npm run backfill:product-categories:dry   # read-only; the historical write plan
+npm run backfill:product-categories       # APPLY — hold until C10A.1
+```
+
+`projectCase` now derives `projection.productCategories`, so new and
+re-projected cases carry categories automatically. **The historical backfill
+has not been applied**: as of the C10A dry run all 1,914 stored cases predate
+the field and would be written. Hold it until the C10A.1 refinement decision
+(docs/recall-food-categories.md §6) — applying now would write rows C10A.1
+would immediately rewrite.
+
+`qa:categories` reports three distinct things and gates on only the first:
+
+1. **Automated product regression gates (blocking).** ≥90% natural exact-set,
+   at-least-one-correct, micro precision and recall, plus determinism —
+   recomputed every run from the frozen gold set, so they really do detect
+   classifier drift. These decide the exit code. They are **intentionally
+   weaker than the personalization and notification bar and must never be
+   cited to relax it**; those paths share no input with this one, which
+   `src/lib/category-invariance.test.ts` and `qa:product-categories` enforce.
+2. **Legacy research benchmark: not met (informational).** The original 95%
+   threshold, at 91.5%. Every number is still printed and the threshold is
+   never weakened, but it gates nothing and is not rendered as a failure.
+3. **Frozen human-reviewed unfindable baseline: 4/200 = 2.0% (≤3%).** The
+   assertion checks the frozen manifest, case ids, reasoning records and
+   arithmetic. It **cannot** detect a new unfindable error after a classifier
+   change — that judgement is not in the data. Refreshing it requires C10A.1
+   to review a newly drawn holdout.
+
+`qa:categories` needs no database or credentials. The backfill performs zero
+network requests, writes exactly one projection field under a compare-and-set
+on `last_changed_at`, and can never create a case, a timeline entry or a
+notification.
+
 ## Imagery: standing QA, no repair command (C9)
 
 ```

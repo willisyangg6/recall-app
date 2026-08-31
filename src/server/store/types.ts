@@ -8,6 +8,7 @@
  * enforced through it.
  */
 
+import type { FoodCategoryId } from '../../domain/food-category';
 import type {
   AffectedProduct,
   CaseProjection,
@@ -245,6 +246,20 @@ export interface RecallStore {
   updateCaseGeography(
     id: string,
     geography: Geography,
+    expectedLastChangedAt: string,
+  ): Promise<boolean>;
+  /**
+   * The same narrow contract for `projection.productCategories` (C10A).
+   *
+   * A discovery-only write: timeline and `last_changed_at` stay byte-identical,
+   * so it can never fire a notification, re-date a case, or appear as public
+   * activity. `detectChanges` does not diff this field under any rule, so a
+   * category-only difference is structurally incapable of being material even
+   * if it went through the pipeline — and this path does not.
+   */
+  updateCaseProductCategories(
+    id: string,
+    productCategories: FoodCategoryId[],
     expectedLastChangedAt: string,
   ): Promise<boolean>;
   /**

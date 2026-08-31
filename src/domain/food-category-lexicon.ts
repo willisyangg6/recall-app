@@ -88,18 +88,18 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
   },
   {
     term: 'cracker sandwich(?:es)?',
-    category: 'snacks_candy',
+    category: 'snacks_sweets',
     note: 'a snack, not a deli sandwich',
   },
-  { term: 'cookie sandwich(?:es)?', category: 'bakery' },
-  { term: 'sandwich cookies?', category: 'bakery' },
+  { term: 'cookie sandwich(?:es)?', category: 'bakery_grains' },
+  { term: 'sandwich cookies?', category: 'bakery_grains' },
   { term: 'cheese (?:curds?|sauce|spread|dip|powder)', category: 'dairy_eggs' },
   { term: 'cottage cheese', category: 'dairy_eggs' },
   { term: 'cream cheese', category: 'dairy_eggs' },
   { term: 'sour cream', category: 'dairy_eggs' },
-  { term: 'peanut butter', category: 'pantry', note: 'a spread, not confectionery' },
-  { term: '(?:almond|cashew|sunflower|seed|nut) butters?', category: 'pantry' },
-  { term: 'apple ?sauce', category: 'pantry' },
+  { term: 'peanut butter', category: 'pantry_condiments', note: 'a spread, not confectionery' },
+  { term: '(?:almond|cashew|sunflower|seed|nut) butters?', category: 'pantry_condiments' },
+  { term: 'apple ?sauce', category: 'pantry_condiments' },
   {
     term: 'baby (?:arugula|spinach|carrots?|greens?|kale|corn|bella mushrooms?|portabellas?)',
     category: 'produce',
@@ -112,15 +112,15 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
     category: 'beverages',
     note: 'plant milks sit with drinks, not dairy',
   },
-  { term: 'milk chocolates?', category: 'snacks_candy', note: 'milk is the chocolate style' },
-  { term: '(?:dark|white|semi ?sweet) chocolates?', category: 'snacks_candy' },
+  { term: 'milk chocolates?', category: 'snacks_sweets', note: 'milk is the chocolate style' },
+  { term: '(?:dark|white|semi ?sweet) chocolates?', category: 'snacks_sweets' },
   {
     term: 'chocolate (?:bars?|chips?|chunks?|nonpareils?|pareils?|truffles?|raisins?|almonds?|peanuts?|pretzels?|nuts?|cherries|macadamias?)',
-    category: 'snacks_candy',
+    category: 'snacks_sweets',
   },
   {
     term: '(?:chocolate|yogurt|candy)[- ]?(?:covered|filled|dipped|coated) [a-z]+',
-    category: 'snacks_candy',
+    category: 'snacks_sweets',
     note: 'the coating or filling is the confection; the covered thing is not the category',
   },
   {
@@ -133,7 +133,7 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
   { term: 'hot ?dogs?', category: 'meat_poultry' },
   {
     term: 'pretzel dogs?',
-    category: 'prepared',
+    category: 'prepared_foods',
     note: 'a wrapped sausage is a dish, not a pretzel',
   },
   { term: 'head cheese', category: 'meat_poultry', note: 'charcuterie, no dairy involved' },
@@ -144,15 +144,15 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
   },
   { term: '(?:chicken|pork|veal|beef|turkey) cutlets?', category: 'meat_poultry' },
   {
-    term: 'pork rinds?|chicharron(?:es)?',
-    category: 'snacks_candy',
-    note: 'shelved and eaten as a snack',
+    term: 'pork ?(?:rinds?|skins?)|chicharron(?:es)?|porkskins?',
+    category: 'snacks_sweets',
+    note: 'shelved and eaten as a snack; labels spell it porkskin as one word',
   },
   { term: 'meat snacks?', category: 'meat_poultry', note: 'jerky and sticks, not the snack aisle' },
   { term: '(?:pork|beef|meat|turkey|chicken|venison|elk) snack sticks?', category: 'meat_poultry' },
   { term: 'ham (?:and )?cheese loaf', category: 'meat_poultry', note: 'a deli luncheon loaf' },
   { term: '(?:monkfish|cod|fish) livers?', category: 'seafood' },
-  { term: 'soybean paste|bean paste', category: 'pantry' },
+  { term: 'soybean paste|bean paste', category: 'pantry_condiments' },
   {
     term: 'chicken (?:nuggets?|strips?|wings?|tenders?|patt(?:y|ies)|fingers?)',
     category: 'meat_poultry',
@@ -162,7 +162,7 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
   { term: 'corned beef', category: 'meat_poultry' },
   {
     term: '(?:beef|pork|duck|chicken) (?:tallows?|lards?|fats?)',
-    category: 'pantry',
+    category: 'pantry_condiments',
     note: 'rendered cooking fats are shelved with oils, not cuts of meat',
   },
   {
@@ -175,53 +175,60 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
     category: 'meat_poultry',
     note: 'deli luncheon loaves are sliced meats, not bakery',
   },
-  { term: 'croutons?', category: 'bakery' },
-  { term: 'bread ?crumbs?', category: 'bakery' },
-  { term: 'potato bread', category: 'bakery' },
+  { term: 'croutons?', category: 'bakery_grains' },
+  { term: 'bread ?crumbs?', category: 'bakery_grains' },
+  { term: 'potato bread', category: 'bakery_grains' },
   {
     term: '(?:potato|sweet potato|corn|tortilla|veggie|vegetable) chips?',
-    category: 'snacks_candy',
+    category: 'snacks_sweets',
     note: 'a chip is a snack whatever it is made from',
   },
-  { term: 'potato sourdough', category: 'bakery' },
-  { term: 'sweet corn (?:pancakes?|cachapas?)', category: 'bakery' },
+  { term: 'potato sourdough', category: 'bakery_grains' },
+  { term: 'sweet corn (?:pancakes?|cachapas?)', category: 'bakery_grains' },
 
   // ── Mixes and bases: the product is the dry good, not its flavour ────────
   {
     term: '(?:frying|batter|baking|pancake|waffle|cake|muffin|bread|brownie|biscuit|stuffing|do(?:ugh)?nut) mix(?:es)?',
-    category: 'pantry',
+    category: 'pantry_condiments',
   },
-  { term: 'pico de gallo', category: 'pantry', note: 'a fresh salsa, sold as a condiment' },
-  { term: 'pounded yam', category: 'pantry', note: 'a dry staple flour, not fresh yam' },
-  { term: 'aquafaba', category: 'pantry' },
-  { term: 'snack mix(?:es)?|botana', category: 'snacks_candy' },
-  { term: 'pancake (?:and |& )?waffle (?:complete|mix(?:es)?)', category: 'pantry' },
-  { term: '(?:soup|broth|gravy|bouillon) (?:base|mix(?:es)?|powder|cubes?)', category: 'pantry' },
+  {
+    term: 'pico de gallo',
+    category: 'pantry_condiments',
+    note: 'a fresh salsa, sold as a condiment',
+  },
+  { term: 'pounded yam', category: 'pantry_condiments', note: 'a dry staple flour, not fresh yam' },
+  { term: 'aquafaba', category: 'pantry_condiments' },
+  { term: 'snack mix(?:es)?|botana', category: 'snacks_sweets' },
+  { term: 'pancake (?:and |& )?waffle (?:complete|mix(?:es)?)', category: 'pantry_condiments' },
+  {
+    term: '(?:soup|broth|gravy|bouillon) (?:base|mix(?:es)?|powder|cubes?)',
+    category: 'pantry_condiments',
+  },
   { term: '(?:drink|beverage|cocktail|lemonade|smoothie) mix(?:es)?', category: 'beverages' },
-  { term: 'seasoning (?:mix(?:es)?|blends?|packets?)', category: 'pantry' },
-  { term: 'spice (?:mix(?:es)?|blends?)', category: 'pantry' },
+  { term: 'seasoning (?:mix(?:es)?|blends?|packets?)', category: 'pantry_condiments' },
+  { term: 'spice (?:mix(?:es)?|blends?)', category: 'pantry_condiments' },
   {
     term: '(?:salad|sandwich|taco|wing|pizza|pasta|meat|barbecue|bbq|hot) sauce',
-    category: 'pantry',
+    category: 'pantry_condiments',
   },
-  { term: 'salad dressings?', category: 'pantry' },
+  { term: 'salad dressings?', category: 'pantry_condiments' },
   {
     term: '(?:cilantro|chipotle|jalape[nñ]o|garlic|avocado|lime) crema',
-    category: 'pantry',
+    category: 'pantry_condiments',
     note: 'a flavoured crema is a table sauce; bare crema stays the dairy staple',
   },
 
   // ── Composed dishes: a single dish, never its parts ──────────────────────
-  { term: "macaroni (?:and|&|n'?) cheese", category: 'prepared' },
-  { term: 'chicken (?:and|&) (?:rice|waffles?|dumplings?|noodles?)', category: 'prepared' },
-  { term: '(?:rice|beans) (?:and|&) (?:beans|rice)', category: 'prepared' },
+  { term: "macaroni (?:and|&|n'?) cheese", category: 'prepared_foods' },
+  { term: 'chicken (?:and|&) (?:rice|waffles?|dumplings?|noodles?)', category: 'prepared_foods' },
+  { term: '(?:rice|beans) (?:and|&) (?:beans|rice)', category: 'prepared_foods' },
   {
     term: '(?:beef|chicken|pork|turkey|vegetable|veggie) (?:enchiladas?|burritos?|tacos?|tamales?|empanadas?|lasagnas?|casseroles?|pot pies?|wraps?|bowls?|kabobs?|skewers?)',
-    category: 'prepared',
+    category: 'prepared_foods',
   },
   {
     term: '(?:chicken|tuna|egg|pasta|potato|macaroni|seafood|shrimp|crab|ham|garden|greek|caesar|cranberry) salads?',
-    category: 'prepared',
+    category: 'prepared_foods',
     note: 'a made salad is a dish, not its protein',
   },
   {
@@ -230,66 +237,85 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
     note: 'a bagged salad is produce a shopper assembles',
   },
   { term: '(?:chopped|garden|slaw|coleslaw) (?:salad )?kits?', category: 'produce' },
-  { term: 'meal kits?', category: 'prepared' },
+  { term: 'meal kits?', category: 'prepared_foods' },
   {
     term: '(?:chicken|beef|pork|turkey|vegetable|noodle|wonton|tomato|potato|clam|corn) (?:noodle )?(?:soups?|chowders?|bisques?|stews?|chilis?)',
-    category: 'prepared',
+    category: 'prepared_foods',
   },
-  { term: 'ready ?meals?', category: 'prepared' },
-  { term: 'deli (?:items?|meals?|salads?)', category: 'prepared' },
-  { term: 'party trays?', category: 'prepared' },
-  { term: 'lunch kits?', category: 'prepared' },
+  { term: 'ready ?meals?', category: 'prepared_foods' },
+  { term: 'deli (?:items?|meals?|salads?)', category: 'prepared_foods' },
+  { term: 'party trays?', category: 'prepared_foods' },
+  { term: 'lunch kits?', category: 'prepared_foods' },
   {
     term: '(?:spaghetti|pasta|macaroni|noodles?) (?:and|&) (?:meatballs?|cheese|chicken|beef|pork|sauce|gravy)',
-    category: 'prepared',
+    category: 'prepared_foods',
     note: 'a named dish, not two staples',
   },
-  { term: 'stuffed (?:mushrooms?|peppers?|shells?|clams?|cabbages?)', category: 'prepared' },
-  { term: 'rice balls?', category: 'prepared' },
+  {
+    term: 'stuffed (?:mushrooms?|peppers?|shells?|clams?|cabbages?|chicken(?: breasts?)?)',
+    category: 'prepared_foods',
+    note: 'the stuffing composes a dish; a stuffed breast is not a cut',
+  },
+  { term: 'rice balls?', category: 'prepared_foods' },
+  {
+    term: 'pickled (?:vegetables?|radish(?:es)?|turnips?|mustard greens?|cabbages?)',
+    category: 'pantry_condiments',
+    note: 'a jarred condiment, not the fresh vegetable',
+  },
   {
     term: 'egg rolls?|spring rolls?',
-    category: 'prepared',
+    category: 'prepared_foods',
     note: 'no egg category here — it is a wrapper',
   },
-  { term: '(?:pork|meat|chicken|bbq|steamed) buns?', category: 'prepared' },
-  { term: 'dirty rice', category: 'prepared' },
-  { term: '(?:meat|chicken|beef|pork|turkey|poultry|seafood) pasta', category: 'prepared' },
-  { term: "shepherd'?s pies?|cottage pies?", category: 'prepared' },
-  { term: '(?:pork|meat|chicken|bbq|steamed) (?:mini |small |large )?buns?', category: 'prepared' },
-  { term: 'street corn|elote', category: 'prepared', note: 'a named dish, not an ear of corn' },
+  { term: '(?:pork|meat|chicken|bbq|steamed) buns?', category: 'prepared_foods' },
+  { term: 'dirty rice', category: 'prepared_foods' },
+  { term: '(?:meat|chicken|beef|pork|turkey|poultry|seafood) pasta', category: 'prepared_foods' },
+  { term: "shepherd'?s pies?|cottage pies?", category: 'prepared_foods' },
+  {
+    term: '(?:pork|meat|chicken|bbq|steamed) (?:mini |small |large )?buns?',
+    category: 'prepared_foods',
+  },
+  {
+    term: 'street corn|elote',
+    category: 'prepared_foods',
+    note: 'a named dish, not an ear of corn',
+  },
   {
     term: 'bagged salads?',
     category: 'produce',
     note: 'bagged greens are produce; made salads are dishes',
   },
-  { term: 'sushi (?:rolls?|products?)?', category: 'prepared' },
-  { term: 'breakfast (?:sandwich(?:es)?|burritos?|bowls?)', category: 'prepared' },
+  { term: 'sushi (?:rolls?|products?)?', category: 'prepared_foods' },
+  { term: 'breakfast (?:sandwich(?:es)?|burritos?|bowls?)', category: 'prepared_foods' },
   {
     term: 'fried (?:rice|noodles?)',
-    category: 'prepared',
+    category: 'prepared_foods',
     note: 'a dish name whatever precedes it',
   },
-  { term: 'lo mein|chow mein|pad thai|chow fun', category: 'prepared' },
-  { term: 'sh(?:u|iu) ?mai|siu ?mai', category: 'prepared', note: 'dim-sum dumpling names' },
-  { term: 'banh mi', category: 'prepared' },
+  { term: 'lo mein|chow mein|pad thai|chow fun', category: 'prepared_foods' },
+  { term: 'sh(?:u|iu) ?mai|siu ?mai', category: 'prepared_foods', note: 'dim-sum dumpling names' },
+  { term: 'banh mi', category: 'prepared_foods' },
   {
     term: 'banh pia',
-    category: 'bakery',
+    category: 'bakery_grains',
     note: 'a Vietnamese filled pastry, like adding "mooncake"',
   },
   {
     term: 'store[- ]?(?:prepared|made) (?:items?|foods?|products?|meals?|dish(?:es)?)',
-    category: 'prepared',
+    category: 'prepared_foods',
     note: 'deli-counter language for made-on-site dishes',
   },
   { term: 'salad mix(?:es)?', category: 'produce', note: 'bagged mixes, like salad kits' },
 
   // ── Baby: only where the product is sold for infants ─────────────────────
-  { term: '(?:infant|baby|toddler) formula', category: 'baby' },
-  { term: 'formula (?:powder|products?)', category: 'baby' },
-  { term: 'baby foods?', category: 'baby' },
-  { term: '(?:infant|baby) (?:cereals?|purees?|snacks?|puffs?|rice)', category: 'baby' },
-  { term: 'teething (?:sticks?|biscuits?|wafers?|rings?)', category: 'baby' },
+  { term: '(?:infant|baby|toddler) formula', category: 'baby_food_formula' },
+  { term: 'formula (?:powder|products?)', category: 'baby_food_formula' },
+  { term: 'baby foods?', category: 'baby_food_formula' },
+  {
+    term: '(?:infant|baby) (?:cereals?|purees?|snacks?|puffs?|rice)',
+    category: 'baby_food_formula',
+  },
+  { term: 'teething (?:sticks?|biscuits?|wafers?|rings?)', category: 'baby_food_formula' },
 
   // ── Supplements: the dose form is the product ────────────────────────────
   { term: '(?:dietary|herbal|nutritional|food) supplements?', category: 'supplements' },
@@ -313,54 +339,54 @@ export const COMPOUND_TERMS: readonly LexiconEntry[] = [
   { term: 'nutrition(?:al)? (?:shakes?|drinks?)', category: 'beverages' },
 
   // ── Bakery vs snack, where both words appear ─────────────────────────────
-  { term: 'cheese ?cakes?', category: 'bakery' },
+  { term: 'cheese ?cakes?', category: 'bakery_grains' },
   {
     term: 'fruit (?:tarts?|pies?|cakes?|breads?)',
-    category: 'bakery',
+    category: 'bakery_grains',
     note: 'the fruit is a filling',
   },
   {
     term: '(?:apple|cherry|pumpkin|pecan|peach|berry|lemon) (?:pies?|tarts?|cakes?|turnovers?|strudels?|danishes?)',
-    category: 'bakery',
+    category: 'bakery_grains',
   },
-  { term: 'granola (?:bars?|clusters?)', category: 'snacks_candy' },
-  { term: '(?:protein|snack|energy|nutrition|cereal|fruit) bars?', category: 'snacks_candy' },
-  { term: '(?:energy|protein) (?:balls?|bites?)', category: 'snacks_candy' },
+  { term: 'granola (?:bars?|clusters?)', category: 'snacks_sweets' },
+  { term: '(?:protein|snack|energy|nutrition|cereal|fruit) bars?', category: 'snacks_sweets' },
+  { term: '(?:energy|protein) (?:balls?|bites?)', category: 'snacks_sweets' },
   {
     term: 'chanachur|namkeen|bhujia|panjiri|pinni|la+ddoo?|barfi|jalebi',
-    category: 'snacks_candy',
+    category: 'snacks_sweets',
     note: 'South Asian sweet and savoury snack names',
   },
-  { term: 'trail mix(?:es)?', category: 'snacks_candy' },
-  { term: 'party mix(?:es)?', category: 'snacks_candy' },
-  { term: 'popcorn', category: 'snacks_candy' },
+  { term: 'trail mix(?:es)?', category: 'snacks_sweets' },
+  { term: 'party mix(?:es)?', category: 'snacks_sweets' },
+  { term: 'popcorn', category: 'snacks_sweets' },
   {
     term: '(?:popped )?water lily seeds?',
-    category: 'snacks_candy',
+    category: 'snacks_sweets',
     note: 'makhana — popped and eaten like popcorn, not a pantry seed',
   },
   {
     term: 'onion (?:flavou?red )?rings?',
-    category: 'snacks_candy',
+    category: 'snacks_sweets',
     note: 'shelf-stable snack rings; the flavour word sits inside the name',
   },
   {
     term: '(?:waffle|sugar|ice cream) cones?',
-    category: 'snacks_candy',
+    category: 'snacks_sweets',
     note: 'cones sold as a treat component, filled or empty',
   },
 
   // ── Pantry goods whose head word is a false friend ───────────────────────
   {
     term: '(?:processing|curing|brining) kits?',
-    category: 'pantry',
+    category: 'pantry_condiments',
     note: 'a seasoning/curing kit is a pantry good, not a meal kit',
   },
 
   // ── Baby audience stated in the name ─────────────────────────────────────
   {
     term: 'nursery water',
-    category: 'baby',
+    category: 'baby_food_formula',
     note: 'water sold explicitly for preparing infant feeds',
   },
 ];
@@ -467,94 +493,100 @@ export const HEAD_TERMS: readonly LexiconEntry[] = [
   // ── Bakery ───────────────────────────────────────────────────────────────
   {
     term: 'breads?|buns?|rolls?|bagels?|baguettes?|croissants?|pitas?|naan|focaccia|loaf|loaves|sourdough|brioche',
-    category: 'bakery',
+    category: 'bakery_grains',
   },
-  { term: 'tortillas?', category: 'bakery' },
+  { term: 'tortillas?', category: 'bakery_grains' },
   {
     term: 'cookies?|crackers?|biscuits?|shortbread|wafers?|macarons?|mooncakes?|pfeffernusse',
-    category: 'bakery',
+    category: 'bakery_grains',
   },
   {
     term: 'cakes?|pies?|pastr(?:y|ies)|muffins?|brownies?|do(?:ugh)?nuts?|tarts?|cupcakes?|desserts?|cannoli|strudels?|churros?|mousses?|scones?|eclairs?|shortcakes?',
-    category: 'bakery',
+    category: 'bakery_grains',
   },
-  { term: 'waffles?|pancakes?|crepes?|hushpupp(?:y|ies)|cachapas?|gorditas?', category: 'bakery' },
-  { term: 'dough|batter', category: 'bakery' },
+  {
+    term: 'waffles?|pancakes?|crepes?|hushpupp(?:y|ies)|cachapas?|gorditas?',
+    category: 'bakery_grains',
+  },
+  { term: 'dough|batter', category: 'bakery_grains' },
 
   // ── Prepared meals ───────────────────────────────────────────────────────
   {
-    term: 'entr[eé]es?|meals?|dinners?|casseroles?|lasagnas?|enchiladas?|tamales?|burritos?|empanadas?|dumplings?|wontons?|pierogi(?:es)?|pirozhki|vareniki|singaras?|samosas?',
-    category: 'prepared',
+    term: 'entr[eéçÇ]es?|meals?|dinners?|casseroles?|lasagnas?|enchiladas?|tamales?|burritos?|empanadas?|dumplings?|wontons?|pierogi(?:es)?|pirozhki|vareniki|singaras?|samosas?|samsas?|coxinhas?',
+    category: 'prepared_foods',
   },
-  { term: 'soups?|broths?|stews?|chilis?|bisques?|chowders?|ramen|pho', category: 'prepared' },
+  {
+    term: 'soups?|broths?|stews?|chilis?|bisques?|chowders?|ramen|pho',
+    category: 'prepared_foods',
+  },
   {
     term: 'alfredo|jambalaya|gumbo|quiches?|croquettes?|blintz(?:es)?|cutlets?|coleslaw|slaw',
-    category: 'prepared',
+    category: 'prepared_foods',
   },
   {
     term: 'risotto|paella|biryani|fritters?|coneys?|sliders?',
-    category: 'prepared',
+    category: 'prepared_foods',
     note: 'dish names; a slider or coney is a made sandwich, not a cut of meat',
   },
-  { term: 'pot ?stickers?|gyozas?|pelmeni', category: 'prepared' },
+  { term: 'pot ?stickers?|gyozas?|pelmeni', category: 'prepared_foods' },
   {
     term: 'sandwich(?:es)?|subs?|burgers?|cheeseburgers?|wraps?|paninis?|kimbap|gyros?',
-    category: 'prepared',
+    category: 'prepared_foods',
   },
-  { term: 'pizzas?|calzones?|strombolis?', category: 'prepared' },
-  { term: 'sushi|poke|kimchi ?bap', category: 'prepared' },
+  { term: 'pizzas?|calzones?|strombolis?', category: 'prepared_foods' },
+  { term: 'sushi|poke|kimchi ?bap', category: 'prepared_foods' },
   {
     term: 'bao|falafels?|kabobs?|kebabs?|quesadillas?|taquitos?|tacos?|chimichangas?',
-    category: 'prepared',
+    category: 'prepared_foods',
   },
   {
     term: 'salads?',
-    category: 'prepared',
+    category: 'prepared_foods',
     note: 'a made salad is a dish; bagged salad kits are a compound above',
   },
 
   // ── Snacks & candy ───────────────────────────────────────────────────────
   {
     term: 'chips?|pretzels?|puffs?|crisps?|snacks?|nachos?|bars?|cracklings?',
-    category: 'snacks_candy',
+    category: 'snacks_sweets',
     note: 'cracklings sit with pork rinds and chicharrones in the snack aisle',
   },
   {
     term: 'chocolates?|cand(?:y|ies)|confections?|confectionar(?:y|ies)|confectioner(?:y|ies)|gumm(?:y|ies)|nonpareils?|truffles?|fudge|marshmallows?|toffee|caramels?|brittle|bark|bonbons?|licorice|pops?',
-    category: 'snacks_candy',
+    category: 'snacks_sweets',
   },
 
   // ── Pantry staples ───────────────────────────────────────────────────────
   {
     term: 'peanuts?|almonds?|cashews?|pecans?|walnuts?|pistachios?|macadamias?|hazelnuts?|nuts?|pinenuts?',
-    category: 'pantry',
+    category: 'pantry_condiments',
   },
-  { term: 'seeds?|kernels?|tahini|tahina|flax|chia', category: 'pantry' },
-  { term: 'cereals?|granola|oatmeal|muesli|oats', category: 'pantry' },
-  { term: 'flours?|cornmeal|semolina|starch|atta|meal', category: 'pantry' },
+  { term: 'seeds?|kernels?|tahini|tahina|flax|chia', category: 'pantry_condiments' },
+  { term: 'cereals?|granola|oatmeal|muesli|oats', category: 'pantry_condiments' },
+  { term: 'flours?|cornmeal|semolina|starch|atta|meal', category: 'pantry_condiments' },
   {
     term: 'pastas?|noodles?|spaghetti|macaroni|orzo|campanelle|vermicelli|linguini?|fettuccine|penne|rigatoni|bowtie|raviolis?|tortellini|gnocchi',
-    category: 'pantry',
+    category: 'pantry_condiments',
   },
   {
     term: 'rice|quinoa|couscous|barley|lentils?|beans?|chickpeas?|dal|grains?',
-    category: 'pantry',
+    category: 'pantry_condiments',
   },
   {
     term: 'sauces?|dressings?|salsas?|ketchup|mustard|mayonnaise|mayo|condiments?|vinegar|marinades?|grav(?:y|ies)|pesto',
-    category: 'pantry',
+    category: 'pantry_condiments',
   },
   {
     term: 'seasonings?|spices?|cinnamon|paprika|turmeric|cumin|asafoetida|herbs?|salt|pepper',
-    category: 'pantry',
+    category: 'pantry_condiments',
   },
-  { term: 'oils?|shortening|lards?|tallows?|fats?', category: 'pantry' },
+  { term: 'oils?|shortening|lards?|tallows?|fats?', category: 'pantry_condiments' },
   {
     term: 'honey|syrups?|sugar|molasses|jams?|jell(?:y|ies)|preserves?|spreads?',
-    category: 'pantry',
+    category: 'pantry_condiments',
   },
-  { term: 'hummus|dips?|guacamole|kimchi|tofu|miso', category: 'pantry' },
-  { term: 'bases?|bouillon', category: 'pantry', note: 'soup and gravy bases' },
+  { term: 'hummus|dips?|guacamole|kimchi|tofu|miso', category: 'pantry_condiments' },
+  { term: 'bases?|bouillon', category: 'pantry_condiments', note: 'soup and gravy bases' },
 
   // ── Supplements ──────────────────────────────────────────────────────────
   {
@@ -568,7 +600,7 @@ export const HEAD_TERMS: readonly LexiconEntry[] = [
   { term: 'angelicae?|tejocote|spermidine?|lactoferrin|apolactoferrin', category: 'supplements' },
 
   // ── Baby ─────────────────────────────────────────────────────────────────
-  { term: 'formulas?', category: 'baby' },
+  { term: 'formulas?', category: 'baby_food_formula' },
 
   // ── Drinks ───────────────────────────────────────────────────────────────
   { term: 'juices?|ciders?|smoothies?|lemonades?|nectars?', category: 'beverages' },
@@ -706,7 +738,7 @@ export const COMPONENT_CATEGORY_IDS: readonly FoodCategoryId[] = [
   'meat_poultry',
   'seafood',
   'dairy_eggs',
-  'pantry',
+  'pantry_condiments',
 ];
 
 /**
@@ -760,7 +792,7 @@ export const DISHABLE_STAPLE_TERMS: readonly string[] = [
  * soup packet is an ingredient.
  */
 export const DISH_CLASS_TERMS: readonly string[] = [
-  'entr[eé]es?',
+  'entr[eéçÇ]es?',
   'meals?',
   'dinners?',
   'bowls?',
@@ -777,12 +809,12 @@ export const DISH_CLASS_TERMS: readonly string[] = [
  * second product.
  */
 export const FLAVOURABLE_TARGET_IDS: readonly FoodCategoryId[] = [
-  'bakery',
-  'snacks_candy',
+  'bakery_grains',
+  'snacks_sweets',
   'dairy_eggs',
   'seafood',
   'supplements',
-  'baby',
+  'baby_food_formula',
   'beverages',
 ];
 

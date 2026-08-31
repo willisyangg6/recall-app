@@ -1,5 +1,5 @@
 /**
- * Gold-set evaluation for food-category matching (Phases C5.3B / C5.3B-2).
+ * Gold-set evaluation for product-category matching (C5.3B / C5.3B-2 / C10A).
  *
  * Pure and shared: the `qa:categories` command and the test suite run THIS
  * code, so a threshold can never pass in a test and fail in the report, or
@@ -10,12 +10,20 @@
  * A lexicon tuned against every case it is measured on is a lookup table with
  * extra steps, and its reported accuracy means nothing. The fixture therefore
  * carries a `development` portion — everything the matcher was ever tuned or
- * debugged against, INCLUDING the two spent evaluation attempts of C5.3B —
- * and two final holdouts drawn in C5.3B-2 from cases no split had ever
- * touched: `final_natural`, sampled to resemble the real corpus, and
- * `final_challenge`, selected by source structure to concentrate the hard
- * families. Only the final holdouts are claims about future notices, and they
- * are measured exactly once against the frozen matcher.
+ * debugged against — and two holdouts drawn from cases no split had ever
+ * touched: `c10a_natural`, sampled to resemble the real corpus, and
+ * `c10a_challenge`, selected by source structure to concentrate the hard
+ * families. Only the holdouts are claims about future notices, and they are
+ * measured exactly once against the frozen matcher.
+ *
+ * ## A holdout is spent when it is measured
+ *
+ * `development` therefore also contains the 317 rows of C5.3B-2's own final
+ * holdout. Those measured the C5.3B-2 matcher once and cannot measure another:
+ * C10A changed the classifier, so re-scoring them would report a tuning number
+ * dressed as a generalization number. They keep `originSplit` so the history
+ * stays legible, and C10A drew its own holdout from the 1,177 cases that no
+ * split had touched.
  *
  * ## Why exact-set accuracy leads
  *
@@ -36,13 +44,18 @@ import { COMPACT_CATEGORY_IDS, toCompactCategories } from './food-category-compa
 import { categoriesForCase, type ProductTextBasis } from './food-category-matcher';
 import type { SourceAgency } from './recall-types';
 
-export type GoldSplit = 'development' | 'final_natural' | 'final_challenge';
+/**
+ * `development` is everything the matcher may be tuned against. It includes
+ * the two C5.3B-2 final holdouts: those were measured once under the frozen
+ * C5.3B-2 matcher and are SPENT, and C10A changes the matcher, so they can
+ * never measure it again. Each such row keeps `originSplit` for provenance.
+ *
+ * `c10a_natural` and `c10a_challenge` are C10A's own holdouts, drawn from
+ * cases NO split had ever touched and labelled from full source evidence.
+ */
+export type GoldSplit = 'development' | 'c10a_natural' | 'c10a_challenge';
 
-export const GOLD_SPLITS: readonly GoldSplit[] = [
-  'development',
-  'final_natural',
-  'final_challenge',
-];
+export const GOLD_SPLITS: readonly GoldSplit[] = ['development', 'c10a_natural', 'c10a_challenge'];
 
 /** One reviewed gold-set row. Mirrors the fixture schema exactly. */
 export interface GoldRow {
@@ -58,10 +71,14 @@ export interface GoldRow {
   /** The canonical product text this row was reviewed from. */
   productText: string;
   basis: ProductTextBasis;
-  /** Reviewed truth: the categories of the recalled products. */
+  /** Reviewed truth: the categories of the recalled products. Never empty. */
   expected: FoodCategoryId[];
   split: GoldSplit;
   note?: string;
+  /** The split this row was drawn into originally, when it has been retired. */
+  originSplit?: string;
+  /** Phase that revised this row's reviewed label, with the reason in `note`. */
+  labelCorrectedIn?: string;
 }
 
 export interface GoldSet {
@@ -141,7 +158,7 @@ interface EvaluationPair {
 }
 
 /**
- * The metric arithmetic, shared verbatim by the eleven-category evaluation and
+ * The metric arithmetic, shared verbatim by the twelve-category evaluation and
  * the compact diagnostic so the two can never drift apart.
  */
 function evaluatePairs(
@@ -369,6 +386,82 @@ export const CHALLENGE_GATES: GateThresholds = {
 } as const;
 
 /**
+ * The ACCEPTED PRODUCT GATES for Category as an optional discovery filter.
+ *
+ * `GATES` above is the research bar this classifier was built against and did
+ * not clear (91.5% against 95%). It is deliberately left intact and still
+ * reported, because a gate weakened after seeing results is not a gate. These
+ * are a SEPARATE, lower bar the founder set afterwards, on an explicit product
+ * argument:
+ *
+ *   Category is a discovery tool, not a safety boundary. A miscategorized card
+ *   is a discovery miss with the entire unfiltered feed still behind it; a
+ *   missed allergen match is a missed alert. Personalization and notification
+ *   eligibility therefore hold a much stricter standard, and nothing in this
+ *   file may ever be reused to justify relaxing those — the two paths do not
+ *   share a threshold, and `category-invariance.test.ts` proves they do not
+ *   share an input either.
+ *
+ * These are REGRESSION gates: they say the shipped classifier still behaves
+ * like the one that was measured and accepted, not that it is accurate enough
+ * to decide anything that matters to someone's health.
+ */
+export const PRODUCT_GATES: GateThresholds = {
+  exactSetAccuracy: 0.9,
+  microPrecision: 0.9,
+  microRecall: 0.9,
+} as const;
+
+/**
+ * FROZEN HUMAN-REVIEWED BASELINE — cases in the frozen natural holdout that a
+ * reviewer judged to be placed somewhere no reasonable shopper would look.
+ *
+ * WHAT THE AUTOMATED ASSERTION CHECKS: that the frozen manifest is intact,
+ * that these case ids are still present in the natural split, that each
+ * carries its recorded reasoning, and that the arithmetic still yields ≤3%.
+ *
+ * WHAT IT CANNOT CHECK: whether a future classifier change introduces a NEW
+ * unfindable error. "Would a shopper look here?" is a human judgement and is
+ * not present in the data, so no assertion can recompute it. This baseline is
+ * a record of one review of one spent holdout — it does not generalize to a
+ * changed classifier, and it must never be read as ongoing coverage.
+ *
+ * REFRESHING IT requires C10A.1 to draw a NEW holdout from untouched cases
+ * and review it; the number below cannot be carried forward across a
+ * classifier change.
+ *
+ * The other twelve zero-overlap failures are dishes filed under Meat &
+ * poultry, which a shopper hunting a recalled chicken salad would plausibly
+ * select; they are wrong, but they are not unfindable.
+ */
+export const REVIEWED_UNFINDABLE_CASE_IDS: readonly string[] = [
+  // dairy_eggs → prepared_foods: an ice-cream sandwich under Prepared foods.
+  '4ed8ced9-33df-43c4-a673-41d28fee3dda',
+  // bakery_grains → produce: a Danish pastry under Fruits & vegetables.
+  'eadc07f9-aa27-4810-8bdf-5d88d6dfb138',
+  // supplements → produce: a supplement powder under Fruits & vegetables.
+  '572b71ca-95d9-4667-8b17-02d4e5b452b4',
+  // supplements → pantry_condiments: a cough syrup under Pantry & staples.
+  'caeafaff-f2ed-4f0e-8f26-a35b53021c39',
+];
+
+export const UNFINDABLE_RATE_LIMIT = 0.03;
+
+/**
+ * Rows whose prediction shares at least one category with reviewed truth —
+ * the discovery question, as opposed to exact-set's cataloguing question. A
+ * case counted here is reachable from at least one chip a user might select.
+ */
+export function atLeastOneCorrect(rows: GoldRow[]): { matched: number; total: number } {
+  let matched = 0;
+  for (const row of rows) {
+    const actual = predict(row);
+    if (actual.some((category) => row.expected.includes(category))) matched += 1;
+  }
+  return { matched, total: rows.length };
+}
+
+/**
  * Every gate the evaluation misses, as human-readable lines. Empty means the
  * split passed its thresholds. The caller decides what to do about it;
  * nothing here exits.
@@ -437,15 +530,15 @@ export type FinalVerdict = 'GREEN' | 'YELLOW' | 'NOT_PASSING';
 
 /**
  * The decision rule of the milestone, as data: GREEN only when the
- * eleven-category matcher passes BOTH final gates (and the run is
- * deterministic with an intact freeze); YELLOW when eleven fails but the
+ * twelve-category matcher passes BOTH final gates (and the run is
+ * deterministic with an intact freeze); YELLOW when the vocabulary fails but the
  * predeclared compact merge passes the same gates on the same predictions —
  * a founder decision, never an automatic adoption; NOT_PASSING otherwise.
  * Only GREEN maps to a zero exit.
  */
 export function finalVerdict(input: {
-  elevenNaturalFailures: string[];
-  elevenChallengeFailures: string[];
+  primaryNaturalFailures: string[];
+  primaryChallengeFailures: string[];
   compactNaturalFailures: string[];
   compactChallengeFailures: string[];
   deterministic: boolean;
@@ -454,8 +547,8 @@ export function finalVerdict(input: {
   const sound = input.deterministic && input.freezeIntact;
   if (
     sound &&
-    input.elevenNaturalFailures.length === 0 &&
-    input.elevenChallengeFailures.length === 0
+    input.primaryNaturalFailures.length === 0 &&
+    input.primaryChallengeFailures.length === 0
   ) {
     return 'GREEN';
   }
@@ -501,6 +594,14 @@ export function validateGoldSet(goldSet: GoldSet): string[] {
       problems.push(`${where}: expected must be an array`);
       continue;
     }
+    // The C10A derivation is TOTAL, so reviewed truth must be too: a row that
+    // expects nothing could never be matched by any prediction.
+    if (row.expected.length === 0) {
+      problems.push(`${where}: expected is empty — an unnameable product is ['other'], not []`);
+    }
+    if (row.expected.includes('other') && row.expected.length > 1) {
+      problems.push(`${where}: 'other' cannot co-occur with a real category`);
+    }
     for (const category of row.expected) {
       if (!isFoodCategoryId(category)) problems.push(`${where}: unknown category ${category}`);
     }
@@ -531,12 +632,23 @@ export function validateGoldSet(goldSet: GoldSet): string[] {
     }
   }
 
-  // The development split must exercise everything, including uncategorized
-  // rows. The final holdout requires every category and a multi-category case
-  // across the UNION of its two splits: the natural sample is drawn blind to
-  // category (forcing coverage would un-naturalize it), and the untouched
-  // corpus pool contained no remaining non-food or product-class-free case,
-  // so a final uncategorized row is impossible — disclosed, not hidden.
+  /**
+   * Categories the C10A holdout provably cannot cover, and why.
+   *
+   * The corpus holds 13 beverage and 20 infant-feeding cases in total, and the
+   * C5.3B-2 development set already contains every one of them, so no split
+   * drawn from untouched cases can contain either. A disclosed supplemental
+   * screen searched the remaining pool and found 1 beverage-shaped and 0
+   * infant-shaped candidates, neither of which reviewed as those categories.
+   * `other` is the same story from the other direction: the untouched pool
+   * held no case whose product the reviewer could not name.
+   *
+   * This is a real limit on what the holdout measures, so it is named here
+   * rather than absorbed by weakening the rule. Those three categories are
+   * exercised by the development split and by unit tests.
+   */
+  const HOLDOUT_UNCOVERABLE = new Set<string>(['beverages', 'baby_food_formula', 'other']);
+
   const development = goldSet.rows.filter((row) => row.split === 'development');
   const finalRows = goldSet.rows.filter((row) => row.split !== 'development');
   for (const [name, rows] of [
@@ -544,6 +656,7 @@ export function validateGoldSet(goldSet: GoldSet): string[] {
     ['final holdout', finalRows],
   ] as const) {
     for (const category of FOOD_CATEGORY_IDS) {
+      if (name === 'final holdout' && HOLDOUT_UNCOVERABLE.has(category)) continue;
       if (!rows.some((row) => row.expected.includes(category))) {
         problems.push(`${name} has no rows expecting ${category}`);
       }
@@ -552,8 +665,17 @@ export function validateGoldSet(goldSet: GoldSet): string[] {
       problems.push(`${name} has no multi-category rows`);
     }
   }
-  if (!development.some((row) => row.expected.length === 0)) {
-    problems.push(`development has no uncategorized rows`);
+  // The disclosure must stay true: if a later draw DOES cover one of these,
+  // the exemption is stale and must be removed rather than silently kept.
+  for (const category of HOLDOUT_UNCOVERABLE) {
+    if (finalRows.some((row) => row.expected.includes(category as FoodCategoryId))) {
+      problems.push(
+        `final holdout now covers ${category}; remove it from HOLDOUT_UNCOVERABLE and its disclosure`,
+      );
+    }
+  }
+  if (!development.some((row) => row.expected.includes('other'))) {
+    problems.push(`development has no 'other' rows`);
   }
   return problems;
 }

@@ -6,6 +6,8 @@
  * array, or guessed default.
  */
 
+import type { FoodCategoryId } from './food-category';
+
 export type SourceAgency = 'FDA' | 'FSIS';
 
 export type SourceSystem = 'fsis_api' | 'fda_announcement' | 'openfda_enforcement';
@@ -133,6 +135,25 @@ export interface CaseProjection {
    * render cleanly without a thumbnail and gain one at the next ingest.
    */
   heroImageUrl: string | null;
+  /**
+   * What KIND of product was recalled (C10A) — the future Category filter's
+   * only input. Derived deterministically from the case's own product text by
+   * `deriveProductCategories`; never from the hazard, allergen, pathogen,
+   * firm, brand or retailer.
+   *
+   * OPTIONAL ON PURPOSE. Projections persisted before this field existed lack
+   * the key entirely, and absence means "not derived yet" — which is NOT the
+   * same as `['other']`, the honest answer for a product we read and could not
+   * name. Readers must go through `readProductCategories` (domain/projection),
+   * which keeps that distinction; nothing may coalesce a missing key to a
+   * category. Cases gain the field at their next legitimate re-projection, or
+   * in bulk from the historical backfill.
+   *
+   * DISCOVERY ONLY. This never affects relevance, Affects Me, risk, ranking,
+   * push eligibility, notification eligibility, or membership of the
+   * unfiltered feed — see docs/recall-food-categories.md.
+   */
+  productCategories?: FoodCategoryId[];
   geography: Geography;
   affectedProducts: AffectedProduct[];
   quantityText: string | null;

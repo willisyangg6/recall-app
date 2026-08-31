@@ -5,6 +5,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
+import type { FoodCategoryId } from '../../domain/food-category';
 import type {
   AffectedProduct,
   CaseProjection,
@@ -400,6 +401,29 @@ export class SupabaseStore implements RecallStore {
       .eq('last_changed_at', expectedLastChangedAt)
       .select('id');
     if (error) this.fail('updateCaseGeography', error);
+    return (data?.length ?? 0) > 0;
+  }
+
+  async updateCaseProductCategories(
+    id: string,
+    productCategories: FoodCategoryId[],
+    expectedLastChangedAt: string,
+  ): Promise<boolean> {
+    // Identical contract to updateCaseRetailerNames: re-read so the merge
+    // happens against the freshest projection, then make the write itself
+    // conditional on `last_changed_at`, so an ingest landing in between loses
+    // nothing — the update matches no row and the caller reports a conflict
+    // rather than rolling newer data back. `timeline` and `last_changed_at`
+    // are not in the payload at all.
+    const current = await this.getCase(id);
+    if (!current || current.lastChangedAt !== expectedLastChangedAt) return false;
+    const { data, error } = await this.client
+      .from('recall_cases')
+      .update({ projection: { ...current.projection, productCategories } })
+      .eq('id', id)
+      .eq('last_changed_at', expectedLastChangedAt)
+      .select('id');
+    if (error) this.fail('updateCaseProductCategories', error);
     return (data?.length ?? 0) > 0;
   }
 

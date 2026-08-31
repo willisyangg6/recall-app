@@ -8,7 +8,8 @@
  *
  * Composition contract:
  *   within one dimension  → OR   (California OR Texas)
- *   across dimensions     → AND  ((California OR Texas) AND (Critical OR High))
+ *   across dimensions     → AND  ((California OR Texas) AND (Critical OR High)
+ *                                 AND (Seafood OR Beverages))
  *
  * LOCATION uses the canonical tri-state geography (domain/recall-types):
  *   - scope 'states'     → matches when the stated list names a selected
@@ -26,6 +27,7 @@
  * set (never from card copy).
  */
 
+import type { FoodCategoryId } from '@/domain/food-category';
 import { stateNameForCode } from '@/domain/preferences';
 import type { Classification, Geography } from '@/domain/recall-types';
 import { consumerRiskTier, type ConsumerRiskTier } from '@/domain/risk-tier';
@@ -35,6 +37,14 @@ import { RISK_PRIORITY } from './affects-me-ranking';
 export interface FilterableRecall {
   classification: Classification;
   geography: Geography;
+  /**
+   * Derived product categories (C10A). OPTIONAL: a case projected before the
+   * field existed carries none, and the loader does not select the column yet
+   * — C10B wires both. Absence means "not derived", never a category, so an
+   * un-enriched case is simply not placed by a Category selection rather than
+   * being mislabelled into one.
+   */
+  productCategories?: readonly FoodCategoryId[];
 }
 
 export interface FeedFilterState {
@@ -42,17 +52,58 @@ export interface FeedFilterState {
   stateCodes: string[];
   /** Selected canonical consumer risk tiers. OR within. */
   riskTiers: ConsumerRiskTier[];
+  /**
+   * Selected product categories. OR within, AND with the other dimensions.
+   *
+   * DISCOVERY ONLY (C10A product decision). Category is not a safety,
+   * relevance, risk, notification or feed-eligibility boundary: it applies to
+   * All Recalls, only when the user intentionally selects one, and it never
+   * touches Affects Me. The accepted classifier is measured at 91.5% natural
+   * exact-set / 92.0% at-least-one-correct, which is deliberately a WEAKER
+   * bar than the personalization and notification paths hold, because a
+   * miscategorized card is a discovery miss with All Recalls behind it, not a
+   * missed alert. See docs/recall-food-categories.md.
+   */
+  categoryIds: FoodCategoryId[];
 }
 
-export const EMPTY_FEED_FILTERS: FeedFilterState = { stateCodes: [], riskTiers: [] };
+export const EMPTY_FEED_FILTERS: FeedFilterState = {
+  stateCodes: [],
+  riskTiers: [],
+  categoryIds: [],
+};
 
 export function hasActiveFilters(filters: FeedFilterState): boolean {
-  return filters.stateCodes.length > 0 || filters.riskTiers.length > 0;
+  return (
+    filters.stateCodes.length > 0 || filters.riskTiers.length > 0 || filters.categoryIds.length > 0
+  );
 }
 
 /** Number of active dimensions+selections, for the temporary UI's chip badges. */
 export function activeFilterCount(filters: FeedFilterState): number {
-  return filters.stateCodes.length + filters.riskTiers.length;
+  return filters.stateCodes.length + filters.riskTiers.length + filters.categoryIds.length;
+}
+
+/**
+ * Does a notice qualify for an ACTIVE category selection?
+ *
+ * OR within the dimension: selecting Seafood and Beverages shows either. A
+ * multi-category case matches if ANY of its categories is selected, which is
+ * what makes the multi-label model useful — a recall of waffles and turkey
+ * sausage is findable under both chips.
+ *
+ * A case with no derived categories matches NO active category selection. It
+ * is never hidden from the unfiltered feed, and it is never guessed into a
+ * chip; the honest answer to "which aisle is this?" for an un-enriched case
+ * is silence, and the user can clear the filter to see it.
+ */
+export function matchesCategoryFilter(
+  productCategories: readonly FoodCategoryId[] | undefined,
+  categoryIds: readonly FoodCategoryId[],
+): boolean {
+  if (categoryIds.length === 0) return true;
+  if (productCategories === undefined || productCategories.length === 0) return false;
+  return productCategories.some((id) => categoryIds.includes(id));
 }
 
 /**
@@ -138,7 +189,8 @@ export function applyFeedFilters<T extends FilterableRecall>(
   return items.filter(
     (item) =>
       matchesLocationFilter(item.geography, filters.stateCodes) &&
-      matchesRiskFilter(item.classification, filters.riskTiers),
+      matchesRiskFilter(item.classification, filters.riskTiers) &&
+      matchesCategoryFilter(item.productCategories, filters.categoryIds),
   );
 }
 

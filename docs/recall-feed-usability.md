@@ -23,7 +23,7 @@ Search stays visible in both modes and is never reset by a mode switch.
 
 ## Filter model
 
-Category is deliberately absent (below).
+Category exists as a derived projection field and a tested predicate, but is not yet wired into this UI (below).
 
 - **All / Affects me** are mutually exclusive feed modes, unchanged: the same
   default-mode rule (personalized once preferences exist, chosen once per
@@ -95,22 +95,45 @@ substring, **never fuzzy**: one wrong digit does not match. Raw announcement
 HTML/prose is not searched; no external service is queried; empty search is a
 strict no-op (same array instance).
 
-## Category: audited, not shipped
+## Category: accepted for discovery, foundation built, UI not wired
 
-"Category" (produce/poultry/dairy/prepared…) has no canonical projection
-field. The deterministic 11-category matcher built and frozen in C5.3B-2
-scored **89.5% on a 200-case never-seen natural holdout against 95% gates**
-(docs/recall-food-categories.md), with a predeclared coarser 7-category
-vocabulary gaining only +0.5pp — and a category filter _hides_ recalls, so a
-one-in-ten miscategorization rate is a safety defect, not a UX blemish.
-Verdict recorded there: **defer**. Residual error is ≈⅓ source-text poverty
-(jurisdiction-only FSIS titles hiding the real dish products that structured
-product lines DO name), ≈⅓ catchable rule gaps, ≈⅓ judgment boundaries. The
-bounded future milestone, if the founder wants it: an extraction-policy
-change preferring structured product lines over jurisdiction-only FSIS
-titles, plus the small catchable-gap list, then a fresh freeze and a fresh
-holdout under the same gates. Until that passes, Category stays out of the
-UI entirely (test-pinned).
+"Category" (produce/poultry/dairy/prepared…) is now a canonical projection
+field, derived in `projectCase` from the recalled product's own text and never
+from the hazard, allergen, firm or retailer. The derivation has failed a 95%
+research gate twice on never-seen data:
+
+| Phase   | Vocabulary | Natural holdout | Research gate |
+| ------- | ---------- | --------------- | ------------- |
+| C5.3B-2 | 11         | 89.5%           | 95%           |
+| C10A    | 12         | **91.5%**       | 95%           |
+
+C10A ran the bounded milestone this section previously recommended — the
+extraction-policy change preferring structured product lines over
+jurisdiction-only FSIS titles, plus the catchable-gap list, then a fresh freeze
+and a fresh 200-case holdout. **The extraction change was measured and
+reverted**: scored against identical labels on the 60 rows it affects, the
+title grammar reached 80.0% and the product lines 50.0%, because FSIS product
+lines are packaging prose whose product names are brand-dominated. The residual
+error is concentrated — 59% of natural failures are one confusion,
+`prepared_foods` mislabelled `meat_poultry` on a jurisdiction-only title.
+
+The founder then accepted 91.5% for a NARROWER purpose than the original brief
+assumed. Category is an **optional discovery tool**: it applies to All Recalls,
+only when intentionally selected, and it never touches Affects Me, relevance,
+risk, ranking, push, notification eligibility, or membership of the unfiltered
+feed. Under that framing it clears separate ≥90% product gates, and the
+reviewed rate of "placed somewhere no shopper would look" is 2.0%. A
+miscategorized card is a discovery miss with the whole feed behind it; that is
+a different kind of failure from a missed allergen alert, and the two paths
+hold different bars on purpose.
+
+Semantics, already implemented and tested in `feed-filters.ts`: OR within the
+selected categories, AND with Location and Risk, filtering picks the set and
+the existing comparator orders it, and a case with no derived categories
+matches no active selection while never being hidden from the unfiltered feed.
+
+**The UI is still not wired** (C10B), and the historical backfill has not been
+applied — see docs/recall-food-categories.md §6 and §8.
 
 ## Sharing
 

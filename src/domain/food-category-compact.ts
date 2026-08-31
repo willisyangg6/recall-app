@@ -1,15 +1,22 @@
 /**
- * The compact seven-category DIAGNOSTIC mapping (Phase C5.3B-2).
+ * The compact DIAGNOSTIC mapping (Phase C5.3B-2) — a CLOSED experiment.
  *
- * PREDECLARED before the final holdout was drawn, as the milestone requires:
- * if the eleven-category matcher fails its gates, the SAME frozen predictions
- * and the SAME frozen labels are mechanically merged through this mapping and
- * re-scored. Nothing may be relabeled or re-predicted after results are seen —
- * the mapping is pure arithmetic over category ids.
+ * PREDECLARED before the C5.3B-2 final holdout was drawn: if the fine-grained
+ * matcher failed its gates, the SAME frozen predictions and the SAME frozen
+ * labels were mechanically merged through this mapping and re-scored, so a
+ * coarser vocabulary could not be proposed after seeing which errors it would
+ * have forgiven. It was measured and it answered its question — the merge
+ * bought +0.5pp in C5.3B-2 and +1.0pp on C10A's challenge split, because the
+ * dominant confusion (Prepared vs Meat & poultry) does not merge away. A
+ * coarser vocabulary was therefore NOT recommended, and C10A froze the full
+ * twelve-category vocabulary instead.
  *
- * This is the C5.3A compact alternative. It is a diagnostic, not the product
- * vocabulary: adopting it would be a founder decision, and until then the
- * frozen eleven-category vocabulary in food-category.ts stands.
+ * It is kept as the record of that experiment and as regression coverage for
+ * the merge arithmetic. Two things changed mechanically in C10A and neither
+ * touches the recorded result: the source ids were renamed, and `other`
+ * joined the vocabulary, so the seven compact buckets became eight. The
+ * compact ids are their OWN namespace — compact `prepared` is not the
+ * product-category id `prepared_foods`.
  */
 
 import type { FoodCategoryId } from './food-category';
@@ -21,14 +28,15 @@ export type CompactCategoryId =
   | 'bakery_snacks'
   | 'prepared'
   | 'pantry_drinks'
-  | 'baby_supplements';
+  | 'baby_supplements'
+  | 'other';
 
 export interface CompactCategory {
   id: CompactCategoryId;
   label: string;
 }
 
-/** The seven compact categories, in display order. */
+/** The compact categories, in display order. `other` is the C10A addition. */
 export const COMPACT_CATEGORIES: readonly CompactCategory[] = [
   { id: 'produce', label: 'Produce' },
   { id: 'meat_seafood', label: 'Meat & seafood' },
@@ -37,6 +45,7 @@ export const COMPACT_CATEGORIES: readonly CompactCategory[] = [
   { id: 'bakery_snacks', label: 'Bakery & snacks' },
   { id: 'dairy_eggs', label: 'Dairy & eggs' },
   { id: 'baby_supplements', label: 'Baby food & supplements' },
+  { id: 'other', label: 'Other' },
 ] as const;
 
 export const COMPACT_CATEGORY_IDS: readonly CompactCategoryId[] = COMPACT_CATEGORIES.map(
@@ -44,21 +53,24 @@ export const COMPACT_CATEGORY_IDS: readonly CompactCategoryId[] = COMPACT_CATEGO
 );
 
 /**
- * The mechanical 11 → 7 merge. Total: every eleven-category id maps to exactly
- * one compact id, so no prediction and no label can be lost or reinterpreted.
+ * The mechanical 12 → 8 merge. Total: every product-category id maps to
+ * exactly one compact id, so no prediction and no label can be lost or
+ * reinterpreted. `other` merges to itself — a product the source never named
+ * does not become nameable by coarsening the vocabulary.
  */
 export const COMPACT_MAPPING: Readonly<Record<FoodCategoryId, CompactCategoryId>> = {
   produce: 'produce',
   meat_poultry: 'meat_seafood',
   seafood: 'meat_seafood',
-  prepared: 'prepared',
-  pantry: 'pantry_drinks',
+  prepared_foods: 'prepared',
+  pantry_condiments: 'pantry_drinks',
   beverages: 'pantry_drinks',
-  bakery: 'bakery_snacks',
-  snacks_candy: 'bakery_snacks',
+  bakery_grains: 'bakery_snacks',
+  snacks_sweets: 'bakery_snacks',
   dairy_eggs: 'dairy_eggs',
   supplements: 'baby_supplements',
-  baby: 'baby_supplements',
+  baby_food_formula: 'baby_supplements',
+  other: 'other',
 } as const;
 
 const COMPACT_INDEX = new Map<CompactCategoryId, number>(
@@ -66,7 +78,7 @@ const COMPACT_INDEX = new Map<CompactCategoryId, number>(
 );
 
 /**
- * Merge an eleven-category set into the compact vocabulary: map every id,
+ * Merge a product-category set into the compact vocabulary: map every id,
  * de-duplicate, and sort into compact display order. Deterministic and
  * argument-order independent.
  */

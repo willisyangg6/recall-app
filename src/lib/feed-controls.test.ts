@@ -196,7 +196,7 @@ test('filters preserved while in Affects me do not change its results or ranking
   const baseline = affectsMe(corpus);
 
   // A Location+Risk selection that would drastically narrow All Recalls…
-  const active: FeedFilterState = { stateCodes: ['TX'], riskTiers: ['minimal'] };
+  const active: FeedFilterState = { stateCodes: ['TX'], riskTiers: ['minimal'], categoryIds: [] };
   assert.notDeepEqual(
     applyFeedFilters(corpus, active).map((entry) => entry.id),
     corpus.map((entry) => entry.id),
@@ -222,7 +222,7 @@ test('search still narrows each mode independently of the other', () => {
   ];
   // All: filters then search.
   const all = filterBySearch(
-    applyFeedFilters(corpus, { stateCodes: ['CA'], riskTiers: [] }),
+    applyFeedFilters(corpus, { stateCodes: ['CA'], riskTiers: [], categoryIds: [] }),
     'peanut',
     buildSearchEntry,
   );
