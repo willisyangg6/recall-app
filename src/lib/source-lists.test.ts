@@ -9,7 +9,7 @@ import { test } from 'node:test';
 
 import { buildConsumerCase } from './consumer-projection';
 import type { CaseProjection } from '@/domain/recall-types';
-import { extractAffectedProductLists } from './source-lists';
+import { classifyListRole, extractAffectedProductLists } from './source-lists';
 
 const WHITE_CHEDDAR_HTML = `
   <p>The recalled products were distributed in limited quantities through retail stores.</p>
@@ -133,4 +133,111 @@ test('FSIS-shape items split package descriptor, quoted name, and identifiers', 
   assert.equal(first.find((f) => f.concept === 'variant')?.value, 'Gangothri Goat Pickle');
   assert.equal(first.find((f) => f.concept === 'package_size')?.value, '8 oz');
   assert.equal(first.find((f) => f.concept === 'packaging')?.value, 'glass jars');
+});
+
+// ── P0A: a declared list that is not a product list ─────────────────────────
+
+/**
+ * SunFed's own markup, verbatim. FDA closes most announcements this way, and
+ * the lead-in ("the following actions:") is structurally identical to a
+ * product list's — which is how five shopper instructions became five
+ * affected-version cards, the first of them "Check to see if you have
+ * recalled whole fresh American cucumbers (photo below)".
+ */
+const SUNFED_ACTIONS_HTML = `
+  <p>The individual whole American cucumbers may also have a PLU sticker in the form of the attached picture.</p>
+  <p>Consumers should take the following actions:</p>
+  <ul>
+  <li>Check to see if you have recalled whole fresh American cucumbers (photo below)</li>
+  <li>Anyone with the recalled product in their possession should not consume, serve, use, sell, or distribute recalled products.&nbsp;We also encourage them to clean and sanitize surfaces that could have come into contact with the recalled product to reduce cross-contamination.</li>
+  <li>Recalled products should be thrown out or destroyed so they may not be consumed or returned to the point of purchase.</li>
+  <li>Consumers who are unsure if they have purchased the recalled product are advised to contact their retailer.</li>
+  <li>If you think you have consumed a recalled product and do not feel well, contact your healthcare provider.</li>
+  </ul>
+  <p>Consumers who have purchased the recalled products may obtain additional information by contacting SunFed’s recall hotline (888) 542-5849, M-F 8:00 a.m. - 5:00 p.m. MST.</p>`;
+
+test('a declared list of shopper instructions is not an affected-product list', () => {
+  assert.equal(
+    classifyListRole('Consumers should take the following actions:', [
+      'Check to see if you have recalled whole fresh American cucumbers (photo below)',
+      'Recalled products should be thrown out or destroyed.',
+      'If you think you have consumed a recalled product and do not feel well, contact your healthcare provider.',
+    ]),
+    'instructions',
+  );
+  assert.deepEqual(extractAffectedProductLists(SUNFED_ACTIONS_HTML), []);
+});
+
+test('a declared symptom list is not an affected-product list', () => {
+  // FDA's Listeria paragraph names these; read as products they became cards.
+  assert.equal(
+    classifyListRole('Symptoms may include the following:', [
+      'High fever',
+      'Severe headache',
+      'Stiffness',
+      'Nausea',
+      'Abdominal pain',
+      'Diarrhea',
+    ]),
+    'instructions',
+  );
+});
+
+test('a declared list of shops is where it was sold, not what it is', () => {
+  // Grand Central Bakery, verbatim lead-in and items.
+  assert.equal(
+    classifyListRole('Other grocery stores in Seattle/Tacoma area in WA:', [
+      'Central Co-op',
+      'Fred Meyer Stores',
+      'Hilltop Red Apple',
+      "Ken's Markets",
+      'Marketime Foods',
+      'PCC Markets',
+    ]),
+    'sellers',
+  );
+  // A product list that merely mentions a shop is still a product list.
+  assert.equal(
+    classifyListRole('The following products sold at our stores are recalled:', [
+      'Roasted Green Chile & Jack Cheese',
+      'Black Bean Bonanza & Jack Cheese',
+    ]),
+    'affected_products',
+  );
+});
+
+test('SunFed: the official product wording survives when no version is extractable', () => {
+  const consumer = buildConsumerCase(
+    projection({
+      title: 'SunFed Produce, LLC Recalls Whole Fresh American Cucumbers',
+      summaryHtml: SUNFED_ACTIONS_HTML,
+      summaryText:
+        'The individual whole American cucumbers may also have a PLU sticker in the form of the attached picture.\nConsumers should take the following actions:\nCheck to see if you have recalled whole fresh American cucumbers (photo below)\nRecalled products should be thrown out or destroyed so they may not be consumed or returned to the point of purchase.\nConsumers who have purchased the recalled products may obtain additional information by contacting SunFed’s recall hotline (888) 542-5849, M-F 8:00 a.m. - 5:00 p.m. MST.',
+      productDescription: 'Whole Fresh American Cucumbers',
+    }),
+    [
+      {
+        sourceNativeId: 'sunfed-1',
+        name: 'Whole fresh American cucumbers',
+        rawText: 'Whole fresh American cucumbers',
+        extractionConfidence: 'stated',
+      },
+    ],
+  );
+  // No instruction becomes a version, and no version is invented in its place.
+  assert.deepEqual(consumer.packageCheck.variants, []);
+  assert.deepEqual(consumer.variantNames, []);
+  // The hotline and its opening hours never become package identifiers.
+  const values = [
+    ...consumer.packageCheck.fields.flatMap((field) => field.values),
+    ...consumer.packageCheck.sharedFields.flatMap((field) => field.values),
+    ...(consumer.packageCheck.lotCodes?.codes ?? []),
+  ];
+  assert.deepEqual(values, []);
+  // Low confidence falls back rather than losing the official evidence: the
+  // recall-level product wording is still there, and the checker says plainly
+  // that no identifiers were stated.
+  assert.equal(consumer.packageCheck.hasIdentifiers, true);
+  assert.equal(consumer.packageCheck.render, false);
+  assert.match(consumer.packageCheck.scopeStatement, /not clearly provided|Only packages matching/);
 });

@@ -8,6 +8,8 @@
  * carried alongside for provenance.
  */
 
+import { splitIdentifierList } from './identifier-lists';
+
 /** A consumer-ready identifier value plus the source text it came from. */
 export interface NormalizedValue {
   /** What the consumer sees. */
@@ -99,10 +101,15 @@ export function normalizeUpc(raw: string): NormalizedValue | null {
   return { display: digits, raw: trimmed, canonical: `upc:${digits}` };
 }
 
-/** Split a source cell that lists several barcodes into individual values. */
+/**
+ * Split a source cell that lists several barcodes into individual values,
+ * through the one shared separator policy. A slash used as a list separator
+ * ("012345 / 067890") is barcode-specific and handled here; inside a code a
+ * slash is meaningful and left alone.
+ */
 export function normalizeUpcList(raw: string): NormalizedValue[] {
   const out: NormalizedValue[] = [];
-  for (const part of raw.split(/,|;|\b(?:and|or)\b|\/(?=\s)|\n/i)) {
+  for (const part of splitIdentifierList(raw.replace(/\/(?=\s)/g, ','))) {
     const normalized = normalizeUpc(part.replace(/^[^\d]*/, '').replace(/[^\d\s-]*$/, ''));
     if (normalized && !out.some((v) => v.display === normalized.display)) out.push(normalized);
   }

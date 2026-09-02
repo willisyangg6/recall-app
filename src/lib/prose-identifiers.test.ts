@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 
+import { aggregateFacts, toPackageFields } from './consumer-projection';
 import { extractProseIdentifiers, extractProseVariantLines } from './prose-identifiers';
 
 // Every input below is a verbatim shape from a recorded real announcement.
@@ -9,6 +12,27 @@ function values(text: string, concept: string): string[] {
   return extractProseIdentifiers(text)
     .facts.filter((f) => f.concept === concept)
     .map((f) => f.value);
+}
+
+/**
+ * The recorded corpus, read rather than transcribed: the two defects below
+ * were reported against specific official announcements, and a hand-copied
+ * excerpt could drift from what those announcements actually say.
+ */
+const GOLD_SET: { rows: { sourceId: string; announcementSummary: string | null }[] } = JSON.parse(
+  readFileSync(path.join(__dirname, '..', 'domain', 'fixtures', 'category-gold-set.json'), 'utf8'),
+);
+
+function recordedSummary(sourceId: string): string {
+  const row = GOLD_SET.rows.find((item) => item.sourceId === sourceId);
+  assert.ok(row?.announcementSummary, `recorded fixture missing: ${sourceId}`);
+  return row.announcementSummary;
+}
+
+/** What the package checker would actually show for this prose, by field. */
+function rendered(text: string): Map<string, string> {
+  const { fields } = toPackageFields(aggregateFacts(extractProseIdentifiers(text).facts));
+  return new Map(fields.map((field) => [field.key, field.value]));
 }
 
 test('inline labeled identifiers are extracted from ordinary prose', () => {
@@ -128,4 +152,156 @@ test('identifiers inside a supplier-recall reference never become this recall’
   assert.ok(facts.some((fact) => fact.value.includes('11/23/26')));
   assert.ok(!facts.some((fact) => fact.value.replace(/\D/g, '').includes('199284530959')));
   assert.ok(!facts.some((fact) => fact.value.includes('12/14/2026')));
+});
+
+// ── P0A: identifier integrity ───────────────────────────────────────────────
+
+test('Everything Sprouts: an ampersand-joined lot list yields four clean codes', () => {
+  // Verbatim from the recorded announcement: "This includes Robust Radish Mix,
+  // 5oz Cups, Barcode 087906000075, LOT# 223, 226, 230, & 233."
+  const summary = recordedSummary(
+    'everything-sprouts-llc-expands-voluntarily-recall-include-robust-radish-mix-due-potential-e-coli-and',
+  );
+  assert.ok(summary.includes('LOT# 223, 226, 230, & 233'), 'fixture no longer states the defect');
+  const lots = values(summary, 'lot');
+  assert.deepEqual(lots, ['223', '226', '230', '233']);
+  // The connector must not survive anywhere in a rendered identifier.
+  assert.ok(!lots.some((lot) => /[&]|\band\b/i.test(lot)), lots.join(' | '));
+  assert.deepEqual(values(summary, 'upc'), ['087906000075']);
+  // And what the shopper actually reads: "223, 226, 230, and & 233" before.
+  const fields = rendered(summary);
+  assert.equal(fields.get('lotCodes'), '223, 226, 230, and 233');
+  assert.equal(fields.get('upc'), '087906000075');
+});
+
+test('Al’Fez Tahini: a semicolon-delimited list keeps every date, in source order', () => {
+  // "…with corresponding BEST BEFORE: “2024 JL 31”; “2024 SE 09”; “2025 MR
+  // 27”; “2025 AL 04”." Read as a terminator, the semicolon dropped three of
+  // the four markings a shopper compares against the jar.
+  const summary = recordedSummary(
+    'ab-world-foods-us-inc-recalls-alfez-natural-tahini-because-possible-health-risk',
+  );
+  const bestBy = values(summary, 'best_by');
+  assert.deepEqual(bestBy, ['2024 JL 11', '2024 JL 31', '2024 SE 09', '2025 MR 27', '2025 AL 04']);
+  // The four quoted lot numbers stay lot numbers, and the date that follows
+  // the "with corresponding BEST BEFORE:" bridge never joins them.
+  assert.deepEqual(values(summary, 'lot'), ['3031', '3080', '3270', '3297']);
+});
+
+test('a semicolon-delimited lot list keeps every code', () => {
+  // Eastern Meat Solutions, verbatim: "Lot # 3115; Lot # 3123; or Lot #3114
+  // on the packages".
+  assert.deepEqual(
+    values('The packages bear Lot # 3115; Lot # 3123; or Lot #3114 on the packages.', 'lot'),
+    ['3115', '3123', '3114'],
+  );
+});
+
+test('official identifiers stay strings: leading zeroes and no digit grouping', () => {
+  // Little Leaf Farms states the lot as the package's first six digits.
+  assert.deepEqual(
+    values('Lot Number: 050011 as the first six digits (printed on the bottom left).', 'lot'),
+    ['050011'],
+  );
+  // Seven digits are seven digits — never "2,606,022".
+  assert.deepEqual(values('The product can be identified by lot number 2606022.', 'lot'), [
+    '2606022',
+  ]);
+  assert.deepEqual(values('BEST BY: 07-07-20; UPC: 0001111079120', 'upc'), ['0001111079120']);
+});
+
+test('alphanumeric, hyphenated and ranged lot codes still extract unchanged', () => {
+  assert.deepEqual(values('with lot codes E-054, EX 0225 and D-181 printed on the bag.', 'lot'), [
+    'E-054',
+    'EX 0225',
+    'D-181',
+  ]);
+  assert.deepEqual(values('Lot codes 25E04-A, 25E04-B and 088594-2-1.', 'lot'), [
+    '25E04-A',
+    '25E04-B',
+    '088594-2-1',
+  ]);
+  // Tipical Latin Food, verbatim — a source-stated range stays one value.
+  assert.ok(
+    values(
+      'Lot number for this product can be found at the bottom of the bag in a blue label and range from 2622404 to 2772412.',
+      'lot',
+    ).includes('2622404 to 2772412'),
+  );
+});
+
+test('a field label repeated inside a list does not ride into the value', () => {
+  // Channel Fish, verbatim: "…with a lot code of 22739 and date code of 17037."
+  // A date code is not a lot code, and the list changes label at that point.
+  assert.deepEqual(
+    values(
+      '10-lb. corrugated box of Channel Brand RAW BREADED SWAI FILLETS, with a lot code of 22739 and date code of 17037.',
+      'lot',
+    ),
+    ['22739'],
+  );
+  // America New York RI Wang, verbatim: "lot code 0418272 and package date 4/3/2017."
+  assert.deepEqual(values('lot code 0418272 and package date 4/3/2017.', 'lot'), ['0418272']);
+  // The same label repeated is only noise around a real code.
+  assert.deepEqual(values('Lot codes: 1624001 - 1624129 and Lot codes 1623129 - 1623365.', 'lot'), [
+    '1624001 - 1624129',
+    '1623129 - 1623365',
+  ]);
+});
+
+test('a production time is never read as a date or a code', () => {
+  // Valley Meats, verbatim: "…date code 231222, Use By 01/15/2024, and time
+  // stamp 1:02:55PM." The value grammar truncates at the clock's own colon,
+  // which put "time stamp 1" under the Use-by heading.
+  const source =
+    '28-lb. box packaging containing “Ground Beef Patties” with product code 72287, date code 231222, Use By 01/15/2024, and time stamp 1:02:55PM.';
+  const facts = extractProseIdentifiers(source).facts;
+  assert.ok(!facts.some((fact) => /time\s*stamp/i.test(fact.value)), JSON.stringify(facts));
+  const fields = rendered(source);
+  assert.equal(fields.get('useBy'), 'January 15, 2024');
+  for (const value of fields.values()) {
+    assert.ok(!/time|:\d\d|\d\s*[ap]m\b/i.test(value), value);
+  }
+});
+
+test('a telephone number or extension is never read as a code', () => {
+  // SunFed, verbatim: "…recall hotline (888) 542-5849, M-F 8:00 a.m. - 5:00 p.m. MST."
+  const source =
+    'Consumers may obtain additional information by contacting SunFed’s recall hotline (888) 542-5849, M-F 8:00 a.m. - 5:00 p.m. MST.\n' +
+    'Questions about the lot code may be directed to Consumer Affairs at 1-800-538-9543 ext. 4021.';
+  // Neither the hotline, its hours, nor the extension may reach a package field.
+  assert.deepEqual([...rendered(source).entries()], []);
+  // And a real lot code stated in the same notice is unaffected.
+  assert.deepEqual(
+    values(
+      'The recalled jars carry lot code 088594-2-1. Consumers with questions may call 1-800-538-9543 ext. 4021.',
+      'lot',
+    ),
+    ['088594-2-1'],
+  );
+});
+
+test('a code the source states before continuing its sentence keeps the code', () => {
+  // Fromi USA, verbatim: "Lot number:615 appears on both the wooden box of
+  // each cheese and the case."
+  assert.deepEqual(
+    values('Lot number:615 appears on both the wooden box of each cheese and the case.', 'lot'),
+    ['615'],
+  );
+});
+
+test('production codes reach their own concept instead of a date field', () => {
+  // Hormel, verbatim: "…with a Best By February 2021 date and production
+  // codes: F020881, F020882 and F020883." The codes are not best-by dates.
+  const facts = extractProseIdentifiers(
+    '12-oz. metal cans containing SPAM Classic with a Best By February 2021 date and production codes: F020881, F020882 and F020883.',
+  ).facts;
+  assert.deepEqual(
+    facts.filter((fact) => fact.concept === 'production_code').map((fact) => fact.value),
+    ['F020881', 'F020882', 'F020883'],
+  );
+  assert.ok(
+    !facts.some((fact) => fact.concept === 'best_by' && /^F0208/.test(fact.value)),
+    JSON.stringify(facts),
+  );
 });

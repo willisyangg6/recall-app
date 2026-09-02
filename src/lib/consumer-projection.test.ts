@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import type { CaseProjection } from '@/domain/recall-types';
@@ -15,6 +17,7 @@ import {
   parseProseVariants,
   proseOutsideTables,
   retailerHeadOfCellLine,
+  toPackageFields,
 } from './consumer-projection';
 import type { SemanticFact } from './source-tables';
 
@@ -576,4 +579,241 @@ test('a value that is not the type its field promises is never rendered', () => 
   // A misaligned source column filing a net weight under a date heading.
   const grouped = aggregateFacts([fact('use_by', '58 oz'), fact('use_by', '02/14/2026')]);
   assert.deepEqual(grouped.find((g) => g.concept === 'use_by')?.values, ['February 14, 2026']);
+});
+
+// ── P0A: identifier integrity end to end ────────────────────────────────────
+
+test('official identifiers render as strings: no digit grouping, leading zeroes intact', () => {
+  const grouped = aggregateFacts([
+    fact('lot', '2606022'),
+    fact('lot', '13150423'),
+    fact('lot', '050011'),
+    fact('upc', '0001111079120'),
+  ]);
+  const { fields } = toPackageFields(grouped);
+  const byKey = new Map(fields.map((field) => [field.key, field.value]));
+  // Seven and eight digits are exactly that — never "2,606,022".
+  assert.equal(byKey.get('lotCodes'), '2606022, 13150423, and 050011');
+  assert.equal(byKey.get('upc'), '0001111079120');
+  for (const value of byKey.values()) assert.ok(!value.includes(','.concat('0')), value);
+  assert.ok(!/\d,\d{3}\b/.test(byKey.get('lotCodes') ?? ''));
+});
+
+test('digit grouping belongs to the recall total and to nothing else', () => {
+  // "3,860 units" is how wide the recall is; it is the one field where a
+  // separator is meaningful, and it never reaches an identifier.
+  const consumer = buildConsumerCase(
+    projection({
+      title: 'Acme Foods Recalls Widgets',
+      summaryText:
+        'Acme Foods is recalling approximately 3860 units of the product with lot code 2606022.',
+    }),
+    [],
+  );
+  assert.equal(consumer.quantityText, '3,860 units');
+  const lot = consumer.packageCheck.fields.find((field) => field.key === 'lotCodes');
+  assert.equal(lot?.value, '2606022');
+});
+
+test('representative FDA shape: an Outshine batch-code cell still yields its codes and dates', () => {
+  // The recorded announcement's own table cell, verbatim.
+  const consumer = buildConsumerCase(
+    projection({
+      title: 'Dreyer’s Grand Ice Cream, Inc. Issues Voluntary Recall of Select Outshine Fruit Bars',
+      summaryHtml:
+        '<table><tr><th>Product</th><th>Packaging</th><th>Batch Code/Best Before Date</th><th>UPC</th></tr>' +
+        '<tr><td>Outshine Fruit Bars Tangerine</td><td>6 Bars</td>' +
+        '<td>Batch code/ Best Before&nbsp;<br>(bottom of package):&nbsp;<br>LLA619603 – 31 OCT 2027&nbsp;<br>LLA619703 – 31 OCT 2027</td>' +
+        '<td>041548612041</td></tr></table>',
+    }),
+    [],
+  );
+  const variant = consumer.packageCheck.variants[0];
+  assert.ok(variant, JSON.stringify(consumer.packageCheck.variants));
+  assert.equal(variant.name, 'Outshine Fruit Bars Tangerine');
+  const byKey = new Map(variant.fields.map((field) => [field.key, field.value]));
+  assert.equal(byKey.get('batchCodes'), 'LLA619603 and LLA619703');
+  assert.equal(byKey.get('bestBy'), 'October 31, 2027');
+  assert.equal(byKey.get('upc'), '041548612041');
+  // The source's own column called it Packaging, and it keeps that name.
+  assert.equal(byKey.get('packaging'), '6 Bars');
+  // The inline "(bottom of package)" hint is a location, never a code.
+  assert.equal(consumer.packageCheck.codeLocation?.text, 'On the bottom of the package.');
+});
+
+test('representative FSIS shape: a labeled list item still yields its use-by marking', () => {
+  // Reser's Fine Foods 009-2026, verbatim.
+  const consumer = buildConsumerCase(
+    projection({
+      sourceAgency: 'FSIS',
+      title: 'Reser’s Fine Foods, Inc. Recalls Ready-To-Eat Pasta Salad Product',
+      summaryHtml:
+        '<p>The following product is subject to recall [<a href="/x.pdf">view labels</a>]:</p>' +
+        '<ul><li>5-lb. plastic tub packages of “Molly’s Kitchen California Style Pasta Salad” with “USE BY JUL/16/26 430” printed on the side of the plastic tub.</li></ul>',
+      summaryText:
+        'The following product is subject to recall:\n5-lb. plastic tub packages of “Molly’s Kitchen California Style Pasta Salad” with “USE BY JUL/16/26 430” printed on the side of the plastic tub.',
+    }),
+    [],
+  );
+  const byKey = new Map(
+    [...consumer.packageCheck.fields, ...consumer.packageCheck.sharedFields].map((field) => [
+      field.key,
+      field.value,
+    ]),
+  );
+  assert.equal(byKey.get('useBy'), 'JUL/16/26 430');
+  assert.ok(!byKey.has('lotCodes'), JSON.stringify([...byKey]));
+});
+
+// ── P0A correction pass: the four remaining identifier defects ──────────────
+
+/**
+ * The recorded corpus, read rather than transcribed. Each case below was
+ * reported against a specific official announcement, so the test runs on the
+ * announcement's own words and fails loudly if the fixture ever changes.
+ */
+const GOLD_SET: {
+  rows: { sourceId: string; title: string; announcementSummary: string | null }[];
+} = JSON.parse(
+  readFileSync(path.join(__dirname, '..', 'domain', 'fixtures', 'category-gold-set.json'), 'utf8'),
+);
+
+function recorded(sourceId: string): CaseProjection {
+  const row = GOLD_SET.rows.find((item) => item.sourceId === sourceId);
+  assert.ok(row?.announcementSummary, `recorded fixture missing: ${sourceId}`);
+  return projection({ title: row.title, summaryText: row.announcementSummary });
+}
+
+function packageFields(consumer: ReturnType<typeof buildConsumerCase>): Map<string, string> {
+  return new Map(
+    [...consumer.packageCheck.fields, ...consumer.packageCheck.sharedFields].map((field) => [
+      field.key,
+      field.value,
+    ]),
+  );
+}
+
+test('a period-delimited lot code survives to the checker', () => {
+  // North Star Imports (048-2019), verbatim: "…marked FOR INSTITUTIONAL USE
+  // ONLY with lot code GP.1051.18 and pack dates 10/30/2018, 10/31/2018, and
+  // 11/01/2018." The code-set builder's shape excluded periods, so the one
+  // official identifier this notice states rendered nowhere.
+  const consumer = buildConsumerCase(recorded('048-2019'), []);
+  assert.equal(packageFields(consumer).get('lotCodes'), 'GP.1051.18');
+  // The pack dates stated under their own label never join the lot list.
+  const lot = packageFields(consumer).get('lotCodes') ?? '';
+  assert.ok(!lot.includes('2018'), lot);
+
+  // Channel Fish (003-2017): "…with Use or Freeze By date of 01/21/17 and lot
+  // code 2457744.2".
+  assert.equal(
+    packageFields(buildConsumerCase(recorded('003-2017'), [])).get('lotCodes'),
+    '2457744.2',
+  );
+
+  // Mutual Trading: "…lot code is 2025.6.30 or before this date." A date-shaped
+  // lot code is still the lot code the source published.
+  assert.equal(
+    packageFields(
+      buildConsumerCase(
+        recorded('mutual-trading-co-issues-allergy-alert-undeclared-milk-prepared-monkfish-liver'),
+        [],
+      ),
+    ).get('lotCodes'),
+    '2025.6.30',
+  );
+});
+
+test('the period shape admits codes without admitting quantities, times or phones', () => {
+  // Gerber states net weights, not lot codes; Valley Meats states clock times;
+  // Stutz prints its telephone number as 760.230.9547. None may become a code.
+  for (const [id, forbidden] of [
+    [
+      'recall-reminder-gerber-products-company-previously-recalled-and-discontinued-all-batches-gerberr',
+      /oz|net\s*wt/i,
+    ],
+    ['065-2023', /time|:\d\d/i],
+    [
+      'stutz-packing-co-recalls-walnut-product-because-possible-health-risk',
+      /760\.230|\d{3}\.\d{3}\.\d{4}/,
+    ],
+  ] as const) {
+    const consumer = buildConsumerCase(recorded(id), []);
+    const values = [
+      ...[...packageFields(consumer).values()],
+      ...(consumer.packageCheck.lotCodes?.codes ?? []),
+      ...(consumer.packageCheck.productionCodes?.codes ?? []),
+    ];
+    for (const value of values) assert.ok(!forbidden.test(value), `${id}: ${value}`);
+  }
+});
+
+test('a placement sentence becomes the code location, never a lot code', () => {
+  // Middlefield, verbatim: "Customers can find the lot codes on 8 oz. packets
+  // and 5 lb. loaves located on the side." rendered "Lot code: …, and on 8 oz".
+  const consumer = buildConsumerCase(
+    recorded(
+      'middlefield-original-cheese-co-op-recalls-100-grass-fed-pepper-jack-cheese-and-horseradish-flavored',
+    ),
+    [],
+  );
+  assert.equal(packageFields(consumer).get('lotCodes'), '251661, 2524061, and 251672');
+  // The package size never rides in as an identifier.
+  for (const value of packageFields(consumer).values()) {
+    assert.ok(!/\b\d+\s*(?:oz|lb)\b/i.test(value), value);
+  }
+  // And the phrase reaches the section that owns it.
+  assert.equal(consumer.packageCheck.codeLocation?.text, 'On the side of the package.');
+});
+
+test('a flattened table row does not invent a lot code from another column', () => {
+  // Moonlight's summary flattens its table, so the column-header run
+  // "… Facility Code Lot Code" is followed by the row's own cells. The 4401 in
+  // it sits under PLU Sticker, and the lot codes are 01PCLC, 03PCAF, … —
+  // emitting 4401 would state a lot the notice never gave.
+  const consumer = buildConsumerCase(
+    recorded(
+      'moonlight-companies-voluntarily-recalls-california-grown-conventional-yellow-and-white-peaches',
+    ),
+    [],
+  );
+  const values = [
+    ...packageFields(consumer).values(),
+    ...(consumer.packageCheck.lotCodes?.codes ?? []),
+  ];
+  for (const value of values) {
+    assert.ok(!/Moonlight|Peaches|pieces/i.test(value), value);
+    assert.notEqual(value, '4401');
+  }
+  // Nothing is invented in its place, and the miss is reported honestly.
+  assert.deepEqual(consumer.packageCheck.variants, []);
+  assert.equal(consumer.packageCheck.coverage, 'parser_missed');
+});
+
+test('a label word left at the end of a date is dropped only when a date remains', () => {
+  // Hormel (041-2018), verbatim: "…with a Best By February 2021 date and
+  // production codes: F020881, …". The label's own noun rendered inside the
+  // value as "February 2021 date".
+  const consumer = buildConsumerCase(recorded('041-2018'), []);
+  assert.equal(packageFields(consumer).get('bestBy'), 'February 2021');
+  // The production codes still reach their own disclosure.
+  assert.ok(consumer.packageCheck.productionCodes?.codes.includes('F020881'));
+
+  // Source wording that is not a redundant label survives untouched: the word
+  // only goes when what remains still resolves to a date.
+  const kept = aggregateFacts([fact('best_by', 'C 08 05 23 date')]);
+  assert.deepEqual(kept.find((group) => group.concept === 'best_by')?.values, ['C 08 05 23 date']);
+});
+
+test('a reference to the notice’s own labels is not an affected version', () => {
+  // FSIS 040-2016, verbatim: "The following products are subject to recall:
+  // [View Labels(PDF only) Labels A , Labels B , Labels C ]" produced version
+  // cards named "Labels B" and "Labels C ]".
+  const consumer = buildConsumerCase(recorded('040-2016'), []);
+  assert.deepEqual(consumer.packageCheck.variants, []);
+  assert.deepEqual(consumer.variantNames, []);
+  // The official recall-level evidence is retained, not lost with them.
+  assert.ok(packageFields(consumer).get('bestBy')?.startsWith('January 2, 2015'));
+  assert.equal(consumer.quantityText, '47,112,256 pounds');
+  assert.equal(consumer.packageCheck.render, true);
 });

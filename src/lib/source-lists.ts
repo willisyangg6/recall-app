@@ -28,6 +28,7 @@ import { normalizeStateToken } from '@/domain/us-geography';
 import { conceptForLabel } from './consumer-concepts';
 import { extractProseIdentifiers } from './prose-identifiers';
 import type { SemanticFact } from './source-tables';
+import { variantIdentityRejection } from './variant-identity';
 
 /** One source-declared list item, as a variant source for `buildVariants`. */
 export interface ListVariant {
@@ -50,6 +51,10 @@ export type ListRole =
   | 'identifiers'
   /** Label:value rows describing ONE product ("Item name : …", "Lot code : …"). */
   | 'properties'
+  /** What the shopper should DO, or which symptoms to watch for. */
+  | 'instructions'
+  /** Where it was sold — shops, not products. */
+  | 'sellers'
   | 'other';
 
 /** The lead-in noun after "following …" that names what the list holds. */
@@ -66,6 +71,24 @@ function isPropertyItem(text: string): boolean {
   return conceptForLabel(labelled[1]) !== 'unknown';
 }
 
+/**
+ * A lead-in declaring what the shopper should DO, or what illness looks like.
+ * FDA closes most announcements with "Consumers should take the following
+ * actions:" over a bulleted list — structurally identical to a product list,
+ * and read as one it produced five affected-version cards of instructions.
+ */
+const LEAD_IN_INSTRUCTIONS =
+  /\bfollowing\s+(?:\w+\s+){0,2}?(?:actions?|steps?|instructions?|precautions?|recommendations?|symptoms?)\b/i;
+
+/**
+ * A lead-in declaring where the product was sold ("Other grocery stores in
+ * Seattle/Tacoma area in WA:"). Only when the sentence never mentions products
+ * — "the following products are subject to recall at our stores:" is a product
+ * list that happens to name a shop.
+ */
+const LEAD_IN_SELLERS = /\b(?:stores?|retailers?|supermarkets?|markets?|shops?)\b[^:]{0,60}:\s*$/i;
+const LEAD_IN_MENTIONS_PRODUCTS = /\b(?:products?|items?|flavou?rs?|varieties|brands?)\b/i;
+
 /** An item that IS an identifier statement ("Best by 12/14/2026"). */
 const IDENTIFIER_ITEM =
   /^["“]?(?:best[- ](?:if[- ]used[- ])?b(?:y|efore)|use[- ]by|sell[- ]by|expir\w*|lot|batch|upc|date)\b/i;
@@ -80,6 +103,15 @@ export function classifyListRole(lead: string, items: string[]): ListRole {
   const states = items.filter((item) => normalizeStateToken(item.trim()) !== null).length;
   if (states === items.length) return 'geography';
   if (LEAD_IN_GEOGRAPHY.test(lead)) return 'geography';
+  // Instructions and symptoms are declared exactly as products are, and only
+  // the lead-in and the items' own kind tell them apart.
+  if (LEAD_IN_INSTRUCTIONS.test(lead)) return 'instructions';
+  const narrative = items.filter((item) => {
+    const rejection = variantIdentityRejection(item.trim().replace(/[.;]+$/, ''));
+    return rejection === 'prose' || rejection === 'symptom';
+  }).length;
+  if (narrative * 2 > items.length) return 'instructions';
+  if (LEAD_IN_SELLERS.test(lead) && !LEAD_IN_MENTIONS_PRODUCTS.test(lead)) return 'sellers';
   const identifierItems = items.filter((item) => IDENTIFIER_ITEM.test(item.trim())).length;
   if (identifierItems * 2 >= items.length && identifierItems > 0) return 'identifiers';
   if (LEAD_IN_IDENTIFIERS.test(lead)) return 'identifiers';
@@ -226,9 +258,10 @@ function declaredLists(summaryHtml: string | null): DeclaredList[] {
  * Extract source-declared affected-product lists from the announcement's own
  * HTML, one variant per item, each owning the identifiers its item states.
  * Returns [] whenever the structural evidence is absent — never a guess.
- * Lists whose role is geography, identifiers, or single-product properties
- * are NOT product lists and contribute no variants; their content reaches the
- * consumer through the distribution and prose paths that own those kinds.
+ * Lists whose role is geography, identifiers, sellers, instructions, or
+ * single-product properties are NOT product lists and contribute no variants;
+ * their content reaches the consumer through the distribution and prose paths
+ * that own those kinds.
  */
 export function extractAffectedProductLists(summaryHtml: string | null): ListVariant[] {
   const out: ListVariant[] = [];

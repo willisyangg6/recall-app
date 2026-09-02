@@ -17,6 +17,7 @@
  */
 
 import type { ConsumerConcept } from './consumer-concepts';
+import { hasProseWordRun, isTimeOrPhoneFragment } from './identifier-lists';
 import { normalizeDateValue, normalizeUpc } from './identifiers';
 
 /** A measurement: a number bound to a unit of weight, volume, or count. */
@@ -61,6 +62,11 @@ function isDateLike(value: string): boolean {
   // Every printed date or date code carries at least one digit. A value with
   // none is a stray label ("use by") that a parse seam filed under itself.
   if (!/\d/.test(trimmed)) return false;
+  // A production time or a telephone number is not a marking on a package.
+  // "…Use By 01/15/2024, and time stamps between 7:36:38AM" put `time stamp 1`
+  // under a Use-by heading, because the value grammar truncates at the clock's
+  // own colon.
+  if (isTimeOrPhoneFragment(trimmed)) return false;
   // A bound word that survived normalization means the range did NOT parse.
   // An incomplete span — one that ends in its connector, or opens "between"
   // without closing — must never render; a complete year-less span printed
@@ -133,6 +139,15 @@ function isCodeLike(value: string): boolean {
   const trimmed = value.trim();
   if (trimmed === '' || trimmed.length > 70) return false;
   if (SENTENCE_PROSE.test(trimmed)) return false;
+  // A clock time, a telephone number, or an extension is never printed on a
+  // package as its identifying code.
+  if (isTimeOrPhoneFragment(trimmed)) return false;
+  // A run of ordinary lowercase words is the tail of a sentence a list split
+  // carried into the field: "EX 0624 El Chilar Ground Cinnamon" is the lot
+  // code EX 0624 plus the product's name. Rejecting the whole value is the
+  // conservative choice — the source text stays on the case, and the other
+  // codes in the same list are unaffected.
+  if (hasProseWordRun(trimmed)) return false;
   if (/["“”]/.test(trimmed)) return false;
   // A list bullet inside a "code" means the cell was a serialized source row,
   // not a code; the row should have been split upstream.

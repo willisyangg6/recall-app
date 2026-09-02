@@ -22,7 +22,14 @@ import { conceptForLabel } from './consumer-concepts';
 
 /** Why a candidate name cannot be a consumer-facing variant identity. */
 export type VariantIdentityRejection =
-  'date' | 'geography' | 'code' | 'field-label' | 'raw-source-row';
+  | 'date'
+  | 'geography'
+  | 'code'
+  | 'field-label'
+  | 'raw-source-row'
+  | 'symptom'
+  | 'prose'
+  | 'document-reference';
 
 /** A calendar-date token in any of the shapes announcements print. */
 const DATE_TOKEN =
@@ -35,6 +42,85 @@ const DATE_TOKEN =
  */
 const FIELD_LABEL_HEAD =
   /^["“]?(?:best[- ](?:if[- ]used[- ])?b(?:y|efore)|use[- ]by|sell[- ]by|freeze[- ]by|expir\w*|lot(?:\s*(?:code|number|#))?|batch(?:\s*(?:code|number|#))?|upc(?:\s+item)?(?:\s*code)?|bar\s*code|item\s+(?:name|number|code)|case(?:\s+item)?\s*code|product\s+code|date\s+code|sku|est\.?\s*(?:no|number)|establishment)\b/i;
+
+/**
+ * Recall narrative rather than a product identity.
+ *
+ * Real regression this exists to prevent: FDA closes many announcements with
+ * "Consumers should take the following actions:" over a bulleted list, and the
+ * list reader — which correctly treats a declared bullet list as structural
+ * evidence — turned SunFed's five instructions into five affected-version
+ * cards, the first reading "Check to see if you have recalled whole fresh
+ * American cucumbers (photo below)".
+ *
+ * No product is named for what a shopper should DO with it, so this wording
+ * can only be narrative. Matched anywhere in the candidate, because the
+ * instruction's verb is as often mid-sentence as at its head.
+ */
+const RECALL_NARRATIVE =
+  /\b(?:recall(?:s|ed|ing)?|consumers?|customers?|should\s+(?:not\s+)?(?:be|consume|check|contact|discard|dispose|return|throw|stop)|please|urged|advised|dispose|discard|throw\s+(?:it|them|away)|check\s+to\s+see|if\s+you\b|anyone\s+with|do\s+not\s+(?:eat|consume|use)|place\s+of\s+purchase|refund)\b/i;
+
+/**
+ * A pointer at one of the notice's own attachments, not a thing on a shelf.
+ *
+ * FSIS hands off its product list through a bracketed link run — 040-2016
+ * reads "The following products are subject to recall: [View Labels(PDF only)
+ * Labels A , Labels B , Labels C ]" — and split on its commas that run
+ * produced affected-version cards named "Labels B" and "Labels C ]". The whole
+ * candidate must be the reference: a document word plus at most an enumerator
+ * and the bracket it was torn out of, so "Label Rouge Chicken" and "Picture
+ * Sweet Corn" are untouched.
+ */
+const DOCUMENT_REFERENCE =
+  /^[\[(]?\s*(?:view\s+|see\s+)?(?:labels?|images?|photos?|pictures?|figures?|exhibits?|attachments?|appendix|appendices|pdfs?|documents?)\s*(?:no\.?|#)?\s*(?:[A-Za-z]|\d{1,3})?\s*(?:\(pdf(?:\s+only)?\))?\s*[\]).,;]*$/i;
+
+/**
+ * Symptoms, as the agencies' own hazard paragraphs name them.
+ *
+ * A symptom list read as a product list produces cards named "Nausea" and
+ * "Abdominal cramps" beside real food. The vocabulary is closed and matched
+ * against the WHOLE candidate, never as a substring, so a genuine product that
+ * happens to contain one of these words (Fever-Tree tonic) is untouched.
+ */
+const SYMPTOM_NAMES = new Set(
+  [
+    'nausea',
+    'vomiting',
+    'diarrhea',
+    'bloody diarrhea',
+    'abdominal pain',
+    'abdominal cramps',
+    'abdominal cramping',
+    'stomach cramps',
+    'fever',
+    'high fever',
+    'chills',
+    'headache',
+    'severe headache',
+    'stiffness',
+    'muscle aches',
+    'myalgia',
+    'fatigue',
+    'dizziness',
+    'blurred vision',
+    'double vision',
+    'drooping eyelids',
+    'slurred speech',
+    'difficulty swallowing',
+    'difficulty breathing',
+    'dry mouth',
+    'muscle weakness',
+    'weakness',
+    'jaundice',
+    'dehydration',
+    'hives',
+    'swelling',
+    'anaphylaxis',
+    'shortness of breath',
+    'loss of appetite',
+    'sore throat',
+  ].map((name) => name.toLowerCase()),
+);
 
 /**
  * Directional-region geography ("Southern California", "Northern Nevada",
@@ -89,6 +175,15 @@ export function variantIdentityRejection(name: string): VariantIdentityRejection
 
   // Geography can never be a product identity.
   if (isGeographicName(trimmed)) return 'geography';
+
+  // A reference to one of the notice's own attachments is not a product.
+  if (DOCUMENT_REFERENCE.test(trimmed)) return 'document-reference';
+
+  // A symptom the hazard paragraph named is not a product.
+  if (SYMPTOM_NAMES.has(trimmed.toLowerCase().replace(/[.,;:]+$/, ''))) return 'symptom';
+
+  // Recall narrative — an instruction to the shopper, not a thing on a shelf.
+  if (RECALL_NARRATIVE.test(trimmed)) return 'prose';
 
   // A name dominated by dates: strip every date token, and if no product
   // wording survives, the "name" was a date. "December Fudge Cake" keeps

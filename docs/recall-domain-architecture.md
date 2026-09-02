@@ -906,16 +906,17 @@ name a version, or occupy two roles at once. This pass closes those.
   enforced where variants are built and audited by QA. A variant name must be
   a product distinction; it can never be a date ("Best by 12/14/2026" —
   Aquafaba's date list read as products), geography ("California" … "Texas" —
-  Pounded Yam's distribution list read as products), a code, a field label, or
-  a serialized source row ("Item name : Birch Benders…" — a property list read
-  as four products). A row with valid facts but no valid identity attaches its
+  Pounded Yam's distribution list read as products), a code, a field label, a
+  serialized source row ("Item name : Birch Benders…" — a property list read
+  as four products), a symptom, recall narrative, or a reference to one of the
+  notice's own attachments. A row with valid facts but no valid identity attaches its
   facts to the parent product scope; nothing is lost and nothing is invented.
   The "Affected versions:" line renders only with ≥2 valid product names.
 - **List ROLE classification before interpretation**
   (`classifyListRole` in `src/lib/source-lists.ts`). A declared list is typed
-  as affected products, geography, identifiers, or single-product properties —
-  from its lead-in noun and its items' own shapes — before any item becomes a
-  variant. Geography lists under a distribution lead-in feed the distribution
+  as affected products, geography, identifiers, single-product properties,
+  shopper instructions, or sellers — from its lead-in noun and its items' own
+  shapes — before any item becomes a variant. Geography lists under a distribution lead-in feed the distribution
   states; identifier lists and property lists flow through prose extraction to
   case-level fields (property rows split on "•" bullets, so "Lot code : 5 265
   • Best-If-Used-By date: MAR 24, 2027" is two clean facts).
@@ -1146,3 +1147,96 @@ agency did not. The app therefore carries two separate layers.
   because none is defined between sets. The derived tier never emits an
   event of its own, so one classification transition is always exactly one
   NotificationEvent, and historical suppression is unchanged.
+
+**Affected-product identifier integrity (2026-09-01, P0A).** Extraction and
+relationship-preservation were by then sound; what remained were pure
+formatting and separator defects that corrupted the identifiers themselves on
+the last step to the screen. Four modules each carried their own idea of what
+separates two codes, and the disagreements were the bug.
+
+- **One separator policy** (`src/lib/identifier-lists.ts`), used by prose
+  extraction, table-cell display, barcode lists, and the collapsed code-set
+  builder. Commas, semicolons, ampersands, bullets, newlines and the words
+  "and"/"or" separate identifiers; a plus separates only when the source
+  spaced it as a connector, so a code containing one is never split through
+  the middle. Every part is stripped of the seam it arrived with — Everything
+  Sprouts' `LOT# 223, 226, 230, & 233` rendered "223, 226, 230, and & 233"
+  because `&` was not a separator anywhere, and the leftover connector became
+  part of the fourth code. It now yields four clean codes.
+- **A semicolon is a separator, not a terminator.** The prose value grammar
+  stopped at the first `;`, so Al'Fez Natural Tahini's
+  `BEST BEFORE: "2024 JL 31"; "2024 SE 09"; "2025 MR 27"; "2025 AL 04"` lost
+  three of its four markings. A labelled value now continues across semicolons
+  while the segments continue the same list — one that opens a new label,
+  carries no digit, reads as prose, or states a time ends it — so the sentence
+  after a list can never be absorbed into it.
+- **Identifiers are strings.** Splitting removes only what is between values.
+  Leading zeroes, hyphens, dots, letters, internal spacing and source-stated
+  ranges all survive verbatim; no digit grouping is ever applied to an
+  identifier (`groupDigits` remains scoped to the recall total, where a
+  separator is meaningful). The collapsed code set carries a second shape for
+  PERIOD-DELIMITED codes — FSIS publishes "lot code GP.1051.18", "lot code
+  2457744.2", "lot code is 2025.6.30", and a shape without the period
+  discarded all of them. It is alphanumeric runs joined by single interior
+  periods and nothing else, which no decimal quantity with its unit ("Net Wt
+  3.2 Oz"), abbreviation inside a phrase ("2507199 Exp. 09/2027"), or clock
+  time can satisfy; a telephone number can, and the type gate refuses it.
+- **Placement is not identity, and leading prose is not a code.** A labelled
+  value that OPENS with a placement word is the notice saying where the code
+  is: Middlefield's "Customers can find the lot codes on 8 oz. packets and 5
+  lb. loaves located on the side." rendered `Lot code: …, and on 8 oz`, and the
+  phrase now reaches the code-location path that owns it ("On the side of the
+  package."). Prose at the FRONT of a code is a flattened source row rather
+  than a code with noise after it — Moonlight's column-header run ("… Facility
+  Code Lot Code") is followed by the row's own cells, and the `4401` in it sits
+  under the PLU Sticker column, so emitting it would state a lot the notice
+  never gave. A trailing tail is trimmed and the code kept; a leading one is
+  refused outright. Before a DATE the same word "on" is only the connector the
+  label handed off with ("best by date on 05/2026" is May 2026), so dates strip
+  it and codes reject it.
+- **A field label never rides inside a value.** "…with a lot code of 22739 and
+  date code of 17037" split into `22739` and `date code of 17037`. A part that
+  repeats a label is resolved by that label: the SAME kind is noise and is
+  removed (`lot code 22740` → `22740`), a DIFFERENT kind is a second labelled
+  statement the split tore loose, and it both drops and ends the list — a
+  package date and a production code are not lot codes, and everything after
+  the label change was stated under the other label. The same defect ran
+  through the clause-then-colon grammar, whose guard listed "Best By" but not
+  "Best Before" or "Production codes"; both now end the clause, and production
+  codes reach their own concept instead of a best-by field. A notice also
+  writes its label on either side of the value — "a Best By date of February
+  2021" and "a Best By February 2021 date" both occur — so the trailing bare
+  noun is dropped, but only when what remains still resolves to a calendar
+  date, which is what proves the word was the label's and not the source's.
+- **Conservative false-positive rejection** (`src/lib/fact-types.ts`,
+  `isTimeOrPhoneFragment` / `hasProseWordRun`). Three named shapes are refused:
+  clock times and production time stamps (Valley Meats' "…Use By 01/15/2024,
+  and time stamp 1:02:55PM" rendered `Use by: time stamp 1`, because the value
+  grammar truncates at the clock's own colon), telephone numbers and
+  extensions, and a run of three ordinary lowercase words — the signature of a
+  sentence tail a list split carried into a code. A tail that CONTINUES a
+  sentence is trimmed and the identifier kept ("615 appears on both the wooden
+  box" → `615`); a capitalized run is a proper name and is left alone, because
+  Whole Foods' own brand is the number 365 and trimming there would invent a
+  lot code out of a product name. The collapsed code set now passes the same
+  type gate as every other rendered value — it was the one path that skipped
+  it.
+- **Variant identity closes over symptoms and narrative.** FDA closes most
+  announcements with "Consumers should take the following actions:" over a
+  bulleted list, structurally identical to a product list; SunFed's five
+  instructions became five version cards. `classifyListRole` now types
+  instruction, symptom and seller lists, and `variantIdentityRejection` adds
+  `symptom` (a closed vocabulary, matched against the whole name so
+  Fever-Tree is untouched), `prose`, and `document-reference` — FSIS hands off
+  its product list through a bracketed link run ("[View Labels(PDF only)
+  Labels A , Labels B , Labels C ]"), and split on its commas that run became
+  version cards named "Labels B" and "Labels C ]". The whole candidate must be
+  the reference, so "Label Rouge Chicken" is untouched, and the recall's own
+  best-by ranges and stated quantity stay after the cards are refused. When extraction is low-confidence the
+  case falls back to the recall-level product wording rather than to garbage,
+  and the prose-variant fallback drops its final fragment when its
+  300-character bound cut a name mid-way instead of showing a truncated one.
+
+This pass is display-layer only: raw snapshots, canonical projections, and
+persistence are unchanged, and it required no migration, backfill, or
+re-projection.

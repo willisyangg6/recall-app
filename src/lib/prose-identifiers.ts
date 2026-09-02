@@ -17,7 +17,20 @@
  */
 
 import type { ConsumerConcept } from './consumer-concepts';
-import { extractCodeDatePairs, resolveDateWithCode, splitTrailingPlacement } from './identifiers';
+import {
+  extractCodeDatePairs,
+  normalizeDateValue,
+  resolveDateWithCode,
+  splitTrailingPlacement,
+} from './identifiers';
+import {
+  hasProseWordRun,
+  isTimeOrPhoneFragment,
+  resolveEmbeddedLabel,
+  splitDateList,
+  splitIdentifierList,
+  stripTrailingProse,
+} from './identifier-lists';
 import type { SemanticFact } from './source-tables';
 
 /** Label vocabulary → concept. Longest alternatives first so "best if used by" wins. */
@@ -30,6 +43,7 @@ const LABEL_PATTERNS: [string, ConsumerConcept, 'explicit'?][] = [
   ['freeze[- ]?by(?:[- ]?date)?', 'freeze_by'],
   ['expiration(?:[- ]?dates?)?', 'expiration'],
   ['expiry(?:[- ]?dates?)?', 'expiration'],
+  ['production[- ]?codes?', 'production_code'],
   ['production[- ]?dates?', 'production_date'],
   ['u\\.?p\\.?c\\.?(?:[- ]?codes?)?', 'upc'],
   ['bar[- ]?codes?', 'upc'],
@@ -74,7 +88,7 @@ const VALUE = String.raw`([^;():\n]{1,90}?)(?=\s*[;():\n]|\.\s|\.$|,?\s+(?:and\s
  * by Date Dec 10, 2024, and Lot Code: BFFG327A6" the colon belongs to the LOT
  * label, and reading across it files a lot code under a best-by date.
  */
-const CLAUSE_THEN_COLON = String.raw`(?:[^:.;\n]{0,80})(?<!\b(?:UPC|Lot|Batch|Item|Case)(?:[- ]?(?:Code|Number|#)s?)?|\b(?:Best|Use|Sell)[- ](?:If[- ]Used[- ])?By(?:[- ]Date)?|\bExpiration(?:[- ]Date)?):\s*`;
+const CLAUSE_THEN_COLON = String.raw`(?:[^:.;\n]{0,80})(?<!\b(?:UPC|Lot|Batch|Item|Case|Product|Production)(?:[- ]?(?:Code|Number|#)s?)?|\b(?:Best|Use|Sell)[- ](?:If[- ]Used[- ])?By(?:[- ]Date)?|\bBest[- ]Before(?:[- ]Date)?|\bExpiration(?:[- ]Date)?):\s*`;
 
 /** The source explicitly stating that no codes exist. */
 const NO_CODES_STATEMENT =
@@ -88,6 +102,40 @@ const NO_CODES_STATEMENT =
 const UNSPECIFIED_CODES_STATEMENT =
   /\b(?:different|varying|various|multiple|assorted|several)\s+(?:UPC|lot|batch|production|expiration|expiry|best[- ]?by|use[- ]?by|sell[- ]?by)\b[^.]{0,30}\b(?:codes?|dates?|numbers?)\b/i;
 
+/**
+ * Drop the bare word "date" left at the END of a date value.
+ *
+ * A notice writes its label on either side of the value — "a Best By date of
+ * February 2021" and "a Best By February 2021 date" both occur — and the
+ * second leaves the label's own noun inside the value, so Hormel rendered
+ * `Best by: February 2021 date`. It is removed ONLY when what remains still
+ * resolves to a calendar date, which is what proves the word was the label's
+ * and not the source's own wording; anything else is kept verbatim.
+ */
+function withoutTrailingDateWord(value: string): string {
+  const trimmed = value.replace(/[\s,]+dates?$/i, '').trim();
+  if (trimmed === value || trimmed === '') return value;
+  return normalizeDateValue(trimmed).canonical !== undefined ? trimmed : value;
+}
+
+/**
+ * A value that opens by saying WHERE the code is rather than what it is.
+ * Middlefield's "Customers can find the lot codes on 8 oz. packets and 5 lb.
+ * loaves located on the side." put `on 8 oz` in the Lot code field; the
+ * sentence is a placement statement, and the code-location path already owns
+ * it ("On the side of the package.").
+ */
+const PLACEMENT_LEAD =
+  /^(?:on|in|at|under|underneath|beneath|below|above|near|next\s+to|inside|outside|located|printed|stamped|marked|found|displayed|embossed)\b/i;
+
+/** Concepts whose values are printed codes, and so are never prose. */
+const CODE_CONCEPTS = new Set<ConsumerConcept>([
+  'lot',
+  'case_code',
+  'item_number',
+  'production_code',
+]);
+
 /** Values that are prose rather than an identifier. */
 function isPlausibleValue(concept: ConsumerConcept, value: string): boolean {
   const trimmed = value.trim();
@@ -96,6 +144,21 @@ function isPlausibleValue(concept: ConsumerConcept, value: string): boolean {
   if (!/\d/.test(trimmed)) return false;
   // Reject sentences: identifiers are short token runs, not clauses.
   if (trimmed.split(/\s+/).length > 12) return false;
+  // A clock time, a telephone number, or an extension is a fact about the
+  // notice, not a marking on the package.
+  if (isTimeOrPhoneFragment(trimmed)) return false;
+  if (CODE_CONCEPTS.has(concept)) {
+    // A code that opens by saying WHERE it is, is the placement sentence, not
+    // the code.
+    if (PLACEMENT_LEAD.test(trimmed)) return false;
+    // Prose at the FRONT is a flattened source row, not a code with noise
+    // after it. Moonlight's column-header run ("… Facility Code Lot Code") is
+    // followed by the row's own cells, and the "4401" in it sits under the
+    // PLU Sticker column — emitting it would state a lot code the source
+    // never gave. A trailing tail is trimmed and the code kept; a leading one
+    // is refused.
+    if (hasProseWordRun(trimmed)) return false;
+  }
   if (
     /\b(?:because|which|consumers|should|please|contact|call|recall(?:ed|ing)?)\b/i.test(trimmed)
   ) {
@@ -227,6 +290,48 @@ function dateConceptForLabel(label: string): ConsumerConcept {
   return 'expiration';
 }
 
+/** A segment that opens its own identifier label, ending the previous list. */
+const SEGMENT_STARTS_A_LABEL =
+  /^["“'’]?(?:(?:and|or|the)\s+)*(?:lot|batch|upc|u\.p\.c|bar[\s-]?code|item|case|sku|product|package|packaging|production|best|use|sell|freeze|expir)\b/i;
+
+/**
+ * Extend a matched value across the semicolons that continue its list.
+ *
+ * The value grammar stops at a semicolon, which is right for a sentence and
+ * wrong for a list: Al'Fez Natural Tahini publishes `BEST BEFORE: "2024 JL
+ * 31"; "2024 SE 09"; "2025 MR 27"; "2025 AL 04"`, and stopping at the first
+ * semicolon dropped three of the four dates a shopper needs. Semicolons and
+ * commas separate identifiers identically; only the grammar disagreed.
+ *
+ * A segment is taken only while it continues the SAME list. One that opens a
+ * new label, carries no digit, reads as prose, or states a time ends it — so
+ * the sentence after the list can never be absorbed into it.
+ */
+function continueAcrossSemicolons(text: string, match: RegExpMatchArray): string {
+  let value = match[2];
+  let cursor = (match.index ?? 0) + match[0].length;
+  for (;;) {
+    const rest = text.slice(cursor);
+    const gap = rest.match(/^\s*;\s*/);
+    if (!gap) return value;
+    const segment = rest.slice(gap[0].length).match(/^[^;.\n]{1,90}/)?.[0];
+    if (segment === undefined) return value;
+    const trimmed = segment.trim();
+    if (
+      trimmed === '' ||
+      !/\d/.test(trimmed) ||
+      trimmed.split(/\s+/).length > 8 ||
+      SEGMENT_STARTS_A_LABEL.test(trimmed) ||
+      hasProseWordRun(trimmed) ||
+      isTimeOrPhoneFragment(trimmed)
+    ) {
+      return value;
+    }
+    value = `${value}; ${trimmed}`;
+    cursor += gap[0].length + segment.length;
+  }
+}
+
 /**
  * Extract label-driven identifiers from announcement prose.
  * Multi-value lists ("Lot numbers: 1472, 1481, 1531") are split into one fact
@@ -295,7 +400,7 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
     ];
     for (const match of patterns.flatMap((pattern) => [...summaryText.matchAll(pattern)])) {
       const sourceLabel = match[1].replace(/\s+/g, ' ').trim();
-      const rawValue = cleanValue(match[2]);
+      const rawValue = cleanValue(continueAcrossSemicolons(summaryText, match));
       if (rawValue === '') continue;
 
       // A list of values under one label becomes one fact per value. Date
@@ -330,19 +435,37 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
           });
         }
       }
+      // One separator policy for every identifier family, so a connector can
+      // never survive as part of a code ("& 233") and a semicolon-delimited
+      // list splits exactly as a comma-delimited one does.
       const parts =
         concept === 'lot' ||
         concept === 'upc' ||
         concept === 'item_number' ||
-        concept === 'case_code'
-          ? rawValue.split(/\s*,\s*|\s+(?:and|or)\s+/i)
+        concept === 'case_code' ||
+        concept === 'production_code'
+          ? splitIdentifierList(rawValue)
           : isDateList && !bounded
-            ? (placement?.value ?? rawValue).split(
-                /\s*,(?!\s*\d{4}\b(?![./-]\d))\s*|\s+(?:and|or)\s+/i,
-              )
+            ? splitDateList(placement?.value ?? rawValue)
             : [rawValue];
       for (const part of parts) {
-        const value = cleanValue(part);
+        // A part that repeats a field label inside itself is either that
+        // label's own noise ("lot code 22740") or a different labelled
+        // statement the split tore loose ("date code of 17037"). The second
+        // kind ends this list: everything after it was stated under the OTHER
+        // label, and reading on files one label's values under another's.
+        const resolved = resolveEmbeddedLabel(concept, cleanValue(part));
+        if (resolved === null) break;
+        const cleaned = cleanValue(
+          CODE_CONCEPTS.has(concept) ? stripTrailingProse(resolved) : resolved,
+        );
+        // Before a date, a leading "on" is the connector the label handed off
+        // with — "best by date on 05/2026" states May 2026 — exactly as a
+        // leading "of" is. Before a CODE the same word means placement, which
+        // is why only dates strip it.
+        const value = isDateList
+          ? withoutTrailingDateWord(cleaned.replace(/^on\s+/i, ''))
+          : cleaned;
         if (!isPlausibleValue(concept, value)) continue;
         // A code already published with its calendar date is fully described
         // by that pair; re-emitting the bare code loses the explanation.

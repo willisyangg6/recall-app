@@ -52,6 +52,7 @@ import {
   type RejectedFact,
 } from './consumer-schema';
 import { composeCodeLocation, isValidForConcept, type CodeLocation } from './fact-types';
+import { splitDateList, splitIdentifierList } from './identifier-lists';
 import {
   dateSortKey,
   extractCodeDatePairs,
@@ -421,27 +422,6 @@ const CODE_LIST_CONCEPTS = new Set<ConsumerConcept>([
   'item_number',
 ]);
 
-/**
- * Split a cell holding several dates into its parts, without breaking a range.
- *
- * "12/04/19, 12/10/19" is two dates; "7/13/2026 - 8/11/2026" is one range, and
- * splitting on its separator would turn a span into two unrelated days. Only
- * list separators divide — the range separator is left to the normalizer.
- */
-function splitDateList(value: string): string[] {
-  const parts = value
-    // A comma before a bare year belongs to the date it is part of: splitting
-    // "July 11, 2026" would turn one day into a day and a year. Four digits
-    // that continue into a date ("2025.07.12") are a year-first date, not a
-    // bare year, and the comma before them does separate list entries.
-    .split(
-      /\s*(?:,(?!\s*\d{4}\b(?![./-]\d))|;|\band\b|\bor\b)\s*|\s{2,}|(?<=\d{2,4})\s+(?=\d{1,2}[/.-]\d)/i,
-    )
-    .map((part) => part.trim())
-    .filter((part) => part !== '');
-  return parts.length > 1 ? parts : [value];
-}
-
 /** One consumer-ready value plus the identity that decides whether it repeats. */
 interface DisplayedValue {
   display: string;
@@ -472,7 +452,7 @@ function displayValues(concept: ConsumerConcept, raw: string): DisplayedValue[] 
   // version that owns one of them silently fails — which is exactly how an
   // orphan "Lot code: 25E04-A" row appeared below the version cards.
   if (CODE_LIST_CONCEPTS.has(concept)) {
-    const parts = trimmed.split(/\s*(?:,|;|•|·|\band\b|\bor\b)\s*/i).filter((part) => part !== '');
+    const parts = splitIdentifierList(trimmed);
     if (parts.length > 1) {
       return parts.map((part) => ({
         display: part,
@@ -880,21 +860,23 @@ export function parseProseVariants(summaryText: string | null): string[] {
   if (!match || match[1].trim().length < 10) return [];
   const listText = match[1].slice(0, 300);
   // Split on commas and the final "and"; keep multi-word names intact.
-  const parts = listText
+  const split = listText
     .split(/,\s*(?:and\s+)?|\s+and\s+the\s+|\s+and\s+(?=[A-Z0-9])/)
-    .map((p) => p.replace(/\s+/g, ' ').trim())
-    .filter(
-      (p) =>
-        p.length >= 3 &&
-        p.length <= 90 &&
-        // A product name, not the sentence's way of introducing one: "products
-        // affected are as follows" and "…as shown in the images below" are
-        // grammar, and presenting them as affected versions is nonsense.
-        !/^(?:as\b|the following|listed|shown|below|described|detailed|outlined|set out)/i.test(
-          p,
-        ) &&
-        /[A-Z0-9]/.test(p),
-    );
+    .map((p) => p.replace(/\s+/g, ' ').trim());
+  // The 300-character bound cuts a long sentence mid-name. A truncated name is
+  // a corrupted product identity, not a shorter one, so the final fragment is
+  // dropped rather than shown — the notice's own wording is preserved on the
+  // case regardless.
+  const parts = (match[1].length > listText.length ? split.slice(0, -1) : split).filter(
+    (p) =>
+      p.length >= 3 &&
+      p.length <= 90 &&
+      // A product name, not the sentence's way of introducing one: "products
+      // affected are as follows" and "…as shown in the images below" are
+      // grammar, and presenting them as affected versions is nonsense.
+      !/^(?:as\b|the following|listed|shown|below|described|detailed|outlined|set out)/i.test(p) &&
+      /[A-Z0-9]/.test(p),
+  );
   if (parts.length < 2) return [];
   const seen = new Set<string>();
   const names: string[] = [];
@@ -1875,6 +1857,28 @@ export function buildDistribution(
  * consumer reads the date, then confirms against the code actually stamped on
  * their package.
  */
+/**
+ * The shape of a code a package actually prints.
+ *
+ * Alphanumerics with spaces, hyphens and slashes cover almost every printed
+ * code, but FSIS also publishes PERIOD-DELIMITED ones — "lot code GP.1051.18",
+ * "lot code 2457744.2", "lot code is 2025.6.30" — and excluding the period
+ * discarded all three. The period form is admitted as its own airtight shape:
+ * alphanumeric runs joined by single interior periods and nothing else. That
+ * is narrow enough that a decimal quantity with its unit ("Net Wt 3.2 Oz"), an
+ * abbreviation inside a phrase ("2507199 Exp. 09/2027"), a clock time, and
+ * trailing sentence punctuation can never satisfy it — each carries a space,
+ * a colon, or a slash. A telephone number does satisfy it, and is refused by
+ * the type gate this feeds.
+ */
+const PRINTED_CODE = /^[A-Za-z0-9][A-Za-z0-9 /-]{2,24}$/;
+const PERIOD_DELIMITED_CODE = /^[A-Za-z0-9]{1,12}(?:\.[A-Za-z0-9]{1,12}){1,5}$/;
+
+function isPrintedCodeShape(code: string): boolean {
+  if (PRINTED_CODE.test(code)) return true;
+  return code.length <= 25 && PERIOD_DELIMITED_CODE.test(code);
+}
+
 function buildLotCodes(
   facts: SemanticFact[],
   concept: 'lot' | 'production_code' = 'lot',
@@ -1893,18 +1897,21 @@ function buildLotCodes(
     const tokens =
       compound.pairs.length > 0
         ? compound.pairs.map((p) => p.code)
-        : // "and"/"or" and list bullets separate codes exactly as commas do;
-          // without them a nine-code cell counts as four tokens, dodges the
-          // collapse threshold, and lands inline as a wall of codes.
-          compound.body.split(/[,;•·]|\s{2,}|\s+(?:and|or)\s+/i);
+        : // "and"/"or", ampersands and list bullets separate codes exactly as
+          // commas do; without them a nine-code cell counts as four tokens,
+          // dodges the collapse threshold, and lands inline as a wall of codes.
+          splitIdentifierList(compound.body);
     for (const token of tokens) {
-      // A conjunction stranded on a token by an upstream comma split is the
-      // seam, not the code: ", and 30324s" must never render "and 30324s".
-      const code = token
-        .trim()
-        .replace(/^(?:and|or)\s+/i, '')
-        .replace(/[.;,]+$/, '');
-      if (!/^[A-Za-z0-9][A-Za-z0-9 /-]{2,24}$/.test(code)) continue;
+      // The shared policy already removed the seam a split leaves on a token
+      // (", and 30324s" must never render "and 30324s"); only the sentence
+      // punctuation a source ends a list with is left to trim here.
+      const code = token.trim().replace(/[.;,]+$/, '');
+      if (!isPrintedCodeShape(code)) continue;
+      // The collapsed set was the one display path that skipped the type
+      // gate, which is how "40 lb on 8 oz" and a column of expiry dates
+      // reached the UI as lot codes. It passes the same gate as every other
+      // rendered value now.
+      if (!isValidForConcept(concept, code)) continue;
       if (seen.has(code)) continue;
       seen.add(code);
       codes.push(code);
