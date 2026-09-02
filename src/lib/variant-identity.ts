@@ -29,7 +29,9 @@ export type VariantIdentityRejection =
   | 'raw-source-row'
   | 'symptom'
   | 'prose'
-  | 'document-reference';
+  | 'document-reference'
+  | 'origin-statement'
+  | 'measurement-statement';
 
 /** A calendar-date token in any of the shapes announcements print. */
 const DATE_TOKEN =
@@ -284,6 +286,77 @@ export function measurementKey(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+// ── Caption contradiction (shared policy) ───────────────────────────────────
+
+/** The closed exact identity of one affected package, for caption-evidence
+ * decisions. Extra fields on a caller's richer row shape are fine. */
+export interface PackageIdentity {
+  name: string | null;
+  /** The row's own Package Size value when it states exactly one. */
+  size: string | null;
+  /** The row's own Barcode (UPC) value, when the source states one. */
+  upc: string | null;
+}
+
+/** Measurement tokens inside a caption ("…, Front Label, 10 oz.") — compared
+ * by exact key equality, so "10 oz" can never claim a "10.5 oz" caption. */
+const CAPTION_SIZE_TOKEN =
+  /\d[\d.,/]*\s*-?\s*(?:fl\.?\s*oz|oz|ounces?|lbs?|pounds?|grams?|g|kg|mg|ml|liters?|litres?|ct|count|bars?|packs?|pks?|pieces?)\b\.?/gi;
+
+export function captionSizeKeys(text: string): Set<string> {
+  return new Set([...text.matchAll(CAPTION_SIZE_TOKEN)].map((match) => measurementKey(match[0])));
+}
+
+/** Barcode-length digit strings inside a value ("UPC 021130 13224 9" →
+ * "021130132249"), spacing and separators removed. */
+const DIGIT_RUN = /\d[\d\s -]{9,22}\d/g;
+
+function barcodeKeys(text: string): Set<string> {
+  const keys = new Set<string>();
+  for (const match of text.matchAll(DIGIT_RUN)) {
+    const digits = match[0].replace(/\D/g, '');
+    if (digits.length >= 11 && digits.length <= 14) keys.add(digits);
+  }
+  return keys;
+}
+
+/**
+ * The ONE caption-contradiction policy, shared by the projection's photo
+ * attachment and the display image-role allocator so the two layers can never
+ * disagree about what an official caption rules out.
+ *
+ * A caption that states its OWN identifiers can prove an image is NOT this
+ * package's version: a caption naming a different barcode, or package sizes
+ * with none the package states, depicts a sibling. Barcodes are read from
+ * every identity value — sources sometimes state a UPC inside the size cell
+ * ("12 oz UPC 711535517733"), and it is no less the package's identity for
+ * being there. Silence never contradicts: a caption with no barcode and no
+ * size vetoes nothing.
+ */
+export function captionContradictsPackage(caption: string, pkg: PackageIdentity): boolean {
+  const packageCodes = barcodeKeys([pkg.name, pkg.size, pkg.upc].filter(Boolean).join(' '));
+  const captionCodes = barcodeKeys(caption);
+  if (
+    packageCodes.size > 0 &&
+    captionCodes.size > 0 &&
+    ![...captionCodes].some((code) => packageCodes.has(code))
+  ) {
+    return true;
+  }
+  if (pkg.size) {
+    const packageSizes = captionSizeKeys(pkg.size);
+    const captionSizes = captionSizeKeys(caption);
+    if (
+      packageSizes.size > 0 &&
+      captionSizes.size > 0 &&
+      ![...captionSizes].some((size) => packageSizes.has(size))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * The reason a candidate variant name is invalid, or null when it is a
  * legitimate product identity. Deliberately asymmetric: it rejects names that
@@ -329,6 +402,25 @@ export function variantIdentityRejection(name: string): VariantIdentityRejection
 
   // Recall narrative — an instruction to the shopper, not a thing on a shelf.
   if (RECALL_NARRATIVE.test(trimmed)) return 'prose';
+
+  // A country-of-origin statement is label metadata, never a product
+  // identity ("Product of Korea" — recorded Sun Hong, where a package
+  // description's comma list flattened into prose variants). Whole-candidate
+  // and anchored: genuine names merely CONTAINING these words ("Korean Rice
+  // Cakes", "Dairy Products Assortment") are untouched.
+  if (/^products?\s+of\s+(?:the\s+)?[A-Z][A-Za-z .]*$/i.test(trimmed)) {
+    return 'origin-statement';
+  }
+
+  // A net-weight statement is package-size evidence stated as a sentence
+  // fragment, not a product ("Net weight 7.05 oz/200g"). It may become
+  // Package Size only through a path that proves which row it belongs to
+  // (a labeled fact, a table cell, or the demotion of a size-distinguished
+  // version); a free-floating heading is rejected rather than guessed onto a
+  // row. "Weight Watchers…" survives: the digit requirement keeps brand
+  // names starting with these words out.
+  if (/^net\s+(?:wt\.?|weight)\b/i.test(trimmed)) return 'measurement-statement';
+  if (/^(?:wt\.?|weight)\s*:?\s*\d/i.test(trimmed)) return 'measurement-statement';
 
   // A name dominated by dates: strip every date token, and if no product
   // wording survives, the "name" was a date. "December Fudge Cake" keeps

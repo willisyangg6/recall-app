@@ -3,7 +3,8 @@
 _Written 2026-08-28; P1 presentation contract added 2026-09-01; P2a identity,
 typed reasons, and the simplified Detail page applied 2026-09-01 (founder
 decisions); P2b product identity, affected-version decomposition, and the
-compact Affected Products table applied 2026-09-02. Functional milestones on
+compact Affected Products table applied 2026-09-02; P2c global image-role
+allocation applied 2026-09-02. Functional milestones on
 the temporary UI — final visual design happens separately and may restyle
 everything here without touching the business logic, which lives entirely in
 pure libs._
@@ -242,9 +243,25 @@ Home shows the selected hero (`heroImageUrl`, existing authoritative
 selection policy — frozen FSIS label policy untouched); Detail shows the
 **same** hero once, near the title, and no image repeats lower on the page
 (P2a founder decision — the lower Product photos gallery and the
-compare-photos block no longer render; the photo and label-visual data stay
-preserved in the model for P2c image-role allocation). Absent imagery
-renders nothing — no placeholders, no carousel.
+compare-photos block no longer render). Absent imagery renders nothing — no
+placeholders, no carousel.
+
+**Image-role allocation (P2c).** One shared pure allocator
+(`src/lib/recall-images.ts`, consumed only through `buildDetailModel` →
+`DetailModel.images`) owns every display role: the hero (the stored
+authoritative selection resolved, never re-ranked), at most one
+evidence-matched image per affected-product row (keyed by the stable P2b
+row identity), a deduplicated deterministic gallery reserved for the future
+top carousel, and retained non-visible supporting close-ups. The same
+underlying asset never holds two visible roles — never two rows, never a
+gallery repeat — except the one evidence-proven hero-to-row reuse in a
+multi-version table (docs/recall-imagery.md §13), and no image is
+assigned to a row by array position, guessed between sibling versions, or
+sourced unofficially. Rows without a confident official match render no
+image and no placeholder. Screens render the allocation's verdicts only
+(wiring-test-pinned). The authoritative matching contract — evidence
+classes, the caption contradiction veto, ambiguity rules, and the pinned
+corpus census — is docs/recall-imagery.md §13.
 
 ### Affected products
 
@@ -271,22 +288,38 @@ composes no columns, labels, or cell values of its own; wiring-test-pinned):
   order — Package Size, Packaging, Best by / Use by / Sell by / Expiration
   (each keeping its exact source-specific meaning; a Sell by is never
   relabeled), Barcode (UPC), Lot codes, Batch codes.
-- One affected version per row, in source order. A column exists only when
-  at least one row has a supported value for it or the value is proven
-  shared; a missing cell stays **empty** — no dash, no "unknown", and never
-  a value borrowed from another version. Rows show the same value only when
-  the source associates it with every version, in which case it repeats
-  inside each row — never in a separate visible block.
+- One affected version per row, in source order. **Columns are computed
+  from the rows currently rendered** (integration correction, 2026-09-02):
+  the model supplies a collapsed view (the first three rows, columns
+  justified by exactly those rows) and an expanded view (all rows, columns
+  recomputed), so a column every currently visible row would leave empty
+  never renders — `See all` may reveal a column along with the rows that
+  justify it (recorded Taylor Fresh). Where at least one visible row has a
+  field, the column exists and the other rows keep honest **empty** cells —
+  no dash, no "unknown", and never a value borrowed from another version
+  (recorded YoCrunch). Rows show the same value only when the source
+  associates it with every version, in which case it repeats inside each
+  row — never in a separate visible block.
 - At most **three rows** render initially; beyond that a functional
   `See all (N)` control reveals the rest inline and collapses again
   (`AFFECTED_PRODUCTS_INITIAL_ROWS`).
 - The table scrolls horizontally as one unit, header and rows aligned.
 - Each row carries a **stable row identity** (the projection's source-row
-  scope) for P2c's version-specific image assignment; no version image or
-  placeholder renders in P2b.
-- A version's own collapsed code set renders behind its disclosure beneath
-  the table, labeled by that row's product name — still that version's
-  codes, never a recall-wide pile.
+  scope). P2c keys version-specific image assignment to it: a row whose
+  identity the shared allocator confidently matched to an official image
+  renders that image left of its Product value; every other row renders no
+  image and no placeholder, and the hero never repeats inside the table.
+- **A version's codes live inside its own table row** (integration
+  correction, 2026-09-02 — the below-table row-code disclosure area is
+  retired; the table is the only affected-product presentation). A small
+  set renders inline in the row's Lot/Batch codes cell; a large collapsed
+  set renders as that row's own in-cell `View N codes` control, which opens
+  a plain accessible modal (no dependency, no navigation route) titled by
+  the row's product identity, showing exactly that row's codes and its
+  source-supported code/date pairs, with an explicit Close — never a
+  sibling's codes, never a recall-wide pile, and never a long list expanded
+  beneath the table. Case-level production-code and case-code disclosures
+  (codes no single version owns) are unchanged.
 - The official attachment links ("Product labels (PDF)", "Product list
   (PDF)") stay preserved in the model (`attachments`) for a later
   source/image surface; **no orphan attachment link renders** under Affected
@@ -326,10 +359,19 @@ product name is ever invented. Both recognizers (`measurementOnlyName`,
 whole-candidate: numeric brands, UPCs, lot codes with decimal-like
 punctuation, dates, full product names ending in a size, and product names
 containing packaging words ("Boxed Water", "Cup Noodles", "7-Eleven Wrap")
-can never match. Corpus scans (`src/server/fda/presentation-regressions.test.ts`,
+can never match. The closed identity gate (`variantIdentityRejection`) also
+rejects label-metadata statements outright (P2c correction, 2026-09-02): a
+country-of-origin statement ("Product of Korea") and a net-weight statement
+("Net weight 7.05 oz/200g") are never affected versions — recorded Sun Hong,
+where a package-description comma list flattened into prose variants. The
+rejections are whole-candidate and anchored, so genuine names containing
+these words ("Korean Rice Cakes", "Weight Watchers…", "Net Cost…") are
+untouched, and a free-floating measurement statement becomes Package Size
+only through a path that proves which row it belongs to — never by guessed
+association. Corpus scans (`src/server/fda/presentation-regressions.test.ts`,
 `src/server/fsis/presentation-regressions.test.ts`) pin that no measurement,
-packaging value, or other non-identity renders as Product anywhere in the
-recorded corpus.
+packaging value, origin/net-weight statement, or other non-identity renders
+as Product anywhere in the recorded corpus.
 
 Coverage is graded in the model (P2a): `structured` (identifying details
 survived), `partial` (only packaging/size evidence — the model's scope
@@ -365,21 +407,31 @@ stays in the model/projection for its assigned later surface:
 Still deliberately absent: Saved state/Save button, retailer link/modal,
 image carousel, new navigation.
 
-### Roadmap requirements (P2c — not implemented yet)
+### P2c — global image-role allocation (implemented 2026-09-02)
 
 _P2b (the compact affected-versions table) shipped as specified above — the
-reference shape is now recorded and test-pinned
+reference shape is recorded and test-pinned
 (`announcement-jaimes-spanish-village-jalapeno-ranch.json`): one table
 header and one data row — Product "Jalapeno Ranch Dressing", Barcode (UPC)
 199284564923, Lot codes "69, 86, 108, 113, 116, and 121"; no Package Size or
 date column, because this version has no supported values for them._
 
-**P2c — global image-role allocation.** One hero (or future hero carousel)
-at the top; a product-version image may appear beside that version's product
-name only when the system can confidently match the image to that exact
-version (the Outshine flavor shape); the hero is never reused as a lower
-generic product photo; no empty image placeholder when no version-specific
-match exists.
+P2c shipped the shared image-role allocation described under Imagery above:
+one hero at the top; a product-version image beside that version's product
+name only when the allocator confidently matches the image to that exact
+version (the Outshine flavor shape, source-established; the Crystal
+Temptations shape, caption name+size); no empty placeholder when no
+version-specific match exists. The integration correction (2026-09-02)
+superseded the absolute no-reuse rule with the narrower one: in a
+multi-version table the hero may ALSO render as the thumbnail of exactly
+the one row it provably depicts (Outshine Strawberry, Crystal 10 oz, Great
+One Mushroom Fish Ball), while a single-row notice stays hero-only
+(Jalapeno Ranch renders its package image exactly once) and the hero never
+re-enters the gallery. The recorded
+regression shapes and the corpus-wide allocation census are pinned in
+`src/server/fda/presentation-regressions.test.ts`; the matching contract
+lives in docs/recall-imagery.md §13. The interactive carousel and all final
+visual styling remain design-system work.
 
 ## Control hierarchy (C6.1)
 

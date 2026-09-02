@@ -87,11 +87,11 @@ test('recorded 018-2026: a container never renders as Product; quoted identities
   // days joined by "and" (a shopper with a mid-range date must still match).
   assert.ok(table, 'the table model is missing');
   assert.deepEqual(
-    table!.columns.map((column) => column.label),
+    table!.expanded.columns.map((column) => column.label),
     ['Product', 'Package Size', 'Sell by', 'Packaging'],
   );
   assert.deepEqual(
-    table!.rows.map((row) => row.cells),
+    table!.expanded.rows.map((row) => row.cells.map((cell) => cell.text)),
     [
       ['Buffalo Chicken Rangoon', '100 pieces', 'July 8, 2026–June 29, 2027', 'Cardboard boxes'],
       [
@@ -102,8 +102,8 @@ test('recorded 018-2026: a container never renders as Product; quoted identities
       ],
     ],
   );
-  for (const row of table!.rows) {
-    assert.ok(!String(row.cells[2]).includes(' and '), String(row.cells[2]));
+  for (const row of table!.expanded.rows) {
+    assert.ok(!String(row.cells[2].text).includes(' and '), String(row.cells[2].text));
   }
 
   // The official labels PDF stays preserved as model data for a later

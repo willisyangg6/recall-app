@@ -45,6 +45,12 @@ import {
 } from './consumer-summary';
 import type { CodeLocation } from './fact-types';
 import type { ProductPhoto } from './product-photos';
+import {
+  allocateRecallImages,
+  type RecallImageAllocation,
+  type RowImageAssignment,
+  type RowImageCandidate,
+} from './recall-images';
 import type { CaseDetail, FeedItem } from './recall-feed';
 import { allergenReasonLabel, healthRiskSummary, stateLabel } from './recall-display';
 import { interpretReason } from './recall-reason';
@@ -871,27 +877,53 @@ export interface AffectedProductsTableColumn {
   label: string;
 }
 
+export interface AffectedProductsTableCell {
+  /** Plain value; null renders an EMPTY cell: a missing value is never a
+   * dash, "unknown", or a value borrowed from another version. */
+  text: string | null;
+  /** This row's own collapsed code set, when it is too large to print
+   * inline: renders as an in-cell control (`codesLabel`) that opens a modal
+   * showing exactly this row's codes and its source-supported code/date
+   * pairs — never a sibling row's. Null for plain cells. */
+  codes: LotCodeSet | null;
+  /** The in-cell control's text ("View 22 codes"); null for plain cells. */
+  codesLabel: string | null;
+}
+
 export interface AffectedProductsTableRow {
   /** Stable row identity (the projection's source-row scope) for P2c. */
   id: string;
   /** This row's product name; null renders an empty Product cell, never a
    * placeholder — and never labels anything else as Product. */
   name: string | null;
-  /** One cell per column, aligned with `columns`. Null is an EMPTY cell: a
-   * missing value is never rendered as a dash, "unknown", or a borrowed
-   * value from another version. */
-  cells: (string | null)[];
-  /** This row's own collapsed code set — rendered behind its disclosure
-   * beneath the table, still attributed to this row. */
-  codes: LotCodeSet | null;
+  /** One cell per column, aligned with the owning view's `columns`. */
+  cells: AffectedProductsTableCell[];
+  /** The image the shared allocator confidently matched to this exact
+   * version (P2c), rendered left of the Product value. Null renders nothing
+   * — no placeholder, no reserved space. The screen never matches images
+   * itself. */
+  image: { url: string; accessibilityText: string } | null;
 }
 
-export interface AffectedProductsTable {
+/** One rendering of the table: the columns justified by exactly the rows
+ * this view shows, and those rows' cells aligned to them. */
+export interface AffectedProductsTableViewModel {
   /** Header labels, rendered once as the uppermost row. A column exists only
-   * when at least one affected row has a supported value for it. */
+   * when at least one row IN THIS VIEW has a supported value (or an in-cell
+   * code set) for it — a column every visible row would leave empty never
+   * renders. */
   columns: AffectedProductsTableColumn[];
   /** One affected version per row, in source order. */
   rows: AffectedProductsTableRow[];
+}
+
+export interface AffectedProductsTable {
+  /** The initial rendering: the first `initialRows` rows, with columns
+   * computed from exactly those rows. */
+  collapsed: AffectedProductsTableViewModel;
+  /** The full rendering after "See all": every row, columns recomputed over
+   * all of them. Identical to `collapsed` when nothing is hidden. */
+  expanded: AffectedProductsTableViewModel;
   /** How many rows render before the reveal control. */
   initialRows: number;
   /** "See all (N)" when more rows exist than initially render; null otherwise. */
@@ -901,17 +933,27 @@ export interface AffectedProductsTable {
 /** At most this many affected-version rows render before "See all (N)". */
 export const AFFECTED_PRODUCTS_INITIAL_ROWS = 3;
 
+/** Which column a collapsed code set belongs to, from its consumer label. */
+function codeColumnKey(codes: LotCodeSet): PackageFieldKey {
+  return /batch/i.test(codes.label) ? 'batchCodes' : 'lotCodes';
+}
+
 /**
  * The compact table-like structure Detail renders for Affected Products
- * (P2b): column labels once, one affected version per row, columns drawn only
- * from populated approved fields, Product first when any row has a name.
- * Cells hold each version's own facts plus the facts PROVEN to apply to
- * every version (repeated per row — the table has no shared-facts section);
- * the model never merges values across versions, and a column another row
- * justified stays empty here. Null when the gated model has no items (the
- * section then renders only its code disclosures, exactly as before).
+ * (P2b, restructured with the P2c integration correction): column labels
+ * once, one affected version per row, columns drawn only from fields the
+ * currently visible rows populate, Product first when any visible row has a
+ * name. Cells hold each version's own facts plus the facts PROVEN to apply
+ * to every version (repeated per row — the table has no shared-facts
+ * section); the model never merges values across versions. A row's own
+ * collapsed code set lives INSIDE its Lot/Batch codes cell as a "View N
+ * codes" control — the table is the only affected-product presentation, and
+ * no code list renders beneath it. Null when the gated model has no items.
  */
-export function affectedProductsTable(model: AffectedProductsModel): AffectedProductsTable | null {
+export function affectedProductsTable(
+  model: AffectedProductsModel,
+  rowImages: ReadonlyMap<string, RowImageAssignment> = new Map(),
+): AffectedProductsTable | null {
   if (model.items.length === 0) return null;
   // The consumer table has NO shared-facts section (founder decision). A fact
   // the model PROVED applies to every affected version (`appliesToAll` — each
@@ -923,35 +965,71 @@ export function affectedProductsTable(model: AffectedProductsModel): AffectedPro
   // is structurally unreachable from this model, so nothing here can guess a
   // value into a row the source never tied it to.
   const sharedByKey = new Map(model.appliesToAll.map((field) => [field.key, field.value]));
-  const columns: AffectedProductsTableColumn[] = [];
-  if (model.items.some((item) => item.name !== null)) {
-    columns.push({ key: 'product', label: TABLE_COLUMN_LABEL.product });
-  }
-  for (const key of PRESENTATION_FIELD_ORDER) {
-    if (
-      sharedByKey.has(key) ||
-      model.items.some((item) => item.fields.some((field) => field.key === key))
-    ) {
-      columns.push({ key, label: TABLE_COLUMN_LABEL[key] });
+  const entries = model.items.map((item) => {
+    const values = new Map<PackageFieldKey, AffectedProductsTableCell>();
+    for (const key of PRESENTATION_FIELD_ORDER) {
+      const text = item.fields.find((field) => field.key === key)?.value ?? sharedByKey.get(key);
+      if (text !== undefined) values.set(key, { text, codes: null, codesLabel: null });
     }
-  }
-  const rows = model.items.map((item) => ({
-    id: item.rowId,
-    name: item.name,
-    cells: columns.map((column) =>
-      column.key === 'product'
-        ? item.name
-        : (item.fields.find((field) => field.key === column.key)?.value ??
-          sharedByKey.get(column.key) ??
-          null),
-    ),
-    codes: item.codes,
-  }));
+    // The row's collapsed code set becomes this row's own cell content — a
+    // code-bearing row can never present as an empty codes cell.
+    if (item.codes) {
+      const key = codeColumnKey(item.codes);
+      if (!values.has(key)) {
+        values.set(key, {
+          text: null,
+          codes: item.codes,
+          codesLabel: `View ${item.codes.count} codes`,
+        });
+      }
+    }
+    const assignment = rowImages.get(item.rowId) ?? null;
+    return {
+      item,
+      values,
+      // The shared allocator's verdict, verbatim: the table only carries it
+      // to the row so the screen has nothing to decide.
+      image: assignment
+        ? { url: assignment.image.url, accessibilityText: assignment.accessibilityText }
+        : null,
+    };
+  });
+
+  const view = (visible: typeof entries): AffectedProductsTableViewModel => {
+    const columns: AffectedProductsTableColumn[] = [];
+    if (visible.some((entry) => entry.item.name !== null)) {
+      columns.push({ key: 'product', label: TABLE_COLUMN_LABEL.product });
+    }
+    for (const key of PRESENTATION_FIELD_ORDER) {
+      if (visible.some((entry) => entry.values.has(key))) {
+        columns.push({ key, label: TABLE_COLUMN_LABEL[key] });
+      }
+    }
+    return {
+      columns,
+      rows: visible.map((entry) => ({
+        id: entry.item.rowId,
+        name: entry.item.name,
+        cells: columns.map((column) =>
+          column.key === 'product'
+            ? { text: entry.item.name, codes: null, codesLabel: null }
+            : (entry.values.get(column.key) ?? { text: null, codes: null, codesLabel: null }),
+        ),
+        image: entry.image,
+      })),
+    };
+  };
+
+  const initialRows = Math.min(AFFECTED_PRODUCTS_INITIAL_ROWS, entries.length);
+  const expanded = view(entries);
   return {
-    columns,
-    rows,
-    initialRows: Math.min(AFFECTED_PRODUCTS_INITIAL_ROWS, rows.length),
-    seeAllLabel: rows.length > AFFECTED_PRODUCTS_INITIAL_ROWS ? `See all (${rows.length})` : null,
+    // Columns are justified by the rows each view actually shows: collapsed
+    // uses the first three, and "See all" recomputes over every row.
+    collapsed: entries.length > initialRows ? view(entries.slice(0, initialRows)) : expanded,
+    expanded,
+    initialRows,
+    seeAllLabel:
+      entries.length > AFFECTED_PRODUCTS_INITIAL_ROWS ? `See all (${entries.length})` : null,
   };
 }
 
@@ -1064,8 +1142,10 @@ export interface DetailModel {
   action: ConsumerAction;
   healthRisk: string | null;
   attachments: OfficialAttachment[];
-  /** Remaining official imagery (gallery + label renders), hero deduplicated. */
-  galleryPhotos: ProductPhoto[];
+  /** The full P2c image-role allocation: the hero, per-row assignments, the
+   * deduplicated future-carousel gallery, and retained supporting assets.
+   * One owner — screens render its verdicts and decide nothing. */
+  images: RecallImageAllocation;
   /** The exact official headline, when the cleaned name differs. */
   officialTitle: string | null;
   /** 'FDA' / 'USDA FSIS' for provenance/share copy. */
@@ -1125,11 +1205,27 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
         ? visual.width / visual.height
         : null,
   }));
-  const heroImageUrl = projection.heroImageUrl ?? null;
-  const galleryPhotos = [...consumer.photos, ...labelVisuals].filter(
-    (photo) => photo.url !== heroImageUrl,
-  );
   const affectedProductsView = affectedProductsModel(consumer.packageCheck, productName);
+  // The one image-role allocation (P2c): the stored hero resolved, row images
+  // assigned only on official evidence, the gallery deduplicated — and no
+  // asset ever holding two visible roles. Screens consume the verdicts.
+  const images = allocateRecallImages({
+    heroImageUrl: projection.heroImageUrl ?? null,
+    photos: consumer.officialPhotos,
+    labelVisuals,
+    rows: affectedProductsView.items.map((item): RowImageCandidate => {
+      const size = item.fields.find((field) => field.key === 'size')?.value ?? null;
+      return {
+        rowId: item.rowId,
+        name: item.name,
+        // A merged multi-size cell is not one matchable size.
+        size: size !== null && !size.includes(',') ? size : null,
+        upc: item.fields.find((field) => field.key === 'upc')?.value ?? null,
+        sourcePhotoUrl: item.photo?.url ?? null,
+      };
+    }),
+  });
+  const heroImageUrl = images.hero?.url ?? null;
 
   return {
     id: detail.id,
@@ -1154,7 +1250,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     quantityLine: quantityLine(projection.sourceAgency, consumer.quantityText, happened.text),
     whereSold: whereSoldModel(consumer.distribution),
     affectedProducts: affectedProductsView,
-    affectedProductsTable: affectedProductsTable(affectedProductsView),
+    affectedProductsTable: affectedProductsTable(affectedProductsView, images.rowImages),
     action: consumer.action,
     healthRisk: healthRiskSummary(
       projection.hazardCategory,
@@ -1162,7 +1258,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
       projection.reasonText,
     ),
     attachments: extractAttachmentLinks(projection.summaryHtml),
-    galleryPhotos,
+    images,
     officialTitle: productName !== projection.title ? projection.title : null,
     agencyLabel: agencyLabel(projection.sourceAgency),
     sourceOrganization:

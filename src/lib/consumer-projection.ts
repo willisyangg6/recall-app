@@ -76,6 +76,7 @@ import { consumerActionDisplay } from './recall-display';
 import { extractAffectedProductLists, extractDistributionListStates } from './source-lists';
 import { interpretTables, type SemanticFact } from './source-tables';
 import {
+  captionContradictsPackage,
   containsPackagingContainer,
   isGeographicName,
   measurementKey,
@@ -83,6 +84,7 @@ import {
   packagingOnlyName,
   splitTrailingMeasurements,
   variantIdentityRejection,
+  type PackageIdentity,
 } from './variant-identity';
 
 // ── Output shape ────────────────────────────────────────────────────────────
@@ -244,6 +246,11 @@ export interface ConsumerAction {
 
 export interface ConsumerCase {
   photos: ProductPhoto[];
+  /** The COMPLETE extracted official photo set — recognition images and
+   * identifier close-ups alike — for the shared image-role allocator (P2c),
+   * which owns suitability and role exclusivity itself. `photos` above stays
+   * the recognition-filtered gallery view. */
+  officialPhotos: ProductPhoto[];
   primaryPhoto: ProductPhoto | null;
   distribution: ConsumerDistribution;
   packageCheck: ConsumerPackageCheck;
@@ -835,9 +842,15 @@ function normalizeForContains(text: string): string {
 
 // ── Variants ────────────────────────────────────────────────────────────────
 
-/** Trailing size inside a variant name ("… Bread, Net Wt. 8 oz (227g)"). */
+/** Trailing size inside a variant name ("… Bread, Net Wt. 8 oz (227g)").
+ * The closed unit vocabulary includes package COUNTS ("6 Bars", "24 Bars",
+ * "100 pieces") — a trailing anchored number-plus-count phrase is package-size
+ * evidence exactly like a weight, whichever structural path named the
+ * version. The digit must immediately precede the unit word, so names that
+ * merely contain the vocabulary ("Fruit Bars Strawberry", "3 Musketeers
+ * Bars") are never stripped. */
 const EMBEDDED_SIZE =
-  /,?\s*(?:net\s+wt\.?|net\s+weight|weight)?\s*:?\s*(\d[\d./]*\s*(?:oz|ounce|ounces|lb|lbs|pound|pounds|g|gram|grams|kg|ml|l|fl\.?\s*oz|count|ct|pack|pk)\b[^,]*)$/i;
+  /,?\s*(?:net\s+wt\.?|net\s+weight|weight)?\s*:?\s*(\d[\d./]*\s*(?:oz|ounce|ounces|lb|lbs|pound|pounds|g|gram|grams|kg|ml|l|fl\.?\s*oz|count|ct|pack|pk|bars?|pieces?)\b[^,]*)$/i;
 
 function splitVariantName(name: string): { name: string; size: string | null } {
   const match = name.match(EMBEDDED_SIZE);
@@ -1165,36 +1178,75 @@ function captionVariantName(caption: string): { name: string | null; size: strin
   return { name: head, size: null };
 }
 
+/** The closed exact identity a variant's own row states, for the shared
+ * caption-contradiction policy (`captionContradictsPackage`). A merged
+ * multi-size cell is not one matchable size. */
+function variantPackageIdentity(variant: AffectedVariant): PackageIdentity {
+  const size = variant.fields.find((field) => field.key === 'size')?.value ?? null;
+  return {
+    name: variant.name,
+    size: size !== null && !size.includes(',') ? size : null,
+    upc: variant.fields.find((field) => field.key === 'upc')?.value ?? null,
+  };
+}
+
 /**
  * Attach each photo to the version its own caption names. Used when the source
  * captions its images with product names (Prince Bakery) rather than relying on
  * position. Matching is exact on the normalized name, so a photo is never
- * shown against a version it does not depict.
+ * shown against a version it does not depict — and it yields to the caption's
+ * own testimony: a caption stating a barcode or size the row does not state
+ * depicts a sibling package (the shared contradiction policy, identical to the
+ * display allocator's), so that pairing is never stored. When several
+ * identical-named versions could equally own a photo, none of them gets it —
+ * an association is proven or absent, never guessed.
  */
 function attachNamedPhotos(variants: AffectedVariant[], photos: ProductPhoto[]): AffectedVariant[] {
   const gallery = galleryPhotos(photos);
   if (gallery.length === 0) return variants;
   const used = new Set<string>();
-  const matched = new Map<string, ProductPhoto>();
+  // Keyed by variant identity, not by name: sibling versions frequently share
+  // one name and differ only by UPC or size, and each must hold its OWN
+  // association (or none) — a name-keyed map cannot represent that.
+  const matched = new Map<AffectedVariant, ProductPhoto>();
   // The most specific version claims first, so "Sesame Italian Bread Large"
   // takes its own photo before "Sesame Italian Bread" can match the same
   // caption by prefix; then the closest remaining caption wins.
   for (const variant of [...variants].sort(
     (a, b) => dedupeKey(b.name).length - dedupeKey(a.name).length,
   )) {
-    if (variant.photo) continue;
+    if (variant.photo || matched.has(variant)) continue;
     const key = dedupeKey(variant.name);
     if (key.length < 6) continue;
     const match = gallery
-      .filter((photo) => !used.has(photo.url) && dedupeKey(photo.alt ?? '').startsWith(key))
+      .filter(
+        (photo) =>
+          !used.has(photo.url) &&
+          dedupeKey(photo.alt ?? '').startsWith(key) &&
+          !captionContradictsPackage(photo.alt ?? '', variantPackageIdentity(variant)),
+      )
       .sort((a, b) => dedupeKey(a.alt ?? '').length - dedupeKey(b.alt ?? '').length)[0];
     if (!match) continue;
+    // Sibling ambiguity: another unclaimed version with the SAME name that
+    // this caption does not rule out could equally own the photo. Only a
+    // caption whose stated identifiers discriminate (each sibling it does
+    // not depict is contradicted) proves the pairing; otherwise the photo
+    // stays unassigned for a later correctly-supported role.
+    const ambiguous = variants.some(
+      (sibling) =>
+        sibling !== variant &&
+        sibling.photo === null &&
+        !matched.has(sibling) &&
+        dedupeKey(sibling.name) === key &&
+        !captionContradictsPackage(match.alt ?? '', variantPackageIdentity(sibling)),
+    );
+    if (ambiguous) continue;
     used.add(match.url);
-    matched.set(variant.name, match);
+    matched.set(variant, match);
   }
   return variants.map((variant) => ({
     ...variant,
-    photo: variant.photo ?? matched.get(variant.name) ?? null,
+    photo: variant.photo ?? matched.get(variant) ?? null,
   }));
 }
 
@@ -2771,6 +2823,7 @@ export function buildConsumerCase(
     // close-ups are held back for the package checker, where they answer the
     // different question the consumer is asking there.
     photos: galleryPhotos(photos),
+    officialPhotos: photos,
     primaryPhoto: primaryPhoto(photos),
     distribution: buildDistribution(projection, tableFacts),
     packageCheck,

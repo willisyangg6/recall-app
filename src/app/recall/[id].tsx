@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -92,14 +92,72 @@ function WhereItWasSold({ model }: { model: WhereSoldModel }) {
   return model.lead ? <ThemedText>{model.lead}</ThemedText> : null;
 }
 
+/** The one code set a row's in-cell control has opened, for the modal. */
+interface OpenRowCodes {
+  rowId: string;
+  /** The row's product identity, shown as the modal's context. */
+  name: string | null;
+  codes: LotCodeSet;
+}
+
 /**
- * The compact Affected Products table (P2b): column labels render once as the
- * uppermost row, then one affected version per row, in source order. The
- * whole table scrolls horizontally as one unit so header and row cells stay
- * aligned. An empty cell stays empty — no dash, no "unknown", no value
- * borrowed from another version. At most three rows render initially; the
- * model's `See all (N)` control reveals the rest inline and collapses again.
- * No version image or placeholder renders here (P2c owns image roles).
+ * The modal a row's "View N codes" control opens: exactly that row's codes
+ * and its source-supported code/date pairs, titled by the row's product
+ * identity, with an explicit Close control. A plain accessible React Native
+ * modal — no dependency, no navigation route; closing returns to the same
+ * table position because the table never moved.
+ */
+function RowCodesModal({ open, onClose }: { open: OpenRowCodes | null; onClose: () => void }) {
+  return (
+    <Modal
+      visible={open !== null}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      accessibilityViewIsModal>
+      <View style={styles.modalBackdrop}>
+        <ThemedView type="background" style={styles.modalCard}>
+          {open ? (
+            <>
+              {open.name ? <ThemedText type="subtitle">{open.name}</ThemedText> : null}
+              <ThemedText type="small" themeColor="textSecondary">
+                {`${open.codes.label.toUpperCase()}S · ${open.codes.count} AFFECTED`}
+              </ThemedText>
+              <ScrollView style={styles.modalScroll}>
+                {open.codes.pairs.length > 0 ? (
+                  open.codes.pairs.map((pair) => (
+                    <ThemedText key={pair.code} type="small">
+                      {pair.code} · {pair.date}
+                    </ThemedText>
+                  ))
+                ) : (
+                  <ThemedText type="small">{open.codes.codes.join(', ')}</ThemedText>
+                )}
+              </ScrollView>
+              <Pressable accessibilityRole="button" onPress={onClose}>
+                <ThemedText themeColor="link">Close</ThemedText>
+              </Pressable>
+            </>
+          ) : null}
+        </ThemedView>
+      </View>
+    </Modal>
+  );
+}
+
+/**
+ * The compact Affected Products table (P2b, restructured): column labels
+ * render once as the uppermost row, then one affected version per row, in
+ * source order. The whole table scrolls horizontally as one unit so header
+ * and row cells stay aligned. The model supplies TWO precomputed views —
+ * collapsed (first three rows) and expanded — each with columns justified by
+ * exactly the rows it shows, so no rendered column is ever entirely empty.
+ * An empty cell stays empty — no dash, no "unknown", no value borrowed from
+ * another version. A version's image renders beside its Product value only
+ * when the shared image-role allocation assigned one to that exact row
+ * (P2c). A row's collapsed code set renders as that row's own in-cell
+ * "View N codes" control opening the row-keyed modal — the table is the only
+ * affected-product presentation, and no code list renders beneath it.
  */
 function AffectedProductsTableView({
   table,
@@ -110,13 +168,14 @@ function AffectedProductsTableView({
   expanded: boolean;
   onToggleExpanded: () => void;
 }) {
-  const rows = expanded ? table.rows : table.rows.slice(0, table.initialRows);
+  const [openCodes, setOpenCodes] = useState<OpenRowCodes | null>(null);
+  const view = expanded ? table.expanded : table.collapsed;
   return (
     <View style={styles.step}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View>
           <View style={styles.tableRow}>
-            {table.columns.map((column) => (
+            {view.columns.map((column) => (
               <ThemedText
                 key={column.key}
                 type="small"
@@ -126,13 +185,45 @@ function AffectedProductsTableView({
               </ThemedText>
             ))}
           </View>
-          {rows.map((row) => (
+          {view.rows.map((row) => (
             <ThemedView key={row.id} type="backgroundElement" style={styles.tableRow}>
-              {row.cells.map((cell, index) => (
-                <ThemedText key={table.columns[index].key} type="small" style={styles.tableCell}>
-                  {cell ?? ''}
-                </ThemedText>
-              ))}
+              {row.cells.map((cell, index) =>
+                view.columns[index].key === 'product' ? (
+                  // The version's own image (P2c) renders left of the Product
+                  // value only when the shared allocator assigned one to this
+                  // exact row — no placeholder, no reserved space otherwise.
+                  <View key="product" style={[styles.tableCell, styles.productCell]}>
+                    {row.image ? (
+                      <PhotoThumbnail
+                        uri={row.image.url}
+                        alt={row.image.accessibilityText}
+                        size={40}
+                      />
+                    ) : null}
+                    <ThemedText type="small" style={styles.productCellText}>
+                      {cell.text ?? ''}
+                    </ThemedText>
+                  </View>
+                ) : cell.codes ? (
+                  // This row's own collapsed code set: the in-cell control
+                  // opens the modal with exactly this row's codes.
+                  <View key={view.columns[index].key} style={styles.tableCell}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setOpenCodes({ rowId: row.id, name: row.name, codes: cell.codes! })
+                      }>
+                      <ThemedText themeColor="link" type="small">
+                        {cell.codesLabel}
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <ThemedText key={view.columns[index].key} type="small" style={styles.tableCell}>
+                    {cell.text ?? ''}
+                  </ThemedText>
+                ),
+              )}
             </ThemedView>
           ))}
         </View>
@@ -147,6 +238,7 @@ function AffectedProductsTableView({
           </ThemedText>
         </Pressable>
       ) : null}
+      <RowCodesModal open={openCodes} onClose={() => setOpenCodes(null)} />
     </View>
   );
 }
@@ -276,8 +368,9 @@ export default function RecallDetailScreen() {
           {model.officialSource.label}
         </ThemedText>
 
-        {/* The primary hero renders ONCE, near the title; no image repeats
-            lower on the page (P2c owns full image-role allocation). */}
+        {/* The hero renders ONCE, near the title, from the shared image-role
+            allocation (P2c): the same underlying asset can never also appear
+            as a row image or gallery entry. Null renders nothing. */}
         {model.heroImageUrl ? (
           <PhotoThumbnail uri={model.heroImageUrl} alt={model.productName} size={160} />
         ) : null}
@@ -326,27 +419,9 @@ export default function RecallDetailScreen() {
               onToggleExpanded={() => setTableExpanded((prior) => !prior)}
             />
           ) : null}
-          {/* A version's OWN collapsed code set stays attributed to that
-              version: its disclosure renders beneath the table under the
-              row's product name. */}
-          {(model.affectedProductsTable?.rows ?? [])
-            .slice(0, tableExpanded ? undefined : model.affectedProductsTable?.initialRows)
-            .filter((row) => row.codes !== null)
-            .map((row) => (
-              <View key={`codes-${row.id}`} style={styles.step}>
-                {row.name ? (
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {row.name}
-                  </ThemedText>
-                ) : null}
-                <CodeSet
-                  codes={row.codes}
-                  expanded={openCodeSets.has(`row-${row.id}`)}
-                  onToggle={() => toggleCodeSet(`row-${row.id}`)}
-                />
-              </View>
-            ))}
-          {/* Production codes are opaque, so the calendar dates they stand
+          {/* Row codes live INSIDE the table (each row's own in-cell
+              "View N codes" control) — no code disclosure renders below it.
+              Production codes are opaque, so the calendar dates they stand
               for lead and the codes follow behind a tap. */}
           {products.productionDates ? (
             <ThemedText type="small">
@@ -434,5 +509,36 @@ const styles = StyleSheet.create({
     width: 148,
     paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.one,
+  },
+  // A Product cell with a matched version image: thumbnail left of the value,
+  // inside the same fixed cell width so the grid stays aligned. Rows without
+  // an image keep the plain text cell — nothing is reserved.
+  productCell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+  },
+  productCellText: {
+    flexShrink: 1,
+  },
+  // The row-codes modal: a centered card over a dimmed backdrop; the code
+  // list scrolls inside the card so a long set never pushes Close off-screen.
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.three,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '75%',
+    borderRadius: Radii.small,
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  modalScroll: {
+    flexGrow: 0,
   },
 });

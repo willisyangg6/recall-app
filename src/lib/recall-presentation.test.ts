@@ -615,12 +615,20 @@ test('absent imagery is a null model field, and the detail gallery deduplicates 
   );
   // Detail shows the SAME selected hero Home shows…
   assert.equal(withHero.heroImageUrl, 'https://www.fda.gov/files/hero.jpg');
-  // …and the preserved gallery never repeats it.
-  assert.ok(!withHero.galleryPhotos.some((photo) => photo.url === withHero.heroImageUrl));
-  assert.equal(withHero.galleryPhotos.length, 1);
+  assert.equal(withHero.images.hero?.url, 'https://www.fda.gov/files/hero.jpg');
+  // …and the allocation's gallery never repeats it — the label render is the
+  // one remaining gallery candidate, carried with its provenance.
+  assert.ok(!withHero.images.gallery.some((image) => image.url === withHero.heroImageUrl));
+  assert.equal(withHero.images.gallery.length, 1);
+  assert.equal(withHero.images.gallery[0].source, 'fsis_label_render');
+  // A label render's stored alt is our wording, never an official caption.
+  assert.equal(withHero.images.gallery[0].caption, null);
 
   const noHero = buildDetailModel(detail({}), { today: TODAY, affectsYou: false });
   assert.equal(noHero.heroImageUrl, null);
+  assert.equal(noHero.images.hero, null);
+  assert.deepEqual(noHero.images.gallery, []);
+  assert.equal(noHero.images.rowImages.size, 0);
 });
 
 // ── 22: official-link labels ────────────────────────────────────────────────
@@ -1417,18 +1425,25 @@ test('the table: headers once, Product first, columns only where a row has data'
   assert.ok(table);
   // Product leads; then the stable field order; no column exists without data.
   assert.deepEqual(
-    table!.columns.map((column) => column.label),
+    table!.expanded.columns.map((column) => column.label),
     ['Product', 'Package Size', 'Best by', 'Barcode (UPC)'],
   );
   // A missing cell stays EMPTY (null) — never a dash, never a borrowed value.
-  assert.deepEqual(table!.rows[0].cells, ['Strawberry Bars', '6 Bars', null, '041548610047']);
-  assert.deepEqual(table!.rows[1].cells, ['Grape Bars', null, 'October 31, 2027', '041548244044']);
-  // Two rows need no reveal control.
+  assert.deepEqual(
+    table!.expanded.rows[0].cells.map((cell) => cell.text),
+    ['Strawberry Bars', '6 Bars', null, '041548610047'],
+  );
+  assert.deepEqual(
+    table!.expanded.rows[1].cells.map((cell) => cell.text),
+    ['Grape Bars', null, 'October 31, 2027', '041548244044'],
+  );
+  // Two rows need no reveal control, and the two views are identical.
   assert.equal(table!.seeAllLabel, null);
   assert.equal(table!.initialRows, 2);
+  assert.deepEqual(table!.collapsed, table!.expanded);
   // Stable row identity for P2c image assignment.
   assert.deepEqual(
-    table!.rows.map((row) => row.id),
+    table!.expanded.rows.map((row) => row.id),
     ['t0r0', 't0r1'],
   );
 });
@@ -1445,7 +1460,8 @@ test('the table shows at most three rows initially, with See all (N) beyond', ()
   );
   const table = affectedProductsTable(model);
   assert.ok(table);
-  assert.equal(table!.rows.length, 5);
+  assert.equal(table!.expanded.rows.length, 5);
+  assert.equal(table!.collapsed.rows.length, AFFECTED_PRODUCTS_INITIAL_ROWS);
   assert.equal(table!.initialRows, AFFECTED_PRODUCTS_INITIAL_ROWS);
   assert.equal(table!.seeAllLabel, 'See all (5)');
 });
@@ -1463,11 +1479,17 @@ test('a demoted row keeps its own facts: name null, no Product masquerade', () =
   // The packaging-only name demoted: its row survives with an empty Product
   // cell and its own Sell by — the date is never relabeled or reassigned.
   assert.deepEqual(
-    table!.columns.map((column) => column.label),
+    table!.expanded.columns.map((column) => column.label),
     ['Product', 'Sell by', 'Packaging'],
   );
-  assert.deepEqual(table!.rows[0].cells, [null, 'July 8, 2026–June 29, 2027', 'Cardboard boxes']);
-  assert.deepEqual(table!.rows[1].cells, ['Potato Market Loaf', 'July 9, 2026', null]);
+  assert.deepEqual(
+    table!.expanded.rows[0].cells.map((cell) => cell.text),
+    [null, 'July 8, 2026–June 29, 2027', 'Cardboard boxes'],
+  );
+  assert.deepEqual(
+    table!.expanded.rows[1].cells.map((cell) => cell.text),
+    ['Potato Market Loaf', 'July 9, 2026', null],
+  );
 });
 
 test('with no items there is no table; the model reports its honest state instead', () => {
@@ -1504,23 +1526,64 @@ test('proven-shared evidence repeats in every row — no shared-facts structure'
   // The column exists once; the proven value repeats inside every row —
   // there is no separate shared-facts structure anywhere in the table shape.
   assert.deepEqual(
-    table!.columns.map((column) => column.label),
+    table!.expanded.columns.map((column) => column.label),
     ['Product', 'Package Size', 'Sell by'],
   );
-  assert.deepEqual(table!.rows[0].cells, [
-    'Buffalo Chicken Rangoon',
-    '100 pieces',
-    'July 8, 2026–June 29, 2027',
-  ]);
-  assert.deepEqual(table!.rows[1].cells, [
-    'Benedetto’s Mozzarella Stick',
-    '120 pieces',
-    'July 8, 2026–June 29, 2027',
-  ]);
+  assert.deepEqual(
+    table!.expanded.rows[0].cells.map((cell) => cell.text),
+    ['Buffalo Chicken Rangoon', '100 pieces', 'July 8, 2026–June 29, 2027'],
+  );
+  assert.deepEqual(
+    table!.expanded.rows[1].cells.map((cell) => cell.text),
+    ['Benedetto’s Mozzarella Stick', '120 pieces', 'July 8, 2026–June 29, 2027'],
+  );
   // Row-specific values stay row-specific — sharing one field never merges
   // the others.
-  assert.notEqual(table!.rows[0].cells[1], table!.rows[1].cells[1]);
-  assert.deepEqual(Object.keys(table!), ['columns', 'rows', 'initialRows', 'seeAllLabel']);
+  assert.notEqual(table!.expanded.rows[0].cells[1].text, table!.expanded.rows[1].cells[1].text);
+  assert.deepEqual(Object.keys(table!), ['collapsed', 'expanded', 'initialRows', 'seeAllLabel']);
+});
+
+test('a collapsed code set is its row\u2019s own in-cell control — and its column obeys the views', () => {
+  // Four rows: the three initially visible carry no codes; the hidden fourth
+  // owns a large collapsed set. Collapsed shows NO codes column at all;
+  // See all recomputes the columns and the code-bearing row presents its own
+  // "View N codes" control — never an empty cell, never a list below the
+  // table, never a sibling\u2019s codes.
+  const check = tableCheck([
+    { name: 'Vanilla Cup', fields: [['upc', '000000000001']] },
+    { name: 'Chocolate Cup', fields: [['upc', '000000000002']] },
+    { name: 'Caramel Cup', fields: [['upc', '000000000003']] },
+    { name: 'Strawberry Cup', fields: [['upc', '000000000004']] },
+  ]);
+  const codeSet = {
+    count: 6,
+    codes: ['4327', '4330', '4331', '4332', '4333', '4334'],
+    pairs: [{ code: '4327', date: 'November 22, 2025' }],
+    label: 'Batch code',
+  };
+  check.variants[3].lotCodes = codeSet;
+  const table = affectedProductsTable(affectedProductsModel(check, 'Cups'));
+  assert.ok(table);
+  assert.equal(table!.seeAllLabel, 'See all (4)');
+  // Collapsed: no visible row justifies a codes column, so none renders.
+  assert.deepEqual(
+    table!.collapsed.columns.map((column) => column.key),
+    ['product', 'upc'],
+  );
+  // Expanded: the column appears; the owning row carries the in-cell control
+  // with exactly its own set; the visible siblings hold honest empty cells.
+  assert.deepEqual(
+    table!.expanded.columns.map((column) => column.key),
+    ['product', 'upc', 'batchCodes'],
+  );
+  const codesIndex = 2;
+  const cells = table!.expanded.rows.map((row) => row.cells[codesIndex]);
+  assert.deepEqual(
+    cells.map((cell) => cell.codesLabel),
+    [null, null, null, 'View 6 codes'],
+  );
+  assert.deepEqual(cells[3].codes, codeSet);
+  assert.ok(cells.slice(0, 3).every((cell) => cell.text === null && cell.codes === null));
 });
 
 test('ambiguous case-level evidence never reaches a row cell', () => {
@@ -1537,8 +1600,8 @@ test('ambiguous case-level evidence never reaches a row cell', () => {
   ];
   const table = affectedProductsTable(affectedProductsModel(check, 'Fruit Bars'));
   assert.ok(table);
-  assert.ok(!table!.columns.some((column) => column.key === 'lotCodes'));
-  for (const row of table!.rows) {
-    assert.ok(!row.cells.some((cell) => cell?.includes('999111')));
+  assert.ok(!table!.expanded.columns.some((column) => column.key === 'lotCodes'));
+  for (const row of table!.expanded.rows) {
+    assert.ok(!row.cells.some((cell) => cell.text?.includes('999111')));
   }
 });

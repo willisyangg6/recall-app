@@ -1,9 +1,11 @@
 # Official imagery: reliability and enrichment foundation (C9)
 
-Audited and implemented 2026-08-29; corrected 2026-08-30. This document is
+Audited and implemented 2026-08-29; corrected 2026-08-30; display
+image-role allocation (P2c) added 2026-09-02 (§13). This document is
 the imagery system's contract: where every image comes from, what counts as
-card imagery versus detail evidence, the URL and fetch security rules, and
-why no third-party image provider is integrated.
+card imagery versus detail evidence, how display roles are allocated, the
+URL and fetch security rules, and why no third-party image provider is
+integrated.
 
 Two governing principles:
 
@@ -346,3 +348,124 @@ This is a deferral, not a dead end. It can be revisited later — with a
 licensed catalog, or with a classifier that clears the precision bar — and
 **revisiting it changes nothing about current hero behavior**, because
 nothing was built against it.
+
+## 13. Display image-role allocation (P2c)
+
+Implemented 2026-09-02. Everything above governs where images come from and
+which one is the stored card hero; this section governs how a recall's
+official imagery is split into **display roles** on the Detail screen. The
+implementation is `src/lib/recall-images.ts` (`allocateRecallImages`), one
+pure deterministic layer consumed only by the shared presentation contract
+(`buildDetailModel` → `DetailModel.images`). Screens render the allocation's
+verdicts and never rank, match, clean, or deduplicate images themselves —
+`src/lib/recall-presentation-wiring.test.ts` pins the wiring.
+
+### Roles
+
+- **hero** — zero or one image, rendered exactly once near the Detail title.
+  The allocator never selects a hero: it resolves the stored authoritative
+  selection (`projection.heroImageUrl`, the frozen policy of §2) into the
+  normalized image set. A hero URL not among the currently extracted photos
+  (a merged multi-record case) still renders, with `classification: null`.
+  No hero anywhere in the recorded corpus changed under P2c (test-pinned).
+- **affected-row image** — at most one image per affected-product row, keyed
+  by the stable P2b row identity, rendered left of the row's Product value.
+  Absence renders nothing: no placeholder, no reserved space.
+- **gallery** — the remaining unique suitable official images (recognizable
+  announcement photos in source order, then FSIS label renders), preserved
+  for the future top carousel. Not rendered yet.
+- **supporting** — retained non-visible assets (barcode/date-code close-ups
+  and other supplementary images), preserved for the package-comparison
+  surface. Never product imagery.
+
+Deduplication precedes role assignment (one normalized image per official
+URL; the byte-stability rule of §4 makes URL equality the asset identity).
+**An asset cannot occupy multiple visible roles except for one
+evidence-proven hero-to-row reuse in a multi-version table** (integration
+correction, 2026-09-02): case hero and exact-version table thumbnail are two
+different contexts, so the hero may also render as the thumbnail of exactly
+the one row it provably depicts — through the same name/size/UPC evidence
+gates and contradiction vetoes as any other image, never by array position,
+never to fill the first row, and never when the exact row is ambiguous. In
+a single-row table the hero stays hero-only (repeating the same image
+immediately below adds nothing). Every other pairing stays exclusive: the
+hero never enters the gallery or supporting set, no image backs two rows,
+and no gallery entry repeats. This retires the audited duplication shape
+`hero == primaryPhoto == checkerPhotos[0]` (Sun Hong, Jaime's Jalapeno
+Ranch): those model fields still exist internally, but only the allocation
+renders.
+
+### Affected-row matching evidence
+
+An image reaches a row only through official evidence connecting it to that
+exact version. Closed evidence set:
+
+- `source_row` — the projection's own evidence-gated attachment: the
+  source's table deferred its rows to the images ("See Image Below", exact
+  count match, caption-derived identity — Outshine), or a caption named the
+  version (Prince Bakery). Established in `src/lib/consumer-projection.ts`
+  and consumed here. Corrected 2026-09-02: the caption-name attachment is
+  identity-keyed (a name-keyed map could not represent same-named sibling
+  rows), applies the same contradiction policy as this allocator, and
+  refuses a photo that several identical-named siblings could equally own —
+  a caption proves a sibling pairing only by discriminating (contradicting
+  every sibling it does not depict, as 4Earth Farms' per-row UPC captions
+  do). An unproven photo stays an unassigned official image, available to
+  the gallery.
+- `caption_name` — an official caption contains the row's exact product
+  identity, the row's name is unique among rows, the most specific version
+  claims first, the shortest matching caption wins, and any tie is treated
+  as ambiguity (Great One Trading's brand-prefixed labels).
+- `caption_name_size` — the caption contains the row's identity **and**
+  states the row's exact package size, for sibling rows that share a name
+  and differ by size (Crystal Temptations). Exact size-token equality: a
+  "10 oz" row can never claim a "10.5 oz" caption.
+
+Guards that apply to every mechanism:
+
+- **Contradiction veto**: a caption stating a different barcode-length code
+  or a package size the row does not state depicts a sibling package, and
+  the match is dropped — even a source-established one (observed: 4Earth
+  Farms' same-named medleys differing only by UPC; Conagra's 15 oz vs
+  24 oz dressings). Caption silence never contradicts. The policy is ONE
+  shared pure function (`captionContradictsPackage`,
+  `src/lib/variant-identity.ts`), enforced at BOTH layers — the
+  projection's photo attachment refuses to store a contradicted
+  association, and this allocator independently refuses to render one — so
+  the two layers cannot disagree about what a caption rules out.
+- The pairing must be unambiguous. Two rows a caption fits equally, or two
+  captions a row fits equally, assign nothing (Conagra's two 15 oz rows).
+- Only recognizable announcement photos are row-assignable: identifier
+  close-ups, supplementary shots, and label renders never decorate a row.
+- The hero enters the row pool only in a multi-version table (the
+  controlled reuse above); in a single-row table it is excluded up front.
+- Caption matching runs only when the model has two or more rows: row
+  images exist to tell versions apart; a single row's product is already
+  identified by the hero.
+- Array position alone is never evidence, anywhere.
+- Accessibility text derives only from the row's own supported identity
+  (name, plus its size when stated) — never from caption prose.
+
+### Pins and audit
+
+`src/lib/recall-images.test.ts` pins the allocator contract.
+`src/server/fda/presentation-regressions.test.ts` pins the recorded shapes
+(Jalapeno Ranch, Outshine, Crystal Temptations, Sun Hong, Great One, a
+no-image notice) and runs two corpus-wide audits: the visible-allocation
+audit (hero unchanged everywhere, role exclusivity everywhere, the complete
+row-image census pinned entry-by-entry, each manually reviewed against its
+official caption; 53 assignments across 13 corpus cases as re-recorded after the
+integration correction, including the evidence-proven hero reuses —
+Outshine Strawberry, Great One Mushroom Fish Ball, 4Earth's 711…733 medley,
+Conagra Chunky Blue Cheese, Prince Pan de Manjeca, Russ Davis Crazy Fresh,
+Enjoy Life Snickerdoodle; Crystal's 10 oz hero reuse is pinned by its own
+recorded fixture) and the stored-association
+audit (no stored variant photo
+contradicts its own caption, and no origin/net-weight pseudo-product row
+exists anywhere — the Tony's Chocolonely shape, where one product photo
+cannot be pinned to one of four sibling lot rows, stays honestly
+unassigned). A changed census entry fails the suite and must be
+re-reviewed, not re-pinned blindly.
+
+Nothing in this section touches ingestion, projection, storage, or the
+frozen policies above: allocation is display-time, derived, and reversible.

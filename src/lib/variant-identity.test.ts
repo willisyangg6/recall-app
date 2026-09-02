@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  captionContradictsPackage,
   isGeographicName,
   packagingOnlyName,
   splitTrailingMeasurements,
@@ -224,4 +225,74 @@ test('trailing measurement lists split off a base name; measurement-only values 
   // Names without a trailing measurement never split.
   assert.equal(splitTrailingMeasurements('Nerds Gummy Clusters'), null);
   assert.equal(splitTrailingMeasurements('100% Grass-fed Pepper Jack Cheese'), null);
+});
+
+test('origin and net-weight statements are never variant identities', () => {
+  // Recorded Sun Hong: a package-description comma list flattened into prose
+  // variants — label metadata, not products.
+  assert.equal(variantIdentityRejection('Product of Korea'), 'origin-statement');
+  assert.equal(variantIdentityRejection('Product of the USA'), 'origin-statement');
+  assert.equal(variantIdentityRejection('Products of Mexico'), 'origin-statement');
+  assert.equal(variantIdentityRejection('Net weight 7.05 oz/200g'), 'measurement-statement');
+  assert.equal(variantIdentityRejection('Net Wt. 12 oz'), 'measurement-statement');
+  // A colon-labelled weight is caught earlier as a field label — either
+  // category keeps it out of Product.
+  assert.notEqual(variantIdentityRejection('Weight: 5 lb'), null);
+  assert.equal(variantIdentityRejection('Weight 5 lb'), 'measurement-statement');
+});
+
+test('genuine names containing origin/weight vocabulary still pass', () => {
+  // Containing the words is not being the statement — the rejections are
+  // whole-candidate and anchored.
+  assert.equal(variantIdentityRejection('Korean Rice Cakes'), null);
+  assert.equal(variantIdentityRejection('Korea Farm Enoki Mushrooms'), null);
+  assert.equal(variantIdentityRejection('Dairy Products Assortment'), null);
+  assert.equal(variantIdentityRejection('Weight Watchers Smart Ones Desserts'), null);
+  assert.equal(variantIdentityRejection('Net Cost Sour Cream'), null);
+  // A name carrying a measurement is still a product (demotion of
+  // measurement-ONLY names is the presentation contract's job, not a
+  // rejection here).
+  assert.equal(variantIdentityRejection('Enoki Mushroom 150g'), null);
+  assert.equal(variantIdentityRejection('Ukrop’s Baked Spaghetti 62.4-oz Pan'), null);
+});
+
+test('the shared caption-contradiction policy: stated identifiers veto, silence never does', () => {
+  const pkg = { name: 'Organic Vegetable Medley', size: '12 oz UPC 711535517733', upc: null };
+  // A caption naming a different barcode depicts a sibling — even when the
+  // row's own barcode lives inside its size cell.
+  assert.equal(
+    captionContradictsPackage('Organic Vegetable Medley 12oz UPC 803944306999', pkg),
+    true,
+  );
+  assert.equal(
+    captionContradictsPackage('Organic Vegetable Medley 12oz UPC 711535517733', pkg),
+    false,
+  );
+  // A caption stating sizes with none the package states is a sibling.
+  assert.equal(
+    captionContradictsPackage('Wish-Bone Thousand Island Dressing, Net Wt 24 oz.', {
+      name: 'Wish-Bone® THOUSAND ISLAND DRESSING',
+      size: '15 oz',
+      upc: null,
+    }),
+    true,
+  );
+  // Silence is not contradiction.
+  assert.equal(
+    captionContradictsPackage('Thousand Island Dressing bottle', {
+      name: 'Wish-Bone® THOUSAND ISLAND DRESSING',
+      size: '15 oz',
+      upc: '041321006456',
+    }),
+    false,
+  );
+  // And a caption with identifiers never vetoes a package that states none.
+  assert.equal(
+    captionContradictsPackage('Everything bar, 6.35 oz, UPC 850011828564', {
+      name: 'Everything Bar',
+      size: null,
+      upc: null,
+    }),
+    false,
+  );
 });

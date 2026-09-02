@@ -40,6 +40,14 @@ const RETIRED_SCREEN_FORMATTERS = [
   'packagingOnlyName(',
   'affectedProductsModel(',
   'affectedProductsTable(',
+  // P2c: image-role allocation lives in the shared contract; a screen may
+  // render the allocation's verdicts but never extract, rank, deduplicate,
+  // or match images itself.
+  'allocateRecallImages(',
+  'extractProductPhotos(',
+  'galleryPhotos(',
+  'primaryPhoto(',
+  'packageCheckPhotos(',
 ];
 
 test('Home renders cards from the presentation model, not its own formatting', () => {
@@ -105,13 +113,19 @@ test('Affected Products renders the shared P2b table model, not screen-built row
   // The screen consumes `model.affectedProductsTable` — columns and cells are
   // decided by the shared contract; no raw fact bags, package-check
   // internals, or rejected facts reach JSX, and the screen composes no field
-  // labels or cell values of its own.
+  // labels or cell values of its own. The model supplies the collapsed and
+  // expanded VIEWS (columns recomputed from the rows each shows) — the
+  // screen only picks which one to render.
   assert.match(DETAIL, /model\.affectedProductsTable/);
-  assert.match(DETAIL, /table\.columns\.map/);
+  assert.match(DETAIL, /expanded \? table\.expanded : table\.collapsed/);
+  assert.match(DETAIL, /view\.columns\.map/);
   assert.match(DETAIL, /row\.cells\.map/);
   assert.ok(!DETAIL.includes('.rejected'), 'Detail reads rejected facts');
   assert.ok(!DETAIL.includes('rawText'), 'Detail renders raw extracted text');
   assert.ok(!DETAIL.includes('PACKAGE_FIELD_LABEL'), 'Detail composes its own field labels');
+  // The screen never re-derives visible columns or rows itself.
+  assert.ok(!DETAIL.includes('rows.slice'), 'the screen slices rows itself');
+  assert.ok(!DETAIL.includes('columns.filter'), 'the screen filters columns itself');
   // The table scrolls horizontally as ONE unit — header and rows together.
   assert.match(DETAIL, /ScrollView[\s\S]{0,40}horizontal/);
   // The reveal control comes from the model ("See all (N)"), collapses again,
@@ -125,12 +139,26 @@ test('Affected Products renders the shared P2b table model, not screen-built row
   // No version image or image placeholder in P2b (P2c owns image roles).
   assert.ok(!DETAIL.includes('item.photo'), 'a version image is rendered');
   assert.ok(!DETAIL.includes('row.photo'), 'a version image is rendered');
-  // Each code disclosure beneath the table is structurally tied to exactly
-  // one row: it renders that row's own `row.codes` under a key derived from
-  // that row's stable id — no path exists to another version's codes.
-  assert.match(DETAIL, /row\.codes/);
-  assert.match(DETAIL, /codes-\$\{row\.id\}/);
-  assert.match(DETAIL, /row-\$\{row\.id\}/);
+});
+
+test('row codes live inside the table: an in-cell control and a row-keyed modal, no lists below', () => {
+  // A row's collapsed code set renders through its own cell's control
+  // (`cell.codes` + the model's label) and opens the modal keyed to exactly
+  // that row — the product identity as context, this row's codes only, an
+  // explicit Close. The retired below-table row-code disclosure area cannot
+  // return, and there is no path to a sibling row's codes.
+  assert.match(DETAIL, /cell\.codes/);
+  assert.match(DETAIL, /cell\.codesLabel/);
+  assert.match(DETAIL, /RowCodesModal/);
+  assert.match(DETAIL, /rowId: row\.id, name: row\.name, codes: cell\.codes/);
+  assert.match(DETAIL, /accessibilityViewIsModal/);
+  assert.match(DETAIL, />Close</);
+  assert.ok(!DETAIL.includes('codes-${row.id}'), 'the below-table row-code disclosure returned');
+  assert.ok(!DETAIL.includes('row-${row.id}'), 'the below-table row-code toggle returned');
+  assert.ok(!DETAIL.includes('row.codes'), 'a row code set is read outside its cell');
+  // No new dependency and no separate navigation route for the modal.
+  assert.match(DETAIL, /Modal[,\s]/);
+  assert.ok(!DETAIL.includes('router.push'), 'the modal became a navigation route');
 });
 
 test('no shared-facts block can render under Affected Products', () => {
@@ -226,4 +254,26 @@ test('both screens share one relevance evaluation — matching logic is not dupl
   assert.match(HOME, /evaluatePersonalRelevance\(/);
   assert.match(DETAIL, /evaluatePersonalRelevance\(/);
   assert.match(DETAIL, /\.affectsMe/);
+});
+
+test('P2c: row images render only the shared allocation — no screen-local matching', () => {
+  // The table row carries the allocator's verdict; the screen renders it
+  // verbatim (URL + conservative accessibility text) and decides nothing.
+  assert.match(DETAIL, /row\.image \?/);
+  assert.match(DETAIL, /uri=\{row\.image\.url\}/);
+  assert.match(DETAIL, /alt=\{row\.image\.accessibilityText\}/);
+  // No screen-side matching signals: the screen never reads captions,
+  // classifications, or the raw photo set to decide what an image belongs to.
+  assert.ok(!DETAIL.includes('.caption'), 'Detail inspects image captions');
+  assert.ok(!DETAIL.includes('.classification'), 'Detail inspects image classification');
+  assert.ok(!DETAIL.includes('rowImages.get'), 'Detail re-derives row assignments');
+  assert.ok(!DETAIL.includes('measurementKey'), 'Detail matches identity keys itself');
+  assert.ok(!HOME.includes('images.'), 'Home reads the detail allocation');
+  // No gallery or supporting imagery renders yet (the carousel is a later
+  // milestone), and no placeholder ever renders for an absent image.
+  assert.ok(!DETAIL.includes('images.gallery'), 'a lower gallery rendered');
+  assert.ok(!DETAIL.includes('images.supporting'), 'supporting close-ups rendered');
+  // The thumbnail render is gated on the assignment itself — an unassigned
+  // row reaches no image element at all, so no placeholder can exist.
+  assert.match(DETAIL, /\{row\.image \? \(/);
 });

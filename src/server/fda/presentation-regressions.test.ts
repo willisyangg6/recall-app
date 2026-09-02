@@ -24,6 +24,7 @@ import type { CaseProjection } from '../../domain/recall-types';
 import {
   affectedProductsModel,
   affectedProductsTable,
+  buildDetailModel,
   caseIdentity,
   cleanProductName,
   conciseReasonLine,
@@ -32,6 +33,7 @@ import {
 import { buildConsumerCase } from '../../lib/consumer-projection';
 import { productDisplayName } from '../../lib/consumer-summary';
 import {
+  captionContradictsPackage,
   measurementKey,
   measurementOnlyName,
   packagingOnlyName,
@@ -207,19 +209,18 @@ test('recorded Jaime’s Jalapeno Ranch: the exact P2b single-row table', () => 
   // values for them (the prose "16 oz glass jars" carries no size label).
   assert.ok(table, 'the table model is missing');
   assert.deepEqual(
-    table!.columns.map((column) => column.label),
+    table!.expanded.columns.map((column) => column.label),
     ['Product', 'Barcode (UPC)', 'Lot codes'],
   );
-  assert.equal(table!.rows.length, 1);
-  assert.deepEqual(table!.rows[0].cells, [
-    'Jalapeno Ranch Dressing',
-    '199284564923',
-    '69, 86, 108, 113, 116, and 121',
-  ]);
+  assert.equal(table!.expanded.rows.length, 1);
+  assert.deepEqual(
+    table!.expanded.rows[0].cells.map((cell) => cell.text),
+    ['Jalapeno Ranch Dressing', '199284564923', '69, 86, 108, 113, 116, and 121'],
+  );
   assert.equal(table!.seeAllLabel, null);
-  // The codes render inline in the row — nothing sits behind a disclosure.
+  // The codes render inline in the row — nothing sits behind a control.
   assert.equal(model.caseCodes, null);
-  assert.equal(table!.rows[0].codes, null);
+  assert.ok(table!.expanded.rows[0].cells.every((cell) => cell.codes === null));
 });
 
 test('recorded Chocolatey Eyeballs: each version keeps its OWN packaging and size', () => {
@@ -266,7 +267,7 @@ test('recorded Chocolatey Eyeballs: each version keeps its OWN packaging and siz
   // Five versions → three initial rows plus a working See all (5).
   assert.ok(table);
   assert.deepEqual(
-    table!.columns.map((column) => column.label),
+    table!.expanded.columns.map((column) => column.label),
     ['Product', 'Package Size', 'Packaging'],
   );
   assert.equal(table!.initialRows, 3);
@@ -301,6 +302,14 @@ test('corpus scan: no measurement, packaging, or non-identity value renders as P
       const label = `${slugFromPath(entry.path)}: ${item.name}`;
       assert.ok(!measurementOnlyName(item.name), `measurement as Product — ${label}`);
       assert.ok(!packagingOnlyName(item.name), `packaging as Product — ${label}`);
+      // A trailing anchored package count ("… 6 Bars", "… 100 pieces") is
+      // Package Size evidence — it never stays inside Product (integration
+      // correction: the shared identity path demotes it for every source
+      // shape, table, list, prose, and caption alike).
+      assert.ok(
+        !/\d[\d./]*\s*(?:bars?|pieces?|count|ct|packs?|pks?)\.?$/i.test(item.name),
+        `trailing package count in Product — ${label}`,
+      );
     }
   }
   assert.ok(scanned >= 155, `only ${scanned} corpus records scanned`);
@@ -425,4 +434,564 @@ test('corpus scan: no malformed because-clause survives in any What Happened', (
     assert.doesNotMatch(happened.text, /^(?:No Brand Name|Multiple brand names|Various)\b/i);
   }
   assert.ok(scanned >= 155, `only ${scanned} corpus records scanned`);
+});
+
+// ── P2c: global image-role allocation ───────────────────────────────────────
+
+/** The full Detail model for one projection — the exact allocation Detail
+ * renders (no label renders here: recorded FDA fixtures carry none). */
+function detailModelFor(projection: CaseProjection) {
+  return buildDetailModel(
+    {
+      id: 'test',
+      projection,
+      timeline: [],
+      affectedProducts: projection.affectedProducts,
+      visuals: [],
+    },
+    { today: '2026-09-02', affectsYou: false },
+  );
+}
+
+function corpusProjection(fragment: string): CaseProjection {
+  const entry = corpus.find((e) => slugFromPath(e.path).includes(fragment));
+  assert.ok(entry, `corpus record missing: ${fragment}`);
+  return projectCase([
+    parseFdaAnnouncement({
+      listing: entry!.listing,
+      detailMainHtml: entry!.mainHtml,
+      path: entry!.path,
+    }),
+  ]);
+}
+
+/**
+ * The role-exclusivity invariant, with the one sanctioned exception: in a
+ * multi-version table the hero may ALSO back exactly the one row it provably
+ * depicts. Everything else stays exclusive — the hero never enters gallery
+ * or supporting, no image backs two rows, and gallery/supporting never
+ * overlap each other or the row images.
+ */
+function assertImageRoleInvariants(model: ReturnType<typeof detailModelFor>, label: string) {
+  const hero = model.images.hero?.url ?? null;
+  const rowUrls = [...model.images.rowImages.values()].map((assignment) => assignment.image.url);
+  const pool = [...model.images.gallery, ...model.images.supporting].map((image) => image.url);
+  assert.equal(new Set(rowUrls).size, rowUrls.length, `${label}: an image backs two rows`);
+  assert.equal(new Set(pool).size, pool.length, `${label}: duplicated gallery/supporting entry`);
+  for (const url of pool) {
+    assert.notEqual(url, hero, `${label}: the hero re-entered gallery/supporting`);
+    assert.ok(!rowUrls.includes(url), `${label}: a row image re-entered gallery/supporting`);
+  }
+  const heroRowUses = rowUrls.filter((url) => url === hero).length;
+  assert.ok(heroRowUses <= 1, `${label}: the hero backs more than one row`);
+  if (heroRowUses === 1) {
+    assert.ok(
+      (model.affectedProductsTable?.expanded.rows.length ?? 0) >= 2,
+      `${label}: hero reused in a single-row table`,
+    );
+  }
+}
+
+const fileName = (url: string) => decodeURIComponent(url).replace(/^.*\//, '').replace(/\?.*$/, '');
+
+test('recorded Jaime’s Jalapeno Ranch: the package image renders once, as the hero only', () => {
+  const { projection } = recordedCase('announcement-jaimes-spanish-village-jalapeno-ranch.json');
+  const model = detailModelFor(projection);
+  // The hero is the stored authoritative selection, unchanged.
+  assert.equal(model.images.hero?.url, projection.heroImageUrl);
+  assert.equal(model.heroImageUrl, projection.heroImageUrl);
+  // A single-row table never reuses the hero — repeating the same image
+  // immediately below the title adds nothing.
+  assert.equal(model.images.rowImages.size, 0);
+  assert.equal(model.affectedProductsTable!.expanded.rows[0].image, null);
+  // The second official label stays a gallery candidate; nothing renders it
+  // as a lower Product Photo section.
+  assert.deepEqual(
+    model.images.gallery.map((image) => fileName(image.url)),
+    ['jamie2.jpeg.png'],
+  );
+  assertImageRoleInvariants(model, 'jalapeno');
+});
+
+test('recorded Outshine: exact flavor thumbnails, count demotion, and in-cell codes', () => {
+  const projection = corpusProjection('outshine-fruit-bars');
+  const model = detailModelFor(projection);
+  const table = model.affectedProductsTable!;
+  assert.equal(model.images.hero?.url, projection.heroImageUrl);
+
+  // Collapsed: exactly three rows, clean names, "6 Bars" in Package Size.
+  const collapsed = table.collapsed;
+  assert.equal(collapsed.rows.length, 3);
+  assert.deepEqual(
+    collapsed.rows.map((row) => row.name),
+    [
+      'Outshine Fruit Bars Strawberry',
+      'Outshine Fruit Bars Grape',
+      'Outshine Fruit Bars Watermelon',
+    ],
+  );
+  const colKey = (view: typeof collapsed, key: string) =>
+    view.columns.findIndex((column) => column.key === key);
+  for (const row of collapsed.rows) {
+    assert.equal(row.cells[colKey(collapsed, 'size')].text, '6 Bars');
+  }
+  // Every collapsed row's batch codes render as that row's own in-cell
+  // control — a code-bearing visible row never shows an empty codes cell.
+  assert.deepEqual(
+    collapsed.rows.map((row) => row.cells[colKey(collapsed, 'batchCodes')].codesLabel),
+    ['View 22 codes', 'View 9 codes', 'View 16 codes'],
+  );
+  // The long strawberry set carries its full source-supported code/date
+  // pairs for the modal — exactly this row's, nothing else's.
+  const strawberryCodes = collapsed.rows[0].cells[colKey(collapsed, 'batchCodes')].codes!;
+  assert.equal(strawberryCodes.count, 22);
+  assert.equal(strawberryCodes.pairs.length, 22);
+
+  // Expanded: all six rows; the trailing package counts moved into Package
+  // Size everywhere ("6 Bars" / "24 Bars"), leaving Product clean.
+  const expanded = table.expanded;
+  assert.deepEqual(
+    expanded.rows.map((row) => [row.name, row.cells[colKey(expanded, 'size')].text]),
+    [
+      ['Outshine Fruit Bars Strawberry', '6 Bars'],
+      ['Outshine Fruit Bars Grape', '6 Bars'],
+      ['Outshine Fruit Bars Watermelon', '6 Bars'],
+      ['Outshine Fruit Bars Black Cherry', '6 Bars'],
+      ['Outshine Fruit Bars Tangerine', '6 Bars'],
+      ['Outshine Fruit Bars Variety Pack', '24 Bars'],
+    ],
+  );
+  // Tangerine's two codes stay inline; the other rows carry controls.
+  const codesCells = expanded.rows.map((row) => row.cells[colKey(expanded, 'batchCodes')]);
+  assert.equal(codesCells[4].text, 'LLA619603 and LLA619703');
+  assert.deepEqual(
+    codesCells.map((cell) => cell.codesLabel),
+    ['View 22 codes', 'View 9 codes', 'View 16 codes', 'View 6 codes', null, 'View 5 codes'],
+  );
+
+  // Every flavor holds exactly its caption/UPC-proven image — including the
+  // controlled hero reuse: the strawberry hero also backs the strawberry row
+  // (two contexts, one proven version), and no other row.
+  assert.deepEqual(
+    [...model.images.rowImages.entries()].map(([rowId, assignment]) => [
+      rowId,
+      fileName(assignment.image.url),
+      assignment.evidence,
+    ]),
+    [
+      ['t0r0', 'image_1_216.png', 'source_row'],
+      ['t0r1', 'image_2_166.png', 'source_row'],
+      ['t0r2', 'image_3_98.png', 'source_row'],
+      ['t0r3', 'image_4_78.png', 'source_row'],
+      ['t0r4', 'image_5_49.png', 'source_row'],
+      ['t0r5', 'image_6_37.png', 'source_row'],
+    ],
+  );
+  assert.equal(model.images.rowImages.get('t0r0')!.image.url, model.images.hero!.url);
+  assert.equal(
+    model.images.rowImages.get('t0r0')!.accessibilityText,
+    'Outshine Fruit Bars Strawberry, 6 Bars',
+  );
+  // The six barcode close-ups stay supporting; the gallery holds nothing —
+  // and in particular never the hero.
+  assert.equal(model.images.supporting.length, 6);
+  assert.ok(model.images.supporting.every((image) => image.classification === 'barcode_closeup'));
+  assert.deepEqual(model.images.gallery, []);
+  assertImageRoleInvariants(model, 'outshine');
+});
+
+test('recorded Chocolatey Eyeballs: five rows; every size-proven image, hero reuse included', () => {
+  const { projection } = recordedCase('announcement-crystal-temptations-chocolatey-eyeballs.json');
+  const model = detailModelFor(projection);
+  const table = model.affectedProductsTable!;
+  // The P2b decomposition is untouched: five product/size/packaging rows.
+  assert.equal(table.expanded.rows.length, 5);
+  assert.deepEqual(
+    table.expanded.columns.map((column) => column.label),
+    ['Product', 'Package Size', 'Packaging'],
+  );
+  // No codes exist → no code column in either view.
+  for (const view of [table.collapsed, table.expanded]) {
+    assert.ok(
+      !view.columns.some((column) => column.key === 'lotCodes' || column.key === 'batchCodes'),
+    );
+  }
+  // Each row gets the image whose official caption states its exact size —
+  // including the controlled reuse of the 10 oz hero on the 10 oz row.
+  assert.equal(model.images.hero?.url, projection.heroImageUrl);
+  assert.deepEqual(
+    table.expanded.rows.map((row) => ({
+      file: row.image ? fileName(row.image.url) : null,
+      a11y: row.image?.accessibilityText ?? null,
+      evidence: model.images.rowImages.get(row.id)?.evidence ?? null,
+    })),
+    [
+      {
+        file: 'image_1_229.png',
+        a11y: 'Chocolatey Eyeballs, 10 oz.',
+        evidence: 'caption_name_size',
+      },
+      {
+        file: 'image_2_178.png',
+        a11y: 'Chocolatey Eyeballs, 7 oz.',
+        evidence: 'caption_name_size',
+      },
+      {
+        file: 'image_3_102.png',
+        a11y: 'Chocolatey Eyeballs, 10.5 oz.',
+        evidence: 'caption_name_size',
+      },
+      {
+        file: 'image_4_84.png',
+        a11y: 'Chocolatey Eyeballs, 16 oz.',
+        evidence: 'caption_name_size',
+      },
+      {
+        file: 'image_5_50.png',
+        a11y: 'Chocolatey Eyeballs, 11 oz.',
+        evidence: 'caption_name_size',
+      },
+    ],
+  );
+  assert.equal(model.images.rowImages.get('t0r0')!.image.url, model.images.hero!.url);
+  // The reused hero still never enters the gallery.
+  assert.deepEqual(model.images.gallery, []);
+  assertImageRoleInvariants(model, 'crystal');
+});
+
+test('recorded Sun Hong and Great One: the audited hero duplication renders once', () => {
+  // The earlier audit observed hero == primaryPhoto == checkerPhotos[0] in
+  // both mechanisms' data. Under the allocation the asset holds exactly one
+  // visible role, and the remaining official images stay unique.
+  const sunHong = detailModelFor(corpusProjection('sun-hong-foods'));
+  assert.ok(sunHong.images.hero, 'Sun Hong lost its hero');
+  assert.deepEqual(
+    sunHong.images.gallery.map((image) => fileName(image.url)),
+    ['Back Enoki.jpeg', 'Front Enoki.jpeg'],
+  );
+  assert.equal(sunHong.images.rowImages.size, 0);
+  assertImageRoleInvariants(sunHong, 'sun-hong');
+
+  const greatOne = detailModelFor(corpusProjection('great-one-trading'));
+  assert.ok(greatOne.images.hero, 'Great One lost its hero');
+  // The rows whose captions uniquely name them get exactly those labels —
+  // including the controlled reuse of the hero on the Mushroom Fish Ball row
+  // its caption proves.
+  assert.deepEqual(
+    [...greatOne.images.rowImages.entries()].map(([rowId, assignment]) => [
+      rowId,
+      fileName(assignment.image.url),
+      assignment.evidence,
+    ]),
+    [
+      ['t0r3', 'Image 3_9.jpg', 'caption_name'],
+      ['t0r4', 'Image 5_4.jpg', 'caption_name'],
+      ['t0r1', 'Image 2_27.jpg', 'caption_name'],
+      ['t0r0', 'Image 1_34.jpg', 'caption_name'],
+    ],
+  );
+  assert.equal(greatOne.images.rowImages.get('t0r0')!.image.url, greatOne.images.hero!.url);
+  assertImageRoleInvariants(greatOne, 'great-one');
+});
+
+test('recorded no-image notice: null hero, empty gallery, no row images, no placeholder fields', () => {
+  const model = detailModelFor(corpusProjection('quaker-recalls-granola'));
+  assert.equal(model.heroImageUrl, null);
+  assert.equal(model.images.hero, null);
+  assert.deepEqual(model.images.gallery, []);
+  assert.deepEqual(model.images.supporting, []);
+  assert.equal(model.images.rowImages.size, 0);
+  for (const row of model.affectedProductsTable?.expanded.rows ?? []) {
+    assert.equal(row.image, null);
+  }
+});
+
+/**
+ * P2c corpus audit, pinned: the complete set of affected-row image
+ * assignments across the recorded corpus — every one manually reviewed
+ * against its recorded official caption (name, size, and barcode agreement).
+ * A new assignment, a lost assignment, or a changed mechanism fails here and
+ * must be re-reviewed, not re-pinned blindly.
+ */
+const PINNED_ROW_IMAGE_CENSUS = [
+  '4earth-farms-llc-recalls-organic-and-con|t0r0|image_1_46.png|source_row',
+  '4earth-farms-llc-recalls-organic-and-con|t0r1|image_2_29.png|source_row',
+  '4earth-farms-llc-recalls-organic-and-con|t0r2|image_3_15.png|source_row',
+  '4earth-farms-llc-recalls-organic-and-con|t0r3|image_4_14.png|source_row',
+  '4earth-farms-llc-recalls-organic-and-con|t0r4|image_5_5.png|source_row',
+  '4earth-farms-llc-recalls-organic-and-con|t0r5|image_6_5.png|source_row',
+  '4earth-farms-llc-recalls-organic-and-con|t0r7|image_8_3.png|source_row',
+  '4earth-farms-llc-recalls-organic-and-con|t0r8|image_9_3.png|source_row',
+  'conagra-brands-issues-voluntary-allergy-|t0r2|WB Thousand Island 24.jpeg|source_row',
+  'conagra-brands-issues-voluntary-allergy-|t0r3|WB Blue Cheese 24.jpeg|source_row',
+  'direct-source-seafood-llc-recalling-froz|t0r1|image_2_168.jpg|source_row',
+  'enjoy-life-natural-brands-llc-conducts-n|t0r0|image-1_37.jpg|caption_name',
+  'enjoy-life-natural-brands-llc-conducts-n|t0r10|image-11_5.jpg|caption_name_size',
+  'enjoy-life-natural-brands-llc-conducts-n|t0r11|image-12_5.jpg|caption_name_size',
+  'enjoy-life-natural-brands-llc-conducts-n|t0r1|image-2_28.jpg|caption_name_size',
+  'enjoy-life-natural-brands-llc-conducts-n|t0r2|image-3_10.jpg|caption_name_size',
+  'enjoy-life-natural-brands-llc-conducts-n|t0r3|image-4_3.jpg|caption_name_size',
+  'enjoy-life-natural-brands-llc-conducts-n|t0r4|image-5_31.jpg|caption_name_size',
+  'enjoy-life-natural-brands-llc-conducts-n|t0r5|image-6_22.jpg|caption_name_size',
+  'enjoy-life-natural-brands-llc-conducts-n|t0r6|image-7_13.jpg|caption_name_size',
+  'enjoy-life-natural-brands-llc-conducts-n|t0r7|image-8_12.jpg|caption_name_size',
+  'enjoy-life-natural-brands-llc-conducts-n|t0r8|image-9_9.jpg|caption_name_size',
+  'enjoy-life-natural-brands-llc-conducts-n|t0r9|image-10_8.jpg|caption_name_size',
+  'fresh-ready-foods-llc-recalls-spicy-brea|t0r0|ready2_0.jpg|caption_name',
+  'fresh-ready-foods-llc-recalls-spicy-brea|t0r1|ready4.png|caption_name',
+  'global-mix-inc-recalls-tejocote-products|t0r0|image_5_8.jpg|source_row',
+  'global-mix-inc-recalls-tejocote-products|t0r1|image_4_14.jpg|source_row',
+  'global-mix-inc-recalls-tejocote-products|t0r2|image_3_17.jpg|source_row',
+  'great-one-trading-inc-issues-expanding-a|t0r0|Image 1_34.jpg|caption_name',
+  'great-one-trading-inc-issues-expanding-a|t0r1|Image 2_27.jpg|caption_name',
+  'great-one-trading-inc-issues-expanding-a|t0r3|Image 3_9.jpg|caption_name',
+  'great-one-trading-inc-issues-expanding-a|t0r4|Image 5_4.jpg|caption_name',
+  'lyons-magnus-expands-voluntary-recall-in|t0r144|image-14_4.jpg|caption_name',
+  'lyons-magnus-expands-voluntary-recall-in|t0r205|image-17_3.jpg|caption_name',
+  'motivate-me-ashley-llc-recalling-vidasli|t0r0|image_2_93.jpg|caption_name',
+  'motivate-me-ashley-llc-recalling-vidasli|t0r1|image_4_40.jpg|caption_name',
+  'motivate-me-ashley-llc-recalling-vidasli|t0r2|image_6_18.jpg|caption_name',
+  'motivate-me-ashley-llc-recalling-vidasli|t0r3|image_8_14.jpg|caption_name',
+  'motivate-me-ashley-llc-recalling-vidasli|t0r4|image_10_7.jpg|caption_name',
+  'motivate-me-ashley-llc-recalling-vidasli|t0r5|image_11_6.jpg|caption_name',
+  'prince-bakery-inc-issues-allergy-alert-u|t0r0|image_1_217.png|source_row',
+  'prince-bakery-inc-issues-allergy-alert-u|t0r1|image_3_100.png|source_row',
+  'prince-bakery-inc-issues-allergy-alert-u|t0r3|image_2_168.png|source_row',
+  'prince-bakery-inc-issues-allergy-alert-u|t0r4|image_4_80.png|source_row',
+  'russ-davis-wholesale-recalls-peaches-and|t0r0|image-1_51.jpg|caption_name',
+  'russ-davis-wholesale-recalls-peaches-and|t0r1|image-2_34.jpg|caption_name',
+  'three-turkey-wrap-sandwiches-added-mg-fo|t0r0|Product label, Fresh to You Deluxe Club Wrap.jpg|caption_name',
+  'updated-dreyers-grand-ice-cream-inc-issu|t0r0|image_1_216.png|source_row',
+  'updated-dreyers-grand-ice-cream-inc-issu|t0r1|image_2_166.png|source_row',
+  'updated-dreyers-grand-ice-cream-inc-issu|t0r2|image_3_98.png|source_row',
+  'updated-dreyers-grand-ice-cream-inc-issu|t0r3|image_4_78.png|source_row',
+  'updated-dreyers-grand-ice-cream-inc-issu|t0r4|image_5_49.png|source_row',
+  'updated-dreyers-grand-ice-cream-inc-issu|t0r5|image_6_37.png|source_row',
+];
+
+test('corpus audit: allocation invariants hold everywhere, and every row assignment is pinned', () => {
+  let scanned = 0;
+  const census: string[] = [];
+  for (const entry of corpus) {
+    let projection;
+    try {
+      projection = projectCase([
+        parseFdaAnnouncement({
+          listing: entry.listing,
+          detailMainHtml: entry.mainHtml,
+          path: entry.path,
+        }),
+      ]);
+    } catch {
+      continue;
+    }
+    const slug = slugFromPath(entry.path);
+    const model = detailModelFor(projection);
+    scanned += 1;
+    // The hero is exactly the stored authoritative selection — this milestone
+    // changes no hero anywhere in the corpus.
+    assert.equal(model.images.hero?.url ?? null, projection.heroImageUrl ?? null, slug);
+    assert.equal(model.heroImageUrl, projection.heroImageUrl ?? null, slug);
+    // Role exclusivity, allowing only the one evidence-proven hero-to-row
+    // reuse in a multi-version table.
+    assertImageRoleInvariants(model, slug);
+    for (const [rowId, assignment] of model.images.rowImages) {
+      census.push(
+        `${slug.slice(0, 40)}|${rowId}|${fileName(assignment.image.url)}|${assignment.evidence}`,
+      );
+    }
+    const table = model.affectedProductsTable;
+    if (table) {
+      // The table renders exactly the allocation's verdicts, in both views.
+      for (const view of [table.collapsed, table.expanded]) {
+        for (const row of view.rows) {
+          const assignment = model.images.rowImages.get(row.id) ?? null;
+          assert.equal(row.image?.url ?? null, assignment?.image.url ?? null, `${slug}/${row.id}`);
+        }
+        // No rendered column is entirely empty in the view that shows it, and
+        // a code-bearing visible row never presents an empty codes cell.
+        view.columns.forEach((column, index) => {
+          if (column.key === 'product') {
+            assert.ok(
+              view.rows.some((row) => row.name !== null),
+              `${slug}: empty Product column`,
+            );
+            return;
+          }
+          assert.ok(
+            view.rows.some(
+              (row) => row.cells[index].text !== null || row.cells[index].codes !== null,
+            ),
+            `${slug}: column ${column.key} entirely empty in a rendered view`,
+          );
+        });
+      }
+    }
+  }
+  assert.ok(scanned >= 155, `only ${scanned} corpus records scanned`);
+  assert.deepEqual(census.sort(), PINNED_ROW_IMAGE_CENSUS);
+});
+
+// ── P2c correction: identity gate + stored photo associations ───────────────
+
+test('recorded Sun Hong: no origin or net-weight pseudo-product rows survive', () => {
+  // The notice's package-description comma list ("…Enoki Mushrooms (orange
+  // front), Product of Korea, Net weight 7.05 oz/200g") flattened into prose
+  // variants; the identity gate now rejects the label-metadata entries
+  // globally while the genuine version survives untouched.
+  const projection = corpusProjection('sun-hong-foods');
+  const consumer = buildConsumerCase(projection, projection.affectedProducts);
+  assert.deepEqual(
+    consumer.packageCheck.variants.map((variant) => variant.name),
+    ['Enoki Mushrooms (orange front)'],
+  );
+  const model = detailModelFor(projection);
+  for (const row of model.affectedProductsTable?.expanded.rows ?? []) {
+    assert.ok(!/^products?\s+of\b/i.test(row.name ?? ''), `origin row: ${row.name}`);
+    assert.ok(!/^net\s+(?:wt|weight)\b/i.test(row.name ?? ''), `weight row: ${row.name}`);
+  }
+});
+
+test('recorded 4Earth Farms: every stored photo association is proven by its caption UPC', () => {
+  // Before the correction, caption-prefix matching stored sibling images on
+  // the wrong same-named rows (caption UPC 803944306999 on the row for UPC
+  // 711535517733). The shared contradiction policy plus identity-keyed
+  // matching now stores only caption-discriminated pairings.
+  const projection = corpusProjection('4earth-farms');
+  const consumer = buildConsumerCase(projection, projection.affectedProducts);
+  let attached = 0;
+  for (const variant of consumer.packageCheck.variants) {
+    if (!variant.photo) continue;
+    attached += 1;
+    const size = variant.fields.find((field) => field.key === 'size')?.value ?? '';
+    const caption = variant.photo.alt ?? '';
+    const rowUpc = size.match(/\d{11,14}/)?.[0];
+    const captionUpc = caption.match(/\d{11,14}/)?.[0];
+    // Wherever both the row and its caption state a barcode, they agree.
+    if (rowUpc && captionUpc) {
+      assert.equal(captionUpc, rowUpc, `${variant.scope}: "${size}" <- "${caption}"`);
+    }
+  }
+  // All three same-named Organic Vegetable Medley rows (and the rest) hold
+  // their own UPC-proven image — eight associations, none guessed.
+  assert.equal(attached, 8);
+});
+
+test('recorded Conagra: contradicted and indistinguishable sibling associations are refused', () => {
+  const projection = corpusProjection('conagra-brands');
+  const consumer = buildConsumerCase(projection, projection.affectedProducts);
+  const bySize = consumer.packageCheck.variants.map((variant) => ({
+    scope: variant.scope,
+    size: variant.fields.find((field) => field.key === 'size')?.value,
+    caption: variant.photo?.alt ?? null,
+  }));
+  // The two 15 oz Thousand Island rows are indistinguishable by the 15 oz
+  // caption — neither stores it. The 24 oz rows each hold their own
+  // size-agreeing image; the 24 oz caption can never sit on a 15 oz row.
+  assert.deepEqual(bySize, [
+    { scope: 't0r0', size: '15 oz', caption: null },
+    { scope: 't0r1', size: '15 oz', caption: null },
+    { scope: 't0r2', size: '24 oz', caption: 'Wish-Bone Thousand Island Dressing, Net Wt 24 oz.' },
+    { scope: 't0r3', size: '24 oz', caption: 'Wish-Bone® CHUNKY BLUE CHEESE DRESSING, 24 oz' },
+  ]);
+});
+
+test("recorded Tony's Chocolonely: a product photo is never guessed onto one sibling lot row", () => {
+  // Four Everything Bar rows differ only by lot/date (and one by UPC); the
+  // caption "Everything bar" states no identifier, so it cannot single one
+  // out. The former arbitrary first-row attachment is refused at the source;
+  // the image stays an unassigned official photo (a gallery candidate).
+  const projection = corpusProjection('tonys-chocolonely');
+  const consumer = buildConsumerCase(projection, projection.affectedProducts);
+  assert.ok(consumer.packageCheck.variants.length >= 7);
+  for (const variant of consumer.packageCheck.variants) {
+    assert.equal(variant.photo, null, `${variant.scope} guessed a photo`);
+  }
+  const model = detailModelFor(projection);
+  assert.ok(
+    model.images.gallery.some((image) => /Everything bar/i.test(image.caption ?? '')),
+    'the Everything bar photo was lost instead of staying a gallery candidate',
+  );
+});
+
+test('corpus audit: no stored variant-photo association contradicts its own caption', () => {
+  // The stored-association layer, audited corpus-wide with the SAME shared
+  // policy the display allocator uses — the two layers cannot disagree.
+  let scanned = 0;
+  let associations = 0;
+  for (const entry of corpus) {
+    let projection;
+    try {
+      projection = projectCase([
+        parseFdaAnnouncement({
+          listing: entry.listing,
+          detailMainHtml: entry.mainHtml,
+          path: entry.path,
+        }),
+      ]);
+    } catch {
+      continue;
+    }
+    scanned += 1;
+    const consumer = buildConsumerCase(projection, projection.affectedProducts);
+    for (const variant of consumer.packageCheck.variants) {
+      // Origin/net-weight label metadata can never be a row anywhere.
+      assert.ok(
+        !/^products?\s+of\s+(?:the\s+)?[A-Za-z .]+$/i.test(variant.name) &&
+          !/^net\s+(?:wt|weight)\b/i.test(variant.name),
+        `${slugFromPath(entry.path)}: non-product row "${variant.name}"`,
+      );
+      if (!variant.photo?.alt) continue;
+      associations += 1;
+      const size = variant.fields.find((field) => field.key === 'size')?.value ?? null;
+      assert.equal(
+        captionContradictsPackage(variant.photo.alt, {
+          name: variant.name,
+          size: size !== null && !size.includes(',') ? size : null,
+          upc: variant.fields.find((field) => field.key === 'upc')?.value ?? null,
+        }),
+        false,
+        `${slugFromPath(entry.path)}/${variant.scope}: "${variant.name}" <- "${variant.photo.alt}"`,
+      );
+    }
+  }
+  assert.ok(scanned >= 155, `only ${scanned} corpus records scanned`);
+  assert.ok(associations >= 20, `only ${associations} stored associations audited`);
+});
+
+test('recorded Taylor Fresh: a column no visible row justifies waits for See all', () => {
+  // The first three rows state no package size; later rows do. Collapsed
+  // shows no Package Size column at all — never a column of empty cells —
+  // and expanding recomputes the columns over every displayed row.
+  const model = detailModelFor(corpusProjection('taylor-fresh-foods'));
+  const table = model.affectedProductsTable!;
+  assert.ok(table.seeAllLabel, 'expected a See all control');
+  assert.deepEqual(
+    table.collapsed.columns.map((column) => column.key),
+    ['product', 'bestBy'],
+  );
+  assert.deepEqual(
+    table.expanded.columns.map((column) => column.key),
+    ['product', 'size', 'bestBy'],
+  );
+});
+
+test('recorded YoCrunch: a mixed view keeps the codes column with honest empty cells', () => {
+  // Only one of the three visible rows carries lot codes: the column exists
+  // (a code-bearing visible row never hides its codes), the code-bearing row
+  // shows its own in-cell value or control, and the others stay empty.
+  const model = detailModelFor(corpusProjection('yocrunchr-products'));
+  const table = model.affectedProductsTable!;
+  const lotIndex = table.collapsed.columns.findIndex((column) => column.key === 'lotCodes');
+  assert.ok(lotIndex >= 0, 'the lot-codes column is missing');
+  const bearing = table.collapsed.rows.filter(
+    (row) => row.cells[lotIndex].text !== null || row.cells[lotIndex].codes !== null,
+  );
+  assert.equal(bearing.length, 1);
+  // Empty cells are empty — never a dash, never a borrowed value.
+  for (const row of table.collapsed.rows) {
+    if (bearing.includes(row)) continue;
+    assert.equal(row.cells[lotIndex].text, null);
+    assert.equal(row.cells[lotIndex].codes, null);
+  }
 });
