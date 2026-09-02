@@ -2,9 +2,11 @@
 
 _Written 2026-08-28; P1 presentation contract added 2026-09-01; P2a identity,
 typed reasons, and the simplified Detail page applied 2026-09-01 (founder
-decisions). Functional milestones on the temporary UI — final visual design
-happens separately and may restyle everything here without touching the
-business logic, which lives entirely in pure libs._
+decisions); P2b product identity, affected-version decomposition, and the
+compact Affected Products table applied 2026-09-02. Functional milestones on
+the temporary UI — final visual design happens separately and may restyle
+everything here without touching the business logic, which lives entirely in
+pure libs._
 
 ## The consumer presentation contract (P1)
 
@@ -48,10 +50,21 @@ same canonical inputs on both screens:
 
 1. `productDisplayName` (FDA's structured description beats title parsing;
    the official title is the last resort).
-2. A **trailing package measurement** ("… 7 oz", "… 150g") is removed only
-   when a meaningful name remains AND the measurement is preserved in the
-   supported affected-product/package evidence — otherwise the official
-   wording stays. No product-to-size pairing is ever invented.
+2. A **trailing package measurement — or a comma/and-joined LIST of them**
+   ("… 7 oz", "… 150g", "… 500 ml, 250 ml, and 100 ml" — P2b,
+   `splitTrailingMeasurements` in `lib/variant-identity.ts`) is removed only
+   when a meaningful name remains AND every removed measurement is preserved
+   in the supported affected-product/package evidence — otherwise the
+   official wording stays. No product-to-size pairing is ever invented. A
+   name derived from the **structured product description** counts that
+   description's own trailing sizes as evidence, because the consumer
+   projection deterministically preserves them: `buildPackageCheck` surfaces
+   any description-tail size not already stated elsewhere as case-level Size
+   evidence (the **description-size guarantee**), so the sizes move into the
+   Affected Products data rather than being lost, and both screens apply the
+   identical rule to the identical field (corpus-scan-pinned in
+   `src/server/fda/presentation-regressions.test.ts`). Title-derived names
+   keep the strict line-evidence gate.
 3. A duplicated **displayed-brand prefix** is removed when safe (remainder ≥ 3
    chars with letters, and not the word "Brand"); otherwise the repetition is
    tolerated.
@@ -74,7 +87,15 @@ and no surface improvises its own:
   "unbranded", and the FDA listing placeholders "No Brand Name" / "Multiple
   brand names" all fall through to the company. With no brand and no company,
   the honest fallbacks are "Multiple products and brands" (when the title
-  supports it) or "Company not specified".
+  supports it) or "Company not specified". A displayed brand must be a
+  **plausible concise identity** (P2b): a stored entry shaped like prose — a
+  sentence, product enumeration, or recall description (the recorded Russ
+  Davis entry "Crazy Fresh and Quick & Easy an Unbranded and Bountiful Fresh
+  gift baskets") — never displays. The bound is the same 40-character cap the
+  What Happened subject uses, so the brand line and the sentence subject
+  share one identity contract; an over-long entry is skipped (never sliced
+  into a fabricated brand), another concise stored brand wins when one
+  exists, and the safe company fallback stands otherwise.
 - **`legalFirm`** — the recalling company's display name, preserved for
   official traceability (share copy, provenance, tests). It is never
   substituted into consumer prose merely because it issued the notice.
@@ -230,29 +251,85 @@ renders nothing — no placeholders, no carousel.
 `affectedProductsModel` consumes **only** the gated Consumer Projection V2
 package checker (closed schema, type gates — never raw fact bags, never
 `rejected` facts, so internal artifacts like the "40 lb" lot candidate are
-structurally unreachable). Detail renders it as a horizontally scrollable
-rail of items — one per source-supported product/package/version — with only
-populated fields in the stable order: Product, Package Size, the identifying
-date under its source-specific label (Best by / Use by / Sell by /
-Expiration), Barcode (UPC), Lot/Batch codes, then remaining package
-description. Fields the closed schema does not support (e.g. establishment
-numbers) cannot appear until the schema itself admits them. Identifier
-fidelity is preserved exactly (leading zeroes, periods, hyphens, letters).
-Proven-shared fields render once above the rail; large code sets stay behind
-their disclosure; production dates lead their codes; the shared code
-location renders once.
+structurally unreachable). Fields the closed schema does not support (e.g.
+establishment numbers) cannot appear until the schema itself admits them.
+Identifier fidelity is preserved exactly (leading zeroes, periods, hyphens,
+letters). **The consumer table has no shared-facts section. Facts proven to
+apply to every version repeat in every row; ambiguous case-level facts do
+not render in the table** (founder decision — repetition is preferable to a
+separate shared block; the model still distinguishes proven-shared from
+version-specific evidence internally, and the table materializes the proven
+set into each row's cells). Large code sets stay behind their disclosure;
+production dates lead their codes.
 
-A version name that is **only a package measurement** ("62.4-oz", "5 lb") is
-package-size evidence, never a consumer product name. The list parser first
-recovers the source's own pairing where it exists ("62.4-oz. ALUMINUM PAN …
-containing "Ukrop's Baked Spaghetti"" names the quoted product, with the
-size as its Size field); any residual measurement-only name is demoted by
-the presentation model into the card's Size field — the card renders without
-a Product line, and no product name is ever invented. The recognizer
-(`measurementOnlyName`, `src/lib/variant-identity.ts`) is conservative and
-unit-aware: the whole candidate must be one number plus a real unit, so
-numeric brands, UPCs, lot codes with decimal-like punctuation, dates, and
-full product names ending in a size can never match.
+**The compact table (P2b).** Detail renders the versions through one shared
+pure table model (`affectedProductsTable` over the item model — the screen
+composes no columns, labels, or cell values of its own; wiring-test-pinned):
+
+- Column labels render **once** as the uppermost row. Product is the first
+  column when any row has a product name; the others follow the stable field
+  order — Package Size, Packaging, Best by / Use by / Sell by / Expiration
+  (each keeping its exact source-specific meaning; a Sell by is never
+  relabeled), Barcode (UPC), Lot codes, Batch codes.
+- One affected version per row, in source order. A column exists only when
+  at least one row has a supported value for it or the value is proven
+  shared; a missing cell stays **empty** — no dash, no "unknown", and never
+  a value borrowed from another version. Rows show the same value only when
+  the source associates it with every version, in which case it repeats
+  inside each row — never in a separate visible block.
+- At most **three rows** render initially; beyond that a functional
+  `See all (N)` control reveals the rest inline and collapses again
+  (`AFFECTED_PRODUCTS_INITIAL_ROWS`).
+- The table scrolls horizontally as one unit, header and rows aligned.
+- Each row carries a **stable row identity** (the projection's source-row
+  scope) for P2c's version-specific image assignment; no version image or
+  placeholder renders in P2b.
+- A version's own collapsed code set renders behind its disclosure beneath
+  the table, labeled by that row's product name — still that version's
+  codes, never a recall-wide pile.
+- The official attachment links ("Product labels (PDF)", "Product list
+  (PDF)") stay preserved in the model (`attachments`) for a later
+  source/image surface; **no orphan attachment link renders** under Affected
+  Products.
+
+**Composite packaging cells.** A table row whose only recognized column is
+packaging can still state the version's identity inside the cell itself —
+the recorded Chocolatey Eyeballs table (Style # / "Packaging (as labeled)")
+writes "“Crystal Temptations” plastic bag with designed header card –
+Chocolatey Eyeballs, 10 oz." per row. `decomposePackagingIdentityFacts`
+splits that shape into the facts it states — the version's name, its size,
+its packaging, the printed brand — **per row**, so each version keeps only
+its own packaging and size; the association is the source's row plus the
+cell's own dash delimiter, never array position. Every part is gated (the
+head must contain a container noun from the closed packaging vocabulary; the
+name must pass the closed identity contract and be neither packaging- nor
+measurement-only; a size tail is required), a row that already names its
+product is left untouched, and a cell failing any gate stays a plain
+packaging fact. Without this, five per-row packaging descriptions flattened
+into one unreadable case-level Packaging enumeration
+(fixture-pinned in `src/server/fda/presentation-regressions.test.ts`).
+
+**Demoted version names.** A version name that is **only a package
+measurement** ("62.4-oz", "5 lb") is package-size evidence, and one that is
+**only a packaging description** ("Cardboard boxes", "Plastic bags" — P2b) is
+packaging evidence; neither is ever a consumer product name. The list parser
+first recovers the source's own pairing where it exists ("62.4-oz. ALUMINUM
+PAN … containing "Ukrop's Baked Spaghetti"" names the quoted product with the
+size as its Size field, and — P2b — "Cardboard boxes containing 100 pieces of
+"BUFFALO CHICKEN RANGOON"" names the quoted product with the container as
+Packaging and the stated piece count as Package Size, recorded FSIS
+018-2026). Any residual measurement-only or packaging-only name is demoted by
+the presentation model into the row's Size or Packaging field — the row keeps
+its own identifying facts and renders with an empty Product cell, and no
+product name is ever invented. Both recognizers (`measurementOnlyName`,
+`packagingOnlyName` — `src/lib/variant-identity.ts`) are conservative and
+whole-candidate: numeric brands, UPCs, lot codes with decimal-like
+punctuation, dates, full product names ending in a size, and product names
+containing packaging words ("Boxed Water", "Cup Noodles", "7-Eleven Wrap")
+can never match. Corpus scans (`src/server/fda/presentation-regressions.test.ts`,
+`src/server/fsis/presentation-regressions.test.ts`) pin that no measurement,
+packaging value, or other non-identity renders as Product anywhere in the
+recorded corpus.
 
 Coverage is graded in the model (P2a): `structured` (identifying details
 survived), `partial` (only packaging/size evidence — the model's scope
@@ -288,19 +365,14 @@ stays in the model/projection for its assigned later surface:
 Still deliberately absent: Saved state/Save button, retailer link/modal,
 image carousel, new navigation.
 
-### Roadmap requirements (documented for P2b/P2c — not implemented in P2a)
+### Roadmap requirements (P2c — not implemented yet)
 
-**P2b — compact affected-versions table.** Replace the product cards with a
-table-like structure: one affected version per row; at most three rows
-initially visible with a `See all (N)` interaction beyond that; columns drawn
-only from Product name, Package Size, Expiration/Use-by/Best-by, Barcode
-(UPC), and Lot codes; a column is omitted when no visible version has that
-field; field labels are not repeated inside every card; values are never
-invented or merged across versions; source order and the existing P0A safety
-gates are preserved. Reference shape (Jalapeño Ranch): one row — Product
-"Jalapeño Ranch Dressing", Barcode (UPC) 199284564923, Lot codes 69, 86,
-108, 113, 116, and 121; no Package Size or Expiration column, because this
-version has no supported values for them.
+_P2b (the compact affected-versions table) shipped as specified above — the
+reference shape is now recorded and test-pinned
+(`announcement-jaimes-spanish-village-jalapeno-ranch.json`): one table
+header and one data row — Product "Jalapeno Ranch Dressing", Barcode (UPC)
+199284564923, Lot codes "69, 86, 108, 113, 116, and 121"; no Package Size or
+date column, because this version has no supported values for them._
 
 **P2c — global image-role allocation.** One hero (or future hero carousel)
 at the top; a product-version image may appear beside that version's product

@@ -27,4 +27,17 @@ listing row, `update-…` and `updated-release-…` coexisting with it), an
 expansion published as a separate announcement, and an upstream-ingredient
 recall.
 
+`announcement-<slug>.json` files are single recorded announcements (verbatim
+listing row + page `<main>`, each stamped with its `capturedAt` date and
+`officialUrl`) backing exact presentation regressions in
+`presentation-regressions.test.ts`:
+
+- `announcement-crystal-temptations-chocolatey-eyeballs.json` — brand vs
+  legal-firm identity, allergen grammar (P2a).
+- `announcement-lmsi-kofinas-garlic-olive-oil.json` — initialism firm name,
+  unapproved-ingredient grammar, multi-size product description (P2a/P2b).
+- `announcement-jaimes-spanish-village-jalapeno-ranch.json` — the P2b
+  single-row Affected Products table: prose UPC + lot list with no size or
+  date evidence (recorded 2026-09-02).
+
 Never hand-edit these files; re-record from the live sources instead.

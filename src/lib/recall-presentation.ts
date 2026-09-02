@@ -49,7 +49,12 @@ import type { CaseDetail, FeedItem } from './recall-feed';
 import { allergenReasonLabel, healthRiskSummary, stateLabel } from './recall-display';
 import { interpretReason } from './recall-reason';
 import { agencyLabel, riskView, type RiskView } from './risk-display';
-import { measurementOnlyName } from './variant-identity';
+import {
+  measurementKey,
+  measurementOnlyName,
+  packagingOnlyName,
+  splitTrailingMeasurements,
+} from './variant-identity';
 import { buildWhatHappened } from './what-happened';
 
 // ── Activity date ───────────────────────────────────────────────────────────
@@ -139,6 +144,19 @@ const JUNK_BRAND =
   /^(?:and\s+)?(?:various|multiple|assorted|others?|unbranded|n\/?a|none|unknown|(?:no|multiple|various|all)\s+brand(?:\s+names?)?s?)\.?$/i;
 
 /**
+ * A displayed brand must be a plausible CONCISE identity — a name, not a
+ * sentence, product enumeration, or recall description. Stored brand entries
+ * occasionally carry source prose whole ("Crazy Fresh and Quick & Easy an
+ * Unbranded and Bountiful Fresh gift baskets" — the recorded Russ Davis
+ * class); the length cap is the same bound the What Happened subject already
+ * uses, so the visible brand line and the sentence subject share one identity
+ * contract. An over-long entry is never sliced into a fabricated brand — it
+ * is skipped, another concise stored brand wins when one exists, and the safe
+ * company fallback stands otherwise.
+ */
+const MAX_BRAND_IDENTITY_LENGTH = 40;
+
+/**
  * One stored brands entry can itself be a source-written list ("Dole, Ahold,
  * Kroger, Lidl, and Others"). Comma-separated entries expand into their
  * segments so the multi-brand compaction sees real brands; entries without a
@@ -165,7 +183,8 @@ export function displayBrand(
   for (const entry of (brands ?? []).flatMap(expandBrandEntry)) {
     const trimmed = entry.trim();
     const key = trimmed.toLowerCase();
-    if (trimmed.length < 2 || JUNK_BRAND.test(trimmed) || seen.has(key)) continue;
+    if (trimmed.length < 2 || trimmed.length > MAX_BRAND_IDENTITY_LENGTH) continue;
+    if (JUNK_BRAND.test(trimmed) || seen.has(key)) continue;
     seen.add(key);
     cleaned.push(trimmed);
   }
@@ -232,35 +251,23 @@ export function caseIdentity(
 // ── Product name ────────────────────────────────────────────────────────────
 
 /**
- * A trailing package measurement ("… 7 oz", "… 150g", "… 2.5 lb"). Only ever
- * removed under the evidence rule in `stripTrailingMeasurement`.
- */
-const TRAILING_MEASUREMENT =
-  /[\s,;:–—-]*\(?\d+(?:[.,]\d+)?\s*(?:fl\.?\s?oz|oz|ounces?|lbs?|pounds?|grams?|g|kg|mg|ml|liters?|litres?|l|ct|count|pks?|packs?)\b\.?\)?$/i;
-
-/** Case/spacing/punctuation-insensitive containment key for measurement text. */
-function measurementKey(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-/**
- * Conservatively drop a trailing package measurement from a product name —
- * but only when (a) a meaningful name remains and (b) the removed measurement
- * is preserved in the supported affected-product/package evidence, so the
- * information is not lost. Anything else keeps the official wording.
+ * Conservatively drop a trailing package measurement — or a comma/and-joined
+ * LIST of them ("… 500 ml, 250 ml, and 100 ml") — from a product name. Only
+ * when (a) a meaningful name remains (`splitTrailingMeasurements` refuses
+ * otherwise) and (b) EVERY removed measurement is preserved in the supported
+ * affected-product/package evidence, so no information is lost. Anything else
+ * keeps the official wording. No product-to-size pairing is ever invented —
+ * the sizes move into package evidence, never onto a different product.
  */
 export function stripTrailingMeasurement(name: string, packageEvidence: string[]): string {
-  const match = name.match(TRAILING_MEASUREMENT);
-  if (!match || match.index === undefined) return name;
-  const remainder = name
-    .slice(0, match.index)
-    .replace(/[\s,;:–—-]+$/, '')
-    .trim();
-  if (remainder.length < 3 || !/[A-Za-z]/.test(remainder)) return name;
-  const removed = measurementKey(match[0]);
-  if (removed === '') return name;
-  const preserved = packageEvidence.some((line) => measurementKey(line).includes(removed));
-  return preserved ? remainder : name;
+  const split = splitTrailingMeasurements(name);
+  if (!split) return name;
+  const evidenceKeys = packageEvidence.map(measurementKey);
+  const preserved = split.measurements.every((measurement) => {
+    const key = measurementKey(measurement);
+    return key !== '' && evidenceKeys.some((line) => line.includes(key));
+  });
+  return preserved ? split.base : name;
 }
 
 /**
@@ -297,10 +304,24 @@ export interface ProductNameInput {
  * The one cleaned consumer product name Home and Detail share. Derived from
  * the same canonical inputs on both screens, so they cannot disagree; the
  * stored title is never mutated and titles are never generatively rewritten.
+ *
+ * A name derived from the STRUCTURED product description counts that
+ * description's own trailing sizes as evidence: the consumer projection
+ * deterministically preserves a description's trailing measurement list as
+ * package-Size evidence (`buildPackageCheck`, the description-size guarantee),
+ * so stripping it here moves the sizes into the Affected Products data rather
+ * than losing them — and both screens apply the identical rule to the
+ * identical field, so they cannot diverge. Title-derived names keep the
+ * strict line-evidence gate.
  */
 export function cleanProductName(input: ProductNameInput): string {
   let name = productDisplayName(input.productDescription, input.title);
-  name = stripTrailingMeasurement(name, input.packageEvidence);
+  const described = (input.productDescription ?? '').replace(/[\s.]+$/, '').trim();
+  const fromDescription = described.length >= 3 && name === described;
+  const evidence = fromDescription
+    ? [...input.packageEvidence, ...(splitTrailingMeasurements(name)?.measurements ?? [])]
+    : input.packageEvidence;
+  name = stripTrailingMeasurement(name, evidence);
   name = stripBrandPrefix(name, input.displayedBrands);
   return humanizeAllCaps(name);
 }
@@ -622,10 +643,15 @@ export interface AffectedProductField {
 }
 
 export interface AffectedProductItem {
+  /** Stable identity of this affected version (the projection's source row
+   * scope where one exists) — the anchor P2c's version-specific image
+   * assignment will use. Never rendered as text. */
+  rowId: string;
   /** Recognizable product/version name (the cleaned product name when the
    * notice describes a single product). Null when the gated projection's
-   * version name was only a package measurement — that value renders in the
-   * Package Size field, never as Product, and no product name is invented. */
+   * version name was only a package measurement or only a packaging
+   * description — those values render in the Package Size / Packaging fields,
+   * never as Product, and no product name is invented. */
   name: string | null;
   /** Populated approved fields only, in the stable presentation order. */
   fields: AffectedProductField[];
@@ -649,7 +675,9 @@ export interface AffectedProductsModel {
   scopeStatement: string | null;
   /** The honest statement for the two identifier-less states. */
   note: string | null;
-  /** Fields proven to apply to every affected version, shown once. */
+  /** Fields proven to apply to every affected version. Internal evidence
+   * only: the table materializes these into every row — no separate
+   * consumer-facing shared-facts block ever renders. */
   appliesToAll: AffectedProductField[];
   items: AffectedProductItem[];
   /** Recall-level collapsed code sets and production-date disclosure. */
@@ -688,11 +716,12 @@ function orderedFields(fields: PackageField[]): AffectedProductField[] {
     .map((field) => ({ key: field.key, label: field.label, value: field.value }));
 }
 
-function variantItem(variant: AffectedVariant): AffectedProductItem {
+function variantItem(variant: AffectedVariant, index: number): AffectedProductItem {
+  const rowId = variant.scope ?? `v${index}`;
   // A version name that is ONLY a package measurement (identity contract:
   // measurementOnlyName) is package-size evidence, not a product name. It is
-  // demoted into the card's Size field — verbatim, so the source evidence is
-  // preserved — and the card renders without a Product line rather than with
+  // demoted into the row's Size field — verbatim, so the source evidence is
+  // preserved — and the row renders without a Product value rather than with
   // a measurement masquerading as one. No product name is invented.
   if (measurementOnlyName(variant.name)) {
     const fields = orderedFields(variant.fields);
@@ -704,6 +733,34 @@ function variantItem(variant: AffectedVariant): AffectedProductItem {
       size.value = `${size.value}, ${variant.name}`;
     }
     return {
+      rowId,
+      name: null,
+      fields,
+      codes: variant.lotCodes,
+      codeLocation: variant.codeLocation,
+      photo: variant.photo,
+    };
+  }
+  // A version name that is ONLY a packaging description (identity contract:
+  // packagingOnlyName — "Cardboard boxes", "Plastic bags") is packaging
+  // evidence, never a consumer product name. Same demotion shape: the value
+  // moves to the row's Packaging field, the row's own identifying facts
+  // survive, and Product stays empty rather than showing a container.
+  if (packagingOnlyName(variant.name)) {
+    const fields = orderedFields(variant.fields);
+    const packaging = fields.find((field) => field.key === 'packaging');
+    if (packaging === undefined) {
+      // Packaging closes the presentation order, so the demoted value goes last.
+      fields.push({
+        key: 'packaging',
+        label: PACKAGE_FIELD_LABEL.packaging,
+        value: variant.name,
+      });
+    } else if (!measurementKey(packaging.value).includes(measurementKey(variant.name))) {
+      packaging.value = `${packaging.value}, ${variant.name}`;
+    }
+    return {
+      rowId,
       name: null,
       fields,
       codes: variant.lotCodes,
@@ -712,6 +769,7 @@ function variantItem(variant: AffectedVariant): AffectedProductItem {
     };
   }
   return {
+    rowId,
     name: humanizeAllCaps(variant.name),
     fields: orderedFields(variant.fields),
     codes: variant.lotCodes,
@@ -733,7 +791,7 @@ export function affectedProductsModel(
   productName: string,
 ): AffectedProductsModel {
   if (packageCheck.render) {
-    // Variant mode keeps proven-shared fields in their own block; without
+    // Variant mode keeps proven-shared fields distinguished internally; without
     // variants, case-level and shared fields merge into one product item so
     // no field renders loosely outside a card.
     const hasVariants = packageCheck.variants.length > 0;
@@ -743,6 +801,7 @@ export function affectedProductsModel(
       : caseFields.length > 0
         ? [
             {
+              rowId: 'case',
               name: productName,
               fields: caseFields,
               codes: null,
@@ -781,6 +840,118 @@ export function affectedProductsModel(
     productionDates: null,
     codeLocation: null,
     comparePhotos: [],
+  };
+}
+
+// ── Affected-products table (P2b) ───────────────────────────────────────────
+
+/**
+ * Column labels for the compact Affected Products table. Drawn from the same
+ * closed field vocabulary as `PACKAGE_FIELD_LABEL` — no new consumer field can
+ * enter through a column — with only the table-appropriate wording tweaks:
+ * "Package Size" (a column names the whole dimension) and pluralized code
+ * labels (one cell may hold several codes). Date labels keep their exact
+ * source-specific meaning — a Sell by is never relabeled Expiration.
+ */
+const TABLE_COLUMN_LABEL: Record<'product' | PackageFieldKey, string> = {
+  product: 'Product',
+  size: 'Package Size',
+  packaging: 'Packaging',
+  bestBy: 'Best by',
+  useBy: 'Use by',
+  sellBy: 'Sell by',
+  expiration: 'Expiration',
+  upc: 'Barcode (UPC)',
+  lotCodes: 'Lot codes',
+  batchCodes: 'Batch codes',
+};
+
+export interface AffectedProductsTableColumn {
+  key: 'product' | PackageFieldKey;
+  label: string;
+}
+
+export interface AffectedProductsTableRow {
+  /** Stable row identity (the projection's source-row scope) for P2c. */
+  id: string;
+  /** This row's product name; null renders an empty Product cell, never a
+   * placeholder — and never labels anything else as Product. */
+  name: string | null;
+  /** One cell per column, aligned with `columns`. Null is an EMPTY cell: a
+   * missing value is never rendered as a dash, "unknown", or a borrowed
+   * value from another version. */
+  cells: (string | null)[];
+  /** This row's own collapsed code set — rendered behind its disclosure
+   * beneath the table, still attributed to this row. */
+  codes: LotCodeSet | null;
+}
+
+export interface AffectedProductsTable {
+  /** Header labels, rendered once as the uppermost row. A column exists only
+   * when at least one affected row has a supported value for it. */
+  columns: AffectedProductsTableColumn[];
+  /** One affected version per row, in source order. */
+  rows: AffectedProductsTableRow[];
+  /** How many rows render before the reveal control. */
+  initialRows: number;
+  /** "See all (N)" when more rows exist than initially render; null otherwise. */
+  seeAllLabel: string | null;
+}
+
+/** At most this many affected-version rows render before "See all (N)". */
+export const AFFECTED_PRODUCTS_INITIAL_ROWS = 3;
+
+/**
+ * The compact table-like structure Detail renders for Affected Products
+ * (P2b): column labels once, one affected version per row, columns drawn only
+ * from populated approved fields, Product first when any row has a name.
+ * Cells hold each version's own facts plus the facts PROVEN to apply to
+ * every version (repeated per row — the table has no shared-facts section);
+ * the model never merges values across versions, and a column another row
+ * justified stays empty here. Null when the gated model has no items (the
+ * section then renders only its code disclosures, exactly as before).
+ */
+export function affectedProductsTable(model: AffectedProductsModel): AffectedProductsTable | null {
+  if (model.items.length === 0) return null;
+  // The consumer table has NO shared-facts section (founder decision). A fact
+  // the model PROVED applies to every affected version (`appliesToAll` — each
+  // version's own source row states it, or the source asserted it about the
+  // whole recall) materializes here into every row: the column exists once
+  // and the value repeats per row. Repetition is preferred over a separate
+  // block. Association safety is unweakened — merely-case-level evidence with
+  // an ambiguous owner was already rejected upstream (`ambiguous-scope`) and
+  // is structurally unreachable from this model, so nothing here can guess a
+  // value into a row the source never tied it to.
+  const sharedByKey = new Map(model.appliesToAll.map((field) => [field.key, field.value]));
+  const columns: AffectedProductsTableColumn[] = [];
+  if (model.items.some((item) => item.name !== null)) {
+    columns.push({ key: 'product', label: TABLE_COLUMN_LABEL.product });
+  }
+  for (const key of PRESENTATION_FIELD_ORDER) {
+    if (
+      sharedByKey.has(key) ||
+      model.items.some((item) => item.fields.some((field) => field.key === key))
+    ) {
+      columns.push({ key, label: TABLE_COLUMN_LABEL[key] });
+    }
+  }
+  const rows = model.items.map((item) => ({
+    id: item.rowId,
+    name: item.name,
+    cells: columns.map((column) =>
+      column.key === 'product'
+        ? item.name
+        : (item.fields.find((field) => field.key === column.key)?.value ??
+          sharedByKey.get(column.key) ??
+          null),
+    ),
+    codes: item.codes,
+  }));
+  return {
+    columns,
+    rows,
+    initialRows: Math.min(AFFECTED_PRODUCTS_INITIAL_ROWS, rows.length),
+    seeAllLabel: rows.length > AFFECTED_PRODUCTS_INITIAL_ROWS ? `See all (${rows.length})` : null,
   };
 }
 
@@ -887,6 +1058,8 @@ export interface DetailModel {
   quantityLine: string | null;
   whereSold: WhereSoldModel;
   affectedProducts: AffectedProductsModel;
+  /** The compact P2b table over the same gated rows; null with no items. */
+  affectedProductsTable: AffectedProductsTable | null;
   /** Existing source-supported content preserved below the standardized sections. */
   action: ConsumerAction;
   healthRisk: string | null;
@@ -956,6 +1129,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
   const galleryPhotos = [...consumer.photos, ...labelVisuals].filter(
     (photo) => photo.url !== heroImageUrl,
   );
+  const affectedProductsView = affectedProductsModel(consumer.packageCheck, productName);
 
   return {
     id: detail.id,
@@ -979,7 +1153,8 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     illnessLine: illnessLine(classifyIllnessReport(projection.summaryText)),
     quantityLine: quantityLine(projection.sourceAgency, consumer.quantityText, happened.text),
     whereSold: whereSoldModel(consumer.distribution),
-    affectedProducts: affectedProductsModel(consumer.packageCheck, productName),
+    affectedProducts: affectedProductsView,
+    affectedProductsTable: affectedProductsTable(affectedProductsView),
     action: consumer.action,
     healthRisk: healthRiskSummary(
       projection.hazardCategory,

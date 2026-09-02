@@ -75,7 +75,15 @@ import { extractProseIdentifiers, extractProseVariantLines } from './prose-ident
 import { consumerActionDisplay } from './recall-display';
 import { extractAffectedProductLists, extractDistributionListStates } from './source-lists';
 import { interpretTables, type SemanticFact } from './source-tables';
-import { isGeographicName, variantIdentityRejection } from './variant-identity';
+import {
+  containsPackagingContainer,
+  isGeographicName,
+  measurementKey,
+  measurementOnlyName,
+  packagingOnlyName,
+  splitTrailingMeasurements,
+  variantIdentityRejection,
+} from './variant-identity';
 
 // ── Output shape ────────────────────────────────────────────────────────────
 
@@ -887,6 +895,78 @@ export function parseProseVariants(summaryText: string | null): string[] {
     names.push(part);
   }
   return names.slice(0, 12);
+}
+
+/**
+ * A packaging cell that itself states the version's identity:
+ *
+ *   “Crystal Temptations” plastic bag with designed header card – Chocolatey
+ *   Eyeballs, 10 oz.
+ *
+ * (recorded Chocolatey Eyeballs — a Style # / "Packaging (as labeled)" table
+ * whose only recognized column is packaging, so five per-row cells were
+ * flattening into one case-level Packaging blob). The dash is the source's
+ * own delimiter between the package description and the labeled product; the
+ * trailing measurement is that version's size. Optional leading quoted text
+ * is the brand as printed.
+ */
+const PACKAGING_IDENTITY_CELL = new RegExp(
+  String.raw`^\s*(?:[“"]([^”"]{2,40})[”"]\s+)?(.{3,80}?)\s+[–—-]\s+(.{3,80}?),\s+(\d+(?:[.,]\d+)?\s*-?\s*(?:fl\.?\s?oz|oz|ounces?|lbs?|pounds?|grams?|g|kg|mg|ml|liters?|litres?|l|ct|count|pks?|packs?)\b\.?)\s*$`,
+);
+
+/**
+ * Decompose one table row's composite packaging cell into the facts it
+ * actually states: the version's name, its size, its packaging, and the
+ * printed brand. Applied per row, so each version keeps ONLY its own
+ * packaging and size — the association is the source's row plus the cell's
+ * own delimiter, never array position.
+ *
+ * Evidence-gated on every part: the row must have no product name of its own
+ * (a named row's packaging cell is left untouched), the head must actually
+ * describe a package (a container noun from the closed vocabulary), and the
+ * candidate name must pass the closed variant-identity contract without
+ * being packaging- or measurement-only. A cell failing any gate stays a
+ * plain packaging fact — nothing is guessed.
+ */
+function decomposePackagingIdentityFacts(facts: SemanticFact[]): SemanticFact[] {
+  if (facts.some((item) => item.concept === 'variant')) return facts;
+  const out: SemanticFact[] = [];
+  for (const item of facts) {
+    const match =
+      item.concept === 'packaging'
+        ? item.value.replace(/\s+/g, ' ').trim().match(PACKAGING_IDENTITY_CELL)
+        : null;
+    const head = match?.[2]?.trim() ?? '';
+    const name = match?.[3]?.trim() ?? '';
+    if (
+      !match ||
+      !containsPackagingContainer(head) ||
+      measurementOnlyName(name) ||
+      packagingOnlyName(name) ||
+      variantIdentityRejection(name) !== null
+    ) {
+      out.push(item);
+      continue;
+    }
+    const base = { evidence: item.evidence, scope: item.scope, raw: item.raw ?? item.value };
+    out.push({ ...base, concept: 'variant', sourceLabel: item.sourceLabel, value: name });
+    out.push({
+      ...base,
+      concept: 'package_size',
+      sourceLabel: item.sourceLabel,
+      value: match[4].trim(),
+    });
+    out.push({ ...base, concept: 'packaging', sourceLabel: item.sourceLabel, value: head });
+    if (match[1]) {
+      out.push({
+        ...base,
+        concept: 'brand',
+        sourceLabel: item.sourceLabel,
+        value: match[1].trim(),
+      });
+    }
+  }
+  return out;
 }
 
 interface VariantSource {
@@ -2267,6 +2347,35 @@ function buildPackageCheck(
     }
   }
 
+  // The structured product description's trailing measurement list is the
+  // source stating the affected package sizes ("… Olive Oil 500 ml, 250 ml,
+  // and 100 ml"). Any of those sizes not already stated elsewhere is preserved
+  // as case-level Size evidence. This is the preservation guarantee behind the
+  // shared title cleaner: the presentation may move a description's trailing
+  // sizes out of the product name only because they survive here — the
+  // information moves, it is never lost (docs/recall-feed-usability.md).
+  const descriptionSizes = splitTrailingMeasurements(projection.productDescription ?? '');
+  if (descriptionSizes) {
+    const existingSizeKeys = [
+      ...proseFacts.filter((f) => f.concept === 'package_size').map((f) => f.value),
+      ...tableFacts.filter((f) => f.concept === 'package_size').map((f) => f.value),
+      ...variants.flatMap((variant) =>
+        variant.fields.filter((field) => field.key === 'size').flatMap((field) => field.values),
+      ),
+    ].map(measurementKey);
+    for (const measurement of descriptionSizes.measurements) {
+      const key = measurementKey(measurement);
+      if (key === '' || existingSizeKeys.some((existing) => existing.includes(key))) continue;
+      proseFacts.push({
+        concept: 'package_size',
+        sourceLabel: 'Product description',
+        value: measurement,
+        raw: projection.productDescription ?? measurement,
+        evidence: 'prose',
+      });
+    }
+  }
+
   // Case-level facts: prose facts, plus table facts when no variant carried
   // them (a single-variant table's facts are shown on the variant instead).
   // Lot codes are collapsed separately; distribution, identity, and placement
@@ -2568,7 +2677,14 @@ export function buildConsumerCase(
   // text like any other, and the same label-driven rules apply to it.
   // A table whose product cells defer to the photos gets each row paired with
   // the photo that depicts it, so a version keeps its own barcode and codes.
-  let built = buildVariants(tables.flatMap((table) => attachDeferredImages(table, photos)));
+  let built = buildVariants(
+    tables.flatMap((table) =>
+      attachDeferredImages(table, photos).map((source) => ({
+        ...source,
+        facts: decomposePackagingIdentityFacts(source.facts),
+      })),
+    ),
+  );
   // Facts from rows whose name failed the identity contract widen to the
   // recall scope, whichever structural path proposed them.
   const unassignedFacts: SemanticFact[] = [...built.unassigned];
@@ -2680,7 +2796,9 @@ export function collectSourceFacts(projection: CaseProjection): SemanticFact[] {
   const proseText = proseOutsideTables(projection.summaryHtml, projection.summaryText);
   return [
     ...tables.flatMap((table) =>
-      attachDeferredImages(table, photos).flatMap((variant) => variant.facts),
+      attachDeferredImages(table, photos).flatMap((variant) =>
+        decomposePackagingIdentityFacts(variant.facts),
+      ),
     ),
     ...extractAffectedProductLists(projection.summaryHtml).flatMap((item) => item.facts),
     ...parseProseFacts(proseText),

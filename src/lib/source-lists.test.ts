@@ -244,3 +244,40 @@ test('SunFed: the official product wording survives when no version is extractab
     /not clearly provided|may not identify every affected package/,
   );
 });
+
+test('a container phrase never stands as an item name; the quoted product does', () => {
+  // The recorded FSIS 018-2026 shape: no leading measurement, a container
+  // phrase, a piece count, then the source's own quoted product identity.
+  const html = `
+    <p>The following products are subject to recall [<a href="/sites/default/files/food_label_pdf/x.pdf">view labels</a>]:</p>
+    <ul type="disc"><li>Cardboard boxes containing 100 pieces of “BUFFALO CHICKEN RANGOON” and “Sell By” dates from July 8, 2026, to June 29, 2027, represented on the label.</li><li>Cardboard boxes containing 120 pieces of “BENEDETTO’S BUFFALO CHICKEN MOZZARELLA STICK” and “Sell By” dates from July 8, 2026, to June 29, 2027, represented on the label.</li></ul>`;
+  const lists = extractAffectedProductLists(html);
+  assert.equal(lists.length, 2);
+  const names = lists.map(
+    (item) => item.facts.find((fact) => fact.concept === 'variant')?.value ?? null,
+  );
+  assert.deepEqual(names, [
+    'BUFFALO CHICKEN RANGOON',
+    'BENEDETTO’S BUFFALO CHICKEN MOZZARELLA STICK',
+  ]);
+  // The container is packaging evidence and the count is the package size —
+  // each attached to its OWN item's scope.
+  for (const [index, item] of lists.entries()) {
+    assert.equal(item.facts.find((fact) => fact.concept === 'packaging')?.value, 'Cardboard boxes');
+    assert.equal(
+      item.facts.find((fact) => fact.concept === 'package_size')?.value,
+      index === 0 ? '100 pieces' : '120 pieces',
+    );
+    assert.ok(item.facts.some((fact) => fact.concept === 'sell_by'));
+  }
+});
+
+test('a product name merely ENDING in a container word keeps its head', () => {
+  const html = `
+    <p>The following products are subject to recall:</p>
+    <ul><li>Harvest Gift Baskets containing assorted cheeses. The affected lot codes are: 11-22.</li><li>Holiday Snack Crates containing assorted nuts. The affected lot codes are: 11-23.</li></ul>`;
+  const names = extractAffectedProductLists(html).map(
+    (item) => item.facts.find((fact) => fact.concept === 'variant')?.value ?? null,
+  );
+  assert.deepEqual(names, ['Harvest Gift Baskets', 'Holiday Snack Crates']);
+});

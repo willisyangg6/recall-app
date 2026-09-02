@@ -7,3 +7,6 @@ assets/
 supabase/.temp
 # Recorded real FDA announcement pages (verbatim source bytes; never reformat)
 src/server/fda/fixtures/pages/
+# Recorded real FDA/FSIS fixture records (verbatim source data; never reformat)
+src/server/fda/fixtures/*.json
+src/server/fsis/fixtures/*.json

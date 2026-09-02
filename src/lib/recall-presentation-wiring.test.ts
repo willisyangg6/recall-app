@@ -30,6 +30,16 @@ const RETIRED_SCREEN_FORMATTERS = [
   'healthRiskSummary(',
   'buildConsumerCase(',
   'riskView(',
+  // P2b: product-identity and affected-row construction live in the shared
+  // contract; a screen may render models but never clean or classify fields
+  // itself.
+  'cleanProductName(',
+  'stripTrailingMeasurement(',
+  'splitTrailingMeasurements(',
+  'measurementOnlyName(',
+  'packagingOnlyName(',
+  'affectedProductsModel(',
+  'affectedProductsTable(',
 ];
 
 test('Home renders cards from the presentation model, not its own formatting', () => {
@@ -91,15 +101,54 @@ test('Detail introduces none of the disallowed dead controls', () => {
   assert.ok(!DETAIL.includes('View all'), 'a retailer-list disclosure control was reintroduced');
 });
 
-test('the Affected Products rail consumes the gated model and only populated fields', () => {
-  // Cards render `item.fields` (already gated and ordered by the model);
-  // no raw fact bags, package-check internals, or rejected facts reach JSX.
-  assert.match(DETAIL, /products\.items\.map/);
-  assert.match(DETAIL, /item\.fields\.map/);
+test('Affected Products renders the shared P2b table model, not screen-built rows', () => {
+  // The screen consumes `model.affectedProductsTable` — columns and cells are
+  // decided by the shared contract; no raw fact bags, package-check
+  // internals, or rejected facts reach JSX, and the screen composes no field
+  // labels or cell values of its own.
+  assert.match(DETAIL, /model\.affectedProductsTable/);
+  assert.match(DETAIL, /table\.columns\.map/);
+  assert.match(DETAIL, /row\.cells\.map/);
   assert.ok(!DETAIL.includes('.rejected'), 'Detail reads rejected facts');
   assert.ok(!DETAIL.includes('rawText'), 'Detail renders raw extracted text');
-  // Horizontal treatment.
+  assert.ok(!DETAIL.includes('PACKAGE_FIELD_LABEL'), 'Detail composes its own field labels');
+  // The table scrolls horizontally as ONE unit — header and rows together.
   assert.match(DETAIL, /ScrollView[\s\S]{0,40}horizontal/);
+  // The reveal control comes from the model ("See all (N)"), collapses again,
+  // and no screen-invented count exists.
+  assert.match(DETAIL, /table\.seeAllLabel/);
+  assert.match(DETAIL, /Show fewer/);
+  assert.ok(!DETAIL.includes("'See all"), 'the See all label is screen-composed');
+  // A missing cell renders EMPTY — never a dash or placeholder text.
+  assert.ok(!DETAIL.includes("?? '—'"), 'a dash placeholder is rendered');
+  assert.ok(!DETAIL.includes('Unknown'), 'an unknown placeholder is rendered');
+  // No version image or image placeholder in P2b (P2c owns image roles).
+  assert.ok(!DETAIL.includes('item.photo'), 'a version image is rendered');
+  assert.ok(!DETAIL.includes('row.photo'), 'a version image is rendered');
+  // Each code disclosure beneath the table is structurally tied to exactly
+  // one row: it renders that row's own `row.codes` under a key derived from
+  // that row's stable id — no path exists to another version's codes.
+  assert.match(DETAIL, /row\.codes/);
+  assert.match(DETAIL, /codes-\$\{row\.id\}/);
+  assert.match(DETAIL, /row-\$\{row\.id\}/);
+});
+
+test('no shared-facts block can render under Affected Products', () => {
+  // Founder decision: the consumer table has no shared-facts section. A fact
+  // proven to apply to every version reaches the screen only inside each
+  // row's cells (materialized by the shared table model); the screen has no
+  // path to the model's internal shared-evidence fields.
+  assert.ok(!DETAIL.includes('appliesToAll'), 'a shared-facts block is rendered');
+  assert.ok(!DETAIL.includes('Applies to all'), 'shared-facts copy is rendered');
+  assert.ok(!DETAIL.includes('sharedFields'), 'package-check shared internals reach the screen');
+});
+
+test('no orphan attachment links render under Affected Products', () => {
+  // The official "Product labels (PDF)" / "Product list (PDF)" links stay
+  // preserved in the model (`model.attachments`) for a later source/image
+  // surface; the Detail screen renders no independent attachment element.
+  assert.ok(!DETAIL.includes('model.attachments'), 'attachment links rendered');
+  assert.ok(!DETAIL.includes('Product labels'), 'the labels PDF link rendered');
 });
 
 test('Home cards carry ONE generic Affects-you flag — the legacy reason chips are gone', () => {

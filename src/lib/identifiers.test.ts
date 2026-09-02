@@ -223,3 +223,19 @@ test('a bare "up to" bound reads as Through, and complete year-less spans stay r
   // both endpoints present. It does not normalize and it is not malformed.
   assert.equal(normalizeDateValue('11-28 thru 12-15').canonical, undefined);
 });
+
+test('a range whose ends carry list commas still normalizes as one range', () => {
+  // "from July 8, 2026, to June 29, 2027" — the comma after the start date is
+  // the source's grammar, not date content. Failing to read the range split
+  // it into two endpoint days downstream, misstating which packages match.
+  assert.deepEqual(normalizeDateValue('from July 8, 2026, to June 29, 2027'), {
+    display: 'July 8, 2026–June 29, 2027',
+    raw: 'from July 8, 2026, to June 29, 2027',
+    canonical: 'range:date:2026-07-08:date:2027-06-29',
+  });
+  assert.deepEqual(normalizeDateValue('between November 30, 2021, and January 8, 2022'), {
+    display: 'November 30, 2021–January 8, 2022',
+    raw: 'between November 30, 2021, and January 8, 2022',
+    canonical: 'range:date:2021-11-30:date:2022-01-08',
+  });
+});

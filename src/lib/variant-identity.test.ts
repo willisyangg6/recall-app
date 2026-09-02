@@ -10,7 +10,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { isGeographicName, variantIdentityRejection } from './variant-identity';
+import {
+  isGeographicName,
+  packagingOnlyName,
+  splitTrailingMeasurements,
+  variantIdentityRejection,
+} from './variant-identity';
 
 test('dates and field-label rows are never variant identities', () => {
   assert.equal(variantIdentityRejection('Best by 12/14/2026'), 'field-label');
@@ -150,4 +155,73 @@ test('a real product whose name opens with a document word still passes', () => 
   ]) {
     assert.equal(variantIdentityRejection(name), null, name);
   }
+});
+
+test('packaging-only names are recognized; product names with packaging words are not', () => {
+  for (const packaging of [
+    'Cardboard boxes',
+    'cardboard boxes',
+    'Plastic bags',
+    'Trays',
+    'Cartons',
+    'Glass jars',
+    'Aluminum pan with plastic overwrap',
+    'Vacuum sealed packages',
+    'Clear plastic clamshells',
+  ]) {
+    assert.equal(packagingOnlyName(packaging), true, packaging);
+  }
+  for (const product of [
+    '7-Eleven Wrap',
+    'Boxed Water',
+    'Cup Noodles',
+    'Bagel Bites',
+    'Jalapeno Ranch Dressing',
+    'Buffalo Chicken Rangoon',
+    'Lunch Box Snack Mix',
+    '365',
+    '100% Grass-fed Pepper Jack Cheese',
+    'a2 Platinum Premium Infant Formula',
+    '',
+  ]) {
+    assert.equal(packagingOnlyName(product), false, product);
+  }
+});
+
+test('trailing measurement lists split off a base name; measurement-only values never do', () => {
+  assert.deepEqual(splitTrailingMeasurements('Enoki Mushroom 150g'), {
+    base: 'Enoki Mushroom',
+    measurements: ['150g'],
+  });
+  assert.deepEqual(
+    splitTrailingMeasurements(
+      'Garlic Mediterranean Infused Extra Virgin Olive Oil 500 ml, 250 ml, and 100 ml',
+    ),
+    {
+      base: 'Garlic Mediterranean Infused Extra Virgin Olive Oil',
+      measurements: ['500 ml', '250 ml', '100 ml'],
+    },
+  );
+  assert.deepEqual(
+    splitTrailingMeasurements('Chocolatey Eyeballs, 7 oz., 10 oz., 10.5 oz., 11 oz., and 16 oz.'),
+    {
+      base: 'Chocolatey Eyeballs',
+      measurements: ['7 oz.', '10 oz.', '10.5 oz.', '11 oz.', '16 oz.'],
+    },
+  );
+  // A parenthesized metric equivalent stays attached to its measurement.
+  assert.deepEqual(
+    splitTrailingMeasurements('Banana & Strawberry Fruit Puree Pouches, 4 oz. (113 g)'),
+    {
+      base: 'Banana & Strawberry Fruit Puree Pouches',
+      measurements: ['4 oz. (113 g)'],
+    },
+  );
+  // Measurement-only values and numeric brands never split.
+  assert.equal(splitTrailingMeasurements('62.4-oz'), null);
+  assert.equal(splitTrailingMeasurements('7 oz'), null);
+  assert.equal(splitTrailingMeasurements('365'), null);
+  // Names without a trailing measurement never split.
+  assert.equal(splitTrailingMeasurements('Nerds Gummy Clusters'), null);
+  assert.equal(splitTrailingMeasurements('100% Grass-fed Pepper Jack Cheese'), null);
 });

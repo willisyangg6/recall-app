@@ -491,7 +491,7 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
   ];
   for (const [labelPattern, concept] of DATE_LABEL_FAMILY) {
     const pattern = new RegExp(
-      String.raw`\b(${labelPattern})\b[”"’']?\s+dates?\s+(?:of\s+)?((?:between|from|up\s+to|through|ranging)\s+[^.;:\n"“”]{4,70}?)(?=[.;\n]|,?\s+(?:located|printed|marked|stamped|found)\b|$)`,
+      String.raw`\b(${labelPattern})\b[”"’']?\s+dates?\s+(?:of\s+)?((?:between|from|up\s+to|through|ranging)\s+[^.;:\n"“”]{4,70}?)(?=[.;\n]|,?\s+(?:located|printed|marked|stamped|found|represented|shown|displayed|embossed)\b|$)`,
       'gi',
     );
     for (const match of summaryText.matchAll(pattern)) {

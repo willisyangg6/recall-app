@@ -28,7 +28,7 @@ import { normalizeStateToken } from '@/domain/us-geography';
 import { conceptForLabel } from './consumer-concepts';
 import { extractProseIdentifiers } from './prose-identifiers';
 import type { SemanticFact } from './source-tables';
-import { variantIdentityRejection } from './variant-identity';
+import { packagingOnlyName, variantIdentityRejection } from './variant-identity';
 
 /** One source-declared list item, as a variant source for `buildVariants`. */
 export interface ListVariant {
@@ -155,6 +155,19 @@ const NAME_SIZE_TAIL =
 const PACKAGE_PREFIX =
   /^\s*((\d[\d,./]*)\s*-?\s*(oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|fl\.?\s*oz|count|ct|pack|pk)\b\.?)\s+([a-z][a-z -]{0,40}?)\s+(?:packages?|bags?|jars?|boxes?|cartons?|containers?|tubs?|bottles?|cans?|pouches?)?\s*(?:containing|of|holding|labeled)\s+/i;
 
+/**
+ * Leading container phrase with NO measurement: "Cardboard boxes containing
+ * 100 pieces of “BUFFALO CHICKEN RANGOON” …" (recorded FSIS 018-2026). Read
+ * whole, the container stood as the item's "name" while the source's own
+ * quoted product identity after it went unread. The container is packaging
+ * evidence, a stated piece count is the package size, and the quoted string is
+ * the product. The captured phrase must itself pass the closed packaging
+ * vocabulary, so a product name that merely ends in a container word ("Gift
+ * Baskets containing …") never loses its head.
+ */
+const CONTAINER_PREFIX =
+  /^\s*((?:[A-Za-z]+\s+){0,2}?(?:box(?:es)?|bags?|jars?|cartons?|cases?|containers?|tubs?|bottles?|cans?|pouch(?:es)?|trays?|packages?|packs?|sleeves?|wrappers?))\s+(?:containing|holding)\s+(?:(\d[\d,]*)[\s-]*(pieces?|units?|bars?|packets?|pouches?|links?|patties?|count|ct)\s+of\s+)?/i;
+
 function fact(
   concept: SemanticFact['concept'],
   sourceLabel: string,
@@ -188,6 +201,17 @@ function itemName(text: string): {
     );
     if (container) packaging = container[1].trim();
     working = working.slice(prefix[0].length);
+  } else {
+    // A container phrase without a measurement, verified against the closed
+    // packaging vocabulary before anything is removed.
+    const container = working.match(CONTAINER_PREFIX);
+    if (container && packagingOnlyName(container[1])) {
+      packaging = container[1].trim();
+      if (container[2] && container[3]) {
+        size = `${container[2]} ${container[3].toLowerCase()}`;
+      }
+      working = working.slice(container[0].length);
+    }
   }
 
   const boundary = working.search(NAME_BOUNDARY);

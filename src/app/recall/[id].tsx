@@ -3,7 +3,7 @@ import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PhotoGallery, PhotoThumbnail } from '@/components/photo-gallery';
+import { PhotoThumbnail } from '@/components/photo-gallery';
 import { RiskBadge } from '@/components/risk-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -15,7 +15,7 @@ import { fetchCaseDetail, type CaseDetail } from '@/lib/recall-feed';
 import {
   buildDetailModel,
   todayIso,
-  type AffectedProductItem,
+  type AffectedProductsTable,
   type DetailModel,
   type WhereSoldModel,
 } from '@/lib/recall-presentation';
@@ -93,40 +93,61 @@ function WhereItWasSold({ model }: { model: WhereSoldModel }) {
 }
 
 /**
- * One affected product/package/version in the horizontal rail: only populated
- * approved fields, always in the stable P1 order (Product, size, identifying
- * date under its source-specific label, barcode, lot/batch codes). Empty
- * fields simply do not render — the card never shows placeholder columns.
+ * The compact Affected Products table (P2b): column labels render once as the
+ * uppermost row, then one affected version per row, in source order. The
+ * whole table scrolls horizontally as one unit so header and row cells stay
+ * aligned. An empty cell stays empty — no dash, no "unknown", no value
+ * borrowed from another version. At most three rows render initially; the
+ * model's `See all (N)` control reveals the rest inline and collapses again.
+ * No version image or placeholder renders here (P2c owns image roles).
  */
-function AffectedProductCard({
-  item,
-  codesExpanded,
-  onToggleCodes,
+function AffectedProductsTableView({
+  table,
+  expanded,
+  onToggleExpanded,
 }: {
-  item: AffectedProductItem;
-  codesExpanded: boolean;
-  onToggleCodes: () => void;
+  table: AffectedProductsTable;
+  expanded: boolean;
+  onToggleExpanded: () => void;
 }) {
+  const rows = expanded ? table.rows : table.rows.slice(0, table.initialRows);
   return (
-    <ThemedView type="backgroundElement" style={styles.productCard}>
-      {/* Null when the model demoted a measurement-only version name into the
-          Size field — the card renders its fields with no Product line. */}
-      {item.name ? <ThemedText style={styles.productName}>{item.name}</ThemedText> : null}
-      {item.photo ? <PhotoGallery photos={[item.photo]} size={110} /> : null}
-      {item.fields.map((field) => (
-        <ThemedText key={field.key} type="small">
-          {field.label}: {field.value}
-        </ThemedText>
-      ))}
-      <CodeSet codes={item.codes} expanded={codesExpanded} onToggle={onToggleCodes} />
-      {/* Only reached when this version's codes sit somewhere the others' do
-          not; a shared location is shown once below the rail. */}
-      {item.codeLocation ? (
-        <ThemedText type="small" themeColor="textSecondary">
-          {item.codeLocation.text}
-        </ThemedText>
+    <View style={styles.step}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View>
+          <View style={styles.tableRow}>
+            {table.columns.map((column) => (
+              <ThemedText
+                key={column.key}
+                type="small"
+                themeColor="textSecondary"
+                style={styles.tableCell}>
+                {column.label.toUpperCase()}
+              </ThemedText>
+            ))}
+          </View>
+          {rows.map((row) => (
+            <ThemedView key={row.id} type="backgroundElement" style={styles.tableRow}>
+              {row.cells.map((cell, index) => (
+                <ThemedText key={table.columns[index].key} type="small" style={styles.tableCell}>
+                  {cell ?? ''}
+                </ThemedText>
+              ))}
+            </ThemedView>
+          ))}
+        </View>
+      </ScrollView>
+      {table.seeAllLabel ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          onPress={onToggleExpanded}>
+          <ThemedText themeColor="link" type="small">
+            {expanded ? 'Show fewer' : table.seeAllLabel}
+          </ThemedText>
+        </Pressable>
       ) : null}
-    </ThemedView>
+    </View>
   );
 }
 
@@ -136,6 +157,8 @@ export default function RecallDetailScreen() {
   // Nested disclosure: large code sets stay collapsed inside their cards,
   // keyed by the item they belong to so each opens independently.
   const [openCodeSets, setOpenCodeSets] = useState<Set<string>>(new Set());
+  // Whether the Affected Products table shows every row or the initial three.
+  const [tableExpanded, setTableExpanded] = useState(false);
   const [prefs, setPrefs] = useState<UserRecallPreferences | null>(null);
   const toggleCodeSet = (key: string) =>
     setOpenCodeSets((prior) => {
@@ -288,37 +311,41 @@ export default function RecallDetailScreen() {
         </Section>
 
         {/* Affected Products: the gated P0A data only — no helper, coverage,
-            or disclaimer prose (P2a founder decision). The coverage state
-            stays internal to the model for correctness and QA. P2b replaces
-            these cards with the compact versions table. */}
+            or disclaimer prose (P2a founder decision). P2b renders the shared
+            table model: headers once, one affected version per row, at most
+            three rows before See all (N). The table has NO shared-facts
+            section (founder decision): a fact proven to apply to every
+            version arrives repeated inside each row's cells. The official
+            attachment links stay preserved in the model for a later
+            source/image surface — no orphan attachment link renders here. */}
         <Section title="Affected Products">
-          {products.appliesToAll.length > 0 ? (
-            <ThemedView type="backgroundElement" style={styles.productRow}>
-              <ThemedText type="small" themeColor="textSecondary">
-                Applies to all affected versions
-              </ThemedText>
-              {products.appliesToAll.map((field) => (
-                <ThemedText key={field.key} type="small">
-                  {field.label}: {field.value}
-                </ThemedText>
-              ))}
-            </ThemedView>
+          {model.affectedProductsTable ? (
+            <AffectedProductsTableView
+              table={model.affectedProductsTable}
+              expanded={tableExpanded}
+              onToggleExpanded={() => setTableExpanded((prior) => !prior)}
+            />
           ) : null}
-          {products.items.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.productRail}>
-              {products.items.map((item, index) => (
-                <AffectedProductCard
-                  key={index}
-                  item={item}
-                  codesExpanded={openCodeSets.has(`v${index}`)}
-                  onToggleCodes={() => toggleCodeSet(`v${index}`)}
+          {/* A version's OWN collapsed code set stays attributed to that
+              version: its disclosure renders beneath the table under the
+              row's product name. */}
+          {(model.affectedProductsTable?.rows ?? [])
+            .slice(0, tableExpanded ? undefined : model.affectedProductsTable?.initialRows)
+            .filter((row) => row.codes !== null)
+            .map((row) => (
+              <View key={`codes-${row.id}`} style={styles.step}>
+                {row.name ? (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {row.name}
+                  </ThemedText>
+                ) : null}
+                <CodeSet
+                  codes={row.codes}
+                  expanded={openCodeSets.has(`row-${row.id}`)}
+                  onToggle={() => toggleCodeSet(`row-${row.id}`)}
                 />
-              ))}
-            </ScrollView>
-          ) : null}
+              </View>
+            ))}
           {/* Production codes are opaque, so the calendar dates they stand
               for lead and the codes follow behind a tap. */}
           {products.productionDates ? (
@@ -336,15 +363,6 @@ export default function RecallDetailScreen() {
             expanded={openCodeSets.has('lot')}
             onToggle={() => toggleCodeSet('lot')}
           />
-          {model.attachments.map((attachment) => (
-            <ThemedText
-              key={attachment.url}
-              themeColor="link"
-              accessibilityRole="link"
-              onPress={() => Linking.openURL(attachment.url)}>
-              {attachment.label}
-            </ThemedText>
-          ))}
         </Section>
       </ScrollView>
     </ThemedView>
@@ -403,24 +421,18 @@ const styles = StyleSheet.create({
     padding: Spacing.two,
     borderRadius: Radii.small,
   },
-  productRow: {
-    padding: Spacing.two,
-    borderRadius: Radii.small,
-    gap: Spacing.half,
-  },
-  // The horizontal Affected Products rail: fixed-width cards so several peek
-  // into view and the rail invites a scroll. Final dimensions/polish deferred.
-  productRail: {
+  // The Affected Products table: fixed-width cells keep the header row and
+  // every data row aligned, and the whole grid scrolls horizontally as one
+  // unit inside its ScrollView. Final dimensions/polish deferred to the
+  // design-system pass.
+  tableRow: {
     flexDirection: 'row',
-    gap: Spacing.two,
-  },
-  productCard: {
-    width: 240,
-    padding: Spacing.two,
     borderRadius: Radii.small,
-    gap: Spacing.half,
+    marginBottom: Spacing.half,
   },
-  productName: {
-    fontWeight: '600',
+  tableCell: {
+    width: 148,
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.one,
   },
 });

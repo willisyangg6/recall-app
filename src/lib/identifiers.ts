@@ -395,7 +395,13 @@ export function normalizeDateValue(raw: string): NormalizedValue {
   const separator = bounded
     ? /\s*(?:–|—|-|\bto\b|\bthrough\b|\bthru\b|\band\b)\s*/i
     : RANGE_SEPARATOR;
-  const parts = rangeText.split(separator);
+  // A range's ends often carry the list punctuation the source wrote around
+  // its connector ("from July 8, 2026, to June 29, 2027" leaves a trailing
+  // comma on the start date). The comma is grammar, not date content, so it is
+  // trimmed before each end is read — without this the range fails to parse
+  // and downstream list-splitting shows the two ENDPOINTS of a span as two
+  // separate days, which misstates which packages are affected.
+  const parts = rangeText.split(separator).map((part) => part.replace(/^[\s,]+|[\s,.]+$/g, ''));
   if (parts.length === 2) {
     let start = parseCalendarDay(parts[0]);
     const end = parseCalendarDay(parts[1]);

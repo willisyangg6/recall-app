@@ -305,3 +305,12 @@ test('production codes reach their own concept instead of a date field', () => {
     JSON.stringify(facts),
   );
 });
+
+test('a "represented on the label" tail never rides into a labeled date span', () => {
+  const { facts } = extractProseIdentifiers(
+    '“Sell By” dates from July 8, 2026, to June 29, 2027, represented on the label.',
+  );
+  const sellBy = facts.filter((fact) => fact.concept === 'sell_by');
+  assert.equal(sellBy.length, 1);
+  assert.equal(sellBy[0].value, 'from July 8, 2026, to June 29, 2027');
+});

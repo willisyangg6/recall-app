@@ -16,7 +16,9 @@ import type { CaseProjection, TimelineEntry } from '@/domain/recall-types';
 import type { CaseDetail, FeedItem } from './recall-feed';
 import {
   activityDisplay,
+  AFFECTED_PRODUCTS_INITIAL_ROWS,
   affectedProductsModel,
+  affectedProductsTable,
   buildDetailModel,
   caseIdentity,
   buildHomeCardModel,
@@ -1262,4 +1264,281 @@ test('graded coverage: partial evidence renders under conservative wording', () 
     scopeStatement: 'Only packages matching the affected details below are part of this recall.',
   };
   assert.equal(affectedProductsModel(structured, 'Cheese Cup').coverage, 'structured');
+});
+
+// ── P2b: trailing measurement lists, packaging demotion, the table ──────────
+
+test('a trailing measurement LIST is removed only when every size is preserved', () => {
+  // All three sizes preserved in evidence → the list strips.
+  assert.equal(
+    stripTrailingMeasurement('Olive Oil 500 ml, 250 ml, and 100 ml', [
+      '500 ml bottle',
+      '250 ml bottle',
+      '100 ml bottle',
+    ]),
+    'Olive Oil',
+  );
+  // One size missing from evidence → the official wording stays whole.
+  assert.equal(
+    stripTrailingMeasurement('Olive Oil 500 ml, 250 ml, and 100 ml', ['500 ml bottle']),
+    'Olive Oil 500 ml, 250 ml, and 100 ml',
+  );
+});
+
+test('a description-derived name counts its own trailing sizes as evidence', () => {
+  // The projection's description-size guarantee preserves these as Size
+  // evidence, so the shared cleaner may move them out of the title — Home and
+  // Detail apply the identical rule to the identical structured field.
+  assert.equal(
+    cleanProductName({
+      title: 'Acme Recalls Olive Oil',
+      productDescription: 'Garlic Infused Olive Oil 500 ml, 250 ml, and 100 ml',
+      displayedBrands: [],
+      packageEvidence: [],
+    }),
+    'Garlic Infused Olive Oil',
+  );
+  // A TITLE-derived name keeps the strict line-evidence gate.
+  assert.equal(
+    cleanProductName({
+      title: 'Acme Recalls Enoki Mushroom 150g',
+      productDescription: null,
+      displayedBrands: [],
+      packageEvidence: [],
+    }),
+    'Enoki Mushroom 150g',
+  );
+});
+
+test('a prose-shaped brand entry never displays; the company fallback stands', () => {
+  const prose = displayBrand(
+    ['Crazy Fresh and Quick & Easy an Unbranded and Bountiful Fresh gift baskets'],
+    'Russ Davis Wholesale',
+    'Russ Davis Wholesale Recalls Peaches',
+  );
+  assert.equal(prose.text, 'Russ Davis Wholesale');
+  assert.equal(prose.usedBrand, false);
+  // Another concise stored brand wins when one exists — never sliced prose.
+  const mixed = displayBrand(
+    ['Crazy Fresh and Quick & Easy an Unbranded and Bountiful Fresh gift baskets', 'Crazy Fresh'],
+    'Russ Davis Wholesale',
+    'Russ Davis Wholesale Recalls Peaches',
+  );
+  assert.equal(mixed.text, 'Crazy Fresh');
+  assert.equal(mixed.usedBrand, true);
+});
+
+test('a packaging-only version name is demoted to Packaging, never Product', () => {
+  const model = affectedProductsModel(nameOnlyPackageCheck('Cardboard boxes'), 'Product');
+  assert.equal(model.items.length, 1);
+  assert.equal(model.items[0].name, null);
+  assert.deepEqual(
+    model.items[0].fields.map((field) => [field.key, field.label, field.value]),
+    [['packaging', 'Packaging', 'Cardboard boxes']],
+  );
+});
+
+test('packaging demotion never duplicates an existing Packaging value', () => {
+  const check = nameOnlyPackageCheck('Cardboard boxes');
+  check.variants[0].fields = [
+    {
+      key: 'packaging',
+      label: 'Packaging',
+      value: 'Cardboard boxes',
+      values: ['Cardboard boxes'],
+      raw: ['Cardboard boxes'],
+      canonicalKeys: ['cardboardboxes'],
+    },
+  ];
+  const model = affectedProductsModel(check, 'Product');
+  assert.equal(model.items[0].name, null);
+  assert.deepEqual(
+    model.items[0].fields.map((field) => [field.key, field.value]),
+    [['packaging', 'Cardboard boxes']],
+  );
+});
+
+function tableCheck(
+  variants: { name: string; fields: [string, string][] }[],
+): ConsumerPackageCheck {
+  return {
+    render: true,
+    scopeStatement: 'Only packages matching the affected details below are part of this recall.',
+    variants: variants.map(({ name, fields }, index) => ({
+      name,
+      fields: fields.map(([key, value]) => ({
+        key: key as 'size' | 'bestBy' | 'upc' | 'lotCodes' | 'sellBy' | 'packaging',
+        label: PACKAGE_FIELD_LABEL[key as 'size'],
+        value,
+        values: [value],
+        raw: [value],
+        canonicalKeys: [value.toLowerCase()],
+      })),
+      rejected: [],
+      codeLocation: null,
+      lotCodes: null,
+      photo: null,
+      scope: `t0r${index}`,
+    })),
+    sharedFields: [],
+    fields: [],
+    rejected: [],
+    lotCodes: null,
+    productionCodes: null,
+    productionDates: null,
+    codeLocation: null,
+    photos: [],
+    coverage: 'structured',
+    hasIdentifiers: true,
+  };
+}
+
+test('the table: headers once, Product first, columns only where a row has data', () => {
+  const model = affectedProductsModel(
+    tableCheck([
+      {
+        name: 'Strawberry Bars',
+        fields: [
+          ['size', '6 Bars'],
+          ['upc', '041548610047'],
+        ],
+      },
+      {
+        name: 'Grape Bars',
+        fields: [
+          ['upc', '041548244044'],
+          ['bestBy', 'October 31, 2027'],
+        ],
+      },
+    ]),
+    'Fruit Bars',
+  );
+  const table = affectedProductsTable(model);
+  assert.ok(table);
+  // Product leads; then the stable field order; no column exists without data.
+  assert.deepEqual(
+    table!.columns.map((column) => column.label),
+    ['Product', 'Package Size', 'Best by', 'Barcode (UPC)'],
+  );
+  // A missing cell stays EMPTY (null) — never a dash, never a borrowed value.
+  assert.deepEqual(table!.rows[0].cells, ['Strawberry Bars', '6 Bars', null, '041548610047']);
+  assert.deepEqual(table!.rows[1].cells, ['Grape Bars', null, 'October 31, 2027', '041548244044']);
+  // Two rows need no reveal control.
+  assert.equal(table!.seeAllLabel, null);
+  assert.equal(table!.initialRows, 2);
+  // Stable row identity for P2c image assignment.
+  assert.deepEqual(
+    table!.rows.map((row) => row.id),
+    ['t0r0', 't0r1'],
+  );
+});
+
+test('the table shows at most three rows initially, with See all (N) beyond', () => {
+  const model = affectedProductsModel(
+    tableCheck(
+      ['A', 'B', 'C', 'D', 'E'].map((name) => ({
+        name: `${name} Cookie Dough`,
+        fields: [['upc', `0000000000${name.charCodeAt(0)}`]] as [string, string][],
+      })),
+    ),
+    'Cookie Dough',
+  );
+  const table = affectedProductsTable(model);
+  assert.ok(table);
+  assert.equal(table!.rows.length, 5);
+  assert.equal(table!.initialRows, AFFECTED_PRODUCTS_INITIAL_ROWS);
+  assert.equal(table!.seeAllLabel, 'See all (5)');
+});
+
+test('a demoted row keeps its own facts: name null, no Product masquerade', () => {
+  const model = affectedProductsModel(
+    tableCheck([
+      { name: 'Cardboard boxes', fields: [['sellBy', 'July 8, 2026–June 29, 2027']] },
+      { name: 'Potato Market Loaf', fields: [['sellBy', 'July 9, 2026']] },
+    ]),
+    'Frozen Products',
+  );
+  const table = affectedProductsTable(model);
+  assert.ok(table);
+  // The packaging-only name demoted: its row survives with an empty Product
+  // cell and its own Sell by — the date is never relabeled or reassigned.
+  assert.deepEqual(
+    table!.columns.map((column) => column.label),
+    ['Product', 'Sell by', 'Packaging'],
+  );
+  assert.deepEqual(table!.rows[0].cells, [null, 'July 8, 2026–June 29, 2027', 'Cardboard boxes']);
+  assert.deepEqual(table!.rows[1].cells, ['Potato Market Loaf', 'July 9, 2026', null]);
+});
+
+test('with no items there is no table; the model reports its honest state instead', () => {
+  const detailless: ConsumerPackageCheck = {
+    ...nameOnlyPackageCheck('x'),
+    render: false,
+    variants: [],
+    coverage: 'source_silent',
+    hasIdentifiers: false,
+  };
+  assert.equal(affectedProductsTable(affectedProductsModel(detailless, 'Product')), null);
+});
+
+test('proven-shared evidence repeats in every row — no shared-facts structure', () => {
+  const check = tableCheck([
+    { name: 'Buffalo Chicken Rangoon', fields: [['size', '100 pieces']] },
+    { name: 'Benedetto’s Mozzarella Stick', fields: [['size', '120 pieces']] },
+  ]);
+  // Evidence the projection PROVED applies to every version (each row's own
+  // source cell states it identically).
+  check.sharedFields = [
+    {
+      key: 'sellBy',
+      label: PACKAGE_FIELD_LABEL.sellBy,
+      value: 'July 8, 2026–June 29, 2027',
+      values: ['July 8, 2026–June 29, 2027'],
+      raw: ['July 8, 2026–June 29, 2027'],
+      canonicalKeys: ['range:date:2026-07-08:date:2027-06-29'],
+    },
+  ];
+  const model = affectedProductsModel(check, 'Frozen Products');
+  const table = affectedProductsTable(model);
+  assert.ok(table);
+  // The column exists once; the proven value repeats inside every row —
+  // there is no separate shared-facts structure anywhere in the table shape.
+  assert.deepEqual(
+    table!.columns.map((column) => column.label),
+    ['Product', 'Package Size', 'Sell by'],
+  );
+  assert.deepEqual(table!.rows[0].cells, [
+    'Buffalo Chicken Rangoon',
+    '100 pieces',
+    'July 8, 2026–June 29, 2027',
+  ]);
+  assert.deepEqual(table!.rows[1].cells, [
+    'Benedetto’s Mozzarella Stick',
+    '120 pieces',
+    'July 8, 2026–June 29, 2027',
+  ]);
+  // Row-specific values stay row-specific — sharing one field never merges
+  // the others.
+  assert.notEqual(table!.rows[0].cells[1], table!.rows[1].cells[1]);
+  assert.deepEqual(Object.keys(table!), ['columns', 'rows', 'initialRows', 'seeAllLabel']);
+});
+
+test('ambiguous case-level evidence never reaches a row cell', () => {
+  // A fact whose owner could not be proven is rejected upstream
+  // ('ambiguous-scope') and is structurally invisible to the table: it is
+  // neither a row field nor shared evidence, so no column and no cell can
+  // carry it — omission, never a guess.
+  const check = tableCheck([
+    { name: 'Strawberry Bars', fields: [['size', '6 Bars']] },
+    { name: 'Grape Bars', fields: [['size', '6 Bars']] },
+  ]);
+  check.rejected = [
+    { concept: 'lot', sourceLabel: 'Lot code', values: ['999111'], reason: 'ambiguous-scope' },
+  ];
+  const table = affectedProductsTable(affectedProductsModel(check, 'Fruit Bars'));
+  assert.ok(table);
+  assert.ok(!table!.columns.some((column) => column.key === 'lotCodes'));
+  for (const row of table!.rows) {
+    assert.ok(!row.cells.some((cell) => cell?.includes('999111')));
+  }
 });

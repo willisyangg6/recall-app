@@ -174,6 +174,117 @@ export function measurementOnlyName(name: string): boolean {
 }
 
 /**
+ * The closed packaging vocabulary: container nouns, package materials, and the
+ * few joiners that connect them. A candidate is packaging-only when EVERY word
+ * belongs to this vocabulary and at least one is a container noun — so
+ * "Cardboard boxes", "Plastic bags", and "Aluminum pan with plastic overwrap"
+ * match, while any candidate carrying a single product word ("7-Eleven Wrap",
+ * "Cup Noodles", "Boxed Water") cannot.
+ */
+const PACKAGING_CONTAINER =
+  /^(?:box(?:es)?|bags?|jars?|cartons?|cases?|trays?|tubs?|bottles?|cans?|pouch(?:es)?|packages?|packets?|packs?|containers?|cups?|sleeves?|wrappers?|wraps?|overwraps?|clamshells?|pails?|buckets?|sacks?|crates?|pans?|lids?|tubes?|liners?)$/i;
+
+const PACKAGING_MODIFIER =
+  /^(?:cardboard|plastic|glass|aluminum|aluminium|foil|paper|paperboard|styrofoam|foam|metal|tin|cellophane|shrink|vacuum|clear|corrugated|sealed|resealable|rigid|flexible|laminated|film|with|and|or|in|of|the|a|an)$/i;
+
+/**
+ * True when the entire candidate variant name describes only a package — a
+ * container and/or its material — with no product identity in it.
+ *
+ * Such a value is PACKAGING evidence, never a consumer product name: the
+ * presentation contract renders it in the Packaging slot of its row and never
+ * as Product. The whole-candidate rule is what keeps genuine product names
+ * containing packaging words ("Boxed Water", "Cup Noodles", "7-Eleven Wrap")
+ * untouched — one non-packaging word disqualifies the match.
+ */
+/**
+ * True when any word of the text is a container noun from the closed
+ * packaging vocabulary ("plastic bag with designed header card" — "bag").
+ * Weaker than `packagingOnlyName` on purpose: it recognizes that a phrase is
+ * ABOUT a package without requiring every word to be packaging vocabulary.
+ */
+export function containsPackagingContainer(text: string): boolean {
+  return text
+    .replace(/[\s,]+/g, ' ')
+    .trim()
+    .split(' ')
+    .some((word) => PACKAGING_CONTAINER.test(word.replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, '')));
+}
+
+export function packagingOnlyName(name: string): boolean {
+  const words = name
+    .replace(/[\s,]+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter((word) => word !== '');
+  if (words.length === 0) return false;
+  let containers = 0;
+  for (const word of words) {
+    const core = word.replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, '');
+    if (core === '') return false;
+    if (PACKAGING_CONTAINER.test(core)) {
+      containers += 1;
+      continue;
+    }
+    if (!PACKAGING_MODIFIER.test(core)) return false;
+  }
+  return containers > 0;
+}
+
+// ── Trailing measurement lists ──────────────────────────────────────────────
+
+/**
+ * One package measurement token, with an optional parenthesized metric
+ * equivalent the source printed beside it ("4 oz. (113 g)").
+ */
+const MEASUREMENT_TOKEN = String.raw`\d+(?:[.,]\d+)?\s*-?\s*(?:fl\.?\s?oz|oz|ounces?|lbs?|pounds?|grams?|g|kg|mg|ml|liters?|litres?|l|ct|count|pks?|packs?)\b\.?(?:\s*\(\s*\d+(?:[.,]\d+)?\s*(?:fl\.?\s?oz|oz|ounces?|lbs?|pounds?|grams?|g|kg|mg|ml|l)\s*\.?\s*\))?`;
+
+/**
+ * A trailing run of one or more package measurements at the end of a product
+ * name: "… 7 oz", "… 500 ml, 250 ml, and 100 ml", "…, 4 oz. (113 g)".
+ */
+const TRAILING_MEASUREMENT_LIST = new RegExp(
+  String.raw`[\s,;:–—-]*\(?(${MEASUREMENT_TOKEN}(?:\s*(?:,\s*(?:and\s+)?|,?\s+and\s+|\s*&\s*)${MEASUREMENT_TOKEN})*)\)?\.?$`,
+  'i',
+);
+
+export interface TrailingMeasurements {
+  /** The name with the trailing measurement run removed. */
+  base: string;
+  /** Each removed measurement, in source order (paired metric kept attached). */
+  measurements: string[];
+}
+
+/**
+ * Split a trailing package measurement — or a comma/and-joined list of them —
+ * off the end of a product name. Returns null unless a meaningful name
+ * remains, so a measurement-only value ("62.4-oz") is never torn apart and a
+ * numeric brand ("365") can never match. This says nothing about whether the
+ * split SHOULD be displayed: the presentation contract strips a title only
+ * when every removed measurement is preserved in supported package evidence.
+ */
+export function splitTrailingMeasurements(name: string): TrailingMeasurements | null {
+  const match = name.match(TRAILING_MEASUREMENT_LIST);
+  if (!match || match.index === undefined) return null;
+  const base = name
+    .slice(0, match.index)
+    .replace(/[\s,;:–—-]+$/, '')
+    .trim();
+  if (base.length < 3 || !/[A-Za-z]/.test(base)) return null;
+  const measurements = match[1]
+    .split(/\s*(?:,\s*(?:and\s+)?|,?\s+and\s+|\s*&\s*)\s*/i)
+    .map((token) => token.replace(/\s+/g, ' ').trim())
+    .filter((token) => token !== '');
+  if (measurements.length === 0) return null;
+  return { base, measurements };
+}
+
+/** Case/spacing/punctuation-insensitive containment key for measurement text. */
+export function measurementKey(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
  * The reason a candidate variant name is invalid, or null when it is a
  * legitimate product identity. Deliberately asymmetric: it rejects names that
  * are demonstrably the wrong KIND of thing rather than demanding proof of the

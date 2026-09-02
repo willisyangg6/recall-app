@@ -20,8 +20,23 @@ import { test } from 'node:test';
 import { gunzipSync } from 'node:zlib';
 
 import { projectCase } from '../../domain/projection';
-import { caseIdentity, conciseReasonLine, whereSoldModel } from '../../lib/recall-presentation';
+import type { CaseProjection } from '../../domain/recall-types';
+import {
+  affectedProductsModel,
+  affectedProductsTable,
+  caseIdentity,
+  cleanProductName,
+  conciseReasonLine,
+  whereSoldModel,
+} from '../../lib/recall-presentation';
 import { buildConsumerCase } from '../../lib/consumer-projection';
+import { productDisplayName } from '../../lib/consumer-summary';
+import {
+  measurementKey,
+  measurementOnlyName,
+  packagingOnlyName,
+  splitTrailingMeasurements,
+} from '../../lib/variant-identity';
 import { buildWhatHappened } from '../../lib/what-happened';
 import { parseFdaAnnouncement, slugFromPath, type FdaListingItem } from './parse';
 
@@ -160,6 +175,214 @@ test('recorded Comforts/Kroger: the consumer brand is the What Happened subject'
  */
 const MALFORMED_BECAUSE =
   /because of (?:contains?|is|are|was|were|has|have|had|does|do|did|not|may|might|must|can|could|will|would|shall|should|prone)\b/i;
+
+/** The shared product-identity + affected-products view for one projection. */
+function consumerView(projection: CaseProjection) {
+  const identity = caseIdentity(
+    projection.brands ?? [],
+    projection.recallingFirm.displayName,
+    projection.title,
+  );
+  const consumer = buildConsumerCase(projection, projection.affectedProducts);
+  const productName = cleanProductName({
+    title: projection.title,
+    productDescription: projection.productDescription ?? null,
+    displayedBrands: identity.brand.brands,
+    packageEvidence: projection.affectedProducts.map((product) => product.name),
+  });
+  const model = affectedProductsModel(consumer.packageCheck, productName);
+  return { identity, consumer, productName, model, table: affectedProductsTable(model) };
+}
+
+test('recorded Jaime’s Jalapeno Ranch: the exact P2b single-row table', () => {
+  const { projection, identity } = recordedCase(
+    'announcement-jaimes-spanish-village-jalapeno-ranch.json',
+  );
+  const { productName, model, table } = consumerView(projection);
+  // The supported source spelling — the structured product description.
+  assert.equal(productName, 'Jalapeno Ranch Dressing');
+  assert.equal(identity.brand.text, 'Jaime’s Spanish Village');
+  // One table header, one data row: Product, Barcode (UPC), Lot codes — and
+  // NO Package Size or date column, because this version has no supported
+  // values for them (the prose "16 oz glass jars" carries no size label).
+  assert.ok(table, 'the table model is missing');
+  assert.deepEqual(
+    table!.columns.map((column) => column.label),
+    ['Product', 'Barcode (UPC)', 'Lot codes'],
+  );
+  assert.equal(table!.rows.length, 1);
+  assert.deepEqual(table!.rows[0].cells, [
+    'Jalapeno Ranch Dressing',
+    '199284564923',
+    '69, 86, 108, 113, 116, and 121',
+  ]);
+  assert.equal(table!.seeAllLabel, null);
+  // The codes render inline in the row — nothing sits behind a disclosure.
+  assert.equal(model.caseCodes, null);
+  assert.equal(table!.rows[0].codes, null);
+});
+
+test('recorded Chocolatey Eyeballs: each version keeps its OWN packaging and size', () => {
+  // The official table is Style # / "Packaging (as labeled)", one row per
+  // version, each cell pairing the package description with the labeled
+  // product and size ("“Crystal Temptations” plastic bag with designed
+  // header card – Chocolatey Eyeballs, 10 oz."). The five packaging
+  // descriptions are version-specific by the source's own rows — they must
+  // never flatten into one case-level blob, never repeat whole on every row,
+  // and never masquerade as Product.
+  const { projection } = recordedCase('announcement-crystal-temptations-chocolatey-eyeballs.json');
+  const { productName, model, table } = consumerView(projection);
+  assert.equal(productName, 'Chocolatey Eyeballs');
+  assert.equal(model.items.length, 5);
+  assert.deepEqual(
+    model.items.map((item) => [
+      item.name,
+      item.fields.find((field) => field.key === 'size')?.value,
+      item.fields.find((field) => field.key === 'packaging')?.value,
+    ]),
+    [
+      ['Chocolatey Eyeballs', '10 oz.', 'Plastic bag with designed header card'],
+      ['Chocolatey Eyeballs', '7 oz.', 'Acrylic box with designed paper wrap'],
+      ['Chocolatey Eyeballs', '10.5 oz.', 'Round plastic jar'],
+      ['Chocolatey Eyeballs', '16 oz.', 'Designer plastic pouch bag'],
+      ['Chocolatey Eyeballs', '11 oz.', 'Plastic bag tied with a tag'],
+    ],
+  );
+  // Nothing hoists: no packaging value is shared, so none renders case-wide,
+  // and no field anywhere carries the five-container enumeration.
+  assert.deepEqual(model.appliesToAll, []);
+  for (const item of model.items) {
+    for (const field of item.fields) {
+      assert.ok(
+        !field.value.includes('–'),
+        `${field.label} still holds a composite: ${field.value}`,
+      );
+      assert.ok(
+        (field.value.match(/bag|box|jar|pouch/gi) ?? []).length <= 2,
+        `${field.label} still enumerates containers: ${field.value}`,
+      );
+    }
+  }
+  // Five versions → three initial rows plus a working See all (5).
+  assert.ok(table);
+  assert.deepEqual(
+    table!.columns.map((column) => column.label),
+    ['Product', 'Package Size', 'Packaging'],
+  );
+  assert.equal(table!.initialRows, 3);
+  assert.equal(table!.seeAllLabel, 'See all (5)');
+});
+
+/**
+ * P2b corpus invariant: nothing that is not a product identity ever renders
+ * as Product — no measurement-only value, no packaging/container description,
+ * and no value the closed variant-identity contract classifies as a date,
+ * code, document reference, heading, or geography.
+ */
+test('corpus scan: no measurement, packaging, or non-identity value renders as Product', () => {
+  let scanned = 0;
+  for (const entry of corpus) {
+    let projection;
+    try {
+      projection = projectCase([
+        parseFdaAnnouncement({
+          listing: entry.listing,
+          detailMainHtml: entry.mainHtml,
+          path: entry.path,
+        }),
+      ]);
+    } catch {
+      continue;
+    }
+    const { model } = consumerView(projection);
+    scanned += 1;
+    for (const item of model.items) {
+      if (item.name === null) continue;
+      const label = `${slugFromPath(entry.path)}: ${item.name}`;
+      assert.ok(!measurementOnlyName(item.name), `measurement as Product — ${label}`);
+      assert.ok(!packagingOnlyName(item.name), `packaging as Product — ${label}`);
+    }
+  }
+  assert.ok(scanned >= 155, `only ${scanned} corpus records scanned`);
+});
+
+/**
+ * P2b corpus invariant: a measurement stripped from the case title is always
+ * preserved in the rendered Affected Products data (the description-size
+ * guarantee) — the sizes move, they are never lost.
+ */
+test('corpus scan: every measurement stripped from a title survives as Size evidence', () => {
+  let stripped = 0;
+  for (const entry of corpus) {
+    let projection;
+    try {
+      projection = projectCase([
+        parseFdaAnnouncement({
+          listing: entry.listing,
+          detailMainHtml: entry.mainHtml,
+          path: entry.path,
+        }),
+      ]);
+    } catch {
+      continue;
+    }
+    const { productName, model } = consumerView(projection);
+    const raw = productDisplayName(projection.productDescription ?? null, projection.title);
+    const split = splitTrailingMeasurements(raw);
+    if (!split) continue;
+    const last = measurementKey(split.measurements[split.measurements.length - 1]);
+    if (measurementKey(productName).includes(last)) continue; // title kept its sizes
+    stripped += 1;
+    const sizeEvidence = [
+      ...model.appliesToAll.filter((field) => field.key === 'size').map((field) => field.value),
+      ...model.items.flatMap((item) =>
+        item.fields.filter((field) => field.key === 'size').map((field) => field.value),
+      ),
+    ].map(measurementKey);
+    for (const measurement of split.measurements) {
+      assert.ok(
+        sizeEvidence.some((line) => line.includes(measurementKey(measurement))),
+        `${slugFromPath(entry.path)}: stripped "${measurement}" is not preserved as Size`,
+      );
+    }
+  }
+  assert.ok(stripped >= 5, `only ${stripped} stripped titles scanned`);
+});
+
+/** P2b (§H): the visible brand line is always a concise identity, never prose. */
+test('corpus scan: no displayed brand entry is prose-shaped', () => {
+  for (const entry of corpus) {
+    let projection;
+    try {
+      projection = projectCase([
+        parseFdaAnnouncement({
+          listing: entry.listing,
+          detailMainHtml: entry.mainHtml,
+          path: entry.path,
+        }),
+      ]);
+    } catch {
+      continue;
+    }
+    const { identity } = consumerView(projection);
+    for (const brand of identity.brand.brands) {
+      assert.ok(brand.length <= 40, `${slugFromPath(entry.path)}: prose brand "${brand}"`);
+    }
+  }
+  // The recorded Russ Davis prose entry falls back to the safe company name.
+  const russDavis = corpus.find((entry) => slugFromPath(entry.path).includes('russ-davis'));
+  assert.ok(russDavis, 'the Russ Davis corpus record is missing');
+  const projection = projectCase([
+    parseFdaAnnouncement({
+      listing: russDavis!.listing,
+      detailMainHtml: russDavis!.mainHtml,
+      path: russDavis!.path,
+    }),
+  ]);
+  const { identity } = consumerView(projection);
+  assert.equal(identity.brand.text, 'Russ Davis Wholesale');
+  assert.equal(identity.brand.usedBrand, false);
+});
 
 test('corpus scan: no malformed because-clause survives in any What Happened', () => {
   let scanned = 0;
