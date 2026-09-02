@@ -143,9 +143,17 @@ const NAME_BOUNDARY =
 const NAME_SIZE_TAIL =
   /,\s*((\d[\d./]*)\s*-?\s*(oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|fl\.?\s*oz|count|ct|pack|pk)\b\.?)\s*([a-z][a-z ]{0,20})?$/i;
 
-/** Leading package descriptor: "8-oz. glass jars containing …". */
+/**
+ * Leading package descriptor: "8-oz. glass jars containing …". The descriptor
+ * allowance covers FSIS's longer container phrases ("62.4-oz. ALUMINUM PAN
+ * WITH PLASTIC OVERWRAP containing …") — a shorter cap left the size token
+ * standing as the item's "name" while the source's own quoted product name
+ * went unread (benchmark record 012-2026). Comma-grouped weights qualify too:
+ * "3,884-lb. super sack of “OvaEasy Plain Whole Egg”" pairs the sack with the
+ * quoted product exactly as its comma-less siblings already did.
+ */
 const PACKAGE_PREFIX =
-  /^\s*((\d[\d./]*)\s*-?\s*(oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|fl\.?\s*oz|count|ct|pack|pk)\b\.?)\s+([a-z][a-z -]{0,30}?)\s+(?:packages?|bags?|jars?|boxes?|cartons?|containers?|tubs?|bottles?|cans?|pouches?)?\s*(?:containing|of|holding|labeled)\s+/i;
+  /^\s*((\d[\d,./]*)\s*-?\s*(oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|fl\.?\s*oz|count|ct|pack|pk)\b\.?)\s+([a-z][a-z -]{0,40}?)\s+(?:packages?|bags?|jars?|boxes?|cartons?|containers?|tubs?|bottles?|cans?|pouches?)?\s*(?:containing|of|holding|labeled)\s+/i;
 
 function fact(
   concept: SemanticFact['concept'],
@@ -176,7 +184,7 @@ function itemName(text: string): {
   if (prefix) {
     size = `${prefix[2]} ${prefix[3].toLowerCase().replace(/\.$/, '')}`;
     const container = working.match(
-      /^\s*[\d./-]+\s*(?:oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|ct|count|pack|pk)\.?\s+([a-z][a-z -]{0,40}?)\s+(?:containing|of|holding|labeled)/i,
+      /^\s*[\d,./-]+\s*(?:oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|ct|count|pack|pk)\.?\s+([a-z][a-z -]{0,40}?)\s+(?:containing|of|holding|labeled)/i,
     );
     if (container) packaging = container[1].trim();
     working = working.slice(prefix[0].length);

@@ -57,10 +57,13 @@ deterministic core shared by the Home "Affects me" feed, the detail screen's
   chosen — only personal signals qualify, and the UI asks for a state
   instead of pretending to know geography. And since C5.2B one further
   exclusion applies after geography: a **known allergen-only mismatch**.
-- `reasons`: chip-ready, priority-ordered (allergen, retailer, geography):
-  "Your allergen · Sesame", "Sold at Costco", "Affects California",
-  "Nationwide recall", "Location not specified". Empty when there is nothing
-  personal to say, so no surface ever renders an empty or misleading block.
+- `reasons`: priority-ordered (allergen, retailer, geography): "Your
+  allergen · Sesame", "Sold at Costco", "Affects California", "Nationwide
+  recall", "Location not specified". Empty when there is nothing personal to
+  say. Since P2a these labels are model-level facts only — Home cards render
+  ONE generic "Affects you" flag, never the per-reason chips
+  ([docs/recall-feed-usability.md](recall-feed-usability.md)); the reasons
+  stay available for ranking, QA, and future surfaces.
 
 ## Home
 
@@ -70,8 +73,9 @@ default is Affects me once any personalization exists, otherwise All recalls
 with a compact "Personalize Recall" CTA (which never requests notification
 permission). Within Affects me:
 
-- AFFECTS ME — recent items where `affectsMe` holds, each carrying up to two
-  reason chips (risk tier stays in its own badge, visually separate).
+- AFFECTS ME — recent items where `affectsMe` holds, each carrying the one
+  generic "Affects you" flag (risk tier stays in its own badge, visually
+  separate; the per-reason chips were retired in P2a).
 - OLDER ACTIVE NOTICES — the existing collapsed tier, filtered the same way.
 
 There is no third section. The generic **"Location not specified" section was
@@ -220,7 +224,8 @@ because they have no severity.
 
 **Explicit state and nationwide are the same confidence** — both are the agency
 saying the product reached the user's area. Which one it was is carried by the
-reason chip ("Affects California" / "Nationwide recall"), never by position.
+relevance reasons ("Affects California" / "Nationwide recall") in the model,
+never by position — and since P2a not by any on-card chip.
 An authoritative geographic **exclusion** never enters Affects Me at all, so it
 cannot be out-ranked by any personal signal.
 
@@ -283,13 +288,12 @@ renders. Sections are disjoint by construction — qualifying cases split by one
 boundary into recent/older, and only non-qualifying unknown-geography cases
 enter "Location not specified".
 
-A card's "Updated …" half reads the **material** activity date in Affects Me
-(All Recalls keeps `lastPublicActivityAt`), so a card can only claim an update
-when an authoritative event actually happened. The announcement date is always
-stated separately, so nothing ever implies an old recall was announced today.
-Cards still show risk tier, dates, and at most two reason chips; no numeric
-score, sort key, purchase claim, or safety claim about excluded items is ever
-exposed.
+Every card shows exactly one activity label from the material-change ledger
+(P1: "Announced …", or "Updated …" only when an authoritative material event
+happened) in every feed mode, so a card can never imply an old recall was
+announced today. Cards still show risk state and that one date, plus the
+generic "Affects you" flag when the verdict holds; no numeric score, sort
+key, purchase claim, or safety claim about excluded items is ever exposed.
 
 ## Preferences: storage and sync
 

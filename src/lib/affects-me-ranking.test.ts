@@ -187,12 +187,12 @@ test('Pending and Unrated rank below Moderate and above Low — and are never re
 
   assert.equal(consumerRiskTier(pending.classification), 'pending');
   assert.equal(consumerRiskTier(unrated.classification), 'unrated');
-  // Ordering never becomes a label: the risk layer still says Pending / Not
-  // rated, and neither is badged as a rated tier on a card.
+  // Ordering never becomes a label: the risk layer still says Risk pending /
+  // Not rated, and neither is ever badged as a rated tier on a card.
   assert.equal(riskView(pending.classification, 'FDA').tier, 'pending');
-  assert.equal(riskView(pending.classification, 'FDA').badgeLabel, null);
+  assert.equal(riskView(pending.classification, 'FDA').badgeLabel, 'Risk pending');
   assert.equal(riskView(unrated.classification, 'FSIS').tier, 'unrated');
-  assert.equal(riskView(unrated.classification, 'FSIS').badgeLabel, null);
+  assert.equal(riskView(unrated.classification, 'FSIS').badgeLabel, 'Not rated');
 
   const pendingPriority = affectsMePriority(pending, relevanceOf(CALIFORNIAN)(pending));
   const unratedPriority = affectsMePriority(unrated, relevanceOf(CALIFORNIAN)(unrated));

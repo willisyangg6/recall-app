@@ -122,10 +122,46 @@ const KEEP_UPPER = new Set([
   'INC',
 ]);
 
+/**
+ * Three-consonant English onset clusters — the only way a real word can open
+ * with three consonants ("SCHWAN", "SPRITE", "STRAWBERRY").
+ */
+const LEGAL_ONSETS = new Set([
+  'chr',
+  'phr',
+  'sch',
+  'scr',
+  'shr',
+  'sph',
+  'spl',
+  'spr',
+  'squ',
+  'str',
+  'thr',
+]);
+
+/**
+ * A short all-caps token that no English word could begin — three opening
+ * consonants forming no legal onset ("LMSI", "JBS"). Such a token is an
+ * initialism, not shouting, and un-shouting it corrupts an identity
+ * ("Lmsi"). Pronounceable brands ("KROGER", "PHO", "OKRA") never qualify by
+ * construction, so nothing ordinary is ever forced upper. "MRS" abbreviates
+ * a real word and is exempted explicitly.
+ */
+function isInitialism(core: string): boolean {
+  const letters = core.replace(/[^A-Za-z]/g, '');
+  if (letters.length < 3 || letters.length > 5) return false;
+  if (letters === 'MRS') return false;
+  const head = letters.slice(0, 3).toLowerCase();
+  if (!/^[bcdfghjklmnpqrstvwxz]{3}$/.test(head)) return false;
+  return !LEGAL_ONSETS.has(head);
+}
+
 function humanizeWordPart(part: string): string {
   const core = part.replace(/^[^A-Za-z&]+|[^A-Za-z&]+$/g, '');
   if (KEEP_UPPER.has(core)) return part;
   if (/^[A-Z](\.[A-Z])+\.?$/.test(core)) return part; // dotted acronyms: U.S.
+  if (isInitialism(core)) return part; // unpronounceable initialisms: LMSI
   if (core.replace(/[^A-Za-z]/g, '').length <= 1) return part; // "A", "7", "&"
   let out = part.toLowerCase().replace(/[a-z]/, (c) => c.toUpperCase());
   out = out.replace(/^Mc([a-z])/, (_, c: string) => `Mc${c.toUpperCase()}`);

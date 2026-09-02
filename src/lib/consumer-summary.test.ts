@@ -93,6 +93,20 @@ test('all-caps display is un-shouted conservatively', () => {
   );
 });
 
+test('unpronounceable initialisms survive un-shouting; ordinary words never do (P2a)', () => {
+  // Recorded Kofinas shape: the recalling firm "LMSI LLC" must display as
+  // "LMSI", never "Lmsi" — no English word opens with "LMS".
+  assert.equal(humanizeAllCaps('LMSI'), 'LMSI');
+  assert.equal(humanizeAllCaps('JBS FOODS'), 'JBS Foods');
+  // Negative cases: pronounceable all-caps words and brands are still
+  // un-shouted — the guard never forces ordinary tokens upper.
+  assert.equal(humanizeAllCaps('KROGER BRAND CHEESE'), 'Kroger Brand Cheese');
+  assert.equal(humanizeAllCaps('SPRITE'), 'Sprite');
+  assert.equal(humanizeAllCaps('SCHWAN FROZEN PIZZA'), 'Schwan Frozen Pizza');
+  assert.equal(humanizeAllCaps('STRAWBERRY OKRA PHO'), 'Strawberry Okra Pho');
+  assert.equal(humanizeAllCaps('MRS. SMITH PIES'), 'Mrs. Smith Pies');
+});
+
 test('company display prefers DBA, strips legal suffixes, un-shouts caps', () => {
   assert.equal(companyDisplayName('Indus Foods, LLC DBA Gangothri Foods'), 'Gangothri Foods');
   // Slash-joined establishment aliases display the primary entity.
@@ -105,6 +119,8 @@ test('company display prefers DBA, strips legal suffixes, un-shouts caps', () =>
   );
   assert.equal(companyDisplayName(null), null);
   assert.equal(companyDisplayName('  '), null);
+  // Recorded Kofinas shape: legal-suffix stripping plus the initialism guard.
+  assert.equal(companyDisplayName('LMSI LLC'), 'LMSI');
 });
 
 test('company line never fabricates an organization', () => {

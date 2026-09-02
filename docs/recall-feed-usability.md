@@ -1,8 +1,313 @@
-# Feed usability foundation (C6)
+# Feed usability foundation (C6) and the consumer presentation contract (P1)
 
-_Written 2026-08-28. Functional milestone on the temporary UI — final visual
-design happens separately and may restyle everything here without touching the
+_Written 2026-08-28; P1 presentation contract added 2026-09-01; P2a identity,
+typed reasons, and the simplified Detail page applied 2026-09-01 (founder
+decisions). Functional milestones on the temporary UI — final visual design
+happens separately and may restyle everything here without touching the
 business logic, which lives entirely in pure libs._
+
+## The consumer presentation contract (P1)
+
+This document is the authoritative home for how recall data becomes the exact
+consumer-facing fields the app renders. The implementation is
+`src/lib/recall-presentation.ts`: one pure, deterministic layer that maps
+canonical data to a **Home card model** (`buildHomeCardModel`) and a **Detail
+model** (`buildDetailModel`). Both screens consume these models and derive no
+recall wording of their own —
+`src/lib/recall-presentation-wiring.test.ts` pins the wiring, and
+`src/lib/recall-presentation.test.ts` pins the behavior below.
+
+Governing rules: canonical/raw recall data is never modified for display;
+every transformation is pure and deterministic; missing or uncertain
+information is omitted or stated honestly, never invented; unsafe
+transformations fall back to the source-supported value. Time is injected
+(`todayIso()` → the builders' `today`), so formatting is timezone-stable and
+testable with a fixed date.
+
+### The one activity date
+
+Every card and the detail header show exactly **one** activity label:
+
+- `Announced <date>` when no material update exists;
+- `Updated <date>` only when the material-change ledger
+  (`domain/material-activity.ts` — `hasMaterialUpdate` / `materialActivityAt`)
+  records an authoritative event after the announcement. Agency wording edits,
+  `lastPublicActivityAt` drift, and our own maintenance writes can never
+  produce "Updated".
+
+Formats: `Today`, `Yesterday`, `Aug 29`, and `Aug 29, 2025` when the year
+differs from today's. Source precision is day-level at both agencies, so
+hour-level phrasing ("2 hours ago") is unknowable and never produced. Feed
+_ordering_ is unchanged — sections still sort by their canonical dates; only
+the displayed label moved to material activity.
+
+### Product name
+
+Home and Detail share one cleaned name (`cleanProductName`), derived from the
+same canonical inputs on both screens:
+
+1. `productDisplayName` (FDA's structured description beats title parsing;
+   the official title is the last resort).
+2. A **trailing package measurement** ("… 7 oz", "… 150g") is removed only
+   when a meaningful name remains AND the measurement is preserved in the
+   supported affected-product/package evidence — otherwise the official
+   wording stays. No product-to-size pairing is ever invented.
+3. A duplicated **displayed-brand prefix** is removed when safe (remainder ≥ 3
+   chars with letters, and not the word "Brand"); otherwise the repetition is
+   tolerated.
+4. Conservative un-shouting of all-caps names (`humanizeAllCaps`).
+
+The stored title is never mutated; titles are never generatively rewritten.
+
+### Brand and identity roles (P2a)
+
+One presentation-level identity decision (`caseIdentity`) assigns three roles,
+and no surface improvises its own:
+
+- **`brand`** — the one brand/company line (`displayBrand`): the consumer
+  brand leads whenever the source states one; the company display name is only
+  the fallback; both are never shown together. A known brand is never replaced
+  by its parent company merely because the product name repeats it. Multi-brand
+  recalls compact deterministically to the first two known brands plus `+N` (a
+  source-written comma list stored as one brands entry is expanded first).
+  Placeholder values are never brands anywhere — "various", "and Others",
+  "unbranded", and the FDA listing placeholders "No Brand Name" / "Multiple
+  brand names" all fall through to the company. With no brand and no company,
+  the honest fallbacks are "Multiple products and brands" (when the title
+  supports it) or "Company not specified".
+- **`legalFirm`** — the recalling company's display name, preserved for
+  official traceability (share copy, provenance, tests). It is never
+  substituted into consumer prose merely because it issued the notice.
+- **`whatHappenedSubject`** — the subject of "X recalled Y": the ONE reliable
+  consumer brand when exactly one is displayed and it reads as a name (a
+  length-capped guard keeps stored prose out of the sentence frame). For
+  multi-brand or brandless recalls the subject is null and What Happened falls
+  back to the company — the firm, not any single brand, is the accurate actor
+  there, and a subject is never invented. Recorded proof: the Comforts/Kroger
+  announcement reads "Comforts recalled …"; Chocolatey Eyeballs reads "Little
+  Temptations recalled …" while the firm Crystal Temptations stays traceable;
+  Kofinas reads "Kofinas recalled …" while the firm displays as "LMSI" — an
+  unpronounceable short all-caps token is an initialism and survives
+  un-shouting (`humanizeAllCaps`), never "Lmsi", while ordinary all-caps words
+  ("KROGER", "SPRITE") are still un-shouted.
+
+### The typed reason (P2a) and the concise reason line (Home)
+
+One bounded typed-reason interpretation (`interpretReason`,
+`src/lib/recall-reason.ts`) classifies the canonical reason evidence into a
+closed family set — pathogen contamination, undeclared allergen, foreign
+material, chemical, inspection failure, import violation, insanitary
+conditions, processing defect, unfit, mislabeling/misbranding,
+nutrition/formulation (infant formula), unapproved ingredient, declared
+contents, gated verbatim, unknown. Home's concise line and Detail's What
+Happened clause are two renderings of the SAME interpretation, so the two
+surfaces cannot disagree about what kind of problem a recall is. A family is
+assigned only from structured canonical fields or a verified source-text
+pattern; a hazard or allergen is never invented.
+
+`conciseReasonLine` renders the family as one deterministic sentence:
+`Potential <pathogen> contamination.` (approved wording is **Potential**, not
+"Possible"; common pathogens display their consumer names — Salmonella,
+Listeria, E. coli — and unlisted agents stay verbatim), `Undeclared
+<allergen(s)> allergen(s).` naming only source-supported allergens,
+`Potential <material> contamination.` for foreign material, and fixed
+sentences for the FSIS regulatory families plus the infant-formula nutrition
+family. **Documented fallback:** for the source-text families, a short
+cleaned verbatim source reason (≤ 60 chars) renders as its own sentence
+(safe standalone even when it could not glue onto "because of"); an
+organism-less microbial hazard whose wording is too long still earns
+`Potential contamination.`; otherwise the line is omitted — a concise reason
+is never hallucinated from prose. Home shows only this line, never the What
+Happened paragraph.
+
+### What Happened, illness, quantity (Detail)
+
+- **What Happened** stays `buildWhatHappened`, template-built from the shared
+  typed reason. The subject of "X recalled Y" is the identity decision's
+  consumer brand when reliable, the company otherwise ("[Consumer brand or
+  safe company fallback] recalled …"). Every reason family has a fixed
+  grammatical clause — the pathogen pattern "… because the products may be
+  contaminated with <Pathogen>", the allergen pattern "… because the products
+  may contain <allergen>, an allergen that is not declared on the label", the
+  unapproved-ingredient pattern "… because it contains <ingredient> that is
+  not approved for <use>" (singular/plural agreement from the product
+  wording; recorded Kofinas exact). The free-text fallback is grammar-gated:
+  a source reason that is not a noun phrase can never glue onto "because of",
+  so "because of contains…", "because of product did not…", "because of glass
+  prone…" are unproducible (corpus-scanned in
+  `src/server/fda/presentation-regressions.test.ts`); a gated reason drops
+  the clause — "<Subject> recalled <product>." — rather than rendering broken
+  grammar. PHAs keep alert wording — "A public health alert was issued for …
+  from <company>" — the from-clause states official provenance, not shelf
+  identity.
+- **Illness** is one line with four honest states (`illnessLine`): explicit
+  zero → `No illnesses reported.`; a reliably counted report → `1 illness
+reported.` / `55 illnesses reported.` (a count only when exactly one
+  unambiguous illness count is stated — hospitalizations and deaths never
+  fold in); reported without a reliable count → `Illnesses have been
+reported.`; source silence → the line is omitted entirely. Silence is never
+  converted to zero, and a **negated statement** ("No customer illnesses have
+  been reported…") that slips past the domain classifier's explicit-zero
+  patterns is re-checked at this boundary so it can never render as a
+  positive report. Home carries no illness line.
+- **Quantity** (`quantityLine`, FDA only — the FSIS `quantityText` field is
+  the amount _recovered_, a different fact, and stays unshown): the complete
+  authoritative quantity as `The recall covers <quantity>.`, never truncated
+  mid-word and never manufactured from package sizes. A stored span carrying
+  a clipped reason tail keeps its full quantity and drops only the
+  non-quantity clause. Omitted when What Happened already states the figure.
+
+### Geography
+
+- **Home** (`homeLocationSummary`): one or two state abbreviations, then
+  `CA, WA +N`; `Nationwide`; or the honest `Distribution not specified`.
+  States come from the canonical tri-state geography, whose derivation
+  already applies the exclusions (containment artifacts, firm-address noise)
+  before display — nothing is re-added here.
+- **Detail** (`whereSoldModel` over the consumer distribution — P2a founder
+  decision): the section renders **only the one state representation** — the
+  complete full-name state list (never a "13 states." count beside the same
+  names), `Nationwide`, a stated metro phrase, or the honest unspecified
+  line — with **no trailing period** ("Texas", not "Texas."). The separate
+  consumer **AREAS subsection stays retired**. Nothing else renders at this
+  stage: named retailers, store addresses, online platforms, and channel
+  evidence stay fully preserved in the model (`retailers`, `retailLocations`,
+  `onlinePlatforms`, `channels`, plus the consumer-venue subset
+  `venueChannels`) for the later collapsed retailer-list milestone, and no
+  dead retailer control exists meanwhile. Generic trade/distribution channel
+  nouns — wholesalers, distributors, independent retailers, food service —
+  are never rendered as if they were stores. Affects-Me relevance and
+  personalization semantics are untouched by any of this.
+
+### Affects you
+
+The `Affects you` flag rides every Home card — All feed included — whenever
+the one relevance evaluation (`lib/relevance.ts`, unchanged) says
+`affectsMe`. Detail shows the generic banner `Warning: This recall affects
+you.` exactly when the same verdict holds; match-reason bullets are not added
+to the banner. Matching logic itself is unchanged.
+
+### Official source
+
+Home cards carry **no per-card source attribution**. Detail shows the dynamic
+official link **exactly once**, prominently under the product heading —
+`View the official FDA report` / `View the official FSIS report` / `View the
+official FSIS alert` (PHAs) — preserving the official URL. The legacy bottom
+Official source block — duplicate link, official-title quote,
+source-organization disclaimer, and the bottom "Share this recall" control —
+is retired (P2a founder decision). The URL, official title, organization,
+and share-message contract stay in the model/libs for later surfaces (share
+will eventually be a top-right icon; no nonfunctional icon is added
+meanwhile).
+
+### Notice and risk labels
+
+Home and Detail render the **same** consumer risk state from the shared
+`riskView` (P2a): rated tiers badge their tier; an unclassified FDA recall
+reads `Risk pending` on both surfaces; a PHA's absent class reads
+`Not rated` — never Unknown. Public Health Alerts always carry the explicit
+`Public Health Alert` label (the chip on Home, the badge-row label on
+Detail) — a notice type, never confused with a risk state. Founder decision:
+"Risk pending" is sufficient by itself — no explanatory classification copy
+renders on Detail (the model's pending `official` block is null so the top
+state is never restated below), and the Detail header carries no
+`Recall · Active` metadata line: it is exactly the risk badge, the one
+material activity date beside it, product name, brand, and the single
+official link. A retracted notice keeps its explicit callout.
+
+### Imagery
+
+Home shows the selected hero (`heroImageUrl`, existing authoritative
+selection policy — frozen FSIS label policy untouched); Detail shows the
+**same** hero once, near the title, and no image repeats lower on the page
+(P2a founder decision — the lower Product photos gallery and the
+compare-photos block no longer render; the photo and label-visual data stay
+preserved in the model for P2c image-role allocation). Absent imagery
+renders nothing — no placeholders, no carousel.
+
+### Affected products
+
+`affectedProductsModel` consumes **only** the gated Consumer Projection V2
+package checker (closed schema, type gates — never raw fact bags, never
+`rejected` facts, so internal artifacts like the "40 lb" lot candidate are
+structurally unreachable). Detail renders it as a horizontally scrollable
+rail of items — one per source-supported product/package/version — with only
+populated fields in the stable order: Product, Package Size, the identifying
+date under its source-specific label (Best by / Use by / Sell by /
+Expiration), Barcode (UPC), Lot/Batch codes, then remaining package
+description. Fields the closed schema does not support (e.g. establishment
+numbers) cannot appear until the schema itself admits them. Identifier
+fidelity is preserved exactly (leading zeroes, periods, hyphens, letters).
+Proven-shared fields render once above the rail; large code sets stay behind
+their disclosure; production dates lead their codes; the shared code
+location renders once.
+
+A version name that is **only a package measurement** ("62.4-oz", "5 lb") is
+package-size evidence, never a consumer product name. The list parser first
+recovers the source's own pairing where it exists ("62.4-oz. ALUMINUM PAN …
+containing "Ukrop's Baked Spaghetti"" names the quoted product, with the
+size as its Size field); any residual measurement-only name is demoted by
+the presentation model into the card's Size field — the card renders without
+a Product line, and no product name is ever invented. The recognizer
+(`measurementOnlyName`, `src/lib/variant-identity.ts`) is conservative and
+unit-aware: the whole candidate must be one number plus a real unit, so
+numeric brands, UPCs, lot codes with decimal-like punctuation, dates, and
+full product names ending in a size can never match.
+
+Coverage is graded in the model (P2a): `structured` (identifying details
+survived), `partial` (only packaging/size evidence — the model's scope
+wording is conservative and a surviving packaging blob can never claim
+complete coverage), `source_silent`, and `unstructured` (a parser miss is
+**never** presented as source silence). Founder decision: none of this
+produces consumer-facing prose on the Detail page — the visible section is
+just `Affected Products` with the gated data (shared fields, the version
+rail, production dates, code disclosures, official attachment links). The
+coverage state and scope statements remain internal to the model for
+correctness and QA; the "Find the Code" block, compare-photos block, and all
+helper/disclaimer copy are removed from the render while their data stays in
+the model. No empty cards, no dead controls.
+
+### What the Detail page no longer renders (P2a founder decision)
+
+Removed from the render — the underlying extracted data is untouched and
+stays in the model/projection for its assigned later surface:
+
+- the `Recall · Active` metadata line and every explanatory risk note;
+- the retailer summary, store-address disclosure, online platforms, and all
+  channel prose under Where It Was Sold;
+- every Affected Products helper/coverage/disclaimer sentence, the
+  compare-photos block, and Find the Code;
+- the lower Product photos gallery (the hero renders once, near the title);
+- What You Should Do and Health Risk (they move to the future
+  "I have this product, what should I do?" destination — the CTA is not
+  added until that destination exists; no dead controls);
+- the bottom Official source block and the bottom Share control (share
+  becomes a top-right icon later; no nonfunctional icon meanwhile);
+- the official-title quote and agency-provenance copy.
+
+Still deliberately absent: Saved state/Save button, retailer link/modal,
+image carousel, new navigation.
+
+### Roadmap requirements (documented for P2b/P2c — not implemented in P2a)
+
+**P2b — compact affected-versions table.** Replace the product cards with a
+table-like structure: one affected version per row; at most three rows
+initially visible with a `See all (N)` interaction beyond that; columns drawn
+only from Product name, Package Size, Expiration/Use-by/Best-by, Barcode
+(UPC), and Lot codes; a column is omitted when no visible version has that
+field; field labels are not repeated inside every card; values are never
+invented or merged across versions; source order and the existing P0A safety
+gates are preserved. Reference shape (Jalapeño Ranch): one row — Product
+"Jalapeño Ranch Dressing", Barcode (UPC) 199284564923, Lot codes 69, 86,
+108, 113, 116, and 121; no Package Size or Expiration column, because this
+version has no supported values for them.
+
+**P2c — global image-role allocation.** One hero (or future hero carousel)
+at the top; a product-version image may appear beside that version's product
+name only when the system can confidently match the image to that exact
+version (the Outshine flavor shape); the hero is never reused as a lower
+generic product photo; no empty image placeholder when no version-specific
+match exists.
 
 ## Control hierarchy (C6.1)
 

@@ -26,7 +26,7 @@ import {
   type UserRecallPreferences,
 } from '@/domain/preferences';
 import { useTheme } from '@/hooks/use-theme';
-import { buildAffectsMeSections, type AffectsMePriority } from '@/lib/affects-me-ranking';
+import { buildAffectsMeSections } from '@/lib/affects-me-ranking';
 import {
   activeFilterCount,
   applyFeedFilters,
@@ -38,7 +38,6 @@ import {
   type FeedFilterState,
 } from '@/lib/feed-filters';
 import { buildSearchEntry, filterBySearch, type SearchEntry } from '@/lib/feed-search';
-import { brandLine, companyLine, productDisplayName } from '@/lib/consumer-summary';
 import { buildFeedSections } from '@/lib/feed-relevance';
 import { createFeedCacheStore } from '@/lib/feed-cache-store';
 import { createFeedSession, type FeedSession } from '@/lib/feed-sync';
@@ -50,9 +49,9 @@ import {
   isFeedConfigured,
   type FeedItem,
 } from '@/lib/recall-feed';
+import { buildHomeCardModel, todayIso, type HomeCardModel } from '@/lib/recall-presentation';
 import { evaluatePersonalRelevance, type PersonalRelevance } from '@/lib/relevance';
-import { riskTierWord, riskView } from '@/lib/risk-display';
-import { geographyLabel, noticeTypeLabel, reasonLine, timingLine } from '@/lib/recall-display';
+import { riskTierWord } from '@/lib/risk-display';
 
 /**
  * `ready` always means COMPLETE: `fetchCurrentFeed` pages to exhaustion and
@@ -309,81 +308,58 @@ function FilterSheet({
 }
 
 /**
- * Standardized consumer card: product identity leads; the raw government
- * headline never appears here (it stays available on the detail screen).
- * In "Affects me", up to two personalization reasons render as chips —
- * strongest first (allergen, retailer, then geography) — and risk stays in
- * its own badge, visually separate.
+ * Standardized consumer card, rendered entirely from the shared presentation
+ * contract (lib/recall-presentation.ts) — this component derives no recall
+ * wording of its own, so Home and Detail can never disagree. Hierarchy (P1):
+ * notice/risk + the one activity date, the Affects-you flag, the hero image,
+ * product name, brand, concise reason, compact location. The raw government
+ * headline never appears here, and cards carry no per-card agency label —
+ * source attribution lives on the detail screen.
  */
-function FeedCard({
-  item,
-  personalReasons,
-  activityDate,
-}: {
-  item: FeedItem;
-  personalReasons?: string[];
-  /**
-   * The date the card's "Updated …" half should report. "Affects me" passes
-   * the MATERIAL activity date, so a card can only claim an update when an
-   * authoritative event actually happened; All Recalls omits it and keeps
-   * `lastPublicActivityAt`. Neither ever implies the recall was announced
-   * today — the announcement date is always stated separately.
-   */
-  activityDate?: string;
-}) {
-  // Consumer risk tier leads the card; the regulatory class it was derived
-  // from lives on the detail screen, never here.
-  const risk = riskView(item.classification, item.sourceAgency);
-  const product = productDisplayName(item.productDescription, item.title);
-  const company = companyLine(item.firmName, item.title);
-  const brands = brandLine(item.brands, item.firmName, product);
-  const reason = reasonLine(item.reasonText, item.hazardCategory, item.pathogenOrAllergen);
-  const sourceLabel = item.sourceAgency === 'FDA' ? 'FDA' : 'USDA FSIS';
+function FeedCard({ model }: { model: HomeCardModel }) {
   return (
-    <Link href={{ pathname: '/recall/[id]', params: { id: item.id } }} asChild>
+    <Link href={{ pathname: '/recall/[id]', params: { id: model.id } }} asChild>
       <Pressable accessibilityRole="button">
         <ThemedView type="backgroundElement" style={styles.card}>
           <View style={styles.badgeRow}>
-            {/* Consumer risk first — it is the primary risk language. A badge
-                only for a rated tier: "pending" on every fresh FDA card reads
-                as unfinished, and the hazard line below is the prominent risk
-                information until a class arrives. The truthful pending state
-                stays on the detail screen. */}
-            {risk.badgeLabel ? (
+            {/* Consumer risk first — it is the primary risk language. Home
+                and Detail render the same risk state from the shared model
+                (P2a): rated tiers badge their tier, an unclassified FDA
+                recall reads "Risk pending", a PHA's absent class reads
+                "Not rated" — the two screens can never disagree. */}
+            {model.risk.badgeLabel ? (
               <RiskBadge
-                tier={risk.tier}
-                label={risk.badgeLabel}
-                accessibilityLabel={risk.accessibilityLabel}
+                tier={model.risk.tier}
+                label={model.risk.badgeLabel}
+                accessibilityLabel={model.risk.accessibilityLabel}
               />
             ) : null}
-            <Badge
-              label={noticeTypeLabel(item.noticeType)}
-              emphasized={item.noticeType === 'public_health_alert'}
-            />
+            {/* Public Health Alerts are always explicitly labeled. */}
+            {model.noticeLabel ? <Badge label={model.noticeLabel} emphasized /> : null}
+            <ThemedText type="small" themeColor="textSecondary">
+              {model.activity.text}
+            </ThemedText>
+            {/* Available in every feed mode whenever saved preferences
+                establish a match — not restricted to the Affects me view.
+                Exactly ONE generic flag (P2a): the legacy match-explanation
+                chips ("Your allergen · Peanuts", "Affects California") are
+                retired — matching logic is unchanged, only its rendering. */}
+            {model.affectsYou ? <Badge label="Affects you" emphasized /> : null}
           </View>
-          {personalReasons && personalReasons.length > 0 ? (
-            <View style={styles.badgeRow}>
-              {personalReasons.slice(0, 2).map((label) => (
-                <Badge key={label} label={label} emphasized />
-              ))}
-            </View>
-          ) : null}
           {/* Product identity stays dominant; the photo is a recognition aid
               beside it, and the row collapses cleanly when there is none. */}
           <View style={styles.cardBody}>
+            <PhotoThumbnail uri={model.heroImageUrl} alt={model.productName} />
             <View style={styles.cardText}>
-              <ThemedText type="subtitle">{product}</ThemedText>
+              <ThemedText type="subtitle">{model.productName}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {brands ? `${company} · Brand: ${brands}` : company}
+                {model.brand.text}
               </ThemedText>
-              {reason ? <ThemedText type="small">{reason}</ThemedText> : null}
-              <ThemedText type="small">{geographyLabel(item.geography)}</ThemedText>
+              {model.reasonLine ? <ThemedText type="small">{model.reasonLine}</ThemedText> : null}
             </View>
-            <PhotoThumbnail uri={item.heroImageUrl} alt={product} />
           </View>
           <ThemedText type="small" themeColor="textSecondary">
-            {timingLine(item.publishedAt, activityDate ?? item.lastPublicActivityAt)} · Source:{' '}
-            {sourceLabel}
+            {model.locationSummary}
           </ThemedText>
         </ThemedView>
       </Pressable>
@@ -559,8 +535,13 @@ export default function HomeScreen() {
   const olderActive = orderByLocationTiers(sectioned.olderActive, filters.stateCodes);
 
   const personalized = tab === 'affects_me' && prefs !== null && hasAnyPreference(prefs);
+  // One relevance evaluation per case whenever preferences exist — the same
+  // deterministic verdict (lib/relevance.ts) powers Affects me membership AND
+  // the per-card "Affects you" flag, which is available in the normal All
+  // feed too, never only in the Affects me view.
+  const hasPersonalization = prefs !== null && hasAnyPreference(prefs);
   const relevanceById = new Map<string, PersonalRelevance>();
-  if (personalized) {
+  if (hasPersonalization) {
     for (const item of state.items) {
       relevanceById.set(
         item.id,
@@ -577,12 +558,12 @@ export default function HomeScreen() {
       );
     }
   }
+  // The injected calendar date every card's activity line is formatted
+  // against — one read per render, so all cards agree on what "Today" is.
+  const today = todayIso();
 
   let sections: HomeSection[];
   let affectsCounts = { affects: 0, older: 0 };
-  // Sort keys, kept only to source the card's "Updated …" date. Nothing here
-  // is ever rendered as a score.
-  let priorityById = new Map<string, AffectsMePriority>();
   if (personalized) {
     // One deterministic ranking for the whole tab (lib/affects-me-ranking.ts).
     // Two sections only (C5.2B): a notice that says nothing about this user
@@ -594,7 +575,6 @@ export default function HomeScreen() {
     const ranked = buildAffectsMeSections(state.items, (item) => relevanceById.get(item.id)!);
     const affects = filterBySearch(ranked.affects, query, entryOf);
     const older = filterBySearch(ranked.older, query, entryOf);
-    priorityById = ranked.priorityById;
     affectsCounts = { affects: affects.length, older: older.length };
     sections = [
       ...(affects.length > 0
@@ -782,15 +762,12 @@ export default function HomeScreen() {
         ref={listRef}
         sections={sections}
         keyExtractor={(item) => item.id}
-        renderItem={({ item, section }) => (
+        renderItem={({ item }) => (
           <FeedCard
-            item={item}
-            personalReasons={
-              personalized
-                ? relevanceById.get(item.id)?.reasons.map((reason) => reason.label)
-                : undefined
-            }
-            activityDate={personalized ? priorityById.get(item.id)?.materialActivityAt : undefined}
+            model={buildHomeCardModel(item, {
+              today,
+              affectsYou: relevanceById.get(item.id)?.affectsMe ?? false,
+            })}
           />
         )}
         renderSectionHeader={({ section }) =>

@@ -2519,9 +2519,16 @@ function buildPackageCheck(
             ? 'Every lot and date of this product is affected. The details below identify it.'
             : 'Every lot and date of this product is affected.'
           : 'All versions of this product are affected, regardless of code or date.'
-    : hasIdentifiers
+    : coverage === 'structured'
       ? 'Only packages matching the affected details below are part of this recall.'
-      : 'Detailed package identifiers were not clearly provided in this notice.';
+      : hasIdentifiers
+        ? // Partial evidence (packaging/size only — no identifying dates,
+          // codes, or versions) cannot honestly claim to bound the recall:
+          // a surviving packaging blob is not proof of complete coverage.
+          // Worded without referring the user out to the government page —
+          // that referral is a standing critical QA violation.
+          'The notice provides these package details. They may not identify every affected package.'
+        : 'Detailed package identifiers were not clearly provided in this notice.';
 
   return {
     render,

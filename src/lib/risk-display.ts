@@ -98,11 +98,10 @@ export function riskView(classification: Classification, sourceAgency: SourceAge
           note: 'Public health alerts do not receive a formal classification.',
         }
       : status === 'pending'
-        ? {
-            heading: `Official ${agency} classification`,
-            text: 'Not yet assigned',
-            note: TIER_NOTE.pending,
-          }
+        ? // The top risk state already says "Risk pending" and carries its one
+          // explanation; a second "Not yet assigned" block restated the same
+          // fact near the bottom and is deliberately gone (P2a).
+          null
         : {
             heading: `Official ${agency} classification${status === 'mixed' ? 's' : ''}`,
             text: officialClassListText(classes),
@@ -112,14 +111,15 @@ export function riskView(classification: Classification, sourceAgency: SourceAge
                 : null,
           };
 
+  // The non-scale states carry ONE shared consumer label on both surfaces
+  // (P2a): Pending reads "Risk pending", a PHA's absent class reads
+  // "Not rated" — never Unknown, and never silently unbadged on one screen
+  // while labeled on the other.
+  const sharedLabel = tier === 'pending' ? 'Risk pending' : 'Not rated';
   return {
     tier,
-    // A fresh FDA recall is Pending for weeks by design; badging every such
-    // card reads as unfinished data rather than as information. The pending
-    // state stays truthful and visible on the detail screen.
-    badgeLabel: rated ? TIER_WORD[tier].toUpperCase() : null,
-    headlineLabel:
-      tier === 'unrated' ? null : rated ? `${TIER_WORD[tier].toUpperCase()} RISK` : 'RISK PENDING',
+    badgeLabel: rated ? TIER_WORD[tier].toUpperCase() : sharedLabel,
+    headlineLabel: rated ? `${TIER_WORD[tier].toUpperCase()} RISK` : sharedLabel,
     accessibilityLabel: rated
       ? `Risk level: ${TIER_WORD[tier]}`
       : tier === 'pending'

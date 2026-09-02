@@ -444,7 +444,7 @@ One deliberate UX-over-normalization choice already embedded: preserved _prose_ 
 
 **Do not retain in MVP:** label/photo binary files (store URLs; both agencies' assets are stable enough short-term, and fetching FSIS label PDFs requires the summary-HTML URL recovery deferred in §10.2), every-poll page HTML, Spanish records (re-fetchable on demand), iRES/Data Dashboard anything.
 
-**Licensing:** unambiguous — openFDA is CC0 (§3.2); FDA/USDA web content is US-government public domain, USDA requests "U.S. Department of Agriculture" credit (§4.1). Retention, processing, and in-app redistribution are all permitted; the app should show "Source: FDA/USDA" attribution on every card, which we'd want for trust anyway.
+**Licensing:** unambiguous — openFDA is CC0 (§3.2); FDA/USDA web content is US-government public domain, USDA requests "U.S. Department of Agriculture" credit (§4.1). Retention, processing, and in-app redistribution are all permitted. Attribution lives on the detail screen as the one prominent official-source link, whose label names the agency ("View the official FDA report" / "View the official FSIS report"); per-card attribution on Home and the separate source-organization line were retired by the P1/P2a presentation contract ([docs/recall-feed-usability.md](recall-feed-usability.md)), which keeps every card one tap from the official government notice.
 
 **Traceability test this must pass:** for any fact on a consumer card, walk `field → provenance/projection rule → SourceRecord → SourceSnapshot → raw bytes + fetch time + source URL`. Every retention choice above exists to keep that chain complete; nothing beyond it is kept.
 

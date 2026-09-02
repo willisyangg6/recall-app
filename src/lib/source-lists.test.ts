@@ -235,9 +235,12 @@ test('SunFed: the official product wording survives when no version is extractab
   ];
   assert.deepEqual(values, []);
   // Low confidence falls back rather than losing the official evidence: the
-  // recall-level product wording is still there, and the checker says plainly
-  // that no identifiers were stated.
+  // recall-level product wording is still there, and the checker's wording
+  // stays conservative — partial evidence never claims complete coverage.
   assert.equal(consumer.packageCheck.hasIdentifiers, true);
   assert.equal(consumer.packageCheck.render, false);
-  assert.match(consumer.packageCheck.scopeStatement, /not clearly provided|Only packages matching/);
+  assert.match(
+    consumer.packageCheck.scopeStatement,
+    /not clearly provided|may not identify every affected package/,
+  );
 });

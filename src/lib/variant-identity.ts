@@ -147,10 +147,44 @@ export function isGeographicName(name: string): boolean {
 }
 
 /**
+ * A candidate that is ONLY a package measurement — one number with a real
+ * unit and nothing else ("62.4-oz", "8 oz", "5 lb", "750 mL", "12-pack").
+ *
+ * Conservative and unit-aware by construction: the whole string must be the
+ * measurement, so a product name that merely contains numbers ("7-Eleven
+ * Wrap"), a numeric brand ("365"), a UPC ("0 41415 06453 1"), a lot code
+ * with decimal-looking punctuation ("2457744.2"), a date ("07/08/26"), an
+ * establishment number ("EST. 19979"), and a full product name that ends
+ * with a size ("Cream Cheese Spread 7 oz") can never match.
+ */
+const MEASUREMENT_ONLY =
+  /^\(?\d+(?:[.,]\d+)?\s*-?\s*(?:fl\.?\s?oz|oz|ounces?|lbs?|pounds?|grams?|g|kg|mg|ml|l|liters?|litres?|ct|count|pks?|packs?)\b\.?\)?$/i;
+
+/**
+ * True when the entire candidate variant name is a package measurement.
+ *
+ * Such a value is package-SIZE evidence, never a consumer product name: the
+ * presentation contract renders it in the Package Size slot of its card and
+ * never as Product (docs/recall-feed-usability.md). Exposed from this module
+ * because "what kind of thing may a version name be" is exactly the identity
+ * contract's question — there is one recognizer, not one per screen.
+ */
+export function measurementOnlyName(name: string): boolean {
+  return MEASUREMENT_ONLY.test(name.replace(/\s+/g, ' ').trim());
+}
+
+/**
  * The reason a candidate variant name is invalid, or null when it is a
  * legitimate product identity. Deliberately asymmetric: it rejects names that
  * are demonstrably the wrong KIND of thing rather than demanding proof of the
  * right one, so unusual-but-genuine product names still render.
+ *
+ * A measurement-only name (`measurementOnlyName`) is deliberately NOT a
+ * rejection here: rejection widens the row's facts to recall scope and drops
+ * the card, but a size-distinguished version is a real affected package whose
+ * card should survive with the measurement in its Package Size field. The
+ * demotion happens in the presentation contract, which owns what renders as
+ * "Product".
  */
 export function variantIdentityRejection(name: string): VariantIdentityRejection | null {
   const trimmed = name.replace(/\s+/g, ' ').trim();

@@ -51,7 +51,11 @@ const ALLERGEN_DISPLAY: Record<string, string> = {
   'crustacean shellfish': 'shellfish',
 };
 
-function allergenReasonLabel(pathogenOrAllergen: string | null): string {
+/**
+ * "Undeclared milk allergen" / "Undeclared milk and soy allergens" — the one
+ * allergen-reason wording, shared with the presentation contract (P1).
+ */
+export function allergenReasonLabel(pathogenOrAllergen: string | null): string {
   const phrase = pathogenOrAllergen?.match(/^undeclared\s+(.+)$/i)?.[1] ?? null;
   if (!phrase) return 'Undeclared allergen';
   const names = phrase
@@ -71,7 +75,8 @@ function allergenReasonLabel(pathogenOrAllergen: string | null): string {
 
 const MATERIAL_WORDS = ['glass', 'metal', 'plastic', 'wood', 'rubber'];
 
-function materialFrom(text: string | null): string | null {
+/** The specific foreign material a reason names, when it names one (P1 shares this). */
+export function materialFrom(text: string | null): string | null {
   if (!text) return null;
   return MATERIAL_WORDS.find((m) => new RegExp(`\\b${m}\\b`, 'i').test(text)) ?? null;
 }

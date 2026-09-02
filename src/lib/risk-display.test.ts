@@ -80,26 +80,28 @@ test('F. Class I + II + III — High, all three classes named', () => {
   assert.equal(v.official?.text, 'Class I, Class II, and Class III');
 });
 
-test('G. unmatched FDA recall — Pending, official Not yet assigned', () => {
+test('G. unmatched FDA recall — Risk pending on both surfaces, explained once', () => {
   const v = view([]);
   assert.equal(v.tier, 'pending');
-  assert.equal(v.headlineLabel, 'RISK PENDING');
-  assert.deepEqual(v.official, {
-    heading: 'Official FDA classification',
-    text: 'Not yet assigned',
-    note: 'The agency assigns a formal recall classification later in its process.',
-  });
+  // One shared label for both surfaces (P2a): Home badge and Detail headline
+  // agree, and the one pending explanation is the top-level note — the old
+  // bottom "Not yet assigned" block restated it and is deliberately gone.
+  assert.equal(v.headlineLabel, 'Risk pending');
+  assert.equal(v.badgeLabel, 'Risk pending');
+  assert.equal(v.note, 'The agency assigns a formal recall classification later in its process.');
+  assert.equal(v.official, null);
 });
 
-test('a public health alert is Unrated, never Pending forever', () => {
+test('a public health alert is Not rated, never Pending forever', () => {
   const v = riskView(
     { value: 'not_applicable_pha', sourceText: null, officialClasses: [] },
     'FSIS',
   );
   assert.equal(v.tier, 'unrated');
-  // No fabricated class, and no risk banner implying a rating exists.
-  assert.equal(v.headlineLabel, null);
-  assert.equal(v.badgeLabel, null);
+  // No fabricated class: "Not rated" (never Unknown) on both surfaces, and
+  // the notice-type label — Public Health Alert — stays a separate concept.
+  assert.equal(v.headlineLabel, 'Not rated');
+  assert.equal(v.badgeLabel, 'Not rated');
   assert.deepEqual(v.official, {
     heading: 'Official USDA FSIS classification',
     text: 'Not assigned',
@@ -126,8 +128,9 @@ test('Home cards lead with consumer risk and never show a regulatory class', () 
     assert.ok(['CRITICAL', 'HIGH', 'MODERATE', 'LOW', 'MINIMAL'].includes(label), label);
     assert.doesNotMatch(label, /class/i);
   }
-  // Pending/unrated get no card badge — the hazard line carries the card.
-  assert.equal(view([]).badgeLabel, null);
+  // Pending/unrated badge their non-scale state, never a rated tier and
+  // never a regulatory class.
+  assert.equal(view([]).badgeLabel, 'Risk pending');
 });
 
 test('risk is never communicated by color alone', () => {

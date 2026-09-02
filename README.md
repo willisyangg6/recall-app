@@ -195,10 +195,11 @@ configuration it shows setup instructions.
   prose; Editor's Notes become normalized Update lines or are omitted),
   standardized consumer instructions, and official product-list/label PDF
   links extracted from the notice's own HTML (links only; no PDF parsing).
-- Honest illness semantics: explicit zero → "No illnesses have been
-  reported."; source-stated counts shown verbatim; source silence → "No
-  illness count is provided" — never converted to zero. Disease education and
-  discovery prose are never presented as illness reports.
+- Honest illness semantics (P1 presentation contract): explicit zero → "No
+  illnesses reported."; a reliably counted report → "55 illnesses reported.";
+  reported without a reliable count → "Illnesses have been reported."; source
+  silence → the line is omitted — never converted to zero. Disease education
+  and discovery prose are never presented as illness reports.
 - Feed relevance separated from source lifecycle: FSIS keeps Public Health
   Alerts "active" for years (live: 167 of 178 active cases are PHAs back to
   2014), so Home shows recent activity first and collapses older agency-active
@@ -239,7 +240,7 @@ Veterinary` co-tags) is deliberately deferred, not silently included.
 - FDA reason categories map into the same structured hazard slots (allergen /
   microbial / foreign material / chemical contamination) feeding the shared
   template-built "What happened" system, with standardized consumer reason
-  labels ("Possible E. coli contamination", "Undeclared soy allergen") and
+  labels ("Potential E. coli contamination.", "Undeclared soy allergen.") and
   concise template-built "Health risk" summaries — never raw press-release
   styling or prose fragments.
 - The official notice is provenance, not required reading: package

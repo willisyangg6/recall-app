@@ -14,6 +14,7 @@
 import { allergenDisplayPhrase } from '@/domain/hazard';
 import { cleanDisplayText } from '@/domain/text';
 import { companyDisplayName, productSummaryFromTitle } from './consumer-summary';
+import { interpretReason, pluralProductPhrase, type TypedReason } from './recall-reason';
 
 export interface WhatHappenedInput {
   title: string;
@@ -25,6 +26,13 @@ export interface WhatHappenedInput {
   summaryText: string | null;
   /** Source-structured product description (FDA provides one; FSIS null). */
   productDescription?: string | null;
+  /**
+   * The one reliable consumer brand from the shared identity decision
+   * (lib/recall-presentation caseIdentity) — the subject of "X recalled Y"
+   * when present. The legal firm is only the fallback subject; it is never
+   * substituted over a reliable brand merely because it issued the notice.
+   */
+  consumerBrand?: string | null;
 }
 
 export interface WhatHappened {
@@ -70,130 +78,50 @@ function productPhrase(title: string, productDescription?: string | null): strin
   return phrase;
 }
 
-const FOREIGN_MATERIALS = ['metal', 'plastic', 'glass', 'wood', 'rubber', 'bone fragments'];
-
-/**
- * "imported from <Country>" as the source states it (title or summary).
- * The lead-in matches any casing; the country itself must be capitalized —
- * no /i flag so the capture never grabs arbitrary lowercase prose.
- */
-function importedFromCountry(title: string, summaryText: string | null): string | null {
-  const match = `${title}\n${summaryText ?? ''}`.match(
-    /\b[Ii]mported [Ff]rom (the\s+[A-Z][A-Za-z’' .-]{2,40}?|[A-Z][A-Za-z’' .-]{2,40}?)(?=,|\.|;| without| that| and| into| due|\n)/,
-  );
-  return match ? match[1].trim() : null;
-}
-
 interface ReasonClause {
   /** Clause completing "<frame> …", starting with "because"/"that". */
   clause: string;
   /** Optional second context sentence (already fully formed). */
   context: string | null;
+  /** True when source free text (not a structured family) carried the clause. */
+  generic?: boolean;
 }
 
-/** Deterministic reason templates for the FSIS structured reason families. */
-function reasonClause(input: WhatHappenedInput): ReasonClause | null {
-  const reasons = (input.reasonText ?? '').toLowerCase();
-  const summary = input.summaryText ?? '';
-  const pathogen =
-    input.pathogenOrAllergen && !/^undeclared/i.test(input.pathogenOrAllergen)
-      ? input.pathogenOrAllergen
-      : null;
-  const allergenRaw = input.pathogenOrAllergen?.match(/^undeclared\s+(.+)$/i)?.[1] ?? null;
-  // Label vocabulary for consistency ("soybean" → "soy", "eggs" → "egg").
-  const allergen = allergenRaw ? allergenDisplayPhrase(allergenRaw) : null;
-  const upstream = /\b(containing|made with)\b/i.test(
-    productPhrase(input.title, input.productDescription) ?? '',
-  );
+/**
+ * Render the shared typed reason (lib/recall-reason.ts) as the grammatical
+ * "because …" clause. Every family has a fixed template; the gated verbatim
+ * family is the only place source wording enters, and only as a noun phrase —
+ * an ungrammatical reason drops the clause instead of gluing it on.
+ */
+function reasonClause(input: WhatHappenedInput, product: string): ReasonClause | null {
+  const typed: TypedReason = interpretReason({
+    reasonText: input.reasonText,
+    hazardCategory: input.hazardCategory,
+    pathogenOrAllergen: input.pathogenOrAllergen,
+    summaryText: input.summaryText,
+    title: input.title,
+  });
+  // Upstream-ingredient notices: the contamination belongs to the recalled
+  // ingredient, so the neutral construction is used for pathogen families.
+  const upstream = /\b(containing|made with)\b/i.test(product);
 
-  // Contamination (pathogen or foreign material).
-  if (reasons.includes('product contamination')) {
-    if (pathogen) {
+  switch (typed.family) {
+    case 'pathogen':
+      if (typed.pathogen === null) {
+        return { clause: 'because the products may be contaminated', context: null };
+      }
       return {
-        // Upstream-ingredient notices: the contamination belongs to the
-        // recalled ingredient, so use the neutral construction.
         clause: upstream
-          ? `because of possible ${pathogen} contamination`
-          : `because the products may be contaminated with ${pathogen}`,
+          ? `because of possible ${typed.pathogen} contamination`
+          : `because the products may be contaminated with ${typed.pathogen}`,
         context: null,
       };
-    }
-    if (input.hazardCategory === 'foreign_material') {
-      const material = FOREIGN_MATERIALS.find((m) => new RegExp(`\\b${m}\\b`, 'i').test(summary));
-      return {
-        clause: material
-          ? `because the products may contain pieces of ${material}`
-          : `because the products may contain foreign material`,
-        context: null,
-      };
-    }
-    return { clause: 'because the products may be contaminated', context: null };
-  }
-
-  // Undeclared allergen (leads even when combined with misbranding).
-  if (reasons.includes('unreported allergens')) {
-    return {
-      clause: allergen
-        ? `because the products may contain ${allergen}, an allergen that is not declared on the label`
-        : 'because the products may contain an undeclared allergen',
-      context: null,
-    };
-  }
-
-  if (reasons.includes('produced without benefit of inspection')) {
-    return {
-      clause: 'because the products were produced without required USDA inspection',
-      context: null,
-    };
-  }
-
-  if (reasons.includes('import violation')) {
-    const country = importedFromCountry(input.title, input.summaryText);
-    const illegal = /illegally imported/i.test(summary);
-    if (illegal && country) {
-      return {
-        clause: `because the products may have been illegally imported from ${country}`,
-        context: /ineligible to export/i.test(summary)
-          ? `${country.replace(/^the /, 'The ')} is not eligible to export these products to the United States.`
-          : null,
-      };
-    }
-    return {
-      clause: 'because the products did not meet U.S. import requirements',
-      context: country ? `The products were imported from ${country}.` : null,
-    };
-  }
-
-  if (reasons.includes('unfit for human consumption')) {
-    return { clause: 'because the products may be unfit to eat', context: null };
-  }
-  if (reasons.includes('insanitary conditions')) {
-    return { clause: 'because the products were made under insanitary conditions', context: null };
-  }
-  if (reasons.includes('processing defect')) {
-    return { clause: 'because of a processing defect', context: null };
-  }
-  if (reasons.includes('mislabeling')) {
-    return { clause: 'because the products were mislabeled', context: null };
-  }
-  if (reasons.includes('misbranding')) {
-    return { clause: 'because the products were misbranded', context: null };
-  }
-
-  // Source-agnostic hazard tier: FDA reason categories don't use the FSIS
-  // enum strings, but they normalize into the same structured hazard slots.
-  // Every clause below is grounded in a structured field or a verified
-  // source-text keyword — never free prose.
-  if (input.hazardCategory === 'microbial_contamination' && pathogen) {
-    return {
-      clause: upstream
-        ? `because of possible ${pathogen} contamination`
-        : `because the products may be contaminated with ${pathogen}`,
-      context: null,
-    };
-  }
-  if (input.hazardCategory === 'allergen') {
-    if (allergen) {
+    case 'allergen': {
+      // Label vocabulary for consistency ("soybean" → "soy", "eggs" → "egg").
+      const allergen = typed.raw ? allergenDisplayPhrase(typed.raw) : null;
+      if (!allergen) {
+        return { clause: 'because the products may contain an undeclared allergen', context: null };
+      }
       const plural = /,| and /.test(allergen);
       return {
         clause: plural
@@ -202,29 +130,80 @@ function reasonClause(input: WhatHappenedInput): ReasonClause | null {
         context: null,
       };
     }
-    return { clause: 'because the products may contain an undeclared allergen', context: null };
+    case 'foreign_material':
+      return {
+        clause: typed.material
+          ? `because the products may contain pieces of ${typed.material}`
+          : 'because the products may contain foreign material',
+        context: null,
+      };
+    case 'chemical':
+      return {
+        clause: typed.agent
+          ? `because the products may be contaminated with ${typed.agent}`
+          : 'because the products may be contaminated with a chemical substance',
+        context: null,
+      };
+    case 'inspection':
+      return {
+        clause: 'because the products were produced without required USDA inspection',
+        context: null,
+      };
+    case 'import':
+      if (typed.illegal && typed.country) {
+        return {
+          clause: `because the products may have been illegally imported from ${typed.country}`,
+          context: typed.ineligible
+            ? `${typed.country.replace(/^the /, 'The ')} is not eligible to export these products to the United States.`
+            : null,
+        };
+      }
+      return {
+        clause: 'because the products did not meet U.S. import requirements',
+        context: typed.country ? `The products were imported from ${typed.country}.` : null,
+      };
+    case 'unfit':
+      return { clause: 'because the products may be unfit to eat', context: null };
+    case 'insanitary':
+      return {
+        clause: 'because the products were made under insanitary conditions',
+        context: null,
+      };
+    case 'processing':
+      return { clause: 'because of a processing defect', context: null };
+    case 'mislabeled':
+      return {
+        clause:
+          typed.word === 'mislabeled'
+            ? 'because the products were mislabeled'
+            : 'because the products were misbranded',
+        context: null,
+      };
+    case 'nutrition':
+      return {
+        clause: 'because the products do not meet infant formula nutrition requirements',
+        context: null,
+      };
+    case 'unapproved':
+      // Recorded Kofinas shape: the ingredient and the disallowed use are the
+      // source's own words; the clause only supplies agreement.
+      return {
+        clause: pluralProductPhrase(product)
+          ? `because the products contain ${typed.ingredient}, which is not approved for ${typed.use}`
+          : `because it contains ${typed.ingredient} that is not approved for ${typed.use}`,
+        context: null,
+      };
+    case 'contents':
+      return {
+        clause: `because the products contain ${typed.contents.toLowerCase()}`,
+        context: null,
+        generic: true,
+      };
+    case 'verbatim':
+      return { clause: `because of ${typed.noun.toLowerCase()}`, context: null, generic: true };
+    case 'unknown':
+      return null;
   }
-  if (input.hazardCategory === 'foreign_material') {
-    const material = FOREIGN_MATERIALS.find((m) =>
-      new RegExp(`\\b${m}\\b`, 'i').test(`${input.reasonText ?? ''}\n${summary}`),
-    );
-    return {
-      clause: material
-        ? `because the products may contain pieces of ${material}`
-        : 'because the products may contain foreign material',
-      context: null,
-    };
-  }
-  if (input.hazardCategory === 'chemical_contamination') {
-    const agent = input.pathogenOrAllergen;
-    return {
-      clause: agent
-        ? `because the products may be contaminated with ${agent}`
-        : 'because the products may be contaminated with a chemical substance',
-      context: null,
-    };
-  }
-  return null;
 }
 
 /**
@@ -297,7 +276,15 @@ export function normalizedUpdate(summaryText: string | null): string | null {
   return `Update: ${clause}`;
 }
 
-/** Sentence frame: who did what to which product. */
+/**
+ * Sentence frame: who did what to which product. The subject of "X recalled Y"
+ * is the shared identity decision's consumer brand when one is reliable, and
+ * the recalling company only as the fallback — a shopper recognizes the brand
+ * on the shelf, not the legal entity behind the notice. The legal firm stays
+ * fully preserved in the projection for official traceability. The PHA frame
+ * keeps the company: its "from X" clause states official provenance (who made
+ * the product), not shelf identity.
+ */
 function frame(input: WhatHappenedInput, product: string): string {
   const company = companyDisplayName(input.firmDisplayName);
   if (input.noticeType === 'public_health_alert') {
@@ -305,7 +292,8 @@ function frame(input: WhatHappenedInput, product: string): string {
       ? `A public health alert was issued for ${product} from ${company}`
       : `A public health alert was issued for ${product}`;
   }
-  return company ? `${company} recalled ${product}` : `A recall was issued for ${product}`;
+  const subject = input.consumerBrand ?? company;
+  return subject ? `${subject} recalled ${product}` : `A recall was issued for ${product}`;
 }
 
 const MAX_WORDS = 70;
@@ -339,29 +327,25 @@ export function buildWhatHappened(input: WhatHappenedInput): WhatHappened {
   }
 
   if (product) {
-    const reason = reasonClause(input);
+    const reason = reasonClause(input, product);
     if (reason) {
       let text = `${frame(input, product)} ${reason.clause}.`;
       const second = reason.context ?? quantitySentence(input);
       if (second && wordCount(text) + wordCount(second) <= MAX_WORDS) {
         text = `${text} ${second}`;
       }
-      return { text: cleanDisplayText(text), update, source: 'template' };
+      return {
+        text: cleanDisplayText(text),
+        update,
+        source: reason.generic ? 'generic' : 'template',
+      };
     }
-    // Generic product frame: reason family unknown but the event is stateable.
-    // FDA reason descriptions are free text ("Due to Elevated Levels of Lead",
-    // "Product contains toxic yellow oleander.") — normalize the connective
-    // deterministically without rewriting the source's own words.
-    let reasonSuffix = '';
-    if (input.reasonText) {
-      const reason = input.reasonText.replace(/[.\s]+$/, '').replace(/^due to\s+/i, '');
-      const contains = reason.match(/^products? contains?\s+(.+)$/i);
-      reasonSuffix = contains
-        ? ` because the products contain ${contains[1].toLowerCase()}`
-        : ` because of ${reason.toLowerCase()}`;
-    }
+    // No renderable reason (unknown family, or a free-text reason the grammar
+    // gate rejected): the event is still stateable, and stating it without a
+    // reason beats gluing an ungrammatical clause on. The full source reason
+    // stays preserved in the projection.
     return {
-      text: cleanDisplayText(`${frame(input, product)}${reasonSuffix}.`),
+      text: cleanDisplayText(`${frame(input, product)}.`),
       update,
       source: 'generic',
     };
