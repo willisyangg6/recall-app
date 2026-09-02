@@ -304,3 +304,20 @@ test('golden: Tomato Bisque moves its recall total out of the package card', () 
   assert.equal(consumer.quantityText, '3,240 packs');
   assert.ok(!variant.fields.some((f) => /3,?240/.test(f.value)));
 });
+
+test('QA corpus: multi-allergen official evidence is carried whole (P2d-A)', () => {
+  // Hand-verified against the recorded announcements: in each, the structured
+  // category under-stated the official reason (e.g. Lee K of NY is filed under
+  // "Crustacean Shellfish" while the announcement states "undeclared milk and
+  // shrimp"), and the evidence-gated text extraction restores the rest.
+  const expected: Record<string, string> = {
+    'lee-k-ny': 'undeclared crustacean shellfish and milk',
+    'raw-seafoods': 'undeclared milk and sesame',
+    'troemner-roemner-farm': 'undeclared milk, wheat, and soy',
+    'cal-yee-farm': 'undeclared sesame, soybean, tree nuts, wheat, and milk',
+    'natural-organics': 'undeclared wheat and gluten',
+  };
+  for (const [fragment, value] of Object.entries(expected)) {
+    assert.equal(corpusCase(fragment).projection.pathogenOrAllergen, value, fragment);
+  }
+});

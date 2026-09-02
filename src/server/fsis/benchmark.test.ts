@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { classifyAllergenOnly, isKnownAllergenMismatch } from '../../domain/allergen-only';
 import { classifyIllnessReport, type IllnessReportStatus } from '../../domain/illness';
 import { buildConsumerCase } from '../../lib/consumer-projection';
 import { PACKAGE_FIELD_LABEL } from '../../lib/consumer-schema';
@@ -327,4 +328,75 @@ test('FSIS: the closed consumer schema holds, and City Foods case codes stay hid
   // is absent far more often than on FDA — which is the honest outcome, not a
   // gap to fill with establishment numbers.
   assert.ok(hidden > 20, `FSIS checkers hidden: ${hidden}`);
+});
+
+/**
+ * P2d-A hand-verified allergen-extraction ledger: every allergen-category
+ * record in the set whose official text names the allergen, checked against
+ * the recorded source wording. The shared evidence-gated extractor must name
+ * each one — a null here is the Steak Burrito failure class returning.
+ */
+const EXPECTED_ALLERGEN: Record<string, string> = {
+  '009-2026': 'undeclared egg and milk', // "contains egg and milk, known allergens"
+  '008-2026': 'undeclared soy',
+  'PHA-07292026-01': 'undeclared egg', // Steak Burrito — "contains egg, a known allergen"
+  'PHA-07032026-01': 'undeclared wheat',
+  'PHA-06252026-02': 'undeclared eggs', // source plural preserved
+  '006-2025': 'undeclared fish', // "contains fish (anchovies), a known allergen"
+  '038-2025': 'undeclared soy',
+  'PHA-04092026-01': 'undeclared sesame', // "may contain sesame, a known allergen"
+  'PHA-01192023-01': 'undeclared wheat', // "may contain wheat, a known allergen"
+  '077-2015': 'undeclared soy',
+  '074-2017-EXP': 'undeclared soy', // MSG stated alongside is unsupported vocabulary — never extracted
+  '130-2017': 'undeclared soy',
+  'PHA-02122025-01': 'undeclared egg', // "produced using an egg wash, which contains egg"
+  'PHA-02012023-01': 'undeclared peanut', // "undeclared allergen, specifically peanut residue"
+  'PHA-08242022-01': 'undeclared milk', // "an undeclared allergen, specifically milk"
+};
+
+test('P2d-A: allergen-category records extract the allergen their source states', () => {
+  for (const [nativeId, expected] of Object.entries(EXPECTED_ALLERGEN)) {
+    const row = rows.get(nativeId);
+    assert.ok(row, `benchmark record missing: ${nativeId}`);
+    assert.equal(row!.projection.hazardCategory, 'allergen', nativeId);
+    assert.equal(row!.projection.pathogenOrAllergen, expected, nativeId);
+  }
+  // And no allergen-category record invents one the ledger does not know:
+  // every named extraction in the set is hand-verified above.
+  for (const [nativeId, row] of rows) {
+    if (row.projection.hazardCategory !== 'allergen') continue;
+    const value = row.projection.pathogenOrAllergen;
+    if (value !== null) {
+      assert.ok(nativeId in EXPECTED_ALLERGEN, `${nativeId}: unreviewed extraction ${value}`);
+    }
+  }
+});
+
+test('P2d-A: the corrected canonical value reaches personalization through the normal path', () => {
+  const burrito = rows.get('PHA-07292026-01')!.projection;
+  const facts = {
+    hazardCategory: burrito.hazardCategory,
+    pathogenOrAllergen: burrito.pathogenOrAllergen,
+    reasonText: burrito.reasonText,
+  };
+  // The allergen is identified, so an egg preference matches …
+  assert.deepEqual(classifyAllergenOnly(facts), { kind: 'identified', tokens: ['egg'] });
+  assert.equal(isKnownAllergenMismatch(facts, ['egg']), false);
+  // … and a non-egg selection is a proven mismatch (withheld from Affects Me).
+  assert.equal(isKnownAllergenMismatch(facts, ['peanut']), true);
+
+  // The typed reason renders the P2a grammar with the now-named allergen.
+  const happened = rows.get('PHA-07292026-01')!.happened;
+  assert.match(happened.text, /may contain egg, an allergen that is not declared on the label\.$/);
+
+  // Multi-allergen evidence flows whole: both tokens are comparable.
+  const pasta = rows.get('009-2026')!.projection;
+  assert.deepEqual(
+    classifyAllergenOnly({
+      hazardCategory: pasta.hazardCategory,
+      pathogenOrAllergen: pasta.pathogenOrAllergen,
+      reasonText: pasta.reasonText,
+    }),
+    { kind: 'identified', tokens: ['egg', 'milk'] },
+  );
 });

@@ -7,6 +7,7 @@ import { parseFdaRssItems } from './fetch';
 import { loadDetailPage, loadFoodRss, loadListingItem, loadListingItems } from './fixtures';
 import {
   announcementIdentity,
+  deriveFdaHazard,
   foodScope,
   parseFdaAnnouncement,
   parseFdaDetail,
@@ -245,4 +246,40 @@ test('FDA labeled product-table lines render as source-labeled identifiers', () 
   assert.match(parsed!.name, /^Prince Pan de Manjeca Spanish Style Bread/);
   assert.equal(parsed!.identifiers.length, 1);
   assert.equal(parsed!.identifiers[0].label, 'Package Color');
+});
+
+// ── P2d-A: allergen hazard derivation unions structured and text evidence ────
+
+test('category tokens lead; evidence-gated text adds only missing families', () => {
+  // Recorded Lee K of NY shape: the category names only the shellfish while
+  // the announcement states "contains undeclared milk and shrimp".
+  assert.deepEqual(
+    deriveFdaHazard(
+      'Crustacean Shellfish',
+      'Allergy Alert on Undeclared Allergen (Milk and Shrimp) in Stewed Aged Kimchi\nit contains undeclared milk and shrimp',
+    ),
+    { hazardCategory: 'allergen', pathogenOrAllergen: 'undeclared crustacean shellfish and milk' },
+  );
+  // A subtype of an already-stated family is never duplicated in.
+  assert.deepEqual(deriveFdaHazard('Tree Nuts', 'because they may contain undeclared almonds'), {
+    hazardCategory: 'allergen',
+    pathogenOrAllergen: 'undeclared tree nuts',
+  });
+  // A complete category is left exactly as stated.
+  assert.deepEqual(deriveFdaHazard('Milk, Sesame', 'due to undeclared sesame and milk allergens'), {
+    hazardCategory: 'allergen',
+    pathogenOrAllergen: 'undeclared milk and sesame',
+  });
+});
+
+test('generic allergen category with non-vocabulary evidence keeps the verbatim source statement', () => {
+  // Recorded Mangalm shape: the FDA files a color additive under its allergen
+  // taxonomy; the verbatim official wording is preserved, never re-mapped.
+  assert.deepEqual(
+    deriveFdaHazard(
+      'Potential or Undeclared Allergen',
+      'Recall Reason Description Undeclared Carmoisine',
+    ),
+    { hazardCategory: 'allergen', pathogenOrAllergen: 'undeclared carmoisine' },
+  );
 });

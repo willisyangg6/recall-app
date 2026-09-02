@@ -17,9 +17,12 @@
  */
 
 import {
+  allergenFamilyToken,
+  extractAllergenEvidence,
   extractChemicalAgent,
   extractPathogen,
   extractPathogenOrAllergen,
+  formatAllergenList,
 } from '../../domain/hazard';
 import { classifyIllnessReport } from '../../domain/illness';
 import { extractRetailerNames } from '../../domain/retailer';
@@ -437,18 +440,33 @@ export function deriveFdaHazard(categoryText: string, fullText: string): FdaHaza
     };
   }
   if (allergens.length > 0 || hasGenericAllergen) {
-    const named =
-      allergens.length > 0
-        ? allergens
+    // Structured category tokens lead; the announcement's own evidence-gated
+    // reason language adds only allergen families the category did not state
+    // (verified live shape: category "Crustacean Shellfish" while the reason
+    // description says "Milk and Shrimp" — milk must not be dropped).
+    const named = [...allergens];
+    const covered = new Set(named.map((w) => allergenFamilyToken(w) ?? w));
+    for (const word of extractAllergenEvidence(fullText)) {
+      const family = allergenFamilyToken(word) ?? word;
+      if (covered.has(family)) continue;
+      covered.add(family);
+      named.push(word);
+    }
+    // No vocabulary evidence at all: keep the source's verbatim generic-
+    // category statement ("Undeclared Carmoisine") rather than inventing one.
+    const verbatim =
+      named.length > 0
+        ? null
         : (fullText
             .match(/undeclared\s+([a-z]+(?:,? and [a-z]+)*)/i)?.[1]
             .split(/,? and /)
-            .map((a) => a.trim().toLowerCase()) ?? []);
+            .map((a) => a.trim().toLowerCase()) ?? null);
+    if (verbatim) named.push(...verbatim);
     return {
       hazardCategory: 'allergen',
       pathogenOrAllergen:
         named.length > 0
-          ? `undeclared ${named.join(named.length === 2 ? ' and ' : ', ').replace(/, ([a-z ]+)$/, ', and $1')}`
+          ? `undeclared ${formatAllergenList(named)}`
           : (extractPathogenOrAllergen(fullText) ?? null),
     };
   }

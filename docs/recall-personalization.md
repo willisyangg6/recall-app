@@ -22,8 +22,10 @@ The core product principle, everywhere in this design:
   egg, wheat, soy, sesame, fish, crustacean shellfish), expressed as the
   canonical tokens `normalizedAllergenTokens` (src/domain/hazard.ts) already
   derives from authoritative notice text. A notice naming cashews or walnuts
-  yields the `tree nuts` token, so a "Tree nuts" preference matches
-  specific-nut recalls with zero new inference. Known non-major tokens the
+  yields the `tree nuts` token, and one naming shrimp yields the
+  `crustacean shellfish` token (FDA's own category for its shrimp recalls),
+  so a "Tree nuts" or "Crustacean shellfish" preference matches those recalls
+  with zero new inference. Known non-major tokens the
   data layer can produce (`gluten`, `sulfites`) are deliberately not
   selectable.
 - **Retailers** — canonical ids from a curated catalog
