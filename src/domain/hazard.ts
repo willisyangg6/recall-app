@@ -125,21 +125,53 @@ function listTokens(phrase: string): string[] {
 }
 
 /**
+ * Two vocabulary words are grammatical aliases of one allergen when they are
+ * the same word, or singular/plural forms ("peanut"/"peanuts", "tree nut"/
+ * "tree nuts") of the same canonical family. Distinct source words that
+ * merely SHARE a family ("almonds" and "walnuts", "shrimp" and "shellfish")
+ * are deliberately not aliases: the source named them separately, and family
+ * grouping stays downstream in `normalizedAllergenTokens`/display.
+ */
+function sameAllergenAlias(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (`${a}s` !== b && `${b}s` !== a) return false;
+  const family = ALLERGEN_TOKEN_MAP[a];
+  return family !== undefined && family === ALLERGEN_TOKEN_MAP[b];
+}
+
+function collectWord(word: string, collected: string[]): void {
+  if (!collected.some((existing) => sameAllergenAlias(existing, word))) collected.push(word);
+}
+
+/**
  * Walk tokens collecting vocabulary words (with two-token lookahead for
  * "crustacean shellfish" / "tree nuts") until a word that is neither
- * vocabulary, connector, nor glue ends the list.
+ * vocabulary, connector, nor glue ends the list. "including" bridges only an
+ * explicitly allergen-governed list ("undeclared allergens, including eggs,
+ * milk, and wheat" — verified against archived production notice 111-2015);
+ * without the allergen governor it ends the run, so an ordinary ingredient
+ * enumeration ("undeclared ingredients, including …") is never interpreted.
  */
 function collectAllergenRun(tokens: string[], collected: string[]): void {
+  let allergenGoverned = false;
   for (let i = 0; i < tokens.length; i++) {
     const pair = i + 1 < tokens.length ? `${tokens[i]} ${tokens[i + 1]}` : null;
     if (pair && ALLERGEN_EVIDENCE_WORDS.includes(pair)) {
-      if (!collected.includes(pair)) collected.push(pair);
+      collectWord(pair, collected);
       i++;
       continue;
     }
     if (ALLERGEN_EVIDENCE_WORDS.includes(tokens[i])) {
-      if (!collected.includes(tokens[i])) collected.push(tokens[i]);
+      collectWord(tokens[i], collected);
       continue;
+    }
+    if (tokens[i] === 'allergen' || tokens[i] === 'allergens') {
+      allergenGoverned = true;
+      continue;
+    }
+    if (tokens[i] === 'including') {
+      if (allergenGoverned) continue;
+      return;
     }
     if (LIST_CONNECTORS.has(tokens[i]) || LIST_GLUE.has(tokens[i])) continue;
     return;
@@ -165,15 +197,16 @@ function collectAllergenRunBackward(tokens: string[], collected: string[]): void
     if (['no', 'not', 'without'].includes(tokens[i])) found.length = 0;
     break;
   }
-  for (const word of found.reverse()) {
-    if (!collected.includes(word)) collected.push(word);
-  }
+  for (const word of found.reverse()) collectWord(word, collected);
 }
 
 /**
  * Allergens the text states as the reason for the notice, as lowercased
- * source words in order of first appearance (deduplicated exactly; family
- * normalization stays downstream in `normalizedAllergenTokens`/display).
+ * source words in order of first appearance. Deduplicated by grammatical
+ * alias (`sameAllergenAlias`), so "undeclared peanut" plus "contains
+ * peanuts, known allergens" yields one peanut entry — while distinct words
+ * sharing a family ("almonds and walnuts") are all preserved; family
+ * normalization stays downstream in `normalizedAllergenTokens`/display.
  */
 export function extractAllergenEvidence(text: string): string[] {
   const collected: string[] = [];

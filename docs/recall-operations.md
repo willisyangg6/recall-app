@@ -499,6 +499,57 @@ merged into a duplicate (1,912 vs the 1,899 a consumer can read). Repairing a
 merged row's geography is harmless and keeps it consistent if it is ever
 unmerged; this matches the retailer backfill's behaviour.
 
+## Allergen agent: a one-time historical correction (P2d-B)
+
+```
+npm run repair:allergens:dry           # report only, writes nothing
+npm run repair:allergens -- --confirm  # APPLY — requires BOTH flags; NOT YET AUTHORIZED
+npm run repair:allergens:dry           # verify: "would change" must be 0
+```
+
+P2d-A taught the one canonical extractor (`domain/hazard.ts`) the allergen
+constructions FSIS and FDA actually publish, but stored `normalized` records
+and case projections were computed with the old extractor, and the ingest hash
+gate never revisits an unchanged page — hence a one-time correction.
+
+Unlike the retailer and geography repairs, this one re-derives from **archived
+official snapshots**, in the FDA image-backfill mold: it re-runs the canonical
+adapters (`parseFsisRecord` / `parseFdaAnnouncement`) over the raw payload
+each snapshot preserved — never a repair-only re-implementation of the
+allergen rules — so a corrected value is exactly what ingestion would produce
+today. Zero network requests; a record with no usable snapshot is reported and
+never guessed.
+
+It writes exactly two fields: `normalized.pathogenOrAllergen` (through a
+compare-and-swap on the field's own current value — source records have no
+version column an ingest reliably moves) and `projection.pathogenOrAllergen`
+(through `updateCasePathogenOrAllergen`, conditional on `last_changed_at`,
+with `timeline` and `lastChangedAt` untouched). Case-level precedence is
+delegated to `projectCase` over the corrected records, so a multi-source case
+resolves exactly as a real re-projection would. Rows that changed between the
+dry-run read and the write are **skipped and reported**, never re-derived on
+the fly — the apply writes only what the reviewed dry-run proposed. No
+material-change detection (`detectChanges` has no hazard rule anyway), no
+NotificationEvent, no snapshot/hash/date/lineage changes, no job lease.
+
+Scope guardrails, straight from the P2d-A recorded-corpus evidence: only
+records whose stored **and** re-derived hazard category is `allergen` are ever
+written. A value difference on any other record — including a pathogen
+record — is refused and reported (`REFUSED` buckets in the report; the command
+exits non-zero if a pathogen record's agent would change). A re-parse that
+moves the hazard category itself is likewise refused. The pre-existing
+Yellow 5/Yellow 6 verbatim-fallback quirk is deliberately out of scope: stored
+values already equal to the canonical derivation are never touched.
+
+Applying is double-gated: `--apply` alone is refused; the second
+acknowledgment (`--confirm`) must accompany it. `--json <path>` writes the
+full machine-readable report including the per-record ledger. The operation is
+idempotent and resumable; the dry run doubles as the post-apply verification
+report.
+
+**Status: implemented and dry-run only. The apply has not been run and is not
+yet authorized.**
+
 ## Enforcement: weekly-gated
 
 The daily job reads the one-request openFDA bulk manifest and compares its

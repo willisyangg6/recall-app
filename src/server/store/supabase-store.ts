@@ -427,6 +427,62 @@ export class SupabaseStore implements RecallStore {
     return (data?.length ?? 0) > 0;
   }
 
+  async updateCasePathogenOrAllergen(
+    id: string,
+    pathogenOrAllergen: string | null,
+    expectedLastChangedAt: string,
+  ): Promise<boolean> {
+    // Identical contract to updateCaseRetailerNames: re-read so the merge
+    // happens against the freshest projection, then make the write itself
+    // conditional on `last_changed_at`, so an ingest landing in between loses
+    // nothing — the update matches no row and the caller reports a conflict
+    // rather than rolling newer data back. `timeline` and `last_changed_at`
+    // are not in the payload at all.
+    const current = await this.getCase(id);
+    if (!current || current.lastChangedAt !== expectedLastChangedAt) return false;
+    const { data, error } = await this.client
+      .from('recall_cases')
+      .update({ projection: { ...current.projection, pathogenOrAllergen } })
+      .eq('id', id)
+      .eq('last_changed_at', expectedLastChangedAt)
+      .select('id');
+    if (error) this.fail('updateCasePathogenOrAllergen', error);
+    return (data?.length ?? 0) > 0;
+  }
+
+  async updateSourceRecordPathogenOrAllergen(
+    id: string,
+    pathogenOrAllergen: string | null,
+    expectedCurrent: string | null,
+  ): Promise<boolean> {
+    // Re-read so the one-field merge happens against the freshest normalized
+    // payload, then guard the write on the field itself (source records have
+    // no version column a real re-parse reliably moves — `last_seen_at` moves
+    // on every unchanged tick). A concurrent ingest re-parse writes its own,
+    // already-corrected value, so the predicate matches no row and the caller
+    // reports a skip instead of overwriting fresher data.
+    const { data: fresh, error: readError } = await this.client
+      .from('source_records')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (readError) this.fail('updateSourceRecordPathogenOrAllergen', readError);
+    if (!fresh) return false;
+    const row = this.toSourceRecordRow(fresh);
+    if ((row.normalized.pathogenOrAllergen ?? null) !== expectedCurrent) return false;
+    let query = this.client
+      .from('source_records')
+      .update({ normalized: { ...row.normalized, pathogenOrAllergen } })
+      .eq('id', id);
+    query =
+      expectedCurrent === null
+        ? query.is('normalized->>pathogenOrAllergen', null)
+        : query.eq('normalized->>pathogenOrAllergen', expectedCurrent);
+    const { data, error } = await query.select('id');
+    if (error) this.fail('updateSourceRecordPathogenOrAllergen', error);
+    return (data?.length ?? 0) > 0;
+  }
+
   async updateCaseHeroImage(
     id: string,
     heroImageUrl: string | null,

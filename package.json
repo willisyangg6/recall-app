@@ -79,6 +79,8 @@
     "backfill:product-categories": "tsx scripts/backfill-product-categories.ts --apply",
     "repair:geography:dry": "tsx scripts/repair-geography.ts",
     "repair:geography": "tsx scripts/repair-geography.ts --apply",
+    "repair:allergens:dry": "tsx scripts/repair-allergens.ts",
+    "repair:allergens": "tsx scripts/repair-allergens.ts --apply",
     "labels:fsis:dry": "tsx scripts/render-fsis-labels.ts",
     "labels:fsis": "tsx scripts/render-fsis-labels.ts --apply"
   },

@@ -263,6 +263,36 @@ export interface RecallStore {
     expectedLastChangedAt: string,
   ): Promise<boolean>;
   /**
+   * The same narrow contract for `projection.pathogenOrAllergen` (P2d-B).
+   *
+   * A correction-only write for the historical allergen repair: timeline and
+   * `last_changed_at` stay byte-identical, so it can never fire a
+   * notification, re-date a case, or appear as public activity.
+   * `detectChanges` has no hazard rule, so a hazard-agent difference is
+   * structurally incapable of being material even if it went through the
+   * pipeline — and this path does not.
+   */
+  updateCasePathogenOrAllergen(
+    id: string,
+    pathogenOrAllergen: string | null,
+    expectedLastChangedAt: string,
+  ): Promise<boolean>;
+  /**
+   * Compare-and-swap ONE field inside `normalized`: `pathogenOrAllergen`
+   * (P2d-B). Unlike the projection CAS methods, source records carry no
+   * version column an ingest reliably moves (`last_seen_at` moves on every
+   * unchanged run), so the guard is the corrected field itself: the write
+   * lands only while the row still holds `expectedCurrent` — the value the
+   * reviewed dry-run observed. A concurrent re-parse (which computes its own,
+   * already-corrected value) makes the write match no row; the caller reports
+   * a skip instead of overwriting fresher data.
+   */
+  updateSourceRecordPathogenOrAllergen(
+    id: string,
+    pathogenOrAllergen: string | null,
+    expectedCurrent: string | null,
+  ): Promise<boolean>;
+  /**
    * The same narrow contract for `projection.heroImageUrl` (C9). An
    * image-only write: timeline and `last_changed_at` stay byte-identical,
    * so it can never fire a notification, re-date a case, or appear as

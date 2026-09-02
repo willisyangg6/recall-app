@@ -1293,4 +1293,23 @@ can never match an egg preference. The fix is in the one owner:
   image-backfill mold — re-run the canonical parser over archived snapshots,
   write only `normalized.pathogenOrAllergen` + `projection.pathogenOrAllergen`,
   leave timeline/notifications/dates untouched, dry-run first. **Not executed
-  in P2d-A**; no production data was touched.
+  in P2d-A**; no production data was touched. The command is
+  `repair:allergens` — see
+  [docs/recall-operations.md](recall-operations.md).
+- **P2d-B follow-up (2026-09-02).** The first production dry run (read-only,
+  accepted) exposed two extractor gaps the recorded corpus never exhibited,
+  both fixed in the one owner: (1) "including" now bridges an
+  **allergen-governed** list only — "contained undeclared allergens,
+  including eggs, milk, and wheat" (verified against the archived production
+  snapshot for FSIS 111-2015, whose stored partial value would otherwise have
+  regressed to null); without the explicit allergen governor, "including"
+  still ends the run, so ordinary ingredient enumerations, facility prose,
+  example lists, and negated constructions stay refused. (2) Evidence words
+  are deduplicated by **grammatical alias** (singular/plural of one family:
+  "peanut"/"peanuts", "tree nut"/"tree nuts"), so two constructions naming
+  one allergen no longer produce "undeclared peanut and peanuts"; distinct
+  source words that merely share a family ("almonds and walnuts", "shellfish
+  and shrimp") are all preserved, and family grouping stays downstream.
+  Re-running the complete recorded corpus (226 records): **zero** value or
+  category changes from these fixes — they alter only production wordings
+  outside the recorded set.

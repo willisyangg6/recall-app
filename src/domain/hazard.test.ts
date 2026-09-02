@@ -192,3 +192,109 @@ test('a named pathogen keeps precedence over allergen wording (existing semantic
   );
   assert.equal(extractPathogenOrAllergen('possible Salmonella contamination'), 'Salmonella');
 });
+
+// ── Allergen-governed "including" lists (P2d-A follow-up, from production
+// record 111-2015's archived official wording) ──────────────────────────────
+
+test('an allergen-governed "including" list is collected whole (archived 111-2015 wording)', () => {
+  // Verified against the archived production snapshot for FSIS 111-2015.
+  const wording =
+    'These products were also missing the ingredient statement and contained undeclared ' +
+    "allergens, including eggs, milk, and wheat, the U.S. Department of Agriculture's Food " +
+    'Safety and Inspection Service (FSIS) announced today.';
+  assert.deepEqual(extractAllergenEvidence(wording), ['eggs', 'milk', 'wheat']);
+  assert.equal(extractPathogenOrAllergen(wording), 'undeclared eggs, milk, and wheat');
+});
+
+test('"including" without the allergen governor never interprets a list', () => {
+  // A general ingredient enumeration.
+  assert.equal(
+    extractAllergenEvidence('made with quality ingredients, including milk, cream, and sugar')
+      .length,
+    0,
+  );
+  // Facility / allergen-control prose (no reason construction at all).
+  assert.equal(
+    extractAllergenEvidence('produced in a facility that handles many allergens, including peanuts')
+      .length,
+    0,
+  );
+  // A list merely discussing allergens as examples.
+  assert.equal(
+    extractAllergenEvidence(
+      'a variety of allergens, including milk and peanuts, can cause reactions',
+    ).length,
+    0,
+  );
+  // Negated construction: the existing negation gate still refuses it.
+  assert.equal(
+    extractAllergenEvidence('the product contains no undeclared allergens, including milk').length,
+    0,
+  );
+  // "including" with no explicit allergen governor ends the run.
+  assert.equal(extractAllergenEvidence('undeclared including milk').length, 0);
+  assert.equal(
+    extractAllergenEvidence('undeclared ingredients, including preservatives and milk').length,
+    0,
+  );
+  // An unsupported token inside a governed list still ends it (existing contract).
+  assert.deepEqual(
+    extractAllergenEvidence('contained undeclared allergens, including milk, carmine, and wheat'),
+    ['milk'],
+  );
+});
+
+// ── Grammatical-alias deduplication (P2d-A follow-up, from the first P2d-B
+// production dry run's "undeclared peanut and peanuts" values) ───────────────
+
+test('singular/plural aliases of one allergen collapse to the first-seen form', () => {
+  // Two constructions naming the same allergen in different number.
+  assert.equal(
+    extractPathogenOrAllergen(
+      'recalled due to undeclared peanut. The products may contain peanuts, known allergens, ' +
+        'which are not declared on the product label.',
+    ),
+    'undeclared peanut',
+  );
+  assert.equal(
+    extractPathogenOrAllergen(
+      'due to undeclared egg. The product contains eggs, a known allergen, which is not declared.',
+    ),
+    'undeclared egg',
+  );
+  // The two-token vocabulary pair dedups the same way.
+  assert.equal(
+    extractPathogenOrAllergen(
+      'due to undeclared tree nuts. The product contains tree nut, a known allergen.',
+    ),
+    'undeclared tree nuts',
+  );
+});
+
+test('genuinely distinct allergens and supported subtypes are all preserved', () => {
+  // Distinct families stay distinct.
+  assert.equal(
+    extractPathogenOrAllergen(
+      'due to undeclared milk. The product contains eggs, a known allergen.',
+    ),
+    'undeclared milk and eggs',
+  );
+  // Distinct tree-nut types are NOT collapsed just because personalization
+  // later groups them under one family token.
+  assert.equal(
+    extractPathogenOrAllergen('due to undeclared almonds and walnuts'),
+    'undeclared almonds and walnuts',
+  );
+  // A subtype and its family word are distinct source statements.
+  assert.equal(
+    extractPathogenOrAllergen(
+      'due to undeclared shellfish. The product contains shrimp, a known allergen.',
+    ),
+    'undeclared shellfish and shrimp',
+  );
+  // Pathogen normalization is untouched by alias deduplication.
+  assert.equal(
+    extractPathogenOrAllergen('Listeria monocytogenes and Listeria were both referenced'),
+    'Listeria monocytogenes',
+  );
+});
