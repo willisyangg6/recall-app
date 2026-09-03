@@ -26,6 +26,47 @@ classification to simulate the pre-classification state). Derivations happen in
 test code, are clearly labeled, and are never displayed or persisted as recall
 data.
 
+## Hazard-precedence set
+
+`hazard-precedence-notices.json` holds the **23 notices the P2e-A audit
+source-reviewed** (recorded 2026-09-02), powering
+`src/server/fsis/hazard-precedence.test.ts`. These records are not in the
+benchmark set, and they are not raw API records: each entry carries the
+verbatim `field_recall_reason` enum and `field_title` from the archived
+production `source_snapshots` row, a **bounded excerpt** of that snapshot's
+summary (HTML stripped, whitespace collapsed, truncated) containing the
+sentence that states the hazard, the values production stored, and the
+source-reviewed expectation.
+
+The excerpt is evidence for review, not a byte-exact parser input — it pins
+the _rule_ against real official wording. The authoritative confirmation that
+production holds exactly this population is the `repair:hazards` dry run,
+which re-parses the complete archived payloads.
+
+Nothing here is invented, and no test may key on a native id: the identities
+exist so a reviewer can trace each expectation back to its official notice.
+
+## Hazard foreign-material set (expanded scope)
+
+`hazard-foreign-material-notices.json` holds **19 of the 27 further
+disagreements** the P2e-B production dry run surfaced beyond the P2e-A
+allergen audit (recorded 2026-09-02, from the saved dry-run report
+`.reports/p2e-b-dry-run.json`, not a fresh production read) — 20 notices
+whose stored `unknown` category disagreed with the corrected parser's
+`foreign_material`, all because the notice states the hazard only in FSIS's
+generic title form ("Due to Possible Foreign Matter Contamination") with no
+specific material the old bare-keyword scan could match.
+
+Only 19 of the 20 appear here: the report's evidence excerpt is populated
+only when an agent is found or the literal word "foreign" appears in the
+notice text, and one further record in this family (likely "extraneous"
+wording) produced no excerpt. It — and all 7 of the 27's other direction
+(`foreign_material -> unknown`, a packaging word with no contamination
+construction) — are deliberately **not** represented here with fabricated
+text. Their correctness is argued instead from the parser's own control flow
+in `src/server/fsis/hazard-foreign-material.test.ts`, which every entry here
+is checked into alongside.
+
 ## Benchmark set
 
 `benchmark-records.json` holds **66 verbatim records** (recorded 2026-08-21)

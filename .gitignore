@@ -41,6 +41,9 @@ yarn-error.*
 # local dry-run output of scripts/render-fsis-labels.ts
 .fsis-label-dryrun/
 
+# durable maintenance-repair ledgers (scripts/repair-hazards.ts)
+.reports/
+
 # generated native folders
 /ios
 /android

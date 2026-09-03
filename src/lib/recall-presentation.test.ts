@@ -1605,3 +1605,26 @@ test('ambiguous case-level evidence never reaches a row cell', () => {
     assert.ok(!row.cells.some((cell) => cell.text?.includes('999111')));
   }
 });
+
+test('P2e-B: the corrected anchovy recall renders its allergen on both surfaces', () => {
+  // Before P2e-B this case was stored `foreign_material` and Home read
+  // "Potential plastic contamination." — from its packaging, not its hazard.
+  assert.equal(
+    conciseReasonLine({
+      reasonText: 'Product Contamination',
+      hazardCategory: 'allergen',
+      pathogenOrAllergen: 'undeclared fish',
+    }),
+    'Undeclared fish allergen.',
+  );
+  // And a foreign-material case whose only material word is packaging keeps
+  // the truthful generic line instead of naming plastic.
+  assert.equal(
+    conciseReasonLine({
+      reasonText: 'Product Contamination',
+      hazardCategory: 'foreign_material',
+      pathogenOrAllergen: null,
+    }),
+    'Potential foreign material contamination.',
+  );
+});

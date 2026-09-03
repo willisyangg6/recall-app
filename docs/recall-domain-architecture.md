@@ -1313,3 +1313,87 @@ can never match an egg preference. The fix is in the one owner:
   Re-running the complete recorded corpus (226 records): **zero** value or
   category changes from these fixes — they alter only production wordings
   outside the recorded set.
+
+**Canonical hazard-category precedence (2026-09-02, P2e).** P2e-A audited
+every record whose stored `hazardCategory` disagreed with its official
+notice — the 22 records the P2d-B repair refused as out-of-scope, plus its one
+category conflict — and found that only ONE was stale data. The other 21 were
+a live parser gap: the derivation trusted FSIS's structured reason enum
+exclusively, and FSIS under-reports allergens in it.
+
+- **FSIS structured-reason under-reporting.** 20 notices whose body states the
+  standard "The product contains X, a known allergen, which is not declared on
+  the product label" carry only `Misbranding`/`Mislabeling` — or an empty
+  `field_recall_reason` array — because misbranding is how an undeclared
+  allergen is _reported_, not a second hazard. They were filed
+  `other_regulatory` or `unknown`, so `classifyAllergenOnly` (which hard-gates
+  on `hazardCategory === 'allergen'`) could never match them to an allergen
+  preference. **Rule:** a labeling-only or absent reason, plus affirmative
+  undeclared-allergen evidence from the one canonical extractor, is an
+  allergen recall. Any other stated reason — import, inspection, insanitary,
+  processing, contamination — keeps its own category: incidental allergen
+  words never displace a stated hazard.
+- **Packaging is not foreign-material evidence.** `Product Contamination`
+  covers pathogens, foreign matter and, rarely, a mis-filed allergen recall.
+  115-2017 is an undeclared-anchovy recall whose only material word is its
+  packaging ("9.75-oz. plastic bowls"), and a bare keyword scan filed it
+  `foreign_material` — so Detail asserted "Potential plastic contamination.",
+  a hazard the source never states. **Rule:** `extractForeignMaterialEvidence`
+  in `domain/hazard.ts` is THE foreign-material evidence owner, evidence-gated
+  on the same principle as the allergen extractor — a material word counts
+  only inside a bounded construction that states it as the contaminant
+  ("foreign material, specifically glass", "pieces of glass", "glass
+  contamination", "may contain hard plastic", "glass found in product").
+  Nothing enumerates packaging nouns; the rule is the inverse, so an unlisted
+  container word cannot outrun it. Within `Product Contamination`, supported
+  hazards resolve in evidence order — pathogen, then genuine foreign material,
+  then chemical — and only with none of them stated may allergen evidence
+  resolve the category.
+- **One record was genuinely stale.** PHA-07302018-1 (Cyclospora, Caito Foods)
+  was ingested 2026-08-21 from working-tree code whose `PATHOGENS` list
+  predated Cyclospora; it has a single archived snapshot, and the ingest hash
+  gate means an unchanged page is never re-parsed — by design. The current
+  parser reads it correctly; only the persisted value was wrong.
+- **The display layer consumes the canonical category.** `interpretReason`'s
+  `Product Contamination` branch now honours a canonical `allergen` category
+  instead of re-deciding from the enum string, and `sniffMaterial` delegates
+  to the shared evidence owner. Neither surface can name a material the
+  category derivation did not accept as evidence.
+- **Recorded-corpus delta (66 FSIS + 160 FDA records re-run, every change
+  source-reviewed):** 0 category changes, 0 agent changes, 0 other normalized
+  fields changed, and FDA derivation byte-identical. Three consumer reason
+  lines change, all correcting the same defect — a material read from
+  packaging or from a category label rather than from the hazard: FSIS
+  005-2026 and PHA-10092020-01 plastic → **glass** (both state "contaminated
+  with foreign material, specifically glass"; both are sold in plastic), and
+  FDA Palermo Villa metal → **plastic** (its own title says "Due to Possible
+  Plastic Contaminant"; "metal" came from the disjunctive taxonomy label
+  "Potential Metal or Chemical Contaminant", which names a category covering
+  two possibilities and states neither).
+- **Mixed-hazard debt (deferred, explicit).** 083-2016 is excluded from the
+  repair. Its primary `other_regulatory` category is correct (produced without
+  benefit of inspection), and its editor's note adds _secondary_
+  cross-contamination allergens that the canonical extractor correctly
+  declines as affirmative evidence. Its stored `undeclared wheat` is a
+  truthful-but-incomplete pre-P2d artifact; replacing it with null would lose
+  information. Representing several hazard roles on one case needs its own
+  model decision and is not part of P2e.
+- **Persistence.** As with P2d, stored values were computed by the old parser
+  and the hash gate means unchanged sources never re-project, so the
+  historical correction is an explicit maintenance operation:
+  `repair:hazards` re-runs the canonical adapters over archived snapshots and
+  writes only `normalized.hazardCategory`/`pathogenOrAllergen` and the same
+  pair inside `projection`, along an approved transition allowlist. The
+  generated `recall_cases.hazard_category` column follows the projection JSON
+  automatically and is never written directly. Feed/cache payload shape is
+  unchanged (enum + string fields), so no cache schema bump — and the C8
+  manifest token is a read-time content hash, so corrected rows reach clients
+  without `last_changed_at` moving. See
+  [docs/recall-operations.md](recall-operations.md).
+- **Future material-change policy (deferred, NOT implemented in P2e).** When a
+  new or changed authoritative source causes an active case's canonical hazard
+  family or named hazard to materially change, that change should be eligible
+  for notification. Parser maintenance, backfills, and historical repairs with
+  no source change must never create retroactive notifications. `detectChanges`
+  has no hazard rule today and was deliberately not modified in P2e-B; adding
+  one is its own milestone with its own founder decision.

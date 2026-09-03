@@ -81,6 +81,8 @@
     "repair:geography": "tsx scripts/repair-geography.ts --apply",
     "repair:allergens:dry": "tsx scripts/repair-allergens.ts",
     "repair:allergens": "tsx scripts/repair-allergens.ts --apply",
+    "repair:hazards:dry": "tsx scripts/repair-hazards.ts",
+    "repair:hazards": "tsx scripts/repair-hazards.ts --apply",
     "labels:fsis:dry": "tsx scripts/render-fsis-labels.ts",
     "labels:fsis": "tsx scripts/render-fsis-labels.ts --apply"
   },

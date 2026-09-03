@@ -10,6 +10,7 @@ import type {
   AffectedProduct,
   CaseProjection,
   Geography,
+  HazardCategory,
   SourceSystem,
   TimelineEntry,
 } from '../../domain/recall-types';
@@ -183,8 +184,13 @@ export class SupabaseStore implements RecallStore {
 
   async listSourceRecords(sourceSystem: SourceSystem): Promise<SourceRecordRow[]> {
     // Paginated: PostgREST caps an unbounded select, and a maintenance
-    // backfill must see every record, not the first page of them.
-    const pageSize = 1000;
+    // backfill must see every record, not the first page of them. 500, not
+    // 1000: a 1000-row page of `source_records` (normalized JSON, FDA rows
+    // carrying summaryHtml) timed out mid-transfer against production on
+    // 2026-09-02, the same class of stall `listCases` was already halved to
+    // 500 for. Ordering, filtering, and completeness are unchanged — only
+    // the page boundary moves, so a maintenance repair still sees every row.
+    const pageSize = 500;
     const rows: SourceRecordRow[] = [];
     for (let from = 0; ; from += pageSize) {
       const { data, error } = await this.client
@@ -447,6 +453,60 @@ export class SupabaseStore implements RecallStore {
       .eq('last_changed_at', expectedLastChangedAt)
       .select('id');
     if (error) this.fail('updateCasePathogenOrAllergen', error);
+    return (data?.length ?? 0) > 0;
+  }
+
+  async updateCaseHazard(
+    id: string,
+    hazard: { hazardCategory: HazardCategory; pathogenOrAllergen: string | null },
+    expectedLastChangedAt: string,
+  ): Promise<boolean> {
+    // Identical contract to updateCasePathogenOrAllergen, writing the hazard
+    // PAIR in one statement so the projection is never briefly inconsistent.
+    // `timeline` and `last_changed_at` are not in the payload at all, and the
+    // generated `hazard_category` column follows the projection by itself.
+    const current = await this.getCase(id);
+    if (!current || current.lastChangedAt !== expectedLastChangedAt) return false;
+    const { data, error } = await this.client
+      .from('recall_cases')
+      .update({ projection: { ...current.projection, ...hazard } })
+      .eq('id', id)
+      .eq('last_changed_at', expectedLastChangedAt)
+      .select('id');
+    if (error) this.fail('updateCaseHazard', error);
+    return (data?.length ?? 0) > 0;
+  }
+
+  async updateSourceRecordHazard(
+    id: string,
+    hazard: { hazardCategory: HazardCategory; pathogenOrAllergen: string | null },
+    expected: { hazardCategory: string; pathogenOrAllergen: string | null },
+  ): Promise<boolean> {
+    // As updateSourceRecordPathogenOrAllergen, but guarded on BOTH observed
+    // values: a concurrent re-parse that corrected either one makes the
+    // predicate match no row, and the caller reports a skip rather than
+    // overwriting fresher data.
+    const { data: fresh, error: readError } = await this.client
+      .from('source_records')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (readError) this.fail('updateSourceRecordHazard', readError);
+    if (!fresh) return false;
+    const row = this.toSourceRecordRow(fresh);
+    if (row.normalized.hazardCategory !== expected.hazardCategory) return false;
+    if ((row.normalized.pathogenOrAllergen ?? null) !== expected.pathogenOrAllergen) return false;
+    let query = this.client
+      .from('source_records')
+      .update({ normalized: { ...row.normalized, ...hazard } })
+      .eq('id', id)
+      .eq('normalized->>hazardCategory', expected.hazardCategory);
+    query =
+      expected.pathogenOrAllergen === null
+        ? query.is('normalized->>pathogenOrAllergen', null)
+        : query.eq('normalized->>pathogenOrAllergen', expected.pathogenOrAllergen);
+    const { data, error } = await query.select('id');
+    if (error) this.fail('updateSourceRecordHazard', error);
     return (data?.length ?? 0) > 0;
   }
 

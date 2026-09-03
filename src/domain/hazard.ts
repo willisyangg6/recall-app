@@ -241,6 +241,115 @@ export function extractAllergenEvidence(text: string): string[] {
 }
 
 /**
+ * Does the text state an undeclared allergen as the reason for the notice?
+ * The evidence owner is `extractAllergenEvidence` above and nowhere else —
+ * category derivation asks this question rather than growing a second
+ * allergen vocabulary of its own.
+ */
+export function statesUndeclaredAllergen(text: string): boolean {
+  return extractAllergenEvidence(text).length > 0;
+}
+
+// ── Foreign-material evidence extraction ─────────────────────────────────────
+//
+// THE foreign-material evidence owner (P2e-B). Evidence-gated on exactly the
+// same principle as the allergen extractor above: a material word counts only
+// inside a bounded official construction that states it as the CONTAMINANT.
+//
+// A material word describing the PACKAGE is never evidence. Verified against
+// archived FSIS notices where the packaging and the real contaminant disagree:
+// PHA-10092020-01 is a glass contamination whose products are "10-oz. plastic
+// bowl package[s]", and 115-2017 is an undeclared-anchovy recall whose
+// products are "9.75-oz. plastic bowls". A bare keyword scan reported
+// "plastic" for both. Nothing here enumerates packaging words — the rule is
+// the inverse and cannot be outrun by an unlisted container noun: absent a
+// stated contamination construction, a material word simply is not evidence.
+//
+// The constructions, all observed verbatim in the recorded corpus:
+//   A. "foreign material" / "foreign matter" / "extraneous material(s)"
+//      ("Due to Possible Foreign Matter Contamination" — the FSIS title form)
+//   B. "… material, specifically <material>"          (names the contaminant)
+//   C. "pieces/fragments/shards of <material>"
+//   D. "<material> pieces/fragments/shards"
+//   E. "contaminated with <material>", "<material> contamination"
+//   F. "<material> found in …", "found <material> in …"
+//   G. "may contain <material>"   (modal + finite verb, never "containing")
+
+/** Materials observed named as contaminants in official notices. */
+export const FOREIGN_MATERIALS = ['metal', 'plastic', 'glass', 'wood', 'rubber', 'bone'];
+
+/** The shapes a foreign object is stated in. Fixed list, never inferred. */
+const FRAGMENT_NOUNS =
+  'pieces?|fragments?|shards?|shavings?|slivers?|particles?|chips?|bits?|chunks?|' +
+  'splinters?|flakes?|specks?|strands?|filaments?';
+
+/** The agency's generic wording for a foreign-material hazard. */
+const GENERIC_FOREIGN_MATERIAL =
+  /\b(?:foreign|extraneous)\s+(?:material|matter|object|substance|contaminant|bod(?:y|ies))s?\b/i;
+
+/** Is this material named as the contaminant (not as the packaging)? */
+function materialStatedAsContaminant(text: string, material: string): boolean {
+  const m = material.replace(/[.]/g, '\\.');
+  return [
+    // C. "pieces of glass", "fragments of hard plastic"
+    new RegExp(`\\b(?:${FRAGMENT_NOUNS})\\s+of\\s+(?:\\w+\\s+){0,2}${m}\\b`, 'i'),
+    // D. "glass pieces", "metal fragments"
+    new RegExp(`\\b${m}\\s+(?:${FRAGMENT_NOUNS})\\b`, 'i'),
+    // E. "contaminated with glass" / "the glass contamination"
+    new RegExp(`\\bcontaminat(?:ed|ion)\\s+(?:with|by)\\s+(?:\\w+[\\s,]+){0,3}${m}\\b`, 'i'),
+    // The gap carries the agency's own qualifiers ("a possible plastic
+    // foreign contaminant") without reaching the next clause. "or"/"and" end
+    // it: FDA's reason TAXONOMY is disjunctive ("Potential Metal or Chemical
+    // Contaminant"), and a category naming two possibilities states neither.
+    new RegExp(`\\b${m}\\s+(?:(?!(?:or|and)\\b)\\w+\\s+){0,2}contamin`, 'i'),
+    // F. "glass found in product". Bounded to the discovery construction so
+    // an ordinary product word cannot reach a nearby "found" ("bone-in
+    // chicken … found at retail").
+    new RegExp(`\\b${m}\\b[^.]{0,15}\\bfound\\s+in\\b`, 'i'),
+    new RegExp(`\\bfound\\s+(?:\\w+\\s+){0,2}${m}\\b`, 'i'),
+    // G. "the salad dressing may contain hard plastic" — the hazard is stated
+    // with a modal + the FINITE verb. FSIS product listings use the
+    // participle instead ("packages containing a plastic bag"), so package
+    // contents can never be read as a contaminant.
+    new RegExp(`\\b(?:may|might|could|possibly)\\s+contains?\\s+(?:\\w+\\s+){0,2}${m}\\b`, 'i'),
+    // B. "extraneous materials, specifically clear flexible and hard plastic"
+    new RegExp(
+      `${GENERIC_FOREIGN_MATERIAL.source}[^.]{0,40}?\\bspecifically\\b[^.]{0,60}?\\b${m}\\b`,
+      'i',
+    ),
+  ].some((pattern) => pattern.test(text));
+}
+
+export interface ForeignMaterialEvidence {
+  /** The notice states a foreign-material hazard. */
+  stated: boolean;
+  /**
+   * The specific material named as the contaminant, or null when the notice
+   * states the hazard only in its generic form. Ordered by first appearance
+   * in the text, so a notice naming several reports the one it leads with.
+   */
+  material: string | null;
+}
+
+/**
+ * The foreign-material hazard a notice states, if any. Deterministic and
+ * derivable at any layer: the FSIS category parser and the consumer reason
+ * line both call this, so a screen can never name a material the category
+ * derivation did not accept as evidence.
+ */
+export function extractForeignMaterialEvidence(text: string): ForeignMaterialEvidence {
+  const named = FOREIGN_MATERIALS.filter((material) =>
+    materialStatedAsContaminant(text, material),
+  ).sort((a, b) => {
+    const at = text.toLowerCase().indexOf(a);
+    const bt = text.toLowerCase().indexOf(b);
+    return (at < 0 ? Number.MAX_SAFE_INTEGER : at) - (bt < 0 ? Number.MAX_SAFE_INTEGER : bt);
+  });
+  if (named.length > 0) return { stated: true, material: named[0] };
+  return { stated: GENERIC_FOREIGN_MATERIAL.test(text), material: null };
+}
+
+/**
  * The canonical multi-allergen list wording ("a", "a and b", "a, b, and c") —
  * the exact shape `normalizedAllergenTokens` and the display layers parse.
  */

@@ -4,8 +4,10 @@ import { test } from 'node:test';
 import {
   allergenDisplayPhrase,
   extractAllergenEvidence,
+  extractForeignMaterialEvidence,
   extractPathogenOrAllergen,
   normalizedAllergenTokens,
+  statesUndeclaredAllergen,
 } from './hazard';
 
 test('allergen values normalize to canonical personalization tokens (founder Part 10)', () => {
@@ -297,4 +299,76 @@ test('genuinely distinct allergens and supported subtypes are all preserved', ()
     extractPathogenOrAllergen('Listeria monocytogenes and Listeria were both referenced'),
     'Listeria monocytogenes',
   );
+});
+
+// ── Foreign-material evidence (P2e-B) ────────────────────────────────────────
+
+test('packaging prose is never foreign-material evidence', () => {
+  for (const text of [
+    '9.75-oz. plastic bowls containing Taylor Farms American Style Pasta Salad',
+    '4.2-lb. plastic bags containing “Ling Ling POTSTICKERS”',
+    '1.5-lb. clear plastic containers with safety lids',
+    '20-oz. plastic wrapped tray packages containing sausage links',
+    '12-inch, 25-oz. plastic-wrapped “KETTLE RIVER Chicken Alfredo Pizza”',
+    '1-lb. plastic vacuum-packed packages containing beef',
+    '10-lb. white cardboard box cases containing a plastic bag of sausage',
+    'Product is packed in plastic overwrap and shipped in plastic tubs.',
+    '16-oz. glass jars and 2-liter plastic bottles of the beverage',
+    'The pouches are sealed with a metal clip and packed in wood crates.',
+  ]) {
+    assert.deepEqual(extractForeignMaterialEvidence(text), { stated: false, material: null }, text);
+  }
+});
+
+test('stated contamination is foreign-material evidence, with the material named', () => {
+  const cases: [string, string | null][] = [
+    // The agency's generic wording, with no material named.
+    ['Recalled Due to Possible Foreign Matter Contamination', null],
+    ['The products may contain foreign material.', null],
+    ['because of a possible foreign contaminant', null],
+    // Material named as the contaminant.
+    ['products that may be contaminated with foreign material, specifically glass', 'glass'],
+    [
+      'contaminated with extraneous materials, specifically clear flexible and hard plastic',
+      'plastic',
+    ],
+    ['a Taylor Farms employee discovered pieces of glass in product', 'glass'],
+    ['the likely source of the glass contamination', 'glass'],
+    ['four consumer complaints regarding glass found in product', 'glass'],
+    ['the salad dressing may contain hard plastic', 'plastic'],
+    ['because of a possible plastic foreign contaminant', 'plastic'],
+    ['The product may contain plastic pieces.', 'plastic'],
+    ['may contain plastic fragments', 'plastic'],
+    ['consumer reported glass shards in the jar', 'glass'],
+    ['may be contaminated with metal fragments', 'metal'],
+    ['small metal shavings were discovered', 'metal'],
+    ['may contain bone fragments', 'bone'],
+    ['pieces of rubber were found in the product', 'rubber'],
+    ['wood splinters in the product', 'wood'],
+  ];
+  for (const [text, material] of cases) {
+    assert.deepEqual(extractForeignMaterialEvidence(text), { stated: true, material }, text);
+  }
+});
+
+test('the real contaminant wins over packaging that names another material', () => {
+  // PHA-10092020-01: glass contamination, sold in plastic bowls.
+  const notice =
+    'FSIS Issues Public Health Alert Due to Possible Foreign Matter Contamination. ' +
+    'The products may be contaminated with extraneous material, specifically glass. ' +
+    '10-oz. plastic bowl package containing “MEAL SIMPLE SPAGHETTI”.';
+  assert.deepEqual(extractForeignMaterialEvidence(notice), { stated: true, material: 'glass' });
+});
+
+test('undeclared-allergen evidence is delegated to the one extractor', () => {
+  assert.equal(
+    statesUndeclaredAllergen('The product contains soy, a known allergen, which is not declared.'),
+    true,
+  );
+  assert.equal(statesUndeclaredAllergen('undeclared milk and wheat'), true);
+  // The same negatives the extractor already refuses.
+  assert.equal(statesUndeclaredAllergen('Consumers allergic to milk should read labels.'), false);
+  assert.equal(statesUndeclaredAllergen('made in a facility that also processes peanuts'), false);
+  assert.equal(statesUndeclaredAllergen('contains no milk, a known allergen'), false);
+  assert.equal(statesUndeclaredAllergen('an undeclared allergen'), false);
 });

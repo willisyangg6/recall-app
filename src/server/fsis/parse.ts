@@ -12,7 +12,13 @@
  * - http:// official URLs
  */
 
-import { extractPathogenOrAllergen, PATHOGENS } from '../../domain/hazard';
+import {
+  extractChemicalAgent,
+  extractForeignMaterialEvidence,
+  extractPathogenOrAllergen,
+  PATHOGENS,
+  statesUndeclaredAllergen,
+} from '../../domain/hazard';
 import { classifyIllnessReport } from '../../domain/illness';
 import type { Geography, HazardCategory } from '../../domain/recall-types';
 import type { NormalizedSourceRecord } from '../../domain/source-record';
@@ -88,22 +94,46 @@ export function splitRecallNumber(raw: string): { nativeId: string; baseId: stri
   return { nativeId, baseId: base === nativeId ? null : base };
 }
 
-const FOREIGN_MATERIALS = ['metal', 'plastic', 'glass', 'wood', 'rubber', 'bone fragment'];
-
 /**
- * Deterministic lookup from FSIS's structured 9-value reason enum (§4.1), with
- * keyword disambiguation only for "Product Contamination" (which covers both
- * pathogens and foreign matter). Unmappable → 'unknown', never guessed.
+ * Deterministic lookup from FSIS's structured 9-value reason enum (§4.1),
+ * with canonical evidence deciding the cases the enum leaves ambiguous or
+ * gets wrong. Unmappable → 'unknown', never guessed.
+ *
+ * Two evidence rules sit alongside the enum (P2e-B, both founder-approved and
+ * both driven entirely by the shared evidence owners in domain/hazard.ts —
+ * this function owns no vocabulary of its own):
+ *
+ * 1. FSIS UNDER-REPORTS ALLERGENS IN THE ENUM. Measured on the live corpus:
+ *    20 notices whose body states the standard "contains X, a known allergen,
+ *    which is not declared on the product label" carry only "Misbranding" /
+ *    "Mislabeling" — or an empty reason array — because misbranding is how an
+ *    undeclared allergen is REPORTED, not a second hazard. Trusting the enum
+ *    alone filed them as regulatory/unknown, so nothing could match a user's
+ *    allergen preference. A labeling-only (or absent) reason plus affirmative
+ *    undeclared-allergen evidence is an allergen recall. A reason naming any
+ *    other hazard — import, inspection, insanitary, processing, contamination
+ *    — keeps its own category: incidental allergen words never displace a
+ *    stated hazard.
+ *
+ * 2. "Product Contamination" covers pathogens, foreign matter AND, rarely, a
+ *    mis-filed allergen recall (verified: 115-2017, an undeclared-anchovy
+ *    recall). Supported hazards win in evidence order — pathogen, then
+ *    genuine foreign material, then chemical — and only with none of them
+ *    stated may affirmative allergen evidence resolve the category.
  */
 export function deriveHazardCategory(reasons: string[], text: string): HazardCategory {
+  const undeclaredAllergen = statesUndeclaredAllergen(text);
+
   if (reasons.includes('Unreported Allergens')) return 'allergen';
   if (reasons.includes('Product Contamination')) {
     if (PATHOGENS.some((p) => new RegExp(`\\b${p.replace(/[.]/g, '\\.')}\\b`, 'i').test(text))) {
       return 'microbial_contamination';
     }
-    if (FOREIGN_MATERIALS.some((m) => new RegExp(`\\b${m}\\b`, 'i').test(text))) {
-      return 'foreign_material';
-    }
+    if (extractForeignMaterialEvidence(text).stated) return 'foreign_material';
+    // A chemical agent is a supported hazard this branch does not itself
+    // classify (FSIS has no chemical reason value); it only bars the allergen
+    // resolution below, so a chemical notice stays 'unknown' as before.
+    if (undeclaredAllergen && extractChemicalAgent(text) === null) return 'allergen';
     return 'unknown';
   }
   if (reasons.includes('Insanitary Conditions')) return 'other_regulatory';
@@ -120,9 +150,20 @@ export function deriveHazardCategory(reasons: string[], text: string): HazardCat
       ].includes(r),
     )
   ) {
-    return 'other_regulatory';
+    return labelingOnly(reasons) && undeclaredAllergen ? 'allergen' : 'other_regulatory';
   }
-  return 'unknown';
+  // No mappable reason at all — including the empty array FSIS serves on some
+  // older records, where the notice text is the only statement of the hazard.
+  return reasons.length === 0 && undeclaredAllergen ? 'allergen' : 'unknown';
+}
+
+/**
+ * Every stated reason is a labeling failure. "Misbranding" and "Mislabeling"
+ * are how an undeclared allergen is reported, so they describe no hazard of
+ * their own; any other value in the array does, and keeps its category.
+ */
+function labelingOnly(reasons: string[]): boolean {
+  return reasons.length > 0 && reasons.every((r) => r === 'Misbranding' || r === 'Mislabeling');
 }
 
 export function extractConsumerAction(summaryText: string): string | null {

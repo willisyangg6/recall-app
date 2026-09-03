@@ -193,3 +193,83 @@ test('singular/plural product agreement is conservative', () => {
   assert.equal(pluralProductPhrase('Classic Hummus'), false);
   assert.equal(pluralProductPhrase('Swiss Cheese Bliss'), false);
 });
+
+// ── P2e-B: packaging prose is never the hazard ──────────────────────────────
+
+/**
+ * 115-2017 (Taylor Farms Florida) as the corrected canonical parser now
+ * normalizes it: FSIS filed it under "Product Contamination", but the notice
+ * is an undeclared-anchovy recall whose only material word is the packaging
+ * ("9.75-oz. plastic bowls"). Before P2e-B the stored category was
+ * `foreign_material` and both surfaces rendered "Potential plastic
+ * contamination." — a hazard the source never states.
+ */
+const ANCHOVY_NOTICE: ReasonEvidence = {
+  reasonText: 'Product Contamination',
+  hazardCategory: 'allergen',
+  pathogenOrAllergen: 'undeclared fish',
+  title:
+    'Taylor Farms Florida Recalls Salad with Chicken Products Due to Misbranding and Undeclared Allergens',
+  summaryText:
+    'The products contain fish (anchovies), a known allergen, which is not declared on the ' +
+    'product label. The following products are subject to recall: 9.75-oz. plastic bowls ' +
+    'containing Taylor Farms American Style Pasta Salad.',
+};
+
+test('a contamination-filed allergen recall renders its allergen, not its packaging', () => {
+  assert.deepEqual(interpretReason(ANCHOVY_NOTICE), { family: 'allergen', raw: 'fish' });
+});
+
+test('the pre-P2e-B category would have named the packaging material; the evidence rule does not', () => {
+  // The stored (wrong) category, with the identical source text: even asked
+  // for a foreign-material family, no material may be named from packaging.
+  assert.deepEqual(interpretReason({ ...ANCHOVY_NOTICE, hazardCategory: 'foreign_material' }), {
+    family: 'foreign_material',
+    material: null,
+  });
+});
+
+test('a genuine contaminant is named over packaging that mentions another material', () => {
+  // PHA-10092020-01: glass contamination sold in plastic bowls.
+  assert.deepEqual(
+    interpretReason(
+      evidence({
+        reasonText: 'Product Contamination, Unfit for Human Consumption',
+        hazardCategory: 'foreign_material',
+        title: 'FSIS Issues Public Health Alert Due to Possible Foreign Matter Contamination',
+        summaryText:
+          'The products may be contaminated with extraneous material, specifically glass. ' +
+          '10-oz. plastic bowl package containing “MEAL SIMPLE SPAGHETTI”.',
+      }),
+    ),
+    { family: 'foreign_material', material: 'glass' },
+  );
+});
+
+test('the FDA reason taxonomy label never names a contaminant', () => {
+  // "Potential Metal or Chemical Contaminant" is a category name, not a
+  // statement about this product — whose own title says plastic.
+  assert.deepEqual(
+    interpretReason(
+      evidence({
+        reasonText: 'Potential Metal or Chemical Contaminant',
+        hazardCategory: 'foreign_material',
+        title:
+          'Palermo Villa, Inc. Issues Recall for Frozen Pizzas Due to Possible Plastic Contaminant',
+        summaryText: 'issuing a recall because of a possible plastic foreign contaminant.',
+      }),
+    ),
+    { family: 'foreign_material', material: 'plastic' },
+  );
+  // With no notice text of its own (Home), the line degrades to the generic
+  // form rather than asserting the label's first material.
+  assert.deepEqual(
+    interpretReason(
+      evidence({
+        reasonText: 'Potential Metal or Chemical Contaminant',
+        hazardCategory: 'foreign_material',
+      }),
+    ),
+    { family: 'foreign_material', material: null },
+  );
+});

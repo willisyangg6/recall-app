@@ -13,6 +13,7 @@ import type {
   AffectedProduct,
   CaseProjection,
   Geography,
+  HazardCategory,
   NotificationKind,
   NotificationSuppression,
   SourceSystem,
@@ -291,6 +292,37 @@ export interface RecallStore {
     id: string,
     pathogenOrAllergen: string | null,
     expectedCurrent: string | null,
+  ): Promise<boolean>;
+  /**
+   * Compare-and-swap the case's canonical HAZARD pair — `hazardCategory` and
+   * `pathogenOrAllergen` — together (P2e-B).
+   *
+   * One method rather than two because the pair is one fact: a category
+   * corrected without its agent, or the reverse, would leave the projection
+   * internally inconsistent for as long as the second write took, and a
+   * crash between them would persist that state. Same correction-only
+   * contract as the P2d-B port above: timeline and `last_changed_at` stay
+   * byte-identical, so it can never fire a notification, re-date a case, or
+   * appear as public activity. The generated `hazard_category` column
+   * follows the projection JSON automatically and is never written directly.
+   */
+  updateCaseHazard(
+    id: string,
+    hazard: { hazardCategory: HazardCategory; pathogenOrAllergen: string | null },
+    expectedLastChangedAt: string,
+  ): Promise<boolean>;
+  /**
+   * The same pair inside `normalized`, guarded the way P2d-B guards a source
+   * record: on the corrected fields themselves, because source records carry
+   * no version column an ingest reliably moves. The write lands only while
+   * the row still holds BOTH values the reviewed dry run observed; a
+   * concurrent re-parse (which computes its own corrected values) makes it
+   * match no row, and the caller reports a skip.
+   */
+  updateSourceRecordHazard(
+    id: string,
+    hazard: { hazardCategory: HazardCategory; pathogenOrAllergen: string | null },
+    expected: { hazardCategory: string; pathogenOrAllergen: string | null },
   ): Promise<boolean>;
   /**
    * The same narrow contract for `projection.heroImageUrl` (C9). An

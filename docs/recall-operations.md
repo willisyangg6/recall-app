@@ -547,6 +547,100 @@ full machine-readable report including the per-record ledger. The operation is
 idempotent and resumable; the dry run doubles as the post-apply verification
 report.
 
+**Status: applied 2026-09-02 and verified** — the post-apply production dry
+run reported 0 remaining eligible corrections. Rerunning it is a safe no-op
+and is the standing verification command.
+
+## Hazard category: a one-time historical correction (P2e-B)
+
+```
+npm run repair:hazards:dry           # report only, writes nothing
+npm run repair:hazards -- --confirm  # APPLY — requires BOTH flags; NOT YET AUTHORIZED
+npm run repair:hazards:dry           # verify: "would change" must be 0
+```
+
+P2e-A audited every record whose stored hazard category disagreed with its
+official notice and found two shared causes, both fixed in the canonical
+parser rather than in this repair: FSIS under-reports allergens in its
+structured reason enum (20 notices filed `Misbranding`/`Mislabeling` or with
+an empty reason state an undeclared allergen in prose), and a bare
+material-word scan read **packaging** as foreign-material evidence (115-2017,
+an undeclared-anchovy recall sold in "plastic bowls"). One further record,
+PHA-07302018-1, is genuinely stale: it was ingested before Cyclospora entered
+the canonical pathogen list, and the hash gate never revisits an unchanged
+page. See [recall-domain-architecture.md](recall-domain-architecture.md),
+"Canonical hazard-category precedence", for the rules themselves.
+
+Mechanically this is the P2d-B repair's safety pattern applied to a second
+field pair. It re-derives from **archived official snapshots**, re-running the
+canonical adapters (`parseFsisRecord` / `parseFdaAnnouncement`) over the raw
+payload each snapshot preserved — never a repair-only re-implementation — so a
+corrected value is exactly what ingestion would produce today. Zero network
+requests; a record with no usable snapshot is reported and never guessed.
+
+It writes exactly four fields: `normalized.hazardCategory` and
+`normalized.pathogenOrAllergen` (one compare-and-swap guarded on **both**
+observed values), and the same pair inside `projection` (through
+`updateCaseHazard`, conditional on `last_changed_at`, with `timeline` and
+`lastChangedAt` untouched). The pair is written together because it is one
+fact — a category corrected without its agent would leave the projection
+internally inconsistent. The generated `recall_cases.hazard_category` column
+follows the projection JSON automatically and is **never written directly**.
+Case-level precedence is delegated to `projectCase` over the corrected
+records, so a multi-source case resolves exactly as a real re-projection
+would. Rows that changed between the dry-run read and the write are **skipped
+and reported**, never re-derived on the fly. No pipeline or material-change
+invocation, no NotificationEvent, no snapshot/hash/date/lineage changes, no
+job lease. Dates, classifications, geography, retailers, products, images and
+the notification ledger stay byte-identical.
+
+Scope guardrails, straight from the P2e-A evidence. A record is writable only
+when its category moves along an **approved transition**:
+
+| From               | To                        | Why                                            |
+| ------------------ | ------------------------- | ---------------------------------------------- |
+| `other_regulatory` | `allergen`                | labeling-only reason, allergen stated in prose |
+| `unknown`          | `allergen`                | empty reason array, allergen stated in prose   |
+| `foreign_material` | `allergen`                | 115-2017 — its "plastic" was the packaging     |
+| `unknown`          | `microbial_contamination` | PHA-07302018-1 — ingested before Cyclospora    |
+
+Every other move is refused and reported, and the command exits non-zero. An
+**agent-only** difference on a record whose category is unchanged is also
+refused: that is what keeps **083-2016** byte-identical. Its
+`other_regulatory` category is correct (produced without benefit of
+inspection), and its stored `undeclared wheat` is a truthful-but-incomplete
+pre-P2d artifact drawn from an editor's note about secondary cross
+contamination — replacing it with null would lose information. Representing
+several hazard roles on one case is deferred mixed-hazard debt with its own
+model decision. Records P2d-B already corrected are re-derived to the same
+values and reported `unchanged`.
+
+The command also guards the **expected population**: P2e-A source-reviewed
+exactly 22 record and 22 case corrections, and a run proposing a larger,
+smaller, or different set exits non-zero for review before any apply. An
+**empty** set (0 and 0) is not a failure — it is exactly what the post-apply
+verification dry run reports, and what a second apply would find.
+
+Applying is double-gated: `--apply` alone is refused; the second
+acknowledgment (`--confirm`) must accompany it. **Durable ledger:** an apply
+always leaves a complete machine-readable report behind rather than trusting
+terminal scrollback — `--json <path>` writes it where you ask, and with no
+`--json` an apply writes a timestamped report to `.reports/` (git-ignored) and
+prints the path. The ledger carries planned, applied, conflicted, refused,
+failed and unchanged counts plus every before/after value. A dry run writes
+one only when `--json` is given. The operation is idempotent and resumable;
+the dry run doubles as the post-apply verification report.
+
+Historical repair is **notification-silent by construction**: `last_changed_at`
+never moves (it is the CAS predicate), the pipeline is never invoked, and
+`detectChanges` has no hazard rule at all. Consumers still see the correction,
+because the C8 feed manifest token is a read-time content hash over the
+projection — no cache schema bump is needed, and no cache invalidation step
+exists to forget. A **future** policy — that a source-driven hazard change on
+an active case should be eligible for notification, while parser maintenance
+and historical repairs must never be — is deliberately **not** implemented
+here; `material-change.ts` was not modified in P2e-B.
+
 **Status: implemented and dry-run only. The apply has not been run and is not
 yet authorized.**
 

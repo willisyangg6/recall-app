@@ -20,6 +20,8 @@
  *    rendering broken grammar — the full source text stays in the projection.
  */
 
+import { extractForeignMaterialEvidence } from '@/domain/hazard';
+
 /** Closed set of reason families both surfaces render from. */
 export type TypedReason =
   | { family: 'pathogen'; pathogen: string | null }
@@ -46,8 +48,6 @@ export interface ReasonEvidence {
   summaryText?: string | null;
   title?: string | null;
 }
-
-const FOREIGN_MATERIALS = ['metal', 'plastic', 'glass', 'wood', 'rubber', 'bone fragments'];
 
 /**
  * "imported from <Country>" as the source states it (title or summary).
@@ -100,9 +100,23 @@ function statedPathogen(pathogenOrAllergen: string | null): string | null {
   return pathogenOrAllergen && !/^undeclared/i.test(pathogenOrAllergen) ? pathogenOrAllergen : null;
 }
 
+/**
+ * The material to name in the reason line — from THE shared foreign-material
+ * evidence owner (domain/hazard.ts), never a keyword scan of its own. A bare
+ * material word in packaging prose ("9.75-oz. plastic bowls", "10-oz. plastic
+ * bowl package") names no material, so the line degrades to the truthful
+ * generic form instead of asserting a contaminant the source never stated.
+ */
 function sniffMaterial(evidence: ReasonEvidence): string | null {
-  const text = `${evidence.reasonText ?? ''}\n${evidence.pathogenOrAllergen ?? ''}\n${evidence.summaryText ?? ''}`;
-  return FOREIGN_MATERIALS.find((m) => new RegExp(`\\b${m}\\b`, 'i').test(text)) ?? null;
+  // The title joins the haystack because it is where an announcement most
+  // often states its contaminant ("Due to Possible Plastic Contaminant").
+  const text = [
+    evidence.reasonText ?? '',
+    evidence.title ?? '',
+    evidence.pathogenOrAllergen ?? '',
+    evidence.summaryText ?? '',
+  ].join('\n');
+  return extractForeignMaterialEvidence(text).material;
 }
 
 /**
@@ -120,6 +134,11 @@ export function interpretReason(evidence: ReasonEvidence): TypedReason {
 
   if (reasons.includes('product contamination')) {
     if (pathogen) return { family: 'pathogen', pathogen };
+    // The canonical category already weighed this notice's evidence under the
+    // shared contract — including the rare contamination-filed allergen recall
+    // (115-2017). Honour its answer rather than re-deciding from the enum
+    // string, which is exactly how the two layers stay unable to disagree.
+    if (evidence.hazardCategory === 'allergen') return { family: 'allergen', raw: allergenRaw };
     if (evidence.hazardCategory === 'foreign_material') {
       return { family: 'foreign_material', material: sniffMaterial(evidence) };
     }
