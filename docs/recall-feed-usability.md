@@ -386,6 +386,15 @@ correctness and QA; the "Find the Code" block, compare-photos block, and all
 helper/disclaimer copy are removed from the render while their data stays in
 the model. No empty cards, no dead controls.
 
+**Deferred (not yet implemented): omit the section entirely when empty.** The
+Detail screen must omit the whole Affected Products section when the shared
+presentation model contains no meaningful accepted rows, cells, codes, or
+disclosures. Section visibility belongs to the shared presentation contract
+(`buildDetailModel` / `affectedProductsTable`), not to notice-specific or
+screen-only logic — the Detail screen must not decide this itself. This is
+presentation polish, not a correctness defect in the model above; it has not
+been implemented.
+
 ### What the Detail page no longer renders (P2a founder decision)
 
 Removed from the render — the underlying extracted data is untouched and

@@ -1313,6 +1313,13 @@ can never match an egg preference. The fix is in the one owner:
   Re-running the complete recorded corpus (226 records): **zero** value or
   category changes from these fixes — they alter only production wordings
   outside the recorded set.
+- **Applied and verified 2026-09-02.** The `repair:allergens` apply wrote 278
+  normalized source-record corrections and 274 case-projection corrections
+  (0 conflicts, 0 failures, 0 notifications); the post-apply dry run reported
+  0 remaining eligible changes. Its 22 outside-category refusals and one
+  category conflict (PHA-07302018-1) were expected — allergen-only scope
+  correctly left them untouched — and were separately resolved by P2e below.
+  See [docs/recall-operations.md](recall-operations.md) for the full record.
 
 **Canonical hazard-category precedence (2026-09-02, P2e).** P2e-A audited
 every record whose stored `hazardCategory` disagreed with its official
@@ -1383,12 +1390,15 @@ exclusively, and FSIS under-reports allergens in it.
   historical correction is an explicit maintenance operation:
   `repair:hazards` re-runs the canonical adapters over archived snapshots and
   writes only `normalized.hazardCategory`/`pathogenOrAllergen` and the same
-  pair inside `projection`, along an approved transition allowlist. The
-  generated `recall_cases.hazard_category` column follows the projection JSON
+  pair inside `projection`, along an approved transition allowlist (expanded
+  after this audit to also cover a 27-record foreign-material false-positive
+  and false-negative follow-up; the deployed allowlist and final applied
+  counts are in docs/recall-operations.md). The generated
+  `recall_cases.hazard_category` column follows the projection JSON
   automatically and is never written directly. Feed/cache payload shape is
   unchanged (enum + string fields), so no cache schema bump — and the C8
   manifest token is a read-time content hash, so corrected rows reach clients
-  without `last_changed_at` moving. See
+  without `last_changed_at` moving. **Applied and verified 2026-09-03.** See
   [docs/recall-operations.md](recall-operations.md).
 - **Future material-change policy (deferred, NOT implemented in P2e).** When a
   new or changed authoritative source causes an active case's canonical hazard

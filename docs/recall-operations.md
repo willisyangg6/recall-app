@@ -501,11 +501,28 @@ unmerged; this matches the retailer backfill's behaviour.
 
 ## Allergen agent: a one-time historical correction (P2d-B)
 
+**Status: applied and verified 2026-09-02.** The apply wrote 278 normalized
+source-record corrections and 274 case-projection corrections, with 0 write
+conflicts, 0 failures, and 0 notifications. The post-apply verification dry
+run reported 0 remaining eligible record or case changes: the population is
+settled. Named spot checks: FSIS 111-2015 corrected to
+`undeclared eggs, milk, and wheat`; the Steak Burrito PHA corrected to
+`undeclared egg`. The repository remained clean throughout. This is a
+**completed historical repair, not a recurring operation** — the commands
+below are kept as operational record and for the standing verification, not
+as an invitation to rerun the apply:
+
 ```
-npm run repair:allergens:dry           # report only, writes nothing
-npm run repair:allergens -- --confirm  # APPLY — requires BOTH flags; NOT YET AUTHORIZED
-npm run repair:allergens:dry           # verify: "would change" must be 0
+npm run repair:allergens:dry           # verify: "would change" must be 0 — safe to rerun any time
+npm run repair:allergens -- --confirm  # HISTORICAL APPLY — already run 2026-09-02; do NOT rerun casually.
 ```
+
+The same post-apply report also listed 22 outside-category refusals and one
+category conflict (PHA-07302018-1) — records P2d-B correctly left untouched
+because they fell outside its allergen-only scope, not evidence that P2d-B
+itself was incomplete or unauthorized. Those were investigated and resolved
+separately by the P2e hazard-category repair below, whose own counts (49
+records / 48 cases) are distinct from P2d-B's 278/274 and do not revise them.
 
 P2d-A taught the one canonical extractor (`domain/hazard.ts`) the allergen
 constructions FSIS and FDA actually publish, but stored `normalized` records
@@ -553,10 +570,24 @@ and is the standing verification command.
 
 ## Hazard category: a one-time historical correction (P2e-B)
 
+**Status: applied and verified 2026-09-03.** The apply wrote 49/49 planned
+source-record corrections and 48/48 planned case-projection corrections (48
+unique cases; one multi-source case, `007-2020` + `007-2020-EXP`), with 0 CAS
+conflicts, 0 skipped writes, 0 failures, 0 notifications, 0 missing
+snapshots, and 0 parse failures — exactly the reviewed population, exactly
+the reviewed transition census below. The one expected agent-only refusal,
+**083-2016**, was preserved untouched as designed. The post-apply
+verification dry run reported 0 record changes and 0 case changes: the
+population is settled. This is a **completed historical repair, not a
+recurring operation** — the commands below are kept as operational record and
+for the standing verification, not as an invitation to rerun the apply:
+
 ```
-npm run repair:hazards:dry           # report only, writes nothing
-npm run repair:hazards -- --confirm  # APPLY — requires BOTH flags; NOT YET AUTHORIZED
-npm run repair:hazards:dry           # verify: "would change" must be 0
+npm run repair:hazards:dry           # verify: "would change" must be 0 — safe to rerun any time
+npm run repair:hazards -- --confirm  # HISTORICAL APPLY — already run 2026-09-03; do NOT rerun casually.
+                                      # The approved-population guard (49/48) would refuse a second apply
+                                      # anyway once the corpus is settled, but this is not a substitute
+                                      # for treating it as a one-time operation.
 ```
 
 P2e-A audited every record whose stored hazard category disagreed with its
@@ -570,6 +601,15 @@ PHA-07302018-1, is genuinely stale: it was ingested before Cyclospora entered
 the canonical pathogen list, and the hash gate never revisits an unchanged
 page. See [recall-domain-architecture.md](recall-domain-architecture.md),
 "Canonical hazard-category precedence", for the rules themselves.
+
+A second pass over the same bare-keyword foreign-material scan found 27 more
+records on the same defect in both directions: 20 generic "Due to Possible
+Foreign Matter Contamination" titles that named no material (`unknown`, not
+`foreign_material`, because the old scan had nothing to match), and 7 where
+the old scan matched a packaging word with no real contamination grammar
+behind it (correctly `unknown`, not `foreign_material`). One of the 20 is the
+`007-2020`/`007-2020-EXP` multi-source case. The approved-transition table and
+population guard below cover the full, expanded 49-record/48-case scope.
 
 Mechanically this is the P2d-B repair's safety pattern applied to a second
 field pair. It re-derives from **archived official snapshots**, re-running the
@@ -597,12 +637,14 @@ the notification ledger stay byte-identical.
 Scope guardrails, straight from the P2e-A evidence. A record is writable only
 when its category moves along an **approved transition**:
 
-| From               | To                        | Why                                            |
-| ------------------ | ------------------------- | ---------------------------------------------- |
-| `other_regulatory` | `allergen`                | labeling-only reason, allergen stated in prose |
-| `unknown`          | `allergen`                | empty reason array, allergen stated in prose   |
-| `foreign_material` | `allergen`                | 115-2017 — its "plastic" was the packaging     |
-| `unknown`          | `microbial_contamination` | PHA-07302018-1 — ingested before Cyclospora    |
+| From               | To                        | Why                                                                             | Applied |
+| ------------------ | ------------------------- | ------------------------------------------------------------------------------- | ------- |
+| `other_regulatory` | `allergen`                | labeling-only reason, allergen stated in prose                                  | 15      |
+| `unknown`          | `allergen`                | empty reason array, allergen stated in prose                                    | 5       |
+| `foreign_material` | `allergen`                | 115-2017 — its "plastic" was the packaging                                      | 1       |
+| `unknown`          | `microbial_contamination` | PHA-07302018-1 — ingested before Cyclospora                                     | 1       |
+| `unknown`          | `foreign_material`        | generic "Foreign Matter Contamination" title, no material named in the old scan | 20      |
+| `foreign_material` | `unknown`                 | old scan matched a packaging word, no contamination grammar                     | 7       |
 
 Every other move is refused and reported, and the command exits non-zero. An
 **agent-only** difference on a record whose category is unchanged is also
@@ -615,11 +657,15 @@ several hazard roles on one case is deferred mixed-hazard debt with its own
 model decision. Records P2d-B already corrected are re-derived to the same
 values and reported `unchanged`.
 
-The command also guards the **expected population**: P2e-A source-reviewed
-exactly 22 record and 22 case corrections, and a run proposing a larger,
-smaller, or different set exits non-zero for review before any apply. An
-**empty** set (0 and 0) is not a failure — it is exactly what the post-apply
-verification dry run reports, and what a second apply would find.
+The command also guards the **expected population**: the full P2e review
+(P2e-A's original 22 plus the 27-record foreign-material follow-up)
+source-reviewed exactly 49 record and 48 case corrections
+(`APPROVED_RECORD_CORRECTIONS` / `APPROVED_CASE_CORRECTIONS` in
+`src/server/hazard-repair.ts`), and a run proposing a larger, smaller, or
+different set exits non-zero for review before any apply. An **empty** set (0
+and 0) is not a failure — it is `settled`, exactly what the post-apply
+verification dry run reported after the 2026-09-03 apply, and what any later
+rerun will find as long as the corpus stays in this state.
 
 Applying is double-gated: `--apply` alone is refused; the second
 acknowledgment (`--confirm`) must accompany it. **Durable ledger:** an apply
@@ -641,8 +687,12 @@ an active case should be eligible for notification, while parser maintenance
 and historical repairs must never be — is deliberately **not** implemented
 here; `material-change.ts` was not modified in P2e-B.
 
-**Status: implemented and dry-run only. The apply has not been run and is not
-yet authorized.**
+**Status: applied and verified 2026-09-03** — 49/49 record writes, 48/48
+case writes, 0 conflicts, 0 failures, 0 notifications; the post-apply
+production dry run reported a `settled` population (0 record and 0 case
+changes remaining). This is a completed one-time historical repair. Rerunning
+the dry run is a safe, standing verification command; rerunning the apply is
+not a normal operation — see the warning on the command block above.
 
 ## Enforcement: weekly-gated
 
