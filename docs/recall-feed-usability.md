@@ -127,6 +127,62 @@ surfaces cannot disagree about what kind of problem a recall is. A family is
 assigned only from structured canonical fields or a verified source-text
 pattern; a hazard or allergen is never invented.
 
+**Home/Detail semantic parity (P3A).** The two surfaces call the one
+interpreter and differ only in how much canonical evidence they can supply. A
+Home feed row carries `reasonText`, `hazardCategory`, `pathogenOrAllergen`
+and `title`; Detail additionally has the announcement body (`summaryText`).
+The body is deliberately **not** on the feed — it is the largest field in the
+corpus (measured: ~2.9 KB/case, which would grow a cold feed load by ~175% on
+the wire) and the standing feed-SELECT contract keeps the app receiving
+derived answers rather than source evidence. So the guarantee is **not** equal
+specificity; it is that the surfaces can never contradict, because more
+evidence can only refine:
+
+- **family** is decided by structured fields alone → identical on every
+  notice;
+- **allergen list** comes from `pathogenOrAllergen` alone → identical;
+- **named material or agent**: Detail's haystack is Home's plus an _appended_
+  summary, so a material Home names still wins in Detail. Home names either
+  nothing or exactly what Detail names — never a third thing;
+- **uncertainty** is honest on both: an unnamed agent renders as its family's
+  generic form, and **packaging material is never the hazard on either
+  screen**.
+
+Worked examples from the recorded corpus. FDA Palermo Villa states its
+contaminant in its own title, so both surfaces say plastic (never metal,
+despite the dual "Potential Metal or Chemical Contaminant" reason category).
+FSIS 005-2026 and PHA-10092020-01 state glass only in the body: Detail names
+glass, Home stays honestly generic, and neither ever says plastic — which is
+what their packaging is made of. 115-2017 reads as undeclared fish on both.
+Corpus-scanned over every recorded FDA and FSIS notice: **zero family
+disagreements, zero agent/material contradictions, zero packaging false
+positives.**
+
+**Foreign-material evidence ownership.** `extractForeignMaterialEvidence`
+(`src/domain/hazard.ts`) is evidence-gated (a material word counts only inside
+a bounded construction that states it as the contaminant, never as
+packaging) and is the owner both the FSIS category parser and the consumer
+reason line (Home/Detail parity above) call. P3A removed one genuine
+duplicate — the dead `foreignMaterialAgent` bare-keyword helper in
+`src/server/fda/parse.ts` and its private vocabulary, which had no caller,
+import, or test — and proved FDA normalized output byte-identical across all
+163 recorded announcements after that deletion.
+
+**Not yet unified (deferred to P3B): the FDA `Potential Metal or Chemical
+Contaminant` category gate.** This live canonical branch still runs its own
+committed bare-keyword scan (`FOREIGN_MATERIAL_WORDS` in
+`src/server/fda/parse.ts`) rather than calling the shared owner. P3A drafted
+and verified the fix — routing this branch through
+`extractForeignMaterialEvidence` — against a read-only audit of all 721
+stored FDA source records (2026-09-03) and confirmed it is correct, but
+reverted it before checkpointing: it is canonical derivation with a real
+production delta (see docs/recall-domain-architecture.md, "Deferred: the FDA
+metal-or-chemical bare-keyword gate"), not a display-layer change, so it
+needs the same reviewed governance as the P2e-B hazard repair rather than
+riding in on a display-only milestone. As committed, P3A changes **zero**
+canonical FDA data — stored production values, the parser, and the recorded
+fixtures all still agree.
+
 `conciseReasonLine` renders the family as one deterministic sentence:
 `Potential <pathogen> contamination.` (approved wording is **Potential**, not
 "Possible"; common pathogens display their consumer names — Salmonella,
@@ -386,14 +442,56 @@ correctness and QA; the "Find the Code" block, compare-photos block, and all
 helper/disclaimer copy are removed from the render while their data stays in
 the model. No empty cards, no dead controls.
 
-**Deferred (not yet implemented): omit the section entirely when empty.** The
-Detail screen must omit the whole Affected Products section when the shared
-presentation model contains no meaningful accepted rows, cells, codes, or
-disclosures. Section visibility belongs to the shared presentation contract
-(`buildDetailModel` / `affectedProductsTable`), not to notice-specific or
-screen-only logic — the Detail screen must not decide this itself. This is
-presentation polish, not a correctness defect in the model above; it has not
-been implemented.
+### Optional-section visibility (P3A) — model-owned
+
+**Implemented.** A consumer-facing section never renders a heading, a
+container, a divider, or its surrounding spacing above nothing. The decision
+belongs to the shared presentation contract and nowhere else:
+`buildDetailModel` returns `sections`, and each optional section is either a
+model with meaningful content or `null`. The Detail screen renders that
+decision and re-evaluates no rows, columns, codes, or geography — pinned by
+`src/lib/recall-presentation-wiring.test.ts`.
+
+**What counts as meaningful content** (`affectedProductsSection`):
+
+- an affected-product row carrying a consumer-facing value — a supported
+  product name, or any populated approved field;
+- a row's own collapsed code set (its in-cell "View N codes" control);
+- an accepted case-level disclosure that still renders: recall-level lot or
+  batch codes, production codes, or the production dates they stand for.
+
+**What is explicitly NOT meaningful:**
+
+- an empty row object, or a row whose every value is null, empty, rejected,
+  or whitespace;
+- internal ids and stable row keys;
+- rejected package-check facts (structurally unreachable from this model);
+- an empty column set;
+- an image allocated to a row that carries no meaningful value — an image is
+  decoration for a product row, never a reason to open a section;
+- the coverage/helper/disclaimer prose the P2a founder decision removed
+  (`model.note`): an explanation of why there is nothing to show is not
+  something to show.
+
+A minimal row is preserved on purpose: **a supported product name alone is
+meaningful.** A real affected product is never hidden because the notice
+states no size, barcode, date, or code for it.
+
+`Where it was sold` follows the same rule (`whereSoldSection`): it renders
+its one representation — the full state list, "Nationwide", a stated metro
+phrase, or the honest unspecified statement — or it is absent. The complete
+retailer/address/channel evidence stays on `DetailModel.whereSold` for the
+later retailer-list milestone; only the render decision moved.
+
+`What happened` is not optional: `buildWhatHappened` always produces text
+(the cleaned official headline is its last resort), so it can never be an
+empty heading. No fallback copy is ever invented to fill an optional section.
+
+Measured over every recorded FDA and FSIS notice (230 records): the Affected
+Products section is visible for 177 both before and after — **zero legitimate
+rows lost** — and 53 empty headings disappear, each proven to have carried no
+rows, no codes and no dates. Nine notices lose an empty `Where it was sold`
+heading. Corpus-scanned in both presentation-regression suites.
 
 ### What the Detail page no longer renders (P2a founder decision)
 

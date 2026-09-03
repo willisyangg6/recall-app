@@ -18,6 +18,34 @@
  *    glued onto "because of", so constructions like "because of contains"
  *    cannot be produced. A gated reason drops the clause rather than
  *    rendering broken grammar — the full source text stays in the projection.
+ *
+ * ## Home/Detail semantic parity (P3A)
+ *
+ * The two surfaces call THIS function and differ only in how much canonical
+ * evidence they can supply. A Home feed row carries `reasonText`,
+ * `hazardCategory`, `pathogenOrAllergen` and `title`; Detail additionally has
+ * the announcement body (`summaryText`). The announcement body is
+ * deliberately NOT on the feed — it is the largest single field in the
+ * corpus (measured: ~2.9 KB/case, +175% on a cold feed load) and the C8
+ * egress work plus the standing feed-SELECT contract keep the app receiving
+ * derived answers rather than source evidence.
+ *
+ * So the guarantee is NOT that both surfaces are equally specific — it is
+ * that they can never CONTRADICT, because more evidence can only refine:
+ *
+ *  - `family` is decided by the structured canonical fields both surfaces
+ *    carry (the reason enum, the hazard category, the pathogen/allergen
+ *    slot), so it is identical on both surfaces for every notice.
+ *  - The allergen list comes from `pathogenOrAllergen` alone — identical.
+ *  - A named material or agent is extracted from a haystack Detail extends
+ *    only by APPENDING the summary, so a material Home names appears at the
+ *    same position in Detail's text and still wins there. Home therefore
+ *    names either nothing or exactly what Detail names — never a third thing.
+ *  - Uncertainty is honest on both: an unnamed agent renders as its family's
+ *    generic form, and neither surface invents a hazard.
+ *
+ * Pinned corpus-wide over every recorded FDA and FSIS notice by
+ * `src/lib/recall-reason.test.ts` and the two presentation-regression suites.
  */
 
 import { extractForeignMaterialEvidence } from '@/domain/hazard';
@@ -44,8 +72,13 @@ export interface ReasonEvidence {
   reasonText: string | null;
   hazardCategory: string;
   pathogenOrAllergen: string | null;
-  /** Fuller source text when the caller has it (Detail); Home has none. */
+  /**
+   * The announcement body. Detail has it; Home deliberately does not (the
+   * feed never carries source evidence — see the parity note above). Absent
+   * evidence can only make an answer LESS specific, never different.
+   */
   summaryText?: string | null;
+  /** The official headline. BOTH surfaces carry this — the feed row has it. */
   title?: string | null;
 }
 

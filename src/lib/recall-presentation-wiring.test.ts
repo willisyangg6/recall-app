@@ -94,8 +94,8 @@ test('Detail renders from the presentation model, not its own formatting', () =>
   assert.match(DETAIL, /model\.quantityLine/);
   assert.match(DETAIL, /model\.officialSource\.label/);
   assert.match(DETAIL, /model\.affectsYouBanner/);
-  assert.match(DETAIL, /model\.whereSold/);
-  assert.match(DETAIL, /model\.affectedProducts/);
+  // Optional sections are read from the model's OWN visibility decision.
+  assert.match(DETAIL, /model\.sections/);
 });
 
 test('Detail introduces none of the disallowed dead controls', () => {
@@ -110,13 +110,13 @@ test('Detail introduces none of the disallowed dead controls', () => {
 });
 
 test('Affected Products renders the shared P2b table model, not screen-built rows', () => {
-  // The screen consumes `model.affectedProductsTable` — columns and cells are
-  // decided by the shared contract; no raw fact bags, package-check
+  // The screen consumes `model.sections.affectedProducts.table` — columns and
+  // cells are decided by the shared contract; no raw fact bags, package-check
   // internals, or rejected facts reach JSX, and the screen composes no field
   // labels or cell values of its own. The model supplies the collapsed and
   // expanded VIEWS (columns recomputed from the rows each shows) — the
   // screen only picks which one to render.
-  assert.match(DETAIL, /model\.affectedProductsTable/);
+  assert.match(DETAIL, /affectedProducts\.table/);
   assert.match(DETAIL, /expanded \? table\.expanded : table\.collapsed/);
   assert.match(DETAIL, /view\.columns\.map/);
   assert.match(DETAIL, /row\.cells\.map/);
@@ -217,7 +217,7 @@ test('Detail header: badge + one activity date + name + brand + one link; no met
 });
 
 test('Where It Was Sold renders only the one state representation', () => {
-  assert.match(DETAIL, /model\.lead/);
+  assert.match(DETAIL, /whereSold\.lead/);
   // No second state list, no count threshold, no channel prose, no online
   // block, no store-address disclosure — the data all stays in the model.
   assert.ok(!DETAIL.includes('model.states.join'), 'a second state list is rendered');
@@ -276,4 +276,52 @@ test('P2c: row images render only the shared allocation — no screen-local matc
   // The thumbnail render is gated on the assignment itself — an unassigned
   // row reaches no image element at all, so no placeholder can exist.
   assert.match(DETAIL, /\{row\.image \? \(/);
+});
+
+test('P3A: optional Detail sections are model-owned — no screen-level content predicate', () => {
+  // Every optional section renders from the shared contract's decision, so a
+  // heading, container, divider, or its spacing can never appear above
+  // nothing. The screen reads the decision and re-derives nothing.
+  assert.match(DETAIL, /const \{ whereSold, affectedProducts \} = model\.sections/);
+  assert.match(DETAIL, /\{whereSold \? \(/);
+  assert.match(DETAIL, /\{affectedProducts \? \(/);
+  // Both headings exist ONLY inside their section's conditional.
+  for (const heading of ['Where it was sold', 'Affected Products']) {
+    const before = DETAIL.slice(0, DETAIL.indexOf(`<Section title="${heading}">`));
+    assert.match(before.slice(-400), /\? \(/, `${heading} can render unconditionally`);
+  }
+  // The screen never re-evaluates row/column/code content to decide.
+  assert.ok(!DETAIL.includes('items.length'), 'the screen counts model items');
+  assert.ok(!DETAIL.includes('rows.length'), 'the screen counts table rows');
+  assert.ok(!DETAIL.includes('columns.length'), 'the screen counts table columns');
+  assert.ok(!DETAIL.includes('.coverage'), 'the screen inspects coverage');
+  assert.ok(!DETAIL.includes('model.affectedProducts.'), 'the screen reads the evidence model');
+  assert.ok(!DETAIL.includes('model.whereSold.'), 'the screen reads the evidence model');
+  // No fabricated fallback copy fills an empty optional section.
+  for (const filler of ['Not specified', 'None listed', 'No products', 'Not available']) {
+    assert.ok(!DETAIL.includes(filler), `fallback copy "${filler}" fills an empty section`);
+  }
+});
+
+test('P3A: the Detail screen holds no notice ids, hazard parsing, or raw-prose regexes', () => {
+  // Section visibility and reason interpretation are model-owned; the screen
+  // may not recognize a specific recall or read source prose.
+  assert.ok(!/\b(?:PHA-\d|\d{3}-20\d\d)\b/.test(DETAIL), 'a notice id appears in the screen');
+  for (const material of ['glass', 'plastic', 'metal', 'foreign material']) {
+    assert.ok(
+      !DETAIL.toLowerCase().includes(material),
+      `hazard vocabulary "${material}" on screen`,
+    );
+  }
+  assert.ok(!DETAIL.includes('summaryText'), 'the screen reads raw announcement prose');
+  // `reasonText`/`hazardCategory` reach the screen for ONE purpose only —
+  // the canonical relevance evaluation, whose matching contract is unchanged.
+  // They are never read a second time to describe the hazard.
+  assert.equal(DETAIL.split('reasonText').length - 1, 2, 'reason text read outside relevance');
+  assert.match(DETAIL, /reasonText: projection\.reasonText/);
+  assert.equal(DETAIL.split('hazardCategory').length - 1, 2, 'hazard read outside relevance');
+  assert.match(DETAIL, /hazardCategory: projection\.hazardCategory/);
+  assert.ok(!DETAIL.includes('interpretReason'), 'the screen interprets reasons itself');
+  assert.ok(!HOME.includes('interpretReason'), 'Home interprets reasons itself');
+  assert.ok(!HOME.includes('conciseReasonLine'), 'Home composes its own reason line');
 });

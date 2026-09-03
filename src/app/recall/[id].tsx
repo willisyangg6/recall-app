@@ -17,7 +17,6 @@ import {
   todayIso,
   type AffectedProductsTable,
   type DetailModel,
-  type WhereSoldModel,
 } from '@/lib/recall-presentation';
 import { evaluatePersonalRelevance } from '@/lib/relevance';
 
@@ -78,18 +77,6 @@ function CodeSet({
       ) : null}
     </View>
   );
-}
-
-/**
- * Where a recall reached (P2a founder decision): ONLY the full state
- * representation renders at this stage — full state names, "Nationwide", or
- * the honest unspecified line, with no trailing period. Named retailers,
- * store addresses, online routes, and channel evidence stay preserved in the
- * model for the later collapsed retailer-list milestone; no channel nouns and
- * no dead retailer control render here.
- */
-function WhereItWasSold({ model }: { model: WhereSoldModel }) {
-  return model.lead ? <ThemedText>{model.lead}</ThemedText> : null;
 }
 
 /** The one code set a row's in-cell control has opened, for the modal. */
@@ -321,7 +308,11 @@ export default function RecallDetailScreen() {
       prefs,
     ).affectsMe;
   const model: DetailModel = buildDetailModel(state.detail, { today: todayIso(), affectsYou });
-  const products = model.affectedProducts;
+  // Optional sections are DECIDED by the shared contract (P3A). The screen
+  // renders a section when the model gives it one and renders nothing at all
+  // otherwise — no heading, no container, no spacing. It never inspects rows,
+  // columns, codes, or geography to decide for itself.
+  const { whereSold, affectedProducts } = model.sections;
 
   return (
     <ThemedView style={styles.container}>
@@ -398,10 +389,13 @@ export default function RecallDetailScreen() {
 
         {/* Where it was sold: only the full state representation (P2a founder
             decision). Retailers, addresses, online routes, and channel
-            evidence stay in the model for the later retailer-list milestone. */}
-        <Section title="Where it was sold">
-          <WhereItWasSold model={model.whereSold} />
-        </Section>
+            evidence stay in the model for the later retailer-list milestone.
+            Absent when the canonical geography supports no representation. */}
+        {whereSold ? (
+          <Section title="Where it was sold">
+            <ThemedText>{whereSold.lead}</ThemedText>
+          </Section>
+        ) : null}
 
         {/* Affected Products: the gated P0A data only — no helper, coverage,
             or disclaimer prose (P2a founder decision). P2b renders the shared
@@ -411,34 +405,36 @@ export default function RecallDetailScreen() {
             version arrives repeated inside each row's cells. The official
             attachment links stay preserved in the model for a later
             source/image surface — no orphan attachment link renders here. */}
-        <Section title="Affected Products">
-          {model.affectedProductsTable ? (
-            <AffectedProductsTableView
-              table={model.affectedProductsTable}
-              expanded={tableExpanded}
-              onToggleExpanded={() => setTableExpanded((prior) => !prior)}
+        {affectedProducts ? (
+          <Section title="Affected Products">
+            {affectedProducts.table ? (
+              <AffectedProductsTableView
+                table={affectedProducts.table}
+                expanded={tableExpanded}
+                onToggleExpanded={() => setTableExpanded((prior) => !prior)}
+              />
+            ) : null}
+            {/* Row codes live INSIDE the table (each row's own in-cell
+                "View N codes" control) — no code disclosure renders below it.
+                Production codes are opaque, so the calendar dates they stand
+                for lead and the codes follow behind a tap. */}
+            {affectedProducts.productionDates ? (
+              <ThemedText type="small">
+                Affected production dates: {affectedProducts.productionDates}
+              </ThemedText>
+            ) : null}
+            <CodeSet
+              codes={affectedProducts.productionCodes}
+              expanded={openCodeSets.has('production')}
+              onToggle={() => toggleCodeSet('production')}
             />
-          ) : null}
-          {/* Row codes live INSIDE the table (each row's own in-cell
-              "View N codes" control) — no code disclosure renders below it.
-              Production codes are opaque, so the calendar dates they stand
-              for lead and the codes follow behind a tap. */}
-          {products.productionDates ? (
-            <ThemedText type="small">
-              Affected production dates: {products.productionDates}
-            </ThemedText>
-          ) : null}
-          <CodeSet
-            codes={products.productionCodes}
-            expanded={openCodeSets.has('production')}
-            onToggle={() => toggleCodeSet('production')}
-          />
-          <CodeSet
-            codes={products.caseCodes}
-            expanded={openCodeSets.has('lot')}
-            onToggle={() => toggleCodeSet('lot')}
-          />
-        </Section>
+            <CodeSet
+              codes={affectedProducts.caseCodes}
+              expanded={openCodeSets.has('lot')}
+              onToggle={() => toggleCodeSet('lot')}
+            />
+          </Section>
+        ) : null}
       </ScrollView>
     </ThemedView>
   );

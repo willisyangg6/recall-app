@@ -273,3 +273,142 @@ test('the FDA reason taxonomy label never names a contaminant', () => {
     { family: 'foreign_material', material: null },
   );
 });
+
+// ── P3A: Home/Detail semantic parity, proven corpus-wide ────────────────────
+
+/**
+ * The two surfaces' evidence, built from ONE canonical projection. Home gets
+ * exactly what a feed row carries; Detail additionally gets the announcement
+ * body. Nothing else differs, so any divergence below is a real parity defect.
+ */
+function surfaces(projection: {
+  reasonText: string | null;
+  hazardCategory: string;
+  pathogenOrAllergen: string | null;
+  title: string;
+  summaryText: string;
+}) {
+  const home: ReasonEvidence = {
+    reasonText: projection.reasonText,
+    hazardCategory: projection.hazardCategory,
+    pathogenOrAllergen: projection.pathogenOrAllergen,
+    title: projection.title,
+  };
+  return {
+    home: interpretReason(home),
+    detail: interpretReason({ ...home, summaryText: projection.summaryText }),
+  };
+}
+
+/** The agent/material/allergen each family names, or null when it names none. */
+function namedAgent(reason: ReturnType<typeof interpretReason>): string | null {
+  switch (reason.family) {
+    case 'pathogen':
+      return reason.pathogen;
+    case 'foreign_material':
+      return reason.material;
+    case 'chemical':
+      return reason.agent;
+    case 'allergen':
+      return reason.raw;
+    default:
+      return null;
+  }
+}
+
+test('P3A: more evidence refines an interpretation — it never contradicts one', () => {
+  // The structural guarantee. Detail's haystack is Home's plus an APPENDED
+  // summary, so Home can name nothing Detail would not, and the family and
+  // allergen list — decided by structured fields alone — are always identical.
+  const cases = [
+    // Named in the title: BOTH surfaces say plastic (recorded Palermo Villa).
+    {
+      reasonText: 'Potential Metal or Chemical Contaminant',
+      hazardCategory: 'foreign_material',
+      pathogenOrAllergen: null,
+      title: 'Palermo Villa, Inc. Issues Recall Due to Possible Plastic Contaminant',
+      summaryText: 'a possible plastic foreign contaminant was found in the product.',
+      expect: { home: 'plastic', detail: 'plastic' },
+    },
+    // Stated only in the body (recorded FSIS 005-2026 / PHA-10092020-01
+    // shape): Home stays honestly generic, Detail names glass. Both are true,
+    // and neither names a material the other rules out.
+    {
+      reasonText: 'Product Contamination',
+      hazardCategory: 'foreign_material',
+      pathogenOrAllergen: null,
+      title: 'Recalls Chicken Fried Rice Products Due to Possible Foreign Matter Contamination',
+      summaryText: 'The products may contain pieces of glass.',
+      expect: { home: null, detail: 'glass' },
+    },
+    // Genuinely generic on both: nothing invents a material.
+    {
+      reasonText: 'Product Contamination',
+      hazardCategory: 'foreign_material',
+      pathogenOrAllergen: null,
+      title: 'Recalls Sausage Products Due to Possible Foreign Matter Contamination',
+      summaryText: 'due to possible foreign matter contamination.',
+      expect: { home: null, detail: null },
+    },
+    // Packaging-only material words (the 115-2017 / PHA-10092020-01 false
+    // positive class): NEITHER surface may name a contaminant.
+    {
+      reasonText: 'Product Contamination',
+      hazardCategory: 'foreign_material',
+      pathogenOrAllergen: null,
+      title: 'Recalls Ready-To-Eat Products',
+      summaryText: 'The products were packaged in 10-oz. plastic bowl packages.',
+      expect: { home: null, detail: null },
+    },
+  ];
+  for (const scenario of cases) {
+    const { home, detail } = surfaces(scenario);
+    assert.equal(home.family, detail.family, scenario.title);
+    assert.equal(namedAgent(home), scenario.expect.home, `home: ${scenario.title}`);
+    assert.equal(namedAgent(detail), scenario.expect.detail, `detail: ${scenario.title}`);
+    // The invariant: null, or identical — never a third thing.
+    const named = namedAgent(home);
+    assert.ok(named === null || named === namedAgent(detail), `contradiction: ${scenario.title}`);
+  }
+});
+
+test('P3A: 115-2017 reads as undeclared fish on both surfaces, never as plastic', () => {
+  // The corrected anchovy recall: filed under the contamination enum, but its
+  // canonical hazard is allergen — and its only material word is packaging.
+  const { home, detail } = surfaces({
+    reasonText: 'Product Contamination',
+    hazardCategory: 'allergen',
+    pathogenOrAllergen: 'undeclared fish',
+    title: 'Recalls Chicken Products Due to Misbranding and an Undeclared Allergen',
+    summaryText: 'The products were packaged in 9.75-oz. plastic bowls and contain anchovy.',
+  });
+  assert.deepEqual(home, { family: 'allergen', raw: 'fish' });
+  assert.deepEqual(detail, { family: 'allergen', raw: 'fish' });
+});
+
+test('P3A: pathogen, allergen, inspection, import, processing and misbranding are unchanged', () => {
+  // Families decided by structured fields alone are identical on both
+  // surfaces for every notice — the announcement body cannot move them.
+  const structured = [
+    { hazardCategory: 'microbial_contamination', pathogenOrAllergen: 'Listeria monocytogenes' },
+    { hazardCategory: 'allergen', pathogenOrAllergen: 'undeclared milk and soy' },
+    { reasonText: 'Produced without benefit of inspection', hazardCategory: 'unknown' },
+    { reasonText: 'Import violation', hazardCategory: 'unknown' },
+    { reasonText: 'Processing defect', hazardCategory: 'unknown' },
+    { reasonText: 'Misbranding', hazardCategory: 'unknown' },
+    { reasonText: 'Mislabeling', hazardCategory: 'unknown' },
+    { reasonText: 'Insanitary conditions', hazardCategory: 'unknown' },
+    { hazardCategory: 'chemical_contamination', pathogenOrAllergen: 'lead' },
+  ];
+  for (const fields of structured) {
+    const { home, detail } = surfaces({
+      reasonText: null,
+      pathogenOrAllergen: null,
+      title: 'A recall notice',
+      summaryText: 'The firm announced a recall. Products shipped in plastic and glass containers.',
+      ...fields,
+    });
+    assert.equal(home.family, detail.family, JSON.stringify(fields));
+    assert.deepEqual(home, detail, JSON.stringify(fields));
+  }
+});

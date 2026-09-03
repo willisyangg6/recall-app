@@ -407,9 +407,14 @@ export interface FdaHazard {
   pathogenOrAllergen: string | null;
 }
 
+// DEFERRED (P3B): the committed bare-keyword gate for the dual "Potential
+// Metal or Chemical Contaminant" category — see the note at its call site.
+// Deliberately narrower than the shared evidence owner in domain/hazard.ts;
+// kept exactly as committed at 3dec7f8 rather than reverting to that owner's
+// stricter, evidence-gated reading (which P3A proved correct but out of
+// scope for a display-only milestone).
 const FOREIGN_MATERIAL_WORDS =
   /\bmetal\b|\bplastic\b|\bglass\b|\bwood\b|\brubber\b|foreign (?:material|matter|object)/i;
-const FOREIGN_MATERIAL_SPECIFIC = ['metal', 'plastic', 'glass', 'wood', 'rubber'];
 
 /**
  * Fixed lookup from the FDA listing's reason-category taxonomy (plus the
@@ -476,6 +481,20 @@ export function deriveFdaHazard(categoryText: string, fullText: string): FdaHaza
   if (/potential metal or chemical contaminant/i.test(category)) {
     // This one category covers both physical fragments and chemical agents;
     // the announcement's own wording decides which.
+    //
+    // DEFERRED (P3B, not this milestone): a production audit of all 721
+    // stored FDA records (2026-09-03) proved this bare-keyword gate
+    // misclassifies 3 active records whose only "plastic"/"metal" word
+    // describes PACKAGING, not a contaminant — the same false-positive shape
+    // P2e-B eliminated for FSIS. Routing this branch through the shared
+    // `extractForeignMaterialEvidence` owner (domain/hazard.ts) is the
+    // correct fix and was verified to produce the right answer for all 3,
+    // but it is a canonical-derivation change with a real stored-data delta,
+    // so it needs its own reviewed governance (an approved-transition table
+    // plus a dry run/apply, same shape as `server/hazard-repair.ts`) rather
+    // than riding in on a display-only milestone. See
+    // docs/recall-domain-architecture.md for the verified findings. Left
+    // exactly as committed at 3dec7f8 so P3A changes no canonical FDA data.
     if (FOREIGN_MATERIAL_WORDS.test(fullText)) {
       return { hazardCategory: 'foreign_material', pathogenOrAllergen: null };
     }
@@ -497,13 +516,6 @@ export function deriveFdaHazard(categoryText: string, fullText: string): FdaHaza
     return { hazardCategory: 'other_regulatory', pathogenOrAllergen: null };
   }
   return { hazardCategory: 'unknown', pathogenOrAllergen: extractPathogenOrAllergen(fullText) };
-}
-
-/** The specific foreign material when the text names one. */
-export function foreignMaterialAgent(fullText: string): string | null {
-  return (
-    FOREIGN_MATERIAL_SPECIFIC.find((m) => new RegExp(`\\b${m}\\b`, 'i').test(fullText)) ?? null
-  );
 }
 
 // ── Classification (Part 7: announcements are pre-classification) ────────────

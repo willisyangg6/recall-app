@@ -30,6 +30,8 @@ import {
   conciseReasonLine,
   whereSoldModel,
 } from '../../lib/recall-presentation';
+import { interpretReason } from '../../lib/recall-reason';
+import { extractForeignMaterialEvidence, FOREIGN_MATERIALS } from '../../domain/hazard';
 import { buildConsumerCase } from '../../lib/consumer-projection';
 import { productDisplayName } from '../../lib/consumer-summary';
 import {
@@ -99,6 +101,7 @@ test('recorded Chocolatey Eyeballs: brand identity, allergen grammar, one state 
       reasonText: projection.reasonText,
       hazardCategory: projection.hazardCategory,
       pathogenOrAllergen: projection.pathogenOrAllergen,
+      title: null,
     }),
     'Undeclared milk allergen.',
   );
@@ -486,7 +489,7 @@ function assertImageRoleInvariants(model: ReturnType<typeof detailModelFor>, lab
   assert.ok(heroRowUses <= 1, `${label}: the hero backs more than one row`);
   if (heroRowUses === 1) {
     assert.ok(
-      (model.affectedProductsTable?.expanded.rows.length ?? 0) >= 2,
+      (model.sections.affectedProducts?.table?.expanded.rows.length ?? 0) >= 2,
       `${label}: hero reused in a single-row table`,
     );
   }
@@ -503,7 +506,7 @@ test('recorded Jaime’s Jalapeno Ranch: the package image renders once, as the 
   // A single-row table never reuses the hero — repeating the same image
   // immediately below the title adds nothing.
   assert.equal(model.images.rowImages.size, 0);
-  assert.equal(model.affectedProductsTable!.expanded.rows[0].image, null);
+  assert.equal(model.sections.affectedProducts!.table!.expanded.rows[0].image, null);
   // The second official label stays a gallery candidate; nothing renders it
   // as a lower Product Photo section.
   assert.deepEqual(
@@ -516,7 +519,7 @@ test('recorded Jaime’s Jalapeno Ranch: the package image renders once, as the 
 test('recorded Outshine: exact flavor thumbnails, count demotion, and in-cell codes', () => {
   const projection = corpusProjection('outshine-fruit-bars');
   const model = detailModelFor(projection);
-  const table = model.affectedProductsTable!;
+  const table = model.sections.affectedProducts!.table!;
   assert.equal(model.images.hero?.url, projection.heroImageUrl);
 
   // Collapsed: exactly three rows, clean names, "6 Bars" in Package Size.
@@ -603,7 +606,7 @@ test('recorded Outshine: exact flavor thumbnails, count demotion, and in-cell co
 test('recorded Chocolatey Eyeballs: five rows; every size-proven image, hero reuse included', () => {
   const { projection } = recordedCase('announcement-crystal-temptations-chocolatey-eyeballs.json');
   const model = detailModelFor(projection);
-  const table = model.affectedProductsTable!;
+  const table = model.sections.affectedProducts!.table!;
   // The P2b decomposition is untouched: five product/size/packaging rows.
   assert.equal(table.expanded.rows.length, 5);
   assert.deepEqual(
@@ -701,7 +704,7 @@ test('recorded no-image notice: null hero, empty gallery, no row images, no plac
   assert.deepEqual(model.images.gallery, []);
   assert.deepEqual(model.images.supporting, []);
   assert.equal(model.images.rowImages.size, 0);
-  for (const row of model.affectedProductsTable?.expanded.rows ?? []) {
+  for (const row of model.sections.affectedProducts?.table?.expanded.rows ?? []) {
     assert.equal(row.image, null);
   }
 });
@@ -800,7 +803,7 @@ test('corpus audit: allocation invariants hold everywhere, and every row assignm
         `${slug.slice(0, 40)}|${rowId}|${fileName(assignment.image.url)}|${assignment.evidence}`,
       );
     }
-    const table = model.affectedProductsTable;
+    const table = model.sections.affectedProducts?.table ?? null;
     if (table) {
       // The table renders exactly the allocation's verdicts, in both views.
       for (const view of [table.collapsed, table.expanded]) {
@@ -846,7 +849,7 @@ test('recorded Sun Hong: no origin or net-weight pseudo-product rows survive', (
     ['Enoki Mushrooms (orange front)'],
   );
   const model = detailModelFor(projection);
-  for (const row of model.affectedProductsTable?.expanded.rows ?? []) {
+  for (const row of model.sections.affectedProducts?.table?.expanded.rows ?? []) {
     assert.ok(!/^products?\s+of\b/i.test(row.name ?? ''), `origin row: ${row.name}`);
     assert.ok(!/^net\s+(?:wt|weight)\b/i.test(row.name ?? ''), `weight row: ${row.name}`);
   }
@@ -964,7 +967,7 @@ test('recorded Taylor Fresh: a column no visible row justifies waits for See all
   // shows no Package Size column at all — never a column of empty cells —
   // and expanding recomputes the columns over every displayed row.
   const model = detailModelFor(corpusProjection('taylor-fresh-foods'));
-  const table = model.affectedProductsTable!;
+  const table = model.sections.affectedProducts!.table!;
   assert.ok(table.seeAllLabel, 'expected a See all control');
   assert.deepEqual(
     table.collapsed.columns.map((column) => column.key),
@@ -981,7 +984,7 @@ test('recorded YoCrunch: a mixed view keeps the codes column with honest empty c
   // (a code-bearing visible row never hides its codes), the code-bearing row
   // shows its own in-cell value or control, and the others stay empty.
   const model = detailModelFor(corpusProjection('yocrunchr-products'));
-  const table = model.affectedProductsTable!;
+  const table = model.sections.affectedProducts!.table!;
   const lotIndex = table.collapsed.columns.findIndex((column) => column.key === 'lotCodes');
   assert.ok(lotIndex >= 0, 'the lot-codes column is missing');
   const bearing = table.collapsed.rows.filter(
@@ -994,4 +997,166 @@ test('recorded YoCrunch: a mixed view keeps the codes column with honest empty c
     assert.equal(row.cells[lotIndex].text, null);
     assert.equal(row.cells[lotIndex].codes, null);
   }
+});
+
+// ── P3A: section visibility and Home/Detail reason parity ───────────────────
+
+/** Every corpus projection that parses, keyed by slug. */
+function everyProjection(): { slug: string; projection: CaseProjection }[] {
+  const out: { slug: string; projection: CaseProjection }[] = [];
+  for (const entry of corpus) {
+    try {
+      out.push({
+        slug: slugFromPath(entry.path),
+        projection: projectCase([
+          parseFdaAnnouncement({
+            listing: entry.listing,
+            detailMainHtml: entry.mainHtml,
+            path: entry.path,
+          }),
+        ]),
+      });
+    } catch {
+      continue;
+    }
+  }
+  return out;
+}
+
+/** The agent/material/allergen a typed reason names, or null. */
+function agentOf(reason: ReturnType<typeof interpretReason>): string | null {
+  switch (reason.family) {
+    case 'pathogen':
+      return reason.pathogen;
+    case 'foreign_material':
+      return reason.material;
+    case 'chemical':
+      return reason.agent;
+    case 'allergen':
+      return reason.raw;
+    default:
+      return null;
+  }
+}
+
+test('P3A recorded Palermo Villa: BOTH surfaces name plastic, and neither names metal', () => {
+  // Its FDA reason category is the dual "Potential Metal or Chemical
+  // Contaminant" — a taxonomy label that names two possibilities and states
+  // neither. The notice's own title states the contaminant, and the title is
+  // on every feed row, so Home reaches the same answer Detail does.
+  const projection = corpusProjection('palermo-villa');
+  const home = conciseReasonLine({
+    reasonText: projection.reasonText,
+    hazardCategory: projection.hazardCategory,
+    pathogenOrAllergen: projection.pathogenOrAllergen,
+    title: projection.title,
+  });
+  const detail = detailModelFor(projection).whatHappened.text;
+  assert.equal(home, 'Potential plastic contamination.');
+  assert.match(detail, /may contain pieces of plastic/);
+  for (const surface of [home, detail]) {
+    assert.ok(!/\bmetal\b/i.test(surface!), `metal named: ${surface}`);
+  }
+});
+
+test('P3A recorded Jalapeno Ranch: its one meaningful row keeps the section', () => {
+  const { projection } = recordedCase('announcement-jaimes-spanish-village-jalapeno-ranch.json');
+  const section = detailModelFor(projection).sections.affectedProducts;
+  assert.ok(section, 'the single-row section was hidden');
+  assert.equal(section!.table!.expanded.rows.length, 1);
+  assert.equal(section!.table!.expanded.rows[0].name, 'Jalapeno Ranch Dressing');
+});
+
+test('P3A recorded no-image notice: no placeholder, and imagery never decides a section', () => {
+  // The recorded notice with no imagery at all still shows its real rows —
+  // section visibility follows readable content, never the image allocation.
+  const withRows = detailModelFor(corpusProjection('quaker-recalls-granola'));
+  assert.equal(withRows.heroImageUrl, null);
+  assert.equal(withRows.images.rowImages.size, 0);
+  assert.ok(withRows.sections.affectedProducts, 'real rows were hidden with the imagery');
+  // And a recorded notice that supports no rows renders no section at all —
+  // no heading, no placeholder, nothing held open.
+  const withNothing = detailModelFor(corpusProjection('ikm-recalls-product'));
+  assert.equal(withNothing.sections.affectedProducts, null);
+  assert.equal(withNothing.affectedProducts.items.length, 0);
+});
+
+test('P3A corpus scan: no Detail section can render a heading above nothing', () => {
+  let scanned = 0;
+  let visible = 0;
+  for (const { slug, projection } of everyProjection()) {
+    const model = detailModelFor(projection);
+    scanned += 1;
+    // What happened is never optional and never empty (title fallback).
+    assert.notEqual(model.whatHappened.text.trim(), '', slug);
+    // Where it was sold renders its one representation, or is absent.
+    if (model.sections.whereSold !== null) {
+      assert.notEqual(model.sections.whereSold.lead.trim(), '', `empty Where it was sold: ${slug}`);
+    }
+    const section = model.sections.affectedProducts;
+    if (section === null) {
+      // PROOF the hidden section held nothing: no rows, no codes, no dates.
+      assert.equal(model.affectedProducts.items.length, 0, `a real row was hidden: ${slug}`);
+      assert.equal(model.affectedProducts.caseCodes, null, slug);
+      assert.equal(model.affectedProducts.productionCodes, null, slug);
+      assert.equal(model.affectedProducts.productionDates, null, slug);
+      continue;
+    }
+    visible += 1;
+    // A visible section always carries something readable.
+    const readable =
+      section.productionDates !== null ||
+      section.productionCodes !== null ||
+      section.caseCodes !== null ||
+      (section.table !== null &&
+        section.table.expanded.columns.length > 0 &&
+        section.table.expanded.rows.some(
+          (row) =>
+            (row.name ?? '').trim() !== '' ||
+            row.cells.some((cell) => (cell.text ?? '').trim() !== '' || cell.codes !== null),
+        ));
+    assert.ok(readable, `visible section with no readable content: ${slug}`);
+  }
+  assert.ok(scanned >= 155, `only ${scanned} corpus records scanned`);
+  assert.ok(visible >= 100, `only ${visible} sections visible`);
+});
+
+test('P3A corpus scan: Home and Detail never disagree about a reason', () => {
+  let scanned = 0;
+  let refined = 0;
+  for (const { slug, projection } of everyProjection()) {
+    const homeEvidence = {
+      reasonText: projection.reasonText,
+      hazardCategory: projection.hazardCategory,
+      pathogenOrAllergen: projection.pathogenOrAllergen,
+      title: projection.title,
+    };
+    const home = interpretReason(homeEvidence);
+    const detail = interpretReason({ ...homeEvidence, summaryText: projection.summaryText });
+    scanned += 1;
+    // Family: identical on every notice — it comes from structured fields.
+    assert.equal(home.family, detail.family, `family disagreement: ${slug}`);
+    // Agent/material/allergen: Home names nothing, or exactly what Detail
+    // names. A third answer is the contradiction this scan exists to catch.
+    const [a, b] = [agentOf(home), agentOf(detail)];
+    assert.ok(a === null || a === b, `${slug}: Home "${a}" vs Detail "${b}"`);
+    if (a === null && b !== null) refined += 1;
+    // Packaging is never a hazard: a named material always comes from the
+    // closed vocabulary AND from a notice that states a foreign-material
+    // hazard at all. A notice whose only material word describes its package
+    // states no such hazard, so it can never reach a named contaminant.
+    for (const named of [a, b]) {
+      if (named === null || home.family !== 'foreign_material') continue;
+      assert.ok(FOREIGN_MATERIALS.includes(named), `${slug}: "${named}" is outside the vocabulary`);
+      assert.equal(
+        extractForeignMaterialEvidence(
+          `${projection.reasonText ?? ''}\n${projection.title}\n${projection.summaryText}`,
+        ).stated,
+        true,
+        `${slug}: "${named}" named where no foreign-material hazard is stated`,
+      );
+    }
+  }
+  assert.ok(scanned >= 155, `only ${scanned} corpus records scanned`);
+  assert.ok(refined >= 1, 'the summary-only refinement case disappeared from the corpus');
 });

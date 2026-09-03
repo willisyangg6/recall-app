@@ -361,6 +361,13 @@ export interface ReasonInput {
   reasonText: string | null;
   hazardCategory: string;
   pathogenOrAllergen: string | null;
+  /**
+   * The official headline. Home carries it on every feed row already, and it
+   * is where an announcement most often states its contaminant ("Due to
+   * Possible Plastic Contaminant") — so passing it costs no egress and closes
+   * the largest part of the Home/Detail specificity gap (P3A).
+   */
+  title: string | null;
 }
 
 /**
@@ -382,6 +389,7 @@ export function conciseReasonLine(input: ReasonInput): string | null {
     reasonText: input.reasonText,
     hazardCategory: input.hazardCategory,
     pathogenOrAllergen: input.pathogenOrAllergen,
+    title: input.title,
   });
   switch (typed.family) {
     case 'pathogen':
@@ -1033,6 +1041,116 @@ export function affectedProductsTable(
   };
 }
 
+// ── Optional section visibility (P3A) ───────────────────────────────────────
+
+/**
+ * The Affected Products SECTION as the screen renders it: the table plus the
+ * case-level code and production-date disclosures that sit beneath it.
+ *
+ * This type exists so the visibility decision has exactly one home. The
+ * screen renders `DetailModel.sections.affectedProducts` or renders nothing —
+ * it never re-derives whether a row, column, or code set is worth a heading.
+ */
+export interface AffectedProductsSection {
+  /** The compact table over the gated rows; null when no row is meaningful. */
+  table: AffectedProductsTable | null;
+  /** Readable calendar dates the production codes stand for. */
+  productionDates: string | null;
+  /** Printed production codes, behind their own disclosure. */
+  productionCodes: LotCodeSet | null;
+  /** Recall-level collapsed lot/batch codes, behind their own disclosure. */
+  caseCodes: LotCodeSet | null;
+}
+
+/**
+ * Does this table view carry anything a person can actually read?
+ *
+ * MEANINGFUL: a row with a consumer-facing product name, a cell holding a
+ * supported value, or a cell holding this row's own collapsed code set.
+ *
+ * NOT MEANINGFUL: an empty row object; a row whose every value is null,
+ * empty, rejected, or whitespace; the row's internal `id`; an empty column
+ * set; and — explicitly — a row image with no accompanying value. An image
+ * is decoration for a product row, never a reason to open a section.
+ */
+function tableHasContent(table: AffectedProductsTable): boolean {
+  const view = table.expanded;
+  if (view.columns.length === 0) return false;
+  return view.rows.some(
+    (row) =>
+      (row.name ?? '').trim() !== '' ||
+      row.cells.some((cell) => (cell.text ?? '').trim() !== '' || cell.codes !== null),
+  );
+}
+
+/**
+ * The Affected Products section, or `null` when the notice supports nothing
+ * to put under the heading (P3A).
+ *
+ * The rule this closes: a heading, its spacing, and an empty container used
+ * to render whenever the gated projection produced no rows — the recorded
+ * Steak Burrito PHA (FSIS PHA-07292026-01) showed "AFFECTED PRODUCTS" with
+ * nothing beneath it. Coverage/helper/disclaimer prose (`model.note`) was
+ * removed from the screen by the P2a founder decision and is deliberately
+ * NOT counted as content: an explanation of why there is nothing to show is
+ * not something to show.
+ *
+ * A minimal row is preserved on purpose. A supported product NAME alone is
+ * meaningful — a real affected product is never hidden merely because the
+ * notice states no size, barcode, date, or code for it.
+ */
+export function affectedProductsSection(
+  model: AffectedProductsModel,
+  rowImages: ReadonlyMap<string, RowImageAssignment> = new Map(),
+): AffectedProductsSection | null {
+  const built = affectedProductsTable(model, rowImages);
+  const table = built !== null && tableHasContent(built) ? built : null;
+  if (
+    table === null &&
+    model.productionDates === null &&
+    model.productionCodes === null &&
+    model.caseCodes === null
+  ) {
+    return null;
+  }
+  return {
+    table,
+    productionDates: model.productionDates,
+    productionCodes: model.productionCodes,
+    caseCodes: model.caseCodes,
+  };
+}
+
+/**
+ * The "Where it was sold" section, or `null`. The section renders exactly one
+ * thing at this stage (the P2a founder decision): the full state
+ * representation, "Nationwide", a stated metro phrase, or the honest
+ * unspecified statement. When the canonical geography supports none of those
+ * the lead is empty, and the heading must not render alone — measured over
+ * the recorded corpus, 9 notices reach that state.
+ *
+ * The complete evidence model (retailers, store addresses, online platforms,
+ * channels) stays on `DetailModel.whereSold` for the later retailer-list
+ * milestone; only the RENDER decision lives here.
+ */
+export function whereSoldSection(model: WhereSoldModel): WhereSoldModel | null {
+  return model.lead.trim() === '' ? null : model;
+}
+
+/**
+ * The optional consumer sections of the Detail screen, each already decided:
+ * present means "there is meaningful content", `null` means "render no
+ * heading, no container, and no surrounding spacing".
+ *
+ * Every optional section belongs here. A screen condition that re-inspects
+ * rows, columns, codes, or geography is the defect this type exists to make
+ * unrepresentable.
+ */
+export interface DetailSections {
+  whereSold: WhereSoldModel | null;
+  affectedProducts: AffectedProductsSection | null;
+}
+
 // ── Quantity ────────────────────────────────────────────────────────────────
 
 /**
@@ -1102,10 +1220,14 @@ export function buildHomeCardModel(item: FeedItem, context: HomeCardContext): Ho
       packageEvidence: item.productNames,
     }),
     brand,
+    // The SAME typed interpretation Detail renders, over the canonical
+    // evidence a feed row carries (P3A). Home never names a material,
+    // agent, allergen or family Detail would not — see `interpretReason`.
     reasonLine: conciseReasonLine({
       reasonText: item.reasonText,
       hazardCategory: item.hazardCategory,
       pathogenOrAllergen: item.pathogenOrAllergen,
+      title: item.title,
     }),
     heroImageUrl: item.heroImageUrl,
     locationSummary: homeLocationSummary(item.geography),
@@ -1134,10 +1256,19 @@ export interface DetailModel {
   whatHappened: { text: string; update: string | null };
   illnessLine: string | null;
   quantityLine: string | null;
+  /**
+   * The complete evidence models. These are PRESERVED SOURCE EVIDENCE for
+   * traceability, matching, and later milestones — they are NOT the render
+   * decision, and the screen does not read them. Render `sections`.
+   */
   whereSold: WhereSoldModel;
   affectedProducts: AffectedProductsModel;
-  /** The compact P2b table over the same gated rows; null with no items. */
-  affectedProductsTable: AffectedProductsTable | null;
+  /**
+   * The optional consumer sections, already decided by this contract (P3A):
+   * a section is present only when it has meaningful content, and `null`
+   * means the heading, its container, and its spacing all stay absent.
+   */
+  sections: DetailSections;
   /** Existing source-supported content preserved below the standardized sections. */
   action: ConsumerAction;
   healthRisk: string | null;
@@ -1226,6 +1357,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     }),
   });
   const heroImageUrl = images.hero?.url ?? null;
+  const sold = whereSoldModel(consumer.distribution);
 
   return {
     id: detail.id,
@@ -1248,9 +1380,12 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     whatHappened: { text: happened.text, update: happened.update },
     illnessLine: illnessLine(classifyIllnessReport(projection.summaryText)),
     quantityLine: quantityLine(projection.sourceAgency, consumer.quantityText, happened.text),
-    whereSold: whereSoldModel(consumer.distribution),
+    whereSold: sold,
     affectedProducts: affectedProductsView,
-    affectedProductsTable: affectedProductsTable(affectedProductsView, images.rowImages),
+    sections: {
+      whereSold: whereSoldSection(sold),
+      affectedProducts: affectedProductsSection(affectedProductsView, images.rowImages),
+    },
     action: consumer.action,
     healthRisk: healthRiskSummary(
       projection.hazardCategory,

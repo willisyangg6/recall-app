@@ -18,6 +18,7 @@ import {
   activityDisplay,
   AFFECTED_PRODUCTS_INITIAL_ROWS,
   affectedProductsModel,
+  affectedProductsSection,
   affectedProductsTable,
   buildDetailModel,
   caseIdentity,
@@ -31,8 +32,13 @@ import {
   officialSourceLink,
   stripTrailingMeasurement,
   whereSoldModel,
+  whereSoldSection,
 } from './recall-presentation';
-import { buildConsumerCase, type ConsumerPackageCheck } from './consumer-projection';
+import {
+  buildConsumerCase,
+  type ConsumerDistribution,
+  type ConsumerPackageCheck,
+} from './consumer-projection';
 import { PACKAGE_FIELD_LABEL } from './consumer-schema';
 import { measurementOnlyName } from './variant-identity';
 import { stripHtml } from '@/domain/text';
@@ -290,6 +296,7 @@ test('pathogen reasons use Potential with consumer pathogen names', () => {
       reasonText: 'Product Contamination',
       hazardCategory: 'microbial_contamination',
       pathogenOrAllergen: 'Salmonella Enteritidis',
+      title: null,
     }),
     'Potential Salmonella contamination.',
   );
@@ -298,6 +305,7 @@ test('pathogen reasons use Potential with consumer pathogen names', () => {
       reasonText: null,
       hazardCategory: 'microbial_contamination',
       pathogenOrAllergen: 'Listeria monocytogenes',
+      title: null,
     }),
     'Potential Listeria contamination.',
   );
@@ -306,6 +314,7 @@ test('pathogen reasons use Potential with consumer pathogen names', () => {
       reasonText: null,
       hazardCategory: 'microbial_contamination',
       pathogenOrAllergen: 'E. coli O157:H7',
+      title: null,
     }),
     'Potential E. coli contamination.',
   );
@@ -315,6 +324,7 @@ test('pathogen reasons use Potential with consumer pathogen names', () => {
       reasonText: null,
       hazardCategory: 'microbial_contamination',
       pathogenOrAllergen: 'Clostridium botulinum',
+      title: null,
     }),
     'Potential Clostridium botulinum contamination.',
   );
@@ -326,6 +336,7 @@ test('allergen reasons name only source-supported allergens, singular and plural
       reasonText: 'Unreported Allergens',
       hazardCategory: 'allergen',
       pathogenOrAllergen: 'undeclared milk',
+      title: null,
     }),
     'Undeclared milk allergen.',
   );
@@ -334,6 +345,7 @@ test('allergen reasons name only source-supported allergens, singular and plural
       reasonText: null,
       hazardCategory: 'allergen',
       pathogenOrAllergen: 'undeclared milk and soy',
+      title: null,
     }),
     'Undeclared milk and soy allergens.',
   );
@@ -343,6 +355,7 @@ test('allergen reasons name only source-supported allergens, singular and plural
       reasonText: null,
       hazardCategory: 'allergen',
       pathogenOrAllergen: 'undeclared gluten',
+      title: null,
     }),
     'Undeclared gluten.',
   );
@@ -354,6 +367,7 @@ test('non-pathogen reasons keep their distinctions and never become a pathogen t
       reasonText: 'Mislabeling',
       hazardCategory: 'other_regulatory',
       pathogenOrAllergen: null,
+      title: null,
     }),
     'Mislabeled product.',
   );
@@ -362,6 +376,7 @@ test('non-pathogen reasons keep their distinctions and never become a pathogen t
       reasonText: 'Produced without benefit of inspection',
       hazardCategory: 'other_regulatory',
       pathogenOrAllergen: null,
+      title: null,
     }),
     'Produced without required inspection.',
   );
@@ -370,6 +385,7 @@ test('non-pathogen reasons keep their distinctions and never become a pathogen t
       reasonText: 'Product may contain pieces of metal',
       hazardCategory: 'foreign_material',
       pathogenOrAllergen: null,
+      title: null,
     }),
     'Potential metal contamination.',
   );
@@ -380,11 +396,17 @@ test('non-pathogen reasons keep their distinctions and never become a pathogen t
       reasonText: 'Due to Elevated Levels of Lead',
       hazardCategory: 'unknown',
       pathogenOrAllergen: null,
+      title: null,
     }),
     'Elevated Levels of Lead.',
   );
   assert.equal(
-    conciseReasonLine({ reasonText: null, hazardCategory: 'unknown', pathogenOrAllergen: null }),
+    conciseReasonLine({
+      reasonText: null,
+      hazardCategory: 'unknown',
+      pathogenOrAllergen: null,
+      title: null,
+    }),
     null,
   );
   // The infant-formula nutrition family keeps a concise line rather than
@@ -394,6 +416,7 @@ test('non-pathogen reasons keep their distinctions and never become a pathogen t
       reasonText: 'Product does not provide sufficient nutrition when used as an infant formula',
       hazardCategory: 'unknown',
       pathogenOrAllergen: null,
+      title: null,
     }),
     'Does not meet infant formula nutrition requirements.',
   );
@@ -1614,6 +1637,7 @@ test('P2e-B: the corrected anchovy recall renders its allergen on both surfaces'
       reasonText: 'Product Contamination',
       hazardCategory: 'allergen',
       pathogenOrAllergen: 'undeclared fish',
+      title: null,
     }),
     'Undeclared fish allergen.',
   );
@@ -1624,7 +1648,146 @@ test('P2e-B: the corrected anchovy recall renders its allergen on both surfaces'
       reasonText: 'Product Contamination',
       hazardCategory: 'foreign_material',
       pathogenOrAllergen: null,
+      title: null,
     }),
     'Potential foreign material contamination.',
   );
+});
+
+// ── P3A: optional section visibility ────────────────────────────────────────
+
+/** A distribution the source said nothing usable about. */
+function emptyDistribution(): ConsumerDistribution {
+  return {
+    scopeType: 'unspecified',
+    areaText: '',
+    states: [],
+    areas: [],
+    coverage: [],
+    retailers: [],
+    retailersShown: [],
+    retailersHidden: 0,
+    retailLocations: [],
+    onlinePlatforms: [],
+    channels: [],
+    unspecified: true,
+  };
+}
+
+/** A gated package check that survived nothing — the empty-section shape. */
+function emptyPackageCheck(coverage: ConsumerPackageCheck['coverage']): ConsumerPackageCheck {
+  return {
+    ...nameOnlyPackageCheck('x'),
+    render: false,
+    variants: [],
+    coverage,
+    hasIdentifiers: false,
+  };
+}
+
+test('P3A: a notice with nothing to show yields NO Affected Products section', () => {
+  // Both identifier-less states: honest source silence and evidence we could
+  // not structure. Neither is a reason to render a heading — the model's own
+  // `note` explains the absence and is deliberately not content.
+  for (const coverage of ['source_silent', 'parser_missed'] as const) {
+    const model = affectedProductsModel(emptyPackageCheck(coverage), 'Product');
+    assert.equal(model.items.length, 0);
+    assert.notEqual(model.note, null, 'the honest state is still preserved in the model');
+    assert.equal(affectedProductsSection(model), null, coverage);
+  }
+});
+
+test('P3A: a product-name-only row is meaningful and keeps its section', () => {
+  // The founder rule: a real affected product is never hidden because the
+  // notice states no size, barcode, date, or code for it.
+  const model = affectedProductsModel(nameOnlyPackageCheck('Buffalo Chicken Rangoon'), 'Product');
+  const section = affectedProductsSection(model);
+  assert.ok(section, 'a supported product name alone must keep the section');
+  assert.deepEqual(
+    section!.table!.expanded.columns.map((column) => column.key),
+    ['product'],
+  );
+  assert.equal(section!.table!.expanded.rows[0].name, 'Buffalo Chicken Rangoon');
+});
+
+test('P3A: whitespace-only and value-less rows are not meaningful content', () => {
+  // A row object exists, but every consumer-facing value is empty or
+  // whitespace: no name, no fields, no codes. An empty row is not a row.
+  const blank = nameOnlyPackageCheck('   ');
+  const model = affectedProductsModel(blank, 'Product');
+  assert.equal(affectedProductsSection(model), null);
+  // The rejected package facts are structurally unreachable either way.
+  assert.equal(
+    model.items.every((item) => item.fields.length === 0),
+    true,
+  );
+});
+
+test('P3A: a row image alone never opens the section', () => {
+  // Image allocation without an associated meaningful product row is
+  // explicitly not content — no placeholder, no heading held open for it.
+  const blank = affectedProductsModel(nameOnlyPackageCheck('   '), 'Product');
+  const rowImages = new Map([
+    [
+      blank.items[0]?.rowId ?? 'v0',
+      {
+        image: { url: 'https://example.test/a.jpg' },
+        accessibilityText: 'Official product photo',
+      },
+    ],
+  ]);
+  assert.equal(
+    affectedProductsSection(blank, rowImages as never),
+    null,
+    'an image kept an otherwise-empty section open',
+  );
+});
+
+test('P3A: a code-only or date-only disclosure keeps the section', () => {
+  // No rows survived, but the notice DOES state case-level codes or the
+  // calendar dates its production codes stand for — supported content that
+  // still renders, so the section stays.
+  const codes = { count: 3, codes: ['A1', 'A2', 'A3'], pairs: [], label: 'Lot code' };
+  // `render: true` with no variants and no approved case fields is the real
+  // shape: the notice states recall-level codes but no per-version rows.
+  const codeOnly: ConsumerPackageCheck = {
+    ...emptyPackageCheck('structured'),
+    render: true,
+    hasIdentifiers: true,
+    lotCodes: codes,
+  };
+  const withCodes = affectedProductsModel(codeOnly, 'Product');
+  const codeSection = affectedProductsSection(withCodes);
+  assert.ok(codeSection);
+  assert.equal(codeSection!.table, null);
+  assert.equal(codeSection!.caseCodes!.count, 3);
+
+  const withDates = affectedProductsModel(
+    {
+      ...emptyPackageCheck('structured'),
+      render: true,
+      hasIdentifiers: true,
+      productionDates: 'July 11, 15, and 22, 2026',
+    },
+    'Product',
+  );
+  const dateSection = affectedProductsSection(withDates);
+  assert.ok(dateSection);
+  assert.equal(dateSection!.productionDates, 'July 11, 15, and 22, 2026');
+});
+
+test('P3A: Where it was sold is absent when the geography supports no representation', () => {
+  const stated = whereSoldModel({
+    ...emptyDistribution(),
+    scopeType: 'states',
+    states: ['Texas', 'Oklahoma'],
+  });
+  assert.equal(whereSoldSection(stated), stated);
+  // No states and no stated area text: the lead is empty, so no heading.
+  const silent = whereSoldModel(emptyDistribution());
+  assert.equal(silent.lead, '');
+  assert.equal(whereSoldSection(silent), null);
+  // A whitespace-only area text is equally not a representation.
+  const blank = whereSoldModel({ ...emptyDistribution(), areaText: '   ' });
+  assert.equal(whereSoldSection(blank), null);
 });
