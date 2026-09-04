@@ -239,3 +239,56 @@ test('a range whose ends carry list commas still normalizes as one range', () =>
     canonical: 'range:date:2021-11-30:date:2022-01-08',
   });
 });
+
+test('a complete space-delimited US date reads as the day it names (P3C-1)', () => {
+  // AquaStar prints its best-by markings with spaces where another notice
+  // prints slashes — "Best If Used By: 03 26 27". It is the same month-first
+  // numeric date and reaches the same consumer format, with the same
+  // two-digit-year policy the slash form already uses.
+  const positives: [string, string][] = [
+    ['11 19 2027', 'November 19, 2027'],
+    ['11 20 2027', 'November 20, 2027'],
+    ['03 26 27', 'March 26, 2027'],
+    ['04 07 27', 'April 7, 2027'],
+    ['11 07 2027', 'November 7, 2027'],
+    ['12 8 25', 'December 8, 2025'],
+    ['08 29 20', 'August 29, 2020'],
+    ['10 01 2019', 'October 1, 2019'],
+  ];
+  for (const [raw, display] of positives) {
+    const value = normalizeDateValue(raw);
+    assert.equal(value.display, display, raw);
+    assert.ok(value.canonical?.startsWith('date:'), raw);
+  }
+  // The same day written two ways is one day, so a notice that prints it in
+  // its prose and again in a photo caption renders it once.
+  assert.equal(
+    normalizeDateValue('11 19 2027').canonical,
+    normalizeDateValue('11/19/2027').canonical,
+  );
+});
+
+test('an incomplete or day-first token is preserved honestly, never guessed at', () => {
+  // The token must be COMPLETE — three numeric groups, the first two of one or
+  // two digits — so no date is carved out of a longer lot or production code,
+  // and a first component that cannot be a month is refused rather than
+  // reordered into one.
+  const negatives = [
+    '13 19 2027', // month 13
+    '30 10 2026', // day-first
+    '10662 5085 10', // an AquaStar lot code
+    '10662 5139', // two groups
+    'C 08 05 23', // a production code carrying a letter
+    '08 02 27 F', // a production code with a trailing letter
+    '30/08/2025',
+    '13/01/2026',
+    '15.09.2027',
+    '15-01-2025',
+    '29-05-2025',
+  ];
+  for (const raw of negatives) {
+    const value = normalizeDateValue(raw);
+    assert.equal(value.canonical, undefined, raw);
+    assert.equal(value.display, raw, raw);
+  }
+});

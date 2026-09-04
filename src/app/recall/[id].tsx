@@ -372,6 +372,12 @@ export default function RecallDetailScreen() {
           </ThemedView>
         ) : null}
 
+        {/* The narrative is assembled by the shared presentation contract
+            (P3C-1): the reason sentence and, where the source states one the
+            reason did not already carry, the recall quantity arrive as ONE
+            body paragraph. The screen composes and styles nothing — there is
+            no separate quantity slot, and the illness status follows the
+            narrative in the same body type. */}
         <Section title="What happened">
           <ThemedText>{model.whatHappened.text}</ThemedText>
           {model.whatHappened.update ? (
@@ -380,11 +386,6 @@ export default function RecallDetailScreen() {
             </ThemedText>
           ) : null}
           {model.illnessLine ? <ThemedText>{model.illnessLine}</ThemedText> : null}
-          {model.quantityLine ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              {model.quantityLine}
-            </ThemedText>
-          ) : null}
         </Section>
 
         {/* Where it was sold: only the full state representation (P2a founder

@@ -865,16 +865,26 @@ future **source-driven** hazard change on an active case should be eligible for
 notification remains a separate policy milestone, deliberately not decided here;
 `material-change.ts` was not modified in P3B.
 
-**A later milestone may touch these same notices for a different reason.**
-P3C (affected-product data and presentation correctness) is **deferred and not
-implemented**; its findings concern affected-product codes, dates, barcodes,
-identifier punctuation, and quantity presentation on the AquaStar and Dynarex
-notices, not their hazard category. P3C is audit-first and it is not yet known
-whether any persisted value is wrong. **If** its audit proves a canonical-data
-defect, that correction is a separate repair needing its own reviewed dry run
-and its own explicit apply authorization under the rules in this document — it
-is in no way covered by the completed P3B authorization above, and the P3B
-apply must not be rerun for it. See
+**A later milestone touched these same notices for a different reason, and
+needed no production action.** P3C (affected-product data and presentation
+correctness) concerns affected-product codes, dates, barcodes, identifier
+punctuation, and quantity presentation on the AquaStar and Dynarex notices,
+not their hazard category.
+
+**P3C-1 is implemented and is display-time only.** Its audit traced every
+disputed value from the archived official payloads through parsing, normalized
+data, projection and presentation model, and found the defects entirely in the
+shared read path: no persisted value is wrong. It therefore has **no
+operational surface at all** — no repair command, no dry run, no migration, no
+backfill, no cache-schema bump, no re-projection, and no notification. There is
+nothing here to authorize or to apply, and the P3B apply must not be rerun for
+it.
+
+**P3C-2 (affected-product row ownership) remains deferred and unimplemented.**
+If it ever proves a canonical-data defect, that correction is a separate repair
+needing its own reviewed dry run and its own explicit apply authorization under
+the rules in this document — it is in no way covered by the completed P3B
+authorization above. See
 [recall-feed-usability.md](recall-feed-usability.md), "P3C — affected-product
 data and presentation correctness".
 

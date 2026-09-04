@@ -407,15 +407,26 @@ Accounts/auth, onboarding flow, quiet hours and other notification
 preferences, ingest-time retailer enrichment of stored projections, pet-food
 scope, Spanish records, CPSC/NHTSA, analytics, final visual design.
 
-**P3C — affected-product data and presentation correctness: deferred, not
-implemented.** Manual QA on 2026-09-04 found pending issues in affected-product
-rendering — lot/batch codes rendering below the table instead of in their own
-rows, inconsistently formatted best-by dates, barcode values that need a
-source audit, natural-language conjunctions in machine identifier lists, and an
-inconsistently styled recall-quantity sentence. P3C is audit-first and nothing
-is fixed yet; the full specification and the required investigation boundary
-live in [docs/recall-feed-usability.md](docs/recall-feed-usability.md), "P3C —
-affected-product data and presentation correctness".
+**P3C-2 — affected-product row ownership: deferred, not implemented.** Lot and
+batch codes still render in a below-table disclosure on some notices rather
+than in the row that owns them. Deciding that requires reading the official
+source structure, not the shape of the rendered output, so it is its own
+milestone and has not begun.
+
+**P3C-1 — affected-product value correctness: implemented, display-time,
+not yet deployed.** The other four 2026-09-04 QA findings are fixed in the
+shared read path: printed dates and lot codes can no longer become barcodes
+because their digit run happens to be a UPC-compatible length (ownership is
+decided by the label that governs the value, never by digit count); complete
+space-delimited US dates reach the same consumer format as the slash and
+hyphen forms, two spellings of one day render once, and every parsed date
+renders in full (`November 19, 2027, November 20, 2027` — no same-month
+collapse); structured identifier and date cells separate with commas only,
+while prose, geography and allergen lists keep ordinary grammar; and the recall quantity is a sentence of the What
+Happened narrative rather than a muted line beneath it. It needs no production
+repair, migration, backfill, cache bump, re-projection, or notification. Full
+detail in [docs/recall-feed-usability.md](docs/recall-feed-usability.md),
+"P3C — affected-product data and presentation correctness".
 
 See [AGENTS.md](AGENTS.md) for standing rules for coding agents working in this
 repository, and

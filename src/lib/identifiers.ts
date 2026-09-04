@@ -250,6 +250,17 @@ function parseCalendarDay(text: string): CalendarDay | null {
       /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/,
       (m) => ({ year: fullYear(m[3]), month: Number(m[1]), day: Number(m[2]) }),
     ],
+    // 11 19 2027, 03 26 27 — the same month-first numeric date with spaces
+    // instead of separators, which is how AquaStar's notices print their
+    // best-by markings. The token must be COMPLETE: three numeric groups and
+    // nothing else, the first two of one or two digits. That anchoring is
+    // what keeps a lot code out — "10662 5085 10" opens with five digits and
+    // can never match — and the month/day validation below rejects a
+    // day-first reading ("30 10 2026") rather than guessing at it.
+    [
+      /^(\d{1,2})\s+(\d{1,2})\s+(\d{2}|\d{4})$/,
+      (m) => ({ year: fullYear(m[3]), month: Number(m[1]), day: Number(m[2]) }),
+    ],
     // 2028 FE 04 — Canadian bilingual month symbol on imported product.
     [
       /^(\d{4})\s+([A-Z]{2})\s+(\d{1,2})$/,

@@ -58,5 +58,32 @@ Nothing in it is invented. If a full page is ever recorded for one of these
 notices, replace the excerpt with the recorded announcement rather than
 extending the excerpt by hand.
 
+## Identifier ownership (P3C-1)
+
+`identifier-ownership-notices.json` is the same kind of fixture as the P3B set
+above — bounded official evidence, not a re-recorded page — and it carries
+**two deliberately distinguished grades**:
+
+- `excerpts` — bounded **verbatim** announcement text from each notice's
+  archived FDA source snapshot, read during the read-only P3C audit on
+  2026-09-04. Only the sentences that state the recall quantity and the package
+  identifiers are kept. These drive the shared extractor end to end in
+  `src/server/fda/identifier-ownership.test.ts`. Kroger Mercado additionally
+  carries the verbatim alt text of two official product photos, because they
+  state the same two best-before days in a second spelling — which is exactly
+  what the deduplication has to resolve. **These do not extend full-snapshot
+  corpus coverage.**
+- `auditLedger` — the notices the pre-fix production audit measured whose
+  payload was never archived (D. Coluccio, Stonewall Kitchen, Hearty
+  Acquisitions). Each entry holds the official URL, the native title, the exact
+  values that rendered in the barcode field, and the label the audit found
+  governing each one. **The source wording is deliberately absent rather than
+  reconstructed**, so these are asserted against the shared ownership
+  vocabulary and never re-parsed. If a full page is ever recorded for one of
+  them, replace the ledger entry with the recorded announcement.
+
+The FSIS half of the same finding (Water Lilies Food Inc.) lives in
+`src/server/fsis/fixtures/identifier-ownership-notices.json`.
+
 Never hand-edit the recorded fixtures above; re-record from the live sources
 instead.

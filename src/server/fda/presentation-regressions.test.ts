@@ -218,7 +218,7 @@ test('recorded Jaime’s Jalapeno Ranch: the exact P2b single-row table', () => 
   assert.equal(table!.expanded.rows.length, 1);
   assert.deepEqual(
     table!.expanded.rows[0].cells.map((cell) => cell.text),
-    ['Jalapeno Ranch Dressing', '199284564923', '69, 86, 108, 113, 116, and 121'],
+    ['Jalapeno Ranch Dressing', '199284564923', '69, 86, 108, 113, 116, 121'],
   );
   assert.equal(table!.seeAllLabel, null);
   // The codes render inline in the row — nothing sits behind a control.
@@ -566,7 +566,7 @@ test('recorded Outshine: exact flavor thumbnails, count demotion, and in-cell co
   );
   // Tangerine's two codes stay inline; the other rows carry controls.
   const codesCells = expanded.rows.map((row) => row.cells[colKey(expanded, 'batchCodes')]);
-  assert.equal(codesCells[4].text, 'LLA619603 and LLA619703');
+  assert.equal(codesCells[4].text, 'LLA619603, LLA619703');
   assert.deepEqual(
     codesCells.map((cell) => cell.codesLabel),
     ['View 22 codes', 'View 9 codes', 'View 16 codes', 'View 6 codes', null, 'View 5 codes'],

@@ -708,8 +708,11 @@ or is omitted rather than rendered wrongly.
   `July 13–August 11, 2026`, stating the year twice only when it changes.
   Qualifiers are meaning, not formatting, so `through February 27, 2026` becomes
   `Through February 27, 2026` rather than collapsing to a single day. Lists
-  split into one date each, sorted; dates sharing a month collapse into
-  `July 11, 15, 16, 18, and 22, 2026`.
+  split into one date each, sorted, and **each renders complete** —
+  `July 11, 2026, July 15, 2026, July 16, 2026, July 18, 2026, July 22, 2026`.
+  Dates sharing a month once collapsed into `July 11, 15, 16, 18, and 22, 2026`;
+  P3C-1 removed that, because a shopper compares one printed marking at a time
+  and a shared month with a bare day is not a value they can match.
 - **Code location as a model, not a phrase**: surface, position, relationship,
   and appearance are recognized separately and the sentence is composed from
   them, so the same physical arrangement always reads the same way
@@ -1468,20 +1471,26 @@ exclusively, and FSIS under-reports allergens in it.
     [recall-operations.md](recall-operations.md), "FDA contaminant category: a
     historical correction (P3B)", for the applied result and the durable
     ledgers.
-- **Affected-product data on the same notices is a separate, deferred
-  milestone (P3C) — not implemented.** P3B settled the hazard category and
-  agent for the AquaStar and Dynarex notices; nothing in this bullet is
-  claimed fixed by it. Manual QA on 2026-09-04 raised pending questions about those
-  same notices' **affected-product** facts: whether lot/batch codes are being
-  attributed to the rows that own them, whether best-by date tokens are
-  normalized consistently, whether some values rendered in the barcode field
-  are in fact best-by dates (an **open audit question**, not an established
-  defect), whether identifier-list conjunctions are stored or joined at
-  presentation time, and where the recall-quantity sentence belongs. P3C is
-  **audit-first**: it must trace each fact from the archived official payload
-  through parsing, normalized data, projection, and presentation model before
-  separating canonical parsing defects from display-only ones, and it must not
-  assume a production repair is needed. Specification in
+- **Affected-product data on the same notices is a separate milestone (P3C),
+  and only half of it is built.** P3B settled the hazard category and agent for
+  the AquaStar and Dynarex notices; nothing in this bullet is claimed fixed by
+  it. Manual QA on 2026-09-04 raised five questions about those same notices'
+  **affected-product** facts, and the source-backed audit that followed
+  answered four of them. **P3C-1 (implemented, display-time only):** the values
+  rendered in the barcode field WERE best-by dates — the prose
+  barcode-continuation rule promoted any digit run of a UPC-compatible length,
+  so ownership is now decided by the label governing the value and never by
+  digit count; supported space-delimited dates reach the one consumer date
+  format and deduplicate against other spellings of the same day; the
+  identifier-list conjunction was presentation-time joining, now field-aware
+  and comma-only for structured cells; and the recall quantity became a
+  sentence of the What Happened narrative instead of a separately styled line.
+  **The canonical-data delta is zero** — all four were display-only, so no
+  repair, migration, backfill, cache bump, re-projection or notification is
+  needed. **P3C-2 (deferred, not implemented):** whether lot/batch codes are
+  attributed to the rows that own them, which requires reading the official
+  source structure rather than the shape of the rendered output. Specification
+  in
   [recall-feed-usability.md](recall-feed-usability.md), "P3C — affected-product
   data and presentation correctness".
 - **One record was genuinely stale.** PHA-07302018-1 (Cyclospora, Caito Foods)

@@ -1,0 +1,18 @@
+{
+  "capturedAt": "2026-09-04",
+  "what": "The FSIS side of the P3C-1 identifier-ownership finding. The recorded FSIS corpus states no UPC in prose at all (0 of 66 benchmark records mention one), so the guard cannot be exercised against recorded FSIS text; the one FSIS notice the production audit caught is recorded here as a ledger entry.",
+  "provenance": "Audit ledger only. No FSIS payload was archived for this notice, so its source wording is deliberately absent rather than reconstructed. The values and the governing label are exactly what the pre-fix production audit measured on 2026-09-04.",
+  "auditLedger": [
+    {
+      "agency": "FSIS",
+      "nativeTitle": "Water Lilies Food Inc. Recalls Egg Roll Product Due To Misbranding and Undeclared Allergens",
+      "officialUrl": "https://www.fsis.usda.gov/recalls-alerts/water-lilies-food-inc--recalls-egg-roll-product-due-misbranding-and-undeclared",
+      "renderedAsBarcode": [
+        "07-12-2017",
+        "07-12-2016"
+      ],
+      "governingLabel": "best-by / packaging date",
+      "evidence": "Pre-fix production audit, 2026-09-04: the Barcode (UPC) cell read \"688267069512, 07122017, and 07122016\" on a row that also renders a Best by column."
+    }
+  ]
+}

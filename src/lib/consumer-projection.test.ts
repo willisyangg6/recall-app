@@ -538,23 +538,106 @@ test('a date list becomes one standardized date per value, in order', () => {
   ]);
 });
 
-test('dates in one month collapse into a phrase a person can read', () => {
+test('every date in a structured cell renders in full — no same-month collapse', () => {
+  // P3C-1 (founder decision): dates in one month used to collapse into a
+  // single phrase ("July 11, 15, 18, 22, 2026"). A shopper checks one printed
+  // marking at a time, so each parsed date keeps its own month, day and year.
   assert.equal(
     joinFactValues('production_date', [
       'July 11, 2026',
       'July 15, 2026',
+      'July 16, 2026',
       'July 18, 2026',
       'July 22, 2026',
     ]),
-    'July 11, 15, 18, and 22, 2026',
+    'July 11, 2026, July 15, 2026, July 16, 2026, July 18, 2026, July 22, 2026',
   );
-  // Different months keep their own dates in full.
+  // Two same-month dates are two complete dates, not a shared month and two
+  // bare days.
+  assert.equal(
+    joinFactValues('best_by', ['November 19, 2027', 'November 20, 2027']),
+    'November 19, 2027, November 20, 2027',
+  );
+  // Mixed months and mixed years were already correct and stay so.
   assert.equal(
     joinFactValues('best_by', ['September 30, 2027', 'October 31, 2027']),
-    'September 30, 2027 and October 31, 2027',
+    'September 30, 2027, October 31, 2027',
   );
-  // Non-date concepts are unaffected.
+  assert.equal(
+    joinFactValues('use_by', ['December 8, 2025', 'December 8, 2026']),
+    'December 8, 2025, December 8, 2026',
+  );
+  // A range is one value and is never split into its endpoints.
+  assert.equal(
+    joinFactValues('sell_by', ['July 20–August 17, 2026', 'September 1, 2026']),
+    'July 20–August 17, 2026, September 1, 2026',
+  );
+  // An unsupported value keeps the source's own wording, beside the parsed
+  // dates rather than instead of them.
+  assert.equal(
+    joinFactValues('expiration', ['November 19, 2027', 'C 08 05 23']),
+    'November 19, 2027, C 08 05 23',
+  );
+  // P3C-1: the conjunction survives where the value is an ordinary phrase.
+  // Size and Packaging are the only two approved fields that are, so they are
+  // the boundary between structured data and English inside this joiner.
   assert.equal(joinFactValues('package_size', ['20 oz', '12 oz']), '20 oz and 12 oz');
+  assert.equal(
+    joinFactValues('packaging', ['Plastic bags', 'Cardboard boxes', 'Foil pouches']),
+    'Plastic bags, Cardboard boxes, and Foil pouches',
+  );
+});
+
+test('structured cells are comma-separated; ordinary phrases keep their grammar', () => {
+  // P3C-1. The distinction is by CONCEPT, so it is field-aware by
+  // construction: a barcode, a printed code, and the calendar date stamped
+  // beside one are machine data a shopper scans, and a conjunction inside a
+  // run of identifiers reads as part of the last value.
+  const structured: [Parameters<typeof joinFactValues>[0], string[], string][] = [
+    ['upc', ['43240304', '230420340240', '324020340'], '43240304, 230420340240, 324020340'],
+    ['lot', ['10662 5139', '10662 5140'], '10662 5139, 10662 5140'],
+    ['case_code', ['B 048', 'B 049'], 'B 048, B 049'],
+    ['production_code', ['26192', '26193'], '26192, 26193'],
+    ['item_number', ['4874', '4875'], '4874, 4875'],
+    ['best_by', ['March 26, 2027', 'April 7, 2027'], 'March 26, 2027, April 7, 2027'],
+    ['use_by', ['March 26, 2027', 'April 7, 2027'], 'March 26, 2027, April 7, 2027'],
+    ['sell_by', ['March 26, 2027', 'April 7, 2027'], 'March 26, 2027, April 7, 2027'],
+    ['expiration', ['March 26, 2027', 'April 7, 2027'], 'March 26, 2027, April 7, 2027'],
+  ];
+  for (const [concept, values, expected] of structured) {
+    assert.equal(joinFactValues(concept, values), expected, concept);
+  }
+  // Two values are the case the old joiner rendered as a bare "and"; they are
+  // commas now too, so a two-code list and a three-code list read alike.
+  assert.equal(joinFactValues('upc', ['10662 5139', '10662 5140']), '10662 5139, 10662 5140');
+  // Values themselves are untouched: leading zeroes and the spacing inside a
+  // printed code are what a shopper compares character by character.
+  assert.equal(joinFactValues('upc', ['011110626196']), '011110626196');
+  // Same-month dates each render complete (no collapse) and comma-only.
+  assert.equal(
+    joinFactValues('production_date', ['July 11, 2026', 'July 22, 2026']),
+    'July 11, 2026, July 22, 2026',
+  );
+  // Natural language is untouched — this is not a global removal of "and".
+  assert.equal(joinValues(['California', 'Texas', 'Ohio']), 'California, Texas, and Ohio');
+  assert.equal(joinValues(['milk', 'soy']), 'milk and soy');
+  assert.equal(joinFactValues('package_size', ['20 oz', '12 oz']), '20 oz and 12 oz');
+});
+
+test('a date list keeps every sibling, including the ones that do not parse', () => {
+  // A value that resolves is not evidence about the ones beside it. Dropping
+  // the rest shortened the list of markings a shopper is asked to check —
+  // silently, and in the one field where completeness is the point.
+  const grouped = aggregateFacts([fact('best_by', '11/19/2027, ABC-123, 11/20/2027')]);
+  const values = grouped.find((group) => group.concept === 'best_by')?.values ?? [];
+  assert.deepEqual(values, ['November 19, 2027', 'November 20, 2027', 'ABC-123']);
+  // Each part is still type-checked on its own, so this is preservation, not
+  // a hole: a whole-cell fallback is what let "10/2025 and 1365200" pass as a
+  // date because one half of it looked like one.
+  const netWeight = aggregateFacts([fact('use_by', '58 oz, 02/14/2026')]);
+  assert.deepEqual(netWeight.find((group) => group.concept === 'use_by')?.values, [
+    'February 14, 2026',
+  ]);
 });
 
 test('scope copy never argues with the identifiers printed beneath it', () => {
@@ -593,7 +676,7 @@ test('official identifiers render as strings: no digit grouping, leading zeroes 
   const { fields } = toPackageFields(grouped);
   const byKey = new Map(fields.map((field) => [field.key, field.value]));
   // Seven and eight digits are exactly that — never "2,606,022".
-  assert.equal(byKey.get('lotCodes'), '2606022, 13150423, and 050011');
+  assert.equal(byKey.get('lotCodes'), '2606022, 13150423, 050011');
   assert.equal(byKey.get('upc'), '0001111079120');
   for (const value of byKey.values()) assert.ok(!value.includes(','.concat('0')), value);
   assert.ok(!/\d,\d{3}\b/.test(byKey.get('lotCodes') ?? ''));
@@ -632,7 +715,7 @@ test('representative FDA shape: an Outshine batch-code cell still yields its cod
   assert.ok(variant, JSON.stringify(consumer.packageCheck.variants));
   assert.equal(variant.name, 'Outshine Fruit Bars Tangerine');
   const byKey = new Map(variant.fields.map((field) => [field.key, field.value]));
-  assert.equal(byKey.get('batchCodes'), 'LLA619603 and LLA619703');
+  assert.equal(byKey.get('batchCodes'), 'LLA619603, LLA619703');
   assert.equal(byKey.get('bestBy'), 'October 31, 2027');
   assert.equal(byKey.get('upc'), '041548612041');
   // The source's own column called it Packaging, and it keeps that name.
@@ -757,7 +840,7 @@ test('a placement sentence becomes the code location, never a lot code', () => {
     ),
     [],
   );
-  assert.equal(packageFields(consumer).get('lotCodes'), '251661, 2524061, and 251672');
+  assert.equal(packageFields(consumer).get('lotCodes'), '251661, 2524061, 251672');
   // The package size never rides in as an identifier.
   for (const value of packageFields(consumer).values()) {
     assert.ok(!/\b\d+\s*(?:oz|lb)\b/i.test(value), value);

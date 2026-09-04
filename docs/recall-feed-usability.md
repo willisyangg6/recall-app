@@ -232,12 +232,16 @@ reported.`; source silence → the line is omitted entirely. Silence is never
   been reported…") that slips past the domain classifier's explicit-zero
   patterns is re-checked at this boundary so it can never render as a
   positive report. Home carries no illness line.
-- **Quantity** (`quantityLine`, FDA only — the FSIS `quantityText` field is
-  the amount _recovered_, a different fact, and stays unshown): the complete
-  authoritative quantity as `The recall covers <quantity>.`, never truncated
-  mid-word and never manufactured from package sizes. A stored span carrying
-  a clipped reason tail keeps its full quantity and drops only the
+- **Quantity** (`recallQuantitySentence`, FDA only — the FSIS `quantityText`
+  field is the amount _recovered_, a different fact, and stays unshown): the
+  complete authoritative quantity as `The recall covers <quantity>.`, never
+  truncated mid-word and never manufactured from package sizes. A stored span
+  carrying a clipped reason tail keeps its full quantity and drops only the
   non-quantity clause. Omitted when What Happened already states the figure.
+  Since P3C-1 it is a **sentence of the What Happened narrative**, not a field
+  of its own: `detailNarrative` composes reason → quantity, the illness line
+  follows, and there is no separate model value for a screen to style. See
+  "P3C — affected-product data and presentation correctness", item E.
 
 ### Geography
 
@@ -544,24 +548,39 @@ regression shapes and the corpus-wide allocation census are pinned in
 lives in docs/recall-imagery.md §13. The interactive carousel and all final
 visual styling remain design-system work.
 
-### P3C — affected-product data and presentation correctness (DEFERRED, NOT IMPLEMENTED)
+### P3C — affected-product data and presentation correctness (PARTIALLY IMPLEMENTED)
 
-**Status: deferred. Nothing in this section is implemented, and recording it
-here does not fix it.** Every item below is a **pending** QA finding from
-manual simulator review of the AquaStar and Dynarex notices on 2026-09-04
-(the same notices P3B corrected for hazard category — P3C is about their
-affected-product data, not their hazard). No code, parser, projection,
-presentation model, or production row has been changed for any of it. Several
-items describe behavior that **contradicts the contracts stated earlier in
-this document**; where they do, the contract above is the intent and the
-observed behavior is the defect.
+The findings below came from manual simulator review of the AquaStar and
+Dynarex notices on 2026-09-04 (the same notices P3B corrected for hazard
+category — P3C is about their affected-product data, not their hazard), and
+from the source-backed audit that followed. **P3C is not complete.** It splits
+in two, and only the first part is built:
 
-P3C is **audit-first**: the investigation boundary below must complete before
-any implementation, because it is not yet established which items are
-canonical parsing defects and which are display-only. Whether any production
-repair is needed at all is an open question, deliberately undecided here.
+| Part      | Items                                                                                                             | Status                        |
+| --------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| **P3C-1** | B (date parsing and formatting), C (barcode correctness), D (identifier-list punctuation), E (quantity paragraph) | **implemented, display-time** |
+| **P3C-2** | A (row-owned lot and batch codes — affected-product row ownership)                                                | **deferred, not implemented** |
 
-#### A. Row-owned lot and batch codes (pending)
+**P3C-1 is display-time only.** Every one of its four corrections happens in
+the shared read path over preserved source data. It requires **no production
+repair, no migration, no backfill, no cache-schema bump, no re-projection, and
+no notification** — the audit's central question, "is any of this persisted
+wrong?", answered no for all four. It is implemented and locally verified, and
+at the time of writing **not committed and not deployed**, so nothing in
+production has changed.
+
+**The pre-fix production counts quoted in this section are historical audit
+findings**, measured on 2026-09-04 before the fix, over the read-only audit's
+own comparison — they are not post-fix production verification, and no
+production read was made after the fix.
+
+#### A. Row-owned lot and batch codes — P3C-2 (DEFERRED, NOT IMPLEMENTED)
+
+**Nothing below is implemented.** P3C-1 deliberately left affected-product row
+ownership untouched, and proved it: measured over every recorded FDA and FSIS
+notice, P3C-1 changed zero product rows, zero row ids, zero row images, zero
+row code sets, and moved no below-table disclosure into a row. The AquaStar and
+Dynarex below-table blocks described here are exactly as they were.
 
 Lot, batch, production, and similar identifier facts render inconsistently
 across notices:
@@ -587,7 +606,7 @@ correctly reporting codes the source does not attribute to a single version,
 or it may be a parser miss. That determination comes from the source, not from
 the shape of the rendered output.
 
-#### B. Date parsing and formatting (pending)
+#### B. Date parsing and formatting — P3C-1 (implemented)
 
 Best-by dates are inconsistently normalized, **including within a single
 row**. Observed:
@@ -607,7 +626,32 @@ the leading values; and it must stay bounded to date evidence so that a
 product code is never reinterpreted as a date. The existing field-label
 meanings are unchanged — a Sell by is still never relabeled.
 
-#### C. Barcode correctness — an audit question, not yet a conclusion (pending)
+**Implemented (P3C-1).** The one shared calendar-day owner
+(`parseCalendarDay`, `src/lib/identifiers.ts`) gained the space-delimited
+month-first form beside the slash, dot and hyphen forms it already read, under
+the same two-digit-year policy and the same month/day validation. The token
+must be **complete** — three numeric groups, the first two of one or two digits
+— so no date is carved out of a longer lot or production code: AquaStar's own
+lot code `10662 5085 10` opens with five digits and can never match. A first
+component that cannot be a month is refused rather than reordered, so
+`13 19 2027` and the day-first `30 10 2026` are preserved exactly as the source
+wrote them. Because the parsed value carries the same canonical key as any
+other spelling of that day, a notice that prints `Best Before 11/19/2027` in
+its prose and `Best Before 11  19  2027` in a photo caption now renders
+November 19, 2027 **once**.
+
+One related honesty repair travelled with it. A date cell holding several
+values used to keep only the parts that parsed, dropping the rest — so a list
+was silently shortened in the one field where completeness is the point. Every
+sibling is now kept, each type-checked on its own; an unsupported marking
+renders as the source wrote it rather than disappearing.
+
+**Deliberately not added: `Mfg. Dt.` and `Exp. Dt.` label support.** Dynarex's
+product table is **day-first** (`01.11.2023`), so reading those columns
+month-first would misstate them. They stay unsupported and hidden — deferred
+source ambiguity, not a parser gap.
+
+#### C. Barcode correctness — P3C-1 (implemented; the audit question is answered)
 
 The Raw Shrimp / Cooked Shrimp / Shrimp Skewers Barcode (UPC) column includes
 values such as `10222027`, `11072027`, `11082027`, `11132027`, and `11152027`.
@@ -630,7 +674,50 @@ P3C must therefore:
   and the production corpus, since a routing defect would not be confined to
   one notice.
 
-#### D. Identifier-list punctuation (pending)
+**Answered: they were wrong, and the cause was neither table alignment nor
+field routing.** The archived AquaStar payloads state each product on its own
+line — `UPC 20011110643906, lot code 10662 5085 10, Best If Used By: 03 26 27`
+— so the source itself labels every value correctly. The defect was in the
+prose **barcode-continuation** rule (`src/lib/prose-identifiers.ts`), which
+existed so that "with UPC #199284530959 (4oz) and #199284306226 (12oz)" keeps
+both barcodes when only the first carries the label. It promoted _every_ digit
+run of a UPC-compatible length inside a sentence mentioning UPC — and
+`10 22 2027` is eight digits.
+
+**The correction is ownership, not shape.** A run becomes a barcode only when
+the label GOVERNING its position is a barcode label; the nearest label to its
+left wins, exactly as a reader resolves it. The competing vocabulary is built
+from the module's own label list rather than a second keyword table, plus the
+printed abbreviations a package carries (`BBD`, `BBE`, `BB`, a bare `EXP`) and
+FSIS's "packaging date". A run already published by a label-anchored pass under
+a non-barcode label is refused on that evidence alone. Digit length decides
+nothing in either direction, which is what keeps two things simultaneously
+true: AquaStar's eight-digit best-before dates are gone from the barcode field,
+and **Cocktail Shrimp's source-printed ELEVEN-digit UPC `19434612191` is
+preserved verbatim** — no leading zero is invented to make it a valid length,
+and it is not dropped for failing to be one. Leading zeroes survive throughout
+(`011110626196`).
+
+Nothing is lost: each rejected value is still extracted, under the date label
+that owns it, and still renders in its Best by cell.
+
+**The values, from the pre-fix production audit (historical).** Six notices
+carried a date- or lot-labelled value in the barcode field: the AquaStar
+combined notice (`10222027`, `10232027`, `11072027`, `11082027`, `11132027`,
+`11152027`), AquaStar Skewers (`11072027`, `11082027`), D. Coluccio
+(`15012025`, `29052025`, under `BBD`), Stonewall Kitchen (`03102025`, under
+Best By), Water Lilies — FSIS (`07122017`, `07122016`, under best-by /
+packaging date), and Hearty Acquisitions (`03222024`, under `lot #`). The
+recorded fixture corpus contains **no** case of this shape, which is why the
+bounded regression fixtures exist
+(`src/server/{fda,fsis}/fixtures/identifier-ownership-notices.json`). Those
+fixtures distinguish two grades of evidence on purpose: bounded verbatim
+excerpts from archived source snapshots, which drive the extractor end to end,
+and an **audit ledger** for the four notices whose payload was never archived —
+recording the exact values and the governing label, with the source wording
+deliberately absent rather than reconstructed.
+
+#### D. Identifier-list punctuation — P3C-1 (implemented)
 
 Machine identifier lists should not carry a natural-language final
 conjunction. Desired display:
@@ -653,7 +740,43 @@ prose and in geography, where they are correct.
 P3C must first establish whether the conjunction is **stored data** or
 **presentation-time list joining**, and fix the shared owner accordingly.
 
-#### E. Recall quantity paragraph consistency (pending)
+**Established: presentation-time joining.** No stored value carries a
+conjunction; `joinFactValues` (`src/lib/consumer-projection.ts`) added one when
+composing a field's display text. It is now **field-aware by construction** —
+the decision is made from the CONCEPT, which is what determines the approved
+field, so no caller can get it wrong. Barcode/UPC, lot codes, batch codes,
+production codes, case codes, item numbers and every structured date (best by,
+use by, sell by, expiration, production date) separate with commas only. The
+two approved fields that hold ordinary phrases, **Size and Packaging**, keep
+their grammar, and `joinValues` — the prose joiner used by geography, allergen
+lists and summaries — is untouched. Values themselves are never mutated:
+leading zeroes and the spacing inside a printed code survive exactly.
+
+A two-value list is included — `10662 5139, 10662 5140`, not `10662 5139 and
+10662 5140` — so a short list and a long one read alike.
+
+**The same-month date collapse is removed** (founder decision, P3C-1 final).
+Five production dates that once read `July 11, 15, 16, 18, and 22, 2026` now
+read `July 11, 2026, July 15, 2026, July 16, 2026, July 18, 2026, July 22,
+2026`, and two same-month best-by days read `November 19, 2027, November 20,
+2027`. Every successfully parsed calendar date keeps its own month, day and
+year, because a shopper checks one printed marking at a time and compares it
+character by character; a shared month with a bare day is a sentence about the
+set, not a value to match against a package. It applies to Best by, Use by,
+Sell by, Expiration and the structured production-date list — the whole
+structured-date family, decided in the one owner (`joinFactValues`).
+
+Nothing else in the date model moved: a **range** is one value and is never
+split into its endpoints (`July 20–August 17, 2026`), an unsupported marking is
+still preserved verbatim beside the parsed dates, announced/updated dates and
+prose are untouched, and no value is altered — only how whole dates are joined.
+
+Measured over every recorded FDA and FSIS notice: **608 structured cells lost a
+final conjunction** and **23 date cells across 13 notices lost the collapse** —
+the individual values in every one of them are byte-identical before and
+after, and no non-date field changed.
+
+#### E. Recall quantity paragraph consistency — P3C-1 (implemented)
 
 A source-supported quantity sentence belongs in the normal What Happened
 paragraph, not in a muted disclaimer-like line beneath it. Observed
@@ -671,9 +794,32 @@ quantity (the existing `quantityLine` omission rule above). The quantity is
 **preserved**, not dropped — it is useful consumer context. The fix belongs to
 the shared presentation/model owner, never to styling an individual notice.
 
-#### F. Investigation boundary (required before any P3C implementation)
+**Implemented (P3C-1), by removing the presentation path rather than
+restyling it.** `DetailModel.quantityLine` is gone. The model now assembles the
+narrative itself (`detailNarrative`, `src/lib/recall-presentation.ts`): the
+reason sentence, then a source-supported quantity sentence the reason did not
+already state, as one paragraph — and the illness-status sentence renders after
+it, so the order a reader always gets is **reason → quantity → illness**, all
+in the same body type. The screen has no quantity slot to style, mute, or
+reorder, which `recall-presentation-wiring.test.ts` pins.
 
-P3C begins with a source-backed audit:
+The two standing rules are unchanged: the FSIS `quantityText` field is the
+amount **recovered** and is still deliberately not consumer-rendered, and a
+figure the reason already carries is still suppressed so the paragraph can
+never state it twice. Measured over the recorded corpus, all **7** muted lines
+became narrative sentences — none dropped, none duplicated.
+
+#### F. Investigation boundary (met for P3C-1; still required for P3C-2)
+
+P3C begins with a source-backed audit. **For P3C-1 this completed**: the audit
+traced every product, date, barcode, code and quantity on the AquaStar,
+Mercado and Dynarex notices from the archived official payloads through
+parsing, projection, presentation model and screen; all four defects proved
+**display-only**, so the canonical-data delta is zero and no production repair,
+migration, cache bump, re-projection or notification is needed. The boundary
+below still governs P3C-2, which has not begun.
+
+The audit steps:
 
 1. Inspect the complete archived official payloads for the three AquaStar
    notices and Dynarex.

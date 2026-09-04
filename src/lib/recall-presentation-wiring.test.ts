@@ -91,11 +91,39 @@ test('Detail renders from the presentation model, not its own formatting', () =>
   assert.match(DETAIL, /model\.activity\.text/);
   assert.match(DETAIL, /model\.whatHappened\.text/);
   assert.match(DETAIL, /model\.illnessLine/);
-  assert.match(DETAIL, /model\.quantityLine/);
   assert.match(DETAIL, /model\.officialSource\.label/);
   assert.match(DETAIL, /model\.affectsYouBanner/);
   // Optional sections are read from the model's OWN visibility decision.
   assert.match(DETAIL, /model\.sections/);
+});
+
+test('the recall quantity is narrative the model composed, never screen styling (P3C-1)', () => {
+  // The quantity sentence belongs to What Happened, in the same body type as
+  // the reason it follows. The screen has no quantity slot at all: it cannot
+  // compose one, cannot mute one, and cannot order it after the illness
+  // status. `recall-presentation.test.ts` pins the model side — that the
+  // narrative ends with the quantity sentence when the source states one.
+  assert.ok(!DETAIL.includes('quantityLine'), 'Detail styles a standalone quantity line');
+  assert.ok(!DETAIL.includes('The recall covers'), 'Detail composes quantity copy of its own');
+  assert.ok(!DETAIL.includes('quantityText'), 'Detail reads the raw quantity fact');
+  assert.ok(!DETAIL.includes('detailNarrative('), 'Detail assembles the narrative itself');
+  // The narrative renders BEFORE the illness status, so the order a reader
+  // gets is reason, quantity, illness.
+  assert.ok(
+    DETAIL.indexOf('model.whatHappened.text') < DETAIL.indexOf('model.illnessLine'),
+    'the illness status renders before the narrative',
+  );
+  // And nothing in What Happened is muted secondary text except the Update
+  // line the P1 contract put there.
+  const section = DETAIL.slice(
+    DETAIL.indexOf('<Section title="What happened">'),
+    DETAIL.indexOf('{/* Where it was sold'),
+  );
+  assert.equal(
+    section.match(/themeColor="textSecondary"/g)?.length ?? 0,
+    1,
+    'What happened carries a second muted line',
+  );
 });
 
 test('Detail introduces none of the disallowed dead controls', () => {

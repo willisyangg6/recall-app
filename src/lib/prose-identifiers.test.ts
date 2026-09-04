@@ -168,9 +168,11 @@ test('Everything Sprouts: an ampersand-joined lot list yields four clean codes',
   // The connector must not survive anywhere in a rendered identifier.
   assert.ok(!lots.some((lot) => /[&]|\band\b/i.test(lot)), lots.join(' | '));
   assert.deepEqual(values(summary, 'upc'), ['087906000075']);
-  // And what the shopper actually reads: "223, 226, 230, and & 233" before.
+  // And what the shopper actually reads: "223, 226, 230, and & 233" before
+  // the separator policy landed, and before P3C-1 dropped the conjunction a
+  // machine identifier list should never have carried.
   const fields = rendered(summary);
-  assert.equal(fields.get('lotCodes'), '223, 226, 230, and 233');
+  assert.equal(fields.get('lotCodes'), '223, 226, 230, 233');
   assert.equal(fields.get('upc'), '087906000075');
 });
 

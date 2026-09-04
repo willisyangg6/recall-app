@@ -1,0 +1,161 @@
+{
+  "capturedAt": "2026-09-04",
+  "what": "P3C-1 identifier-ownership regressions: the notices whose printed best-by, packaging and lot markings were promoted into the Barcode (UPC) field because their digit runs happened to be a UPC-compatible length.",
+  "provenance": "Two kinds of evidence, deliberately distinguished. `excerpts` are bounded verbatim announcement text from archived FDA source snapshots, and drive the shared extractor end to end. `auditLedger` records notices the pre-fix production audit measured but whose payload was NOT archived: it holds the exact values that rendered in the barcode field and the label the audit found governing each one — the source wording is not stated here because it was never captured, and nothing in this file is reconstructed or invented.",
+  "excerpts": [
+    {
+      "key": "aquastarCombined",
+      "nativeTitle": "Aquastar (USA) Corp Recalls Kroger Frozen Raw EZ Peel, Kroger Mercado Frozen Cooked Shrimp, and Aquastar Raw Shrimp Skewers Because of Possible Health Risk",
+      "officialUrl": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/aquastar-usa-corp-recalls-kroger-frozen-raw-ez-peel-kroger-mercado-frozen-cooked-shrimp-and-aquastar",
+      "provenance": "Bounded verbatim excerpt of the announcement text preserved in this notice's archived FDA source snapshot, read during the read-only P3C audit on 2026-09-04. Only the sentences that state the recall quantity and the package identifiers are kept — this is NOT a recorded page, and it does not extend full-snapshot corpus coverage.",
+      "excerpt": "September 19, 2025, AquaStar (USA) Corp of Seattle, WA is recalling:\napproximately 49,920 bags (net wt. 2lbs) of Kroger Raw Colossal EZ Peel Shrimp.\napproximately 18,000 bags (net wt. 2lbs) of Kroger Mercado Cooked Medium Peeled Tail-Off Shrimp.\napproximately 17,264 bags (net wt. 1.25lbs) of AquaStar Raw Peeled Tail-on Shrimp Skewers because they may have been prepared, packed, or held under insanitary conditions whereby they may have become contaminated with cesium-137 (Cs-137).\nThe recalled Kroger Raw Colossal EZ Peel Shrimp net wt. 2lbs., is packaged in transparent printed bag with a blue band on the top with yellow and red details, and has the following codes:\nUPC 20011110643906, lot code 10662 5085 10, Best If Used By: 03 26 27\nUPC 20011110643906, lot code 10662 5097 11, Best If Used By: 04 07 27\nUPC 20011110643906, lot code 10662 5106 11, Best If Used By: 04 16 27\nUPC 20011110643906, lot code 10662 5107 10, Best If Used By: 04 17 27\nUPC 20011110643906, lot code 10662 5111 11, Best If Used By: 04 21 27\nUPC 20011110643906, lot code 10662 5112 10, Best If Used By: 04 22 27\nUPC 20011110643906, lot code 10662 5113 10, Best If Used By: 04 23 27\nUPC 20011110643906, lot code 10662 5113 11, Best If Used By: 04 23 27\nUPC 20011110643906, lot code 10662 5114 10, Best If Used By: 04 24 27\nUPC 20011110643906, lot code 10662 5114 11, Best If Used By: 04 24 27\nThe recalled Kroger Mercado Cooked Medium Peeled Tail-Off Shrimp, net wt. 2lbs., is packaged in clear plastic bag and has a white label with green stripes on top of each bag and has the following codes:\nUPC 011110626196, lot code 10662 5112 11, Best Before: 10 22 2027\nUPC 011110626196, lot code 10662 5113 10, Best Before: 10 23 2027\nThe recalled AquaStar Raw Peeled Tail-on Shrimp Skewers; net wt. 1.25 lbs., is packaged in a printed bag with a black top and blue bottom and printed pictures of the skewers inside, and has the following codes:\nUPC 731149390010, lot code 10662 5127 10, Best If Used By: 11 07 2027\nUPC 731149390010, lot code 10662 5128 11, Best If Used By: 11 08 2027\nUPC 731149390010, lot code 10662 5133 11, Best If Used By: 11 13 2027\nUPC 731149390010, lot code 10662 5135 10, Best If Used By: 11 15 2027",
+      "expect": {
+        "note": "One UPC label governs each line; the \"Best If Used By\" and \"Best Before\" markings on the same line are eight digits long and were the false barcodes.",
+        "barcodes": [
+          "20011110643906",
+          "011110626196",
+          "731149390010"
+        ],
+        "rejectedAsBarcode": [
+          "10 22 2027",
+          "10 23 2027",
+          "11 07 2027",
+          "11 08 2027",
+          "11 13 2027",
+          "11 15 2027"
+        ],
+        "fields": {
+          "bestBy": "March 26, 2027, April 7, 2027, April 16, 2027, April 17, 2027, April 21, 2027, April 22, 2027, April 23, 2027, April 24, 2027, October 22, 2027, October 23, 2027, November 7, 2027, November 8, 2027, November 13, 2027, November 15, 2027",
+          "upc": "20011110643906, 011110626196, 731149390010",
+          "lotCodes": "10662 5085 10, 10662 5097 11, 10662 5106 11, 10662 5107 10, 10662 5111 11, 10662 5112 10, 10662 5113 10, 10662 5113 11, 10662 5114 10, 10662 5114 11, 10662 5112 11, 10662 5127 10, 10662 5128 11, 10662 5133 11, 10662 5135 10"
+        },
+        "quantity": {
+          "statedInExcerpt": "49,920 bags",
+          "narrativeSentence": "The recall covers 49,920 bags."
+        }
+      }
+    },
+    {
+      "key": "aquastarSkewers",
+      "nativeTitle": "AquaStar (USA) Corp Recalls AquaStar Raw Shrimp Skewers Because of Possible Health Risk",
+      "officialUrl": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/aquastar-usa-corp-recalls-aquastar-raw-shrimp-skewers-because-possible-health-risk",
+      "provenance": "Bounded verbatim excerpt of the announcement text preserved in this notice's archived FDA source snapshot, read during the read-only P3C audit on 2026-09-04. Only the sentences that state the recall quantity and the package identifiers are kept — this is NOT a recorded page, and it does not extend full-snapshot corpus coverage.",
+      "excerpt": "September 23, 2025, AquaStar (USA) Corp of Seattle, WA is recalling approximately 8,000 bags (net wt. 1.25lbs) of AquaStar Raw Peeled Tail-on Shrimp Skewers (see photo), imported from Indonesia, because they may have been prepared, packed, or held under insanitary conditions whereby they may have become contaminated with cesium137 (Cs-137).\nThe recalled item is packaged in a printed bag with a black top and blue bottom, along with a printed image of the skewers inside. It is labeled with the following UPC, lot codes and “Best If Used By” dates, which can be found on the back of the bag.\nUPC 731149390010, lot code 10662 5127 10, Best If Used By: 11 07 2027\nUPC 731149390010, lot code 10662 5128 11, Best If Used By: 11 08 2027",
+      "expect": {
+        "barcodes": [
+          "731149390010"
+        ],
+        "rejectedAsBarcode": [
+          "11 07 2027",
+          "11 08 2027"
+        ],
+        "fields": {
+          "bestBy": "November 7, 2027, November 8, 2027",
+          "upc": "731149390010",
+          "lotCodes": "10662 5127 10, 10662 5128 11"
+        },
+        "quantity": {
+          "statedInExcerpt": "8,000 bags",
+          "narrativeSentence": "The recall covers 8,000 bags."
+        }
+      }
+    },
+    {
+      "key": "aquastarCocktail",
+      "nativeTitle": "Aquastar (USA) Corp Recalls Cocktail Shrimp 6oz Because of Possible Health Risk",
+      "officialUrl": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/aquastar-usa-corp-recalls-cocktail-shrimp-6oz-because-possible-health-risk",
+      "provenance": "Bounded verbatim excerpt of the announcement text preserved in this notice's archived FDA source snapshot, read during the read-only P3C audit on 2026-09-04. Only the sentences that state the recall quantity and the package identifiers are kept — this is NOT a recorded page, and it does not extend full-snapshot corpus coverage.",
+      "excerpt": "August 28, 2025, AquaStar (USA) Corp of Seattle, WA is recalling approximately 26,460 packages of Cocktail Shrimp 6oz (see photo), imported from Indonesia, because they may have been prepared, packed, or held under insanitary conditions whereby they may have become contaminated with cesium-137 (Cs-137).\nThe affected Cocktail Shrimp 6oz is packaged in a clear plastic tray and has a red and white label. The recalled product has the UPC 19434612191 and the Lot Codes 10662 5106, 10662 5107, 10662 5124, and 10662 5125 at the bottom of plastic tray.",
+      "expect": {
+        "note": "The source prints an ELEVEN-digit UPC. It is preserved exactly as printed: no leading zero is invented to reach a valid barcode length, and it is not dropped for failing one.",
+        "barcodes": [
+          "19434612191"
+        ],
+        "rejectedAsBarcode": [],
+        "fields": {
+          "upc": "19434612191",
+          "lotCodes": "10662 5106, 10662 5107, 10662 5124, 10662 5125"
+        },
+        "quantity": {
+          "statedInExcerpt": "26,460 packages",
+          "narrativeSentence": "The recall covers 26,460 packages."
+        }
+      }
+    },
+    {
+      "key": "krogerMercado",
+      "nativeTitle": "Aquastar (USA) Corp Recalls Kroger Mercado Frozen Cooked Shrimp Because of Possible Health Risk",
+      "officialUrl": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/aquastar-usa-corp-recalls-kroger-mercado-frozen-cooked-shrimp-because-possible-health-risk",
+      "provenance": "Bounded verbatim excerpt of the announcement text preserved in this notice's archived FDA source snapshot, read during the read-only P3C audit on 2026-09-04. Only the sentences that state the recall quantity and the package identifiers are kept — this is NOT a recorded page, and it does not extend full-snapshot corpus coverage.",
+      "excerpt": "August 27, 2025, AquaStar (USA) Corp of Seattle, WA is recalling approximately 18,000 bags (net wt. 2lbs) of Kroger Mercado Cooked Medium Peeled Tail-Off Shrimp because they may have been prepared, packed, or held under insanitary conditions whereby they may have become contaminated with cesium-137 (Cs-137).\nThe recalled Kroger Mercado Cooked Medium Peeled Tail-Off Shrimp, net wt. 2lbs., is packaged in clear plastic bag and has a white label with green stripes on top of each bag and has the following codes:\nUPC 011110626196, Lot code 10662 5139, Best Before 11/19/2027\nUPC 011110626196, Lot code 10662 5140, Best Before 11/20/2027\n“Kroger Mercado Shrimp Pieces label, Best Before 11  19  2027”\n“Mercado Shrimp Pieces label, Best Before 11  20  2027”",
+      "captionProvenance": "The last two lines are the verbatim alt text of two official FDA product photos in the same archived snapshot. They are included because they state the SAME two best-before days in a second spelling (\"11  19  2027\"), which is what the mixed-spelling deduplication has to resolve.",
+      "expect": {
+        "note": "The leading zero of 011110626196 is significant and survives. The prose states 11/19/2027 and the photo captions state the same day as 11  19  2027; the two spellings are one calendar day and render once, and each of the two days renders as a COMPLETE date (no same-month collapse).",
+        "barcodes": [
+          "011110626196"
+        ],
+        "rejectedAsBarcode": [],
+        "fields": {
+          "bestBy": "November 19, 2027, November 20, 2027",
+          "upc": "011110626196",
+          "lotCodes": "10662 5139, 10662 5140"
+        },
+        "quantity": {
+          "statedInExcerpt": "18,000 bags",
+          "narrativeSentence": "The recall covers 18,000 bags."
+        }
+      }
+    },
+    {
+      "key": "dynarex",
+      "nativeTitle": "Dynarex Corporation Expands Recall to Include Additional Products Due to Possible Health Risk",
+      "officialUrl": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/dynarex-corporation-expands-recall-include-additional-products-due-possible-health-risk",
+      "provenance": "Bounded verbatim excerpt of the announcement text preserved in this notice's archived FDA source snapshot, read during the read-only P3C audit on 2026-09-04. Only the sentences that state the recall quantity and the package identifiers are kept — this is NOT a recorded page, and it does not extend full-snapshot corpus coverage.",
+      "excerpt": "Montvale, NJ, October 28, 2024 — Dynarex Corporation is expanding the recall initiated on September 19, 2024 , to include an additional 373 cases of item number 4875, Dynacare Baby Powder, 14 oz., as well as 647 cases of item number 4874, Dynacare Baby Powder, 4 oz ., because they have the potential to be contaminated with asbestos. Asbestos is a naturally occurring mineral that is often found near talc, an ingredient in many cosmetic products. Asbestos, however, is a known carcinogen and its health risks are well-documented. If talc mining sites are not carefully chosen or if proper steps are not taken to adequately purify the talc ore, it may contain asbestos.\nBoth the 4875 and 4874 Baby Powder products are packaged in plastic bottles, 24 bottles to a case for the 14 oz. and 48 to a case for the 4 oz., with lot/batch numbers located on the bottom of the bottle and on each case (see images below).",
+      "expect": {
+        "note": "No barcode is stated anywhere in this notice. It is here for the quantity narrative, and for the deferred day-first Mfg. Dt./Exp. Dt. columns recorded below.",
+        "barcodes": [],
+        "rejectedAsBarcode": [],
+        "fields": {},
+        "quantity": {
+          "statedInExcerpt": "373 cases",
+          "narrativeSentence": "The recall covers 373 cases."
+        }
+      },
+      "deferred": "The notice's product table carries \"Mfg. Dt.\" and \"Exp. Dt.\" columns whose values are DAY-first (\"01.11.2023\"). A month-first reading would misstate them, so those columns stay unsupported and hidden (P3C-1 deliberately adds no label support for them)."
+    }
+  ],
+  "auditLedger": [
+    {
+      "agency": "FDA",
+      "nativeTitle": "D. Coluccio & Sons, Issues Allergy Alert on Undeclared Almonds in “Colussi Cantuccini Chocolate Drops Cookies”",
+      "officialUrl": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/d-coluccio-sons-issues-allergy-alert-undeclared-almonds-colussi-cantuccini-chocolate-drops-cookies",
+      "renderedAsBarcode": [
+        "15-01-2025",
+        "29-05-2025"
+      ],
+      "governingLabel": "BBD",
+      "evidence": "Pre-fix production audit, 2026-09-04: the Barcode (UPC) cell read \"8002590006020, 15012025, and 29052025\", and the Lot code cell of the same row read \"’s 3540152 BBD 15-01-2025 and L354150 BBD 29-05-2025\" — the two dates are published under BBD labels."
+    },
+    {
+      "agency": "FDA",
+      "nativeTitle": "Stonewall Kitchen Issues Allergy Alert for Wheat in Limited Quantity of Gluten Free Cinnamon Sugar Doughnut Mix",
+      "officialUrl": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/stonewall-kitchen-issues-allergy-alert-wheat-limited-quantity-gluten-free-cinnamon-sugar-doughnut",
+      "renderedAsBarcode": [
+        "03-10-2025"
+      ],
+      "governingLabel": "Best By",
+      "evidence": "Pre-fix production audit, 2026-09-04: the Barcode (UPC) cell read \"711381313329 and 03102025\" on a row that also renders a Best by column."
+    },
+    {
+      "agency": "FDA",
+      "nativeTitle": "Hearty Acquisitions Llc Issues Allergy Alert on Undeclared Soy in Tomato Basil with Rice Exp 3/22/2024",
+      "officialUrl": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/hearty-acquisitions-llc-issues-allergy-alert-undeclared-soy-tomato-basil-rice-exp-3222024",
+      "renderedAsBarcode": [
+        "03222024"
+      ],
+      "governingLabel": "lot #",
+      "evidence": "Pre-fix production audit, 2026-09-04: the Barcode (UPC) cell read \"635508547872 and 03222024\" on a row that also renders Expiration and Lot code columns."
+    }
+  ]
+}

@@ -81,3 +81,22 @@ To expand it: fetch the live API once (see `scripts/ingest-fsis.ts` fetch
 module), append the verbatim raw records here, and add hand-verified
 expectations to `EXPECTED` in the benchmark test for any new difficult class —
 label only what you have checked against the official source text.
+
+## Identifier ownership (P3C-1)
+
+`identifier-ownership-notices.json` holds the FSIS half of the P3C-1
+barcode-ownership finding: **one** notice (Water Lilies Food Inc.) whose
+printed best-by / packaging dates rendered in the Barcode (UPC) field before
+the fix.
+
+It is an **audit ledger only**. No FSIS payload was archived for that notice,
+so its source wording is deliberately absent rather than reconstructed; the
+entry holds the official URL, the native title, the exact values, and the
+governing label the pre-fix production audit measured on 2026-09-04.
+
+The recorded FSIS corpus states no UPC in prose at all (0 of the 66 benchmark
+records mention one), so the guard cannot be exercised against recorded FSIS
+text. What `src/server/fsis/identifier-ownership.test.ts` does run offline is
+the whole recorded FSIS corpus through the shared owner, asserting that no
+date-shaped value reaches a barcode field — plus the ledger entry's own
+labels against the shared ownership vocabulary.

@@ -183,6 +183,84 @@ function cleanValue(value: string): string {
   );
 }
 
+/**
+ * The labels that COMPETE with a barcode label for ownership of a printed
+ * value, built from this module's own label vocabulary rather than a second
+ * keyword list: every label above that means something other than a barcode,
+ * plus the printed abbreviations a package carries instead of the spelled-out
+ * words. `BBD`/`BBE`/`BB` and a bare `EXP` are how notices print a best-before
+ * or expiration marking (D. Coluccio's `BBD 15-01-2025`), and "packaging date"
+ * is the wording FSIS uses beside a best-by date (Water Lilies).
+ */
+const COMPETING_LABEL = new RegExp(
+  `\\b(?:${[
+    ...LABEL_PATTERNS.filter(([, concept]) => concept !== 'upc').map(([pattern]) => pattern),
+    'packaging[- ]?dates?',
+    // The printed abbreviations, closed to a letter so "expands" is not a
+    // label and "Bubba" holds no "BB".
+    '(?:bbd|bbe|bb|exp)(?![a-z])',
+  ]
+    .map((pattern) => `(?:${pattern})`)
+    .join('|')})`,
+  'gi',
+);
+
+/** The barcode labels, from the same vocabulary. */
+const BARCODE_LABEL = new RegExp(
+  `\\b(?:${LABEL_PATTERNS.filter(([, concept]) => concept === 'upc')
+    .map(([pattern]) => `(?:${pattern})`)
+    .join('|')})`,
+  'gi',
+);
+
+/**
+ * True when the label GOVERNING this position in the sentence is a barcode
+ * label — or when no label governs it at all, which is the ordinary
+ * continuation case ("with UPC #199284530959 (4oz) and #199284306226 (12oz)",
+ * where the one UPC label owns both values).
+ *
+ * Ownership is positional and bounded: the nearest label to the LEFT of the
+ * value wins, exactly as a reader resolves it. That is what stops a digit run
+ * the source explicitly published as a best-by date, a packaging date, or a
+ * lot code from also becoming a barcode because its digits happen to be
+ * eight, twelve, thirteen or fourteen long. Digit length decides nothing here.
+ */
+export function barcodeLabelGoverns(sentence: string, index: number): boolean {
+  const before = sentence.slice(0, index);
+  const last = (pattern: RegExp): number => {
+    let end = -1;
+    for (const match of before.matchAll(pattern)) end = match.index + match[0].length;
+    return end;
+  };
+  const competing = last(COMPETING_LABEL);
+  if (competing === -1) return true;
+  return last(BARCODE_LABEL) > competing;
+}
+
+/**
+ * True when an earlier, LABEL-ANCHORED pass already published this exact span
+ * under a label that is not a barcode.
+ *
+ * The label-anchored passes are the module's strongest evidence — a value is
+ * there only because the source's own words introduced it — so a span already
+ * claimed by one of them is settled. It catches the case positional ownership
+ * cannot: a value stated under its label somewhere the sentence split does not
+ * reach.
+ */
+function claimedByAnotherLabel(facts: SemanticFact[], run: string): boolean {
+  const needle = run.trim();
+  if (needle === '') return false;
+  const delimited = new RegExp(
+    `(?:^|[^\\w-])${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^\\w-]|$)`,
+  );
+  return facts.some((fact) => {
+    if (fact.concept === 'upc') return false;
+    return [fact.value, fact.raw ?? ''].some(
+      (span) => span.trim() === needle || delimited.test(span),
+    );
+  });
+}
+
 export interface ProseIdentifierResult {
   facts: SemanticFact[];
   /** True when the notice explicitly states the product carries no codes. */
@@ -537,12 +615,19 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
 
   // Barcode continuation lists: "with UPC #199284530959 (4oz) and #199284306226
   // (12oz)" repeats the value but not the label, so a label-anchored match
-  // finds only the first. Within a sentence that names UPC, every run of
-  // digits that is a valid barcode length is a barcode — nothing shorter or
-  // longer is ever promoted, so package sizes and lot numbers cannot qualify.
+  // finds only the first. Within a sentence that names UPC, a run of digits of
+  // a valid barcode length continues that label — but ONLY where no other
+  // label already owns it. A UPC-compatible length is not evidence of
+  // anything: AquaStar prints "Best Before: 10 22 2027" beside its barcodes,
+  // and eight digits made that date a second barcode on the shelf-check the
+  // consumer is asked to perform.
   for (const sentence of summaryText.split(/(?<=[.!?])\s+|\n/)) {
     if (!/\bU\.?P\.?C\.?\b/i.test(sentence)) continue;
     for (const run of sentence.matchAll(/#?\b(\d[\d\s-]{6,17}\d)\b/g)) {
+      // Ownership first, in both the forms this module can prove it: the label
+      // governing this position, and the label-anchored facts already emitted.
+      if (run.index !== undefined && !barcodeLabelGoverns(sentence, run.index)) continue;
+      if (claimedByAnotherLabel(facts, run[1])) continue;
       // A caption like "UPC Bottom of Package:2 041548816678" puts a stray
       // digit against the barcode, and 1 + 12 digits is itself a valid EAN-13
       // length — so the corrupted value would pass. When one whitespace-

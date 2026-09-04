@@ -1154,12 +1154,20 @@ export interface DetailSections {
 // ── Quantity ────────────────────────────────────────────────────────────────
 
 /**
- * The complete authoritative recall quantity as one sentence, or null. FDA
- * only: the FSIS `quantityText` field is the amount RECOVERED — a different
- * fact — and is deliberately not shown (standing decision). Omitted when the
- * What Happened prose already carries the same figure, and never truncated.
+ * The complete authoritative recall quantity as one sentence, or null.
+ *
+ * FDA only: the FSIS `quantityText` field is the amount RECOVERED — a
+ * different fact — and is deliberately not shown (standing decision). Omitted
+ * when the What Happened narrative already carries the same figure, and never
+ * truncated.
+ *
+ * This is a NARRATIVE sentence, not a separate presentation slot. It belongs
+ * to the What Happened paragraph, in the same voice and the same body type as
+ * the reason sentence beside it — how much was recalled is consumer context,
+ * not a disclaimer. `detailNarrative` below is the one place it is composed;
+ * no screen assembles or styles it.
  */
-export function quantityLine(
+export function recallQuantitySentence(
   sourceAgency: SourceAgency,
   quantityText: string | null,
   whatHappenedText: string,
@@ -1179,6 +1187,19 @@ export function quantityLine(
   const figure = text.match(/[\d,]+/)?.[0];
   if (figure && whatHappenedText.includes(figure)) return null;
   return `The recall covers ${text}.`;
+}
+
+/**
+ * The What Happened narrative, assembled once by the model.
+ *
+ * The reason sentence leads; a source-supported quantity the reason did not
+ * already state follows it, in the same paragraph. The illness-status sentence
+ * renders after this narrative, so the order a reader gets is always: what
+ * happened, how much, who got sick. The screen renders the finished text and
+ * composes nothing.
+ */
+export function detailNarrative(reasonText: string, quantitySentence: string | null): string {
+  return quantitySentence ? `${reasonText} ${quantitySentence}` : reasonText;
 }
 
 // ── Home card model ─────────────────────────────────────────────────────────
@@ -1253,9 +1274,14 @@ export interface DetailModel {
   affectsYou: boolean;
   /** The generic approved banner text, shown iff `affectsYou`. */
   affectsYouBanner: string;
+  /**
+   * The complete What Happened narrative (P3C-1): the reason sentence plus,
+   * when the source states one the reason did not already carry, the recall
+   * quantity — one paragraph, one voice. There is deliberately no separate
+   * quantity field for a screen to style on its own.
+   */
   whatHappened: { text: string; update: string | null };
   illnessLine: string | null;
-  quantityLine: string | null;
   /**
    * The complete evidence models. These are PRESERVED SOURCE EVIDENCE for
    * traceability, matching, and later milestones — they are NOT the render
@@ -1377,9 +1403,14 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     heroImageUrl,
     affectsYou: context.affectsYou,
     affectsYouBanner: 'Warning: This recall affects you.',
-    whatHappened: { text: happened.text, update: happened.update },
+    whatHappened: {
+      text: detailNarrative(
+        happened.text,
+        recallQuantitySentence(projection.sourceAgency, consumer.quantityText, happened.text),
+      ),
+      update: happened.update,
+    },
     illnessLine: illnessLine(classifyIllnessReport(projection.summaryText)),
-    quantityLine: quantityLine(projection.sourceAgency, consumer.quantityText, happened.text),
     whereSold: sold,
     affectedProducts: affectedProductsView,
     sections: {

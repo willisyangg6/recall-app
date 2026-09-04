@@ -81,7 +81,8 @@ test('golden Aquafaba: dates are fields, never variant identities', () => {
   assert.deepEqual(consumer.variantNames, []);
   const bestBy = consumer.packageCheck.fields.find((field) => field.key === 'bestBy');
   assert.ok(bestBy, JSON.stringify(consumer.packageCheck.fields));
-  assert.equal(bestBy.value, 'December 14, 2026 and December 12, 2027');
+  // P3C-1: a structured date cell separates with commas only.
+  assert.equal(bestBy.value, 'December 14, 2026, December 12, 2027');
   const upc = consumer.packageCheck.fields.find((field) => field.key === 'upc');
   assert.ok(upc);
   assert.deepEqual(upc.values, ['199284530959', '199284306226']);

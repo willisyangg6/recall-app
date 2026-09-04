@@ -274,7 +274,12 @@ test('golden: Dairyland jalapeños lead with real dates and keep the printed cod
   // proves its own date order. Consumers get the readable date…
   // Production dates are not a package-card row: they lead the production-code
   // disclosure, where the readable date explains the opaque code beneath it.
-  assert.equal(consumer.packageCheck.productionDates, 'July 11, 15, 16, 18, and 22, 2026');
+  // Each date renders complete: P3C-1 removed the same-month collapse, so this
+  // reads as five dates to compare rather than one month and five bare days.
+  assert.equal(
+    consumer.packageCheck.productionDates,
+    'July 11, 2026, July 15, 2026, July 16, 2026, July 18, 2026, July 22, 2026',
+  );
   assert.ok(!labelsOf(consumer).includes('Production date'));
   // …and the opaque code printed on the bag is preserved, mapped to its date,
   // because that is what they will actually compare against.

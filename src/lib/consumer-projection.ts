@@ -512,20 +512,16 @@ function displayValues(concept: ConsumerConcept, raw: string): DisplayedValue[] 
     // leave the list in the source's raw formatting.
     const parts = splitDateList(trimmed);
     // A cell can hold a date wrapped in noise ("BB 11/13/2024", "03-15-2024
-    // product of USA") or a date beside a lot code. Each part contributes only
-    // if a date can be read from it; a cell where none can falls back to the
-    // source's own wording untouched.
-    const dates = parts.map((part) => extractDate(part)).filter((date) => date !== null);
-    // With nothing parseable, keep the source's own wording — but per part, so
-    // each is type-checked on its own. Falling back to the whole cell let
-    // "10/2025 and 1365200" pass as a date because one half of it looked like
-    // one, carrying a lot number into a best-by field.
-    const values =
-      dates.length > 0
-        ? dates
-        : parts.length > 1
-          ? parts.map((part) => normalizeDateValue(part))
-          : [whole];
+    // product of USA") or a date beside a lot code. Each part contributes the
+    // date read from it, and a part no date can be read from contributes the
+    // source's own wording — never nothing. A sibling that happened to parse
+    // is not evidence about the others, and dropping the rest silently
+    // shortened the list of markings a shopper is asked to check. Keeping the
+    // fallback per part is also what stops a whole-cell fallback from letting
+    // "10/2025 and 1365200" pass as a date because one half looked like one,
+    // carrying a lot number into a best-by field; each part is type-checked on
+    // its own downstream.
+    const values = parts.map((part) => extractDate(part) ?? normalizeDateValue(part));
     return values.map((normalized) => ({
       display: normalized.display,
       canonical: normalized.canonical ?? dedupeKey(normalized.display),
@@ -724,21 +720,54 @@ function withoutVariantOwnedValues(
 }
 
 /**
+ * Concepts whose displayed values are machine data — a barcode, a printed
+ * code, or the calendar date stamped beside one — rather than English.
+ *
+ * These render as structured cells a shopper scans against a package, and a
+ * scanned list reads as data: `43240304, 230420340240, 324020340`, never
+ * `…, and 324020340`. A grammatical conjunction inside a run of identifiers
+ * reads as though it were part of the last value. The distinction is by
+ * concept, which is what makes it field-aware by construction: Size and
+ * Packaging are ordinary phrases and keep their conjunction, and prose,
+ * geography, allergens and product names never reach this joiner at all.
+ */
+const STRUCTURED_LIST_CONCEPTS = new Set<ConsumerConcept>([
+  'upc',
+  'lot',
+  'case_code',
+  'item_number',
+  'production_code',
+  ...DATE_CONCEPTS,
+]);
+
+/**
  * Join a concept's values for display.
  *
- * Dates in the same month and year collapse to one readable phrase — five
- * production dates read as "July 11, 15, 16, 18, and 22, 2026" rather than as
- * five sentences repeating the same month. Everything else joins plainly.
+ * Structured values — barcodes, printed codes, and the calendar dates stamped
+ * beside them — are separated by commas only. Everything else joins with
+ * ordinary English grammar.
+ *
+ * Dates in one month used to collapse into a single phrase ("July 11, 15, 16,
+ * 18, 22, 2026"). That is gone (P3C-1, founder decision): every parsed date in
+ * a structured cell renders as a complete date, with its own month, day and
+ * year. A shopper checks one printed marking at a time and compares it
+ * character by character; a shared month and a bare day are a sentence about
+ * the set, not a value to match. Nothing here alters a value — the collapse was
+ * the last place display text was composed from date PARTS rather than joined
+ * from whole dates.
  */
 export function joinFactValues(concept: ConsumerConcept, values: string[]): string {
-  if (values.length < 2 || !DATE_CONCEPTS.has(concept)) return joinValues(values);
-  const parsed = values.map((value) => value.match(/^([A-Z][a-z]+) (\d{1,2}), (\d{4})$/));
-  if (parsed.some((match) => match === null)) return joinValues(values);
-  const months = new Set(parsed.map((m) => m![1]));
-  const years = new Set(parsed.map((m) => m![3]));
-  if (months.size !== 1 || years.size !== 1) return joinValues(values);
-  const days = parsed.map((m) => m![2]);
-  return `${[...months][0]} ${joinValues(days)}, ${[...years][0]}`;
+  return STRUCTURED_LIST_CONCEPTS.has(concept) ? joinStructuredValues(values) : joinValues(values);
+}
+
+/**
+ * Join structured identifier or date values ("43240304, 230420340240").
+ *
+ * Separation only — no value is altered, so leading zeroes and the spacing
+ * inside a printed code survive exactly as the source stated them.
+ */
+export function joinStructuredValues(values: string[]): string {
+  return values.join(', ');
 }
 
 /** Join aggregated values into one consumer string ("12 oz, 20 oz"). */

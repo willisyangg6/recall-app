@@ -518,7 +518,13 @@ test('the complete authoritative quantity is preserved, untruncated', () => {
     }),
     { today: TODAY, affectsYou: false },
   );
-  assert.equal(model.quantityLine, 'The recall covers 120 cases of Enoki Mushroom 150g.');
+  // P3C-1: the quantity is a sentence of the What Happened narrative, not a
+  // field of its own — it reads in the same paragraph and the same body type
+  // as the reason sentence it follows.
+  assert.ok(
+    model.whatHappened.text.endsWith('The recall covers 120 cases of Enoki Mushroom 150g.'),
+    model.whatHappened.text,
+  );
   // A stored span carrying a clipped reason tail keeps its complete quantity
   // (amount, unit, product) and drops only the non-quantity clause — the
   // mid-word artifact ("…of the Fo.") can never render.
@@ -528,9 +534,11 @@ test('the complete authoritative quantity is preserved, untruncated', () => {
     }),
     { today: TODAY, affectsYou: false },
   );
-  assert.equal(
-    clipped.quantityLine,
-    'The recall covers 1,506 boxes of Goat Milk Formula Recipe Kit.',
+  assert.ok(
+    clipped.whatHappened.text.endsWith(
+      'The recall covers 1,506 boxes of Goat Milk Formula Recipe Kit.',
+    ),
+    clipped.whatHappened.text,
   );
 });
 
@@ -707,7 +715,7 @@ test('structured identifiers become items with stable, populated-only field orde
   for (const field of item.fields) assert.notEqual(field.value.trim(), '');
   assert.equal(
     item.fields.find((field) => field.key === 'lotCodes')?.value,
-    '251661, 2524061, and 251672',
+    '251661, 2524061, 251672',
   );
 });
 
