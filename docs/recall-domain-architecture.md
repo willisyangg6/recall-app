@@ -618,8 +618,11 @@ AUGUST 31`), value lists, clause-separated values, and barcodes stated in a
   excluded and code close-ups reserved for the package checker.
 - **Progressive package checking**: the checker states what matching means,
   shows a recognizable summary, and keeps identifiers behind "Do you have this
-  product?" — with a second disclosure step for large code sets (Outshine: 54
-  batch codes with their date pairing preserved). Small sets stay inline.
+  product?" — with a second step for large code sets (Outshine: 54 batch codes
+  with their date pairing preserved). Small sets stay inline. Since P3C-2 that
+  second step is always **row-local**: it is the row's own in-cell "View N
+  codes" control opening a modal of exactly that row's codes, and no code set
+  renders beneath the affected-products table at all.
 - **Persistence boundary**: V2 is entirely display-layer, derived from
   `summaryText`/`summaryHtml` already stored with every case, so all 712
   persisted FDA cases improved with **no re-ingestion**. The one exception is
@@ -646,7 +649,16 @@ relationships end to end:
   uncertain the value stays at case level rather than being invented onto a
   version. Versions are named from a product column, a photo caption, a
   transposed table's column headers (`Sura Tanmen (Unit)` / `(Case)`), or —
-  when rows differ only by brand — the brand.
+  when rows differ only by brand — the brand. Since P3C-2 a version's `name`
+  may also be **`null`**: a source row that states no product name at all is
+  still a row, keeps its own facts and its own row scope, and renders an
+  honest empty Product cell rather than a name borrowed from the recall
+  title. Three gates keep a layout artifact from becoming one — it must yield
+  an approved consumer field or its own code set, it must relate at least two
+  kinds of fact, and its table must not be a column-oriented grid (where one
+  `<tr>` holds codes belonging to several different column dates). A refused
+  row's facts widen to the recall scope with their pairings intact, exactly
+  as before.
 - **Photos carry identity**: when a table's product cells say only
   "See Image Below" and the row count matches the number of recognizable
   product photos, the agency's own ordering pairs them, and each caption names
@@ -654,7 +666,9 @@ relationships end to end:
   that version by name, most specific first.
 - **Code ↔ calendar date**: codes the source printed with their date keep the
   pairing, in every observed shape — dash-separated (`LLA616903 – 30 SEP
-2027`), parenthesized (`26192 (07/11/26)`), across a row, and down a column.
+2027`), parenthesized (`26192 (07/11/26)`), across a row, down a column, and
+  (P3C-2) along one `<li>` of a declared identifier list, which is read by the
+  same shared owner (`pairRowDatesAndCodes`) a table row is.
   Consumer-facing dates lead with the readable calendar date; the opaque
   printed code stays available beneath it, mapped to that date. Where a Julian
   pack code resolves to the same day as one reading of an ambiguous numeric

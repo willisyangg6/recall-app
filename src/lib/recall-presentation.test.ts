@@ -779,8 +779,7 @@ test('P0A fidelity crosses the presentation boundary: periods survive, the 40 lb
       ...(item.codes?.codes ?? []),
     ]),
     ...middlefield.appliesToAll.map((field) => field.value),
-    ...(middlefield.caseCodes?.codes ?? []),
-    ...(middlefield.productionCodes?.codes ?? []),
+    ...middlefield.sharedCodes.flatMap((shared) => shared.codes.codes),
   ];
   for (const value of middlefieldValues) {
     assert.ok(!/40\s*lb/i.test(value), `40 lb artefact reached presentation: ${value}`);
@@ -1751,10 +1750,11 @@ test('P3A: a row image alone never opens the section', () => {
   );
 });
 
-test('P3A: a code-only or date-only disclosure keeps the section', () => {
-  // No rows survived, but the notice DOES state case-level codes or the
-  // calendar dates its production codes stand for — supported content that
-  // still renders, so the section stays.
+test('P3C-2: a code-only or date-only notice keeps the section, as ONE table row', () => {
+  // No named row survived, but the notice DOES state recall-level codes or
+  // the calendar dates its production codes stand for. That content belongs
+  // in the table — the below-table disclosure is retired — so the section
+  // stays and the facts arrive as one anonymous evidence row.
   const codes = { count: 3, codes: ['A1', 'A2', 'A3'], pairs: [], label: 'Lot code' };
   // `render: true` with no variants and no approved case fields is the real
   // shape: the notice states recall-level codes but no per-version rows.
@@ -1767,21 +1767,198 @@ test('P3A: a code-only or date-only disclosure keeps the section', () => {
   const withCodes = affectedProductsModel(codeOnly, 'Product');
   const codeSection = affectedProductsSection(withCodes);
   assert.ok(codeSection);
-  assert.equal(codeSection!.table, null);
-  assert.equal(codeSection!.caseCodes!.count, 3);
+  const codeTable = codeSection!.table.expanded;
+  // No row has a name, so the Product column does not render at all — an
+  // honest omission, never a column of empty cells and never the recall
+  // title borrowed to fill one.
+  assert.deepEqual(
+    codeTable.columns.map((column) => column.key),
+    ['lotCodes'],
+  );
+  assert.equal(codeTable.rows.length, 1);
+  assert.equal(codeTable.rows[0].name, null);
+  // Three codes is a small set: it reads inline, with no control to tap.
+  assert.equal(codeTable.rows[0].cells[0].text, 'A1, A2, A3');
+  assert.equal(codeTable.rows[0].cells[0].codes, null);
 
   const withDates = affectedProductsModel(
     {
       ...emptyPackageCheck('structured'),
       render: true,
       hasIdentifiers: true,
-      productionDates: 'July 11, 15, and 22, 2026',
+      productionDates: 'July 11, 2026, July 22, 2026',
     },
     'Product',
   );
   const dateSection = affectedProductsSection(withDates);
   assert.ok(dateSection);
-  assert.equal(dateSection!.productionDates, 'July 11, 15, and 22, 2026');
+  const dateTable = dateSection!.table.expanded;
+  assert.deepEqual(
+    dateTable.columns.map((column) => column.key),
+    ['productionDates'],
+  );
+  assert.equal(dateTable.rows[0].cells[0].text, 'July 11, 2026, July 22, 2026');
+});
+
+test('P3C-2: a large shared code set repeats into every named row, behind its own control', () => {
+  const codes = {
+    count: 6,
+    codes: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'],
+    pairs: [],
+    label: 'Lot code',
+  };
+  const model = affectedProductsModel(
+    {
+      ...emptyPackageCheck('structured'),
+      render: true,
+      hasIdentifiers: true,
+      lotCodes: codes,
+      variants: [
+        {
+          name: 'Original',
+          fields: [
+            {
+              key: 'upc',
+              label: 'Barcode (UPC)',
+              value: '111',
+              values: ['111'],
+              raw: ['111'],
+              canonicalKeys: ['111'],
+            },
+          ],
+          rejected: [],
+          codeLocation: null,
+          lotCodes: null,
+          photo: null,
+          scope: 't0r0',
+        },
+        {
+          name: 'Spicy',
+          fields: [
+            {
+              key: 'upc',
+              label: 'Barcode (UPC)',
+              value: '222',
+              values: ['222'],
+              raw: ['222'],
+              canonicalKeys: ['222'],
+            },
+          ],
+          rejected: [],
+          codeLocation: null,
+          lotCodes: null,
+          photo: null,
+          scope: 't0r1',
+        },
+      ],
+    },
+    'Product',
+  );
+  const view = affectedProductsSection(model)!.table.expanded;
+  assert.deepEqual(
+    view.columns.map((column) => column.key),
+    ['product', 'upc', 'lotCodes'],
+  );
+  // Repetition is the contract: the same set renders in BOTH rows, each with
+  // its own control opening its own row's codes. No block below the table.
+  for (const row of view.rows) {
+    const cell = row.cells[2];
+    assert.equal(cell.codesLabel, 'View 6 codes');
+    assert.deepEqual(cell.codes!.codes, ['L1', 'L2', 'L3', 'L4', 'L5', 'L6']);
+  }
+  assert.deepEqual(
+    view.rows.map((row) => row.name),
+    ['Original', 'Spicy'],
+  );
+});
+
+test('P3C-2: a row that states its OWN codes is never overwritten by the shared set', () => {
+  const own = { count: 5, codes: ['R1', 'R2', 'R3', 'R4', 'R5'], pairs: [], label: 'Lot code' };
+  const shared = {
+    count: 7,
+    codes: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7'],
+    pairs: [],
+    label: 'Lot code',
+  };
+  const model = affectedProductsModel(
+    {
+      ...emptyPackageCheck('structured'),
+      render: true,
+      hasIdentifiers: true,
+      lotCodes: shared,
+      variants: [
+        {
+          name: 'Owns its codes',
+          fields: [],
+          rejected: [],
+          codeLocation: null,
+          lotCodes: own,
+          photo: null,
+          scope: 't0r0',
+        },
+        {
+          name: 'States none',
+          fields: [],
+          rejected: [],
+          codeLocation: null,
+          lotCodes: null,
+          photo: null,
+          scope: 't0r1',
+        },
+      ],
+    },
+    'Product',
+  );
+  const view = affectedProductsSection(model)!.table.expanded;
+  const lot = view.columns.findIndex((column) => column.key === 'lotCodes');
+  assert.deepEqual(view.rows[0].cells[lot].codes!.codes, own.codes);
+  assert.deepEqual(view.rows[1].cells[lot].codes!.codes, shared.codes);
+});
+
+test('P3C-2: a nameless row keeps an honest empty Product cell beside a named sibling', () => {
+  const field = (key: 'upc' | 'lotCodes', value: string) => ({
+    key,
+    label: key === 'upc' ? 'Barcode (UPC)' : 'Lot code',
+    value,
+    values: [value],
+    raw: [value],
+    canonicalKeys: [value],
+  });
+  const model = affectedProductsModel(
+    {
+      ...emptyPackageCheck('structured'),
+      render: true,
+      hasIdentifiers: true,
+      variants: [
+        {
+          name: 'Named version',
+          fields: [field('upc', '111')],
+          rejected: [],
+          codeLocation: null,
+          lotCodes: null,
+          photo: null,
+          scope: 't0r0',
+        },
+        {
+          name: null,
+          fields: [field('lotCodes', 'K9')],
+          rejected: [],
+          codeLocation: null,
+          lotCodes: null,
+          photo: null,
+          scope: 't0r1',
+        },
+      ],
+    },
+    'Product',
+  );
+  const view = affectedProductsSection(model)!.table.expanded;
+  // Some rows have names, so the Product column stays — and the nameless
+  // row's cell is empty rather than borrowed, invented, or dashed.
+  assert.equal(view.columns[0].key, 'product');
+  assert.equal(view.rows[0].cells[0].text, 'Named version');
+  assert.equal(view.rows[1].cells[0].text, null);
+  assert.equal(view.rows[1].name, null);
 });
 
 test('P3A: Where it was sold is absent when the geography supports no representation', () => {

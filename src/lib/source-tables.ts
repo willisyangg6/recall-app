@@ -440,8 +440,13 @@ const ROW_DATE_CONCEPTS = new Set<ConsumerConcept>([
  *
  * A barcode is deliberately not paired: a UPC identifies the product, not the
  * production run, and tying it to one date would assert something false.
+ *
+ * Exported because a table row is not the only shape a source states this
+ * relationship in: one `<li>` of a declared identifier list ("UPC …, lot code
+ * 10662 5085 10, Best If Used By: 03 26 27") is the same row, written as a
+ * sentence, and it gets the same rule from the same owner (P3C-2).
  */
-function pairRowDatesAndCodes(facts: SemanticFact[]): SemanticFact[] {
+export function pairRowDatesAndCodes(facts: SemanticFact[]): SemanticFact[] {
   const dates = facts.filter((fact) => ROW_DATE_CONCEPTS.has(fact.concept));
   const codes = facts.filter((fact) => DATED_CODE_CONCEPTS.has(fact.concept));
   if (dates.length !== 1 || codes.length === 0) return facts;

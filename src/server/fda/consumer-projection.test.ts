@@ -179,7 +179,7 @@ test('golden: Prince Bakery keeps rich neighborhood distribution and clean bread
   // the bread it actually depicts rather than to whichever came first.
   assert.ok(consumer.photos.length >= 1);
   const italianLarge = consumer.packageCheck.variants.find((v) =>
-    /Sesame Italian Bread Large/.test(v.name),
+    /Sesame Italian Bread Large/.test(v.name ?? ''),
   );
   assert.match(italianLarge?.photo?.alt ?? '', /Sesame Italian Bread Large/);
   // Very tall label photographs keep their real proportions for layout.
@@ -204,7 +204,7 @@ test('golden: Outshine hides 54 batch codes behind disclosure and surfaces the f
   assert.ok(consumer.variantNames.some((n) => /Variety Pack/.test(n)));
 
   const strawberry = consumer.packageCheck.variants[0];
-  assert.match(strawberry.name, /Strawberry/);
+  assert.match(strawberry.name ?? '', /Strawberry/);
   assert.equal(strawberry.fields.find((f) => f.key === 'upc')?.value, '041548610047');
   assert.match(strawberry.photo?.alt ?? '', /Strawberry/);
   // Each version's own dates, sorted chronologically rather than in whatever

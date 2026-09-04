@@ -27,7 +27,7 @@ import { stripHtml } from '@/domain/text';
 import { normalizeStateToken } from '@/domain/us-geography';
 import { conceptForLabel } from './consumer-concepts';
 import { extractProseIdentifiers } from './prose-identifiers';
-import type { SemanticFact } from './source-tables';
+import { pairRowDatesAndCodes, type SemanticFact } from './source-tables';
 import { packagingOnlyName, variantIdentityRejection } from './variant-identity';
 
 /** One source-declared list item, as a variant source for `buildVariants`. */
@@ -139,6 +139,17 @@ const LEAD_IN_SIZE = /\bfollowing\s+(\d+[\s-]?(?:count|ct|pack|pk))\b/i;
 const NAME_BOUNDARY =
   /(?:,\s*|\s+)(?:containing|sold|available|distributed|packaged|produced|with\s+(?:lot|batch|UPC|a\s+lot|best[-\s]|use[-\s]|sell[-\s]|expiration))\b|\.\s|\s+The\s+affected\b/i;
 
+/**
+ * A stated net weight closing a name: "… EZ Peel Shrimp net wt. 2lbs.",
+ * "… Tail-Off Shrimp, net wt. 2lbs.", "… Skewers; net wt. 1.25 lbs.". The
+ * words "net wt" are the source labelling what follows as the package size,
+ * so the measurement moves to the Size field and the product name ends where
+ * the label begins. Without this the sentence's own abbreviation period cut
+ * the name at "… Shrimp net wt" and the stated weight was lost entirely.
+ */
+const NAME_NET_WEIGHT_TAIL =
+  /[\s,;]+net\s*\.?\s*w(?:eigh)?t\.?\s*:?\s*((\d[\d.,/]*)\s*-?\s*(?:oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|fl\.?\s*oz)\b\.?)\s*[.,;]?\s*$/i;
+
 /** Trailing size(+container) on a name: "…, 1.6 oz jars". */
 const NAME_SIZE_TAIL =
   /,\s*((\d[\d./]*)\s*-?\s*(oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|fl\.?\s*oz|count|ct|pack|pk)\b\.?)\s*([a-z][a-z ]{0,20})?$/i;
@@ -192,6 +203,14 @@ function itemName(text: string): {
   let packaging: string | null = null;
   let working = text.replace(/[-–—]\s*branded/gi, '').trim();
 
+  // A labelled net weight is package-size evidence wherever the sentence's
+  // own punctuation would otherwise have ended the name inside it.
+  const netWeight = working.match(NAME_NET_WEIGHT_TAIL);
+  if (netWeight) {
+    size = netWeight[1].trim();
+    working = working.slice(0, netWeight.index).replace(/[\s,;]+$/, '');
+  }
+
   // "8-oz. glass jars containing “NAME”" — the descriptor precedes the name.
   const prefix = working.match(PACKAGE_PREFIX);
   if (prefix) {
@@ -237,8 +256,8 @@ function itemName(text: string): {
 
   // "…, 1.6 oz jars" at the end of the name is the size, not the name.
   const tail = name.match(NAME_SIZE_TAIL);
-  if (tail && tail.index !== undefined && tail.index >= 3) {
-    size = size ?? `${tail[2]} ${tail[3].toLowerCase()}`;
+  if (size === null && tail && tail.index !== undefined && tail.index >= 3) {
+    size = `${tail[2]} ${tail[3].toLowerCase()}`;
     if (tail[4] && tail[4].trim() !== '') packaging = packaging ?? tail[4].trim();
     name = name.slice(0, tail.index).replace(/[\s,]+$/, '');
   }
@@ -319,6 +338,110 @@ export function extractAffectedProductLists(summaryHtml: string | null): ListVar
       }
       out.push({ facts, scope });
     });
+  }
+  return out;
+}
+
+/**
+ * The product a declared IDENTIFIER list belongs to, read from the lead-in
+ * sentence that introduces it.
+ *
+ * AquaStar's combined announcement states three products, each followed by
+ * its own bullet list of `UPC …, lot code …, Best If Used By: …` tuples:
+ *
+ *   <p>The recalled Kroger Raw Colossal EZ Peel Shrimp net wt. 2lbs., is
+ *      packaged in … and has the following codes:</p>
+ *   <ul><li>UPC 20011110643906, lot code 10662 5085 10, …</li> … </ul>
+ *
+ * The list itself is correctly classified `identifiers` — its items are
+ * markings, not products — and before P3C-2 that meant its contents reached
+ * the consumer through the recall-wide prose path: three products' barcodes,
+ * fourteen dates and fifteen lot codes pooled into one undifferentiated row,
+ * so a shopper holding the 1.25-lb skewers matched against the colossal
+ * shrimp's codes.
+ *
+ * The lead-in paragraph is the source's own statement of who owns the list
+ * that follows it. Reading it is structural DOM ownership — the `<p>` before
+ * this `<ul>`, nothing else — never pairing by array position across
+ * unrelated lists.
+ */
+const IDENTIFIER_LIST_OWNER =
+  /\bthe\s+recalled\s+(.{4,140}?)\s*,?\s+(?:is|are|was|were|has|have|can|could|may|might|will|which|that)\b/i;
+
+/**
+ * The lead-in's own last sentence — the one that ends in the colon and hands
+ * the list off. A 240-character lead-in usually carries the tail of the
+ * paragraph before it as well ("… sold exclusively through Kroger, Meijer,
+ * and Target retail stores nationwide between 03/06/2026 and 07/13/2026."),
+ * and that sentence can mention a recalled thing of its own. Only the
+ * handing-off sentence declares ownership of the list beneath it.
+ */
+function owningSentence(lead: string): string {
+  const sentences = lead.split(/(?<=[.!?])\s+(?=[A-Z“"'])/);
+  return sentences[sentences.length - 1];
+}
+
+/**
+ * The lead-in must hand the list off as THIS product's codes. "has the
+ * following codes:" qualifies; a sentence that merely mentions a product
+ * before an unrelated list does not.
+ */
+const LEAD_IN_ITS_CODES = /\b(?:following|these)\s+(?:\w+\s+){0,2}?(?:codes?|lots?|numbers?)\b/i;
+
+/**
+ * Affected products declared as a NAMED lead-in over an identifier list
+ * (source-shape A). One variant per list — the product the lead-in names,
+ * owning every marking its own list states and no other list's.
+ *
+ * Returns [] whenever the structural evidence is absent: a list with no
+ * declaring lead-in, a lead-in that names no product, or a lead-in whose
+ * product name fails the closed identity contract. Nothing is guessed, and
+ * two lists are never merged.
+ */
+export function extractIdentifierListOwners(summaryHtml: string | null): ListVariant[] {
+  const out: ListVariant[] = [];
+  const lists = declaredLists(summaryHtml);
+  // The ownership question only exists when the announcement declares SEVERAL
+  // such lists. One list and the recall cover the same population, so making
+  // a row for it asserts nothing new — and it costs the case-level evidence
+  // the source stated elsewhere: the recorded PT Organics notice declares one
+  // list, and routing it through a row dropped the metric weight "(113 g)"
+  // that its product description preserved. Below two, the existing case path
+  // is both correct and richer.
+  if (lists.filter((list) => list.role === 'identifiers').length < 2) return out;
+  let listIndex = 0;
+  for (const list of lists) {
+    const index = listIndex++;
+    if (list.role !== 'identifiers') continue;
+    if (!LEAD_IN_ITS_CODES.test(list.lead)) continue;
+    const owner = owningSentence(list.lead).match(IDENTIFIER_LIST_OWNER);
+    if (!owner) continue;
+    const { name, size, packaging } = itemName(owner[1].trim());
+    // The same closed identity contract every other variant name passes. A
+    // lead-in that resolves to a date, a place, a code, or a package
+    // measurement names no product, and the list stays unowned.
+    if (name.length < 3 || variantIdentityRejection(name) !== null) continue;
+    // The list's own identity, derived from the source structure — never from
+    // where the list happened to fall among unrelated lists.
+    const scope = `idlist${index}`;
+    const facts: SemanticFact[] = [fact('variant', 'affected product list', name, scope)];
+    if (size) facts.push(fact('package_size', 'affected product list', size, scope));
+    if (packaging) facts.push(fact('packaging', 'affected product list', packaging, scope));
+    // Every tuple in THIS list, with its internal UPC/code/date relationships
+    // preserved as the extractor read them. Aggregation into one row per
+    // product happens downstream, where the row-local modal can still show
+    // each code beside the date the source printed with it.
+    for (const item of list.items) {
+      // One `<li>` is one row: the code it states and the date it states are
+      // the source's own pairing, and it is read by the same shared owner a
+      // table row is. A code can never acquire another item's date, and the
+      // barcode is deliberately left unpaired.
+      for (const identifier of pairRowDatesAndCodes(extractProseIdentifiers(item).facts)) {
+        facts.push({ ...identifier, scope });
+      }
+    }
+    if (facts.length === 1) continue;
+    out.push({ facts, scope });
   }
   return out;
 }

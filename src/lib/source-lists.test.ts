@@ -68,7 +68,7 @@ test('golden White Cheddar: each list item keeps its own lot code', () => {
   const variants = consumer.packageCheck.variants;
   assert.equal(variants.length, 3, JSON.stringify(variants.map((v) => v.name)));
 
-  const byName = (prefix: string) => variants.find((v) => v.name.startsWith(prefix));
+  const byName = (prefix: string) => variants.find((v) => (v.name ?? '').startsWith(prefix));
   const giftBox = byName('Williams Sonoma');
   assert.ok(giftBox);
   // "–branded" is grammar, not part of the product's name.

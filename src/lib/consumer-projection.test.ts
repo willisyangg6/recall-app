@@ -19,6 +19,7 @@ import {
   retailerHeadOfCellLine,
   toPackageFields,
 } from './consumer-projection';
+import { affectedProductsModel, affectedProductsTable } from './recall-presentation';
 import type { SemanticFact } from './source-tables';
 
 function projection(overrides: Partial<CaseProjection>): CaseProjection {
@@ -899,4 +900,97 @@ test('a reference to the notice’s own labels is not an affected version', () =
   assert.ok(packageFields(consumer).get('bestBy')?.startsWith('January 2, 2015'));
   assert.equal(consumer.quantityText, '47,112,256 pounds');
   assert.equal(consumer.packageCheck.render, true);
+});
+
+// ── P3C-2: recall-level codes only repeat where the source says they apply ──
+
+test('P3C-2 shape C: a code set beside rows that state their own codes stays unowned', () => {
+  // Two product rows, each with its own lot code, plus a loose recall-level
+  // sentence naming more. A competing owner exists, so widening the loose set
+  // into every row would invent an ownership claim — it is refused, and the
+  // table repeats nothing.
+  const consumer = buildConsumerCase(
+    projection({
+      title: 'Acme Recalls Dip',
+      summaryHtml:
+        '<table><tr><th>Product</th><th>Lot code</th></tr>' +
+        '<tr><td>Original Dip</td><td>LOTA001</td></tr>' +
+        '<tr><td>Spicy Dip</td><td>LOTB001</td></tr></table>' +
+        '<p>Other affected lot codes are LOT1001, LOT1002, LOT1003, LOT1004, LOT1005, LOT1006.</p>',
+      summaryText:
+        'Other affected lot codes are LOT1001, LOT1002, LOT1003, LOT1004, LOT1005, LOT1006.',
+    }),
+    [],
+  );
+  assert.equal(consumer.packageCheck.lotCodes, null);
+  assert.ok(
+    consumer.packageCheck.rejected.some((fact) => fact.reason === 'ambiguous-scope'),
+    'the unowned set was not recorded as ambiguous',
+  );
+  const table = affectedProductsTable(affectedProductsModel(consumer.packageCheck, 'Dip'))!;
+  assert.deepEqual(
+    table.expanded.rows.map((row) => row.name),
+    ['Original Dip', 'Spicy Dip'],
+  );
+  const lot = table.expanded.columns.findIndex((column) => column.key === 'lotCodes');
+  assert.deepEqual(
+    table.expanded.rows.map((row) => row.cells[lot].text),
+    ['LOTA001', 'LOTB001'],
+  );
+});
+
+test('P3C-2 shape C: a row-scoped residue never becomes a shared set', () => {
+  // The loose codes here came from a source ROW that failed to attach to any
+  // version. Shared scope is never inferred from a fact merely being
+  // unassigned, so the set does not widen into the rows that did attach.
+  const consumer = buildConsumerCase(
+    projection({
+      title: 'Acme Recalls Dip',
+      summaryHtml:
+        '<table><tr><th>Product</th><th>Barcode</th><th>Lot code</th></tr>' +
+        '<tr><td>Original Dip</td><td>012345678905</td><td></td></tr>' +
+        '<tr><td>10/14/2026</td><td></td><td>LOT1001, LOT1002, LOT1003, LOT1004, LOT1005, C6</td></tr></table>',
+      summaryText: '',
+    }),
+    [],
+  );
+  assert.equal(consumer.packageCheck.lotCodes, null);
+  assert.deepEqual(
+    consumer.packageCheck.variants.map((variant) => variant.name),
+    ['Original Dip'],
+  );
+});
+
+test('P3C-2 shape C: a set the source states about the whole recall repeats into every row', () => {
+  // No version carries codes, and the only statement of the kind is a
+  // scope-less recall-level sentence — exactly the shared-scope evidence the
+  // shared fields require. It repeats into both rows.
+  const consumer = buildConsumerCase(
+    projection({
+      title: 'Acme Recalls Dip',
+      summaryHtml:
+        '<table><tr><th>Product</th><th>Barcode</th></tr>' +
+        '<tr><td>Original Dip</td><td>012345678905</td></tr>' +
+        '<tr><td>Spicy Dip</td><td>012345678912</td></tr></table>' +
+        '<p>The affected lot codes are LOT1001, LOT1002, LOT1003, LOT1004, LOT1005, LOT1006.</p>',
+      summaryText:
+        'The affected lot codes are LOT1001, LOT1002, LOT1003, LOT1004, LOT1005, LOT1006.',
+    }),
+    [],
+  );
+  assert.equal(consumer.packageCheck.lotCodes?.count, 6);
+  const table = affectedProductsTable(affectedProductsModel(consumer.packageCheck, 'Dip'))!;
+  const lot = table.expanded.columns.findIndex((column) => column.key === 'lotCodes');
+  assert.equal(table.expanded.rows.length, 2);
+  for (const row of table.expanded.rows) {
+    assert.equal(row.cells[lot].codesLabel, 'View 6 codes');
+    assert.deepEqual(row.cells[lot].codes!.codes, [
+      'LOT1001',
+      'LOT1002',
+      'LOT1003',
+      'LOT1004',
+      'LOT1005',
+      'LOT1006',
+    ]);
+  }
 });

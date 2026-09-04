@@ -456,7 +456,9 @@ export function inventorySourceFacts(
     for (const code of variant.lotCodes?.codes ?? []) {
       for (const key of keysFor('lot', code)) variantKeys.add(key);
     }
-    for (const key of keysFor('variant', variant.name)) variantKeys.add(key);
+    if (variant.name !== null) {
+      for (const key of keysFor('variant', variant.name)) variantKeys.add(key);
+    }
   }
   const caseKeys = new Map<string, string>();
   for (const field of [...consumer.packageCheck.fields, ...consumer.packageCheck.sharedFields]) {
@@ -609,7 +611,14 @@ export function auditConsumerCase(
   // repeating it before every FIELD VALUE is the defect V2 removes.
   const fields = renderedFields(consumer);
   const fieldValues = fields.flatMap((field) => field.values);
-  const packageValues = [...fieldValues, ...consumer.packageCheck.variants.map((v) => v.name)];
+  // A nameless row (P3C-2) contributes no name to the copy checks — there is
+  // no rendered string to check.
+  const packageValues = [
+    ...fieldValues,
+    ...consumer.packageCheck.variants
+      .map((v) => v.name)
+      .filter((name): name is string => name !== null),
+  ];
   const renderedLabels = fields.map((field) => field.label);
   const distributionCopy = [
     consumer.distribution.areaText,
@@ -862,14 +871,41 @@ export function auditConsumerCase(
 
   // A code the source published with its calendar date must keep that date.
   const sourcePairs = extractCodeDatePairs(summary).length;
+  // A pairing survives in one of two shapes. A collapsed code set carries the
+  // date on each code explicitly. A ROW preserves it structurally: when the
+  // row states exactly one date and its own codes beside it, every code in
+  // that row is printed next to the date it belongs to, and the reader needs
+  // no second surface to see it (P3C-2 — King Arthur's nineteen rows and
+  // MedTech's five state their pairs this way, one date per row).
+  const rowStructuralPairs = consumer.packageCheck.variants.reduce((sum, variant) => {
+    const dates = variant.fields
+      .filter((field) => DATE_CONCEPTS.has(conceptForField(field.key)))
+      .flatMap((field) => field.values);
+    if (dates.length !== 1) return sum;
+    return (
+      sum +
+      variant.fields
+        .filter((field) => field.key === 'lotCodes' || field.key === 'batchCodes')
+        .reduce((codes, field) => codes + field.values.length, 0)
+    );
+  }, 0);
   const projectedPairs =
     (consumer.packageCheck.lotCodes?.pairs.length ?? 0) +
     (consumer.packageCheck.productionCodes?.pairs.length ?? 0) +
-    consumer.packageCheck.variants.reduce((sum, v) => sum + (v.lotCodes?.pairs.length ?? 0), 0);
+    consumer.packageCheck.variants.reduce((sum, v) => sum + (v.lotCodes?.pairs.length ?? 0), 0) +
+    rowStructuralPairs;
   const projectedCodes =
     (consumer.packageCheck.lotCodes?.count ?? 0) +
     (consumer.packageCheck.productionCodes?.count ?? 0) +
-    consumer.packageCheck.variants.reduce((sum, v) => sum + (v.lotCodes?.count ?? 0), 0);
+    consumer.packageCheck.variants.reduce(
+      (sum, v) =>
+        sum +
+        (v.lotCodes?.count ?? 0) +
+        v.fields
+          .filter((field) => field.key === 'lotCodes' || field.key === 'batchCodes')
+          .reduce((codes, field) => codes + field.values.length, 0),
+      0,
+    );
   if (sourcePairs >= 2 && projectedCodes > 0 && projectedPairs === 0) {
     push(
       violations,
@@ -1030,7 +1066,11 @@ export function auditConsumerCase(
   const measurable = fields
     .filter((field) => !CODE_CONCEPTS.has(conceptForField(field.key)))
     .flatMap((field) => field.values)
-    .concat(consumer.packageCheck.variants.map((variant) => variant.name));
+    .concat(
+      consumer.packageCheck.variants
+        .map((variant) => variant.name)
+        .filter((name): name is string => name !== null),
+    );
   const unformatted = measurable.find((value) => UNFORMATTED_MEASURE.test(value));
   if (unformatted) push(violations, 'unformatted-measure', 'minor', unformatted);
 
@@ -1268,7 +1308,9 @@ export function auditConsumerCase(
   // field label, or a serialized source row. The projection gates these at
   // construction; this invariant proves nothing leaks around the gate.
   const identityRejections = consumer.packageCheck.variants
-    .map((variant) => ({ name: variant.name, why: variantIdentityRejection(variant.name) }))
+    .map((variant) => variant.name)
+    .filter((name): name is string => name !== null)
+    .map((name) => ({ name, why: variantIdentityRejection(name) }))
     .filter((entry) => entry.why !== null);
   for (const entry of identityRejections.slice(0, 3)) {
     push(violations, 'invalid-variant-identity', 'critical', `${entry.why}: ${entry.name}`);

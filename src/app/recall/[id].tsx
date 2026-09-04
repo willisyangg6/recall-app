@@ -37,48 +37,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-/**
- * A collapsed set of printed codes. Large sets stay behind their own step —
- * useful, never a wall of codes — and when the source paired each code with a
- * calendar date, both are shown: the date is what a person can read, the code
- * is what is actually stamped on their package.
- */
-function CodeSet({
-  codes,
-  expanded,
-  onToggle,
-}: {
-  codes: LotCodeSet | null;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  if (!codes) return null;
-  return (
-    <View style={styles.step}>
-      <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={onToggle}>
-        <ThemedText themeColor="link" type="small">
-          {expanded
-            ? `Hide ${codes.label.toLowerCase()}s`
-            : `${codes.label}s · ${codes.count} affected — view`}
-        </ThemedText>
-      </Pressable>
-      {expanded ? (
-        <ThemedView type="backgroundElement" style={styles.identifierRow}>
-          {codes.pairs.length > 0 ? (
-            codes.pairs.map((pair) => (
-              <ThemedText key={pair.code} type="small">
-                {pair.code} · {pair.date}
-              </ThemedText>
-            ))
-          ) : (
-            <ThemedText type="small">{codes.codes.join(', ')}</ThemedText>
-          )}
-        </ThemedView>
-      ) : null}
-    </View>
-  );
-}
-
 /** The one code set a row's in-cell control has opened, for the modal. */
 interface OpenRowCodes {
   rowId: string;
@@ -233,18 +191,11 @@ function AffectedProductsTableView({
 export default function RecallDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
-  // Nested disclosure: large code sets stay collapsed inside their cards,
-  // keyed by the item they belong to so each opens independently.
-  const [openCodeSets, setOpenCodeSets] = useState<Set<string>>(new Set());
   // Whether the Affected Products table shows every row or the initial three.
+  // The only expansion state the screen holds: the retired below-table code
+  // disclosures had their own, and there is nothing beneath the table now.
   const [tableExpanded, setTableExpanded] = useState(false);
   const [prefs, setPrefs] = useState<UserRecallPreferences | null>(null);
-  const toggleCodeSet = (key: string) =>
-    setOpenCodeSets((prior) => {
-      const next = new Set(prior);
-      if (!next.delete(key)) next.add(key);
-      return next;
-    });
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -399,40 +350,23 @@ export default function RecallDetailScreen() {
         ) : null}
 
         {/* Affected Products: the gated P0A data only — no helper, coverage,
-            or disclaimer prose (P2a founder decision). P2b renders the shared
-            table model: headers once, one affected version per row, at most
-            three rows before See all (N). The table has NO shared-facts
-            section (founder decision): a fact proven to apply to every
-            version arrives repeated inside each row's cells. The official
+            or disclaimer prose (P2a founder decision). The shared table model
+            is the WHOLE section (P3C-2): headers once, one affected version
+            per row, at most three rows before See all (N). Every
+            affected-product code and every row-applicable production date is
+            a cell of the row it belongs to — inline when the set is small,
+            behind that row's own "View N codes" control when it is not. There
+            is no code block, production-date line, or shared-facts card
+            beneath the table, and the screen has no path to render one: it
+            receives finished rows and redistributes nothing. The official
             attachment links stay preserved in the model for a later
             source/image surface — no orphan attachment link renders here. */}
         {affectedProducts ? (
           <Section title="Affected Products">
-            {affectedProducts.table ? (
-              <AffectedProductsTableView
-                table={affectedProducts.table}
-                expanded={tableExpanded}
-                onToggleExpanded={() => setTableExpanded((prior) => !prior)}
-              />
-            ) : null}
-            {/* Row codes live INSIDE the table (each row's own in-cell
-                "View N codes" control) — no code disclosure renders below it.
-                Production codes are opaque, so the calendar dates they stand
-                for lead and the codes follow behind a tap. */}
-            {affectedProducts.productionDates ? (
-              <ThemedText type="small">
-                Affected production dates: {affectedProducts.productionDates}
-              </ThemedText>
-            ) : null}
-            <CodeSet
-              codes={affectedProducts.productionCodes}
-              expanded={openCodeSets.has('production')}
-              onToggle={() => toggleCodeSet('production')}
-            />
-            <CodeSet
-              codes={affectedProducts.caseCodes}
-              expanded={openCodeSets.has('lot')}
-              onToggle={() => toggleCodeSet('lot')}
+            <AffectedProductsTableView
+              table={affectedProducts.table}
+              expanded={tableExpanded}
+              onToggleExpanded={() => setTableExpanded((prior) => !prior)}
             />
           </Section>
         ) : null}
@@ -488,10 +422,6 @@ const styles = StyleSheet.create({
   step: {
     gap: Spacing.half,
     marginTop: Spacing.one,
-  },
-  identifierRow: {
-    padding: Spacing.two,
-    borderRadius: Radii.small,
   },
   // The Affected Products table: fixed-width cells keep the header row and
   // every data row aligned, and the whole grid scrolls horizontally as one

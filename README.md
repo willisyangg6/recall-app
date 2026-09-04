@@ -407,11 +407,16 @@ Accounts/auth, onboarding flow, quiet hours and other notification
 preferences, ingest-time retailer enrichment of stored projections, pet-food
 scope, Spanish records, CPSC/NHTSA, analytics, final visual design.
 
-**P3C-2 — affected-product row ownership: deferred, not implemented.** Lot and
-batch codes still render in a below-table disclosure on some notices rather
-than in the row that owns them. Deciding that requires reading the official
-source structure, not the shape of the rendered output, so it is its own
-milestone and has not begun.
+**P3D — consumer-facing capitalization: deferred, not implemented.** Detail
+shows the company as `dynacare`, the generated reason sentence opens
+`dynacare recalled…`, and one Home card title reads
+`dietary supplements marketed for male sexual enhancement` entirely in
+lowercase. The fix is display-time capitalization with a shared owner, and it
+must preserve established acronyms and intentional internal casing (`FDA`,
+`UPC`, `E. coli`, `iHerb`, `4Earth`, `McCain`) rather than lowercasing and
+title-casing blindly. Nothing about capitalization changed in P3C-2. Full
+contract in [docs/recall-feed-usability.md](docs/recall-feed-usability.md),
+"P3D — consumer-facing capitalization".
 
 **P3C-1 — affected-product value correctness: implemented, display-time,
 not yet deployed.** The other four 2026-09-04 QA findings are fixed in the
@@ -427,6 +432,24 @@ Happened narrative rather than a muted line beneath it. It needs no production
 repair, migration, backfill, cache bump, re-projection, or notification. Full
 detail in [docs/recall-feed-usability.md](docs/recall-feed-usability.md),
 "P3C — affected-product data and presentation correctness".
+
+**P3C-2 — affected-product row ownership: implemented, display-time, not yet
+committed or deployed.** The Affected Products table is now the sole
+presentation of affected-product codes. Lot, batch, case and production codes
+and row-applicable production dates render in table columns and cells —
+inline while the set is small, behind that row's own "View N codes" control
+when it is not — and the standalone code and production-date disclosures
+beneath the table are removed from the model and from the screen. A source
+row that states no product name now survives with an honest empty Product
+cell (and the Product column disappears when no rendered row has a name); a
+recall-level set the source states about the whole recalled population
+repeats into every row, or becomes one anonymous evidence row when the notice
+supports no named row; and a set whose owner is ambiguous is still refused
+rather than widened. Measured over the recorded FDA and FSIS corpus: 12 of
+241 notices change, zero below-table disclosures remain, every supported code
+survives, and no hero, row, gallery, or supporting image assignment moves.
+Like P3C-1 it is display-time and needs no production repair, migration,
+backfill, cache bump, re-projection, or notification.
 
 See [AGENTS.md](AGENTS.md) for standing rules for coding agents working in this
 repository, and

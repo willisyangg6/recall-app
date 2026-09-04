@@ -221,8 +221,10 @@ test('recorded Jaime’s Jalapeno Ranch: the exact P2b single-row table', () => 
     ['Jalapeno Ranch Dressing', '199284564923', '69, 86, 108, 113, 116, 121'],
   );
   assert.equal(table!.seeAllLabel, null);
-  // The codes render inline in the row — nothing sits behind a control.
-  assert.equal(model.caseCodes, null);
+  // The codes render inline in the row — nothing sits behind a control, and
+  // (P3C-2) there is no recall-level set left over to render anywhere else.
+  assert.deepEqual(model.sharedCodes, []);
+  assert.equal(model.sharedProductionDates, null);
   assert.ok(table!.expanded.rows[0].cells.every((cell) => cell.codes === null));
 });
 
@@ -489,9 +491,17 @@ function assertImageRoleInvariants(model: ReturnType<typeof detailModelFor>, lab
   assert.ok(heroRowUses <= 1, `${label}: the hero backs more than one row`);
   if (heroRowUses === 1) {
     assert.ok(
-      (model.sections.affectedProducts?.table?.expanded.rows.length ?? 0) >= 2,
+      (model.sections.affectedProducts?.table.expanded.rows.length ?? 0) >= 2,
       `${label}: hero reused in a single-row table`,
     );
+  }
+  // P3C-2 introduced rows that state no product name. An image is attached
+  // through stated identity evidence only, so a nameless row can never carry
+  // one — not from its size, its barcode, its codes, or its position — and
+  // its accessibility text can never invent an identity for it.
+  for (const row of model.sections.affectedProducts?.table.expanded.rows ?? []) {
+    if (row.name !== null) continue;
+    assert.equal(row.image, null, `${label}: a nameless row was given an image`);
   }
 }
 
@@ -938,10 +948,13 @@ test('corpus audit: no stored variant-photo association contradicts its own capt
     scanned += 1;
     const consumer = buildConsumerCase(projection, projection.affectedProducts);
     for (const variant of consumer.packageCheck.variants) {
-      // Origin/net-weight label metadata can never be a row anywhere.
+      // Origin/net-weight label metadata can never be a row anywhere. A
+      // nameless row (P3C-2) states no identity at all, so there is nothing
+      // for the metadata patterns to match.
       assert.ok(
-        !/^products?\s+of\s+(?:the\s+)?[A-Za-z .]+$/i.test(variant.name) &&
-          !/^net\s+(?:wt|weight)\b/i.test(variant.name),
+        variant.name === null ||
+          (!/^products?\s+of\s+(?:the\s+)?[A-Za-z .]+$/i.test(variant.name) &&
+            !/^net\s+(?:wt|weight)\b/i.test(variant.name)),
         `${slugFromPath(entry.path)}: non-product row "${variant.name}"`,
       );
       if (!variant.photo?.alt) continue;
@@ -1097,24 +1110,20 @@ test('P3A corpus scan: no Detail section can render a heading above nothing', ()
     if (section === null) {
       // PROOF the hidden section held nothing: no rows, no codes, no dates.
       assert.equal(model.affectedProducts.items.length, 0, `a real row was hidden: ${slug}`);
-      assert.equal(model.affectedProducts.caseCodes, null, slug);
-      assert.equal(model.affectedProducts.productionCodes, null, slug);
-      assert.equal(model.affectedProducts.productionDates, null, slug);
+      assert.deepEqual(model.affectedProducts.sharedCodes, [], slug);
+      assert.equal(model.affectedProducts.sharedProductionDates, null, slug);
       continue;
     }
     visible += 1;
-    // A visible section always carries something readable.
+    // A visible section is a table, and the table always carries something
+    // readable (P3C-2: the section has nothing else in it).
     const readable =
-      section.productionDates !== null ||
-      section.productionCodes !== null ||
-      section.caseCodes !== null ||
-      (section.table !== null &&
-        section.table.expanded.columns.length > 0 &&
-        section.table.expanded.rows.some(
-          (row) =>
-            (row.name ?? '').trim() !== '' ||
-            row.cells.some((cell) => (cell.text ?? '').trim() !== '' || cell.codes !== null),
-        ));
+      section.table.expanded.columns.length > 0 &&
+      section.table.expanded.rows.some(
+        (row) =>
+          (row.name ?? '').trim() !== '' ||
+          row.cells.some((cell) => (cell.text ?? '').trim() !== '' || cell.codes !== null),
+      );
     assert.ok(readable, `visible section with no readable content: ${slug}`);
   }
   assert.ok(scanned >= 155, `only ${scanned} corpus records scanned`);
@@ -1159,4 +1168,219 @@ test('P3A corpus scan: Home and Detail never disagree about a reason', () => {
   }
   assert.ok(scanned >= 155, `only ${scanned} corpus records scanned`);
   assert.ok(refined >= 1, 'the summary-only refinement case disappeared from the corpus');
+});
+
+// ── P3C-2: the table is the sole owner of affected-product codes ────────────
+
+/** A view's rendered cell for one column key, by row index. */
+function cellAt(
+  view: { columns: { key: string }[]; rows: { cells: any[] }[] },
+  row: number,
+  key: string,
+) {
+  const index = view.columns.findIndex((column) => column.key === key);
+  assert.notEqual(index, -1, `no ${key} column`);
+  return view.rows[row].cells[index];
+}
+
+test('P3C-2 corpus scan: no notice keeps a code or date outside the table', () => {
+  // The founder's final ruling, measured over every recorded announcement:
+  // there is no below-table code disclosure and no below-table production-date
+  // line, because the model has no field left for one to render from.
+  let scanned = 0;
+  let inTable = 0;
+  for (const { slug, projection } of everyProjection()) {
+    scanned += 1;
+    const model = detailModelFor(projection);
+    const section = model.sections.affectedProducts;
+    if (section === null) continue;
+    const view = section.table.expanded;
+    // Every rendered column is justified by a row IN THIS VIEW, in both the
+    // collapsed and expanded renderings — a column of empty cells never
+    // renders, and that stays true after "See all".
+    for (const rendering of [section.table.collapsed, section.table.expanded]) {
+      rendering.columns.forEach((column, index) => {
+        assert.ok(
+          rendering.rows.some(
+            (row) => (row.cells[index].text ?? '').trim() !== '' || row.cells[index].codes !== null,
+          ),
+          `${slug}: empty ${column.key} column`,
+        );
+      });
+    }
+    if (
+      view.columns.some((column) =>
+        ['lotCodes', 'batchCodes', 'productionCodes', 'productionDates'].includes(column.key),
+      )
+    ) {
+      inTable += 1;
+    }
+  }
+  assert.ok(scanned >= 155, `only ${scanned} corpus records scanned`);
+  assert.ok(inTable >= 40, `only ${inTable} notices render codes or production dates in the table`);
+});
+
+test('P3C-2 shape B: King Arthur keeps one row per source row, each date with its codes', () => {
+  // The source table is Best Used By / Lot Code with NO product column. Its
+  // nineteen rows used to be discarded whole: the recall rendered as one row
+  // named from the title, its nineteen dates merged into a single cell, and
+  // its thirty-four lot codes flattened into a recall-wide block beneath the
+  // table where no date could be matched to any code.
+  const model = detailModelFor(corpusProjection('king-arthur-flour'));
+  const view = model.sections.affectedProducts!.table.expanded;
+  assert.equal(view.rows.length, 19);
+  // Every row lacks a product name, so the Product column does not render at
+  // all — no useless column of empty cells, and no name borrowed from the
+  // recall title to fill it.
+  assert.deepEqual(
+    view.columns.map((column) => column.key),
+    ['bestBy', 'upc', 'lotCodes'],
+  );
+  assert.ok(view.rows.every((row) => row.name === null));
+  // The source's own pairing, row by row.
+  assert.equal(cellAt(view, 0, 'bestBy').text, 'December 4, 2019');
+  assert.equal(cellAt(view, 0, 'lotCodes').text, 'L18A04A');
+  assert.equal(cellAt(view, 1, 'bestBy').text, 'December 5, 2019');
+  assert.equal(cellAt(view, 1, 'lotCodes').text, 'L18A05A, L18A05B, L18A05C');
+  // The recall-wide barcode is PROVEN shared (no source row states one), so
+  // it repeats into every row. Repetition is the contract.
+  assert.ok(view.rows.every((_, index) => cellAt(view, index, 'upc').text === '071012010509'));
+  // Every lot code the source states appears exactly once, in its own row.
+  const codes = view.rows.flatMap((_, index) =>
+    (cellAt(view, index, 'lotCodes').text ?? '').split(', '),
+  );
+  assert.equal(codes.length, 34);
+  assert.equal(new Set(codes).size, 34);
+  // …and the date that used to render as a lot code is gone from the codes.
+  assert.ok(!codes.includes('12/04/19'));
+  // Long tables collapse; the initial view is three rows and its columns are
+  // computed over exactly those three.
+  assert.equal(model.sections.affectedProducts!.table.seeAllLabel, 'See all (19)');
+  assert.equal(model.sections.affectedProducts!.table.collapsed.rows.length, 3);
+  // No image is attached to any nameless row.
+  assert.ok(view.rows.every((row) => row.image === null));
+});
+
+test('P3C-2 shape B: MedTech pairs each lot with its own expiration', () => {
+  const view = detailModelFor(corpusProjection('medtech-products')).sections.affectedProducts!.table
+    .expanded;
+  assert.equal(view.rows.length, 5);
+  assert.ok(view.rows.every((row) => row.name === null));
+  assert.deepEqual(
+    view.rows.map((_, index) => [
+      cellAt(view, index, 'lotCodes').text,
+      cellAt(view, index, 'expiration').text,
+    ]),
+    [
+      ['0039', 'November 2025'],
+      ['0545', 'January 2026'],
+      ['0640', 'February 2026'],
+      ['0450', 'May 2026'],
+      ['1198', 'December 2026'],
+    ],
+  );
+  // The source's rowspan barcode is shared, and repeats into all five rows.
+  assert.ok(view.rows.every((_, index) => cellAt(view, index, 'upc').text === '756184107379'));
+});
+
+test('P3C-2 shape B: a column-oriented grid is not read as rows', () => {
+  // Wawona's recorded table puts one best-by date in each COLUMN header and
+  // that date's lot codes beneath it, so a single `<tr>` holds four codes
+  // belonging to four different dates. Reading those `<tr>`s as rows would
+  // group codes the source never grouped — and, because its last four `<tr>`s
+  // hold only the tail of the longest column, it would also publish four of
+  // twenty-three codes and silently drop the rest.
+  const view = detailModelFor(corpusProjection('wawona-frozen-foods')).sections.affectedProducts!
+    .table.expanded;
+  assert.equal(view.rows.length, 1);
+  assert.equal(view.rows[0].name, 'Organic Daybreak Blend 4lb bags of frozen fruit');
+  const codes = cellAt(view, 0, 'lotCodes');
+  assert.equal(codes.codesLabel, 'View 23 codes');
+  assert.equal(codes.codes!.count, 23);
+  // Each code still carries the column date the source printed above it.
+  assert.equal(codes.codes!.pairs.length, 23);
+  assert.equal(
+    codes.codes!.pairs.find((pair: { code: string }) => pair.code === '20082D04')!.date,
+    'September 23, 2023',
+  );
+  assert.equal(
+    codes.codes!.pairs.find((pair: { code: string }) => pair.code === '20108D08')!.date,
+    'October 18, 2023',
+  );
+});
+
+test('P3C-2 shape B: a nameless row with no consumer facts is still refused', () => {
+  // Albanese's second recorded table is 191 store addresses; Murray's is
+  // internal item numbers; Grimmway's is label prose. None maps onto an
+  // approved consumer field, so none becomes a row — the gate that kept them
+  // out is unchanged, and a 191-row address table can never reach the screen.
+  for (const [fragment, maxRows] of [
+    ['albanese-confectionery', 2],
+    ['murray-intl-trading', 1],
+    ['grimmway-farms-expands', 1],
+    ['taharka-brothers', 0],
+  ] as const) {
+    const section = detailModelFor(corpusProjection(fragment)).sections.affectedProducts;
+    const rows = section?.table.expanded.rows.length ?? 0;
+    assert.ok(rows <= maxRows, `${fragment}: ${rows} rows`);
+  }
+});
+
+test('P3C-2 shape D: recall-level codes render as one anonymous evidence row', () => {
+  // Four recorded notices state supported codes and name no product row for
+  // them. Before P3C-2 each rendered an empty table area with a code
+  // disclosure beneath it; now the codes ARE the table, in one anonymous row
+  // whose Product column does not render.
+  for (const [fragment, label, count] of [
+    ['twin-sisters-creamery', 'View 8 codes', 8],
+    ['sheng-kee-california', 'View 17 codes', 17],
+    ['hardies-fresh-foods-recalls-cucumbers', 'View 7 codes', 7],
+  ] as const) {
+    const view = detailModelFor(corpusProjection(fragment)).sections.affectedProducts!.table
+      .expanded;
+    assert.equal(view.rows.length, 1, fragment);
+    assert.equal(view.rows[0].name, null, fragment);
+    assert.ok(
+      !view.columns.some((column) => column.key === 'product'),
+      `${fragment}: an empty Product column rendered`,
+    );
+    assert.equal(view.rows[0].cells[0].codesLabel, label, fragment);
+    assert.equal(view.rows[0].cells[0].codes!.count, count, fragment);
+    // A nameless row never receives an image.
+    assert.equal(view.rows[0].image, null, fragment);
+  }
+});
+
+test('P3C-2 shape D: production codes and their readable dates are table cells', () => {
+  const view = detailModelFor(corpusProjection('hardies-fresh-foods-recalls-jalapenos')).sections
+    .affectedProducts!.table.expanded;
+  assert.deepEqual(
+    view.columns.map((column) => column.key),
+    ['productionDates', 'lotCodes', 'productionCodes'],
+  );
+  assert.equal(view.rows.length, 1);
+  assert.equal(
+    cellAt(view, 0, 'productionDates').text,
+    'July 11, 2026, July 15, 2026, July 16, 2026, July 18, 2026, July 22, 2026',
+  );
+  // The two code sets keep their own labels: a production code is never
+  // relabelled as a lot code to fit an existing column.
+  assert.equal(cellAt(view, 0, 'lotCodes').codes!.count, 7);
+  assert.deepEqual(cellAt(view, 0, 'productionCodes').codes!.codes, [
+    '26192',
+    '26196',
+    '26197',
+    '26199',
+    '26203',
+  ]);
+});
+
+test('P3C-2 shape D: a case-level set repeats into the named row that owns it', () => {
+  // One named row, one recall-level code set: the codes render inside that
+  // row's own cell, not beneath the table.
+  const view = detailModelFor(corpusProjection('northfork-bison')).sections.affectedProducts!.table
+    .expanded;
+  assert.equal(view.rows.length, 1);
+  assert.equal(view.rows[0].name, 'Bison Burgers & Bison Ground');
+  assert.equal(cellAt(view, 0, 'productionDates').text, 'April 30, 2019');
 });

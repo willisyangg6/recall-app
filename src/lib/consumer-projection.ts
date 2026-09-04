@@ -73,7 +73,11 @@ import {
 } from './product-photos';
 import { extractProseIdentifiers, extractProseVariantLines } from './prose-identifiers';
 import { consumerActionDisplay } from './recall-display';
-import { extractAffectedProductLists, extractDistributionListStates } from './source-lists';
+import {
+  extractAffectedProductLists,
+  extractDistributionListStates,
+  extractIdentifierListOwners,
+} from './source-lists';
 import { interpretTables, type SemanticFact } from './source-tables';
 import {
   captionContradictsPackage,
@@ -108,8 +112,17 @@ export interface ConceptValues {
 }
 
 export interface AffectedVariant {
-  /** Recognizable name of this affected version. */
-  name: string;
+  /**
+   * Recognizable name of this affected version, or `null` when the source row
+   * that established this version states no product name at all (P3C-2). A
+   * nameless row is a real row: MedTech's cough-syrup table pairs each lot
+   * code with its own expiration under no product column, and discarding it
+   * flattened five row-scoped codes into one recall-wide pile. The name is
+   * never invented from the recall title to fill the gap — the row renders
+   * with an honest empty Product cell, and the Product column disappears
+   * entirely when no rendered row has one.
+   */
+  name: string | null;
   /**
    * This version's identifying details, drawn ONLY from the approved package
    * field vocabulary and always in the same order. A source column we have no
@@ -211,14 +224,25 @@ export interface ConsumerPackageCheck {
   fields: PackageField[];
   /** Extracted, deliberately not rendered. Development/QA provenance only. */
   rejected: RejectedFact[];
-  /** Large code sets, collapsed behind their own disclosure step. */
+  /**
+   * Recall-level lot/batch codes the source stated about the whole recalled
+   * population, held back from the inline fields because the set is large.
+   * In variant mode this survives only when no version carries codes of its
+   * own AND no source statement of the kind was row-scoped — the same
+   * evidence test `sharedFields` passes — because the presentation repeats it
+   * into every row (P3C-2), and repetition is an ownership claim.
+   */
   lotCodes: LotCodeSet | null;
-  /** Printed production codes, each mapped to the date the source paired it with. */
+  /**
+   * Printed production codes, each mapped to the date the source paired it
+   * with. Production codes have no approved package field, so this set is the
+   * only path they reach the consumer by; a set too small to clear the
+   * collapse threshold is deliberately not published (see `buildPackageCheck`).
+   */
   productionCodes: LotCodeSet | null;
   /**
-   * The readable calendar dates those production codes stand for. Shown above
-   * the codes, because "July 11, 15, 16, 18, and 22, 2026" is something a
-   * person can check and "26192" is not.
+   * The readable calendar dates those production codes stand for, because
+   * "July 11, 2026" is something a person can check and "26192" is not.
    */
   productionDates: string | null;
   /**
@@ -1056,23 +1080,58 @@ function buildVariants(sources: VariantSource[]): BuiltVariants {
       .flatMap((source) => source.facts.filter((f) => f.concept === 'brand').map((f) => f.value)),
   );
   const brandNamesVersions = sources.length >= 2 && brands.size >= 2;
+  // Which source tables are COLUMN-oriented grids rather than lists of rows.
+  //
+  // Wawona's recorded table puts one best-by date in each column header and
+  // that date's lot codes in the cells beneath it, so a single `<tr>` holds
+  // four codes belonging to four different dates. Where the row states no
+  // product name, the `<tr>` is the only evidence its facts belong together —
+  // and here it is layout, not meaning. The column association each code
+  // already carries is what detects this, so nothing is guessed.
+  //
+  // The verdict is per TABLE, not per row: a grid's last few `<tr>`s hold
+  // only the tail of its longest column and look like honest single-date rows.
+  // Letting those four through while refusing the five above them published
+  // four of twenty-three codes and dropped the rest, because rows existing at
+  // all suppresses the recall-level set. Orientation is a property of the
+  // table, and it is decided once for all of its nameless rows.
+  const gridTables = new Set<string>();
+  for (const source of sources) {
+    if (source.facts.some((f) => f.concept === 'variant')) continue;
+    const table = source.scope?.match(/^(t\d+)[rc]\d+$/)?.[1];
+    if (table === undefined) continue;
+    const dates = new Set(
+      source.facts
+        .flatMap(expandFact)
+        .map((f) => f.pairedDate)
+        .filter((date): date is string => date !== undefined && date !== ''),
+    );
+    if (dates.size > 1) gridTables.add(table);
+  }
 
   for (const source of sources) {
     const nameFact =
       source.facts.find((f) => f.concept === 'variant') ??
       (brandNamesVersions ? source.facts.find((f) => f.concept === 'brand') : undefined);
-    if (!nameFact) continue;
-    const split = splitVariantName(nameFact.value);
-    const name = formatMeasurements(humanizeAllCaps(split.name));
-    if (name.length < 2) continue;
-    // The closed identity gate. An invalid identity does not become a card,
-    // and its row's facts widen to the recall scope rather than vanishing.
-    if (variantIdentityRejection(name) !== null) {
-      for (const factItem of source.facts) {
-        if (factItem === nameFact) continue;
-        unassigned.push(factItem);
+    // A row with NO product-name fact is still a row (P3C-2). Its survival is
+    // decided below, by whether it carries approved consumer facts of its own
+    // — never by borrowing an identity it does not have.
+    let name: string | null = null;
+    let split: { name: string; size: string | null } | null = null;
+    if (nameFact) {
+      split = splitVariantName(nameFact.value);
+      const candidate = formatMeasurements(humanizeAllCaps(split.name));
+      if (candidate.length < 2) continue;
+      // The closed identity gate. An invalid identity does not become a card,
+      // and its row's facts widen to the recall scope rather than vanishing.
+      if (variantIdentityRejection(candidate) !== null) {
+        for (const factItem of source.facts) {
+          if (factItem === nameFact) continue;
+          unassigned.push(factItem);
+        }
+        continue;
       }
-      continue;
+      name = candidate;
     }
 
     // A variant carries only identifying facts. Distribution belongs to
@@ -1085,7 +1144,7 @@ function buildVariants(sources: VariantSource[]): BuiltVariants {
         f.concept !== 'brand' &&
         f.concept !== 'company',
     );
-    if (split.size) {
+    if (nameFact && split?.size) {
       identifying.push({
         concept: 'package_size',
         sourceLabel: 'Net weight',
@@ -1107,7 +1166,36 @@ function buildVariants(sources: VariantSource[]): BuiltVariants {
     const projected = toPackageFields(
       aggregated.filter((f) => f.concept !== 'identifier_location'),
     );
-    const key = `${dedupeKey(name)}|${projected.fields.map((f) => f.value).join('|')}`;
+    if (name === null) {
+      // A nameless row earns its place only through its own approved consumer
+      // facts: an identifying field the closed schema accepted, or its own
+      // code set. A row holding nothing but store addresses, internal item
+      // numbers, or unmapped text is still rejected — its facts reach the
+      // recall scope through the case path exactly as before.
+      if (projected.fields.length === 0 && !collapse) continue;
+      // …and it must RELATE at least two kinds of fact. A row exists to hold
+      // a relationship the source stated; with a name absent and only one
+      // kind of fact present there is no relationship, only a list entry —
+      // and the source's identity evidence for it is somewhere this parser
+      // did not read. King Arthur's second recorded table is exactly that
+      // shape: one column of best-by dates under a `<th>` that is really a
+      // caption ("… Unbleached All-Purpose Flour 25 lb. UPC: 071012012503
+      // Costco only"). Read as a row, it rendered five dates beside the
+      // 5-lb bag's barcode — a package identity the source assigns to a
+      // different product. Its dates widen to the recall scope instead,
+      // exactly as before.
+      const kinds = new Set<string>(projected.fields.map((field) => field.key));
+      if (collapse && lotSet) kinds.add(lotSet.label);
+      if (kinds.size < 2) continue;
+      // …and only when it came from a table of rows rather than a
+      // column-oriented grid (see `gridTables`). A refused row loses nothing:
+      // its codes reach the consumer through the recall scope with the dates
+      // the source paired them with still attached, and P3C-2 renders that
+      // set inside the table.
+      const table = source.scope?.match(/^(t\d+)[rc]\d+$/)?.[1];
+      if (table !== undefined && gridTables.has(table)) continue;
+    }
+    const key = `${dedupeKey(name ?? '')}|${projected.fields.map((f) => f.value).join('|')}`;
     if (seen.has(key)) continue;
     seen.add(key);
     variants.push({
@@ -1242,9 +1330,13 @@ function attachNamedPhotos(variants: AffectedVariant[], photos: ProductPhoto[]):
   // takes its own photo before "Sesame Italian Bread" can match the same
   // caption by prefix; then the closest remaining caption wins.
   for (const variant of [...variants].sort(
-    (a, b) => dedupeKey(b.name).length - dedupeKey(a.name).length,
+    (a, b) => dedupeKey(b.name ?? '').length - dedupeKey(a.name ?? '').length,
   )) {
     if (variant.photo || matched.has(variant)) continue;
+    // A nameless row (P3C-2) has no identity a caption can match against, so
+    // it can never claim a photo: an image is attached through stated
+    // identity evidence, never through size, code, or row position.
+    if (variant.name === null) continue;
     const key = dedupeKey(variant.name);
     if (key.length < 6) continue;
     const match = gallery
@@ -1266,7 +1358,7 @@ function attachNamedPhotos(variants: AffectedVariant[], photos: ProductPhoto[]):
         sibling !== variant &&
         sibling.photo === null &&
         !matched.has(sibling) &&
-        dedupeKey(sibling.name) === key &&
+        dedupeKey(sibling.name ?? '') === key &&
         !captionContradictsPackage(match.alt ?? '', variantPackageIdentity(sibling)),
     );
     if (ambiguous) continue;
@@ -2522,6 +2614,18 @@ function buildPackageCheck(
   // Production codes are opaque by nature ("26192"). The readable calendar
   // date the source paired with each one is what leads; the printed code stays
   // available, mapped to its date, for the person checking a package.
+  // Production codes are opaque by nature ("26192"). The readable calendar
+  // date the source paired with each one is what leads; the printed code stays
+  // available, mapped to its date, for the person checking a package.
+  //
+  // The collapse threshold is deliberately kept as the gate on the whole set,
+  // not just on how it renders. Production codes have no approved package
+  // field, so a small set has no second path — and surfacing every small set
+  // publishes the parser's near-misses: the recorded Northfork notice states
+  // one production DATE RANGE ("February 22, 2019 – April 30, 2019") and
+  // yields a single "production code" of `2019`, a fragment of that range.
+  // Rendering it in the table would tell a shopper to look for a year stamped
+  // on a box. P3C-2 changes WHERE codes render, never WHICH.
   const productionSet = buildLotCodes(unclaimedLotFacts, 'production_code');
   const collapseProduction = productionSet !== null && productionSet.count > SMALL_CODE_SET;
   const facts = withoutVariantOwnedValues(
@@ -2532,14 +2636,11 @@ function buildPackageCheck(
       // as well rendered one large code list twice: collapsed AND inline.
       ...legacyFacts.filter((f) => f.concept !== 'lot' && f.concept !== 'production_code'),
       ...(lotSet && !collapseLots ? unclaimedLotFacts.filter((f) => f.concept === 'lot') : []),
-      ...(productionSet && !collapseProduction
-        ? unclaimedLotFacts.filter((f) => f.concept === 'production_code')
-        : []),
     ]),
     variants,
   );
   let lotCodes = collapseLots ? lotSet : null;
-  const productionCodes = collapseProduction ? productionSet : null;
+  let productionCodes = collapseProduction ? productionSet : null;
   // Project the case-level facts through the closed schema. Anything with no
   // approved field stops here — recorded, counted, and never rendered.
   const projected = toPackageFields(facts);
@@ -2596,13 +2697,28 @@ function buildPackageCheck(
       });
     }
     fields = [];
-    // The same rule for a collapsed case-level code set beside versions that
-    // carry their own codes.
+    // The same rule, now stated once for code SETS as well (P3C-2). A
+    // recall-level set no longer sits in its own block beneath the table: it
+    // is repeated into every row. That is only honest when the source itself
+    // asserted it about the whole recalled population, so a set faces exactly
+    // the test the shared fields face —
+    //
+    //   - some version already carries codes → a competing owner exists, so
+    //     recall-wide scope would be an invention. Rejected.
+    //   - some source statement of the kind was ROW-SCOPED → the set is row
+    //     residue that failed to attach, and shared scope is never inferred
+    //     from a fact merely being unassigned. Rejected.
+    //   - every statement of the kind is a scope-less recall-level sentence →
+    //     shared. This is the evidence that lets it repeat into each row.
+    //
+    // Rejecting is not losing: the codes stay on the case for QA and
+    // provenance, and the consumer is never shown an ownership claim the
+    // source did not make.
     const variantsOwnCodes =
       variantFieldKeys.has('lotCodes') ||
       variantFieldKeys.has('batchCodes') ||
       variants.some((variant) => variant.lotCodes !== null);
-    if (lotCodes !== null && variantsOwnCodes) {
+    if (lotCodes !== null && (variantsOwnCodes || conceptHasScopedSource('lot'))) {
       rejected.push({
         concept: 'lot',
         sourceLabel: lotCodes.label,
@@ -2610,6 +2726,15 @@ function buildPackageCheck(
         reason: 'ambiguous-scope',
       });
       lotCodes = null;
+    }
+    if (productionCodes !== null && conceptHasScopedSource('production_code')) {
+      rejected.push({
+        concept: 'production_code',
+        sourceLabel: productionCodes.label,
+        values: productionCodes.codes,
+        reason: 'ambiguous-scope',
+      });
+      productionCodes = null;
     }
   }
 
@@ -2634,6 +2759,9 @@ function buildPackageCheck(
   // with lead the disclosure: "July 11, 15, 16, 18, and 22, 2026" is something
   // a person can read off a bag; "26192" is something they can only compare.
   const productionDateGroup = facts.find((group) => group.concept === 'production_date');
+  // The readable dates stand on their own evidence: the source stated them as
+  // production dates, and they render as this row's Production dates cell
+  // whether or not the printed codes beside them cleared the collapse gate.
   const productionDates =
     productionSet !== null && productionDateGroup
       ? joinFactValues('production_date', productionDateGroup.values)
@@ -2772,7 +2900,14 @@ export function buildConsumerCase(
   if (built.variants.length === 0) {
     // A source-declared bullet list is structural evidence on par with a
     // table: each item is one product owning the identifiers stated in it.
-    built = buildVariants(extractAffectedProductLists(projection.summaryHtml));
+    // A declared list of MARKINGS is the same evidence read the other way
+    // round (P3C-2): the lead-in paragraph names the product, and the list
+    // beneath it holds that product's own codes — one row per list, never
+    // one pooled row across every list on the page.
+    built = buildVariants([
+      ...extractAffectedProductLists(projection.summaryHtml),
+      ...extractIdentifierListOwners(projection.summaryHtml),
+    ]);
     unassignedFacts.push(...built.unassigned);
   }
   if (built.variants.length === 0) {
@@ -2883,6 +3018,7 @@ export function collectSourceFacts(projection: CaseProjection): SemanticFact[] {
       ),
     ),
     ...extractAffectedProductLists(projection.summaryHtml).flatMap((item) => item.facts),
+    ...extractIdentifierListOwners(projection.summaryHtml).flatMap((item) => item.facts),
     ...parseProseFacts(proseText),
     ...extractProseIdentifiers(proseText).facts.map((fact) => ({
       ...fact,
@@ -2977,6 +3113,7 @@ function summarizeVariantNames(variants: AffectedVariant[]): string[] {
   const seen = new Set<string>();
   const names: string[] = [];
   for (const variant of variants) {
+    if (variant.name === null) continue;
     const key = dedupeKey(variant.name);
     if (key === '' || seen.has(key)) continue;
     seen.add(key);

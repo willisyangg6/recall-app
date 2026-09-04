@@ -28,13 +28,21 @@ import { test } from 'node:test';
 import type { CaseProjection } from '../../domain/recall-types';
 import {
   aggregateFacts,
+  buildConsumerCase,
   joinFactValues,
   joinValues,
   recallQuantity,
   toPackageFields,
 } from '../../lib/consumer-projection';
 import { barcodeLabelGoverns, extractProseIdentifiers } from '../../lib/prose-identifiers';
-import { detailNarrative, recallQuantitySentence } from '../../lib/recall-presentation';
+import {
+  affectedProductsModel,
+  affectedProductsSection,
+  detailNarrative,
+  recallQuantitySentence,
+  type AffectedProductsTableViewModel,
+} from '../../lib/recall-presentation';
+import { extractIdentifierListOwners } from '../../lib/source-lists';
 
 interface Excerpt {
   key: string;
@@ -267,4 +275,187 @@ test('the audit ledger records each unreproducible notice honestly', () => {
     const label = entry.governingLabel;
     assert.equal(barcodeLabelGoverns(`${label} `, label.length + 1), false, label);
   }
+});
+
+// ── P3C-2 source-shape A: a named lead-in over an identifier list ───────────
+
+/**
+ * Rebuild the announcement's stated DOM around the VERBATIM excerpt lines.
+ *
+ * A third evidence grade, and the weakest of the three — stated here so no
+ * reader has to infer it. The archived snapshot preserved this notice's text,
+ * not its markup: every character below comes from the fixture's audited
+ * excerpt, and only the `<p>`/`<ul>`/`<li>` structure around those characters
+ * is supplied here, from the source shape the P3C-2 milestone states the
+ * announcement uses (a lead-in paragraph ending "…has the following codes:"
+ * over a bullet list of `UPC …, lot code …, Best If Used By: …` tuples).
+ *
+ * Nothing is invented: no code, date, barcode, product name, or size appears
+ * that the excerpt does not already state, and the reconstruction is
+ * mechanical — a line ending in "codes:" opens a list, and the lines under it
+ * are its items. It exercises the structural owner end to end; it is NOT a
+ * recorded page and does not extend snapshot corpus coverage.
+ */
+function statedDom(excerpt: string): string {
+  const out: string[] = [];
+  let open = false;
+  for (const line of excerpt.split('\n')) {
+    const text = line.trim();
+    if (text === '') continue;
+    if (/codes:$/i.test(text)) {
+      if (open) out.push('</ul>');
+      out.push(`<p>${text}</p>`, '<ul>');
+      open = true;
+    } else if (open) {
+      out.push(`<li>${text}</li>`);
+    } else {
+      out.push(`<p>${text}</p>`);
+    }
+  }
+  if (open) out.push('</ul>');
+  return out.join('\n');
+}
+
+function tableFor(summaryHtml: string, summaryText: string, productName: string) {
+  const projection = {
+    title: 'Recall',
+    summaryHtml,
+    summaryText,
+    productDescription: null,
+    quantityText: null,
+    affectedProducts: [],
+    recallingFirm: { displayName: 'Firm' },
+    brands: [],
+    geography: { scope: 'unknown', states: [] },
+    noticeType: 'recall',
+    reasonText: null,
+    hazardCategory: null,
+    pathogenOrAllergen: null,
+    retailerNames: [],
+  } as unknown as CaseProjection;
+  const consumer = buildConsumerCase(projection, []);
+  const model = affectedProductsModel(consumer.packageCheck, productName);
+  return { model, section: affectedProductsSection(model) };
+}
+
+/** A row's rendered value for one column, by key. */
+function cellOf(view: AffectedProductsTableViewModel, row: number, key: string) {
+  const index = view.columns.findIndex((column) => column.key === key);
+  assert.notEqual(index, -1, `no ${key} column`);
+  return view.rows[row].cells[index];
+}
+
+test('P3C-2 AquaStar combined: three rows, each owning only its own list', () => {
+  const notice = FIXTURE.excerpts.find((entry) => entry.key === 'aquastarCombined')!;
+  const { model, section } = tableFor(statedDom(notice.excerpt), notice.excerpt, 'Shrimp');
+  const view = section!.table.expanded;
+
+  // Exactly three rows: not one pooled row, and not sixteen repetitive ones.
+  assert.equal(view.rows.length, 3);
+  assert.deepEqual(
+    view.rows.map((row) => row.name),
+    [
+      'Kroger Raw Colossal EZ Peel Shrimp',
+      'Kroger Mercado Cooked Medium Peeled Tail-Off Shrimp',
+      'AquaStar Raw Peeled Tail-on Shrimp Skewers',
+    ],
+  );
+  // Row identity comes from the source structure — the list each row's facts
+  // were declared under — never from array position across unrelated lists.
+  assert.deepEqual(
+    view.rows.map((row) => row.id),
+    ['idlist0', 'idlist1', 'idlist2'],
+  );
+
+  // Exactly three genuine UPCs, one per row, each the barcode its own list
+  // states. Nothing date-shaped survives in a barcode cell (P3C-1).
+  const barcodes = view.rows.map((_, index) => cellOf(view, index, 'upc').text);
+  assert.deepEqual(barcodes, ['20011110643906', '011110626196', '731149390010']);
+  assert.deepEqual(new Set(barcodes).size, 3);
+  assert.deepEqual(barcodes, notice.expect.barcodes);
+
+  // Package sizes, as the source's own "net wt." labels state them.
+  assert.deepEqual(
+    view.rows.map((_, index) => cellOf(view, index, 'size').text),
+    ['2 lbs.', '2 lbs.', '1.25 lbs.'],
+  );
+
+  // Row 2 and row 3 state small code sets, which read inline; row 1 states
+  // ten, which reach the row-local control. No row can see another's codes.
+  assert.equal(cellOf(view, 1, 'lotCodes').text, '10662 5112 11, 10662 5113 10');
+  assert.equal(
+    cellOf(view, 2, 'lotCodes').text,
+    '10662 5127 10, 10662 5128 11, 10662 5133 11, 10662 5135 10',
+  );
+  const first = cellOf(view, 0, 'lotCodes');
+  assert.equal(first.codesLabel, 'View 10 codes');
+  assert.deepEqual(first.codes!.codes, [
+    '10662 5085 10',
+    '10662 5097 11',
+    '10662 5106 11',
+    '10662 5107 10',
+    '10662 5111 11',
+    '10662 5112 10',
+    '10662 5113 10',
+    '10662 5113 11',
+    '10662 5114 10',
+    '10662 5114 11',
+  ]);
+  // The tuple evidence the source printed on each `<li>` survives into the
+  // row-local modal: every code keeps the date it was published beside.
+  assert.equal(first.codes!.pairs.length, 10);
+  assert.equal(
+    first.codes!.pairs.find((pair) => pair.code === '10662 5085 10')!.date,
+    'March 26, 2027',
+  );
+  assert.equal(
+    first.codes!.pairs.find((pair) => pair.code === '10662 5114 11')!.date,
+    'April 24, 2027',
+  );
+
+  // Row 2 and row 3's own best-by values, complete and comma-separated —
+  // P3C-1's formatting is unchanged by the regrouping.
+  assert.equal(cellOf(view, 1, 'bestBy').text, 'October 22, 2027, October 23, 2027');
+  assert.equal(
+    cellOf(view, 2, 'bestBy').text,
+    'November 7, 2027, November 8, 2027, November 13, 2027, November 15, 2027',
+  );
+  for (const key of ['bestBy', 'upc', 'lotCodes', 'size']) {
+    for (let row = 0; row < view.rows.length; row += 1) {
+      const text = cellOf(view, row, key).text;
+      if (text !== null) assert.ok(!/\sand\s/.test(text), `${key}: ${text}`);
+    }
+  }
+
+  // Row 1's ten tuples state eight distinct calendar days (04 23 27 and
+  // 04 24 27 each appear twice). P3C-1 renders a calendar day once, and the
+  // repeated tuples keep both their codes.
+  const rowOneDays = cellOf(view, 0, 'bestBy').text!.split(', ');
+  assert.equal(rowOneDays.length / 2, 8);
+
+  // Nothing is left over to render beneath the table.
+  assert.deepEqual(model.sharedCodes, []);
+  assert.equal(model.sharedProductionDates, null);
+});
+
+test('P3C-2: one declared identifier list keeps the case path, which is richer', () => {
+  // The ownership question only exists across SEVERAL lists. With one, the
+  // list and the recall cover the same population — and routing it through a
+  // row costs the case-level evidence stated elsewhere in the notice. Proven
+  // on the recorded PT Organics announcement in the presentation regressions;
+  // asserted here on the extractor itself.
+  const notice = FIXTURE.excerpts.find((entry) => entry.key === 'aquastarSkewers')!;
+  assert.deepEqual(extractIdentifierListOwners(statedDom(notice.excerpt)), []);
+});
+
+test('P3C-2: a list whose lead-in names no product stays unowned', () => {
+  // The lead-in declares codes but names nothing the identity contract
+  // accepts, so no row is invented and the codes keep the recall scope.
+  const html = [
+    '<p>The affected products have the following codes:</p>',
+    '<ul><li>lot code A1</li><li>lot code A2</li></ul>',
+    '<p>The recalled 08/14/2026 is packaged in bags and has the following codes:</p>',
+    '<ul><li>lot code B1</li><li>lot code B2</li></ul>',
+  ].join('\n');
+  assert.deepEqual(extractIdentifierListOwners(html), []);
 });

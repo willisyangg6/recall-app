@@ -230,9 +230,8 @@ test('P3A recorded Steak Burrito PHA: no Affected Products heading above nothing
   assert.equal(model.sections.affectedProducts, null);
   // PROOF the section held nothing consumer-facing.
   assert.equal(model.affectedProducts.items.length, 0);
-  assert.equal(model.affectedProducts.caseCodes, null);
-  assert.equal(model.affectedProducts.productionCodes, null);
-  assert.equal(model.affectedProducts.productionDates, null);
+  assert.deepEqual(model.affectedProducts.sharedCodes, []);
+  assert.equal(model.affectedProducts.sharedProductionDates, null);
   // The honest coverage statement survives as model evidence — it is simply
   // not content, and never was rendered (P2a founder decision).
   assert.notEqual(model.affectedProducts.note, null);
@@ -302,22 +301,18 @@ test('P3A FSIS corpus scan: no empty section, no lost row, no reason disagreemen
       hidden += 1;
       // PROOF: nothing consumer-facing was under the heading.
       assert.equal(model.affectedProducts.items.length, 0, `a real row was hidden: ${id}`);
-      assert.equal(model.affectedProducts.caseCodes, null, id);
-      assert.equal(model.affectedProducts.productionCodes, null, id);
-      assert.equal(model.affectedProducts.productionDates, null, id);
+      assert.deepEqual(model.affectedProducts.sharedCodes, [], id);
+      assert.equal(model.affectedProducts.sharedProductionDates, null, id);
     } else {
       visible += 1;
+      // A visible section is a table, and nothing else (P3C-2).
       const readable =
-        section.productionDates !== null ||
-        section.productionCodes !== null ||
-        section.caseCodes !== null ||
-        (section.table !== null &&
-          section.table.expanded.columns.length > 0 &&
-          section.table.expanded.rows.some(
-            (row) =>
-              (row.name ?? '').trim() !== '' ||
-              row.cells.some((cell) => (cell.text ?? '').trim() !== '' || cell.codes !== null),
-          ));
+        section.table.expanded.columns.length > 0 &&
+        section.table.expanded.rows.some(
+          (row) =>
+            (row.name ?? '').trim() !== '' ||
+            row.cells.some((cell) => (cell.text ?? '').trim() !== '' || cell.codes !== null),
+        );
       assert.ok(readable, `visible section with no readable content: ${id}`);
     }
 
@@ -348,4 +343,72 @@ test('P3A FSIS corpus scan: no empty section, no lost row, no reason disagreemen
   assert.ok(records.length >= 66, `only ${records.length} FSIS records scanned`);
   assert.ok(visible >= 20, `only ${visible} sections visible`);
   assert.ok(hidden >= 20, `only ${hidden} sections hidden`);
+});
+
+// ── P3C-2: the table is the sole owner of affected-product codes ────────────
+
+test('P3C-2: FSIS recall-level codes render inside the table, not beneath it', () => {
+  // Two recorded FSIS notices state supported lot codes and support no named
+  // product row. Before P3C-2 each rendered a code disclosure under an empty
+  // table area; now the codes ARE the table, as one anonymous evidence row
+  // with no Product column and no name invented from the recall title.
+  for (const [id, count] of [
+    ['PHA-07032026-01', 10],
+    ['103-2019', 7],
+  ] as const) {
+    const view = detailModelFor(recordById(id)).sections.affectedProducts!.table.expanded;
+    assert.equal(view.rows.length, 1, id);
+    assert.equal(view.rows[0].name, null, id);
+    assert.deepEqual(
+      view.columns.map((column) => column.key),
+      ['lotCodes'],
+      id,
+    );
+    assert.equal(view.rows[0].cells[0].codesLabel, `View ${count} codes`, id);
+    assert.equal(view.rows[0].cells[0].codes!.count, count, id);
+    // A nameless row is never given an image.
+    assert.equal(view.rows[0].image, null, id);
+  }
+});
+
+test('P3C-2 FSIS corpus scan: every code reaches a table cell, and only its own row', () => {
+  let withCodes = 0;
+  for (const { id, projection } of everyRecord()) {
+    const model = detailModelFor(projection);
+    const section = model.sections.affectedProducts;
+    // The retired below-table evidence has no field left on the section, and
+    // a section exists exactly when a meaningful table does.
+    if (section === null) {
+      assert.deepEqual(model.affectedProducts.sharedCodes, [], id);
+      continue;
+    }
+    const view = section.table.expanded;
+    const codeColumns = view.columns.filter((column) =>
+      ['lotCodes', 'batchCodes', 'productionCodes'].includes(column.key),
+    );
+    if (codeColumns.length > 0) withCodes += 1;
+    // Every shared set the model proved reaches at least one rendered cell.
+    for (const shared of model.affectedProducts.sharedCodes) {
+      const index = view.columns.findIndex((column) => column.key === shared.key);
+      assert.notEqual(index, -1, `${id}: ${shared.key} has no column`);
+      assert.ok(
+        view.rows.some(
+          (row) =>
+            row.cells[index].codes === shared.codes ||
+            (row.cells[index].text ?? '') === shared.codes.codes.join(', '),
+        ),
+        `${id}: a proven shared code set reached no row`,
+      );
+    }
+    // A row-local set is exactly that row's own codes: the modal identity and
+    // its label come from the row it renders in, never a sibling's.
+    for (const row of view.rows) {
+      for (const cell of row.cells) {
+        if (cell.codes === null) continue;
+        assert.equal(cell.codesLabel, `View ${cell.codes.count} codes`, id);
+        assert.ok(cell.codes.count > 0, id);
+      }
+    }
+  }
+  assert.ok(withCodes >= 5, `only ${withCodes} FSIS notices render codes in the table`);
 });

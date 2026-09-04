@@ -199,6 +199,43 @@ test('no shared-facts block can render under Affected Products', () => {
   assert.ok(!DETAIL.includes('sharedFields'), 'package-check shared internals reach the screen');
 });
 
+test('P3C-2: no code or date disclosure can render beneath the Affected Products table', () => {
+  // The founder's final ruling: lot, batch, case and production codes, and
+  // row-applicable production dates, appear in table columns and cells and
+  // nowhere else. The screen must have no second surface for them — not the
+  // retired disclosures, not a renamed replacement.
+  //
+  // The retired model fields are the first gate. They no longer exist on the
+  // section type, so naming one is a compile error; naming one as a string
+  // is what a future refactor would do first.
+  for (const retired of [
+    'caseCodes',
+    'productionCodes',
+    'productionDates',
+    'affectedProducts.table ?',
+    'openCodeSets',
+    'toggleCodeSet',
+    'Affected production dates',
+    '<CodeSet',
+    'function CodeSet',
+  ]) {
+    assert.ok(!DETAIL.includes(retired), `the below-table disclosure returned: ${retired}`);
+  }
+  // The section renders the table and nothing else: one child, no sibling
+  // control, no second heading, no "applies to all" replacement card.
+  assert.match(
+    DETAIL,
+    /<Section title="Affected Products">\s*<AffectedProductsTableView[\s\S]{0,240}?<\/Section>/,
+    'the Affected Products section renders something besides the table',
+  );
+  assert.ok(!DETAIL.includes('Applies to all affected versions'), 'the retired card returned');
+  // And the screen never redistributes: no code set is read outside the cell
+  // the model put it in, and no row/code assignment happens on the screen.
+  assert.ok(!DETAIL.includes('sharedCodes'), 'the screen reads the model shared-code evidence');
+  assert.ok(!DETAIL.includes('.items'), 'the screen reads model items instead of table rows');
+  assert.ok(!DETAIL.includes('rowImages'), 'the screen matches images to rows itself');
+});
+
 test('no orphan attachment links render under Affected Products', () => {
   // The official "Product labels (PDF)" / "Product list (PDF)" links stay
   // preserved in the model (`model.attachments`) for a later source/image

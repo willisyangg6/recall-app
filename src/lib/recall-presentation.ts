@@ -694,12 +694,30 @@ export interface AffectedProductsModel {
    * consumer-facing shared-facts block ever renders. */
   appliesToAll: AffectedProductField[];
   items: AffectedProductItem[];
-  /** Recall-level collapsed code sets and production-date disclosure. */
-  caseCodes: LotCodeSet | null;
-  productionCodes: LotCodeSet | null;
-  productionDates: string | null;
+  /**
+   * Code sets the source states about the whole recalled population (P3C-2).
+   * Internal evidence only, exactly like `appliesToAll`: the table repeats
+   * each set into every row it applies to, and — when the notice supports no
+   * named row at all — into one anonymous evidence row. There is no
+   * consumer-facing code block beneath the table for these to render in.
+   */
+  sharedCodes: SharedCodeSet[];
+  /** The readable calendar dates the shared production codes stand for. Same
+   * treatment: a table cell in every applicable row, never a block. */
+  sharedProductionDates: string | null;
   codeLocation: CodeLocation | null;
   comparePhotos: ProductPhoto[];
+}
+
+/**
+ * One code set proven to apply to the whole recalled population, together
+ * with the table column that owns it. The column is decided here, from the
+ * set's own source concept, so a production code can never be relabelled as a
+ * lot code to fit an existing column.
+ */
+export interface SharedCodeSet {
+  key: 'lotCodes' | 'batchCodes' | 'productionCodes';
+  codes: LotCodeSet;
 }
 
 /**
@@ -732,19 +750,33 @@ function orderedFields(fields: PackageField[]): AffectedProductField[] {
 
 function variantItem(variant: AffectedVariant, index: number): AffectedProductItem {
   const rowId = variant.scope ?? `v${index}`;
+  // A source row that stated no product name at all (P3C-2) is already
+  // nameless: its own facts render, its Product cell stays honestly empty,
+  // and nothing is borrowed from the recall title to fill it.
+  if (variant.name === null) {
+    return {
+      rowId,
+      name: null,
+      fields: orderedFields(variant.fields),
+      codes: variant.lotCodes,
+      codeLocation: variant.codeLocation,
+      photo: variant.photo,
+    };
+  }
+  const variantName = variant.name;
   // A version name that is ONLY a package measurement (identity contract:
   // measurementOnlyName) is package-size evidence, not a product name. It is
   // demoted into the row's Size field — verbatim, so the source evidence is
   // preserved — and the row renders without a Product value rather than with
   // a measurement masquerading as one. No product name is invented.
-  if (measurementOnlyName(variant.name)) {
+  if (measurementOnlyName(variantName)) {
     const fields = orderedFields(variant.fields);
     const size = fields.find((field) => field.key === 'size');
     if (size === undefined) {
       // Size leads the presentation order, so the demoted value goes first.
-      fields.unshift({ key: 'size', label: PACKAGE_FIELD_LABEL.size, value: variant.name });
-    } else if (!measurementKey(size.value).includes(measurementKey(variant.name))) {
-      size.value = `${size.value}, ${variant.name}`;
+      fields.unshift({ key: 'size', label: PACKAGE_FIELD_LABEL.size, value: variantName });
+    } else if (!measurementKey(size.value).includes(measurementKey(variantName))) {
+      size.value = `${size.value}, ${variantName}`;
     }
     return {
       rowId,
@@ -760,7 +792,7 @@ function variantItem(variant: AffectedVariant, index: number): AffectedProductIt
   // evidence, never a consumer product name. Same demotion shape: the value
   // moves to the row's Packaging field, the row's own identifying facts
   // survive, and Product stays empty rather than showing a container.
-  if (packagingOnlyName(variant.name)) {
+  if (packagingOnlyName(variantName)) {
     const fields = orderedFields(variant.fields);
     const packaging = fields.find((field) => field.key === 'packaging');
     if (packaging === undefined) {
@@ -768,10 +800,10 @@ function variantItem(variant: AffectedVariant, index: number): AffectedProductIt
       fields.push({
         key: 'packaging',
         label: PACKAGE_FIELD_LABEL.packaging,
-        value: variant.name,
+        value: variantName,
       });
-    } else if (!measurementKey(packaging.value).includes(measurementKey(variant.name))) {
-      packaging.value = `${packaging.value}, ${variant.name}`;
+    } else if (!measurementKey(packaging.value).includes(measurementKey(variantName))) {
+      packaging.value = `${packaging.value}, ${variantName}`;
     }
     return {
       rowId,
@@ -784,12 +816,30 @@ function variantItem(variant: AffectedVariant, index: number): AffectedProductIt
   }
   return {
     rowId,
-    name: humanizeAllCaps(variant.name),
+    name: humanizeAllCaps(variantName),
     fields: orderedFields(variant.fields),
     codes: variant.lotCodes,
     codeLocation: variant.codeLocation,
     photo: variant.photo,
   };
+}
+
+/**
+ * The recall-level code sets, each routed to the column its own source
+ * concept owns. The projection has already proven these apply to the whole
+ * recalled population — a set whose owner was ambiguous was rejected upstream
+ * (`ambiguous-scope`) and is structurally unreachable here — so repeating
+ * them into every row asserts nothing the source did not.
+ */
+function sharedCodeSets(packageCheck: ConsumerPackageCheck): SharedCodeSet[] {
+  const sets: SharedCodeSet[] = [];
+  if (packageCheck.lotCodes) {
+    sets.push({ key: codeColumnKey(packageCheck.lotCodes), codes: packageCheck.lotCodes });
+  }
+  if (packageCheck.productionCodes) {
+    sets.push({ key: 'productionCodes', codes: packageCheck.productionCodes });
+  }
+  return sets;
 }
 
 /**
@@ -830,9 +880,8 @@ export function affectedProductsModel(
       note: null,
       appliesToAll: hasVariants ? orderedFields(packageCheck.sharedFields) : [],
       items,
-      caseCodes: packageCheck.lotCodes,
-      productionCodes: packageCheck.productionCodes,
-      productionDates: packageCheck.productionDates,
+      sharedCodes: sharedCodeSets(packageCheck),
+      sharedProductionDates: packageCheck.productionDates,
       codeLocation: packageCheck.codeLocation,
       comparePhotos: packageCheck.photos,
     };
@@ -849,9 +898,8 @@ export function affectedProductsModel(
       : 'This notice describes package details that can’t be shown reliably here yet. Check the official notice for the exact identifiers.',
     appliesToAll: [],
     items: [],
-    caseCodes: null,
-    productionCodes: null,
-    productionDates: null,
+    sharedCodes: [],
+    sharedProductionDates: null,
     codeLocation: null,
     comparePhotos: [],
   };
@@ -867,7 +915,7 @@ export function affectedProductsModel(
  * labels (one cell may hold several codes). Date labels keep their exact
  * source-specific meaning — a Sell by is never relabeled Expiration.
  */
-const TABLE_COLUMN_LABEL: Record<'product' | PackageFieldKey, string> = {
+const TABLE_COLUMN_LABEL: Record<AffectedProductsTableColumnKey, string> = {
   product: 'Product',
   size: 'Package Size',
   packaging: 'Packaging',
@@ -875,13 +923,47 @@ const TABLE_COLUMN_LABEL: Record<'product' | PackageFieldKey, string> = {
   useBy: 'Use by',
   sellBy: 'Sell by',
   expiration: 'Expiration',
+  productionDates: 'Production dates',
   upc: 'Barcode (UPC)',
   lotCodes: 'Lot codes',
   batchCodes: 'Batch codes',
+  productionCodes: 'Production codes',
 };
 
+/**
+ * Every column the table may render (P3C-2). It is the closed package-field
+ * vocabulary plus Product, plus the two columns that give the retired
+ * below-table disclosure's own values a home: the printed production codes
+ * and the readable calendar dates they stand for. Both were already
+ * consumer-visible and already gated by the projection — this moves where
+ * they render, and opens no new extraction path.
+ */
+export type AffectedProductsTableColumnKey =
+  'product' | PackageFieldKey | 'productionCodes' | 'productionDates';
+
+/**
+ * Column order (frozen, P3C-2 extension): Package Size, then the identifying
+ * dates under their source-specific labels — production dates last among them,
+ * because they describe when the package was made rather than a marking a
+ * shopper reads off it — then Barcode (UPC), then the printed codes, then
+ * remaining package description.
+ */
+const TABLE_COLUMN_ORDER: Exclude<AffectedProductsTableColumnKey, 'product'>[] = [
+  'size',
+  'bestBy',
+  'useBy',
+  'sellBy',
+  'expiration',
+  'productionDates',
+  'upc',
+  'lotCodes',
+  'batchCodes',
+  'productionCodes',
+  'packaging',
+];
+
 export interface AffectedProductsTableColumn {
-  key: 'product' | PackageFieldKey;
+  key: AffectedProductsTableColumnKey;
   label: string;
 }
 
@@ -941,55 +1023,99 @@ export interface AffectedProductsTable {
 /** At most this many affected-version rows render before "See all (N)". */
 export const AFFECTED_PRODUCTS_INITIAL_ROWS = 3;
 
-/** Which column a collapsed code set belongs to, from its consumer label. */
-function codeColumnKey(codes: LotCodeSet): PackageFieldKey {
+/** Which column a collapsed lot/batch code set belongs to, from the consumer
+ * label the projection gave it — the word the source itself printed. */
+function codeColumnKey(codes: LotCodeSet): 'lotCodes' | 'batchCodes' {
   return /batch/i.test(codes.label) ? 'batchCodes' : 'lotCodes';
 }
 
 /**
+ * At most this many codes render inline in a cell; beyond it the cell shows
+ * the row-local "View N codes" control instead. Matches the projection's own
+ * collapse threshold, so a small set that arrived as inline field text and a
+ * small set that arrived as a code object read identically.
+ */
+const INLINE_CODES = 4;
+
+/**
  * The compact table-like structure Detail renders for Affected Products
- * (P2b, restructured with the P2c integration correction): column labels
- * once, one affected version per row, columns drawn only from fields the
- * currently visible rows populate, Product first when any visible row has a
- * name. Cells hold each version's own facts plus the facts PROVEN to apply
- * to every version (repeated per row — the table has no shared-facts
- * section); the model never merges values across versions. A row's own
- * collapsed code set lives INSIDE its Lot/Batch codes cell as a "View N
- * codes" control — the table is the only affected-product presentation, and
- * no code list renders beneath it. Null when the gated model has no items.
+ * (P2b, restructured by P2c and made the SOLE presentation by P3C-2): column
+ * labels once, one affected version per row, columns drawn only from fields
+ * the currently visible rows populate, Product first when any visible row has
+ * a name.
+ *
+ * Cells hold each version's own facts plus every fact PROVEN to apply to the
+ * whole recalled population — shared fields, shared lot/batch/production code
+ * sets, and the readable production dates — repeated per row. The model never
+ * merges values across versions, and never widens a row-scoped fact.
+ *
+ * Every affected-product code lives in a cell of the row it belongs to,
+ * inline while the set is small and behind that row's own "View N codes"
+ * control when it is not. Nothing renders beneath the table: the standalone
+ * lot/batch/case/production-code disclosure and the standalone
+ * production-date line are retired, and there is no "applies to all affected
+ * versions" card to replace them.
+ *
+ * Null only when the gated model supports no row and no shared fact at all.
  */
 export function affectedProductsTable(
   model: AffectedProductsModel,
   rowImages: ReadonlyMap<string, RowImageAssignment> = new Map(),
 ): AffectedProductsTable | null {
-  if (model.items.length === 0) return null;
-  // The consumer table has NO shared-facts section (founder decision). A fact
-  // the model PROVED applies to every affected version (`appliesToAll` — each
-  // version's own source row states it, or the source asserted it about the
-  // whole recall) materializes here into every row: the column exists once
-  // and the value repeats per row. Repetition is preferred over a separate
-  // block. Association safety is unweakened — merely-case-level evidence with
-  // an ambiguous owner was already rejected upstream (`ambiguous-scope`) and
-  // is structurally unreachable from this model, so nothing here can guess a
+  // The consumer table has NO shared-facts section and NO code block beneath
+  // it (founder decision, made total by P3C-2). A fact the model PROVED
+  // applies to every affected version — `appliesToAll` fields, `sharedCodes`
+  // sets, and the readable production dates — materializes here into every
+  // row: the column exists once and the value repeats per row. Repetition is
+  // preferred over a separate block, and visual deduplication is not a goal.
+  // Association safety is unweakened: merely-case-level evidence with an
+  // ambiguous owner was already rejected upstream (`ambiguous-scope`) and is
+  // structurally unreachable from this model, so nothing here can guess a
   // value into a row the source never tied it to.
   const sharedByKey = new Map(model.appliesToAll.map((field) => [field.key, field.value]));
-  const entries = model.items.map((item) => {
-    const values = new Map<PackageFieldKey, AffectedProductsTableCell>();
-    for (const key of PRESENTATION_FIELD_ORDER) {
+  const hasShared =
+    sharedByKey.size > 0 || model.sharedCodes.length > 0 || model.sharedProductionDates !== null;
+  // A notice can state supported codes or dates and name no product row for
+  // them at all (Twin Sisters' eight cheese lot codes; FSIS 103-2019's seven).
+  // Those facts belong in the table, so the table gets ONE anonymous evidence
+  // row to hold them. Its Product cell stays empty and — since it is the only
+  // row — the Product column does not render at all. No name is invented, and
+  // no ownership is asserted beyond what the source stated about the whole
+  // recalled population.
+  const items: AffectedProductItem[] =
+    model.items.length > 0
+      ? model.items
+      : hasShared
+        ? [{ rowId: 'case', name: null, fields: [], codes: null, codeLocation: null, photo: null }]
+        : [];
+  if (items.length === 0) return null;
+
+  const entries = items.map((item) => {
+    const values = new Map<AffectedProductsTableColumnKey, AffectedProductsTableCell>();
+    const plain = (text: string) => ({ text, codes: null, codesLabel: null });
+    for (const key of TABLE_COLUMN_ORDER) {
+      if (key === 'productionCodes' || key === 'productionDates') continue;
       const text = item.fields.find((field) => field.key === key)?.value ?? sharedByKey.get(key);
-      if (text !== undefined) values.set(key, { text, codes: null, codesLabel: null });
+      if (text !== undefined) values.set(key, plain(text));
     }
-    // The row's collapsed code set becomes this row's own cell content — a
-    // code-bearing row can never present as an empty codes cell.
-    if (item.codes) {
-      const key = codeColumnKey(item.codes);
-      if (!values.has(key)) {
-        values.set(key, {
-          text: null,
-          codes: item.codes,
-          codesLabel: `View ${item.codes.count} codes`,
-        });
-      }
+    // A code set renders inline while it is small enough to read at a glance,
+    // and behind this row's own "View N codes" control when it is not. Either
+    // way it is a cell of this row — never a block below the table.
+    const codeCell = (key: AffectedProductsTableColumnKey, codes: LotCodeSet) => {
+      if (values.has(key)) return;
+      values.set(
+        key,
+        codes.count <= INLINE_CODES
+          ? plain(codes.codes.join(', '))
+          : { text: null, codes, codesLabel: `View ${codes.count} codes` },
+      );
+    };
+    // The row's OWN set first, so a row that states its codes can never be
+    // overwritten by the recall-level set.
+    if (item.codes) codeCell(codeColumnKey(item.codes), item.codes);
+    for (const shared of model.sharedCodes) codeCell(shared.key, shared.codes);
+    if (model.sharedProductionDates !== null && !values.has('productionDates')) {
+      values.set('productionDates', plain(model.sharedProductionDates));
     }
     const assignment = rowImages.get(item.rowId) ?? null;
     return {
@@ -1008,7 +1134,7 @@ export function affectedProductsTable(
     if (visible.some((entry) => entry.item.name !== null)) {
       columns.push({ key: 'product', label: TABLE_COLUMN_LABEL.product });
     }
-    for (const key of PRESENTATION_FIELD_ORDER) {
+    for (const key of TABLE_COLUMN_ORDER) {
       if (visible.some((entry) => entry.values.has(key))) {
         columns.push({ key, label: TABLE_COLUMN_LABEL[key] });
       }
@@ -1044,22 +1170,25 @@ export function affectedProductsTable(
 // ── Optional section visibility (P3A) ───────────────────────────────────────
 
 /**
- * The Affected Products SECTION as the screen renders it: the table plus the
- * case-level code and production-date disclosures that sit beneath it.
+ * The Affected Products SECTION as the screen renders it: the table, and
+ * nothing else (P3C-2).
+ *
+ * The section used to carry three further slots beneath the table — the
+ * recall-level lot/batch codes, the printed production codes, and the
+ * readable production dates — each with its own disclosure control. That
+ * contract is retired. Every affected-product code and every row-applicable
+ * production date now renders as a cell of the table row it belongs to, so a
+ * section with no table has nothing to show and does not render.
  *
  * This type exists so the visibility decision has exactly one home. The
  * screen renders `DetailModel.sections.affectedProducts` or renders nothing —
- * it never re-derives whether a row, column, or code set is worth a heading.
+ * it never re-derives whether a row, column, or code set is worth a heading,
+ * and it has no second place to put a code.
  */
 export interface AffectedProductsSection {
-  /** The compact table over the gated rows; null when no row is meaningful. */
-  table: AffectedProductsTable | null;
-  /** Readable calendar dates the production codes stand for. */
-  productionDates: string | null;
-  /** Printed production codes, behind their own disclosure. */
-  productionCodes: LotCodeSet | null;
-  /** Recall-level collapsed lot/batch codes, behind their own disclosure. */
-  caseCodes: LotCodeSet | null;
+  /** The compact table over the gated rows. Never null: a section exists
+   * exactly when a meaningful table does. */
+  table: AffectedProductsTable;
 }
 
 /**
@@ -1098,27 +1227,19 @@ function tableHasContent(table: AffectedProductsTable): boolean {
  * A minimal row is preserved on purpose. A supported product NAME alone is
  * meaningful — a real affected product is never hidden merely because the
  * notice states no size, barcode, date, or code for it.
+ *
+ * P3C-2 makes the table the whole section. A notice whose only supported
+ * package facts are recall-level codes still shows a section: those codes
+ * reach the table as its one anonymous evidence row, rather than as a
+ * disclosure beneath a table that was never built.
  */
 export function affectedProductsSection(
   model: AffectedProductsModel,
   rowImages: ReadonlyMap<string, RowImageAssignment> = new Map(),
 ): AffectedProductsSection | null {
   const built = affectedProductsTable(model, rowImages);
-  const table = built !== null && tableHasContent(built) ? built : null;
-  if (
-    table === null &&
-    model.productionDates === null &&
-    model.productionCodes === null &&
-    model.caseCodes === null
-  ) {
-    return null;
-  }
-  return {
-    table,
-    productionDates: model.productionDates,
-    productionCodes: model.productionCodes,
-    caseCodes: model.caseCodes,
-  };
+  if (built === null || !tableHasContent(built)) return null;
+  return { table: built };
 }
 
 /**

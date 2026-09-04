@@ -348,10 +348,12 @@ pure table model (`affectedProductsTable` over the item model — the screen
 composes no columns, labels, or cell values of its own; wiring-test-pinned):
 
 - Column labels render **once** as the uppermost row. Product is the first
-  column when any row has a product name; the others follow the stable field
-  order — Package Size, Packaging, Best by / Use by / Sell by / Expiration
-  (each keeping its exact source-specific meaning; a Sell by is never
-  relabeled), Barcode (UPC), Lot codes, Batch codes.
+  column when any row has a product name — and does not render at all when
+  no rendered row has one (P3C-2), rather than showing a column of empty
+  cells. The others follow the stable field order — Package Size, Best by /
+  Use by / Sell by / Expiration / Production dates (each keeping its exact
+  source-specific meaning; a Sell by is never relabeled), Barcode (UPC), Lot
+  codes, Batch codes, Production codes, Packaging.
 - One affected version per row, in source order. **Columns are computed
   from the rows currently rendered** (integration correction, 2026-09-02):
   the model supplies a collapsed view (the first three rows, columns
@@ -382,8 +384,14 @@ composes no columns, labels, or cell values of its own; wiring-test-pinned):
   the row's product identity, showing exactly that row's codes and its
   source-supported code/date pairs, with an explicit Close — never a
   sibling's codes, never a recall-wide pile, and never a long list expanded
-  beneath the table. Case-level production-code and case-code disclosures
-  (codes no single version owns) are unchanged.
+  beneath the table. **P3C-2 made this total.** Recall-level lot, batch, case
+  and production codes, and row-applicable production dates, are cells of the
+  rows they belong to as well: a set the source states about the whole
+  recalled population repeats into every row, and a notice that supports no
+  named row gets one anonymous evidence row inside the table to hold it. No
+  code disclosure, production-date line, or "applies to all affected
+  versions" card renders beneath the table, and the screen has no path to
+  build one — see "A. Row-owned lot and batch codes — P3C-2" below.
 - The official attachment links ("Product labels (PDF)", "Product list
   (PDF)") stay preserved in the model (`attachments`) for a later
   source/image surface; **no orphan attachment link renders** under Affected
@@ -443,8 +451,9 @@ wording is conservative and a surviving packaging blob can never claim
 complete coverage), `source_silent`, and `unstructured` (a parser miss is
 **never** presented as source silence). Founder decision: none of this
 produces consumer-facing prose on the Detail page — the visible section is
-just `Affected Products` with the gated data (shared fields, the version
-rail, production dates, code disclosures, official attachment links). The
+just `Affected Products` with the gated data, which since P3C-2 is the table
+and nothing else — every shared field, code set and production date arrives
+inside the rows it belongs to. The
 coverage state and scope statements remain internal to the model for
 correctness and QA; the "Find the Code" block, compare-photos block, and all
 helper/disclaimer copy are removed from the render while their data stays in
@@ -464,9 +473,10 @@ decision and re-evaluates no rows, columns, codes, or geography — pinned by
 
 - an affected-product row carrying a consumer-facing value — a supported
   product name, or any populated approved field;
-- a row's own collapsed code set (its in-cell "View N codes" control);
-- an accepted case-level disclosure that still renders: recall-level lot or
-  batch codes, production codes, or the production dates they stand for.
+- a row's own code set, inline or behind its in-cell "View N codes" control;
+- a recall-level code set or production date the model proved shared — which
+  since P3C-2 reaches the screen as a row's cell (an anonymous evidence row
+  when the notice supports no named one), never as a separate disclosure.
 
 **What is explicitly NOT meaningful:**
 
@@ -548,18 +558,22 @@ regression shapes and the corpus-wide allocation census are pinned in
 lives in docs/recall-imagery.md §13. The interactive carousel and all final
 visual styling remain design-system work.
 
-### P3C — affected-product data and presentation correctness (PARTIALLY IMPLEMENTED)
+### P3C — affected-product data and presentation correctness (IMPLEMENTED)
 
 The findings below came from manual simulator review of the AquaStar and
 Dynarex notices on 2026-09-04 (the same notices P3B corrected for hazard
 category — P3C is about their affected-product data, not their hazard), and
-from the source-backed audit that followed. **P3C is not complete.** It splits
-in two, and only the first part is built:
+from the source-backed audit that followed. P3C split in two, and both parts
+are now built:
 
 | Part      | Items                                                                                                             | Status                        |
 | --------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | **P3C-1** | B (date parsing and formatting), C (barcode correctness), D (identifier-list punctuation), E (quantity paragraph) | **implemented, display-time** |
-| **P3C-2** | A (row-owned lot and batch codes — affected-product row ownership)                                                | **deferred, not implemented** |
+| **P3C-2** | A (row-owned lot and batch codes — affected-product row ownership)                                                | **implemented, display-time** |
+
+Neither part completes all P3 work: **P3D (consumer-facing capitalization) is
+deferred and unimplemented**, and the Dynarex `Mfg. Dt.` / `Exp. Dt.` columns
+remain deferred because their day-first reading is not authorized.
 
 **P3C-1 is display-time only.** Every one of its four corrections happens in
 the shared read path over preserved source data. It requires **no production
@@ -574,37 +588,154 @@ findings**, measured on 2026-09-04 before the fix, over the read-only audit's
 own comparison — they are not post-fix production verification, and no
 production read was made after the fix.
 
-#### A. Row-owned lot and batch codes — P3C-2 (DEFERRED, NOT IMPLEMENTED)
+#### A. Row-owned lot and batch codes — P3C-2 (IMPLEMENTED)
 
-**Nothing below is implemented.** P3C-1 deliberately left affected-product row
-ownership untouched, and proved it: measured over every recorded FDA and FSIS
-notice, P3C-1 changed zero product rows, zero row ids, zero row images, zero
-row code sets, and moved no below-table disclosure into a row. The AquaStar and
-Dynarex below-table blocks described here are exactly as they were.
+**The final founder contract, and it is absolute.** Under Affected Products,
+lot codes, batch codes, production codes, case codes, and row-applicable
+production dates appear in table columns and cells. **A separate code
+disclosure beneath the table is never rendered.** Repetition across the rows a
+code set applies to is acceptable and preferred; visual deduplication is not a
+goal. The earlier allowance for a legitimate case-level code block beneath the
+table is retired, and so is any "applies to all affected versions" card that
+would replace it under another name.
 
-Lot, batch, production, and similar identifier facts render inconsistently
-across notices:
+**What the source review found.** Before P3C-2 the same kind of fact rendered
+in three different places depending on the notice: AquaStar Cocktail Shrimp
+put its lot codes in a table column; AquaStar Raw / Cooked / Skewers and
+Dynarex Baby Powder put theirs in an expandable block beneath the table. The
+audit's question — is the block a parser miss, or the case-level path
+correctly reporting codes the source attributes to no single version? —
+resolved into four distinct source shapes, each with its own owner:
 
-- AquaStar Cocktail Shrimp renders its lot codes as a **table column**.
-- AquaStar Raw Shrimp / Cooked Shrimp / Shrimp Skewers renders its lot codes
-  in a **separate expandable block below the table**.
-- Dynarex Baby Powder likewise renders its batch codes below its product
-  table.
+| Shape | Source structure                                           | Owner                                           |
+| ----- | ---------------------------------------------------------- | ----------------------------------------------- |
+| **A** | A named lead-in paragraph over a list of identifier tuples | `lib/source-lists.ts`                           |
+| **B** | A source table whose rows carry no product-name column     | `buildVariants` in `lib/consumer-projection.ts` |
+| **C** | Declared product rows with codes widened to recall scope   | `buildPackageCheck`'s shared-scope gate         |
+| **D** | Codes the source genuinely states about the whole recall   | `lib/recall-presentation.ts` (the table)        |
 
-**Founder product rule (the target contract).** A fact that belongs to an
-affected product renders **in that product's own table row**. A separate
-below-table or "applies to all" disclosure must not be created merely to
-avoid repetition. If one code set genuinely applies to several affected
-versions, it **repeats in every applicable row**. Codes are never assigned by
-array position or any other unsupported inference. This is the same rule the
-"Affected products" section states above; the observed below-table blocks are
-the inconsistency to resolve.
+**Shape A — a named lead-in over an identifier list.** AquaStar's combined
+announcement states three products, each followed by its own bullet list of
+`UPC …, lot code …, Best If Used By: …` tuples under its own lead-in
+paragraph ("The recalled Kroger Raw Colossal EZ Peel Shrimp net wt. 2lbs., is
+packaged in … and has the following codes:"). The list is correctly
+classified as an identifier list — its items are markings, not products — and
+that used to mean its contents reached the consumer through the recall-wide
+prose path: three products' barcodes, fourteen calendar days and fifteen lot
+codes pooled into one undifferentiated row, so a shopper holding the 1.25-lb
+skewers matched against the colossal shrimp's codes.
 
-P3C must **inspect the official source structure before deciding ownership** —
-the below-table rendering may be the existing case-level disclosure path
-correctly reporting codes the source does not attribute to a single version,
-or it may be a parser miss. That determination comes from the source, not from
-the shape of the rendered output.
+The lead-in paragraph is the source's own statement of who owns the list
+beneath it. Reading it is **structural DOM ownership** — the `<p>` before this
+`<ul>`, and nothing else. Row identity comes from the list's own position in
+the document structure (`idlist0`, `idlist1`, `idlist2`), never from pairing
+by array position across unrelated lists. Each `<li>` is treated as one row by
+the same shared owner a table row uses (`pairRowDatesAndCodes`), so a code
+keeps the date printed beside it and can never acquire another item's.
+
+The rule requires **two or more** declared identifier lists. With one, the
+list and the recall cover the same population, so making a row for it asserts
+nothing new — and it costs the case-level evidence the source states
+elsewhere (the recorded PT Organics notice declares one such list, and routing
+it through a row dropped the metric weight "(113 g)" its product description
+preserved).
+
+**Shape B — a source table with no Product column.** `buildVariants` used to
+discard a table row that carried no product-name fact, even when the row held
+supported package, code, or date facts. It no longer does. A nameless row
+survives, keeps its stable source row scope, renders an honest empty Product
+cell — and, when no rendered row has a name, the Product column does not
+render at all rather than showing a column of empty cells. **No name is
+invented from the recall title.**
+
+Three gates keep a layout artifact from becoming a row:
+
+- The row must produce at least one approved consumer field or its own code
+  set. Albanese's 191 store addresses, Murray's internal item numbers and
+  Grimmway's label prose still map onto nothing and are still refused.
+- The row must **relate at least two kinds of fact**. A row exists to hold a
+  relationship; with no name and one kind of fact there is no relationship,
+  only a list entry — and the source's identity evidence for it is somewhere
+  the parser did not read. King Arthur's second recorded table is exactly that
+  shape: one column of best-by dates under a `<th>` that is really a caption
+  ("… Unbleached All-Purpose Flour 25 lb. UPC: 071012012503 Costco only").
+  Read as a row it showed five dates beside the 5-lb bag's barcode — a package
+  identity the source assigns to a different product.
+- The row's table must not be a **column-oriented grid**. Wawona's recorded
+  table puts one best-by date in each column header and that date's lot codes
+  beneath it, so a single `<tr>` holds four codes belonging to four different
+  dates. The verdict is per table, not per row: a grid's last few `<tr>`s hold
+  only the tail of its longest column and look like honest single-date rows,
+  and letting those through while refusing the ones above them published four
+  of twenty-three codes and dropped the rest.
+
+A refused row loses nothing. Its facts reach the consumer through the recall
+scope with the dates the source paired them with still attached — and P3C-2
+renders that set inside the table.
+
+**Shape C — declared product rows with widened codes.** A recall-level code
+set no longer sits in its own block; it is repeated into every row. That is
+only honest when the source itself asserted it about the whole recalled
+population, so a code set now faces exactly the test the shared FIELDS
+already faced:
+
+- some version already carries codes → a competing owner exists, so
+  recall-wide scope would be an invention. **Refused.**
+- some source statement of the kind was row-scoped → the set is row residue
+  that failed to attach, and shared scope is never inferred from a fact merely
+  being unassigned. **Refused.**
+- every statement of the kind is a scope-less recall-level sentence → shared,
+  and it repeats into each row.
+
+Refusing is not losing: the codes stay on the case for QA and provenance, and
+the consumer is never shown an ownership claim the source did not make.
+
+**Shape D — genuinely recall-level codes.** These used to render beneath the
+table. That visual contract is retired. The set now materializes into every
+supported row; when the notice supports no named row at all, the table gets
+**one anonymous evidence row** to hold it, with no Product column and no name
+borrowed from the title. Small sets read inline in the cell; large sets keep
+the row-local `View N codes` control and its accessible modal, whose identity
+and contents come from that row's own supported facts only.
+
+**Presentation model.** `AffectedProductsSection` is now just
+`{ table }` — the `caseCodes`, `productionCodes` and `productionDates` slots
+are gone from the type, and with them the screen's `CodeSet` component, its
+expansion state, and the "Affected production dates:" line. The table's column
+vocabulary gained `Production codes` and `Production dates` so those already
+gated, already consumer-visible values have a cell to live in; a production
+code is never relabelled as a lot code to fit an existing column. Column
+visibility stays model-owned and is recomputed separately for the collapsed
+and expanded views, so expanding rows may reveal a newly justified column and
+no rendered column is ever entirely empty.
+
+**Measured over the recorded FDA and FSIS corpus (241 notices), before and
+after, from a pristine `git archive HEAD` baseline:**
+
+- 12 notices change; 229 are byte-identical.
+- Below-table code and production-date disclosures: 10 → **0**.
+- Every supported code survives. The single dropped value is King Arthur's
+  `12/04/19`, which was a calendar date rendering inside a lot-code list; it
+  now renders as that row's Best by date.
+- Row counts: King Arthur 1 → 19, MedTech 1 → 5, Wawona 1 → 1 (its grid is
+  refused, and its 23 codes move into the one row's cell with all 23
+  code/date pairs intact), and five notices go 0 → 1 anonymous evidence row.
+- Row images: **zero** deltas. No hero, row, gallery, or supporting
+  assignment moves anywhere in the corpus.
+- Two notices lose a title-derived Product name (Braga Fresh "Broccoli
+  Florets", Lunds & Byerlys "Lone Star Dip") because their single source row
+  states none. Both still show every identifying fact, and the product name is
+  the Detail screen's own heading directly above the table.
+
+**P3C-2 is display-time.** Like P3C-1 it needs no production repair, no
+migration, no backfill, no cache-schema bump, no re-projection, and no
+notification. It is implemented and locally verified, and at the time of
+writing **not committed and not deployed**.
+
+**Still deferred.** The Dynarex product table's `Mfg. Dt.` and `Exp. Dt.`
+columns carry day-first values ("01.11.2023"). A month-first reading would
+misstate them, so those columns stay unsupported and hidden — P3C-2 adds no
+label support for them and guesses nothing.
 
 #### B. Date parsing and formatting — P3C-1 (implemented)
 
@@ -809,15 +940,37 @@ figure the reason already carries is still suppressed so the paragraph can
 never state it twice. Measured over the recorded corpus, all **7** muted lines
 became narrative sentences — none dropped, none duplicated.
 
-#### F. Investigation boundary (met for P3C-1; still required for P3C-2)
+#### F. Investigation boundary (met for P3C-1 and P3C-2)
 
 P3C begins with a source-backed audit. **For P3C-1 this completed**: the audit
 traced every product, date, barcode, code and quantity on the AquaStar,
 Mercado and Dynarex notices from the archived official payloads through
 parsing, projection, presentation model and screen; all four defects proved
 **display-only**, so the canonical-data delta is zero and no production repair,
-migration, cache bump, re-projection or notification is needed. The boundary
-below still governs P3C-2, which has not begun.
+migration, cache bump, re-projection or notification is needed.
+
+**For P3C-2 it completed too**, by the same boundary and with the same answer.
+Ownership was decided from the official source structure — a lead-in
+paragraph's `<p>`/`<ul>` relationship, a table's column headers, the presence
+or absence of a product-name cell — never from the shape of the rendered
+output, and never by array position. Every change is in the shared read path
+over already-preserved source data: the canonical-data delta is zero, and no
+production repair, migration, backfill, cache bump, re-projection or
+notification is needed.
+
+**Evidence coverage is not complete, and that is stated rather than papered
+over.** The recorded corpus contains King Arthur, Twin Sisters Creamery,
+Outshine, Wawona, MedTech, Braga Fresh, Lunds & Byerlys, Albanese, Murray
+International, Grimmway, Sheng Kee, Hardies, Northfork and the two FSIS
+notices — each pinned. AquaStar reaches the tests only through the bounded
+excerpt fixture, whose archived snapshot preserved text and not markup: the
+regression rebuilds the stated `<p>`/`<ul>` structure around the verbatim
+lines, which is a third and weaker evidence grade, labelled as such in the
+test. **Dynarex's own product table, JFE Franchising, Ambrosia Brands, World
+Green Nutrition, Kinjin, America NY/RI Wang Food Group, Hartford Bakery, Maxi
+Canada, Venda Ravioli, Maid-Rite and the California firm are in no recorded or
+bounded fixture**, so their behavior is covered only by the generic rules
+above and by the corpus scans — not by a pinned per-notice regression.
 
 The audit steps:
 
@@ -840,6 +993,38 @@ The audit steps:
    [recall-operations.md](recall-operations.md).
 8. Preserve row identity and evidence ownership throughout; never use array
    position.
+
+### P3D — consumer-facing capitalization (DEFERRED, NOT IMPLEMENTED)
+
+**Nothing below is implemented.** P3C-2 changed no capitalization behavior
+anywhere, deliberately: it is recorded here so the contract is settled before
+someone reaches for a `toLowerCase()`.
+
+**Observed defects.**
+
+- Detail renders the company/brand as `dynacare` rather than `Dynacare`.
+- The generated reason sentence opens `dynacare recalled…`.
+- One Home card title reads
+  `dietary supplements marketed for male sexual enhancement` entirely in
+  lowercase.
+
+**Founder contract to implement.**
+
+- Consumer-facing recall and product headlines use headline capitalization:
+  every ordinary lowercase word is capitalized at its beginning.
+- Consumer-facing company and brand names begin with a capital letter.
+- A generated reason sentence begins with a capitalized display name.
+- This is **display-time presentation**. Authoritative stored source text is
+  never rewritten for appearance.
+- The implementation must preserve established acronyms and intentional
+  internal casing — `FDA`, `UPC`, `E. coli`, `iHerb`, `4Earth`, `McCain`, and
+  similar mixed alphanumeric or proper-name tokens.
+- **Avoid a blind lowercase-then-title-case transformation.** That is the
+  defect this milestone exists to prevent, not the fix.
+- Audit Home, Detail, search, notification copy and accessibility text before
+  choosing the shared owner, so the rule lands in one place rather than at
+  each render site. `humanizeAllCaps` and `sentenceCaseValue` in the shared
+  read path are the existing casing owners and are the natural starting point.
 
 ## Control hierarchy (C6.1)
 
