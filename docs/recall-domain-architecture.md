@@ -1361,54 +1361,105 @@ exclusively, and FSIS under-reports allergens in it.
   hazards resolve in evidence order — pathogen, then genuine foreign material,
   then chemical — and only with none of them stated may allergen evidence
   resolve the category.
-- **Deferred: the FDA metal-or-chemical bare-keyword gate (P3B, not this
-  milestone).** The live `deriveFdaHazard` branch for the FDA reason category
-  `Potential Metal or Chemical Contaminant` still runs its own committed
-  bare-keyword scan (`FOREIGN_MATERIAL_WORDS` in `server/fda/parse.ts`) —
-  the same class of packaging false positive the paragraph above eliminated
-  for FSIS, just not yet closed for this one FDA branch. P3A drafted the fix
-  (routing this branch through `extractForeignMaterialEvidence`) and ran a
-  read-only audit of all 721 stored FDA source records against it
-  (2026-09-03, `SUPABASE_URL`/`SUPABASE_SECRET_KEY`, `listSourceRecords` +
-  `getLatestSnapshotPayload` + `getCase` only — no write call was made) before
-  reverting it, because it is canonical derivation with a real production
-  delta and needs the P2e-B repair pattern's own governance, not a
-  display-only milestone's. The verified findings, for that future milestone:
-  - **3 active FDA records** are stored `foreign_material` under this
-    category, and in every one the bare-keyword scan's only match is the word
-    "plastic" describing the PACKAGE, with no contamination construction
-    anywhere in the announcement — proven both by `extractForeignMaterialEvidence`
-    returning `{stated: false}` on the full text and by direct reading of the
-    official announcement.
+- **The FDA metal-or-chemical category is disjunctive, and its label proves
+  nothing (P3B).** The FDA reason category
+  `Potential Metal or Chemical Contaminant` is one taxonomy heading covering a
+  physical fragment hazard AND a chemical/radiological one. A category naming
+  two possibilities states neither, so the heading is never evidence of a
+  contaminant — not as a
+  category, not as an agent, and not as a named material on any surface. Until
+  P3B, `deriveFdaHazard`'s branch for it ran its own bare-keyword scan
+  (`FOREIGN_MATERIAL_WORDS`), the same class of packaging false positive the
+  paragraph above eliminated for FSIS. **Rule (P3B): this branch now asks THE
+  shared evidence owner** — `extractForeignMaterialEvidence` — exactly as the
+  FSIS `Product Contamination` branch does. Genuine foreign-material evidence
+  → `foreign_material`; otherwise the established chemical fallback stands,
+  with any supported agent recovered through the canonical
+  `extractChemicalAgent` path. `FOREIGN_MATERIAL_WORDS` is deleted; nothing
+  FDA-specific enumerates packaging nouns, and no behavior keys on a notice
+  title, product name, source id or native id. Recorded-corpus delta: **zero**
+  — every recorded FDA and FSIS announcement parses byte-identically, because
+  no recorded fixture belongs to this production-only defect class.
+- **The three verified production records (P3B).** A read-only comparison
+  reparsed all 721 archived FDA production snapshots (2026-09-03,
+  `SUPABASE_URL`/`SUPABASE_SECRET_KEY`, `listSourceRecords` +
+  `getLatestSnapshotPayload` + `getCase` only — no write call) and found
+  exactly three canonical differences. All three are **active**, all are in
+  this category, and in every one the old scan's only match was a material
+  word describing the PACKAGE, with no contamination construction anywhere in
+  the announcement — proven both by `extractForeignMaterialEvidence` returning
+  `{stated: false}` on the full text and by direct reading of the official
+  announcement.
   - `dynarex-corporation-expands-recall-include-additional-products-due-possible-health-risk` —
-    match was `"packaged in plastic bottles"`; the announcement instead
-    states an unexplained "contamination of the talc." Correct value:
-    `chemical_contamination` / `null`.
+    match was `"packaged in plastic bottles"`; the announcement instead states
+    the product has "the potential to be contaminated with asbestos." Correct
+    value: `chemical_contamination` / `asbestos`. (An earlier read of this
+    milestone's evidence reported a null agent here, from the paraphrase
+    "an unexplained contamination of the talc"; the verified official wording,
+    recovered by the founder-authorized 2026-09-03 production dry run, directly
+    names asbestos, and the canonical chemical-agent extractor now recovers it
+    — see below.)
   - `aquastar-usa-corp-recalls-cocktail-shrimp-6oz-because-possible-health-risk` —
     match was `"packaged in a clear plastic tray"`; the announcement states
     the shrimp "may have become contaminated with cesium-137 (Cs-137)."
-    Correct value: `chemical_contamination` / `Cesium-137` — the stored
-    record currently carries no agent at all.
+    Correct value: `chemical_contamination` / `Cesium-137`.
   - `aquastar-usa-corp-recalls-kroger-mercado-frozen-cooked-shrimp-because-possible-health-risk` —
     same shape and same correct value as the previous record.
-  - All three are `active` cases today. Consumer impact of the current stored
-    values: both Cs-137 recalls render as a generic foreign-material line on
-    Home and Detail, naming no agent — the same class of misleading
-    presentation P2e-B fixed for FSIS, now known to also exist on the FDA
-    side. No allergen or personalization impact either way
-    (`normalizedAllergenTokens('Cesium-137')` is `[]`).
-  - A future milestone should apply the P2e-B pattern exactly: an
-    approved-transition table (`foreign_material -> chemical_contamination`
-    for this evidence shape only), a reviewed dry run, then an explicit
-    apply — reusing `server/hazard-repair.ts`'s machinery rather than a new
-    one-off script. **No schema migration is expected**; this is a
-    `normalized.hazardCategory` / `normalized.pathogenOrAllergen` correction
-    of the same shape P2e-B already made, on the projection and the source
-    record together.
-  - Until that milestone, P3A leaves the FDA parser and the 721 stored FDA
-    records in agreement (proven: stored vs. this branch's committed logic
-    shows zero category and zero agent drift across every stored FDA
-    record) — P3A intentionally changes no canonical FDA data.
+  - Consumer impact of the stored values: all three notices render as a
+    generic foreign-material line on Home and Detail, naming no agent — the
+    same class of misleading presentation P2e-B fixed for FSIS. No allergen or
+    personalization impact either way (`normalizedAllergenTokens('Cesium-137')`
+    is `[]`, and asbestos is not an allergen), and Affects-Me allergen matching
+    is unchanged.
+  - **FDA has no separate mineral or radiological category, and P3B
+    deliberately does not add one.** Within the closed schema the honest
+    representation of both asbestos and Cs-137 is the chemical category plus
+    the named agent, never a nameless foreign-material line, and never null
+    when the source states one. Asbestos is not chemically a "chemical" in
+    the strict sense; this is the app's existing honest mapping onto its
+    current closed taxonomy, not a scientific classification claim. A
+    separate mineral or radiological category is a schema decision for its
+    own milestone.
+  - **The chemical-agent extractor recognizes asbestos, evidence-gated
+    (P3B).** `CHEMICAL_AGENTS`' historical bare-keyword list (`lead`,
+    `cadmium`, `arsenic`, `mercury`, `Cesium-137`) does not include asbestos,
+    so `extractChemicalAgent` originally left the Dynarex agent null even
+    though the source names it. A bare-keyword match for "asbestos" would
+    have been wrong the same way `FOREIGN_MATERIAL_WORDS` was wrong: the same
+    Dynarex announcement also contains the educational aside "Asbestos is a
+    naturally occurring mineral..." one sentence later, and a bare scan
+    cannot tell that from the hazard statement. `extractChemicalAgent`
+    (`domain/hazard.ts`) now also checks a second, evidence-gated list
+    (`EVIDENCE_GATED_CHEMICAL_AGENTS`) against a bounded contamination
+    construction — "contaminated with asbestos", "asbestos contamination" —
+    so a facility mention, an educational aside, or a negated statement
+    ("asbestos-free", "contains no asbestos") is never mistaken for the
+    product stating the hazard. The historical bare-keyword agents keep their
+    existing permissive matching, unchanged. Recorded-corpus delta: **zero**
+    — no recorded FDA or FSIS fixture contains the word "asbestos" at all.
+  - **Status: implemented, dry-run-reviewed, not yet applied to production.**
+    The corrected parser and a narrow repair
+    (`src/server/fda-contaminant-repair.ts`,
+    `npm run repair:fda-contaminants:dry`) are committed and covered by
+    tests. One founder-authorized read-only production dry run confirmed the
+    population (3 records, 3 distinct single-source active cases, 0 missing
+    snapshots, 0 parse failures) before the asbestos correction above;
+    `.reports/p3b-dry-run.json` is kept as that historical evidence rather
+    than overwritten, and a fresh dry run (expected to report the corrected
+    agent census, same population) is the required next step before any
+    apply. No row has ever been written. The repair follows the P2e-B
+    pattern with a single approved transition
+    (`foreign_material -> chemical_contamination`) plus an approved agent
+    table (`null -> asbestos`, `null -> Cesium-137`), and it plans the whole
+    population before writing anything, so any blocker refuses the entire
+    apply. It does not reopen P2e-B's settled 49/48 population or commands.
+    **No schema migration and no cache-schema bump are expected**; this is a
+    `normalized.hazardCategory` / `normalized.pathogenOrAllergen` correction of
+    the same shape P2e-B already made, on the projection and the source record
+    together. Historical correction is notification-silent; whether a future
+    source-driven hazard change should notify remains a separate policy
+    milestone. See [recall-operations.md](recall-operations.md), "FDA
+    contaminant category: a historical correction (P3B)".
 - **One record was genuinely stale.** PHA-07302018-1 (Cyclospora, Caito Foods)
   was ingested 2026-08-21 from working-tree code whose `PATHOGENS` list
   predated Cyclospora; it has a single archived snapshot, and the ingest hash

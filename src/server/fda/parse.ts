@@ -20,6 +20,7 @@ import {
   allergenFamilyToken,
   extractAllergenEvidence,
   extractChemicalAgent,
+  extractForeignMaterialEvidence,
   extractPathogen,
   extractPathogenOrAllergen,
   formatAllergenList,
@@ -407,15 +408,6 @@ export interface FdaHazard {
   pathogenOrAllergen: string | null;
 }
 
-// DEFERRED (P3B): the committed bare-keyword gate for the dual "Potential
-// Metal or Chemical Contaminant" category — see the note at its call site.
-// Deliberately narrower than the shared evidence owner in domain/hazard.ts;
-// kept exactly as committed at 3dec7f8 rather than reverting to that owner's
-// stricter, evidence-gated reading (which P3A proved correct but out of
-// scope for a display-only milestone).
-const FOREIGN_MATERIAL_WORDS =
-  /\bmetal\b|\bplastic\b|\bglass\b|\bwood\b|\brubber\b|foreign (?:material|matter|object)/i;
-
 /**
  * Fixed lookup from the FDA listing's reason-category taxonomy (plus the
  * announcement text for agent names). Unmapped categories → 'unknown', never
@@ -479,25 +471,32 @@ export function deriveFdaHazard(categoryText: string, fullText: string): FdaHaza
     return { hazardCategory: 'foreign_material', pathogenOrAllergen: null };
   }
   if (/potential metal or chemical contaminant/i.test(category)) {
-    // This one category covers both physical fragments and chemical agents;
-    // the announcement's own wording decides which.
+    // This one category covers both physical fragments and chemical agents,
+    // and its LABEL states neither: "Metal or Chemical" is a disjunctive
+    // taxonomy heading, not the source naming a contaminant. Only the
+    // announcement's own wording decides which hazard it is.
     //
-    // DEFERRED (P3B, not this milestone): a production audit of all 721
-    // stored FDA records (2026-09-03) proved this bare-keyword gate
-    // misclassifies 3 active records whose only "plastic"/"metal" word
-    // describes PACKAGING, not a contaminant — the same false-positive shape
-    // P2e-B eliminated for FSIS. Routing this branch through the shared
-    // `extractForeignMaterialEvidence` owner (domain/hazard.ts) is the
-    // correct fix and was verified to produce the right answer for all 3,
-    // but it is a canonical-derivation change with a real stored-data delta,
-    // so it needs its own reviewed governance (an approved-transition table
-    // plus a dry run/apply, same shape as `server/hazard-repair.ts`) rather
-    // than riding in on a display-only milestone. See
-    // docs/recall-domain-architecture.md for the verified findings. Left
-    // exactly as committed at 3dec7f8 so P3A changes no canonical FDA data.
-    if (FOREIGN_MATERIAL_WORDS.test(fullText)) {
+    // P3B: the deciding question — "does the source state a physical
+    // foreign-material hazard?" — belongs to the one shared evidence owner
+    // in domain/hazard.ts, exactly as the FSIS `Product Contamination`
+    // branch asks it. The predecessor here was a bare-keyword scan, and a
+    // read-only audit of all 721 stored FDA source records (2026-09-03)
+    // proved it misclassified 3 active records whose only material word
+    // described the PACKAGE ("packaged in plastic bottles", "in a clear
+    // plastic tray", "in clear plastic bag") while the announcement stated
+    // chemical or radiological contamination — the same false-positive
+    // shape P2e-B eliminated for FSIS. Nothing here enumerates packaging
+    // nouns: the rule is the inverse, so an unlisted container word cannot
+    // outrun it.
+    if (extractForeignMaterialEvidence(fullText).stated) {
       return { hazardCategory: 'foreign_material', pathogenOrAllergen: null };
     }
+    // No genuine foreign-material evidence: the established chemical
+    // fallback stands, with the agent recovered — when the source names one
+    // — through the canonical agent extractor (`Cesium-137` and the other
+    // supported agents). FDA has no separate radiological category, so a
+    // radionuclide is carried as `chemical_contamination` plus its named
+    // agent rather than being flattened into a nameless hazard.
     return {
       hazardCategory: 'chemical_contamination',
       pathogenOrAllergen: extractChemicalAgent(fullText),

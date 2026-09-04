@@ -31,8 +31,46 @@ export const ALLERGENS = [
   'gluten',
 ];
 
-/** Named chemical contaminants observed in official recall notices. */
+/**
+ * Named chemical contaminants observed in official recall notices, matched
+ * anywhere the exact word appears — no evidence gate. Historical, permissive
+ * matching that predates the evidence-gated agents below; left unchanged.
+ */
 export const CHEMICAL_AGENTS = ['lead', 'cadmium', 'arsenic', 'mercury', 'Cesium-137'];
+
+/**
+ * Substances recognized only inside a bounded contamination construction —
+ * never a bare keyword scan, because a facility/educational/negated mention
+ * of the substance is not evidence that the recalled product contains it
+ * (P3B: "Asbestos is a naturally occurring mineral..." is generic scientific
+ * background in the same announcement that states the real hazard one
+ * sentence earlier; a bare scan cannot tell the two apart). Asbestos is the
+ * first member — add future evidence-gated agents here rather than growing a
+ * second implementation.
+ */
+const EVIDENCE_GATED_CHEMICAL_AGENTS = ['asbestos'];
+
+/** Is this substance stated as the contaminant (not mentioned in passing)? */
+function chemicalAgentStatedAsContaminant(text: string, agent: string): boolean {
+  return [
+    // "contaminated with asbestos", "may be contaminated by ... asbestos" —
+    // the official Dynarex construction ("potential to be contaminated with
+    // asbestos") is this pattern; the modal/aux words before "contaminated"
+    // don't matter, only what follows it.
+    new RegExp(`\\bcontaminat(?:ed|ion)\\s+(?:with|by)\\s+(?:\\w+[\\s,]+){0,3}${agent}\\b`, 'i'),
+    // "asbestos contamination", "potential asbestos contamination" — forward
+    // gap; "or"/"and" end it, so a disjunctive label ("asbestos or lead
+    // contamination") states neither on its own.
+    new RegExp(`\\b${agent}\\s+(?:(?!(?:or|and)\\b)\\w+\\s+){0,2}contamin`, 'i'),
+  ].some((pattern) => pattern.test(text));
+}
+
+function evidenceGatedChemicalAgent(text: string): string | null {
+  return (
+    EVIDENCE_GATED_CHEMICAL_AGENTS.find((agent) => chemicalAgentStatedAsContaminant(text, agent)) ??
+    null
+  );
+}
 
 export function extractPathogen(text: string): string | null {
   for (const pathogen of PATHOGENS) {
@@ -42,7 +80,10 @@ export function extractPathogen(text: string): string | null {
 }
 
 export function extractChemicalAgent(text: string): string | null {
-  return CHEMICAL_AGENTS.find((c) => new RegExp(`\\b${c}\\b`, 'i').test(text)) ?? null;
+  return (
+    CHEMICAL_AGENTS.find((c) => new RegExp(`\\b${c}\\b`, 'i').test(text)) ??
+    evidenceGatedChemicalAgent(text)
+  );
 }
 
 /**

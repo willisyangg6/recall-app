@@ -694,6 +694,149 @@ changes remaining). This is a completed one-time historical repair. Rerunning
 the dry run is a safe, standing verification command; rerunning the apply is
 not a normal operation — see the warning on the command block above.
 
+## FDA contaminant category: a historical correction (P3B)
+
+**Status: implemented, dry-run-reviewed, NOT applied.** One founder-authorized
+read-only production dry run has been run (2026-09-03,
+`.reports/p3b-dry-run.json`) and confirmed the population: 3 source records,
+3 case projections, all active, all distinct and single-source, 0 missing
+snapshots, 0 parse failures, 0 refused transitions, 0 writes. That dry run
+predates the asbestos correction below (it reported Dynarex's agent as
+`null`, not `asbestos`) and its ledger is kept as historical evidence rather
+than overwritten. No row has ever been written. **A fresh dry run — expected
+to report the corrected agent census (`null → asbestos` in place of
+`null → null`), otherwise the same population — is the required next step
+before any apply.**
+
+```
+npm run repair:fda-contaminants:dry            # report only, writes nothing
+npm run repair:fda-contaminants -- --confirm   # APPLY (requires BOTH flags; needs explicit authorization)
+npm run repair:fda-contaminants:dry            # verify: "would change" must be 0
+```
+
+**The defect.** The FDA reason category `Potential Metal or Chemical
+Contaminant` is disjunctive — one taxonomy heading covering a physical
+fragment hazard AND a chemical/radiological one — so the heading itself proves
+neither. The committed parser decided between them with a bare scan for
+material words anywhere in the announcement, so **packaging chose the
+hazard**: the same false-positive shape P2e-B eliminated for FSIS, left open
+on this one FDA branch. `deriveFdaHazard` now routes the branch through THE
+shared evidence owner, `extractForeignMaterialEvidence` in
+`src/domain/hazard.ts`, exactly as the FSIS `Product Contamination` branch
+does. Nothing enumerates packaging nouns; the rule is the inverse, so an
+unlisted container word cannot outrun it. See
+[recall-domain-architecture.md](recall-domain-architecture.md), "Canonical
+hazard-category precedence", for the rule itself and
+[recall-source-contract.md](recall-source-contract.md) §3.1 for the source
+behavior that makes the category ambiguous.
+
+**The verified population.** A read-only comparison reparsed all 721 archived
+FDA production snapshots (2026-09-03, 100% snapshot coverage) and found
+exactly three canonical differences — all active, all in this category, all
+stored `foreign_material` / null because the only material word in the
+announcement described the package:
+
+| Notice                                       | False trigger                      | What the source states                           | Correct value                           |
+| -------------------------------------------- | ---------------------------------- | ------------------------------------------------ | --------------------------------------- |
+| Dynarex Dynacare Baby Powder                 | "packaged in plastic bottles"      | "the potential to be contaminated with asbestos" | `chemical_contamination` / `asbestos`   |
+| AquaStar Cocktail Shrimp 6oz                 | "packaged in a clear plastic tray" | contamination with Cesium-137 (Cs-137)           | `chemical_contamination` / `Cesium-137` |
+| AquaStar Kroger Mercado Frozen Cooked Shrimp | "packaged in clear plastic bag"    | contamination with Cesium-137 (Cs-137)           | `chemical_contamination` / `Cesium-137` |
+
+FDA's taxonomy has **no separate mineral or radiological category**, and P3B
+deliberately does not add one. Within the closed schema the honest
+representation of both asbestos and Cs-137 is the chemical category plus the
+named agent — never a nameless foreign-material line, and never null when the
+source states one. (Asbestos is not chemically a "chemical" in the strict
+sense; this is the app's existing honest mapping onto its current closed
+taxonomy, not a scientific classification claim.)
+
+**The chemical-agent extractor now recognizes asbestos, evidence-gated.** The
+Dynarex announcement directly states "the potential to be contaminated with
+asbestos" — asbestos is not in `CHEMICAL_AGENTS`' historical bare-keyword list
+(`lead`, `cadmium`, `arsenic`, `mercury`, `Cesium-137`), so leaving it there
+left the agent null even though the source names it. `extractChemicalAgent`
+(`src/domain/hazard.ts`) now also checks a second, evidence-gated list
+(`EVIDENCE_GATED_CHEMICAL_AGENTS`, currently just `asbestos`) against a
+bounded contamination construction — "contaminated with asbestos", "asbestos
+contamination" — so a facility mention, an educational aside ("Asbestos is a
+naturally occurring mineral...", which the same Dynarex announcement also
+contains one sentence later), or a negated statement ("asbestos-free",
+"contains no asbestos") is never mistaken for the product stating the hazard.
+The historical bare-keyword agents are unchanged.
+
+**The tooling.** `src/server/fda-contaminant-repair.ts` and
+`scripts/repair-fda-contaminants.ts` are a separate, narrowly scoped repair
+built on the P2d/P2e safety pattern. The settled P2e-B repair, its approved
+49/48 population and its commands are **not** reopened or modified.
+
+Scope is decided from the **archived official reason category** alone — never
+from a title, product name, source id or native id. Only FDA announcement
+records whose recorded category is `Potential Metal or Chemical Contaminant`
+are planned; every other source system and every other FDA category is
+out of scope and untouched, so this repair cannot reach the P2e-B population
+or any FSIS row.
+
+It writes exactly four fields: `normalized.hazardCategory` and
+`normalized.pathogenOrAllergen` on source records (one compare-and-swap
+guarded on **both** observed values), and the same pair inside `projection`
+(through `updateCaseHazard`, conditional on `last_changed_at`). Category and
+agent are written **together**, because they are one canonical fact. The
+generated `recall_cases.hazard_category` column follows the projection JSON
+automatically and is **never written directly**. Case reconstruction is
+delegated to `projectCase` over the corrected records, so a multi-source case
+resolves exactly as a real re-projection would, never by assumption. No
+network, no pipeline, no `detectChanges`, no NotificationEvent, no job lease;
+dates, classifications, states, retailers, products, images, raw snapshots,
+hashes and the notification ledger stay byte-identical.
+
+**Plan-then-apply.** Unlike P2e-B's single pass, P3B plans the entire
+population first and only then writes, so a blocker anywhere refuses the
+**whole** apply rather than being discovered after some rows were already
+corrected. The blockers, each exiting non-zero with the ledger printed:
+
+- a missing archived snapshot (its official category is unknowable, so the
+  record cannot be ruled in or out of scope);
+- a snapshot the canonical adapter cannot parse;
+- a category transition outside the approved table;
+- an agent transition outside the approved table;
+- a population that is not the reviewed one.
+
+Approved transitions, the only writable moves:
+
+| From               | To                       | Approved agent moves                   | Expected |
+| ------------------ | ------------------------ | -------------------------------------- | -------- |
+| `foreign_material` | `chemical_contamination` | `null → asbestos`, `null → Cesium-137` | 3        |
+
+**Expected production dry-run population:** 3 source records and 3 case
+projections, all active — `foreign_material → chemical_contamination` ×3, with
+agent `null → asbestos` ×1 (Dynarex) and `null → Cesium-137` ×2 (both AquaStar
+shrimp notices). The case count and case structure were **confirmed** by the
+2026-09-03 dry run (`.reports/p3b-dry-run.json`, pre-asbestos-correction): 3
+distinct, active, single-source cases, 0 multi-source. That run reported
+Dynarex's agent as `null → null`, since it predates the asbestos correction —
+a fresh dry run is expected to report the corrected census above against the
+same case structure. An **empty** set (0 and 0) is not a failure — it is
+`settled`, which is exactly what the post-apply verification dry run must
+report.
+
+Applying is double-gated: `--apply` alone is refused; the second
+acknowledgment (`--confirm`) must accompany it. **Durable ledger:** an apply
+always leaves a complete machine-readable report behind — `--json <path>`
+writes it where you ask, and with no `--json` an apply writes a timestamped
+report to `.reports/` (git-ignored) and prints the path. A dry run writes one
+only when `--json` is given. The operation is idempotent and restartable;
+rows that changed between the plan read and the write are **skipped and
+reported**, never re-derived on the fly.
+
+Historical correction is **notification-silent by construction**:
+`last_changed_at` never moves (it is the CAS predicate), the pipeline is never
+invoked, and `detectChanges` has no hazard rule at all. Consumers still see the
+correction, because the C8 feed manifest token is a read-time content hash over
+the projection — **no cache schema bump and no migration are needed**. Whether a
+future **source-driven** hazard change on an active case should be eligible for
+notification remains a separate policy milestone, deliberately not decided here;
+`material-change.ts` was not modified in P3B.
+
 ## Enforcement: weekly-gated
 
 The daily job reads the one-request openFDA bulk manifest and compares its

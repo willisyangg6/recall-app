@@ -1,0 +1,41 @@
+[
+  {
+    "product": "Dynarex Dynacare Baby Powder",
+    "nativeId": "dynarex-corporation-expands-recall-include-additional-products-due-possible-health-risk",
+    "officialUrl": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/dynarex-corporation-expands-recall-include-additional-products-due-possible-health-risk",
+    "fdaReasonCategory": "Potential Metal or Chemical Contaminant",
+    "storedHazardCategory": "foreign_material",
+    "storedPathogenOrAllergen": null,
+    "expectedHazardCategory": "chemical_contamination",
+    "expectedPathogenOrAllergen": "asbestos",
+    "packagingExcerpt": "packaged in plastic bottles, 24 bottles to a case",
+    "hazardExcerpt": "because they have the potential to be contaminated with asbestos. Asbestos is a naturally occurring mineral that is often found near talc, an ingredient in many baby powders",
+    "provenance": "Hazard excerpt recovered verbatim by the founder-authorized read-only P3B production dry run (2026-09-03, .reports/p3b-dry-run.json — read-only: listSourceRecords/getLatestSnapshotPayload/getCase/listCases only, zero writes). The packaging excerpt is the P3A read-only production audit of all 721 stored FDA source records (2026-09-03), quoted in docs/recall-domain-architecture.md."
+  },
+  {
+    "product": "AquaStar Cocktail Shrimp 6oz",
+    "nativeId": "aquastar-usa-corp-recalls-cocktail-shrimp-6oz-because-possible-health-risk",
+    "officialUrl": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/aquastar-usa-corp-recalls-cocktail-shrimp-6oz-because-possible-health-risk",
+    "fdaReasonCategory": "Potential Metal or Chemical Contaminant",
+    "storedHazardCategory": "foreign_material",
+    "storedPathogenOrAllergen": null,
+    "expectedHazardCategory": "chemical_contamination",
+    "expectedPathogenOrAllergen": "Cesium-137",
+    "packagingExcerpt": "packaged in a clear plastic tray",
+    "hazardExcerpt": "may have become contaminated with cesium-137 (Cs-137)",
+    "provenance": "Bounded excerpts recorded by the P3A read-only production audit of all 721 stored FDA source records (2026-09-03) and quoted in docs/recall-domain-architecture.md."
+  },
+  {
+    "product": "AquaStar Kroger Mercado Frozen Cooked Shrimp",
+    "nativeId": "aquastar-usa-corp-recalls-kroger-mercado-frozen-cooked-shrimp-because-possible-health-risk",
+    "officialUrl": "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/aquastar-usa-corp-recalls-kroger-mercado-frozen-cooked-shrimp-because-possible-health-risk",
+    "fdaReasonCategory": "Potential Metal or Chemical Contaminant",
+    "storedHazardCategory": "foreign_material",
+    "storedPathogenOrAllergen": null,
+    "expectedHazardCategory": "chemical_contamination",
+    "expectedPathogenOrAllergen": "Cesium-137",
+    "packagingExcerpt": "packaged in clear plastic bag",
+    "hazardExcerpt": "may have become contaminated with cesium-137 (Cs-137)",
+    "provenance": "Packaging excerpt recorded verbatim by the P3A read-only production audit (2026-09-03). The same audit recorded this notice's hazard statement as the same construction as the preceding AquaStar record ('same shape and same correct value'), which is the construction pinned here — not a re-recorded page."
+  }
+]

@@ -105,6 +105,21 @@ persists nothing (zero configuration needed); on `jobs:labels`/
 (`jobs:push` additionally sends nothing to Expo). `--force` bypasses the
 unchanged-source gate after a code change.
 
+Historical corrections are separate, explicitly invoked maintenance commands,
+never scheduled. Each is dry-run by default and needs a second acknowledgment
+(`--confirm`) before it writes; each leaves a durable JSON ledger on apply.
+The completed ones are kept as operational record — see
+[docs/recall-operations.md](docs/recall-operations.md) for each one's exact
+status and semantics.
+
+```bash
+npm run repair:geography:dry             # applied 2026-09-02 (completed)
+npm run repair:allergens:dry             # applied 2026-09-02 (completed)
+npm run repair:hazards:dry               # P2e-B, applied 2026-09-03 (completed)
+npm run repair:fda-contaminants:dry      # P3B — implemented, NOT yet dry-run or applied
+npm run repair:fda-contaminants -- --confirm   # APPLY (needs explicit authorization)
+```
+
 ### Push notifications (Phase C2)
 
 Deliverable NotificationEvents become real device pushes via the Expo Push

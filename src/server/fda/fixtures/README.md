@@ -40,4 +40,23 @@ listing row + page `<main>`, each stamped with its `capturedAt` date and
   single-row Affected Products table: prose UPC + lot list with no size or
   date evidence (recorded 2026-09-02).
 
-Never hand-edit these files; re-record from the live sources instead.
+## Pinned production notices (P3B)
+
+`hazard-metal-or-chemical-notices.json` is a different kind of fixture: it is
+**not** a re-recorded page. It holds the three production notices the P3B
+read-only audit of all 721 archived FDA source records (2026-09-03) found
+misclassified under the disjunctive FDA reason category `Potential Metal or
+Chemical Contaminant`, as **bounded official excerpts** — the packaging clause
+that falsely triggered the old bare-keyword scan, and the clause that actually
+states the hazard — each entry carrying its own `officialUrl` and a
+`provenance` note saying exactly where its text came from. It backs
+`src/server/fda/hazard-metal-or-chemical.test.ts` and the repair tests in
+`src/server/fda-contaminant-repair.test.ts`, neither of which may branch on a
+native id.
+
+Nothing in it is invented. If a full page is ever recorded for one of these
+notices, replace the excerpt with the recorded announcement rather than
+extending the excerpt by hand.
+
+Never hand-edit the recorded fixtures above; re-record from the live sources
+instead.

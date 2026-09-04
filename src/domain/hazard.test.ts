@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   allergenDisplayPhrase,
   extractAllergenEvidence,
+  extractChemicalAgent,
   extractForeignMaterialEvidence,
   extractPathogenOrAllergen,
   normalizedAllergenTokens,
@@ -371,4 +372,69 @@ test('undeclared-allergen evidence is delegated to the one extractor', () => {
   assert.equal(statesUndeclaredAllergen('made in a facility that also processes peanuts'), false);
   assert.equal(statesUndeclaredAllergen('contains no milk, a known allergen'), false);
   assert.equal(statesUndeclaredAllergen('an undeclared allergen'), false);
+});
+
+// ── Chemical-agent evidence extraction (P3B) ─────────────────────────────────
+
+test('the historical chemical-agent list still matches anywhere the word appears, unchanged', () => {
+  // CHEMICAL_AGENTS is deliberately permissive/bare — predates the evidence
+  // gate below, and this milestone leaves that behavior exactly as it was.
+  assert.equal(extractChemicalAgent('Testing found elevated levels of lead.'), 'lead');
+  assert.equal(extractChemicalAgent('a footnote mentions mercury in passing'), 'mercury');
+  assert.equal(
+    extractChemicalAgent('may have become contaminated with cesium-137 (Cs-137)'),
+    'Cesium-137',
+  );
+});
+
+test('asbestos is recovered only from a bounded contamination construction', () => {
+  // The verified official Dynarex Dynacare Baby Powder wording (P3B).
+  assert.equal(
+    extractChemicalAgent(
+      'because they have the potential to be contaminated with asbestos. Asbestos is a ' +
+        'naturally occurring mineral that is often found near talc, an ingredient in many baby powders.',
+    ),
+    'asbestos',
+  );
+  assert.equal(
+    extractChemicalAgent('The firm initiated the recall due to potential asbestos contamination.'),
+    'asbestos',
+  );
+  assert.equal(
+    extractChemicalAgent('Testing revealed the lot was contaminated with asbestos.'),
+    'asbestos',
+  );
+});
+
+test('asbestos is never invented from a mention that does not state contamination', () => {
+  assert.equal(
+    extractChemicalAgent(
+      'The product is labeled asbestos-free and has passed independent testing.',
+    ),
+    null,
+  );
+  assert.equal(
+    extractChemicalAgent('Laboratory testing confirmed the product contains no asbestos.'),
+    null,
+  );
+  assert.equal(extractChemicalAgent('Testing found no asbestos in the recalled lots.'), null);
+  // Hypothetical/educational discussion never connected to the recalled product.
+  assert.equal(
+    extractChemicalAgent(
+      'Asbestos is a naturally occurring mineral once widely used in insulation and building materials.',
+    ),
+    null,
+  );
+  // Facility prose that mentions asbestos without connecting it to the product.
+  assert.equal(
+    extractChemicalAgent(
+      'The manufacturing facility completed an unrelated asbestos remediation project last year.',
+    ),
+    null,
+  );
+  // A bare occurrence outside any contamination construction.
+  assert.equal(
+    extractChemicalAgent('See the appendix for general information about asbestos.'),
+    null,
+  );
 });

@@ -168,20 +168,23 @@ duplicate — the dead `foreignMaterialAgent` bare-keyword helper in
 import, or test — and proved FDA normalized output byte-identical across all
 163 recorded announcements after that deletion.
 
-**Not yet unified (deferred to P3B): the FDA `Potential Metal or Chemical
-Contaminant` category gate.** This live canonical branch still runs its own
-committed bare-keyword scan (`FOREIGN_MATERIAL_WORDS` in
-`src/server/fda/parse.ts`) rather than calling the shared owner. P3A drafted
-and verified the fix — routing this branch through
-`extractForeignMaterialEvidence` — against a read-only audit of all 721
-stored FDA source records (2026-09-03) and confirmed it is correct, but
-reverted it before checkpointing: it is canonical derivation with a real
-production delta (see docs/recall-domain-architecture.md, "Deferred: the FDA
-metal-or-chemical bare-keyword gate"), not a display-layer change, so it
-needs the same reviewed governance as the P2e-B hazard repair rather than
-riding in on a display-only milestone. As committed, P3A changes **zero**
-canonical FDA data — stored production values, the parser, and the recorded
-fixtures all still agree.
+**Now unified (P3B): the FDA `Potential Metal or Chemical Contaminant`
+category gate.** This was the last canonical branch running a bare-keyword
+scan of its own (`FOREIGN_MATERIAL_WORDS` in `src/server/fda/parse.ts`); it
+now calls the shared owner, so no derivation anywhere can name a material the
+evidence rule did not accept. The FDA heading is **disjunctive** — it covers a
+physical fragment hazard and a chemical/radiological one — and a category
+naming two possibilities states neither, so it is never evidence of a
+contaminant. The parser change is byte-identical over every recorded FDA and
+FSIS announcement; the defect it closes is production-only, and correcting the
+three stored records is the separate, reviewed P3B repair (implemented, not
+yet applied — see [recall-operations.md](recall-operations.md), "FDA
+contaminant category: a historical correction (P3B)"). Once applied, the two
+Cs-137 shrimp notices name **Cesium-137** on Home and Detail instead of a
+nameless foreign-material line, the talc notice stops reading as
+foreign-material contamination, no packaging material is named as a hazard on
+either surface, Affects-Me allergen matching is unchanged (none is an allergen
+case), and the feed/cache payload shapes are untouched.
 
 `conciseReasonLine` renders the family as one deterministic sentence:
 `Potential <pathogen> contamination.` (approved wording is **Potential**, not
