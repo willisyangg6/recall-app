@@ -880,13 +880,18 @@ backfill, no cache-schema bump, no re-projection, and no notification. There is
 nothing here to authorize or to apply, and the P3B apply must not be rerun for
 it.
 
-**P3C-2 (affected-product row ownership) remains deferred and unimplemented.**
-If it ever proves a canonical-data defect, that correction is a separate repair
-needing its own reviewed dry run and its own explicit apply authorization under
-the rules in this document — it is in no way covered by the completed P3B
-authorization above. See
-[recall-feed-usability.md](recall-feed-usability.md), "P3C — affected-product
-data and presentation correctness".
+**P3C-2 (affected-product row ownership) is implemented, simulator-verified,
+and shipped** — committed and pushed in `51c1a7b`. The Affected Products table
+is now the only visual owner of lot, batch, case, and production codes and of
+row-applicable production dates; no code disclosure renders beneath the table.
+AquaStar and Dynarex were verified in the live app. Like P3C-1 it is
+display-time only: no production repair or migration was required, and there
+is nothing here to authorize or to apply. If a canonical-data defect is ever
+proven in this area, that correction is a separate repair needing its own
+reviewed dry run and its own explicit apply authorization under the rules in
+this document — it is in no way covered by the completed P3B authorization
+above. See [recall-feed-usability.md](recall-feed-usability.md), "P3C —
+affected-product data and presentation correctness".
 
 ## Enforcement: weekly-gated
 

@@ -1976,3 +1976,80 @@ test('P3A: Where it was sold is absent when the geography supports no representa
   const blank = whereSoldModel({ ...emptyDistribution(), areaText: '   ' });
   assert.equal(whereSoldSection(blank), null);
 });
+
+// ── P3D: display capitalization through the shared models ───────────────────
+
+test('P3D named regression (synthetic): dynacare renders as Dynacare on every surface', () => {
+  // Synthetic reproduction of the production-observed Dynarex/Dynacare defect
+  // (visually verified in production on 2026-09-04; that notice is not in the
+  // recorded corpus, so these inputs mirror its shape rather than replay it).
+  // The FDA structured brand field carried "dynacare" entirely lowercase.
+  const item = feedItem({
+    title:
+      'Dynarex Corporation Expands Recall to Include Additional Products Due to Possible Health Risk',
+    firmName: 'Dynarex Corporation',
+    brands: ['dynacare'],
+    productDescription: 'Baby Powder',
+    hazardCategory: 'chemical_contamination',
+    pathogenOrAllergen: 'asbestos',
+  });
+  const home = buildHomeCardModel(item, { today: TODAY, affectsYou: false });
+  const model = buildDetailModel(
+    detail({
+      title: item.title,
+      recallingFirm: { displayName: 'Dynarex Corporation', rawVariants: ['Dynarex Corporation'] },
+      brands: ['dynacare'],
+      productDescription: 'Baby Powder',
+      hazardCategory: 'chemical_contamination',
+      pathogenOrAllergen: 'asbestos',
+    }),
+    { today: TODAY, affectsYou: false },
+  );
+  // The one brand line, corrected, on both surfaces — never "dynacare".
+  assert.equal(home.brand.text, 'Dynacare');
+  assert.equal(model.brand.text, 'Dynacare');
+  // The generated sentence opens with the corrected display subject.
+  assert.equal(
+    model.whatHappened.text,
+    'Dynacare recalled Baby Powder because the products may be contaminated with asbestos.',
+  );
+  // Home/Detail parity for the product name is unaffected by the brand fix.
+  assert.equal(home.productName, model.productName);
+});
+
+test('P3D named regression (synthetic): the lowercase supplements headline is headline-cased', () => {
+  // Synthetic reproduction of the production-observed all-lowercase FDA
+  // product description that rendered verbatim as a Home card title.
+  const description = 'dietary supplements marketed for male sexual enhancement';
+  const item = feedItem({ productDescription: description });
+  const home = buildHomeCardModel(item, { today: TODAY, affectsYou: false });
+  const model = buildDetailModel(detail({ productDescription: description }), {
+    today: TODAY,
+    affectsYou: false,
+  });
+  // Founder contract: every ordinary word capitalized, including "For".
+  assert.equal(home.productName, 'Dietary Supplements Marketed For Male Sexual Enhancement');
+  assert.equal(model.productName, home.productName);
+});
+
+test('P3D: the stylized brand a2 is preserved on the brand line and as sentence subject', () => {
+  const overrides = {
+    title: 'a2 Platinum USA label infant formula recalled',
+    recallingFirm: { displayName: 'The a2 Milk Company', rawVariants: ['The a2 Milk Company'] },
+    brands: ['a2'],
+    productDescription: 'a2 Platinum Premium Infant Formula',
+  };
+  const item = feedItem({
+    title: overrides.title,
+    firmName: overrides.recallingFirm.displayName,
+    brands: overrides.brands,
+    productDescription: overrides.productDescription,
+  });
+  const home = buildHomeCardModel(item, { today: TODAY, affectsYou: false });
+  const model = buildDetailModel(detail(overrides), { today: TODAY, affectsYou: false });
+  // Brand identity wins over sentence-opening convention (P3D founder
+  // decision A): never "A2".
+  assert.equal(home.brand.text, 'a2');
+  assert.equal(model.brand.text, 'a2');
+  assert.match(model.whatHappened.text, /^a2 recalled a2 Platinum Premium Infant Formula/);
+});

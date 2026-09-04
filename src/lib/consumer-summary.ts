@@ -187,6 +187,105 @@ export function humanizeAllCaps(text: string): string {
     .join(' ');
 }
 
+// ── Display capitalization (P3D) ────────────────────────────────────────────
+//
+// Two defect-gated, idempotent display transforms. Both fire only on values
+// whose casing is evidence of a source defect (entirely-lowercase headlines,
+// lowercase-leading labels); any uppercase letter anywhere in the gated span
+// is treated as intentional and preserves the value untouched. Stylized
+// identities therefore survive by construction: "a2", "iHerb", "4Earth",
+// acronyms, scientific notation, and codes are never rewritten. Display-only —
+// canonical stored text, search keys, and identity are never modified.
+
+/**
+ * Conventional abbreviated units, preserved verbatim in headline mode
+ * ("16 oz.", "5 kg"). Deliberately narrow: spelled-out unit nouns ("quart",
+ * "pounds") are ordinary headline words and are NOT listed here. Digit-bearing
+ * tokens ("4-lb.,", "8-oz") never reach this check — they are preserved first.
+ */
+const UNIT_ABBREVIATION = /^(?:oz|lbs?|g|kg|mg|ml|l|ct|pk|qt|pt|gal|fl|ea)[.,;]*$/;
+
+/** A scientific genus abbreviation opening ("e." in "e. coli"). */
+const SCIENTIFIC_MARKER = /^[a-z]\.$/;
+
+const ANY_UPPER = /\p{Lu}/u;
+const ANY_LOWER = /\p{Ll}/u;
+
+/** Capitalize the first lowercase letter of each hyphen/slash segment. */
+function capitalizeHeadlineToken(token: string): string {
+  return token
+    .split(/([-/])/)
+    .map((segment) =>
+      segment === '-' || segment === '/'
+        ? segment
+        : segment.replace(/\p{Ll}/u, (c) => c.toUpperCase()),
+    )
+    .join('');
+}
+
+/**
+ * Headline capitalization for a defectively lowercase headline (P3D founder
+ * contract): fires ONLY when the value has lowercase letters and no uppercase
+ * letter at all — an entirely-lowercase source headline ("dietary supplements
+ * marketed for male sexual enhancement"). Every ordinary word is then
+ * capitalized, including short connectives ("For", "To") and each hyphen/
+ * slash segment; apostrophes capitalize only the lead ("red's" → "Red's").
+ * Preserved within a transformed headline: digit-bearing tokens ("4-lb.,",
+ * "8-oz"), the abbreviated units above ("oz.", "kg"), and the word after a
+ * scientific genus marker ("e. coli" → "E. coli", never "E. Coli").
+ * Idempotent: any transformed value contains an uppercase letter, which
+ * disqualifies it from transforming again; a value that is all preserved
+ * tokens ("16 oz.") is a fixed point.
+ */
+export function headlineCaseIfLowercase(text: string): string {
+  if (ANY_UPPER.test(text) || !ANY_LOWER.test(text)) return text;
+  let afterScientificMarker = false;
+  return text
+    .split(/(\s+)/)
+    .map((token) => {
+      if (/^\s*$/.test(token)) return token;
+      const wasAfterMarker = afterScientificMarker;
+      afterScientificMarker = SCIENTIFIC_MARKER.test(token);
+      if (afterScientificMarker) return token.toUpperCase(); // "e." → "E."
+      if (wasAfterMarker) return token; // "coli" keeps its lowercase species name
+      if (/\p{Nd}/u.test(token)) return token; // codes, "4-lb.,", "8-oz"
+      if (UNIT_ABBREVIATION.test(token)) return token;
+      if (!ANY_LOWER.test(token)) return token; // punctuation-only
+      return capitalizeHeadlineToken(token);
+    })
+    .join('');
+}
+
+/**
+ * Leading-word capitalization for labels and generated sentences (P3D):
+ * capitalizes the first word ONLY when that word is entirely lowercase and
+ * digit-free ("dynacare" → "Dynacare"; "dynacare recalled Baby Powder…" →
+ * "Dynacare recalled…"). The rest of the value is never rebuilt. A first
+ * token carrying a digit or any uppercase is intentional identity and leaves
+ * the whole value untouched ("a2", "iHerb", "4Earth"). Idempotent: the
+ * transformed value opens with an uppercase letter. NOT `sentenceCaseValue`
+ * (lib/identifiers.ts): that helper's first-word scan stops at a digit and
+ * would corrupt "a2" into "A2".
+ */
+export function capitalizeLeadingWord(text: string): string {
+  if (!/^\p{Ll}[\p{Ll}'’]*(?=$|[^\p{L}\p{N}])/u.test(text)) return text;
+  return text.replace(/^\p{Ll}/u, (c) => c.toUpperCase());
+}
+
+/**
+ * The complete headline casing pipeline for a consumer product name: un-shout
+ * an ALL-CAPS source value (`humanizeAllCaps`), then headline-case a
+ * defectively all-lowercase one (`headlineCaseIfLowercase`). The two gates are
+ * mutually exclusive — a value has no lowercase or no uppercase, never both —
+ * so exactly one transform can fire and the composition stays idempotent.
+ * Home/Detail's cleaned product name and the push formatter's product slot
+ * both flow through THIS function, so a card and the notification that opens
+ * it can never disagree about a name's casing.
+ */
+export function displayHeadlineCase(text: string): string {
+  return headlineCaseIfLowercase(humanizeAllCaps(text));
+}
+
 /**
  * Mechanical legal suffixes that can be dropped for display without changing
  * identity. Deliberately conservative: ambiguous words like "Company"/"Foods"
@@ -198,8 +297,9 @@ const LEGAL_SUFFIX =
 /**
  * Most consumer-recognizable company name for display. Prefers a DBA/trade
  * name when the source states one ("Indus Foods, LLC DBA Gangothri Foods" →
- * "Gangothri Foods"), strips mechanical legal suffixes, and un-shouts
- * all-caps legal names ("RED'S ALL NATURAL, LLC." → "Red's All Natural").
+ * "Gangothri Foods"), strips mechanical legal suffixes, un-shouts all-caps
+ * legal names ("RED'S ALL NATURAL, LLC." → "Red's All Natural"), and opens a
+ * defectively lowercase name with a capital ("dynacare" → "Dynacare", P3D).
  * The authoritative raw/legal name stays in the underlying data untouched.
  */
 export function companyDisplayName(raw: string | null): string | null {
@@ -223,7 +323,7 @@ export function companyDisplayName(raw: string | null): string | null {
     // "Slade Gorton &") — drop it with the punctuation.
     .replace(/[\s,&]+$|\s+and$/i, '')
     .trim();
-  return humanizeAllCaps(stripped.length >= 3 ? stripped : base);
+  return capitalizeLeadingWord(humanizeAllCaps(stripped.length >= 3 ? stripped : base));
 }
 
 /**

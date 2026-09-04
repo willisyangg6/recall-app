@@ -124,9 +124,15 @@ Copy is one deterministic formatter (`src/server/push/format.ts`, golden-
 tested) reusing the app's own display helpers — product identity, hazard
 reason, ConsumerRiskTier words (Critical/High/…); official Class I/II/III
 never appears in a push, mixed classes are never shown as one class, and a
-Pending-risk recall announces hazard facts without inventing a tier. Payload
-is `{kind:'recall', recallCaseId, notificationEventId}` — the app validates
-it and builds the route itself; it never navigates to a pushed URL.
+Pending-risk recall announces hazard facts without inventing a tier. Product
+titles flow through the shared display-capitalization contract (P3D,
+[recall-feed-usability.md](recall-feed-usability.md)), so a defectively
+lowercase source name is headline-cased in future delivery copy exactly as on
+the app's cards. That is formatting only: it does not activate push, create
+notification events, or rewrite any recorded notification data — copy is
+rendered at delivery time and is never stored in the ledger. Payload is
+`{kind:'recall', recallCaseId, notificationEventId}` — the app validates it
+and builds the route itself; it never navigates to a pushed URL.
 
 Scheduling: a `jobs:push` step at the end of both existing workflows. The
 30-minute tick delivers events created in the same cycle and reads the

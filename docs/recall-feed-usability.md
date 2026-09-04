@@ -571,9 +571,9 @@ are now built:
 | **P3C-1** | B (date parsing and formatting), C (barcode correctness), D (identifier-list punctuation), E (quantity paragraph) | **implemented, display-time** |
 | **P3C-2** | A (row-owned lot and batch codes — affected-product row ownership)                                                | **implemented, display-time** |
 
-Neither part completes all P3 work: **P3D (consumer-facing capitalization) is
-deferred and unimplemented**, and the Dynarex `Mfg. Dt.` / `Exp. Dt.` columns
-remain deferred because their day-first reading is not authorized.
+**P3D (consumer-facing capitalization) is implemented, display-time** — see
+its section below. The Dynarex `Mfg. Dt.` / `Exp. Dt.` columns remain deferred
+because their day-first reading is not authorized.
 
 **P3C-1 is display-time only.** Every one of its four corrections happens in
 the shared read path over preserved source data. It requires **no production
@@ -994,37 +994,71 @@ The audit steps:
 8. Preserve row identity and evidence ownership throughout; never use array
    position.
 
-### P3D — consumer-facing capitalization (DEFERRED, NOT IMPLEMENTED)
+### P3D — consumer-facing capitalization (IMPLEMENTED, display-time)
 
-**Nothing below is implemented.** P3C-2 changed no capitalization behavior
-anywhere, deliberately: it is recorded here so the contract is settled before
-someone reaches for a `toLowerCase()`.
+The display defects this milestone corrected (visually verified in
+production): Detail rendered the company/brand as `dynacare` rather than
+`Dynacare`, the generated reason sentence opened `dynacare recalled…`, and one
+Home card title read
+`dietary supplements marketed for male sexual enhancement` entirely in
+lowercase.
 
-**Observed defects.**
+**The shared display contract.** Two defect-gated, idempotent helpers in
+`lib/consumer-summary.ts` own all display capitalization; no screen carries a
+casing call of its own:
 
-- Detail renders the company/brand as `dynacare` rather than `Dynacare`.
-- The generated reason sentence opens `dynacare recalled…`.
-- One Home card title reads
-  `dietary supplements marketed for male sexual enhancement` entirely in
-  lowercase.
+- **Headline mode** — `headlineCaseIfLowercase` fires ONLY on a value that has
+  lowercase letters and no uppercase letter at all (an entirely lowercase
+  source headline). Every ordinary word is then capitalized, including short
+  connectives (`For`, `To`) and spelled-out unit nouns (`1 Quart To 3
+Quarts`), across hyphen and slash segments. Preserved inside a transformed
+  headline: digit-bearing tokens (`4-lb.,`, `8-oz`, codes), the narrow
+  abbreviated-unit set (`oz.`, `kg`, `ml`…), scientific genus notation
+  (`e. coli` → `E. coli`, never `E. Coli`), and apostrophe tails (`red's` →
+  `Red's`). Product names reach it through `displayHeadlineCase`, the one
+  composed pipeline (`humanizeAllCaps` un-shouting, then this helper — the two
+  gates are mutually exclusive, so the composition stays idempotent). That
+  composition is called by the shared product name (`cleanProductName`), which
+  drives the Home title, the Detail title, hero accessibility text, and share
+  copy, and by the push formatter's product slot — so a card and a future
+  notification can never disagree about a name's casing.
+- **Leading-word mode** — `capitalizeLeadingWord` capitalizes only the first
+  word, and only when that word is entirely lowercase and digit-free. Applied
+  to the company display name (`companyDisplayName`), each displayed brand
+  entry (`displayBrand`), and affected-product row names. The What Happened
+  sentence subject and share copy inherit the corrected identity from those
+  owners. Row names deliberately never take headline mode: they are as often
+  package-description prose as product names (`4-lb., or various weight
+packages sliced in retail delis` keeps its source casing, founder decision).
 
-**Founder contract to implement.**
+**Preservation is structural, not a dictionary.** Any uppercase letter or
+digit in the gated span is treated as intentional casing evidence, so
+stylized identities survive by construction: the real brand `a2` renders as
+`a2` (and opens its generated sentence lowercase — identity beats
+sentence-opening convention, founder decision), and `iHerb`, `4Earth`,
+`McCain`, acronyms (`FDA`, `UPC`), and `E. coli` are never rewritten. The only
+list kept is the small documented abbreviated-unit set; `humanizeAllCaps`
+(un-shouting) and `sentenceCaseValue` (packaging values) are unchanged and
+compose with the new helpers.
 
-- Consumer-facing recall and product headlines use headline capitalization:
-  every ordinary lowercase word is capitalized at its beginning.
-- Consumer-facing company and brand names begin with a capital letter.
-- A generated reason sentence begins with a capitalized display name.
-- This is **display-time presentation**. Authoritative stored source text is
-  never rewritten for appearance.
-- The implementation must preserve established acronyms and intentional
-  internal casing — `FDA`, `UPC`, `E. coli`, `iHerb`, `4Earth`, `McCain`, and
-  similar mixed alphanumeric or proper-name tokens.
-- **Avoid a blind lowercase-then-title-case transformation.** That is the
-  defect this milestone exists to prevent, not the fix.
-- Audit Home, Detail, search, notification copy and accessibility text before
-  choosing the shared owner, so the rule lands in one place rather than at
-  each render site. `humanizeAllCaps` and `sentenceCaseValue` in the shared
-  read path are the existing casing owners and are the natural starting point.
+**Boundaries.** Display-time only: canonical stored text, projections, search
+normalization and results, identity, deduplication, the feed-cache schema,
+material-change detection, and recorded notification events are all
+unchanged. Future push delivery copy uses the same shared contract through
+`server/push/format.ts`; this neither activates push nor rewrites any stored
+notification data. The corpus-wide guard in
+`src/server/presentation-casing.test.ts` pins the exact recorded source values
+the transforms change (the `terrafina` brand entry and the lowercase
+saucepans description) — any widening fails tests and requires review here
+first, never a silent exception.
+
+**Deferred casing risk (recorded, not fixed).** `what-happened.ts` lowercases
+whole source phrases in its `contents`/`verbatim` reason clauses (`because of
+<phrase.toLowerCase()>`). No recorded-corpus defect is known, and P3D
+deliberately does not change this behavior — but a future source phrase
+carrying meaningful internal casing (an acronym, a brand, a chemical name)
+would be flattened mid-sentence. Any correction must be evidence-gated and
+corpus-audited the way P3D itself was, never a blanket rewrite.
 
 ## Control hierarchy (C6.1)
 

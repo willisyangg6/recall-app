@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  capitalizeLeadingWord,
   companyDisplayName,
+  displayHeadlineCase,
   companyLine,
   extractAttachmentLinks,
+  headlineCaseIfLowercase,
   humanizeAllCaps,
   parseProductLine,
   productSummaryFromTitle,
@@ -213,4 +216,177 @@ test('official PDF attachments are extracted from summary HTML only', () => {
     },
   ]);
   assert.deepEqual(extractAttachmentLinks(null), []);
+});
+
+// ── Display capitalization (P3D) ────────────────────────────────────────────
+
+test('headlineCaseIfLowercase fixes a defectively lowercase headline', () => {
+  // Synthetic reproduction of the production-observed defect (P3D audit):
+  // this exact FDA product description rendered entirely lowercase on Home.
+  assert.equal(
+    headlineCaseIfLowercase('dietary supplements marketed for male sexual enhancement'),
+    'Dietary Supplements Marketed For Male Sexual Enhancement',
+  );
+  // Recorded-corpus defect (Town Food Service saucepans description).
+  assert.equal(
+    headlineCaseIfLowercase('4 sizes of aluminum saucepans from 1 quart to 3 quarts'),
+    '4 Sizes Of Aluminum Saucepans From 1 Quart To 3 Quarts',
+  );
+});
+
+test('headlineCaseIfLowercase is a no-op on any value carrying uppercase', () => {
+  for (const value of [
+    'Dietary Supplements Marketed For Male Sexual Enhancement', // already correct
+    'ALL CAPS SHOUTING', // humanizeAllCaps territory, never this helper
+    'FDA',
+    'USDA',
+    'FSIS',
+    'UPC',
+    'E. coli',
+    'iHerb',
+    '4Earth',
+    'McCain',
+    'CuttleFish Flavoured Seafood Ball',
+    'ProSource Produce',
+    'Murray Int’l Trading',
+    "Nature's Promise",
+    '500 mL',
+    'Thickened Dairy Drink - Mildly Thick/Nectar Consistency',
+  ]) {
+    assert.equal(headlineCaseIfLowercase(value), value);
+  }
+});
+
+test('headlineCaseIfLowercase preserves protected tokens inside a lowercase headline', () => {
+  // Scientific genus abbreviation: "E. coli", never "E. Coli".
+  assert.equal(
+    headlineCaseIfLowercase('e. coli contaminated product'),
+    'E. coli Contaminated Product',
+  );
+  // Digit-bearing tokens (codes, model numbers, attached measurements).
+  assert.equal(headlineCaseIfLowercase('item 4875 baby powder'), 'Item 4875 Baby Powder');
+  assert.equal(headlineCaseIfLowercase('4-lb. smoked sausage'), '4-lb. Smoked Sausage');
+  assert.equal(headlineCaseIfLowercase('8-oz cups of dip'), '8-oz Cups Of Dip');
+  // Abbreviated units stay lowercase; spelled-out units are ordinary words.
+  assert.equal(headlineCaseIfLowercase('16 oz. cream cheese'), '16 oz. Cream Cheese');
+  assert.equal(headlineCaseIfLowercase('5 kg bag of flour'), '5 kg Bag Of Flour');
+  assert.equal(headlineCaseIfLowercase('1 quart to 3 quarts'), '1 Quart To 3 Quarts');
+  // Stylized numeric brand survives even in an otherwise lowercase value.
+  assert.equal(headlineCaseIfLowercase('a2 infant formula'), 'a2 Infant Formula');
+});
+
+test('headlineCaseIfLowercase handles punctuation, segments, and Unicode', () => {
+  assert.equal(headlineCaseIfLowercase('ready-to-eat pickled goat'), 'Ready-To-Eat Pickled Goat');
+  assert.equal(
+    headlineCaseIfLowercase('mildly thick/nectar consistency'),
+    'Mildly Thick/Nectar Consistency',
+  );
+  assert.equal(headlineCaseIfLowercase("red's all natural"), "Red's All Natural");
+  assert.equal(headlineCaseIfLowercase('baked bites (chocolate)'), 'Baked Bites (Chocolate)');
+  assert.equal(headlineCaseIfLowercase('jalapeño ranch dip'), 'Jalapeño Ranch Dip');
+  assert.equal(headlineCaseIfLowercase(''), '');
+  assert.equal(headlineCaseIfLowercase('   '), '   ');
+});
+
+test('capitalizeLeadingWord fixes a lowercase-leading label or sentence only', () => {
+  // Synthetic reproductions of the production-observed Dynarex defects: the
+  // FDA brand field carried "dynacare" entirely lowercase.
+  assert.equal(capitalizeLeadingWord('dynacare'), 'Dynacare');
+  assert.equal(
+    capitalizeLeadingWord('dynacare recalled Baby Powder'),
+    'Dynacare recalled Baby Powder',
+  );
+  // Recorded-corpus defect (Sunco & Frenchie brand entry).
+  assert.equal(
+    capitalizeLeadingWord('terrafina recalled Golden Raisins'),
+    'Terrafina recalled Golden Raisins',
+  );
+  assert.equal(capitalizeLeadingWord("red's all natural"), "Red's all natural");
+  assert.equal(capitalizeLeadingWord('éclair assortment'), 'Éclair assortment');
+});
+
+test('capitalizeLeadingWord preserves stylized, numeric, and cased identities', () => {
+  for (const value of [
+    'a2', // stylized lowercase brand — the audited sentenceCaseValue defect
+    'a2 recalled a2 Platinum',
+    'iHerb',
+    'iHerb recalled Supplements',
+    '4Earth',
+    'eBay listing',
+    'FDA',
+    'McCain',
+    'Dynacare', // already correct
+    '4-lb., or various weight packages sliced in retail delis',
+    '30 8-oz',
+    '',
+    '   ',
+  ]) {
+    assert.equal(capitalizeLeadingWord(value), value);
+  }
+});
+
+test('both P3D helpers are idempotent across the whole example matrix', () => {
+  const inputs = [
+    'dietary supplements marketed for male sexual enhancement',
+    '4 sizes of aluminum saucepans from 1 quart to 3 quarts',
+    'e. coli contaminated product',
+    '16 oz. cream cheese',
+    'a2 infant formula',
+    "red's all natural",
+    'jalapeño ranch dip',
+    'ready-to-eat pickled goat',
+    'dynacare',
+    'dynacare recalled Baby Powder',
+    'terrafina',
+    'a2',
+    'a2 recalled a2 Platinum',
+    'iHerb',
+    '4Earth',
+    'McCain',
+    'FDA',
+    'E. coli',
+    '500 mL',
+    '30 8-oz',
+    '',
+    '   ',
+  ];
+  for (const input of inputs) {
+    const headline = headlineCaseIfLowercase(input);
+    assert.equal(headlineCaseIfLowercase(headline), headline, `headline not idempotent: ${input}`);
+    const leading = capitalizeLeadingWord(input);
+    assert.equal(capitalizeLeadingWord(leading), leading, `leading not idempotent: ${input}`);
+  }
+});
+
+test('companyDisplayName opens a defectively lowercase company with a capital', () => {
+  // Synthetic reproduction of the production-observed Dynarex defect.
+  assert.equal(companyDisplayName('dynacare'), 'Dynacare');
+  // Stylized and already-cased names are untouched.
+  assert.equal(companyDisplayName('a2 Milk Company'), 'a2 Milk Company');
+  assert.equal(companyDisplayName('iHerb, LLC'), 'iHerb');
+});
+
+test('displayHeadlineCase is the one composed pipeline both cards and push use', () => {
+  // ALL-CAPS is un-shouted (humanizeAllCaps side of the composition).
+  assert.equal(displayHeadlineCase('TOP SIRLOIN BUTT'), 'Top Sirloin Butt');
+  assert.equal(displayHeadlineCase('FDA UPC LMSI'), 'FDA UPC LMSI'); // acronyms kept
+  // A defectively lowercase headline is headline-cased (the other side).
+  assert.equal(
+    displayHeadlineCase('dietary supplements marketed for male sexual enhancement'),
+    'Dietary Supplements Marketed For Male Sexual Enhancement',
+  );
+  // Correct mixed casing passes through untouched.
+  for (const value of [
+    'Crunchy Trail Mix',
+    'a2 Platinum Premium Infant Formula',
+    'iHerb',
+    'E. coli',
+  ]) {
+    assert.equal(displayHeadlineCase(value), value);
+  }
+  // The two gates are mutually exclusive, so the composition is idempotent.
+  for (const input of ['TOP SIRLOIN BUTT', 'dietary supplements', 'Crunchy Trail Mix', '', '   ']) {
+    const once = displayHeadlineCase(input);
+    assert.equal(displayHeadlineCase(once), once, `not idempotent: ${input}`);
+  }
 });

@@ -37,7 +37,9 @@ import {
 } from './consumer-projection';
 import { PACKAGE_FIELD_LABEL, type PackageField, type PackageFieldKey } from './consumer-schema';
 import {
+  capitalizeLeadingWord,
   companyDisplayName,
+  displayHeadlineCase,
   extractAttachmentLinks,
   humanizeAllCaps,
   productDisplayName,
@@ -192,7 +194,11 @@ export function displayBrand(
     if (trimmed.length < 2 || trimmed.length > MAX_BRAND_IDENTITY_LENGTH) continue;
     if (JUNK_BRAND.test(trimmed) || seen.has(key)) continue;
     seen.add(key);
-    cleaned.push(trimmed);
+    // Display casing only (P3D): a defectively lowercase brand opens with a
+    // capital ("terrafina" → "Terrafina"); stylized identities ("a2") pass
+    // untouched. The dedupe key above is case-insensitive, so identity and
+    // deduplication are unaffected.
+    cleaned.push(capitalizeLeadingWord(trimmed));
   }
   if (cleaned.length > 0) {
     const text =
@@ -329,7 +335,10 @@ export function cleanProductName(input: ProductNameInput): string {
     : input.packageEvidence;
   name = stripTrailingMeasurement(name, evidence);
   name = stripBrandPrefix(name, input.displayedBrands);
-  return humanizeAllCaps(name);
+  // The one shared headline pipeline (P3D): ALL-CAPS is un-shouted, a
+  // defectively lowercase headline is headline-cased, and an already-cased
+  // name passes through untouched. Push copy uses the same composition.
+  return displayHeadlineCase(name);
 }
 
 // ── Concise reason line (Home) ──────────────────────────────────────────────
@@ -816,7 +825,12 @@ function variantItem(variant: AffectedVariant, index: number): AffectedProductIt
   }
   return {
     rowId,
-    name: humanizeAllCaps(variantName),
+    // Leading-word casing only (P3D founder decision): a row name is as often
+    // package-description prose as a product headline, so headline mode never
+    // applies here — "4-lb., or various weight packages…" keeps its source
+    // casing (digit-leading first token), while a defectively lowercase
+    // product-name row opens with a capital.
+    name: capitalizeLeadingWord(humanizeAllCaps(variantName)),
     fields: orderedFields(variant.fields),
     codes: variant.lotCodes,
     codeLocation: variant.codeLocation,

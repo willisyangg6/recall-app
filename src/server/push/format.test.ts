@@ -219,3 +219,55 @@ test('push message payload is small, typed, and secret-free', () => {
   // Expo caps the whole message at 4096 bytes; ours stays far under.
   assert.ok(Buffer.byteLength(JSON.stringify(message)) < 1024);
 });
+
+test('P3D: a defectively lowercase product name is headline-cased in push copy only', () => {
+  // Synthetic reproduction of the production-observed all-lowercase FDA
+  // product description (P3D). Formatting is display-only: the projection
+  // passed in stays untouched, no event or delivery exists here.
+  const projection = makeProjection({
+    productDescription: 'dietary supplements marketed for male sexual enhancement',
+    hazardCategory: 'unknown',
+    pathogenOrAllergen: null,
+  });
+  const content = formatPushContent(makeEvent('initial', 'new_recall', projection));
+  assert.equal(
+    content.title,
+    'Recall alert: Dietary Supplements Marketed For Male Sexual Enhancement',
+  );
+  // Canonical input keeps its source casing.
+  assert.equal(
+    projection.productDescription,
+    'dietary supplements marketed for male sexual enhancement',
+  );
+});
+
+test('P3D: stylized and already-cased product names are untouched in push copy', () => {
+  const stylized = formatPushContent(
+    makeEvent(
+      'initial',
+      'new_recall',
+      makeProjection({ productDescription: 'a2 Platinum Premium Infant Formula' }),
+    ),
+  );
+  assert.equal(stylized.title, 'Recall alert: a2 Platinum Premium Infant Formula');
+  const normal = formatPushContent(
+    makeEvent('initial', 'new_recall', makeProjection({ productDescription: 'Crunchy Trail Mix' })),
+  );
+  assert.equal(normal.title, 'Recall alert: Crunchy Trail Mix');
+});
+
+test('P3D: push un-shouts an ALL-CAPS product name exactly as the app cards do', () => {
+  // No recorded notice carries an ALL-CAPS product name at this boundary
+  // (frozen by the corpus guard); this synthetic input proves the shared
+  // displayHeadlineCase composition keeps push and Home/Detail in agreement
+  // if one ever arrives.
+  const content = formatPushContent(
+    makeEvent(
+      'initial',
+      'new_recall',
+      makeProjection({ productDescription: 'TOP SIRLOIN BUTT, 12 OZ' }),
+    ),
+  );
+  // "OZ" → "Oz" is existing humanizeAllCaps behavior, identical on the cards.
+  assert.equal(content.title, 'Recall alert: Top Sirloin Butt, 12 Oz');
+});

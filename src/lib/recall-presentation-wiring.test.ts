@@ -390,3 +390,10 @@ test('P3A: the Detail screen holds no notice ids, hazard parsing, or raw-prose r
   assert.ok(!HOME.includes('interpretReason'), 'Home interprets reasons itself');
   assert.ok(!HOME.includes('conciseReasonLine'), 'Home composes its own reason line');
 });
+
+test('hero accessibility text inherits the shared model product name (P3D)', () => {
+  // The corrected display name reaches assistive tech through the same model
+  // field the visible title uses — no screen-local casing or alt text.
+  assert.match(HOME, /alt=\{model\.productName\}/);
+  assert.match(DETAIL, /alt=\{model\.productName\}/);
+});
