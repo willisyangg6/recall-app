@@ -176,15 +176,16 @@ evidence rule did not accept. The FDA heading is **disjunctive** — it covers a
 physical fragment hazard and a chemical/radiological one — and a category
 naming two possibilities states neither, so it is never evidence of a
 contaminant. The parser change is byte-identical over every recorded FDA and
-FSIS announcement; the defect it closes is production-only, and correcting the
-three stored records is the separate, reviewed P3B repair (implemented, not
-yet applied — see [recall-operations.md](recall-operations.md), "FDA
-contaminant category: a historical correction (P3B)"). Once applied, the two
-Cs-137 shrimp notices name **Cesium-137** on Home and Detail instead of a
-nameless foreign-material line, the talc notice stops reading as
-foreign-material contamination, no packaging material is named as a hazard on
-either surface, Affects-Me allergen matching is unchanged (none is an allergen
-case), and the feed/cache payload shapes are untouched.
+FSIS announcement; the defect it closed is production-only, and the three
+stored records were corrected by the separate, reviewed P3B repair (**applied
+and verified 2026-09-04** — see [recall-operations.md](recall-operations.md),
+"FDA contaminant category: a historical correction (P3B)"). The two Cs-137
+shrimp notices now name **Cesium-137** on Home and Detail instead of a
+nameless foreign-material line, the talc notice names **asbestos** and no
+longer reads as foreign-material contamination, and no packaging material is
+named as a hazard on either surface — confirmed by manual simulator QA.
+Affects-Me allergen matching is unchanged (none is an allergen case), and the
+feed/cache payload shapes were untouched.
 
 `conciseReasonLine` renders the family as one deterministic sentence:
 `Potential <pathogen> contamination.` (approved wording is **Potential**, not
@@ -542,6 +543,157 @@ regression shapes and the corpus-wide allocation census are pinned in
 `src/server/fda/presentation-regressions.test.ts`; the matching contract
 lives in docs/recall-imagery.md §13. The interactive carousel and all final
 visual styling remain design-system work.
+
+### P3C — affected-product data and presentation correctness (DEFERRED, NOT IMPLEMENTED)
+
+**Status: deferred. Nothing in this section is implemented, and recording it
+here does not fix it.** Every item below is a **pending** QA finding from
+manual simulator review of the AquaStar and Dynarex notices on 2026-09-04
+(the same notices P3B corrected for hazard category — P3C is about their
+affected-product data, not their hazard). No code, parser, projection,
+presentation model, or production row has been changed for any of it. Several
+items describe behavior that **contradicts the contracts stated earlier in
+this document**; where they do, the contract above is the intent and the
+observed behavior is the defect.
+
+P3C is **audit-first**: the investigation boundary below must complete before
+any implementation, because it is not yet established which items are
+canonical parsing defects and which are display-only. Whether any production
+repair is needed at all is an open question, deliberately undecided here.
+
+#### A. Row-owned lot and batch codes (pending)
+
+Lot, batch, production, and similar identifier facts render inconsistently
+across notices:
+
+- AquaStar Cocktail Shrimp renders its lot codes as a **table column**.
+- AquaStar Raw Shrimp / Cooked Shrimp / Shrimp Skewers renders its lot codes
+  in a **separate expandable block below the table**.
+- Dynarex Baby Powder likewise renders its batch codes below its product
+  table.
+
+**Founder product rule (the target contract).** A fact that belongs to an
+affected product renders **in that product's own table row**. A separate
+below-table or "applies to all" disclosure must not be created merely to
+avoid repetition. If one code set genuinely applies to several affected
+versions, it **repeats in every applicable row**. Codes are never assigned by
+array position or any other unsupported inference. This is the same rule the
+"Affected products" section states above; the observed below-table blocks are
+the inconsistency to resolve.
+
+P3C must **inspect the official source structure before deciding ownership** —
+the below-table rendering may be the existing case-level disclosure path
+correctly reporting codes the source does not attribute to a single version,
+or it may be a parser miss. That determination comes from the source, not from
+the shape of the rendered output.
+
+#### B. Date parsing and formatting (pending)
+
+Best-by dates are inconsistently normalized, **including within a single
+row**. Observed:
+
+- Raw Shrimp / Cooked Shrimp / Shrimp Skewers displays compact values such as
+  `03 26 27`, `04 07 27`, and `11 07 2027`.
+- Mercado Frozen Cooked Shrimp formats its first entries as
+  `November 19, 2027` and `November 20, 2027`, but leaves later entries in the
+  same field as `11 19 2027` and `11 20 2027`.
+
+**Target contract.** Every supported date token in a labeled
+best-by / use-by / expiration / sell-by field renders in one consumer-readable
+format such as `November 19, 2027`. The formatter must handle supported
+space-, slash-, and hyphen-delimited numeric dates and both two- and
+four-digit years; it must process **every** token in a list rather than only
+the leading values; and it must stay bounded to date evidence so that a
+product code is never reinterpreted as a date. The existing field-label
+meanings are unchanged — a Sell by is still never relabeled.
+
+#### C. Barcode correctness — an audit question, not yet a conclusion (pending)
+
+The Raw Shrimp / Cooked Shrimp / Shrimp Skewers Barcode (UPC) column includes
+values such as `10222027`, `11072027`, `11082027`, `11132027`, and `11152027`.
+These **look like compact dates rather than UPCs**, which is a strong and
+specific correctness concern — but it is **not yet established that they are
+wrong**, and this document does not claim they are. Only the notice's own
+archived official source can settle it.
+
+P3C must therefore:
+
+- compare **every** displayed barcode against the notice's own archived
+  official source;
+- determine whether table alignment or field routing placed best-by dates into
+  the barcode field;
+- preserve leading zeroes throughout;
+- **never** infer or repair a barcode from digit length alone;
+- correct the shared parser/projection owner rather than adding a
+  notice-specific exception;
+- audit equivalent source-table shapes across both the recorded fixture corpus
+  and the production corpus, since a routing defect would not be confined to
+  one notice.
+
+#### D. Identifier-list punctuation (pending)
+
+Machine identifier lists should not carry a natural-language final
+conjunction. Desired display:
+
+```text
+43240304, 230420340240, 324020340
+```
+
+Not:
+
+```text
+43240304, 230420340240, and 324020340
+```
+
+This contract applies consistently to structured barcode, UPC, lot-code,
+batch-code, production-code, and case-code lists. It is **not** a global
+removal of the word "and": natural-language conjunctions are preserved in
+prose and in geography, where they are correct.
+
+P3C must first establish whether the conjunction is **stored data** or
+**presentation-time list joining**, and fix the shared owner accordingly.
+
+#### E. Recall quantity paragraph consistency (pending)
+
+A source-supported quantity sentence belongs in the normal What Happened
+paragraph, not in a muted disclaimer-like line beneath it. Observed
+inconsistency:
+
+- Raw Shrimp / Cooked Shrimp / Shrimp Skewers renders "The recall covers
+  49,920 bags." as **gray secondary text**.
+- Cocktail Shrimp and Mercado Frozen Cooked Shrimp integrate their quantity
+  sentences into the normal What Happened paragraph.
+
+**Target contract.** Source-supported recall quantity reads as part of the
+normal What Happened narrative, in the same text style as the surrounding
+paragraph. Duplication is avoided when the generated reason already states the
+quantity (the existing `quantityLine` omission rule above). The quantity is
+**preserved**, not dropped — it is useful consumer context. The fix belongs to
+the shared presentation/model owner, never to styling an individual notice.
+
+#### F. Investigation boundary (required before any P3C implementation)
+
+P3C begins with a source-backed audit:
+
+1. Inspect the complete archived official payloads for the three AquaStar
+   notices and Dynarex.
+2. Trace each product, date, barcode, lot/batch code, and quantity through
+   parsing, normalized data, consumer projection, presentation model, and
+   screen.
+3. Separate **canonical parsing defects** from **display-only formatting
+   defects**.
+4. Scan the recorded fixtures and the production snapshots for equivalent
+   source shapes, so a shared defect is not fixed as a one-notice special
+   case.
+5. Quantify every proposed canonical-data delta.
+6. **Do not assume a production repair is needed.** Decide only after
+   determining whether the incorrect values are persisted or derived at
+   display time.
+7. If persisted data would change, that requires a **separate reviewed dry run
+   and its own explicit apply authorization** — see
+   [recall-operations.md](recall-operations.md).
+8. Preserve row identity and evidence ownership throughout; never use array
+   position.
 
 ## Control hierarchy (C6.1)
 

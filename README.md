@@ -116,8 +116,7 @@ status and semantics.
 npm run repair:geography:dry             # applied 2026-09-02 (completed)
 npm run repair:allergens:dry             # applied 2026-09-02 (completed)
 npm run repair:hazards:dry               # P2e-B, applied 2026-09-03 (completed)
-npm run repair:fda-contaminants:dry      # P3B — implemented, NOT yet dry-run or applied
-npm run repair:fda-contaminants -- --confirm   # APPLY (needs explicit authorization)
+npm run repair:fda-contaminants:dry      # P3B, applied 2026-09-04 (completed)
 ```
 
 ### Push notifications (Phase C2)
@@ -407,6 +406,16 @@ via manual input, not location permissions. See
 Accounts/auth, onboarding flow, quiet hours and other notification
 preferences, ingest-time retailer enrichment of stored projections, pet-food
 scope, Spanish records, CPSC/NHTSA, analytics, final visual design.
+
+**P3C — affected-product data and presentation correctness: deferred, not
+implemented.** Manual QA on 2026-09-04 found pending issues in affected-product
+rendering — lot/batch codes rendering below the table instead of in their own
+rows, inconsistently formatted best-by dates, barcode values that need a
+source audit, natural-language conjunctions in machine identifier lists, and an
+inconsistently styled recall-quantity sentence. P3C is audit-first and nothing
+is fixed yet; the full specification and the required investigation boundary
+live in [docs/recall-feed-usability.md](docs/recall-feed-usability.md), "P3C —
+affected-product data and presentation correctness".
 
 See [AGENTS.md](AGENTS.md) for standing rules for coding agents working in this
 repository, and

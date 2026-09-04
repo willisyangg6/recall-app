@@ -696,23 +696,51 @@ not a normal operation — see the warning on the command block above.
 
 ## FDA contaminant category: a historical correction (P3B)
 
-**Status: implemented, dry-run-reviewed, NOT applied.** One founder-authorized
-read-only production dry run has been run (2026-09-03,
-`.reports/p3b-dry-run.json`) and confirmed the population: 3 source records,
-3 case projections, all active, all distinct and single-source, 0 missing
-snapshots, 0 parse failures, 0 refused transitions, 0 writes. That dry run
-predates the asbestos correction below (it reported Dynarex's agent as
-`null`, not `asbestos`) and its ledger is kept as historical evidence rather
-than overwritten. No row has ever been written. **A fresh dry run — expected
-to report the corrected agent census (`null → asbestos` in place of
-`null → null`), otherwise the same population — is the required next step
-before any apply.**
+**Status: applied and verified 2026-09-04.** The apply wrote 3/3 planned
+source-record corrections and 3/3 planned case-projection corrections across 3
+active, distinct, single-source FDA cases, with 0 CAS conflicts, 0 skipped
+writes, 0 refused transitions, 0 refused agent transitions, 0 missing
+snapshots, 0 parse failures, 0 failures, 0 notification events, and 0 new
+cases — exactly the reviewed population and exactly the approved transition
+census (`foreign_material → chemical_contamination` ×3, agent
+`null → asbestos` ×1 and `null → Cesium-137` ×2). The post-apply
+verification dry run reported 0 record changes and 0 case changes: the
+population is settled.
+
+Bounded read-only verification confirmed the final stored values agree at both
+layers — `normalized` on the source record and `projection` on the case:
+
+| Notice                                       | Final stored value                      |
+| -------------------------------------------- | --------------------------------------- |
+| Dynarex Dynacare Baby Powder                 | `chemical_contamination` / `asbestos`   |
+| AquaStar Cocktail Shrimp 6oz                 | `chemical_contamination` / `Cesium-137` |
+| AquaStar Kroger Mercado Frozen Cooked Shrimp | `chemical_contamination` / `Cesium-137` |
+
+It also confirmed that timelines and `lastChangedAt` did not move, that the
+denormalized `recall_cases.hazard_category` column changed consistently with
+`projection.hazardCategory`, and that no unrelated field, row or notification
+record changed. No migration, deployment, ingestion run, or live FDA fetch
+occurred. Manual simulator QA confirmed the three notices no longer describe
+the hazard as foreign material.
+
+This is a **completed historical repair, not a recurring operation** — the
+commands below are kept as operational record and for the standing
+verification, not as an invitation to rerun the apply:
 
 ```
-npm run repair:fda-contaminants:dry            # report only, writes nothing
-npm run repair:fda-contaminants -- --confirm   # APPLY (requires BOTH flags; needs explicit authorization)
-npm run repair:fda-contaminants:dry            # verify: "would change" must be 0
+npm run repair:fda-contaminants:dry            # verify: "would change" must be 0 — safe to rerun any time
+npm run repair:fda-contaminants -- --confirm   # HISTORICAL APPLY — already run 2026-09-04; do NOT rerun casually.
+                                                # Requires BOTH flags. The approved-population guard would refuse a
+                                                # second apply once the corpus is settled, but that is not a
+                                                # substitute for treating it as a one-time operation.
 ```
+
+**Durable ledgers** (git-ignored, in `.reports/`, kept as operational
+history): `p3b-dry-run.json` and `p3b-dry-run-2.json` (the two read-only
+dry runs — the first predates the asbestos correction below and reported
+Dynarex's agent as `null`; the second is the reviewed population that
+authorized the apply), `p3b-apply.json` (the apply), and
+`p3b-post-apply.json` (the settled post-apply verification).
 
 **The defect.** The FDA reason category `Potential Metal or Chemical
 Contaminant` is disjunctive — one taxonomy heading covering a physical
@@ -807,17 +835,17 @@ Approved transitions, the only writable moves:
 | ------------------ | ------------------------ | -------------------------------------- | -------- |
 | `foreign_material` | `chemical_contamination` | `null → asbestos`, `null → Cesium-137` | 3        |
 
-**Expected production dry-run population:** 3 source records and 3 case
-projections, all active — `foreign_material → chemical_contamination` ×3, with
-agent `null → asbestos` ×1 (Dynarex) and `null → Cesium-137` ×2 (both AquaStar
-shrimp notices). The case count and case structure were **confirmed** by the
-2026-09-03 dry run (`.reports/p3b-dry-run.json`, pre-asbestos-correction): 3
-distinct, active, single-source cases, 0 multi-source. That run reported
-Dynarex's agent as `null → null`, since it predates the asbestos correction —
-a fresh dry run is expected to report the corrected census above against the
-same case structure. An **empty** set (0 and 0) is not a failure — it is
-`settled`, which is exactly what the post-apply verification dry run must
-report.
+**The applied population:** 3 source records and 3 case projections, all
+active — `foreign_material → chemical_contamination` ×3, with agent
+`null → asbestos` ×1 (Dynarex) and `null → Cesium-137` ×2 (both AquaStar
+shrimp notices). The case structure was confirmed first by the 2026-09-03 dry
+run (`.reports/p3b-dry-run.json`, pre-asbestos-correction — 3 distinct,
+active, single-source cases, 0 multi-source; it reported Dynarex's agent as
+`null → null` because it predates the asbestos correction), then by the
+reviewed 2026-09-03 dry run (`.reports/p3b-dry-run-2.json`) carrying the
+corrected agent census, and the 2026-09-04 apply matched it exactly. The dry
+run now reports an **empty** set (0 and 0), which is not a failure — it is
+`settled`, and it is what the standing verification must keep reporting.
 
 Applying is double-gated: `--apply` alone is refused; the second
 acknowledgment (`--confirm`) must accompany it. **Durable ledger:** an apply
@@ -836,6 +864,19 @@ the projection — **no cache schema bump and no migration are needed**. Whether
 future **source-driven** hazard change on an active case should be eligible for
 notification remains a separate policy milestone, deliberately not decided here;
 `material-change.ts` was not modified in P3B.
+
+**A later milestone may touch these same notices for a different reason.**
+P3C (affected-product data and presentation correctness) is **deferred and not
+implemented**; its findings concern affected-product codes, dates, barcodes,
+identifier punctuation, and quantity presentation on the AquaStar and Dynarex
+notices, not their hazard category. P3C is audit-first and it is not yet known
+whether any persisted value is wrong. **If** its audit proves a canonical-data
+defect, that correction is a separate repair needing its own reviewed dry run
+and its own explicit apply authorization under the rules in this document — it
+is in no way covered by the completed P3B authorization above, and the P3B
+apply must not be rerun for it. See
+[recall-feed-usability.md](recall-feed-usability.md), "P3C — affected-product
+data and presentation correctness".
 
 ## Enforcement: weekly-gated
 

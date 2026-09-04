@@ -1405,12 +1405,13 @@ exclusively, and FSIS under-reports allergens in it.
     Correct value: `chemical_contamination` / `Cesium-137`.
   - `aquastar-usa-corp-recalls-kroger-mercado-frozen-cooked-shrimp-because-possible-health-risk` —
     same shape and same correct value as the previous record.
-  - Consumer impact of the stored values: all three notices render as a
+  - Consumer impact of the old stored values: all three notices rendered as a
     generic foreign-material line on Home and Detail, naming no agent — the
-    same class of misleading presentation P2e-B fixed for FSIS. No allergen or
-    personalization impact either way (`normalizedAllergenTokens('Cesium-137')`
-    is `[]`, and asbestos is not an allergen), and Affects-Me allergen matching
-    is unchanged.
+    same class of misleading presentation P2e-B fixed for FSIS. Since the
+    2026-09-04 apply they name their agent instead, confirmed by manual
+    simulator QA. There was no allergen or personalization impact either way
+    (`normalizedAllergenTokens('Cesium-137')` is `[]`, and asbestos is not an
+    allergen), and Affects-Me allergen matching is unchanged.
   - **FDA has no separate mineral or radiological category, and P3B
     deliberately does not add one.** Within the closed schema the honest
     representation of both asbestos and Cs-137 is the chemical category plus
@@ -1437,29 +1438,52 @@ exclusively, and FSIS under-reports allergens in it.
     product stating the hazard. The historical bare-keyword agents keep their
     existing permissive matching, unchanged. Recorded-corpus delta: **zero**
     — no recorded FDA or FSIS fixture contains the word "asbestos" at all.
-  - **Status: implemented, dry-run-reviewed, not yet applied to production.**
+  - **Status: applied and verified in production 2026-09-04 — complete.**
     The corrected parser and a narrow repair
     (`src/server/fda-contaminant-repair.ts`,
     `npm run repair:fda-contaminants:dry`) are committed and covered by
-    tests. One founder-authorized read-only production dry run confirmed the
-    population (3 records, 3 distinct single-source active cases, 0 missing
-    snapshots, 0 parse failures) before the asbestos correction above;
-    `.reports/p3b-dry-run.json` is kept as that historical evidence rather
-    than overwritten, and a fresh dry run (expected to report the corrected
-    agent census, same population) is the required next step before any
-    apply. No row has ever been written. The repair follows the P2e-B
+    tests, and the correction is now the stored value. Two founder-authorized
+    read-only production dry runs confirmed the population (3 records, 3
+    distinct single-source active cases, 0 missing snapshots, 0 parse
+    failures) — the first before the asbestos correction above, the second
+    carrying the corrected agent census — and the apply wrote 3/3 records and
+    3/3 case projections with 0 conflicts, 0 skips, 0 refusals, 0 failures and
+    0 notifications, after which the post-apply dry run reported 0 and 0
+    (settled). All three notices now store `chemical_contamination` with their
+    named agent (`asbestos`, `Cesium-137`, `Cesium-137`) at both the
+    `normalized` and `projection` layers; timelines and `lastChangedAt` did
+    not move, and the denormalized `recall_cases.hazard_category` column
+    followed the projection as designed. The repair follows the P2e-B
     pattern with a single approved transition
     (`foreign_material -> chemical_contamination`) plus an approved agent
     table (`null -> asbestos`, `null -> Cesium-137`), and it plans the whole
     population before writing anything, so any blocker refuses the entire
     apply. It does not reopen P2e-B's settled 49/48 population or commands.
-    **No schema migration and no cache-schema bump are expected**; this is a
+    **No schema migration and no cache-schema bump were needed**; this is a
     `normalized.hazardCategory` / `normalized.pathogenOrAllergen` correction of
     the same shape P2e-B already made, on the projection and the source record
-    together. Historical correction is notification-silent; whether a future
-    source-driven hazard change should notify remains a separate policy
-    milestone. See [recall-operations.md](recall-operations.md), "FDA
-    contaminant category: a historical correction (P3B)".
+    together. Historical correction is
+    notification-silent; whether a future source-driven hazard change should
+    notify remains a separate policy milestone. See
+    [recall-operations.md](recall-operations.md), "FDA contaminant category: a
+    historical correction (P3B)", for the applied result and the durable
+    ledgers.
+- **Affected-product data on the same notices is a separate, deferred
+  milestone (P3C) — not implemented.** P3B settled the hazard category and
+  agent for the AquaStar and Dynarex notices; nothing in this bullet is
+  claimed fixed by it. Manual QA on 2026-09-04 raised pending questions about those
+  same notices' **affected-product** facts: whether lot/batch codes are being
+  attributed to the rows that own them, whether best-by date tokens are
+  normalized consistently, whether some values rendered in the barcode field
+  are in fact best-by dates (an **open audit question**, not an established
+  defect), whether identifier-list conjunctions are stored or joined at
+  presentation time, and where the recall-quantity sentence belongs. P3C is
+  **audit-first**: it must trace each fact from the archived official payload
+  through parsing, normalized data, projection, and presentation model before
+  separating canonical parsing defects from display-only ones, and it must not
+  assume a production repair is needed. Specification in
+  [recall-feed-usability.md](recall-feed-usability.md), "P3C — affected-product
+  data and presentation correctness".
 - **One record was genuinely stale.** PHA-07302018-1 (Cyclospora, Caito Foods)
   was ingested 2026-08-21 from working-tree code whose `PATHOGENS` list
   predated Cyclospora; it has a single archived snapshot, and the ingest hash
