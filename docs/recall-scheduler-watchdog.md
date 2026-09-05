@@ -1,9 +1,15 @@
 # Scheduler watchdog (O1)
 
-_Written 2026-08-28. Code, migration, and tooling are complete and tested;
-**nothing is deployed, applied, scheduled, or credentialed** until the founder
-runs the activation sequence below. Until then every surface reports an
-explicit pre-activation state._
+_Written 2026-08-28. Code, migration, and tooling are complete and tested.
+As of that date nothing was deployed, applied, scheduled, or credentialed —
+activation is the founder sequence below, and every surface reports an
+explicit pre-activation state until it runs. The watchdog is designed to
+become the primary freshness owner **once deployed and activated**; its
+current production activation state cannot be established from the
+repository and requires live verification (`npm run scheduler:status`, or
+the `Scheduler watchdog` section of `npm run ops:health`). Until that
+activation is confirmed, the GitHub scheduled cron remains the ingestion
+delivery path at its measured best-effort rates._
 
 ## Why GitHub's native schedule is not enough
 

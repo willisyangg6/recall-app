@@ -8,9 +8,13 @@ Alert data and real FDA food recall announcements through one shared canonical
 pipeline (raw snapshots → normalized records → recall cases → material-change
 detection → notification ledger) and renders both agencies on the same
 dashboard. FDA Phase B (openFDA enforcement reconciliation — the official
-Class I/II/III arriving weeks later onto the same case) is implemented behind
-explicit maintenance commands. Push notification delivery, accounts, and
-personalization are not implemented yet.
+Class I/II/III arriving weeks later onto the same case) is implemented and
+runs as the scheduled, weekly-gated daily maintenance job. Personalization
+(Phase C3) is implemented. Push delivery machinery — registration, the
+notification-event ledger, the delivery job, and copy formatting — is
+implemented but **deliberately inactive**: until the founder runs
+`push:activate -- --confirm`, `jobs:push` is a no-send no-op and no device
+notification is sent. Accounts are not implemented.
 
 Design documents:
 
@@ -407,49 +411,43 @@ Accounts/auth, onboarding flow, quiet hours and other notification
 preferences, ingest-time retailer enrichment of stored projections, pet-food
 scope, Spanish records, CPSC/NHTSA, analytics, final visual design.
 
-**P3D — consumer-facing capitalization: deferred, not implemented.** Detail
-shows the company as `dynacare`, the generated reason sentence opens
-`dynacare recalled…`, and one Home card title reads
-`dietary supplements marketed for male sexual enhancement` entirely in
-lowercase. The fix is display-time capitalization with a shared owner, and it
-must preserve established acronyms and intentional internal casing (`FDA`,
-`UPC`, `E. coli`, `iHerb`, `4Earth`, `McCain`) rather than lowercasing and
-title-casing blindly. Nothing about capitalization changed in P3C-2. Full
-contract in [docs/recall-feed-usability.md](docs/recall-feed-usability.md),
-"P3D — consumer-facing capitalization".
+## Consumer presentation milestones (P3 series) — implemented and shipped
 
-**P3C-1 — affected-product value correctness: implemented, display-time,
-not yet deployed.** The other four 2026-09-04 QA findings are fixed in the
-shared read path: printed dates and lot codes can no longer become barcodes
-because their digit run happens to be a UPC-compatible length (ownership is
-decided by the label that governs the value, never by digit count); complete
-space-delimited US dates reach the same consumer format as the slash and
-hyphen forms, two spellings of one day render once, and every parsed date
-renders in full (`November 19, 2027, November 20, 2027` — no same-month
-collapse); structured identifier and date cells separate with commas only,
-while prose, geography and allergen lists keep ordinary grammar; and the recall quantity is a sentence of the What
-Happened narrative rather than a muted line beneath it. It needs no production
-repair, migration, backfill, cache bump, re-projection, or notification. Full
-detail in [docs/recall-feed-usability.md](docs/recall-feed-usability.md),
-"P3C — affected-product data and presentation correctness".
+All five P3 presentation milestones are display-time only — none required a
+production repair, migration, backfill, cache-schema bump, re-projection, or
+notification (P3B's three-record hazard repair is the separately authorized
+exception, applied and verified 2026-09-04). The authoritative contracts live
+in [docs/recall-feed-usability.md](docs/recall-feed-usability.md).
 
-**P3C-2 — affected-product row ownership: implemented, display-time, not yet
-committed or deployed.** The Affected Products table is now the sole
-presentation of affected-product codes. Lot, batch, case and production codes
-and row-applicable production dates render in table columns and cells —
-inline while the set is small, behind that row's own "View N codes" control
-when it is not — and the standalone code and production-date disclosures
-beneath the table are removed from the model and from the screen. A source
-row that states no product name now survives with an honest empty Product
-cell (and the Product column disappears when no rendered row has a name); a
-recall-level set the source states about the whole recalled population
-repeats into every row, or becomes one anonymous evidence row when the notice
-supports no named row; and a set whose owner is ambiguous is still refused
-rather than widened. Measured over the recorded FDA and FSIS corpus: 12 of
-241 notices change, zero below-table disclosures remain, every supported code
-survives, and no hero, row, gallery, or supporting image assignment moves.
-Like P3C-1 it is display-time and needs no production repair, migration,
-backfill, cache bump, re-projection, or notification.
+- **P3A — optional-section visibility and Home/Detail reason parity**
+  (shipped `80ed509`): sections render only over meaningful
+  content, Home and Detail share one typed-reason interpretation, and one
+  evidence-gated owner decides foreign-material hazards.
+- **P3B — FDA contaminant-category classification** (shipped `48870a1`;
+  production repair applied 2026-09-04): the disjunctive FDA category no
+  longer lets packaging choose the hazard; three stored cases corrected to
+  `chemical_contamination` (asbestos, Cesium-137 ×2). See
+  [docs/recall-operations.md](docs/recall-operations.md).
+- **P3C-1 — affected-product value correctness** (shipped `aab6588`):
+  barcode ownership decided by the governing label, never digit length;
+  space-delimited dates parse and deduplicate; structured identifier and
+  date cells join with commas only, with no same-month collapse; the recall
+  quantity is a sentence of the What Happened narrative.
+- **P3C-2 — affected-product row ownership** (shipped `51c1a7b`): the
+  Affected Products table is the sole presentation of codes and
+  row-applicable production dates; below-table disclosures are retired;
+  nameless-but-supported rows survive; ambiguous ownership is refused.
+- **P3D — consumer-facing display capitalization** (shipped `cae9732`):
+  defect-gated headline and leading-word casing with structural preservation
+  of intentional casing (`iHerb`, `a2`, `FDA`, `E. coli`).
+- **P3E — reason-clause casing** (shipped `b4a1a12`): evidence-gated
+  restoration of medically meaningful casing in free-text reason clauses
+  (`Cronobacter sakazakii`, `Bacillus cereus`, `vitamin D3`); exactly seven
+  recorded-corpus clauses change, frozen by a corpus guard.
+
+Still deferred within this area: the Dynarex `Mfg. Dt.` / `Exp. Dt.`
+day-first columns stay unsupported and hidden (a month-first reading would
+misstate them), and none of this activates push delivery.
 
 See [AGENTS.md](AGENTS.md) for standing rules for coding agents working in this
 repository, and

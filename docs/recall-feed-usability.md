@@ -4,7 +4,13 @@ _Written 2026-08-28; P1 presentation contract added 2026-09-01; P2a identity,
 typed reasons, and the simplified Detail page applied 2026-09-01 (founder
 decisions); P2b product identity, affected-version decomposition, and the
 compact Affected Products table applied 2026-09-02; P2c global image-role
-allocation applied 2026-09-02. Functional milestones on
+allocation applied 2026-09-02; P3A optional-section visibility and
+Home/Detail reason parity shipped 2026-09-03 (`80ed509`); P3B
+contaminant-category unification shipped (`48870a1`) with its production
+repair applied 2026-09-04; P3C-1 and P3C-2 affected-product correctness
+shipped 2026-09-04 (`aab6588`, `51c1a7b`); P3D display capitalization
+shipped 2026-09-04 (`cae9732`); P3E reason-clause casing shipped 2026-09-05
+(`b4a1a12`). Functional milestones on
 the temporary UI — final visual design happens separately and may restyle
 everything here without touching the business logic, which lives entirely in
 pure libs._
@@ -579,9 +585,9 @@ because their day-first reading is not authorized.
 the shared read path over preserved source data. It requires **no production
 repair, no migration, no backfill, no cache-schema bump, no re-projection, and
 no notification** — the audit's central question, "is any of this persisted
-wrong?", answered no for all four. It is implemented and locally verified, and
-at the time of writing **not committed and not deployed**, so nothing in
-production has changed.
+wrong?", answered no for all four. It is implemented, locally verified, and
+**shipped in commit `aab6588` (2026-09-04)**. No persisted production data
+changed — the correction is entirely in the shared read path.
 
 **The pre-fix production counts quoted in this section are historical audit
 findings**, measured on 2026-09-04 before the fix, over the read-only audit's
@@ -729,8 +735,8 @@ after, from a pristine `git archive HEAD` baseline:**
 
 **P3C-2 is display-time.** Like P3C-1 it needs no production repair, no
 migration, no backfill, no cache-schema bump, no re-projection, and no
-notification. It is implemented and locally verified, and at the time of
-writing **not committed and not deployed**.
+notification. It is implemented, locally verified, simulator-verified, and
+**shipped in commit `51c1a7b` (2026-09-04)**.
 
 **Still deferred.** The Dynarex product table's `Mfg. Dt.` and `Exp. Dt.`
 columns carry day-first values ("01.11.2023"). A month-first reading would

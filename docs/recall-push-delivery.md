@@ -42,8 +42,10 @@ from the worker (verified against current Expo docs, 2026-08):
 **Activation horizon (global).** `push_delivery_config.push_enabled_at` is
 set only by `npm run push:activate -- --confirm` — never inferred from
 deploys, migrations, or first runs. Only events created ON/AFTER it are ever
-considered, so the pre-C2 deliverable backlog (42 events at time of writing)
-can never be broadcast. Until activation the worker runs as a no-send no-op.
+considered, so the pre-C2 deliverable backlog (42 events as measured
+2026-08-26; a historical figure — the ledger has grown since, and every
+pre-activation event is excluded regardless of count) can never be
+broadcast. Until activation the worker runs as a no-send no-op.
 `--deactivate --confirm` is the emergency off switch; reactivating records a
 NEW horizon, so nothing from a dark period is sent as catch-up.
 
@@ -108,9 +110,10 @@ Runs through the C1 runner — same lease (`push_delivery`, 25-min TTL, stale
 recovery), same one-`ingest_runs`-row bookkeeping, same failure semantics —
 so overlapping runs skip safely and manual + scheduled execution are the
 same code. Each run: process due receipts → create missing deliveries for
-newly eligible events (one `eligibleSubscriptions()` seam — C3 filters go
-there and nowhere else) → send pending/retryable/crash-recovered rows in
-chunks of 100.
+newly eligible events (one eligibility seam — `classifySubscriptionsForEvent`
+in `src/server/push/worker.ts`, with `eligibleSubscriptions()` as its thin
+wrapper; C3 preference filters go there and nowhere else) → send
+pending/retryable/crash-recovered rows in chunks of 100.
 
 Retries: transient failures (network, `MessageRateExceeded`, unknown codes)
 back off 30 min · 2ⁿ capped at 6 h, at most 5 attempts, then
@@ -128,9 +131,11 @@ Pending-risk recall announces hazard facts without inventing a tier. Product
 titles flow through the shared display-capitalization contract (P3D,
 [recall-feed-usability.md](recall-feed-usability.md)), so a defectively
 lowercase source name is headline-cased in future delivery copy exactly as on
-the app's cards. That is formatting only: it does not activate push, create
-notification events, or rewrite any recorded notification data — copy is
-rendered at delivery time and is never stored in the ledger. Payload is
+the app's cards. The P3E reason-clause casing does not reach push copy at
+all — the push `reasonLine` renders the source verbatim. Both are formatting
+only: neither activates push, creates notification events, or rewrites any
+recorded notification data — copy is rendered at delivery time and is never
+stored in the ledger. Payload is
 `{kind:'recall', recallCaseId, notificationEventId}` — the app validates it
 and builds the route itself; it never navigates to a pushed URL.
 

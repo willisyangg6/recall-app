@@ -1,8 +1,11 @@
 # Recall operations: scheduled ingestion (Phase C1)
 
-_Written 2026-08-26. Turns the manually-operated pipelines into a
-continuously-running service. Push delivery is Phase C2 — nothing here
-touches devices; the pipeline still ends at the NotificationEvent ledger._
+_Written 2026-08-26, when the pipeline ended at the NotificationEvent
+ledger and nothing here touched devices. Since Phase C2 both workflows end
+with a `jobs:push` step — but **invoking the push job is not device
+delivery**: until the founder runs `push:activate -- --confirm`, the job is
+a no-send no-op and no device notification is sent (see
+docs/recall-push-delivery.md)._
 
 ## Architecture
 
@@ -72,12 +75,17 @@ unchanged, and raising it would make dropped ticks more likely, not less.
 `:07/:37` delivered at most 4 of 44 expected ticks (~9%, worse than the 24%
 baseline; median gap 386 min, worst 694 min), none of the observed starts
 landed on a scheduled minute, and `ops:health` attributed every gap to
-scheduler silence — the reconsideration bar below was met. The fix is the
-**Supabase scheduler watchdog** (docs/recall-scheduler-watchdog.md): Supabase
-Cron → Edge Function → atomic claim → `workflow_dispatch` on this same
-workflow whenever FDA/FSIS freshness lapses. The cron entry stays as a free
-best-effort extra tick during the watchdog observation period; do not rely on
-it for freshness.
+scheduler silence — the reconsideration bar below was met. The designed fix
+is the **Supabase scheduler watchdog** (docs/recall-scheduler-watchdog.md):
+Supabase Cron → Edge Function → atomic claim → `workflow_dispatch` on this
+same workflow whenever FDA/FSIS freshness lapses. The watchdog is built and
+tested and is designed to become the primary freshness owner **once deployed
+and activated** — but its current production activation state is not
+verifiable from the repository and requires a live check (`npm run
+scheduler:status` / the `ops:health` watchdog section). Until that
+activation is confirmed, this GitHub cron remains the delivery path,
+best-effort as measured above; the cron entry stays regardless as a free
+extra tick.
 
 The cron is pinned by `src/server/jobs/workflow-schedule.test.ts`, which also
 asserts `workflow_dispatch` survives on both workflows — it is the recovery
@@ -126,9 +134,11 @@ An additional shifted cron entry inside the same workflow is the cheaper next
 step and should be tried first.
 
 **That bar was met on 2026-08-28** (≈9% delivery, all scheduler silence), and
-the external scheduler exists: see docs/recall-scheduler-watchdog.md for the
-architecture, activation, rollback, and the new `Scheduler watchdog` section
+the external scheduler is built: see docs/recall-scheduler-watchdog.md for
+the architecture, activation, rollback, and the `Scheduler watchdog` section
 in `ops:health` plus `npm run scheduler:status` / `npm run scheduler:probe`.
+Whether it has been activated in production is a live question those
+commands answer; do not assume it from the code's presence.
 
 ### The unchanged-source skip gate
 
@@ -296,8 +306,9 @@ content-type + magic-byte checks) with the per-document cap raised
 alone). Of the eight ledgered failures, seven recover on the next `--full`
 sweep; 047-2023 is a dead link at FSIS itself. Rendered pages are
 DETAIL-SCREEN EVIDENCE only: under the C9 frozen policy the sync never
-touches `projection.heroImageUrl` — professional card-hero sourcing is
-C9.1 (docs/recall-imagery.md).
+touches `projection.heroImageUrl` — professional card-hero sourcing was
+researched by C9.1 (2026-08-30) and **deferred**; no provider is integrated
+(docs/recall-imagery.md §12).
 
 ## Product categories: derived, accepted, backfilled (C10B)
 
@@ -389,7 +400,9 @@ Three coverage concepts are distinct and never conflated: CARD HERO
 coverage (`projection.heroImageUrl` — today exclusively official FDA
 photographs under the historical selection, ~619 active), DETAIL VISUAL
 coverage (a hero and/or rendered label pages in product_visuals), and
-PROFESSIONAL PACKSHOT coverage (not yet measured — C9.1 defines it).
+PROFESSIONAL PACKSHOT coverage (sampled once by the completed C9.1
+research, 2026-08-30, and deliberately not tracked in production — external
+sourcing is deferred, docs/recall-imagery.md §12).
 `qa:imagery` gates on the frozen interim policy — zero label renders
 promoted to card hero, zero unknown-provenance heroes, zero
 URL-normalization drift — with bounded live probes only, never a corpus
@@ -397,8 +410,11 @@ download. There is deliberately NO imagery repair command: the only
 historical repair C9 contemplated was blanket hero promotion of ordinary
 label renders, which the professional-imagery objective forbids;
 `src/server/imagery-guards.test.ts` keeps every promotion path removed.
-Professional hero repair, if C9.1's classifier finds work, will be built
-there on the reserved `updateCaseHeroImage` compare-and-set seam.
+Professional hero repair remains unbuilt on purpose: C9.1 (2026-08-30)
+concluded no classifier clears the precision bar and no free source
+qualifies, and deferred external sourcing; the reserved
+`updateCaseHeroImage` compare-and-set seam stays without a production
+caller until that deferral is revisited.
 
 ## Retailer evidence: a one-time historical repair
 
@@ -922,7 +938,14 @@ optionally local `.env` for the probe CLI). Neither is a repo secret, neither
 appears in any table, log, or migration; docs/recall-scheduler-watchdog.md
 §Credentials has scopes and rotation.
 
-## Activation (founder steps — nothing is deployed until these run)
+## Activation (C1 founder steps — completed; kept as record)
+
+_These steps were the original C1 activation, and they were carried out in
+2026-08: the measured delivery windows above record live `schedule` runs on
+this repository, and the applied repairs in this document record dated
+production writes through the same job layer. The list is kept as the
+operational record of what activation involved (and as the template for a
+re-activation after a credential loss), not as pending work._
 
 1. Review + apply the ops migration: `supabase db push`
    (adds `ingest_runs` job columns, `job_leases` + lease functions,

@@ -1,6 +1,6 @@
 # Recall Domain Model & Ingestion Architecture
 
-**Status:** design specification for the first backend implementation. No code exists yet.
+**Status:** written as the design specification for the first backend implementation (before any code existed); the pipeline it specifies is now implemented and live, and this document is maintained as the authoritative domain-model and ingestion reference, with later milestone deltas recorded in place (P2/P3 notes below).
 **Evidence base:** every source-behavior claim cited as "§n" refers to [`docs/recall-source-contract.md`](recall-source-contract.md) (all sources verified live 2026-08-21). Where this document makes a product/engineering choice not dictated by evidence, it is marked **[DECISION]** with the reasoning.
 
 **Design priorities (in order):** usability → useful coverage → understandable information → correctness and traceability → maintainability → elegance. Concretely: prefer graceful uncertainty over missing information; never fabricate recall facts; never let ingestion ambiguity silently drop an authoritative recall.
@@ -238,7 +238,16 @@ Inference from government prose is **acceptable and necessary** (openFDA distrib
 3. `confidence: 'inferred'` is rendered visibly (badge/tooltip) — uncertainty is displayed, not hidden.
 4. Ambiguous extraction (e.g. "in." vs Indiana) → drop to `unknown`, keep the text. Precision beats coverage _for geography specifically_ because a wrong "doesn't affect you" is dangerous.
 
-### 5.3 "Affects me" semantics (future personalization, model-ready now)
+### 5.3 "Affects me" semantics (design-era sketch; personalization has since shipped)
+
+_This subsection is the pre-implementation sketch, kept as design record. The
+shipped semantics live in
+[recall-personalization.md](recall-personalization.md) and differ in two
+ways: relevance never infers a state (no `inferred` badge exists), and the
+"Distribution not specified" section was removed in C5.2B — an
+unknown-distribution notice appears in Affects Me only when a personal
+allergen/retailer signal qualifies it, and All Recalls remains the complete
+safety net._
 
 Given a user state `S`, a case is:
 
@@ -1486,7 +1495,7 @@ exclusively, and FSIS under-reports allergens in it.
     historical correction (P3B)", for the applied result and the durable
     ledgers.
 - **Affected-product data on the same notices is a separate milestone (P3C),
-  and only half of it is built.** P3B settled the hazard category and agent for
+  and both halves are now built.** P3B settled the hazard category and agent for
   the AquaStar and Dynarex notices; nothing in this bullet is claimed fixed by
   it. Manual QA on 2026-09-04 raised five questions about those same notices'
   **affected-product** facts, and the source-backed audit that followed
@@ -1501,9 +1510,13 @@ exclusively, and FSIS under-reports allergens in it.
   sentence of the What Happened narrative instead of a separately styled line.
   **The canonical-data delta is zero** — all four were display-only, so no
   repair, migration, backfill, cache bump, re-projection or notification is
-  needed. **P3C-2 (deferred, not implemented):** whether lot/batch codes are
-  attributed to the rows that own them, which requires reading the official
-  source structure rather than the shape of the rendered output. Specification
+  needed. **P3C-2 (implemented, display-time only — shipped `51c1a7b`,
+  2026-09-04):** lot/batch codes are attributed to the rows that own them by
+  reading the official source structure (a lead-in paragraph's `<p>`/`<ul>`
+  relationship, a table's headers, the presence of a product-name cell) —
+  never the shape of the rendered output and never array position; the
+  Affected Products table is now the sole presentation of codes, and its
+  canonical-data delta is likewise zero. Contract and measured corpus deltas
   in
   [recall-feed-usability.md](recall-feed-usability.md), "P3C — affected-product
   data and presentation correctness".

@@ -283,12 +283,14 @@ second truth able to drift from the timeline it was derived from.
 
 ### Sections and copy
 
-The structure is unchanged: recent qualifying notices, "Location not
+At C3.2 the structure was unchanged: recent qualifying notices, "Location not
 specified", then older active collapsed. Only the recency date changed, and
-all three sections are ordered by the one comparator, so nothing jumps between
+all sections are ordered by the one comparator, so nothing jumps between
 renders. Sections are disjoint by construction — qualifying cases split by one
-boundary into recent/older, and only non-qualifying unknown-geography cases
-enter "Location not specified".
+boundary into recent/older. _Superseded by C5.2B (see "Home" above): the
+generic "Location not specified" **section** no longer exists — Affects Me
+renders two sections, and an unknown-location notice appears only when a
+personal signal qualifies it, carrying its honest context chip._
 
 Every card shows exactly one activity label from the material-change ledger
 (P1: "Announced …", or "Updated …" only when an authoritative material event
@@ -575,29 +577,39 @@ real chains ("Great Wall Super", "Heinen's Locations", "Texas HEB") name a
 real shop imperfectly rather than a wrong one. None can produce a false
 preference match, which requires an exact catalog alias.
 
-## Future filter contract (documented, NOT implemented)
+## Filter contract (recorded pre-C6; since implemented, one dimension open)
 
-Recorded here so the next milestone starts from a settled contract. None of
-this exists in the app today.
+This contract was recorded before the filter UI existed so that milestone
+could start from settled semantics. **It has since shipped**: C6/C6.1 built
+the control hierarchy and the Location and Risk filters, and C10B added
+Category — the implementation is
+[recall-feed-usability.md](recall-feed-usability.md) ("Control hierarchy
+(C6.1)", "Filter model", "Category (C10B)") and `lib/feed-filters.ts`.
+Status per clause:
 
-- **`All` and `Affects Me` are mutually exclusive scopes** — one or the other,
-  never both, and never neither.
-- **`Location`, `Category` and `Risk` are composable filters** that apply
-  within the chosen scope.
-- **Within one filter, selections OR together**: Critical OR High.
-- **Between filters, AND**: (Critical OR High) AND (Location = CA).
-- **Applied dimensions stay active while others are added** — adding a Risk
-  filter must not silently clear a Location one.
-- **Filter chips may scroll horizontally** rather than wrapping or truncating.
-- **Rated risk values are Critical, High, Moderate, Low, Minimal.** `Pending`
-  and `Not rated` are neutral ADDITIONAL states, never folded into a rated
-  value and never inferred from hazard text (see `domain/risk-tier.ts`).
-- **Category vocabulary requires its own corpus audit** before any UI is
-  designed; `hazardCategory` is an ingestion-side classification, not a
-  consumer-facing taxonomy.
-- **Allergen filtering is TBD** and deliberately unresolved: allergens
-  currently drive Affects Me eligibility, so exposing them as a filter as well
-  needs a decision about whether the two interact or one replaces the other.
+- **`All` and `Affects Me` are mutually exclusive scopes** — implemented.
+- **`Location`, `Category` and `Risk` are composable filters** within the
+  All scope — implemented (a C6.1 founder decision scoped them to All
+  Recalls only; they never apply to Affects Me).
+- **Within one filter, selections OR together**: Critical OR High —
+  implemented.
+- **Between filters, AND**: (Critical OR High) AND (Location = CA) —
+  implemented.
+- **Applied dimensions stay active while others are added** — implemented.
+- **Filter chips scroll horizontally** — implemented.
+- **Rated risk values are Critical, High, Moderate, Low, Minimal**, with
+  `Pending` and `Not rated` as neutral additional states, never folded into
+  a rated value and never inferred from hazard text (`domain/risk-tier.ts`)
+  — implemented.
+- **Category corpus audit before any UI** — completed: the C10A/C10B audits
+  and the founder shipping decision are recorded in
+  [recall-food-categories.md](recall-food-categories.md); the launch filter
+  uses the derived `productCategories` vocabulary, never `hazardCategory`.
+- **Allergen filtering remains TBD** and deliberately unresolved — the one
+  filter dimension with no UI. Allergens drive Affects Me eligibility, so
+  exposing them as a browsing filter as well needs a product decision about
+  whether the two interact or one replaces the other. No allergen filter
+  exists in `lib/feed-filters.ts` today.
 
 ## Privacy
 

@@ -23,13 +23,17 @@
 # repository: 16 of 67 expected ticks (24%) under `*/30` (2026-08-26/27), and
 # at most 4 of 44 (9%) under the `:07`/`:37` offset (2026-08-27/28) — the
 # offset did not fix it. Schedule events are dropped, not queued, so a missed
-# tick is simply lost. Freshness is therefore owned by the Supabase scheduler
-# watchdog (supabase/functions/ingest-watchdog +
-# docs/recall-scheduler-watchdog.md), which calls workflow_dispatch on this
-# workflow whenever FDA/FSIS ingestion goes stale. The cron stays as a free
-# extra chance at a tick; do NOT rely on it, and do not remove it until the
-# watchdog has production evidence (see the observation-period notes in the
-# watchdog doc).
+# tick is simply lost. The Supabase scheduler watchdog
+# (supabase/functions/ingest-watchdog + docs/recall-scheduler-watchdog.md)
+# is designed to own freshness by calling workflow_dispatch on this workflow
+# whenever FDA/FSIS ingestion goes stale — but that holds only once it is
+# deployed and activated, and its live activation state must be verified
+# against production (npm run scheduler:status / ops:health), never assumed
+# from the code. Until that activation is confirmed, this cron remains the
+# delivery path, at the measured best-effort rates above. Keep the cron as a
+# free extra chance at a tick either way, and never remove
+# workflow_dispatch (it is the watchdog's target and the manual recovery
+# path).
 
 name: scheduled-ingest
 

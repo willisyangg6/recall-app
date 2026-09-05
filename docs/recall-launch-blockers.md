@@ -26,8 +26,11 @@ Product decisions with policy consequences:
 - [ ] Retention promises for what the C7.1 reset cannot reach: **the in-app
       "Reset app and delete my data" control now ships** (C7.1 — atomic
       `delete_installation_data` RPC + local reset; migration
-      `20260902000000_installation_deletion.sql`, pending production apply),
-      so self-service deletion of an installation's own rows is resolved.
+      `20260902000000_installation_deletion.sql` exists in the repository,
+      but its production application status is unverified from here — a
+      separately authorized live check must confirm it before the policy
+      describes deletion as live), so self-service deletion of an
+      installation's own rows is resolved in the app.
       Still open: how long rows persist for installations that never reset —
       disabled `token_reassigned` rows from pre-reinstall installs
       (unreachable by the reset RPC), abandoned installations, and delivery
@@ -119,5 +122,20 @@ Everything in §3, plus (tracked in `recall-app-store-readiness.md`):
   Privacy & Data Controls, Attributions) describe verified current behavior,
   contain no placeholders or invented contacts (test-enforced), and are safe
   to ship now.
-- The data-flow and SDK audits are code-backed and current at HEAD `5cef70d`;
-  they need re-verification only when dependencies or data flows change.
+- The data-flow and SDK audits were verified at HEAD `5cef70d` (2026-08-28)
+  and revised for C7.1 deletion and the C8 feed manifest/cache; data flows
+  HAVE changed since that checkpoint, so the audits are **not** blanket
+  "current at HEAD". Changed paths since `5cef70d`: the C8 incremental feed
+  sync and on-device cache (`d92cb01`), the C7.1 deletion RPC (`ef78de7`),
+  the C10B category filter (a derived projection field on the feed SELECT;
+  session-only filter state), imagery-pipeline hardening (`10b6139`), the
+  applied historical repairs (data corrections only), and the P1–P3E
+  display-time presentation work (no network or storage changes). A bounded
+  offline spot re-verification on 2026-09-05 confirmed: the feed cache
+  carries a tested no-identity pin (`src/lib/feed-cache.test.ts`), no read
+  path sends the installation id, and the only dependency-lock delta is
+  `expo-file-system` moving from transitive to direct (its privacy manifest
+  was already in the §5 inventory); an analytics/tracker sweep of the lock
+  still returns zero. **Not re-run**: the exported-bundle secret scans and
+  the privacy-manifest re-read (both dated 2026-08-28) — re-run them during
+  submission prep, per §4.6.
