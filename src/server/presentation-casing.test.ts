@@ -1,6 +1,6 @@
 /**
- * P3D corpus-wide display-capitalization contract, proven over every recorded
- * FDA and FSIS notice at full pipeline depth (raw fixture → parse →
+ * P3D/P3E corpus-wide display-capitalization contract, proven over every
+ * recorded FDA and FSIS notice at full pipeline depth (raw fixture → parse →
  * projectCase → shared presentation models).
  *
  * Two guarantees, both pinned exactly:
@@ -37,9 +37,12 @@ import {
   headlineCaseIfLowercase,
   humanizeAllCaps,
   productDisplayName,
+  reasonClauseCasing,
 } from '../lib/consumer-summary';
 import { buildSearchEntry, matchesSearch, parseSearchQuery } from '../lib/feed-search';
 import { buildDetailModel, buildHomeCardModel } from '../lib/recall-presentation';
+import { interpretReason } from '../lib/recall-reason';
+import { buildShareMessage } from '../lib/share-message';
 import type { FeedItem } from '../lib/recall-feed';
 import { parseFdaAnnouncement, slugFromPath, type FdaListingItem } from './fda/parse';
 import { parseFsisRecord, type FsisRawRecord } from './fsis/parse';
@@ -384,4 +387,262 @@ test('the push formatter stays a pure server-safe module (structural)', () => {
   assert.ok(!/from '.*(push-store|expo-transport|worker)'/.test(source));
   assert.ok(!/from '(react|react-native|expo)/.test(source));
   assert.match(source, /displayHeadlineCase/);
+});
+
+// ── P3E: reason-clause sentence-interior casing ─────────────────────────────
+//
+// The What Happened free-text reason clauses (`contents`/`verbatim` families)
+// previously lowercased the WHOLE source phrase; the P3E audit over the
+// recorded FDA corpus found 28 notices reaching these clauses, 11 of them
+// with source capitalization flattened, 7 of those genuinely wrong for
+// consumers (taxonomic organism names on infant formula, vitamin
+// designations). `reasonClauseCasing` (lib/consumer-summary.ts) now
+// normalizes each phrase to sentence-interior lowercase and restores only
+// evidence-backed semantic spans. Everything here drives the full recorded
+// pipeline (fixture → parse → projectCase → presentation models).
+
+test('recorded regression: Cronobacter sakazakii casing survives on infant formula (Nutramigen, ByHeart)', () => {
+  const nutramigen = modelsOf('nutramigen-hypoallergenic-infant');
+  assert.equal(
+    nutramigen.detail.whatHappened.text,
+    'Enfamil recalled Nutramigen Powder infant formula in 12.6 and 19.8oz cans because of potential Cronobacter sakazakii contamination.',
+  );
+  // Canonical stored reason keeps the raw source casing — display-only fix.
+  assert.equal(nutramigen.projection.reasonText, 'Potential Cronobacter sakazakii contamination');
+
+  const byheart = modelsOf('byheart-issues-voluntary-recall');
+  assert.equal(
+    byheart.detail.whatHappened.text,
+    'ByHeart recalled Whole Nutrition Infant Formula, Milk Based Powder with Iron for 0-12months because of potential for cross-contamination with Cronobacter sakazakii.',
+  );
+  assert.equal(
+    byheart.projection.reasonText,
+    'Potential for cross-contamination with Cronobacter sakazakii',
+  );
+});
+
+test('recorded regression: Bacillus cereus casing survives (Little Remedies, a2)', () => {
+  const littleRemedies = modelsOf('little-remediesr-honey-cough-syrup');
+  assert.equal(
+    littleRemedies.detail.whatHappened.text,
+    'Little Remedies recalled Honey Cough Syrup because of potential foodborne illness – Bacillus cereus.',
+  );
+  const a2 = modelsOf('a2-platinum-usa-label');
+  assert.equal(
+    a2.detail.whatHappened.text,
+    'a2 recalled a2 Platinum Premium Infant Formula 0-12 months USA label because of presence of cereulide toxin produced by some strains of the bacterium Bacillus cereus. The recall covers 16,428 units.',
+  );
+});
+
+test('recorded regression: the Talaromyces genus casing survives (Comforts baby water)', () => {
+  const { detail } = modelsOf('comforts-baby-water');
+  assert.equal(
+    detail.whatHappened.text,
+    'Comforts recalled Comforts FOR BABY Purified Water with Fluoride because of potential mold contamination - Talaromyces penicillium.',
+  );
+});
+
+test('recorded regression: vitamin designations keep their letter uppercase (Nordic D3, Perrigo D)', () => {
+  const nordic = modelsOf('nordic-naturals');
+  assert.equal(
+    nordic.detail.whatHappened.text,
+    'Nordic Naturals recalled Baby’s Vitamin D3 Liquid because of elevated level of vitamin D3 dosage. The recall covers 3,800 units.',
+  );
+  const perrigo = modelsOf('perrigo-issues-voluntary-recall');
+  assert.equal(
+    perrigo.detail.whatHappened.text,
+    'Perrigo Company recalled Premium Infant Formula with Iron Milk-Based Powder because the products contain levels of vitamin D above the maximum level permitted. The recall covers 16,500 cans.',
+  );
+});
+
+test('recorded preservation: generic source title casing still flattens to natural prose', () => {
+  // These four notices carry source capitalization that is styling, not
+  // meaning — their clauses stay byte-identical to the pre-P3E rendering.
+  assert.equal(
+    modelsOf('shopaax').detail.whatHappened.text,
+    'Kingdom Honey recalled Royal Honey because of undeclared sildenafil.',
+  );
+  // "lead" is lowercase in the canonical chemical vocabulary — the
+  // vocabulary affirms natural lowercase rather than restoring a capital.
+  assert.equal(
+    modelsOf('ikm-recalls').detail.whatHappened.text,
+    'IKM recalled Metal Cookware Items because of potential foodborne illness – lead contamination.',
+  );
+  assert.equal(
+    modelsOf('mondelez').detail.whatHappened.text,
+    'CHIPS AHOY recalled Baked brownie bites because of product safety – choking threats.',
+  );
+  assert.equal(
+    modelsOf('my-wifes-slaw').detail.whatHappened.text,
+    'My Wife’s Slaw recalled Original and Jalapeno Heat flavored coleslaw because of foodborne illness - potential for microorganisms growth.',
+  );
+  // Punctuation/parentheses pass through a clause that was already natural
+  // lowercase in the source.
+  assert.equal(
+    modelsOf('ea-sween').detail.whatHappened.text,
+    'Deli Express recalled BBQ Pulled Pork Sandwich because of the potential presence of foreign particles (plastic).',
+  );
+});
+
+test('Home and Detail render compatible casing for every corrected semantic span (P3A parity)', () => {
+  // Home's concise reason line keeps the source's own casing as a standalone
+  // sentence; Detail embeds the same phrase mid-sentence. After P3E the two
+  // agree on every semantic span — Home can no longer show "Cronobacter
+  // sakazakii" while Detail flattens it.
+  const nutramigen = modelsOf('nutramigen-hypoallergenic-infant');
+  assert.equal(nutramigen.home.reasonLine, 'Potential Cronobacter sakazakii contamination.');
+  assert.ok(nutramigen.detail.whatHappened.text.includes('Cronobacter sakazakii'));
+  const byheart = modelsOf('byheart-issues-voluntary-recall');
+  assert.equal(
+    byheart.home.reasonLine,
+    'Potential for cross-contamination with Cronobacter sakazakii.',
+  );
+  assert.ok(byheart.detail.whatHappened.text.includes('Cronobacter sakazakii'));
+  const littleRemedies = modelsOf('little-remediesr-honey-cough-syrup');
+  assert.equal(littleRemedies.home.reasonLine, 'Potential Foodborne Illness – Bacillus cereus.');
+  assert.ok(littleRemedies.detail.whatHappened.text.includes('Bacillus cereus'));
+});
+
+test('share copy inherits the corrected clause from the one shared sentence', () => {
+  const { projection, detail } = modelsOf('nutramigen-hypoallergenic-infant');
+  const share = buildShareMessage({
+    productName: detail.productName,
+    firmDisplayName: projection.recallingFirm.displayName,
+    brands: projection.brands ?? [],
+    whatHappened: detail.whatHappened.text,
+    consumerAction: null,
+    agencyLabel: projection.sourceAgency,
+    officialUrl: projection.officialUrl,
+  });
+  assert.ok(share.message.includes('because of potential Cronobacter sakazakii contamination.'));
+});
+
+/**
+ * The complete approved population of recorded reason clauses P3E changes,
+ * frozen from the P3E audit (2026-09-04): the seven occurrences of medically
+ * meaningful casing the pre-P3E whole-phrase lowercasing destroyed. Keyed by
+ * notice identity, clause family, and the exact source phrase; each entry
+ * pins the pre-P3E rendering and the corrected rendering, plus the evidence
+ * rule that authorizes the restored span. If this guard fails because a new
+ * clause entered (or left) the set, do not edit this table to make it pass:
+ * review the source notice's own capitalization against
+ * docs/recall-feed-usability.md (P3E) first — silent widening of a casing
+ * transform is the regression this guard exists to catch.
+ */
+const APPROVED_REASON_CLAUSE_DELTAS: Record<
+  string,
+  { baseline: string; corrected: string; rule: string }
+> = {
+  'fda:reckittmead-johnson-nutrition-voluntarily-recalls-select-batches-nutramigen-hypoallergenic-infant § verbatim § Potential Cronobacter sakazakii contamination':
+    {
+      baseline: 'potential cronobacter sakazakii contamination',
+      corrected: 'potential Cronobacter sakazakii contamination',
+      rule: 'organism genus vocabulary (Cronobacter)',
+    },
+  'fda:byheart-issues-voluntary-recall-five-batches-its-infant-formula-because-possible-health-risk § verbatim § Potential for cross-contamination with Cronobacter sakazakii':
+    {
+      baseline: 'potential for cross-contamination with cronobacter sakazakii',
+      corrected: 'potential for cross-contamination with Cronobacter sakazakii',
+      rule: 'organism genus vocabulary (Cronobacter)',
+    },
+  'fda:medtech-products-inc-issues-nationwide-recall-little-remediesr-honey-cough-syrup-due-microbial § verbatim § Potential Foodborne Illness – Bacillus cereus':
+    {
+      baseline: 'potential foodborne illness – bacillus cereus',
+      corrected: 'potential foodborne illness – Bacillus cereus',
+      rule: 'organism genus vocabulary (Bacillus)',
+    },
+  'fda:a2-platinum-usa-label-infant-formula-recalled-because-possible-health-risk § verbatim § Presence of cereulide toxin produced by some strains of the bacterium Bacillus cereus':
+    {
+      baseline:
+        'presence of cereulide toxin produced by some strains of the bacterium bacillus cereus',
+      corrected:
+        'presence of cereulide toxin produced by some strains of the bacterium Bacillus cereus',
+      rule: 'organism genus vocabulary (Bacillus)',
+    },
+  'fda:fda-alerts-consumers-recall-certain-comforts-baby-water-fluoride § verbatim § Potential mold contamination - Talaromyces penicillium':
+    {
+      baseline: 'potential mold contamination - talaromyces penicillium',
+      corrected: 'potential mold contamination - Talaromyces penicillium',
+      rule: 'organism genus vocabulary (Talaromyces)',
+    },
+  'fda:nordic-naturals-issues-voluntary-recall-babys-vitamin-d3-liquid-due-elevated-levels-vitamin-d3 § verbatim § Elevated level of Vitamin D3 dosage':
+    {
+      baseline: 'elevated level of vitamin d3 dosage',
+      corrected: 'elevated level of vitamin D3 dosage',
+      rule: 'vitamin designation construction',
+    },
+  'fda:perrigo-issues-voluntary-recall-one-batch-premium-infant-formula-iron-milk-based-powder-due-elevated § contents § levels of Vitamin D above the maximum level permitted':
+    {
+      baseline: 'levels of vitamin d above the maximum level permitted',
+      corrected: 'levels of vitamin D above the maximum level permitted',
+      rule: 'vitamin designation construction',
+    },
+};
+
+test('corpus guard: reason-clause casing changes exactly the approved recorded clauses', () => {
+  const observed: Record<string, { baseline: string; corrected: string }> = {};
+  for (const { id, projection } of CORPUS) {
+    const typed = interpretReason({
+      reasonText: projection.reasonText,
+      hazardCategory: projection.hazardCategory,
+      pathogenOrAllergen: projection.pathogenOrAllergen,
+      summaryText: projection.summaryText,
+      title: projection.title,
+    });
+    if (typed.family !== 'contents' && typed.family !== 'verbatim') continue;
+    const phrase = typed.family === 'contents' ? typed.contents : typed.noun;
+    const baseline = phrase.toLowerCase(); // the pre-P3E rendering
+    const corrected = reasonClauseCasing(phrase);
+    // Casing-only and idempotent over every recorded free-text reason.
+    assert.equal(corrected.toLowerCase(), baseline, `${id}: transform is not casing-only`);
+    assert.equal(reasonClauseCasing(corrected), corrected, `${id}: transform is not idempotent`);
+    if (corrected !== baseline) {
+      observed[`${id} § ${typed.family} § ${phrase}`] = { baseline, corrected };
+    }
+  }
+  const expected = Object.fromEntries(
+    Object.entries(APPROVED_REASON_CLAUSE_DELTAS).map(([key, { baseline, corrected }]) => [
+      key,
+      { baseline, corrected },
+    ]),
+  );
+  assert.deepEqual(
+    observed,
+    expected,
+    'The set of recorded reason clauses the P3E casing transform changes has widened or shrunk. ' +
+      "Do not edit APPROVED_REASON_CLAUSE_DELTAS to make this pass — review the notice's own " +
+      'source capitalization first (P3E contract, docs/recall-feed-usability.md).',
+  );
+});
+
+test('the corrected notices change no canonical, search, push, or materiality behavior', () => {
+  for (const key of Object.keys(APPROVED_REASON_CLAUSE_DELTAS)) {
+    const fragment = key.split(' § ')[0].replace(/^fda:/, '');
+    const { id, projection } = caseOf(fragment);
+    // Canonical reason text keeps the raw source casing (display-only fix)…
+    const sourcePhrase = key.split(' § ')[2];
+    assert.ok(
+      (projection.reasonText ?? '').includes(sourcePhrase.slice(0, 24)) ||
+        (projection.reasonText ?? '')
+          .toLowerCase()
+          .includes(sourcePhrase.slice(0, 24).toLowerCase()),
+      `${id}: canonical reason text lost its source phrase`,
+    );
+    assert.notEqual(projection.reasonText, projection.reasonText?.toLowerCase());
+    // …identity and materiality are untouched (a display change can never
+    // trigger a notification)…
+    assert.equal(detectChanges(projection, projection).material.length, 0, id);
+    // …and search — which never indexes reason text — matches identically
+    // for any query casing.
+    const entry = buildSearchEntry(feedItemOf(id, projection));
+    const parsed = parseSearchQuery(projection.title.split(/\s+/)[0]);
+    if (parsed) assert.ok(matchesSearch(entry, parsed), `${id}: title search miss`);
+  }
+  // Push copy is built from reasonLine (lib/recall-display), which renders
+  // the source reason verbatim — the P3E clause transform never reaches it.
+  const { projection } = caseOf('nutramigen-hypoallergenic-infant');
+  assert.deepEqual(initialPushOf(projection), {
+    title: 'Recall alert: Nutramigen Powder infant formula in 12.6 and 19.8oz cans',
+    body: 'Possible contamination. Check your package.',
+  });
 });

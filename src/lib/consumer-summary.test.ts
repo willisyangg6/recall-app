@@ -11,6 +11,7 @@ import {
   humanizeAllCaps,
   parseProductLine,
   productSummaryFromTitle,
+  reasonClauseCasing,
 } from './consumer-summary';
 
 // Title and product-line strings below are verbatim from the recorded real
@@ -388,5 +389,133 @@ test('displayHeadlineCase is the one composed pipeline both cards and push use',
   for (const input of ['TOP SIRLOIN BUTT', 'dietary supplements', 'Crunchy Trail Mix', '', '   ']) {
     const once = displayHeadlineCase(input);
     assert.equal(displayHeadlineCase(once), once, `not idempotent: ${input}`);
+  }
+});
+
+// ── Reason-clause sentence-interior casing (P3E) ────────────────────────────
+//
+// Phrases below marked "recorded" are the verbatim source reason phrases of
+// the audited FDA corpus notices; the full-pipeline regressions for those
+// notices live in src/server/presentation-casing.test.ts. Cases marked
+// "synthetic" cover edge shapes the recorded corpus does not contain.
+
+test('reasonClauseCasing restores organism casing from the genus vocabulary (recorded)', () => {
+  assert.equal(
+    reasonClauseCasing('Potential Cronobacter sakazakii contamination'),
+    'potential Cronobacter sakazakii contamination',
+  );
+  assert.equal(
+    reasonClauseCasing('Potential for cross-contamination with Cronobacter sakazakii'),
+    'potential for cross-contamination with Cronobacter sakazakii',
+  );
+  assert.equal(
+    reasonClauseCasing('Potential Foodborne Illness – Bacillus cereus'),
+    'potential foodborne illness – Bacillus cereus',
+  );
+  assert.equal(
+    reasonClauseCasing(
+      'Presence of cereulide toxin produced by some strains of the bacterium Bacillus cereus',
+    ),
+    'presence of cereulide toxin produced by some strains of the bacterium Bacillus cereus',
+  );
+  assert.equal(
+    reasonClauseCasing('Potential mold contamination - Talaromyces penicillium'),
+    'potential mold contamination - Talaromyces penicillium',
+  );
+});
+
+test('reasonClauseCasing keeps vitamin designations uppercase (recorded)', () => {
+  assert.equal(
+    reasonClauseCasing('Elevated level of Vitamin D3 dosage'),
+    'elevated level of vitamin D3 dosage',
+  );
+  assert.equal(
+    reasonClauseCasing('levels of Vitamin D above the maximum level permitted'),
+    'levels of vitamin D above the maximum level permitted',
+  );
+});
+
+test('reasonClauseCasing flattens generic source title casing to natural prose (recorded)', () => {
+  // A capitalized drug name is not medically meaningful casing — lowercase
+  // mid-sentence is the natural prose form.
+  assert.equal(reasonClauseCasing('Undeclared Sildenafil'), 'undeclared sildenafil');
+  // "lead" is lowercase in the canonical chemical vocabulary — the vocabulary
+  // affirms natural lowercase rather than restoring a capital.
+  assert.equal(
+    reasonClauseCasing('Potential Foodborne Illness – Lead contamination'),
+    'potential foodborne illness – lead contamination',
+  );
+  assert.equal(
+    reasonClauseCasing('Product Safety – choking threats'),
+    'product safety – choking threats',
+  );
+  assert.equal(
+    reasonClauseCasing('Foodborne Illness - Potential for microorganisms growth'),
+    'foodborne illness - potential for microorganisms growth',
+  );
+});
+
+test('reasonClauseCasing restores canonical pathogen and chemical spans (synthetic)', () => {
+  // No recorded free-text reason names these agents (they classify into the
+  // structured families first), but the helper must not corrupt them if one
+  // ever arrives: the shared vocabularies carry the canonical casing.
+  assert.equal(
+    reasonClauseCasing('Potential E. Coli O157:H7 Contamination'),
+    'potential E. coli O157:H7 contamination',
+  );
+  assert.equal(
+    reasonClauseCasing('Possible Listeria Monocytogenes exposure'),
+    'possible Listeria monocytogenes exposure',
+  );
+  // A genuinely semantic code-bearing agent survives via CHEMICAL_AGENTS.
+  assert.equal(
+    reasonClauseCasing('Potential Cesium-137 Contamination'),
+    'potential Cesium-137 contamination',
+  );
+});
+
+test('reasonClauseCasing never invents a designation from a code-like token (synthetic)', () => {
+  // "d3" not governed by the word "vitamin" is a model/code token, not a
+  // nutrient designation.
+  assert.equal(
+    reasonClauseCasing('Defective Model D3 Dispenser Part'),
+    'defective model d3 dispenser part',
+  );
+  // ALL-CAPS generic prose is ordinary shouting, not semantic casing.
+  assert.equal(reasonClauseCasing('POTENTIAL CHOKING HAZARD'), 'potential choking hazard');
+});
+
+test('reasonClauseCasing degrades safely on degenerate input (synthetic)', () => {
+  assert.equal(reasonClauseCasing(''), '');
+  assert.equal(reasonClauseCasing('   '), '   ');
+  // Punctuation and parentheses pass through untouched (recorded EA Sween
+  // shape: the phrase is already natural lowercase).
+  assert.equal(
+    reasonClauseCasing('the potential presence of foreign particles (plastic)'),
+    'the potential presence of foreign particles (plastic)',
+  );
+});
+
+test('reasonClauseCasing is casing-only and idempotent over every covered shape', () => {
+  const inputs = [
+    'Potential Cronobacter sakazakii contamination',
+    'Potential Foodborne Illness – Bacillus cereus',
+    'Potential mold contamination - Talaromyces penicillium',
+    'Elevated level of Vitamin D3 dosage',
+    'levels of Vitamin D above the maximum level permitted',
+    'Undeclared Sildenafil',
+    'Potential Foodborne Illness – Lead contamination',
+    'Potential E. Coli O157:H7 Contamination',
+    'POTENTIAL CHOKING HAZARD',
+    'the potential presence of foreign particles (plastic)',
+    'Defective Model D3 Dispenser Part',
+    '',
+    '   ',
+  ];
+  for (const input of inputs) {
+    const once = reasonClauseCasing(input);
+    // Casing-only: the transform never adds, drops, or reorders a character.
+    assert.equal(once.toLowerCase(), input.toLowerCase(), `not casing-only: ${input}`);
+    assert.equal(reasonClauseCasing(once), once, `not idempotent: ${input}`);
   }
 });

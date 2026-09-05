@@ -1052,13 +1052,82 @@ the transforms change (the `terrafina` brand entry and the lowercase
 saucepans description) — any widening fails tests and requires review here
 first, never a silent exception.
 
-**Deferred casing risk (recorded, not fixed).** `what-happened.ts` lowercases
-whole source phrases in its `contents`/`verbatim` reason clauses (`because of
-<phrase.toLowerCase()>`). No recorded-corpus defect is known, and P3D
-deliberately does not change this behavior — but a future source phrase
-carrying meaningful internal casing (an acronym, a brand, a chemical name)
-would be flattened mid-sentence. Any correction must be evidence-gated and
-corpus-audited the way P3D itself was, never a blanket rewrite.
+**Deferred casing risk — resolved by P3E below.** P3D recorded (but did not
+change) that `what-happened.ts` lowercased whole source phrases in its
+`contents`/`verbatim` reason clauses. The P3E audit then disproved the "no
+recorded-corpus defect" assessment against the recorded corpus, and P3E
+corrected the behavior.
+
+### P3E — reason-clause casing (IMPLEMENTED, display-time)
+
+**The measured recorded-corpus evidence.** An offline run of the real
+`parseFdaAnnouncement → projectCase → buildWhatHappened` path over every
+recorded FDA announcement found 28 notices reaching the free-text
+`contents`/`verbatim` reason clauses. Eleven carried source capitalization
+that whole-phrase lowercasing flattened; seven of those were genuinely wrong
+for consumers — taxonomic organism names on infant formula and vitamin
+designations: `cronobacter sakazakii` (Nutramigen, ByHeart), `bacillus
+cereus` (Little Remedies, a2), `talaromyces penicillium` (Comforts baby
+water), `vitamin d3` (Nordic Naturals), and `vitamin d` (Perrigo). The other
+four flattenings are styling, not meaning (`Undeclared Sildenafil`,
+`Potential Foodborne Illness – Lead contamination`, `Product Safety – choking
+threats`, `Foodborne Illness - Potential for microorganisms growth`) and
+correctly read as natural mid-sentence lowercase.
+
+**The evidence-gated casing rule.** `reasonClauseCasing`
+(`lib/consumer-summary.ts`) replaces the whole-phrase lowercasing at both
+clause call sites: it normalizes the source phrase to ordinary
+sentence-interior lowercase, then restores only evidence-backed semantic
+spans. It is casing-only (never adds, drops, or reorders a character),
+deterministic, and idempotent; it never reads a notice ID and never stores a
+source sentence.
+
+**The protected semantic families**, in evidence order:
+
+1. **Shared hazard vocabularies** — the canonical casing in `domain/hazard`
+   `PATHOGENS` (`Listeria monocytogenes`, `E. coli O157:H7`) and
+   `CHEMICAL_AGENTS` (`Cesium-137`) is restored wherever the phrase names one
+   of those agents. Entries whose canonical form is entirely lowercase
+   (`lead`, `arsenic`) are the same vocabulary affirming mid-sentence
+   lowercase — which is why `…Illness – Lead contamination` stays lowercase.
+2. **Organism genus vocabulary (display-only)** — `Cronobacter`, `Bacillus`,
+   `Talaromyces`: genus names the recorded corpus states in free-text reasons
+   while the structured pathogen slot is empty. Binomial nomenclature is the
+   casing authority (genus capitalized, species epithet lowercase), giving
+   back the exact source-supported spans; the consumer health-risk copy in
+   `lib/recall-display.ts` already names Cronobacter and Bacillus cereus with
+   this casing. Extraction and classification never read this list.
+3. **Vitamin designation construction (structural)** — a single letter with
+   optional digits directly governed by the word `vitamin(s)` keeps its
+   uppercase designation (`vitamin D`, `vitamin D3`) while `vitamin` itself
+   stays ordinary prose. Not a vitamin table: a code-like token anywhere else
+   (`model d3`) is never rewritten.
+
+**Meaningful casing vs. generic source title casing.** The contract preserves
+only casing that carries meaning under one of the three families above.
+Generic source title casing — capitals a press office put on ordinary words —
+flattens to natural prose, so `Undeclared Sildenafil` renders `undeclared
+sildenafil` mid-sentence. Preserving every source capital is exactly the
+defect P3D's product-name work avoided in the other direction.
+
+**Frozen corpus guard.** The P3E section of
+`src/server/presentation-casing.test.ts` reproduces the audit over the full
+recorded FDA + FSIS corpus at pipeline depth and freezes the complete
+approved delta: the seven corrected clauses with their exact baseline and
+corrected renderings and the evidence rule authorizing each. Casing-only and
+idempotence are asserted over every recorded free-text reason. Any future
+widening or shrinking fails with an instruction to review the notice's source
+capitalization, never to update the expected set casually.
+
+**Boundaries.** Display-time only, confirmed by a full-corpus surface
+comparison (230 recorded cases): exactly the seven notices change, and only
+in Detail's What Happened sentence and the share copy that embeds it.
+Canonical projections (including `reasonText`), Home models and reason lines,
+product titles, brands, affected-product rows, identifiers, dates,
+quantities, imagery, search entries, the feed-cache schema, push copy
+(`reasonLine` renders the source verbatim and never reaches this transform),
+and material-change detection are all byte-identical; no stored notification
+event changes and no material-change event can be triggered.
 
 ## Control hierarchy (C6.1)
 

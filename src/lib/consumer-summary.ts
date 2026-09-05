@@ -8,6 +8,8 @@
  * an imperfect summary must never hide or alter recall information.
  */
 
+import { CHEMICAL_AGENTS, PATHOGENS } from '@/domain/hazard';
+
 /**
  * FSIS headline grammar, verified across the recorded fixtures:
  *   "<Firm> Recalls <products> Due to <reason>"
@@ -284,6 +286,83 @@ export function capitalizeLeadingWord(text: string): string {
  */
 export function displayHeadlineCase(text: string): string {
   return headlineCaseIfLowercase(humanizeAllCaps(text));
+}
+
+// ── Reason-clause sentence-interior casing (P3E) ────────────────────────────
+//
+// The What Happened free-text reason clauses ("because of <phrase>", "because
+// the products contain <phrase>") embed a source phrase mid-sentence. Source
+// phrases arrive title-cased ("Undeclared Sildenafil", "Potential Foodborne
+// Illness – Lead contamination"), and preserving that casing wholesale would
+// shout generic title case mid-sentence — but flattening the WHOLE phrase
+// (the pre-P3E behavior) destroyed casing that carries meaning: the recorded
+// corpus rendered "cronobacter sakazakii" on infant formula, "bacillus
+// cereus", and "vitamin d3". The contract: normalize the phrase to ordinary
+// sentence-interior lowercase, then restore only evidence-backed semantic
+// spans.
+
+/**
+ * Genus names of organisms the recorded corpus states in free-text reasons
+ * while the structured pathogen slot is empty (they are not in domain/hazard
+ * PATHOGENS — which is exactly why those notices reach the free-text clauses
+ * at all). Binomial nomenclature is the casing authority: the genus is
+ * capitalized and the species epithet stays lowercase, giving back the exact
+ * source-supported spans "Cronobacter sakazakii", "Bacillus cereus", and
+ * "Talaromyces penicillium". The consumer health-risk copy
+ * (lib/recall-display.ts) already names Cronobacter and Bacillus cereus with
+ * this casing. Display-only vocabulary: extraction, classification, and
+ * canonical data never read this list.
+ */
+const ORGANISM_GENUS_CASING = ['Cronobacter', 'Bacillus', 'Talaromyces'];
+
+/**
+ * Canonical spans restored after sentence-interior lowercasing, as
+ * [lowercase-matching pattern, canonical casing]. The shared hazard
+ * vocabularies are the first authority (PATHOGENS: "Listeria monocytogenes",
+ * "E. coli O157:H7"; CHEMICAL_AGENTS: "Cesium-137"); entries whose canonical
+ * form is entirely lowercase ("lead", "arsenic") need no restoring and are
+ * filtered out — for those, the vocabulary itself affirms mid-sentence
+ * lowercase. Each pattern matches only lowercase text, so an already-restored
+ * span cannot match again and the transform is idempotent by construction.
+ */
+const SEMANTIC_SPAN_CASING: [RegExp, string][] = [
+  ...PATHOGENS,
+  ...CHEMICAL_AGENTS,
+  ...ORGANISM_GENUS_CASING,
+]
+  .filter((term) => term !== term.toLowerCase())
+  .map((term): [RegExp, string] => [
+    new RegExp(`\\b${term.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'),
+    term,
+  ]);
+
+/**
+ * Vitamin designations: the letter (with optional number) is the meaningful
+ * part and stays uppercase mid-sentence ("vitamin D", "vitamin D3") while the
+ * word "vitamin" is ordinary prose. Structural, not a vitamin table — the
+ * designation must directly follow the word "vitamin(s)", so a code-like
+ * token anywhere else ("model d3") is never rewritten.
+ */
+const VITAMIN_DESIGNATION = /\b(vitamins?) ([a-z])(\d*)(?![\p{L}\p{N}])/gu;
+
+/**
+ * Sentence-interior casing for a source reason phrase embedded mid-sentence
+ * in a generated What Happened clause (P3E): lowercase the phrase as ordinary
+ * prose, then restore the semantic spans above. Generic source title casing
+ * ("Undeclared Sildenafil", "Product Safety") flattens to natural prose;
+ * medically meaningful casing ("Cronobacter sakazakii", "vitamin D3")
+ * survives. Casing-only (never adds, drops, or reorders a character),
+ * deterministic, and idempotent; the canonical reason text is never modified.
+ */
+export function reasonClauseCasing(phrase: string): string {
+  let out = phrase.toLowerCase();
+  for (const [pattern, canonical] of SEMANTIC_SPAN_CASING) {
+    out = out.replace(pattern, canonical);
+  }
+  return out.replace(
+    VITAMIN_DESIGNATION,
+    (_, word: string, letter: string, digits: string) => `${word} ${letter.toUpperCase()}${digits}`,
+  );
 }
 
 /**

@@ -13,7 +13,11 @@
 
 import { allergenDisplayPhrase } from '@/domain/hazard';
 import { cleanDisplayText } from '@/domain/text';
-import { companyDisplayName, productSummaryFromTitle } from './consumer-summary';
+import {
+  companyDisplayName,
+  productSummaryFromTitle,
+  reasonClauseCasing,
+} from './consumer-summary';
 import { interpretReason, pluralProductPhrase, type TypedReason } from './recall-reason';
 
 export interface WhatHappenedInput {
@@ -193,14 +197,22 @@ function reasonClause(input: WhatHappenedInput, product: string): ReasonClause |
           : `because it contains ${typed.ingredient} that is not approved for ${typed.use}`,
         context: null,
       };
+    // Both free-text families embed the source phrase mid-sentence through the
+    // shared sentence-interior casing contract (P3E, lib/consumer-summary):
+    // generic source title casing flattens to natural prose while medically
+    // meaningful casing ("Cronobacter sakazakii", "vitamin D3") survives.
     case 'contents':
       return {
-        clause: `because the products contain ${typed.contents.toLowerCase()}`,
+        clause: `because the products contain ${reasonClauseCasing(typed.contents)}`,
         context: null,
         generic: true,
       };
     case 'verbatim':
-      return { clause: `because of ${typed.noun.toLowerCase()}`, context: null, generic: true };
+      return {
+        clause: `because of ${reasonClauseCasing(typed.noun)}`,
+        context: null,
+        generic: true,
+      };
     case 'unknown':
       return null;
   }
