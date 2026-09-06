@@ -193,8 +193,12 @@ been made yet.
 
 - **Activation (founder):** review + `supabase db push` (adds only the
   view + grant; additive, no RLS/policy changes), then `npm run qa:egress`
-  must print PASS. Until then the deployed app behaves exactly as pre-C8
-  (full loads via the fallback path) — shipping the client first is safe.
+  must print PASS. **The migration is verified applied in production**
+  (2026-09-05, O2-A read-only audit: linked migration history matches the
+  local file, and the view answered a read-only SELECT — 890 rows at
+  audit). No post-apply `qa:egress` PASS is recorded in the docs yet; run
+  it to close that gate. If the manifest is ever unavailable the app still
+  behaves exactly as pre-C8 (full loads via the fallback path).
 - **`npm run qa:egress`** (read-only): authoritative count, cold-load
   bytes/completeness, manifest bytes + hidden-id gate, warm-refresh
   bytes/row-count gates + % reduction, changed-row example, largest

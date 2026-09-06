@@ -26,11 +26,12 @@ Product decisions with policy consequences:
 - [ ] Retention promises for what the C7.1 reset cannot reach: **the in-app
       "Reset app and delete my data" control now ships** (C7.1 — atomic
       `delete_installation_data` RPC + local reset; migration
-      `20260902000000_installation_deletion.sql` exists in the repository,
-      but its production application status is unverified from here — a
-      separately authorized live check must confirm it before the policy
-      describes deletion as live), so self-service deletion of an
-      installation's own rows is resolved in the app.
+      `20260902000000_installation_deletion.sql` was **verified applied in
+      production on 2026-09-05** by the O2-A read-only audit — linked
+      migration history matches the local file and the RPC is live on the
+      Data API surface — so the policy may describe deletion as live), so
+      self-service deletion of an installation's own rows is resolved in
+      the app.
       Still open: how long rows persist for installations that never reset —
       disabled `token_reassigned` rows from pre-reinstall installs
       (unreachable by the reset RPC), abandoned installations, and delivery

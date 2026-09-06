@@ -5,11 +5,18 @@ As of that date nothing was deployed, applied, scheduled, or credentialed —
 activation is the founder sequence below, and every surface reports an
 explicit pre-activation state until it runs. The watchdog is designed to
 become the primary freshness owner **once deployed and activated**; its
-current production activation state cannot be established from the
-repository and requires live verification (`npm run scheduler:status`, or
-the `Scheduler watchdog` section of `npm run ops:health`). Until that
-activation is confirmed, the GitHub scheduled cron remains the ingestion
-delivery path at its measured best-effort rates._
+production activation state cannot be established from the repository alone
+and requires live verification (`npm run scheduler:status`, or the
+`Scheduler watchdog` section of `npm run ops:health`)._
+
+_**Status update (2026-09-05, O2-A production audit):** that live
+verification has now been performed, read-only. The watchdog is **deployed,
+enabled, and active in production — and has been since 2026-08-28** — on its
+five-minute cadence with a 40-minute stale threshold and 20-minute dispatch
+cooldown. Based on the audit's inferred dispatch attribution, it is the
+effective primary freshness owner; the GitHub scheduled cron remains a
+secondary best-effort channel. Details and evidence grades: "Production
+verification (O2-A, 2026-09-05)" at the end of this document._
 
 ## Why GitHub's native schedule is not enough
 
@@ -287,3 +294,44 @@ Supabase migrations are transactional, so a failure rolls back cleanly.
 Mutation proofs (each reverted byte-identically): advisory lock removed,
 cooldown clause removed, secret validation removed, failure-recording
 inverted, health distinction removed — a test failed for every one.
+
+## Production verification (O2-A, 2026-09-05) [DATED MEASUREMENT]
+
+The O2-A read-only production audit (ledger:
+`.reports/o2-a-production-freshness.json`, git-ignored) verified the
+watchdog's live state as of 2026-09-05. Dated measurements, not standing
+guarantees. Evidence grades are stated per claim.
+
+**Verified** (each from direct read-only production evidence):
+
+- Deployed: `watchdog_invocations` rows are written every five minutes by
+  the Edge Function via pg_cron/pg_net.
+- Enabled and active since 2026-08-28: `watchdog_config.enabled = true`,
+  `installed_at = 2026-08-28T19:04:49Z`.
+- Cadence held perfectly in the audited seven-day window: 2,016/2,016
+  expected heartbeats, gap median/p95/max = 5.0/5.0/5.1 minutes, zero
+  invocation errors.
+- Configuration: stale threshold 40 minutes, dispatch cooldown 20 minutes;
+  GitHub token expiration recorded as 2027-08-28.
+- Dispatches: 203/203 accepted in the seven-day window (239/239 over thirty
+  days), zero failures; most recent recovery 2026-09-05T22:45Z (HTTP 200).
+- At audit completion the watchdog considered neither FDA nor FSIS stale
+  (last decision `fresh`).
+- The scheduler_watchdog migration is applied: linked production migration
+  history matches the local file.
+
+**Inferred** (production bookkeeping, not GitHub-verified attribution):
+
+- The watchdog is the effective primary freshness owner: ~82% of
+  fast-channel workflow runs in the window correlate with
+  `watchdog_dispatches.github_run_id`. GitHub's own run history could not be
+  read during the audit, so at most 46 of 336 expected cron ticks (~14%
+  upper bound) could have been GitHub-delivered — and some of those could
+  have been manual. GitHub cron therefore remains a secondary/bonus channel,
+  not the dependable owner.
+
+**Effect on freshness (dated):** the seven-day maximum gap between
+fast-channel successes was 52.5 minutes; every gap over 60 minutes in the
+thirty-day evidence ended at watchdog activation on 2026-08-28 (pre-watchdog
+worst: ~11.6 h). No manual intervention sustained freshness during the
+audited seven days.

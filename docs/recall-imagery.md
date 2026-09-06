@@ -211,8 +211,11 @@ reference the new columns, so the migration applied with zero coordination.
 **Applied to the live project.** Verified 2026-08-30: the columns exist on
 `product_visuals`, and `npx supabase db push --dry-run` reports
 `{"upToDate":true,…,"message":"Remote database is up to date."}` with no
-migrations pending. The columns are currently unwritten — they were
-prepared so a professional-imagery source could record where an image came
+migrations pending. Re-confirmed 2026-09-05 (O2-A read-only audit):
+the linked production migration history contains
+`20260906000000_product_visual_provenance.sql` matching the local file, and
+the `provider`/`confidence` columns answered a read-only SELECT. The
+columns are currently unwritten — they were prepared so a professional-imagery source could record where an image came
 from and what attribution it owes, and that sourcing is deferred (§12).
 
 ## 9. QA operations

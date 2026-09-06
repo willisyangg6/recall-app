@@ -14,7 +14,11 @@ runs as the scheduled, weekly-gated daily maintenance job. Personalization
 notification-event ledger, the delivery job, and copy formatting — is
 implemented but **deliberately inactive**: until the founder runs
 `push:activate -- --confirm`, `jobs:push` is a no-send no-op and no device
-notification is sent. Accounts are not implemented.
+notification is sent. Accounts are not implemented. Production operations
+were audited read-only on 2026-09-05 (O2-A) and classified **healthy**: the
+Supabase scheduler watchdog is verified deployed and active, and FDA/FSIS
+data was fresh and matched to upstream — see "Operational verification (O2)"
+below and [docs/recall-operations.md](docs/recall-operations.md).
 
 Design documents:
 
@@ -448,6 +452,27 @@ in [docs/recall-feed-usability.md](docs/recall-feed-usability.md).
 Still deferred within this area: the Dynarex `Mfg. Dt.` / `Exp. Dt.`
 day-first columns stay unsupported and hidden (a month-first reading would
 misstate them), and none of this activates push delivery.
+
+## Operational verification (O2)
+
+- **O2-A — read-only production audit, completed 2026-09-05. Final
+  classification: `healthy`.** The scheduler watchdog is verified deployed
+  and active in production (since 2026-08-28) and, by the audit's inferred
+  dispatch attribution, is the effective freshness owner; GitHub's native
+  cron remains a secondary best-effort channel. FDA and FSIS were fresh and
+  matched to upstream within the documented food scope. All named
+  migrations (installation deletion, consumer feed manifest, product-visual
+  provenance) are verified applied. No remediation or production mutation
+  was required. Dated evidence and grades:
+  [docs/recall-operations.md](docs/recall-operations.md) ("Production
+  verification (O2-A, 2026-09-05)") and
+  [docs/recall-scheduler-watchdog.md](docs/recall-scheduler-watchdog.md).
+- **O2-B — documentation reconciliation only** (this closeout): repository
+  docs updated to the verified state; no code, configuration, or production
+  change.
+- Push delivery remains deliberately inactive and was outside O2's scope.
+- Next engineering milestone: **O3 — ingest-pipeline atomicity** (not
+  started).
 
 See [AGENTS.md](AGENTS.md) for standing rules for coding agents working in this
 repository, and

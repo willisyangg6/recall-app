@@ -111,7 +111,8 @@ configuration only (`@supabase/supabase-js` is imported exclusively by
    photographs (C9 frozen policy: label renders are detail evidence, never
    automatic card heroes); provenance rules and the additive
    `product_visual_provenance` migration (verified applied to the live
-   project 2026-08-30 — docs/recall-imagery.md §8; it was unapplied when
+   project 2026-08-30 — docs/recall-imagery.md §8 — and re-confirmed
+   2026-09-05 via the linked migration history, O2-A; it was unapplied when
    this audit was first written) are documented in docs/recall-imagery.md.
 5. `Linking.openURL` to official notice URLs and notice attachments;
    OS share sheet with canonical facts + official URL only
@@ -243,11 +244,11 @@ grep of the emitted JS/HTML):
 - **"Reset app and delete my data" (C7.1)** — the comprehensive self-service
   deletion, at the bottom of Privacy & Data Controls. The
   `delete_installation_data` RPC (migration
-  `20260902000000_installation_deletion.sql`; the migration exists in the
-  repository, and its **production application status is unverified** — no
-  document records a dated live apply, so a separately authorized live
-  check must settle it) atomically and idempotently deletes the installation's
-  `installation_preferences` row, `push_subscriptions` rows, and their
+  `20260902000000_installation_deletion.sql`; **verified applied in
+  production 2026-09-05** by the O2-A read-only audit — the linked
+  production migration history matches the local file, and the RPC is
+  present on the live Data API surface) atomically and idempotently
+  deletes the installation's `installation_preferences` row, `push_subscriptions` rows, and their
   `notification_deliveries`, authorized by possession of the opaque
   installation id (the existing bearer-capability model; void return, no
   existence oracle). On success the client clears its SecureStore state

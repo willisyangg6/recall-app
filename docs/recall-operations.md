@@ -79,13 +79,13 @@ scheduler silence — the reconsideration bar below was met. The designed fix
 is the **Supabase scheduler watchdog** (docs/recall-scheduler-watchdog.md):
 Supabase Cron → Edge Function → atomic claim → `workflow_dispatch` on this
 same workflow whenever FDA/FSIS freshness lapses. The watchdog is built and
-tested and is designed to become the primary freshness owner **once deployed
-and activated** — but its current production activation state is not
-verifiable from the repository and requires a live check (`npm run
-scheduler:status` / the `ops:health` watchdog section). Until that
-activation is confirmed, this GitHub cron remains the delivery path,
-best-effort as measured above; the cron entry stays regardless as a free
-extra tick.
+tested and is designed to become the primary freshness owner once deployed
+and activated. **Superseded 2026-09-05:** the O2-A read-only production
+audit verified exactly that state — the watchdog is deployed, enabled, and
+has been active since 2026-08-28, and it is the effective freshness owner
+(see "Production verification (O2-A, 2026-09-05)" below). The GitHub cron
+entry stays regardless as a free extra tick, but it is a secondary/bonus
+channel, not the dependable freshness owner.
 
 The cron is pinned by `src/server/jobs/workflow-schedule.test.ts`, which also
 asserts `workflow_dispatch` survives on both workflows — it is the recovery
@@ -138,7 +138,83 @@ the external scheduler is built: see docs/recall-scheduler-watchdog.md for
 the architecture, activation, rollback, and the `Scheduler watchdog` section
 in `ops:health` plus `npm run scheduler:status` / `npm run scheduler:probe`.
 Whether it has been activated in production is a live question those
-commands answer; do not assume it from the code's presence.
+commands answer; do not assume it from the code's presence. That question
+was answered on 2026-09-05: the O2-A audit ran those commands read-only and
+verified the watchdog deployed, enabled, and active — see the next section.
+
+### Production verification (O2-A, 2026-09-05) [DATED MEASUREMENT]
+
+A read-only production audit (ledger: `.reports/o2-a-production-freshness.json`,
+git-ignored) established the live operational state as of 2026-09-05 and
+classified it **healthy**. These are dated measurements of that audit window,
+not standing guarantees.
+
+**Watchdog — verified active.** `watchdog_config.enabled = true`, installed
+2026-08-28T19:04:49Z; five-minute heartbeat cadence with all 2,016 expected
+invocations present in the audited seven-day window (gap median/p95/max =
+5.0/5.0/5.1 min); stale threshold 40 min; dispatch cooldown 20 min; GitHub
+token expiration recorded as 2027-08-28. Every watchdog dispatch in the
+window was accepted: 203/203 over seven days (239/239 over thirty), zero
+failures, zero invocation errors. At audit completion the watchdog considered
+neither FDA nor FSIS stale. That the watchdog is the **primary freshness
+owner** is an **inference** from production bookkeeping (~82% of fast-channel
+runs in the window correlate with `watchdog_dispatches.github_run_id`), not a
+GitHub-verified attribution — see the census limitation below.
+
+**GitHub cron — still unreliable; evidence limitation.** GitHub's
+authoritative workflow-run history could not be read during O2-A (no `gh`, no
+local GitHub credential by design), so trigger attribution was reconstructed
+from `ingest_runs` (`version` carries the runner's `GITHUB_SHA`) and
+`watchdog_dispatches`. In the seven-day window: 336 expected cron ticks
+(`7,37 * * * *`, 48/day), 249 workflow runs observed, 203 of them verified
+watchdog dispatches — so **at most 46 runs (~14% of expected ticks) could
+have come from GitHub cron, and some of those could have been manual**. That
+is an inferred upper bound, not a verified GitHub delivery rate. Once
+started, every audited fast-channel run completed successfully (312/312 over
+thirty days, zero failed, zero stuck past the 25-minute grace).
+
+**Freshness result.** Seven-day maximum gap between fast-channel successes:
+**52.5 minutes** (median 44.9). Every gap over 60 minutes in the thirty-day
+evidence ended when the watchdog came online on 2026-08-28; the pre-watchdog
+maximum (~11.6 h) remains the relevant contrast. No stuck runs, no held
+leases, no duplicate running jobs, and no manual intervention sustained
+freshness during the audited seven days.
+
+**FDA freshness (audit snapshot, 2026-09-05).** Within all configured
+thresholds. Upstream comparison: nine of the ten newest food-scope FDA
+listing items were present in production; the one absent item was a pet-food
+recall co-tagged Animal & Veterinary, excluded by the documented food-scope
+decision (`excluded_animal`) and verified absent by direct id lookup — a
+scope exclusion, not a missed ingest. All five newest food-safety RSS items
+were present. Snapshot counts at audit: 724 source records, 711 active
+cases, newest stored publication 2026-09-04.
+
+**FSIS freshness (audit snapshot, 2026-09-05).** Within all configured
+thresholds. All 1,234 upstream FSIS API items matched the 1,234 stored
+records, and the latest upstream recall (018-2026, 2026-08-26) was present.
+The absence of newer FSIS snapshots reflected an unchanged upstream feed and
+the unchanged-source hash gate correctly skipping per-record processing —
+not a failed ingest (the job itself succeeded every ~45 minutes). Snapshot
+counts at audit: 179 active / 1,016 closed / 1 retracted case. The three
+permanently failing FSIS label PDFs are a known label-rendering backlog,
+not ingest failures.
+
+**Daily maintenance.** All seven audited days completed successfully, but
+observed start times were later and more variable than the configured 09:15Z
+slot (12:43–17:04 UTC); whether those were late cron deliveries or manual
+dispatches is not distinguishable without GitHub run history. Production did
+not go stale from this during the audit. This is a dated observation, not
+proof of a permanent scheduler property; note the watchdog does not cover
+`daily-maintenance`.
+
+**Watch item — openFDA enforcement export.** At audit time `ops:health`
+reported the enforcement leg healthy, but the source export date (2026-08-27)
+sat exactly at the configured ten-day stale threshold: if the weekly openFDA
+export does not advance within about a day of the audit, `ops:health` flips
+that leg to STALE. That is a source-side condition to monitor — not a job
+failure and not grounds for any mutation. Re-run `npm run ops:health` to
+check; the three permanently failing FSIS label PDFs remain the other known,
+unrelated backlog (see the labels section).
 
 ### The unchanged-source skip gate
 
@@ -249,9 +325,12 @@ docs/recall-feed-sync.md. Operationally:
   evidence guard needs `normalized`.
 - **The client feed syncs incrementally** against the anon-readable
   `consumer_feed_manifest` view (id + content-hash token per visible case).
-  Activation requires `supabase db push` of
-  `20260904000000_consumer_feed_manifest.sql`; until then clients fall back
-  to exactly the pre-C8 complete load.
+  Activation required `supabase db push` of
+  `20260904000000_consumer_feed_manifest.sql`; O2-A verified it **applied in
+  production** on 2026-09-05 (linked migration history matches the local
+  file, and the view answered a read-only SELECT — 890 rows at audit). The
+  pre-C8 full-load fallback remains the client's behavior only if the
+  manifest is ever unavailable.
 - **`npm run qa:egress`** (read-only) is the standing measurement: cold-load
   bytes and completeness, manifest hidden-id gate, warm-refresh
   zero-full-rows and ≥80%-reduction gates, and scheduled-job estimates from
@@ -920,6 +999,11 @@ same function the manual CLI runs). Matcher, thresholds, ambiguity handling,
 class sets, tier projection, and historical suppression are Phase B's,
 untouched. A run that would expose a mixed-class case as a scalar class
 fails on a hard gate.
+
+Dated status (O2-A, 2026-09-05): the daily check was running and healthy,
+with the source export date 2026-08-27 sitting exactly at the ten-day stale
+threshold — see the watch item under "Production verification (O2-A,
+2026-09-05)".
 
 ## Secrets
 
