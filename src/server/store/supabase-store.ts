@@ -19,6 +19,7 @@ import type {
   AppliedMarker,
   ApplyState,
   ArchiveSnapshotResult,
+  CaseGeneratedColumns,
   CaseTransitionInput,
   CaseTransitionResult,
   CaseVisualRow,
@@ -522,6 +523,115 @@ export class SupabaseStore implements RecallStore {
     return (data?.length ?? 0) > 0;
   }
 
+  // ── O3-B2 applied-state audit reads + governed legacy seeding ──────────────
+
+  async listSourceRecordIdentities(): Promise<
+    {
+      id: string;
+      sourceSystem: string;
+      nativeId: string;
+      recallCaseId: string;
+      applyState: ApplyState | null;
+    }[]
+  > {
+    // Narrow identity slice, paginated like the maintenance list reads: the
+    // census must see EVERY record — including ones whose source_system the
+    // audit does not recognize — without transferring normalized payloads.
+    const pageSize = 1000;
+    const rows: {
+      id: string;
+      sourceSystem: string;
+      nativeId: string;
+      recallCaseId: string;
+      applyState: ApplyState | null;
+    }[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await this.client
+        .from('source_records')
+        .select('id, source_system, native_id, recall_case_id, apply_state')
+        .order('id')
+        .range(from, from + pageSize - 1);
+      if (error || !data) this.fail('listSourceRecordIdentities', error);
+      rows.push(
+        ...data.map((row) => ({
+          id: row.id as string,
+          sourceSystem: row.source_system as string,
+          nativeId: row.native_id as string,
+          recallCaseId: row.recall_case_id as string,
+          applyState: (row.apply_state as ApplyState | null) ?? null,
+        })),
+      );
+      if (data.length < pageSize) return rows;
+    }
+  }
+
+  async listCaseProducts(recallCaseId: string): Promise<AffectedProduct[]> {
+    const { data, error } = await this.client
+      .from('affected_products')
+      .select('ordinal, source_native_id, name, raw_text, extraction_confidence')
+      .eq('recall_case_id', recallCaseId)
+      .order('ordinal');
+    if (error || !data) this.fail('listCaseProducts', error);
+    return data.map((row) => ({
+      sourceNativeId: row.source_native_id as string,
+      name: row.name as string,
+      rawText: row.raw_text as string,
+      extractionConfidence: row.extraction_confidence as AffectedProduct['extractionConfidence'],
+    }));
+  }
+
+  async hasNotificationEvent(dedupKey: string): Promise<boolean> {
+    const { count, error } = await this.client
+      .from('notification_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('dedup_key', dedupKey);
+    if (error) this.fail('hasNotificationEvent', error);
+    return (count ?? 0) > 0;
+  }
+
+  async getCaseGeneratedColumns(id: string): Promise<CaseGeneratedColumns | null> {
+    const { data, error } = await this.client
+      .from('recall_cases')
+      .select(
+        'source_agency, notice_type, state, title, classification_value, hazard_category, published_at, last_public_activity_at',
+      )
+      .eq('id', id)
+      .maybeSingle();
+    if (error) this.fail('getCaseGeneratedColumns', error);
+    if (!data) return null;
+    return {
+      sourceAgency: (data.source_agency as string | null) ?? null,
+      noticeType: (data.notice_type as string | null) ?? null,
+      state: (data.state as string | null) ?? null,
+      title: (data.title as string | null) ?? null,
+      classificationValue: (data.classification_value as string | null) ?? null,
+      hazardCategory: (data.hazard_category as string | null) ?? null,
+      publishedAt: (data.published_at as string | null) ?? null,
+      lastPublicActivityAt: (data.last_public_activity_at as string | null) ?? null,
+    };
+  }
+
+  async seedLegacyAppliedMarker(marker: AppliedMarker): Promise<boolean> {
+    // Strictly narrower than markSourceRecordApplied: the write lands only
+    // while the row is STILL legacy-unverified. Any concurrent ingest that
+    // touched the record (now pending/applied) makes the predicate match no
+    // row — the reviewed plan can never overwrite live contract state.
+    const { data, error } = await this.client
+      .from('source_records')
+      .update({
+        apply_state: marker.state,
+        applied_content_hash: marker.contentHash,
+        applied_snapshot_seq: marker.snapshotSeq,
+        applied_at: marker.appliedAt,
+      })
+      .eq('id', marker.sourceRecordId)
+      .is('apply_state', null)
+      .or(`applied_snapshot_seq.is.null,applied_snapshot_seq.lte.${marker.snapshotSeq}`)
+      .select('id');
+    if (error) this.fail('seedLegacyAppliedMarker', error);
+    return (data?.length ?? 0) > 0;
+  }
+
   private toCaseRow(data: Record<string, unknown>): RecallCaseRow {
     return {
       id: data.id as string,
@@ -529,13 +639,14 @@ export class SupabaseStore implements RecallStore {
       timeline: data.timeline as TimelineEntry[],
       createdAt: data.created_at as string,
       lastChangedAt: data.last_changed_at as string,
+      mergedInto: (data.merged_into as string | null | undefined) ?? null,
     };
   }
 
   async getCase(id: string): Promise<RecallCaseRow | null> {
     const { data, error } = await this.client
       .from('recall_cases')
-      .select('id, projection, timeline, created_at, last_changed_at')
+      .select('id, projection, timeline, created_at, last_changed_at, merged_into')
       .eq('id', id)
       .maybeSingle();
     if (error) this.fail('getCase', error);
@@ -553,7 +664,7 @@ export class SupabaseStore implements RecallStore {
     for (let from = 0; ; from += pageSize) {
       const { data, error } = await this.client
         .from('recall_cases')
-        .select('id, projection, timeline, created_at, last_changed_at')
+        .select('id, projection, timeline, created_at, last_changed_at, merged_into')
         .order('id')
         .range(from, from + pageSize - 1);
       if (error || !data) this.fail('listCases', error);

@@ -71,6 +71,8 @@
     "reconcile:fda-enforcement": "tsx scripts/reconcile-fda-enforcement.ts",
     "qa:fda-enforcement": "tsx scripts/qa-fda-enforcement.ts",
     "reconcile:duplicates": "tsx scripts/reconcile-duplicate-cases.ts",
+    "reconcile:applied-state:dry": "tsx scripts/reconcile-applied-state.ts",
+    "reconcile:applied-state": "tsx scripts/reconcile-applied-state.ts --apply",
     "backfill:fda-images:dry": "tsx scripts/backfill-fda-images.ts",
     "backfill:fda-images": "tsx scripts/backfill-fda-images.ts --apply",
     "backfill:retailers:dry": "tsx scripts/backfill-retailers.ts",

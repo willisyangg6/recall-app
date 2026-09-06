@@ -285,10 +285,34 @@ fails the run loudly.
 expectations (fast jobs 3 h, labels/enforcement ~daily, enforcement export ≤ 10
 days old), newest-source staleness (a silent feed alarm at 14 days), the
 label-failure backlog, and the 7-day deliverable/suppressed notification flow.
-Non-zero exit when anything is UNHEALTHY. (Surfacing the new applied-state
-counters — pending / degraded / legacy-unverified counts from the
-`source_record_apply_health` view — into `ops:health` is deliberately O3-B2,
-not yet wired.)
+Non-zero exit when anything is UNHEALTHY.
+
+### Applied-version state section (O3-B2)
+
+`ops:health` now reads the service-role `source_record_apply_health` view and
+reports the applied-version population: total records; `applied` / `pending` /
+`applied_degraded` / legacy-unverified counts; pending and degraded counts by
+source system; oldest pending age (minutes) and oldest degraded age (hours);
+bounded identifiers for overdue actionable records (never payloads or
+secrets); and whether the governed reconciliation has completed
+(legacy-unverified = 0). A missing view is the explicit status
+`not installed` (`applied_version_contract` migration pending) — never a
+misleading healthy.
+
+The four stored states mean four different things and must not be conflated:
+
+| State              | Meaning                                                         | Health effect                                                                                                         |
+| ------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `applied`          | current version fully completed                                 | healthy                                                                                                               |
+| `pending`          | current archived work awaiting its retry tick                   | informational < 40 min; **degraded** past one watchdog window (40 min); **UNHEALTHY** ≥ 90 min (the pinned O3 alarm)  |
+| `applied_degraded` | usable FDA listing coverage still owed its detail page          | visible + age-tracked; **degraded** after one daily cycle + slack (26 h); never UNHEALTHY alone (consumer is covered) |
+| legacy-unverified  | pre-O3 row awaiting **governed reconciliation** — NOT `pending` | informational; blocks "O3 fully settled" but is never an ingest failure                                               |
+
+Thresholds are derived, not invented: 30-minute ingest cadence, the
+watchdog's 40-minute staleness window, the O3-B0/B1 pinned 90-minute pending
+alarm, and the daily maintenance cycle. Classification is pure in
+`src/server/applied-state-health.ts` (tested in
+`applied-state-health.test.ts`); the script is presentation.
 
 Attempt and success are separate on purpose, because two very different
 outages present with the identical symptom `no success in Nh`:
@@ -401,10 +425,73 @@ is **implemented in code and NOT yet active anywhere**:
   applies the migration (its own authorization; `supabase db push`) and then
   pushes the code (its own authorization). Schema-first is mandatory — the
   new code writes the marker columns and calls the RPCs.
-- Reconciliation and the applied-state health counters are **O3-B2**, not
-  part of this checkpoint. Rollout order, stop-anywhere behavior, and the
-  suppression policy for historical recoveries are specified in the O3-B0
-  design ledger and remain individually gated on founder authorization.
+- O3-B2 (2026-09-06) adds the applied-state health section above and the
+  governed reconciliation below — **implemented and locally verified, never
+  run against production**. Production dry run, migration apply, marker
+  apply, and code push each remain separately authorized founder steps.
+- Push delivery remains inactive throughout.
+
+## Applied-state reconciliation (O3-B2): governed, plan-bound, dry-run first
+
+The one-time census + marker seeding for the pre-O3 population — an explicit
+maintenance command, never scheduled, and deliberately NOT a repair:
+
+```bash
+npm run reconcile:applied-state:dry                          # census + reviewable PLAN (writes nothing to the DB)
+npm run reconcile:applied-state -- --confirm \
+    --plan <reviewed-plan.json> --digest <plan digest>       # APPLY: marker seeding only, all four gates required
+```
+
+What it does, and refuses to do:
+
+- **Dry run (default)** reads the complete population (records, latest
+  archived snapshot payloads, cases, generated columns, products, bounded
+  initial-event evidence — no network, no upstream fetches, zero writes),
+  re-derives every record through its canonical parser, groups by case, and
+  classifies every record and case into exactly one bucket
+  (`consistent_legacy_seedable`, `already_applied_consistent`,
+  `pending_current_version`, `applied_degraded`, `normalized_drift`,
+  `case_projection_drift`, `affected_products_drift`,
+  `missing_initial_event`, `orphan_case`, `missing_snapshot`,
+  `snapshot_parse_failure`, `unsupported_source_system`,
+  `applied_marker_inconsistent`, `invalid_case_link`,
+  `case_blocked_by_sibling`, `multiple_findings`). The output is a durable
+  JSON **plan/ledger** (`.reports/`, refused if the requested path exists)
+  with per-record fingerprints and a deterministic **plan digest** —
+  identical audits produce identical digests regardless of pagination order.
+- **Seeding eligibility** requires the FULL proof: the latest snapshot
+  parses; the re-derived normalized state equals the stored one (pinned
+  comparison contract — for enforcement records the stored match-provenance
+  block is audit history and is copied, everything else byte-equal); the
+  case link is valid; the projection recomputed from ALL contributors equals
+  the stored projection; the generated columns agree; the product rows agree
+  (ordinal order contractual); the initial event exists; and NO sibling is
+  pending, degraded, or inconsistent — one bad contributor blocks the whole
+  case (`case_blocked_by_sibling`).
+- **Apply** requires `--apply` AND `--confirm` AND the reviewed `--plan`
+  file AND its `--digest`, refuses a plan whose content was edited (its own
+  digest breaks) or produced at a different git commit, re-verifies every
+  fingerprint against the live rows per case group immediately before
+  seeding, and writes ONLY `apply_state`, `applied_content_hash`,
+  `applied_snapshot_seq`, `applied_at` through the legacy-null-guarded
+  monotonic seed. Anything that moved since the plan is a recorded
+  **conflict** (a governed outcome, exit 0) — the plan is immutable input
+  and is never regenerated mid-apply. Reruns are idempotent
+  (already-seeded, zero writes).
+- **Everything else is refused and enumerated**, never auto-repaired:
+  drift, missing initial events, orphan cases, missing snapshots, parse
+  failures, pending/degraded work, malformed markers. Each finding carries
+  field-level before/derived evidence for a separately reviewed,
+  evidence-specific correction after the production dry run establishes the
+  real historical population. Marker seeding creates **zero** notification
+  events and deliveries, changes no timeline or `last_changed_at`, and
+  cannot make historical events newly eligible.
+
+The command exits non-zero only for a malformed/tampered plan, a digest or
+commit mismatch, a missing schema, or an unhandled failure — refusals and
+conflicts are expected governance, reported in counters and the ledger.
+Engine: `src/server/applied-state-reconcile.ts` (tested in
+`applied-state-reconcile.test.ts`); CLI: `scripts/reconcile-applied-state.ts`.
 
 ## Labels: incremental by construction
 

@@ -177,6 +177,30 @@ export interface RecallCaseRow {
   timeline: TimelineEntry[];
   createdAt: string;
   lastChangedAt: string;
+  /**
+   * Merge tombstone (O3-B2 exposes it read-only): non-null means this case
+   * was absorbed into another and is hidden from consumers by RLS. Optional
+   * so pre-B2 constructors stay valid; readers treat absent as null.
+   */
+  mergedInto?: string | null;
+}
+
+/**
+ * The generated read-model columns recall_cases derives from `projection`
+ * (O3-B2 audit surface). Postgres guarantees they follow the JSON; the
+ * reconciliation audit still verifies them so a definition drift or a
+ * bypassed write can never hide. MemoryStore derives them from the stored
+ * projection with the same expressions.
+ */
+export interface CaseGeneratedColumns {
+  sourceAgency: string | null;
+  noticeType: string | null;
+  state: string | null;
+  title: string | null;
+  classificationValue: string | null;
+  hazardCategory: string | null;
+  publishedAt: string | null;
+  lastPublicActivityAt: string | null;
 }
 
 /**
@@ -380,6 +404,41 @@ export interface RecallStore {
    * Sequence-monotonic like the in-transaction marker update.
    */
   markSourceRecordApplied(marker: AppliedMarker): Promise<boolean>;
+
+  // ── O3-B2 applied-state audit reads + governed legacy seeding ──────────────
+
+  /**
+   * Identity of EVERY source record (id, system, nativeId, applyState),
+   * paginated. The reconciliation census uses it to prove population
+   * completeness and to surface records of source systems the audit does
+   * not support — a population that can only be enumerated per known system
+   * could silently omit an unknown one.
+   */
+  listSourceRecordIdentities(): Promise<
+    {
+      id: string;
+      sourceSystem: string;
+      nativeId: string;
+      recallCaseId: string;
+      applyState: ApplyState | null;
+    }[]
+  >;
+  /** A case's stored affected-product rows in ordinal order (read-only audit surface). */
+  listCaseProducts(recallCaseId: string): Promise<AffectedProduct[]>;
+  /** Whether a ledger event with this dedup key exists — bounded evidence, never payloads. */
+  hasNotificationEvent(dedupKey: string): Promise<boolean>;
+  /** The generated read-model columns for one case (see CaseGeneratedColumns). */
+  getCaseGeneratedColumns(id: string): Promise<CaseGeneratedColumns | null>;
+  /**
+   * Governed legacy seeding (O3-B2): writes ONLY the four marker fields, and
+   * ONLY while the row is still legacy-unverified (`apply_state IS NULL`) AND
+   * the monotonic seq predicate holds. Strictly narrower than
+   * markSourceRecordApplied: a record that any ingest touched since the
+   * reviewed plan was made (now pending/applied) refuses the seed — the plan
+   * can never overwrite live contract state. Returns false on any predicate
+   * miss.
+   */
+  seedLegacyAppliedMarker(marker: AppliedMarker): Promise<boolean>;
 
   getCase(id: string): Promise<RecallCaseRow | null>;
   /**

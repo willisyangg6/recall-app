@@ -19,6 +19,11 @@
 
 import { createClient } from '@supabase/supabase-js';
 
+import {
+  summarizeAppliedState,
+  type ActionableApplyRow,
+  type AppliedStateCounts,
+} from '../src/server/applied-state-health';
 import { summarizeJobRuns, type HealthRun } from '../src/server/jobs/health';
 import {
   asWatchdogQueryClient,
@@ -317,6 +322,100 @@ async function main(): Promise<void> {
       );
     }
     for (const note of pushNotes) console.log(`    · ${note}`);
+    console.log('');
+  }
+
+  // ── Applied-version state (O3-B2) ─────────────────────────────────────────
+  // Archived-vs-APPLIED accounting from the service-role health view. The
+  // contract-not-installed state (applied_version_contract migration pending)
+  // is explicit and never a misleading "healthy". Classification is pure and
+  // lives in src/server/applied-state-health.ts (thresholds derived from the
+  // 30-min cadence, the 40-min watchdog window, and the pinned 90-min pending
+  // alarm); this script is presentation and I/O.
+  {
+    // A ranged select 404s honestly on a missing view (the HEAD-count
+    // pitfall documented for installation_preferences above).
+    const probe = await client.from('source_record_apply_health').select('id').limit(0);
+    let counts: AppliedStateCounts | null = null;
+    const actionable: ActionableApplyRow[] = [];
+    if (probe.error) {
+      if (!/source_record_apply_health/.test(probe.error.message)) {
+        console.error(`source_record_apply_health query failed: ${probe.error.message}`);
+        process.exit(1);
+      }
+    } else {
+      const countWhere = async (
+        filter: (q: ReturnType<typeof base>) => ReturnType<typeof base>,
+      ) => {
+        const { count, error } = await filter(base());
+        if (error) {
+          console.error(`applied-state count failed: ${error.message}`);
+          process.exit(1);
+        }
+        return count ?? 0;
+      };
+      const base = () =>
+        client.from('source_record_apply_health').select('id', { count: 'exact', head: true });
+      counts = {
+        totalRecords: await countWhere((q) => q),
+        legacyUnverified: await countWhere((q) => q.is('apply_state', null)),
+        pending: await countWhere((q) => q.eq('apply_state', 'pending')),
+        applied: await countWhere((q) => q.eq('apply_state', 'applied')),
+        appliedDegraded: await countWhere((q) => q.eq('apply_state', 'applied_degraded')),
+      };
+      // Actionable rows only (partial-index states) — identifiers and ages,
+      // never payloads; bounded for logs.
+      const { data, error } = await client
+        .from('source_record_apply_health')
+        .select('source_system, native_id, apply_state, latest_fetched_at, applied_at')
+        .in('apply_state', ['pending', 'applied_degraded'])
+        .order('latest_fetched_at', { ascending: true })
+        .limit(200);
+      if (error) {
+        console.error(`applied-state actionable query failed: ${error.message}`);
+        process.exit(1);
+      }
+      for (const row of data ?? []) {
+        actionable.push({
+          sourceSystem: row.source_system as string,
+          nativeId: row.native_id as string,
+          applyState: row.apply_state as ActionableApplyRow['applyState'],
+          latestFetchedAt: (row.latest_fetched_at as string | null) ?? null,
+          appliedAt: (row.applied_at as string | null) ?? null,
+        });
+      }
+    }
+    const applied = summarizeAppliedState(counts, actionable, Date.now());
+    console.log('Applied-version state (O3)');
+    console.log(`  status:              ${applied.status}`);
+    if (applied.counts) {
+      console.log(
+        `  records:             ${applied.counts.totalRecords} total — ` +
+          `${applied.counts.applied} applied, ${applied.counts.pending} pending, ` +
+          `${applied.counts.appliedDegraded} degraded, ${applied.counts.legacyUnverified} legacy-unverified`,
+      );
+      const bySystem = (label: string, map: Record<string, number>) => {
+        const entries = Object.entries(map).sort();
+        if (entries.length > 0) {
+          console.log(
+            `  ${label}${entries.map(([system, count]) => `${system} ${count}`).join(', ')}`,
+          );
+        }
+      };
+      bySystem('pending by system:   ', applied.pendingBySystem);
+      bySystem('degraded by system:  ', applied.degradedBySystem);
+      if (applied.oldestPendingMinutes !== null) {
+        console.log(`  oldest pending:      ${applied.oldestPendingMinutes.toFixed(0)} min`);
+      }
+      if (applied.oldestDegradedHours !== null) {
+        console.log(`  oldest degraded:     ${applied.oldestDegradedHours.toFixed(1)} h`);
+      }
+      console.log(
+        `  reconciliation:      ${applied.reconciled ? 'complete (zero legacy-unverified)' : 'NOT complete (governed O3-B2 reconciliation pending)'}`,
+      );
+    }
+    for (const note of applied.notes) console.log(`    · ${note}`);
+    if (applied.unhealthy) unhealthy += 1;
     console.log('');
   }
 
