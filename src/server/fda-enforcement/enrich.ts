@@ -19,6 +19,16 @@
  *
  * A recall_number already linked to a DIFFERENT case is a conflict: it is
  * reported and skipped, never silently re-linked.
+ *
+ * Crash safety (O3-B1): enrichment commits through the same
+ * apply_case_transition contract as announcement ingestion — the case
+ * update, its timeline, its products, its classification events, and the
+ * applied markers of every enforcement record in the transition are ONE
+ * transaction. The pre-O3 failure modes are structurally gone: an event can
+ * no longer describe a case version that was never stored (E2), and a retry
+ * whose recomputed projection already equals the stored case can no longer
+ * permanently lose the event (E3) — equality now PROVES the event committed
+ * with the case, so the retry only finishes the pending markers.
  */
 
 import { detectChanges } from '../../domain/material-change';
@@ -27,7 +37,7 @@ import type { OfficialClass, TimelineEntry } from '../../domain/recall-types';
 import { consumerRiskTier, officialClassesOf, type ConsumerRiskTier } from '../../domain/risk-tier';
 import type { NormalizedSourceRecord } from '../../domain/source-record';
 import { contentHash } from '../pipeline';
-import type { RecallStore } from '../store/types';
+import type { AppliedMarker, NotificationEventInput, RecallStore } from '../store/types';
 import type { AcceptedMatch } from './match';
 import { MATCHER_VERSION } from './match';
 import type { EnforcementRecord, OpenFdaEnforcementRaw } from './parse';
@@ -135,7 +145,16 @@ export interface CaseEnrichmentOutcome {
   riskTierAfter: ConsumerRiskTier;
   materialChanges: string[];
   notifications: { ruleId: string; suppressed: string | null }[];
+  /**
+   * The case CAS lost to a concurrent writer on every retry: the records
+   * stay pending and the next scheduled run converges. Reported, never
+   * silent — a caller must not read the planned materialChanges as applied.
+   */
+  casExhausted?: boolean;
 }
+
+/** Case CAS attempts before the enrichment leaves the records pending. */
+const CASE_CAS_ATTEMPTS = 3;
 
 /**
  * Attach accepted matches to one case. Dry-run (apply=false) computes the
@@ -170,9 +189,12 @@ export async function enrichCaseWithMatches(
     notifications: [],
   };
 
-  // 1. Link / refresh each matched enforcement record.
+  // 1. Link / refresh each matched enforcement record. New and changed
+  // records become PENDING versions whose applied markers ride the atomic
+  // case transition below; a crash anywhere between here and that
+  // transition leaves them pending and the next daily run converges.
   const linkedNormalized: NormalizedSourceRecord[] = [];
-  let anyContentChange = false;
+  const markers: AppliedMarker[] = [];
   for (const match of accepted) {
     for (const record of match.records) {
       const raw = rawByRecallNumber.get(record.recallNumber);
@@ -199,7 +221,7 @@ export async function enrichCaseWithMatches(
 
       if (!existing) {
         outcome.recordsLinked += 1;
-        anyContentChange = true;
+        outcome.snapshotsWritten += 1;
         if (options.apply) {
           const inserted = await store.insertSourceRecord({
             sourceSystem: 'openfda_enforcement',
@@ -210,93 +232,138 @@ export async function enrichCaseWithMatches(
             sourceUrl: normalized.officialUrl,
             firstSeenAt: nowIso,
             lastSeenAt: nowIso,
+            applyState: 'pending',
           });
-          await store.insertSnapshot({
+          const archived = await store.archiveSnapshot({
             sourceRecordId: inserted.id,
             fetchedAt: nowIso,
             contentHash: hash,
             rawPayload: raw ?? record,
             sourceUrl: normalized.officialUrl,
           });
-        }
-        outcome.snapshotsWritten += 1;
-      } else {
-        outcome.recordsAlreadyLinked += 1;
-        const latestHash = await store.getLatestSnapshotHash(existing.id);
-        if (latestHash !== hash) {
-          anyContentChange = true;
-          outcome.snapshotsWritten += 1;
-          if (options.apply) {
-            await store.insertSnapshot({
-              sourceRecordId: existing.id,
-              fetchedAt: nowIso,
+          if (archived.status !== 'stale') {
+            markers.push({
+              sourceRecordId: inserted.id,
               contentHash: hash,
-              rawPayload: raw ?? record,
-              sourceUrl: normalized.officialUrl,
+              snapshotSeq: archived.snapshotSeq,
+              state: 'applied',
+              appliedAt: nowIso,
             });
-            await store.updateSourceRecord(existing.id, { normalized, lastSeenAt: nowIso });
           }
-        } else if (options.apply) {
-          await store.updateSourceRecord(existing.id, { lastSeenAt: nowIso });
         }
+        continue;
+      }
+
+      outcome.recordsAlreadyLinked += 1;
+      const meta = await store.getLatestSnapshotMeta(existing.id);
+      const sameAsLatest = meta !== null && meta.contentHash === hash;
+      // legacy_unverified (NULL marker) keeps its pre-O3 behavior on
+      // unchanged content; it graduates when the payload actually changes
+      // or through the O3-B2 reconciliation.
+      const isLegacy = existing.applyState == null;
+      const fullyApplied =
+        sameAsLatest &&
+        existing.applyState === 'applied' &&
+        existing.appliedSnapshotSeq === meta?.seq &&
+        existing.appliedContentHash === hash;
+      if (sameAsLatest && (isLegacy || fullyApplied)) {
+        if (options.apply) await store.updateSourceRecord(existing.id, { lastSeenAt: nowIso });
+        continue;
+      }
+
+      // Changed payload (new snapshot) or a pending re-apply of the current
+      // one (no duplicate snapshot).
+      if (!sameAsLatest) outcome.snapshotsWritten += 1;
+      if (options.apply) {
+        let snapshotSeq: number;
+        if (meta !== null && sameAsLatest) {
+          snapshotSeq = meta.seq;
+        } else {
+          const archived = await store.archiveSnapshot({
+            sourceRecordId: existing.id,
+            fetchedAt: nowIso,
+            contentHash: hash,
+            rawPayload: raw ?? record,
+            sourceUrl: normalized.officialUrl,
+          });
+          if (archived.status === 'stale') continue; // a newer fetch owns this record
+          snapshotSeq = archived.snapshotSeq;
+        }
+        const wrote = await store.updateSourceRecordNormalized(
+          existing.id,
+          normalized,
+          nowIso,
+          snapshotSeq,
+        );
+        if (!wrote) continue; // monotonic guard: a newer version already applied
+        markers.push({
+          sourceRecordId: existing.id,
+          contentHash: hash,
+          snapshotSeq,
+          state: 'applied',
+          appliedAt: nowIso,
+        });
       }
     }
   }
   if (linkedNormalized.length === 0) return outcome;
 
-  // 2. Re-project. In dry-run the store has no enforcement rows yet, so the
+  // 2. Re-project and commit ONE atomic transition (case + products +
+  // events + markers). The CAS re-reads and recomputes on conflict, so a
+  // concurrent announcement ingest can never be blindly overwritten — and
+  // vice versa. In dry-run the store has no enforcement rows yet, so the
   // next projection is computed from current records + the would-be links.
-  const current = await store.getSourceRecordsForCase(caseId);
-  const currentById = new Map(current.map((r) => [r.nativeId, r.normalized]));
-  for (const normalized of linkedNormalized) currentById.set(normalized.nativeId, normalized);
-  const next = projectCase([...currentById.values()]);
-  outcome.classificationAfter = next.classification.value;
-  outcome.officialClassesAfter = officialClassesOf(next.classification);
-  outcome.riskTierAfter = consumerRiskTier(next.classification);
+  for (let attempt = 0; attempt < CASE_CAS_ATTEMPTS; attempt++) {
+    const freshCase = attempt === 0 ? recallCase : await store.getCase(caseId);
+    if (!freshCase) return outcome;
+    const current = await store.getSourceRecordsForCase(caseId);
+    const currentById = new Map(current.map((r) => [r.nativeId, r.normalized]));
+    for (const normalized of linkedNormalized) currentById.set(normalized.nativeId, normalized);
+    const next = projectCase([...currentById.values()]);
+    outcome.classificationAfter = next.classification.value;
+    outcome.officialClassesAfter = officialClassesOf(next.classification);
+    outcome.riskTierAfter = consumerRiskTier(next.classification);
 
-  if (JSON.stringify(next) === JSON.stringify(recallCase.projection)) {
-    return outcome; // idempotent re-run: linked, unchanged, nothing to say.
-  }
+    if (JSON.stringify(next) === JSON.stringify(freshCase.projection)) {
+      // Nothing consumer-visible left to write. Under the atomic contract
+      // this PROVES any required event already committed with the case
+      // (equality can no longer mask a lost event — the E3 fix), so the
+      // retry only finishes the pending markers.
+      if (options.apply) {
+        for (const marker of markers) await store.markSourceRecordApplied(marker);
+      }
+      return outcome;
+    }
 
-  const { material } = detectChanges(recallCase.projection, next);
-  outcome.materialChanges = material.map((m) => m.ruleId);
+    const { material } = detectChanges(freshCase.projection, next);
+    outcome.materialChanges = material.map((m) => m.ruleId);
 
-  // FDA's own classification date anchors the timeline — enrichment must
-  // never make the recall look newly announced or newly active.
-  const classificationDates = accepted
-    .flatMap((m) => m.records)
-    .map((r) => r.centerClassificationDate ?? r.reportDate)
-    .filter((d): d is string => d !== null)
-    .sort();
-  const occurredAt = classificationDates.at(-1) ?? nowIso.slice(0, 10);
-  const classificationAgeMs = now().getTime() - Date.parse(occurredAt);
-  const isBackfill = classificationAgeMs > backfillHorizonDays * 24 * 60 * 60 * 1000;
+    // FDA's own classification date anchors the timeline — enrichment must
+    // never make the recall look newly announced or newly active.
+    const classificationDates = accepted
+      .flatMap((m) => m.records)
+      .map((r) => r.centerClassificationDate ?? r.reportDate)
+      .filter((d): d is string => d !== null)
+      .sort();
+    const occurredAt = classificationDates.at(-1) ?? nowIso.slice(0, 10);
+    const classificationAgeMs = now().getTime() - Date.parse(occurredAt);
+    const isBackfill = classificationAgeMs > backfillHorizonDays * 24 * 60 * 60 * 1000;
 
-  const timeline: TimelineEntry[] = [...recallCase.timeline];
-  for (const change of material) {
-    timeline.push({
-      occurredAt,
-      kind: change.ruleId.startsWith('classification') ? 'classified' : 'source_updated',
-      summary: change.summary,
-      causedBySnapshotIds: [],
-      material: true,
-      ruleId: change.ruleId,
-    });
-  }
-
-  if (options.apply && anyContentChange) {
-    await store.updateCase(caseId, {
-      projection: next,
-      timeline,
-      lastChangedAt: nowIso,
-    });
-  }
-
-  for (const change of material) {
-    const suppressed = isBackfill ? ('backfill' as const) : null;
-    outcome.notifications.push({ ruleId: change.ruleId, suppressed });
-    if (options.apply) {
-      await store.insertNotificationIfAbsent({
+    const timeline: TimelineEntry[] = [...freshCase.timeline];
+    const events: NotificationEventInput[] = [];
+    outcome.notifications = [];
+    for (const change of material) {
+      timeline.push({
+        occurredAt,
+        kind: change.ruleId.startsWith('classification') ? 'classified' : 'source_updated',
+        summary: change.summary,
+        causedBySnapshotIds: [],
+        material: true,
+        ruleId: change.ruleId,
+      });
+      const suppressed = isBackfill ? ('backfill' as const) : null;
+      outcome.notifications.push({ ruleId: change.ruleId, suppressed });
+      events.push({
         recallCaseId: caseId,
         kind: 'material_update',
         triggerRuleId: change.ruleId,
@@ -308,7 +375,26 @@ export async function enrichCaseWithMatches(
         createdAt: nowIso,
       });
     }
-  }
 
+    if (!options.apply) return outcome;
+
+    const result = await store.applyCaseTransition({
+      recallCaseId: caseId,
+      expectedLastChangedAt: freshCase.lastChangedAt,
+      projection: next,
+      timeline,
+      lastChangedAt: nowIso,
+      products: next.affectedProducts,
+      events,
+      markers,
+    });
+    if (result.status === 'applied') return outcome;
+    // 'conflict': a concurrent writer moved the case — re-read, recompute.
+  }
+  // The records stay pending; the next scheduled run converges.
+  outcome.casExhausted = true;
+  console.warn(
+    `  case ${caseId}: enrichment lost the case CAS ${CASE_CAS_ATTEMPTS} times — left pending for the next run.`,
+  );
   return outcome;
 }

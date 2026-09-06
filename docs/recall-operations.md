@@ -220,12 +220,20 @@ unrelated backlog (see the labels section).
 
 Both fast feeds return their entire content every fetch. Each job hashes the
 fetched content (order-insensitively — the FDA listing is not date-sorted)
-and compares it to the hash recorded by the last successful run: identical
-content skips the per-record processing entirely (~1-minute tick instead of
-~5–8 minutes). The gate can only ever skip work the per-record snapshot hash
-gate would also have skipped, so it cannot change outcomes — only cost. The
-FDA gate requires both the listing AND the RSS to be fetched and unchanged,
-so an RSS-only discovery is never delayed. `--force` bypasses the gate.
+and compares it to **`completedFeedHash`** — recorded only by a run that left
+nothing deferred, degraded, pending, stale-skipped, or errored (O3-B1,
+mirroring the enforcement job's `completedExportDate`): identical content
+then skips the per-record processing entirely (~1-minute tick instead of
+~5–8 minutes). An incomplete run withholds the token, so unfinished work
+(a deferred FDA detail page, a pending version from a crash, a case-CAS
+exhaustion) is always retried by the next tick's per-record pass even when
+the feed bytes are identical. Quarantined records do NOT withhold the token —
+a parse failure is deterministic on identical bytes, so the gate loses
+nothing by skipping it. The gate can only ever skip work the per-record
+applied-version gate would also have skipped, so it cannot change outcomes —
+only cost. The FDA gate requires both the listing AND the RSS to be fetched
+and unchanged, so an RSS-only discovery is never delayed. `--force` bypasses
+the gate.
 
 ## Locking
 
@@ -263,12 +271,24 @@ notification tallies — never logs), `version` (git SHA), and `error`.
 `partial` means completed with item-level failures (quarantined records,
 failed detail fetches, failed label PDFs).
 
+Under the O3-B1 applied-version contract, `succeeded` means every in-scope
+item reached its applied success condition; a run that left ANY item
+deferred, degraded, pending, stale-skipped, CAS-exhausted, or errored is
+`partial`, with per-state counts in `metrics` (`deferred`, `degradedFounded`,
+`staleSkipped`, `conflictsExhausted`, `pendingCompleted`, `itemFailures`).
+Per-item errors are isolated (one poison item no longer aborts the feed) and
+a failure spike above 20% of records — quarantines plus isolated errors —
+fails the run loudly.
+
 `npm run ops:health` answers, from the database alone: the most recent
 **attempt** and the last **success** per job, staleness against per-job
 expectations (fast jobs 3 h, labels/enforcement ~daily, enforcement export ≤ 10
 days old), newest-source staleness (a silent feed alarm at 14 days), the
 label-failure backlog, and the 7-day deliverable/suppressed notification flow.
-Non-zero exit when anything is UNHEALTHY.
+Non-zero exit when anything is UNHEALTHY. (Surfacing the new applied-state
+counters — pending / degraded / legacy-unverified counts from the
+`source_record_apply_health` view — into `ops:health` is deliberately O3-B2,
+not yet wired.)
 
 Attempt and success are separate on purpose, because two very different
 outages present with the identical symptom `no success in Nh`:
@@ -360,6 +380,31 @@ the next scheduled tick IS the retry — spaced, bounded, and safe because
 every pipeline is idempotent. GitHub does not auto-retry scheduled runs, so
 there is no retry-storm interaction. Failed label PDFs retry with their own
 backoff (6h·2ⁿ, capped at 7 days).
+
+## O3 applied-version contract: implementation status (O3-B1, 2026-09-05)
+
+The crash-safe applied-version contract (archived ≠ applied; atomic case
+transitions; atomic founding; deferred/degraded FDA detail; completion-gated
+feed hash — design ledger `.reports/o3-b0-design-closure.json`, mechanics in
+[docs/recall-domain-architecture.md](recall-domain-architecture.md) Part 8.3)
+is **implemented in code and NOT yet active anywhere**:
+
+- The migration `supabase/migrations/20260907000000_applied_version_contract.sql`
+  (four nullable marker columns on `source_records`, the
+  `source_record_apply_health` view, and the `archive_snapshot` /
+  `apply_case_transition` / `found_recall_case` functions) is **created but
+  not applied** to any database. It contains no legacy seeding by design:
+  every existing row stays `NULL` (legacy-unverified) until the separately
+  authorized O3-B2 reconciliation verifies it, or its content changes.
+- The application code is **committed-in-tree only, not deployed**: scheduled
+  ingestion in production continues to run the pre-O3 code until the founder
+  applies the migration (its own authorization; `supabase db push`) and then
+  pushes the code (its own authorization). Schema-first is mandatory — the
+  new code writes the marker columns and calls the RPCs.
+- Reconciliation and the applied-state health counters are **O3-B2**, not
+  part of this checkpoint. Rollout order, stop-anywhere behavior, and the
+  suppression policy for historical recoveries are specified in the O3-B0
+  design ledger and remain individually gated on founder authorization.
 
 ## Labels: incremental by construction
 

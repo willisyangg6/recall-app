@@ -67,6 +67,14 @@ pipeline sites that never read `normalized`: the per-item hash gate and
 retraction targeting (`src/server/pipeline.ts`). The expansion-parent lookup
 keeps the full row — its evidence guard genuinely reads the payload.
 
+> **O3-B1 amendment (2026-09-05):** the pipeline's per-item read is now
+> `getSourceRecordGateByNativeId` — the same identity slice plus the
+> applied-version marker columns (`apply_state`, `applied_content_hash`,
+> `applied_snapshot_seq`, ~60 additional bytes), still never `normalized`.
+> The egress property this section measures is unchanged and remains pinned
+> by `src/server/pipeline-egress.test.ts` and the column-list tests in
+> `src/server/store/supabase-store.test.ts`.
+
 Effect (estimate from measured sizes): a full FDA run's per-record reads
 drop from ~12.7 MB to **~84 KB** decompressed (~99%); FSIS from ~11.4 MB to
 ~145 KB. Semantics are pinned unchanged by the existing pipeline tests plus

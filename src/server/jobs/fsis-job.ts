@@ -65,9 +65,13 @@ export async function runFsisJob(
       );
     }
 
+    // The gate compares against `completedFeedHash`, recorded ONLY by a run
+    // that left nothing pending or failed (O3-B1 — mirroring the enforcement
+    // job's completedExportDate): an incomplete run must not stop the next
+    // tick's per-record pass from retrying unfinished work.
     const feedHash = orderInsensitiveFeedHash(fetched.records);
     if (!options.force) {
-      const previousHash = await latestJobMetric(ctx.store, FSIS_JOB.jobName, 'feedHash');
+      const previousHash = await latestJobMetric(ctx.store, FSIS_JOB.jobName, 'completedFeedHash');
       if (previousHash === feedHash) {
         console.log('FSIS feed content unchanged since the last run — nothing to do.');
         return {
@@ -76,6 +80,7 @@ export async function runFsisJob(
           metrics: {
             skipped: 'source_unchanged',
             feedHash,
+            completedFeedHash: feedHash,
             itemsSeen: fetched.records.length,
           },
         };
@@ -88,13 +93,22 @@ export async function runFsisJob(
     });
     printFsisReport(summary, options.dryRun ?? false);
 
-    const parsedPlusQuarantined = summary.itemsParsed + summary.quarantined.length;
-    const quarantineRatio =
-      parsedPlusQuarantined > 0 ? summary.quarantined.length / parsedPlusQuarantined : 0;
+    const failedItems = summary.quarantined.length + summary.itemFailures.length;
+    const attempted = summary.itemsParsed + summary.quarantined.length;
+    const failureRatio = attempted > 0 ? failedItems / attempted : 0;
+    // Work the run left unfinished (retried next tick). Quarantines are NOT
+    // here: a parse failure is deterministic on identical bytes, so the feed
+    // gate loses nothing by skipping it.
+    const incomplete =
+      summary.deferred +
+      summary.degradedFounded +
+      summary.staleSkipped +
+      summary.conflictsExhausted +
+      summary.itemFailures.length;
     const outcome =
-      quarantineRatio > QUARANTINE_SPIKE_RATIO
+      failureRatio > QUARANTINE_SPIKE_RATIO
         ? 'failed'
-        : summary.quarantined.length > 0
+        : summary.quarantined.length > 0 || incomplete > 0
           ? 'partial'
           : 'succeeded';
 
@@ -103,16 +117,24 @@ export async function runFsisJob(
       outcome,
       error:
         outcome === 'failed'
-          ? `parse failure spike: ${summary.quarantined.length}/${parsedPlusQuarantined} records quarantined — source shape may have drifted`
+          ? `item failure spike: ${failedItems}/${attempted} records failed ` +
+            `(${summary.quarantined.length} quarantined, ${summary.itemFailures.length} errored` +
+            `${summary.itemFailures[0] ? `; first error: ${summary.itemFailures[0].reason}` : ''})`
           : undefined,
       metrics: {
         feedHash,
+        // The gate token: only a COMPLETE run may arm the whole-feed skip.
+        completedFeedHash: incomplete === 0 ? feedHash : null,
         itemsSeen: summary.itemsSeen,
         parsed: summary.itemsParsed,
         unchanged: summary.unchanged,
         newCases: summary.newCases,
         changedCases: summary.changedCases,
         quarantined: summary.quarantined.length,
+        staleSkipped: summary.staleSkipped,
+        conflictsExhausted: summary.conflictsExhausted,
+        pendingCompleted: summary.pendingCompleted,
+        itemFailures: summary.itemFailures.length,
         notifications: summary.notifications,
         newestPublishedAt: summary.newestPublishedAt,
       },
@@ -139,6 +161,12 @@ export function printFsisReport(summary: IngestSummary, dryRun: boolean): void {
       console.log(`    - ${JSON.stringify(q.rawNativeId)}: ${q.reason}`);
     }
     console.log('  Quarantined raw payloads are preserved in the ingest run record.');
+  }
+  if (summary.itemFailures.length > 0) {
+    console.log(`  ITEM FAILURES: ${summary.itemFailures.length} (isolated; run downgraded):`);
+    for (const f of summary.itemFailures) {
+      console.log(`    - ${JSON.stringify(f.nativeId)}: ${f.reason}`);
+    }
   }
 
   // Stale-source alarm (architecture Part 8.3): FSIS publishes ~1–2 recalls a

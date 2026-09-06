@@ -208,3 +208,241 @@ test('listSourceRecords filters by source system before paginating, not after', 
   assert.equal(result.length, 5);
   assert.ok(result.every((r) => r.sourceSystem === 'fsis_api'));
 });
+
+// ── O3-B1 applied-version contract: exact query and RPC shapes ───────────────
+
+interface RecordedWrite {
+  table: string;
+  kind: 'update' | 'rpc';
+  payload: unknown;
+  filters: [string, string, unknown][];
+  select: string | null;
+}
+
+/**
+ * A recording fake for the O3 write shapes: update chains with .eq/.or and a
+ * trailing .select (the conditional-write pattern), plus .rpc calls. What it
+ * records is what production sends — the predicates ARE the safety property.
+ */
+function writeRecordingClient(rpcResult: unknown = null, updateRows: unknown[] = [{ id: 'x' }]) {
+  const writes: RecordedWrite[] = [];
+  const client = {
+    from(table: string) {
+      return {
+        update(payload: unknown) {
+          const write: RecordedWrite = {
+            table,
+            kind: 'update',
+            payload,
+            filters: [],
+            select: null,
+          };
+          writes.push(write);
+          const builder = {
+            eq(column: string, value: unknown) {
+              write.filters.push(['eq', column, value]);
+              return builder;
+            },
+            or(predicate: string) {
+              write.filters.push(['or', predicate, null]);
+              return builder;
+            },
+            async select(columns: string) {
+              write.select = columns;
+              return { data: updateRows, error: null };
+            },
+          };
+          return builder;
+        },
+        select(columns: string) {
+          const write: RecordedWrite = {
+            table,
+            kind: 'update',
+            payload: null,
+            filters: [],
+            select: columns,
+          };
+          writes.push(write);
+          const builder = {
+            eq(column: string, value: unknown) {
+              write.filters.push(['eq', column, value]);
+              return builder;
+            },
+            order() {
+              return builder;
+            },
+            limit() {
+              return builder;
+            },
+            async maybeSingle() {
+              return { data: null, error: null };
+            },
+          };
+          return builder;
+        },
+      };
+    },
+    async rpc(fn: string, args: Record<string, unknown>) {
+      writes.push({ table: fn, kind: 'rpc', payload: args, filters: [], select: null });
+      return { data: rpcResult, error: null };
+    },
+  };
+  return { client: client as unknown as SupabaseClient, writes };
+}
+
+test('getSourceRecordGateByNativeId selects the gate slice only — never normalized', async () => {
+  const { client, queries } = recordingClient({
+    id: 'rec-1',
+    recall_case_id: 'case-1',
+    apply_state: null,
+    applied_content_hash: null,
+    applied_snapshot_seq: null,
+  });
+  const store = new SupabaseStore(client);
+
+  const gate = await store.getSourceRecordGateByNativeId('fda_announcement', 'fda-123');
+
+  assert.deepEqual(gate, {
+    id: 'rec-1',
+    recallCaseId: 'case-1',
+    applyState: null,
+    appliedContentHash: null,
+    appliedSnapshotSeq: null,
+  });
+  assert.equal(queries[0].table, 'source_records');
+  // The gate slice is the C8 identity slice + the applied marker; the
+  // ingest hot path pays this once per feed item, so `normalized` must
+  // never ride along.
+  assert.equal(
+    queries[0].select,
+    'id, recall_case_id, apply_state, applied_content_hash, applied_snapshot_seq',
+  );
+});
+
+test('getLatestSnapshotMeta stays a narrow four-column read', async () => {
+  const { client, queries } = recordingClient({
+    id: 'snap-1',
+    seq: 7,
+    content_hash: 'abc',
+    fetched_at: '2026-09-01T00:00:00Z',
+  });
+  const store = new SupabaseStore(client);
+  const meta = await store.getLatestSnapshotMeta('rec-1');
+  assert.deepEqual(meta, {
+    id: 'snap-1',
+    seq: 7,
+    contentHash: 'abc',
+    fetchedAt: '2026-09-01T00:00:00Z',
+  });
+  assert.equal(queries[0].table, 'source_snapshots');
+  assert.equal(queries[0].select, 'id, seq, content_hash, fetched_at');
+});
+
+test('archiveSnapshot calls the archive_snapshot RPC and maps every typed outcome', async () => {
+  const archived = writeRecordingClient({ status: 'archived', snapshot_id: 's1', snapshot_seq: 9 });
+  const result = await new SupabaseStore(archived.client).archiveSnapshot({
+    sourceRecordId: 'rec-1',
+    fetchedAt: '2026-09-01T00:00:00Z',
+    contentHash: 'h',
+    rawPayload: { a: 1 },
+    sourceUrl: 'https://example.test',
+  });
+  assert.deepEqual(result, { status: 'archived', snapshotId: 's1', snapshotSeq: 9 });
+  assert.equal(archived.writes[0].kind, 'rpc');
+  assert.equal(archived.writes[0].table, 'archive_snapshot');
+  assert.deepEqual(archived.writes[0].payload, {
+    p_source_record_id: 'rec-1',
+    p_fetched_at: '2026-09-01T00:00:00Z',
+    p_content_hash: 'h',
+    p_raw_payload: { a: 1 },
+    p_source_url: 'https://example.test',
+    p_allow_same_hash: false,
+  });
+
+  const stale = writeRecordingClient({ status: 'stale' });
+  assert.deepEqual(
+    await new SupabaseStore(stale.client).archiveSnapshot({
+      sourceRecordId: 'rec-1',
+      fetchedAt: 'x',
+      contentHash: 'h',
+      rawPayload: {},
+      sourceUrl: 'u',
+    }),
+    { status: 'stale' },
+  );
+});
+
+test('applyCaseTransition and foundCase call their RPCs and surface conflict/exists as typed results', async () => {
+  const conflict = writeRecordingClient({ status: 'conflict' });
+  const conflictResult = await new SupabaseStore(conflict.client).applyCaseTransition({
+    recallCaseId: 'case-1',
+    expectedLastChangedAt: '2026-09-01T00:00:00Z',
+    projection: {} as never,
+    timeline: [],
+    lastChangedAt: '2026-09-01T00:01:00Z',
+    products: [],
+    events: [],
+    markers: [],
+  });
+  assert.deepEqual(conflictResult, { status: 'conflict' });
+  assert.equal(conflict.writes[0].table, 'apply_case_transition');
+  const applyArgs = conflict.writes[0].payload as Record<string, unknown>;
+  assert.equal(applyArgs.p_case_id, 'case-1');
+  assert.equal(applyArgs.p_expected_last_changed_at, '2026-09-01T00:00:00Z');
+
+  const exists = writeRecordingClient({ status: 'record_exists' });
+  const existsResult = await new SupabaseStore(exists.client).foundCase({
+    caseRow: { projection: {} as never, timeline: [], createdAt: 'c', lastChangedAt: 'l' },
+    record: {
+      sourceSystem: 'fsis_api',
+      nativeId: 'n-1',
+      linkMethod: 'self',
+      normalized: {} as never,
+      sourceUrl: 'u',
+      firstSeenAt: 'f',
+      lastSeenAt: 'l',
+      applyState: 'applied',
+      appliedContentHash: 'h',
+      appliedAt: 'a',
+    },
+    snapshot: { id: 'snap-1', fetchedAt: 'f', contentHash: 'h', rawPayload: {}, sourceUrl: 'u' },
+    products: [],
+    initialEvent: null,
+  });
+  assert.deepEqual(existsResult, { status: 'record_exists' });
+  assert.equal(exists.writes[0].table, 'found_recall_case');
+});
+
+test('markSourceRecordApplied and updateSourceRecordNormalized carry the monotonic predicate', async () => {
+  const { client, writes } = writeRecordingClient();
+  const store = new SupabaseStore(client);
+
+  await store.markSourceRecordApplied({
+    sourceRecordId: 'rec-1',
+    contentHash: 'h',
+    snapshotSeq: 12,
+    state: 'applied',
+    appliedAt: '2026-09-01T00:00:00Z',
+  });
+  const marker = writes[0];
+  assert.equal(marker.table, 'source_records');
+  assert.deepEqual(marker.payload, {
+    apply_state: 'applied',
+    applied_content_hash: 'h',
+    applied_snapshot_seq: 12,
+    applied_at: '2026-09-01T00:00:00Z',
+  });
+  // The predicate IS the stale-worker protection: null-or-≤ the marker's seq.
+  assert.deepEqual(marker.filters, [
+    ['eq', 'id', 'rec-1'],
+    ['or', 'applied_snapshot_seq.is.null,applied_snapshot_seq.lte.12', null],
+  ]);
+
+  await store.updateSourceRecordNormalized('rec-1', {} as never, '2026-09-01T00:00:00Z', 12);
+  const normalized = writes[1];
+  assert.equal(normalized.table, 'source_records');
+  assert.deepEqual(normalized.filters, [
+    ['eq', 'id', 'rec-1'],
+    ['or', 'applied_snapshot_seq.is.null,applied_snapshot_seq.lte.12', null],
+  ]);
+});

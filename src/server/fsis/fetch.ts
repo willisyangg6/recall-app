@@ -60,6 +60,11 @@ export async function fetchFsisRecords(fetchImpl: typeof fetch = fetch): Promise
   let lastError: string = 'no attempts made';
   for (let attempt = 0; attempt < attempts; attempt++) {
     const headers = FINGERPRINTS[attempt % FINGERPRINTS.length];
+    // Captured when the request STARTS, not when the response lands (O3-B1
+    // version ordering): a slow response must not launder older content
+    // under a newer timestamp, because fetched_at is the monotonicity token
+    // archive_snapshot orders competing fetches by.
+    const fetchedAt = new Date().toISOString();
     try {
       const response = await fetchImpl(FSIS_API_URL, { headers });
       if (response.ok) {
@@ -69,7 +74,7 @@ export async function fetchFsisRecords(fetchImpl: typeof fetch = fetch): Promise
         }
         return {
           records: body as FsisRawRecord[],
-          fetchedAt: new Date().toISOString(),
+          fetchedAt,
           sourceUrl: FSIS_API_URL,
         };
       }

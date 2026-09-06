@@ -12,9 +12,20 @@
  * assumed to break silently one day). One announcement seen through both
  * channels is one source record and one consumer case.
  *
- * Detail pages are fetched only for records that are new or whose listing
- * `changed` timestamp moved (any page edit moves it), so steady-state runs
- * perform a handful of page fetches, not hundreds.
+ * Detail pages are fetched only for records that are new, changed, pending
+ * (an interrupted apply awaiting retry), or applied_degraded (a record still
+ * owed its detail page), so steady-state runs perform a handful of page
+ * fetches, not hundreds.
+ *
+ * Detail completeness (O3-B1): a listing-backed record's contract includes
+ * its detail page. When the fetch fails for an EXISTING record's changed
+ * version, the item is DEFERRED whole — nothing archived, nothing applied,
+ * the previous complete version stays authoritative, and the next run
+ * retries even if the listing is unchanged (the job withholds the feed gate
+ * on any deferral). A NEW listing-backed record still founds its case from
+ * listing evidence (coverage invariant) but as `applied_degraded`, and every
+ * later run retries its detail page until it lands. RSS-only records cannot
+ * be normalized without the page and quarantine exactly as before.
  */
 
 import type { NormalizedSourceRecord } from '../../domain/source-record';
@@ -60,6 +71,13 @@ export interface FdaCrossCheck {
   rssOnlyIds: string[];
   detailPagesFetched: number;
   detailFetchFailures: { nativeId: string; reason: string }[];
+  /**
+   * Existing records whose changed version was deferred whole because its
+   * required detail page failed to fetch (O3-B1) — retried next run.
+   */
+  deferredIds: string[];
+  /** New records founded from listing evidence alone (applied_degraded). */
+  degradedIds: string[];
   newestListingDate: string | null;
   newestRssDate: string | null;
   /** Operational warnings (stale primary, shape drift, RSS-only items…). */
@@ -123,6 +141,8 @@ export async function runFdaIngest(
     rssOnlyIds: [],
     detailPagesFetched: 0,
     detailFetchFailures: [],
+    deferredIds: [],
+    degradedIds: [],
     newestListingDate: null,
     newestRssDate: null,
     warnings: [],
@@ -206,16 +226,29 @@ export async function runFdaIngest(
     }
   }
 
-  // ── Fetch detail pages for new/changed records; normalize everything ───────
+  // ── Fetch detail pages for new/changed/pending/degraded records ────────────
   const items: ParsedSourceItem[] = [];
   let fetchedAny = false;
   for (const discovery of discoveries.values()) {
-    const existing = await store.getSourceRecordByNativeId('fda_announcement', discovery.nativeId);
-    const unchanged =
-      existing !== null &&
-      (await store.getLatestSnapshotHash(existing.id)) === contentHash(discovery.contentKey);
+    // The same gate the pipeline applies (gate slice + latest snapshot meta):
+    // skip the detail fetch ONLY when the version is unchanged AND either
+    // fully applied or legacy_unverified. Pending and applied_degraded
+    // records refetch even with an unchanged hash — that retry is exactly
+    // what the O3 contract exists to guarantee.
+    const gate = await store.getSourceRecordGateByNativeId('fda_announcement', discovery.nativeId);
+    const hash = contentHash(discovery.contentKey);
+    const meta = gate ? await store.getLatestSnapshotMeta(gate.id) : null;
+    const sameAsLatest = meta !== null && meta.contentHash === hash;
+    const fullyApplied =
+      gate !== null &&
+      sameAsLatest &&
+      gate.applyState === 'applied' &&
+      gate.appliedSnapshotSeq === meta?.seq &&
+      gate.appliedContentHash === hash;
+    const unchanged = gate !== null && sameAsLatest && (gate.applyState == null || fullyApplied);
 
     let detailMainHtml: string | null = null;
+    let detailFailed = false;
     if (!unchanged) {
       const url = `https://www.fda.gov${discovery.path}`;
       try {
@@ -224,14 +257,26 @@ export async function runFdaIngest(
         fetchedAny = true;
         crossCheck.detailPagesFetched += 1;
       } catch (error) {
-        // Listing-backed records degrade to listing-only normalization —
-        // the case still exists (coverage invariant); RSS-only records
-        // cannot be normalized without the page and are quarantined below.
+        detailFailed = true;
         crossCheck.detailFetchFailures.push({
           nativeId: discovery.nativeId,
           reason: error instanceof Error ? error.message : String(error),
         });
       }
+    }
+
+    // An EXISTING record's version needing its detail page: defer the whole
+    // item — the previous complete version stays authoritative, nothing is
+    // archived or applied, and the next run retries the fetch (the job
+    // withholds the feed gate whenever anything was deferred). New
+    // listing-backed records instead found degraded below (coverage
+    // invariant); RSS-only records quarantine in the parse step.
+    if (detailFailed && gate !== null) {
+      crossCheck.deferredIds.push(discovery.nativeId);
+      continue;
+    }
+    if (detailFailed && discovery.listing !== null) {
+      crossCheck.degradedIds.push(discovery.nativeId);
     }
 
     // RSS-only discoveries bypass the listing's category tags; scope them by
@@ -271,6 +316,7 @@ export async function runFdaIngest(
       },
       normalized,
       contentKey: discovery.contentKey,
+      completeness: detailFailed ? 'degraded' : 'complete',
     });
   }
 
@@ -286,6 +332,7 @@ export async function runFdaIngest(
       sourceSystem: 'fda_announcement',
       items,
       quarantined,
+      deferred: crossCheck.deferredIds.length,
       itemsSeen: input.listing.items.length,
       fetchedAt: input.listing.fetchedAt,
     },

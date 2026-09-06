@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { loadDetailPage, loadFoodRss, loadListingItems } from '../fda/fixtures';
+import { loadDetailPage, loadFoodRss, loadListingItem, loadListingItems } from '../fda/fixtures';
 import { parseFdaRssItems, type FdaRssItem } from '../fda/fetch';
 import { slugFromPath } from '../fda/parse';
 import { MemoryStore } from '../store/memory-store';
@@ -159,12 +159,75 @@ test('an RSS outage degrades gracefully: full run, no skip gate, no failure', as
   assert.equal(store.cases.size, 25);
 });
 
+test('a deferred detail fetch withholds the feed gate so the next identical run retries (O3-B1)', async () => {
+  const BOWTIE =
+    'albertsons-companies-voluntarily-recalls-select-store-made-deli-items-containing-bowtie-pasta';
+  const listingOf = (slug: string, fetchedAt: string) => async () => ({
+    items: [loadListingItem(slug)],
+    fetchedAt,
+    sourceUrl: 'fixture',
+  });
+  // RSS fetched-but-empty: the whole-feed gate stays armed without adding
+  // RSS-only discoveries whose pages the failing fetch below would also hit.
+  const emptyRss = async () => ({
+    items: [],
+    fetchedAt: '2026-08-21T00:00:00Z',
+    sourceUrl: 'fixture',
+  });
+  const store = new MemoryStore();
+  // Run 1: the original announcement, complete — arms the gate.
+  const first = await runFdaJob(
+    context(store),
+    options({ fetchListing: listingOf(BOWTIE, '2026-08-21T00:00:00Z'), fetchRss: emptyRss }),
+  );
+  assert.equal(first.outcome, 'succeeded');
+  assert.equal(typeof first.metrics.completedFeedHash, 'string');
+  const eventsAfterFirst = store.notifications.size;
+
+  // Run 2: the re-published update row arrives but its page is down → the
+  // item defers, the run is partial, and the gate token is withheld
+  // (completedFeedHash null) even though the run finished.
+  const deferredRun = await runFdaJob(
+    context(store),
+    options({
+      fetchListing: listingOf(`update-${BOWTIE}`, '2026-08-21T01:00:00Z'),
+      fetchRss: emptyRss,
+      fetchDetail: async () => {
+        throw new Error('HTTP 403');
+      },
+    }),
+  );
+  assert.equal(deferredRun.outcome, 'partial');
+  assert.equal(deferredRun.metrics.completedFeedHash, null);
+  assert.equal(deferredRun.metrics.deferred, 1);
+  assert.equal(store.notifications.size, eventsAfterFirst); // nothing half-applied
+
+  // Run 3: byte-identical feed, page back up — the whole-feed gate must NOT
+  // skip (no source_unchanged), and the deferred update now applies.
+  const detailCalls: string[] = [];
+  const retried = await runFdaJob(
+    context(store),
+    options(
+      { fetchListing: listingOf(`update-${BOWTIE}`, '2026-08-21T01:30:00Z'), fetchRss: emptyRss },
+      detailCalls,
+    ),
+  );
+  assert.notEqual(retried.metrics.skipped, 'source_unchanged');
+  assert.equal(detailCalls.length, 1, 'the deferred detail fetch is retried');
+  assert.equal(retried.metrics.changedCases, 1);
+  assert.equal(typeof retried.metrics.completedFeedHash, 'string');
+});
+
 test('a database failure mid-run surfaces as a failed job', async () => {
   const store = new MemoryStore();
-  store.insertCase = async () => {
-    throw new Error('SupabaseStore.insertCase failed: connection reset');
+  store.foundCase = async () => {
+    throw new Error('SupabaseStore.foundCase failed: connection reset');
   };
   const report = await runFdaJob(context(store), options());
+  // Item isolation records every founding failure instead of aborting on the
+  // first, and the spike threshold turns a broadly broken store into a
+  // loudly FAILED run — never a routine partial.
   assert.equal(report.outcome, 'failed');
+  assert.match(report.error!, /item failure spike/);
   assert.match(report.error!, /connection reset/);
 });

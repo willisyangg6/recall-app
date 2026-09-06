@@ -16,7 +16,14 @@ import type {
 } from '../../domain/recall-types';
 import type { NormalizedSourceRecord } from '../../domain/source-record';
 import type {
+  AppliedMarker,
+  ApplyState,
+  ArchiveSnapshotResult,
+  CaseTransitionInput,
+  CaseTransitionResult,
   CaseVisualRow,
+  FoundCaseInput,
+  FoundCaseResult,
   IngestRunPatch,
   IngestRunSource,
   JobRunAnnotation,
@@ -24,6 +31,8 @@ import type {
   NotificationEventInput,
   RecallCaseRow,
   RecallStore,
+  SnapshotMeta,
+  SourceRecordGate,
   SourceRecordLink,
   SourceRecordRow,
 } from './types';
@@ -131,6 +140,10 @@ export class SupabaseStore implements RecallStore {
       sourceUrl: data.source_url as string,
       firstSeenAt: data.first_seen_at as string,
       lastSeenAt: data.last_seen_at as string,
+      applyState: (data.apply_state as ApplyState | null | undefined) ?? null,
+      appliedContentHash: (data.applied_content_hash as string | null | undefined) ?? null,
+      appliedSnapshotSeq: (data.applied_snapshot_seq as number | null | undefined) ?? null,
+      appliedAt: (data.applied_at as string | null | undefined) ?? null,
     };
   }
 
@@ -206,18 +219,22 @@ export class SupabaseStore implements RecallStore {
   }
 
   async insertSourceRecord(row: Omit<SourceRecordRow, 'id'>): Promise<SourceRecordRow> {
+    const insert: Record<string, unknown> = {
+      source_system: row.sourceSystem,
+      native_id: row.nativeId,
+      recall_case_id: row.recallCaseId,
+      link_method: row.linkMethod,
+      normalized: row.normalized,
+      source_url: row.sourceUrl,
+      first_seen_at: row.firstSeenAt,
+      last_seen_at: row.lastSeenAt,
+    };
+    // O3: ingest inserts declare 'pending' explicitly; omitting the field
+    // (legacy-era callers, tests predating O3) leaves the column NULL.
+    if (row.applyState !== undefined) insert.apply_state = row.applyState;
     const { data, error } = await this.client
       .from('source_records')
-      .insert({
-        source_system: row.sourceSystem,
-        native_id: row.nativeId,
-        recall_case_id: row.recallCaseId,
-        link_method: row.linkMethod,
-        normalized: row.normalized,
-        source_url: row.sourceUrl,
-        first_seen_at: row.firstSeenAt,
-        last_seen_at: row.lastSeenAt,
-      })
+      .insert(insert)
       .select('*')
       .single();
     if (error || !data) this.fail('insertSourceRecord', error);
@@ -292,6 +309,217 @@ export class SupabaseStore implements RecallStore {
       .single();
     if (error || !data) this.fail('insertSnapshot', error);
     return data.id as string;
+  }
+
+  // ── O3-B1 applied-version contract ─────────────────────────────────────────
+
+  async getSourceRecordGateByNativeId(
+    sourceSystem: SourceSystem,
+    nativeId: string,
+  ): Promise<SourceRecordGate | null> {
+    // The C8 identity slice plus the applied marker — still never
+    // `normalized`. This is the one read every feed item pays on a changed
+    // run, so the column list stays the egress budget.
+    const { data, error } = await this.client
+      .from('source_records')
+      .select('id, recall_case_id, apply_state, applied_content_hash, applied_snapshot_seq')
+      .eq('source_system', sourceSystem)
+      .eq('native_id', nativeId)
+      .maybeSingle();
+    if (error) this.fail('getSourceRecordGateByNativeId', error);
+    if (!data) return null;
+    return {
+      id: data.id as string,
+      recallCaseId: data.recall_case_id as string,
+      applyState: (data.apply_state as ApplyState | null) ?? null,
+      appliedContentHash: (data.applied_content_hash as string | null) ?? null,
+      appliedSnapshotSeq: (data.applied_snapshot_seq as number | null) ?? null,
+    };
+  }
+
+  async getLatestSnapshotMeta(sourceRecordId: string): Promise<SnapshotMeta | null> {
+    const { data, error } = await this.client
+      .from('source_snapshots')
+      .select('id, seq, content_hash, fetched_at')
+      .eq('source_record_id', sourceRecordId)
+      .order('seq', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) this.fail('getLatestSnapshotMeta', error);
+    if (!data) return null;
+    return {
+      id: data.id as string,
+      seq: Number(data.seq),
+      contentHash: data.content_hash as string,
+      fetchedAt: data.fetched_at as string,
+    };
+  }
+
+  async archiveSnapshot(input: {
+    sourceRecordId: string;
+    fetchedAt: string;
+    contentHash: string;
+    rawPayload: unknown;
+    sourceUrl: string;
+    allowSameHash?: boolean;
+  }): Promise<ArchiveSnapshotResult> {
+    const { data, error } = await this.client.rpc('archive_snapshot', {
+      p_source_record_id: input.sourceRecordId,
+      p_fetched_at: input.fetchedAt,
+      p_content_hash: input.contentHash,
+      p_raw_payload: input.rawPayload,
+      p_source_url: input.sourceUrl,
+      p_allow_same_hash: input.allowSameHash ?? false,
+    });
+    if (error) this.fail('archiveSnapshot', error);
+    const result = data as Record<string, unknown> | null;
+    const status = result?.status;
+    if (status === 'stale') return { status: 'stale' };
+    if (status === 'archived' || status === 'duplicate') {
+      return {
+        status,
+        snapshotId: result!.snapshot_id as string,
+        snapshotSeq: Number(result!.snapshot_seq),
+      };
+    }
+    // 'missing_record' or an unrecognized payload: the record vanished under
+    // us or the function drifted — both are hard faults, never silent skips.
+    this.fail('archiveSnapshot', { message: `unexpected result ${JSON.stringify(result)}` });
+  }
+
+  async updateSourceRecordNormalized(
+    id: string,
+    normalized: NormalizedSourceRecord,
+    lastSeenAt: string,
+    expectedSnapshotSeq: number,
+  ): Promise<boolean> {
+    // Monotonic predicate: the write lands only while the applied seq has
+    // not moved past the snapshot this normalization was derived from — a
+    // stale worker matches no row and reports false instead of regressing.
+    const { data, error } = await this.client
+      .from('source_records')
+      .update({ normalized, last_seen_at: lastSeenAt })
+      .eq('id', id)
+      .or(`applied_snapshot_seq.is.null,applied_snapshot_seq.lte.${expectedSnapshotSeq}`)
+      .select('id');
+    if (error) this.fail('updateSourceRecordNormalized', error);
+    return (data?.length ?? 0) > 0;
+  }
+
+  async applyCaseTransition(input: CaseTransitionInput): Promise<CaseTransitionResult> {
+    const { data, error } = await this.client.rpc('apply_case_transition', {
+      p_case_id: input.recallCaseId,
+      p_expected_last_changed_at: input.expectedLastChangedAt,
+      p_projection: input.projection,
+      p_timeline: input.timeline,
+      p_last_changed_at: input.lastChangedAt,
+      p_products: input.products.map((product) => ({
+        sourceNativeId: product.sourceNativeId,
+        name: product.name,
+        rawText: product.rawText,
+        extractionConfidence: product.extractionConfidence,
+      })),
+      p_events: input.events.map((event) => ({
+        kind: event.kind,
+        triggerRuleId: event.triggerRuleId,
+        dedupKey: event.dedupKey,
+        materialChangeRef: event.materialChangeRef,
+        payloadSummary: event.payloadSummary,
+        suppressed: event.suppressed,
+        sourceSnapshotIds: event.sourceSnapshotIds,
+        createdAt: event.createdAt,
+      })),
+      p_markers: input.markers.map((marker) => ({
+        sourceRecordId: marker.sourceRecordId,
+        contentHash: marker.contentHash,
+        snapshotSeq: marker.snapshotSeq,
+        state: marker.state,
+        appliedAt: marker.appliedAt,
+      })),
+    });
+    if (error) this.fail('applyCaseTransition', error);
+    const result = data as Record<string, unknown> | null;
+    if (result?.status === 'conflict') return { status: 'conflict' };
+    if (result?.status === 'applied') {
+      return {
+        status: 'applied',
+        insertedDedupKeys: (result.inserted_dedup_keys as string[] | null) ?? [],
+      };
+    }
+    this.fail('applyCaseTransition', { message: `unexpected result ${JSON.stringify(result)}` });
+  }
+
+  async foundCase(input: FoundCaseInput): Promise<FoundCaseResult> {
+    const { data, error } = await this.client.rpc('found_recall_case', {
+      p_case: {
+        projection: input.caseRow.projection,
+        timeline: input.caseRow.timeline,
+        createdAt: input.caseRow.createdAt,
+        lastChangedAt: input.caseRow.lastChangedAt,
+      },
+      p_record: {
+        sourceSystem: input.record.sourceSystem,
+        nativeId: input.record.nativeId,
+        linkMethod: input.record.linkMethod,
+        normalized: input.record.normalized,
+        sourceUrl: input.record.sourceUrl,
+        firstSeenAt: input.record.firstSeenAt,
+        lastSeenAt: input.record.lastSeenAt,
+        applyState: input.record.applyState,
+        appliedContentHash: input.record.appliedContentHash,
+        appliedAt: input.record.appliedAt,
+      },
+      p_snapshot: {
+        id: input.snapshot.id,
+        fetchedAt: input.snapshot.fetchedAt,
+        contentHash: input.snapshot.contentHash,
+        rawPayload: input.snapshot.rawPayload,
+        sourceUrl: input.snapshot.sourceUrl,
+      },
+      p_products: input.products.map((product) => ({
+        sourceNativeId: product.sourceNativeId,
+        name: product.name,
+        rawText: product.rawText,
+        extractionConfidence: product.extractionConfidence,
+      })),
+      p_initial_event: input.initialEvent
+        ? {
+            triggerRuleId: input.initialEvent.triggerRuleId,
+            payloadSummary: input.initialEvent.payloadSummary,
+            suppressed: input.initialEvent.suppressed,
+            createdAt: input.initialEvent.createdAt,
+          }
+        : null,
+    });
+    if (error) this.fail('foundCase', error);
+    const result = data as Record<string, unknown> | null;
+    if (result?.status === 'record_exists') return { status: 'record_exists' };
+    if (result?.status === 'founded') {
+      return {
+        status: 'founded',
+        caseId: result.case_id as string,
+        recordId: result.record_id as string,
+        snapshotSeq: Number(result.snapshot_seq),
+        initialInserted: result.initial_inserted === true,
+      };
+    }
+    this.fail('foundCase', { message: `unexpected result ${JSON.stringify(result)}` });
+  }
+
+  async markSourceRecordApplied(marker: AppliedMarker): Promise<boolean> {
+    const { data, error } = await this.client
+      .from('source_records')
+      .update({
+        apply_state: marker.state,
+        applied_content_hash: marker.contentHash,
+        applied_snapshot_seq: marker.snapshotSeq,
+        applied_at: marker.appliedAt,
+      })
+      .eq('id', marker.sourceRecordId)
+      .or(`applied_snapshot_seq.is.null,applied_snapshot_seq.lte.${marker.snapshotSeq}`)
+      .select('id');
+    if (error) this.fail('markSourceRecordApplied', error);
+    return (data?.length ?? 0) > 0;
   }
 
   private toCaseRow(data: Record<string, unknown>): RecallCaseRow {

@@ -23,6 +23,15 @@ import type { NormalizedSourceRecord } from '../../domain/source-record';
 
 export type LinkMethod = 'self' | 'expansion_prefix' | 'retraction_reference' | 'enforcement_match';
 
+/**
+ * Applied-version marker states (O3-B1). `null`/absent = legacy_unverified:
+ * the row predates the marker and its application state is UNKNOWN — never
+ * assumed applied (that assumption was the O3-A defect) and never treated as
+ * fresh pending work (which would replay the corpus). 'superseded' is derived
+ * (applied seq < latest seq), deliberately not stored.
+ */
+export type ApplyState = 'pending' | 'applied' | 'applied_degraded';
+
 export interface SourceRecordRow {
   id: string;
   sourceSystem: SourceSystem;
@@ -33,6 +42,11 @@ export interface SourceRecordRow {
   sourceUrl: string;
   firstSeenAt: string;
   lastSeenAt: string;
+  /** O3 applied-version marker; optional so legacy rows and constructors predating O3 stay valid. */
+  applyState?: ApplyState | null;
+  appliedContentHash?: string | null;
+  appliedSnapshotSeq?: number | null;
+  appliedAt?: string | null;
 }
 
 /**
@@ -48,6 +62,114 @@ export interface SourceRecordLink {
   id: string;
   recallCaseId: string;
 }
+
+/**
+ * The gate slice (O3-B1): the C8 identity slice plus the applied-version
+ * marker — everything the per-item unchanged gate needs, still without the
+ * normalized payload (~60 extra bytes on the ~0.1 KB slice).
+ */
+export interface SourceRecordGate {
+  id: string;
+  recallCaseId: string;
+  applyState: ApplyState | null;
+  appliedContentHash: string | null;
+  appliedSnapshotSeq: number | null;
+}
+
+/** Identity of a record's newest archived snapshot (single-row read). */
+export interface SnapshotMeta {
+  id: string;
+  seq: number;
+  contentHash: string;
+  fetchedAt: string;
+}
+
+export type ArchiveSnapshotResult =
+  /** A genuinely new version was archived and the record set pending — one transaction. */
+  | { status: 'archived'; snapshotId: string; snapshotSeq: number }
+  /** The latest archived snapshot already carries this hash; nothing written. */
+  | { status: 'duplicate'; snapshotId: string; snapshotSeq: number }
+  /** The incoming fetch is OLDER than the newest archived one — stale worker, no write. */
+  | { status: 'stale' };
+
+/** One record's applied-marker completion, carried by a case transition. */
+export interface AppliedMarker {
+  sourceRecordId: string;
+  contentHash: string;
+  snapshotSeq: number;
+  state: Extract<ApplyState, 'applied' | 'applied_degraded'>;
+  appliedAt: string;
+}
+
+/**
+ * One atomic consumer transition (O3-B1): case projection + timeline +
+ * last_changed_at (CAS on `expectedLastChangedAt`), the complete
+ * affected-product set, the notification events this transition produces,
+ * and the applied markers of every source version it carries — all-or-
+ * nothing. Event dedup collisions are idempotent success; a CAS miss writes
+ * nothing and reports 'conflict'.
+ */
+export interface CaseTransitionInput {
+  recallCaseId: string;
+  expectedLastChangedAt: string;
+  projection: CaseProjection;
+  timeline: TimelineEntry[];
+  lastChangedAt: string;
+  products: AffectedProduct[];
+  events: NotificationEventInput[];
+  markers: AppliedMarker[];
+}
+
+export type CaseTransitionResult =
+  { status: 'applied'; insertedDedupKeys: string[] } | { status: 'conflict' };
+
+/** Atomic founding (O3-B1): case + record + snapshot + products + initial event + marker. */
+export interface FoundCaseInput {
+  caseRow: Omit<RecallCaseRow, 'id'>;
+  record: {
+    sourceSystem: SourceSystem;
+    nativeId: string;
+    linkMethod: LinkMethod;
+    normalized: NormalizedSourceRecord;
+    sourceUrl: string;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    applyState: Extract<ApplyState, 'applied' | 'applied_degraded'>;
+    appliedContentHash: string;
+    appliedAt: string;
+  };
+  /** `id` is app-generated so the founding timeline can reference it in-transaction. */
+  snapshot: {
+    id: string;
+    fetchedAt: string;
+    contentHash: string;
+    rawPayload: unknown;
+    sourceUrl: string;
+  };
+  products: AffectedProduct[];
+  /**
+   * The initial event minus its case-dependent fields: dedup_key is built
+   * server-side as `initial:{caseId}` and sourceSnapshotIds is the founding
+   * snapshot — both anchored inside the transaction.
+   */
+  initialEvent: {
+    triggerRuleId: string;
+    payloadSummary: string;
+    suppressed: NotificationSuppression | null;
+    createdAt: string;
+  } | null;
+}
+
+export type FoundCaseResult =
+  | {
+      status: 'founded';
+      caseId: string;
+      recordId: string;
+      snapshotSeq: number;
+      initialInserted: boolean;
+    }
+  /** The identity already exists (prior founding or a concurrent winner) — nothing written. */
+  | { status: 'record_exists' };
 
 export interface RecallCaseRow {
   id: string;
@@ -205,6 +327,59 @@ export interface RecallStore {
     rawPayload: unknown;
     sourceUrl: string;
   }): Promise<string>;
+
+  // ── O3-B1 applied-version contract ─────────────────────────────────────────
+
+  /**
+   * The gate slice: identity + applied marker, one narrow read per feed item
+   * (the O3 successor to getSourceRecordLinkByNativeId on the ingest path).
+   */
+  getSourceRecordGateByNativeId(
+    sourceSystem: SourceSystem,
+    nativeId: string,
+  ): Promise<SourceRecordGate | null>;
+  /** Newest archived snapshot's identity (id, seq, hash, fetchedAt) — one row. */
+  getLatestSnapshotMeta(sourceRecordId: string): Promise<SnapshotMeta | null>;
+  /**
+   * Atomic archive-and-pending (archive_snapshot RPC): rejects an older
+   * fetch before any write, refuses to duplicate the current version unless
+   * `allowSameHash` (FDA degraded-detail completion re-archiving a richer
+   * payload of unchanged content), and sets the record pending in the same
+   * transaction.
+   */
+  archiveSnapshot(input: {
+    sourceRecordId: string;
+    fetchedAt: string;
+    contentHash: string;
+    rawPayload: unknown;
+    sourceUrl: string;
+    allowSameHash?: boolean;
+  }): Promise<ArchiveSnapshotResult>;
+  /**
+   * Monotonic conditional normalized write (O3-B1): lands only while the
+   * record's applied seq is null or ≤ `expectedSnapshotSeq`, so a stale
+   * worker can never overwrite normalization derived from a newer snapshot.
+   * Returns false on the monotonic miss; the caller skips, never retries
+   * with stale data.
+   */
+  updateSourceRecordNormalized(
+    id: string,
+    normalized: NormalizedSourceRecord,
+    lastSeenAt: string,
+    expectedSnapshotSeq: number,
+  ): Promise<boolean>;
+  /** One atomic consumer transition (apply_case_transition RPC). */
+  applyCaseTransition(input: CaseTransitionInput): Promise<CaseTransitionResult>;
+  /** Atomic founding (found_recall_case RPC). */
+  foundCase(input: FoundCaseInput): Promise<FoundCaseResult>;
+  /**
+   * Marker-only completion for a retry whose recomputed projection already
+   * equals the stored case (everything durable was applied by the
+   * interrupted attempt — under this contract, projection-current implies
+   * products- and events-current, because they only ever commit together).
+   * Sequence-monotonic like the in-transaction marker update.
+   */
+  markSourceRecordApplied(marker: AppliedMarker): Promise<boolean>;
 
   getCase(id: string): Promise<RecallCaseRow | null>;
   /**

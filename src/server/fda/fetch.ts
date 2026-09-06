@@ -59,12 +59,17 @@ export interface FdaListingFetchResult {
 export async function fetchFdaListing(
   fetchImpl: typeof fetch = fetch,
 ): Promise<FdaListingFetchResult> {
+  // Captured when the request STARTS (O3-B1 version ordering): a slow
+  // response must not launder older content under a newer timestamp —
+  // fetched_at is the monotonicity token archive_snapshot orders competing
+  // fetches by.
+  const fetchedAt = new Date().toISOString();
   const response = await fetchWithRetry(FDA_LISTING_URL, fetchImpl);
   const body = (await response.json()) as unknown;
   if (!Array.isArray(body)) {
     throw new Error(`FDA listing returned non-array JSON (${typeof body})`);
   }
-  return { items: body, fetchedAt: new Date().toISOString(), sourceUrl: FDA_LISTING_URL };
+  return { items: body, fetchedAt, sourceUrl: FDA_LISTING_URL };
 }
 
 export interface FdaRssItem {
@@ -103,13 +108,15 @@ export interface FdaRssFetchResult {
 }
 
 export async function fetchFdaFoodRss(fetchImpl: typeof fetch = fetch): Promise<FdaRssFetchResult> {
+  // Request-start capture, same rationale as fetchFdaListing.
+  const fetchedAt = new Date().toISOString();
   const response = await fetchWithRetry(FDA_FOOD_RSS_URL, fetchImpl);
   const xml = await response.text();
   const items = parseFdaRssItems(xml);
   if (items.length === 0) {
     throw new Error('FDA food RSS returned no parseable items — feed shape may have changed');
   }
-  return { items, fetchedAt: new Date().toISOString(), sourceUrl: FDA_FOOD_RSS_URL };
+  return { items, fetchedAt, sourceUrl: FDA_FOOD_RSS_URL };
 }
 
 /**

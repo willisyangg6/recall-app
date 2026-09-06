@@ -2,17 +2,26 @@
  * Source-agnostic ingestion pipeline (architecture Part 8):
  *
  *   fetch result → ingest run → parse/normalize (quarantine on failure)
- *   → identity upsert → snapshot (hash-gated) → case linking
+ *   → applied-version gate → archive-and-pending → case linking
  *   → canonical projection → material-change detection
- *   → notification eligibility → consumer read model
+ *   → ONE atomic case transition (projection + timeline + products +
+ *     notification events + applied markers) → consumer read model
  *
  * Adapters (FSIS, FDA) own all source quirks and hand this pipeline
  * already-normalized records; nothing here knows a source field name.
- * Idempotent by construction: re-running on identical input performs no
- * writes beyond ingest-run bookkeeping.
+ *
+ * Crash safety (O3-B1): "snapshot archived" and "snapshot APPLIED" are
+ * separate durable facts. The unchanged gate skips an item only when the
+ * incoming content equals the latest archived snapshot AND that snapshot is
+ * marked applied (or the record predates the marker — legacy_unverified,
+ * whose pre-O3 behavior is preserved so the historical corpus never
+ * replays). Everything between archive and apply is pending and retried on
+ * the next run; the consumer-visible transition (case + products + events +
+ * markers) commits in one transaction, so a consumer can never observe a
+ * torn state and a required notification can never be silently lost.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { detectChanges, fingerprint } from '../domain/material-change';
 import { projectCase } from '../domain/projection';
@@ -24,7 +33,13 @@ import type {
 } from '../domain/recall-types';
 import type { NormalizedSourceRecord } from '../domain/source-record';
 import { FsisParseError, parseFsisRecord, type FsisRawRecord } from './fsis/parse';
-import type { RecallStore, SourceRecordRow } from './store/types';
+import type {
+  AppliedMarker,
+  NotificationEventInput,
+  RecallStore,
+  SourceRecordGate,
+  SourceRecordRow,
+} from './store/types';
 
 /** Stable stringify (recursively sorted keys) so content hashes are canonical. */
 export function canonicalJson(value: unknown): string {
@@ -55,6 +70,9 @@ const RULE_TO_TIMELINE_KIND: Record<MaterialChange['ruleId'], TimelineKind> = {
   retraction: 'retracted',
 };
 
+/** Case CAS attempts before an item stays pending for the next run. */
+const CASE_CAS_ATTEMPTS = 3;
+
 export interface IngestSummary {
   runId: string;
   itemsSeen: number;
@@ -63,6 +81,18 @@ export interface IngestSummary {
   unchanged: number;
   newCases: number;
   changedCases: number;
+  /** O3: adapter-deferred items (required evidence unavailable this run) — retried next tick. */
+  deferred: number;
+  /** O3: items skipped because a newer fetch is already archived (stale worker), plus monotonic-guard misses. */
+  staleSkipped: number;
+  /** O3: items left pending after the case CAS retry budget — retried next tick. */
+  conflictsExhausted: number;
+  /** O3: pending versions whose retry found everything already applied — marker completed only. */
+  pendingCompleted: number;
+  /** O3: new records founded with incomplete evidence (FDA listing-only) — completed by later runs. */
+  degradedFounded: number;
+  /** O3: per-item errors isolated so sibling items continue; the job layer downgrades the run. */
+  itemFailures: { nativeId: string | null; reason: string }[];
   notifications: { initial: number; materialUpdate: number; suppressed: number };
   /** Newest source-published date seen — input to stale-source alarms. */
   newestPublishedAt: string | null;
@@ -112,6 +142,14 @@ export interface ParsedSourceItem {
    * the stored payload also carries the (re)fetched detail HTML.
    */
   contentKey?: unknown;
+  /**
+   * Adapter-declared evidence completeness. 'degraded' = the record is
+   * credible but its required evidence (an FDA detail page) could not be
+   * fetched: the item still applies (coverage invariant) but its marker is
+   * 'applied_degraded', so every later run retries the missing evidence even
+   * while the content hash is unchanged. Defaults to 'complete'.
+   */
+  completeness?: 'complete' | 'degraded';
 }
 
 export interface SourceIngestInput {
@@ -119,6 +157,12 @@ export interface SourceIngestInput {
   items: ParsedSourceItem[];
   /** Items that failed adapter parsing — reported, never silently dropped. */
   quarantined: { rawNativeId: string | null; reason: string }[];
+  /**
+   * Items the adapter deferred whole (an existing record's changed version
+   * whose required evidence failed to fetch): nothing archived, nothing
+   * applied, retried next run. Counted so the run cannot read as complete.
+   */
+  deferred?: number;
   /** Raw items seen before parsing/filtering, for run bookkeeping. */
   itemsSeen: number;
   fetchedAt: string;
@@ -143,6 +187,12 @@ export async function runSourceIngest(
     unchanged: 0,
     newCases: 0,
     changedCases: 0,
+    deferred: input.deferred ?? 0,
+    staleSkipped: 0,
+    conflictsExhausted: 0,
+    pendingCompleted: 0,
+    degradedFounded: 0,
+    itemFailures: [],
     notifications: { initial: 0, materialUpdate: 0, suppressed: 0 },
     newestPublishedAt: null,
   };
@@ -170,16 +220,26 @@ export async function runSourceIngest(
     for (const item of parsed) byNativeId.set(item.normalized.nativeId, item);
 
     for (const item of byNativeId.values()) {
-      await ingestOne(
-        store,
-        item,
-        input,
-        summary,
-        now,
-        backfillHorizonDays,
-        options.expansionGuard,
-        options.expansionReferenceGuard,
-      );
+      // Per-item isolation (O3): one poison item must not abort the feed —
+      // its failure is recorded and every other item still applies. The job
+      // layer downgrades the run (partial) and fails it on a failure spike.
+      try {
+        await ingestOne(
+          store,
+          item,
+          input,
+          summary,
+          now,
+          backfillHorizonDays,
+          options.expansionGuard,
+          options.expansionReferenceGuard,
+        );
+      } catch (error) {
+        summary.itemFailures.push({
+          nativeId: item.normalized.nativeId,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     await store.finishIngestRun(runId, {
@@ -256,56 +316,164 @@ async function ingestOne(
   expansionGuard?: IngestOptions['expansionGuard'],
   expansionReferenceGuard?: IngestOptions['expansionReferenceGuard'],
 ): Promise<void> {
-  const { raw, normalized } = item;
+  const { normalized } = item;
   const sourceSystem = input.sourceSystem;
-  const nowIso = now().toISOString();
-  // Identity slice only (C8): this lookup runs once per feed item on every
-  // changed run — ~700–1,200 times — and the hash gate below needs the
-  // record id and case link, never the stored normalized payload. The full
-  // row (~19 KB for FDA vs ~0.1 KB for the slice) stays reserved for the
-  // expansion path, whose evidence guard genuinely reads `normalized`.
-  const existing = await store.getSourceRecordLinkByNativeId(sourceSystem, normalized.nativeId);
-  const hash = contentHash(item.contentKey ?? raw);
-
-  if (existing) {
-    const latestHash = await store.getLatestSnapshotHash(existing.id);
-    if (latestHash === hash) {
-      await store.updateSourceRecord(existing.id, { lastSeenAt: nowIso });
-      summary.unchanged += 1;
+  // Two passes at most: a founding attempt that loses the identity race
+  // ('record_exists') re-enters the existing-record path against the winner.
+  for (let pass = 0; pass < 2; pass++) {
+    // The gate slice (C8 + O3): identity, case link, and applied marker —
+    // never the normalized payload. One narrow read per feed item.
+    const gate = await store.getSourceRecordGateByNativeId(sourceSystem, normalized.nativeId);
+    if (gate) {
+      await ingestExisting(store, item, input, gate, summary, now, backfillHorizonDays);
       return;
     }
-    // Layer 1: the source changed. Snapshot first, then re-project.
-    const snapshotId = await store.insertSnapshot({
-      sourceRecordId: existing.id,
+    const founded = await ingestNew(
+      store,
+      item,
+      input,
+      summary,
+      now,
+      backfillHorizonDays,
+      expansionGuard,
+      expansionReferenceGuard,
+    );
+    if (founded) return;
+    // record_exists: loop once more through the existing path.
+  }
+  throw new Error(`record ${normalized.nativeId} raced founding twice — giving up this run`);
+}
+
+/** An already-known record: unchanged, pending re-apply, degraded completion, or changed. */
+async function ingestExisting(
+  store: RecallStore,
+  item: ParsedSourceItem,
+  input: SourceIngestInput,
+  gate: SourceRecordGate,
+  summary: IngestSummary,
+  now: () => Date,
+  backfillHorizonDays: number,
+): Promise<void> {
+  const { raw, normalized } = item;
+  const nowIso = now().toISOString();
+  const hash = contentHash(item.contentKey ?? raw);
+  const completeness = item.completeness ?? 'complete';
+  const meta = await store.getLatestSnapshotMeta(gate.id);
+
+  const sameAsLatest = meta !== null && meta.contentHash === hash;
+  // legacy_unverified (NULL marker): the row predates O3. Its application
+  // state is unknown — never assumed applied, but ALSO never treated as
+  // fresh pending work, or the whole historical corpus would replay through
+  // notification paths. Unchanged content keeps exactly the pre-O3 behavior;
+  // the record graduates to a verified marker on its next real change (here)
+  // or through the O3-B2 reconciliation.
+  const isLegacy = gate.applyState == null;
+  const fullyApplied =
+    sameAsLatest &&
+    gate.applyState === 'applied' &&
+    gate.appliedSnapshotSeq === meta?.seq &&
+    gate.appliedContentHash === hash;
+
+  if (sameAsLatest && (isLegacy || fullyApplied)) {
+    await store.updateSourceRecord(gate.id, { lastSeenAt: nowIso });
+    summary.unchanged += 1;
+    return;
+  }
+
+  // A degraded record whose required evidence has now been fetched: the
+  // content hash is unchanged, but the richer payload is honestly
+  // re-archived (provenance: getLatestSnapshotPayload must see the detail
+  // page a later backfill would re-derive from).
+  const degradedCompletion =
+    sameAsLatest && gate.applyState === 'applied_degraded' && completeness === 'complete';
+
+  let snapshotId: string;
+  let snapshotSeq: number;
+  if (meta !== null && sameAsLatest && !degradedCompletion) {
+    // Pending re-apply of the already-archived current version (a prior run
+    // crashed between archive and apply) — never a duplicate snapshot.
+    snapshotId = meta.id;
+    snapshotSeq = meta.seq;
+  } else {
+    const archived = await store.archiveSnapshot({
+      sourceRecordId: gate.id,
       fetchedAt: input.fetchedAt,
       contentHash: hash,
       rawPayload: raw,
       sourceUrl: normalized.officialUrl,
+      allowSameHash: degradedCompletion,
     });
-    await store.updateSourceRecord(existing.id, { normalized, lastSeenAt: nowIso });
-    await reprojectCase(
-      store,
-      existing.recallCaseId,
-      [snapshotId],
-      summary,
-      now,
-      backfillHorizonDays,
-    );
+    if (archived.status === 'stale') {
+      // A newer fetch is already archived: this worker is stale and stops
+      // BEFORE any write — it must not regress normalized, case, product,
+      // marker, timeline, or event state.
+      summary.staleSkipped += 1;
+      return;
+    }
+    snapshotId = archived.snapshotId;
+    snapshotSeq = archived.snapshotSeq;
+  }
+
+  // Monotonic conditional normalized write: derived from THIS snapshot, and
+  // refused once a newer version has been applied (stale worker).
+  const wrote = await store.updateSourceRecordNormalized(gate.id, normalized, nowIso, snapshotSeq);
+  if (!wrote) {
+    summary.staleSkipped += 1;
     return;
   }
 
-  // New source record. Resolve which case it belongs to (architecture Part 8.2):
-  // a retraction notice attaches to the case it retracts; an expansion record
-  // attaches to its parent's case; anything unresolvable founds its own case —
-  // the coverage invariant means no credible record is ever dropped.
+  const marker: AppliedMarker = {
+    sourceRecordId: gate.id,
+    contentHash: hash,
+    snapshotSeq,
+    state: completeness === 'degraded' ? 'applied_degraded' : 'applied',
+    appliedAt: nowIso,
+  };
+  const outcome = await applyCaseChange(
+    store,
+    gate.recallCaseId,
+    [snapshotId],
+    [marker],
+    summary,
+    now,
+    backfillHorizonDays,
+    normalized,
+  );
+  if (outcome === 'conflict_exhausted') summary.conflictsExhausted += 1;
+}
+
+/**
+ * A record the store has never seen: resolve which case it belongs to
+ * (architecture Part 8.2) — a retraction notice attaches to the case it
+ * retracts; an expansion record attaches to its parent's case; anything
+ * unresolvable founds its own case atomically (the coverage invariant means
+ * no credible record is ever dropped). Returns false when the founding lost
+ * the identity race and the caller must re-enter the existing path.
+ */
+async function ingestNew(
+  store: RecallStore,
+  item: ParsedSourceItem,
+  input: SourceIngestInput,
+  summary: IngestSummary,
+  now: () => Date,
+  backfillHorizonDays: number,
+  expansionGuard?: IngestOptions['expansionGuard'],
+  expansionReferenceGuard?: IngestOptions['expansionReferenceGuard'],
+): Promise<boolean> {
+  const { raw, normalized } = item;
+  const sourceSystem = input.sourceSystem;
+  const nowIso = now().toISOString();
+  const hash = contentHash(item.contentKey ?? raw);
+  const completeness = item.completeness ?? 'complete';
+
   let targetCase: { id: string } | null = null;
   let linkMethod: SourceRecordRow['linkMethod'] = 'self';
 
   if (normalized.isRetractionNotice) {
     for (const retractedId of normalized.retractsNativeIds) {
-      // Only the case link is needed to attach a retraction — same narrow
-      // slice as the hash gate above.
-      const target = await store.getSourceRecordLinkByNativeId(sourceSystem, retractedId);
+      // Only the case link is needed to attach a retraction — the same
+      // narrow gate slice as the per-item lookup.
+      const target = await store.getSourceRecordGateByNativeId(sourceSystem, retractedId);
       if (target) {
         targetCase = { id: target.recallCaseId };
         linkMethod = 'retraction_reference';
@@ -355,217 +523,286 @@ async function ingestOne(
   }
 
   if (!targetCase) {
+    // Atomic founding (O3): case + record + snapshot + products + initial
+    // event + applied marker commit together — a crash leaves nothing, never
+    // an orphan case, and the initial notification can never be lost after
+    // the case exists. The snapshot id is app-generated so the founding
+    // timeline can reference it inside the same transaction.
     const projection = projectCase([normalized]);
     const agencyLabel = normalized.sourceAgency === 'FSIS' ? 'FSIS' : normalized.sourceAgency;
+    const snapshotId = randomUUID();
     const timeline: TimelineEntry[] = [
       {
         occurredAt: normalized.publishedAt,
         kind: 'published',
         summary: `${normalized.noticeType === 'public_health_alert' ? 'Public health alert' : 'Recall'} published by ${agencyLabel}.`,
-        causedBySnapshotIds: [],
+        causedBySnapshotIds: [snapshotId],
         material: false,
       },
     ];
-    const recallCase = await store.insertCase({
-      projection,
-      timeline,
-      createdAt: nowIso,
-      lastChangedAt: nowIso,
+    // Exactly-one-initial invariant: dedupKey = the case id (anchored inside
+    // the founding transaction). Old records discovered late (first live run
+    // imports 12 years of history) are ledgered but suppressed as backfill —
+    // auditable, never delivered.
+    const ageMs = now().getTime() - new Date(normalized.publishedAt).getTime();
+    const isBackfill = ageMs > backfillHorizonDays * 24 * 60 * 60 * 1000;
+    const founded = await store.foundCase({
+      caseRow: { projection, timeline, createdAt: nowIso, lastChangedAt: nowIso },
+      record: {
+        sourceSystem,
+        nativeId: normalized.nativeId,
+        linkMethod: 'self',
+        normalized,
+        sourceUrl: normalized.officialUrl,
+        firstSeenAt: nowIso,
+        lastSeenAt: nowIso,
+        applyState: completeness === 'degraded' ? 'applied_degraded' : 'applied',
+        appliedContentHash: hash,
+        appliedAt: nowIso,
+      },
+      snapshot: {
+        id: snapshotId,
+        fetchedAt: input.fetchedAt,
+        contentHash: hash,
+        rawPayload: raw,
+        sourceUrl: normalized.officialUrl,
+      },
+      products: projection.affectedProducts,
+      initialEvent: {
+        triggerRuleId: 'new_case',
+        payloadSummary: projection.title,
+        suppressed: isBackfill ? 'backfill' : null,
+        createdAt: nowIso,
+      },
     });
-    const record = await store.insertSourceRecord({
+    if (founded.status === 'record_exists') return false;
+    summary.newCases += 1;
+    if (completeness === 'degraded') summary.degradedFounded += 1;
+    if (founded.initialInserted) {
+      if (isBackfill) summary.notifications.suppressed += 1;
+      else summary.notifications.initial += 1;
+    }
+    return true;
+  }
+
+  // Record joins an existing case: record (pending) → archive → one atomic
+  // case transition. A crash between these steps leaves the version pending
+  // and the next run converges through the existing-record path.
+  let record: SourceRecordRow;
+  try {
+    record = await store.insertSourceRecord({
       sourceSystem,
       nativeId: normalized.nativeId,
-      recallCaseId: recallCase.id,
-      linkMethod: 'self',
+      recallCaseId: targetCase.id,
+      linkMethod,
       normalized,
       sourceUrl: normalized.officialUrl,
       firstSeenAt: nowIso,
       lastSeenAt: nowIso,
+      applyState: 'pending',
     });
-    const snapshotId = await store.insertSnapshot({
-      sourceRecordId: record.id,
-      fetchedAt: input.fetchedAt,
-      contentHash: hash,
-      rawPayload: raw,
-      sourceUrl: normalized.officialUrl,
-    });
-    timeline[0].causedBySnapshotIds.push(snapshotId);
-    await store.updateCase(recallCase.id, {
-      projection,
-      timeline,
-      lastChangedAt: nowIso,
-    });
-    await store.replaceProducts(recallCase.id, projection.affectedProducts);
-    summary.newCases += 1;
-
-    // Exactly-one-initial invariant: dedupKey = the case id. Old records
-    // discovered late (first live run imports 12 years of history) are
-    // ledgered but suppressed as backfill — auditable, never delivered.
-    const ageMs = now().getTime() - new Date(normalized.publishedAt).getTime();
-    const isBackfill = ageMs > backfillHorizonDays * 24 * 60 * 60 * 1000;
-    const inserted = await store.insertNotificationIfAbsent({
-      recallCaseId: recallCase.id,
-      kind: 'initial',
-      triggerRuleId: 'new_case',
-      dedupKey: `initial:${recallCase.id}`,
-      materialChangeRef: null,
-      payloadSummary: projection.title,
-      suppressed: isBackfill ? 'backfill' : null,
-      sourceSnapshotIds: [snapshotId],
-      createdAt: nowIso,
-    });
-    if (inserted) {
-      if (isBackfill) summary.notifications.suppressed += 1;
-      else summary.notifications.initial += 1;
-    }
-    return;
+  } catch (error) {
+    // A concurrent worker inserted the identity first: re-enter the
+    // existing path (pass 2) rather than failing the item.
+    const raced = await store.getSourceRecordGateByNativeId(sourceSystem, normalized.nativeId);
+    if (raced) return false;
+    throw error;
   }
-
-  // Record joins an existing case.
-  const record = await store.insertSourceRecord({
-    sourceSystem,
-    nativeId: normalized.nativeId,
-    recallCaseId: targetCase.id,
-    linkMethod,
-    normalized,
-    sourceUrl: normalized.officialUrl,
-    firstSeenAt: nowIso,
-    lastSeenAt: nowIso,
-  });
-  const snapshotId = await store.insertSnapshot({
+  const archived = await store.archiveSnapshot({
     sourceRecordId: record.id,
     fetchedAt: input.fetchedAt,
     contentHash: hash,
     rawPayload: raw,
     sourceUrl: normalized.officialUrl,
   });
-  await reprojectCase(
+  if (archived.status === 'stale') {
+    summary.staleSkipped += 1;
+    return true;
+  }
+  const marker: AppliedMarker = {
+    sourceRecordId: record.id,
+    contentHash: hash,
+    snapshotSeq: archived.snapshotSeq,
+    state: completeness === 'degraded' ? 'applied_degraded' : 'applied',
+    appliedAt: nowIso,
+  };
+  const outcome = await applyCaseChange(
     store,
     targetCase.id,
-    [snapshotId],
+    [archived.snapshotId],
+    [marker],
     summary,
     now,
     backfillHorizonDays,
     normalized,
   );
+  if (outcome === 'conflict_exhausted') summary.conflictsExhausted += 1;
+  return true;
 }
 
 /**
  * Re-project a case from all its linked records, detect consumer-relevant
- * changes (Layer 2), append timeline entries, and write eligible notification
- * events. A changed payload hash alone never produces a notification.
+ * changes (Layer 2), and commit ONE atomic transition: projection, timeline,
+ * affected products, eligible notification events, and the applied markers
+ * of every source version this transition carries. A changed payload hash
+ * alone never produces a notification.
+ *
+ * The case CAS (`expectedLastChangedAt`) serializes concurrent writers: a
+ * conflict re-reads the case and every contributing record, recomputes
+ * deterministically (projectCase is order-independent), and retries — the
+ * loser's retry includes the winner's facts. After the retry budget the
+ * version stays pending, visibly, for the next run; it is never declared
+ * applied.
  *
  * `heroImageUrl` is exactly what `projectCase` derives from the records —
  * an official agency photograph or nothing. FSIS label renders in
  * product_visuals are detail-screen evidence and are deliberately NOT
- * promoted to the feed hero here (C9 frozen policy: an ordinary
- * regulatory label sheet is not card imagery; professional-quality hero
- * sourcing is C9.1).
+ * promoted to the feed hero here (C9 frozen policy).
  */
-async function reprojectCase(
+async function applyCaseChange(
   store: RecallStore,
   recallCaseId: string,
   causedBySnapshotIds: string[],
+  markers: AppliedMarker[],
   summary: IngestSummary,
   now: () => Date,
   backfillHorizonDays: number,
-  joinedRecord?: NormalizedSourceRecord,
-): Promise<void> {
-  const nowIso = now().toISOString();
-  const recallCase = await store.getCase(recallCaseId);
-  if (!recallCase) throw new Error(`case ${recallCaseId} missing during re-projection`);
-  const records = await store.getSourceRecordsForCase(recallCaseId);
-  const next = projectCase(records.map((r) => r.normalized));
+  applyingRecord: NormalizedSourceRecord,
+): Promise<'applied' | 'completed' | 'conflict_exhausted'> {
+  for (let attempt = 0; attempt < CASE_CAS_ATTEMPTS; attempt++) {
+    const nowIso = now().toISOString();
+    const recallCase = await store.getCase(recallCaseId);
+    if (!recallCase) throw new Error(`case ${recallCaseId} missing during re-projection`);
+    const records = await store.getSourceRecordsForCase(recallCaseId);
+    const next = projectCase(records.map((r) => r.normalized));
 
-  if (canonicalJson(next) === canonicalJson(recallCase.projection)) {
-    return; // snapshot recorded; projection identical — nothing consumer-visible.
-  }
+    const projectionChanged = canonicalJson(next) !== canonicalJson(recallCase.projection);
+    const { material, nonMaterial } = projectionChanged
+      ? detectChanges(recallCase.projection, next)
+      : { material: [] as MaterialChange[], nonMaterial: [] as string[] };
 
-  const { material, nonMaterial } = detectChanges(recallCase.projection, next);
-
-  // An FSIS expansion is published as a new record; the expanded product list
-  // is often only in an attached PDF (verified: 005-2026-EXP), so the
-  // projection diff alone can miss it. The expansion notice itself is material
-  // (architecture Part 9) unless the diff already reported the expansion.
-  if (
-    joinedRecord?.expansionOfNativeId &&
-    !material.some((m) => m.ruleId === 'expansion_products' || m.ruleId === 'expansion_geography')
-  ) {
-    material.push({
-      ruleId: 'expansion_products',
-      summary: `The agency expanded this recall (notice ${joinedRecord.nativeId}).`,
-      fingerprint: fingerprint(`expansion-record:${joinedRecord.nativeId}`),
-    });
-  }
-
-  const timeline = [...recallCase.timeline];
-  const activityDate = next.lastPublicActivityAt;
-
-  for (const change of material) {
-    timeline.push({
-      occurredAt: activityDate,
-      kind: RULE_TO_TIMELINE_KIND[change.ruleId],
-      summary: change.summary,
-      causedBySnapshotIds,
-      material: true,
-      ruleId: change.ruleId,
-    });
-  }
-  for (const note of nonMaterial) {
-    timeline.push({
-      occurredAt: activityDate,
-      kind: note.startsWith('Recall closed') ? 'closed' : 'source_updated',
-      summary: note,
-      causedBySnapshotIds,
-      material: false,
-    });
-  }
-  if (material.length === 0 && nonMaterial.length === 0) {
-    timeline.push({
-      occurredAt: activityDate,
-      kind: 'source_updated',
-      summary: 'Source record updated (no consumer-relevant change).',
-      causedBySnapshotIds,
-      material: false,
-    });
-  }
-
-  await store.updateCase(recallCaseId, {
-    projection: next,
-    timeline,
-    lastChangedAt: nowIso,
-  });
-  await store.replaceProducts(recallCaseId, next.affectedProducts);
-  summary.changedCases += 1;
-
-  // Notification eligibility (architecture Part 10): one push per distinct
-  // material change, coalesced to one per case per 24h — except retractions,
-  // which always fire. A change whose source-published activity is older than
-  // the backfill horizon (e.g. a years-old expansion seen on the first import)
-  // is ledgered but suppressed: auditable, never delivered as news.
-  const activityAgeMs = now().getTime() - new Date(next.lastPublicActivityAt).getTime();
-  const isBackfill = activityAgeMs > backfillHorizonDays * 24 * 60 * 60 * 1000;
-  for (const change of material) {
-    const dedupKey = `mu:${recallCaseId}:${change.ruleId}:${change.fingerprint}`;
-    const since = new Date(now().getTime() - 24 * 60 * 60 * 1000).toISOString();
-    const coalesce =
-      !isBackfill &&
-      change.ruleId !== 'retraction' &&
-      (await store.countRecentMaterialUpdates(recallCaseId, since)) > 0;
-    const inserted = await store.insertNotificationIfAbsent({
-      recallCaseId,
-      kind: 'material_update',
-      triggerRuleId: change.ruleId,
-      dedupKey,
-      materialChangeRef: change.fingerprint,
-      payloadSummary: change.summary,
-      suppressed: isBackfill ? 'backfill' : coalesce ? 'coalesced' : null,
-      sourceSnapshotIds: causedBySnapshotIds,
-      createdAt: nowIso,
-    });
-    if (inserted) {
-      if (isBackfill || coalesce) summary.notifications.suppressed += 1;
-      else summary.notifications.materialUpdate += 1;
+    // An FSIS expansion is published as a new record; the expanded product
+    // list is often only in an attached PDF (verified: 005-2026-EXP), so the
+    // projection diff alone can miss it. The expansion notice itself is
+    // material (architecture Part 9) unless the diff already reported the
+    // expansion. Derived from the applying record + the stored projection —
+    // "this apply is the one that introduces the record to the case" — so an
+    // interrupted join's RETRY reproduces it (same retry-stable fingerprint,
+    // deduped by the ledger), while a later in-place edit of the expansion
+    // record does not repeat it.
+    const introducesRecord = !(recallCase.projection.sourceIdentifiers ?? []).some(
+      (identifier) => identifier.id === applyingRecord.nativeId,
+    );
+    if (
+      applyingRecord.expansionOfNativeId &&
+      introducesRecord &&
+      !material.some((m) => m.ruleId === 'expansion_products' || m.ruleId === 'expansion_geography')
+    ) {
+      material.push({
+        ruleId: 'expansion_products',
+        summary: `The agency expanded this recall (notice ${applyingRecord.nativeId}).`,
+        fingerprint: fingerprint(`expansion-record:${applyingRecord.nativeId}`),
+      });
     }
+
+    if (!projectionChanged && material.length === 0) {
+      // Everything durable already matches the recomputed projection: an
+      // interrupted prior attempt completed the transition (under this
+      // contract, projection-current ⇒ products- and events-current, because
+      // they only ever commit together). Finish the marker alone.
+      for (const marker of markers) await store.markSourceRecordApplied(marker);
+      summary.pendingCompleted += 1;
+      return 'completed';
+    }
+
+    const timeline = [...recallCase.timeline];
+    const activityDate = next.lastPublicActivityAt;
+    for (const change of material) {
+      timeline.push({
+        occurredAt: activityDate,
+        kind: RULE_TO_TIMELINE_KIND[change.ruleId],
+        summary: change.summary,
+        causedBySnapshotIds,
+        material: true,
+        ruleId: change.ruleId,
+      });
+    }
+    for (const note of nonMaterial) {
+      timeline.push({
+        occurredAt: activityDate,
+        kind: note.startsWith('Recall closed') ? 'closed' : 'source_updated',
+        summary: note,
+        causedBySnapshotIds,
+        material: false,
+      });
+    }
+    if (material.length === 0 && nonMaterial.length === 0) {
+      timeline.push({
+        occurredAt: activityDate,
+        kind: 'source_updated',
+        summary: 'Source record updated (no consumer-relevant change).',
+        causedBySnapshotIds,
+        material: false,
+      });
+    }
+
+    // Notification eligibility (architecture Part 10): one push per distinct
+    // material change, coalesced to one per case per 24h — except
+    // retractions, which always fire. A change whose source-published
+    // activity is older than the backfill horizon (e.g. a years-old
+    // expansion seen on the first import) is ledgered but suppressed:
+    // auditable, never delivered as news. The recent count is read once and
+    // advanced locally per deliverable event, reproducing the sequential
+    // pre-O3 semantics inside one batch.
+    const activityAgeMs = now().getTime() - new Date(next.lastPublicActivityAt).getTime();
+    const isBackfill = activityAgeMs > backfillHorizonDays * 24 * 60 * 60 * 1000;
+    const since = new Date(now().getTime() - 24 * 60 * 60 * 1000).toISOString();
+    let recentDeliverable =
+      material.length > 0 ? await store.countRecentMaterialUpdates(recallCaseId, since) : 0;
+    const events: NotificationEventInput[] = [];
+    for (const change of material) {
+      const coalesce = !isBackfill && change.ruleId !== 'retraction' && recentDeliverable > 0;
+      const suppressed = isBackfill
+        ? ('backfill' as const)
+        : coalesce
+          ? ('coalesced' as const)
+          : null;
+      if (suppressed === null) recentDeliverable += 1;
+      events.push({
+        recallCaseId,
+        kind: 'material_update',
+        triggerRuleId: change.ruleId,
+        dedupKey: `mu:${recallCaseId}:${change.ruleId}:${change.fingerprint}`,
+        materialChangeRef: change.fingerprint,
+        payloadSummary: change.summary,
+        suppressed,
+        sourceSnapshotIds: causedBySnapshotIds,
+        createdAt: nowIso,
+      });
+    }
+
+    const result = await store.applyCaseTransition({
+      recallCaseId,
+      expectedLastChangedAt: recallCase.lastChangedAt,
+      projection: next,
+      timeline,
+      lastChangedAt: nowIso,
+      products: next.affectedProducts,
+      events,
+      markers,
+    });
+    if (result.status === 'applied') {
+      summary.changedCases += 1;
+      for (const key of result.insertedDedupKeys) {
+        const event = events.find((e) => e.dedupKey === key);
+        if (!event) continue;
+        if (event.suppressed) summary.notifications.suppressed += 1;
+        else summary.notifications.materialUpdate += 1;
+      }
+      return 'applied';
+    }
+    // 'conflict': a concurrent writer moved the case — loop, re-read,
+    // recompute. The stale computation above is discarded whole.
   }
+  return 'conflict_exhausted';
 }

@@ -30,7 +30,11 @@ export const FDA_JOB: JobSpec = {
 
 const STALE_SOURCE_ALARM_DAYS = 14;
 const DETAIL_DELAY_MS = 200;
-/** More than this fraction of records failing to parse means the source shape drifted. */
+/**
+ * More than this fraction of records failing (parse quarantine or isolated
+ * item failure) means the source shape or the store broke — the run fails
+ * loudly instead of posing as a routine partial.
+ */
 const QUARANTINE_SPIKE_RATIO = 0.2;
 
 export interface FdaJobOptions {
@@ -81,6 +85,12 @@ export async function runFdaJob(ctx: JobContext, options: FdaJobOptions = {}): P
     // per-record hash gate would skip every item anyway — spare the ~3,000
     // per-record round trips. Gate only when BOTH channels were fetched, so a
     // new RSS-only announcement can never be delayed by an unchanged listing.
+    //
+    // The gate compares against `completedFeedHash`, recorded ONLY by a run
+    // that left nothing deferred, degraded, pending, or failed (O3-B1 —
+    // mirroring the enforcement job's completedExportDate): an incomplete
+    // run must not stop the next tick's per-record pass from retrying the
+    // unfinished work even when the feed bytes are identical.
     const feedHash = rss
       ? orderInsensitiveFeedHash([
           ...listing.items,
@@ -88,7 +98,7 @@ export async function runFdaJob(ctx: JobContext, options: FdaJobOptions = {}): P
         ])
       : null;
     if (!options.force && feedHash) {
-      const previousHash = await latestJobMetric(ctx.store, FDA_JOB.jobName, 'feedHash');
+      const previousHash = await latestJobMetric(ctx.store, FDA_JOB.jobName, 'completedFeedHash');
       if (previousHash === feedHash) {
         console.log('FDA listing and RSS content unchanged since the last run — nothing to do.');
         return {
@@ -97,6 +107,7 @@ export async function runFdaJob(ctx: JobContext, options: FdaJobOptions = {}): P
           metrics: {
             skipped: 'source_unchanged',
             feedHash,
+            completedFeedHash: feedHash,
             itemsSeen: listing.items.length,
             rssItems: rss!.items.length,
           },
@@ -117,13 +128,25 @@ export async function runFdaJob(ctx: JobContext, options: FdaJobOptions = {}): P
     printFdaReport(result, options.dryRun ?? false);
 
     const { summary, crossCheck } = result;
-    const parsedPlusQuarantined = summary.itemsParsed + summary.quarantined.length;
-    const quarantineRatio =
-      parsedPlusQuarantined > 0 ? summary.quarantined.length / parsedPlusQuarantined : 0;
+    const failedItems = summary.quarantined.length + summary.itemFailures.length;
+    const attempted = summary.itemsParsed + summary.quarantined.length;
+    const failureRatio = attempted > 0 ? failedItems / attempted : 0;
+    // Anything the run left unfinished: deferred whole items, degraded
+    // foundings still owed their detail page, stale-worker skips, exhausted
+    // case-CAS retries, isolated item failures, and detail-fetch failures.
+    // Quarantines are NOT in this set: a parse failure is deterministic on
+    // identical bytes, so skipping it via the feed gate loses nothing.
+    const incomplete =
+      summary.deferred +
+      summary.degradedFounded +
+      summary.staleSkipped +
+      summary.conflictsExhausted +
+      summary.itemFailures.length +
+      crossCheck.detailFetchFailures.length;
     const outcome =
-      quarantineRatio > QUARANTINE_SPIKE_RATIO
+      failureRatio > QUARANTINE_SPIKE_RATIO
         ? 'failed'
-        : summary.quarantined.length > 0 || crossCheck.detailFetchFailures.length > 0
+        : summary.quarantined.length > 0 || incomplete > 0
           ? 'partial'
           : 'succeeded';
 
@@ -132,10 +155,14 @@ export async function runFdaJob(ctx: JobContext, options: FdaJobOptions = {}): P
       outcome,
       error:
         outcome === 'failed'
-          ? `parse failure spike: ${summary.quarantined.length}/${parsedPlusQuarantined} records quarantined — source shape may have drifted`
+          ? `item failure spike: ${failedItems}/${attempted} records failed ` +
+            `(${summary.quarantined.length} quarantined, ${summary.itemFailures.length} errored` +
+            `${summary.itemFailures[0] ? `; first error: ${summary.itemFailures[0].reason}` : ''})`
           : undefined,
       metrics: {
         feedHash,
+        // The gate token: only a COMPLETE run may arm the whole-feed skip.
+        completedFeedHash: incomplete === 0 ? feedHash : null,
         itemsSeen: listing.items.length,
         foodItems: crossCheck.foodItems,
         parsed: summary.itemsParsed,
@@ -143,6 +170,12 @@ export async function runFdaJob(ctx: JobContext, options: FdaJobOptions = {}): P
         newCases: summary.newCases,
         changedCases: summary.changedCases,
         quarantined: summary.quarantined.length,
+        deferred: summary.deferred,
+        degradedFounded: summary.degradedFounded,
+        staleSkipped: summary.staleSkipped,
+        conflictsExhausted: summary.conflictsExhausted,
+        pendingCompleted: summary.pendingCompleted,
+        itemFailures: summary.itemFailures.length,
         notifications: summary.notifications,
         newestPublishedAt: summary.newestPublishedAt,
         detailPagesFetched: crossCheck.detailPagesFetched,
@@ -184,10 +217,26 @@ export function printFdaReport(result: FdaIngestResult, dryRun: boolean): void {
   if (crossCheck.detailFetchFailures.length > 0) {
     console.log(
       `  DETAIL FETCH FAILURES: ${crossCheck.detailFetchFailures.length} ` +
-        `(records fell back to listing-only data):`,
+        `(existing records deferred whole; new records founded listing-only as applied_degraded):`,
     );
     for (const f of crossCheck.detailFetchFailures) {
       console.log(`    - ${f.nativeId}: ${f.reason}`);
+    }
+  }
+  if (crossCheck.deferredIds.length > 0) {
+    console.log(
+      `  deferred (retry next run): ${crossCheck.deferredIds.length} — ${crossCheck.deferredIds.join(', ')}`,
+    );
+  }
+  if (crossCheck.degradedIds.length > 0) {
+    console.log(
+      `  degraded foundings (detail retried each run): ${crossCheck.degradedIds.length} — ${crossCheck.degradedIds.join(', ')}`,
+    );
+  }
+  if (summary.itemFailures.length > 0) {
+    console.log(`  ITEM FAILURES: ${summary.itemFailures.length} (isolated; run downgraded):`);
+    for (const f of summary.itemFailures) {
+      console.log(`    - ${JSON.stringify(f.nativeId)}: ${f.reason}`);
     }
   }
 

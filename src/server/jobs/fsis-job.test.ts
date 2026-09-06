@@ -87,7 +87,7 @@ test('a parse-failure spike fails the run; isolated quarantine is partial', asyn
     fetchRecords: feed([RECALL, garbage('X1'), garbage('X2'), garbage('X3')]),
   });
   assert.equal(spiked.outcome, 'failed');
-  assert.match(spiked.error!, /parse failure spike/);
+  assert.match(spiked.error!, /item failure spike/);
   // The good record still ingested (fail-safe: report, never discard).
   assert.equal(store.cases.size, 1);
 
