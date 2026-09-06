@@ -43,6 +43,9 @@
  *    captured separately as the CAS token, never compared as content.
  */
 
+import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+
 import { projectCase } from '../domain/projection';
 import type { AffectedProduct, SourceSystem } from '../domain/recall-types';
 import type { NormalizedSourceRecord } from '../domain/source-record';
@@ -302,89 +305,339 @@ interface CaseAudit {
   initialEventExists: boolean;
 }
 
+// ── O3-B3A: bounded reads, retries, and the concurrent-drift fence ──────────
+
+/** Retry-exhausted transient read failure: fail-closed, no plan. */
+export class AuditReadExhaustedError extends Error {
+  constructor(
+    public readonly readName: string,
+    cause: unknown,
+  ) {
+    super(
+      `audit read '${readName}' still failing after ${AUDIT_RETRY_ATTEMPTS} attempts: ${clipMessage(cause)}`,
+    );
+  }
+}
+
+/** Material production state changed while the census was being assembled. */
+export class ConcurrentAuditDriftError extends Error {
+  constructor(
+    public readonly driftedRecordIds: string[],
+    public readonly driftedCaseIds: string[],
+    detail: string,
+  ) {
+    super(
+      `material production state changed during the audit (${detail}) — rerun after the writer finishes. ` +
+        `Affected records: ${driftedRecordIds.slice(0, 10).join(', ') || '(membership)'}` +
+        `${driftedRecordIds.length > 10 ? ` +${driftedRecordIds.length - 10} more` : ''}; ` +
+        `cases: ${driftedCaseIds.slice(0, 10).join(', ') || '(none)'}` +
+        `${driftedCaseIds.length > 10 ? ` +${driftedCaseIds.length - 10} more` : ''}`,
+    );
+  }
+}
+
+/**
+ * Bounded retry policy for the audit's idempotent reads ONLY (never wraps a
+ * mutation — applySeedPlan calls the store directly, at most once per write).
+ *
+ * 4 total attempts with 500ms·2ⁿ backoff (±25% jitter, 5s cap): the failed
+ * production census died to ONE transient `fetch failed` among ~13k
+ * sequential requests; with ~100 bounded reads and 4 attempts each, a single
+ * blip retries in under a second while a sustained outage still fails the
+ * whole audit inside a few minutes. 429-class responses wait at least 2s —
+ * the Retry-After substitute, since supabase-js does not expose response
+ * headers on errors. Everything not provably transient (permission, schema,
+ * validation, ordinary 4xx) is thrown immediately, unretried.
+ *
+ * LAYERING (deliberate, verified against the installed client): postgrest-js
+ * itself retries thrown transport errors and 503/520 responses on
+ * GET/HEAD/OPTIONS up to 3 times (1s/2s/4s, honoring Retry-After) before an
+ * error ever reaches the store. One store-call "attempt" here therefore
+ * already spans up to ~7s of inner retries; this outer policy engages only
+ * when a whole inner cycle exhausts — extending tolerance from single-blip
+ * (which killed the 2026-09-06 census under the inner layer alone) to
+ * sustained ~30-60s outages, still bounded at 16 transport attempts per
+ * read. Mutations are excluded at BOTH layers: POST is not an inner
+ * retryable method, and no outer wrapper ever touches a mutating call.
+ */
+export const AUDIT_RETRY_ATTEMPTS = 4;
+const RETRY_BASE_DELAY_MS = 500;
+const RETRY_MAX_DELAY_MS = 5000;
+const RATE_LIMIT_MIN_DELAY_MS = 2000;
+
+const TRANSIENT_READ_ERROR =
+  /fetch failed|network|socket hang up|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|EAI_AGAIN|UND_ERR|timed? ?out|\b(408|429|502|503|504)\b/i;
+const RATE_LIMITED = /\b429\b|rate.?limit/i;
+
+export function isTransientReadError(error: unknown): boolean {
+  return TRANSIENT_READ_ERROR.test(error instanceof Error ? error.message : String(error));
+}
+
+/** Sanitized diagnostic: bounded length, never payload contents or key-bearing URLs. */
+function clipMessage(error: unknown): string {
+  const message = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ');
+  return message.length > 200 ? `${message.slice(0, 200)}…` : message;
+}
+
+interface RetryContext {
+  sleep: (ms: number) => Promise<void>;
+  jitter: () => number;
+  warn: (line: string) => void;
+}
+
+async function retryRead<T>(name: string, fn: () => Promise<T>, ctx: RetryContext): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!isTransientReadError(error)) throw error;
+      if (attempt >= AUDIT_RETRY_ATTEMPTS) throw new AuditReadExhaustedError(name, error);
+      let delay = Math.min(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), RETRY_MAX_DELAY_MS);
+      if (RATE_LIMITED.test(error instanceof Error ? error.message : '')) {
+        delay = Math.max(delay, RATE_LIMIT_MIN_DELAY_MS);
+      }
+      const jittered = Math.round(delay * (0.75 + 0.5 * ctx.jitter()));
+      ctx.warn(
+        `  audit read retry: ${name} attempt ${attempt + 1}/${AUDIT_RETRY_ATTEMPTS} in ${jittered}ms (${clipMessage(error)})`,
+      );
+      await ctx.sleep(jittered);
+    }
+  }
+}
+
+/** Read every page of one bounded read, retrying exactly the failed page. */
+async function readAllPages<T>(
+  name: string,
+  pageSize: number,
+  fetchPage: (from: number, pageSize: number) => Promise<T[]>,
+  ctx: RetryContext,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const page = await retryRead(`${name}[${from}]`, () => fetchPage(from, pageSize), ctx);
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
+/** Page/chunk sizes — injectable so tests cross every boundary cheaply. */
+export interface AuditPageSizes {
+  records: number;
+  health: number;
+  cases: number;
+  caseTokens: number;
+  products: number;
+  initialEvents: number;
+  payloadChunk: number;
+}
+export const DEFAULT_AUDIT_PAGE_SIZES: AuditPageSizes = {
+  records: 500,
+  health: 1000,
+  cases: 500,
+  caseTokens: 1000,
+  products: 1000,
+  initialEvents: 1000,
+  payloadChunk: 50,
+};
+
 export interface AuditOptions {
   now?: () => Date;
   gitCommit: string;
+  /** Injectable for deterministic retry tests; defaults to real timers/random. */
+  sleep?: (ms: number) => Promise<void>;
+  jitter?: () => number;
+  warn?: (line: string) => void;
+  pageSizes?: Partial<AuditPageSizes>;
 }
 
-/** The complete dry-run census. Performs ZERO writes of any kind. */
+/** The material-evidence fingerprint the drift fence compares (excluded: last_seen_at, fetched_at). */
+function fenceRecordKey(row: {
+  recallCaseId: string;
+  applyState: unknown;
+  appliedSnapshotSeq: unknown;
+  appliedContentHash: unknown;
+  latestSeq: unknown;
+  latestHash: unknown;
+}): string {
+  return canonicalJson([
+    row.recallCaseId,
+    row.applyState ?? null,
+    row.appliedSnapshotSeq ?? null,
+    row.appliedContentHash ?? null,
+    row.latestSeq ?? null,
+    row.latestHash ?? null,
+  ]);
+}
+
+/**
+ * The complete dry-run census. Performs ZERO writes of any kind.
+ *
+ * Bounded read model (O3-B3A): the request count is proportional to pages
+ * and chunks, never to records × attributes —
+ *   ceil(N/health) [view: marker + latest-snapshot identity, also the fence
+ *   bracket start] + Σ ceil(Nsys/records) [full rows] + ceil(L/payloadChunk)
+ *   [latest payloads by globally-unique seq] + ceil(C/cases) [projection +
+ *   CAS token + generated columns] + ceil(P/products) + ceil(E/initialEvents)
+ *   + fence end (ceil(N/health) + ceil(C/caseTokens)).
+ * For production (N=3,523, C=1,920, P=4,810, E≈C): ≈ 4+8+71+4+5+2+4+2 ≈ 100
+ * requests, vs ~12,800 in the N+1 shape that failed on 2026-09-06.
+ *
+ * Consistency fence: the view + case CAS tokens are captured before the
+ * census and re-read after it. Under the O3 write contract every material
+ * change moves at least one fenced fact (membership, latest snapshot
+ * seq/hash, marker state, or case last_changed_at — products/events/
+ * projection only ever commit with a last_changed_at move). If any fenced
+ * fact changed, the audit throws ConcurrentAuditDriftError and no plan
+ * exists; ordinary last_seen_at movement is not read and cannot trip it.
+ */
 export async function auditAppliedState(
   store: RecallStore,
   options: AuditOptions,
 ): Promise<ReconcilePlan> {
   const now = options.now ?? (() => new Date());
+  const ctx: RetryContext = {
+    sleep: options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
+    jitter: options.jitter ?? Math.random,
+    warn: options.warn ?? ((line) => console.warn(line)),
+  };
+  const ps: AuditPageSizes = { ...DEFAULT_AUDIT_PAGE_SIZES, ...options.pageSizes };
 
-  // ── Population completeness: EVERY record, including unknown systems ──────
-  const identities = await store.listSourceRecordIdentities();
-  const unsupported = identities.filter(
-    (identity) => !SUPPORTED_SYSTEMS.includes(identity.sourceSystem as SourceSystem),
+  // ── Fence bracket START + population completeness (one read, two uses) ────
+  const healthRows = await readAllPages(
+    'health',
+    ps.health,
+    (from, size) => store.listAppliedStateHealthPage(from, size),
+    ctx,
+  );
+  const healthById = new Map(healthRows.map((row) => [row.id, row]));
+  const unsupported = healthRows.filter(
+    (row) => !SUPPORTED_SYSTEMS.includes(row.sourceSystem as SourceSystem),
   );
 
+  // ── Full record rows per supported system (paginated) ─────────────────────
   const audits = new Map<string, RecordAudit>();
   let snapshotsExamined = 0;
-
   for (const system of SUPPORTED_SYSTEMS) {
-    for (const record of await store.listSourceRecords(system)) {
-      const audit: RecordAudit = {
+    const records = await readAllPages(
+      `records:${system}`,
+      ps.records,
+      (from, size) => store.listSourceRecordsPage(system, from, size),
+      ctx,
+    );
+    for (const record of records) {
+      audits.set(record.id, {
         record,
         snapshotSeq: null,
         snapshotHash: null,
         findings: [],
         normalizedFingerprint: contentHash(record.normalized),
-      };
-      audits.set(record.id, audit);
+      });
+    }
+  }
 
-      const meta = await store.getLatestSnapshotMeta(record.id);
-      if (!meta) {
+  // ── Latest payloads in bounded chunks (seq is globally unique) ────────────
+  const latestSeqByRecord = new Map<string, { seq: number; hash: string }>();
+  for (const audit of audits.values()) {
+    const health = healthById.get(audit.record.id);
+    if (health?.latestSeq != null && health.latestHash != null) {
+      latestSeqByRecord.set(audit.record.id, { seq: health.latestSeq, hash: health.latestHash });
+    }
+  }
+  const allSeqs = [...latestSeqByRecord.values()].map((v) => v.seq).sort((a, b) => a - b);
+  const payloadBySeq = new Map<number, unknown>();
+  for (let i = 0; i < allSeqs.length; i += ps.payloadChunk) {
+    const chunk = allSeqs.slice(i, i + ps.payloadChunk);
+    const rows = await retryRead(
+      `snapshots[${i / ps.payloadChunk}]`,
+      () => store.listSnapshotsBySeq(chunk),
+      ctx,
+    );
+    for (const row of rows) payloadBySeq.set(row.seq, row.rawPayload);
+  }
+
+  // ── Per-record audit from the bulk data ───────────────────────────────────
+  for (const audit of audits.values()) {
+    const record = audit.record;
+    const latest = latestSeqByRecord.get(record.id);
+    if (!latest) {
+      audit.findings.push({
+        classification: 'missing_snapshot',
+        reason: 'no archived snapshot exists for this record',
+      });
+      continue;
+    }
+    snapshotsExamined += 1;
+    audit.snapshotSeq = latest.seq;
+    audit.snapshotHash = latest.hash;
+    if (!payloadBySeq.has(latest.seq)) {
+      audit.findings.push({
+        classification: 'concurrent_or_changed_during_audit',
+        reason: `latest snapshot seq ${latest.seq} was reported by the health view but absent from the payload read`,
+      });
+      continue;
+    }
+    const derived = rederiveNormalized(record, payloadBySeq.get(latest.seq));
+    if ('error' in derived) {
+      audit.findings.push({
+        classification: 'snapshot_parse_failure',
+        reason: `archived payload does not re-derive: ${derived.error}`,
+      });
+    } else if (canonicalJson(derived.normalized) !== canonicalJson(record.normalized)) {
+      audit.findings.push({
+        classification: 'normalized_drift',
+        reason: 'stored normalized state disagrees with re-derivation from the archived snapshot',
+        diffs: shallowDiff(record.normalized, derived.normalized, 'normalized.'),
+      });
+    }
+    // O3-era marker sanity (§12): an applied/degraded marker must point
+    // at the LATEST snapshot with its hash, with no required field null.
+    const state = record.applyState ?? null;
+    if (state === 'applied' || state === 'applied_degraded') {
+      if (record.appliedSnapshotSeq == null || record.appliedContentHash == null) {
         audit.findings.push({
-          classification: 'missing_snapshot',
-          reason: 'no archived snapshot exists for this record',
+          classification: 'applied_marker_inconsistent',
+          reason: `apply_state=${state} with null marker fields`,
         });
-      } else {
-        snapshotsExamined += 1;
-        audit.snapshotSeq = meta.seq;
-        audit.snapshotHash = meta.contentHash;
-        const payload = await store.getLatestSnapshotPayload(record.id);
-        const derived = rederiveNormalized(record, payload);
-        if ('error' in derived) {
-          audit.findings.push({
-            classification: 'snapshot_parse_failure',
-            reason: `archived payload does not re-derive: ${derived.error}`,
-          });
-        } else if (canonicalJson(derived.normalized) !== canonicalJson(record.normalized)) {
-          audit.findings.push({
-            classification: 'normalized_drift',
-            reason:
-              'stored normalized state disagrees with re-derivation from the archived snapshot',
-            diffs: shallowDiff(record.normalized, derived.normalized, 'normalized.'),
-          });
-        }
-        // O3-era marker sanity (§12): an applied/degraded marker must point
-        // at the LATEST snapshot with its hash, with no required field null.
-        const state = record.applyState ?? null;
-        if (state === 'applied' || state === 'applied_degraded') {
-          if (record.appliedSnapshotSeq == null || record.appliedContentHash == null) {
-            audit.findings.push({
-              classification: 'applied_marker_inconsistent',
-              reason: `apply_state=${state} with null marker fields`,
-            });
-          } else if (
-            record.appliedSnapshotSeq !== meta.seq ||
-            record.appliedContentHash !== meta.contentHash
-          ) {
-            audit.findings.push({
-              classification: 'applied_marker_inconsistent',
-              reason: `marker (seq ${record.appliedSnapshotSeq}, hash ${clip(record.appliedContentHash)}) does not match the latest snapshot (seq ${meta.seq})`,
-            });
-          }
-        }
+      } else if (
+        record.appliedSnapshotSeq !== latest.seq ||
+        record.appliedContentHash !== latest.hash
+      ) {
+        audit.findings.push({
+          classification: 'applied_marker_inconsistent',
+          reason: `marker (seq ${record.appliedSnapshotSeq}, hash ${clip(record.appliedContentHash)}) does not match the latest snapshot (seq ${latest.seq})`,
+        });
       }
     }
   }
 
-  // ── Case pass: group contributors, recompute, verify read model ────────────
-  const allCases = await store.listCases();
-  const caseById = new Map(allCases.map((row) => [row.id, row]));
+  // ── Case pass from bulk reads: no per-case network calls ──────────────────
+  const caseRows = await readAllPages(
+    'cases',
+    ps.cases,
+    (from, size) => store.listCaseAuditPage(from, size),
+    ctx,
+  );
+  const caseById = new Map(caseRows.map((row) => [row.id, row]));
+  const productsByCase = new Map<string, AffectedProduct[]>();
+  for (const entry of await readAllPages(
+    'products',
+    ps.products,
+    (from, size) => store.listCaseProductsPage(from, size),
+    ctx,
+  )) {
+    const list = productsByCase.get(entry.recallCaseId) ?? [];
+    list.push(entry.product);
+    productsByCase.set(entry.recallCaseId, list);
+  }
+  const initialEventCaseIds = new Set(
+    await readAllPages(
+      'initialEvents',
+      ps.initialEvents,
+      (from, size) => store.listInitialEventCasePage(from, size),
+      ctx,
+    ),
+  );
+
   const contributorsByCase = new Map<string, RecordAudit[]>();
   for (const audit of audits.values()) {
     const list = contributorsByCase.get(audit.record.recallCaseId) ?? [];
@@ -392,10 +645,10 @@ export async function auditAppliedState(
     contributorsByCase.set(audit.record.recallCaseId, list);
   }
 
-  const linkedCaseIds = new Set(identities.map((identity) => identity.recallCaseId));
+  const linkedCaseIds = new Set(healthRows.map((row) => row.recallCaseId));
   let mergedTombstonesSkipped = 0;
   const caseFindings: CaseFinding[] = [];
-  for (const row of allCases) {
+  for (const row of caseRows) {
     if (contributorsByCase.has(row.id) || linkedCaseIds.has(row.id)) continue;
     if ((row.mergedInto ?? null) !== null) {
       mergedTombstonesSkipped += 1; // absorbed tombstone: records re-linked away by design
@@ -426,7 +679,7 @@ export async function auditAppliedState(
     };
     caseAudits.set(caseId, caseAudit);
 
-    const caseRow = caseById.get(caseId) ?? (await store.getCase(caseId));
+    const caseRow = caseById.get(caseId);
     if (!caseRow) {
       caseAudit.issues.push({
         classification: 'invalid_case_link',
@@ -446,17 +699,16 @@ export async function auditAppliedState(
       });
     }
 
-    const generated = await store.getCaseGeneratedColumns(caseId);
     const expectedGenerated = generatedFromProjection(caseRow.projection);
-    if (generated && canonicalJson(generated) !== canonicalJson(expectedGenerated)) {
+    if (canonicalJson(caseRow.generated) !== canonicalJson(expectedGenerated)) {
       caseAudit.issues.push({
         classification: 'case_projection_drift',
         reason: 'generated read-model columns disagree with the stored projection',
-        diffs: shallowDiff(generated, expectedGenerated, 'generated.'),
+        diffs: shallowDiff(caseRow.generated, expectedGenerated, 'generated.'),
       });
     }
 
-    const products = await store.listCaseProducts(caseId);
+    const products = productsByCase.get(caseId) ?? [];
     const expectedProducts = (caseRow.projection.affectedProducts ?? []) as AffectedProduct[];
     caseAudit.productsFp = productsFingerprint(products);
     if (caseAudit.productsFp !== productsFingerprint(expectedProducts)) {
@@ -466,12 +718,55 @@ export async function auditAppliedState(
       });
     }
 
-    caseAudit.initialEventExists = await store.hasNotificationEvent(caseAudit.initialEventDedupKey);
+    caseAudit.initialEventExists = initialEventCaseIds.has(caseId);
     if (!caseAudit.initialEventExists) {
       caseAudit.issues.push({
         classification: 'missing_initial_event',
         reason: `no ledger event with dedup key initial:${caseId} — every founded case requires exactly one (possibly suppressed) initial`,
       });
+    }
+  }
+
+  // ── Fence bracket END: material state must not have moved ─────────────────
+  {
+    const healthAfter = await readAllPages(
+      'health(fence)',
+      ps.health,
+      (from, size) => store.listAppliedStateHealthPage(from, size),
+      ctx,
+    );
+    const tokensAfter = await readAllPages(
+      'caseTokens(fence)',
+      ps.caseTokens,
+      (from, size) => store.listCaseTokensPage(from, size),
+      ctx,
+    );
+    const driftedRecords = new Set<string>();
+    const driftedCases = new Set<string>();
+    const afterById = new Map(healthAfter.map((row) => [row.id, row]));
+    for (const before of healthRows) {
+      const after = afterById.get(before.id);
+      if (!after) driftedRecords.add(before.nativeId);
+      else if (fenceRecordKey(after) !== fenceRecordKey(before))
+        driftedRecords.add(before.nativeId);
+    }
+    for (const after of healthAfter) {
+      if (!healthById.has(after.id)) driftedRecords.add(after.nativeId);
+    }
+    const tokenById = new Map(tokensAfter.map((row) => [row.id, row.lastChangedAt]));
+    for (const row of caseRows) {
+      const after = tokenById.get(row.id);
+      if (after === undefined || after !== row.lastChangedAt) driftedCases.add(row.id);
+    }
+    for (const token of tokensAfter) {
+      if (!caseById.has(token.id)) driftedCases.add(token.id);
+    }
+    if (driftedRecords.size > 0 || driftedCases.size > 0) {
+      throw new ConcurrentAuditDriftError(
+        [...driftedRecords].sort(),
+        [...driftedCases].sort(),
+        'membership, snapshot, marker, or case CAS token moved between the fence brackets',
+      );
     }
   }
 
@@ -649,6 +944,35 @@ export async function auditAppliedState(
     seedable,
   };
   return { ...body, auditTimestamp: now().toISOString(), planDigest: planContentDigest(body) };
+}
+
+// ── Fail-closed plan output (O3-B3A) ─────────────────────────────────────────
+
+/**
+ * Write a reviewed artifact atomically: the JSON lands under a temporary
+ * name and is renamed into place only after the full serialization succeeds,
+ * so no interruption or thrown error can leave a partial, valid-looking
+ * file. An existing destination is refused — a reviewed ledger is immutable.
+ */
+export function writeJsonFileAtomically(path: string, body: unknown): void {
+  if (existsSync(path)) {
+    throw new Error(
+      `refusing to overwrite ${path} — a reviewed ledger is immutable; pick a new path`,
+    );
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.tmp-${process.pid}`;
+  try {
+    writeFileSync(tmp, `${JSON.stringify(body, null, 2)}\n`);
+    renameSync(tmp, path);
+  } catch (error) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // best-effort cleanup; the tmp name can never satisfy a plan path
+    }
+    throw error;
+  }
 }
 
 // ── Plan-bound apply ─────────────────────────────────────────────────────────

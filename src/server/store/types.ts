@@ -204,6 +204,35 @@ export interface CaseGeneratedColumns {
 }
 
 /**
+ * One row of the service-role `source_record_apply_health` view (O3-B3A):
+ * a record's identity + applied marker + LATEST archived snapshot identity,
+ * computed server-side in one read. The bounded audit reads this view in
+ * pages instead of issuing two per-record snapshot lookups — the read that
+ * turned the first production census into ~15,000 sequential requests.
+ */
+export interface AppliedStateHealthRow {
+  id: string;
+  sourceSystem: string;
+  nativeId: string;
+  recallCaseId: string;
+  applyState: ApplyState | null;
+  appliedContentHash: string | null;
+  appliedSnapshotSeq: number | null;
+  latestSeq: number | null;
+  latestHash: string | null;
+  latestFetchedAt: string | null;
+}
+
+/** One case row shaped for the bounded audit: projection + CAS token + generated columns in one read. */
+export interface CaseAuditRow {
+  id: string;
+  projection: CaseProjection;
+  lastChangedAt: string;
+  mergedInto: string | null;
+  generated: CaseGeneratedColumns;
+}
+
+/**
  * One rendered page of an official label document (a product_visuals row).
  * Detail-screen evidence; under the C9 frozen policy these never become
  * card heroes automatically (professional hero sourcing is C9.1).
@@ -429,6 +458,43 @@ export interface RecallStore {
   hasNotificationEvent(dedupKey: string): Promise<boolean>;
   /** The generated read-model columns for one case (see CaseGeneratedColumns). */
   getCaseGeneratedColumns(id: string): Promise<CaseGeneratedColumns | null>;
+  // ── O3-B3A bounded audit reads ─────────────────────────────────────────────
+  // One PAGE per call (service-role only) so the audit can retry exactly the
+  // failed page and its request count stays proportional to pages/chunks,
+  // never to records × attributes. All page reads use a stable server-side
+  // order so pagination is complete and duplicate-free.
+
+  /** One page of the source_record_apply_health view, ordered by id. */
+  listAppliedStateHealthPage(from: number, pageSize: number): Promise<AppliedStateHealthRow[]>;
+  /** One page of one source system's full records, ordered by id. */
+  listSourceRecordsPage(
+    sourceSystem: SourceSystem,
+    from: number,
+    pageSize: number,
+  ): Promise<SourceRecordRow[]>;
+  /** One page of audit-shaped case rows (projection + CAS token + generated columns), ordered by id. */
+  listCaseAuditPage(from: number, pageSize: number): Promise<CaseAuditRow[]>;
+  /** One page of {id, lastChangedAt} case CAS tokens, ordered by id (the drift fence). */
+  listCaseTokensPage(
+    from: number,
+    pageSize: number,
+  ): Promise<{ id: string; lastChangedAt: string }[]>;
+  /** One page of ALL affected-product rows, ordered by (recall_case_id, ordinal). */
+  listCaseProductsPage(
+    from: number,
+    pageSize: number,
+  ): Promise<{ recallCaseId: string; product: AffectedProduct }[]>;
+  /** One page of recall_case_ids that hold an 'initial' ledger event, ordered by case id. */
+  listInitialEventCasePage(from: number, pageSize: number): Promise<string[]>;
+  /**
+   * The snapshots with these EXACT seq values (seq is globally unique), with
+   * raw payloads — one bounded chunk per call; the caller chunks
+   * deterministically to keep URL length and response size bounded.
+   */
+  listSnapshotsBySeq(
+    seqs: number[],
+  ): Promise<{ sourceRecordId: string; seq: number; contentHash: string; rawPayload: unknown }[]>;
+
   /**
    * Governed legacy seeding (O3-B2): writes ONLY the four marker fields, and
    * ONLY while the row is still legacy-unverified (`apply_state IS NULL`) AND

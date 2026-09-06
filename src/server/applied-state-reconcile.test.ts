@@ -150,11 +150,21 @@ test('one inconsistent sibling blocks certification of the whole case', async ()
 test('results are deterministic regardless of database pagination order', async () => {
   const store = await legacyFsisStore([RECALL, PARENT, EXPANSION]);
   const forward = await audit(store);
+  // O3-B3A: the audit reads via page methods; serve the same rows in a
+  // different stable order through the SAME pagination contract.
   const reversed: RecallStore = Object.create(store);
-  reversed.listSourceRecords = async (system) => (await store.listSourceRecords(system)).reverse();
-  reversed.listSourceRecordIdentities = async () =>
-    (await store.listSourceRecordIdentities()).reverse();
-  reversed.listCases = async () => (await store.listCases()).reverse();
+  reversed.listSourceRecordsPage = async (system, from, size) => {
+    const all = await store.listSourceRecordsPage(system, 0, 10_000);
+    return all.sort((a, b) => b.id.localeCompare(a.id)).slice(from, from + size);
+  };
+  reversed.listAppliedStateHealthPage = async (from, size) => {
+    const all = await store.listAppliedStateHealthPage(0, 10_000);
+    return all.sort((a, b) => b.id.localeCompare(a.id)).slice(from, from + size);
+  };
+  reversed.listCaseAuditPage = async (from, size) => {
+    const all = await store.listCaseAuditPage(0, 10_000);
+    return all.sort((a, b) => b.id.localeCompare(a.id)).slice(from, from + size);
+  };
   const backward = await audit(reversed);
   assert.equal(forward.planDigest, backward.planDigest);
   assert.deepEqual(forward.records, backward.records);

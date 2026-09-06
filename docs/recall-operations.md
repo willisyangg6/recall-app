@@ -488,10 +488,66 @@ What it does, and refuses to do:
   cannot make historical events newly eligible.
 
 The command exits non-zero only for a malformed/tampered plan, a digest or
-commit mismatch, a missing schema, or an unhandled failure — refusals and
-conflicts are expected governance, reported in counters and the ledger.
-Engine: `src/server/applied-state-reconcile.ts` (tested in
-`applied-state-reconcile.test.ts`); CLI: `scripts/reconcile-applied-state.ts`.
+commit mismatch, a missing schema, retry exhaustion, a concurrent-writer
+invalidation, or an unhandled failure — refusals and conflicts are expected
+governance, reported in counters and the ledger. Engine:
+`src/server/applied-state-reconcile.ts` (tested in
+`applied-state-reconcile.test.ts` and `applied-state-read-hardening.test.ts`);
+CLI: `scripts/reconcile-applied-state.ts`.
+
+### Read-path hardening (O3-B3A, 2026-09-06)
+
+**Historical evidence.** The first production dry run (2026-09-06,
+19:51–20:09 UTC) aborted when ONE transient HTTPS `fetch failed` landed
+among the ~12,800 sequential requests the original N+1 read shape issued
+(two per record for snapshot meta + payload, three per case for generated
+columns, products, and the initial-event probe). The failure path behaved
+exactly as designed — zero production writes, no partial plan, no usable
+digest — and the census/apply contracts were not disproven. No production
+rerun has happened yet; marker seeding remains unauthorized.
+
+**Bounded read model.** The audit now reads in pages and chunks only —
+request count proportional to pages, never records × attributes: the
+`source_record_apply_health` view (marker + latest-snapshot identity, one
+paginated read that also opens the drift fence), full record rows per
+system (paginated), latest payloads fetched by globally-unique snapshot
+`seq` in bounded chunks, and one paginated read each for audit-shaped case
+rows (projection + CAS token + generated columns), all product rows, and
+initial-event case ids. For the production population (3,523 records /
+1,920 cases) that is ≈ 100 requests instead of ~12,800. A structural
+regression test fails if any per-record/per-case read returns to the audit.
+
+**Retry policy (audit reads ONLY).** One centralized bounded policy: 4
+total attempts, 500ms·2ⁿ backoff with ±25% jitter capped at 5s; 429-class
+responses wait ≥2s (the Retry-After substitute — supabase-js does not
+expose response headers on errors). Retried: transient transport failures
+(`fetch failed`, reset/timeout classes) and 408/429/502/503/504. Never
+retried: permission, schema, validation, auth, and ordinary 4xx failures —
+and never any mutating call (`applySeedPlan` writes at-most-once, with no
+retry wrapper reachable; pinned by test). The policy deliberately LAYERS on
+postgrest-js's own bounded retry (3 inner attempts at 1s/2s/4s for thrown
+transport errors and 503/520 on idempotent methods — which the 2026-09-06
+failure had already exhausted, proving that outage was sustained, not a
+single blip): one outer attempt spans a full inner cycle, so total
+tolerance reaches ~30-60s of sustained outage at a bounded 16 transport
+attempts per read, and POST mutations are excluded at both layers. Diagnostics carry the read name,
+page, and attempt count — sanitized, bounded, never payloads or key-bearing
+URLs. Retries never change plan contents or the digest.
+
+**Fail-closed output.** The plan file is written atomically (tmp + rename)
+only after the complete audit and digest construction succeed; an existing
+destination is refused; retry exhaustion and drift exit non-zero and leave
+only a timestamped failure artifact that cannot satisfy the plan schema.
+
+**Concurrent-drift fence.** The health view and the case CAS tokens are
+captured before the census and re-read after it. Under the O3 write
+contract every material change moves at least one fenced fact (membership,
+latest snapshot seq/hash, marker state, or `last_changed_at` — projection,
+products, and events only ever commit with a `last_changed_at` move), so a
+concurrent scheduled tick that genuinely changed anything material
+invalidates the audit with bounded identifiers and a rerun instruction,
+while an unchanged tick (whose only writes are `last_seen_at` bumps and run
+rows — fields the fence never reads) passes harmlessly.
 
 ## Labels: incremental by construction
 

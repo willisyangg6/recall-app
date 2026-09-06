@@ -17,8 +17,10 @@ import type {
 import type { NormalizedSourceRecord } from '../../domain/source-record';
 import type {
   AppliedMarker,
+  AppliedStateHealthRow,
   ApplyState,
   ArchiveSnapshotResult,
+  CaseAuditRow,
   CaseGeneratedColumns,
   CaseTransitionInput,
   CaseTransitionResult,
@@ -609,6 +611,144 @@ export class SupabaseStore implements RecallStore {
       publishedAt: (data.published_at as string | null) ?? null,
       lastPublicActivityAt: (data.last_public_activity_at as string | null) ?? null,
     };
+  }
+
+  // ── O3-B3A bounded audit reads (one page per call; stable server order) ────
+
+  async listAppliedStateHealthPage(
+    from: number,
+    pageSize: number,
+  ): Promise<AppliedStateHealthRow[]> {
+    const { data, error } = await this.client
+      .from('source_record_apply_health')
+      .select(
+        'id, source_system, native_id, recall_case_id, apply_state, applied_content_hash, applied_snapshot_seq, latest_snapshot_seq, latest_content_hash, latest_fetched_at',
+      )
+      .order('id')
+      .range(from, from + pageSize - 1);
+    if (error || !data) this.fail('listAppliedStateHealthPage', error);
+    return data.map((row) => ({
+      id: row.id as string,
+      sourceSystem: row.source_system as string,
+      nativeId: row.native_id as string,
+      recallCaseId: row.recall_case_id as string,
+      applyState: (row.apply_state as ApplyState | null) ?? null,
+      appliedContentHash: (row.applied_content_hash as string | null) ?? null,
+      appliedSnapshotSeq:
+        row.applied_snapshot_seq == null ? null : Number(row.applied_snapshot_seq),
+      latestSeq: row.latest_snapshot_seq == null ? null : Number(row.latest_snapshot_seq),
+      latestHash: (row.latest_content_hash as string | null) ?? null,
+      latestFetchedAt: (row.latest_fetched_at as string | null) ?? null,
+    }));
+  }
+
+  async listSourceRecordsPage(
+    sourceSystem: SourceSystem,
+    from: number,
+    pageSize: number,
+  ): Promise<SourceRecordRow[]> {
+    const { data, error } = await this.client
+      .from('source_records')
+      .select('*')
+      .eq('source_system', sourceSystem)
+      .order('id')
+      .range(from, from + pageSize - 1);
+    if (error || !data) this.fail('listSourceRecordsPage', error);
+    return data.map((row) => this.toSourceRecordRow(row));
+  }
+
+  async listCaseAuditPage(from: number, pageSize: number): Promise<CaseAuditRow[]> {
+    const { data, error } = await this.client
+      .from('recall_cases')
+      .select(
+        'id, projection, last_changed_at, merged_into, source_agency, notice_type, state, title, classification_value, hazard_category, published_at, last_public_activity_at',
+      )
+      .order('id')
+      .range(from, from + pageSize - 1);
+    if (error || !data) this.fail('listCaseAuditPage', error);
+    return data.map((row) => ({
+      id: row.id as string,
+      projection: row.projection as CaseProjection,
+      lastChangedAt: row.last_changed_at as string,
+      mergedInto: (row.merged_into as string | null) ?? null,
+      generated: {
+        sourceAgency: (row.source_agency as string | null) ?? null,
+        noticeType: (row.notice_type as string | null) ?? null,
+        state: (row.state as string | null) ?? null,
+        title: (row.title as string | null) ?? null,
+        classificationValue: (row.classification_value as string | null) ?? null,
+        hazardCategory: (row.hazard_category as string | null) ?? null,
+        publishedAt: (row.published_at as string | null) ?? null,
+        lastPublicActivityAt: (row.last_public_activity_at as string | null) ?? null,
+      },
+    }));
+  }
+
+  async listCaseTokensPage(
+    from: number,
+    pageSize: number,
+  ): Promise<{ id: string; lastChangedAt: string }[]> {
+    const { data, error } = await this.client
+      .from('recall_cases')
+      .select('id, last_changed_at')
+      .order('id')
+      .range(from, from + pageSize - 1);
+    if (error || !data) this.fail('listCaseTokensPage', error);
+    return data.map((row) => ({
+      id: row.id as string,
+      lastChangedAt: row.last_changed_at as string,
+    }));
+  }
+
+  async listCaseProductsPage(
+    from: number,
+    pageSize: number,
+  ): Promise<{ recallCaseId: string; product: AffectedProduct }[]> {
+    const { data, error } = await this.client
+      .from('affected_products')
+      .select('recall_case_id, ordinal, source_native_id, name, raw_text, extraction_confidence')
+      .order('recall_case_id')
+      .order('ordinal')
+      .range(from, from + pageSize - 1);
+    if (error || !data) this.fail('listCaseProductsPage', error);
+    return data.map((row) => ({
+      recallCaseId: row.recall_case_id as string,
+      product: {
+        sourceNativeId: row.source_native_id as string,
+        name: row.name as string,
+        rawText: row.raw_text as string,
+        extractionConfidence: row.extraction_confidence as AffectedProduct['extractionConfidence'],
+      },
+    }));
+  }
+
+  async listInitialEventCasePage(from: number, pageSize: number): Promise<string[]> {
+    const { data, error } = await this.client
+      .from('notification_events')
+      .select('recall_case_id')
+      .eq('kind', 'initial')
+      .order('recall_case_id')
+      .range(from, from + pageSize - 1);
+    if (error || !data) this.fail('listInitialEventCasePage', error);
+    return data.map((row) => row.recall_case_id as string);
+  }
+
+  async listSnapshotsBySeq(
+    seqs: number[],
+  ): Promise<{ sourceRecordId: string; seq: number; contentHash: string; rawPayload: unknown }[]> {
+    if (seqs.length === 0) return [];
+    const { data, error } = await this.client
+      .from('source_snapshots')
+      .select('source_record_id, seq, content_hash, raw_payload')
+      .in('seq', seqs)
+      .order('seq');
+    if (error || !data) this.fail('listSnapshotsBySeq', error);
+    return data.map((row) => ({
+      sourceRecordId: row.source_record_id as string,
+      seq: Number(row.seq),
+      contentHash: row.content_hash as string,
+      rawPayload: row.raw_payload,
+    }));
   }
 
   async seedLegacyAppliedMarker(marker: AppliedMarker): Promise<boolean> {

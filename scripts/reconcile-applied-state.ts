@@ -29,15 +29,18 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import {
   applySeedPlan,
   auditAppliedState,
+  AuditReadExhaustedError,
+  ConcurrentAuditDriftError,
   PlanValidationError,
   PLAN_SCHEMA_VERSION,
+  writeJsonFileAtomically,
+  type AuditPageSizes,
   type ReconcilePlan,
 } from '../src/server/applied-state-reconcile';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
@@ -61,19 +64,58 @@ function flagValue(argv: string[], flag: string): string | null {
   return value;
 }
 
+/**
+ * Atomic ledger write (O3-B3A): tmp + rename, refusing an existing
+ * destination — no interruption or error can leave a partial plan, and a
+ * reviewed ledger is never overwritten.
+ */
 function writeLedger(requestedPath: string | null, prefix: string, body: unknown): string {
   const target =
     requestedPath ??
     path.join('.reports', `${prefix}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
-  if (requestedPath && existsSync(requestedPath)) {
-    console.error(
-      `Refusing to overwrite ${requestedPath} — a reviewed ledger is immutable; pick a new path.`,
-    );
+  try {
+    writeJsonFileAtomically(target, body);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
-  mkdirSync(path.dirname(target), { recursive: true });
-  writeFileSync(target, `${JSON.stringify(body, null, 2)}\n`);
   return target;
+}
+
+/**
+ * A failed audit leaves a clearly separate, structurally un-appliable
+ * failure artifact (no plan schema version, no seedable set, no digest) at a
+ * timestamped path — NEVER at the requested plan path.
+ */
+function writeFailureArtifact(status: string, error: Error, gitCommit: string): string {
+  return writeLedger(null, 'applied-state-audit-failure', {
+    status,
+    error: error.message.slice(0, 2000),
+    gitCommit,
+    failedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Test-only page-size override (RECONCILE_AUDIT_PAGE_SIZE): lets the local
+ * integration matrix cross every pagination boundary with a small synthetic
+ * population. Unset in production, where the audited defaults apply.
+ */
+function pageSizeOverride(): Partial<AuditPageSizes> | undefined {
+  const raw = process.env.RECONCILE_AUDIT_PAGE_SIZE;
+  if (!raw) return undefined;
+  const size = Number(raw);
+  if (!Number.isInteger(size) || size < 1) return undefined;
+  console.log(`  (test override: all audit page/chunk sizes = ${size})`);
+  return {
+    records: size,
+    health: size,
+    cases: size,
+    caseTokens: size,
+    products: size,
+    initialEvents: size,
+    payloadChunk: size,
+  };
 }
 
 async function main(): Promise<void> {
@@ -98,7 +140,25 @@ async function main(): Promise<void> {
     console.log(
       `\n${'═'.repeat(72)}\nApplied-state reconciliation — DRY RUN census (writes nothing to the database)\n${'═'.repeat(72)}\n`,
     );
-    const plan = await auditAppliedState(store, { gitCommit });
+    let plan: ReconcilePlan;
+    try {
+      plan = await auditAppliedState(store, { gitCommit, pageSizes: pageSizeOverride() });
+    } catch (error) {
+      if (error instanceof ConcurrentAuditDriftError) {
+        console.error(`AUDIT INVALIDATED BY CONCURRENT WRITER: ${error.message}`);
+        const artifact = writeFailureArtifact('concurrent_drift', error, gitCommit);
+        console.error(`No plan was produced. Failure artifact: ${artifact}`);
+        console.error('Rerun the dry run after the concurrent writer (a scheduled tick) finishes.');
+        process.exit(1);
+      }
+      if (error instanceof AuditReadExhaustedError) {
+        console.error(`AUDIT READS EXHAUSTED RETRIES: ${error.message}`);
+        const artifact = writeFailureArtifact('read_retries_exhausted', error, gitCommit);
+        console.error(`No plan was produced. Failure artifact: ${artifact}`);
+        process.exit(1);
+      }
+      throw error;
+    }
     const s = plan.summary;
     console.log(`  records examined:      ${s.recordsExamined}`);
     console.log(`  cases examined:        ${s.casesExamined}`);
