@@ -37,6 +37,7 @@ import {
   auditAppliedState,
   AuditReadExhaustedError,
   ConcurrentAuditDriftError,
+  LEGACY_EQUIVALENCE_CONTRACT,
   PlanValidationError,
   PLAN_SCHEMA_VERSION,
   writeJsonFileAtomically,
@@ -178,6 +179,7 @@ async function main(): Promise<void> {
     const target = writeLedger(jsonPath, 'applied-state-plan', plan);
     console.log(`\n  plan/ledger written:   ${target}`);
     console.log(`  plan digest:           ${plan.planDigest}`);
+    console.log(`  equivalence contract:  ${plan.equivalenceContract}`);
     console.log(
       '\n  To seed the consistent legacy population after review:\n' +
         `    npm run reconcile:applied-state -- --confirm --plan ${target} --digest ${plan.planDigest}\n`,
@@ -208,6 +210,9 @@ async function main(): Promise<void> {
   );
   console.log(`  plan:        ${planPath}`);
   console.log(`  plan schema: ${plan.schemaVersion} (supported: ${PLAN_SCHEMA_VERSION})`);
+  console.log(
+    `  equivalence: ${plan.equivalenceContract ?? '(none)'} (supported: ${LEGACY_EQUIVALENCE_CONTRACT})`,
+  );
   console.log(`  seedable:    ${plan.seedable?.length ?? 0} entr(ies)\n`);
   try {
     const report = await applySeedPlan(store, plan, {

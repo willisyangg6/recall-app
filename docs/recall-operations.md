@@ -449,7 +449,8 @@ What it does, and refuses to do:
   initial-event evidence — no network, no upstream fetches, zero writes),
   re-derives every record through its canonical parser, groups by case, and
   classifies every record and case into exactly one bucket
-  (`consistent_legacy_seedable`, `already_applied_consistent`,
+  (`consistent_legacy_seedable`, `equivalent_legacy_seedable`,
+  `already_applied_consistent`,
   `pending_current_version`, `applied_degraded`, `normalized_drift`,
   `case_projection_drift`, `affected_products_drift`,
   `missing_initial_event`, `orphan_case`, `missing_snapshot`,
@@ -462,7 +463,9 @@ What it does, and refuses to do:
 - **Seeding eligibility** requires the FULL proof: the latest snapshot
   parses; the re-derived normalized state equals the stored one (pinned
   comparison contract — for enforcement records the stored match-provenance
-  block is audit history and is copied, everything else byte-equal); the
+  block is audit history and is copied, everything else byte-equal, except
+  that a legacy-unverified record may match under the four versioned
+  legacy-equivalence rules below); the
   case link is valid; the projection recomputed from ALL contributors equals
   the stored projection; the generated columns agree; the product rows agree
   (ordinal order contractual); the initial event exists; and NO sibling is
@@ -503,8 +506,15 @@ among the ~12,800 sequential requests the original N+1 read shape issued
 (two per record for snapshot meta + payload, three per case for generated
 columns, products, and the initial-event probe). The failure path behaved
 exactly as designed — zero production writes, no partial plan, no usable
-digest — and the census/apply contracts were not disproven. No production
-rerun has happened yet; marker seeding remains unauthorized.
+digest — and the census/apply contracts were not disproven. The hardened
+rerun (O3-B3 Phase 3B, 2026-09-06 21:49 UTC) completed in 20 seconds with
+zero writes and produced the valid plan
+`.reports/o3-b3-reconciliation-dry-run-v2.json` (schema
+`recall-applied-state-plan/1`, commit-bound to `7c2a25a`): 3,523 records,
+33 strictly seedable, 3,475 refused as parser/projector-era drift
+(evidence analysis: `.reports/o3-b4-historical-drift-analysis.json`).
+That plan remains completely unapplied; marker seeding remains
+unauthorized.
 
 **Bounded read model.** The audit now reads in pages and chunks only —
 request count proportional to pages, never records × attributes: the
@@ -548,6 +558,55 @@ concurrent scheduled tick that genuinely changed anything material
 invalidates the audit with bounded identifiers and a rerun instruction,
 while an unchanged tick (whose only writes are `last_seen_at` bumps and run
 rows — fields the fence never reads) passes harmlessly.
+
+### Legacy-equivalence contract (O3-B4B, 2026-09-07)
+
+The O3-B4A evidence audit (`.reports/o3-b4-historical-drift-analysis.json`)
+proved that most Phase 3B refusals are pre-era representation, not data
+defects. The founder accepted exactly four equivalence rules, implemented as
+`LEGACY_EQUIVALENCE_CONTRACT = legacy-equivalence/1` in
+`src/server/applied-state-reconcile.ts` (pinned in
+`applied-state-equivalence.test.ts`):
+
+- **R1 / R2** — stored absent/`null` `declaresRevision` / `declaresExpansion`
+  vs derived exactly `false`. The domain contract defines absence as
+  "unknown, never true"; the only consumer is ingest-time truthiness.
+- **R3** — stored absent/`null` `retailerNames` vs derived exactly `[]`, at
+  BOTH the normalized-record and case-projection boundaries; every projection
+  consumer already defaults the missing value to `[]`.
+- **R4** — a legacy projection classification lacking the newer
+  `officialClasses` set, accepted ONLY when every other classification field
+  is canonically identical AND both shapes resolve identically through
+  `officialClassesOf`, `consumerRiskTier`, and `classificationStatus` —
+  semantic class equality, never a blanket missing-field pass.
+
+Every rule is **legacy-directional**: it applies only while
+`apply_state IS NULL` (projection rules additionally require an all-legacy
+case group), and unknown never equals affirmative evidence — `null` vs
+`true`, `null` vs a nonempty retailer list, and any new or different class,
+tier, or status all remain real drift (counterexamples pinned in tests).
+`pending`, `applied`, and `applied_degraded` records — including the 15
+already-applied production records — and every record processed under O3
+keep strict byte-equality. There is deliberately NO broad "consumer-inert"
+rule: a field being ignored by current consumers does not make its stored
+value equivalent (the ~117 such records from O3-B4A stay refused), because a
+seeded marker asserts derivation equality, not display invisibility. A
+record certified only through these rules is classified
+`equivalent_legacy_seedable` (vs `consistent_legacy_seedable` for exact
+equality) and its plan entry names the rules used.
+
+Plan binding: the plan schema is now `recall-applied-state-plan/2` and every
+plan records its `equivalenceContract`; apply refuses any other schema or
+contract version, so the Phase 3B plan (`plan/1`, commit-bound to `7c2a25a`)
+can never be applied or silently reinterpreted under the new rules — it
+stays a frozen evidence artifact. **No production dry run under R1–R4 has
+happened yet**; the O3-B4A evidence-audit projection (NOT a production
+census) expects roughly 2,389 certifiable records (≈2,374 legacy, freeing
+≈886 enforcement records) with ≈1,134 still refused as genuine
+parser/projector-era drift. The seven notification-eligible improvement
+events, the nine ambiguous records, and any O3-B5 historical re-derivation
+remain deferred founder decisions; marker seeding remains separately
+authorized.
 
 ## Labels: incremental by construction
 

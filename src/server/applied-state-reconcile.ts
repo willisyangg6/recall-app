@@ -25,7 +25,21 @@
  *
  * COMPARISON CONTRACT (pinned in applied-state-reconcile.test.ts):
  *  - normalized: full canonical-JSON equality of NormalizedSourceRecord —
- *    every field is canonical content; nothing is excluded. For
+ *    every field is canonical content; nothing is excluded — except that a
+ *    LEGACY-UNVERIFIED record (apply_state IS NULL) compares under the four
+ *    founder-accepted legacy-equivalence rules (O3-B4B,
+ *    `LEGACY_EQUIVALENCE_CONTRACT`): R1/R2 stored-null `declaresRevision`/
+ *    `declaresExpansion` vs derived `false`, R3 stored-null `retailerNames`
+ *    vs derived `[]` (both boundaries), R4 a legacy classification lacking
+ *    `officialClasses` that resolves identically through officialClassesOf/
+ *    consumerRiskTier/classificationStatus. Every rule is legacy-directional
+ *    (unknown never equals affirmative evidence), applies to NO other
+ *    apply_state, and projection-boundary rules require an all-legacy group.
+ *    A legacy marker therefore certifies exact equality OR equality under
+ *    these explicitly versioned rules — never consumer-visible,
+ *    notification-material, ambiguous, or integrity-relevant drift, and
+ *    never a difference merely because current consumers ignore the field.
+ *    For
  *    `openfda_enforcement` the stored match-provenance block
  *    (`normalized.enforcement.match`: method, matcherVersion, matchedAt,
  *    evidence, eventId) is copied into the re-derivation first — it is audit
@@ -47,7 +61,8 @@ import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'no
 import { dirname } from 'node:path';
 
 import { projectCase } from '../domain/projection';
-import type { AffectedProduct, SourceSystem } from '../domain/recall-types';
+import type { AffectedProduct, Classification, SourceSystem } from '../domain/recall-types';
+import { classificationStatus, consumerRiskTier, officialClassesOf } from '../domain/risk-tier';
 import type { NormalizedSourceRecord } from '../domain/source-record';
 import { enforcementToNormalized, type EnforcementMatchProvenance } from './fda-enforcement/enrich';
 import { parseEnforcementRecord, type OpenFdaEnforcementRaw } from './fda-enforcement/parse';
@@ -56,7 +71,17 @@ import { parseFsisRecord, type FsisRawRecord } from './fsis/parse';
 import { canonicalJson, contentHash } from './pipeline';
 import type { ApplyState, CaseGeneratedColumns, RecallStore, SourceRecordRow } from './store/types';
 
-export const PLAN_SCHEMA_VERSION = 'recall-applied-state-plan/1';
+export const PLAN_SCHEMA_VERSION = 'recall-applied-state-plan/2';
+
+/**
+ * O3-B4B legacy-equivalence contract version. Every plan records the contract
+ * it was compared under, and apply refuses any other version, so plan
+ * generation and apply-time validation can never disagree about what
+ * "equivalent" meant. Bump on ANY rule change; never reuse a version for
+ * different semantics. A plan/1 artifact predates this contract and fails
+ * closed on its schema version alone.
+ */
+export const LEGACY_EQUIVALENCE_CONTRACT = 'legacy-equivalence/1';
 
 const SUPPORTED_SYSTEMS: SourceSystem[] = ['fsis_api', 'fda_announcement', 'openfda_enforcement'];
 
@@ -66,10 +91,15 @@ const SUPPORTED_SYSTEMS: SourceSystem[] = ['fsis_api', 'fda_announcement', 'open
  * (an O3-era marker contradicting its snapshots — §12) and
  * `case_blocked_by_sibling` / `invalid_case_link` (a record whose own state
  * is fine but whose case cannot be certified) — materially different risks
- * that must not collapse into one bucket.
+ * that must not collapse into one bucket. O3-B4B adds
+ * `equivalent_legacy_seedable`: a legacy record seedable ONLY under the
+ * versioned legacy-equivalence rules, kept distinct from
+ * `consistent_legacy_seedable` (exact equality) so a reviewer always sees
+ * which entries relied on the contract.
  */
 export type ReconcileClassification =
   | 'consistent_legacy_seedable'
+  | 'equivalent_legacy_seedable'
   | 'already_applied_consistent'
   | 'pending_current_version'
   | 'applied_degraded'
@@ -106,6 +136,8 @@ export interface RecordFinding {
   /** Exact reasons; for multiple_findings, every contributing reason. */
   reasons: string[];
   fieldDiffs: FieldDiff[];
+  /** Legacy-equivalence rule tags accepted for this record or its case (O3-B4B). */
+  equivalencesUsed: string[];
   seedable: boolean;
   consumerVisibleDiff: boolean;
   notificationDiff: boolean;
@@ -133,6 +165,8 @@ export interface SeedablePlanEntry {
   productsFingerprint: string;
   membershipFingerprint: string;
   initialEventDedupKey: string;
+  /** Rule tags under which this entry certifies (empty = exact equality). */
+  equivalencesUsed: string[];
 }
 
 export interface ReconcileSummary {
@@ -158,6 +192,8 @@ export interface ReconcileSummary {
 
 export interface ReconcilePlan {
   schemaVersion: string;
+  /** The legacy-equivalence contract version the audit compared under. */
+  equivalenceContract: string;
   gitCommit: string;
   /** Excluded from the digest so identical audits are digest-identical. */
   auditTimestamp: string;
@@ -174,6 +210,7 @@ export function planContentDigest(
 ): string {
   return contentHash({
     schemaVersion: plan.schemaVersion,
+    equivalenceContract: plan.equivalenceContract,
     gitCommit: plan.gitCommit,
     summary: plan.summary,
     records: plan.records,
@@ -198,6 +235,112 @@ function shallowDiff(stored: unknown, derived: unknown, prefix: string): FieldDi
     }
   }
   return diffs;
+}
+
+// ── O3-B4B legacy-equivalence contract (legacy-equivalence/1) ───────────────
+//
+// Four founder-accepted rules — and NOTHING else — under which an unmarked
+// legacy record (apply_state IS NULL) may be judged to faithfully represent
+// the current derivation. Every rule is legacy-DIRECTIONAL: the stored side
+// must be the pre-era absent/null representation and the derived side must be
+// exactly the modern no-evidence default, so unknown can never equal
+// affirmative evidence (declares* true, a nonempty retailer list, a new or
+// different official class). The rules change no stored data, no ingestion,
+// no presentation, and no notification behavior: they are an ephemeral
+// comparison projection used only for equality/diff classification. A field
+// being ignored by current consumers is NOT grounds for equivalence — only
+// these proven representation identities are.
+
+/** R1/R2/R3 at the normalized-record boundary. Returns the rule tag or null. */
+export function normalizedLegacyEquivalence(
+  field: string,
+  stored: unknown,
+  derived: unknown,
+): string | null {
+  const s = stored ?? null;
+  const d = derived ?? null;
+  if (field === 'declaresRevision' && s === null && d === false) return 'R1';
+  if (field === 'declaresExpansion' && s === null && d === false) return 'R2';
+  if (field === 'retailerNames' && s === null && Array.isArray(d) && d.length === 0) {
+    return 'R3-normalized';
+  }
+  return null;
+}
+
+/**
+ * R3/R4 at the case-projection boundary. R4 accepts a legacy classification
+ * lacking the newer officialClasses set ONLY when every other classification
+ * field is canonically identical AND both shapes resolve to the same
+ * semantics through the authoritative domain accessors (officialClassesOf,
+ * consumerRiskTier, classificationStatus) — semantic class equality, never a
+ * blanket "missing field is acceptable" rule.
+ */
+export function projectionLegacyEquivalence(
+  field: string,
+  stored: unknown,
+  derived: unknown,
+): string | null {
+  const s = stored ?? null;
+  const d = derived ?? null;
+  if (field === 'retailerNames' && s === null && Array.isArray(d) && d.length === 0) {
+    return 'R3-projection';
+  }
+  if (field === 'classification') return classificationLegacyEquivalent(s, d) ? 'R4' : null;
+  return null;
+}
+
+function classificationLegacyEquivalent(stored: unknown, derived: unknown): boolean {
+  if (typeof stored !== 'object' || stored === null || Array.isArray(stored)) return false;
+  if (typeof derived !== 'object' || derived === null || Array.isArray(derived)) return false;
+  const s = stored as Record<string, unknown>;
+  const d = derived as Record<string, unknown>;
+  // Legacy-directional shape gate: stored must predate the set; derived carries it.
+  if ('officialClasses' in s || !('officialClasses' in d)) return false;
+  // Every field except the added set must be canonically identical (value,
+  // sourceText, and anything else either shape carries).
+  const sKeys = Object.keys(s).sort();
+  const dKeys = Object.keys(d)
+    .filter((key) => key !== 'officialClasses')
+    .sort();
+  if (canonicalJson(sKeys) !== canonicalJson(dKeys)) return false;
+  for (const key of sKeys) {
+    if (canonicalJson(s[key] ?? null) !== canonicalJson(d[key] ?? null)) return false;
+  }
+  const sc = s as unknown as Pick<Classification, 'value' | 'officialClasses'>;
+  const dc = d as unknown as Pick<Classification, 'value' | 'officialClasses'>;
+  return (
+    canonicalJson(officialClassesOf(sc)) === canonicalJson(officialClassesOf(dc)) &&
+    consumerRiskTier(sc) === consumerRiskTier(dc) &&
+    classificationStatus(sc) === classificationStatus(dc)
+  );
+}
+
+/**
+ * One legacy-aware comparison: residual diffs are real drift; accepted
+ * equivalences are recorded by rule tag. `rule = null` compares strictly
+ * (every non-legacy record/group). Inputs are never mutated — the walk is a
+ * pure, ephemeral comparison projection.
+ */
+function diffWithLegacyEquivalence(
+  stored: unknown,
+  derived: unknown,
+  prefix: string,
+  rule: ((field: string, s: unknown, d: unknown) => string | null) | null,
+): { residual: FieldDiff[]; equivalencesUsed: string[] } {
+  if (canonicalJson(stored ?? null) === canonicalJson(derived ?? null)) {
+    return { residual: [], equivalencesUsed: [] };
+  }
+  const s = (stored ?? {}) as Record<string, unknown>;
+  const d = (derived ?? {}) as Record<string, unknown>;
+  const residual: FieldDiff[] = [];
+  const used = new Set<string>();
+  for (const key of [...new Set([...Object.keys(s), ...Object.keys(d)])].sort()) {
+    if (canonicalJson(s[key] ?? null) === canonicalJson(d[key] ?? null)) continue;
+    const tag = rule ? rule(key, s[key], d[key]) : null;
+    if (tag !== null) used.add(tag);
+    else residual.push({ field: `${prefix}${key}`, stored: clip(s[key]), derived: clip(d[key]) });
+  }
+  return { residual, equivalencesUsed: [...used].sort() };
 }
 
 /** Re-derive a record's normalized state from its archived payload. */
@@ -290,6 +433,8 @@ interface RecordAudit {
   snapshotHash: string | null;
   /** Record-level findings only (case-level ones attach in the case pass). */
   findings: { classification: ReconcileClassification; reason: string; diffs?: FieldDiff[] }[];
+  /** Rule tags accepted at the normalized boundary (legacy records only). */
+  normalizedEquivalences: string[];
   normalizedFingerprint: string | null;
 }
 
@@ -297,6 +442,8 @@ interface CaseAudit {
   caseId: string;
   contributors: RecordAudit[];
   issues: { classification: ReconcileClassification; reason: string; diffs?: FieldDiff[] }[];
+  /** Rule tags accepted at the projection boundary (all-legacy groups only). */
+  projectionEquivalences: string[];
   caseLastChangedAt: string | null;
   projectionFingerprint: string | null;
   productsFp: string | null;
@@ -530,6 +677,7 @@ export async function auditAppliedState(
         snapshotSeq: null,
         snapshotHash: null,
         findings: [],
+        normalizedEquivalences: [],
         normalizedFingerprint: contentHash(record.normalized),
       });
     }
@@ -582,12 +730,23 @@ export async function auditAppliedState(
         classification: 'snapshot_parse_failure',
         reason: `archived payload does not re-derive: ${derived.error}`,
       });
-    } else if (canonicalJson(derived.normalized) !== canonicalJson(record.normalized)) {
-      audit.findings.push({
-        classification: 'normalized_drift',
-        reason: 'stored normalized state disagrees with re-derivation from the archived snapshot',
-        diffs: shallowDiff(record.normalized, derived.normalized, 'normalized.'),
-      });
+    } else {
+      // A legacy-unverified record compares under the four accepted
+      // equivalence rules; every other apply_state compares strictly.
+      const cmp = diffWithLegacyEquivalence(
+        record.normalized,
+        derived.normalized,
+        'normalized.',
+        (record.applyState ?? null) === null ? normalizedLegacyEquivalence : null,
+      );
+      audit.normalizedEquivalences = cmp.equivalencesUsed;
+      if (cmp.residual.length > 0) {
+        audit.findings.push({
+          classification: 'normalized_drift',
+          reason: 'stored normalized state disagrees with re-derivation from the archived snapshot',
+          diffs: cmp.residual,
+        });
+      }
     }
     // O3-era marker sanity (§12): an applied/degraded marker must point
     // at the LATEST snapshot with its hash, with no required field null.
@@ -670,6 +829,7 @@ export async function auditAppliedState(
       caseId,
       contributors,
       issues: [],
+      projectionEquivalences: [],
       caseLastChangedAt: null,
       projectionFingerprint: null,
       productsFp: null,
@@ -691,11 +851,24 @@ export async function auditAppliedState(
     caseAudit.projectionFingerprint = contentHash(caseRow.projection);
 
     const recomputed = projectCase(contributors.map((audit) => audit.record.normalized));
-    if (canonicalJson(recomputed) !== canonicalJson(caseRow.projection)) {
+    // Projection equivalences may relax only an all-legacy group: any
+    // pending/applied/degraded contributor means the stored projection was
+    // (or is being) written by current-era code and must match strictly.
+    const groupAllLegacy = contributors.every(
+      (audit) => (audit.record.applyState ?? null) === null,
+    );
+    const projectionCmp = diffWithLegacyEquivalence(
+      caseRow.projection,
+      recomputed,
+      'projection.',
+      groupAllLegacy ? projectionLegacyEquivalence : null,
+    );
+    caseAudit.projectionEquivalences = projectionCmp.equivalencesUsed;
+    if (projectionCmp.residual.length > 0) {
       caseAudit.issues.push({
         classification: 'case_projection_drift',
         reason: 'stored projection disagrees with projectCase over the stored contributor records',
-        diffs: shallowDiff(caseRow.projection, recomputed, 'projection.'),
+        diffs: projectionCmp.residual,
       });
     }
 
@@ -786,6 +959,7 @@ export async function auditAppliedState(
       applyState: identity.applyState,
       reasons: [`source system ${identity.sourceSystem} is not covered by this audit`],
       fieldDiffs: [],
+      equivalencesUsed: [],
       seedable: false,
       consumerVisibleDiff: false,
       notificationDiff: false,
@@ -813,6 +987,9 @@ export async function auditAppliedState(
       const reasons = all.map((f) => f.reason);
       const fieldDiffs = all.flatMap((f) => f.diffs ?? []);
       const distinct = [...new Set(all.map((f) => f.classification))];
+      const equivalencesUsed = [
+        ...new Set([...audit.normalizedEquivalences, ...caseAudit.projectionEquivalences]),
+      ].sort();
       const consumerVisibleDiff = distinct.some(
         (c) => c === 'case_projection_drift' || c === 'affected_products_drift',
       );
@@ -841,7 +1018,8 @@ export async function auditAppliedState(
         classification = 'case_blocked_by_sibling';
         requiresSeparateReview = false;
       } else {
-        classification = 'consistent_legacy_seedable';
+        classification =
+          equivalencesUsed.length > 0 ? 'equivalent_legacy_seedable' : 'consistent_legacy_seedable';
         seedableHere = true;
         requiresSeparateReview = false;
       }
@@ -866,6 +1044,7 @@ export async function auditAppliedState(
         applyState: state,
         reasons,
         fieldDiffs,
+        equivalencesUsed,
         seedable: seedableHere,
         consumerVisibleDiff,
         notificationDiff,
@@ -886,6 +1065,7 @@ export async function auditAppliedState(
           productsFingerprint: caseAudit.productsFp!,
           membershipFingerprint: caseAudit.membershipFp!,
           initialEventDedupKey: caseAudit.initialEventDedupKey,
+          equivalencesUsed,
         });
       }
     }
@@ -937,6 +1117,7 @@ export async function auditAppliedState(
 
   const body = {
     schemaVersion: PLAN_SCHEMA_VERSION,
+    equivalenceContract: LEGACY_EQUIVALENCE_CONTRACT,
     gitCommit: options.gitCommit,
     summary,
     records,
@@ -1022,6 +1203,11 @@ export async function applySeedPlan(
   if (plan.schemaVersion !== PLAN_SCHEMA_VERSION) {
     throw new PlanValidationError(
       `plan schema ${plan.schemaVersion} is not the supported ${PLAN_SCHEMA_VERSION}`,
+    );
+  }
+  if (plan.equivalenceContract !== LEGACY_EQUIVALENCE_CONTRACT) {
+    throw new PlanValidationError(
+      `plan was compared under equivalence contract ${plan.equivalenceContract ?? '(none)'} but this code applies ${LEGACY_EQUIVALENCE_CONTRACT} — regenerate the plan so generation and apply share one contract`,
     );
   }
   const recomputed = planContentDigest(plan);
