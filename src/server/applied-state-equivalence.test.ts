@@ -14,7 +14,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import {
@@ -337,15 +337,19 @@ test('an accepted equivalence beside one real drift still refuses the record', a
 
 // ── Marker-state gating: only apply_state IS NULL compares under the rules ──
 
-test('an applied record stays strictly checked — the same pair is drift there', async () => {
-  const store = await fdaStore(false); // markers kept: the O3-applied state
+test('an applied record with a SANE marker settles under the same rules (O3-B4C)', async () => {
+  const store = await fdaStore(false); // markers kept: the seeded/settled O3 state
   normalizedOf(store, PRINCE).declaresRevision = null;
   const plan = await audit(store);
   const finding = only(plan, PRINCE);
-  assert.equal(finding.classification, 'normalized_drift');
+  assert.equal(finding.classification, 'already_applied_equivalent');
   assert.equal(finding.seedable, false);
-  assert.deepEqual(finding.equivalencesUsed, []);
-  assert.ok(finding.fieldDiffs.some((d) => d.field === 'normalized.declaresRevision'));
+  assert.equal(finding.requiresSeparateReview, false);
+  assert.deepEqual(finding.equivalencesUsed, ['R1']);
+  assert.deepEqual(finding.fieldDiffs, []);
+  assert.equal(plan.summary.seedableCount, 0);
+  assert.equal(plan.summary.refusedCount, 0);
+  assert.equal(plan.summary.populationVerdict, 'fully_consistent');
 });
 
 test('a pending record stays strictly checked', async () => {
@@ -595,3 +599,307 @@ test('equivalence comparison never touches notification or material-change machi
   assert.ok(!source.includes('material-change'));
   assert.ok(!source.includes('detectChanges'));
 });
+
+// ── O3-B4C settlement recognition: applied records with sane markers ────────
+
+/** Applied store with a marker deliberately broken (hash or seq). */
+function breakMarker(store: MemoryStore, nativeId: string, kind: 'hash' | 'seq'): void {
+  const row = record(store, nativeId);
+  if (kind === 'hash') row.appliedContentHash = 'not-the-snapshot-hash';
+  else row.appliedSnapshotSeq = (row.appliedSnapshotSeq ?? 0) + 999;
+}
+
+test('settlement: R2, R3-normalized, R3-projection, and R4 each settle an applied record', async () => {
+  const cases: [string, (s: MemoryStore) => void, string[]][] = [
+    ['R2', (s) => void (normalizedOf(s, PRINCE).declaresExpansion = null), ['R2']],
+    ['R3n', (s) => void (normalizedOf(s, PRINCE).retailerNames = null), ['R3-normalized']],
+    [
+      'R3p',
+      (s) =>
+        void ((caseOf(s, PRINCE).projection as unknown as Record<string, unknown>).retailerNames =
+          null),
+      ['R3-projection'],
+    ],
+    [
+      'R4',
+      (s) =>
+        void delete (
+          caseOf(s, PRINCE).projection.classification as unknown as Record<string, unknown>
+        ).officialClasses,
+      ['R4'],
+    ],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const store = await fdaStore(false);
+    mutate(store);
+    const plan = await audit(store);
+    const finding = only(plan, PRINCE);
+    assert.equal(finding.classification, 'already_applied_equivalent', `${label} must settle`);
+    assert.deepEqual(finding.equivalencesUsed, expected, label);
+    assert.equal(plan.seedable.length, 0, `${label}: settlement is never seedable`);
+  }
+});
+
+test('settlement: multiple accepted rules settle one applied record with every rule tagged', async () => {
+  const store = await fdaStore(false);
+  const normalized = normalizedOf(store, PRINCE);
+  normalized.declaresRevision = null;
+  normalized.declaresExpansion = null;
+  normalized.retailerNames = null;
+  const caseRow = caseOf(store, PRINCE);
+  (caseRow.projection as unknown as Record<string, unknown>).retailerNames = null;
+  delete (caseRow.projection.classification as unknown as Record<string, unknown>).officialClasses;
+  const plan = await audit(store);
+  const finding = only(plan, PRINCE);
+  assert.equal(finding.classification, 'already_applied_equivalent');
+  assert.deepEqual(finding.equivalencesUsed, ['R1', 'R2', 'R3-normalized', 'R3-projection', 'R4']);
+  assert.deepEqual(plan.summary.equivalenceRuleCounts, {
+    R1: 1,
+    R2: 1,
+    'R3-normalized': 1,
+    'R3-projection': 1,
+    R4: 1,
+  });
+  assert.equal(plan.summary.populationVerdict, 'fully_consistent');
+});
+
+test('settlement: exact and equivalent applied siblings coexist in one group', async () => {
+  const store = await fdaStore(false);
+  const announcementCase = caseOf(store, PRINCE);
+  const raw: OpenFdaEnforcementRaw = {
+    recall_number: 'F-4000-2026',
+    event_id: '88900',
+    classification: 'Class I',
+    status: 'Ongoing',
+    recalling_firm: 'Fixture Firm',
+    product_description: 'Fixture product',
+    code_info: 'Lot 9',
+    reason_for_recall: 'Fixture reason',
+    recall_initiation_date: '20260810',
+    center_classification_date: '20260818',
+    report_date: '20260820',
+  };
+  const parsed = parseEnforcementRecord(raw);
+  await enrichCaseWithMatches(
+    store,
+    announcementCase.id,
+    [{ eventId: parsed.eventId, method: 'code-identity', records: [parsed], evidence: ['e'] }],
+    new Map([[parsed.recallNumber, raw]]),
+    { apply: true, now: NOW },
+  );
+  // Record-level R1 on the announcement only; the enforcement sibling is exact.
+  normalizedOf(store, PRINCE).declaresRevision = null;
+  const plan = await audit(store);
+  assert.equal(only(plan, PRINCE).classification, 'already_applied_equivalent');
+  assert.equal(only(plan, 'F-4000-2026').classification, 'already_applied_consistent');
+  assert.equal(plan.summary.populationVerdict, 'fully_consistent');
+});
+
+test('settlement: an applied-equivalent sibling neither blocks nor hides a legacy sibling', async () => {
+  // Applied announcement + LEGACY enforcement sibling, case shaped to need R4:
+  // the applied record settles as equivalent, and the clean legacy sibling
+  // remains seedable under the same group equivalence — a settled sibling
+  // never blocks governed seeding, and seeding evidence stays intact.
+  const store = await multiSourceStore(); // strips ALL markers
+  // Re-apply the FSIS announcement's marker so it is applied + sane.
+  const ann = record(store, '017-2026');
+  const annLatest = store.snapshots.filter((snap) => snap.sourceRecordId === ann.id).at(-1)!;
+  ann.applyState = 'applied';
+  ann.appliedContentHash = annLatest.contentHash;
+  ann.appliedSnapshotSeq = annLatest.seq;
+  ann.appliedAt = NOW().toISOString();
+  delete (caseOf(store, '017-2026').projection.classification as unknown as Record<string, unknown>)
+    .officialClasses;
+  const plan = await audit(store);
+  assert.equal(only(plan, '017-2026').classification, 'already_applied_equivalent');
+  const enforcement = only(plan, 'F-2000-2026');
+  assert.equal(enforcement.classification, 'equivalent_legacy_seedable');
+  assert.deepEqual(enforcement.equivalencesUsed, ['R4']);
+  assert.equal(plan.seedable.length, 1);
+});
+
+test('settlement: genuine residual drift on an applied record remains drift', async () => {
+  const store = await fdaStore(false);
+  normalizedOf(store, PRINCE).declaresRevision = null; // accepted rule fires…
+  normalizedOf(store, PRINCE).title = 'A different stored title'; // …but real drift remains
+  const plan = await audit(store);
+  const finding = only(plan, PRINCE);
+  assert.equal(finding.classification, 'multiple_findings');
+  assert.equal(finding.seedable, false);
+  assert.deepEqual(finding.equivalencesUsed, ['R1']);
+  assert.ok(finding.fieldDiffs.some((d) => d.field === 'normalized.title'));
+  assert.equal(plan.summary.refusedCount, 1);
+});
+
+test('settlement: a marker HASH mismatch takes precedence over any equivalence', async () => {
+  const store = await fdaStore(false);
+  breakMarker(store, PRINCE, 'hash');
+  const plan = await audit(store);
+  // Stored state is exact, so the marker is the only finding.
+  assert.equal(only(plan, PRINCE).classification, 'applied_marker_inconsistent');
+
+  const store2 = await fdaStore(false);
+  breakMarker(store2, PRINCE, 'hash');
+  normalizedOf(store2, PRINCE).declaresRevision = null; // would be R1 with a sane marker
+  const plan2 = await audit(store2);
+  const finding = only(plan2, PRINCE);
+  assert.equal(finding.classification, 'multiple_findings');
+  assert.deepEqual(finding.equivalencesUsed, []); // strict — never rehabilitated
+  assert.ok(finding.reasons.some((r) => r.includes('does not match the latest snapshot')));
+});
+
+test('settlement: a marker SEQUENCE mismatch takes precedence over any equivalence', async () => {
+  const store = await fdaStore(false);
+  breakMarker(store, PRINCE, 'seq');
+  normalizedOf(store, PRINCE).declaresRevision = null;
+  const plan = await audit(store);
+  const finding = only(plan, PRINCE);
+  assert.equal(finding.classification, 'multiple_findings');
+  assert.deepEqual(finding.equivalencesUsed, []);
+  assert.equal(finding.seedable, false);
+});
+
+test('settlement: a marker-inconsistent sibling forces the whole group strict', async () => {
+  const store = await fdaStore(false);
+  const caseRow = caseOf(store, PRINCE);
+  delete (caseRow.projection.classification as unknown as Record<string, unknown>).officialClasses;
+  breakMarker(store, PRINCE, 'hash');
+  const plan = await audit(store);
+  const finding = only(plan, PRINCE);
+  // Strict projection comparison exposes the legacy shape as real drift
+  // beside the marker finding — nothing is hidden by equivalence.
+  assert.equal(finding.classification, 'multiple_findings');
+  assert.deepEqual(finding.equivalencesUsed, []);
+  assert.ok(finding.reasons.some((r) => r.includes('marker')));
+  assert.ok(finding.fieldDiffs.some((d) => d.field === 'projection.classification'));
+});
+
+test('settlement: pending and degraded records never settle through equivalence', async () => {
+  for (const state of ['pending', 'applied_degraded'] as const) {
+    const store = await fdaStore(false);
+    record(store, PRINCE).applyState = state;
+    normalizedOf(store, PRINCE).declaresRevision = null;
+    const plan = await audit(store);
+    const finding = only(plan, PRINCE);
+    assert.notEqual(finding.classification, 'already_applied_equivalent', state);
+    assert.deepEqual(finding.equivalencesUsed, [], state);
+  }
+});
+
+test('settlement: affirmative evidence on an applied record remains strict drift', async () => {
+  const store = await fdaStore(false);
+  normalizedOf(store, PRINCE).declaresRevision = true; // stored affirmative vs derived false
+  const plan = await audit(store);
+  const finding = only(plan, PRINCE);
+  assert.notEqual(finding.classification, 'already_applied_equivalent');
+  assert.deepEqual(finding.equivalencesUsed, []);
+  assert.ok(finding.fieldDiffs.some((d) => d.field === 'normalized.declaresRevision'));
+});
+
+test('settlement: the dry run stays write-free and deterministic over an applied-equivalent store', async () => {
+  const store = await fdaStore(false);
+  normalizedOf(store, PRINCE).declaresRevision = null;
+  const before = durableState(store);
+  const one = await audit(store);
+  assert.deepEqual(durableState(store), before);
+  const two = await auditAppliedState(store, {
+    gitCommit: GIT,
+    now: NOW,
+    pageSizes: {
+      records: 1,
+      health: 1,
+      cases: 1,
+      caseTokens: 1,
+      products: 1,
+      initialEvents: 1,
+      payloadChunk: 1,
+    },
+  });
+  assert.equal(one.planDigest, two.planDigest);
+  assert.deepEqual(one.records, two.records);
+});
+
+// ── Offline evidence regression (skips when ignored artifacts are absent) ───
+//
+// EVIDENCE PROJECTION, not a production census: re-runs the exact shipped
+// predicates over the git-ignored O3-B4B settlement + applied-plan artifacts
+// and asserts the corrected engine would decompose production settlement as
+// 926 exact applied + 1,465 applied-equivalent + 1,134 governed legacy
+// refusals + 0 seedable + 0 marker-inconsistent — pending the separately
+// authorized fresh production settlement run.
+
+const SETTLEMENT_PATH = new URL(
+  '../../.reports/o3-b4b-post-apply-settlement.json',
+  import.meta.url,
+);
+const APPLIED_PLAN_PATH = new URL(
+  '../../.reports/o3-b4b-reconciliation-dry-run.json',
+  import.meta.url,
+);
+const evidencePresent = existsSync(SETTLEMENT_PATH) && existsSync(APPLIED_PLAN_PATH);
+
+test(
+  'evidence projection: corrected settlement decomposes the O3-B4B production evidence as 926/1465/1134',
+  { skip: !evidencePresent && 'ignored O3-B4B evidence artifacts not present' },
+  () => {
+    const settlement = JSON.parse(readFileSync(SETTLEMENT_PATH, 'utf8'));
+    const appliedPlan = JSON.parse(readFileSync(APPLIED_PLAN_PATH, 'utf8'));
+    const parse = (v: string): unknown => (v.endsWith('…') ? Symbol('truncated') : JSON.parse(v));
+    const covered = (d: { field: string; stored: string; derived: string }): boolean => {
+      const stored = parse(d.stored);
+      const derived = parse(d.derived);
+      if (typeof stored === 'symbol' || typeof derived === 'symbol') return false;
+      if (d.field.startsWith('normalized.')) {
+        return (
+          normalizedLegacyEquivalence(d.field.slice('normalized.'.length), stored, derived) !== null
+        );
+      }
+      if (d.field.startsWith('projection.')) {
+        return (
+          projectionLegacyEquivalence(d.field.slice('projection.'.length), stored, derived) !== null
+        );
+      }
+      return false;
+    };
+    let exactApplied = 0;
+    let appliedEquivalent = 0;
+    let legacyRefused = 0;
+    let markerInconsistent = 0;
+    let seedable = 0;
+    for (const r of settlement.records) {
+      if (r.seedable) seedable += 1;
+      if (r.classification === 'applied_marker_inconsistent') markerInconsistent += 1;
+      if (r.applyState === 'applied') {
+        if (r.classification === 'already_applied_consistent') exactApplied += 1;
+        else if (r.fieldDiffs.length > 0 && r.fieldDiffs.every(covered)) appliedEquivalent += 1;
+      } else if (r.applyState === null && r.classification !== 'consistent_legacy_seedable') {
+        legacyRefused += 1;
+      }
+    }
+    assert.equal(exactApplied, 926);
+    assert.equal(appliedEquivalent, 1465);
+    assert.equal(legacyRefused, 1134);
+    assert.equal(seedable, 0);
+    assert.equal(markerInconsistent, 0);
+    // Cross-binding: the projected applied-equivalent set must be exactly the
+    // population the executed plan seeded under the equivalence contract.
+    const equivalenceSeeded = new Set(
+      appliedPlan.seedable
+        .filter((e: { equivalencesUsed: string[] }) => e.equivalencesUsed.length > 0)
+        .map((e: { sourceRecordId: string }) => e.sourceRecordId),
+    );
+    const projected = settlement.records.filter(
+      (r: {
+        applyState: string | null;
+        classification: string;
+        fieldDiffs: { field: string; stored: string; derived: string }[];
+      }) =>
+        r.applyState === 'applied' &&
+        r.classification !== 'already_applied_consistent' &&
+        r.fieldDiffs.length > 0 &&
+        r.fieldDiffs.every(covered),
+    );
+    assert.equal(projected.length, equivalenceSeeded.size);
+    for (const r of projected) assert.ok(equivalenceSeeded.has(r.sourceRecordId));
+  },
+);

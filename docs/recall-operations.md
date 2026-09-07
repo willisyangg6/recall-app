@@ -599,14 +599,56 @@ Plan binding: the plan schema is now `recall-applied-state-plan/2` and every
 plan records its `equivalenceContract`; apply refuses any other schema or
 contract version, so the Phase 3B plan (`plan/1`, commit-bound to `7c2a25a`)
 can never be applied or silently reinterpreted under the new rules — it
-stays a frozen evidence artifact. **No production dry run under R1–R4 has
-happened yet**; the O3-B4A evidence-audit projection (NOT a production
-census) expects roughly 2,389 certifiable records (≈2,374 legacy, freeing
-≈886 enforcement records) with ≈1,134 still refused as genuine
-parser/projector-era drift. The seven notification-eligible improvement
-events, the nine ambiguous records, and any O3-B5 historical re-derivation
-remain deferred founder decisions; marker seeding remains separately
-authorized.
+stays a frozen evidence artifact. The seven notification-eligible
+improvement events, the nine ambiguous records, and any O3-B5 historical
+re-derivation remain deferred founder decisions.
+
+### The 2,374-marker apply and settlement recognition (O3-B4C, 2026-09-07)
+
+The R1–R4 contract ran and applied in production on 2026-09-07 (ledgers
+under git-ignored `.reports/`): the plan/2 dry run certified exactly the
+projected population (2,374 seedable = 909 exact + 1,465
+equivalence-certified; 1,134 refused), and the founder-authorized
+plan-bound apply seeded **all 2,374 markers with zero conflicts** —
+column-exact (the four marker fields only; a deterministic aggregate over
+every non-marker column was byte-identical before and after), zero
+notification events, the 1,134 refusals untouched. Production markers are
+correct and ingestion is unaffected: the ingest gate reads snapshot hashes
+and marker state, never normalized equality.
+
+The Phase 4 settlement run then exposed an audit-semantics gap: the
+equivalence rules were gated to `apply_state IS NULL`, so the audit
+re-classified the 1,465 equivalence-seeded rows as drift (their stored
+bytes still carry the legacy-era shapes; only markers changed by design)
+while their markers stayed snapshot-perfect (0 marker-inconsistent).
+O3-B4C closes that gap in code only: a record whose marker is proven sane
+(matches its latest snapshot) compares under the same versioned rules and
+settles as **`already_applied_equivalent`** — distinct from
+`already_applied_consistent` (exact), never seedable, never a historical
+mismatch, and reported with its `equivalencesUsed`. Marker inconsistency
+always takes precedence (a bad marker is never rehabilitated by
+equivalence, and a marker-inconsistent contributor forces its whole group
+strict); `pending`/`applied_degraded` never settle through equivalence.
+
+Durable evidence needs no schema column: the marker's hash+sequence bind
+the record to its archived snapshot, re-derivation from that snapshot is
+deterministic, the contract is versioned in code, every audit reports the
+rules used, and the immutable plan/apply ledgers hold the original
+authorization. Versioning: `legacy-equivalence/1` and
+`recall-applied-state-plan/2` are unchanged — the rules and the seed/apply
+semantics are identical; only the settlement classification vocabulary
+grew — and git-commit binding already fail-closes any attempt to apply an
+older plan under newer code. If a future contract revision changes any
+rule, its version must bump and the next audit re-evaluates settlement
+under the new contract (markers stay valid; only classification shifts).
+
+**No production settlement run under the corrected code has happened
+yet.** The offline evidence regression (pinned in
+`applied-state-equivalence.test.ts`, skipped where the ignored artifacts
+are absent) projects the corrected decomposition as 926 exact applied +
+1,465 applied-equivalent + 1,134 governed legacy refusals + 0 seedable +
+0 marker-inconsistent — pending that separately authorized read-only run.
+Push delivery remains inactive.
 
 ## Labels: incremental by construction
 

@@ -171,6 +171,10 @@ async function main(): Promise<void> {
     }
     console.log(`  seedable (plan):       ${s.seedableCount}`);
     console.log(`  refused (governed):    ${s.refusedCount}`);
+    const rules = Object.entries(s.equivalenceRuleCounts ?? {}).sort();
+    if (rules.length > 0) {
+      console.log(`  equivalence rules:     ${rules.map(([k, v]) => `${k}×${v}`).join('  ')}`);
+    }
     console.log(
       `  notification events:   ${s.notificationEventsWritten} (audit writes none, ever)`,
     );

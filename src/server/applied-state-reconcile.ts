@@ -39,6 +39,13 @@
  *    these explicitly versioned rules — never consumer-visible,
  *    notification-material, ambiguous, or integrity-relevant drift, and
  *    never a difference merely because current consumers ignore the field.
+ *    SETTLEMENT (O3-B4C): an APPLIED record whose marker matches its latest
+ *    snapshot compares under the same rules and settles as
+ *    `already_applied_equivalent` when only rule-accepted differences
+ *    remain — the durable evidence is the marker's snapshot binding plus
+ *    deterministic re-derivation under the versioned contract, so no
+ *    schema column is needed. Marker inconsistency always wins over
+ *    equivalence; pending/degraded stay strict.
  *    For
  *    `openfda_enforcement` the stored match-provenance block
  *    (`normalized.enforcement.match`: method, matcherVersion, matchedAt,
@@ -95,12 +102,18 @@ const SUPPORTED_SYSTEMS: SourceSystem[] = ['fsis_api', 'fda_announcement', 'open
  * `equivalent_legacy_seedable`: a legacy record seedable ONLY under the
  * versioned legacy-equivalence rules, kept distinct from
  * `consistent_legacy_seedable` (exact equality) so a reviewer always sees
- * which entries relied on the contract.
+ * which entries relied on the contract. O3-B4C adds the settlement mirror
+ * `already_applied_equivalent`: an APPLIED record whose marker is sane
+ * (matches its latest snapshot) and whose only stored-vs-derived
+ * differences are accepted by the active contract — valid settled state,
+ * never seedable, never a historical mismatch. A bad marker always takes
+ * precedence: equivalence can never rehabilitate `applied_marker_inconsistent`.
  */
 export type ReconcileClassification =
   | 'consistent_legacy_seedable'
   | 'equivalent_legacy_seedable'
   | 'already_applied_consistent'
+  | 'already_applied_equivalent'
   | 'pending_current_version'
   | 'applied_degraded'
   | 'normalized_drift'
@@ -177,6 +190,8 @@ export interface ReconcileSummary {
   seedableCount: number;
   refusedCount: number;
   classificationCounts: Record<string, number>;
+  /** Records whose comparison used each equivalence rule (O3-B4C reporting). */
+  equivalenceRuleCounts: Record<string, number>;
   plannedMarkerWrites: number;
   appliedMarkerWrites: number;
   notificationEventsWritten: number;
@@ -433,8 +448,10 @@ interface RecordAudit {
   snapshotHash: string | null;
   /** Record-level findings only (case-level ones attach in the case pass). */
   findings: { classification: ReconcileClassification; reason: string; diffs?: FieldDiff[] }[];
-  /** Rule tags accepted at the normalized boundary (legacy records only). */
+  /** Rule tags accepted at the normalized boundary (equivalence-eligible records only). */
   normalizedEquivalences: string[];
+  /** True for an applied/degraded record whose marker matches its latest snapshot. */
+  markerSane: boolean;
   normalizedFingerprint: string | null;
 }
 
@@ -678,6 +695,7 @@ export async function auditAppliedState(
         snapshotHash: null,
         findings: [],
         normalizedEquivalences: [],
+        markerSane: false,
         normalizedFingerprint: contentHash(record.normalized),
       });
     }
@@ -724,32 +742,10 @@ export async function auditAppliedState(
       });
       continue;
     }
-    const derived = rederiveNormalized(record, payloadBySeq.get(latest.seq));
-    if ('error' in derived) {
-      audit.findings.push({
-        classification: 'snapshot_parse_failure',
-        reason: `archived payload does not re-derive: ${derived.error}`,
-      });
-    } else {
-      // A legacy-unverified record compares under the four accepted
-      // equivalence rules; every other apply_state compares strictly.
-      const cmp = diffWithLegacyEquivalence(
-        record.normalized,
-        derived.normalized,
-        'normalized.',
-        (record.applyState ?? null) === null ? normalizedLegacyEquivalence : null,
-      );
-      audit.normalizedEquivalences = cmp.equivalencesUsed;
-      if (cmp.residual.length > 0) {
-        audit.findings.push({
-          classification: 'normalized_drift',
-          reason: 'stored normalized state disagrees with re-derivation from the archived snapshot',
-          diffs: cmp.residual,
-        });
-      }
-    }
-    // O3-era marker sanity (§12): an applied/degraded marker must point
-    // at the LATEST snapshot with its hash, with no required field null.
+    // O3-era marker sanity (§12) runs FIRST: an applied/degraded marker must
+    // point at the LATEST snapshot with its hash, with no required field
+    // null — and marker inconsistency takes precedence over equivalence, so
+    // eligibility below depends on this verdict.
     const state = record.applyState ?? null;
     if (state === 'applied' || state === 'applied_degraded') {
       if (record.appliedSnapshotSeq == null || record.appliedContentHash == null) {
@@ -764,6 +760,36 @@ export async function auditAppliedState(
         audit.findings.push({
           classification: 'applied_marker_inconsistent',
           reason: `marker (seq ${record.appliedSnapshotSeq}, hash ${clip(record.appliedContentHash)}) does not match the latest snapshot (seq ${latest.seq})`,
+        });
+      } else {
+        audit.markerSane = true;
+      }
+    }
+    // Equivalence eligibility (O3-B4C): a legacy-unverified record, or an
+    // APPLIED record whose marker is proven sane — the settled outcome of
+    // the marker apply. `pending`/`applied_degraded` and any record with a
+    // bad marker compare strictly; the rules themselves stay legacy-
+    // directional over the STORED representation either way.
+    const equivalenceEligible = state === null || (state === 'applied' && audit.markerSane);
+    const derived = rederiveNormalized(record, payloadBySeq.get(latest.seq));
+    if ('error' in derived) {
+      audit.findings.push({
+        classification: 'snapshot_parse_failure',
+        reason: `archived payload does not re-derive: ${derived.error}`,
+      });
+    } else {
+      const cmp = diffWithLegacyEquivalence(
+        record.normalized,
+        derived.normalized,
+        'normalized.',
+        equivalenceEligible ? normalizedLegacyEquivalence : null,
+      );
+      audit.normalizedEquivalences = cmp.equivalencesUsed;
+      if (cmp.residual.length > 0) {
+        audit.findings.push({
+          classification: 'normalized_drift',
+          reason: 'stored normalized state disagrees with re-derivation from the archived snapshot',
+          diffs: cmp.residual,
         });
       }
     }
@@ -851,17 +877,20 @@ export async function auditAppliedState(
     caseAudit.projectionFingerprint = contentHash(caseRow.projection);
 
     const recomputed = projectCase(contributors.map((audit) => audit.record.normalized));
-    // Projection equivalences may relax only an all-legacy group: any
-    // pending/applied/degraded contributor means the stored projection was
-    // (or is being) written by current-era code and must match strictly.
-    const groupAllLegacy = contributors.every(
-      (audit) => (audit.record.applyState ?? null) === null,
-    );
+    // Projection equivalences may relax a group only when EVERY contributor
+    // is equivalence-eligible: legacy-unverified, or applied with a sane
+    // marker (O3-B4C settlement). A pending, degraded, or marker-
+    // inconsistent contributor forces strict comparison — an equivalent
+    // sibling can never hide a bad marker or in-flight work.
+    const groupEquivalenceEligible = contributors.every((audit) => {
+      const state = audit.record.applyState ?? null;
+      return state === null || (state === 'applied' && audit.markerSane);
+    });
     const projectionCmp = diffWithLegacyEquivalence(
       caseRow.projection,
       recomputed,
       'projection.',
-      groupAllLegacy ? projectionLegacyEquivalence : null,
+      groupEquivalenceEligible ? projectionLegacyEquivalence : null,
     );
     caseAudit.projectionEquivalences = projectionCmp.equivalencesUsed;
     if (projectionCmp.residual.length > 0) {
@@ -1011,7 +1040,8 @@ export async function auditAppliedState(
       } else if (distinct.length === 1) {
         classification = distinct[0];
       } else if (state === 'applied') {
-        classification = 'already_applied_consistent';
+        classification =
+          equivalencesUsed.length > 0 ? 'already_applied_equivalent' : 'already_applied_consistent';
         requiresSeparateReview = false;
       } else if (!caseCertifiable) {
         // Own state clean, case clean, but a sibling blocks certification.
@@ -1081,14 +1111,21 @@ export async function auditAppliedState(
   caseFindings.sort((a, b) => a.recallCaseId.localeCompare(b.recallCaseId));
 
   const classificationCounts: Record<string, number> = {};
+  const equivalenceRuleCounts: Record<string, number> = {};
   for (const finding of records) {
     classificationCounts[finding.classification] =
       (classificationCounts[finding.classification] ?? 0) + 1;
+    for (const rule of finding.equivalencesUsed) {
+      equivalenceRuleCounts[rule] = (equivalenceRuleCounts[rule] ?? 0) + 1;
+    }
   }
   if (caseFindings.length > 0) classificationCounts.orphan_case = caseFindings.length;
 
   const refused = records.filter(
-    (r) => !r.seedable && r.classification !== 'already_applied_consistent',
+    (r) =>
+      !r.seedable &&
+      r.classification !== 'already_applied_consistent' &&
+      r.classification !== 'already_applied_equivalent',
   );
   const mismatches = records.some((r) => r.requiresSeparateReview) || caseFindings.length > 0;
   const summary: ReconcileSummary = {
@@ -1099,6 +1136,7 @@ export async function auditAppliedState(
     seedableCount: seedable.length,
     refusedCount: refused.length,
     classificationCounts,
+    equivalenceRuleCounts,
     plannedMarkerWrites: seedable.length,
     appliedMarkerWrites: 0,
     notificationEventsWritten: 0,
