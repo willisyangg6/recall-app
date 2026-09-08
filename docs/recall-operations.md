@@ -642,13 +642,77 @@ older plan under newer code. If a future contract revision changes any
 rule, its version must bump and the next audit re-evaluates settlement
 under the new contract (markers stay valid; only classification shifts).
 
-**No production settlement run under the corrected code has happened
-yet.** The offline evidence regression (pinned in
-`applied-state-equivalence.test.ts`, skipped where the ignored artifacts
-are absent) projects the corrected decomposition as 926 exact applied +
-1,465 applied-equivalent + 1,134 governed legacy refusals + 0 seedable +
-0 marker-inconsistent — pending that separately authorized read-only run.
-Push delivery remains inactive.
+The corrected settlement ran in production on 2026-09-07 and decomposed
+exactly as projected: 926 exact applied + 1,465 applied-equivalent +
+1,134 governed legacy refusals + 0 seedable + 0 marker-inconsistent
+(ledger `.reports/o3-b4c-production-settlement.json`). O3-B4 is closed;
+the 1,134 remainder is the O3-B5 population. Push delivery remains
+inactive.
+
+## Historical re-derivation (O3-B5): wave-based, plan-bound, dry-run first
+
+The governed repair of the 1,134-record remainder — genuine
+parser/projector-era content drift, never R1–R4 equivalence. Founder
+decisions (O3-B5A, design ledger `.reports/o3-b5a-rederivation-design.json`):
+**Policy B** for the seven material candidates (correct the data, append one
+`corrected` timeline entry, create ZERO notification events); the eight
+false-Virginia records adopt the current derivation (the old parser matched
+"Virginia" inside "West Virginia" — evidence later showed the false state
+never reached any stored case projection, so these repairs are
+consumer-invisible normalized refreshes); FSIS 083-2016 is a **governed
+exception** — its stored wheat cross-contamination evidence is retained
+because current derivation would erase it, and it stays legacy-unverified
+pending a parser milestone; rollout happens in independently reviewed
+waves with consumer-material cases last.
+
+```bash
+npm run rederive:historical:dry -- --json <path>               # full census plan (never appliable)
+npm run rederive:historical:dry -- --wave <wave> --json <path> # wave-bound reviewable plan
+npm run rederive:historical -- --confirm --wave <wave>     --plan <reviewed-plan.json> --digest <plan digest>         # APPLY exactly one wave
+```
+
+Waves (stable identifiers; membership derived from evidence at dry-run
+time, never hardcoded): `inert_refresh` (consumer-invisible normalized/
+projection refresh — the vast majority), `visible_corrections`
+(presentation-visible but notification-inert: the "FSIS"-as-firm dozen,
+quantity and non-material instruction fixes), `virginia_false_positive`
+(case-level false-state removal; projected EMPTY in production because the
+defect never reached projections — kept for the hypothetical), and
+`material_corrections` (the seven Policy B cases). The
+`governed_exception` classification (the allergen-evidence-loss shape,
+generalized) rides along in every plan as a report and is never appliable.
+Evidence projection (pending the separately authorized production dry
+run): inert 397 groups / 1,090 records, visible 22 / 28, material 7 / 15,
+exception 1 / 1; ≈439 normalized writes; exactly 7 `corrected` entries.
+
+**Transaction model — two steps, honestly stated.** Repairing one case
+group is NOT a single database transaction: Step 1 performs guarded
+`updateSourceRecordNormalized` writes per drifting contributor
+(consumer-invisible; the monotonic snapshot guard refuses stale workers);
+Step 2 performs ONE `apply_case_transition` RPC in which the repaired
+projection, unchanged-or-planned products, the optional `corrected`
+timeline entry, an EMPTY event list, every contributor's marker, and the
+case CAS commit or roll back together — that step alone is atomic. A crash
+between steps leaves consumers untouched and the group visibly unfinished;
+a rerun with the SAME plan converges: every contributor must sit at its
+planned pre- or post-repair normalized fingerprint (a third state refuses
+the group), already-post contributors are skipped, and the transition
+fires only when all contributors reach post-state. Mutations are never
+retried; plan reads use a bounded 4-attempt retry.
+
+Plans (`recall-rederivation-plan/1`, derivation contract
+`historical-rederivation/1`) are immutable, digest-bound, commit-bound,
+wave-bound (a census plan or another wave's plan fails closed), atomic on
+disk, refuse-overwrite, and carry fingerprints and bounded diffs — never
+raw payloads. The `corrected` timeline entry (existing `TimelineEntry`
+kind; new optional `repair` provenance block) states that the app
+corrected its reading of the original official notice — it is not a new
+agency update: `publishedAt`, `lastPublicActivityAt`, feed ordering, and
+notification history are untouched, `material` is false,
+`notificationEventCreated` is pinned false, and its deterministic
+fingerprint makes duplication impossible. **No production O3-B5 dry run or
+repair has happened yet**; each wave requires its own founder-authorized
+plan, review, apply, and settlement verification.
 
 ## Labels: incremental by construction
 

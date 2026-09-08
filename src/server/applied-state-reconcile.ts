@@ -358,8 +358,11 @@ function diffWithLegacyEquivalence(
   return { residual, equivalencesUsed: [...used].sort() };
 }
 
-/** Re-derive a record's normalized state from its archived payload. */
-function rederiveNormalized(
+/** Re-derive a record's normalized state from its archived payload.
+ * Exported as the SINGLE derivation owner shared with the O3-B5 historical
+ * re-derivation engine — both must always agree on what "current
+ * derivation" means. */
+export function rederiveNormalized(
   record: SourceRecordRow,
   payload: unknown,
 ): { normalized: NormalizedSourceRecord } | { error: string } {

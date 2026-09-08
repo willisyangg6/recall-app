@@ -96,6 +96,23 @@ export interface TimelineEntry {
   material: boolean;
   /** Material-change rule that fired, when material. */
   ruleId?: MaterialChangeRuleId;
+  /**
+   * Present ONLY on `corrected` entries appended by a governed historical
+   * repair (O3-B5): the app corrected its own reading of the ORIGINAL
+   * official notice. Never a new agency update — feed ordering, published
+   * dates, and notification history are untouched, and
+   * `notificationEventCreated` is pinned false. Readers that don't know
+   * this block ignore it (JSONB forward compatibility).
+   */
+  repair?: {
+    /** Deterministic dedup fingerprint — a rerun can never duplicate the entry. */
+    fingerprint: string;
+    derivationContract: string;
+    wave: string;
+    changedCategories: string[];
+    consumerVisible: boolean;
+    notificationEventCreated: false;
+  };
 }
 
 /**
