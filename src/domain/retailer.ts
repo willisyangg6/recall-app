@@ -138,11 +138,23 @@ const LEADING_PLACE = new RegExp(
 const VENUE_DESCRIPTOR_TAIL =
   /\s+(?:retail|grocery|wholesale|convenience|gas station|supermarkets?|stores?|markets?|locations?|clubs?|restaurants?|outlets?)$/;
 
+/**
+ * An "and"-joined tail led by a lowercase quantifier/generic word is unnamed
+ * distribution prose, never a second retailer: "Walgreens and some
+ * independent [stores]" names exactly ONE store, and "some independent" must
+ * not survive as identity. A capitalized right side ("H-E-B and Joe V's
+ * Smart Shop") is untouched — capitalization is the name/description line
+ * everywhere in this module. Case-sensitive on purpose.
+ */
+const GENERIC_CONJUNCTION_TAIL =
+  /\s+and\s+(?:some|other|others|various|select|selected|certain|numerous|many|any|all|additional|several|a few|local|smaller|independent)\b.*$/;
+
 /** One store name, cleaned of the wording around it. */
 function cleanRetailerName(raw: string): string {
   return raw
     .replace(LEADING_PLACE, '')
     .replace(NAME_TRIM, '')
+    .replace(GENERIC_CONJUNCTION_TAIL, '')
     .replace(VENUE_DESCRIPTOR_TAIL, '')
     .replace(/[\s,]+$/, '')
     .trim();

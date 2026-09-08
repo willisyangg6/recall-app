@@ -710,9 +710,29 @@ corrected its reading of the original official notice — it is not a new
 agency update: `publishedAt`, `lastPublicActivityAt`, feed ordering, and
 notification history are untouched, `material` is false,
 `notificationEventCreated` is pinned false, and its deterministic
-fingerprint makes duplication impossible. **No production O3-B5 dry run or
-repair has happened yet**; each wave requires its own founder-authorized
-plan, review, apply, and settlement verification.
+fingerprint makes duplication impossible.
+
+Rollout so far: the `inert_refresh` wave applied on 2026-09-08 (397 groups /
+1,090 records, zero conflicts, consumer models byte-identical) and settled
+cleanly (1,090 → strict `already_applied_consistent`; production 3,481
+applied / 44 governed legacy). The first `visible_corrections` plan was
+generated and then **held** (Phase 6A): its Sprout Organics value
+`["Walgreens and some independent"]` was a parser artifact — the official
+notice says "sold in Walgreens and some independent stores", where "some
+independent stores" is unnamed distribution prose, so the only stated
+retailer identity is `Walgreens`. Phase 6B added the general rule (an
+"and"-joined tail led by a lowercase quantifier/generic word is prose,
+stripped in `cleanRetailerName`; capitalized conjunctions like
+"H-E-B and Joe V's Smart Shop" untouched), which changed exactly ONE
+derived value in the whole recorded corpus (that Sprout record →
+`["Walgreens"]`). Because parsing changed, the derivation contract is now
+`historical-rederivation/2` and the held `/1` plan is permanently
+un-appliable (refused before any write). Walgreens remains outside the
+personalization catalog — matching and filters are unaffected; adding it
+is an independent future product/catalog decision. **No visible-wave
+production plan under `/2` has been generated or applied yet**; the
+`material_corrections` wave and the 083-2016 exception are unchanged, and
+push delivery remains inactive.
 
 ## Labels: incremental by construction
 

@@ -601,3 +601,36 @@ test('current O3 reconciliation behavior is untouched by the repair module', asy
   assert.equal(finding.classification, 'multiple_findings');
   assert.equal(finding.seedable, false);
 });
+
+// ── O3-B5B Phase 6B: derivation contract /2 and old-plan rejection ──────────
+
+test('new plans carry historical-rederivation/2 and a held /1 plan is refused before any mutation', async () => {
+  const store = await inertStore();
+  const plan = await build(store, 'inert_refresh');
+  assert.equal(plan.derivationContract, 'historical-rederivation/2');
+  assert.equal(DERIVATION_CONTRACT, 'historical-rederivation/2');
+  assert.equal(plan.schemaVersion, 'recall-rederivation-plan/1'); // shape unchanged — no bump
+
+  // A plan claiming the retired /1 contract (the held Phase 6 production
+  // plan's shape) is refused up front, before any store mutation.
+  const v1 = { ...plan, derivationContract: 'historical-rederivation/1' } as RederivationPlan;
+  v1.planDigest = rederivationPlanDigest(v1);
+  let writes = 0;
+  const originalUpdate = store.updateSourceRecordNormalized.bind(store);
+  const originalTransition = store.applyCaseTransition.bind(store);
+  store.updateSourceRecordNormalized = async (...args) => {
+    writes += 1;
+    return originalUpdate(...args);
+  };
+  store.applyCaseTransition = async (input) => {
+    writes += 1;
+    return originalTransition(input);
+  };
+  await assert.rejects(
+    apply(store, v1, 'inert_refresh'),
+    (e: unknown) =>
+      e instanceof RederivationPlanError && /historical-rederivation\/1/.test(e.message),
+  );
+  assert.equal(writes, 0);
+  assert.equal(record(store, '017-2026').applyState ?? null, null);
+});

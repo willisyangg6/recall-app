@@ -58,8 +58,11 @@ export const REDERIVATION_PLAN_SCHEMA = 'recall-rederivation-plan/1';
  * derived under. Together with the Git-commit binding it guarantees plan
  * generation and apply share one notion of "current derivation" — bump it on
  * ANY parser/projector change that should invalidate outstanding plans.
+ * /2 (O3-B5B Phase 6B): the retailer seam strips lowercase quantifier-led
+ * "and …" prose tails, so the held /1 visible_corrections plan (which
+ * carried "Walgreens and some independent") is permanently un-appliable.
  */
-export const DERIVATION_CONTRACT = 'historical-rederivation/1';
+export const DERIVATION_CONTRACT = 'historical-rederivation/2';
 
 const SUPPORTED_SYSTEMS: SourceSystem[] = ['fsis_api', 'fda_announcement', 'openfda_enforcement'];
 

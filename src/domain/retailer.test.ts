@@ -88,3 +88,77 @@ test('retailersWithPlaces keeps the source-stated store→place relationships', 
   ]);
   assert.deepEqual(retailersWithPlaces(null), []);
 });
+
+// ── Generic conjunction tails (O3-B5B Phase 6B) ─────────────────────────────
+//
+// "and <lowercase quantifier> …" after a named retailer is unnamed
+// distribution prose, never a second identity. Phrasings verbatim from the
+// recorded Sprout Organics notices (bounded excerpts) plus counterexamples.
+
+test('a lowercase quantifier-led "and" tail is prose, not a second retailer', () => {
+  // The recorded original-notice construction.
+  assert.deepEqual(
+    extractRetailerNames(
+      'The product, a 3.5-ounce pouch, was sold in Walgreens and some independent stores in the US South region with most sales in Texas.',
+    ),
+    ['Walgreens'],
+  );
+  // This phrasing never matched the sold-at seam even before the rule
+  // (conservative non-match, verified against the unmodified module) — the
+  // requirement is that NO false identity appears.
+  assert.deepEqual(
+    extractRetailerNames('The affected lot was sold at Walgreens and other independent retailers.'),
+    [],
+  );
+  assert.deepEqual(
+    extractRetailerNames(
+      'The product was sold in Walgreens and other independent stores in the region.',
+    ),
+    ['Walgreens'],
+  );
+  assert.deepEqual(
+    extractRetailerNames('was available at Kroger and various local stores statewide'),
+    ['Kroger'],
+  );
+  // The prose fragment alone must never become an identity.
+  assert.equal(isRetailerName('some independent'), false);
+});
+
+test('the recorded expansion-notice construction still yields no false identity', () => {
+  // Semicolon-separated distribution clauses ("in Walgreens; in independent
+  // retailers in AZ, …; and online") — the state-list clause and the online
+  // channel must not produce identities; Walgreens has no sold-at verb run
+  // of its own here, so the sentence seam stays conservative.
+  const sentence =
+    'The product, a 3.5-ounce pouch, was sold in Walgreens; in independent retailers in AZ, CO, FL; and online. It was not sold in any other large retail chain besides Walgreens.';
+  const names = extractRetailerNames(sentence);
+  assert.ok(!names.some((n) => n.toLowerCase().includes('independent')), JSON.stringify(names));
+  assert.ok(!names.some((n) => /\band\b/.test(n)), JSON.stringify(names));
+});
+
+test('capitalized conjunctions and legitimate names survive the tail rule', () => {
+  // A capitalized right side is a NAME, not prose — preserved exactly.
+  assert.equal(isRetailerName("H-E-B and Joe V's Smart Shop"), true);
+  // Two genuinely named chains in a sold-at list keep exactly the behavior
+  // the unmodified module had (verified old == new on this phrasing) — the
+  // capitalized conjunction is never stripped by the tail rule.
+  assert.deepEqual(
+    extractRetailerNames('sold only at Costco, BJ’s Wholesale Club and Sam’s Club locations'),
+    ['Costco', 'BJ’s Wholesale'],
+  );
+  assert.deepEqual(
+    extractRetailerNames(
+      'is recalling lot 3896 of Wellsley Farms Farm-Raised Atlantic Salmon sold in 2-lb bags at BJ’s Wholesale Club stores due to the potential',
+    ),
+    ['BJ’s Wholesale Club'],
+  );
+  // Ampersand names are untouched.
+  assert.deepEqual(extractRetailerNames('sold at Bed Bath & Beyond stores nationwide'), [
+    'Bed Bath & Beyond',
+  ]);
+  // Generic prose without any named retailer invents nothing.
+  assert.deepEqual(
+    extractRetailerNames('was sold in some independent stores and other retail outlets'),
+    [],
+  );
+});
