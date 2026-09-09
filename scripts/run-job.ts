@@ -33,6 +33,7 @@ import { SupabaseLabelStore } from '../src/server/fsis/label-store';
 import { ExpoPushTransport } from '../src/server/push/expo-transport';
 import { SupabasePushStore } from '../src/server/push/push-store';
 import { MemoryStore } from '../src/server/store/memory-store';
+import { withReadRetry } from '../src/server/store/read-retry';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
 
 const JOB_NAMES = ['fda', 'fsis', 'labels', 'enforcement', 'push'] as const;
@@ -61,6 +62,19 @@ function requireSupabaseEnv(): { url: string; secretKey: string } {
   return { url, secretKey };
 }
 
+/**
+ * Every scheduled job reads through this wrapper, so a transient Supabase or
+ * edge fault costs one bounded retry instead of the whole run — the
+ * 2026-09-09 `getLatestSnapshotMeta` HTML 502 failure mode.
+ *
+ * Reads only: withReadRetry's allowlist is asserted disjoint from every
+ * mutating store method, so writes stay single-attempt (see
+ * src/server/store/read-retry.ts).
+ */
+function readRetrying(store: SupabaseStore): SupabaseStore {
+  return withReadRetry(store, { warn: (line) => console.error(line) });
+}
+
 async function main(): Promise<void> {
   const [, , jobArg, ...flags] = process.argv;
   if (!JOB_NAMES.includes(jobArg as JobArg)) {
@@ -86,7 +100,9 @@ async function main(): Promise<void> {
   if (job === 'fda' || job === 'fsis') {
     if (!dryRun) {
       const env = requireSupabaseEnv();
-      ctx.store = new SupabaseStore(createSupabaseServerClient(env.url, env.secretKey));
+      ctx.store = readRetrying(
+        new SupabaseStore(createSupabaseServerClient(env.url, env.secretKey)),
+      );
     }
     report =
       job === 'fda'
@@ -95,7 +111,7 @@ async function main(): Promise<void> {
   } else {
     const env = requireSupabaseEnv();
     const client = createSupabaseServerClient(env.url, env.secretKey);
-    const supabaseStore = new SupabaseStore(client);
+    const supabaseStore = readRetrying(new SupabaseStore(client));
     if (!dryRun) ctx.store = supabaseStore;
     report =
       job === 'labels'

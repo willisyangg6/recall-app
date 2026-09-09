@@ -14,6 +14,11 @@
  * The classification lives in src/server/jobs/health.ts so it can be tested;
  * this script is presentation and I/O.
  *
+ * DATABASE-ONLY, AND IT SAYS SO. This command contacts no external source: not
+ * openFDA, not FSIS, not www.fda.gov. Every "export date" and "source item" it
+ * prints is state we already reconciled and stored, so the output labels it that
+ * way rather than implying upstream was checked.
+ *
  * Requires SUPABASE_URL / SUPABASE_SECRET_KEY (server-only). Prints no secrets.
  */
 
@@ -24,7 +29,11 @@ import {
   type ActionableApplyRow,
   type AppliedStateCounts,
 } from '../src/server/applied-state-health';
-import { summarizeJobRuns, type HealthRun } from '../src/server/jobs/health';
+import {
+  describeEnforcementExport,
+  summarizeJobRuns,
+  type HealthRun,
+} from '../src/server/jobs/health';
 import {
   asWatchdogQueryClient,
   formatWatchdogSection,
@@ -36,12 +45,25 @@ interface JobHealthSpec {
   label: string;
   /** No success within this window ⇒ UNHEALTHY. */
   staleAfterHours: number;
+  /** No success within this window ⇒ degraded warning. Daily jobs only. */
+  warnAfterHours?: number;
   /** Newest source item older than this ⇒ STALE SOURCE warning (feed silence). */
   sourceStaleDays?: number;
-  /** Enforcement only: completed export older than this ⇒ STALE. */
+  /**
+   * Enforcement only: OUR last applied export older than this ⇒ STALE EXPORT.
+   * This is reconciled database state, not a live openFDA query — nothing in
+   * this command contacts openFDA.
+   */
   exportStaleDays?: number;
 }
 
+/**
+ * Freshness windows. The two daily jobs carry a warning stage because GitHub
+ * Actions delivers `schedule` events late (3.5–7.8h observed on 2026-09-08/09),
+ * so a 24h job can legitimately go ~32h between successes; see
+ * FreshnessThresholds in src/server/jobs/health.ts for the derivation. The
+ * 30-minute jobs keep one threshold — their cadence leaves no delay to absorb.
+ */
 const JOBS: JobHealthSpec[] = [
   {
     jobName: 'fda_announcements',
@@ -50,11 +72,17 @@ const JOBS: JobHealthSpec[] = [
     sourceStaleDays: 14,
   },
   { jobName: 'fsis_ingest', label: 'FSIS recalls/PHAs', staleAfterHours: 3, sourceStaleDays: 14 },
-  { jobName: 'fsis_labels', label: 'FSIS product visuals', staleAfterHours: 30 },
+  {
+    jobName: 'fsis_labels',
+    label: 'FSIS product visuals',
+    staleAfterHours: 36,
+    warnAfterHours: 30,
+  },
   {
     jobName: 'fda_enforcement',
     label: 'FDA enforcement (openFDA)',
-    staleAfterHours: 30,
+    staleAfterHours: 36,
+    warnAfterHours: 30,
     exportStaleDays: 10,
   },
 ];
@@ -126,7 +154,10 @@ async function main(): Promise<void> {
         metrics: run.metrics,
         error: run.error,
       })),
-      spec.staleAfterHours,
+      {
+        staleAfterHours: spec.staleAfterHours,
+        ...(spec.warnAfterHours !== undefined ? { warnAfterHours: spec.warnAfterHours } : {}),
+      },
       Date.now(),
     );
     const lastRun = runs[0] ?? null;
@@ -149,19 +180,20 @@ async function main(): Promise<void> {
       }
     }
     if (spec.exportStaleDays) {
-      const completed = runs
-        .map((run) => run.metrics?.completedExportDate)
-        .find((value): value is string => typeof value === 'string');
-      if (completed) {
-        const age = daysAgo(completed);
-        notes.push(`source export date: ${completed} (${age.toFixed(0)}d ago)`);
-        if (age > spec.exportStaleDays && status === 'healthy') {
-          status = 'STALE';
-          notes.push(`export older than ${spec.exportStaleDays}d — weekly source refresh missed`);
-        }
-      } else {
-        notes.push('no completed reconciliation recorded yet');
-      }
+      // Wording and state distinctions live in src/server/jobs/health.ts so they
+      // are testable; this script only prints them.
+      const report = describeEnforcementExport(
+        runs.map((run): HealthRun => ({
+          startedAt: run.started_at,
+          outcome: run.outcome,
+          metrics: run.metrics,
+          error: run.error,
+        })),
+        spec.exportStaleDays,
+        Date.now(),
+      );
+      notes.push(...report.notes);
+      if (report.staleExport && status === 'healthy') status = 'STALE EXPORT';
     }
 
     if (status === 'UNHEALTHY') unhealthy += 1;
@@ -169,7 +201,14 @@ async function main(): Promise<void> {
     console.log(
       `  most recent attempt: ${lastRun ? `${lastRun.started_at} (${summary.lastAttemptKind}${lastRun.version ? `, ${lastRun.version}` : ''})` : '—'}`,
     );
-    console.log(`  last successful run: ${lastSuccess ? lastSuccess.started_at : '—'}`);
+    console.log(
+      `  last successful run: ${lastSuccess ? lastSuccess.started_at : '—'}` +
+        (summary.hoursSinceSuccess !== null
+          ? ` (${summary.hoursSinceSuccess.toFixed(1)}h ago; warn ` +
+            `${summary.thresholds.warnAfterHours ?? '—'}h / unhealthy ` +
+            `${summary.thresholds.staleAfterHours}h)`
+          : ''),
+    );
     if (summary.leaseSkipsSinceSuccess > 0) {
       console.log(
         `  lease skips:         ${summary.leaseSkipsSinceSuccess} of ` +

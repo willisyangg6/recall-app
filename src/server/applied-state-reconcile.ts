@@ -77,6 +77,12 @@ import { parseFdaAnnouncement } from './fda/parse';
 import { parseFsisRecord, type FsisRawRecord } from './fsis/parse';
 import { canonicalJson, contentHash } from './pipeline';
 import type { ApplyState, CaseGeneratedColumns, RecallStore, SourceRecordRow } from './store/types';
+import {
+  classifyReadError,
+  clipDiagnostic,
+  retryTransientRead,
+  type RetryPolicy,
+} from './transient-retry';
 
 export const PLAN_SCHEMA_VERSION = 'recall-applied-state-plan/2';
 
@@ -526,25 +532,27 @@ export class ConcurrentAuditDriftError extends Error {
  * sustained ~30-60s outages, still bounded at 16 transport attempts per
  * read. Mutations are excluded at BOTH layers: POST is not an inner
  * retryable method, and no outer wrapper ever touches a mutating call.
+ *
+ * The classification and backoff mechanics moved to ./transient-retry.ts on
+ * 2026-09-09, shared with the store read decorator and the FDA source fetch so
+ * that one policy governs every read path. Behaviour here is unchanged; this
+ * module keeps only its own failure type and page shaping.
  */
 export const AUDIT_RETRY_ATTEMPTS = 4;
-const RETRY_BASE_DELAY_MS = 500;
-const RETRY_MAX_DELAY_MS = 5000;
-const RATE_LIMIT_MIN_DELAY_MS = 2000;
 
-const TRANSIENT_READ_ERROR =
-  /fetch failed|network|socket hang up|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|EAI_AGAIN|UND_ERR|timed? ?out|\b(408|429|502|503|504)\b/i;
-const RATE_LIMITED = /\b429\b|rate.?limit/i;
+const AUDIT_RETRY_POLICY: RetryPolicy = {
+  attempts: AUDIT_RETRY_ATTEMPTS,
+  baseDelayMs: 500,
+  maxDelayMs: 5000,
+  rateLimitMinDelayMs: 2000,
+};
 
 export function isTransientReadError(error: unknown): boolean {
-  return TRANSIENT_READ_ERROR.test(error instanceof Error ? error.message : String(error));
+  return classifyReadError(error).retryable;
 }
 
 /** Sanitized diagnostic: bounded length, never payload contents or key-bearing URLs. */
-function clipMessage(error: unknown): string {
-  const message = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ');
-  return message.length > 200 ? `${message.slice(0, 200)}…` : message;
-}
+const clipMessage = clipDiagnostic;
 
 interface RetryContext {
   sleep: (ms: number) => Promise<void>;
@@ -553,23 +561,13 @@ interface RetryContext {
 }
 
 async function retryRead<T>(name: string, fn: () => Promise<T>, ctx: RetryContext): Promise<T> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (!isTransientReadError(error)) throw error;
-      if (attempt >= AUDIT_RETRY_ATTEMPTS) throw new AuditReadExhaustedError(name, error);
-      let delay = Math.min(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), RETRY_MAX_DELAY_MS);
-      if (RATE_LIMITED.test(error instanceof Error ? error.message : '')) {
-        delay = Math.max(delay, RATE_LIMIT_MIN_DELAY_MS);
-      }
-      const jittered = Math.round(delay * (0.75 + 0.5 * ctx.jitter()));
-      ctx.warn(
-        `  audit read retry: ${name} attempt ${attempt + 1}/${AUDIT_RETRY_ATTEMPTS} in ${jittered}ms (${clipMessage(error)})`,
-      );
-      await ctx.sleep(jittered);
-    }
-  }
+  return retryTransientRead(name, fn, AUDIT_RETRY_POLICY, {
+    sleep: ctx.sleep,
+    jitter: ctx.jitter,
+    // Diagnostic prefix preserved verbatim — operator runbooks grep for it.
+    warn: (line) => ctx.warn(line.replace(/^ {2}read retry:/, '  audit read retry:')),
+    onExhausted: (operation, _attempts, cause) => new AuditReadExhaustedError(operation, cause),
+  });
 }
 
 /** Read every page of one bounded read, retrying exactly the failed page. */

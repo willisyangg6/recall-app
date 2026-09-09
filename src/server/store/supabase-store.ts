@@ -42,6 +42,37 @@ import type {
 
 const UNIQUE_VIOLATION = '23505';
 
+/**
+ * A failed store operation, preserving the PostgREST/PostgreSQL SQLSTATE and
+ * HTTP status alongside the human message.
+ *
+ * The code is what makes transient-fault classification exact rather than
+ * prose-matching: PG 57014 (statement timeout) is a bounded-retry candidate on
+ * a read, while 42703 (undefined column) must never be retried, and the two are
+ * indistinguishable from message text alone. See ../transient-retry.ts.
+ *
+ * The message shape is unchanged from the original throw, so existing operator
+ * runbooks and log greps keep working.
+ */
+export class StoreOperationError extends Error {
+  constructor(
+    readonly operation: string,
+    message: string,
+    readonly code: string | null,
+    readonly status: number | null,
+  ) {
+    super(message);
+    this.name = 'StoreOperationError';
+  }
+}
+
+/** The shape supabase-js rejects with (PostgrestError and friends). */
+interface StoreErrorSource {
+  message: string;
+  code?: string | null;
+  status?: number | null;
+}
+
 export function createSupabaseServerClient(url: string, secretKey: string): SupabaseClient {
   return createClient(url, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -51,8 +82,13 @@ export function createSupabaseServerClient(url: string, secretKey: string): Supa
 export class SupabaseStore implements RecallStore {
   constructor(private readonly client: SupabaseClient) {}
 
-  private fail(operation: string, error: { message: string } | null): never {
-    throw new Error(`SupabaseStore.${operation} failed: ${error?.message ?? 'unknown error'}`);
+  private fail(operation: string, error: StoreErrorSource | null): never {
+    throw new StoreOperationError(
+      operation,
+      `SupabaseStore.${operation} failed: ${error?.message ?? 'unknown error'}`,
+      error?.code ?? null,
+      error?.status ?? null,
+    );
   }
 
   async createIngestRun(sourceSystem: IngestRunSource, startedAt: string): Promise<string> {

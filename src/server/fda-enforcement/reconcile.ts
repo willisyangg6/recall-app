@@ -26,6 +26,7 @@ import {
   type ConsumerRiskTier,
 } from '../../domain/risk-tier';
 import type { RecallStore, SourceRecordRow } from '../store/types';
+import { retryTransientRead, type RetryHooks, type RetryPolicy } from '../transient-retry';
 import { enrichCaseWithMatches, type ClassificationChangePreviewEntry } from './enrich';
 import { fetchEnforcementBulkUrl } from './fetch';
 import {
@@ -73,16 +74,52 @@ const CLASSIFICATION_REVIEW_CEILING = 500;
 
 /** Read-only; tolerates the push_delivery migration not being applied yet,
  * exactly as SupabasePushStore.getPushEnabledAt does. */
-async function readPushEnabledAt(client: SupabaseClient): Promise<string | null> {
-  const { data, error } = await client
-    .from('push_delivery_config')
-    .select('push_enabled_at')
-    .maybeSingle();
-  if (error) {
-    if (/push_delivery_config/.test(error.message)) return null;
-    throw new Error(error.message);
-  }
-  return (data?.push_enabled_at as string | undefined) ?? null;
+async function readPushEnabledAt(client: SupabaseClient, retry: ReadRetry): Promise<string | null> {
+  return retry('push_delivery_config', async () => {
+    const { data, error } = await client
+      .from('push_delivery_config')
+      .select('push_enabled_at')
+      .maybeSingle();
+    if (error) {
+      if (/push_delivery_config/.test(error.message)) return null;
+      throw postgrestError('push_delivery_config', error);
+    }
+    return (data?.push_enabled_at as string | undefined) ?? null;
+  });
+}
+
+/**
+ * Bounded retry for this module's two direct PostgREST reads.
+ *
+ * These bypass SupabaseStore, so they are the one pair of enforcement reads the
+ * store-level retry decorator cannot reach — and the case-page read below is
+ * the seam that failed on 2026-09-08 with PG 57014 `canceling statement due to
+ * statement timeout` (the recorded error text carried no `SupabaseStore.` prefix,
+ * which is what identifies it: every store read prefixes its operation name).
+ *
+ * Reads only. The apply path's writes all go through store.applyCaseTransition
+ * and are never retried here or anywhere else.
+ */
+type ReadRetry = <T>(operation: string, read: () => Promise<T>) => Promise<T>;
+
+/** Re-throw a PostgrestError as an Error that preserves its SQLSTATE. */
+function postgrestError(
+  operation: string,
+  error: { message: string; code?: string | null },
+): Error {
+  return Object.assign(new Error(`${operation} read failed: ${error.message}`), {
+    code: error.code ?? null,
+  });
+}
+
+function makeReadRetry(options: ReconcileOptions): ReadRetry {
+  return (operation, read) =>
+    retryTransientRead(
+      `enforcement.${operation}`,
+      read,
+      options.retryPolicy,
+      options.retryHooks ?? { warn: (line) => console.error(line) },
+    );
 }
 
 export interface EnforcementCorpus {
@@ -132,6 +169,11 @@ export interface ReconcileOptions {
   /** Override for CLASSIFICATION_REVIEW_CEILING — tests only; production runs
    * always get the real ceiling. */
   reviewCeiling?: number;
+  /** Bounded read-retry policy for this module's two direct PostgREST reads.
+   * Defaults to DEFAULT_READ_RETRY_POLICY; overridden by tests only. */
+  retryPolicy?: RetryPolicy;
+  /** Injectable sleep/jitter/warn seam so retry tests need no real time. */
+  retryHooks?: RetryHooks;
 }
 
 /** JSON-friendly stats — persisted as job-run metrics. */
@@ -166,6 +208,7 @@ export async function reconcileFdaEnforcement(
   options: ReconcileOptions,
 ): Promise<ReconcileStats> {
   const { apply } = options;
+  const retry = makeReadRetry(options);
   console.log(
     `\n${'═'.repeat(72)}\nFDA enforcement reconciliation — ${apply ? 'APPLY' : 'DRY RUN, nothing will be written'}\n${'═'.repeat(72)}\n`,
   );
@@ -190,13 +233,18 @@ export async function reconcileFdaEnforcement(
   const pageSize = 200;
   const cases: { id: string; projection: CaseProjection }[] = [];
   for (let from = 0; ; from += pageSize) {
-    const { data, error } = await client
-      .from('recall_cases')
-      .select('id, merged_into, projection')
-      .eq('source_agency', 'FDA')
-      .order('id')
-      .range(from, from + pageSize - 1);
-    if (error) throw new Error(error.message);
+    // Retried per page, so a transient fault costs one page, not the whole run.
+    // Deterministic `.order('id')` keeps a retried page byte-identical.
+    const data = await retry(`recall_cases[${from}]`, async () => {
+      const result = await client
+        .from('recall_cases')
+        .select('id, merged_into, projection')
+        .eq('source_agency', 'FDA')
+        .order('id')
+        .range(from, from + pageSize - 1);
+      if (result.error) throw postgrestError('recall_cases', result.error);
+      return result.data;
+    });
     for (const row of data ?? []) {
       if (row.merged_into === null)
         cases.push({ id: row.id as string, projection: row.projection as CaseProjection });
@@ -384,7 +432,7 @@ export async function reconcileFdaEnforcement(
     );
   }
 
-  const pushEnabledAt = await readPushEnabledAt(client);
+  const pushEnabledAt = await readPushEnabledAt(client, retry);
   const pushActive = pushEnabledAt !== null;
   const reviewEntries: ClassificationChangeReviewEntry[] = classificationChanges.map((entry) => ({
     ...entry,

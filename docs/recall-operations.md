@@ -289,10 +289,17 @@ fails the run loudly.
 
 `npm run ops:health` answers, from the database alone: the most recent
 **attempt** and the last **success** per job, staleness against per-job
-expectations (fast jobs 3 h, labels/enforcement ~daily, enforcement export ≤ 10
-days old), newest-source staleness (a silent feed alarm at 14 days), the
-label-failure backlog, and the 7-day deliverable/suppressed notification flow.
-Non-zero exit when anything is UNHEALTHY.
+expectations (fast jobs 3 h; the two daily jobs warn at 30 h and go UNHEALTHY at
+36 h — see [Health thresholds](#health-thresholds-warning-before-failure-2026-09-09);
+last applied enforcement export ≤ 10 days old), newest-source staleness (a
+silent feed alarm at 14 days), the label-failure backlog, and the 7-day
+deliverable/suppressed notification flow. Non-zero exit when anything is
+UNHEALTHY; a warning is `degraded` and never gates the exit code.
+
+It contacts **no external source** — not openFDA, not FSIS, not www.fda.gov.
+Every date it prints is state already reconciled into our database, and the
+output now labels it that way (see
+[Health wording](#health-wording-stored-state-is-not-an-upstream-check)).
 
 ### Applied-version state section (O3-B2)
 
@@ -410,11 +417,15 @@ recalls: the pipelines only ever add, so the consumer keeps the last good
 data while operations shows the outage.
 
 Retries: the fetch adapters keep their bounded in-process retries (FSIS 4×
-with fingerprint rotation, FDA 3×, both exponential backoff); beyond that,
+with fingerprint rotation, FDA 3×, both exponential backoff) — and since
+2026-09-09 the FDA adapter retries the **whole response boundary**, not just the
+status check, plus bounded retries on read-only database calls. Beyond that,
 the next scheduled tick IS the retry — spaced, bounded, and safe because
 every pipeline is idempotent. GitHub does not auto-retry scheduled runs, so
 there is no retry-storm interaction. Failed label PDFs retry with their own
-backoff (6h·2ⁿ, capped at 7 days).
+backoff (6h·2ⁿ, capped at 7 days). **No mutation is ever retried
+automatically** — see
+[Transient-read hardening](#transient-read-hardening-2026-09-09).
 
 ## O3 applied-version contract: implementation status (O3-B1, 2026-09-05)
 
@@ -565,6 +576,13 @@ tolerance reaches ~30-60s of sustained outage at a bounded 16 transport
 attempts per read, and POST mutations are excluded at both layers. Diagnostics carry the read name,
 page, and attempt count — sanitized, bounded, never payloads or key-bearing
 URLs. Retries never change plan contents or the digest.
+
+On 2026-09-09 the classification and backoff mechanics were **extracted** to
+`src/server/transient-retry.ts` and are now shared with the store read decorator
+and the FDA source fetch, so one policy governs every read path; see
+[Transient-read hardening](#transient-read-hardening-2026-09-09). The audit's
+behaviour, attempt bound, message shapes, and mutation exclusion are unchanged —
+all 16 of its hardening tests still pass verbatim.
 
 **Fail-closed output.** The plan file is written atomically (tmp + rename)
 only after the complete audit and digest construction succeed; an existing
@@ -1541,6 +1559,230 @@ separate things and they must never be confused:
   for authorizing one enforcement apply; it adds no new detection, only a
   structured view of the decision `src/server/fda-enforcement/enrich.ts`
   already makes (`CaseEnrichmentOutcome.classificationChanges`).
+
+## The 2026-09-08/09 reliability incident and what was hardened
+
+[DATED MEASUREMENT — production evidence gathered read-only 2026-09-09]
+
+Four distinct infrastructure faults each killed a whole scheduled run inside
+about 26 hours. Not one of them was a defect in recall logic, not one wrote
+partial data, and not one was retried. The scheduler watchdog re-dispatched each
+about twenty minutes later and the next run completed the missed work.
+
+**That is recovery, not hardening.** The distinction matters and is the reason
+this section exists: a red run that a later green run papers over still means
+the pipeline cannot absorb a blip, an operator still gets paged, and freshness
+still lapses for ~20 minutes. Later runs succeeding is never evidence of a fix.
+
+### What happened
+
+| #   | Fault                                      | Where                                                            | Recorded error                                                                             | Wrote                                                 | Recovered                                      |
+| --- | ------------------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------- |
+| 1   | PG 57014 statement timeout                 | enforcement bulk read (`fda_enforcement` run #15, sha `a07011d`) | `canceling statement due to statement timeout`                                             | nothing; `completedExportDate` correctly NOT advanced | run #16 applied export `2026-09-08` in 721.6 s |
+| 2   | Supabase/Cloudflare HTML `502 Bad Gateway` | `SupabaseStore.getLatestSnapshotMeta` (scheduled-ingest #434)    | `SupabaseStore.getLatestSnapshotMeta failed: <html> <head><title>502 Bad Gateway</title>…` | nothing (`items_seen = 0`; failed on a **read**)      | #435, +22.7 min                                |
+| 3   | Persistent upstream FDA HTTP 404           | `fda_announcements` fetch (#436)                                 | HTTP 404 after all 3 attempts                                                              | nothing (failed at **fetch**)                         | #437, +21.9 min                                |
+| 4   | HTML body under HTTP 200                   | `fda_announcements` JSON parse (#438)                            | unclassified `SyntaxError: Unexpected token '<'`                                           | nothing (failed at **parse**)                         | #439, +19.9 min                                |
+
+Faults 2–4 all hit `fda_announcements` only; `fsis_ingest` succeeded _inside_
+all three failed runs, confirming the workflow's `if: !cancelled()` step
+independence. Every source record stayed consistent: **0 pending, 0 degraded**
+throughout, so the O3 applied-version contract held under all four failures.
+Crash-safe ingestion behaved exactly as designed — the value of writing nothing
+is that there was nothing to repair.
+
+Recovery was entirely the watchdog's, via its 20-minute `cooldown_minutes`
+re-dispatch. Those runs appear in GitHub as "Manually run by willisyangg6"
+because GitHub attributes a REST-API `workflow_dispatch` to the token owner;
+they are machine dispatches, provable by matching each `github_run_id` against
+`watchdog_dispatches`, never by assuming a human clicked. Watchdog expansion to
+`daily-maintenance.yml` remains **out of scope** — a separate architectural
+decision, and not required to close this incident.
+
+### Transient-read hardening (2026-09-09)
+
+One shared primitive, `src/server/transient-retry.ts`, now governs every
+read path. It classifies a failure and, only when the failure is provably
+transient, retries under a bounded policy: **4 attempts, 500 ms·2ⁿ capped at
+5 s, ±25 % jitter** — worst case ~3.5 s of delay per read (~6 s when every wait
+hits the 429 floor), orders of magnitude inside both the lease TTL and the
+workflow budget. Retry-After is honored for 429/503 and clamped to the cap, so
+a server cannot stall a job.
+
+| Retryable                                                                      | Never retried                                                                      |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| transport failures (`fetch failed`, `ECONNRESET`, `EAI_AGAIN`, socket hang up) | authentication / authorization (SQLSTATE 28xxx, JWT, `permission denied for`, RLS) |
+| HTTP 408 / 429 / 502 / 503 / 504 / 52x                                         | schema errors (42xxx, 3F, `PGRST*`, `does not exist`)                              |
+| HTML gateway pages returned instead of PostgREST JSON                          | validation / integrity (23xxx, 22xxx)                                              |
+| PG 57014 statement timeout **on a read**                                       | ordinary non-transient 4xx (400, 401, **403, 404**, 405, 406, 409, 410, 422, …)    |
+| connection-class SQLSTATEs (08xxx, 57P0x, 53300, 40001, 40P01)                 | malformed application data, invariant violations                                   |
+| invalid source responses (HTML-on-200, empty or truncated body)                | **anything unrecognized**                                                          |
+
+Two ordering rules make this safe rather than merely tolerant:
+
+- **Permanent wins.** An explicit SQLSTATE or HTTP status is authoritative and
+  is checked first, so a real defect surfaces on attempt 1 — never masked by
+  retries, never slowed by backoff.
+- **Unrecognized is permanent.** Retrying is the privileged case and has to be
+  earned. Forgetting to classify a new fault fails fast; it does not silently
+  start retrying.
+
+Prose patterns are only a fallback for when no code survives the boundary, and
+they rank _below_ definitive transport evidence. That ordering was forced by a
+real false positive caught in test: an error echoing a payload containing
+`apikey=` was classified as an auth failure and a genuine `fetch failed` went
+unretried. `SupabaseStore.fail()` now re-throws a `StoreOperationError`
+preserving the PostgREST `code` and `status`, so 57014 is matched on the code
+itself rather than on prose (the message shape is unchanged — operator greps
+still work).
+
+Diagnostics name the operation, attempt, and fault class, and carry a cause
+clipped to 200 characters with query strings elided and HTML collapsed to
+`HTML response (<title>)`. No credential, query payload, record, or response
+body can reach a log line.
+
+#### Mutations are excluded — structurally
+
+**No mutating operation passes through any retry wrapper.** Idempotence is not
+permission to retry a write: a lost response may well mean the first attempt
+committed.
+
+The guarantee is a property of one literal set, `RETRYABLE_READ_METHODS` in
+`src/server/store/read-retry.ts`, applied as a decorator — not of ~50 method
+bodies. Anything absent from that set, **including any method added to
+`RecallStore` later**, is passed through untouched and invoked exactly once; the
+default is "not retried", so forgetting to update the file stays safe.
+
+`store/read-retry.test.ts` proves it three independent ways:
+
+1. **Structurally** — it parses `supabase-store.ts` and asserts every
+   allowlisted method issues `.select()` and no `insert` / `update` / `upsert` /
+   `delete` / `rpc`.
+2. **By set algebra** — the allowlist is asserted disjoint from every method
+   that issues a mutating verb, with the read-modify-write helpers
+   (`updateCaseHazard`, `seedLegacyAppliedMarker`, `markSourceRecordApplied`, …)
+   pinned on the mutator side where they belong.
+3. **Behaviourally** — every mutating method is driven through the wrapper with
+   the most transient error there is and counted at exactly one call.
+
+Checks 1 and 2 read the real source, so a future edit that turns an allowlisted
+read into a write fails the suite instead of quietly enabling duplicate writes.
+Mutations are also excluded at the _inner_ layer: postgrest-js retries only
+520/503 on GET/HEAD/OPTIONS, never POST.
+
+#### Enforcement read-timeout coverage
+
+The 57014 failure is attributed **conclusively, not inferred**. Every store read
+prefixes its operation name via `SupabaseStore.fail()`, so a bare PostgREST
+message can only come from the one enforcement read that bypasses the store: the
+paged `recall_cases` projection read in `fda-enforcement/reconcile.ts`. The
+recorded production text carried no `SupabaseStore.` prefix. That read and the
+`push_delivery_config` read beside it now retry **per page**, so a transient
+fault costs one page rather than the whole run, and the deterministic
+`.order('id')` keeps a retried page byte-identical.
+
+The per-case enrichment loop reads through the store and is therefore covered by
+the decorator's allowlist — asserted statically in
+`fda-enforcement/read-hardening.test.ts`, which scans both enforcement modules
+for every `store.<method>(` call and checks each read-shaped one against the
+allowlist while confirming each write is **absent** from it. The applied
+enforcement job itself is never auto-retried, and neither are its writes.
+
+#### FDA source fetch: the response boundary moved
+
+Previously only the status check sat inside the retry loop; `response.json()`
+ran _after_ it. That is exactly why fault 4 was fatal — the response passed the
+`ok` gate because its status really was 200. Status check, body decode, and
+payload parse now happen **inside one bounded attempt**, and the line between
+retry and alarm is decode versus contract:
+
+- **Decode failure ⇒ bounded retry.** HTML where JSON or XML was promised, an
+  empty body, truncated JSON, a gateway status. None of these is ever a
+  documented payload, so a proxy or edge cache produced it.
+- **Contract drift ⇒ fail immediately, alarm kept.** A well-formed payload of
+  the wrong shape: JSON that parses but is not an array; valid XML with no
+  `<item>`. The source really did change. Retrying would only delay the alarm,
+  and loosening the check to accept it would hide a real break.
+
+Width is unchanged at 3 attempts, so a persistent 404/403 (www.fda.gov's
+documented bot gate, source contract §3.1) still exhausts the same bound and
+then reports `FdaSourceUnavailableError` instead of crashing on a parse. That
+tolerance is declared **locally in `fda/fetch.ts` and nowhere else**: for a
+database read, 403/404 means a denied policy or a missing route — a defect that
+must surface on attempt 1, not after four rounds of backoff — so the shared
+classifier treats them as permanent and only this one source opts out.
+Ordinary non-transient 4xx fails on attempt 1. Final error text is bounded and
+payload-free. **Parser behaviour after a valid payload is obtained is
+unchanged**, and **FSIS is deliberately untouched** — its fetch already parsed
+inside its attempt loop and keeps its own 4-attempt fingerprint-rotating policy.
+
+### Health wording: stored state is not an upstream check
+
+`ops:health` printed `source export date: 2026-08-27`, which read as though
+openFDA had been queried. It had not been: that value is `completedExportDate`,
+written **only** by a reconciliation that actually applied, so it names the
+export _we_ have reconciled into the database. The label is now:
+
+```
+last applied enforcement export: 2026-09-08 (2d ago) — our reconciled database state; openFDA was not queried
+```
+
+and the stale note reads `last applied export older than 10d — a weekly refresh
+was missed or has not been applied (stored state; upstream freshness unverified
+here)`. The four states stay distinct, and a fifth case is now reported:
+
+| State                       | Source                        | Meaning                                                                     |
+| --------------------------- | ----------------------------- | --------------------------------------------------------------------------- |
+| last successful job check   | `ingest_runs.started_at`      | the job ran and completed                                                   |
+| last applied export         | `metrics.completedExportDate` | reconciled into our database                                                |
+| export seen but not applied | `metrics.checkedExportDate`   | a dry run or an incomplete apply                                            |
+| upstream export freshness   | —                             | **not queried by this command**                                             |
+| failed reconciliation       | `outcome = failed`            | now always reported, even when a freshness verdict already moved the status |
+
+That last row is a real fix: a failed latest attempt is the most actionable fact
+there is and must not be swallowed by a staleness verdict.
+
+### Health thresholds: warning before failure (2026-09-09)
+
+The daily jobs used a single 30 h UNHEALTHY boundary. GitHub Actions **drops and
+delays** `schedule` events — they are not queued — and the deliveries observed
+on 2026-09-08/09 ran 3.5–7.8 h late; `daily-maintenance #16` itself landed at
+13:43 Z for a 09:15 Z cron, a 4.5 h delay, and then succeeded.
+
+For a 24 h schedule a perfectly healthy gap between successes can therefore
+reach 24 + 7.8 ≈ **31.8 h**. The single 30 h threshold fired UNHEALTHY on a
+working pipeline, and an operator who learns to ignore that stops reading the
+signal at all. Two stages, derived rather than guessed:
+
+| Stage     | Threshold | Derivation                                                   | Status                                 |
+| --------- | --------- | ------------------------------------------------------------ | -------------------------------------- |
+| warning   | **30 h**  | 24 h period + ~6 h delay                                     | `degraded` — never gates the exit code |
+| unhealthy | **36 h**  | 24 h period + the 7.8 h worst observed delay + ~4 h headroom | `UNHEALTHY` — exit 1                   |
+
+Monitoring is not weakened. Boundary tests pin both edges, and the cases that
+matter all still fail: the real **39.1 h** enforcement stall stays UNHEALTHY
+with ~3 h to spare, and a fully missed day (≥ 48 h) can never pass. A warning
+threshold mistakenly set at or above the stale one is ignored rather than
+allowed to weaken the unhealthy boundary. The 30-minute jobs keep a single 3 h
+threshold — their cadence leaves no delivery delay to absorb.
+
+### What is hardened, and what is not yet proven
+
+| Fault                               | Before                                  | Now                                                |
+| ----------------------------------- | --------------------------------------- | -------------------------------------------------- |
+| PG 57014 on a read                  | unhardened                              | bounded retry, per page, classified by SQLSTATE    |
+| Supabase/Cloudflare HTML 502        | unhardened (`fail()` threw immediately) | bounded retry on every read-only store call        |
+| HTML-on-200 parse                   | unhardened **and** unclassified         | classified, retryable, payload-free diagnostic     |
+| Persistent FDA 404                  | partially hardened                      | same bound, now a clear `source unavailable` class |
+| False UNHEALTHY from schedule delay | 30 h hard boundary                      | 30 h warning / 36 h unhealthy                      |
+
+**No production validation has occurred under this code.** It is verified
+offline only — 1,880 local tests with faults injected from the recorded
+production error strings, plus static structural proofs. Nothing in this change
+touched `supabase/` (no migration, RPC, or RLS policy), and nothing touched
+`src/app/`, `src/components/`, or `src/lib/`, so there is no client or RLS
+surface change. The first real evidence will be the next scheduled runs, whose
+`ingest_runs` rows should show either no change at all or a retry warning
+followed by a success.
 
 ## Secrets
 
