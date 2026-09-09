@@ -207,14 +207,21 @@ not go stale from this during the audit. This is a dated observation, not
 proof of a permanent scheduler property; note the watchdog does not cover
 `daily-maintenance`.
 
-**Watch item — openFDA enforcement export.** At audit time `ops:health`
+**Watch item — openFDA enforcement export.** At O2-A audit time `ops:health`
 reported the enforcement leg healthy, but the source export date (2026-08-27)
 sat exactly at the configured ten-day stale threshold: if the weekly openFDA
 export does not advance within about a day of the audit, `ops:health` flips
 that leg to STALE. That is a source-side condition to monitor — not a job
-failure and not grounds for any mutation. Re-run `npm run ops:health` to
-check; the three permanently failing FSIS label PDFs remain the other known,
-unrelated backlog (see the labels section).
+failure and not grounds for any mutation. **Update (as observed during the
+O3 closeout audits, 2026-09-08–09):** the export date had not advanced
+(still 2026-08-27) and the job's last success was over 33 hours prior, so
+the leg had since flipped to UNHEALTHY. This is unrelated to O3 — it was
+observed incidentally by O3's read-only health checks, not caused, fixed,
+or investigated by any O3 work, which was explicitly out of scope for it.
+It remains an open, separate operational follow-up. Re-run
+`npm run ops:health` to check current status; the three permanently
+failing FSIS label PDFs remain the other known, unrelated backlog (see the
+labels section).
 
 ### The unchanged-source skip gate
 
@@ -294,19 +301,23 @@ reports the applied-version population: total records; `applied` / `pending` /
 `applied_degraded` / legacy-unverified counts; pending and degraded counts by
 source system; oldest pending age (minutes) and oldest degraded age (hours);
 bounded identifiers for overdue actionable records (never payloads or
-secrets); and whether the governed reconciliation has completed
-(legacy-unverified = 0). A missing view is the explicit status
+secrets); and whether the governed reconciliation has reached its settled
+state. O3's historical reconciliation and repair are now complete (see
+"O3 production rollout and closeout" below): the settled legacy-unverified
+count is **1**, not 0 — a single permanent governed exception (FSIS
+083-2016) that current derivation logic would otherwise corrupt, not an
+outstanding reconciliation task. A missing view is the explicit status
 `not installed` (`applied_version_contract` migration pending) — never a
 misleading healthy.
 
 The four stored states mean four different things and must not be conflated:
 
-| State              | Meaning                                                         | Health effect                                                                                                         |
-| ------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `applied`          | current version fully completed                                 | healthy                                                                                                               |
-| `pending`          | current archived work awaiting its retry tick                   | informational < 40 min; **degraded** past one watchdog window (40 min); **UNHEALTHY** ≥ 90 min (the pinned O3 alarm)  |
-| `applied_degraded` | usable FDA listing coverage still owed its detail page          | visible + age-tracked; **degraded** after one daily cycle + slack (26 h); never UNHEALTHY alone (consumer is covered) |
-| legacy-unverified  | pre-O3 row awaiting **governed reconciliation** — NOT `pending` | informational; blocks "O3 fully settled" but is never an ingest failure                                               |
+| State              | Meaning                                                                                                                             | Health effect                                                                                                         |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `applied`          | current version fully completed                                                                                                     | healthy                                                                                                               |
+| `pending`          | current archived work awaiting its retry tick                                                                                       | informational < 40 min; **degraded** past one watchdog window (40 min); **UNHEALTHY** ≥ 90 min (the pinned O3 alarm)  |
+| `applied_degraded` | usable FDA listing coverage still owed its detail page                                                                              | visible + age-tracked; **degraded** after one daily cycle + slack (26 h); never UNHEALTHY alone (consumer is covered) |
+| legacy-unverified  | pre-O3 row resolved by **governed reconciliation** — NOT `pending`; the settled count is 1 (083-2016, permanent governed exception) | informational; never an ingest failure                                                                                |
 
 Thresholds are derived, not invented: 30-minute ingest cadence, the
 watchdog's 40-minute staleness window, the O3-B0/B1 pinned 90-minute pending
@@ -407,29 +418,37 @@ backoff (6h·2ⁿ, capped at 7 days).
 
 ## O3 applied-version contract: implementation status (O3-B1, 2026-09-05)
 
+> **Superseded — this section is a frozen pre-deployment snapshot.** It
+> describes the contract as it stood immediately after implementation,
+> before the migration was applied or the code was deployed. Both have
+> since happened, and the full production rollout and closeout — migration
+> apply, code deployment through natural FDA/FSIS cycles, reconciliation,
+> the three repair waves, final settlement, and Simulator QA — is recorded
+> in "O3 production rollout and closeout" near the end of this document.
+> The design description below remains accurate and is preserved as-is.
+
 The crash-safe applied-version contract (archived ≠ applied; atomic case
 transitions; atomic founding; deferred/degraded FDA detail; completion-gated
 feed hash — design ledger `.reports/o3-b0-design-closure.json`, mechanics in
 [docs/recall-domain-architecture.md](recall-domain-architecture.md) Part 8.3)
-is **implemented in code and NOT yet active anywhere**:
+was, at this dated checkpoint, **implemented in code and not yet active
+anywhere**:
 
 - The migration `supabase/migrations/20260907000000_applied_version_contract.sql`
   (four nullable marker columns on `source_records`, the
   `source_record_apply_health` view, and the `archive_snapshot` /
-  `apply_case_transition` / `found_recall_case` functions) is **created but
-  not applied** to any database. It contains no legacy seeding by design:
-  every existing row stays `NULL` (legacy-unverified) until the separately
-  authorized O3-B2 reconciliation verifies it, or its content changes.
-- The application code is **committed-in-tree only, not deployed**: scheduled
-  ingestion in production continues to run the pre-O3 code until the founder
-  applies the migration (its own authorization; `supabase db push`) and then
-  pushes the code (its own authorization). Schema-first is mandatory — the
-  new code writes the marker columns and calls the RPCs.
-- O3-B2 (2026-09-06) adds the applied-state health section above and the
-  governed reconciliation below — **implemented and locally verified, never
-  run against production**. Production dry run, migration apply, marker
-  apply, and code push each remain separately authorized founder steps.
-- Push delivery remains inactive throughout.
+  `apply_case_transition` / `found_recall_case` functions) was, at this
+  checkpoint, created but not yet applied to any database. It contains no
+  legacy seeding by design: every existing row stays `NULL`
+  (legacy-unverified) until the separately authorized O3-B2 reconciliation
+  verifies it, or its content changes.
+- The application code was, at this checkpoint, committed-in-tree only, not
+  deployed. Schema-first was mandatory — the new code writes the marker
+  columns and calls the RPCs.
+- O3-B2 (2026-09-06) added the applied-state health section above and the
+  governed reconciliation below — implemented and locally verified at the
+  time, not yet run against production.
+- Push delivery remained inactive throughout, and still does.
 
 ## Applied-state reconciliation (O3-B2): governed, plan-bound, dry-run first
 
@@ -513,8 +532,11 @@ zero writes and produced the valid plan
 `recall-applied-state-plan/1`, commit-bound to `7c2a25a`): 3,523 records,
 33 strictly seedable, 3,475 refused as parser/projector-era drift
 (evidence analysis: `.reports/o3-b4-historical-drift-analysis.json`).
-That plan remains completely unapplied; marker seeding remains
-unauthorized.
+That specific plan (`plan/1`, this Phase 3B artifact) was never applied and
+never can be — it is permanently superseded by the `plan/2` equivalence
+contract below. Marker seeding under `plan/2` was authorized and did later
+happen (O3-B4C, and subsequently the O3-B5 waves); see those sections and
+the closeout below.
 
 **Bounded read model.** The audit now reads in pages and chunks only —
 request count proportional to pages, never records × attributes: the
@@ -599,9 +621,13 @@ Plan binding: the plan schema is now `recall-applied-state-plan/2` and every
 plan records its `equivalenceContract`; apply refuses any other schema or
 contract version, so the Phase 3B plan (`plan/1`, commit-bound to `7c2a25a`)
 can never be applied or silently reinterpreted under the new rules — it
-stays a frozen evidence artifact. The seven notification-eligible
-improvement events, the nine ambiguous records, and any O3-B5 historical
-re-derivation remain deferred founder decisions.
+stays a frozen evidence artifact. At this checkpoint, the seven
+notification-eligible improvement events, the nine ambiguous records, and
+any O3-B5 historical re-derivation remained deferred founder decisions;
+all were subsequently resolved by the O3-B5 waves below, and the final
+settled census (3,525 applied / 1 permanent governed exception / 0 pending
+/ 0 degraded) confirms no ambiguous or unresolved population remains
+outside that single exception.
 
 ### The 2,374-marker apply and settlement recognition (O3-B4C, 2026-09-07)
 
@@ -662,8 +688,11 @@ never reached any stored case projection, so these repairs are
 consumer-invisible normalized refreshes); FSIS 083-2016 is a **governed
 exception** — its stored wheat cross-contamination evidence is retained
 because current derivation would erase it, and it stays legacy-unverified
-pending a parser milestone; rollout happens in independently reviewed
-waves with consumer-material cases last.
+by deliberate, permanent design: this is the settled O3 end state for this
+one record, not a task awaiting near-term resolution, and it would only
+ever change if a future parser improvement could extract that evidence
+without loss. Rollout happened in independently reviewed waves with
+consumer-material cases last.
 
 ```bash
 npm run rederive:historical:dry -- --json <path>               # full census plan (never appliable)
@@ -681,9 +710,10 @@ defect never reached projections — kept for the hypothetical), and
 `material_corrections` (the seven Policy B cases). The
 `governed_exception` classification (the allergen-evidence-loss shape,
 generalized) rides along in every plan as a report and is never appliable.
-Evidence projection (pending the separately authorized production dry
-run): inert 397 groups / 1,090 records, visible 22 / 28, material 7 / 15,
-exception 1 / 1; ≈439 normalized writes; exactly 7 `corrected` entries.
+Evidence projection at design time: inert 397 groups / 1,090 records,
+visible 22 / 28, material 7 / 15, exception 1 / 1; ≈439 normalized writes;
+exactly 7 `corrected` entries. The production apply, recorded below,
+matched this projection exactly.
 
 **Transaction model — two steps, honestly stated.** Repairing one case
 group is NOT a single database transaction: Step 1 performs guarded
@@ -701,7 +731,8 @@ fires only when all contributors reach post-state. Mutations are never
 retried; plan reads use a bounded 4-attempt retry.
 
 Plans (`recall-rederivation-plan/1`, derivation contract
-`historical-rederivation/1`) are immutable, digest-bound, commit-bound,
+`historical-rederivation/1` at design time, superseded by `/2` below) are
+immutable, digest-bound, commit-bound,
 wave-bound (a census plan or another wave's plan fails closed), atomic on
 disk, refuse-overwrite, and carry fingerprints and bounded diffs — never
 raw payloads. The `corrected` timeline entry (existing `TimelineEntry`
@@ -712,27 +743,137 @@ notification history are untouched, `material` is false,
 `notificationEventCreated` is pinned false, and its deterministic
 fingerprint makes duplication impossible.
 
-Rollout so far: the `inert_refresh` wave applied on 2026-09-08 (397 groups /
-1,090 records, zero conflicts, consumer models byte-identical) and settled
-cleanly (1,090 → strict `already_applied_consistent`; production 3,481
-applied / 44 governed legacy). The first `visible_corrections` plan was
-generated and then **held** (Phase 6A): its Sprout Organics value
-`["Walgreens and some independent"]` was a parser artifact — the official
-notice says "sold in Walgreens and some independent stores", where "some
-independent stores" is unnamed distribution prose, so the only stated
-retailer identity is `Walgreens`. Phase 6B added the general rule (an
-"and"-joined tail led by a lowercase quantifier/generic word is prose,
-stripped in `cleanRetailerName`; capitalized conjunctions like
-"H-E-B and Joe V's Smart Shop" untouched), which changed exactly ONE
-derived value in the whole recorded corpus (that Sprout record →
-`["Walgreens"]`). Because parsing changed, the derivation contract is now
-`historical-rederivation/2` and the held `/1` plan is permanently
-un-appliable (refused before any write). Walgreens remains outside the
-personalization catalog — matching and filters are unaffected; adding it
-is an independent future product/catalog decision. **No visible-wave
-production plan under `/2` has been generated or applied yet**; the
-`material_corrections` wave and the 083-2016 exception are unchanged, and
-push delivery remains inactive.
+**Rollout, complete.** The `inert_refresh` wave applied on 2026-09-08 (397
+groups / 1,090 records, zero conflicts, consumer models byte-identical) and
+settled cleanly (1,090 → strict `already_applied_consistent`; production
+3,481 applied / 44 governed legacy at that point). The first
+`visible_corrections` plan was generated and then **held** (Phase 6A): its
+Sprout Organics value `["Walgreens and some independent"]` was a parser
+artifact — the official notice says "sold in Walgreens and some
+independent stores", where "some independent stores" is unnamed
+distribution prose, so the only stated retailer identity is `Walgreens`.
+Phase 6B added the general rule (an "and"-joined tail led by a lowercase
+quantifier/generic word is prose, stripped in `cleanRetailerName`;
+capitalized conjunctions like "H-E-B and Joe V's Smart Shop" untouched),
+which changed exactly ONE derived value in the whole recorded corpus (that
+Sprout record → `["Walgreens"]`). Because parsing changed, the derivation
+contract became `historical-rederivation/2` and the held `/1` plan is
+permanently un-appliable (refused before any write). Walgreens remains
+outside the personalization catalog — matching and filters are unaffected;
+adding it is an independent future product/catalog decision (its corrected
+identity does, however, already improve product/company search).
+
+The corrected `visible_corrections` plan under `/2` applied on 2026-09-08
+(22 groups / 28 records, zero conflicts) and settled cleanly (all 28 →
+strict `already_applied_consistent`). The `material_corrections` wave
+applied on 2026-09-08 (7 groups / 15 records, zero conflicts, zero
+notification events, zero product changes, exactly 7 `corrected` timeline
+entries) and settled cleanly (all 15 → strict `already_applied_consistent`
+identity-verified). A final read-only settlement audit on 2026-09-09
+confirmed the complete production population: 2,060 `already_applied_consistent`
+plus 1,465 `already_applied_equivalent`, totaling 3,525 applied, with
+exactly one refusal — FSIS 083-2016, the permanent governed exception. Final Simulator
+QA (2026-09-09) visually confirmed the two consumer-visible corrections
+(Metro Produce's Minnesota geography and matching Affects-Me result; 529
+Commerce's "The recall covers 3,860 units." sentence) and found no
+regression on a representative FSIS instruction case, no fake new-update
+or notification presentation anywhere, and no push interaction. Push
+delivery remained inactive throughout every wave. See "O3 production
+rollout and closeout" below for the authoritative summary.
+
+## O3 production rollout and closeout (2026-09-05 – 2026-09-09)
+
+**O3 is complete.** This section is the single authoritative summary of
+the whole program, from implementation through final verification. The
+detailed dated narrative for each step lives in the sections above; this
+is the end-to-end record for anyone who does not need that detail.
+
+**Implementation checkpoints** (the shipped sequence; not every commit
+independently deployed code — deployment happened at the points noted
+below):
+
+- `401d0e0` — crash-safe recall ingestion (the applied-version contract:
+  archived and applied are separate, atomically-tracked facts).
+- `daa62d5` — applied-state reconciliation (governed, plan-bound, dry-run
+  first).
+- `7c2a25a` — hardened reconciliation reads (bounded retry against
+  transient read failures).
+- `f3e862d` — equivalent legacy-state recognition (the R1–R4 equivalence
+  contract, `legacy-equivalence/1`).
+- `f95e601` — equivalent applied-marker settlement (the O3-B4C marker
+  apply and settlement recognition).
+- `47bf136` — governed historical re-derivation (the O3-B5 wave-based
+  repair system).
+- `a07011d` — normalized retailer identity extraction and
+  `historical-rederivation/2` (the Sprout Organics parser fix); this is
+  also the commit every O3-B5 wave plan, apply, and settlement below is
+  bound to.
+
+**Rollout sequence:**
+
+1. The `20260907000000_applied_version_contract.sql` migration was applied
+   to production exactly once, before the crash-safe code was activated.
+2. The crash-safe ingestion code was deployed and proven through natural
+   FDA and FSIS scheduled cycles — no synthetic or manual triggering.
+3. An initial reconciliation census established the pre-O3 legacy
+   population and its equivalence classification.
+4. A marker-only certification pass (O3-B4C) applied 2,374 markers for
+   records whose stored state was already equivalent to current
+   derivation, settling the population down to a 1,134-record remainder.
+5. **`inert_refresh`** applied 397 groups / 1,090 records —
+   consumer-invisible normalized/projection refreshes.
+6. **`visible_corrections`** applied 22 groups / 28 records — presentation
+   corrections (the "FSIS"-as-firm fallback dozen, quantity and
+   non-material instruction fixes, and the Sprout Organics retailer
+   identity) that are notification-inert.
+7. **`material_corrections`** applied 7 groups / 15 records under Policy
+   B: the canonical data was corrected and exactly one deterministic
+   `corrected` timeline entry was appended per repaired case; zero
+   notification events and zero deliveries were created; zero product
+   changes occurred.
+8. A final read-only settlement audit confirmed the complete population.
+9. Final Simulator QA visually confirmed the two consumer-visible
+   corrections and found no regression.
+
+**Final census:** 3,526 total source records — **3,525 applied, 1
+legacy-unverified, 0 pending, 0 applied_degraded**. The one legacy record
+is **FSIS 083-2016**, held because current derivation logic would erase
+its valid stored `undeclared wheat` evidence. This is a deliberate,
+permanent governed exception — not an ingestion failure, not a task
+awaiting near-term resolution, and not evidence that `legacy_unverified`
+records are generally broken data (every other legacy record in the
+program was successfully resolved).
+
+**What did not change:**
+
+- O3 never rewrote a raw archived source snapshot — only normalized
+  derivations and case projections.
+- Every repair-generated `corrected` timeline entry is a historical audit
+  record stating that the app corrected its own reading of an
+  already-published notice — never a claim that the agency issued a new
+  update.
+- `publishedAt` and `lastPublicActivityAt` were preserved on every
+  repaired case; feed ordering (which depends on `lastPublicActivityAt`)
+  was therefore unaffected.
+- Zero notification events and zero deliveries were created by any wave;
+  no user received a retrospective notification for a historical repair.
+- Future agency updates continue to use the ordinary material-change
+  detection and notification policy, unaffected by O3.
+- Push delivery remained deliberately inactive throughout the entire
+  program and remains so today.
+
+**Presentation gaps (not O3 defects, tracked as future UI work):** the
+corrected consumer instruction (`consumerAction`) and canonical retailer
+identity have no dedicated Detail section yet, and the seven stored
+`corrected` timeline entries have no consumer-facing timeline renderer.
+Two of the material corrections are nonetheless visible today — Metro
+Produce's Minnesota geography (and its matching Affects-Me result) and 529
+Commerce's corrected quantity sentence — and Sprout Organics' corrected
+Walgreens identity already improves search, even though Walgreens is not
+in the fixed personalization retailer catalog (adding it is a separate,
+independent product decision). See
+[docs/recall-feed-usability.md](recall-feed-usability.md) for the tracked
+presentation-gap items.
 
 ## Labels: incremental by construction
 

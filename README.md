@@ -471,8 +471,31 @@ misstate them), and none of this activates push delivery.
   docs updated to the verified state; no code, configuration, or production
   change.
 - Push delivery remains deliberately inactive and was outside O2's scope.
-- Next engineering milestone: **O3 — ingest-pipeline atomicity** (not
-  started).
+
+## Ingest-pipeline atomicity and historical repair (O3)
+
+**O3 is complete: implemented, deployed, and production-settled.** The
+applied-version contract (crash-safe ingestion: archived snapshots and
+downstream application are separate, atomically-tracked facts) shipped and
+has run through natural FDA and FSIS cycles. Governed, plan-bound,
+digest-bound historical reconciliation and re-derivation then resolved the
+pre-O3 legacy population in independently reviewed waves — culminating in a
+final settlement and Simulator QA pass. Final production state: **3,525 of
+3,526 source records `applied`, 0 `pending`, 0 `applied_degraded`, and
+exactly 1 permanent governed exception** (FSIS 083-2016, held because
+current derivation would erase its valid stored `undeclared wheat`
+evidence — a deliberate exclusion, not an ingest failure). The repair
+program created zero notification events and zero deliveries; push
+delivery remains deliberately inactive throughout. Full history, the
+implementation checkpoint sequence, and the final closeout are recorded in
+[docs/recall-operations.md](docs/recall-operations.md).
+
+Two presentation gaps remain, tracked as future UI work rather than O3
+defects: Detail has no dedicated section for the corrected consumer
+instruction (`consumerAction`) or for canonical retailer identity, and the
+repair's stored `corrected` timeline entries have no consumer-facing
+timeline renderer yet. See
+[docs/recall-feed-usability.md](docs/recall-feed-usability.md).
 
 See [AGENTS.md](AGENTS.md) for standing rules for coding agents working in this
 repository, and

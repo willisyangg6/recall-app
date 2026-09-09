@@ -1360,3 +1360,34 @@ local-first persistence, and server mirror are untouched. Privacy, legal,
 methodology, and support rows are deliberately absent until real screens
 exist. Restyling or moving Profile later means touching only
 `src/app/profile.tsx` and the header entry in `_layout.tsx`.
+
+## Presentation gaps from the O3 historical repair (tracked future work)
+
+O3 (see [docs/recall-operations.md](recall-operations.md), "O3 production
+rollout and closeout") corrected several canonical data values in
+production. Three of those corrections are stored correctly but have no
+dedicated Detail-screen surface today. These are tracked future
+presentation work, not O3 defects — the backend data is right; the app
+just doesn't have a place to show it yet.
+
+- **No dedicated Detail section renders `consumerAction`** ("What should I
+  do"). `buildConsumerAction` computes a correct, always-present value, but
+  Detail's only sections are "What happened," "Where it was sold," and
+  "Affected Products" — nothing consumes it.
+- **No dedicated Detail section renders canonical retailer identity.**
+  `projection.retailerNames` feeds search indexing and Affects-Me matching
+  live today, but Detail has no "Sold at" retailer label — geography is the
+  only distribution surface currently shown.
+- **Stored `corrected` timeline entries have no consumer-facing renderer.**
+  The seven O3-B5 material corrections each added one `corrected`
+  `TimelineEntry`, but no screen currently reads or displays case
+  timelines.
+
+Two of the material corrections are nonetheless visible today through
+existing surfaces: Metro Produce's Minnesota geography (and its matching
+Affects-Me result) and 529 Commerce's corrected quantity sentence ("The
+recall covers 3,860 units.") in the What-Happened narrative. Sprout
+Organics' corrected `["Walgreens"]` retailer identity already improves
+product/company search, even though Walgreens is not in the fixed
+personalization retailer catalog — adding it there is a separate,
+independent product/catalog decision, not part of this gap.
