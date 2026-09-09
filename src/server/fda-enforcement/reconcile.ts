@@ -26,7 +26,7 @@ import {
   type ConsumerRiskTier,
 } from '../../domain/risk-tier';
 import type { RecallStore, SourceRecordRow } from '../store/types';
-import { enrichCaseWithMatches } from './enrich';
+import { enrichCaseWithMatches, type ClassificationChangePreviewEntry } from './enrich';
 import { fetchEnforcementBulkUrl } from './fetch';
 import {
   announcementFactsFor,
@@ -51,6 +51,39 @@ const TIER_ORDER: ConsumerRiskTier[] = [
   'pending',
   'unrated',
 ];
+
+/**
+ * A founder-review item: enrichment's per-case preview plus the one fact it
+ * cannot know — whether push delivery is active right now. Deliverability is
+ * "active AND not backfill-suppressed"; an inactive subscriber base means
+ * every proposed change here lands in the ledger only, never a device.
+ */
+export interface ClassificationChangeReviewEntry extends ClassificationChangePreviewEntry {
+  pushActive: boolean;
+  currentlyDeliverable: boolean;
+}
+
+/**
+ * A list this large can no longer be eyeballed by a founder before an apply.
+ * Exceeding it fails the REVIEW output loudly (reporting the true total)
+ * rather than silently showing a truncated list — it never blocks or alters
+ * the case transitions already decided above.
+ */
+const CLASSIFICATION_REVIEW_CEILING = 500;
+
+/** Read-only; tolerates the push_delivery migration not being applied yet,
+ * exactly as SupabasePushStore.getPushEnabledAt does. */
+async function readPushEnabledAt(client: SupabaseClient): Promise<string | null> {
+  const { data, error } = await client
+    .from('push_delivery_config')
+    .select('push_enabled_at')
+    .maybeSingle();
+  if (error) {
+    if (/push_delivery_config/.test(error.message)) return null;
+    throw new Error(error.message);
+  }
+  return (data?.push_enabled_at as string | undefined) ?? null;
+}
 
 export interface EnforcementCorpus {
   records: OpenFdaEnforcementRaw[];
@@ -96,6 +129,9 @@ export async function downloadEnforcementCorpus(
 export interface ReconcileOptions {
   apply: boolean;
   corpus: EnforcementCorpus;
+  /** Override for CLASSIFICATION_REVIEW_CEILING — tests only; production runs
+   * always get the real ceiling. */
+  reviewCeiling?: number;
 }
 
 /** JSON-friendly stats — persisted as job-run metrics. */
@@ -119,6 +155,9 @@ export interface ReconcileStats {
   byMethod: Record<string, number>;
   classSets: Record<string, number>;
   tiers: Record<string, number>;
+  /** Every proposed classification assignment/change, for founder review
+   * before an apply. Length always equals assignments + reclassifications. */
+  classificationChanges: ClassificationChangeReviewEntry[];
 }
 
 export async function reconcileFdaEnforcement(
@@ -195,6 +234,7 @@ export async function reconcileFdaEnforcement(
   };
   const ambiguousExamples: string[] = [];
   const matchedExamples: string[] = [];
+  const classificationChanges: ClassificationChangePreviewEntry[] = [];
 
   for (const recallCase of cases) {
     const notices = (recordsByCase.get(recallCase.id) ?? []).map((row) => ({
@@ -272,6 +312,7 @@ export async function reconcileFdaEnforcement(
       officialClasses: outcome.officialClassesAfter,
     });
     summary.conflicts += outcome.conflicts.length;
+    classificationChanges.push(...outcome.classificationChanges);
     if (outcome.materialChanges.includes('classification_assigned')) summary.assignments += 1;
     if (
       outcome.materialChanges.some(
@@ -326,8 +367,65 @@ export async function reconcileFdaEnforcement(
   );
   console.log(`  new RecallCases: 0 (enrichment never creates cases)`);
 
+  // ── Founder review: every proposed classification assignment/change ──────
+  // Separate from "Representative matches" below on purpose: that section is
+  // a capped general-QA sample of matching, not the list of proposed writes.
+  const reviewCeiling = options.reviewCeiling ?? CLASSIFICATION_REVIEW_CEILING;
+  if (classificationChanges.length > reviewCeiling) {
+    console.error(
+      `\n  ⚠ ${classificationChanges.length} proposed classification changes exceed the ` +
+        `founder-review ceiling of ${reviewCeiling} — refusing to print an ` +
+        `unreviewable list. Every case transition above already reflects this run's decisions; ` +
+        `only this review output is blocked.\n`,
+    );
+    throw new Error(
+      `classification-change review ceiling exceeded: ${classificationChanges.length} proposed ` +
+        `changes > ${reviewCeiling}`,
+    );
+  }
+
+  const pushEnabledAt = await readPushEnabledAt(client);
+  const pushActive = pushEnabledAt !== null;
+  const reviewEntries: ClassificationChangeReviewEntry[] = classificationChanges.map((entry) => ({
+    ...entry,
+    pushActive,
+    currentlyDeliverable: pushActive && entry.suppressed === null,
+  }));
+
+  console.log(
+    `\n  Proposed classification changes${apply ? '' : ' — REVIEW BEFORE APPLYING'} (${reviewEntries.length}):`,
+  );
+  if (reviewEntries.length === 0) {
+    console.log('    none — this run would not write a new classification.');
+  }
+  for (const entry of reviewEntries) {
+    console.log(
+      `    · [${entry.caseId}] ${entry.changeKind === 'first_assignment' ? 'First assignment' : 'Reclassification'}` +
+        ` → ${entry.officialClassesAfter.join('+') || 'none'} (${entry.riskTierAfter})`,
+    );
+    console.log(`      "${entry.title.slice(0, 70)}"`);
+    console.log(
+      `      announcement ${entry.announcementRecallNumber ?? '(none)'} · ` +
+        `event(s) ${entry.acceptedEventIds.join(', ')} [${entry.matchMethods.join(', ')}] · ` +
+        `${entry.enforcementRecallNumberCount} enforcement record(s) (sample: ${entry.enforcementRecallNumbersSample.join(', ')})`,
+    );
+    console.log(
+      `      was ${entry.classificationBefore} · rule ${entry.ruleId} · mixed-class ${entry.mixedClass} · ` +
+        `timeline '${entry.timelineKind}'`,
+    );
+    console.log(
+      `      fingerprint ${entry.fingerprint} · dedup ${entry.dedupKey} · ` +
+        `event ${entry.eventAlreadyExists ? 'ALREADY EXISTS' : 'new'} · ` +
+        `suppressed ${entry.suppressed ?? 'no'} · push ${entry.pushActive ? 'active' : 'inactive'} · ` +
+        `deliverable now: ${entry.currentlyDeliverable}`,
+    );
+    if (entry.evidence.length > 0) console.log(`      evidence: ${entry.evidence.join(' · ')}`);
+  }
+
   if (matchedExamples.length > 0) {
-    console.log('\n  Representative matches:');
+    console.log(
+      '\n  Representative matches (general QA sample — NOT the list of proposed writes):',
+    );
     for (const example of matchedExamples) console.log(`    · ${example}`);
   }
   if (ambiguousExamples.length > 0) {
@@ -360,5 +458,6 @@ export async function reconcileFdaEnforcement(
     byMethod: Object.fromEntries(summary.byMethod),
     classSets: Object.fromEntries(summary.classSets),
     tiers: Object.fromEntries(summary.tiers),
+    classificationChanges: reviewEntries,
   };
 }

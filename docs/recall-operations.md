@@ -1519,6 +1519,29 @@ with the source export date 2026-08-27 sitting exactly at the ten-day stale
 threshold — see the watch item under "Production verification (O2-A,
 2026-09-05)".
 
+### Dry-run review output (2026-09-09)
+
+Every reconcile run (`--dry-run` or apply, CLI or scheduled) prints two
+separate things and they must never be confused:
+
+- **"Representative matches"** — a general-QA sample capped at 6 cases, for
+  eyeballing the matcher. It is not a list of proposed writes.
+- **"Proposed classification changes"** — every case whose classification
+  would be newly assigned or changed this run (the same cases counted in
+  `classification assignments`/`reclassifications` above), enumerated in
+  full: case id, announcement recall number, title, prior/proposed
+  classification and tier, the accepted enforcement event(s)/recall
+  number(s)/matching method(s) and evidence behind the change, the exact
+  timeline kind, notification rule, fingerprint, and dedup key an apply
+  would write, whether that dedup key is already in the ledger (always
+  expected `new`, given the atomic case-transition contract), suppression
+  state, and whether push is currently active. The list is never silently
+  truncated — a run proposing more than 500 changes fails this output
+  loudly instead, reporting the true total. This is the founder-review seam
+  for authorizing one enforcement apply; it adds no new detection, only a
+  structured view of the decision `src/server/fda-enforcement/enrich.ts`
+  already makes (`CaseEnrichmentOutcome.classificationChanges`).
+
 ## Secrets
 
 Production jobs use two environment variables — `SUPABASE_URL` and

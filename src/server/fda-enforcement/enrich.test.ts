@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { fingerprint } from '../../domain/material-change';
 import { projectCase } from '../../domain/projection';
 import { consumerRiskTier } from '../../domain/risk-tier';
 import type { NormalizedSourceRecord } from '../../domain/source-record';
@@ -286,6 +287,8 @@ test('a recall_number already linked to another case is a conflict, never re-lin
     (await store.getCase(caseA.id))!.projection.classification.value,
     'not_yet_classified',
   );
+  // A conflict-only case has nothing left to propose.
+  assert.deepEqual(outcome?.classificationChanges, []);
 });
 
 test('enrichment never creates cases and dry-run writes nothing', async () => {
@@ -427,4 +430,253 @@ test('a historical MIXED classification is suppressed exactly like a single one'
     { ruleId: 'classification_assigned', suppressed: 'backfill' },
   ]);
   assert.equal([...store.notifications.values()].length, 1);
+});
+
+test('a first-time Class I assignment is enumerated in the preview', async () => {
+  const store = new MemoryStore();
+  const recallCase = await seedCase(store);
+  const { accepted, rawByRecallNumber } = acceptedFor(
+    rawEnforcement({ classification: 'Class I' }),
+  );
+
+  const outcome = await enrichCaseWithMatches(store, recallCase.id, accepted, rawByRecallNumber, {
+    apply: true,
+    now: NOW,
+  });
+
+  assert.equal(outcome?.classificationChanges.length, 1);
+  const entry = outcome!.classificationChanges[0];
+  assert.equal(entry.caseId, recallCase.id);
+  assert.equal(entry.announcementRecallNumber, 'acme-foods-recalls-widget-snacks');
+  assert.equal(entry.classificationBefore, 'not_yet_classified');
+  assert.deepEqual(entry.officialClassesAfter, ['class_I']);
+  assert.equal(entry.riskTierAfter, 'critical');
+  assert.equal(entry.changeKind, 'first_assignment');
+  assert.equal(entry.ruleId, 'classification_assigned');
+  assert.deepEqual(entry.acceptedEventIds, ['99900']);
+  assert.equal(entry.enforcementRecallNumberCount, 1);
+  assert.deepEqual(entry.enforcementRecallNumbersSample, ['F-1000-2026']);
+  assert.deepEqual(entry.matchMethods, ['code-identity']);
+  assert.ok(entry.evidence.length >= 2);
+  assert.equal(entry.mixedClass, false);
+  assert.equal(entry.timelineKind, 'classified');
+  const expectedFingerprint = fingerprint('classified:class_I');
+  assert.equal(entry.fingerprint, expectedFingerprint);
+  assert.equal(
+    entry.dedupKey,
+    `mu:${recallCase.id}:classification_assigned:${expectedFingerprint}`,
+  );
+  assert.equal(entry.eventAlreadyExists, false);
+  assert.equal(entry.suppressed, null);
+});
+
+test('a first-time Class II assignment is enumerated in the preview', async () => {
+  const store = new MemoryStore();
+  const recallCase = await seedCase(store);
+  const { accepted, rawByRecallNumber } = acceptedFor(rawEnforcement({})); // Class II
+
+  const outcome = await enrichCaseWithMatches(store, recallCase.id, accepted, rawByRecallNumber, {
+    apply: true,
+    now: NOW,
+  });
+
+  assert.equal(outcome?.classificationChanges.length, 1);
+  const entry = outcome!.classificationChanges[0];
+  assert.deepEqual(entry.officialClassesAfter, ['class_II']);
+  assert.equal(entry.riskTierAfter, 'moderate');
+  assert.equal(entry.changeKind, 'first_assignment');
+});
+
+test('a genuine reclassification is labeled distinctly from a first assignment', async () => {
+  const store = new MemoryStore();
+  const recallCase = await seedCase(store);
+  const first = acceptedFor(rawEnforcement({}));
+  await enrichCaseWithMatches(store, recallCase.id, first.accepted, first.rawByRecallNumber, {
+    apply: true,
+    now: NOW,
+  });
+
+  const upgraded = acceptedFor(
+    rawEnforcement({ classification: 'Class I', center_classification_date: '20260824' }),
+  );
+  const outcome = await enrichCaseWithMatches(
+    store,
+    recallCase.id,
+    upgraded.accepted,
+    upgraded.rawByRecallNumber,
+    { apply: true, now: NOW },
+  );
+
+  assert.equal(outcome?.classificationChanges.length, 1);
+  const entry = outcome!.classificationChanges[0];
+  assert.equal(entry.changeKind, 'reclassification');
+  assert.equal(entry.ruleId, 'classification_upgraded');
+  assert.equal(entry.classificationBefore, 'class_II');
+  assert.deepEqual(entry.officialClassesAfter, ['class_I']);
+});
+
+test('an unchanged classification (re-run) produces an empty preview', async () => {
+  const store = new MemoryStore();
+  const recallCase = await seedCase(store);
+  const { accepted, rawByRecallNumber } = acceptedFor(rawEnforcement({}));
+  await enrichCaseWithMatches(store, recallCase.id, accepted, rawByRecallNumber, {
+    apply: true,
+    now: NOW,
+  });
+
+  const second = await enrichCaseWithMatches(store, recallCase.id, accepted, rawByRecallNumber, {
+    apply: true,
+    now: NOW,
+  });
+
+  assert.deepEqual(second?.classificationChanges, []);
+});
+
+test('mixed official classes are represented honestly in the preview', async () => {
+  const store = new MemoryStore();
+  const recallCase = await seedCase(store);
+  const rawII = rawEnforcement({});
+  const rawI = rawEnforcement({
+    recall_number: 'F-1001-2026',
+    classification: 'Class I',
+    product_description: 'Widget Snacks Family Size 32 oz bag UPC 012345678905',
+  });
+  const accepted: AcceptedMatch[] = [
+    {
+      eventId: '99900',
+      method: 'code-identity',
+      records: [parseEnforcementRecord(rawII), parseEnforcementRecord(rawI)],
+      evidence: ['same normalized recalling firm', 'exact UPC overlap: 012345678905'],
+    },
+  ];
+  const rawByRecallNumber = new Map([
+    ['F-1000-2026', rawII],
+    ['F-1001-2026', rawI],
+  ]);
+
+  const outcome = await enrichCaseWithMatches(store, recallCase.id, accepted, rawByRecallNumber, {
+    apply: true,
+    now: NOW,
+  });
+
+  assert.equal(outcome?.classificationChanges.length, 1);
+  const entry = outcome!.classificationChanges[0];
+  assert.equal(entry.mixedClass, true);
+  assert.deepEqual(entry.officialClassesAfter, ['class_I', 'class_II']);
+  assert.equal(entry.riskTierAfter, 'high');
+  assert.equal(entry.enforcementRecallNumberCount, 2);
+  assert.deepEqual(entry.enforcementRecallNumbersSample.sort(), ['F-1000-2026', 'F-1001-2026']);
+});
+
+test('the preview carries no raw payload text, addresses, or credentials', async () => {
+  const store = new MemoryStore();
+  const recallCase = await seedCase(store);
+  const { accepted, rawByRecallNumber } = acceptedFor(rawEnforcement({}));
+
+  const outcome = await enrichCaseWithMatches(store, recallCase.id, accepted, rawByRecallNumber, {
+    apply: true,
+    now: NOW,
+  });
+
+  const entry = outcome!.classificationChanges[0];
+  const serialized = JSON.stringify(entry);
+  // The enforcement fixture's raw product/reason text never appears — only
+  // the bounded, human-authored evidence lines from match.ts.
+  assert.ok(!serialized.includes('Widget Snacks 16 oz bag'));
+  assert.ok(!serialized.includes('Undeclared peanuts'));
+  assert.ok(!serialized.includes('Lot 12345'));
+});
+
+test('dry-run produces an identical preview to apply planning, and calls no mutating store method', async () => {
+  const store = new MemoryStore();
+  const recallCase = await seedCase(store);
+  const { accepted, rawByRecallNumber } = acceptedFor(
+    rawEnforcement({ classification: 'Class I' }),
+  );
+
+  const mutatingMethods = [
+    'insertSourceRecord',
+    'updateSourceRecord',
+    'updateSourceRecordNormalized',
+    'archiveSnapshot',
+    'markSourceRecordApplied',
+    'applyCaseTransition',
+    'insertNotificationIfAbsent',
+  ] as const;
+  const calls: string[] = [];
+  const guarded = new Proxy(store, {
+    get(target, prop, receiver) {
+      if (typeof prop === 'string' && (mutatingMethods as readonly string[]).includes(prop)) {
+        calls.push(prop);
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
+
+  const dryRun = await enrichCaseWithMatches(guarded, recallCase.id, accepted, rawByRecallNumber, {
+    apply: false,
+    now: NOW,
+  });
+
+  assert.deepEqual(calls, []);
+
+  const storeForApply = new MemoryStore();
+  const caseForApply = await seedCase(storeForApply);
+  const applyPlan = await enrichCaseWithMatches(
+    storeForApply,
+    caseForApply.id,
+    accepted,
+    rawByRecallNumber,
+    { apply: true, now: NOW },
+  );
+
+  assert.equal(dryRun?.classificationChanges.length, 1);
+  // caseId and dedupKey differ only because the two runs used different
+  // seeded cases — every other field, including the fingerprint and the
+  // dedup key's rule/fingerprint suffix, must be identical.
+  const strip = ({ caseId, dedupKey, ...rest }: (typeof dryRun.classificationChanges)[number]) =>
+    rest;
+  assert.deepEqual(
+    dryRun!.classificationChanges.map(strip),
+    applyPlan!.classificationChanges.map(strip),
+  );
+  assert.equal(
+    dryRun!.classificationChanges[0].dedupKey,
+    `mu:${recallCase.id}:classification_assigned:${dryRun!.classificationChanges[0].fingerprint}`,
+  );
+  assert.equal(
+    applyPlan!.classificationChanges[0].dedupKey,
+    `mu:${caseForApply.id}:classification_assigned:${applyPlan!.classificationChanges[0].fingerprint}`,
+  );
+});
+
+test('an already-ledgered dedup key is identified as already existing', async () => {
+  const store = new MemoryStore();
+  const recallCase = await seedCase(store);
+  const { accepted, rawByRecallNumber } = acceptedFor(
+    rawEnforcement({ classification: 'Class I' }),
+  );
+  const materialChangeRef = fingerprint('classified:class_I');
+  const dedupKey = `mu:${recallCase.id}:classification_assigned:${materialChangeRef}`;
+  // Simulate a ledger row that already exists for this exact dedup key,
+  // independent of whatever the case's own classification says.
+  await store.insertNotificationIfAbsent({
+    recallCaseId: recallCase.id,
+    kind: 'material_update',
+    triggerRuleId: 'classification_assigned',
+    dedupKey,
+    materialChangeRef,
+    payloadSummary: 'The agency classified this recall (Class I).',
+    suppressed: null,
+    sourceSnapshotIds: [],
+    createdAt: '2026-08-20T00:00:00.000Z',
+  });
+
+  const outcome = await enrichCaseWithMatches(store, recallCase.id, accepted, rawByRecallNumber, {
+    apply: false,
+    now: NOW,
+  });
+
+  assert.equal(outcome?.classificationChanges[0]?.dedupKey, dedupKey);
+  assert.equal(outcome?.classificationChanges[0]?.eventAlreadyExists, true);
 });

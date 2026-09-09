@@ -33,7 +33,12 @@
 
 import { detectChanges } from '../../domain/material-change';
 import { projectCase } from '../../domain/projection';
-import type { OfficialClass, TimelineEntry } from '../../domain/recall-types';
+import type {
+  MaterialChangeRuleId,
+  OfficialClass,
+  TimelineEntry,
+  TimelineKind,
+} from '../../domain/recall-types';
 import { consumerRiskTier, officialClassesOf, type ConsumerRiskTier } from '../../domain/risk-tier';
 import type { NormalizedSourceRecord } from '../../domain/source-record';
 import { contentHash } from '../pipeline';
@@ -41,6 +46,65 @@ import type { AppliedMarker, NotificationEventInput, RecallStore } from '../stor
 import type { AcceptedMatch } from './match';
 import { MATCHER_VERSION } from './match';
 import type { EnforcementRecord, OpenFdaEnforcementRaw } from './parse';
+
+/**
+ * The two classification-change material rules this preview covers — the
+ * exact set `reconcileFdaEnforcement` already counts as `assignments` +
+ * `reclassifications` (see reconcile.ts). `classification_changed` (a
+ * mixed-set transition with no defined direction) is deliberately NOT
+ * counted there today, so it is excluded here too: the preview's total must
+ * match the pre-existing aggregate by construction, not introduce a third
+ * category the rest of the system doesn't already recognize.
+ */
+const CLASSIFICATION_CHANGE_RULE_IDS: ReadonlySet<MaterialChangeRuleId> = new Set([
+  'classification_assigned',
+  'classification_upgraded',
+  'classification_downgraded',
+]);
+
+/** Caps on founder-review text — evidence and recall numbers are already
+ * short, but a case with many accepted matches must not grow unbounded. */
+const PREVIEW_RECALL_NUMBER_SAMPLE = 10;
+const PREVIEW_EVIDENCE_SAMPLE = 12;
+
+export type ClassificationChangeKind = 'first_assignment' | 'reclassification';
+
+/**
+ * One proposed classification assignment/change, captured at the exact point
+ * `detectChanges` decides it is material — the same decision that produces
+ * the timeline entry and the NotificationEvent below. Bounded and
+ * payload-free: no raw enforcement descriptions, addresses, or credentials.
+ */
+export interface ClassificationChangePreviewEntry {
+  caseId: string;
+  /** The case's own FDA announcement recall number, when one is linked — a
+   * stable, officially-searchable identifier distinct from the internal
+   * caseId. */
+  announcementRecallNumber: string | null;
+  title: string;
+  classificationBefore: string;
+  officialClassesAfter: OfficialClass[];
+  riskTierAfter: ConsumerRiskTier;
+  changeKind: ClassificationChangeKind;
+  ruleId: MaterialChangeRuleId;
+  acceptedEventIds: string[];
+  enforcementRecallNumberCount: number;
+  enforcementRecallNumbersSample: string[];
+  matchMethods: AcceptedMatch['method'][];
+  /** Bounded human-readable evidence lines — the audit answer to "why this class?". */
+  evidence: string[];
+  mixedClass: boolean;
+  timelineKind: TimelineKind;
+  fingerprint: string;
+  dedupKey: string;
+  /** True only if a ledger event with this exact dedup key is already stored
+   * (read-only check; see RecallStore.hasNotificationEvent). Given the
+   * atomic case-transition contract, a change that reaches this preview has
+   * never been committed, so this is expected to always be false — surfaced
+   * explicitly rather than assumed. */
+  eventAlreadyExists: boolean;
+  suppressed: 'backfill' | null;
+}
 
 /** Provenance block stored inside the enforcement record's normalized payload. */
 export interface EnforcementMatchProvenance {
@@ -145,6 +209,9 @@ export interface CaseEnrichmentOutcome {
   riskTierAfter: ConsumerRiskTier;
   materialChanges: string[];
   notifications: { ruleId: string; suppressed: string | null }[];
+  /** Every proposed classification assignment/change this case would write —
+   * a strict subset of materialChanges, detailed enough for founder review. */
+  classificationChanges: ClassificationChangePreviewEntry[];
   /**
    * The case CAS lost to a concurrent writer on every retry: the records
    * stay pending and the next scheduled run converges. Reported, never
@@ -187,7 +254,20 @@ export async function enrichCaseWithMatches(
     riskTierAfter: consumerRiskTier(recallCase.projection.classification),
     materialChanges: [],
     notifications: [],
+    classificationChanges: [],
   };
+
+  // Aggregated, bounded match evidence — identical for every classification
+  // change this case could produce this run, so it is computed once from the
+  // function's own `accepted` argument rather than re-derived per change.
+  const acceptedEventIds = [...new Set(accepted.map((match) => match.eventId))];
+  const enforcementRecallNumbers = accepted.flatMap((match) =>
+    match.records.map((record) => record.recallNumber),
+  );
+  const matchMethods = [...new Set(accepted.map((match) => match.method))];
+  const evidenceSample = accepted
+    .flatMap((match) => match.evidence)
+    .slice(0, PREVIEW_EVIDENCE_SAMPLE);
 
   // 1. Link / refresh each matched enforcement record. New and changed
   // records become PENDING versions whose applied markers ride the atomic
@@ -317,6 +397,8 @@ export async function enrichCaseWithMatches(
     const freshCase = attempt === 0 ? recallCase : await store.getCase(caseId);
     if (!freshCase) return outcome;
     const current = await store.getSourceRecordsForCase(caseId);
+    const announcementRecallNumber =
+      current.find((r) => r.sourceSystem === 'fda_announcement')?.nativeId ?? null;
     const currentById = new Map(current.map((r) => [r.nativeId, r.normalized]));
     for (const normalized of linkedNormalized) currentById.set(normalized.nativeId, normalized);
     const next = projectCase([...currentById.values()]);
@@ -352,10 +434,14 @@ export async function enrichCaseWithMatches(
     const timeline: TimelineEntry[] = [...freshCase.timeline];
     const events: NotificationEventInput[] = [];
     outcome.notifications = [];
+    outcome.classificationChanges = [];
     for (const change of material) {
+      const timelineKind: TimelineKind = change.ruleId.startsWith('classification')
+        ? 'classified'
+        : 'source_updated';
       timeline.push({
         occurredAt,
-        kind: change.ruleId.startsWith('classification') ? 'classified' : 'source_updated',
+        kind: timelineKind,
         summary: change.summary,
         causedBySnapshotIds: [],
         material: true,
@@ -363,17 +449,48 @@ export async function enrichCaseWithMatches(
       });
       const suppressed = isBackfill ? ('backfill' as const) : null;
       outcome.notifications.push({ ruleId: change.ruleId, suppressed });
+      const dedupKey = `mu:${caseId}:${change.ruleId}:${change.fingerprint}`;
       events.push({
         recallCaseId: caseId,
         kind: 'material_update',
         triggerRuleId: change.ruleId,
-        dedupKey: `mu:${caseId}:${change.ruleId}:${change.fingerprint}`,
+        dedupKey,
         materialChangeRef: change.fingerprint,
         payloadSummary: change.summary,
         suppressed,
         sourceSnapshotIds: [],
         createdAt: nowIso,
       });
+
+      // The founder-review preview: a strict subset of the timeline/event
+      // writes above, at the same decision point, never a second detector.
+      if (CLASSIFICATION_CHANGE_RULE_IDS.has(change.ruleId)) {
+        outcome.classificationChanges.push({
+          caseId,
+          announcementRecallNumber,
+          title: next.title,
+          classificationBefore: freshCase.projection.classification.value,
+          officialClassesAfter: outcome.officialClassesAfter,
+          riskTierAfter: outcome.riskTierAfter,
+          changeKind:
+            change.ruleId === 'classification_assigned' ? 'first_assignment' : 'reclassification',
+          ruleId: change.ruleId,
+          acceptedEventIds,
+          enforcementRecallNumberCount: enforcementRecallNumbers.length,
+          enforcementRecallNumbersSample: enforcementRecallNumbers.slice(
+            0,
+            PREVIEW_RECALL_NUMBER_SAMPLE,
+          ),
+          matchMethods,
+          evidence: evidenceSample,
+          mixedClass: outcome.officialClassesAfter.length > 1,
+          timelineKind,
+          fingerprint: change.fingerprint,
+          dedupKey,
+          eventAlreadyExists: await store.hasNotificationEvent(dedupKey),
+          suppressed,
+        });
+      }
     }
 
     if (!options.apply) return outcome;

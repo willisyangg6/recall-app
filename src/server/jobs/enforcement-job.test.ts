@@ -33,6 +33,7 @@ function stats(overrides: Partial<ReconcileStats> = {}): ReconcileStats {
     byMethod: {},
     classSets: {},
     tiers: {},
+    classificationChanges: [],
     ...overrides,
   };
 }
