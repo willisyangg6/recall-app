@@ -46,11 +46,42 @@ share personal information for advertising.
   and timestamps for enabling, registering, and refreshing.
 - **Alert delivery records.** Which alert was sent to which registration and
   whether the delivery service accepted it.
+- **Community shopper reports (only if you submit one — not yet available).**
+  ⟦FOUNDER: this paragraph activates only when shopper reporting launches
+  (P1D + enabling the server-side gate); it must not be published as live
+  before then.⟧ If you choose to report finding a recalled product, we
+  store: the state you select, the store you select (only from the stores
+  the official notice names — or nothing if you choose "Not sure"), a rough
+  purchase-time range (e.g. "past week"), and the random installation
+  identifier, so your report stays editable and deletable by you. These
+  reports exist to show other shoppers an aggregate signal ("N shoppers
+  reported finding it here"). Individual reports are private: only totals
+  of three or more reports are ever shown, and no report ever changes the
+  official recall information. A report contains no symptoms, illness or
+  medical information, no name or contact details, no exact location or
+  GPS, no receipt or photo, and no free text — the questionnaire cannot
+  collect them. You can edit or withdraw your report at any time
+  (withdrawal deletes it), and "Reset app and delete my data" deletes all
+  of your reports along with your other installation data.
+  **Retention:** a report is kept for up to 12 months after your most
+  recent meaningful submission or edit of it — editing it restarts that
+  12-month period; retrying an unchanged submission does not. When a
+  report reaches 12 months it stops counting toward the aggregate
+  immediately, and a scheduled daily cleanup permanently deletes it within
+  at most about a day. Withdrawing a report or using "Reset app and delete
+  my data" deletes it immediately instead. Uninstalling the app alone
+  does not send a deletion request (though an abandoned report still ages
+  out under the 12-month rule). No hidden copy or marker of a deleted or
+  expired report is kept.
 
 We do **not** collect: names, email addresses, phone numbers, contacts,
 photos, account credentials (no accounts exist), device location (your state
-is a manual choice), advertising identifiers, purchase information, search
-terms, or a record of which recalls you view.
+is a manual choice), advertising identifiers, search terms, or a record of
+which recalls you view. Outside a community shopper report you choose to
+submit (described above, and not yet available), we collect no
+purchase-related information — and even a shopper report records only a
+selected state, an optionally selected store, and a rough time range, never
+a receipt, price, or purchase history.
 
 Like every internet service, requests from the app to our infrastructure
 carry standard connection details such as an IP address, which our hosting
@@ -101,9 +132,16 @@ changes accordingly.⟧
 do. As audited (2026-08-28, revised C7.1): an in-app "Reset app and delete
 my data" control now exists (Profile → Privacy & Data Controls) and deletes
 the installation's server records — preference mirror, push registration,
-delivery records — then resets the device to a fresh installation identity.
+delivery records, and (once shopper reporting ships) all of the
+installation's community shopper reports, in one atomic operation — then
+resets the device to a fresh installation identity.
 Its migration must be applied to production before this policy describes it
-as live. Rows for installations that never use the reset (including
+as live; the shopper-report clause additionally requires the P1C migration
+and launch. Shopper-report retention is DECIDED (2026-09-10): 12 months
+after the most recent meaningful submission or edit, with a daily scheduled
+physical cleanup — see `recall-shopper-reports.md` §7. The retention gap
+that remains open is the C7 one above (stale push-registration rows of
+never-reset installations), which this decision does not cover. Rows for installations that never use the reset (including
 registrations left by pre-reinstall installations under old identifiers)
 persist with no automatic purge; either ship a retention window first or
 disclose the absence honestly. Do not publish aspirational promises.⟧

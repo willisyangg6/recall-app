@@ -455,8 +455,8 @@ misstate them), and none of this activates push delivery.
 
 ## Consumer product milestones (P1 series)
 
-- **P1B — standardized health guidance** (implemented, display-time,
-  uncommitted): Recall Detail gains a `Health Risk` section between
+- **P1B — standardized health guidance** (shipped, display-time):
+  Recall Detail gains a `Health Risk` section between
   `Where it was sold` and `Affected Products`. Copy comes from a versioned,
   source-reviewed registry ([src/content/hazard-guides.ts](src/content/hazard-guides.ts))
   so the same recognized hazard renders identical wording on every recall —
@@ -481,6 +481,42 @@ misstate them), and none of this activates push delivery.
   generic "What should I do?" section or page, and no shopper/community
   reporting UI — shopper reports are P1C (data model, questionnaire logic,
   aggregation) and P1D (visible flow).
+
+- **P1C — community shopper reports, data foundation** (implemented,
+  uncommitted; **feature OFF**, migration **not applied to production**):
+  the secure backend and nonvisual client foundation for community
+  corroboration ("N shoppers reported finding it here"), with no
+  questionnaire, no Detail copy, and no route — those are P1D. One
+  forward-only migration
+  ([supabase/migrations/20260910000000_shopper_reports.sql](supabase/migrations/20260910000000_shopper_reports.sql))
+  adds an RLS-locked `shopper_reports` table (no policies, no public
+  grants; one row per installation and case), a disabled-by-default
+  kill-switch config, and five SECURITY DEFINER RPCs: submit/update
+  (idempotent upsert validated server-side against the case's own
+  lifecycle, official geography, and canonical retailer evidence), get-my,
+  withdraw (physical delete), a thresholded public summary (0–2 reports
+  return one indistinguishable hidden state; 3+ return the real exact
+  total), and an extended `delete_installation_data` covering reports.
+  Ownership reuses the existing keychain-held random-UUID bearer
+  capability. Two founder decisions are recorded and enforced: the
+  residual multi-installation (Sybil) risk is an **accepted MVP
+  limitation** — bounded to count inflation, containable by the kill
+  switch, never described as Sybil-proof — and reports carry a **12-month
+  retention** (`expires_at`, restarted only by a meaningful edit): expired
+  rows stop counting and stop returning instantly, never block a fresh
+  submission, and a daily pg_cron job (`recall-shopper-report-expiry`)
+  physically deletes them within ~24 hours. Details and remaining launch
+  preconditions:
+  [docs/recall-shopper-reports.md](docs/recall-shopper-reports.md) and
+  [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md).
+  Client foundation: `src/domain/shopper-report.ts`,
+  `src/lib/report-api.ts`, `src/lib/shopper-report-store.ts` (mutations
+  ride the shared installation mutation queue; reads never mint an
+  identity). Verified by deterministic suites plus a live matrix over real
+  PostgREST on a disposable local stack (applied the full migration chain;
+  torn down completely). Community data influences no official field,
+  feed, notification, or ranking — the aggregate is one-way by
+  construction.
 
 ## Operational verification (O2)
 

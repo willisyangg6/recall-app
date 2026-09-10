@@ -33,6 +33,7 @@ it in the same change rather than describing the new behavior somewhere else.
 | Feed usability and filtering                       | [docs/recall-feed-usability.md](docs/recall-feed-usability.md)             |
 | Product categories                                 | [docs/recall-food-categories.md](docs/recall-food-categories.md)           |
 | Personalization and Affects-Me                     | [docs/recall-personalization.md](docs/recall-personalization.md)           |
+| Community shopper reports                          | [docs/recall-shopper-reports.md](docs/recall-shopper-reports.md)           |
 | Push delivery                                      | [docs/recall-push-delivery.md](docs/recall-push-delivery.md)               |
 | Imagery                                            | [docs/recall-imagery.md](docs/recall-imagery.md)                           |
 | Data-flow audit                                    | [docs/recall-data-flow-audit.md](docs/recall-data-flow-audit.md)           |

@@ -52,6 +52,35 @@ Product decisions with policy consequences:
 - [ ] Corrections-policy response-time commitments, if any are ever wanted
       (none are promised today).
 
+Community shopper reports (P1C built the data foundation with the server
+gate **disabled** — see [recall-shopper-reports.md](recall-shopper-reports.md)):
+
+- [x] **Sybil/abuse posture — DECIDED 2026-09-10.** The founder accepts
+      the residual multi-installation risk for the initial MVP: the
+      bearer-installation model protects one installation's report from
+      another, but does not prove one human has one installation, and the
+      system is never described as Sybil-proof or verified-human. Accepted
+      because the impact is bounded (a report can only move a count — it
+      cannot introduce unofficial states, retailers, classifications, or
+      notification behavior) and immediately containable (the kill
+      switch). Hardening — device attestation, edge rate limiting, or
+      accounts — is a recorded future option if abuse appears or usage
+      materially scales; none was added, and no fingerprinting, IP
+      storage, or invented quota exists.
+- [x] **Shopper-report retention — DECIDED 2026-09-10.** Reports expire 12
+      months after the most recent meaningful submission or edit
+      (`expires_at`), stop counting the instant they expire, and are
+      physically deleted by the daily `recall-shopper-report-expiry` cron
+      within at most ~24 hours. (The separate C7-era question — stale
+      push-registration rows of never-reset installations — remains open
+      above and is not resolved by this.)
+- [ ] **Enabling the feature** is still its own explicit production action
+      (service-role update of `shopper_report_config`), separate from
+      applying the migration, and stays off until P1D ships the
+      point-of-submission notice + Privacy Policy link and the reviews
+      below are done. Accepting the Sybil risk does not make the feature
+      enabled or production-ready.
+
 ## 2. Counsel-review checklist
 
 - [ ] **Apple Health data type**: whether server-synced allergen selections
@@ -82,6 +111,12 @@ Product decisions with policy consequences:
       build; liability/disclaimer language for safety-information services.
 - [ ] **Attributions**: confirm public-domain treatment of FDA/USDA content
       and the trademark note for label imagery is adequate.
+- [ ] **Shopper-report disclosure** (added by P1C, prospective — the feature
+      is built but disabled): review the community-report paragraph of the
+      Privacy Policy draft and the App Privacy label implications of
+      collecting a selected state, optional retailer, and purchase-time
+      range keyed to the installation identifier, before the feature is
+      enabled or the P1D point-of-submission notice ships.
 
 ## 3. Publication blockers — Privacy Policy (and its Profile row)
 
