@@ -157,12 +157,44 @@ test('no guide states an onset, incubation, or duration window', () => {
   assert.doesNotMatch(ALL_TEXT, /\bincubation\b/i);
 });
 
-test('higher-risk statements name groups, and are absent where the source names none', () => {
-  const listeria = hazardGuideByKey('listeria');
-  assert.match(listeria?.higherRisk ?? '', /pregnant/i);
-  const salmonella = hazardGuideByKey('salmonella');
-  assert.match(salmonella?.higherRisk ?? '', /weakened immune systems/i);
-  // Absent, not invented, where the cited page identifies no group.
+test('the founder-consolidated guides render one paragraph, not two', () => {
+  // Founder visual QA (2026-09-10): allergen, E. coli, Listeria, and
+  // Salmonella each fold their higher-risk group INTO the single risk
+  // paragraph, so the section goes straight from that paragraph to Common
+  // Symptoms with no second paragraph in between. Hepatitis A was
+  // deliberately NOT part of this pass and keeps its own separate
+  // higher-risk paragraph — this test is scoped to exactly the four guides
+  // the founder specified, not the whole registry.
+  for (const key of ['undeclared-allergen', 'stec', 'listeria', 'salmonella'] as const) {
+    const guide = hazardGuideByKey(key);
+    assert.equal(guide?.higherRisk, null, `${key} still carries a second paragraph`);
+  }
+  // Untouched by this pass: hepatitis A keeps its separate paragraph, and
+  // botulism/cyclospora keep their pre-existing absence of one.
+  assert.ok(hazardGuideByKey('hepatitis-a')?.higherRisk, 'hepatitis A lost its higher-risk group');
   assert.equal(hazardGuideByKey('botulism')?.higherRisk, null);
   assert.equal(hazardGuideByKey('cyclospora')?.higherRisk, null);
+});
+
+test('the higher-risk group is folded into the one risk paragraph where the source names one', () => {
+  const listeria = hazardGuideByKey('listeria');
+  assert.match(listeria?.risk ?? '', /pregnant/i);
+  const stec = hazardGuideByKey('stec');
+  assert.match(stec?.risk ?? '', /young children and adults 65/i);
+  const salmonella = hazardGuideByKey('salmonella');
+  assert.match(salmonella?.risk ?? '', /weakened immune systems/i);
+  // Absent, not invented, where the cited page identifies no group — this
+  // was true before and is unchanged by the paragraph consolidation.
+  assert.doesNotMatch(hazardGuideByKey('botulism')?.risk ?? '', /higher risk|more likely/i);
+  assert.doesNotMatch(hazardGuideByKey('cyclospora')?.risk ?? '', /higher risk|more likely/i);
+});
+
+test('the allergen guide has no secondary paragraph: only the approved risk template and symptoms', () => {
+  const allergen = hazardGuideByKey(ALLERGEN_GUIDE_KEY);
+  assert.ok(allergen);
+  // The opening sentence still comes from the approved allergen template
+  // (named to the specific allergen at selection time) — unaffected here.
+  assert.equal(allergen.risk, null);
+  assert.equal(allergen.higherRisk, null);
+  assert.ok(allergen.symptoms && allergen.symptoms.length > 0, 'allergen symptoms were removed');
 });

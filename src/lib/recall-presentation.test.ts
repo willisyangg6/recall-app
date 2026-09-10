@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
+import { HAZARD_GUIDES } from '@/content/hazard-guides';
 import { classifyIllnessReport } from '@/domain/illness';
 import type { CaseProjection, TimelineEntry } from '@/domain/recall-types';
 import type { CaseDetail, FeedItem } from './recall-feed';
@@ -2069,11 +2070,51 @@ test('the Health Risk section renders the reviewed guide for a recognized hazard
   const section = model.sections.healthRisk;
   assert.ok(section);
   assert.match(section.risk, /Listeria bacteria can cause/);
+  // Founder visual QA (2026-09-10): the higher-risk group is folded into the
+  // one risk paragraph — the section carries no separate second paragraph.
+  assert.match(section.risk, /Pregnant women/);
+  assert.equal(section.higherRisk, null);
   assert.ok(section.symptoms && section.symptoms.length > 0);
-  assert.match(section.higherRisk ?? '', /Pregnant people/);
   // The source link label is model-owned and names the citing agency.
   assert.equal(section.source?.label, 'Learn more from CDC');
   assert.match(section.source?.url ?? '', /^https:\/\/www\.cdc\.gov\//);
+});
+
+test('the model passes every full guide’s source URL through unchanged', () => {
+  // The section builder must never transform, truncate, or re-derive a
+  // source URL — it is copied verbatim from the registry entry the case
+  // resolved to. Exercised for every full guide, not just Listeria.
+  const evidence: [string, Partial<CaseProjection>][] = [
+    [
+      'botulism',
+      { hazardCategory: 'microbial_contamination', pathogenOrAllergen: 'Clostridium botulinum' },
+    ],
+    [
+      'listeria',
+      { hazardCategory: 'microbial_contamination', pathogenOrAllergen: 'Listeria monocytogenes' },
+    ],
+    ['stec', { hazardCategory: 'microbial_contamination', pathogenOrAllergen: 'E. coli O157:H7' }],
+    ['undeclared-allergen', { hazardCategory: 'allergen', pathogenOrAllergen: 'Undeclared milk' }],
+    ['salmonella', { hazardCategory: 'microbial_contamination', pathogenOrAllergen: 'Salmonella' }],
+    [
+      'hepatitis-a',
+      { hazardCategory: 'microbial_contamination', pathogenOrAllergen: 'Hepatitis A' },
+    ],
+    ['cyclospora', { hazardCategory: 'microbial_contamination', pathogenOrAllergen: 'Cyclospora' }],
+  ];
+  for (const [key, overrides] of evidence) {
+    const registryUrl = HAZARD_GUIDES.find((guide) => guide.key === key)?.source.url;
+    assert.ok(registryUrl, `no registry entry for ${key}`);
+    const section = buildDetailModel(
+      detail({ ...overrides, reasonText: 'Product Contamination' }),
+      { today: TODAY, affectsYou: false },
+    ).sections.healthRisk;
+    assert.equal(
+      section?.source?.url,
+      registryUrl,
+      `${key} URL was altered on the way to the model`,
+    );
+  }
 });
 
 test('the same hazard yields the same section on two different recalls', () => {
@@ -2114,6 +2155,10 @@ test('an undeclared allergen gets the allergen guide, named to the allergen', ()
   assert.match(section.risk, /milk allergy/i);
   assert.ok(section.symptoms?.some((symptom) => /hives/i.test(symptom)));
   assert.equal(section.source?.label, 'Learn more from FDA');
+  // Founder visual QA (2026-09-10): the section goes straight from the
+  // allergen-specific opening sentence to Common Symptoms — no secondary
+  // higher-risk paragraph renders in between.
+  assert.equal(section.higherRisk, null);
 });
 
 test('a hazard with no reviewed guide renders risk only — never invented symptoms', () => {
@@ -2131,6 +2176,28 @@ test('a hazard with no reviewed guide renders risk only — never invented sympt
   assert.equal(foreign.symptoms, null);
   assert.equal(foreign.higherRisk, null);
   assert.equal(foreign.source, null);
+});
+
+test('founder visual-QA pass (2026-09-10): foreign-material and metal output are byte-identical', () => {
+  // This pass touched only the four consolidated guides (allergen, E. coli,
+  // Listeria, Salmonella). The risk-only tier — which foreign material and
+  // metal render through — is pinned here to prove it is untouched.
+  const glass = buildDetailModel(
+    detail({ hazardCategory: 'foreign_material', reasonText: 'Potential glass contamination' }),
+    { today: TODAY, affectsYou: false },
+  ).sections.healthRisk;
+  assert.equal(
+    glass?.risk,
+    'Swallowing pieces of glass can injure the mouth, throat, or digestive tract.',
+  );
+  const metal = buildDetailModel(
+    detail({ hazardCategory: 'foreign_material', reasonText: 'Potential metal contamination' }),
+    { today: TODAY, affectsYou: false },
+  ).sections.healthRisk;
+  assert.equal(
+    metal?.risk,
+    'Swallowing pieces of metal can injure the mouth, throat, or digestive tract.',
+  );
 });
 
 test('an unmapped or regulatory-only hazard omits the whole section', () => {

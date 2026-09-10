@@ -345,6 +345,24 @@ test('P1B: Health Risk renders the model-decided standardized section', () => {
   assert.match(DETAIL, /accessibilityRole="link"[\s\S]{0,80}healthRisk\.source/);
   assert.ok(!DETAIL.includes('Learn more from CDC'), 'the screen composes the source label');
   assert.ok(!DETAIL.includes('Learn more from FDA'), 'the screen composes the source label');
+  // The tap dispatches the model's exact URL — not a composed, rewritten, or
+  // partial one. Hyperlink audit requirement (founder visual QA, 2026-09-10).
+  assert.match(DETAIL, /Linking\.openURL\(healthRisk\.source!\.url\)/);
+});
+
+test('P1B: an absent higher-risk paragraph renders null — no blank line or filler', () => {
+  // Founder visual QA (2026-09-10): allergen, E. coli, Listeria, and
+  // Salmonella now carry their higher-risk group inside `healthRisk.risk`
+  // and pass `healthRisk.higherRisk === null` — this pins that the screen's
+  // conditional renders bare `null` in that case, never an empty element, a
+  // placeholder string, or a spacing view a `null` child would leave behind.
+  assert.match(
+    DETAIL,
+    /\{healthRisk\.higherRisk \? <ThemedText>\{healthRisk\.higherRisk\}<\/ThemedText> : null\}/,
+  );
+  for (const filler of ['No additional risk', 'N/A', 'Not applicable']) {
+    assert.ok(!DETAIL.includes(filler), `fallback filler "${filler}" fills the absent paragraph`);
+  }
 });
 
 test('P1B: the screen invents no health content and repeats no recall-specific illness fact', () => {

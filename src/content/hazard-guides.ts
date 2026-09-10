@@ -163,19 +163,21 @@ export const HAZARD_GUIDES: readonly HazardGuide[] = [
     version: 1,
     displayPriority: 80,
     match: [/\blisteria\b/i, /\blisteriosis\b/i],
+    // Founder visual QA (2026-09-10): one combined paragraph reads more
+    // cleanly on the Detail screen than a risk sentence followed by a
+    // separate higher-risk paragraph. `higherRisk` is null here on purpose —
+    // the group statement is folded into `risk` instead of rendered twice.
     risk:
-      'Listeria bacteria can cause a serious infection called listeriosis. During pregnancy, ' +
-      'the infection can cause serious complications even when the pregnant person feels only ' +
-      'mildly ill.',
+      'Listeria bacteria can cause a serious infection called listeriosis. Pregnant women, ' +
+      'newborns, adults 65 and older, and people with weakened immune systems are at much ' +
+      'higher risk.',
     symptoms: [
       'Fever',
       'Muscle aches or fatigue',
       'Headache, stiff neck, or confusion',
       'Diarrhea or vomiting',
     ],
-    higherRisk:
-      'Pregnant people, newborns, adults 65 and older, and people with weakened immune systems ' +
-      'are at much higher risk. Other people are rarely seriously ill.',
+    higherRisk: null,
     source: {
       organization: 'CDC',
       url: 'https://www.cdc.gov/listeria/signs-symptoms/index.html',
@@ -187,21 +189,22 @@ export const HAZARD_GUIDES: readonly HazardGuide[] = [
     version: 1,
     displayPriority: 60,
     match: [/\be\.\s?coli\b/i, /\bescherichia coli\b/i, /\bshiga toxin\b/i, /\bstec\b/i],
+    // Founder visual QA (2026-09-10): one combined paragraph — see the
+    // Listeria comment above for the reasoning. `higherRisk` is null.
     risk:
-      'Some kinds of E. coli produce a toxin that can cause severe illness. A small number of ' +
-      'people go on to develop a dangerous kidney complication that needs emergency care.',
+      'E. coli can produce a toxin that can cause serious illness. Young children and adults ' +
+      '65 and older are more likely to develop severe complications.',
     symptoms: [
       'Diarrhea, which may be bloody',
       'Stomach cramps, which can be severe',
       'Vomiting',
       'A low fever',
     ],
-    higherRisk:
-      'Young children and adults 65 and older are more likely to develop severe complications.',
+    higherRisk: null,
     source: {
       organization: 'CDC',
       url: 'https://www.cdc.gov/ecoli/signs-symptoms/index.html',
-      reviewedOn: '2026-09-09',
+      reviewedOn: '2026-09-10',
     },
   },
   {
@@ -220,14 +223,14 @@ export const HAZARD_GUIDES: readonly HazardGuide[] = [
       'Vomiting, diarrhea, or stomach cramps',
       'Dizziness or fainting',
     ],
-    higherRisk:
-      'Only people allergic or sensitive to the undeclared ingredient are at risk. A mild ' +
-      'reaction in the past does not mean the next one will be mild, and a severe reaction ' +
-      'needs emergency care.',
+    // Founder visual QA (2026-09-10): the secondary paragraph is removed —
+    // the section now goes straight from the allergen-specific risk sentence
+    // (rendered from the approved template above) to Common Symptoms.
+    higherRisk: null,
     source: {
       organization: 'FDA',
       url: 'https://www.fda.gov/food/buy-store-serve-safe-food/food-allergies-what-you-need-know',
-      reviewedOn: '2026-09-09',
+      reviewedOn: '2026-09-10',
     },
   },
   {
@@ -235,9 +238,11 @@ export const HAZARD_GUIDES: readonly HazardGuide[] = [
     version: 1,
     displayPriority: 40,
     match: [/\bsalmonella\b/i, /\bsalmonellosis\b/i],
+    // Founder visual QA (2026-09-10): one combined paragraph — see the
+    // Listeria comment above for the reasoning. `higherRisk` is null.
     risk:
-      'Salmonella bacteria can cause food poisoning. Most people recover on their own, but ' +
-      'some infections are serious enough to need medical care.',
+      'Salmonella bacteria can cause food poisoning. Children under 5, adults 65 and older, ' +
+      'and people with weakened immune systems are more likely to become seriously ill.',
     symptoms: [
       'Diarrhea, which may be bloody',
       'Stomach cramps, which can be severe',
@@ -245,9 +250,7 @@ export const HAZARD_GUIDES: readonly HazardGuide[] = [
       'Nausea or vomiting',
       'Headache',
     ],
-    higherRisk:
-      'Children under 5, adults 65 and older, and people with weakened immune systems are more ' +
-      'likely to become seriously ill.',
+    higherRisk: null,
     source: {
       organization: 'CDC',
       url: 'https://www.cdc.gov/salmonella/signs-symptoms/index.html',
