@@ -4,9 +4,18 @@
  * a guessed default.
  */
 
+import {
+  ALLERGEN_GUIDE_KEY,
+  HAZARD_GUIDES,
+  hazardGuideByKey,
+  type HazardGuide,
+  type HazardGuideKey,
+  type HazardGuideSource,
+} from '@/content/hazard-guides';
 import type { IllnessReport } from '@/domain/illness';
 import type { CaseProjection } from '@/domain/recall-types';
 import { cleanDisplayText, joinSentences } from '@/domain/text';
+import type { TypedReason } from './recall-reason';
 
 export function noticeTypeLabel(noticeType: 'recall' | 'public_health_alert'): string {
   return noticeType === 'public_health_alert' ? 'Public Health Alert' : 'Recall';
@@ -284,6 +293,99 @@ const HAZARD_HEALTH_RISK: [RegExp, string][] = [
     'This product does not supply the nutrition it should. Relying on it as a sole source of nutrition can cause serious harm, especially to infants.',
   ],
 ];
+
+/**
+ * A reviewed hazard guide with its risk sentence resolved — what the Health
+ * risk section renders when a hazard is confidently recognized (P1B).
+ */
+export interface HazardGuidance {
+  key: HazardGuideKey;
+  version: number;
+  risk: string;
+  symptoms: readonly string[] | null;
+  higherRisk: string | null;
+  source: HazardGuideSource;
+}
+
+/**
+ * The typed-reason families whose canonical reason may NAME a recognized
+ * organism, and are therefore eligible for the organism dictionary.
+ *
+ * `pathogen` is the primary path: the structured `pathogenOrAllergen` slot
+ * named the organism outright. `verbatim` is the documented safety net —
+ * that family means the canonical reason survived the interpreter's grammar
+ * gates as a clean noun phrase, and the structured slot is frequently null on
+ * notices whose reason names the organism anyway ("Potential Clostridium
+ * botulinum contamination"). Recognizing six organism names inside that short
+ * canonical field is not a second classifier: the FAMILY is never re-decided
+ * here, only which named organism an already-hazard-bearing reason states.
+ *
+ * Every other family is excluded on purpose. A foreign-material, packaging,
+ * labeling, import, inspection, or unmapped reason names no organism, and
+ * forcing an infection guide onto one would invent a hazard the source never
+ * stated.
+ */
+const ORGANISM_BEARING_FAMILIES: ReadonlySet<TypedReason['family']> = new Set([
+  'pathogen',
+  'verbatim',
+]);
+
+function guidance(guide: HazardGuide, risk: string): HazardGuidance {
+  return {
+    key: guide.key,
+    version: guide.version,
+    risk,
+    symptoms: guide.symptoms,
+    higherRisk: guide.higherRisk,
+    source: guide.source,
+  };
+}
+
+/**
+ * Select the one reviewed hazard guide this notice's canonical reason
+ * identifies, or null when no guide can be assigned confidently.
+ *
+ * Deterministic and conservative by construction:
+ *
+ *  - The hazard FAMILY comes from `interpretReason` — the one bounded typed
+ *    reason interpretation Home and Detail already share. Nothing is
+ *    re-decided from prose here.
+ *  - Evidence is the canonical structured reason only (`pathogenOrAllergen`
+ *    and `reasonText`). The announcement body is deliberately never read: a
+ *    guide must be the same for every recall carrying the hazard, and source
+ *    prose is exactly what would make it differ.
+ *  - MULTI-HAZARD DISPLAY PRECEDENCE: a notice must show exactly one guide.
+ *    When its reason names more than one supported hazard, the guide with the
+ *    highest `displayPriority` wins — a presentation tie-breaker, not a claim
+ *    that one hazard is medically worse than another. Match order, registry
+ *    order, and the order the organisms appear in the text decide nothing, so
+ *    the same notice always resolves to the same guide.
+ *  - No recognized hazard means null, and the caller falls back to a
+ *    risk-only sentence or omits the section entirely.
+ */
+export function selectHazardGuidance(
+  reason: TypedReason,
+  evidence: { pathogenOrAllergen: string | null; reasonText: string | null },
+): HazardGuidance | null {
+  if (reason.family === 'allergen') {
+    // The allergen guide's risk sentence names the specific undeclared
+    // allergen, so it comes from the approved template above rather than from
+    // a fixed string — deterministic, so one allergen always reads the same.
+    const guide = hazardGuideByKey(ALLERGEN_GUIDE_KEY);
+    const risk = healthRiskSummary('allergen', evidence.pathogenOrAllergen, evidence.reasonText);
+    return guide && risk ? guidance(guide, risk) : null;
+  }
+  if (!ORGANISM_BEARING_FAMILIES.has(reason.family)) return null;
+
+  const text = `${evidence.pathogenOrAllergen ?? ''} ${evidence.reasonText ?? ''}`;
+  let selected: HazardGuide | null = null;
+  for (const guide of HAZARD_GUIDES) {
+    if (guide.match.length === 0) continue;
+    if (!guide.match.some((pattern) => pattern.test(text))) continue;
+    if (selected === null || guide.displayPriority > selected.displayPriority) selected = guide;
+  }
+  return selected && selected.risk !== null ? guidance(selected, selected.risk) : null;
+}
 
 export function stateLabel(state: 'active' | 'closed' | 'retracted'): string {
   switch (state) {

@@ -54,7 +54,13 @@ import {
   type RowImageCandidate,
 } from './recall-images';
 import type { CaseDetail, FeedItem } from './recall-feed';
-import { allergenReasonLabel, healthRiskSummary, stateLabel } from './recall-display';
+import {
+  allergenReasonLabel,
+  healthRiskSummary,
+  selectHazardGuidance,
+  stateLabel,
+  type HazardGuidance,
+} from './recall-display';
 import { interpretReason } from './recall-reason';
 import { agencyLabel, riskView, type RiskView } from './risk-display';
 import {
@@ -1283,7 +1289,81 @@ export function whereSoldSection(model: WhereSoldModel): WhereSoldModel | null {
  */
 export interface DetailSections {
   whereSold: WhereSoldModel | null;
+  healthRisk: HealthRiskSection | null;
   affectedProducts: AffectedProductsSection | null;
+}
+
+// ── Health Risk ─────────────────────────────────────────────────────────────
+
+/**
+ * The "Health Risk" section (P1B), or `null`.
+ *
+ * Standardized content only: the section renders a reviewed hazard guide
+ * (src/content/hazard-guides.ts) selected from the canonical typed reason, so
+ * every recall carrying the same recognized hazard shows identical copy. It
+ * is never assembled from a notice's own prose.
+ *
+ * Two tiers plus omission, in strict precedence:
+ *
+ *  1. A reviewed guide matched — risk statement, "Common symptoms" bullets,
+ *     the higher-risk-group line when the source states one, and the
+ *     authoritative source link.
+ *  2. No guide, but the approved hazard templates still produce a defensible
+ *     risk sentence (Cronobacter, mold, choking, foreign material, packaging
+ *     defects, and the other recurring families) — that sentence renders
+ *     ALONE. No symptom list is invented for a hazard that has no reviewed
+ *     one, and no source is cited that was not recorded.
+ *  3. Neither — no section at all: no heading, no container, no spacing. An
+ *     unmapped, regulatory-only, or unknown hazard is left silent rather than
+ *     given health copy it cannot support.
+ *
+ * Recall-specific illness facts are NOT here. Whether this recall reported
+ * illnesses is a separate canonical fact rendered in What Happened
+ * (`DetailModel.illnessLine`); merging them would imply that the general
+ * symptoms below were experienced in this recall.
+ */
+export interface HealthRiskSection {
+  /** The standardized risk statement — always present when the section is. */
+  risk: string;
+  /** Reviewed symptom bullets, or null when no symptom list is defensible. */
+  symptoms: readonly string[] | null;
+  /** Higher-risk-group statement, when the authoritative source states one. */
+  higherRisk: string | null;
+  /** The official source link ("Learn more from CDC"), tier 1 only. */
+  source: { label: string; url: string } | null;
+}
+
+/**
+ * Decide the Health Risk section for one case.
+ *
+ * A retracted notice is suppressed entirely: the agency has withdrawn the
+ * claim that this product carries the hazard, so standing hazard education
+ * beside it would assert a risk the source no longer states. A CLOSED recall
+ * keeps its section — closure means the agency finished its process, not that
+ * the product left anyone's kitchen, and a shopper holding it still needs to
+ * know what the hazard does.
+ */
+export function healthRiskSection(
+  guidance: HazardGuidance | null,
+  fallbackRisk: string | null,
+  options: { retracted: boolean },
+): HealthRiskSection | null {
+  if (options.retracted) return null;
+  if (guidance) {
+    return {
+      risk: guidance.risk,
+      symptoms: guidance.symptoms,
+      higherRisk: guidance.higherRisk,
+      source: {
+        label: `Learn more from ${guidance.source.organization}`,
+        url: guidance.source.url,
+      },
+    };
+  }
+  if (fallbackRisk) {
+    return { risk: fallbackRisk, symptoms: null, higherRisk: null, source: null };
+  }
+  return null;
 }
 
 // ── Quantity ────────────────────────────────────────────────────────────────
@@ -1432,6 +1512,13 @@ export interface DetailModel {
   sections: DetailSections;
   /** Existing source-supported content preserved below the standardized sections. */
   action: ConsumerAction;
+  /**
+   * The approved standardized risk sentence for this hazard, or null — the
+   * EVIDENCE field, kept for traceability and for the Health Risk section's
+   * risk-only tier. It is not the render decision: screens read
+   * `sections.healthRisk`, which owns tiering, source citation, and whether
+   * the section appears at all.
+   */
   healthRisk: string | null;
   attachments: OfficialAttachment[];
   /** The full P2c image-role allocation: the hero, per-row assignments, the
@@ -1519,6 +1606,30 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
   });
   const heroImageUrl = images.hero?.url ?? null;
   const sold = whereSoldModel(consumer.distribution);
+  // The standardized health guide (P1B) is selected from the SAME typed
+  // reason What Happened rendered — `interpretReason` is pure, so calling it
+  // with Detail's identical evidence cannot produce a different family, and
+  // the hazard is interpreted in exactly one place. The guide's own organism
+  // lookup then reads only the canonical structured reason (never the
+  // announcement body), so the same hazard yields the same copy everywhere.
+  const hazardGuidance: HazardGuidance | null = selectHazardGuidance(
+    interpretReason({
+      reasonText: projection.reasonText,
+      hazardCategory: projection.hazardCategory,
+      pathogenOrAllergen: projection.pathogenOrAllergen,
+      summaryText: projection.summaryText,
+      title: projection.title,
+    }),
+    {
+      pathogenOrAllergen: projection.pathogenOrAllergen,
+      reasonText: projection.reasonText,
+    },
+  );
+  const standardizedRisk = healthRiskSummary(
+    projection.hazardCategory,
+    projection.pathogenOrAllergen,
+    projection.reasonText,
+  );
 
   return {
     id: detail.id,
@@ -1550,14 +1661,13 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     affectedProducts: affectedProductsView,
     sections: {
       whereSold: whereSoldSection(sold),
+      healthRisk: healthRiskSection(hazardGuidance, standardizedRisk, {
+        retracted: projection.state === 'retracted',
+      }),
       affectedProducts: affectedProductsSection(affectedProductsView, images.rowImages),
     },
     action: consumer.action,
-    healthRisk: healthRiskSummary(
-      projection.hazardCategory,
-      projection.pathogenOrAllergen,
-      projection.reasonText,
-    ),
+    healthRisk: standardizedRisk,
     attachments: extractAttachmentLinks(projection.summaryHtml),
     images,
     officialTitle: productName !== projection.title ? projection.title : null,

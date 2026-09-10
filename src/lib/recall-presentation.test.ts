@@ -27,6 +27,7 @@ import {
   conciseReasonLine,
   displayBrand,
   formatActivityDate,
+  healthRiskSection,
   homeLocationSummary,
   illnessLine,
   officialSourceLink,
@@ -2052,4 +2053,205 @@ test('P3D: the stylized brand a2 is preserved on the brand line and as sentence 
   assert.equal(home.brand.text, 'a2');
   assert.equal(model.brand.text, 'a2');
   assert.match(model.whatHappened.text, /^a2 recalled a2 Platinum Premium Infant Formula/);
+});
+
+// ── P1B: the Health Risk section ────────────────────────────────────────────
+
+test('the Health Risk section renders the reviewed guide for a recognized hazard', () => {
+  const model = buildDetailModel(
+    detail({
+      hazardCategory: 'microbial_contamination',
+      pathogenOrAllergen: 'Listeria monocytogenes',
+      reasonText: 'Product Contamination',
+    }),
+    { today: TODAY, affectsYou: false },
+  );
+  const section = model.sections.healthRisk;
+  assert.ok(section);
+  assert.match(section.risk, /Listeria bacteria can cause/);
+  assert.ok(section.symptoms && section.symptoms.length > 0);
+  assert.match(section.higherRisk ?? '', /Pregnant people/);
+  // The source link label is model-owned and names the citing agency.
+  assert.equal(section.source?.label, 'Learn more from CDC');
+  assert.match(section.source?.url ?? '', /^https:\/\/www\.cdc\.gov\//);
+});
+
+test('the same hazard yields the same section on two different recalls', () => {
+  const one = buildDetailModel(
+    detail({
+      id: 'a',
+      title: 'Alpha Foods Recalls Salad',
+      recallingFirm: { displayName: 'Alpha Foods', rawVariants: ['Alpha Foods'] },
+      hazardCategory: 'microbial_contamination',
+      pathogenOrAllergen: 'Salmonella',
+      reasonText: 'Product Contamination',
+    } as Partial<CaseProjection>),
+    { today: TODAY, affectsYou: false },
+  ).sections.healthRisk;
+  const two = buildDetailModel(
+    detail({
+      title: 'Beta Brands Recalls Snacks',
+      recallingFirm: { displayName: 'Beta Brands', rawVariants: ['Beta Brands'] },
+      hazardCategory: 'microbial_contamination',
+      pathogenOrAllergen: 'Salmonella',
+      reasonText: 'Potential Salmonella contamination',
+    }),
+    { today: TODAY, affectsYou: false },
+  ).sections.healthRisk;
+  assert.deepEqual(one, two);
+});
+
+test('an undeclared allergen gets the allergen guide, named to the allergen', () => {
+  const section = buildDetailModel(
+    detail({
+      hazardCategory: 'allergen',
+      pathogenOrAllergen: 'Undeclared milk',
+      reasonText: 'Unreported Allergens',
+    }),
+    { today: TODAY, affectsYou: false },
+  ).sections.healthRisk;
+  assert.ok(section);
+  assert.match(section.risk, /milk allergy/i);
+  assert.ok(section.symptoms?.some((symptom) => /hives/i.test(symptom)));
+  assert.equal(section.source?.label, 'Learn more from FDA');
+});
+
+test('a hazard with no reviewed guide renders risk only — never invented symptoms', () => {
+  // Foreign material has an approved risk sentence but no defensible symptom
+  // list. The section appears with the sentence alone, no bullets, no source.
+  const foreign = buildDetailModel(
+    detail({
+      hazardCategory: 'foreign_material',
+      reasonText: 'Potential glass contamination',
+    }),
+    { today: TODAY, affectsYou: false },
+  ).sections.healthRisk;
+  assert.ok(foreign);
+  assert.match(foreign.risk, /Swallowing pieces of glass/);
+  assert.equal(foreign.symptoms, null);
+  assert.equal(foreign.higherRisk, null);
+  assert.equal(foreign.source, null);
+});
+
+test('an unmapped or regulatory-only hazard omits the whole section', () => {
+  for (const overrides of [
+    { hazardCategory: 'other_regulatory', reasonText: 'Import Violation' },
+    { hazardCategory: 'other_regulatory', reasonText: 'Produced Without Benefit of Inspection' },
+    { hazardCategory: 'unknown', reasonText: null },
+    { hazardCategory: 'unknown', reasonText: 'Product Contamination' },
+  ] as Partial<CaseProjection>[]) {
+    const model = buildDetailModel(detail(overrides), { today: TODAY, affectsYou: false });
+    assert.equal(
+      model.sections.healthRisk,
+      null,
+      `a health section rendered for ${overrides.reasonText}`,
+    );
+  }
+});
+
+test('a CLOSED recall keeps its Health Risk; a RETRACTED notice suppresses it', () => {
+  const hazard: Partial<CaseProjection> = {
+    hazardCategory: 'microbial_contamination',
+    pathogenOrAllergen: 'Salmonella',
+    reasonText: 'Product Contamination',
+  };
+  // Closed means the agency finished its process, not that the product left
+  // anyone's kitchen — a shopper still holding it needs the hazard education.
+  const closed = buildDetailModel(detail({ ...hazard, state: 'closed', closedYear: '2025' }), {
+    today: TODAY,
+    affectsYou: false,
+  });
+  assert.ok(closed.sections.healthRisk);
+  assert.match(closed.sections.healthRisk.risk, /Salmonella/);
+  // Retracted means the agency withdrew the claim that this product carries
+  // the hazard; standing hazard education beside it would assert a risk the
+  // source no longer states.
+  const retracted = buildDetailModel(detail({ ...hazard, state: 'retracted' }), {
+    today: TODAY,
+    affectsYou: false,
+  });
+  assert.equal(retracted.sections.healthRisk, null);
+  assert.equal(retracted.retracted, true);
+  // The underlying evidence field is untouched — only the render is suppressed.
+  assert.ok(retracted.healthRisk);
+});
+
+test('the Health Risk section is a pure function of the section builder', () => {
+  const guidance = {
+    key: 'salmonella' as const,
+    version: 1,
+    risk: 'Risk sentence.',
+    symptoms: ['One', 'Two'],
+    higherRisk: 'Group statement.',
+    source: {
+      organization: 'CDC' as const,
+      url: 'https://www.cdc.gov/x',
+      reviewedOn: '2026-09-09',
+    },
+  };
+  assert.deepEqual(healthRiskSection(guidance, 'fallback', { retracted: false }), {
+    risk: 'Risk sentence.',
+    symptoms: ['One', 'Two'],
+    higherRisk: 'Group statement.',
+    source: { label: 'Learn more from CDC', url: 'https://www.cdc.gov/x' },
+  });
+  // A guide always outranks the fallback sentence — never both.
+  assert.equal(
+    healthRiskSection(guidance, 'fallback', { retracted: false })?.risk,
+    'Risk sentence.',
+  );
+  // Retraction suppresses both tiers.
+  assert.equal(healthRiskSection(guidance, 'fallback', { retracted: true }), null);
+  assert.equal(healthRiskSection(null, 'fallback', { retracted: true }), null);
+  // No guide and no fallback means no section.
+  assert.equal(healthRiskSection(null, null, { retracted: false }), null);
+});
+
+test('recall-specific illness facts stay out of the standardized hazard content', () => {
+  // A notice that REPORTS illnesses renders that fact in What happened; the
+  // Health Risk copy is identical to the same hazard with no reported
+  // illnesses, so a symptom list can never read as this recall's illnesses.
+  const reported = buildDetailModel(
+    detail({
+      hazardCategory: 'microbial_contamination',
+      pathogenOrAllergen: 'Salmonella',
+      reasonText: 'Product Contamination',
+      summaryText: 'A total of 12 illnesses have been reported in connection with this recall.',
+    }),
+    { today: TODAY, affectsYou: false },
+  );
+  const silent = buildDetailModel(
+    detail({
+      hazardCategory: 'microbial_contamination',
+      pathogenOrAllergen: 'Salmonella',
+      reasonText: 'Product Contamination',
+    }),
+    { today: TODAY, affectsYou: false },
+  );
+  assert.deepEqual(reported.sections.healthRisk, silent.sections.healthRisk);
+  assert.ok(reported.illnessLine, 'the reported-illness fact was lost');
+  // And the illness fact appears in exactly one place — never inside the guide.
+  const section = reported.sections.healthRisk;
+  assert.ok(section);
+  const guideText = [section.risk, section.higherRisk ?? '', ...(section.symptoms ?? [])].join(' ');
+  assert.doesNotMatch(guideText, /reported|illnesses have been|12/i);
+});
+
+test('P1B changes presentation only — parser output and canonical records are untouched', () => {
+  const source = detail({
+    hazardCategory: 'microbial_contamination',
+    pathogenOrAllergen: 'Listeria monocytogenes',
+    reasonText: 'Product Contamination',
+    summaryText: 'Listeria can cause serious illness.',
+  });
+  const before = JSON.parse(JSON.stringify(source));
+  const model = buildDetailModel(source, { today: TODAY, affectsYou: false });
+  assert.ok(model.sections.healthRisk);
+  // Building the model mutates nothing it was given.
+  assert.deepEqual(source, before);
+  // Feed ordering inputs and the notification-relevant fields are untouched.
+  assert.equal(
+    model.activity.text,
+    buildDetailModel(source, { today: TODAY, affectsYou: false }).activity.text,
+  );
 });

@@ -304,13 +304,115 @@ test('Affected Products renders data only — no helper, coverage, or disclaimer
 });
 
 test('the retired lower sections are gone; the hero renders once near the title', () => {
+  // AMENDED FOR P1B — Health Risk is now intentionally rendered.
+  //
+  // This suite previously pinned the ABSENCE of the Health Risk section
+  // alongside the other P2a removals. That exclusion was reversed by founder
+  // decision: the standardized hazard guide is the P1B milestone, and a
+  // recall app that never explains what the hazard does was the gap it
+  // closes. The positive contract now lives in the P1B tests below.
+  //
+  // Every other exclusion here is STILL FINAL and unchanged: no generic
+  // consumer-action section, no lower photo gallery, one hero.
   assert.ok(!DETAIL.includes('What you should do'), 'What You Should Do rendered');
   assert.ok(!DETAIL.includes('model.action'), 'consumer action rendered');
-  assert.ok(!DETAIL.includes('Health risk'), 'Health Risk rendered');
-  assert.ok(!DETAIL.includes('model.healthRisk'), 'health-risk copy rendered');
+  // Still pinned, and now sharper: the screen may render the model's DECIDED
+  // section (`sections.healthRisk`) but never the raw evidence string, which
+  // carries no tiering, no source citation, and no omission decision.
+  assert.ok(!DETAIL.includes('model.healthRisk'), 'raw health-risk evidence rendered');
   assert.ok(!DETAIL.includes('galleryPhotos'), 'a lower photo gallery rendered');
   // Exactly one hero render.
   assert.equal(DETAIL.split('model.heroImageUrl').length - 1, 2); // condition + uri
+});
+
+test('P1B: Health Risk renders the model-decided standardized section', () => {
+  // The section exists, is model-owned, and renders only inside its own
+  // conditional — a heading can never appear above nothing.
+  assert.match(DETAIL, /\{healthRisk \? \(/);
+  assert.match(DETAIL, /<Section title="Health Risk">/);
+  assert.match(DETAIL, /healthRisk\.risk/);
+  assert.match(DETAIL, /healthRisk\.symptoms/);
+  assert.match(DETAIL, /healthRisk\.higherRisk/);
+  // The symptom list is a labelled bulleted group with list semantics, and
+  // each symptom is one accessible node labelled with the symptom alone, so
+  // the bullet glyph is never announced.
+  assert.match(DETAIL, /COMMON SYMPTOMS/);
+  assert.match(DETAIL, /accessibilityRole="list"/);
+  assert.match(DETAIL, /accessibilityLabel=\{symptom\}/);
+  // The official source link is an accessible link whose LABEL comes from the
+  // model — the screen names no agency of its own.
+  assert.match(DETAIL, /healthRisk\.source\.label/);
+  assert.match(DETAIL, /accessibilityRole="link"[\s\S]{0,80}healthRisk\.source/);
+  assert.ok(!DETAIL.includes('Learn more from CDC'), 'the screen composes the source label');
+  assert.ok(!DETAIL.includes('Learn more from FDA'), 'the screen composes the source label');
+});
+
+test('P1B: the screen invents no health content and repeats no recall-specific illness fact', () => {
+  // Every visible string in the section comes from the model. The screen
+  // holds no symptom vocabulary, no hazard names, and no medical wording of
+  // its own — a hardcoded symptom here would silently differ between recalls
+  // carrying the same hazard, which is the whole failure the registry closes.
+  for (const invented of [
+    'diarrhea',
+    'vomiting',
+    'fever',
+    'nausea',
+    'cramps',
+    'allergic reaction',
+    'salmonella',
+    'listeria',
+    'botulism',
+  ]) {
+    assert.ok(!DETAIL.toLowerCase().includes(invented), `health copy "${invented}" on screen`);
+  }
+  // Recall-specific illness facts stay in What happened and are never
+  // repeated inside Health Risk: one illness line exists on the screen, and
+  // it renders before the Health Risk section.
+  assert.equal(DETAIL.split('model.illnessLine').length - 1, 2, 'illness status rendered twice');
+  assert.ok(
+    DETAIL.indexOf('model.illnessLine') < DETAIL.indexOf('<Section title="Health Risk">'),
+    'the illness status renders after Health Risk',
+  );
+  // No alert/warning treatment, and no second disclaimer surface.
+  assert.ok(!DETAIL.includes('accessibilityRole="alert"'), 'Health Risk uses alert semantics');
+  assert.ok(!DETAIL.includes('medical advice'), 'the screen composes medical disclaimer copy');
+  assert.ok(!DETAIL.includes('healthEducationText'), 'the screen extracts notice health prose');
+});
+
+test('P1B: Detail section order is What happened → Where it was sold → Health Risk → Products', () => {
+  const order = [
+    '<Section title="What happened">',
+    '<Section title="Where it was sold">',
+    '<Section title="Health Risk">',
+    '<Section title="Affected Products">',
+  ].map((heading) => {
+    const at = DETAIL.indexOf(heading);
+    assert.notEqual(at, -1, `${heading} is missing`);
+    return at;
+  });
+  for (let index = 1; index < order.length; index += 1) {
+    assert.ok(order[index - 1] < order[index], 'Detail sections are out of contract order');
+  }
+});
+
+test('P1B: the still-final exclusions survive the Health Risk reversal', () => {
+  // Reversing ONE freeze does not reopen the others. Correction history, the
+  // generic consumer-action surface, and community/shopper reporting remain
+  // out of Detail; P1C/P1D own the community work and this milestone adds
+  // none of it.
+  for (const excluded of [
+    'Correction history',
+    'corrected',
+    'changedCategories',
+    'notificationEventCreated',
+    'model.timeline',
+    'What should I do',
+    'Add your report',
+    'shopper',
+    'shoppers reported',
+  ]) {
+    assert.ok(!DETAIL.includes(excluded), `deferred surface "${excluded}" rendered on Detail`);
+  }
 });
 
 test('both screens share one relevance evaluation — matching logic is not duplicated', () => {
@@ -347,11 +449,12 @@ test('P3A: optional Detail sections are model-owned — no screen-level content 
   // Every optional section renders from the shared contract's decision, so a
   // heading, container, divider, or its spacing can never appear above
   // nothing. The screen reads the decision and re-derives nothing.
-  assert.match(DETAIL, /const \{ whereSold, affectedProducts \} = model\.sections/);
+  assert.match(DETAIL, /const \{ whereSold, healthRisk, affectedProducts \} = model\.sections/);
   assert.match(DETAIL, /\{whereSold \? \(/);
+  assert.match(DETAIL, /\{healthRisk \? \(/);
   assert.match(DETAIL, /\{affectedProducts \? \(/);
-  // Both headings exist ONLY inside their section's conditional.
-  for (const heading of ['Where it was sold', 'Affected Products']) {
+  // Every heading exists ONLY inside its section's conditional.
+  for (const heading of ['Where it was sold', 'Health Risk', 'Affected Products']) {
     const before = DETAIL.slice(0, DETAIL.indexOf(`<Section title="${heading}">`));
     assert.match(before.slice(-400), /\? \(/, `${heading} can render unconditionally`);
   }

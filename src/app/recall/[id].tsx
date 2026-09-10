@@ -263,7 +263,7 @@ export default function RecallDetailScreen() {
   // renders a section when the model gives it one and renders nothing at all
   // otherwise — no heading, no container, no spacing. It never inspects rows,
   // columns, codes, or geography to decide for itself.
-  const { whereSold, affectedProducts } = model.sections;
+  const { whereSold, healthRisk, affectedProducts } = model.sections;
 
   return (
     <ThemedView style={styles.container}>
@@ -349,6 +349,53 @@ export default function RecallDetailScreen() {
           </Section>
         ) : null}
 
+        {/* Health Risk (P1B): standardized, reviewed hazard education owned by
+            the shared contract — the same recognized hazard renders the same
+            copy on every recall, and none of it is composed from this
+            notice's prose. The screen renders the model's decided section and
+            interprets no hazard of its own: whether a symptom list, a
+            higher-risk line, or a source link belongs here is already
+            decided. Whether THIS recall reported illnesses stays in What
+            happened — the bullets below are what the hazard can cause, never
+            a claim about this recall. Absent for an unmapped hazard and for a
+            retracted notice. */}
+        {healthRisk ? (
+          <Section title="Health Risk">
+            <ThemedText>{healthRisk.risk}</ThemedText>
+            {healthRisk.higherRisk ? <ThemedText>{healthRisk.higherRisk}</ThemedText> : null}
+            {healthRisk.symptoms ? (
+              <View style={styles.symptoms}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  COMMON SYMPTOMS
+                </ThemedText>
+                <View accessibilityRole="list" style={styles.symptomList}>
+                  {healthRisk.symptoms.map((symptom) => (
+                    // One accessible node per symptom, labelled with the
+                    // symptom alone so the bullet glyph is never announced.
+                    <View
+                      key={symptom}
+                      style={styles.symptomRow}
+                      accessible
+                      accessibilityRole="text"
+                      accessibilityLabel={symptom}>
+                      <ThemedText>{'•'}</ThemedText>
+                      <ThemedText style={styles.symptomText}>{symptom}</ThemedText>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+            {healthRisk.source ? (
+              <ThemedText
+                themeColor="link"
+                accessibilityRole="link"
+                onPress={() => Linking.openURL(healthRisk.source!.url)}>
+                {healthRisk.source.label}
+              </ThemedText>
+            ) : null}
+          </Section>
+        ) : null}
+
         {/* Affected Products: the gated P0A data only — no helper, coverage,
             or disclaimer prose (P2a founder decision). The shared table model
             is the WHOLE section (P3C-2): headers once, one affected version
@@ -422,6 +469,23 @@ const styles = StyleSheet.create({
   step: {
     gap: Spacing.half,
     marginTop: Spacing.one,
+  },
+  // The Health Risk symptom list: a labelled group of bulleted lines in the
+  // section's existing body type — no card, no icon, no alert treatment.
+  // Final styling belongs to the design-system pass.
+  symptoms: {
+    gap: Spacing.half,
+    marginTop: Spacing.one,
+  },
+  symptomList: {
+    gap: Spacing.half,
+  },
+  symptomRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  symptomText: {
+    flexShrink: 1,
   },
   // The Affected Products table: fixed-width cells keep the header row and
   // every data row aligned, and the whole grid scrolls horizontally as one

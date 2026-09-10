@@ -9,6 +9,7 @@ import {
   healthRiskSummary,
   illnessDisplay,
   reasonLine,
+  selectHazardGuidance,
 } from './recall-display';
 
 // Risk wording moved to risk-display.ts (consumer tier vs official
@@ -211,4 +212,207 @@ test('geography stays honest in both compact and detail forms', () => {
   };
   assert.equal(geographyLabel(unknown), 'Distribution not specified');
   assert.ok(geographyDetail(unknown).startsWith('Distribution not specified'));
+});
+
+// ── P1B: standardized hazard-guide selection ────────────────────────────────
+
+/**
+ * Guide selection is deterministic, typed, conservative, and independent of
+ * recall identity and source page layout: every case below is described only
+ * by its canonical typed reason and structured reason evidence.
+ */
+
+function reasonEvidence(pathogenOrAllergen: string | null, reasonText: string | null) {
+  return { pathogenOrAllergen, reasonText };
+}
+
+test('the same recognized hazard produces identical copy across different recalls', () => {
+  // Two unrelated Salmonella notices — different reason wording, different
+  // agencies' phrasing — must yield byte-identical consumer copy. This is the
+  // whole standardization guarantee.
+  const first = selectHazardGuidance(
+    { family: 'pathogen', pathogen: 'Salmonella' },
+    reasonEvidence('Salmonella', 'Product Contamination'),
+  );
+  const second = selectHazardGuidance(
+    { family: 'pathogen', pathogen: 'Salmonella' },
+    reasonEvidence('Salmonella', 'Potential Salmonella contamination'),
+  );
+  assert.ok(first && second);
+  assert.deepEqual(first, second);
+  assert.equal(first.key, 'salmonella');
+});
+
+test('each corpus-evidenced pathogen selects its own guide', () => {
+  const cases: [string, string][] = [
+    ['Salmonella', 'salmonella'],
+    ['Listeria monocytogenes', 'listeria'],
+    ['E. coli', 'stec'],
+    ['E. coli O157:H7', 'stec'],
+    ['Clostridium botulinum', 'botulism'],
+    ['Hepatitis A', 'hepatitis-a'],
+    ['Cyclospora', 'cyclospora'],
+  ];
+  for (const [pathogen, key] of cases) {
+    const selected = selectHazardGuidance(
+      { family: 'pathogen', pathogen },
+      reasonEvidence(pathogen, 'Product Contamination'),
+    );
+    assert.equal(selected?.key, key, `${pathogen} selected ${selected?.key}`);
+    assert.ok(selected?.symptoms && selected.symptoms.length > 0);
+    assert.ok(selected?.source.url.startsWith('https://'));
+  }
+});
+
+test('an undeclared allergen selects the allergen guide and names the allergen', () => {
+  const milk = selectHazardGuidance(
+    { family: 'allergen', raw: 'milk' },
+    reasonEvidence('Undeclared milk', 'Unreported Allergens'),
+  );
+  assert.equal(milk?.key, 'undeclared-allergen');
+  // The risk sentence comes from the approved allergen template and names the
+  // specific allergen; the symptom list is the shared reviewed one.
+  assert.match(milk?.risk ?? '', /milk allergy/i);
+  assert.ok(milk?.symptoms?.some((symptom) => /hives/i.test(symptom)));
+  assert.equal(milk?.source.organization, 'FDA');
+  // Same allergen, different notice wording — identical copy.
+  const milkAgain = selectHazardGuidance(
+    { family: 'allergen', raw: 'milk' },
+    reasonEvidence('Undeclared milk', 'Product Contamination'),
+  );
+  assert.deepEqual(milk, milkAgain);
+  // A different allergen names itself, and never borrows the first one's name.
+  const soy = selectHazardGuidance(
+    { family: 'allergen', raw: 'soy' },
+    reasonEvidence('Undeclared soy', 'Unreported Allergens'),
+  );
+  assert.match(soy?.risk ?? '', /soy allergy/i);
+  assert.doesNotMatch(soy?.risk ?? '', /milk/i);
+  // An unnamed allergen degrades to the honest generic sentence, never a guess.
+  const unnamed = selectHazardGuidance(
+    { family: 'allergen', raw: null },
+    reasonEvidence(null, 'Unreported Allergens'),
+  );
+  assert.match(unnamed?.risk ?? '', /a food allergy or severe sensitivity/i);
+});
+
+test('multi-hazard display precedence is order-independent and deterministic', () => {
+  // A notice must show exactly ONE guide. Registry order is botulism,
+  // listeria, stec, allergen, salmonella, hepatitis-a, cyclospora, and each
+  // case below places the LOWER-priority organism FIRST in the evidence
+  // string — proving match order, registry order, and text order decide
+  // nothing. `displayPriority` is a presentation tie-breaker; it makes no
+  // claim that one hazard is medically worse than another.
+  const pairs: [string, string][] = [
+    ['Salmonella and Listeria monocytogenes', 'listeria'],
+    ['Cyclospora and Salmonella', 'salmonella'],
+    ['Salmonella and Clostridium botulinum', 'botulism'],
+    ['Hepatitis A and E. coli O157:H7', 'stec'],
+    ['Cyclospora, Hepatitis A, Salmonella, Listeria', 'listeria'],
+  ];
+  for (const [evidence, expected] of pairs) {
+    const selected = selectHazardGuidance(
+      { family: 'pathogen', pathogen: evidence },
+      reasonEvidence(evidence, 'Product Contamination'),
+    );
+    assert.equal(selected?.key, expected, `"${evidence}" selected ${selected?.key}`);
+  }
+  // No recorded FDA or FSIS notice names two supported hazards today; these
+  // are the guard, so a future multi-organism notice always resolves the same
+  // way instead of depending on how the reason happens to be worded.
+});
+
+test('non-medical hazard families are never given a guide or invented symptoms', () => {
+  const families = [
+    { family: 'foreign_material', material: 'glass' },
+    { family: 'foreign_material', material: null },
+    { family: 'mislabeled', word: 'misbranded' },
+    { family: 'inspection' },
+    { family: 'import', country: 'Ecuador', illegal: true, ineligible: false },
+    { family: 'unfit' },
+    { family: 'insanitary' },
+    { family: 'processing' },
+    { family: 'nutrition' },
+    { family: 'chemical', agent: 'Lead' },
+    { family: 'contents', contents: 'toxic yellow oleander' },
+    { family: 'unapproved', ingredient: 'garlic essential oil', use: 'culinary use' },
+    { family: 'unknown' },
+  ] as const;
+  for (const reason of families) {
+    assert.equal(
+      selectHazardGuidance(reason, reasonEvidence('Glass', 'Potential presence of glass')),
+      null,
+      `${reason.family} was given a hazard guide`,
+    );
+  }
+});
+
+test('an organism named in a lone canonical reason is still recognized (verbatim safety net)', () => {
+  // The structured pathogen slot is frequently null on notices whose reason
+  // names the organism outright, which lands the case in the `verbatim`
+  // family. Recognizing the name there closes a documented routing gap. No
+  // recorded corpus case needs this today; it is a guard, not a behavior
+  // change.
+  const rescued = selectHazardGuidance(
+    { family: 'verbatim', noun: 'Potential Clostridium botulinum contamination' },
+    reasonEvidence(null, 'Potential Clostridium botulinum contamination'),
+  );
+  assert.equal(rescued?.key, 'botulism');
+  // A verbatim reason naming NO organism stays unguided.
+  assert.equal(
+    selectHazardGuidance(
+      { family: 'verbatim', noun: 'Potential presence of small stones' },
+      reasonEvidence(null, 'Potential presence of small stones'),
+    ),
+    null,
+  );
+});
+
+test('guide selection never reads announcement prose', () => {
+  // Only the canonical structured reason is evidence. An organism mentioned
+  // in the announcement body — background prose, a supplier's history, an
+  // unrelated outbreak reference — must not select a guide, or the same
+  // hazard would render different copy on different recalls.
+  assert.equal(
+    selectHazardGuidance(
+      { family: 'verbatim', noun: 'Undercooked product' },
+      reasonEvidence(null, 'Undercooked product'),
+    ),
+    null,
+  );
+  // A pathogen family with no named organism gets no guide either — the
+  // generic "possible contamination" case falls to the risk-only tier.
+  assert.equal(
+    selectHazardGuidance(
+      { family: 'pathogen', pathogen: null },
+      reasonEvidence(null, 'Product Contamination'),
+    ),
+    null,
+  );
+});
+
+test('guide selection is independent of recall identity and agency', () => {
+  // Nothing about which notice, which agency, or which page layout produced
+  // the reason may change the answer.
+  const a = selectHazardGuidance(
+    { family: 'pathogen', pathogen: 'Listeria monocytogenes' },
+    reasonEvidence('Listeria monocytogenes', 'Product Contamination'),
+  );
+  const b = selectHazardGuidance(
+    { family: 'pathogen', pathogen: 'Listeria monocytogenes' },
+    reasonEvidence('listeria monocytogenes', 'potential listeria contamination'),
+  );
+  assert.deepEqual(a, b);
+});
+
+test('the risk-only tier still covers recognized hazards without a reviewed guide', () => {
+  // Cronobacter, mold, choking, packaging defects and the rest keep the
+  // approved standardized sentence — no guide, so no symptom list and no
+  // source citation, but no coverage regression either.
+  assert.ok(healthRiskSummary('microbial_contamination', null, 'Potential Cronobacter sakazakii'));
+  assert.ok(healthRiskSummary('foreign_material', null, 'Potential glass contamination'));
+  assert.ok(healthRiskSummary('product_integrity', null, 'Packaging defect'));
+  // And an unmapped regulatory reason still yields nothing at all.
+  assert.equal(healthRiskSummary('other_regulatory', null, 'Import Violation'), null);
+  assert.equal(healthRiskSummary('unknown', null, null), null);
 });

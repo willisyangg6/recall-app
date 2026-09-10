@@ -453,6 +453,35 @@ Still deferred within this area: the Dynarex `Mfg. Dt.` / `Exp. Dt.`
 day-first columns stay unsupported and hidden (a month-first reading would
 misstate them), and none of this activates push delivery.
 
+## Consumer product milestones (P1 series)
+
+- **P1B — standardized health guidance** (implemented, display-time,
+  uncommitted): Recall Detail gains a `Health Risk` section between
+  `Where it was sold` and `Affected Products`. Copy comes from a versioned,
+  source-reviewed registry ([src/content/hazard-guides.ts](src/content/hazard-guides.ts))
+  so the same recognized hazard renders identical wording on every recall —
+  guides for botulism, Listeria, Shiga toxin-producing _E. coli_, undeclared
+  allergens, Salmonella, hepatitis A, and Cyclospora, each citing a CDC or
+  FDA page with a review date. Selection reuses the shared typed-reason
+  interpreter; a notice naming two supported hazards resolves by an explicit
+  `displayPriority` tie-breaker — a presentation ordering that picks one
+  guide deterministically, never a claim of medical severity. The guides
+  carry no onset, incubation, or recovery-duration windows: they explain the
+  hazard, its common symptoms, and materially higher-risk groups, without
+  inviting readers to self-diagnose by timing. Hazards with no reviewed guide keep a risk sentence alone
+  (never invented symptoms), unmapped and regulatory-only reasons omit the
+  section entirely, and a retracted notice suppresses it. Recall-specific
+  illness facts stay separate in What Happened. Measured over the 226
+  recorded notices: 203 render a section (150 full guides, 53 risk-only),
+  23 correctly omitted — no coverage regression. No ingestion, projection,
+  notification, migration, or database change. The contract lives in
+  [docs/recall-feed-usability.md](docs/recall-feed-usability.md).
+
+  Settled by P1B, deliberately not built: no consumer correction history, no
+  generic "What should I do?" section or page, and no shopper/community
+  reporting UI — shopper reports are P1C (data model, questionnaire logic,
+  aggregation) and P1D (visible flow).
+
 ## Operational verification (O2)
 
 - **O2-A — read-only production audit, completed 2026-09-05. Final

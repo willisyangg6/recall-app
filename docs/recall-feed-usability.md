@@ -507,6 +507,9 @@ phrase, or the honest unspecified statement — or it is absent. The complete
 retailer/address/channel evidence stays on `DetailModel.whereSold` for the
 later retailer-list milestone; only the render decision moved.
 
+`Health Risk` follows the same rule (`healthRiskSection`), with one extra
+gate: a **retracted** notice suppresses it entirely (see P1B).
+
 `What happened` is not optional: `buildWhatHappened` always produces text
 (the cleaned official headline is its last resort), so it can never be an
 empty heading. No fallback copy is ever invented to fill an optional section.
@@ -528,9 +531,11 @@ stays in the model/projection for its assigned later surface:
 - every Affected Products helper/coverage/disclaimer sentence, the
   compare-photos block, and Find the Code;
 - the lower Product photos gallery (the hero renders once, near the title);
-- What You Should Do and Health Risk (they move to the future
-  "I have this product, what should I do?" destination — the CTA is not
-  added until that destination exists; no dead controls);
+- What You Should Do — and, at the time, Health Risk. **Health Risk was
+  reinstated by P1B below** as a standardized, source-reviewed section
+  between Where It Was Sold and Affected Products. What You Should Do stays
+  removed, and the "I have this product, what should I do?" destination and
+  its CTA are **cancelled**, not deferred (see P1B);
 - the bottom Official source block and the bottom Share control (share
   becomes a top-right icon later; no nonfunctional icon meanwhile);
 - the official-title quote and agency-provenance copy.
@@ -1135,6 +1140,125 @@ quantities, imagery, search entries, the feed-cache schema, push copy
 and material-change detection are all byte-identical; no stored notification
 event changes and no material-change event can be triggered.
 
+### P1B — standardized health guidance (IMPLEMENTED, display-time)
+
+The Detail screen tells a shopper what the hazard actually does. It is a
+**standardized-first** section: the same recognized hazard renders the same
+reviewed copy on every recall that carries it.
+
+**Placement.** Directly below `Where it was sold` and above
+`Affected Products`, titled `Health Risk`. The full Detail order is Identity
+and Affects-Me warning → What happened → Where it was sold → Health Risk →
+Affected Products. Pinned by `recall-presentation-wiring.test.ts`.
+
+**Content ownership.** The copy lives in one versioned registry,
+[src/content/hazard-guides.ts](../src/content/hazard-guides.ts). Each guide
+carries a stable key, a version, a risk statement, an optional
+`Common symptoms` list, an optional higher-risk-group line, and its
+authoritative source with a review date. Nothing is generated at runtime and
+nothing is recomposed from a notice's own prose — recomposing arbitrary
+announcement text is exactly what produced inconsistent health copy before,
+and this registry exists to close that path.
+
+**Selection.** `selectHazardGuidance` (in `lib/recall-display.ts`, beside the
+existing `healthRiskSummary` templates) maps a case to at most one guide:
+
+- The hazard **family** comes from the one shared typed-reason interpreter
+  (`interpretReason`) — never re-decided from prose.
+- The **organism** is resolved from a closed dictionary applied only to the
+  canonical structured reason (`pathogenOrAllergen`, `reasonText`). The
+  announcement body is deliberately never read: source prose is precisely
+  what would make the same hazard read differently on two recalls.
+- **Multi-hazard display precedence.** A notice must show exactly one guide,
+  so when its reason names more than one supported hazard the highest
+  `displayPriority` wins — never match order, never registry order, never the
+  order the organisms happen to appear in the text. This is a presentation
+  tie-breaker only: the registry offers no universal comparison of medical
+  severity, makes no claim about which hazard is worse for any person, and
+  the number is never rendered or described in the app. No recorded notice
+  names two supported hazards today, so it ships as a tested guard and has
+  never chosen in practice.
+- Undeclared allergens are selected by family. Their risk sentence still
+  names the specific allergen through the existing approved template, so
+  `Undeclared milk` and `Undeclared soy` differ by exactly the allergen.
+
+**Three tiers, strict precedence.**
+
+1. **Guide** — risk statement, symptom bullets, higher-risk line where the
+   source states one, and a `Learn more from CDC`/`FDA` link.
+2. **Risk only** — no reviewed guide, but the approved hazard templates still
+   produce a defensible sentence (Cronobacter, mold, choking, foreign
+   material, packaging defects, lead, and the rest). That sentence renders
+   alone: no symptom list is invented for a hazard that has no reviewed one,
+   and no source is cited that was never recorded.
+3. **Omitted** — neither. No heading, no container, no spacing. An unmapped,
+   regulatory-only, or unknown hazard stays silent.
+
+**Conservative omission is the rule, not a gap.** Foreign material, choking,
+packaging defects, labeling-only issues, import violations,
+produced-without-inspection, and unmapped reasons never receive
+infection-shaped symptom content.
+
+**No onset or duration windows.** The guides explain what a hazard is, why it
+can be harmful, its common symptoms, and materially higher-risk groups. They
+deliberately state no incubation window, no symptom-onset timing, and no
+recovery duration: that information invites a reader to time their own
+symptoms against an exposure and self-diagnose, which the app does not do and
+is not qualified to support. Pinned by `hazard-guides.test.ts`, which rejects
+numeric windows, timing phrases, duration estimates, and bare time units in
+consumer-visible copy. The Listeria guide in particular no longer attaches
+the invasive-listeriosis two-week window to a symptom list that also covers
+intestinal illness. Truly necessary emergency wording is preserved — botulism
+still says it needs emergency medical care right away.
+
+**Retracted notices suppress the section.** The agency has withdrawn the
+claim that the product carries the hazard, so standing hazard education
+beside it would assert a risk the source no longer states. A **closed**
+recall keeps its section: closure means the agency finished its process, not
+that the product left anyone's kitchen.
+
+**Separation from recall-specific facts.** Whether _this_ recall reported
+illnesses is a different canonical fact (`domain/illness.ts`) rendered in
+What Happened. It is never merged into the guide, and the guide is provably
+identical for the same hazard whether or not illnesses were reported — so a
+symptom list can never read as this recall's illnesses. The copy carries no
+diagnosis, no causation claim, and no individualized advice, pinned by
+`src/content/hazard-guides.test.ts`.
+
+**Sourcing requirement.** Only CDC, FDA, and USDA/FSIS pages may back a
+guide, each on the citing agency's own domain, each with the date the copy
+was verified against it. Guides ship at version 1, reviewed 2026-09-09,
+covering botulism, Listeria, Shiga toxin-producing _E. coli_, undeclared
+allergens, Salmonella, hepatitis A, and Cyclospora.
+
+**Coverage, measured over the 226 recorded FDA + FSIS notices.** Before, 203
+carried an approved risk sentence that no screen rendered. After: **203
+render a section** — 150 with a full reviewed guide (86 allergen, 22
+Salmonella, 20 Listeria, 13 _E. coli_, 6 botulism, 2 hepatitis A, 1
+Cyclospora) and 53 risk-only. The 23 omissions are all correct: 9 import
+violations, 5 produced-without-inspection, 3 mislabeling, 5 unmapped
+reasons, and 1 contamination notice naming no organism. No coverage
+regression.
+
+**Boundaries.** Display-time only. No ingestion, parser, normalized-record,
+projection, notification, push, feed-order, cache-schema, or database change;
+`DetailModel.healthRisk` is retained unchanged as the evidence field.
+
+**Decisions recorded here, deliberately not built.**
+
+- **No consumer correction history.** The stored `corrected` timeline
+  entries stay internal; a consumer-facing correction timeline is not a
+  product surface.
+- **No generic "What should I do?" section, page, or CTA.** The earlier
+  "I have this product, what should I do?" destination is cancelled.
+  `consumerAction` remains computed and internal.
+- **No community or shopper-report UI in P1B.** Shopper reports — including
+  the community signal inside Where It Was Sold — are P1C (data model,
+  questionnaire logic, aggregation) and P1D (visible flow).
+- **An exceptional-official-instruction seam** is documented in the registry
+  and left unused: no recorded notice today carries health instruction so
+  specific that a standardized guide would be unsafe.
+
 ## Control hierarchy (C6.1)
 
 Home renders **two conceptual levels**, not one row of peer chips:
@@ -1370,18 +1494,20 @@ dedicated Detail-screen surface today. These are tracked future
 presentation work, not O3 defects — the backend data is right; the app
 just doesn't have a place to show it yet.
 
-- **No dedicated Detail section renders `consumerAction`** ("What should I
-  do"). `buildConsumerAction` computes a correct, always-present value, but
-  Detail's only sections are "What happened," "Where it was sold," and
-  "Affected Products" — nothing consumes it.
+- **`consumerAction` is computed and intentionally not rendered.**
+  `buildConsumerAction` produces a correct, always-present value, and it
+  stays internal: P1B cancelled the generic "What should I do?" section,
+  page, and CTA outright. This is a settled product decision, not an open
+  gap.
 - **No dedicated Detail section renders canonical retailer identity.**
   `projection.retailerNames` feeds search indexing and Affects-Me matching
   live today, but Detail has no "Sold at" retailer label — geography is the
   only distribution surface currently shown.
-- **Stored `corrected` timeline entries have no consumer-facing renderer.**
+- **Stored `corrected` timeline entries are intentionally not rendered.**
   The seven O3-B5 material corrections each added one `corrected`
-  `TimelineEntry`, but no screen currently reads or displays case
-  timelines.
+  `TimelineEntry`. P1B settled this: there is no consumer-facing correction
+  history, and the entries stay internal audit data. This is a decision, not
+  a gap.
 
 Two of the material corrections are nonetheless visible today through
 existing surfaces: Metro Produce's Minnesota geography (and its matching
