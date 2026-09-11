@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -12,8 +12,7 @@ import {
 import { Link, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PhotoThumbnail } from '@/components/photo-gallery';
-import { RiskBadge } from '@/components/risk-badge';
+import { RecallCard } from '@/components/recall-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
@@ -25,6 +24,7 @@ import {
   SUPPORTED_STATE_CODES,
   type UserRecallPreferences,
 } from '@/domain/preferences';
+import { useFeed } from '@/hooks/use-feed';
 import { useTheme } from '@/hooks/use-theme';
 import { buildAffectsMeSections } from '@/lib/affects-me-ranking';
 import {
@@ -39,111 +39,13 @@ import {
 } from '@/lib/feed-filters';
 import { buildSearchEntry, filterBySearch, type SearchEntry } from '@/lib/feed-search';
 import { buildFeedSections } from '@/lib/feed-relevance';
-import { createFeedCacheStore } from '@/lib/feed-cache-store';
-import { createFeedSession, type FeedSession } from '@/lib/feed-sync';
 import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
-import {
-  fetchCurrentFeed,
-  fetchCurrentManifest,
-  fetchFeedItemsByIds,
-  isFeedConfigured,
-  type FeedItem,
-} from '@/lib/recall-feed';
-import { buildHomeCardModel, todayIso, type HomeCardModel } from '@/lib/recall-presentation';
+import { isFeedConfigured, type FeedItem } from '@/lib/recall-feed';
+import { buildHomeCardModel, todayIso } from '@/lib/recall-presentation';
 import { evaluatePersonalRelevance, type PersonalRelevance } from '@/lib/relevance';
 import { riskTierWord } from '@/lib/risk-display';
 
-/**
- * `ready` always means COMPLETE: `fetchCurrentFeed` pages to exhaustion and
- * throws rather than resolving with part of the corpus, so nothing downstream
- * has to reason about a feed that might be missing its tail.
- */
-type LoadState =
-  | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'ready'; items: FeedItem[] };
-
 type FeedTab = 'affects_me' | 'all';
-
-/**
- * One feed session for the app process (C8): it owns the persistent cache
- * and coalesces concurrent reconciliations, so a remount, the launch
- * revalidation, and a pull-to-refresh share one in-flight sync instead of
- * issuing duplicate request storms. Created lazily because the module loads
- * before env configuration is checked.
- */
-let feedSession: FeedSession | null = null;
-function getFeedSession(): FeedSession {
-  if (feedSession === null) {
-    feedSession = createFeedSession({
-      store: createFeedCacheStore(),
-      transport: {
-        fetchManifest: fetchCurrentManifest,
-        fetchAll: fetchCurrentFeed,
-        fetchByIds: fetchFeedItemsByIds,
-      },
-    });
-  }
-  return feedSession;
-}
-
-function useFeed() {
-  const [state, setState] = useState<LoadState>({ status: 'loading' });
-  const [refreshing, setRefreshing] = useState(false);
-  /** Set when a refresh failed over a feed we still hold — see below. */
-  const [staleMessage, setStaleMessage] = useState<string | null>(null);
-
-  // A sync resolves with a COMPLETE corpus or throws — the reconciliation
-  // never hands back part of a feed, so `ready` keeps meaning complete.
-  const revalidate = useCallback(async () => {
-    try {
-      const outcome = await getFeedSession().sync();
-      setState({ status: 'ready', items: outcome.items });
-      setStaleMessage(null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not load recalls.';
-      // A failed refresh must never cost the user a complete feed they already
-      // have: keep showing it, and say plainly that it may be out of date.
-      // Only a failure with nothing loaded becomes the full error screen.
-      setState((current) => (current.status === 'ready' ? current : { status: 'error', message }));
-      setStaleMessage(message);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Cached-first render: the last complete corpus appears without waiting
-    // on the network, then the background reconciliation replaces it. The
-    // cache only ever fills a not-yet-ready state, so a sync that resolves
-    // first is never overwritten by older cached items.
-    if (!isFeedConfigured()) return;
-    let cancelled = false;
-    void getFeedSession()
-      .getCached()
-      .then((cachedItems) => {
-        if (cancelled || cachedItems === null) return;
-        setState((current) =>
-          current.status === 'ready' ? current : { status: 'ready', items: cachedItems },
-        );
-      });
-    // State updates happen after the network await resolves, not
-    // synchronously in the effect body.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void revalidate();
-    return () => {
-      cancelled = true;
-    };
-  }, [revalidate]);
-
-  // Pull-to-refresh runs a real reconciliation (or joins the one in flight);
-  // the feed is replaced only on complete success.
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
-    await revalidate();
-    setRefreshing(false);
-  }, [revalidate]);
-
-  return { state, refreshing, refresh, staleMessage };
-}
 
 /**
  * The user's preferences, reloaded on every focus so edits in Settings
@@ -169,16 +71,6 @@ function usePreferences(onFirstLoad: (prefs: UserRecallPreferences) => void) {
   );
 
   return prefs;
-}
-
-function Badge({ label, emphasized }: { label: string; emphasized?: boolean }) {
-  return (
-    <ThemedView type={emphasized ? 'backgroundSelected' : 'backgroundElement'} style={styles.badge}>
-      <ThemedText type="small" style={emphasized ? styles.badgeEmphasized : undefined}>
-        {label}
-      </ThemedText>
-    </ThemedView>
-  );
 }
 
 /** One chip in the horizontally scrollable filter bar (temporary UI). */
@@ -307,66 +199,6 @@ function FilterSheet({
   );
 }
 
-/**
- * Standardized consumer card, rendered entirely from the shared presentation
- * contract (lib/recall-presentation.ts) — this component derives no recall
- * wording of its own, so Home and Detail can never disagree. Hierarchy (P1):
- * notice/risk + the one activity date, the Affects-you flag, the hero image,
- * product name, brand, concise reason, compact location. The raw government
- * headline never appears here, and cards carry no per-card agency label —
- * source attribution lives on the detail screen.
- */
-function FeedCard({ model }: { model: HomeCardModel }) {
-  return (
-    <Link href={{ pathname: '/recall/[id]', params: { id: model.id } }} asChild>
-      <Pressable accessibilityRole="button">
-        <ThemedView type="backgroundElement" style={styles.card}>
-          <View style={styles.badgeRow}>
-            {/* Consumer risk first — it is the primary risk language. Home
-                and Detail render the same risk state from the shared model
-                (P2a): rated tiers badge their tier, an unclassified FDA
-                recall reads "Risk pending", a PHA's absent class reads
-                "Not rated" — the two screens can never disagree. */}
-            {model.risk.badgeLabel ? (
-              <RiskBadge
-                tier={model.risk.tier}
-                label={model.risk.badgeLabel}
-                accessibilityLabel={model.risk.accessibilityLabel}
-              />
-            ) : null}
-            {/* Public Health Alerts are always explicitly labeled. */}
-            {model.noticeLabel ? <Badge label={model.noticeLabel} emphasized /> : null}
-            <ThemedText type="small" themeColor="textSecondary">
-              {model.activity.text}
-            </ThemedText>
-            {/* Available in every feed mode whenever saved preferences
-                establish a match — not restricted to the Affects me view.
-                Exactly ONE generic flag (P2a): the legacy match-explanation
-                chips ("Your allergen · Peanuts", "Affects California") are
-                retired — matching logic is unchanged, only its rendering. */}
-            {model.affectsYou ? <Badge label="Affects you" emphasized /> : null}
-          </View>
-          {/* Product identity stays dominant; the photo is a recognition aid
-              beside it, and the row collapses cleanly when there is none. */}
-          <View style={styles.cardBody}>
-            <PhotoThumbnail uri={model.heroImageUrl} alt={model.productName} />
-            <View style={styles.cardText}>
-              <ThemedText type="subtitle">{model.productName}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {model.brand.text}
-              </ThemedText>
-              {model.reasonLine ? <ThemedText type="small">{model.reasonLine}</ThemedText> : null}
-            </View>
-          </View>
-          <ThemedText type="small" themeColor="textSecondary">
-            {model.locationSummary}
-          </ThemedText>
-        </ThemedView>
-      </Pressable>
-    </Link>
-  );
-}
-
 function CenteredMessage({ title, body }: { title: string; body: string }) {
   return (
     <View style={styles.centered}>
@@ -383,7 +215,7 @@ function CenteredMessage({ title, body }: { title: string; body: string }) {
 /** Compact invitation to personalize — never a permission prompt. */
 function PersonalizeCta({ compact }: { compact?: boolean }) {
   return (
-    <Link href="/settings" asChild>
+    <Link href="/settings/personalization" asChild>
       <Pressable accessibilityRole="button">
         <ThemedView type="backgroundSelected" style={styles.ctaCard}>
           <ThemedText type="subtitle">Personalize Recall</ThemedText>
@@ -722,7 +554,7 @@ export default function HomeScreen() {
           <ThemedText type="small" themeColor="textSecondary">
             Based on your personalization
           </ThemedText>
-          <Link href="/settings" asChild>
+          <Link href="/settings/personalization" asChild>
             <Pressable accessibilityRole="button" hitSlop={8}>
               <ThemedText type="small" themeColor="link">
                 Edit
@@ -763,7 +595,7 @@ export default function HomeScreen() {
         sections={sections}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <FeedCard
+          <RecallCard
             model={buildHomeCardModel(item, {
               today,
               affectsYou: relevanceById.get(item.id)?.affectsMe ?? false,
@@ -946,34 +778,8 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.one,
     gap: Spacing.one,
   },
-  card: {
-    gap: Spacing.one,
-    padding: Spacing.three,
-    borderRadius: Radii.medium,
-    marginBottom: Spacing.two,
-  },
-  cardBody: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.two,
-  },
-  // flexShrink lets long product names wrap instead of pushing the thumbnail
-  // off the card.
-  cardText: {
-    flex: 1,
-    flexShrink: 1,
-    gap: Spacing.one,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    flexWrap: 'wrap',
-  },
-  badge: {
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.half,
-    borderRadius: Radii.small,
-  },
+  // Card, badge and thumbnail styles moved with the card itself
+  // (components/recall-card.tsx). What stays here is screen chrome.
   badgeEmphasized: {
     fontWeight: '600',
   },

@@ -540,8 +540,9 @@ stays in the model/projection for its assigned later surface:
   becomes a top-right icon later; no nonfunctional icon meanwhile);
 - the official-title quote and agency-provenance copy.
 
-Still deliberately absent: Saved state/Save button, retailer link/modal,
-image carousel, new navigation.
+Still deliberately absent: retailer link/modal and the image carousel. Saved
+state and the navigation change are no longer absent — **P2A** below adds
+both.
 
 ### P2c — global image-role allocation (implemented 2026-09-02)
 
@@ -1261,7 +1262,7 @@ projection, notification, push, feed-order, cache-schema, or database change;
 
 ## Control hierarchy (C6.1)
 
-Home renders **two conceptual levels**, not one row of peer chips:
+Feed renders **two conceptual levels**, not one row of peer chips:
 
 1. **Feed mode** — a segmented `All | Affects me` control. Which feed you are
    looking at. Mutually exclusive.
@@ -1274,8 +1275,9 @@ In Affects me the filter row, its active counts, and Clear all are absent
 entirely — they cannot be opened, read, or cleared from there, and the earlier
 "Location/Risk filters apply to All recalls — selections kept" sentence is
 gone. The selections survive silently in session state and return with All. A
-short context row (`Based on your personalization` + `Edit` → the existing
-settings screen) replaces the instruction; it holds no preference logic.
+short context row (`Based on your personalization` + `Edit` → the
+Personalization screen) replaces the instruction; it holds no preference
+logic.
 Search stays visible in both modes and is never reset by a mode switch.
 
 ## Filter model
@@ -1473,17 +1475,102 @@ link. Nothing personal can enter (the input type has no such fields) and the
 copy never claims the recipient is affected. Cancellation or a platform
 without a share sheet rejects the promise; both are absorbed.
 
-## Profile
+## Navigation and Profile (P2A)
 
-`/profile` (header entry on Home, replacing the direct Alerts link) is
-navigation only: Personalization and Notifications rows both open the
-existing, unchanged Settings screen (route `/settings` preserved for deep
-links), plus an About block (runtime app version via expo-constants). No
-preference state, no duplication, no new fields — the serial save queue,
-local-first persistence, and server mirror are untouched. Privacy, legal,
-methodology, and support rows are deliberately absent until real screens
-exist. Restyling or moving Profile later means touching only
-`src/app/profile.tsx` and the header entry in `_layout.tsx`.
+### The three destinations
+
+The app has exactly **three** bottom destinations, in this order:
+
+| Tab       | Route                    | What it is                                   |
+| --------- | ------------------------ | -------------------------------------------- |
+| `Feed`    | `/` (`(tabs)/index.tsx`) | The complete recall feed — the initial tab   |
+| `Saved`   | `/saved`                 | The recalls this device bookmarked           |
+| `Profile` | `/profile`               | Navigation into settings and trust documents |
+
+`(tabs)` is an Expo Router **route group**, so it contributes no URL segment:
+`/` and `/profile` are byte-for-byte the paths they were before the bar
+existed, and every deep link — including the push handler's
+`/recall/[id]` — is unchanged.
+
+**Search and Affects Me stay inside Feed.** Neither is a destination: search
+is the field at the top of the feed, and Affects Me is the existing
+`All | Affects me` segmented control described under Control hierarchy above.
+Making either a tab would imply a second feed; there is one feed with two
+modes.
+
+Recall Details, the shopper-report questionnaire, the two settings pages, and
+the trust documents are registered on the **root stack**, outside the group.
+They push _over_ the bar rather than nesting a navigator inside a tab, which
+is also what guarantees the bar cannot grow a fourth item: a route becomes a
+tab only by being moved into `src/app/(tabs)/`.
+
+The C6 header entry to Profile is **retired** — Profile is a permanent tab,
+so a header link to it was duplicate navigation. No settings gear was removed
+because none existed: Recall Details had no header controls and Home's entry
+was a text link. Recall Details keeps only controls about that recall (its
+official-source link, its share sheet, and the P2A save control).
+
+### Profile
+
+Profile is navigation only — no business logic, no state, no form. Three
+primary destinations:
+
+1. **Personalization** → `/settings/personalization`
+2. **Notifications** → `/settings/notifications`
+3. **Privacy & Data Controls** → the registered trust document
+
+The first two previously opened **one** combined screen (route `/settings`,
+title "Alerts"). That screen is now two pages with their controls, copy,
+autosave behavior, and stores unchanged; `/settings` survives as a redirect
+to Notifications so existing deep links keep resolving instead of hitting a
+dead screen.
+
+The remaining trust documents (About & Safety, Legal) keep their rows below
+the primary three, still taken from the registry in `src/content/`, so
+simplifying the landing page orphans nothing. The privacy document is
+promoted into the primary trio and skipped when the groups render, so it
+appears exactly once. Deliberately absent, unchanged: a Privacy Policy,
+Terms/EULA, onboarding, accounts, and a support row.
+
+### Saved
+
+Saving stores a list of **case ids** on the device, newest save first — never
+a copy of the recall. The Saved screen resolves those ids against the same
+complete corpus the Feed already holds (one shared feed session in
+`src/hooks/use-feed.ts`, so opening the tab joins the feed's in-flight sync
+rather than starting a second one). A saved recall therefore always shows
+today's official facts; ids that have left the active corpus are skipped and
+counted, with the screen saying plainly how many rather than quietly showing
+a shorter list.
+
+The control is one component (`components/save-recall-button.tsx`) used by
+both the feed card and Recall Details, so the two can never disagree. The
+card itself moved to `components/recall-card.tsx` for the same reason —
+Saved renders the same card as Feed, not a second implementation.
+
+Saving is device-local: no server row, no sync, and no installation identity
+(saving must never mint one). It **is** cleared by "Reset app and delete my
+data", because that control promises the app returns to its default state and
+a bookmark list is the user's own data on the device. Saved shows no
+community shopper-report data and feeds nothing into ranking,
+personalization, or notifications.
+
+### Provisional appearance
+
+Everything visual here is provisional, pending the design system:
+
+- Tab labels only, no icons — the app installs no icon set, and adding a
+  dependency for one ahead of the design system would be a product decision
+  made by accident. `tabBarIconStyle: { display: 'none' }` reclaims the
+  space react-navigation reserves for the missing icon.
+- The save control is the existing themed chip primitive, the same one the
+  filter chips use.
+- Tab-bar dimensions and colors are whatever the platform default gives;
+  nothing here encodes a final visual decision.
+
+Restyling later means touching `src/app/(tabs)/_layout.tsx`,
+`components/save-recall-button.tsx`, and `components/recall-card.tsx` —
+the structure and the contracts underneath are independent of the styling.
 
 ## Presentation gaps from the O3 historical repair (tracked future work)
 

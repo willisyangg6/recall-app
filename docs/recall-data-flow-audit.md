@@ -48,8 +48,8 @@ Not collected (verified absent):
   sentry/crashlytics/firebase/amplitude/mixpanel/segment/appsflyer/adjust/
   google-analytics/facebook: zero hits; pinned by
   `src/content/profile-trust-center.test.ts`).
-- No search-term transmission: Home search and filters are session-only React
-  state over the already-loaded corpus (`src/app/index.tsx`,
+- No search-term transmission: Feed search and filters are session-only React
+  state over the already-loaded corpus (`src/app/(tabs)/index.tsx`,
   `src/lib/feed-search.ts` — "Nothing here queries a service").
 - No per-user record of viewed recalls: `fetchCaseDetail(id)` is a REST GET
   authenticated only by the shared publishable key; the installation id is

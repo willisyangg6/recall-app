@@ -19,7 +19,10 @@ test('the allergen preference copy is exactly the approved household wording', (
 });
 
 test('Settings renders that copy, and none of the wording it replaced', () => {
-  const settings = readFileSync(path.join(__dirname, '..', 'app', 'settings.tsx'), 'utf8');
+  const settings = readFileSync(
+    path.join(__dirname, '..', 'app', 'settings', 'personalization.tsx'),
+    'utf8',
+  );
   assert.match(settings, /\{ALLERGEN_SECTION_LABEL\}/);
   assert.match(settings, /\{ALLERGEN_SECTION_HELPER\}/);
   // The pre-C5.2B wording spoke only to the person holding the phone.

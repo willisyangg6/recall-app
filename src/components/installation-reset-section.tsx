@@ -21,6 +21,7 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radii, Spacing } from '@/constants/theme';
+import { forgetSavedRecallsCache } from '@/hooks/use-saved-recalls';
 import {
   RESET_ACTION_LABEL,
   RESET_CONFIRM_BODY,
@@ -44,6 +45,10 @@ export function InstallationResetSection() {
     // Belt over the queue's braces: never start a second run from the UI.
     setState((prior) => (prior === 'running' ? prior : 'running'));
     const result = await runInstallationReset();
+    // The orchestrator cleared the stored saved-recall list; drop the shared
+    // in-memory copy too, so every mounted screen re-renders empty instead of
+    // showing deleted bookmarks until the next launch.
+    if (result.status === 'deleted') forgetSavedRecallsCache();
     setState(result.status === 'deleted' ? 'deleted' : 'failed');
   };
 

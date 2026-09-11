@@ -1,14 +1,22 @@
+/**
+ * Personalization (P2A) — state, allergens to watch, and stores.
+ *
+ * Split out of the former combined "Alerts" screen so Profile can offer
+ * Personalization and Notifications as separate destinations. The controls,
+ * the copy, the autosave behavior, and the preference store are UNCHANGED:
+ * this screen owns the same `UserRecallPreferences` fields it always did, in
+ * the same order, through the same `savePreferences` path. Nothing about
+ * matching, relevance, or Affects Me moved with it.
+ *
+ * Choosing a state, an allergen, or a store never prompts for a permission —
+ * preferences are plain app state, useful on Feed even while push alerts stay
+ * off. The one permission prompt in the app lives on the Notifications screen,
+ * behind its explicit button.
+ */
+
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import {
-  Linking,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -21,14 +29,8 @@ import {
 } from '@/domain/preferences';
 import { retailerById, searchRetailers } from '@/domain/retailer-catalog';
 import { useTheme } from '@/hooks/use-theme';
-import type { AlertStatus } from '@/lib/alert-status';
 import { ALLERGEN_SECTION_HELPER, ALLERGEN_SECTION_LABEL } from '@/lib/personalization-copy';
 import { loadPreferences, preferencesAvailable, savePreferences } from '@/lib/preferences-store';
-import { disableRecallAlerts, enableRecallAlerts, getAlertStatus } from '@/lib/push-registration';
-
-type ControlState =
-  | { status: 'loading' }
-  | { status: 'ready'; alerts: AlertStatus; busy: boolean; error: string | null };
 
 /** Autosave feedback: silent when idle, honest when offline. */
 type SaveState = 'idle' | 'saving' | 'saved' | 'local_only';
@@ -197,50 +199,18 @@ function RetailerPicker({
   );
 }
 
-/**
- * Alerts + personalization. The permission prompt still fires only from the
- * "Enable recall alerts" button; choosing a state, allergens, or stores
- * never prompts for anything — preferences are plain app state, useful on
- * Home even while push alerts stay off.
- */
-export default function SettingsScreen() {
-  const [state, setState] = useState<ControlState>({ status: 'loading' });
+export default function PersonalizationScreen() {
   const [prefs, setPrefs] = useState<UserRecallPreferences | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
 
-  const load = useCallback(async () => {
-    const alerts = await getAlertStatus();
-    setState({ status: 'ready', alerts, busy: false, error: null });
-    if (preferencesAvailable()) setPrefs(await loadPreferences());
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
-      // Read-only status + preference load on every focus (not just mount):
-      // after the C7.1 data reset ran on the Privacy & Data Controls screen,
-      // popping back here must show the cleared state, not a stale in-memory
-      // copy. Same convention Home already uses.
-      void load();
-    }, [load]),
+      // Reloaded on every focus (not just mount): after the data reset ran on
+      // the Privacy & Data Controls screen, coming back here must show the
+      // cleared state, not a stale in-memory copy.
+      if (preferencesAvailable()) void loadPreferences().then(setPrefs);
+    }, []),
   );
-
-  const run = useCallback(async (action: () => Promise<AlertStatus>) => {
-    setState((prev) => (prev.status === 'ready' ? { ...prev, busy: true, error: null } : prev));
-    try {
-      const alerts = await action();
-      setState({ status: 'ready', alerts, busy: false, error: null });
-    } catch (error) {
-      setState((prev) =>
-        prev.status === 'ready'
-          ? {
-              ...prev,
-              busy: false,
-              error: error instanceof Error ? error.message : 'Something went wrong.',
-            }
-          : prev,
-      );
-    }
-  }, []);
 
   // Autosave: local write always succeeds; a failed server sync is reported
   // honestly and retried on the next launch (never a lost preference).
@@ -257,9 +227,9 @@ export default function SettingsScreen() {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.content}>
-          <ThemedText type="subtitle">Recall alerts</ThemedText>
+          <ThemedText type="subtitle">Personalization</ThemedText>
           <ThemedText themeColor="textSecondary">
-            Push alerts and personalization are available in the Recall mobile app.
+            Personalization is available in the Recall mobile app.
           </ThemedText>
         </View>
       </ThemedView>
@@ -270,65 +240,13 @@ export default function SettingsScreen() {
     <ThemedView style={styles.container}>
       <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.content}>
-          <ThemedText type="subtitle">Recall alerts</ThemedText>
           <ThemedText themeColor="textSecondary">
-            Get a push notification when a new recall is announced or an existing one changes in a
-            way that matters — nothing else, no marketing.
+            Powers the “Affects me” view on Feed — and, once alerts are on, limits notifications to
+            recalls relevant to you. All recalls always stay available.
           </ThemedText>
-
-          {state.status === 'loading' ? (
-            <ThemedText themeColor="textSecondary">Checking status…</ThemedText>
-          ) : (
-            <>
-              {state.alerts === 'enabled' ? (
-                <>
-                  <ThemedText>Recall alerts are on for this device.</ThemedText>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={state.busy}
-                    onPress={() => run(disableRecallAlerts)}>
-                    <ThemedView type="backgroundElement" style={styles.button}>
-                      <ThemedText>{state.busy ? 'Working…' : 'Turn off alerts'}</ThemedText>
-                    </ThemedView>
-                  </Pressable>
-                </>
-              ) : state.alerts === 'denied' ? (
-                <>
-                  <ThemedText>
-                    Notifications for Recall are turned off in your system settings.
-                  </ThemedText>
-                  <Pressable accessibilityRole="button" onPress={() => void Linking.openSettings()}>
-                    <ThemedView type="backgroundSelected" style={styles.button}>
-                      <ThemedText style={styles.buttonEmphasis}>Open system settings</ThemedText>
-                    </ThemedView>
-                  </Pressable>
-                </>
-              ) : (
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={state.busy}
-                  onPress={() => run(enableRecallAlerts)}>
-                  <ThemedView type="backgroundSelected" style={styles.button}>
-                    <ThemedText style={styles.buttonEmphasis}>
-                      {state.busy ? 'Working…' : 'Enable recall alerts'}
-                    </ThemedText>
-                  </ThemedView>
-                </Pressable>
-              )}
-              {state.error ? (
-                <ThemedText themeColor="textSecondary">{state.error}</ThemedText>
-              ) : null}
-            </>
-          )}
 
           {prefs !== null ? (
             <>
-              <SectionLabel>Personalization</SectionLabel>
-              <ThemedText themeColor="textSecondary">
-                Powers the “Affects me” view on Home — and, once alerts are on, limits notifications
-                to recalls relevant to you. All recalls always stay available.
-              </ThemedText>
-
               <SectionLabel>Your state</SectionLabel>
               <StatePicker
                 value={prefs.state}
@@ -411,15 +329,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     padding: Spacing.three,
     gap: Spacing.two,
-  },
-  button: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Radii.medium,
-  },
-  buttonEmphasis: {
-    fontWeight: '600',
   },
   sectionLabel: {
     marginTop: Spacing.two,

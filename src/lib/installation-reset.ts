@@ -12,7 +12,7 @@
  *      server keyed to this installation),
  *   2. delete the server data for that id (one atomic, idempotent RPC),
  *   3. only then clear the local state (preferences, dirty flag, alerts
- *      flag, installation id),
+ *      flag, saved recalls, installation id),
  *   4. mint the fresh installation id through the one canonical path.
  *
  * A failure in step 2 aborts BEFORE any local mutation: the old id — the
@@ -41,6 +41,14 @@ export interface InstallationResetDeps {
   deleteServerData(installationId: string): Promise<void>;
   /** Remove locally persisted preferences + retry flag. */
   clearLocalPreferences(): Promise<void>;
+  /**
+   * Remove the locally persisted saved-recall list (P2A). Saved recalls are
+   * device-local and have no server row, so they are cleared with the rest of
+   * the local state rather than being part of the server deletion — but they
+   * ARE cleared, because the confirmation promises the app returns to its
+   * default state and this is the user's own data on the device.
+   */
+  clearLocalSavedRecalls(): Promise<void>;
   /** Remove the locally persisted alerts-enabled flag. */
   clearLocalAlertState(): Promise<void>;
   /** Discard the old installation id. */
@@ -74,6 +82,7 @@ export function resetInstallationData(
     // old id are already gone, and each clear below is a no-op when re-run.
     await deps.clearLocalPreferences();
     await deps.clearLocalAlertState();
+    await deps.clearLocalSavedRecalls();
     await deps.clearInstallationId();
     await deps.createFreshInstallationId();
     return { status: 'deleted' };
@@ -93,11 +102,15 @@ export const RESET_SUPPORTING_COPY =
 
 export const RESET_CONFIRM_TITLE = 'Delete your data?';
 
+// P2A added a second kind of device-local user data (saved recalls), so the
+// confirmation names it: a destructive dialog must say what it destroys, and
+// a user with bookmarks would otherwise not learn they go too. The rest of
+// the C7.1 wording is unchanged.
 export const RESET_CONFIRM_BODY =
   'This removes your personalization, your notification registration, and the data associated ' +
-  'with this installation from Recall’s server, and clears them from this device. The app ' +
-  'returns to its default, unpersonalized state, and recall alerts stay off until you enable ' +
-  'them again. This cannot be undone.';
+  'with this installation from Recall’s server, clears them from this device, and removes your ' +
+  'saved recalls. The app returns to its default, unpersonalized state, and recall alerts stay ' +
+  'off until you enable them again. This cannot be undone.';
 
 export const RESET_CONFIRM_CANCEL = 'Cancel';
 

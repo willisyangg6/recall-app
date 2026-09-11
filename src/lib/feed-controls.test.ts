@@ -26,7 +26,7 @@ import { buildSearchEntry, filterBySearch } from './feed-search';
 import type { FeedItem } from './recall-feed';
 import { evaluatePersonalRelevance } from './relevance';
 
-const HOME = readFileSync(join(__dirname, '..', 'app', 'index.tsx'), 'utf8');
+const HOME = readFileSync(join(__dirname, '..', 'app', '(tabs)', 'index.tsx'), 'utf8');
 
 /** The source between two marker comments, exclusive. */
 function region(startMarker: string, endMarker: string): string {
@@ -119,7 +119,9 @@ test('the Affects me context row explains scope without instructing or duplicati
   assert.match(HOME, /Based on your personalization/);
   assert.match(HOME, /tab === 'affects_me' && showTabs \?/);
   // It links to the one existing personalization screen; no preference state.
-  assert.match(HOME, /<Link href="\/settings" asChild>/);
+  // P2A split the combined settings screen, so the link is now the specific
+  // personalization page rather than the page that held both.
+  assert.match(HOME, /<Link href="\/settings\/personalization" asChild>/);
   assert.ok(!HOME.includes('savePreferences'));
 });
 

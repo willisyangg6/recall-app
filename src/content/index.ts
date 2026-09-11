@@ -39,6 +39,18 @@ export interface ProfileDocumentGroup {
 }
 
 /**
+ * The one document Profile promotes to a PRIMARY destination (P2A): Profile's
+ * three primary rows are Personalization, Notifications, and Privacy & Data
+ * Controls, and the third is this document rather than a row Profile invents.
+ *
+ * It stays registered in its group below — the registry remains the single
+ * definition of what exists and where it belongs — and Profile simply skips
+ * it when rendering the groups, so it appears exactly once on screen while
+ * the "every document reachable exactly once" guarantee is unchanged.
+ */
+export const PROFILE_PRIMARY_DOCUMENT_SLUG = 'privacy-data-controls';
+
+/**
  * The Profile trust-center grouping. Every slug must resolve in
  * TRUST_DOCUMENTS and every registered document must appear exactly once —
  * both enforced by tests — so Profile can never grow a dead row and a

@@ -47,7 +47,7 @@ attributions), pinned to the implementation by
 
 ```
 src/
-  app/          # Expo Router routes (dashboard + recall detail)
+  app/          # Expo Router routes; (tabs)/ holds Feed, Saved and Profile
   components/   # reusable UI components
   constants/    # theme tokens (placeholder — final branding undecided)
   domain/       # canonical model: types, projection, material-change rules
@@ -140,15 +140,15 @@ npm run push:test -- --subscription <id>    # ONE labeled test push to ONE devic
 Until `push:activate -- --confirm` runs, `jobs:push` is a no-send no-op, and
 events created before activation are permanently excluded (as are events
 predating each device's own opt-in). In the app, alerts are opt-in via
-Home → Alerts → "Enable recall alerts" — the permission prompt never fires on
-launch. Design, safety model, and device-setup steps:
+Profile → Notifications → "Enable recall alerts" — the permission prompt never
+fires on launch, and opening the screen only reads the current status. Design, safety model, and device-setup steps:
 [docs/recall-push-delivery.md](docs/recall-push-delivery.md).
 
 ### Personalization (Phase C3)
 
-Home offers **Affects me** / **All recalls**: one home state, allergen
+Feed offers **Affects me** / **All recalls**: one home state, allergen
 selections (the nine major US allergens), and a searchable canonical store
-catalog, all edited in the same Alerts screen and autosaved. Relevance is one
+catalog, all edited under Profile → Personalization and autosaved. Relevance is one
 deterministic evaluation ([src/lib/relevance.ts](src/lib/relevance.ts))
 shared by the feed, the detail screen's "Why this may affect you" section,
 and push eligibility: nationwide always matches the chosen state, an
@@ -525,10 +525,11 @@ misstate them), and none of this activates push delivery.
   block _inside_ "Where it was sold" — `Did you find this product here?`
   below the threshold, `12 shoppers reported finding it here` at three or
   more, plus your own report with edit and remove once you have one. A
-  questionnaire at `/report/<caseId>` asks one question per screen (found
-  it? → state → store → when), offering only the notice's own official
-  jurisdictions and canonical retailers; "No" and "I'm not sure" end the
-  flow with nothing stored and the server never contacted. A
+  questionnaire at `/report/<caseId>` asks one question per screen, starting
+  with state (state → store → when), offering only the notice's own official
+  jurisdictions and canonical retailers; on a single-state recall the state
+  question is a `Did you find this product in <State>?` confirmation whose
+  "No" ends the flow with nothing stored and the server never contacted. A
   point-of-submission disclosure sits above Submit, linking the in-app
   Privacy & Data Controls document — which now carries a full "Community
   shopper reports" section — because the formal Privacy Policy is still
@@ -540,6 +541,44 @@ misstate them), and none of this activates push delivery.
   live in the tested contract `src/lib/shopper-report-presentation.ts`;
   the screen and the isolated `CommunityReportsBlock` hard-code no words
   and are meant to be restyled wholesale in the design-system pass.
+
+## Consumer product milestones (P2 series)
+
+- **P2A — three-tab navigation and Profile information architecture**
+  (implemented, uncommitted): the app gains its first bottom navigation —
+  exactly three destinations, `Feed` · `Saved` · `Profile`, with Feed
+  initial. `(tabs)` is a route group, so `/` and `/profile` keep their
+  existing paths and every deep link still resolves; Recall Details, the
+  questionnaire, the settings pages, and the trust documents stay on the
+  root stack and push over the bar, which is what keeps a fourth tab from
+  appearing by accident. Search and Affects Me remain **controls inside
+  Feed**, not destinations.
+
+  Profile becomes a navigation page with three primary destinations —
+  Personalization, Notifications, and Privacy & Data Controls. The first two
+  previously opened one combined screen (`/settings`, titled "Alerts"); that
+  screen is now two pages with their controls, copy, autosave, and stores
+  unchanged, and `/settings` survives as a redirect to Notifications. The
+  remaining trust documents keep their rows, so the simpler landing page
+  orphans nothing. The C6 header entry to Profile is retired as duplicate
+  navigation (no settings gear was removed — none existed).
+
+  **Saved is new.** It did not exist before this milestone
+  (`docs/recall-feed-usability.md` recorded it as deliberately absent), so a
+  minimal version was built to make the third tab real rather than a dead
+  destination: a device-local list of case ids, newest first, resolved
+  against the same feed corpus the Feed already holds — never a stored copy
+  of a recall, so a saved notice always shows current official facts. One
+  save control serves the feed card and Recall Details, and the card itself
+  moved to `components/recall-card.tsx` so Saved renders the identical card.
+  Saving touches no server, mints no installation identity, and feeds nothing
+  into ranking, personalization, or notifications; it **is** cleared by
+  "Reset app and delete my data". No migration, no SQL, no notification
+  change, and shopper reports remain disabled. Styling throughout is
+  provisional (labels-only tabs, existing chip and row primitives) pending
+  the design system; onboarding stays deferred. The contract lives in
+  [docs/recall-feed-usability.md](docs/recall-feed-usability.md),
+  "Navigation and Profile (P2A)".
 
 ## Operational verification (O2)
 

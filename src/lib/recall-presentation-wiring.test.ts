@@ -12,7 +12,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-const HOME = readFileSync(join(__dirname, '..', 'app', 'index.tsx'), 'utf8');
+// P2A moved Home into the (tabs) route group (the URL is still `/`) and
+// extracted its card into a shared component so Saved lists recalls through
+// the SAME one. HOME is both files: every positive pin still finds its text,
+// and every "Home must never …" guard now covers the card too.
+const HOME = [
+  readFileSync(join(__dirname, '..', 'app', '(tabs)', 'index.tsx'), 'utf8'),
+  readFileSync(join(__dirname, '..', 'components', 'recall-card.tsx'), 'utf8'),
+].join('\n');
 const DETAIL = readFileSync(join(__dirname, '..', 'app', 'recall', '[id].tsx'), 'utf8');
 
 /** Formatting entry points the screens must no longer call directly. */

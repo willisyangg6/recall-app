@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CommunityReportsBlock } from '@/components/community-reports-section';
 import { PhotoThumbnail } from '@/components/photo-gallery';
 import { RiskBadge } from '@/components/risk-badge';
+import { SaveRecallButton } from '@/components/save-recall-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
@@ -311,6 +312,15 @@ export default function RecallDetailScreen() {
           {model.officialSource.label}
         </ThemedText>
 
+        {/* P2A: the only control this screen gained. It is about THIS recall
+            — the same shared control the feed card uses, so the two can never
+            disagree about whether a recall is saved — and it sits with the
+            recall's identity rather than in the header, which carries only
+            navigation. */}
+        <View style={styles.saveRow}>
+          <SaveRecallButton caseId={model.id} />
+        </View>
+
         {/* The hero renders ONCE, near the title, from the shared image-role
             allocation (P2c): the same underlying asset can never also appear
             as a row image or gallery entry. Null renders nothing. */}
@@ -450,6 +460,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     padding: Spacing.three,
     gap: Spacing.two,
+  },
+  // Left-aligned so the control keeps the reading column's edge rather than
+  // stretching; provisional, like every other value here.
+  saveRow: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
   },
   messageContainer: {
     flex: 1,

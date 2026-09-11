@@ -146,9 +146,12 @@ maintenance run delivers enforcement-driven risk updates same-cycle.
 
 ## Client
 
-- Explicit opt-in only: Home → **Alerts** → "Enable recall alerts" is the
-  single place the system permission prompt can fire (never on launch);
-  denial routes to system settings, no re-prompting.
+- Explicit opt-in only: Profile → **Notifications** → "Enable recall alerts"
+  is the single place the system permission prompt can fire (never on launch,
+  and never merely by opening the screen — that only reads the status);
+  denial routes to system settings, no re-prompting. P2A split the former
+  combined "Alerts" screen into Personalization and Notifications; the
+  controls and their behavior are unchanged.
 - `expo-notifications` + `expo-secure-store` (installation id + enabled
   flag) + `expo-crypto` (random UUID). Foreground notifications show the
   system banner/list (no custom duplicate). Cold start / background /

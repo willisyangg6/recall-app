@@ -43,11 +43,13 @@ test('every registered document is reachable from Profile exactly once', () => {
 test('the document route exists, is registered, and Profile renders the registry grouping', () => {
   assert.ok(existsSync(join(APP, 'document', '[slug].tsx')), 'document screen missing');
   assert.ok(read('_layout.tsx').includes('name="document/[slug]"'), 'route not in the stack');
-  const profile = read('profile.tsx');
+  const profile = read('(tabs)', 'profile.tsx');
   assert.ok(profile.includes('PROFILE_DOCUMENT_GROUPS'), 'Profile must render the registry');
   assert.ok(profile.includes("pathname: '/document/[slug]'"), 'Profile must link documents');
-  // The settings rows survive untouched alongside the trust center.
-  assert.ok(profile.includes('href="/settings"'));
+  // P2A: the settings rows survive alongside the trust center — now as two
+  // destinations rather than one combined screen.
+  assert.ok(profile.includes('href="/settings/personalization"'));
+  assert.ok(profile.includes('href="/settings/notifications"'));
 });
 
 test('no unfinished Privacy Policy or Terms is exposed in the app', () => {
@@ -60,7 +62,7 @@ test('no unfinished Privacy Policy or Terms is exposed in the app', () => {
       `"${doc.title}" must not be exposed while its founder/legal inputs are unresolved`,
     );
   }
-  const profile = read('profile.tsx');
+  const profile = read('(tabs)', 'profile.tsx');
   assert.ok(!profile.includes('privacy-policy'), 'Profile must not link a Privacy Policy row');
 });
 
@@ -186,11 +188,18 @@ test('exactly one deletion action exists — on Privacy & Data Controls, nowhere
   );
   // Profile gains no extra row and no redundant prominent personalization
   // reset; Home and Settings don't grow one either.
-  for (const file of ['profile.tsx', 'index.tsx', 'settings.tsx']) {
-    const source = read(file);
-    assert.ok(!source.includes('InstallationResetSection'), `${file} must not mount the reset`);
-    assert.ok(!source.includes(RESET_ACTION_LABEL), `${file} must not duplicate the action`);
-    assert.doesNotMatch(source, /Clear all selections/i, `${file} adds an out-of-scope reset`);
+  for (const file of [
+    ['(tabs)', 'profile.tsx'],
+    ['(tabs)', 'index.tsx'],
+    ['(tabs)', 'saved.tsx'],
+    ['settings', 'personalization.tsx'],
+    ['settings', 'notifications.tsx'],
+  ]) {
+    const source = read(...file);
+    const name = file.join('/');
+    assert.ok(!source.includes('InstallationResetSection'), `${name} must not mount the reset`);
+    assert.ok(!source.includes(RESET_ACTION_LABEL), `${name} must not duplicate the action`);
+    assert.doesNotMatch(source, /Clear all selections/i, `${name} adds an out-of-scope reset`);
   }
   // The reset introduces no account, household, or authentication concept.
   const resetSources = [

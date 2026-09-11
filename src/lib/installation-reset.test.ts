@@ -53,6 +53,7 @@ function fakeWorld(options: { failServerDeletes?: number; ambiguousDeletes?: num
       prefs: null as string | null,
       dirty: false,
       alertsEnabled: false,
+      savedRecalls: [] as string[],
       installationId: null as string | null,
     },
     log: [] as string[],
@@ -86,6 +87,10 @@ function fakeWorld(options: { failServerDeletes?: number; ambiguousDeletes?: num
     clearLocalAlertState: async () => {
       world.local.alertsEnabled = false;
       world.log.push('clear-alerts');
+    },
+    clearLocalSavedRecalls: async () => {
+      world.local.savedRecalls = [];
+      world.log.push('clear-saved');
     },
     clearInstallationId: async () => {
       world.local.installationId = null;
@@ -131,6 +136,10 @@ function fakeWorld(options: { failServerDeletes?: number; ambiguousDeletes?: num
     world.local.installationId = 'seed-installation-0001';
     world.local.prefs = 'CA+peanut';
     world.local.alertsEnabled = true;
+    // Saved recalls (P2A) are device-local with no server row — seeded here so
+    // both properties below are proven: a successful reset clears them, and a
+    // FAILED one leaves them (like everything else local) untouched.
+    world.local.savedRecalls = ['case-a', 'case-b'];
     world.serverPreferences.set('seed-installation-0001', 'CA+peanut');
     world.serverRegistrations.add('seed-installation-0001');
   };
@@ -152,6 +161,7 @@ test('success clears local state, deletes only this installation server-side, an
     'server-delete:seed-installation-0001',
     'clear-prefs',
     'clear-alerts',
+    'clear-saved',
     'clear-id',
     'fresh-id:fresh-1',
   ]);
@@ -159,6 +169,7 @@ test('success clears local state, deletes only this installation server-side, an
     prefs: null,
     dirty: false,
     alertsEnabled: false,
+    savedRecalls: [],
     installationId: 'fresh-1', // canonical path minted it (test 17)
   });
   // The other installation's rows are untouched.
@@ -176,6 +187,7 @@ test('a failed server deletion mutates NOTHING local — credential and preferen
     prefs: 'CA+peanut',
     dirty: false,
     alertsEnabled: true,
+    savedRecalls: ['case-a', 'case-b'],
     installationId: 'seed-installation-0001',
   });
   assert.deepEqual(world.log, ['server-delete-failed:seed-installation-0001']);
@@ -259,6 +271,7 @@ test('push registration cannot race the reset and recreate the old subscription'
     'server-delete:seed-installation-0001',
     'clear-prefs',
     'clear-alerts',
+    'clear-saved',
     'clear-id',
     'fresh-id:fresh-1',
     'refresh:noop', // push stays OFF after reset until explicitly re-enabled
@@ -316,4 +329,7 @@ test('the confirmation copy explains scope and the return to the default state',
   assert.match(RESET_CONFIRM_BODY, /notification registration/);
   assert.match(RESET_CONFIRM_BODY, /data associated\s?with this installation/);
   assert.match(RESET_CONFIRM_BODY, /default, unpersonalized state/);
+  // P2A: a destructive dialog must name every kind of data it removes, and
+  // saved recalls are device-local user data the reset clears.
+  assert.match(RESET_CONFIRM_BODY, /saved recalls/);
 });

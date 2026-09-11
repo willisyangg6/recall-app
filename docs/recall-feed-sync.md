@@ -162,13 +162,17 @@ performs a complete network load per visit — exactly the pre-C8 web
 behavior, deliberately, rather than growing an IndexedDB backend inside
 this milestone. Web export verified.
 
-**UI (`src/app/index.tsx`):** the last complete cached corpus renders
+**UI (`src/hooks/use-feed.ts`, consumed by `src/app/(tabs)/index.tsx` and
+`src/app/(tabs)/saved.tsx`):** the last complete cached corpus renders
 immediately on mount; a background reconciliation replaces it (the cache
 only ever fills a not-yet-ready state, so a faster network result is never
 overwritten by older cached items). Pull-to-refresh runs a real
 reconciliation. A module-level session coalesces concurrent syncs (mount +
-remount + pull-to-refresh share one in-flight reconciliation). The existing
-stale-banner behavior on refresh failure is unchanged.
+remount + pull-to-refresh + a tab switch share one in-flight
+reconciliation). P2A moved the session and the hook out of the Feed screen
+so Saved resolves its ids against the SAME corpus rather than opening a
+second cache; the behavior is otherwise unchanged, including the
+stale-banner behavior on refresh failure.
 
 ## 4. Cold vs warm, before vs after (883-case corpus)
 

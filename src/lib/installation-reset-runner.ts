@@ -16,6 +16,7 @@ import { resetInstallationData, type InstallationResetResult } from './installat
 import { deleteLocalPreferenceState } from './preferences-store';
 import { deleteInstallationData } from './push-api';
 import { clearLocalAlertState } from './push-registration';
+import { deleteLocalSavedRecalls } from './saved-recalls-store';
 
 /** The reset control renders only where an installation identity exists. */
 export function resetAvailable(): boolean {
@@ -29,6 +30,7 @@ export function runInstallationReset(): Promise<InstallationResetResult> {
     deleteServerData: deleteInstallationData,
     clearLocalPreferences: deleteLocalPreferenceState,
     clearLocalAlertState,
+    clearLocalSavedRecalls: deleteLocalSavedRecalls,
     clearInstallationId,
     createFreshInstallationId: getOrCreateInstallationId,
   });

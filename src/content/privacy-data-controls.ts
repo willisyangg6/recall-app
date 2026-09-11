@@ -39,6 +39,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'Your personalization choices — state, allergens to watch, and stores — saved in the device’s secure storage. They work offline and are read locally to build Affects Me.',
           'A random installation identifier, created on this device the first time it is needed. It contains nothing about you or your device — it is a random number used so the server can tell installations apart.',
           'Whether you turned recall alerts on.',
+          'The recalls you saved, kept as a list of recall identifiers on this device only. Saving is a private bookmark: it is never sent to Recall’s server, is not part of your personalization, and changes nothing about which recalls you are alerted to.',
           'Search text and browsing filters are session state only: searching runs entirely on this device over already-loaded notices, and what you type is never stored or sent anywhere.',
         ]),
       ],
@@ -123,8 +124,8 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'Clearing and resetting',
       blocks: [
         bullets([
-          'You can clear each personalization choice in Settings; the cleared (empty) state syncs to the server mirror.',
-          `For a complete reset, use “${RESET_ACTION_LABEL}” at the bottom of this screen. It deletes this installation’s server records — the preference mirror, the push registration, and its alert delivery records — then clears your choices, the alerts setting, and the installation identifier from this device and creates a fresh identifier. The app returns to its default, unpersonalized state and stays fully usable; alerts stay off until you enable them again.`,
+          'You can clear each personalization choice under Profile → Personalization; the cleared (empty) state syncs to the server mirror.',
+          `For a complete reset, use “${RESET_ACTION_LABEL}” at the bottom of this screen. It deletes this installation’s server records — the preference mirror, the push registration, and its alert delivery records — then clears your choices, the alerts setting, your saved recalls, and the installation identifier from this device and creates a fresh identifier. The app returns to its default, unpersonalized state and stays fully usable; alerts stay off until you enable them again.`,
           'The reset asks for confirmation first, and cancelling changes nothing. If the deletion cannot reach the server, nothing is changed on this device either — you can simply try again.',
         ]),
         paragraph(
