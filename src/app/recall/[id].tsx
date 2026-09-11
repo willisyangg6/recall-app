@@ -3,6 +3,7 @@ import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-n
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CommunityReportsBlock } from '@/components/community-reports-section';
 import { PhotoThumbnail } from '@/components/photo-gallery';
 import { RiskBadge } from '@/components/risk-badge';
 import { ThemedText } from '@/components/themed-text';
@@ -263,7 +264,7 @@ export default function RecallDetailScreen() {
   // renders a section when the model gives it one and renders nothing at all
   // otherwise — no heading, no container, no spacing. It never inspects rows,
   // columns, codes, or geography to decide for itself.
-  const { whereSold, healthRisk, affectedProducts } = model.sections;
+  const { whereSold, communityReports, healthRisk, affectedProducts } = model.sections;
 
   return (
     <ThemedView style={styles.container}>
@@ -346,6 +347,14 @@ export default function RecallDetailScreen() {
         {whereSold ? (
           <Section title="Where it was sold">
             <ThemedText>{whereSold.lead}</ThemedText>
+            {/* Community shopper reports (P1D) sit UNDER the official
+                statement, never beside or above it: they corroborate where
+                the notice says the product went, and the model nests them
+                here so an entry point can never outlive the statement it
+                corroborates. The block stays silent unless the server
+                discloses something — while the feature gate is off it
+                renders nothing at all. */}
+            {communityReports ? <CommunityReportsBlock section={communityReports} /> : null}
           </Section>
         ) : null}
 

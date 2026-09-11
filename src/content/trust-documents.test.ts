@@ -138,8 +138,30 @@ test('retailer matching never implies a purchase, and requires the notice to nam
   assert.match(affectsMeText, /no purchase history/i);
   assert.match(affectsMeText, /official notice itself states the product was sold/i);
   assert.match(affectsMeText, /no store flag never means/i);
-  // No document may claim purchase knowledge.
-  assert.doesNotMatch(allText, /based on your purchases|you (bought|purchased)/i);
+  // No document may claim Recall LEARNED what you bought. The ban is on
+  // inference and on any store of purchase data Recall assembled itself.
+  //
+  // AMENDED BY P1D (deliberate): this used to forbid the words "you bought"
+  // outright, which was a sound proxy while the app could not receive a
+  // purchase fact at all. A community shopper report is the one thing a
+  // person can volunteer about a purchase — they write it themselves — so
+  // the proxy is replaced by the claims it stood for, plus the requirement
+  // below that the exception is disclosed rather than quietly true.
+  for (const claim of [
+    /based on your purchases/i,
+    /your purchase history/i,
+    /we know what you (bought|purchased)/i,
+    /from your receipts/i,
+    /track(ing|s)? your (purchases|shopping)/i,
+  ]) {
+    assert.doesNotMatch(allText, claim, `a document claims purchase knowledge: ${claim}`);
+  }
+  // The relevance claim stays absolute where it still is absolute…
+  assert.match(affectsMeText, /no purchase history, no receipts, and no inference/i);
+  // …and the one voluntary exception is named in the same breath, so the
+  // trust documents cannot contradict the shopper-report feature.
+  assert.match(affectsMeText, /shopper report you choose to submit/i);
+  assert.match(affectsMeText, /never affects Affects Me/i);
 });
 
 test('All Recalls always remaining available is stated', () => {

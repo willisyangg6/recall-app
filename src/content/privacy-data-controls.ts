@@ -50,11 +50,32 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'A mirror of your personalization choices (state, allergens, stores), keyed by the random installation identifier — synced so alert delivery can apply exactly the same relevance rules the app shows you.',
           'When you enable alerts: a push registration holding the delivery token issued for this installation, the platform (iOS or Android), the app version, and timestamps for when alerts were enabled and last refreshed.',
           'Per-alert delivery records: which alert was sent to which registration and whether the delivery service accepted it.',
+          'Any community shopper report you choose to submit, keyed by the same random installation identifier — see “Community shopper reports” below for exactly what one contains.',
         ]),
         paragraph(
           'Server records are keyed only by the random installation identifier. Recall’s server ' +
             'has no name, email, account, or contact information to attach them to.',
         ),
+      ],
+    },
+    {
+      title: 'Community shopper reports',
+      blocks: [
+        paragraph(
+          'Some recalls invite you to report that you found the product where you shop. ' +
+            'Submitting one is always your choice, and a report is never required to use ' +
+            'anything else in the app.',
+        ),
+        bullets([
+          'A report saves four things: the state you chose, the store you chose (only from the stores the official notice names — or nothing, if you answer “I’m not sure”), roughly when you bought it, and the random installation identifier that makes the report yours to change.',
+          'It never includes your name, contact details, exact location or GPS, a receipt or photo, free text, or anything about your health, symptoms, or whether you ate the product. The questionnaire has no field for any of them.',
+          'Answering “No” or “I’m not sure” to whether you found the product stores nothing at all and counts nothing — the app does not send that answer anywhere.',
+          'Individual reports are private. Other shoppers never see who reported; they see a total, and only once at least three people have reported finding that product.',
+          'Reports never change the official recall information. They cannot alter the states, stores, hazard, risk level, or status a government notice states, and they never affect alerts or what appears in your feed.',
+          'You can change your report at any time, or remove it — removing it deletes it and it stops counting toward the total immediately.',
+          'A report you leave in place is kept for up to 12 months after the last time you submitted or changed it, then it stops counting and is deleted automatically. Changing it starts the 12 months again; re-sending the same answers does not.',
+          `“${RESET_ACTION_LABEL}” below also deletes every shopper report from this installation, along with the rest of your data.`,
+        ]),
       ],
     },
     {

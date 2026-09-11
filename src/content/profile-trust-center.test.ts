@@ -12,7 +12,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { SHOPPER_REPORT_VISIBILITY_THRESHOLD } from '@/domain/shopper-report';
 import { RESET_ACTION_LABEL } from '@/lib/installation-reset';
+import { PRIVACY_DOCUMENT_SLUG } from '@/lib/shopper-report-presentation';
 import { documentPlainText } from './document-model';
 import { documentBySlug, PROFILE_DOCUMENT_GROUPS, TRUST_DOCUMENTS } from './index';
 
@@ -60,6 +62,42 @@ test('no unfinished Privacy Policy or Terms is exposed in the app', () => {
   }
   const profile = read('profile.tsx');
   assert.ok(!profile.includes('privacy-policy'), 'Profile must not link a Privacy Policy row');
+});
+
+test('P1D: the privacy document is the questionnaire’s disclosure destination, and agrees with it', () => {
+  // The formal Privacy Policy is still unpublished (unresolved founder/legal
+  // inputs), so the point-of-submission disclosure links HERE — the app's
+  // complete, placeholder-free privacy explanation. This pins that the link
+  // target exists and that the document actually covers what the disclosure
+  // promises it covers.
+  assert.equal(PRIVACY_DOCUMENT_SLUG, 'privacy-data-controls');
+  const privacy = documentBySlug(PRIVACY_DOCUMENT_SLUG);
+  assert.ok(privacy, 'the disclosure links a document that does not exist');
+  const text = documentPlainText(privacy);
+
+  // What a report stores — the four fields, and nothing that could grow.
+  assert.match(text, /state you chose/i);
+  assert.match(text, /store you chose/i);
+  assert.match(text, /when you bought it/i);
+  assert.match(text, /random installation identifier/i);
+  // What it can never store, stated as plainly as the questionnaire does.
+  assert.match(text, /never includes your name/i);
+  assert.match(text, /no field for any of them/i);
+  for (const never of ['symptoms', 'health', 'receipt', 'free text', 'GPS']) {
+    assert.ok(text.includes(never), `the privacy document omits "${never}"`);
+  }
+  // Visibility, control, and retention — the promises the feature must keep.
+  assert.match(text, /at least three people have reported/i);
+  assert.match(text, /never see who reported/i);
+  assert.match(text, /removing it deletes it/i);
+  assert.match(text, /12 months/);
+  assert.match(text, /Changing it starts the 12 months again/i);
+  assert.match(text, /never change the official recall information/i);
+  // Declining is stated as storing nothing at all.
+  assert.match(text, /stores nothing at all and counts nothing/i);
+
+  // The threshold the document promises is the one the system enforces.
+  assert.equal(SHOPPER_REPORT_VISIBILITY_THRESHOLD, 3);
 });
 
 test('no document contains unresolved placeholders or invented contact points', () => {

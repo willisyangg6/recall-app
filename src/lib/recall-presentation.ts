@@ -26,6 +26,7 @@ import type {
   SourceAgency,
   TimelineEntry,
 } from '@/domain/recall-types';
+import { evaluateReportEligibility } from '@/domain/shopper-report';
 import { STATE_TO_POSTAL } from '@/domain/us-geography';
 import {
   buildConsumerCase,
@@ -1289,8 +1290,67 @@ export function whereSoldSection(model: WhereSoldModel): WhereSoldModel | null {
  */
 export interface DetailSections {
   whereSold: WhereSoldModel | null;
+  /** Community shopper reports (P1D), nested under Where it was sold. */
+  communityReports: CommunityReportsSection | null;
   healthRisk: HealthRiskSection | null;
   affectedProducts: AffectedProductsSection | null;
+}
+
+// ── Community shopper reports ───────────────────────────────────────────────
+
+/**
+ * The case-derived half of the community shopper-report block (P1D), or
+ * `null` for "this recall can never take a report — ask the server nothing
+ * and render nothing".
+ *
+ * Two independent gates decide the block, and BOTH must open:
+ *
+ *  1. This one, computed purely from the case (an active, non-merged notice
+ *     with usable official geography, mirroring the server's own eligibility
+ *     rules in domain/shopper-report.ts). It also carries the only choices a
+ *     report may name, so the questionnaire offers official states and
+ *     notice-listed retailers and nothing else.
+ *  2. The SERVER's thresholded summary at render time, which additionally
+ *     reports `unavailable` whenever the feature gate is off. The app holds
+ *     no local copy of that gate — the server is the single source of truth
+ *     for whether the feature is visible at all.
+ *
+ * The section is deliberately nested under Where it was sold rather than
+ * standing alone, and this decision enforces it: community reports
+ * corroborate the official distribution statement, so where the case renders
+ * no such statement there is nothing to corroborate and no entry point goes
+ * silently missing.
+ */
+export interface CommunityReportsSection {
+  /** The case a report would be filed against. */
+  caseId: string;
+  /** Jurisdictions a report may name (postal codes). Never empty. */
+  allowedStateCodes: readonly string[];
+  /** Exact canonical retailer names the store question may offer; [] = no question. */
+  retailerChoices: readonly string[];
+}
+
+/**
+ * Decide the community section for one case. `whereSold` is the already
+ * decided Where-it-was-sold section: null there means null here.
+ */
+export function communityReportsSection(
+  caseId: string,
+  projection: CaseProjection,
+  whereSold: WhereSoldModel | null,
+): CommunityReportsSection | null {
+  if (whereSold === null) return null;
+  const eligibility = evaluateReportEligibility({
+    state: projection.state,
+    geography: projection.geography,
+    retailerNames: projection.retailerNames ?? [],
+  });
+  if (!eligibility.eligible) return null;
+  return {
+    caseId,
+    allowedStateCodes: eligibility.allowedStateCodes,
+    retailerChoices: eligibility.retailerChoices,
+  };
 }
 
 // ── Health Risk ─────────────────────────────────────────────────────────────
@@ -1631,6 +1691,10 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     projection.reasonText,
   );
 
+  // Decided once: the community block nests under this section, so both
+  // read the same verdict rather than recomputing it.
+  const whereSoldDecision = whereSoldSection(sold);
+
   return {
     id: detail.id,
     noticeTypeLabel:
@@ -1660,7 +1724,8 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     whereSold: sold,
     affectedProducts: affectedProductsView,
     sections: {
-      whereSold: whereSoldSection(sold),
+      whereSold: whereSoldDecision,
+      communityReports: communityReportsSection(detail.id, projection, whereSoldDecision),
       healthRisk: healthRiskSection(hazardGuidance, standardizedRisk, {
         retracted: projection.state === 'retracted',
       }),

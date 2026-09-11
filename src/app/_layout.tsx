@@ -44,6 +44,11 @@ export default function RootLayout() {
         {/* C7 trust documents: one reusable screen; each document sets its
             own title from the content registry. */}
         <Stack.Screen name="document/[slug]" options={{ title: 'About' }} />
+        {/* P1D shopper-report questionnaire. Reachable from the Detail
+            community block, which renders nothing while the server feature
+            gate is off; a direct deep link lands on the screen's own "not
+            available" state rather than on a form. */}
+        <Stack.Screen name="report/[id]" options={{ title: 'Share a shopper report' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

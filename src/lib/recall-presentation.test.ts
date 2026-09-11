@@ -22,6 +22,7 @@ import {
   affectedProductsSection,
   affectedProductsTable,
   buildDetailModel,
+  communityReportsSection,
   caseIdentity,
   buildHomeCardModel,
   cleanProductName,
@@ -2321,4 +2322,118 @@ test('P1B changes presentation only — parser output and canonical records are 
     model.activity.text,
     buildDetailModel(source, { today: TODAY, affectsYou: false }).activity.text,
   );
+});
+
+// ── P1D: the community shopper-report section ───────────────────────────────
+
+const STATES_GEO = {
+  scope: 'states' as const,
+  states: ['California', 'Nevada'],
+  confidence: 'stated' as const,
+  sourceText: 'California and Nevada',
+};
+
+function community(overrides: Partial<CaseProjection>) {
+  return buildDetailModel(detail(overrides), { today: TODAY, affectsYou: false }).sections
+    .communityReports;
+}
+
+test('P1D: an active case with official geography can take reports, with its own choices', () => {
+  const section = community({
+    state: 'active',
+    geography: STATES_GEO,
+    retailerNames: ['Costco Wholesale'],
+  });
+  assert.ok(section);
+  assert.equal(section.caseId, 'case-1');
+  // Exactly the notice's own jurisdictions, as postal codes, and exactly its
+  // own retailer evidence — the questionnaire can offer nothing else.
+  assert.deepEqual([...section.allowedStateCodes], ['CA', 'NV']);
+  assert.deepEqual([...section.retailerChoices], ['Costco Wholesale']);
+});
+
+test('P1D: a nationwide case opens every supported jurisdiction; no retailers = no question', () => {
+  const section = community({
+    state: 'active',
+    geography: { scope: 'nationwide', states: [], confidence: 'stated', sourceText: 'Nationwide' },
+    retailerNames: [],
+  });
+  assert.ok(section);
+  assert.equal(section.allowedStateCodes.length, 52);
+  assert.deepEqual([...section.retailerChoices], []);
+});
+
+test('P1D: closed, retracted, and unknown-geography cases get no section at all', () => {
+  // Mirrors the server's own eligibility rules, so the app never offers a
+  // form whose submission the database would refuse.
+  assert.equal(community({ state: 'closed', geography: STATES_GEO }), null);
+  assert.equal(community({ state: 'retracted', geography: STATES_GEO }), null);
+  assert.equal(
+    community({
+      state: 'active',
+      geography: { scope: 'unknown', states: [], confidence: 'inferred', sourceText: null },
+    }),
+    null,
+  );
+});
+
+test('P1D: the community section can never outlive the statement it corroborates', () => {
+  // The block is nested under Where it was sold, so the two decisions are
+  // coupled in the MODEL rather than by luck in the screen. The coupling is
+  // direct: with no host section there is no community section, whatever
+  // the case's own eligibility would otherwise say.
+  assert.equal(
+    communityReportsSection('case-1', projection({ state: 'active', geography: STATES_GEO }), null),
+    null,
+    'a community block survived its host section',
+  );
+  // And across every geography the corpus produces, a community section
+  // implies a host section — the invariant the screen's nesting relies on.
+  const geographies = [
+    STATES_GEO,
+    {
+      scope: 'nationwide' as const,
+      states: [],
+      confidence: 'stated' as const,
+      sourceText: 'Nationwide',
+    },
+    { scope: 'unknown' as const, states: [], confidence: 'inferred' as const, sourceText: null },
+    { scope: 'states' as const, states: [], confidence: 'stated' as const, sourceText: null },
+  ];
+  for (const geography of geographies) {
+    for (const state of ['active', 'closed', 'retracted'] as const) {
+      const built = buildDetailModel(detail({ state, geography }), {
+        today: TODAY,
+        affectsYou: false,
+      });
+      if (built.sections.communityReports !== null) {
+        assert.ok(
+          built.sections.whereSold,
+          `community block with no host section: ${state}/${geography.scope}`,
+        );
+      }
+    }
+  }
+});
+
+test('P1D: the community section changes no official field on the model', () => {
+  // Community context is additive: adding the section leaves every official
+  // rendering — risk, activity, narrative, geography, products — identical.
+  const source = detail({
+    state: 'active',
+    geography: STATES_GEO,
+    retailerNames: ['Costco Wholesale'],
+    reasonText: 'Undeclared milk',
+    hazardCategory: 'allergen',
+  });
+  const model = buildDetailModel(source, { today: TODAY, affectsYou: false });
+  assert.ok(model.sections.communityReports);
+  const { communityReports, ...official } = model.sections;
+  assert.deepEqual(official, {
+    whereSold: model.sections.whereSold,
+    healthRisk: model.sections.healthRisk,
+    affectedProducts: model.sections.affectedProducts,
+  });
+  assert.equal(model.whereSold.lead, 'California and Nevada');
+  assert.equal(model.affectsYou, false);
 });

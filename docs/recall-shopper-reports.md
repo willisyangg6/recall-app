@@ -1,12 +1,20 @@
-# Community shopper reports (P1C — data foundation, feature OFF)
+# Community shopper reports (feature OFF in production)
 
 _Authoritative home for the shopper-report domain: the product contract, the
 schema and RPC surface, aggregation and privacy rules, the ownership/threat
-model, retention and deletion, and launch preconditions. P1C built the
-secure data foundation only; the questionnaire and all community copy on
-Recall Detail are P1D and do not exist yet. The migration
-(`supabase/migrations/20260910000000_shopper_reports.sql`) has **not** been
-applied to production, and the feature gate ships **disabled**._
+model, retention and deletion, the consumer experience, and launch
+preconditions._
+
+_Status: P1C built the data foundation (§2–§9) and its migration
+(`supabase/migrations/20260910000000_shopper_reports.sql`) was applied to
+production on 2026-09-11. P1D built the whole consumer experience (§10), and
+a same-day follow-up corrected the Detail rendering matrix, retired the
+redundant "did you find this product?" question, and replaced the four-line
+disclosure with one line (§10). The feature gate
+`shopper_report_config.reports_enabled` is still **false**, so nothing is
+visible to anyone and no report can be submitted; enabling it is a separate,
+explicit founder action with its own preconditions (§8, and
+[recall-launch-blockers.md](recall-launch-blockers.md))._
 
 ## 1. What a shopper report is — and is not
 
@@ -18,7 +26,8 @@ a thresholded community signal:
 - Below threshold: `Did you find this product here? Add your report`
 - At threshold: `12 shoppers reported finding it here · Add your report`
 
-(P1C renders neither string; they are recorded here as the target contract.)
+(P1D renders both — see §10. They remain the frozen target contract, pinned
+verbatim by test.)
 
 It is **not** official recall evidence, not a discovery feed, and not input
 to anything official. Community data never modifies or influences official
@@ -53,8 +62,9 @@ cannot store; the closed column set is pinned by
 
 "Not sure" for the retailer is represented as **no retailer** (`null`),
 never a stored string. A "No / Not sure" answer to _did you find it here_ is
-not a report at all: nothing is stored and nothing is counted — the future
-UI ends the flow gracefully client-side.
+not a report at all: nothing is stored and nothing is counted — the
+questionnaire ends the flow gracefully client-side without contacting the
+server (§10).
 
 ## 3. Eligibility: which cases can take reports
 
@@ -139,9 +149,11 @@ MVP, on these grounds:
   fingerprinting, no IP storage, no invented quotas.
 
 Accepting this risk does **not** mean the feature is enabled or
-production-ready: the gate still ships off, and P1D, the privacy
-disclosure, migration review/application, and explicit enablement all
-remain outstanding ([recall-launch-blockers.md](recall-launch-blockers.md)).
+production-ready. The migration is applied and P1D has shipped the consumer
+experience and its point-of-submission disclosure (§10), but the gate is
+still off, and counsel review, the App Privacy label answers, and the
+explicit enablement action all remain outstanding
+([recall-launch-blockers.md](recall-launch-blockers.md)).
 
 ## 5. RPC surface (the only public interaction)
 
@@ -154,7 +166,8 @@ remain outstanding ([recall-launch-blockers.md](recall-launch-blockers.md)).
 | `delete_installation_data(installation) → void`                              | The C7.1 deletion RPC, replaced to also delete the installation's shopper reports in the same atomic transaction. All C7.1 properties preserved.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 The internal jurisdiction mapping (`shopper_report_state_name`) is not
-public surface (no anon execute). Client-side, the P1D-ready foundation is:
+public surface (no anon execute). Client-side, the foundation P1D builds on
+(§10) is:
 `src/domain/shopper-report.ts` (types, closed purchase vocabulary,
 threshold constant, pure eligibility/validation, response sanitizers),
 `src/lib/report-api.ts` (RPC wrappers; every response passes through the
@@ -285,3 +298,148 @@ cross-table atomic deletion; public recall reads unchanged; zero writes to
 any recall-domain or notification table; and the kill-switch scope in both
 directions. The stack was torn down completely (0 containers, 0 volumes,
 shared images preserved). Production was not touched.
+
+## 10. The consumer experience (P1D)
+
+P1D builds the whole shopper-facing feature against the deployed contract.
+It changes no SQL: the migration applied in Phase 3 is untouched, and the
+production feature gate is still **off**, so none of this is visible to
+anyone today (§8).
+
+### Where it lives
+
+The community block renders **inside** the Detail screen's "Where it was
+sold" section, directly beneath the official distribution statement — never
+beside or above it. That nesting is a model decision, not a layout habit:
+`DetailSections.communityReports` is null whenever `whereSold` is null, so
+community context can never outlive the official statement it corroborates,
+and an entry point can never render alone. The block is a single isolated
+component (`src/components/community-reports-section.tsx`) holding layout
+and one fetch; the provisional styling there is meant to be replaced
+wholesale in the design-system pass without touching a contract.
+
+### Two gates, and the silent default
+
+Nothing renders unless **both** open:
+
+1. The case-derived section (active, non-merged, usable geography, with the
+   only choices a report may name), computed by the same rules the server
+   enforces so the app never offers a form the database would refuse.
+2. The server's thresholded summary at render time, which reports
+   `unavailable` whenever the feature gate is off.
+
+The app holds **no local copy of the gate** — there is no feature flag in
+the client that could drift from the server's. A failed or refused summary
+read is treated exactly like `unavailable`: the block stays absent rather
+than turning additive context into an error message.
+
+### What the shopper sees
+
+Corrected same day (founder correction, 2026-09-10): Detail is a
+corroboration signal only. It never carries this installation's own state,
+retailer, or purchase timeframe, and it never offers Remove — both live one
+tap away, on the questionnaire's edit screen.
+
+| public summary  | this installation | rendered                                                    |
+| --------------- | ----------------- | ----------------------------------------------------------- |
+| below threshold | no report         | `Did you find this product here?` + `Add your report`       |
+| 3+ reports      | no report         | `12 shoppers reported finding it here` + `Add your report`  |
+| below threshold | has a report      | `Edit your report` — no lead, no count                      |
+| 3+ reports      | has a report      | `12 shoppers reported finding it here` + `Edit your report` |
+| unavailable     | no report         | nothing renders at all                                      |
+
+One further case sits outside that table: reading and withdrawing one's own
+report are never gated by the feature switch (§5), so an installation whose
+report predates the feature being switched off can reach Detail with the
+public summary reading `unavailable` and a real report of its own. That
+combination renders exactly `Edit your report` and nothing else — no count,
+no invitation, no public copy of a disabled feature — just enough of the
+entry point for the owner to reach removal.
+
+No sub-threshold number is ever rendered, implied, or hinted at — "0", "no
+one", "be the first" and "1 shopper" are all forbidden by test, because the
+server deliberately withheld that fact. Nothing describes a community total
+as verified, confirmed, or official.
+
+### The questionnaire
+
+Built from the section's own choices at `/report/<caseId>`. There is no
+separate "did you find this product?" step — tapping `Add your report`
+already states that intent, so asking it again was a redundant question.
+**State is always first:**
+
+- **A recall naming exactly one official state** asks
+  `Did you find this product in <State>?` — Yes / No, with no "I'm not
+  sure" (there is only one possible answer to check). "No" ends the flow
+  immediately: nothing is stored, nothing is counted, and the server is
+  never contacted. "Yes" selects that one state and continues.
+- **A multi-state or nationwide recall** asks the direct picker question
+  (`What state did you find it in?`), over exactly the notice's official
+  jurisdictions (all 52 for a nationwide recall, where the list becomes
+  searchable). There is no decline path here at all: picking a state is
+  itself the complete answer, exactly as it already was for the
+  single-state case's "Yes".
+
+Then, when the case has choices for them:
+
+- **Which store did you find it at?** — only the notice's own canonical
+  retailer names, plus "I'm not sure", which submits **no** retailer rather
+  than a string. Skipped entirely when the notice names no safe retailers.
+- **When did you buy it?** — the five closed purchase-time buckets.
+
+Then a review step, the disclosure below, and Submit (or, on an edit,
+Update). Editing an existing report pre-fills every answer from what the
+server holds, so an unchanged re-submission is exactly the server's
+idempotent no-op (no version bump, no new timestamp, no extended retention,
+no movement in any count). The screen has exactly one text field — the
+state-list search — and it can never become an answer. There is no field for
+anything the schema cannot store.
+
+**Removal** exists only on the edit screen (never on Detail), behind a
+native confirmation — `Remove your report?` / `This will remove it from
+community totals.` / `Cancel` / `Remove` — mirroring the "Reset app and
+delete my data" pattern: Cancel performs no mutation. A successful removal
+returns to Detail, which re-reads the server on focus rather than the screen
+computing a replacement count itself. While the feature is off, an
+installation with an existing report reaches a reduced screen offering only
+this removal control — never a form whose submission would be refused.
+
+### Point-of-submission disclosure
+
+One line renders directly above Submit/Update, not behind a link a shopper
+would have to go find:
+
+> Your anonymous report contributes to community totals and does not change
+> official recall information. **Learn more.**
+
+"Learn more." opens the in-app **Privacy & Data Controls** document, which
+carries the full detail this line summarizes — what is saved, what never is,
+who can see it, and retention — in its "Community shopper reports" section.
+That document — not the unpublished formal Privacy Policy — is the app's
+privacy surface, and it is reachable from both the questionnaire and
+Profile. The formal policy is still blocked on founder/legal inputs
+([recall-launch-blockers.md](recall-launch-blockers.md)) and remains
+unexposed; two tests enforce that.
+
+One consequence of P1D worth recording: the Affects Me document's claim that
+"Recall never knows or guesses what you actually bought" now names its one
+exception — a shopper report the person writes themselves, which never feeds
+Affects Me. The claim was true before shopper reports could exist and would
+have become false without that clause.
+
+### Outcomes
+
+Every ending is explicit: submitted, removed, declined, or failed. Success
+is the exact copy `Thanks for contributing! Your report helps other
+shoppers make safer decisions.` — no metric or threshold restated, since the
+disclosure above already covered that. Because the server refuses before
+writing in every failure case — offline, a case that closed mid-flow, the
+gate switched off — the failure copy says "Nothing was saved", which is
+always true, and never leaks which refusal happened.
+
+### What this milestone did not do
+
+No SQL, no migration, no enablement, no production write. No bottom
+navigation, Saved, onboarding, or Profile restructuring (the Privacy & Data
+Controls row it links to already existed). No design-system implementation —
+the styling is provisional and deliberately isolated.

@@ -47,9 +47,14 @@ share personal information for advertising.
 - **Alert delivery records.** Which alert was sent to which registration and
   whether the delivery service accepted it.
 - **Community shopper reports (only if you submit one — not yet available).**
-  ⟦FOUNDER: this paragraph activates only when shopper reporting launches
-  (P1D + enabling the server-side gate); it must not be published as live
-  before then.⟧ If you choose to report finding a recalled product, we
+  ⟦FOUNDER: the shopper-report experience shipped in P1D (2026-09-11) and
+  its migration is applied, but the server-side gate is still off, so no
+  one can submit one. This paragraph activates when the gate is enabled;
+  it must not be published as live before then. Note that the app's own
+  consumer privacy surface for this feature is the in-app "Privacy & Data
+  Controls" document (which P1D extended, and which the questionnaire links
+  to) — this policy draft stays unpublished until its placeholders and
+  counsel review are resolved.⟧ If you choose to report finding a recalled product, we
   store: the state you select, the store you select (only from the stores
   the official notice names — or nothing if you choose "Not sure"), a rough
   purchase-time range (e.g. "past week"), and the random installation

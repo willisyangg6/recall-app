@@ -516,7 +516,30 @@ misstate them), and none of this activates push delivery.
   PostgREST on a disposable local stack (applied the full migration chain;
   torn down completely). Community data influences no official field,
   feed, notification, or ranking — the aggregate is one-way by
-  construction.
+  construction. **The migration was applied to production on 2026-09-11**
+  (audited read-only first); the feature gate remains `false`.
+
+- **P1D — the shopper-report experience** (implemented, uncommitted;
+  **feature still OFF**): the complete consumer surface, built against the
+  deployed contract with no SQL change. Recall Detail grows a community
+  block _inside_ "Where it was sold" — `Did you find this product here?`
+  below the threshold, `12 shoppers reported finding it here` at three or
+  more, plus your own report with edit and remove once you have one. A
+  questionnaire at `/report/<caseId>` asks one question per screen (found
+  it? → state → store → when), offering only the notice's own official
+  jurisdictions and canonical retailers; "No" and "I'm not sure" end the
+  flow with nothing stored and the server never contacted. A
+  point-of-submission disclosure sits above Submit, linking the in-app
+  Privacy & Data Controls document — which now carries a full "Community
+  shopper reports" section — because the formal Privacy Policy is still
+  unpublished. Two gates gate everything: the case-derived section (null
+  whenever `whereSold` is null, so an entry point can never outlive the
+  official statement it corroborates) and the server's summary, which
+  reads `unavailable` while the gate is off — so today the feature renders
+  nowhere and the app holds no local flag that could drift. Copy and flow
+  live in the tested contract `src/lib/shopper-report-presentation.ts`;
+  the screen and the isolated `CommunityReportsBlock` hard-code no words
+  and are meant to be restyled wholesale in the design-system pass.
 
 ## Operational verification (O2)
 

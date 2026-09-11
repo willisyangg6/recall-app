@@ -81,7 +81,7 @@ export const HOW_AFFECTS_ME_WORKS: TrustDocument = {
       blocks: [
         bullets([
           'A store is flagged only when the official notice itself states the product was sold, shipped, or distributed there. Recall never infers a store from a chain’s known locations.',
-          'Recall never knows or guesses what you actually bought. There is no purchase history, no receipts, and no inference from your store list — a store match only means the notice named a store you selected.',
+          'Recall never knows or guesses what you actually bought. There is no purchase history, no receipts, and no inference from your store list — a store match only means the notice named a store you selected. The one exception is a community shopper report you choose to submit, which you fill in yourself and which never affects Affects Me.',
           'Notices often do not state where a product was sold, so no store flag never means “not sold there.”',
         ]),
       ],

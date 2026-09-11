@@ -414,10 +414,15 @@ test('P1B: Detail section order is What happened → Where it was sold → Healt
 });
 
 test('P1B: the still-final exclusions survive the Health Risk reversal', () => {
-  // Reversing ONE freeze does not reopen the others. Correction history, the
-  // generic consumer-action surface, and community/shopper reporting remain
-  // out of Detail; P1C/P1D own the community work and this milestone adds
-  // none of it.
+  // Reversing ONE freeze does not reopen the others. Correction history and
+  // the generic consumer-action surface remain out of Detail.
+  //
+  // AMENDED BY P1D (deliberate, not a silent deletion): this list used to
+  // exclude community/shopper reporting too, with the note that "P1C/P1D own
+  // the community work". P1D is that milestone, so the community block now
+  // ships — but the exclusion it replaces is kept in its stronger form
+  // below: the screen may MOUNT the block and may not contain a single word
+  // of its copy, which belongs to the tested contract.
   for (const excluded of [
     'Correction history',
     'corrected',
@@ -425,9 +430,11 @@ test('P1B: the still-final exclusions survive the Health Risk reversal', () => {
     'notificationEventCreated',
     'model.timeline',
     'What should I do',
+    // Community copy stays out of the screen — it lives in
+    // lib/shopper-report-presentation and reaches the block as a model.
     'Add your report',
-    'shopper',
     'shoppers reported',
+    'Did you find this product',
   ]) {
     assert.ok(!DETAIL.includes(excluded), `deferred surface "${excluded}" rendered on Detail`);
   }
@@ -467,7 +474,10 @@ test('P3A: optional Detail sections are model-owned — no screen-level content 
   // Every optional section renders from the shared contract's decision, so a
   // heading, container, divider, or its spacing can never appear above
   // nothing. The screen reads the decision and re-derives nothing.
-  assert.match(DETAIL, /const \{ whereSold, healthRisk, affectedProducts \} = model\.sections/);
+  assert.match(
+    DETAIL,
+    /const \{ whereSold, communityReports, healthRisk, affectedProducts \} = model\.sections/,
+  );
   assert.match(DETAIL, /\{whereSold \? \(/);
   assert.match(DETAIL, /\{healthRisk \? \(/);
   assert.match(DETAIL, /\{affectedProducts \? \(/);
@@ -510,6 +520,211 @@ test('P3A: the Detail screen holds no notice ids, hazard parsing, or raw-prose r
   assert.ok(!DETAIL.includes('interpretReason'), 'the screen interprets reasons itself');
   assert.ok(!HOME.includes('interpretReason'), 'Home interprets reasons itself');
   assert.ok(!HOME.includes('conciseReasonLine'), 'Home composes its own reason line');
+});
+
+// ── P1D: community shopper reports ──────────────────────────────────────────
+
+const COMMUNITY = readFileSync(
+  join(__dirname, '..', 'components', 'community-reports-section.tsx'),
+  'utf8',
+);
+const QUESTIONNAIRE = readFileSync(join(__dirname, '..', 'app', 'report', '[id].tsx'), 'utf8');
+
+test('P1D: the community block nests inside Where it was sold, gated by the model', () => {
+  // It renders UNDER the official statement — inside that section's own
+  // conditional — so community context can never appear beside, above, or
+  // without the government statement it corroborates.
+  const section = DETAIL.slice(
+    DETAIL.indexOf('<Section title="Where it was sold">'),
+    DETAIL.indexOf('<Section title="Health Risk">'),
+  );
+  assert.ok(section.includes('<CommunityReportsBlock'), 'the block is not in Where it was sold');
+  assert.match(
+    section,
+    /\{communityReports \? <CommunityReportsBlock section=\{communityReports\} \/> : null\}/,
+  );
+  // The screen decides nothing itself: no eligibility, no geography, no
+  // count, and no second gate of its own.
+  for (const forbidden of [
+    'evaluateReportEligibility',
+    'loadReportSummary',
+    'loadMyReport',
+    'submitReport',
+    'below_threshold',
+    'reports_enabled',
+  ]) {
+    assert.ok(
+      !DETAIL.includes(forbidden),
+      `Detail decides shopper-report behavior itself: ${forbidden}`,
+    );
+  }
+});
+
+test('P1D: the block is silent until the server answers, and silent when it says unavailable', () => {
+  // No placeholder, skeleton, or "loading community reports" flashes a
+  // feature that may not be available at all.
+  assert.match(COMMUNITY, /if \(loaded === null\) return null;/);
+  assert.match(COMMUNITY, /if \(view === null\) return null;/);
+  // A failed read is treated exactly like unavailable — additive context is
+  // never an error surface.
+  assert.match(COMMUNITY, /catch \{[\s\S]*?status: 'unavailable'/);
+  // The app holds no local copy of the feature gate that could drift from
+  // the server's.
+  assert.ok(!COMMUNITY.includes('reports_enabled'));
+  assert.ok(!COMMUNITY.includes('FEATURE_'));
+});
+
+test('P1D: every community word comes from the contract — the UI hard-codes none', () => {
+  // The block and the questionnaire may name contract constants, never the
+  // strings themselves.
+  for (const copy of [
+    'Add your report',
+    'Edit your report',
+    'Remove my report',
+    'Did you find this product here?',
+    'shoppers reported finding it here',
+    'Thanks for contributing!',
+    'Your report helps other shoppers make safer decisions.',
+    'Thanks — nothing was submitted',
+    'Remove your report?',
+    'This will remove it from community totals.',
+  ]) {
+    assert.ok(!COMMUNITY.includes(copy), `the block hard-codes copy: ${copy}`);
+    assert.ok(!QUESTIONNAIRE.includes(copy), `the questionnaire hard-codes copy: ${copy}`);
+  }
+  assert.ok(COMMUNITY.includes('communityReportsView'), 'the block builds no view of its own');
+  assert.ok(
+    QUESTIONNAIRE.includes('questionnaireOutcome') && QUESTIONNAIRE.includes('questionnaireSteps'),
+    'the questionnaire decides its own flow',
+  );
+});
+
+test('P1D: there is no generic found-it step — state is always first and asked only once', () => {
+  // The retired step and its options must not return under any name.
+  for (const retired of [
+    'Did you find this product where you shop',
+    'Did you find it',
+    'Found it',
+    'FOUND_OPTIONS',
+    "'found'",
+    'FoundAnswer',
+  ]) {
+    assert.ok(!QUESTIONNAIRE.includes(retired), `the retired found-it step returned: ${retired}`);
+  }
+  // The single-state confirm question is built from the contract's own
+  // function, never composed on the screen.
+  assert.match(QUESTIONNAIRE, /isSingleStateCase\(section\)/);
+  assert.match(QUESTIONNAIRE, /questionPrompt\(key, section\)/);
+  assert.match(QUESTIONNAIRE, /STATE_CONFIRM_OPTIONS/);
+  // No "I'm not sure" option exists for the state question at all — the
+  // confirm is strictly Yes/No (pinned at the contract level:
+  // shopper-report-presentation.test.ts). The retailer question keeps its
+  // own escape via retailerOptions(), called here and nowhere replaced.
+  assert.match(QUESTIONNAIRE, /retailerOptions\(section\.retailerChoices\)/);
+});
+
+test('P1D: removal requires confirmation and exists only on the questionnaire route', () => {
+  // A native confirm dialog gates the destructive call — Cancel performs no
+  // mutation, mirroring the "Reset app and delete my data" pattern.
+  assert.match(QUESTIONNAIRE, /Alert\.alert\(REMOVE_CONFIRM_TITLE, REMOVE_CONFIRM_BODY, \[/);
+  assert.match(QUESTIONNAIRE, /style: 'cancel'/);
+  assert.match(QUESTIONNAIRE, /style: 'destructive', onPress: \(\) => void remove\(\)/);
+  // Detail never mounts a removal control or a confirmation dialog of its
+  // own — the block's only control is the add/edit action.
+  assert.ok(!COMMUNITY.includes('REPORT_REMOVE_ACTION'), 'Detail renders a remove control');
+  assert.ok(!COMMUNITY.includes('Alert'), 'Detail imports a confirmation dialog');
+  assert.ok(!DETAIL.includes('REPORT_REMOVE_ACTION'), 'Detail renders a remove control');
+});
+
+test('P1D: the paused screen offers only removal while the feature is off with an existing report', () => {
+  // Reading and withdrawing are never gated; re-submitting is. The paused
+  // state must never expose the multi-step form or a submit control.
+  assert.match(QUESTIONNAIRE, /kind: 'paused'/);
+  assert.match(QUESTIONNAIRE, /REPORT_PAUSED_MESSAGE/);
+  const paused = QUESTIONNAIRE.slice(
+    QUESTIONNAIRE.indexOf("screen.kind === 'paused'"),
+    QUESTIONNAIRE.indexOf("screen.kind === 'declined'"),
+  );
+  assert.ok(!paused.includes('SUBMIT_ACTION'), 'the paused screen offers to submit');
+  assert.ok(!paused.includes('StateQuestion'), 'the paused screen renders the form');
+  assert.match(paused, /REPORT_REMOVE_ACTION/);
+});
+
+test('P1D: the questionnaire offers only model-supplied choices and stores no free text', () => {
+  // Choices come from the shared section, never from anything the screen
+  // derives, and the one TextInput on the screen filters the state list —
+  // it can never become an answer.
+  assert.match(QUESTIONNAIRE, /stateOptions\(section\.allowedStateCodes\)/);
+  assert.match(QUESTIONNAIRE, /retailerOptions\(section\.retailerChoices\)/);
+  assert.match(QUESTIONNAIRE, /purchaseWindowOptions\(\)/);
+  assert.equal(QUESTIONNAIRE.split('<TextInput').length - 1, 1, 'a second text field appeared');
+  assert.match(QUESTIONNAIRE, /accessibilityLabel="Search states"/);
+  // No field exists for anything the schema cannot store.
+  for (const forbidden of [
+    'symptom',
+    'illness',
+    'email',
+    'phone',
+    'photo',
+    'receipt',
+    'comment',
+    'note',
+  ]) {
+    assert.ok(
+      !QUESTIONNAIRE.toLowerCase().includes(forbidden),
+      `the questionnaire collects ${forbidden}`,
+    );
+  }
+});
+
+test('P1D: the one-line point-of-submission disclosure renders with the submit control', () => {
+  // The disclosure is on the review step, above Submit — not buried behind
+  // a link a shopper would have to go find, and it is ONE line (the four-
+  // line predecessor is retired: the full explanation now lives only in
+  // Privacy & Data Controls).
+  const review = QUESTIONNAIRE.slice(
+    QUESTIONNAIRE.indexOf("screen.kind === 'review'"),
+    QUESTIONNAIRE.indexOf('const key = steps[screen.index]'),
+  );
+  assert.ok(review.includes('SUBMISSION_DISCLOSURE'), 'the disclosure is not rendered');
+  assert.ok(
+    review.indexOf('SUBMISSION_DISCLOSURE') < review.indexOf('SUBMIT_ACTION'),
+    'the disclosure must precede the submit control',
+  );
+  // …and it links to the app's real privacy document, never to an
+  // unpublished policy. The navigation itself is a shared handler (opened
+  // from the tappable link inline in the sentence), so the slug reference
+  // is checked over the whole screen rather than the review slice alone.
+  assert.ok(review.includes('PRIVACY_LINK_LABEL'), 'the Learn more link is not rendered');
+  assert.ok(QUESTIONNAIRE.includes('PRIVACY_DOCUMENT_SLUG'));
+  assert.match(QUESTIONNAIRE, /pathname: '\/document\/\[slug\]'/);
+  assert.ok(!QUESTIONNAIRE.includes('privacy-policy'), 'links an unpublished Privacy Policy');
+  // The retired four-line disclosure and its header cannot return.
+  assert.ok(!QUESTIONNAIRE.includes('BEFORE YOU SUBMIT'), 'the retired disclosure header returned');
+  assert.ok(!QUESTIONNAIRE.includes('.map((line)'), 'the disclosure is rendered as multiple lines');
+});
+
+test('P1D: only "Yes" can reach a submission, and a refusal writes nothing', () => {
+  // The declined ending is reachable from the flow's own verdict, not from
+  // a screen-local guess about what the answer meant.
+  assert.match(QUESTIONNAIRE, /outcome\?\.kind === 'declined'/);
+  assert.match(QUESTIONNAIRE, /setScreen\(\{ kind: 'declined' \}\)/);
+  // Submission is gated on the contract's ready verdict and cannot fire twice.
+  assert.match(QUESTIONNAIRE, /if \(busy \|\| outcome\?\.kind !== 'ready'\) return;/);
+  // The submitted draft is the CONTRACT's, passed straight through: the
+  // screen holds answers and never assembles a report body of its own.
+  // `retailerName` is the draft-only field — its absence here is what
+  // proves the screen never builds one (the answer patches it does hold
+  // carry `retailer`/`stateCode`, which are questionnaire answers).
+  assert.match(QUESTIONNAIRE, /await submitReport\(id, outcome\.draft\)/);
+  assert.ok(!QUESTIONNAIRE.includes('retailerName'), 'the screen assembles a draft itself');
+  assert.ok(!QUESTIONNAIRE.includes('ShopperReportDraft'), 'the screen builds its own draft type');
+});
+
+test('P1D: the questionnaire route is registered and is the block’s only destination', () => {
+  const layout = readFileSync(join(__dirname, '..', 'app', '_layout.tsx'), 'utf8');
+  assert.ok(layout.includes('name="report/[id]"'), 'the questionnaire route is not in the stack');
+  assert.match(COMMUNITY, /pathname: '\/report\/\[id\]', params: \{ id: section\.caseId \}/);
 });
 
 test('hero accessibility text inherits the shared model product name (P3D)', () => {

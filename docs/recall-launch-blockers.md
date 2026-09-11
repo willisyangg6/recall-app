@@ -74,12 +74,20 @@ gate **disabled** — see [recall-shopper-reports.md](recall-shopper-reports.md)
       within at most ~24 hours. (The separate C7-era question — stale
       push-registration rows of never-reset installations — remains open
       above and is not resolved by this.)
+- [x] **Point-of-submission notice + privacy link — SHIPPED by P1D
+      (2026-09-11).** The review step of the questionnaire states, above the
+      Submit control, what a report saves, what it never includes, that only
+      a total at three or more is ever shown, and that the report stays the
+      shopper's to change or remove — beside a link to the in-app Privacy &
+      Data Controls document, which now carries a full "Community shopper
+      reports" section. The link deliberately does **not** open the formal
+      Privacy Policy draft, which stays unpublished (§3 below).
 - [ ] **Enabling the feature** is still its own explicit production action
-      (service-role update of `shopper_report_config`), separate from
-      applying the migration, and stays off until P1D ships the
-      point-of-submission notice + Privacy Policy link and the reviews
-      below are done. Accepting the Sybil risk does not make the feature
-      enabled or production-ready.
+      (service-role update of `shopper_report_config`), separate from the
+      migration (applied 2026-09-11) and from the shipped UI. It stays off
+      until the counsel review and App Privacy label answers below are
+      done. Neither accepting the Sybil risk nor shipping the UI makes the
+      feature enabled or production-ready.
 
 ## 2. Counsel-review checklist
 
@@ -111,12 +119,13 @@ gate **disabled** — see [recall-shopper-reports.md](recall-shopper-reports.md)
       build; liability/disclaimer language for safety-information services.
 - [ ] **Attributions**: confirm public-domain treatment of FDA/USDA content
       and the trademark note for label imagery is adequate.
-- [ ] **Shopper-report disclosure** (added by P1C, prospective — the feature
-      is built but disabled): review the community-report paragraph of the
-      Privacy Policy draft and the App Privacy label implications of
-      collecting a selected state, optional retailer, and purchase-time
-      range keyed to the installation identifier, before the feature is
-      enabled or the P1D point-of-submission notice ships.
+- [ ] **Shopper-report disclosure** (the feature is fully built but
+      disabled): review the community-report paragraph of the Privacy Policy
+      draft, the shipped "Community shopper reports" section of the in-app
+      Privacy & Data Controls document, the shipped point-of-submission
+      notice, and the App Privacy label implications of collecting a
+      selected state, optional retailer, and purchase-time range keyed to
+      the installation identifier — all before the feature is enabled.
 
 ## 3. Publication blockers — Privacy Policy (and its Profile row)
 
