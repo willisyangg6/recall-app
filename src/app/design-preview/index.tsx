@@ -28,9 +28,18 @@ import { Stack, router, useFocusEffect } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { RiskBadge } from '@/components/risk-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { DisclosureControl } from '@/components/ui/disclosure-control';
+import { RiskLabel } from '@/components/ui/risk-label';
+import { Surface } from '@/components/ui/surface';
+import { Text } from '@/components/ui/text';
+import {
+  CUSTOM_FONTS_INSTALLED,
+  fontFamily,
+  typography,
+  type TypographyVariant,
+} from '@/constants/design-tokens';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { useFeed } from '@/hooks/use-feed';
 import {
@@ -52,7 +61,7 @@ import type { Classification, OfficialClass } from '@/domain/recall-types';
 import type { ConsumerRiskTier } from '@/domain/risk-tier';
 import { RISK_FILTER_TIERS } from '@/lib/feed-filters';
 import { fetchCaseDetail } from '@/lib/recall-feed';
-import { buildDetailModel, todayIso } from '@/lib/recall-presentation';
+import { buildDetailModel, disclosureControl, todayIso } from '@/lib/recall-presentation';
 import { riskView } from '@/lib/risk-display';
 
 /** How many candidates per requirement the hub offers as alternatives. */
@@ -122,6 +131,8 @@ export default function DesignPreviewScreen() {
   const [confirmed, setConfirmed] = useState<Record<string, ConfirmedSections>>({});
   const [session, setSession] = useState<DesignPreviewSession | null>(null);
   const [expanded, setExpanded] = useState<PreviewCaseRequirement | null>(null);
+  // The foundation gallery's one interactive sample.
+  const [sampleExpanded, setSampleExpanded] = useState(false);
 
   // Returning from a simulated submission or removal should show the current
   // simulated state, not the one this screen last rendered.
@@ -370,19 +381,68 @@ export default function DesignPreviewScreen() {
           </ThemedView>
         ) : null}
 
+        {/* P2B0 design foundation: the shared primitives rendered from the
+            tokens, so the founder can inspect them in a simulator before any
+            product screen is restyled. Development-only, like this whole hub. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          DESIGN FOUNDATION
+        </ThemedText>
+        <Surface
+          background="background/page"
+          radius={16}
+          border="border/subtle"
+          style={styles.card}>
+          <Text variant="caption" color="text/secondary">
+            {CUSTOM_FONTS_INSTALLED
+              ? `Type scale in ${fontFamily.sans} and ${fontFamily.mono}.`
+              : `Type scale at the approved sizes and weights. ${fontFamily.sans} and ${fontFamily.mono} are not installed yet, so the platform face stands in.`}
+          </Text>
+          {(Object.keys(typography) as TypographyVariant[]).map((variant) => (
+            <Text key={variant} variant={variant}>
+              {variant === 'label' || variant === 'label-strong'
+                ? variant.toUpperCase()
+                : `${variant} · ${typography[variant].fontSize}/${typography[variant].fontWeight}`}
+            </Text>
+          ))}
+        </Surface>
+        <View style={styles.badges}>
+          <Surface radius={16} border="border/subtle" elevation="card" style={styles.swatch}>
+            <Text variant="body-small">Card surface · elevated</Text>
+          </Surface>
+          <Surface background="background/subtle" radius={8} style={styles.swatch}>
+            <Text variant="body-small">Information callout surface</Text>
+          </Surface>
+          <Surface background="background/media-placeholder" radius={8} style={styles.swatch}>
+            <Text variant="body-small" color="text/secondary">
+              Media placeholder
+            </Text>
+          </Surface>
+        </View>
+        <Surface radius={16} border="border/subtle" style={styles.card}>
+          <Text variant="body-small" color="text/secondary">
+            The shared disclosure control, collapsed and expanded. Its words come from the real
+            presentation contract; tap it to toggle.
+          </Text>
+          <DisclosureControl
+            control={disclosureControl(22, 'lot codes')}
+            expanded={sampleExpanded}
+            onPress={() => setSampleExpanded((prior) => !prior)}
+          />
+        </Surface>
+
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           RISK LABELS
         </ThemedText>
         <ThemedView type="backgroundElement" style={styles.card}>
           <ThemedText type="small" themeColor="textSecondary">
-            All seven consumer labels, rendered by the product’s own badge through the real riskView
-            pipeline — the same words, casing and spoken labels a live recall gets.
+            All seven consumer labels, rendered by the product’s own Risk Label through the real
+            riskView pipeline — the same words, casing and spoken labels a live recall gets.
           </ThemedText>
           <View style={styles.badges}>
             {RISK_FILTER_TIERS.map((tier) => {
               const risk = riskView(TIER_SAMPLE[tier], 'FDA');
               return (
-                <RiskBadge
+                <RiskLabel
                   key={tier}
                   tier={risk.tier}
                   label={risk.badgeLabel ?? ''}
@@ -579,6 +639,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: Spacing.two,
     marginVertical: Spacing.one,
+  },
+  swatch: {
+    padding: Spacing.three,
   },
   option: {
     padding: Spacing.two,

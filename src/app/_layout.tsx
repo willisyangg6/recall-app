@@ -1,13 +1,37 @@
 import { useEffect } from 'react';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { IBMPlexMono_500Medium, IBMPlexMono_600SemiBold } from '@expo-google-fonts/ibm-plex-mono';
+import {
+  PublicSans_400Regular,
+  PublicSans_500Medium,
+  PublicSans_600SemiBold,
+  PublicSans_700Bold,
+} from '@expo-google-fonts/public-sans';
+import { useFonts } from 'expo-font';
+import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { flushPreferencesSync } from '@/lib/preferences-store';
 
+// Keep the native splash up until the fonts below have loaded (or failed), so
+// the first screen never paints in a stand-in face and then reflows. Called at
+// module scope, as expo-splash-screen recommends — inside a component it can
+// run after the splash has already gone.
+void SplashScreen.preventAutoHideAsync();
+
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  // The six faces the design contract uses (DESIGN.md, "Typography"), loaded
+  // once for the whole app. The keys are the names `textStyle` emits as
+  // `fontFamily`, so a token and its face can never disagree.
+  const [fontsLoaded, fontError] = useFonts({
+    PublicSans_400Regular,
+    PublicSans_500Medium,
+    PublicSans_600SemiBold,
+    PublicSans_700Bold,
+    IBMPlexMono_500Medium,
+    IBMPlexMono_600SemiBold,
+  });
   // Foreground presentation, tap → recall deep link, and silent registration
   // upkeep. Never triggers a permission prompt (that stays behind the
   // explicit control on the Notifications screen).
@@ -16,9 +40,23 @@ export default function RootLayout() {
     // Retry a preference sync that failed offline. Silent, launch never blocks.
     void flushPreferencesSync();
   }, []);
+  useEffect(() => {
+    // A failed load is not a reason to stay blank: the app proceeds with the
+    // platform's fallback face for any name it cannot resolve, and the failure
+    // is named in development rather than hidden.
+    if (fontError && __DEV__) console.warn('Design-system fonts failed to load', fontError);
+    if (fontsLoaded || fontError) void SplashScreen.hideAsync();
+  }, [fontsLoaded, fontError]);
+
+  // Nothing renders under the splash until the fonts have settled either way.
+  if (!fontsLoaded && !fontError) return null;
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    // Light appearance only (founder decision, 2026-09-14): dark mode is
+    // deferred until it has approved tokens and designs, so the navigation
+    // theme is pinned to light here and the app's `userInterfaceStyle` is
+    // `light` in app.json. There is no toggle and no dark palette.
+    <ThemeProvider value={DefaultTheme}>
       <Stack>
         {/* P2A: the three-destination bottom navigation (Feed, Saved,
             Profile). It is a route GROUP, so it owns no URL segment — Feed is
@@ -50,7 +88,7 @@ export default function RootLayout() {
             available" state rather than on a form. */}
         <Stack.Screen name="report/[id]" options={{ title: 'Share a shopper report' }} />
       </Stack>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
     </ThemeProvider>
   );
 }

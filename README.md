@@ -24,6 +24,7 @@ Design documents:
 
 - [docs/recall-source-contract.md](docs/recall-source-contract.md) — verified behavior of the official FDA/FSIS data sources
 - [docs/recall-domain-architecture.md](docs/recall-domain-architecture.md) — the canonical domain model and ingestion architecture
+- [DESIGN.md](DESIGN.md) — the Lotly design contract: tokens, semantic meaning, Figma ↔ code mapping, and the product rules the visual system must carry
 
 Trust & App Store preparation (C7): the in-app trust center renders the
 structured documents in `src/content/` (sources & methodology, Affects-Me
@@ -48,8 +49,8 @@ attributions), pinned to the implementation by
 ```
 src/
   app/          # Expo Router routes; (tabs)/ holds Feed, Saved and Profile
-  components/   # reusable UI components
-  constants/    # theme tokens (placeholder — final branding undecided)
+  components/   # reusable UI components; ui/ holds the design-system primitives
+  constants/    # design tokens (design-tokens.ts, pinned to DESIGN.md) + legacy provisional theme
   domain/       # canonical model: types, projection, material-change rules
   lib/          # client-safe read path + display formatting
   server/       # server-only: FSIS + FDA adapters, ingestion pipeline, stores
@@ -588,6 +589,49 @@ misstate them), and none of this activates push delivery.
   the design system; onboarding stays deferred. The contract lives in
   [docs/recall-feed-usability.md](docs/recall-feed-usability.md),
   "Navigation and Profile (P2A)".
+
+- **P2B0 — design-system reconciliation and code foundation** (implemented,
+  uncommitted): the Figma system, the founder's `DESIGN.md`, and the shipped
+  product are reconciled into one design contract at [DESIGN.md](DESIGN.md)
+  — Feed/Saved/Profile navigation, the Recall Detail section order including
+  Health Risk, the community-report states and questionnaire, the
+  jurisdiction / product-row / cell disclosures with paired identifier/date
+  alignment, interaction states, the 44pt target, VoiceOver and Dynamic Type
+  expectations, reduced motion, safe areas, and the prohibition on copying
+  Figma's generated React/Tailwind into React Native. Token names follow
+  Figma's slash-separated variables (`background/page`), and the document
+  ends with the exact corrections Figma itself needs (the Detail screen's
+  obsolete `label/Critical` treatment among them) and the Figma/code
+  conflicts left for the founder.
+
+  In code, `src/constants/design-tokens.ts` is the typed token foundation —
+  semantic colours, the complete seven-label risk palette (Critical is
+  `#EF4E47` / `#001F3E` / `#C82728` everywhere), the separate `Affects You`
+  relevance palette, spacing, radii, typography with resolved line heights,
+  elevation, icon sizes, and the 44pt hit target — re-exported through the
+  existing `constants/theme.ts`, whose provisional values remain for
+  un-migrated screens. Four shared primitives in `src/components/ui/` prove
+  it: `Text`, `Surface`, `DisclosureControl` (extracted from Recall Detail,
+  44pt via hitSlop), and `RiskLabel`, which replaces the provisional
+  `RiskBadge` on the feed card, Recall Detail, and the Design Preview gallery
+  at one canonical size. Public Sans and IBM Plex Mono are **not installed**
+  (`CUSTOM_FONTS_INSTALLED` is false and pinned to `package.json`); the
+  exact dependency change is recorded in `DESIGN.md` and awaits approval.
+  Tests pin every token to the contract's front matter, the risk palette,
+  the contract's product rules against the presentation contracts, and the
+  primitives' token-only sourcing. No screen was restyled; no business
+  logic, gate, SQL, or production configuration changed.
+
+  **Follow-up (same day):** Public Sans and IBM Plex Mono are installed
+  (`@expo-google-fonts/public-sans`, `@expo-google-fonts/ibm-plex-mono`,
+  `expo-font`) and the root layout loads exactly the six contract faces
+  behind the splash screen; `CUSTOM_FONTS_INSTALLED` is true. Three founder
+  decisions applied: the visible risk label is the bare canonical word on
+  every surface (`CRITICAL`, never `CRITICAL RISK`), the app is locked to
+  light appearance (`userInterfaceStyle: light`; dark mode deferred until it
+  has tokens and designs), and the bottom bar's `Feed` / `Saved` / `Profile`
+  labels are styled from the tokens. The tier mapping, ranking, filtering,
+  and notification logic are untouched.
 
 ## Operational verification (O2)
 

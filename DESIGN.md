@@ -1,0 +1,1307 @@
+---
+version: alpha
+name: Lotly
+description: 'Mobile-first design system for Lotly, a consumer food-recall discovery and personalization app. The visual language combines grocery-app warmth with trusted public-information clarity.'
+
+colors:
+  background/page: '#FDFCF6'
+  background/surface: '#FFFFFF'
+  background/subtle: '#C0D6EB'
+  background/brand: '#2B4A6C'
+  background/accent: '#E2EE57'
+  background/media-placeholder: '#EEF1F1'
+
+  text/primary: '#001F3E'
+  text/secondary: '#66747A'
+  text/inverse: '#FFFFFF'
+  text/disabled: '#D1D7D9'
+
+  border/default: '#D1D7D9'
+  border/subtle: '#E1E5E6'
+  border/strong: '#89969B'
+
+  action/primary: '#2B4A6C'
+  action/secondary: '#3560A9'
+  action/accent: '#E2EE57'
+  action/disabled: '#D1D7D9'
+
+  icon/primary: '#2B4A6C'
+  icon/secondary: '#66747A'
+  icon/inverse: '#FFFFFF'
+  icon/brand: '#3560A9'
+
+  risk/critical/background: '#EF4E47'
+  risk/critical/foreground: '#001F3E'
+  risk/critical/border: '#C82728'
+
+  risk/very-high/background: '#F28C28'
+  risk/very-high/foreground: '#001F3E'
+  risk/very-high/border: '#C86700'
+
+  risk/high/background: '#F3B63F'
+  risk/high/foreground: '#001F3E'
+  risk/high/border: '#C78C00'
+
+  risk/moderate/background: '#E8D348'
+  risk/moderate/foreground: '#001F3E'
+  risk/moderate/border: '#BBA600'
+
+  risk/low/background: '#F2E76B'
+  risk/low/foreground: '#001F3E'
+  risk/low/border: '#C8BD3E'
+
+  risk/pending/background: '#C0D6EB'
+  risk/pending/foreground: '#001F3E'
+  risk/pending/border: '#D1D7D9'
+
+  risk/unknown/background: '#EEF1F1'
+  risk/unknown/foreground: '#4B585E'
+  risk/unknown/border: '#D1D7D9'
+
+  relevance/affects-you/background: '#E2EE57'
+  relevance/affects-you/foreground: '#001F3E'
+  relevance/affects-you/border: '#ADB600'
+
+typography:
+  display:
+    fontFamily: Public Sans
+    fontSize: 33px
+    fontWeight: 700
+    lineHeight: 1.2
+    letterSpacing: 0em
+
+  heading-1:
+    fontFamily: Public Sans
+    fontSize: 28px
+    fontWeight: 700
+    lineHeight: 1.2
+    letterSpacing: 0em
+
+  heading-2:
+    fontFamily: Public Sans
+    fontSize: 23px
+    fontWeight: 700
+    lineHeight: 1.3
+    letterSpacing: 0em
+
+  heading-3:
+    fontFamily: Public Sans
+    fontSize: 19px
+    fontWeight: 600
+    lineHeight: 1.35
+    letterSpacing: 0em
+
+  body:
+    fontFamily: Public Sans
+    fontSize: 16px
+    fontWeight: 400
+    lineHeight: 1.5
+    letterSpacing: 0em
+
+  body-small:
+    fontFamily: Public Sans
+    fontSize: 13px
+    fontWeight: 400
+    lineHeight: 1.4
+    letterSpacing: 0em
+
+  body-small-bold:
+    fontFamily: Public Sans
+    fontSize: 13px
+    fontWeight: 600
+    lineHeight: 1.4
+    letterSpacing: 0em
+
+  caption:
+    fontFamily: Public Sans
+    fontSize: 12px
+    fontWeight: 500
+    lineHeight: 1.35
+    letterSpacing: 0em
+
+  micro-caption:
+    fontFamily: Public Sans
+    fontSize: 10px
+    fontWeight: 500
+    lineHeight: 1.35
+    letterSpacing: 0em
+
+  label:
+    fontFamily: IBM Plex Mono
+    fontSize: 12px
+    fontWeight: 500
+    lineHeight: 1.35
+    letterSpacing: 0.02em
+
+  label-strong:
+    fontFamily: IBM Plex Mono
+    fontSize: 12px
+    fontWeight: 600
+    lineHeight: 1.35
+    letterSpacing: 0.02em
+
+radius:
+  radius/4: 4px
+  radius/8: 8px
+  radius/12: 12px
+  radius/16: 16px
+  radius/full: 999px
+
+spacing:
+  spacing/4: 4px
+  spacing/8: 8px
+  spacing/12: 12px
+  spacing/16: 16px
+  spacing/24: 24px
+  spacing/32: 32px
+  spacing/48: 48px
+
+elevation:
+  elevation/none: none
+  elevation/card: '0 2px 8px rgba(0, 0, 0, 0.06)'
+
+icon-size:
+  icon-size/12: 12px
+  icon-size/16: 16px
+  icon-size/20: 20px
+  icon-size/24: 24px
+
+hit-target:
+  minimum: 44pt
+
+layout:
+  reference-width: 393px
+  page-margin: 16px
+  content-width: 361px
+  bottom-nav-height: 72px
+  search-bar-height: 44px
+  risk-label-height: 24px
+
+components:
+  search-bar:
+    backgroundColor: '{colors.background/surface}'
+    textColor: '{colors.text/secondary}'
+    typography: '{typography.caption}'
+    radius: '{radius.radius/12}'
+    padding: '{spacing.spacing/12}'
+    height: 44px
+
+  nav-chip-selected:
+    backgroundColor: '{colors.background/brand}'
+    textColor: '{colors.text/inverse}'
+    typography: '{typography.caption}'
+    radius: '{radius.radius/full}'
+    height: 32px
+
+  recall-card:
+    backgroundColor: '{colors.background/surface}'
+    textColor: '{colors.text/primary}'
+    border: '{colors.border/subtle}'
+    elevation: '{elevation.elevation/card}'
+    radius: '{radius.radius/16}'
+    padding: '{spacing.spacing/12}'
+
+  risk-label:
+    typography: '{typography.label}'
+    radius: '{radius.radius/4}'
+    paddingHorizontal: '{spacing.spacing/8}'
+    paddingVertical: '{spacing.spacing/4}'
+    borderWidth: 1px
+    height: 24px
+
+  relevance-affects-you:
+    backgroundColor: '{colors.relevance/affects-you/background}'
+    textColor: '{colors.relevance/affects-you/foreground}'
+    border: '{colors.relevance/affects-you/border}'
+    typography: '{typography.label}'
+    radius: '{radius.radius/4}'
+    height: 24px
+
+  information-warning:
+    backgroundColor: '{colors.relevance/affects-you/background}'
+    textColor: '{colors.text/primary}'
+    typography: '{typography.body-small}'
+    radius: '{radius.radius/8}'
+    padding: '{spacing.spacing/12}'
+
+  information:
+    backgroundColor: '{colors.background/subtle}'
+    textColor: '{colors.text/primary}'
+    typography: '{typography.body-small}'
+    radius: '{radius.radius/8}'
+    padding: '{spacing.spacing/12}'
+
+  affected-products-viewport:
+    backgroundColor: '{colors.background/surface}'
+    textColor: '{colors.text/primary}'
+    border: '{colors.border/subtle}'
+    radius: '{radius.radius/8}'
+    padding: '{spacing.spacing/12}'
+
+  bottom-nav:
+    backgroundColor: '{colors.background/surface}'
+    iconColor: '{colors.icon/primary}'
+    iconSize: '{icon-size.icon-size/24}'
+    height: 72px
+---
+
+# Lotly Design System
+
+_Authoritative home for the Lotly design contract: reusable tokens, their
+semantic meaning, the Figma ↔ code mapping, the product contracts the visual
+system must carry, and the implementation guardrails. The tokens in the front
+matter above are the same values as `src/constants/design-tokens.ts`;
+`src/constants/design-tokens.test.ts` proves the two agree, and
+`src/constants/design-contract.test.ts` pins the product rules below._
+
+_Status (P2B0 and its follow-up, 2026-09-14): reconciled against Figma and the
+shipped product. The token foundation and four shared primitives exist in
+code; Public Sans and IBM Plex Mono are installed and loaded at the root; the
+app is locked to light appearance; the risk label reads its bare canonical
+word on every surface; the bottom navigation shows its three labels. No
+product screen has been restyled yet._
+
+## Overview
+
+Lotly is a mobile-first food-recall product that should feel like a
+**grocery-shopping app crossed with a trusted news/public-information app**.
+It is consumer-friendly, calm, modern, and highly legible. The interface should
+make serious information understandable without looking bureaucratic,
+medicalized, or alarmist.
+
+The design direction is **editorial utility with consumer-product warmth**:
+
+- Warm cream page backgrounds soften the experience.
+- Deep navy provides authority, trust, and high-contrast structure.
+- White cards separate product information cleanly.
+- Soft blue supports neutral informational content.
+- Bright lime is a distinctive Lotly personalization signal.
+- Risk colors remain vivid enough to scan quickly, but the surrounding UI stays
+  calm.
+
+Lotly should feel credible enough for safety information and approachable
+enough to check routinely while shopping.
+
+### Source of truth
+
+Use this priority when implementing or extending the product. Earlier entries
+win:
+
+1. **Production code owns behavior, data, navigation, and business rules.**
+   What a screen shows, in what order, under which conditions, with which
+   words, is decided by the shipped presentation contracts (`src/lib/`) and
+   the domain (`src/domain/`). The risk-tier mapping, the disclosure rules,
+   the community-report states, and the questionnaire are product behavior,
+   not visual choices.
+2. **Final founder decisions override outdated Figma content.** The
+   decisions recorded in this document ("Product contracts the design must
+   carry", "Known Figma/code conflicts") are those decisions.
+3. **Figma owns approved visual composition** — layout, hierarchy, proportion,
+   and the look of each component.
+4. **This `DESIGN.md` owns reusable tokens, semantic meaning, and
+   implementation guardrails.**
+
+When Figma and code disagree, do not silently invent a compromise, and never
+discard working product behavior because it is absent from Figma. Preserve the
+behavior, follow the Figma visual intent where it can be followed, and record
+the conflict here.
+
+Primary Figma references (file `WN8RP0xZGYdj4CSztvQ7Km`):
+
+- Final page: node `81:792`
+- Feed (named `home` in Figma — see "Naming"): node `81:793`
+- Recall Detail (named `product information` in Figma): node `81:819`
+- Components: node `36:524`
+
+### Branding status
+
+The product name is **Lotly**. The final logo/brand mark is not yet locked. Do
+not invent a new logo, mascot, shield, siren, warning triangle, grocery cart,
+or food icon in implementation work unless a later approved brand asset
+explicitly provides one.
+
+The brand should not resemble a government emergency-alert product.
+Seriousness comes from hierarchy, typography, information quality, and
+navy—not from constant alarm imagery.
+
+### Naming
+
+- **The consumer screen is `Feed`, never `Home`.** The bottom navigation reads
+  `Feed` · `Saved` · `Profile`. Figma's frame is still named `home`, and older
+  code comments say "Home"; both are drift, not decisions. No consumer-facing
+  string may say "Home".
+- **Semantic tokens carry their Figma variable names**, slash-separated:
+  `background/page`, `text/primary`, `risk/critical/background`,
+  `spacing/16`, `radius/8`. Code keys them by exactly these strings
+  (`color['background/page']`, `spacing[16]`, `radius[8]`), so the Figma ↔
+  code mapping is the identity and needs no lookup table.
+- **Typography tokens use the kebab-case names in the front matter**
+  (`heading-3`, `body-small`, `label`), because Figma text styles are not
+  variables and carry display names instead. The mapping is in "Typography".
+- React Native property mappings are recorded separately, in "Implementation
+  guardrails → React Native mapping", never inside the token names.
+
+## Colors
+
+The core palette uses warm cream, white, deep navy, muted blue, soft
+informational blue, vivid risk hues, and one distinctive lime personalization
+accent.
+
+### Core surfaces and text
+
+- **Page (`background/page`, `#FDFCF6`)** is the default app background. It is
+  intentionally warmer than pure white.
+- **Surface (`background/surface`, `#FFFFFF`)** is used for cards, search,
+  navigation surfaces, and table surfaces.
+- **Primary text (`text/primary`, `#001F3E`)** is the main reading color for
+  headlines, product names, labels, and important facts.
+- **Secondary text (`text/secondary`, `#66747A`)** is used for descriptions,
+  manufacturer names, timestamps, and supporting metadata. Do not lighten this
+  value for normal-size text.
+- **Brand navy (`background/brand` / `action/primary` / `icon/primary`,
+  `#2B4A6C`)** is used for primary actions, selected navigation, and primary
+  icons.
+- **Action blue (`action/secondary` / `icon/brand`, `#3560A9`)** is used for
+  links, in-place disclosure controls, and secondary actions.
+- **Soft blue (`background/subtle`, `#C0D6EB`)** is used for informational
+  callouts.
+- **Lime (`background/accent` / `action/accent`, `#E2EE57`)** is reserved for
+  personalization/relevance and rare branded emphasis.
+
+Use semantic colors rather than reaching directly for palette primitives.
+Components should conceptually resolve as:
+
+`component → semantic role → color value`
+
+Do not hardcode primitive or raw colors inside reusable UI when a semantic
+token exists. Figma primitives such as `tomato/500` and `tomato/300` are not
+tokens and must not be bound to anything a component renders.
+
+### Risk colors
+
+Risk and relevance are different systems.
+
+Risk labels use this ordered severity system. All seven are the complete set;
+there is no eighth label and no second spelling of any of them:
+
+| Label     | Token prefix     | Background | Foreground | Border    |
+| --------- | ---------------- | ---------- | ---------- | --------- |
+| Critical  | `risk/critical`  | `#EF4E47`  | `#001F3E`  | `#C82728` |
+| Very High | `risk/very-high` | `#F28C28`  | `#001F3E`  | `#C86700` |
+| High      | `risk/high`      | `#F3B63F`  | `#001F3E`  | `#C78C00` |
+| Moderate  | `risk/moderate`  | `#E8D348`  | `#001F3E`  | `#BBA600` |
+| Low       | `risk/low`       | `#F2E76B`  | `#001F3E`  | `#C8BD3E` |
+| Pending   | `risk/pending`   | `#C0D6EB`  | `#001F3E`  | `#D1D7D9` |
+| Unknown   | `risk/unknown`   | `#EEF1F1`  | `#4B585E`  | `#D1D7D9` |
+
+`Pending` and `Unknown` deliberately leave the red-to-yellow severity
+spectrum. They communicate classification state, not danger.
+
+The risk scale does **not** use green. Never make a low-severity recall green
+or describe green as "safe."
+
+**Critical is one treatment everywhere.** The canonical Critical label is
+`risk/critical` — `#EF4E47` background, `#001F3E` foreground, `#C82728`
+border, visible label `CRITICAL` — on the feed card, on Recall Detail, and in
+any gallery. The older darker-red/white `label/Critical` treatment on the
+Recall Detail frame (bound to `tomato/500` with white text) is obsolete: it is
+not reproduced in code, and it is retired in Figma (see "Figma corrections for
+Cheyenne").
+
+**The mapping into these labels is business logic, not design.** Which recall
+gets which label is decided by `src/domain/risk-tier.ts` from the official
+FDA/FSIS classification set, and worded by `src/lib/risk-display.ts`. The
+design system looks a treatment up **by** the tier; it never infers, adjusts,
+or re-ranks one.
+
+### Personal relevance
+
+`Affects You` is **not a severity level**. It answers a different question:
+whether the recall is personally relevant to the user's saved location,
+retailers, allergens, or other personalization inputs.
+
+Use `relevance/affects-you`:
+
+- Background: `#E2EE57`
+- Foreground/icon: `#001F3E`
+- Border: `#ADB600`
+
+Lime must mean **"this matters to you"**, not "safe," "resolved," or "low
+risk." In code the relevance palette is a separate object that cannot be
+indexed by a risk tier, and the Risk Label component cannot render it.
+
+### Dark mode
+
+Dark mode is **intentionally deferred**, not accidentally unsupported. The
+tokens define one light palette and no dark variant, and none may be added
+without approved tokens and designs.
+
+Until then the app is locked to light appearance (founder decision,
+2026-09-14): `userInterfaceStyle` is `light` in `app.json`, which is the
+supported Expo configuration, and the root navigation theme is pinned to light
+so no screen can follow the system into dark. There is no toggle and no fake
+dark token. The legacy provisional theme the un-migrated screens still use
+carries dark values from before the system existed; they are unreachable now
+and go when the last screen migrates.
+
+## Typography
+
+Lotly uses two type families with distinct jobs.
+
+### Public Sans
+
+**Public Sans** is the primary interface family. It provides the clarity and
+institutional credibility needed for public-information content without
+making the app feel governmental or clinical.
+
+Use it for:
+
+- page and section headings
+- product names
+- manufacturer names
+- explanatory body copy
+- location and retailer information
+- search
+- navigation
+- links and actions
+
+### IBM Plex Mono
+
+**IBM Plex Mono** is reserved for structured, verified, scan-oriented
+metadata. It should feel factual rather than decorative.
+
+Use it for:
+
+- risk labels and the relevance label
+- lot codes and identifiers when shown as compact metadata
+- other terse structured facts where monospacing improves recognition
+
+Risk labels are uppercase.
+
+Do not use IBM Plex Mono for paragraph copy, buttons, navigation labels,
+product titles, or long instructions.
+
+### The type scale
+
+The canonical hierarchy, with the Figma text style each token _is_ and the
+whole-point line height React Native renders (the ratio resolved and rounded,
+which is also what Figma draws — a 19px Heading 3 measures 26 high on the
+canvas):
+
+| Token             | Figma style       | Family        | Size | Weight | Ratio | Line height | Tracking        |
+| ----------------- | ----------------- | ------------- | ---- | ------ | ----- | ----------- | --------------- |
+| `display`         | —                 | Public Sans   | 33   | 700    | 1.2   | 40          | 0               |
+| `heading-1`       | —                 | Public Sans   | 28   | 700    | 1.2   | 34          | 0               |
+| `heading-2`       | `Heading 2`       | Public Sans   | 23   | 700    | 1.3   | 30          | 0               |
+| `heading-3`       | `Heading 3`       | Public Sans   | 19   | 600    | 1.35  | 26          | 0               |
+| `body`            | —                 | Public Sans   | 16   | 400    | 1.5   | 24          | 0               |
+| `body-small`      | `Body Small`      | Public Sans   | 13   | 400    | 1.4   | 18          | 0               |
+| `body-small-bold` | `Body Small Bold` | Public Sans   | 13   | 600    | 1.4   | 18          | 0               |
+| `caption`         | `Caption`         | Public Sans   | 12   | 500    | 1.35  | 16          | 0               |
+| `micro-caption`   | `Micro-caption`   | Public Sans   | 10   | 500    | 1.35  | 14          | 0               |
+| `label`           | `Label`           | IBM Plex Mono | 12   | 500    | 1.35  | 16          | 0.02em = 0.24pt |
+| `label-strong`    | —                 | IBM Plex Mono | 12   | 600    | 1.35  | 16          | 0.02em = 0.24pt |
+
+No other size, weight, or leading is approved. Figma's `Label` style records
+its tracking as `2` (percent); that is the same `0.02em`.
+
+### Fonts
+
+Both families are installed as direct dependencies —
+`@expo-google-fonts/public-sans`, `@expo-google-fonts/ibm-plex-mono`, and
+`expo-font`, at the versions Expo selected for SDK 57 — and
+`CUSTOM_FONTS_INSTALLED` in `src/constants/design-tokens.ts` is `true`. The
+installing command, for the record:
+
+```bash
+npx expo install expo-font @expo-google-fonts/public-sans @expo-google-fonts/ibm-plex-mono
+```
+
+`design-tokens.test.ts` pins that flag to `package.json`, so the two cannot
+disagree in either direction.
+
+The root layout (`src/app/_layout.tsx`) loads exactly six faces, once, before
+the first screen renders, and holds the native splash until they have settled:
+
+- `PublicSans_400Regular`
+- `PublicSans_500Medium`
+- `PublicSans_600SemiBold`
+- `PublicSans_700Bold`
+- `IBMPlexMono_500Medium`
+- `IBMPlexMono_600SemiBold`
+
+`fontFace` in the tokens maps each family-and-weight the contract uses to the
+name the package registers, and a typography token can only name one of those
+six — an unapproved weight is a compile error, not a synthesized face.
+`textStyle` therefore emits `fontFamily` and never `fontWeight`: React Native
+selects a custom face by its full name, and a weight on a single-weight face
+makes iOS synthesize one.
+
+If loading fails, the app is not left blank: the splash still hides, the
+failure is named in development, and React Native's own fallback face stands
+in for any name it cannot resolve. That is a degraded state to fix, never a
+design.
+
+## Layout
+
+Lotly is designed mobile-first around a **393px-wide iPhone frame**.
+
+### Base geometry
+
+- Reference viewport: 393px wide
+- Standard horizontal page margin: 16px
+- Standard content width: 361px at the reference width
+- Bottom navigation: 72px tall
+- Search field: 44px tall
+- Recall cards: full content width
+- Risk and relevance labels: 24px tall
+- Common icon glyph size: 20px for utility icons, 24px in the bottom
+  navigation, 16px inline with text, 12px inside labels
+
+The 393px frame is a **reference, not a constraint**. Screens size to the real
+device width: the page margin is what carries over, content width is what is
+left, and a card is as wide as the content column. Nothing is fixed to 361px
+or 393px in code.
+
+### Safe areas
+
+Honor native safe areas in implementation rather than hardcoding a status-bar
+or home-indicator inset. Figma's frames use `48px` (Feed) and `40px` (Detail)
+of top padding to stand in for the status bar; in code that is the safe-area
+inset plus a spacing token. Scrollable content adds the bottom inset to its
+own bottom padding; the bottom navigation sits above the home indicator.
+
+### Spacing
+
+Use the established spacing scale only:
+
+`4 / 8 / 12 / 16 / 24 / 32 / 48`
+
+Prefer 8–16px for internal component rhythm and 16–24px for separation between
+major content groups. Use 4px only for tightly related micro-elements such as
+an icon-to-label gap.
+
+Do not introduce arbitrary values when a scale value works. Figma values off
+the scale are accidental (see "Normalized Figma values") and are snapped to
+the nearest step, never copied.
+
+### Feed
+
+The Feed is a vertically scrolling recall feed. Its hierarchy is:
+
+1. top utility/header area
+2. search — search lives **inside** the Feed and is never a destination
+3. feed-mode and filter controls (All / Affects me, Location, Category, Risk)
+4. section heading
+5. recall cards
+6. persistent bottom navigation
+
+The category/filter row may overflow horizontally when needed, but it must not
+cause the page itself to overflow.
+
+Feed chips are browse/navigation controls, not a pile of independent
+multi-select toggles. Keep unrelated filter dimensions visually distinct. In
+the shipped product `All` and `Affects me` are mutually exclusive **feed
+modes** and the Location / Risk / Category chips are filters that apply to the
+`All` feed only; the visual row may present them together, the behavior stays.
+
+The Feed's section headings are decided by the presentation contract
+(`Recent activity`, `Older active notices`, `Affects me`), not by the
+composition.
+
+### Affected Products table
+
+Affected Products intentionally uses a **horizontally scrollable table** on
+mobile.
+
+Rules:
+
+- The table viewport is exactly the content width.
+- `Clip content` is enabled on the viewport.
+- The inner table may be wider than the viewport.
+- **Horizontal scrolling is applied to the table viewport only.** No other
+  surface in the app scrolls horizontally except the filter-chip row.
+- The screen/page and main inner-content frame must never horizontally pan.
+- The section heading, `See all (N)`, and any callout remain fixed outside the
+  scrolling viewport.
+- Preserve structured columns such as Product, Package Size, Expiration Date,
+  Barcode (UPC), and Lot Codes; the columns actually rendered are decided by
+  the presentation contract from what the notice states.
+
+Never allow the wide table to create page-level horizontal overflow.
+
+## Elevation & Depth
+
+Lotly is mostly flat. Depth is used sparingly to separate interactive/product
+surfaces from the warm page background.
+
+The canonical card elevation is `elevation/card`:
+
+`0 2px 8px rgba(0, 0, 0, 0.06)`
+
+Use it for primary card-like surfaces such as recall cards and similar
+elevated content containers. Figma's `Elevation/Card` effect style is this
+value (`#0000000F` is 6% black).
+
+Do not stack multiple strong shadows or use glossy/glass effects. Hierarchy
+should primarily come from:
+
+- warm page vs. white surface contrast
+- borders
+- spacing
+- typography
+- restrained card elevation
+
+Risk and relevance labels do not need shadows.
+
+## Shapes
+
+The shape language is soft but controlled. Rounded corners communicate
+consumer-product warmth without becoming playful or toy-like.
+
+Canonical radii:
+
+- **`radius/4` (4px):** risk and relevance labels
+- **`radius/8` (8px):** information callouts, media tiles, and compact
+  structured containers
+- **`radius/12` (12px):** search/input surfaces
+- **`radius/16` (16px):** recall cards and larger product surfaces
+- **`radius/full` (999px):** pill-shaped navigation/filter chips
+
+Keep radii tokenized. Do not type arbitrary corner values directly into
+reusable components if an existing radius token fits.
+
+Avoid extreme bubbly shapes on content-heavy surfaces. Full-pill geometry is
+for chips and compact controls, not large cards.
+
+## Components
+
+### Search Bar
+
+The search bar is a 44px-tall white surface with `radius/12`, `spacing/12`
+padding, and `elevation/card`. It uses a secondary-color search icon and
+secondary text for placeholder content, both `text/secondary` in meaning even
+where Figma binds the icon-token twin.
+
+Default placeholder pattern:
+
+`Search product, brands, or recalls.`
+
+Search must feel like a primary discovery tool, not a form field buried in
+chrome. It is a control inside the Feed: it filters the loaded feed and never
+navigates.
+
+### Navigation Chips
+
+Navigation/filter chips use pill geometry and compact heights in the 32–36px
+range.
+
+- Selected states use `background/brand` with `text/inverse`.
+- Default states stay light and low-emphasis: `background/surface` with
+  `text/primary`.
+- Icons may precede labels where they clarify meaning.
+- Dropdown chevrons may be used for controls such as Location or Category.
+- "All" behaves as a selected browse state.
+- "Affects me" is a personalized filter/control and should remain semantically
+  distinct from ordinary product categories.
+
+A 32px chip is under the minimum touch target; the pressable grows to 44pt
+through `hitSlop` without changing the layout. Do not turn every surfaced chip
+into an independent multi-select toggle.
+
+### Risk Label
+
+Risk Label is a 24px-high compact status label using IBM Plex Mono `label`
+type, uppercase text, `radius/4`, `spacing/8` horizontal and `spacing/4`
+vertical padding, a 1px border in the tier's own border color, and no shadow.
+
+Supported states, and the only states:
+
+- Critical
+- Very High
+- High
+- Moderate
+- Low
+- Pending
+- Unknown
+
+The visible copy and semantic risk token must describe the **same** level. Do
+not shift or reuse neighboring severity colors. The label text is mandatory —
+color is the second, redundant channel — and the spoken label ("Risk level:
+High") comes from the presentation contract.
+
+There is exactly one Risk Label component (`src/components/ui/risk-label.tsx`),
+one size, and one word: Recall Detail renders the same 24px label as the feed
+card, reading exactly `CRITICAL`, `VERY HIGH`, `HIGH`, `MODERATE`, `LOW`,
+`PENDING`, or `UNKNOWN`. The former Detail wording `CRITICAL RISK` is retired
+(founder decision, 2026-09-14); `risk-display.test.ts` pins the closed
+seven-word vocabulary on both surfaces.
+
+### Relevance Label
+
+Relevance Label is separate from Risk Label.
+
+Current supported state:
+
+`AFFECTS YOU`
+
+It uses `relevance/affects-you`: lime, navy text, a 12px flag icon, `radius/4`,
+and a 1px `#ADB600` border.
+
+Never implement `Affects You` as an additional risk/severity variant.
+
+### Recall Card
+
+Recall Card is the primary feed object. It is a white card at the content
+width with `radius/16`, a 1px `border/subtle` border, `elevation/card`, strong
+product-title hierarchy, and a trailing save/bookmark action.
+
+The component has two independent state dimensions:
+
+**Relevance**
+
+- Affects You
+- Does not affect you
+
+**Media**
+
+- Image
+- No Image
+
+The complete supported matrix is:
+
+- Affects You + Image
+- Affects You + No Image
+- Does not affect you + Image
+- Does not affect you + No Image
+
+If a product image exists, show the actual product image. If it does not,
+preserve the same media footprint and render `background/media-placeholder`
+(`#EEF1F1`). Do not collapse the media area, leave a broken-image icon, or
+substitute an unrelated stock image.
+
+A relevance badge is shown only when the recall affects the user.
+
+Card content hierarchy:
+
+1. risk label + recency/update metadata
+2. optional Affects You relevance label
+3. product media
+4. product title
+5. manufacturer/brand
+6. one-sentence recall summary
+7. affected location
+8. save/bookmark affordance
+
+A Public Health Alert additionally carries its explicit notice label (shipped
+behavior; not yet in Figma). Product titles and summaries must tolerate
+realistic wrapping without breaking card layout.
+
+### Information Callouts
+
+Two callout types are currently established.
+
+**Warning**
+
+- `relevance/affects-you/background` (lime)
+- `text/primary` text and icon
+- `radius/8`
+- Used for personal relevance, e.g. `Warning: This recall affects you.` The
+  sentence itself comes from the presentation contract.
+
+**Information**
+
+- `background/subtle` (soft blue)
+- `text/primary` text and icon
+- `radius/8`
+- Used for neutral guidance
+
+Do not use the lime warning treatment for generic informational content. Note
+that Recall Detail currently ships **no** informational callout above
+Affected Products (a founder decision, P2a); see "Known Figma/code conflicts".
+
+### Disclosure Control
+
+Every in-place reveal — the jurisdiction list, the Affected Products rows, and
+each multi-value cell — renders through one control
+(`src/components/ui/disclosure-control.tsx`): `caption` type in
+`action/secondary`, visible text `See all (N)` while collapsed and `Show less`
+while expanded, where `N` is always the complete count.
+
+It is a button with a real expanded state: VoiceOver announces the spoken
+label from the presentation contract ("See all 22 lot codes", "Show less")
+plus `button` and `collapsed` / `expanded`. Its visible footprint is one
+caption line, so it reaches the 44pt minimum target through `hitSlop`. Nothing
+animates when it toggles: the list simply grows, which is also its
+reduced-motion behavior.
+
+### Recall Detail
+
+The recall detail view prioritizes source credibility and user actionability.
+
+Header hierarchy:
+
+1. navigation and utility actions
+2. risk label + the one material activity date
+3. product title
+4. manufacturer/brand
+5. official source link
+6. product image
+
+The official-source copy is data-driven. The shipped label is
+`View the official {agency} report` (`…alert` for a Public Health Alert),
+where the agency is the notice's own source (`FDA`, `FSIS`). Never hardcode
+`FDA` as the universal source. Keep the external-link icon.
+
+Section order — this is product behavior and must survive any restyle:
+
+1. Header / product identity
+2. What Happened
+3. Where It Was Sold
+4. Health Risk
+5. Affected Products
+
+Community information belongs **under** the official Where It Was Sold
+statement, never beside or above it.
+
+Keep section headings direct and plain-language. Avoid bureaucratic
+terminology when a clear consumer phrase is available.
+
+### Bottom Navigation
+
+The bottom navigation is a 72px-tall white surface with 24px icons. It has
+**exactly three visible destinations**, in this order, with Feed initial:
+
+- Feed (home icon)
+- Saved (bookmark icon)
+- Profile (user icon)
+
+Search stays inside Feed. There is no fourth tab, and Feed is never renamed
+Home in consumer-facing UI. Recall Detail, the shopper-report questionnaire,
+the settings pages and the trust documents push over the bar.
+
+The three destinations are visibly labelled `Feed`, `Saved`, `Profile`
+(founder decision, 2026-09-14), in `caption` type on `background/surface`,
+`action/primary` navy when selected and `text/secondary` otherwise, and each
+carries its name as its accessibility label with the selected state exposed.
+Icons join the labels once an icon set is chosen; they never replace them.
+
+Interactive targets should be comfortably tappable even when the visible glyph
+is only 20–24px: each tab is a 44pt-or-larger target.
+
+### Iconography
+
+Use **Lucide-style** outline icons with consistent stroke weight.
+
+Common patterns include:
+
+- search
+- filter/sliders
+- map pin
+- bell
+- bookmark
+- home
+- user
+- chevron
+- share
+- external link
+- flag
+- warning
+- information
+
+Use semantic icon colors (`icon/primary`, `icon/secondary`, `icon/inverse`,
+`icon/brand`). Do not mix filled illustration-style icons into the core
+utility UI without an explicit approved design. Icon glyphs come from the
+`icon-size` scale; an icon inside a label is 12, inline with text 16, a
+utility control 20, and a tab 24.
+
+## Product contracts the design must carry
+
+These are shipped behaviors. They are recorded here so that no visual pass
+removes or reorders them; the words are the presentation contracts' own and
+are pinned by `src/constants/design-contract.test.ts`.
+
+### Community shopper reports
+
+Rendered beneath the official Where It Was Sold statement on Recall Detail.
+The server gate is authoritative: while it is off the block renders nothing at
+all, the app holds no local feature flag, and production shopper reports are
+not enabled by any design work.
+
+When no installation report exists:
+
+- Below the public threshold: `Did you find this product here?` followed by
+  the action `Add your report`.
+- At three or more reports: `{count} shoppers reported finding it here`
+  followed by `Add your report`.
+
+When this installation already has a report:
+
+- The action reads `Edit your report`.
+- No personal confirmation sentence appears on Recall Detail (no restatement
+  of the state, retailer, or timeframe submitted).
+- Removal is available only inside the edit flow, behind a confirmation.
+
+Unknown geography:
+
+- Show no community geography metrics and no state choices.
+- Only the purchase-timeframe answer remains available.
+
+### Questionnaire
+
+One question per screen, in this order:
+
+1. **State** — always first.
+   - One-state recall: `Did you find this product in {State}?` with Yes/No.
+     "No" ends the flow with nothing stored.
+   - Multi-state recall: ask directly which listed state:
+     `What state did you find it in?`
+   - Unknown geography: omit the state question.
+2. **Retailer** — only when the notice names canonical retailers; otherwise
+   the question is absent.
+3. **Purchase timeframe.**
+4. **Review.**
+5. **Disclosure** — exactly:
+   `Your anonymous report contributes to community totals and does not change official recall information. Learn more.`
+   `Learn more.` opens Privacy & Data Controls.
+6. **Submit** — the action reads `Submit report`, or `Update report` when
+   editing an existing report.
+
+Success:
+
+- Title: `Thanks for contributing!`
+- Body: `Your report helps other shoppers make safer decisions.`
+
+Do not collect health information. There is no field for symptoms, illness,
+purchase proof, free text, or location beyond the state.
+
+### Detail disclosure behavior
+
+Jurisdictions (Where It Was Sold):
+
+- Five or fewer: show all.
+- More than five: show the first five and `See all (N)`.
+- Expanded action: `Show less`.
+- Do not reorder values — a collapsed list is always a prefix of the expanded
+  one, in the source's order.
+
+Affected products:
+
+- Initially show the first product row.
+- If more exist, show `See all (N)` beside the section heading.
+- Expanded action: `Show less`.
+
+Multi-value cells:
+
+- Show the first two values.
+- More than two uses that cell's own independent `See all (N)` control.
+- Explicit identifier/date pairs remain aligned line-for-line: line _n_ of the
+  code column sits level with line _n_ of its date column, and an undated
+  code keeps a blank line so nothing below it shifts.
+- A paired group expands and collapses together; one column can never move
+  alone.
+- Never reconstruct pairs by array position. A pair exists only where the
+  source stated it.
+
+## Interaction states
+
+Every reusable component defines these states; a screen may not leave one to
+chance.
+
+- **Loading** — a plain secondary-text message (`Loading…`) in the content
+  column; no skeleton chrome, no spinner-only screens. Nothing that could be
+  mistaken for real recall content renders while data is absent.
+- **Empty** — a `heading-3` title with a `body-small` secondary explanation and
+  the one relevant action (for example the Feed's "No matching recalls" with
+  "Clear all"). Never an empty white card.
+- **Error** — the same shape as empty, with the honest message and no
+  fabricated fallback content. A missing image removes the tile or renders the
+  media placeholder; it never shows a broken-image glyph.
+- **Disabled** — `text/disabled` / `action/disabled`, with
+  `accessibilityState.disabled` set so the state is announced, not just
+  dimmed.
+- **Pressed** — a brief opacity reduction on the pressed element (60% is the
+  primitives' value); no color change that could read as a state change.
+- **Selected** — `background/brand` with `text/inverse` for chips and tabs,
+  and `accessibilityState.selected` (or `checked` for multi-select rows) set.
+  Selection is never carried by color alone: the label or a check mark also
+  changes.
+
+## Accessibility
+
+- **Minimum interactive target: 44×44pt.** A control whose visible footprint
+  is smaller grows through `hitSlop`; a layout may never leave a target short.
+  The token is `hit-target.minimum` and shared primitives derive their slop
+  from it.
+- **VoiceOver labels.** Every interactive element has an accessibility label
+  that names its action (`Save this recall`, `See all 10 jurisdictions`), and
+  every status label announces its meaning (`Risk level: High`) rather than
+  its visible text. Icon-only controls always carry a label.
+- **Expanded/collapsed state.** Every disclosure control sets
+  `accessibilityState.expanded`, so its state is announced and its visible
+  word (`See all (N)` / `Show less`) changes with it.
+- **Dynamic Type and text wrapping.** Text scales with the user's setting; no
+  `maxFontSizeMultiplier` caps anywhere. Product names, summaries, and cell
+  values wrap rather than truncate; only a paired identifier/date line is
+  capped to one line, so the two columns stay aligned. Layouts must survive a
+  200% text size without overlapping or clipping.
+- **Reduced motion.** The system has no essential motion: disclosures grow in
+  place, tabs switch without animation, and the only motion is the platform's
+  own navigation transition, which respects the Reduce Motion setting. Any
+  future animation must be skipped when
+  `AccessibilityInfo.isReduceMotionEnabled` reports true.
+- **Color is never the only channel.** Risk carries its word, relevance its
+  word and flag, selection its check or label change.
+- **Contrast.** Maintain WCAG AA for normal text: `text/primary` and
+  `text/secondary` on every page and surface token, and each risk foreground on
+  its own background.
+- **Safe areas** — see "Layout → Safe areas".
+
+## Implementation guardrails
+
+### Do not copy generated code from Figma
+
+Figma's design-context export is React + Tailwind (`<div className="flex
+gap-[var(--spacing/12,12px)] …">`). It is a **reference for values and
+composition only**. Copying it, or any DOM markup, Tailwind class, CSS
+variable, shadcn primitive, or web-only accessibility pattern (`aria-*`,
+`role=`) into this React Native app is prohibited. Every screen is built from
+React Native views, the tokens, and the shared primitives below.
+
+### Do not copy accidental fractional values
+
+Several Figma nodes carry values produced by scaling a group, not by a
+decision. They are normalized to the scale and never reproduced:
+
+| Figma value                    | Where                          | Normalized to              |
+| ------------------------------ | ------------------------------ | -------------------------- |
+| `17.786px` semibold            | card product title             | `heading-3` (19/600)       |
+| `11.233px` medium              | card brand, card location text | `caption` (12/500)         |
+| `12.169px` regular             | card summary                   | `body-small` (13/400)      |
+| `14.978px` gap                 | card content ↔ footer          | `spacing/16`               |
+| `11.233px` gap                 | card media ↔ text              | `spacing/12`               |
+| `7.489px` gap                  | card title block ↔ summary     | `spacing/8`                |
+| `3.744px` gap, `10px` gap      | card location icon gap, card   | `spacing/4`, `spacing/8`   |
+| `13.106px`, `18.722px`, `15px` | pin icon, bookmark, ext. link  | `icon-size/12`, `20`, `16` |
+| `194.711px` text column        | card                           | flex remainder             |
+| `202.437px` title width        | Detail title column            | flex remainder             |
+| `38px` + `48px` nav padding    | bottom navigation              | equal distribution         |
+
+### Extend the existing theme; do not build a parallel one
+
+- Tokens live in `src/constants/design-tokens.ts` (a leaf module: no React
+  Native runtime import, no CSS, no I/O) and are re-exported from
+  `src/constants/theme.ts`, which remains the app's one theme entry point.
+- The legacy provisional values in `theme.ts` (`Colors`, `Spacing`, `Radii`,
+  `Fonts`) still serve un-migrated screens. They are not extended. Each
+  screen's design milestone moves it onto the tokens.
+- Shared primitives live in `src/components/ui/` and consume tokens only:
+  `Text` (variant + semantic color), `Surface` (semantic background, radius,
+  border, elevation), `DisclosureControl`, and `RiskLabel`. A reusable
+  component contains no hex literal, no off-scale number, and no font size of
+  its own.
+- Use existing Expo Router / React Native patterns. No Tailwind, NativeWind,
+  styled-components, CSS variables, DOM elements, or new state or UI
+  libraries.
+- Preserve the 393px composition while laying out against the real device
+  width and safe areas.
+
+### React Native mapping
+
+| Token family            | React Native property                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `background/*`          | `backgroundColor` on a View (`Surface`)                                                                                                                 |
+| `text/*`, `action/*`    | `color` on a Text (`Text color=`); `action/secondary` is the link/disclosure color                                                                      |
+| `border/*`              | `borderColor` with `borderWidth: 1`                                                                                                                     |
+| `icon/*`                | the icon component's `color`                                                                                                                            |
+| `risk/*`, `relevance/*` | `backgroundColor` + `borderColor` on the label View, `color` on its Text                                                                                |
+| `spacing/N`             | `padding*`, `margin*`, `gap`, `rowGap`, `columnGap`                                                                                                     |
+| `radius/N`              | `borderRadius`                                                                                                                                          |
+| `elevation/card`        | `shadowColor #000000`, `shadowOffset {0, 2}`, `shadowRadius 8`, `shadowOpacity 0.06`, Android `elevation 2`                                             |
+| typography token        | `fontSize`, `lineHeight` (points), `letterSpacing` (points), and `fontWeight` — or `fontFamily` set to the registered face once the fonts are installed |
+| `icon-size/N`           | `width` and `height`                                                                                                                                    |
+| `hit-target.minimum`    | `minHeight`/`minWidth`, or `hitSlop` from `hitSlopToMinimum(visibleHeight)`                                                                             |
+
+### Figma ↔ code mapping
+
+| Figma                                    | Code                                                             |
+| ---------------------------------------- | ---------------------------------------------------------------- |
+| `home` frame `81:793`                    | `src/app/(tabs)/index.tsx` — the **Feed**                        |
+| `product information` frame `81:819`     | `src/app/recall/[id].tsx` — Recall Detail                        |
+| `nav bar` `163:259`                      | `src/app/(tabs)/_layout.tsx`                                     |
+| `Search-Bar` `33:429`                    | the search `TextInput` in the Feed                               |
+| `Nav-Chip` `33:445` (Default / Selected) | `FilterChip` in the Feed (the mode control and filter chips)     |
+| `Risk Label` `42:833` (seven severities) | `src/components/ui/risk-label.tsx`                               |
+| `Relevance Label` `42:840`               | the `Affects you` badge in `recall-card.tsx` (primitive pending) |
+| `Recall-Card` `42:987` (2×2 matrix)      | `src/components/recall-card.tsx`                                 |
+| `Information` `81:681` (Warning / Info)  | the affects-you banner in Recall Detail (primitive pending)      |
+| `Product-Information` `81:719`           | `AffectedProductsTableView` in Recall Detail                     |
+| `See all (3)` / `View Retailers (10)`    | `src/components/ui/disclosure-control.tsx`                       |
+| `label/Critical` `42:832`                | **retired** — nothing in code                                    |
+| text styles                              | `typography` in `design-tokens.ts` (`Text variant=`)             |
+| `Elevation/Card`                         | `elevation.card`                                                 |
+| color / spacing / radius variables       | `color`, `spacing`, `radius` in `design-tokens.ts`, same names   |
+
+### Development gallery
+
+The dev-only Design Preview hub (Profile → Development → Design Preview;
+`docs/recall-design-preview.md`) renders the primitives from the tokens — the
+type scale, three surfaces, the disclosure control, and all seven risk labels
+through the real `riskView` pipeline — so they can be inspected in a simulator
+before any screen is restyled. It is not a product surface.
+
+## Known Figma/code conflicts
+
+Recorded so nobody resolves them by accident. Code wins on behavior and copy;
+Figma wins on composition; open items are the founder's.
+
+1. **Critical label.** Detail (`81:828`) instantiates the obsolete
+   `label/Critical` (`tomato/500`, white text). Canonical is
+   `Risk Label / Severity=Critical` (`156:218`). Code renders the canonical
+   treatment; Figma
+   is corrected (see below).
+2. **Screen name.** Figma `home`; product `Feed`. Code and this contract use
+   Feed.
+3. **Bottom navigation labels.** Figma shows icons only. **Resolved
+   (2026-09-14):** the bar shows visible `Feed` / `Saved` / `Profile` labels;
+   icons are added beside them once an icon set is chosen, never instead.
+4. **Health Risk.** Absent from the Figma Detail frame; shipped between Where
+   It Was Sold and Affected Products and stays.
+5. **`View Retailers (10)`.** Figma's Where It Was Sold action. The shipped
+   product renders the full jurisdiction list with the `See all (N)`
+   disclosure and no retailer list (retailers are a deferred milestone). The
+   disclosure pattern applies; the retailer action does not exist.
+6. **Community line.** Figma: `12 shoppers reported finding it here.` (period,
+   link-styled, no action). Product: no period, followed by the
+   `Add your report` / `Edit your report` action, plus the below-threshold
+   question state. Copy is the contract's.
+7. **Informational callout above Affected Products.** Figma shows
+   `Check your package for the lot code and the best buy date near the barcode.`
+   The P2a
+   founder decision removed helper prose from Affected Products; the product
+   renders no such callout. Reinstating it is a founder decision, not a
+   design one.
+8. **Detail risk label text.** Figma shows `CRITICAL`; the shipped Detail
+   headline used to read `CRITICAL RISK` for rated tiers. **Resolved
+   (2026-09-14):** the visible label is exactly the canonical word on every
+   surface; the suffix is retired and the closed vocabulary is pinned.
+9. **Save control placement.** Figma puts the bookmark in the Detail header;
+   the shipped Detail renders the shared save control in the body beside the
+   recall's identity. The Detail milestone may move it to the header; it
+   remains the one shared control. The header's share icon has no product
+   behavior and is not implemented.
+10. **Feed mode vs. chips.** Figma renders `Affects me` as a chip in the filter
+    row; the product has a separate All / Affects me mode control and hides
+    filters in Affects me mode. Composition may merge the row; behavior stays.
+11. **Feed header bell.** No product behavior is defined for it (notification
+    settings live under Profile). Not implemented until one is.
+12. **Feed heading.** Figma `Recent recalls`; product `Recent activity` /
+    `Older active notices` / `Affects me` from the presentation contract.
+13. **Search placeholder.** Figma `Search product, brands, or recalls.`;
+    shipped `Search product, company, brand, or code` (the field genuinely
+    matches codes). Copy decision pending; the shipped string stands.
+14. **Dark mode.** Not in the approved system. **Resolved (2026-09-14):** the
+    app is locked to light (`userInterfaceStyle: light`, root theme pinned);
+    dark mode is deferred until it has approved tokens and designs.
+15. **Callout and table shadows.** Figma gives callouts and the product table
+    `0 2px 4px 6%` and the nav bar `0 -2px 8px 8%`; only `elevation/card` is a
+    token. Either bind them to `Elevation/Card` or approve named effect styles.
+
+## Figma corrections for Cheyenne
+
+Changes to make in Figma itself. Nothing here changes product behavior.
+
+- [ ] On `product information` (`81:819`), replace the `label/Critical`
+      instance (`81:828`) with `Risk Label / Severity=Critical` (`156:218`),
+      then delete the `label/Critical` symbol (`42:832`) and its `tomato/500`
+      / `tomato/300` bindings. Keep `CRITICAL` as the visible label.
+- [ ] Rename frame `home` (`81:793`) to `Feed`. Rename `product information`
+      (`81:819`) to `Recall Detail`.
+- [ ] Bind the `home` frame's page fill to `background/page` (it is a raw
+      `#fdfcf6`).
+- [ ] Add `radius/4`, `radius/12` and `radius/16` variables and rebind the
+      corners currently bound to `spacing/4` (labels), `spacing/12` (search
+      bar) and `spacing/16` (recall card). Only `radius/8` and `radius/full`
+      exist today.
+- [ ] Rebind misused tokens: Nav-Chip fills and text use `icon/primary` /
+      `icon/inverse` → `background/brand` / `text/inverse` (selected) and
+      `background/surface` / `text/primary` (default); the search placeholder
+      uses `icon/secondary` → `text/secondary`; callout text uses
+      `background/brand` → `text/primary`; the card's location text uses
+      `icon/primary` → a text token.
+- [ ] Recall-Card: replace the scaled values — title `17.786` → `Heading 3`,
+      brand and location `11.233` → `Caption`, summary `12.169` →
+      `Body Small`, gaps `14.978 / 11.233 / 7.489 / 3.744 / 10` →
+      `spacing/16 / 12 / 8 / 4 / 8`, icons `13.106` → 12 and `18.722` → 20, and
+      let the text column
+      fill rather than fixing it at `194.711`.
+- [ ] Recall Detail: `202.437` title-column width → fill; external-link icon
+      `15` → 16; the Where It Was Sold pin `13.106` → 12; top padding `40` →
+      a safe-area placeholder plus a spacing token (Feed's `48` likewise).
+- [ ] Add the missing Detail section **Health Risk** between Where It Was Sold
+      and Affected Products (body copy, an optional higher-risk line, an
+      optional `COMMON SYMPTOMS` bulleted list, an optional source link).
+- [ ] Replace `View Retailers (10)` with the jurisdiction disclosure
+      (`See all (N)` / `Show less` after five states) or remove it; add the
+      per-cell `See all (N)` control and a paired code/date column example to
+      `Product-Information`.
+- [ ] Community block: drop the period, add the `Add your report` action
+      beneath the count, and add the two other states — below threshold
+      (`Did you find this product here?` + `Add your report`) and existing
+      report (`Edit your report` alone).
+- [ ] Remove the informational callout above Affected Products, or flag it
+      for the founder (conflict 7).
+- [ ] Add the Public Health Alert notice label to Recall-Card and Detail, the
+      retracted-notice callout, and Pending / Unknown card examples.
+- [ ] Bottom navigation: name the three tabs `Feed`, `Saved`, `Profile` in
+      the layer names; replace the `38 + 48` padding with equal distribution;
+      show the `Feed` / `Saved` / `Profile` labels beneath the icons
+      (decided: labels are visible).
+- [ ] Nav-Chip: settle on one height (32 or 36) for the row.
+- [ ] Bind callout, product-table and nav-bar shadows to `Elevation/Card` or
+      add named effect styles (conflict 15).
+- [ ] Add screens that exist in the product but not in Figma: Saved, Profile,
+      the questionnaire (state / retailer / timeframe / review / success), and
+      the Feed's loading, empty and error states.
+
+## Do's and Don'ts
+
+- **Do** use semantic design tokens before raw palette values.
+- **Do** preserve the warm cream page background and white-card hierarchy.
+- **Do** use navy to communicate trust, structure, and important interaction.
+- **Do** keep severity color vivid enough to scan quickly.
+- **Do** keep `Affects You` visually prominent and semantically separate from
+  severity.
+- **Do** use Public Sans for normal interface language and IBM Plex Mono only
+  for compact structured metadata.
+- **Do** preserve the full Recall Card state matrix for relevance and media
+  availability.
+- **Do** render a neutral media placeholder when no product image exists.
+- **Do** keep the Affected Products table horizontally scrollable inside its
+  own clipped viewport.
+- **Do** populate the official-source agency from recall data.
+- **Do** preserve current business logic and supported data fields when
+  implementing from Figma.
+- **Do** maintain WCAG AA contrast for normal text.
+- **Do** give every interactive element a 44pt target and a spoken label.
+
+- **Don't** interpret lime as low risk, safety, success, or resolution.
+- **Don't** use green as part of the recall-severity scale.
+- **Don't** hardcode `FDA` as the source agency.
+- **Don't** allow the Affected Products table to make the entire screen
+  scroll sideways.
+- **Don't** collapse no-image Recall Cards into a different card geometry.
+- **Don't** use raw primitive colors in reusable components when a semantic
+  token exists.
+- **Don't** introduce arbitrary spacing or corner-radius values when a defined
+  token works.
+- **Don't** copy Figma's generated React/Tailwind, DOM markup, or CSS into
+  React Native.
+- **Don't** add a fourth navigation destination or call the Feed "Home".
+- **Don't** remove or reorder shipped product information because Figma lacks
+  it.
+- **Don't** add sirens, shields, emergency-alert motifs, or government-style
+  warning chrome as generic branding.
+- **Don't** invent the final Lotly logo or brand mark until an approved asset
+  exists.
+- **Don't** replace product data with decorative or speculative content.

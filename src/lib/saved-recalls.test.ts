@@ -155,7 +155,7 @@ test('a saved item opens the ordinary Recall Details route, through the shared c
   assert.match(CARD, /pathname: '\/recall\/\[id\]', params: \{ id: model\.id \}/);
   // Saved renders NO card of its own — one implementation, so a saved recall
   // can never word anything differently from the feed.
-  assert.ok(!SAVED_SCREEN.includes('StyleSheet') || !SAVED_SCREEN.includes('RiskBadge'));
+  assert.ok(!SAVED_SCREEN.includes('StyleSheet') || !SAVED_SCREEN.includes('RiskLabel'));
   assert.ok(!SAVED_SCREEN.includes('buildDetailModel'));
 });
 

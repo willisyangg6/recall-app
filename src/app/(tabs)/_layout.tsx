@@ -14,24 +14,36 @@
  * WITHIN Feed (the search field and the All / Affects me segmented control),
  * because they narrow one feed rather than being separate places.
  *
- * ## Provisional appearance
+ * ## Appearance (P2B0 follow-up)
  *
- * Labels only, no icons: the app installs no icon set, and adding one for
- * this milestone would be a dependency ahead of the design system rather
- * than a product need. `tabBarIconStyle: display none` reclaims the space
+ * The three destinations are visibly labelled `Feed`, `Saved`, `Profile`
+ * (founder decision, 2026-09-14), in the design system's caption type on a
+ * white surface: brand navy for the selected tab, secondary grey otherwise,
+ * with `border/subtle` as the hairline above. Selection is also carried by
+ * react-navigation's `selected` accessibility state, never by colour alone.
+ *
+ * Icons are still absent: no icon set is installed, and choosing one is a
+ * dependency decision for the Feed milestone (DESIGN.md, "Bottom
+ * Navigation"). `tabBarIconStyle: display none` reclaims the space
  * react-navigation reserves for the missing icon so the labels sit centred.
- * Dimensions, colors, and iconography are the design-system pass's to
- * decide; nothing here encodes a final visual decision.
  */
 
 import { Tabs } from 'expo-router/js-tabs';
+
+import { color, textStyle } from '@/constants/design-tokens';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
         tabBarIconStyle: { display: 'none' },
-        tabBarLabelStyle: { fontSize: 13 },
+        tabBarLabelStyle: textStyle('caption'),
+        tabBarActiveTintColor: color['action/primary'],
+        tabBarInactiveTintColor: color['text/secondary'],
+        tabBarStyle: {
+          backgroundColor: color['background/surface'],
+          borderTopColor: color['border/subtle'],
+        },
       }}>
       <Tabs.Screen
         name="index"

@@ -1626,7 +1626,11 @@ personalization, or notifications.
 
 ### Provisional appearance
 
-Everything visual here is provisional, pending the design system:
+Everything visual here is provisional, pending the per-screen design
+milestones. The design contract itself now exists —
+[../DESIGN.md](../DESIGN.md) (P2B0) records the tokens, the three
+destinations, and the rules below survive any restyle — and the risk label on
+the card already renders through its `RiskLabel` primitive:
 
 - Tab labels only, no icons — the app installs no icon set, and adding a
   dependency for one ahead of the design system would be a product decision
@@ -1634,8 +1638,9 @@ Everything visual here is provisional, pending the design system:
   space react-navigation reserves for the missing icon.
 - The save control is the existing themed chip primitive, the same one the
   filter chips use.
-- Tab-bar dimensions and colors are whatever the platform default gives;
-  nothing here encodes a final visual decision.
+- Tab-bar colors and the label type now come from the design tokens (P2B0
+  follow-up: brand navy selected, secondary grey otherwise, Public Sans
+  caption, white surface); dimensions are still the platform default.
 
 Restyling later means touching `src/app/(tabs)/_layout.tsx`,
 `components/save-recall-button.tsx`, and `components/recall-card.tsx` —

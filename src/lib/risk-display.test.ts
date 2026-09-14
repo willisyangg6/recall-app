@@ -34,7 +34,7 @@ test('A. Class I only — Critical, official Class I', () => {
   const v = view(['class_I']);
   assert.equal(v.tier, 'critical');
   assert.equal(v.badgeLabel, 'CRITICAL');
-  assert.equal(v.headlineLabel, 'CRITICAL RISK');
+  assert.equal(v.headlineLabel, 'CRITICAL');
   assert.deepEqual(v.official, {
     heading: 'Official FDA classification',
     text: 'Class I',
@@ -46,7 +46,7 @@ test('B. Class II only — High, official Class II', () => {
   const v = view(['class_II']);
   assert.equal(v.tier, 'high');
   assert.equal(v.badgeLabel, 'HIGH');
-  assert.equal(v.headlineLabel, 'HIGH RISK');
+  assert.equal(v.headlineLabel, 'HIGH');
   assert.equal(v.official?.text, 'Class II');
   assert.equal(v.official?.heading, 'Official FDA classification');
 });
@@ -55,7 +55,7 @@ test('C. Class III only — Low, official Class III, never called safe', () => {
   const v = view(['class_III']);
   assert.equal(v.tier, 'low');
   assert.equal(v.badgeLabel, 'LOW');
-  assert.equal(v.headlineLabel, 'LOW RISK');
+  assert.equal(v.headlineLabel, 'LOW');
   assert.equal(v.official?.text, 'Class III');
   assert.match(v.note ?? '', /still an active recall/);
   assert.doesNotMatch(v.note ?? '', /safe/i);
@@ -65,7 +65,7 @@ test('D. Class I + II — Very High, both classes named, difference explained', 
   const v = view(['class_I', 'class_II']);
   assert.equal(v.tier, 'very_high');
   assert.equal(v.badgeLabel, 'VERY HIGH');
-  assert.equal(v.headlineLabel, 'VERY HIGH RISK');
+  assert.equal(v.headlineLabel, 'VERY HIGH');
   assert.deepEqual(v.official, {
     heading: 'Official FDA classifications',
     text: 'Class I and Class II',
@@ -77,7 +77,7 @@ test('E. Class II + III — Moderate, both classes named', () => {
   const v = view(['class_II', 'class_III']);
   assert.equal(v.tier, 'moderate');
   assert.equal(v.badgeLabel, 'MODERATE');
-  assert.equal(v.headlineLabel, 'MODERATE RISK');
+  assert.equal(v.headlineLabel, 'MODERATE');
   assert.equal(v.official?.text, 'Class II and Class III');
   assert.equal(v.official?.heading, 'Official FDA classifications');
 });
@@ -227,10 +227,9 @@ test('every label reaches the badge, the headline and the spoken label intact', 
     assert.equal(v.tier, tier);
     assert.equal(v.accessibilityLabel, `Risk level: ${word}`);
     assert.equal(v.badgeLabel, word.toUpperCase());
-    // Only the five severities take the " RISK" suffix: an absent
-    // classification is not a level of risk.
-    const severity = tier !== 'pending' && tier !== 'unknown';
-    assert.equal(v.headlineLabel, severity ? `${word.toUpperCase()} RISK` : word.toUpperCase());
+    // The Detail label is the same canonical word as the feed badge (founder
+    // decision, 2026-09-14): no " RISK" suffix on any tier.
+    assert.equal(v.headlineLabel, word.toUpperCase());
   }
 });
 
@@ -263,4 +262,40 @@ test('no retired risk label survives anywhere riskView can render it', () => {
   for (const retired of [/\bMinimal\b/i, /\bNot rated\b/i, /\bUnrated\b/i, /Risk pending/i]) {
     assert.doesNotMatch(rendered, retired);
   }
+});
+
+test('every rendered risk label is one of the seven canonical words — on both surfaces', () => {
+  // The complete label vocabulary, uppercased the way the badge and the Detail
+  // label render it. Nothing else may ever reach a screen: no " RISK" suffix,
+  // no "Risk pending", no "Not rated".
+  const canonical = ['CRITICAL', 'VERY HIGH', 'HIGH', 'MODERATE', 'LOW', 'PENDING', 'UNKNOWN'];
+  const classifications: Classification[] = [
+    classificationOf(['class_I']),
+    classificationOf(['class_I', 'class_II']),
+    classificationOf(['class_I', 'class_III']),
+    classificationOf(['class_I', 'class_II', 'class_III']),
+    classificationOf(['class_II']),
+    classificationOf(['class_II', 'class_III']),
+    classificationOf(['class_III']),
+    classificationOf([]),
+    { value: 'not_applicable_pha', sourceText: null, officialClasses: [] },
+    { value: 'multiple_classes', sourceText: null },
+  ];
+  const seen = new Set<string>();
+  for (const classification of classifications) {
+    for (const agency of ['FDA', 'FSIS'] as const) {
+      const v = riskView(classification, agency);
+      assert.ok(v.badgeLabel !== null && canonical.includes(v.badgeLabel), `${v.badgeLabel}`);
+      assert.ok(
+        v.headlineLabel !== null && canonical.includes(v.headlineLabel),
+        `${v.headlineLabel}`,
+      );
+      // One word, both surfaces — the feed and Detail can never disagree.
+      assert.equal(v.headlineLabel, v.badgeLabel);
+      seen.add(v.badgeLabel);
+    }
+  }
+  // Every one of the seven is reachable, so the vocabulary is complete as
+  // well as closed.
+  assert.deepEqual([...seen].sort(), [...canonical].sort());
 });

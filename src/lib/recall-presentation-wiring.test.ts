@@ -21,6 +21,11 @@ const HOME = [
   readFileSync(join(__dirname, '..', 'components', 'recall-card.tsx'), 'utf8'),
 ].join('\n');
 const DETAIL = readFileSync(join(__dirname, '..', 'app', 'recall', '[id].tsx'), 'utf8');
+/** The shared disclosure primitive (P2B0) every Detail reveal renders through. */
+const DISCLOSURE = readFileSync(
+  join(__dirname, '..', 'components', 'ui', 'disclosure-control.tsx'),
+  'utf8',
+);
 
 /** Formatting entry points the screens must no longer call directly. */
 const RETIRED_SCREEN_FORMATTERS = [
@@ -164,11 +169,24 @@ test('Affected Products renders the shared P2b table model, not screen-built row
   // The table scrolls horizontally as ONE unit — header and rows together.
   assert.match(DETAIL, /ScrollView[\s\S]{0,40}horizontal/);
   // The reveal control comes from the model ("See all (N)" / "Show less"),
-  // and no screen-invented count or label exists: the screen renders
-  // `DisclosureControl` values and composes no disclosure copy at all.
+  // and no screen-invented count or label exists: the screen hands the
+  // model's `DisclosureControl` to the shared primitive (P2B0,
+  // components/ui/disclosure-control.tsx), which renders its values and
+  // composes no disclosure copy of its own either.
   assert.match(DETAIL, /table\.rowsDisclosure/);
-  assert.match(DETAIL, /control\.expandLabel/);
-  assert.match(DETAIL, /control\.collapseLabel/);
+  assert.match(
+    DETAIL,
+    /import \{ DisclosureControl \} from '@\/components\/ui\/disclosure-control'/,
+  );
+  assert.match(DETAIL, /<DisclosureControl\s+control=\{affectedProducts\.table\.rowsDisclosure\}/);
+  assert.ok(
+    !DETAIL.includes('function DisclosureButton'),
+    'a screen-local disclosure control returned',
+  );
+  assert.match(DISCLOSURE, /control\.expandLabel/);
+  assert.match(DISCLOSURE, /control\.collapseLabel/);
+  assert.ok(!DISCLOSURE.includes("'See all"), 'the See all label is primitive-composed');
+  assert.ok(!DISCLOSURE.includes("'Show less"), 'the Show less label is primitive-composed');
   assert.ok(!DETAIL.includes("'See all"), 'the See all label is screen-composed');
   assert.ok(!DETAIL.includes("'Show less"), 'the Show less label is screen-composed');
   assert.ok(!DETAIL.includes("'Show fewer"), 'the retired collapse word returned');

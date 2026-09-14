@@ -41,7 +41,12 @@ export interface RiskView {
   tier: ConsumerRiskTier;
   /** Home card badge ("HIGH"); null when there is no rated tier to badge. */
   badgeLabel: string | null;
-  /** Detail headline ("HIGH RISK"); null only when no rating is ever expected. */
+  /**
+   * Detail label ("HIGH") — the same canonical word as `badgeLabel` (founder
+   * decision, 2026-09-14: the visible label is exactly the tier word on every
+   * surface; the former " RISK" suffix is retired). Kept as its own field so
+   * the two surfaces stay independently addressable.
+   */
   headlineLabel: string | null;
   /** Spoken label — risk is never communicated by color alone. */
   accessibilityLabel: string;
@@ -97,7 +102,6 @@ export function riskView(classification: Classification, sourceAgency: SourceAge
   const classes = officialClassesOf(classification);
   const status = classificationStatus(classification);
   const agency = agencyLabel(sourceAgency);
-  const rated = tier !== 'pending' && tier !== 'unknown';
 
   const official: OfficialClassificationView | null =
     status === 'not_applicable'
@@ -122,20 +126,21 @@ export function riskView(classification: Classification, sourceAgency: SourceAge
                 : null,
           };
 
-  // The two non-scale states carry ONE shared consumer label on both surfaces
-  // (the P2a rule, kept): they read as their own word alone — never with a
-  // " RISK" suffix, which would present an absent classification as a level of
-  // risk, and never labeled on one screen while silently unbadged on the
-  // other.
+  // Every tier carries ONE consumer label, identical on both surfaces: the
+  // canonical word, uppercased, and nothing else. The " RISK" suffix the five
+  // severities used to take on Detail is retired (founder decision,
+  // 2026-09-14) so the label set is exactly the seven words everywhere — a
+  // label can never be spelled one way on the feed and another on Detail.
   //
-  // The retired wording ("Risk pending" / "Not rated") is gone: Pending and
-  // Unknown are first-class members of the one label set now, so they are
-  // spelled and styled exactly like the five severities.
+  // Pending and Unknown were never suffixed (the P2a rule): a suffix would
+  // present an absent classification as a level of risk. They remain
+  // first-class members of the one label set, spelled and styled exactly like
+  // the five severities.
   const word = TIER_WORD[tier];
   return {
     tier,
     badgeLabel: word.toUpperCase(),
-    headlineLabel: rated ? `${word.toUpperCase()} RISK` : word.toUpperCase(),
+    headlineLabel: word.toUpperCase(),
     accessibilityLabel: `Risk level: ${word}`,
     note: TIER_NOTE[tier],
     official,

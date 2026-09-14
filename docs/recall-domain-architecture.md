@@ -1168,14 +1168,15 @@ agency did not. The app therefore carries two separate layers.
   recall is Pending. Because the tier is a pure function of the set, it is
   derived at read time and never stored: a second copy could only drift.
 - **Where each appears.** Home cards and the top of Recall Detail lead with
-  the consumer tier (badge + "HIGH RISK"), never with a regulatory class.
+  the consumer tier (one label reading "HIGH" on both), never with a regulatory class.
   The agency's own wording lives deeper in the detail screen ("Official FDA
   classifications — Class I and Class II", with "FDA assigned different
   classifications to different affected products." when mixed). Matcher
   internals — scores, evidence, event_id, recall_number — never reach a
   consumer surface. Risk is never communicated by color alone: every chip
   carries visible text plus a spoken "Risk level: …" label, and the tokens
-  live in one place (`RiskColors`, no green anywhere in the scale).
+  live in one place (`riskPalette` in `src/constants/design-tokens.ts`, no
+  green anywhere in the scale — see [../DESIGN.md](../DESIGN.md)).
 - **Material change compares SETS.** {I,III} → {I,II} keeps the consumer tier
   at High and is still a real regulatory change, so the authoritative class
   set — not the tier, and not the scalar — is what `detectChanges` diffs.

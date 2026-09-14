@@ -75,11 +75,16 @@ before offering it (see §4).
 | 16  | Detail · two identifier pairs                          | A code column and its date column aligned line for line, two complete pairs, and no control at all.                                                                                 |
 | 17  | Detail · several identifier pairs                      | Two complete pairs aligned across both columns behind ONE `See all (N)`; tapping reveals every remaining pair on both sides together, still aligned. Neither column can move alone. |
 
-The hub also renders a **risk-label gallery**: all seven consumer labels
-(Critical, Very High, High, Moderate, Low, Pending, Unknown) drawn through the
-real `riskView` pipeline from one classification per tier, so the words,
-casing, badge colours and spoken labels are the product's own — a wrong
-mapping shows up as a wrong badge.
+The hub also renders a **design foundation gallery** (P2B0): the type scale,
+three surfaces, and the shared disclosure control, all drawn from the tokens
+in `src/constants/design-tokens.ts` and the primitives in
+`src/components/ui/` (see [../DESIGN.md](../DESIGN.md)), followed by the
+**risk-label gallery**: all seven consumer labels (Critical, Very High, High,
+Moderate, Low, Pending, Unknown) drawn through the real `riskView` pipeline
+from one classification per tier by the product's own `RiskLabel`, so the
+words, casing, label colours and spoken labels are the product's own — a
+wrong mapping shows up as a wrong label. Until Public Sans and IBM Plex Mono
+are installed the gallery says so and renders the platform face.
 
 Scenarios 8 and 9 are deliberately **not simulated**. They arm a session that
 diverts nothing, so those screens read the live server exactly as they do

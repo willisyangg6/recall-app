@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommunityReportsBlock } from '@/components/community-reports-section';
 import { PhotoThumbnail } from '@/components/photo-gallery';
-import { RiskBadge } from '@/components/risk-badge';
 import { SaveRecallButton } from '@/components/save-recall-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { DisclosureControl } from '@/components/ui/disclosure-control';
+import { RiskLabel } from '@/components/ui/risk-label';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import type { UserRecallPreferences } from '@/domain/preferences';
 import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
@@ -21,7 +22,6 @@ import {
   type AffectedProductsTable,
   type AffectedProductsTableCell,
   type DetailModel,
-  type DisclosureControl,
 } from '@/lib/recall-presentation';
 import { evaluatePersonalRelevance } from '@/lib/relevance';
 
@@ -53,46 +53,6 @@ function Section({
       </View>
       {children}
     </View>
-  );
-}
-
-/**
- * Small text controls in a dense table need a bigger tappable area than their
- * glyphs occupy; hitSlop grows the target without moving anything on screen.
- */
-const DISCLOSURE_HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
-
-/**
- * Every in-place reveal on this screen — the jurisdiction list, the product
- * rows, and each multi-value cell — renders through this one control.
- *
- * It is a real button with a real expanded state, so VoiceOver announces
- * "See all 22 lot codes, button, collapsed" rather than a bare link, and the
- * state is never carried by colour: the visible word itself flips between
- * "See all (22)" and "Show less". Nothing animates — the list simply grows.
- */
-function DisclosureButton({
-  control,
-  expanded,
-  onPress,
-}: {
-  control: DisclosureControl;
-  expanded: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={
-        expanded ? control.collapseAccessibilityLabel : control.expandAccessibilityLabel
-      }
-      accessibilityState={{ expanded }}
-      hitSlop={DISCLOSURE_HIT_SLOP}
-      onPress={onPress}>
-      <ThemedText themeColor="link" type="small">
-        {expanded ? control.collapseLabel : control.expandLabel}
-      </ThemedText>
-    </Pressable>
   );
 }
 
@@ -233,7 +193,7 @@ function ProductCell({
         ))
       )}
       {cell.disclosure ? (
-        <DisclosureButton
+        <DisclosureControl
           control={cell.disclosure}
           expanded={open}
           onPress={() => onToggle(stateId)}
@@ -339,11 +299,10 @@ export default function RecallDetailScreen() {
             explicit notice label (standing rule). */}
         <View style={styles.badgeRow}>
           {model.risk.headlineLabel ? (
-            <RiskBadge
+            <RiskLabel
               tier={model.risk.tier}
               label={model.risk.headlineLabel}
               accessibilityLabel={model.risk.accessibilityLabel}
-              size="large"
             />
           ) : null}
           {model.noticeTypeLabel === 'Public Health Alert' ? (
@@ -422,7 +381,7 @@ export default function RecallDetailScreen() {
                 model gives those no control at all. */}
             <ThemedText>{statesExpanded ? whereSold.lead : whereSold.leadCollapsed}</ThemedText>
             {whereSold.statesDisclosure ? (
-              <DisclosureButton
+              <DisclosureControl
                 control={whereSold.statesDisclosure}
                 expanded={statesExpanded}
                 onPress={() => setStatesExpanded((prior) => !prior)}
@@ -507,7 +466,7 @@ export default function RecallDetailScreen() {
             title="Affected Products"
             action={
               affectedProducts.table.rowsDisclosure ? (
-                <DisclosureButton
+                <DisclosureControl
                   control={affectedProducts.table.rowsDisclosure}
                   expanded={tableExpanded}
                   onPress={() => {

@@ -21,7 +21,7 @@ import { Link } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { PhotoThumbnail } from '@/components/photo-gallery';
-import { RiskBadge } from '@/components/risk-badge';
+import { RiskLabel } from '@/components/ui/risk-label';
 import { SaveRecallButton } from '@/components/save-recall-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -50,7 +50,7 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
                 recall reads "PENDING", a PHA's absent class reads
                 "UNKNOWN" — the two screens can never disagree. */}
             {model.risk.badgeLabel ? (
-              <RiskBadge
+              <RiskLabel
                 tier={model.risk.tier}
                 label={model.risk.badgeLabel}
                 accessibilityLabel={model.risk.accessibilityLabel}

@@ -1,13 +1,32 @@
 /**
- * Placeholder design tokens. Final branding is intentionally undecided —
- * these values exist so screens share one source of truth and can be
- * restyled in one place later.
+ * The app theme entry point.
+ *
+ * Two layers live here, deliberately side by side while screens migrate:
+ *
+ *   DESIGN TOKENS (P2B0) — the approved Lotly system, defined in
+ *   `design-tokens.ts` and re-exported below. Semantic colour, spacing,
+ *   radius, typography, elevation, icon size and hit target, pinned to
+ *   DESIGN.md. New and migrated components consume these and nothing else.
+ *
+ *   LEGACY PROVISIONAL THEME — `Colors`, `Spacing`, `Radii`, `Fonts` and
+ *   `MaxContentWidth` below: the placeholder values the screens were built on
+ *   before the system existed. They stay so that un-migrated screens keep
+ *   rendering exactly as they do today, and they are not extended further.
+ *   Each screen's design-system milestone moves it onto the tokens and
+ *   drops its use of these; when the last use goes, so does this layer.
+ *
+ * The provisional risk palette that used to live here is gone: the seven
+ * consumer risk labels are `riskPalette` in `design-tokens.ts`, and
+ * `components/ui/risk-label.tsx` is the one component that renders them.
  */
 
 import '@/global.css';
 
 import { Platform } from 'react-native';
 
+export * from '@/constants/design-tokens';
+
+/** Legacy provisional palette — see the file header. Not the design system. */
 export const Colors = {
   light: {
     text: '#000000',
@@ -29,47 +48,7 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
-/**
- * Consumer risk-tier tokens — the one place a risk color is defined.
- *
- * Deep red → red-orange → dark orange → dark yellow → light yellow, with a
- * neutral gray for the non-scale states. No green appears in the scale: no
- * recall level means "fine". Every pair is a background plus the foreground
- * that stays legible on it, because the label text is mandatory — color alone
- * must never carry the risk (see src/components/risk-badge.tsx).
- *
- * The scale is five rungs deep and stayed five rungs deep when the consumer
- * labels were replaced: these are the SAME five colours in the same severity
- * order, re-keyed from Critical/High/Moderate/Low/Minimal to
- * Critical/Very High/High/Moderate/Low. No colour was added, removed, or
- * restyled. Both non-scale states (Pending, Unknown) share the one neutral
- * token — neither is a severity.
- *
- * Provisional, like the rest of these tokens: the brand has no final risk
- * palette yet, and swapping one lives here.
- */
-export const RiskColors = {
-  light: {
-    critical: { background: '#8E1519', text: '#FFFFFF' },
-    very_high: { background: '#B4400C', text: '#FFFFFF' },
-    high: { background: '#A85E06', text: '#FFFFFF' },
-    moderate: { background: '#8A6A00', text: '#FFFFFF' },
-    low: { background: '#F5DE8A', text: '#3D3200' },
-    pending: { background: '#E0E1E6', text: '#3C3F45' },
-  },
-  dark: {
-    critical: { background: '#B3261E', text: '#FFFFFF' },
-    very_high: { background: '#C2450F', text: '#FFFFFF' },
-    high: { background: '#A85E06', text: '#FFFFFF' },
-    moderate: { background: '#8F7000', text: '#FFFFFF' },
-    low: { background: '#E8D488', text: '#332A00' },
-    pending: { background: '#2E3135', text: '#B0B4BA' },
-  },
-} as const;
-
-export type RiskColorToken = keyof typeof RiskColors.light;
-
-/** System font stacks per platform — no custom fonts yet. */
+/** Legacy system font stacks — superseded by `fontFamily` / `textStyle` in the tokens. */
 export const Fonts = Platform.select({
   ios: {
     sans: 'system-ui',
@@ -91,6 +70,7 @@ export const Fonts = Platform.select({
   },
 });
 
+/** Legacy provisional spacing — the approved scale is `spacing` in the tokens. */
 export const Spacing = {
   half: 2,
   one: 4,
@@ -101,6 +81,7 @@ export const Spacing = {
   six: 64,
 } as const;
 
+/** Legacy provisional radii — the approved scale is `radius` in the tokens. */
 export const Radii = {
   small: 8,
   medium: 16,
