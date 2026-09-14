@@ -28,10 +28,11 @@ import { Stack, router, useFocusEffect } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FeedStateMessage } from '@/components/feed-state-message';
 import { RecallCard } from '@/components/recall-card';
+import { StateMessage } from '@/components/state-message';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Callout } from '@/components/ui/callout';
 import { Chip } from '@/components/ui/chip';
 import { DisclosureControl } from '@/components/ui/disclosure-control';
 import { Icon, ICON_NAMES } from '@/components/ui/icon';
@@ -62,8 +63,10 @@ import {
   type PreviewCaseRequirement,
   type PreviewDetailFacts,
   type PreviewScenario,
+  type PreviewScenarioGroup,
   type ScreenedCandidate,
 } from '@/lib/design-preview';
+import { DETAIL_ERROR_TITLE, DETAIL_LOADING, DETAIL_MISSING } from '@/lib/detail-copy';
 import type { Classification, OfficialClass } from '@/domain/recall-types';
 import type { ConsumerRiskTier } from '@/domain/risk-tier';
 import {
@@ -73,6 +76,7 @@ import {
   PERSONALIZE_CTA,
 } from '@/lib/feed-copy';
 import { RISK_FILTER_TIERS } from '@/lib/feed-filters';
+import { selectHazardGuidance } from '@/lib/recall-display';
 import { fetchCaseDetail, type FeedItem } from '@/lib/recall-feed';
 import {
   buildDetailModel,
@@ -81,6 +85,7 @@ import {
   todayIso,
   type HomeCardModel,
 } from '@/lib/recall-presentation';
+import { interpretReason } from '@/lib/recall-reason';
 import { riskView } from '@/lib/risk-display';
 
 /** How many candidates per requirement the hub offers as alternatives. */
@@ -94,7 +99,25 @@ const CANDIDATES_CONFIRMED = 5;
  * this notice hold more than two values". These are the same read-only detail
  * requests the Detail screen itself makes.
  */
-const DETAIL_PROBE_LIMIT = 30;
+const DETAIL_PROBE_LIMIT = 60;
+
+/** How many feed rows each P2B2 hint bucket contributes to the probes. */
+const HINTS_PER_BUCKET = 3;
+
+/**
+ * Feed-row HINTS for the reviewed hazard guides — where a recall carrying
+ * each guide is likely to be found, so a probe is spent on it. Hints only:
+ * the requirement itself is decided by the real Detail model's guide
+ * selection, never by these patterns.
+ */
+const GUIDE_HINTS: readonly RegExp[] = [
+  /botul/i,
+  /listeria/i,
+  /e\.?\s?coli|stec|shiga/i,
+  /salmonella/i,
+  /hepatitis/i,
+  /cyclospora/i,
+];
 
 const REQUIREMENT_LABELS: Record<PreviewCaseRequirement, string> = {
   reportable_with_retailers: 'Eligible recall naming at least one retailer',
@@ -108,6 +131,39 @@ const REQUIREMENT_LABELS: Record<PreviewCaseRequirement, string> = {
   cell_many_values: 'Recall with an unpaired cell holding more than two values',
   pairs_two: 'Recall stating exactly two code/date pairs',
   pairs_many: 'Recall stating more than two code/date pairs',
+  // P2B2
+  nationwide: 'Recall distributed nationwide',
+  risk_critical: 'Recall at the CRITICAL tier',
+  risk_very_high: 'Recall at the VERY HIGH tier',
+  risk_high: 'Recall at the HIGH tier',
+  risk_moderate: 'Recall at the MODERATE tier',
+  risk_low: 'Recall at the LOW tier',
+  risk_pending: 'Recall at the PENDING tier',
+  risk_unknown: 'Notice at the UNKNOWN tier',
+  image: 'Recall whose Detail model resolved a hero image',
+  no_image: 'Recall whose Detail model resolved no hero image',
+  name_short: 'Recall with a short product name',
+  name_long: 'Recall with a long product name',
+  guide_botulism: 'Recall the pipeline matches to the botulism guide',
+  guide_listeria: 'Recall the pipeline matches to the Listeria guide',
+  guide_stec: 'Recall the pipeline matches to the E. coli (STEC) guide',
+  guide_undeclared_allergen: 'Recall the pipeline matches to the undeclared-allergen guide',
+  guide_salmonella: 'Recall the pipeline matches to the Salmonella guide',
+  guide_hepatitis_a: 'Recall the pipeline matches to the hepatitis A guide',
+  guide_cyclospora: 'Recall the pipeline matches to the Cyclospora guide',
+  health_risk_fallback: 'Recall with a Health Risk section but no reviewed guide',
+  health_risk_absent: 'Recall with no Health Risk section',
+  pairs_complete: 'Recall whose code/date group is complete',
+  pairs_incomplete: 'Recall whose code/date group has an undated code',
+};
+
+const GROUP_LABELS: Record<PreviewScenarioGroup, string> = {
+  community: 'Community shopper reports',
+  questionnaire: 'Questionnaire',
+  disclosure: 'Where It Was Sold and Affected Products',
+  header: 'Product header',
+  health: 'Health Risk',
+  risk: 'Risk labels on Detail',
 };
 
 /**
@@ -171,6 +227,9 @@ export default function DesignPreviewScreen() {
       retailerNames: item.retailerNames,
       productLineCount: item.productNames.length,
       lastPublicActivityAt: item.lastPublicActivityAt,
+      // The same derivation the Detail model makes from the same stored
+      // classification, so the risk scenarios land on the tier they name.
+      riskTier: riskView(item.classification, item.sourceAgency).tier,
     }));
   }, [feed.state]);
 
@@ -194,6 +253,7 @@ export default function DesignPreviewScreen() {
    * confirming can never feed back into what gets confirmed.
    */
   const probeIds = useMemo(() => {
+    const items = feed.state.status === 'ready' ? feed.state.items : [];
     const byProductLines = [...candidates].sort((a, b) => b.productLineCount - a.productLineCount);
     const singleLine = candidates.filter((item) => item.productLineCount === 1);
     const byStates = [...candidates].sort(
@@ -201,6 +261,27 @@ export default function DesignPreviewScreen() {
         (b.geography.scope === 'states' ? b.geography.states.length : 0) -
         (a.geography.scope === 'states' ? a.geography.states.length : 0),
     );
+    // P2B2 hints, from the feed row's own fields: a few rows per reviewed
+    // hazard guide, a few whose hazard has no guide, rows with and without
+    // a hero, and the shortest and longest titles. Every one is confirmed
+    // against the real Detail model before a scenario can use it.
+    const hazardText = (item: FeedItem) =>
+      `${item.pathogenOrAllergen ?? ''} ${item.reasonText ?? ''}`;
+    const guideHinted = GUIDE_HINTS.flatMap((pattern) =>
+      items.filter((item) => pattern.test(hazardText(item))).slice(0, HINTS_PER_BUCKET),
+    );
+    const allergen = items.filter((item) => item.hazardCategory === 'allergen');
+    const otherHazards = items.filter((item) =>
+      [
+        'foreign_material',
+        'product_integrity',
+        'other_regulatory',
+        'chemical_contamination',
+      ].includes(item.hazardCategory),
+    );
+    const withHero = items.filter((item) => item.heroImageUrl !== null);
+    const withoutHero = items.filter((item) => item.heroImageUrl === null);
+    const byTitleLength = [...items].sort((a, b) => a.title.length - b.title.length);
     const picked: string[] = [];
     for (const item of [
       // Weighted toward long product tables: a notice that prints a code
@@ -212,11 +293,18 @@ export default function DesignPreviewScreen() {
       ...byProductLines.slice(0, 20),
       ...singleLine.slice(0, 5),
       ...byStates.slice(0, 5),
+      ...guideHinted,
+      ...allergen.slice(0, HINTS_PER_BUCKET),
+      ...otherHazards.slice(0, HINTS_PER_BUCKET + 1),
+      ...withHero.slice(0, HINTS_PER_BUCKET),
+      ...withoutHero.slice(0, HINTS_PER_BUCKET),
+      ...byTitleLength.slice(0, 2),
+      ...byTitleLength.slice(-2),
     ]) {
       if (!picked.includes(item.id) && picked.length < DETAIL_PROBE_LIMIT) picked.push(item.id);
     }
     return picked;
-  }, [candidates]);
+  }, [candidates, feed.state]);
 
   // Read each probe's real Detail model: which sections it produced, and the
   // disclosure shape of its jurisdiction list, product rows and cells. These
@@ -250,6 +338,35 @@ export default function DesignPreviewScreen() {
                 return [...groups.values()];
               },
             );
+            // A pair group is incomplete when either half carries an empty
+            // line — an undated code, which the screen keeps as a blank.
+            const pairCompleteness = (sections.affectedProducts?.table.expanded.rows ?? []).flatMap(
+              (row) => {
+                const groups = new Map<string, boolean>();
+                for (const cell of row.cells) {
+                  if (cell.pairGroup === null) continue;
+                  const blank = cell.values.includes('');
+                  groups.set(cell.pairGroup, (groups.get(cell.pairGroup) ?? false) || blank);
+                }
+                return [...groups.values()];
+              },
+            );
+            // The guide the REAL pipeline selects for this notice — the same
+            // call, on the same projection, that `buildDetailModel` makes.
+            const { projection } = detail;
+            const guide = selectHazardGuidance(
+              interpretReason({
+                reasonText: projection.reasonText,
+                hazardCategory: projection.hazardCategory,
+                pathogenOrAllergen: projection.pathogenOrAllergen,
+                summaryText: projection.summaryText,
+                title: projection.title,
+              }),
+              {
+                pathogenOrAllergen: projection.pathogenOrAllergen,
+                reasonText: projection.reasonText,
+              },
+            );
             return [
               id,
               {
@@ -263,6 +380,12 @@ export default function DesignPreviewScreen() {
                   hasTwoValueCell: valueCounts.includes(2),
                   maxPairLines: pairLines.length > 0 ? Math.max(...pairLines) : 0,
                   hasTwoLinePairGroup: pairLines.includes(2),
+                  hasHeroImage: model.heroImageUrl !== null,
+                  productNameLength: model.productName.length,
+                  healthRisk: sections.healthRisk !== null,
+                  healthGuideKey: sections.healthRisk !== null && guide !== null ? guide.key : null,
+                  hasCompletePairGroup: pairCompleteness.includes(false),
+                  hasIncompletePairGroup: pairCompleteness.includes(true),
                 },
               },
             ] as const;
@@ -490,6 +613,14 @@ export default function DesignPreviewScreen() {
         </ThemedText>
         <FeedControlsGallery />
 
+        {/* P2B2: Recall Detail's whole-screen states with their real copy,
+            and the two Information Callout tones. Everything else on Detail
+            is inspected on the real screen through the scenarios below. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          DETAIL STATES AND CALLOUTS
+        </ThemedText>
+        <DetailStatesGallery />
+
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           RECALLS IN USE
         </ThemedText>
@@ -546,8 +677,10 @@ export default function DesignPreviewScreen() {
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           SCENARIOS
         </ThemedText>
-        {DESIGN_PREVIEW_SCENARIOS.map((scenario) => {
+        {DESIGN_PREVIEW_SCENARIOS.map((scenario, index) => {
           const selection = selectionFor(scenario.requirement);
+          const firstOfGroup =
+            index === 0 || DESIGN_PREVIEW_SCENARIOS[index - 1].group !== scenario.group;
           return (
             <Pressable
               key={scenario.id}
@@ -556,6 +689,11 @@ export default function DesignPreviewScreen() {
               accessibilityState={{ disabled: selection === null }}
               disabled={selection === null}
               onPress={() => open(scenario)}>
+              {firstOfGroup ? (
+                <ThemedText type="small" themeColor="textSecondary" style={styles.groupLabel}>
+                  {GROUP_LABELS[scenario.group]}
+                </ThemedText>
+              ) : null}
               <ThemedView type="backgroundElement" style={styles.card}>
                 <ThemedText>{scenario.title}</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
@@ -703,13 +841,13 @@ function FeedControlsGallery() {
         ))}
       </View>
       <Surface radius={12} border="border/subtle">
-        <FeedStateMessage {...FEED_LOADING} />
+        <StateMessage {...FEED_LOADING} />
       </Surface>
       <Surface radius={12} border="border/subtle">
-        <FeedStateMessage {...FEED_EMPTY_SEARCH} />
+        <StateMessage {...FEED_EMPTY_SEARCH} />
       </Surface>
       <Surface radius={12} border="border/subtle">
-        <FeedStateMessage
+        <StateMessage
           title={FEED_ERROR_TITLE}
           body="The feed session’s own error message renders here."
         />
@@ -718,6 +856,45 @@ function FeedControlsGallery() {
         <Text variant="heading-3">{PERSONALIZE_CTA.title}</Text>
         <Text variant="body-small">{PERSONALIZE_CTA.body}</Text>
       </Surface>
+    </Surface>
+  );
+}
+
+/**
+ * Recall Detail's loading, not-found and load-failure messages with the real
+ * copy from lib/detail-copy.ts (the loading sample does not announce itself
+ * here), and the Information Callout in both tones on sample sentences —
+ * the real affects-you and retracted-notice sentences are the presentation
+ * contract's and render only on a real Detail.
+ */
+function DetailStatesGallery() {
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        Recall Detail’s whole-screen states with their real copy, and the Information Callout in its
+        warning and information tones on sample sentences. The loading sample does not announce
+        itself here.
+      </Text>
+      <Surface radius={12} border="border/subtle">
+        <StateMessage {...DETAIL_LOADING} />
+      </Surface>
+      <Surface radius={12} border="border/subtle">
+        <StateMessage {...DETAIL_MISSING} />
+      </Surface>
+      <Surface radius={12} border="border/subtle">
+        <StateMessage
+          title={DETAIL_ERROR_TITLE}
+          body="The load failure’s own error message renders here."
+        />
+      </Surface>
+      <Callout tone="warning">Sample warning callout — the affects-you treatment.</Callout>
+      <Callout tone="information">
+        Sample information callout — the retracted-notice treatment.
+      </Callout>
     </Surface>
   );
 }
@@ -762,7 +939,11 @@ function candidateFacts(
     parts.push(`${sections.facts.productRowCount} product row(s)`);
     parts.push(`longest unpaired cell ${sections.facts.maxCellValues} value(s)`);
     parts.push(`longest pair group ${sections.facts.maxPairLines} line(s)`);
+    parts.push(sections.facts.hasHeroImage ? 'hero image' : 'no hero image');
+    parts.push(`name ${sections.facts.productNameLength} chars`);
+    parts.push(`guide ${sections.facts.healthGuideKey ?? 'none'}`);
   }
+  parts.push(`tier ${screened.candidate.riskTier}`);
   parts.push(`fit ${candidateScore(screened)}`);
   return parts.join(' · ');
 }
@@ -807,6 +988,10 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     marginTop: Spacing.three,
+  },
+  groupLabel: {
+    marginTop: Spacing.two,
+    marginBottom: Spacing.one,
   },
   card: {
     padding: Spacing.three,

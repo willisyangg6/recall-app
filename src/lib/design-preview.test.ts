@@ -26,6 +26,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import type { HazardGuideKey } from '@/content/hazard-guides';
+import type { ConsumerRiskTier } from '@/domain/risk-tier';
 import {
   sanitizeReportSummary,
   SHOPPER_REPORT_VISIBILITY_THRESHOLD,
@@ -37,9 +39,12 @@ import {
   DESIGN_PREVIEW_SCENARIOS,
   enterDesignPreview,
   exitDesignPreview,
+  GUIDE_REQUIREMENTS,
   isDevelopmentBuild,
   isDisclosableCount,
   meetsRequirement,
+  NAME_LONG_MIN,
+  NAME_SHORT_MAX,
   PRESENTATION_REQUIREMENTS,
   previewScenario,
   previewShopperState,
@@ -47,6 +52,7 @@ import {
   recordPreviewSubmission,
   recordPreviewWithdrawal,
   resetDesignPreview,
+  RISK_REQUIREMENTS,
   screenCandidate,
   SIMULATED_PURCHASE_WINDOW,
   SIMULATED_REPORTED_COUNT,
@@ -197,7 +203,14 @@ test('the harness imports nothing capable of I/O — it cannot write anywhere', 
   // Types and pure domain logic only. Anything else — the RPC wrappers, the
   // feed reader, SecureStore, the Supabase client — would put a write path
   // one call away from simulated state.
-  assert.deepEqual(imports.sort(), ['@/domain/recall-types', '@/domain/shopper-report']);
+  // P2B2 added two more pure type imports: the reviewed-guide keys (a static
+  // content registry) and the consumer risk tiers.
+  assert.deepEqual(imports.sort(), [
+    '@/content/hazard-guides',
+    '@/domain/recall-types',
+    '@/domain/risk-tier',
+    '@/domain/shopper-report',
+  ]);
   for (const forbidden of [
     'fetch(',
     'report-api',
@@ -327,12 +340,41 @@ test('every required scenario exists, and each names its destination', () => {
       'cell_collapsed',
       'pairs_two',
       'pairs_many',
+      // P2B2: the restyled Detail's own shapes. Real recalls, nothing simulated.
+      'geography_nationwide',
+      'pairs_complete',
+      'pairs_incomplete',
+      'header_image',
+      'header_no_image',
+      'name_short',
+      'name_long',
+      'guide_botulism',
+      'guide_listeria',
+      'guide_stec',
+      'guide_undeclared_allergen',
+      'guide_salmonella',
+      'guide_hepatitis_a',
+      'guide_cyclospora',
+      'health_risk_fallback',
+      'health_risk_absent',
+      'risk_critical',
+      'risk_very_high',
+      'risk_high',
+      'risk_moderate',
+      'risk_low',
+      'risk_pending',
+      'risk_unknown',
     ],
   );
   for (const scenario of DESIGN_PREVIEW_SCENARIOS) {
     assert.ok(scenario.title.length > 0);
     assert.ok(scenario.expectation.length > 0);
     assert.equal(previewScenario(scenario.id)?.id, scenario.id);
+    // Every P2B2 scenario opens the real Detail and simulates nothing.
+    if (scenario.group === 'header' || scenario.group === 'health' || scenario.group === 'risk') {
+      assert.equal(scenario.destination, 'detail');
+      assert.equal(scenario.simulation, null);
+    }
   }
 });
 
@@ -498,6 +540,7 @@ const multiState: PreviewCandidate = {
   retailerNames: ['Costco Wholesale'],
   productLineCount: 4,
   lastPublicActivityAt: '2026-09-01T00:00:00.000Z',
+  riskTier: 'high',
 };
 const noRetailer: PreviewCandidate = {
   ...multiState,
@@ -576,6 +619,12 @@ test('confirmed detail facts decide each presentation requirement exactly', () =
     hasTwoValueCell: false,
     maxPairLines: 0,
     hasTwoLinePairGroup: false,
+    hasHeroImage: false,
+    productNameLength: 0,
+    healthRisk: false,
+    healthGuideKey: null,
+    hasCompletePairGroup: false,
+    hasIncompletePairGroup: false,
     ...over,
   });
   const ok = (requirement: Parameters<typeof meetsRequirement>[1], f: PreviewDetailFacts) =>
@@ -610,6 +659,63 @@ test('confirmed detail facts decide each presentation requirement exactly', () =
   // A long unpaired field never satisfies a pair scenario, and vice versa.
   assert.equal(ok('pairs_many', facts({ maxCellValues: 9 })), false);
   assert.equal(ok('cell_many_values', facts({ maxPairLines: 9 })), false);
+
+  // P2B2 — the header, health and pair-completeness shapes.
+  assert.equal(ok('image', facts({ hasHeroImage: true })), true);
+  assert.equal(ok('image', facts({ hasHeroImage: false })), false);
+  assert.equal(ok('no_image', facts({ hasHeroImage: false })), true);
+  assert.equal(ok('name_short', facts({ productNameLength: NAME_SHORT_MAX })), true);
+  assert.equal(ok('name_short', facts({ productNameLength: NAME_SHORT_MAX + 1 })), false);
+  assert.equal(ok('name_short', facts({ productNameLength: 0 })), false);
+  assert.equal(ok('name_long', facts({ productNameLength: NAME_LONG_MIN })), true);
+  assert.equal(ok('name_long', facts({ productNameLength: NAME_LONG_MIN - 1 })), false);
+  // A guide requirement is satisfied only by the real pipeline's own key,
+  // and only when the model actually decided a Health Risk section.
+  assert.equal(ok('guide_listeria', facts({ healthRisk: true, healthGuideKey: 'listeria' })), true);
+  assert.equal(
+    ok('guide_listeria', facts({ healthRisk: true, healthGuideKey: 'salmonella' })),
+    false,
+  );
+  assert.equal(ok('guide_listeria', facts({ healthRisk: true, healthGuideKey: null })), false);
+  assert.equal(ok('health_risk_fallback', facts({ healthRisk: true, healthGuideKey: null })), true);
+  assert.equal(
+    ok('health_risk_fallback', facts({ healthRisk: true, healthGuideKey: 'stec' })),
+    false,
+  );
+  assert.equal(ok('health_risk_absent', facts({ healthRisk: false })), true);
+  assert.equal(ok('health_risk_absent', facts({ healthRisk: true })), false);
+  assert.equal(ok('pairs_complete', facts({ hasCompletePairGroup: true })), true);
+  assert.equal(ok('pairs_incomplete', facts({ hasIncompletePairGroup: true })), true);
+  assert.equal(ok('pairs_incomplete', facts({ hasCompletePairGroup: true })), false);
+  for (const key of Object.keys(GUIDE_REQUIREMENTS) as HazardGuideKey[]) {
+    assert.ok(PRESENTATION_REQUIREMENTS.includes(GUIDE_REQUIREMENTS[key]), key);
+  }
+});
+
+test('nationwide and the risk tiers are decided from the feed row, with no probe needed', () => {
+  const nationwide: PreviewCandidate = {
+    ...multiState,
+    id: 'n',
+    geography: { scope: 'nationwide', states: [], confidence: 'stated', sourceText: null },
+  };
+  assert.equal(meetsRequirement(screenCandidate(nationwide), 'nationwide'), true);
+  assert.equal(meetsRequirement(screenCandidate(multiState), 'nationwide'), false);
+  for (const tier of Object.keys(RISK_REQUIREMENTS) as ConsumerRiskTier[]) {
+    const requirement = RISK_REQUIREMENTS[tier];
+    assert.equal(
+      meetsRequirement(screenCandidate({ ...multiState, riskTier: tier }), requirement),
+      true,
+    );
+    assert.equal(
+      meetsRequirement(
+        screenCandidate({ ...multiState, riskTier: tier === 'low' ? 'high' : 'low' }),
+        requirement,
+      ),
+      false,
+    );
+    assert.ok(!PRESENTATION_REQUIREMENTS.includes(requirement), `${requirement} needs no probe`);
+  }
+  assert.ok(!PRESENTATION_REQUIREMENTS.includes('nationwide'));
 });
 
 test('an empty corpus yields no candidate rather than an unsuitable one', () => {

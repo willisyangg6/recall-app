@@ -114,6 +114,44 @@ ordinary way — launch, a search that matches nothing, and a backend that is
 unreachable — and pull-to-refresh, scrolling and the sheets are inspected on
 the Feed, not here.
 
+### Detail scenarios (P2B2)
+
+Twenty-two further scenarios open the **real** Recall Detail on a real
+current recall chosen for the shape each needs. As with rows 10–17, none of
+them simulates anything: the hub proves each shape from the real Detail model
+(or, for nationwide and the risk tiers, from the same projection fields the
+model reads) before offering it, and says "No suitable current recall" rather
+than substituting one. The hub groups them under `Product header`,
+`Where It Was Sold and Affected Products`, `Health Risk` and `Risk labels on
+Detail`.
+
+| #     | Scenario                                        | What you should see                                                                                                                                                               |
+| ----- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 18    | Detail · header with a product image            | Risk label, date and save control; name, brand and official link beside the hero tile.                                                                                            |
+| 19    | Detail · header without a product image         | No tile and no placeholder: the identity takes the whole row.                                                                                                                     |
+| 20    | Detail · a short product name (≤ 24 characters) | One line beside the hero.                                                                                                                                                         |
+| 21    | Detail · a long product name (≥ 56 characters)  | Wraps across several lines beside the hero; never truncated.                                                                                                                      |
+| 22    | Detail · nationwide distribution                | One sentence after the pin, no list, no control.                                                                                                                                  |
+| 23–29 | Detail · Health Risk from each reviewed guide   | One row per guide (botulism, Listeria, E. coli/STEC, undeclared allergen, Salmonella, hepatitis A, Cyclospora): the risk statement, `COMMON SYMPTOMS`, and the `Learn more` link. |
+| 30    | Detail · Health Risk with no reviewed guide     | The risk-only sentence alone.                                                                                                                                                     |
+| 31    | Detail · no Health Risk section                 | Where It Was Sold followed directly by Affected Products.                                                                                                                         |
+| 32    | Detail · a complete identifier/date group       | Every code dated; no blank line.                                                                                                                                                  |
+| 33    | Detail · an incomplete identifier/date group    | An undated code keeps a blank line in the date column.                                                                                                                            |
+| 34–40 | Detail · one recall per risk tier               | CRITICAL, VERY HIGH, HIGH, MODERATE, LOW, PENDING and UNKNOWN (a Public Health Alert, beside its notice label).                                                                   |
+
+Whether a recall carries a guide is decided by the real guide pipeline
+(`selectHazardGuidance` over `interpretReason`, on the fetched projection —
+the same call `buildDetailModel` makes); the hub spends a few of its probes
+on feed rows whose hazard text hints at each guide, and confirms every one.
+The **saved and unsaved** header states are inspected by tapping the save
+control on any of these; the **affects-you** callout renders on any recall
+that matches this device's personalization.
+
+A further gallery, **Detail states and callouts**, renders Recall Detail's
+loading, not-found and load-failure messages with their real copy from
+`src/lib/detail-copy.ts`, and the Information Callout in both tones on
+labelled sample sentences.
+
 Scenarios 8 and 9 are deliberately **not simulated**. They arm a session that
 diverts nothing, so those screens read the live server exactly as they do
 outside the preview — which is the only way they can prove anything.
@@ -153,7 +191,11 @@ this order — known state geography, at least one canonical retailer,
 affected-product lines, and stated (not inferred) geography. For the primary
 bucket it confirms the top candidates against the real Detail model, so the
 recall you land on genuinely carries Health Risk and Affected Products
-content rather than merely looking like it should.
+content rather than merely looking like it should. Up to sixty recalls are
+probed on open (read-only detail requests, the same the Detail screen makes):
+the longest product tables, single-line notices, the widest jurisdiction
+lists, and from P2B2 a few rows per hazard-guide hint, rows with and without
+a hero, and the shortest and longest titles.
 
 Tap **Choose another** on any bucket to pick a different real recall. Each
 option shows its real attributes. If the live corpus contains nothing that

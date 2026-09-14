@@ -32,7 +32,9 @@ const PROFILE = read('app', '(tabs)', 'profile.tsx');
 const PREVIEW = read('app', 'design-preview', 'index.tsx');
 const CARD = read('components', 'recall-card.tsx');
 const SAVE_BUTTON = read('components', 'save-recall-button.tsx');
-const STATE_MESSAGE = read('components', 'feed-state-message.tsx');
+const STATE_MESSAGE = read('components', 'state-message.tsx');
+const MEDIA_TILE = read('components', 'ui', 'media-tile.tsx');
+const NOTICE_LABEL = read('components', 'ui', 'notice-label.tsx');
 const ICON = read('components', 'ui', 'icon.tsx');
 const CHIP = read('components', 'ui', 'chip.tsx');
 const SEARCH_BAR = read('components', 'ui', 'search-bar.tsx');
@@ -102,8 +104,12 @@ test('the card renders relevance and media as two independent, upstream-decided 
   // Relevance: the shared primitive, gated on the model's verdict and nothing else.
   assert.ok(CARD.includes('{model.affectsYou ? <RelevanceLabel /> : null}'));
   assert.equal((CARD.match(/<RelevanceLabel \/>/g) ?? []).length, 1);
-  // Media: rendered unconditionally — the tile exists in every state.
-  assert.ok(CARD.includes('<CardMedia uri={model.heroImageUrl} alt={model.productName} />'));
+  // Media: rendered unconditionally — the tile exists in every state. The
+  // tile itself is the shared primitive (P2B2 extracted it for Detail).
+  assert.match(
+    CARD,
+    /<MediaTile\s+uri=\{model\.heroImageUrl\}\s+alt=\{model\.productName\}\s+size=\{layout\.cardMediaSize\}\s*\/>/,
+  );
   assert.ok(!/heroImageUrl \?/.test(codeOnly(CARD)), 'the media tile must not be conditional');
   // The two dimensions are read from the model, never derived on the card.
   assert.ok(!CARD.includes('evaluatePersonalRelevance'));
@@ -164,8 +170,11 @@ test('IBM Plex Mono is used only for compact status labels, never for words peop
   }
   // The card uses it exactly once: the Public Health Alert notice label,
   // which sits beside the risk label and is the same kind of thing.
-  assert.equal((codeOnly(CARD).match(/variant="label"/g) ?? []).length, 1);
-  assert.ok(CARD.includes('function NoticeLabel'));
+  // The notice label is the shared primitive (P2B2); the card holds no
+  // mono text of its own.
+  assert.equal((codeOnly(CARD).match(/variant="label"/g) ?? []).length, 0);
+  assert.ok(CARD.includes("import { NoticeLabel } from '@/components/ui/notice-label';"));
+  assert.equal((codeOnly(NOTICE_LABEL).match(/variant="label"/g) ?? []).length, 1);
   // The timestamp, name, brand, summary and location are Public Sans tokens.
   assert.ok(CARD.includes('<Text variant="micro-caption" color="text/secondary">'));
   assert.ok(CARD.includes('<Text variant="heading-3">{model.productName}</Text>'));
@@ -201,15 +210,20 @@ test('the relevance label cannot be handed a risk tier, and the risk label canno
 
 test('the media tile keeps the same square footprint with an image, a failed image, or none', () => {
   assert.equal(layout.cardMediaSize, 112);
-  assert.ok(CARD.includes('width: layout.cardMediaSize'));
-  assert.ok(CARD.includes('height: layout.cardMediaSize'));
-  assert.ok(CARD.includes('background="background/media-placeholder"'));
-  assert.ok(CARD.includes('onError={() => setFailed(true)}'));
-  assert.ok(CARD.includes('resizeMode="contain"'), 'a label photo is never cropped or distorted');
+  assert.ok(CARD.includes('size={layout.cardMediaSize}'));
+  // The shared tile (P2B2) is a square of the caller's size in every state.
+  assert.ok(MEDIA_TILE.includes('{ width: size, height: size }'));
+  assert.ok(MEDIA_TILE.includes('background="background/media-placeholder"'));
+  assert.ok(MEDIA_TILE.includes('onError={() => setFailed(true)}'));
+  assert.ok(
+    MEDIA_TILE.includes('resizeMode="contain"'),
+    'a label photo is never cropped or distorted',
+  );
   // No broken-image glyph and no substitute picture: the only image source
   // is the model's own hero URL.
-  assert.equal((codeOnly(CARD).match(/source=\{/g) ?? []).length, 1);
-  assert.ok(CARD.includes('source={{ uri: image }}'));
+  assert.equal((codeOnly(MEDIA_TILE).match(/source=\{/g) ?? []).length, 1);
+  assert.ok(MEDIA_TILE.includes('source={{ uri: image }}'));
+  assert.ok(!CARD.includes('source={'), 'the card renders no image of its own');
   assert.ok(!CARD.includes('PhotoThumbnail'));
   assert.ok(!CARD.includes('require('), 'the card bundles no stock image');
 });
@@ -306,9 +320,10 @@ test('nothing on the card truncates or fixes a height around real product text',
   assert.ok(!CARD.includes('numberOfLines'));
   assert.ok(!CARD.includes('ellipsizeMode'));
   assert.ok(!CARD.includes('maxFontSizeMultiplier'));
-  // The only fixed dimensions are the media tile's.
+  // The card fixes no height at all; the media tile's square is the shared
+  // primitive's, sized by the token the card passes it.
   const heights = codeOnly(CARD).match(/\bheight: [^,]+/g) ?? [];
-  assert.deepEqual(heights, ['height: layout.cardMediaSize', "height: '100%'"]);
+  assert.deepEqual(heights, []);
   // The text column takes the remaining width and may shrink below its content.
   assert.ok(/identity: \{[^}]*flex: 1[^}]*minWidth: 0/s.test(CARD));
 });
@@ -388,15 +403,20 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
   }
   // The icon set is exactly what a shipped control uses.
   const glyphs = [...ICON.matchAll(/^\s+'?([a-z-]+)'?: require\(/gm)].map((m) => m[1]).sort();
+  // P2B2 added the Detail frame's external-link, warning and info glyphs;
+  // there is still no bell, share, sliders or chevron-left glyph.
   assert.deepEqual(glyphs, [
     'bookmark',
     'bookmark-filled',
     'chevron-down',
+    'external-link',
     'flag',
     'home',
+    'info',
     'map-pin',
     'search',
     'user',
+    'warning',
   ]);
 });
 

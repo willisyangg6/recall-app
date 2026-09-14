@@ -204,6 +204,24 @@ export const layout = {
    * never reaches it, so it changes nothing about the 393pt composition.
    */
   maxContentWidth: 800,
+  /**
+   * Recall Detail's square hero tile beside the product identity (Figma's
+   * 150 normalized to the 4pt grid). Rendered only when the recall has a
+   * usable image: Detail removes the tile rather than reserving its space.
+   */
+  detailMediaSize: 152,
+  /**
+   * The version image beside a Product value in the Affected Products table
+   * — a recognition aid inside a dense row, so it stays small.
+   */
+  rowMediaSize: 40,
+  /**
+   * One fixed column width for the Affected Products table, so the header
+   * row and every version row stay aligned while the table scrolls sideways
+   * as one unit. Wide enough for a paired "Month DD, YYYY" line, which is
+   * the one value the contract caps to a single line.
+   */
+  tableColumnWidth: 144,
 } as const;
 
 // ── Elevation ───────────────────────────────────────────────────────────────

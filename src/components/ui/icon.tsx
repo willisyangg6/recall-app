@@ -7,8 +7,9 @@
  * No icon library is installed — adding one is a dependency decision the
  * Feed milestone was told not to make — so the glyphs are the Figma file's
  * own exported vectors: the Lucide-style outlines the design uses (`house`,
- * `bookmark`, `user-round`, `search`, `map-pin`, `flag`, `chevron-down`).
- * Each export was rasterised once, unchanged in shape, into
+ * `bookmark`, `user-round`, `search`, `map-pin`, `flag`, `chevron-down`, and
+ * from the Detail frame `external-link`, `triangle-alert` as `warning`, and
+ * `info`). Each export was rasterised once, unchanged in shape, into
  * `assets/icons/<name>.png` at 1x/2x/3x on a 24pt box, black on transparent,
  * and is tinted here at render time. `bookmark-filled` is the same bookmark
  * path with its interior filled: the active state of the save control.
@@ -39,6 +40,9 @@ const GLYPHS = {
   'map-pin': require('@/assets/icons/map-pin.png') as ImageSourcePropType,
   flag: require('@/assets/icons/flag.png') as ImageSourcePropType,
   'chevron-down': require('@/assets/icons/chevron-down.png') as ImageSourcePropType,
+  'external-link': require('@/assets/icons/external-link.png') as ImageSourcePropType,
+  warning: require('@/assets/icons/warning.png') as ImageSourcePropType,
+  info: require('@/assets/icons/info.png') as ImageSourcePropType,
 } as const;
 
 export type IconName = keyof typeof GLYPHS;

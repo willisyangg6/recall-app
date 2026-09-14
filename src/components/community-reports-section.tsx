@@ -6,8 +6,8 @@
  * else. Every word comes from lib/shopper-report-presentation (a tested
  * contract), the case's eligibility and the choices a report may name come
  * from the shared presentation model, and the network/queue behavior lives in
- * lib/shopper-report-store. That keeps the provisional styling here easy to
- * replace wholesale in the design-system pass without touching any contract.
+ * lib/shopper-report-store. That keeps the styling here easy to replace
+ * without touching any contract.
  *
  * ## Two gates, and the silent default
  *
@@ -31,15 +31,25 @@
  * The summary and this installation's own report are re-read on focus, so
  * returning from the questionnaire (or from a data reset) shows the current
  * truth rather than a stale total. Reads never mint an installation id.
+ *
+ * ## Appearance (P2B2)
+ *
+ * Part of the Where It Was Sold section, in its body type: the disclosed
+ * count or the invitation as `body-small`, then the add/edit action as a
+ * `caption` text action in `action/secondary` — the same treatment as the
+ * section's other in-place controls, and the link styling Figma gives the
+ * community line. It sits `spacing/12` under the official statement so
+ * community context reads as its own line, never as part of the government
+ * notice. The action is one caption line tall and reaches the 44pt target
+ * through `hitSlop`.
  */
 
 import { useCallback, useState } from 'react';
 import { Link, useFocusEffect } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Radii, Spacing } from '@/constants/theme';
+import { Text } from '@/components/ui/text';
+import { hitSlopToMinimum, spacing, typography } from '@/constants/design-tokens';
 import type { MyShopperReport, ShopperReportSummary } from '@/domain/shopper-report';
 import type { CommunityReportsSection } from '@/lib/recall-presentation';
 import { communityReportsView } from '@/lib/shopper-report-presentation';
@@ -49,6 +59,8 @@ interface Loaded {
   summary: ShopperReportSummary;
   report: MyShopperReport | null;
 }
+
+const ACTION_HIT_SLOP = hitSlopToMinimum(typography.caption.lineHeight);
 
 export function CommunityReportsBlock({ section }: { section: CommunityReportsSection }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -83,40 +95,36 @@ export function CommunityReportsBlock({ section }: { section: CommunityReportsSe
 
   return (
     <View style={styles.block} accessibilityLabel="Community shopper reports">
-      {view.countLine ? <ThemedText>{view.countLine}</ThemedText> : null}
-      {view.prompt ? <ThemedText>{view.prompt}</ThemedText> : null}
-      <View style={styles.actions}>
-        <Link href={{ pathname: '/report/[id]', params: { id: section.caseId } }} asChild>
-          <Pressable accessibilityRole="button" accessibilityLabel={view.actionLabel}>
-            <ThemedView type="backgroundElement" style={styles.button}>
-              <ThemedText style={styles.buttonLabel}>{view.actionLabel}</ThemedText>
-            </ThemedView>
-          </Pressable>
-        </Link>
-      </View>
+      {view.countLine ? <Text variant="body-small">{view.countLine}</Text> : null}
+      {view.prompt ? <Text variant="body-small">{view.prompt}</Text> : null}
+      <Link href={{ pathname: '/report/[id]', params: { id: section.caseId } }} asChild>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={view.actionLabel}
+          hitSlop={ACTION_HIT_SLOP}
+          style={styles.action}>
+          {({ pressed }) => (
+            <Text variant="caption" color="action/secondary" style={pressed && styles.pressed}>
+              {view.actionLabel}
+            </Text>
+          )}
+        </Pressable>
+      </Link>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // Provisional spacing only — separated from the official statement above
-  // so community context never reads as part of the government notice.
+  // The section's own gap is spacing/8; this margin makes the separation
+  // from the official statement spacing/12, the design's community rhythm.
   block: {
-    gap: Spacing.one,
-    marginTop: Spacing.two,
+    gap: spacing[4],
+    marginTop: spacing[4],
   },
-  actions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-    marginTop: Spacing.half,
+  action: {
+    alignSelf: 'flex-start',
   },
-  button: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Radii.medium,
-  },
-  buttonLabel: {
-    fontWeight: '600',
+  pressed: {
+    opacity: 0.6,
   },
 });

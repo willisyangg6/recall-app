@@ -1645,9 +1645,26 @@ every platform instead of iOS's native in-field glyph.
 
 The bottom navigation now carries the design's own exported glyphs beside its
 three labels (no icon library was installed; see DESIGN.md, "The icon set as
-implemented"). Saved and Profile keep the provisional appearance — including
-the platform header — until their own milestones, as does Recall Detail; the
-shared card and save control they render are already the designed ones.
+implemented").
+
+**Recall Detail (P2B2)** renders the design system too — the product header,
+the affects-you and retracted callouts, the four sections with their
+hairlines, the community block, and the Affected Products table — and again
+what matters here is what did not change: the section order, the
+five-jurisdiction rule and its `See all (N)` / `Show less`, the one initial
+product row and the section-level reveal, the two-value cell rule and the
+per-cell reveal, the line-for-line identifier/date pairing with its kept
+blank line, the community block beneath the official geography, the save
+control, the official-source and Health Risk links, and every state the
+screen can be in are the shipped behaviour, pinned by
+`src/components/detail-design.test.ts` beside the wiring, detail-disclosure
+and presentation suites. The four section headings now render in title case
+(`What Happened`, `Where It Was Sold`, `Health Risk`, `Affected Products`) —
+previously sentence-case strings rendered uppercase — and the pushed-screen
+back control is the platform chevron named `Back`, never the route group's
+`(tabs)`. Saved and Profile keep the provisional appearance until their own
+milestones; the shared card and save control they render are already the
+designed ones.
 
 ## Presentation gaps from the O3 historical repair (tracked future work)
 

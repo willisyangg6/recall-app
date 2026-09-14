@@ -29,6 +29,10 @@ const UI_FILES = [
   'ui/relevance-label.tsx',
   'ui/chip.tsx',
   'ui/search-bar.tsx',
+  // P2B2
+  'ui/media-tile.tsx',
+  'ui/callout.tsx',
+  'ui/notice-label.tsx',
 ];
 const UI = Object.fromEntries(UI_FILES.map((f) => [f, read(join('components', f))]));
 const TEXT = UI['ui/text.tsx'];

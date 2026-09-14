@@ -178,6 +178,9 @@ layout:
   risk-label-height: 24px
   card-media-size: 112px
   max-content-width: 800px
+  detail-media-size: 152px
+  row-media-size: 40px
+  table-column-width: 144px
 
 components:
   search-bar:
@@ -256,18 +259,21 @@ matter above are the same values as `src/constants/design-tokens.ts`;
 `src/constants/design-tokens.test.ts` proves the two agree, and
 `src/constants/design-contract.test.ts` pins the product rules below._
 
-_Status (P2B1, 2026-09-14): reconciled against Figma and the shipped product.
-The token foundation and eight shared primitives exist in code — `Text`,
+_Status (P2B2, 2026-09-14): reconciled against Figma and the shipped product.
+The token foundation and eleven shared primitives exist in code — `Text`,
 `Surface`, `DisclosureControl` and `RiskLabel` from P2B0; `Icon`,
-`RelevanceLabel`, `Chip` and `SearchBar` from P2B1; Public Sans and IBM Plex
-Mono are installed and loaded at the root; the app is locked to light
-appearance; the risk label reads its bare canonical word on every surface.
-**The Feed is the first restyled product screen**: its page, search bar, chip
-row, section headings, recall card, whole-screen states and the bottom
-navigation (now carrying the design's own glyphs beside the three labels)
-render from the tokens with every shipped behaviour intact. Recall Detail,
-Saved and Profile keep the provisional appearance until their own
-milestones._
+`RelevanceLabel`, `Chip` and `SearchBar` from P2B1; `MediaTile`, `Callout`
+and `NoticeLabel` from P2B2 — plus the shared `StateMessage`; Public Sans and
+IBM Plex Mono are installed and loaded at the root; the app is locked to
+light appearance; the risk label reads its bare canonical word on every
+surface. **The Feed (P2B1) and Recall Detail (P2B2) are the restyled product
+screens**: the Feed's page, search bar, chip row, section headings, recall
+card, whole-screen states and the bottom navigation, and Detail's product
+header, callouts, sections, community block and Affected Products table,
+render from the tokens with every shipped behaviour intact. The pushed
+screens' header chrome is styled from the same tokens and their back control
+is the platform chevron alone. Saved and Profile keep the provisional
+appearance until their own milestones._
 
 ## Overview
 
@@ -568,6 +574,11 @@ Lotly is designed mobile-first around a **393px-wide iPhone frame**.
 - Content column cap: 800px (`max-content-width`) — reached on tablets and
   the web only, so a phone's column is always the device width less the
   margins
+- Recall Detail hero tile: 152px square (`detail-media-size`; Figma's 150 is
+  normalized to the 4pt grid), rendered only when the recall has an image
+- Affected Products version image: 40px square (`row-media-size`)
+- Affected Products column: 144px (`table-column-width`), one width for every
+  column so the header row and each version row stay aligned
 - Common icon glyph size: 20px for utility icons, 24px in the bottom
   navigation, 16px inline with text, 12px inside labels
 
@@ -660,6 +671,19 @@ Rules:
   the presentation contract from what the notice states.
 
 Never allow the wide table to create page-level horizontal overflow.
+
+**As implemented (P2B2, `AffectedProductsTableView` in
+`src/app/recall/[id].tsx`).** The viewport is a horizontal `ScrollView` at
+the content width; inside it, one white `radius/8` surface with a
+`border/subtle` border (the front matter's `affected-products-viewport`),
+`spacing/4` padding, and no shadow (conflict 15). Column labels render once
+in `body-small-bold`; values in `caption` (Figma's 10px `micro-caption` is
+normalized up one step so a lot code or date is legible — a value a shopper
+checks against a package is not metadata). Every cell is `table-column-width`
+wide with `spacing/8` padding; `border/subtle` hairlines separate columns and
+version rows. The section heading and its `See all (N)` stay outside the
+viewport on the heading row. Nothing on the page pans sideways but this
+grid.
 
 ## Elevation & Depth
 
@@ -903,6 +927,17 @@ Do not use the lime warning treatment for generic informational content. Note
 that Recall Detail currently ships **no** informational callout above
 Affected Products (a founder decision, P2a); see "Known Figma/code conflicts".
 
+Implemented as `src/components/ui/callout.tsx` (P2B2): `tone="warning"` is
+the lime `background/accent` surface with the design's 16px `warning` glyph,
+`tone="information"` the soft-blue `background/subtle` surface with the
+`info` glyph; both `radius/8`, `spacing/12` padding, `body-small` text in
+`text/primary` (Figma binds the text to `background/brand`, corrected to a
+text token), the glyph centred on the first line of text, and no shadow
+(conflict 15). Recall Detail renders the affects-you sentence as the warning
+tone and a retracted notice as the information tone; the sentences are the
+presentation contract's. The lime tone is keyed by name, so generic
+information cannot land on it without saying so in code.
+
 ### Disclosure Control
 
 Every in-place reveal — the jurisdiction list, the Affected Products rows, and
@@ -949,6 +984,47 @@ statement, never beside or above it.
 
 Keep section headings direct and plain-language. Avoid bureaucratic
 terminology when a clear consumer phrase is available.
+
+**As implemented (P2B2, `src/app/recall/[id].tsx`).** The warm page,
+`spacing/16` margins and gaps, the content column capped at
+`max-content-width`, the bottom safe-area inset added to the content
+padding. The navigation header is the navigator's own (`Recall Details` in
+`heading-3` on the page colour, no shadow) with the platform's back chevron
+alone — see "Bottom Navigation" for the pushed-screen chrome. The product
+header: the Risk Label, the Public Health Alert notice label when there is
+one, and the one activity date in `caption` on the status row, with the
+shared save control (glyph and `Save` / `Saved` word) at its trailing edge —
+in the body with the recall's identity, per the P2A founder decision,
+rather than in Figma's utility row (conflict 9); then the product name in
+`heading-2`, the brand in `body-small` `text/secondary`, and the
+official-source link — `caption` in `action/secondary` with the 16px
+`external-link` glyph, a `link` role, the spoken hint `Opens in your
+browser`, and a 44pt target — beside the 152px hero tile when the recall has
+an image. With no image the identity takes the whole row: Detail removes the
+tile rather than reserving its space, the second of the two approved
+no-image treatments. At accessibility text sizes, where one `heading-2`
+word can be wider than the column beside the tile, the header stacks — the
+identity at full width, the tile beneath it — decided from the name's own
+text layout (a line that ended mid-word) and latched, so a product name
+never stays broken inside a word. A retracted notice renders the information callout in
+the header; the affects-you verdict renders the warning callout beneath it.
+
+Sections follow in `heading-3` (`What Happened`, `Where It Was Sold`,
+`Health Risk`, `Affected Products` — the design's title case replaces the
+legacy uppercase grey headings), separated by `border/default` hairlines
+that render only between sections that exist, each with its reveal on the
+heading row: the jurisdiction `See all (N)` opposite `Where It Was Sold`
+(where Figma's `View Retailers (10)` sits), the row reveal opposite
+`Affected Products`. Section bodies are `body-small` in `text/primary` —
+Figma's `text/secondary` body copy is not used for the narrative, because
+the shipped rule mutes only the `Update` line (conflict 21). The jurisdiction
+line carries the 12px pin; the community block follows it `spacing/12`
+below, in the same body type with its add/edit action as a `caption` text
+action in `action/secondary`. Health Risk keeps its `COMMON SYMPTOMS` group
+label (a `caption` in `text/secondary`, the contract's pinned words) over
+bulleted `body-small` lines and the `Learn more from …` external link.
+Loading, not-found and load-failure states are the shared `StateMessage`
+with the copy in `src/lib/detail-copy.ts`.
 
 ### Bottom Navigation
 
@@ -1015,16 +1091,19 @@ and 3x on a 24pt box (black on transparent) and tinted at render time by
 `src/components/ui/icon.tsx`. Nothing was drawn by hand: every export is the
 Lucide-style outline the design uses, unchanged in shape.
 
-| Icon              | Figma export (node)                    | Lucide name         | Used by                              |
-| ----------------- | -------------------------------------- | ------------------- | ------------------------------------ |
-| `home`            | `icon/home` in `nav bar` (`81:816`)    | `house`             | Feed tab                             |
-| `bookmark`        | `icon` in `nav bar` (`81:817`)         | `bookmark`          | Saved tab; the save control, unsaved |
-| `bookmark-filled` | the same path with its interior filled | `bookmark` (filled) | the save control, saved              |
-| `user`            | `icon/user` in `nav bar` (`81:818`)    | `user-round`        | Profile tab                          |
-| `search`          | `Search-Bar` glyph (`30:404`)          | `search`            | the search bar                       |
-| `map-pin`         | `Nav-Chip` glyph (`33:458`)            | `map-pin`           | the card's location line             |
-| `flag`            | `Relevance Label` glyph (`42:866`)     | `flag`              | the relevance label                  |
-| `chevron-down`    | `Nav Chip/icon` (`42:809`)             | `chevron-down`      | the Location / Risk / Category chips |
+| Icon              | Figma export (node)                        | Lucide name         | Used by                                         |
+| ----------------- | ------------------------------------------ | ------------------- | ----------------------------------------------- |
+| `home`            | `icon/home` in `nav bar` (`81:816`)        | `house`             | Feed tab                                        |
+| `bookmark`        | `icon` in `nav bar` (`81:817`)             | `bookmark`          | Saved tab; the save control, unsaved            |
+| `bookmark-filled` | the same path with its interior filled     | `bookmark` (filled) | the save control, saved                         |
+| `user`            | `icon/user` in `nav bar` (`81:818`)        | `user-round`        | Profile tab                                     |
+| `search`          | `Search-Bar` glyph (`30:404`)              | `search`            | the search bar                                  |
+| `map-pin`         | `Nav-Chip` glyph (`33:458`)                | `map-pin`           | the card's location line                        |
+| `flag`            | `Relevance Label` glyph (`42:866`)         | `flag`              | the relevance label                             |
+| `chevron-down`    | `Nav Chip/icon` (`42:809`)                 | `chevron-down`      | the Location / Risk / Category chips            |
+| `external-link`   | `external-link` in Detail (`81:837`)       | `external-link`     | the official-source and Learn more links (P2B2) |
+| `warning`         | `icon/warning` in `Information` (`78:223`) | `triangle-alert`    | the warning callout (P2B2)                      |
+| `info`            | `lucide/info` in `Information` (`81:687`)  | `info`              | the information callout (P2B2)                  |
 
 Figma exports each glyph cropped to its path bounds at some scale; each was
 drawn at `export size × S / (24 × k)` centred in an `S`-point box, where `k`
@@ -1130,8 +1209,9 @@ chance.
 - **Loading** — a plain secondary-text message (`Loading…`) in the content
   column; no skeleton chrome, no spinner-only screens. Nothing that could be
   mistaken for real recall content renders while data is absent. The Feed's
-  loading state is also a polite live region that announces its title once,
-  so a screen-reader user hears that the feed is loading.
+  and Detail's loading states (the shared `StateMessage`) are also polite
+  live regions that announce their title once, so a screen-reader user hears
+  that the screen is loading.
 - **Empty** — a `heading-3` title with a `body-small` secondary explanation and
   the one relevant action (for example the Feed's "No matching recalls" with
   "Clear all"). Never an empty white card.
@@ -1209,6 +1289,10 @@ decision. They are normalized to the scale and never reproduced:
 | `38px` + `48px` nav padding    | bottom navigation              | equal distribution         |
 | `115px` media tile             | card                           | `card-media-size` (112)    |
 | `36px` default chip            | Nav-Chip (Default)             | 32, the selected height    |
+| `150px` hero tile              | Detail header                  | `detail-media-size` (152)  |
+| `79–119px` per-column widths   | Product-Information            | `table-column-width` (144) |
+| `10px` medium cell values      | Product-Information            | `caption` (12/500)         |
+| `40px` Detail top padding      | Detail frame                   | the navigator's header     |
 
 ### Extend the existing theme; do not build a parallel one
 
@@ -1220,10 +1304,15 @@ decision. They are normalized to the scale and never reproduced:
   screen's design milestone moves it onto the tokens.
 - Shared primitives live in `src/components/ui/` and consume tokens only:
   `Text` (variant + semantic color), `Surface` (semantic background, radius,
-  border, elevation), `DisclosureControl`, `RiskLabel`, and from P2B1 `Icon`
+  border, elevation), `DisclosureControl`, `RiskLabel`, from P2B1 `Icon`
   (a glyph from the exported set, an icon-scale size, an icon colour),
-  `RelevanceLabel`, `Chip` and `SearchBar`. A reusable component contains no
-  hex literal, no off-scale number, and no font size of its own.
+  `RelevanceLabel`, `Chip` and `SearchBar`, and from P2B2 `MediaTile` (a
+  square image-or-placeholder at one of the three media-size tokens),
+  `Callout` (the two Information tones) and `NoticeLabel` (the Public Health
+  Alert label). The whole-screen `StateMessage`
+  (`src/components/state-message.tsx`) is shared by the Feed and Detail. A
+  reusable component contains no hex literal, no off-scale number, and no
+  font size of its own.
 - Use existing Expo Router / React Native patterns. No Tailwind, NativeWind,
   styled-components, CSS variables, DOM elements, or new state or UI
   libraries.
@@ -1259,9 +1348,12 @@ decision. They are normalized to the scale and never reproduced:
 | `Relevance Label` `42:840`               | `src/components/ui/relevance-label.tsx`                        |
 | `icon/*` glyphs                          | `src/components/ui/icon.tsx` over `assets/icons/`              |
 | `Recall-Card` `42:987` (2×2 matrix)      | `src/components/recall-card.tsx`                               |
-| `Information` `81:681` (Warning / Info)  | the affects-you banner in Recall Detail (primitive pending)    |
+| `Information` `81:681` (Warning / Info)  | `src/components/ui/callout.tsx` (P2B2)                         |
 | `Product-Information` `81:719`           | `AffectedProductsTableView` in Recall Detail                   |
 | `See all (3)` / `View Retailers (10)`    | `src/components/ui/disclosure-control.tsx`                     |
+| Detail hero `81:838`, card media         | `src/components/ui/media-tile.tsx` (P2B2)                      |
+| `icon/chevron-left` `63:1343`            | the platform back control (`headerBackButtonDisplayMode`)      |
+| `share` `63:1358`                        | **not rendered** — no behaviour (conflict 9)                   |
 | `label/Critical` `42:832`                | **retired** — nothing in code                                  |
 | text styles                              | `typography` in `design-tokens.ts` (`Text variant=`)           |
 | `Elevation/Card`                         | `elevation.card`                                               |
@@ -1276,8 +1368,13 @@ through the real `riskView` pipeline — and, from P2B1, the Feed's card matrix
 (the four relevance × media states, the longest live product name and
 summary, nationwide and multi-state geography, and the Public Health Alert
 notice label, each on a real current recall) plus the Feed's controls and
-state messages with their real copy. Only the values each caption names are
-simulated. It is not a product surface.
+state messages with their real copy; and from P2B2, Detail's state messages
+and the two callout tones, plus twenty-two further scenarios that open the
+real Recall Detail on a real recall chosen for its shape — with and without
+a hero, short and long names, nationwide, every reviewed hazard guide, the
+risk-only and absent Health Risk states, complete and incomplete
+identifier/date groups, and one recall per risk tier. Only the values each
+caption names are simulated. It is not a product surface.
 
 ## Known Figma/code conflicts
 
@@ -1316,9 +1413,11 @@ Figma wins on composition; open items are the founder's.
    surface; the suffix is retired and the closed vocabulary is pinned.
 9. **Save control placement.** Figma puts the bookmark in the Detail header;
    the shipped Detail renders the shared save control in the body beside the
-   recall's identity. The Detail milestone may move it to the header; it
-   remains the one shared control. The header's share icon has no product
-   behavior and is not implemented.
+   recall's identity. **Resolved (P2B2):** it stays in the body, at the
+   trailing edge of the status row, the one shared control with its visible
+   word (the P2A founder decision: the navigation header carries only
+   navigation). The header's share icon has no product behavior and is not
+   implemented.
 10. **Feed mode vs. chips.** Figma renders `Affects me` as a chip in the filter
     row; the product has a separate All / Affects me mode control and hides
     filters in Affects me mode. **Resolved in composition (P2B1):** one chip
@@ -1338,7 +1437,8 @@ Figma wins on composition; open items are the founder's.
 15. **Callout and table shadows.** Figma gives callouts and the product table
     `0 2px 4px 6%` and the nav bar `0 -2px 8px 8%`; only `elevation/card` is a
     token. Either bind them to `Elevation/Card` or approve named effect styles.
-    The implemented bar uses the `border/subtle` hairline and no shadow.
+    The implemented bar, callouts and table (P2B2) use surface colour and the
+    `border/subtle` hairline with no shadow.
 16. **Save control on the card.** Figma shows the bookmark glyph alone; the
     product shows the glyph (outline / filled) beside the visible `Save` /
     `Saved` word — a P2A founder copy decision and the state's non-colour
@@ -1354,6 +1454,26 @@ Figma wins on composition; open items are the founder's.
     label). Figma should add it (see the corrections below).
 20. **Search clear affordance.** Figma's bar has no clear state; the product
     shows an explicit `Clear` control while the field holds text.
+21. **Detail body copy colour.** Figma sets the What Happened paragraphs and
+    the jurisdiction line in `text/secondary`; the product renders section
+    bodies in `text/primary` and mutes only the `Update` line (the shipped
+    rule, pinned by the wiring suite). Safety-critical narrative is not
+    secondary text.
+22. **Detail section headings.** Figma `What Happened` / `Where It Was
+Sold`; the shipped titles were sentence case and rendered uppercase.
+    **Resolved (P2B2):** the four headings render in the design's title case
+    in `heading-3`.
+23. **Table cell values.** Figma's `Product-Information` sets values in
+    `micro-caption` (10px); the product renders them in `caption` (12px) —
+    a lot code or date is checked against a package, not glanced at.
+24. **Jurisdiction reveal placement.** Figma's `View Retailers (10)` sits on
+    the Where It Was Sold heading row; the product's jurisdiction `See all
+(N)` takes that place (the retailer action does not exist; conflict 5).
+25. **Detail navigation row.** Figma draws its own chevron, share and
+    bookmark row inside the frame with `40px` top padding; the product keeps
+    the navigator's header (title `Recall Details`, page colour, no shadow)
+    with the platform chevron alone as the back control, named `Back` for
+    assistive technology, and no share glyph.
 
 ## Figma corrections for Cheyenne
 
@@ -1418,6 +1538,15 @@ Changes to make in Figma itself. Nothing here changes product behavior.
 - [ ] Add screens that exist in the product but not in Figma: Saved, Profile,
       the questionnaire (state / retailer / timeframe / review / success), and
       the Feed's loading, empty and error states.
+- [ ] Recall Detail: set the section bodies and the jurisdiction line in
+      `text/primary` (conflict 21); set the table values in `Caption`
+      (conflict 23); normalize the hero to 152 and the columns to one 144
+      width; show the `Save` / `Saved` control on the status row instead of
+      the bookmark in the utility row, and remove the share glyph (conflict
+      9); replace the frame's own chevron row with a navigator header
+      placeholder (conflict 25); and add the no-image header, the retracted
+      information callout, and the loading / not-found / load-failure
+      states.
 
 ## Do's and Don'ts
 

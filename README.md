@@ -634,7 +634,7 @@ misstate them), and none of this activates push delivery.
   labels are styled from the tokens. The tier mapping, ranking, filtering,
   and notification logic are untouched.
 
-- **P2B1 — the Lotly Feed** (implemented, uncommitted): the first restyled
+- **P2B1 — the Lotly Feed** (shipped, `3e89771`): the first restyled
   product screen. The Feed, the shared recall card, the save control and the
   bottom navigation render from the design tokens and the shared primitives
   — four new ones in `src/components/ui/` (`Icon`, `RelevanceLabel`, `Chip`,
@@ -655,8 +655,31 @@ misstate them), and none of this activates push delivery.
   matrix and a controls-and-states gallery over real recalls. Figma's bell,
   sliders glyph and `Urgency` chip were not reproduced (no behaviour; `Risk`
   is the shipped filter) — the decisions are in [DESIGN.md](DESIGN.md),
-  "Known Figma/code conflicts". Recall Detail, Saved and Profile keep the
-  provisional appearance.
+  "Known Figma/code conflicts".
+
+- **P2B2 — the Lotly Recall Detail** (implemented, uncommitted): the second
+  restyled product screen. Recall Detail renders from the tokens and the
+  shared primitives — three new ones in `src/components/ui/` (`MediaTile`,
+  extracted from the card; `Callout` in its warning and information tones;
+  `NoticeLabel`, extracted from the card) plus the whole-screen
+  `StateMessage` now shared with the Feed — with every shipped behaviour
+  intact: the product header (risk label, notice label, date, save control,
+  `heading-2` name, brand, official link with the external-link glyph, and
+  the 152pt hero only when there is an image), the affects-you and retracted
+  callouts, the four title-case sections separated by hairlines with their
+  reveals on the heading rows, the community block styled as part of Where
+  It Was Sold, and the Affected Products table as a white bordered grid with
+  one fixed column width so the header and version rows stay aligned while
+  only the table pans sideways. The pushed screens' back control is the
+  platform chevron named `Back` (it read `(tabs)` before), and their header
+  chrome is styled from the same tokens as the Feed's. Nothing in the
+  presentation contract, the disclosure thresholds, the identifier/date
+  pairing, the community copy or the server gate changed —
+  `src/components/detail-design.test.ts` pins that beside the existing
+  suites — and the dev-only Design Preview gained twenty-two Detail
+  scenarios on real recalls (header, names, geography, every hazard guide,
+  pair completeness, every risk tier) plus a Detail states-and-callouts
+  gallery. Saved and Profile keep the provisional appearance.
 
 ## Operational verification (O2)
 

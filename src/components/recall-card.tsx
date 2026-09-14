@@ -46,12 +46,13 @@
  * stays for everyone else.
  */
 
-import { useState } from 'react';
 import { Link } from 'expo-router';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { SaveRecallButton } from '@/components/save-recall-button';
 import { Icon } from '@/components/ui/icon';
+import { MediaTile } from '@/components/ui/media-tile';
+import { NoticeLabel } from '@/components/ui/notice-label';
 import { RelevanceLabel } from '@/components/ui/relevance-label';
 import { RiskLabel } from '@/components/ui/risk-label';
 import { Surface } from '@/components/ui/surface';
@@ -125,7 +126,11 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
           {/* Product identity stays dominant; the media is a recognition aid
               beside it, and keeps its footprint when there is no image. */}
           <View style={styles.content}>
-            <CardMedia uri={model.heroImageUrl} alt={model.productName} />
+            <MediaTile
+              uri={model.heroImageUrl}
+              alt={model.productName}
+              size={layout.cardMediaSize}
+            />
             <View style={styles.identity}>
               <View>
                 <Text variant="heading-3">{model.productName}</Text>
@@ -159,61 +164,6 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
   );
 }
 
-/**
- * The card's media tile: the real product image from the shared image
- * pipeline when one exists and loads, and the neutral placeholder — at the
- * same size — when there is none or it fails. `contain` never crops or
- * distorts a government label photo; the placeholder colour shows around it.
- * The image is labelled with the product name; the empty placeholder is
- * decorative and hidden from assistive technology.
- */
-function CardMedia({ uri, alt }: { uri: string | null; alt: string }) {
-  const [failed, setFailed] = useState(false);
-  const image = uri !== null && !failed ? uri : null;
-
-  return (
-    <Surface
-      background="background/media-placeholder"
-      radius={8}
-      style={styles.media}
-      accessible={image !== null}
-      accessibilityRole={image !== null ? 'image' : undefined}
-      accessibilityLabel={image !== null ? alt : undefined}
-      importantForAccessibility={image !== null ? 'auto' : 'no-hide-descendants'}>
-      {image !== null ? (
-        <Image
-          source={{ uri: image }}
-          style={styles.mediaImage}
-          resizeMode="contain"
-          accessible={false}
-          onError={() => setFailed(true)}
-        />
-      ) : null}
-    </Surface>
-  );
-}
-
-/**
- * The Public Health Alert notice label: the same compact-label geometry as
- * the risk label beside it, on the neutral informational surface — it is a
- * notice type, not a severity and not a relevance, so it borrows neither
- * palette.
- */
-function NoticeLabel({ label }: { label: string }) {
-  return (
-    <Surface
-      background="background/subtle"
-      radius={4}
-      border="border/default"
-      style={styles.notice}
-      accessible
-      accessibilityRole="text"
-      accessibilityLabel={label}>
-      <Text variant="label">{label.toUpperCase()}</Text>
-    </Surface>
-  );
-}
-
 const styles = StyleSheet.create({
   pressed: {
     opacity: 0.6,
@@ -241,15 +191,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: spacing[12],
   },
-  media: {
-    width: layout.cardMediaSize,
-    height: layout.cardMediaSize,
-    overflow: 'hidden',
-  },
-  mediaImage: {
-    width: '100%',
-    height: '100%',
-  },
   // flex + minWidth 0 let long product names wrap instead of pushing the
   // media off the card.
   identity: {
@@ -272,12 +213,5 @@ const styles = StyleSheet.create({
   },
   locationText: {
     flexShrink: 1,
-  },
-  notice: {
-    alignSelf: 'flex-start',
-    justifyContent: 'center',
-    minHeight: layout.riskLabelHeight,
-    paddingHorizontal: spacing[8],
-    paddingVertical: spacing[4],
   },
 });

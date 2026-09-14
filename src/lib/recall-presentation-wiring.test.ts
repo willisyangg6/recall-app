@@ -128,11 +128,11 @@ test('the recall quantity is narrative the model composed, never screen styling 
   // And nothing in What Happened is muted secondary text except the Update
   // line the P1 contract put there.
   const section = DETAIL.slice(
-    DETAIL.indexOf('<Section title="What happened">'),
+    DETAIL.indexOf('<Section title="What Happened">'),
     DETAIL.indexOf('{/* Where it was sold'),
   );
   assert.equal(
-    section.match(/themeColor="textSecondary"/g)?.length ?? 0,
+    section.match(/color="text\/secondary"/g)?.length ?? 0,
     1,
     'What happened carries a second muted line',
   );
@@ -419,9 +419,11 @@ test('P1B: an absent higher-risk paragraph renders null — no blank line or fil
   // and pass `healthRisk.higherRisk === null` — this pins that the screen's
   // conditional renders bare `null` in that case, never an empty element, a
   // placeholder string, or a spacing view a `null` child would leave behind.
+  // P2B2: the paragraph is the shared Text primitive in the section's body
+  // type; Prettier may wrap the conditional, so the parens are optional.
   assert.match(
     DETAIL,
-    /\{healthRisk\.higherRisk \? <ThemedText>\{healthRisk\.higherRisk\}<\/ThemedText> : null\}/,
+    /\{healthRisk\.higherRisk \? \(?\s*<Text variant="body-small">\{healthRisk\.higherRisk\}<\/Text>\s*\)? : null\}/,
   );
   for (const filler of ['No additional risk', 'N/A', 'Not applicable']) {
     assert.ok(!DETAIL.includes(filler), `fallback filler "${filler}" fills the absent paragraph`);
@@ -460,8 +462,8 @@ test('P1B: the screen invents no health content and repeats no recall-specific i
   assert.ok(!DETAIL.includes('healthEducationText'), 'the screen extracts notice health prose');
 });
 
-test('P1B: Detail section order is What happened → Where it was sold → Health Risk → Products', () => {
-  const order = ['What happened', 'Where it was sold', 'Health Risk', 'Affected Products'].map(
+test('P1B: Detail section order is What Happened → Where It Was Sold → Health Risk → Products', () => {
+  const order = ['What Happened', 'Where It Was Sold', 'Health Risk', 'Affected Products'].map(
     (heading) => {
       // Affected Products carries an `action` prop (its row reveal), so the
       // opening tag may wrap — match the title attribute, not a literal tag.
@@ -544,7 +546,7 @@ test('P3A: optional Detail sections are model-owned — no screen-level content 
   assert.match(DETAIL, /\{healthRisk \? \(/);
   assert.match(DETAIL, /\{affectedProducts \? \(/);
   // Every heading exists ONLY inside its section's conditional.
-  for (const heading of ['Where it was sold', 'Health Risk', 'Affected Products']) {
+  for (const heading of ['Where It Was Sold', 'Health Risk', 'Affected Products']) {
     const before = DETAIL.slice(0, DETAIL.search(new RegExp(`<Section\\s+title="${heading}"`)));
     assert.match(before.slice(-400), /\? \(/, `${heading} can render unconditionally`);
   }
@@ -596,8 +598,10 @@ test('P1D: the community block nests inside Where it was sold, gated by the mode
   // It renders UNDER the official statement — inside that section's own
   // conditional — so community context can never appear beside, above, or
   // without the government statement it corroborates.
+  // The section's opening tag carries the jurisdiction reveal as its
+  // `action` (P2B2), so it may wrap — match the title attribute.
   const section = DETAIL.slice(
-    DETAIL.indexOf('<Section title="Where it was sold">'),
+    DETAIL.search(/<Section\s+title="Where It Was Sold"/),
     DETAIL.indexOf('<Section title="Health Risk">'),
   );
   assert.ok(section.includes('<CommunityReportsBlock'), 'the block is not in Where it was sold');

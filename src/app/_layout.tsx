@@ -11,6 +11,7 @@ import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 
+import { color, textStyle } from '@/constants/design-tokens';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { flushPreferencesSync } from '@/lib/preferences-store';
 
@@ -19,6 +20,18 @@ import { flushPreferencesSync } from '@/lib/preferences-store';
 // module scope, as expo-splash-screen recommends — inside a component it can
 // run after the splash has already gone.
 void SplashScreen.preventAutoHideAsync();
+
+/**
+ * The spoken name of every pushed screen's back control (P2B2). The screens
+ * beneath the stack are the `(tabs)` route GROUP, which has no title of its
+ * own, so the platform used to fall back to the group's name and the back
+ * control read "(tabs)". The control is now the platform chevron alone
+ * (`headerBackButtonDisplayMode: 'minimal'`, the design's back affordance)
+ * and this is what a screen reader and the long-press back menu call it —
+ * "Back" rather than the name of whichever tab the reader came from, because
+ * the group returns to whichever tab was active.
+ */
+const BACK_LABEL = 'Back';
 
 export default function RootLayout() {
   // The six faces the design contract uses (DESIGN.md, "Typography"), loaded
@@ -51,13 +64,27 @@ export default function RootLayout() {
   // Nothing renders under the splash until the fonts have settled either way.
   if (!fontsLoaded && !fontError) return null;
 
+  // The pushed screens' header is navigation chrome the navigator owns, so
+  // it is styled here from the tokens exactly as the tab layout styles the
+  // Feed's: the page colour, no shadow, `heading-3` for the title, the
+  // action colour for the back chevron.
+  const { fontFamily, fontSize, fontWeight } = textStyle('heading-3');
+
   return (
     // Light appearance only (founder decision, 2026-09-14): dark mode is
     // deferred until it has approved tokens and designs, so the navigation
     // theme is pinned to light here and the app's `userInterfaceStyle` is
     // `light` in app.json. There is no toggle and no dark palette.
     <ThemeProvider value={DefaultTheme}>
-      <Stack>
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: color['background/page'] },
+          headerShadowVisible: false,
+          headerTintColor: color['action/primary'],
+          headerTitleStyle: { fontFamily, fontSize, fontWeight, color: color['text/primary'] },
+          headerBackButtonDisplayMode: 'minimal',
+          headerBackTitle: BACK_LABEL,
+        }}>
         {/* P2A: the three-destination bottom navigation (Feed, Saved,
             Profile). It is a route GROUP, so it owns no URL segment — Feed is
             still `/` and Profile still `/profile`. Its own header is hidden

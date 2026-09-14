@@ -51,7 +51,9 @@
  * nothing at all.
  */
 
+import type { HazardGuideKey } from '@/content/hazard-guides';
 import type { Geography } from '@/domain/recall-types';
+import type { ConsumerRiskTier } from '@/domain/risk-tier';
 import {
   evaluateReportEligibility,
   SHOPPER_REPORT_VISIBILITY_THRESHOLD,
@@ -98,7 +100,32 @@ export type DesignPreviewScenarioId =
   | 'cell_two_values'
   | 'cell_collapsed'
   | 'pairs_two'
-  | 'pairs_many';
+  | 'pairs_many'
+  // P2B2 Detail scenarios. Still real recalls chosen for their own shape;
+  // nothing is simulated on any of them.
+  | 'header_image'
+  | 'header_no_image'
+  | 'name_short'
+  | 'name_long'
+  | 'geography_nationwide'
+  | 'guide_botulism'
+  | 'guide_listeria'
+  | 'guide_stec'
+  | 'guide_undeclared_allergen'
+  | 'guide_salmonella'
+  | 'guide_hepatitis_a'
+  | 'guide_cyclospora'
+  | 'health_risk_fallback'
+  | 'health_risk_absent'
+  | 'pairs_complete'
+  | 'pairs_incomplete'
+  | 'risk_critical'
+  | 'risk_very_high'
+  | 'risk_high'
+  | 'risk_moderate'
+  | 'risk_low'
+  | 'risk_pending'
+  | 'risk_unknown';
 
 /**
  * What kind of real recall a scenario needs to be shown on.
@@ -131,7 +158,74 @@ export type PreviewCaseRequirement =
   /** A code/date pair group of exactly two pairs: aligned, with no control. */
   | 'pairs_two'
   /** A pair group of more than two pairs: two pairs, then one shared control. */
-  | 'pairs_many';
+  | 'pairs_many'
+  // P2B2 — decided from the feed row (the same projection fields the
+  // Detail model reads).
+  /** Nationwide distribution: one sentence, no jurisdiction list, no control. */
+  | 'nationwide'
+  /** One recall per consumer risk tier, from the real `riskView` of its classification. */
+  | 'risk_critical'
+  | 'risk_very_high'
+  | 'risk_high'
+  | 'risk_moderate'
+  | 'risk_low'
+  | 'risk_pending'
+  | 'risk_unknown'
+  // P2B2 — confirmed against the real Detail model.
+  /** The model resolved a hero image: the header renders the tile. */
+  | 'image'
+  /** No hero: the identity column takes the whole header row. */
+  | 'no_image'
+  /** A product name at or under `NAME_SHORT_MAX` characters. */
+  | 'name_short'
+  /** A product name at or over `NAME_LONG_MIN` characters — wraps beside the hero. */
+  | 'name_long'
+  /** One recall per reviewed hazard guide, selected by the real guide pipeline. */
+  | 'guide_botulism'
+  | 'guide_listeria'
+  | 'guide_stec'
+  | 'guide_undeclared_allergen'
+  | 'guide_salmonella'
+  | 'guide_hepatitis_a'
+  | 'guide_cyclospora'
+  /** Health Risk present with the risk-only sentence: no guide, no symptoms, no source. */
+  | 'health_risk_fallback'
+  /** No Health Risk section at all. */
+  | 'health_risk_absent'
+  /** A pair group where every code has its date: no blank line. */
+  | 'pairs_complete'
+  /** A pair group with an undated code: the blank keeps its line. */
+  | 'pairs_incomplete';
+
+/** The guide each `guide_*` requirement is satisfied by — one per reviewed guide. */
+export const GUIDE_REQUIREMENTS: Record<HazardGuideKey, PreviewCaseRequirement> = {
+  botulism: 'guide_botulism',
+  listeria: 'guide_listeria',
+  stec: 'guide_stec',
+  'undeclared-allergen': 'guide_undeclared_allergen',
+  salmonella: 'guide_salmonella',
+  'hepatitis-a': 'guide_hepatitis_a',
+  cyclospora: 'guide_cyclospora',
+};
+
+/** The tier each `risk_*` requirement is satisfied by. */
+export const RISK_REQUIREMENTS: Record<ConsumerRiskTier, PreviewCaseRequirement> = {
+  critical: 'risk_critical',
+  very_high: 'risk_very_high',
+  high: 'risk_high',
+  moderate: 'risk_moderate',
+  low: 'risk_low',
+  pending: 'risk_pending',
+  unknown: 'risk_unknown',
+};
+
+/**
+ * Product-name thresholds for the short and long header scenarios, in
+ * characters of the model's own `productName`. Short fits one line beside
+ * the hero on the reference width; long is sure to wrap into several.
+ */
+export const NAME_SHORT_MAX = 24;
+export const NAME_LONG_MIN = 56;
 
 /** Which requirements need a confirmed Detail model rather than a feed row. */
 export const PRESENTATION_REQUIREMENTS: readonly PreviewCaseRequirement[] = [
@@ -143,6 +237,15 @@ export const PRESENTATION_REQUIREMENTS: readonly PreviewCaseRequirement[] = [
   'cell_many_values',
   'pairs_two',
   'pairs_many',
+  'image',
+  'no_image',
+  'name_short',
+  'name_long',
+  ...Object.values(GUIDE_REQUIREMENTS),
+  'health_risk_fallback',
+  'health_risk_absent',
+  'pairs_complete',
+  'pairs_incomplete',
 ];
 
 /**
@@ -168,6 +271,18 @@ export interface PreviewDetailFacts {
   maxPairLines: number;
   /** Whether any pair group holds exactly two lines (so it needs no control). */
   hasTwoLinePairGroup: boolean;
+  /** Whether the model resolved a hero image for the header tile. */
+  hasHeroImage: boolean;
+  /** Characters in the model's own cleaned product name. */
+  productNameLength: number;
+  /** Whether the model decided a Health Risk section at all. */
+  healthRisk: boolean;
+  /** The reviewed guide the real pipeline selected, or null (risk-only or no section). */
+  healthGuideKey: HazardGuideKey | null;
+  /** Whether any pair group has every code dated. */
+  hasCompletePairGroup: boolean;
+  /** Whether any pair group carries an undated code (a blank partner line). */
+  hasIncompletePairGroup: boolean;
 }
 
 export type PreviewDestination = 'detail' | 'questionnaire';
@@ -193,8 +308,13 @@ export interface ScenarioSimulation {
   ownReport: boolean;
 }
 
+/** How the hub groups its scenario list. */
+export type PreviewScenarioGroup =
+  'community' | 'questionnaire' | 'disclosure' | 'header' | 'health' | 'risk';
+
 export interface PreviewScenario {
   id: DesignPreviewScenarioId;
+  group: PreviewScenarioGroup;
   /** The hub's label for the state being previewed. */
   title: string;
   /** What the founder should expect to see once it opens. */
@@ -229,6 +349,7 @@ export const SIMULATED_PURCHASE_WINDOW: PurchaseWindow = 'past_month';
 export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   {
     id: 'detail_below_threshold',
+    group: 'community',
     title: 'Detail · below threshold, no personal report',
     expectation: 'The invitation question, then Add your report. No count anywhere.',
     requirement: 'reportable_with_retailers',
@@ -237,6 +358,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'detail_reported',
+    group: 'community',
     title: 'Detail · twelve public reports, no personal report',
     expectation: 'The disclosed count replaces the question, then Add your report.',
     requirement: 'reportable_with_retailers',
@@ -245,6 +367,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'detail_below_threshold_own_report',
+    group: 'community',
     title: 'Detail · below threshold, personal report exists',
     expectation: 'Edit your report alone — no count, no invitation.',
     requirement: 'reportable_with_retailers',
@@ -253,6 +376,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'detail_reported_own_report',
+    group: 'community',
     title: 'Detail · twelve public reports, personal report exists',
     expectation: 'The disclosed count, then Edit your report.',
     requirement: 'reportable_with_retailers',
@@ -261,6 +385,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'questionnaire_new',
+    group: 'questionnaire',
     title: 'Questionnaire · full new report',
     expectation:
       'State first (a single-state confirm, or the direct picker), the store question, ' +
@@ -271,6 +396,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'questionnaire_edit',
+    group: 'questionnaire',
     title: 'Questionnaire · edit and removal',
     expectation:
       'Every answer pre-filled, Update report on review, Remove my report, and the removal confirm.',
@@ -280,6 +406,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'questionnaire_no_retailer',
+    group: 'questionnaire',
     title: 'Questionnaire · recall naming no retailer',
     expectation: 'The store question is absent entirely: state, then purchase time, then review.',
     requirement: 'reportable_without_retailers',
@@ -288,6 +415,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'detail_ineligible',
+    group: 'community',
     title: 'Detail · ineligible recall (unusable geography)',
     expectation: 'No community block at all — no heading, no control, no spacing. Not simulated.',
     requirement: 'not_reportable',
@@ -296,6 +424,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'detail_production_gated',
+    group: 'community',
     title: 'Detail · the real production gate, unsimulated',
     expectation:
       'An eligible recall with the real server answering. The gate is off, so nothing renders. ' +
@@ -306,6 +435,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'jurisdictions_complete',
+    group: 'disclosure',
     title: 'Detail · five jurisdictions or fewer',
     expectation: 'The whole jurisdiction list renders. No control at all.',
     requirement: 'jurisdictions_few',
@@ -314,6 +444,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'jurisdictions_collapsed',
+    group: 'disclosure',
     title: 'Detail · more than five jurisdictions',
     expectation:
       'The first five in the notice’s own order, then See all (N). Tapping expands in place; ' +
@@ -324,6 +455,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'products_single',
+    group: 'disclosure',
     title: 'Detail · one affected product',
     expectation:
       'The single row renders normally, with no section-level action beside the heading.',
@@ -333,6 +465,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'products_collapsed',
+    group: 'disclosure',
     title: 'Detail · several affected products',
     expectation:
       'Exactly the first row in source order, with See all (N) beside the Affected Products ' +
@@ -343,6 +476,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'cell_two_values',
+    group: 'disclosure',
     title: 'Detail · a product cell holding exactly two values',
     expectation: 'Both values render inline. The cell has no control of its own.',
     requirement: 'cell_two_values',
@@ -351,6 +485,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'cell_collapsed',
+    group: 'disclosure',
     title: 'Detail · an UNPAIRED cell holding more than two values',
     expectation:
       'The first two values, then that cell’s own See all (N). Expanding affects only that ' +
@@ -361,6 +496,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'pairs_two',
+    group: 'disclosure',
     title: 'Detail · two identifier pairs',
     expectation:
       'A code column and its date column aligned line for line, two complete pairs, and no ' +
@@ -371,11 +507,225 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
   {
     id: 'pairs_many',
+    group: 'disclosure',
     title: 'Detail · several identifier pairs',
     expectation:
       'Two complete pairs, aligned across both columns, behind ONE See all (N) — tap it and both ' +
       'sides reveal every remaining pair together, still aligned. Neither column can move alone.',
     requirement: 'pairs_many',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'geography_nationwide',
+    group: 'disclosure',
+    title: 'Detail · nationwide distribution',
+    expectation: 'One sentence after the pin, no jurisdiction list and no control.',
+    requirement: 'nationwide',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'pairs_complete',
+    group: 'disclosure',
+    title: 'Detail · a complete identifier/date group',
+    expectation: 'Every code has its date on the same line; no blank line anywhere.',
+    requirement: 'pairs_complete',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'pairs_incomplete',
+    group: 'disclosure',
+    title: 'Detail · an incomplete identifier/date group',
+    expectation:
+      'An undated code keeps a blank line in the date column, so every later pair stays level.',
+    requirement: 'pairs_incomplete',
+    destination: 'detail',
+    simulation: null,
+  },
+  // ── P2B2: the restyled Detail's own shapes ────────────────────────────────
+  {
+    id: 'header_image',
+    group: 'header',
+    title: 'Detail · header with a product image',
+    expectation:
+      'The risk label, date and save control, then the product name, brand and official link ' +
+      'beside the hero tile.',
+    requirement: 'image',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'header_no_image',
+    group: 'header',
+    title: 'Detail · header without a product image',
+    expectation: 'No tile and no placeholder: the identity column takes the whole row.',
+    requirement: 'no_image',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'name_short',
+    group: 'header',
+    title: 'Detail · a short product name',
+    expectation: 'The name sits on one line beside the hero; nothing stretches to fill.',
+    requirement: 'name_short',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'name_long',
+    group: 'header',
+    title: 'Detail · a long product name',
+    expectation: 'The name wraps across several lines beside the hero and is never truncated.',
+    requirement: 'name_long',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'guide_botulism',
+    group: 'health',
+    title: 'Detail · Health Risk from the botulism guide',
+    expectation: 'The reviewed risk statement, COMMON SYMPTOMS bullets, and the Learn more link.',
+    requirement: 'guide_botulism',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'guide_listeria',
+    group: 'health',
+    title: 'Detail · Health Risk from the Listeria guide',
+    expectation: 'The reviewed risk statement, COMMON SYMPTOMS bullets, and the Learn more link.',
+    requirement: 'guide_listeria',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'guide_stec',
+    group: 'health',
+    title: 'Detail · Health Risk from the E. coli (STEC) guide',
+    expectation: 'The reviewed risk statement, COMMON SYMPTOMS bullets, and the Learn more link.',
+    requirement: 'guide_stec',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'guide_undeclared_allergen',
+    group: 'health',
+    title: 'Detail · Health Risk from the undeclared-allergen guide',
+    expectation:
+      'The allergen-specific risk sentence, COMMON SYMPTOMS bullets, and the Learn more link.',
+    requirement: 'guide_undeclared_allergen',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'guide_salmonella',
+    group: 'health',
+    title: 'Detail · Health Risk from the Salmonella guide',
+    expectation: 'The reviewed risk statement, COMMON SYMPTOMS bullets, and the Learn more link.',
+    requirement: 'guide_salmonella',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'guide_hepatitis_a',
+    group: 'health',
+    title: 'Detail · Health Risk from the hepatitis A guide',
+    expectation: 'The reviewed risk statement, COMMON SYMPTOMS bullets, and the Learn more link.',
+    requirement: 'guide_hepatitis_a',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'guide_cyclospora',
+    group: 'health',
+    title: 'Detail · Health Risk from the Cyclospora guide',
+    expectation: 'The reviewed risk statement, COMMON SYMPTOMS bullets, and the Learn more link.',
+    requirement: 'guide_cyclospora',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'health_risk_fallback',
+    group: 'health',
+    title: 'Detail · Health Risk with no reviewed guide',
+    expectation: 'The risk-only sentence stands alone: no symptom list and no source link.',
+    requirement: 'health_risk_fallback',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'health_risk_absent',
+    group: 'health',
+    title: 'Detail · no Health Risk section',
+    expectation:
+      'Where It Was Sold is followed directly by Affected Products — no heading, no divider.',
+    requirement: 'health_risk_absent',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'risk_critical',
+    group: 'risk',
+    title: 'Detail · CRITICAL',
+    expectation: 'The canonical bare word in the critical treatment, beside the date.',
+    requirement: 'risk_critical',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'risk_very_high',
+    group: 'risk',
+    title: 'Detail · VERY HIGH',
+    expectation: 'The canonical bare words in the very-high treatment.',
+    requirement: 'risk_very_high',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'risk_high',
+    group: 'risk',
+    title: 'Detail · HIGH',
+    expectation: 'The canonical bare word in the high treatment.',
+    requirement: 'risk_high',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'risk_moderate',
+    group: 'risk',
+    title: 'Detail · MODERATE',
+    expectation: 'The canonical bare word in the moderate treatment.',
+    requirement: 'risk_moderate',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'risk_low',
+    group: 'risk',
+    title: 'Detail · LOW',
+    expectation: 'The canonical bare word in the low treatment — never green, never "safe".',
+    requirement: 'risk_low',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'risk_pending',
+    group: 'risk',
+    title: 'Detail · PENDING',
+    expectation: 'The soft-blue pending label with no explanatory note beneath it.',
+    requirement: 'risk_pending',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'risk_unknown',
+    group: 'risk',
+    title: 'Detail · UNKNOWN (Public Health Alert)',
+    expectation: 'The neutral unknown label beside the PUBLIC HEALTH ALERT notice label.',
+    requirement: 'risk_unknown',
     destination: 'detail',
     simulation: null,
   },
@@ -588,6 +938,12 @@ export interface PreviewCandidate {
   /** How many affected-product lines the notice carries. */
   productLineCount: number;
   lastPublicActivityAt: string;
+  /**
+   * The consumer risk tier the real `riskView` derives from the row's
+   * classification — the same derivation the Detail model makes, computed by
+   * the hub and carried here as data.
+   */
+  riskTier: ConsumerRiskTier;
 }
 
 /** A candidate resolved against the same eligibility rules the server enforces. */
@@ -644,9 +1000,35 @@ export function meetsRequirement(
         return facts.maxCellValues > 2;
       case 'pairs_two':
         return facts.hasTwoLinePairGroup;
-      default:
+      case 'pairs_many':
         return facts.maxPairLines > 2;
+      case 'image':
+        return facts.hasHeroImage;
+      case 'no_image':
+        return !facts.hasHeroImage;
+      case 'name_short':
+        return facts.productNameLength > 0 && facts.productNameLength <= NAME_SHORT_MAX;
+      case 'name_long':
+        return facts.productNameLength >= NAME_LONG_MIN;
+      case 'health_risk_fallback':
+        return facts.healthRisk && facts.healthGuideKey === null;
+      case 'health_risk_absent':
+        return !facts.healthRisk;
+      case 'pairs_complete':
+        return facts.hasCompletePairGroup;
+      case 'pairs_incomplete':
+        return facts.hasIncompletePairGroup;
+      default:
+        // The seven guide requirements: the real pipeline's guide, by key.
+        return (
+          facts.healthGuideKey !== null && GUIDE_REQUIREMENTS[facts.healthGuideKey] === requirement
+        );
     }
+  }
+  // Decided from the feed row's own projection fields.
+  if (requirement === 'nationwide') return screened.candidate.geography.scope === 'nationwide';
+  if (requirement.startsWith('risk_')) {
+    return RISK_REQUIREMENTS[screened.candidate.riskTier] === requirement;
   }
   if (requirement === 'not_reportable') return !screened.reportable;
   if (!screened.reportable) return false;

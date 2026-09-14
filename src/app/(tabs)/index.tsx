@@ -11,7 +11,7 @@ import {
 import { Link, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FeedStateMessage } from '@/components/feed-state-message';
+import { StateMessage } from '@/components/state-message';
 import { RecallCard } from '@/components/recall-card';
 import { Chip } from '@/components/ui/chip';
 import { SearchBar } from '@/components/ui/search-bar';
@@ -347,7 +347,7 @@ export default function HomeScreen() {
   if (!isFeedConfigured()) {
     return (
       <Page>
-        <FeedStateMessage {...FEED_NOT_CONFIGURED} tone="error" />
+        <StateMessage {...FEED_NOT_CONFIGURED} tone="error" />
       </Page>
     );
   }
@@ -355,7 +355,7 @@ export default function HomeScreen() {
   if (state.status === 'loading') {
     return (
       <Page>
-        <FeedStateMessage {...FEED_LOADING} tone="loading" />
+        <StateMessage {...FEED_LOADING} tone="loading" />
       </Page>
     );
   }
@@ -363,7 +363,7 @@ export default function HomeScreen() {
   if (state.status === 'error') {
     return (
       <Page>
-        <FeedStateMessage title={FEED_ERROR_TITLE} body={state.message} tone="error" />
+        <StateMessage title={FEED_ERROR_TITLE} body={state.message} tone="error" />
       </Page>
     );
   }
@@ -704,11 +704,11 @@ export default function HomeScreen() {
         }
         ListEmptyComponent={
           searchActive || (tab === 'all' && filtersActive) ? (
-            <FeedStateMessage {...(searchActive ? FEED_EMPTY_SEARCH : FEED_EMPTY_FILTERS)} />
+            <StateMessage {...(searchActive ? FEED_EMPTY_SEARCH : FEED_EMPTY_FILTERS)} />
           ) : personalized ? (
-            <FeedStateMessage {...FEED_EMPTY_PERSONALIZED} />
+            <StateMessage {...FEED_EMPTY_PERSONALIZED} />
           ) : tab === 'affects_me' ? null : (
-            <FeedStateMessage {...FEED_EMPTY_CORPUS} />
+            <StateMessage {...FEED_EMPTY_CORPUS} />
           )
         }
       />
