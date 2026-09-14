@@ -311,7 +311,7 @@ test('P3A FSIS corpus scan: no empty section, no lost row, no reason disagreemen
         section.table.expanded.rows.some(
           (row) =>
             (row.name ?? '').trim() !== '' ||
-            row.cells.some((cell) => (cell.text ?? '').trim() !== '' || cell.codes !== null),
+            row.cells.some((cell) => (cell.text ?? '').trim() !== ''),
         );
       assert.ok(readable, `visible section with no readable content: ${id}`);
     }
@@ -364,8 +364,8 @@ test('P3C-2: FSIS recall-level codes render inside the table, not beneath it', (
       ['lotCodes'],
       id,
     );
-    assert.equal(view.rows[0].cells[0].codesLabel, `View ${count} codes`, id);
-    assert.equal(view.rows[0].cells[0].codes!.count, count, id);
+    assert.equal(view.rows[0].cells[0].disclosure?.expandLabel, `See all (${count})`, id);
+    assert.equal(view.rows[0].cells[0].values.length, count, id);
     // A nameless row is never given an image.
     assert.equal(view.rows[0].image, null, id);
   }
@@ -392,21 +392,22 @@ test('P3C-2 FSIS corpus scan: every code reaches a table cell, and only its own 
       const index = view.columns.findIndex((column) => column.key === shared.key);
       assert.notEqual(index, -1, `${id}: ${shared.key} has no column`);
       assert.ok(
-        view.rows.some(
-          (row) =>
-            row.cells[index].codes === shared.codes ||
-            (row.cells[index].text ?? '') === shared.codes.codes.join(', '),
-        ),
+        view.rows.some((row) => (row.cells[index].text ?? '') === shared.codes.codes.join(', ')),
         `${id}: a proven shared code set reached no row`,
       );
     }
-    // A row-local set is exactly that row's own codes: the modal identity and
-    // its label come from the row it renders in, never a sibling's.
+    // A cell's reveal counts exactly that cell's own values and shows its
+    // first two: the control comes from the row it renders in, never a
+    // sibling's, and two values or fewer never produce one.
     for (const row of view.rows) {
       for (const cell of row.cells) {
-        if (cell.codes === null) continue;
-        assert.equal(cell.codesLabel, `View ${cell.codes.count} codes`, id);
-        assert.ok(cell.codes.count > 0, id);
+        if (cell.disclosure === null) {
+          assert.ok(cell.values.length <= 2, `${id}: ${cell.key} hides values with no control`);
+          continue;
+        }
+        assert.equal(cell.disclosure.expandLabel, `See all (${cell.values.length})`, id);
+        assert.equal(cell.collapsedText, cell.values.slice(0, 2).join(', '), id);
+        assert.ok(cell.values.length > 2, id);
       }
     }
   }

@@ -559,6 +559,61 @@ export function homeLocationSummary(geography: Geography): string {
   return `${codes[0]}, ${codes[1]} +${codes.length - 2}`;
 }
 
+/**
+ * One in-place disclosure control: "See all (N)" while collapsed, "Show less"
+ * while expanded. Three surfaces share this shape — the Detail jurisdiction
+ * list, the Affected Products row list, and an individual multi-value product
+ * cell — so every reveal on the screen words itself, counts itself, and
+ * announces itself the same way, and no screen composes disclosure copy of
+ * its own.
+ *
+ * Expanding NEVER navigates: there is no page, modal, or sheet behind any of
+ * these. The list grows where it already is.
+ */
+export interface DisclosureControl {
+  /** Visible text while collapsed. Always "See all (N)" with the REAL total. */
+  expandLabel: string;
+  /** Visible text while expanded. */
+  collapseLabel: string;
+  /**
+   * Spoken label while collapsed. Names the count AND what is being revealed,
+   * because "See all (10)" alone tells a screen-reader user nothing about
+   * what the ten things are.
+   */
+  expandAccessibilityLabel: string;
+  /**
+   * Spoken label while expanded — identical to the visible word, so Voice
+   * Control matches what a sighted user would say out loud.
+   */
+  collapseAccessibilityLabel: string;
+}
+
+/** The one collapse word. Never "Show fewer", never "Collapse". */
+export const SHOW_LESS_LABEL = 'Show less';
+
+/**
+ * Build the control for a list of `total` items described by `noun`
+ * ("jurisdictions", "affected products", "lot codes"). `total` is always the
+ * complete count, never the hidden remainder: "See all (10)" on a
+ * ten-jurisdiction recall, not "See all (5)".
+ */
+export function disclosureControl(total: number, noun: string): DisclosureControl {
+  return {
+    expandLabel: `See all (${total})`,
+    collapseLabel: SHOW_LESS_LABEL,
+    expandAccessibilityLabel: `See all ${total} ${noun}`,
+    collapseAccessibilityLabel: SHOW_LESS_LABEL,
+  };
+}
+
+/**
+ * At most this many jurisdictions render on Recall Detail before the list
+ * discloses the rest in place. Five is the founder's number; Home is
+ * unaffected and keeps its own two-code "+N" summary
+ * (`homeLocationSummary`), which is a different, much tighter surface.
+ */
+export const WHERE_SOLD_INITIAL_STATES = 5;
+
 export interface WhereSoldModel {
   /** The ONE rendered representation of where the recall reached (P2a
    * founder decision): the complete full-name state list, "Nationwide", a
@@ -566,6 +621,22 @@ export interface WhereSoldModel {
    * period, never a bare count beside the list, and the only thing the
    * Where-it-was-sold section renders at this stage. */
   lead: string;
+  /**
+   * The lead as Detail renders it BEFORE the jurisdiction list is expanded:
+   * the first `WHERE_SOLD_INITIAL_STATES` jurisdictions in canonical order,
+   * comma-joined with no terminal "and" — because an "and" would assert the
+   * list had ended when five of ten are showing. Identical to `lead` (same
+   * string) whenever nothing is hidden, which includes every nationwide,
+   * metro-phrase, and unspecified-distribution case: those are untouched by
+   * this disclosure and never carry a control.
+   */
+  leadCollapsed: string;
+  /**
+   * The jurisdiction reveal, or null when every jurisdiction already shows.
+   * Null is the whole gate: five or fewer jurisdictions render complete with
+   * no control at all.
+   */
+  statesDisclosure: DisclosureControl | null;
   /** Complete full-name state list (empty when not state-scoped). Preserved
    * for matching/traceability; the rendered representation is `lead`. */
   states: string[];
@@ -621,6 +692,12 @@ function joinNames(names: string[]): string {
 export function whereSoldModel(distribution: ConsumerDistribution): WhereSoldModel {
   const states = distribution.scopeType === 'states' ? distribution.states : [];
   const lead = states.length > 0 ? joinNames(states) : distribution.areaText.replace(/\.$/, '');
+  // Only a state list can be too long to show at once. Nationwide, a stated
+  // metro phrase, and the honest unspecified statement are single sentences
+  // with nothing to reveal, so they keep `lead` verbatim and get no control —
+  // their handling is deliberately untouched here.
+  const hiddenStates = states.length > WHERE_SOLD_INITIAL_STATES;
+  const leadCollapsed = hiddenStates ? states.slice(0, WHERE_SOLD_INITIAL_STATES).join(', ') : lead;
   const shown = distribution.retailers.slice(0, RETAILERS_SUMMARIZED);
   const hidden = distribution.retailers.length - shown.length;
   const retailerSummary =
@@ -631,6 +708,8 @@ export function whereSoldModel(distribution: ConsumerDistribution): WhereSoldMod
         : `Sold at ${joinNames(shown)}.`;
   return {
     lead,
+    leadCollapsed,
+    statesDisclosure: hiddenStates ? disclosureControl(states.length, 'jurisdictions') : null,
     states,
     retailers: distribution.retailers,
     retailerCount: distribution.retailers.length,
@@ -669,7 +748,16 @@ export function noticeLabel(noticeType: NoticeType): string | null {
 export interface AffectedProductField {
   key: PackageFieldKey;
   label: string;
+  /** Every value, joined exactly as the projection composed it. */
   value: string;
+  /**
+   * The individual values behind `value`, in source order. Carried so a long
+   * field can disclose two values at a time without re-splitting formatted
+   * text — the separator differs by field, and reverse-engineering it from
+   * the joined string would be inventing data semantics. A single-value field
+   * holds exactly one entry.
+   */
+  values: string[];
 }
 
 export interface AffectedProductItem {
@@ -721,6 +809,9 @@ export interface AffectedProductsModel {
   /** The readable calendar dates the shared production codes stand for. Same
    * treatment: a table cell in every applicable row, never a block. */
   sharedProductionDates: string | null;
+  /** Those dates as individual values, so the cell can disclose them two at
+   * a time. Empty whenever `sharedProductionDates` is null. */
+  sharedProductionDateValues: string[];
   codeLocation: CodeLocation | null;
   comparePhotos: ProductPhoto[];
 }
@@ -761,7 +852,12 @@ function orderedFields(fields: PackageField[]): AffectedProductField[] {
     .sort(
       (a, b) => PRESENTATION_FIELD_ORDER.indexOf(a.key) - PRESENTATION_FIELD_ORDER.indexOf(b.key),
     )
-    .map((field) => ({ key: field.key, label: field.label, value: field.value }));
+    .map((field) => ({
+      key: field.key,
+      label: field.label,
+      value: field.value,
+      values: [...field.values],
+    }));
 }
 
 function variantItem(variant: AffectedVariant, index: number): AffectedProductItem {
@@ -790,9 +886,15 @@ function variantItem(variant: AffectedVariant, index: number): AffectedProductIt
     const size = fields.find((field) => field.key === 'size');
     if (size === undefined) {
       // Size leads the presentation order, so the demoted value goes first.
-      fields.unshift({ key: 'size', label: PACKAGE_FIELD_LABEL.size, value: variantName });
+      fields.unshift({
+        key: 'size',
+        label: PACKAGE_FIELD_LABEL.size,
+        value: variantName,
+        values: [variantName],
+      });
     } else if (!measurementKey(size.value).includes(measurementKey(variantName))) {
       size.value = `${size.value}, ${variantName}`;
+      size.values = [...size.values, variantName];
     }
     return {
       rowId,
@@ -817,9 +919,11 @@ function variantItem(variant: AffectedVariant, index: number): AffectedProductIt
         key: 'packaging',
         label: PACKAGE_FIELD_LABEL.packaging,
         value: variantName,
+        values: [variantName],
       });
     } else if (!measurementKey(packaging.value).includes(measurementKey(variantName))) {
       packaging.value = `${packaging.value}, ${variantName}`;
+      packaging.values = [...packaging.values, variantName];
     }
     return {
       rowId,
@@ -903,6 +1007,7 @@ export function affectedProductsModel(
       items,
       sharedCodes: sharedCodeSets(packageCheck),
       sharedProductionDates: packageCheck.productionDates,
+      sharedProductionDateValues: packageCheck.productionDateValues,
       codeLocation: packageCheck.codeLocation,
       comparePhotos: packageCheck.photos,
     };
@@ -921,6 +1026,7 @@ export function affectedProductsModel(
     items: [],
     sharedCodes: [],
     sharedProductionDates: null,
+    sharedProductionDateValues: [],
     codeLocation: null,
     comparePhotos: [],
   };
@@ -988,17 +1094,58 @@ export interface AffectedProductsTableColumn {
   label: string;
 }
 
+/**
+ * One cell — and, when the field holds more than two values, its own
+ * independent disclosure.
+ *
+ * Every affected-product field can hold several values: expiration and
+ * best-by dates, lot and batch codes, barcodes, package sizes, production
+ * dates. They are all treated identically here. Two or fewer values always
+ * render in full; beyond that the cell shows the first two and reveals the
+ * rest IN PLACE. The retired "View N codes" modal is gone — a code list is
+ * not a different kind of thing from a date list, and neither is worth
+ * leaving the table for.
+ *
+ * `text` is the complete composed value, byte-identical to what this cell
+ * rendered before any disclosure existed, so expanding a cell always lands
+ * back on the projection's own wording.
+ */
 export interface AffectedProductsTableCell {
-  /** Plain value; null renders an EMPTY cell: a missing value is never a
-   * dash, "unknown", or a value borrowed from another version. */
+  /** The column this cell sits in — the stable identity the screen keys its
+   * per-cell expansion by, so expansion cannot follow the wrong column when
+   * the visible column set changes. */
+  key: AffectedProductsTableColumnKey;
+  /** Every value this field holds, in source order. Empty renders an EMPTY
+   * cell: a missing value is never a dash, "unknown", or a value borrowed
+   * from another version. */
+  values: string[];
+  /** All values as the projection composed them; null renders an empty cell. */
   text: string | null;
-  /** This row's own collapsed code set, when it is too large to print
-   * inline: renders as an in-cell control (`codesLabel`) that opens a modal
-   * showing exactly this row's codes and its source-supported code/date
-   * pairs — never a sibling row's. Null for plain cells. */
-  codes: LotCodeSet | null;
-  /** The in-cell control's text ("View 22 codes"); null for plain cells. */
-  codesLabel: string | null;
+  /** The first two values, comma-joined — no terminal "and", which would
+   * assert the list had ended. Identical to `text` when nothing is hidden. */
+  collapsedText: string | null;
+  /** This cell's own reveal, or null when two or fewer values render. For an
+   * ordinary cell this is entirely independent of the section's row
+   * disclosure and of every sibling cell; for a paired cell it is the
+   * group's ONE coordinated control, carried identically by both halves. */
+  disclosure: DisclosureControl | null;
+  /**
+   * When the source stated this cell's values as explicit code/date PAIRS,
+   * the identity of that pair group — shared by exactly the two cells that
+   * hold its two halves, and unique within the row. Null for an ordinary
+   * independent cell.
+   *
+   * Both halves of a group carry the same `values.length`, the same
+   * `disclosure`, and their values in the same line order, so line _n_ of one
+   * is the partner of line _n_ of the other. The screen keys expansion by
+   * this identity rather than by column, which is what makes it structurally
+   * impossible for one half to expand while the other stays collapsed.
+   *
+   * A paired cell's values are rendered ONE PER LINE, never comma-joined: a
+   * date like "September 30, 2027" carries its own comma, and joining would
+   * both blur the values and destroy the alignment the pairing depends on.
+   */
+  pairGroup: string | null;
 }
 
 export interface AffectedProductsTableRow {
@@ -1037,12 +1184,49 @@ export interface AffectedProductsTable {
   expanded: AffectedProductsTableViewModel;
   /** How many rows render before the reveal control. */
   initialRows: number;
-  /** "See all (N)" when more rows exist than initially render; null otherwise. */
-  seeAllLabel: string | null;
+  /** The section-level reveal over product ROWS, or null when every row
+   * already shows (a single-product recall gets no control at all). Entirely
+   * independent of any cell's own disclosure. */
+  rowsDisclosure: DisclosureControl | null;
 }
 
-/** At most this many affected-version rows render before "See all (N)". */
-export const AFFECTED_PRODUCTS_INITIAL_ROWS = 3;
+/**
+ * The identity of one cell's expansion state.
+ *
+ * A row id and a column key can each contain anything the source did, so they
+ * are joined on a character neither can hold. For a PAIRED cell the second
+ * half is the group identity rather than the column, and both halves of the
+ * group produce the same id — which is what makes it impossible for one
+ * paired column to expand while its partner stays collapsed.
+ */
+export function cellStateId(rowId: string, cell: AffectedProductsTableCell): string {
+  return `${rowId}\u0000${cell.pairGroup ?? cell.key}`;
+}
+
+/**
+ * Drop the cell-expansion state of every row the collapsed view will not
+ * show, so a hidden row can never return already expanded. Cells in rows that
+ * stay visible keep theirs, and a pair group's single entry is dropped or
+ * kept as one thing.
+ */
+export function visibleCellState(
+  open: ReadonlySet<string>,
+  visibleRowIds: readonly string[],
+): ReadonlySet<string> {
+  const visible = new Set(visibleRowIds);
+  return new Set([...open].filter((id) => visible.has(id.split('\u0000')[0])));
+}
+
+/**
+ * At most this many affected-version rows render before "See all (N)".
+ *
+ * One: a recall's first affected product stands for the section, and a
+ * shopper checking a package in hand scans one row far faster than a wall of
+ * them. Rows stay in official/source order — the first row is the source's
+ * first row, never the soonest expiry, the lowest lot code, or anything else
+ * this app decided was more important.
+ */
+export const AFFECTED_PRODUCTS_INITIAL_ROWS = 1;
 
 /** Which column a collapsed lot/batch code set belongs to, from the consumer
  * label the projection gave it — the word the source itself printed. */
@@ -1051,12 +1235,134 @@ function codeColumnKey(codes: LotCodeSet): 'lotCodes' | 'batchCodes' {
 }
 
 /**
- * At most this many codes render inline in a cell; beyond it the cell shows
- * the row-local "View N codes" control instead. Matches the projection's own
- * collapse threshold, so a small set that arrived as inline field text and a
- * small set that arrived as a code object read identically.
+ * The columns a code set's paired dates could live in. A pair's date carries
+ * no concept of its own — the projection records only "the source printed
+ * this date beside this code" — so the partner column is never guessed from
+ * the pair. It is IDENTIFIED, by the rule below.
  */
-const INLINE_CODES = 4;
+const PAIRABLE_DATE_COLUMNS: AffectedProductsTableColumnKey[] = [
+  'bestBy',
+  'useBy',
+  'sellBy',
+  'expiration',
+  'productionDates',
+];
+
+/**
+ * The column that holds exactly this code set's paired dates, or null.
+ *
+ * The test is SET EQUALITY: a column qualifies only when its values are
+ * precisely the distinct dates the pairs name — no date the pairs do not
+ * name, and none of theirs missing. That is evidence the two columns are the
+ * two halves of one source statement, and it is the only thing that makes a
+ * pair group honest:
+ *
+ *  - a column with an extra date would, once aligned, silently drop that date
+ *    from view;
+ *  - a column missing one of the pairs' dates was never the pairs' partner;
+ *  - and array position proves nothing at all, so it is never consulted.
+ *
+ * When nothing qualifies, no group forms and both columns keep their ordinary
+ * independent behaviour. Every value still renders; only the pairing goes
+ * unshown, which is the conservative failure.
+ */
+function pairedDateColumn(
+  codes: LotCodeSet,
+  values: ReadonlyMap<AffectedProductsTableColumnKey, AffectedProductsTableCell>,
+  claimed: ReadonlySet<AffectedProductsTableColumnKey>,
+): AffectedProductsTableColumnKey | null {
+  const dates = new Set(codes.pairs.map((pair) => pair.date));
+  if (dates.size === 0) return null;
+  for (const key of PAIRABLE_DATE_COLUMNS) {
+    if (claimed.has(key)) continue;
+    const candidate = values.get(key);
+    if (candidate === undefined) continue;
+    const held = new Set(candidate.values);
+    if (held.size === dates.size && [...dates].every((date) => held.has(date))) return key;
+  }
+  return null;
+}
+
+/**
+ * One rendered line of a pair group: a code and the date the source printed
+ * beside it. `date` is null for a code the source left undated — those lines
+ * follow the pairs, keep the code visible, and render an EMPTY date so
+ * nothing implies a pairing the source never made.
+ */
+interface PairLine {
+  code: string;
+  date: string | null;
+}
+
+/**
+ * Build the two halves of a pair group.
+ *
+ * Source order throughout: the pairs in the order the projection collected
+ * them (which is the order the codes appear in the notice), then any undated
+ * codes in theirs. The date half follows the CODE order rather than the date
+ * column's own, because alignment is the whole point — line _n_ of each half
+ * must be the same source statement.
+ */
+function pairGroupCells(
+  dateKey: AffectedProductsTableColumnKey,
+  codeKey: AffectedProductsTableColumnKey,
+  codes: LotCodeSet,
+): { lines: PairLine[]; date: AffectedProductsTableCell; code: AffectedProductsTableCell } {
+  const pairedCodes = new Set(codes.pairs.map((pair) => pair.code));
+  const lines: PairLine[] = [
+    ...codes.pairs.map((pair) => ({ code: pair.code, date: pair.date })),
+    ...codes.codes.filter((code) => !pairedCodes.has(code)).map((code) => ({ code, date: null })),
+  ];
+  const group = `${dateKey}+${codeKey}`;
+  // ONE control for the group, carried identically by both halves so either
+  // column can be tapped and neither can move alone. The visible count is the
+  // number of lines the control reveals — under-counting would hide values
+  // behind a smaller number — and the spoken label names the pairs, which is
+  // the fact a screen-reader user needs.
+  const control =
+    lines.length > CELL_INLINE_VALUES
+      ? disclosureControl(lines.length, pairGroupNoun(lines.length, codes.pairs.length))
+      : null;
+  const half = (key: AffectedProductsTableColumnKey, values: string[]) => ({
+    key,
+    values,
+    // Line-joined, never comma-joined: these values can contain commas.
+    text: values.join('\n'),
+    collapsedText:
+      control === null ? values.join('\n') : values.slice(0, CELL_INLINE_VALUES).join('\n'),
+    disclosure: control,
+    pairGroup: group,
+  });
+  return {
+    lines,
+    date: half(
+      dateKey,
+      lines.map((line) => line.date ?? ''),
+    ),
+    code: half(
+      codeKey,
+      lines.map((line) => line.code),
+    ),
+  };
+}
+
+/**
+ * What the group's control announces. When every line is a pair it is exactly
+ * that — "See all 22 identifier pairs". When undated codes ride along, the
+ * label says how many of the lines are actually paired rather than letting
+ * the word "pairs" cover values the source never paired.
+ */
+function pairGroupNoun(lines: number, pairs: number): string {
+  return lines === pairs ? 'identifier pairs' : `identifiers (${pairs} paired with a date)`;
+}
+
+/**
+ * At most this many values render inline in ANY cell; beyond it the cell
+ * shows its own in-place reveal. One threshold for every field — a two-date
+ * cell and a two-code cell behave identically, and a shopper never has to
+ * learn which columns collapse.
+ */
+const CELL_INLINE_VALUES = 2;
 
 /**
  * The compact table-like structure Detail renders for Affected Products
@@ -1093,7 +1399,7 @@ export function affectedProductsTable(
   // ambiguous owner was already rejected upstream (`ambiguous-scope`) and is
   // structurally unreachable from this model, so nothing here can guess a
   // value into a row the source never tied it to.
-  const sharedByKey = new Map(model.appliesToAll.map((field) => [field.key, field.value]));
+  const sharedByKey = new Map(model.appliesToAll.map((field) => [field.key, field]));
   const hasShared =
     sharedByKey.size > 0 || model.sharedCodes.length > 0 || model.sharedProductionDates !== null;
   // A notice can state supported codes or dates and name no product row for
@@ -1113,31 +1419,73 @@ export function affectedProductsTable(
 
   const entries = items.map((item) => {
     const values = new Map<AffectedProductsTableColumnKey, AffectedProductsTableCell>();
-    const plain = (text: string) => ({ text, codes: null, codesLabel: null });
     for (const key of TABLE_COLUMN_ORDER) {
       if (key === 'productionCodes' || key === 'productionDates') continue;
-      const text = item.fields.find((field) => field.key === key)?.value ?? sharedByKey.get(key);
-      if (text !== undefined) values.set(key, plain(text));
+      const field = item.fields.find((entry) => entry.key === key) ?? sharedByKey.get(key);
+      if (field !== undefined) values.set(key, cell(key, field.value, field.values));
     }
-    // A code set renders inline while it is small enough to read at a glance,
-    // and behind this row's own "View N codes" control when it is not. Either
-    // way it is a cell of this row — never a block below the table.
+    // A code set is a multi-value cell like any other: inline at two values
+    // or fewer, its own in-place reveal beyond that. Either way it is a cell
+    // of this row — never a block below the table, and never a modal.
+    //
+    // The values are the source's own codes, nothing composed. The retired
+    // modal also printed each code beside the date the source paired it with;
+    // a cell cannot, because a value like "March 26, 2027" carries its own
+    // comma and could not be comma-joined unambiguously. Those dates keep
+    // their own column wherever the source stated them as dates.
     const codeCell = (key: AffectedProductsTableColumnKey, codes: LotCodeSet) => {
       if (values.has(key)) return;
-      values.set(
-        key,
-        codes.count <= INLINE_CODES
-          ? plain(codes.codes.join(', '))
-          : { text: null, codes, codesLabel: `View ${codes.count} codes` },
-      );
+      values.set(key, cell(key, codes.codes.join(', '), codes.codes));
     };
     // The row's OWN set first, so a row that states its codes can never be
     // overwritten by the recall-level set.
     if (item.codes) codeCell(codeColumnKey(item.codes), item.codes);
     for (const shared of model.sharedCodes) codeCell(shared.key, shared.codes);
     if (model.sharedProductionDates !== null && !values.has('productionDates')) {
-      values.set('productionDates', plain(model.sharedProductionDates));
+      values.set(
+        'productionDates',
+        cell('productionDates', model.sharedProductionDates, model.sharedProductionDateValues),
+      );
     }
+
+    // ── Identifier pairs ────────────────────────────────────────────────
+    //
+    // Independent per-cell disclosure is right for independent fields, and
+    // wrong for the one case where the source stated a RELATIONSHIP: when a
+    // notice prints each code beside its own date, two columns of unrelated
+    // lists invite exactly the reading the source ruled out — that every code
+    // combines with every date. Twenty-two batch codes beside three best-by
+    // dates is sixty-six product identities a shopper might check for; the
+    // notice named twenty-two.
+    //
+    // So where — and only where — the projection holds explicit pairs AND a
+    // date column is provably their partner, the two columns become one
+    // coordinated group: aligned line by line, revealed and collapsed
+    // together, under a single control. Everywhere else nothing changes.
+    const claimed = new Set<AffectedProductsTableColumnKey>();
+    const pairCodeSets: { key: AffectedProductsTableColumnKey; codes: LotCodeSet }[] = [
+      ...(item.codes ? [{ key: codeColumnKey(item.codes), codes: item.codes }] : []),
+      ...model.sharedCodes.map((shared) => ({
+        key: shared.key as AffectedProductsTableColumnKey,
+        codes: shared.codes,
+      })),
+    ];
+    for (const { key, codes } of pairCodeSets) {
+      // Only the cell this very set produced may be rewritten: a row whose
+      // own codes already own the column is never overwritten by the
+      // recall-level set (the same precedence codeCell applies).
+      const existing = values.get(key);
+      if (existing === undefined || existing.pairGroup !== null) continue;
+      if (existing.values.length !== codes.codes.length) continue;
+      const dateKey = pairedDateColumn(codes, values, claimed);
+      if (dateKey === null) continue;
+      const group = pairGroupCells(dateKey, key, codes);
+      values.set(dateKey, group.date);
+      values.set(key, group.code);
+      claimed.add(dateKey);
+      claimed.add(key);
+    }
+
     const assignment = rowImages.get(item.rowId) ?? null;
     return {
       item,
@@ -1167,8 +1515,10 @@ export function affectedProductsTable(
         name: entry.item.name,
         cells: columns.map((column) =>
           column.key === 'product'
-            ? { text: entry.item.name, codes: null, codesLabel: null }
-            : (entry.values.get(column.key) ?? { text: null, codes: null, codesLabel: null }),
+            ? // A product name is one value and never discloses: it is the
+              // row's identity, not a list.
+              cell('product', entry.item.name, entry.item.name === null ? [] : [entry.item.name])
+            : (entry.values.get(column.key) ?? emptyCell(column.key)),
         ),
         image: entry.image,
       })),
@@ -1179,13 +1529,47 @@ export function affectedProductsTable(
   const expanded = view(entries);
   return {
     // Columns are justified by the rows each view actually shows: collapsed
-    // uses the first three, and "See all" recomputes over every row.
+    // uses the first row, and "See all" recomputes over every row.
     collapsed: entries.length > initialRows ? view(entries.slice(0, initialRows)) : expanded,
     expanded,
     initialRows,
-    seeAllLabel:
-      entries.length > AFFECTED_PRODUCTS_INITIAL_ROWS ? `See all (${entries.length})` : null,
+    rowsDisclosure:
+      entries.length > AFFECTED_PRODUCTS_INITIAL_ROWS
+        ? disclosureControl(entries.length, 'affected products')
+        : null,
   };
+}
+
+/**
+ * Build one cell from a field's composed text and its individual values.
+ *
+ * The collapsed form is the first two values comma-joined; the expanded form
+ * is `text` exactly as the projection composed it, so expanding always lands
+ * on the wording that shipped before disclosure existed. Nothing here
+ * deduplicates, reorders, or reformats a value — whatever the projection
+ * already decided about duplicates and order is what renders.
+ */
+function cell(
+  key: AffectedProductsTableColumnKey,
+  text: string | null,
+  values: readonly string[],
+): AffectedProductsTableCell {
+  const all = [...values];
+  const hidden = all.length > CELL_INLINE_VALUES;
+  return {
+    key,
+    values: all,
+    text,
+    collapsedText: hidden ? all.slice(0, CELL_INLINE_VALUES).join(', ') : text,
+    disclosure: hidden
+      ? disclosureControl(all.length, TABLE_COLUMN_LABEL[key].toLowerCase())
+      : null,
+    pairGroup: null,
+  };
+}
+
+function emptyCell(key: AffectedProductsTableColumnKey): AffectedProductsTableCell {
+  return { key, values: [], text: null, collapsedText: null, disclosure: null, pairGroup: null };
 }
 
 // ── Optional section visibility (P3A) ───────────────────────────────────────
@@ -1229,7 +1613,11 @@ function tableHasContent(table: AffectedProductsTable): boolean {
   return view.rows.some(
     (row) =>
       (row.name ?? '').trim() !== '' ||
-      row.cells.some((cell) => (cell.text ?? '').trim() !== '' || cell.codes !== null),
+      // `text` is the complete composed value of every cell — a field's
+      // joined value, a code set's joined codes, or the row's product name —
+      // so it alone decides renderability. A whitespace-only name is not
+      // content, exactly as before disclosure existed.
+      row.cells.some((entry) => (entry.text ?? '').trim() !== ''),
   );
 }
 

@@ -141,7 +141,7 @@ function order(items: FeedItem[], prefs: UserRecallPreferences = CALIFORNIAN): s
 
 // ── Dimension 1: consumer risk leads ─────────────────────────────────────────
 
-test('risk is the first dimension: Critical, High, Moderate, Pending/Unrated, Low, Minimal', () => {
+test('risk is the first dimension: Critical, Very High, High, Pending/Unknown, Moderate, Low', () => {
   const minimal = item({ classification: classes('class_III'), geography: geo('nationwide') });
   const unrated = item({ classification: PHA_CLASSIFICATION, geography: geo('nationwide') });
   const critical = item({ classification: classes('class_I'), geography: geo('nationwide') });
@@ -160,7 +160,7 @@ test('risk is the first dimension: Critical, High, Moderate, Pending/Unrated, Lo
     critical.id,
     high.id,
     moderate.id,
-    // Pending and Unrated share one position; the id tie-break settles them.
+    // Pending and Unknown share one position; the id tie-break settles them.
     ...[pending.id, unrated.id].sort(),
     low.id,
     minimal.id,
@@ -181,18 +181,18 @@ test('Critical with confirmed geography outranks High with an exact personal sig
   assert.deepEqual(order([highWithBoth, criticalPlain]), [criticalPlain.id, highWithBoth.id]);
 });
 
-test('Pending and Unrated rank below Moderate and above Low — and are never relabeled', () => {
+test('Pending and Unknown rank below High and above Moderate — and are never relabeled', () => {
   const pending = item({ classification: classes() });
   const unrated = item({ classification: PHA_CLASSIFICATION, noticeType: 'public_health_alert' });
 
   assert.equal(consumerRiskTier(pending.classification), 'pending');
-  assert.equal(consumerRiskTier(unrated.classification), 'unrated');
-  // Ordering never becomes a label: the risk layer still says Risk pending /
-  // Not rated, and neither is ever badged as a rated tier on a card.
+  assert.equal(consumerRiskTier(unrated.classification), 'unknown');
+  // Ordering never becomes a label: the risk layer still says Pending /
+  // Unknown, and neither is ever badged as a rated tier on a card.
   assert.equal(riskView(pending.classification, 'FDA').tier, 'pending');
-  assert.equal(riskView(pending.classification, 'FDA').badgeLabel, 'Risk pending');
-  assert.equal(riskView(unrated.classification, 'FSIS').tier, 'unrated');
-  assert.equal(riskView(unrated.classification, 'FSIS').badgeLabel, 'Not rated');
+  assert.equal(riskView(pending.classification, 'FDA').badgeLabel, 'PENDING');
+  assert.equal(riskView(unrated.classification, 'FSIS').tier, 'unknown');
+  assert.equal(riskView(unrated.classification, 'FSIS').badgeLabel, 'UNKNOWN');
 
   const pendingPriority = affectsMePriority(pending, relevanceOf(CALIFORNIAN)(pending));
   const unratedPriority = affectsMePriority(unrated, relevanceOf(CALIFORNIAN)(unrated));

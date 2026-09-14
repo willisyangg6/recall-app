@@ -246,6 +246,14 @@ export interface ConsumerPackageCheck {
    */
   productionDates: string | null;
   /**
+   * The same readable dates as individual values, in the order the source
+   * stated them. `productionDates` is the composed consumer string; this is
+   * what it was composed FROM, carried so the presentation can disclose a
+   * long list two values at a time without ever re-splitting formatted text.
+   * Empty whenever `productionDates` is null.
+   */
+  productionDateValues: string[];
+  /**
    * Where to look on the package, and what the code looks like — standardized
    * copy composed from the source's semantics, shown once when it applies to
    * every affected version. Null when the source never states a usable one.
@@ -2762,10 +2770,13 @@ function buildPackageCheck(
   // The readable dates stand on their own evidence: the source stated them as
   // production dates, and they render as this row's Production dates cell
   // whether or not the printed codes beside them cleared the collapse gate.
-  const productionDates =
-    productionSet !== null && productionDateGroup
-      ? joinFactValues('production_date', productionDateGroup.values)
-      : null;
+  const hasProductionDates = productionSet !== null && productionDateGroup !== undefined;
+  const productionDates = hasProductionDates
+    ? joinFactValues('production_date', productionDateGroup.values)
+    : null;
+  // The individual whole dates behind that composed string. Nothing is
+  // altered or re-parsed: these are the same values the join consumed.
+  const productionDateValues = hasProductionDates ? [...productionDateGroup.values] : [];
 
   const hasIdentifiers =
     variants.length > 0 ||
@@ -2858,6 +2869,7 @@ function buildPackageCheck(
     lotCodes,
     productionCodes,
     productionDates,
+    productionDateValues,
     codeLocation,
     photos: checkerPhotos(photos, variants),
     coverage,

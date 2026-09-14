@@ -145,14 +145,14 @@ test('the case classification is the DISTINCT set of its records official classe
   assert.equal(single.classification.value, 'class_II');
   assert.deepEqual(single.classification.officialClasses, ['class_II']);
   assert.equal(single.classification.sourceText, 'Class II');
-  assert.equal(consumerRiskTier(single.classification), 'moderate');
+  assert.equal(consumerRiskTier(single.classification), 'high');
 
   // Several classes: no single class is claimed for the case.
   const mixed = projectCase([withClass('a', 'class_III'), withClass('b', 'class_I')]);
   assert.equal(mixed.classification.value, 'multiple_classes');
   assert.deepEqual(mixed.classification.officialClasses, ['class_I', 'class_III']);
   assert.equal(mixed.classification.sourceText, null);
-  assert.equal(consumerRiskTier(mixed.classification), 'high');
+  assert.equal(consumerRiskTier(mixed.classification), 'very_high');
 
   // Repeats of one class are still a single class, in any input order.
   const repeated = projectCase([withClass('a', 'class_I'), withClass('b', 'class_I')]);
@@ -170,10 +170,10 @@ test('an unclassified case carries an empty class set, not a guessed one', () =>
   assert.equal(consumerRiskTier(projection.classification), 'pending');
 });
 
-test('a public health alert is unrated, never pending', () => {
+test('a public health alert is Unknown, never pending', () => {
   const pha = parseFsisRecord(loadFixture('pha-active-nationwide-pha-08082026-01'));
   const projection = projectCase([pha]);
   assert.equal(projection.classification.value, 'not_applicable_pha');
   assert.deepEqual(projection.classification.officialClasses, []);
-  assert.equal(consumerRiskTier(projection.classification), 'unrated');
+  assert.equal(consumerRiskTier(projection.classification), 'unknown');
 });

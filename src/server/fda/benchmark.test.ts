@@ -477,7 +477,7 @@ test('benchmark: GreenWise blueberries / Publix — roles distinct, casing stand
   // …while the illness status stays separate and honest (source is silent).
   assert.equal(row.illness, 'unknown');
   // Classification pending is intentional, not missing data: one shared
-  // "Risk pending" state, with no duplicate bottom classification block.
+  // "PENDING" state, with no duplicate bottom classification block.
   assert.equal(
     riskView(row.projection.classification, row.projection.sourceAgency).tier,
     'pending',

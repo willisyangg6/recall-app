@@ -46,22 +46,27 @@ export interface AffectsMeRankable {
  * `RISK_TIER_RANK` (domain/risk-tier.ts), which ranks the non-scale states
  * `null` precisely because they have no severity.
  *
- * Pending and Unrated share one position between Moderate and Low. A notice
+ * Pending and Unknown share one position between High and Moderate. A notice
  * the agency has not classified yet, or never will (a public health alert),
- * must not sink below one the agency actively rated Low or Minimal — but
- * neither may it be presented AS Moderate. Sharing a rank says exactly that
- * and nothing more: they are grouped for sequence, are never relabeled, and no
+ * must not sink below one the agency actively rated Moderate or Low — but
+ * neither may it be presented AS High. Sharing a rank says exactly that and
+ * nothing more: they are grouped for sequence, are never relabeled, and no
  * risk level is inferred for them anywhere (see lib/risk-display.ts, which
- * still badges them "Pending" / "Not rated").
+ * badges them "Pending" / "Unknown").
+ *
+ * The sequence is unchanged by the label replacement: every case sits exactly
+ * where it sat before, because each old tier and its new name occupy the same
+ * rung (Critical, then the mixed-with-Class-I tier, then the Class-II tier,
+ * then the two absences, then the remaining two).
  */
 export const RISK_PRIORITY: Record<ConsumerRiskTier, number> = {
   critical: 0,
-  high: 1,
-  moderate: 2,
+  very_high: 1,
+  high: 2,
   pending: 3,
-  unrated: 3,
-  low: 4,
-  minimal: 5,
+  unknown: 3,
+  moderate: 4,
+  low: 5,
 };
 
 /**
@@ -98,7 +103,7 @@ function signalPriority(relevance: PersonalRelevance): 0 | 1 | 2 | 3 {
 
 /** The complete sort key for one case. Every field is derived, never stored. */
 export interface AffectsMePriority {
-  /** 0 Critical · 1 High · 2 Moderate · 3 Pending/Unrated · 4 Low · 5 Minimal */
+  /** 0 Critical · 1 Very High · 2 High · 3 Pending/Unknown · 4 Moderate · 5 Low */
   riskPriority: number;
   /** Carried for explanation only; never itself compared. */
   riskTier: ConsumerRiskTier;

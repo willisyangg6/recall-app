@@ -47,8 +47,8 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
             {/* Consumer risk first — it is the primary risk language. Home
                 and Detail render the same risk state from the shared model
                 (P2a): rated tiers badge their tier, an unclassified FDA
-                recall reads "Risk pending", a PHA's absent class reads
-                "Not rated" — the two screens can never disagree. */}
+                recall reads "PENDING", a PHA's absent class reads
+                "UNKNOWN" — the two screens can never disagree. */}
             {model.risk.badgeLabel ? (
               <RiskBadge
                 tier={model.risk.tier}

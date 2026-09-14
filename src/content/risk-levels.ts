@@ -16,28 +16,29 @@ import { bullets, paragraph, type TrustDocument } from './document-model';
 
 /** The five severity levels, canonical order — everything before the non-scale states. */
 export const SEVERITY_TIERS: ConsumerRiskTier[] = RISK_FILTER_TIERS.filter(
-  (tier) => tier !== 'pending' && tier !== 'unrated',
+  (tier) => tier !== 'pending' && tier !== 'unknown',
 );
 /** The two uncertainty states, canonical order. */
 export const UNCERTAINTY_TIERS: ConsumerRiskTier[] = RISK_FILTER_TIERS.filter(
-  (tier) => tier === 'pending' || tier === 'unrated',
+  (tier) => tier === 'pending' || tier === 'unknown',
 );
 
 /** One consumer meaning per severity level, restating consumerRiskTier. */
 const SEVERITY_MEANING: Record<string, string> = {
   critical: 'every affected product carries the agency’s most serious recall classification.',
-  high: 'affected products carry different official classifications, including the most serious one.',
-  moderate: 'the agency placed this recall in its middle classification.',
-  low: 'the affected products carry the agency’s two lower classifications — this is still an active recall.',
-  minimal:
-    'the affected products carry only the agency’s least serious classification — this is still an active recall.',
+  very_high:
+    'affected products carry different official classifications, including the most serious one.',
+  high: 'the agency placed this recall in its middle classification.',
+  moderate:
+    'the affected products carry the agency’s two lower classifications — this is still an active recall.',
+  low: 'the affected products carry only the agency’s least serious classification — this is still an active recall.',
 };
 
 const UNCERTAINTY_MEANING: Record<string, string> = {
   pending:
     'the agency has not assigned an official classification yet. FDA recalls are routinely announced weeks before their classification arrives, so Pending is the normal early state of a fresh FDA recall — it says “not decided yet,” never “low risk.”',
-  unrated:
-    'no official classification is ever expected for this notice. Public health alerts do not receive one, so Recall says so instead of inventing a level — Not rated is not a level of risk, and it does not mean low risk.',
+  unknown:
+    'Recall cannot determine a supported official classification for this notice. Most often that is a public health alert, which never receives a classification at all — the recall’s detail screen says exactly that beneath the level. Unknown describes missing classification information, not severity: it is not a level of risk, and it does not mean low risk. It is also never used for a recall whose classification is simply still on its way; that one is Pending.',
 };
 
 export const RISK_LEVELS: TrustDocument = {

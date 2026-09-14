@@ -206,21 +206,23 @@ A points model was rejected outright: with weights, two retailer matches could
 out-rank a Critical classification, and no one could explain afterwards why a
 card placed second. Here every position answers in one sentence.
 
-| #   | Dimension             | Order                                                            |
-| --- | --------------------- | ---------------------------------------------------------------- |
-| 1   | Consumer risk         | Critical → High → Moderate → **Pending/Unrated** → Low → Minimal |
-| 2   | Geographic confidence | confirmed (state **or** nationwide) → unknown-with-signal        |
-| 3   | Personal signal       | allergen+retailer → allergen → retailer → neither                |
-| 4   | Material activity     | newest authoritative event first                                 |
-| 5   | Announcement date     | newest first                                                     |
-| 6   | Case id               | ascending — a total order, so renders never reshuffle            |
+| #   | Dimension             | Order                                                              |
+| --- | --------------------- | ------------------------------------------------------------------ |
+| 1   | Consumer risk         | Critical → Very High → High → **Pending/Unknown** → Moderate → Low |
+| 2   | Geographic confidence | confirmed (state **or** nationwide) → unknown-with-signal          |
+| 3   | Personal signal       | allergen+retailer → allergen → retailer → neither                  |
+| 4   | Material activity     | newest authoritative event first                                   |
+| 5   | Announcement date     | newest first                                                       |
+| 6   | Case id               | ascending — a total order, so renders never reshuffle              |
 
-**Pending and Unrated share one position, and are never relabeled.** A notice
+**Pending and Unknown share one position, and are never relabeled.** A notice
 the agency has not classified yet, or never will (a public health alert), must
-not sink below one the agency actively rated Low or Minimal — but it is not
-Moderate either, and nothing infers a preliminary level from hazard text. They
-are grouped for sequence only; `riskView` still says "Pending" / "Not rated"
-and still refuses to badge them as a rated tier. This is deliberately separate
+not sink below one the agency actively rated Moderate or Low — but it is not
+High either, and nothing infers a preliminary level from hazard text. They are
+grouped for sequence only; `riskView` says "Pending" / "Unknown" and still
+refuses to badge them as a rated tier. The sequence itself did not move when
+the labels were replaced: each old tier and its new name occupy the same
+rung. This is deliberately separate
 from `RISK_TIER_RANK` (domain/risk-tier.ts), which ranks them `null` precisely
 because they have no severity.
 
@@ -593,12 +595,12 @@ Status per clause:
   Recalls only; they never apply to Affects Me).
 - **Within one filter, selections OR together**: Critical OR High —
   implemented.
-- **Between filters, AND**: (Critical OR High) AND (Location = CA) —
+- **Between filters, AND**: (Critical OR Very High) AND (Location = CA) —
   implemented.
 - **Applied dimensions stay active while others are added** — implemented.
 - **Filter chips scroll horizontally** — implemented.
-- **Rated risk values are Critical, High, Moderate, Low, Minimal**, with
-  `Pending` and `Not rated` as neutral additional states, never folded into
+- **Rated risk values are Critical, Very High, High, Moderate, Low**, with
+  `Pending` and `Unknown` as neutral additional states, never folded into
   a rated value and never inferred from hazard text (`domain/risk-tier.ts`)
   — implemented.
 - **Category corpus audit before any UI** — completed: the C10A/C10B audits

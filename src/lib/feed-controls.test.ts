@@ -209,7 +209,7 @@ test('filters preserved while in Affects me do not change its results or ranking
   const baseline = affectsMe(corpus);
 
   // A Location+Risk selection that would drastically narrow All Recalls…
-  const active: FeedFilterState = { stateCodes: ['TX'], riskTiers: ['minimal'], categoryIds: [] };
+  const active: FeedFilterState = { stateCodes: ['TX'], riskTiers: ['low'], categoryIds: [] };
   assert.notDeepEqual(
     applyFeedFilters(corpus, active).map((entry) => entry.id),
     corpus.map((entry) => entry.id),

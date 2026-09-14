@@ -5,8 +5,9 @@
  * Detail can never disagree about a recall's risk, and the wording is testable
  * as a golden without a renderer.
  *
- *   PRIMARY   — the consumer tier (Critical / High / Moderate / Low / Minimal,
- *               plus Pending). Leads the card and the detail screen.
+ *   PRIMARY   — the consumer tier (Critical / Very High / High / Moderate /
+ *               Low, plus Pending and Unknown). Leads the card and the detail
+ *               screen.
  *   SECONDARY — the official agency classification (Class I / II / III),
  *               preserved exactly, shown deeper in the detail screen.
  *
@@ -49,28 +50,38 @@ export interface RiskView {
   official: OfficialClassificationView | null;
 }
 
+/**
+ * THE seven consumer risk labels, in their canonical casing. This record is
+ * the single source of the words: every surface — badges, the detail
+ * headline, spoken labels, the Risk sheet, the trust documents, push copy —
+ * reads them from here, so no screen can invent an eighth label or a second
+ * spelling of one. Screens may restyle the casing (the badge shouts, as it
+ * always has); they never rewrite the word.
+ */
 const TIER_WORD: Record<ConsumerRiskTier, string> = {
   critical: 'Critical',
+  very_high: 'Very High',
   high: 'High',
   moderate: 'Moderate',
   low: 'Low',
-  minimal: 'Minimal',
   pending: 'Pending',
-  unrated: 'Not rated',
+  unknown: 'Unknown',
 };
 
 /**
- * Consumer explanation per tier. "Minimal" never implies safe — this is still
- * an active recall, and the copy says so.
+ * Consumer explanation per tier. The lowest level never implies safe — this is
+ * still an active recall, and the copy says so.
  */
 const TIER_NOTE: Record<ConsumerRiskTier, string | null> = {
   critical: 'Every affected product carries the agency’s most serious recall classification.',
-  high: 'Affected products carry different official classifications, including the most serious one.',
-  moderate: 'The agency placed this recall in its middle classification.',
-  low: 'The affected products carry the agency’s two lower classifications — this is still an active recall.',
-  minimal: 'Lower relative risk within recalled products — this is still an active recall.',
+  very_high:
+    'Affected products carry different official classifications, including the most serious one.',
+  high: 'The agency placed this recall in its middle classification.',
+  moderate:
+    'The affected products carry the agency’s two lower classifications — this is still an active recall.',
+  low: 'The affected products carry only the agency’s least serious classification — this is still an active recall.',
   pending: 'The agency assigns a formal recall classification later in its process.',
-  unrated: null,
+  unknown: null,
 };
 
 export function agencyLabel(sourceAgency: SourceAgency): string {
@@ -86,7 +97,7 @@ export function riskView(classification: Classification, sourceAgency: SourceAge
   const classes = officialClassesOf(classification);
   const status = classificationStatus(classification);
   const agency = agencyLabel(sourceAgency);
-  const rated = tier !== 'pending' && tier !== 'unrated';
+  const rated = tier !== 'pending' && tier !== 'unknown';
 
   const official: OfficialClassificationView | null =
     status === 'not_applicable'
@@ -98,7 +109,7 @@ export function riskView(classification: Classification, sourceAgency: SourceAge
           note: 'Public health alerts do not receive a formal classification.',
         }
       : status === 'pending'
-        ? // The top risk state already says "Risk pending" and carries its one
+        ? // The top risk state already says "PENDING" and carries its one
           // explanation; a second "Not yet assigned" block restated the same
           // fact near the bottom and is deliberately gone (P2a).
           null
@@ -111,20 +122,21 @@ export function riskView(classification: Classification, sourceAgency: SourceAge
                 : null,
           };
 
-  // The non-scale states carry ONE shared consumer label on both surfaces
-  // (P2a): Pending reads "Risk pending", a PHA's absent class reads
-  // "Not rated" — never Unknown, and never silently unbadged on one screen
-  // while labeled on the other.
-  const sharedLabel = tier === 'pending' ? 'Risk pending' : 'Not rated';
+  // The two non-scale states carry ONE shared consumer label on both surfaces
+  // (the P2a rule, kept): they read as their own word alone — never with a
+  // " RISK" suffix, which would present an absent classification as a level of
+  // risk, and never labeled on one screen while silently unbadged on the
+  // other.
+  //
+  // The retired wording ("Risk pending" / "Not rated") is gone: Pending and
+  // Unknown are first-class members of the one label set now, so they are
+  // spelled and styled exactly like the five severities.
+  const word = TIER_WORD[tier];
   return {
     tier,
-    badgeLabel: rated ? TIER_WORD[tier].toUpperCase() : sharedLabel,
-    headlineLabel: rated ? `${TIER_WORD[tier].toUpperCase()} RISK` : sharedLabel,
-    accessibilityLabel: rated
-      ? `Risk level: ${TIER_WORD[tier]}`
-      : tier === 'pending'
-        ? 'Risk level: pending'
-        : 'Risk level: not rated',
+    badgeLabel: word.toUpperCase(),
+    headlineLabel: rated ? `${word.toUpperCase()} RISK` : word.toUpperCase(),
+    accessibilityLabel: `Risk level: ${word}`,
     note: TIER_NOTE[tier],
     official,
   };

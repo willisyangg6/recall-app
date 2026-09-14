@@ -356,8 +356,8 @@ test('mixed classifications are preserved as a set and never collapse to one cla
   assert.equal(updated.projection.classification.sourceText, null);
   // Consumer semantics: mixed Class I is High, not Critical.
   assert.deepEqual(outcome?.officialClassesAfter, ['class_I', 'class_II']);
-  assert.equal(outcome?.riskTierAfter, 'high');
-  assert.equal(consumerRiskTier(updated.projection.classification), 'high');
+  assert.equal(outcome?.riskTierAfter, 'very_high');
+  assert.equal(consumerRiskTier(updated.projection.classification), 'very_high');
   assert.equal(
     riskView(updated.projection.classification, 'FDA').official?.text,
     'Class I and Class II',
@@ -386,7 +386,7 @@ test('a single official class still exposes a scalar and its own source wording'
   assert.equal(updated.projection.classification.value, 'class_II');
   assert.deepEqual(updated.projection.classification.officialClasses, ['class_II']);
   assert.equal(updated.projection.classification.sourceText, 'Class II');
-  assert.equal(consumerRiskTier(updated.projection.classification), 'moderate');
+  assert.equal(consumerRiskTier(updated.projection.classification), 'high');
 });
 
 test('a historical MIXED classification is suppressed exactly like a single one', async () => {
@@ -424,7 +424,7 @@ test('a historical MIXED classification is suppressed exactly like a single one'
   );
 
   assert.deepEqual(outcome?.officialClassesAfter, ['class_I', 'class_II']);
-  assert.equal(outcome?.riskTierAfter, 'high');
+  assert.equal(outcome?.riskTierAfter, 'very_high');
   // One event, suppressed — a mixed set is not a second notification either.
   assert.deepEqual(outcome?.notifications, [
     { ruleId: 'classification_assigned', suppressed: 'backfill' },
@@ -483,7 +483,7 @@ test('a first-time Class II assignment is enumerated in the preview', async () =
   assert.equal(outcome?.classificationChanges.length, 1);
   const entry = outcome!.classificationChanges[0];
   assert.deepEqual(entry.officialClassesAfter, ['class_II']);
-  assert.equal(entry.riskTierAfter, 'moderate');
+  assert.equal(entry.riskTierAfter, 'high');
   assert.equal(entry.changeKind, 'first_assignment');
 });
 
@@ -563,7 +563,7 @@ test('mixed official classes are represented honestly in the preview', async () 
   const entry = outcome!.classificationChanges[0];
   assert.equal(entry.mixedClass, true);
   assert.deepEqual(entry.officialClassesAfter, ['class_I', 'class_II']);
-  assert.equal(entry.riskTierAfter, 'high');
+  assert.equal(entry.riskTierAfter, 'very_high');
   assert.equal(entry.enforcementRecallNumberCount, 2);
   assert.deepEqual(entry.enforcementRecallNumbersSample.sort(), ['F-1000-2026', 'F-1001-2026']);
 });

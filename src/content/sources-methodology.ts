@@ -92,7 +92,7 @@ export const SOURCES_METHODOLOGY: TrustDocument = {
         ),
         bullets([
           `For readability, active notices with recent activity (within ${RECENT_WINDOW_DAYS} days) are shown ahead of older active notices, which stay fully available in their own clearly labeled section. This is presentation only; it never changes a notice’s official status.`,
-          'FSIS Public Health Alerts are labeled as public health alerts, distinct from recalls. They never receive an official recall classification, and Recall labels their risk “Not rated” rather than inventing one.',
+          'FSIS Public Health Alerts are labeled as public health alerts, distinct from recalls. They never receive an official recall classification, so Recall shows their risk level as “Unknown” rather than inventing one, and the recall’s detail screen states plainly that public health alerts do not receive a formal classification.',
         ]),
       ],
     },

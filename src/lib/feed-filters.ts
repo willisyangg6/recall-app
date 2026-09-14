@@ -22,7 +22,7 @@
  *                          headquarters, firm address, or retailer footprint.
  *
  * RISK uses the canonical consumer tiers (domain/risk-tier) exactly — the
- * seven values including the non-scale states Pending and Not rated, never
+ * seven values including the non-scale states Pending and Unknown, never
  * renamed, never collapsed, always derived from the official classification
  * set (never from card copy).
  */
@@ -159,17 +159,19 @@ export function matchesCategoryFilter(
 
 /**
  * The complete canonical tier vocabulary in its canonical order — what the
- * Risk sheet offers. All seven, including the non-scale states, each under
- * its existing name (labels come from riskTierWord, never invented here).
+ * Risk sheet offers. All seven, most severe first, then the two non-scale
+ * states, each under its canonical name (labels come from riskTierWord, never
+ * invented here). This ordering is also what the Risk Levels trust document
+ * reads, so the sheet and the explanation can never list different levels.
  */
 export const RISK_FILTER_TIERS: ConsumerRiskTier[] = [
   'critical',
+  'very_high',
   'high',
   'moderate',
   'low',
-  'minimal',
   'pending',
-  'unrated',
+  'unknown',
 ];
 
 /**

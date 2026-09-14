@@ -145,7 +145,7 @@ test('classification assigned with a MIXED set never shows one scalar class', ()
   );
   assert.equal(
     content.body,
-    'FDA gave affected products different classifications — overall High risk.',
+    'FDA gave affected products different classifications — overall Very High risk.',
   );
   assert.ok(!/class[\s_]?I\b/i.test(content.body));
 });
@@ -158,14 +158,14 @@ test('classification upgrade and downgrade name the new tier', () => {
   const down = formatPushContent(
     makeEvent('material_update', 'classification_downgraded', classified(['class_III'])),
   );
-  assert.equal(down.body, "FDA lowered this recall's classification — now Minimal risk.");
+  assert.equal(down.body, "FDA lowered this recall's classification — now Low risk.");
 });
 
 test('directionless class-set change claims no direction', () => {
   const content = formatPushContent(
     makeEvent('material_update', 'classification_changed', classified(['class_I', 'class_II'])),
   );
-  assert.equal(content.body, "FDA updated this recall's classifications — now High risk.");
+  assert.equal(content.body, "FDA updated this recall's classifications — now Very High risk.");
   assert.ok(!/raised|lowered/.test(content.body));
 });
 

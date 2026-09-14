@@ -251,7 +251,7 @@ Veterinary` co-tags) is deliberately deferred, not silently included.
   preserves its `<main>` content region in the snapshot store (dates,
   press-release body, product tables, photo URLs).
 - Announcements are pre-classification by design: cases render honestly as
-  "Risk pending" until enforcement enrichment supplies the official class; a
+  "Pending" until enforcement enrichment supplies the official class; a
   class is never inferred from hazard language.
 - Deterministic consumer extraction from the announcement's own words:
   distribution (nationwide / named states / honest unknown with source text),
@@ -373,12 +373,15 @@ Veterinary` co-tags) is deliberately deferred, not silently included.
 - **Consumer risk tier, separate from the regulatory class.** FDA classifies
   per affected product, so one recall can carry several official classes.
   Cards and the top of the detail screen lead with Recall's own five-level
-  language (Critical / High / Moderate / Low / Minimal, plus Pending and
-  Unrated), derived deterministically from the authoritative class SET —
-  {Class I} is Critical, a mixed set containing Class I is High, {Class II}
-  is Moderate, {Class II, Class III} is Low, {Class III} is Minimal. No
-  averaging, no heuristic scoring, and never a tier before an official
-  classification exists. The agency's own wording is preserved exactly and
+  language (Critical / Very High / High / Moderate / Low, plus Pending and
+  Unknown), derived deterministically from the authoritative class SET —
+  {Class I} is Critical, a mixed set containing Class I is Very High,
+  {Class II} is High, {Class II, Class III} is Moderate, {Class III} is Low.
+  Pending means the agency has not assigned a classification yet; Unknown
+  means the app cannot determine a supported one (a public health alert
+  never receives one), and the two are never merged. No averaging, no
+  heuristic scoring, and never a tier before an official classification
+  exists. The agency's own wording is preserved exactly and
   shown deeper in the detail screen ("Official FDA classifications — Class I
   and Class II"). Risk is never carried by color alone: every badge has
   visible text and a spoken label.
@@ -517,7 +520,13 @@ misstate them), and none of this activates push delivery.
   torn down completely). Community data influences no official field,
   feed, notification, or ranking — the aggregate is one-way by
   construction. **The migration was applied to production on 2026-09-11**
-  (audited read-only first); the feature gate remains `false`.
+  (audited read-only first); the feature gate remains `false`. Because the
+  gate is off, none of the shipped experience is visible in a normal build;
+  a **development-only** Design Preview harness (Profile → Design Preview,
+  `__DEV__` only) renders the real screens over real recalls with the
+  shopper-report values simulated in memory, so the states can be
+  screenshotted without enabling anything or writing a row —
+  [docs/recall-design-preview.md](docs/recall-design-preview.md).
 
 - **P1D — the shopper-report experience** (implemented, uncommitted;
   **feature still OFF**): the complete consumer surface, built against the

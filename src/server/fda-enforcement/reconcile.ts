@@ -45,12 +45,12 @@ import {
 /** Most severe first, so the tier distribution always reads in scale order. */
 const TIER_ORDER: ConsumerRiskTier[] = [
   'critical',
+  'very_high',
   'high',
   'moderate',
   'low',
-  'minimal',
   'pending',
-  'unrated',
+  'unknown',
 ];
 
 /**

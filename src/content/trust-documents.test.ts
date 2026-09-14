@@ -205,8 +205,8 @@ test('local-first preferences and the server mirror are described', () => {
 });
 
 test('the risk document uses the canonical tier vocabulary, five levels + two states', () => {
-  assert.deepEqual(SEVERITY_TIERS, ['critical', 'high', 'moderate', 'low', 'minimal']);
-  assert.deepEqual(UNCERTAINTY_TIERS, ['pending', 'unrated']);
+  assert.deepEqual(SEVERITY_TIERS, ['critical', 'very_high', 'high', 'moderate', 'low']);
+  assert.deepEqual(UNCERTAINTY_TIERS, ['pending', 'unknown']);
   assert.deepEqual([...SEVERITY_TIERS, ...UNCERTAINTY_TIERS], RISK_FILTER_TIERS);
   // Every canonical word appears, spelled by riskTierWord, never retyped.
   for (const tier of RISK_FILTER_TIERS) {
@@ -214,7 +214,7 @@ test('the risk document uses the canonical tier vocabulary, five levels + two st
   }
 });
 
-test('Pending and Not rated are separated from the severity levels and never called low risk', () => {
+test('Pending and Unknown are separated from the severity levels and never called low risk', () => {
   const fiveLevels = RISK_LEVELS.sections.find((s) => s.title === 'The five risk levels');
   const states = RISK_LEVELS.sections.find(
     (s) => s.title === 'Two states that are not risk levels',

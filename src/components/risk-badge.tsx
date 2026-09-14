@@ -25,8 +25,8 @@ export function RiskBadge({
   size?: 'small' | 'large';
 }) {
   const palette = useRiskColors();
-  // Pending and Unrated share the one neutral token: neither is a severity.
-  const token: RiskColorToken = tier === 'unrated' ? 'pending' : tier;
+  // Pending and Unknown share the one neutral token: neither is a severity.
+  const token: RiskColorToken = tier === 'unknown' ? 'pending' : tier;
   const colors = palette[token];
 
   return (

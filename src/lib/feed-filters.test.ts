@@ -99,6 +99,11 @@ test('risk filtering uses the canonical tiers, never collapsing the non-scale st
     officialClasses: [],
   } as unknown as FeedItem['classification'];
   const pending = {
+    value: 'not_yet_classified',
+    sourceText: null,
+    officialClasses: [],
+  } as unknown as FeedItem['classification'];
+  const unsupported = {
     value: 'unclassified',
     sourceText: null,
     officialClasses: [],
@@ -106,12 +111,16 @@ test('risk filtering uses the canonical tiers, never collapsing the non-scale st
 
   assert.equal(matchesRiskFilter(classified('class_I'), ['critical']), true);
   assert.equal(matchesRiskFilter(classified('class_II'), ['critical']), false);
-  assert.equal(matchesRiskFilter(classified('class_II'), ['critical', 'moderate']), true);
-  // Pending and Unrated are their own levels — selectable, never absorbed.
+  assert.equal(matchesRiskFilter(classified('class_II'), ['critical', 'high']), true);
+  // Pending and Unknown are their own levels — selectable, never absorbed.
   assert.equal(matchesRiskFilter(pending, ['pending']), true);
-  assert.equal(matchesRiskFilter(pending, ['moderate']), false);
-  assert.equal(matchesRiskFilter(pha, ['unrated']), true);
+  assert.equal(matchesRiskFilter(pending, ['high']), false);
+  assert.equal(matchesRiskFilter(pha, ['unknown']), true);
   assert.equal(matchesRiskFilter(pha, ['pending']), false);
+  // A value outside the supported vocabulary is Unknown, never quietly
+  // Pending: the filter must not promise a classification is on its way.
+  assert.equal(matchesRiskFilter(unsupported, ['unknown']), true);
+  assert.equal(matchesRiskFilter(unsupported, ['pending']), false);
 });
 
 test('the sheet vocabulary is exactly the seven canonical tiers', () => {
@@ -120,14 +129,14 @@ test('the sheet vocabulary is exactly the seven canonical tiers', () => {
 
 // ── Composition ──────────────────────────────────────────────────────────────
 
-test('dimensions AND together: (CA OR TX) AND (Critical OR High)', () => {
+test('dimensions AND together: (CA OR TX) AND (Critical OR Very High)', () => {
   const caCritical = item({ geography: geo('states', ['California']) });
-  const caMinimal = item({
+  const caLow = item({
     geography: geo('states', ['California']),
     classification: classified('class_III'),
   });
   const nyCritical = item({ geography: geo('states', ['New York']) });
-  const nationwideHigh = item({
+  const nationwideVeryHigh = item({
     geography: geo('nationwide'),
     classification: {
       value: 'class_I',
@@ -135,20 +144,20 @@ test('dimensions AND together: (CA OR TX) AND (Critical OR High)', () => {
       officialClasses: ['class_I', 'class_II'],
     } as FeedItem['classification'],
   });
-  const corpus = [caCritical, caMinimal, nyCritical, nationwideHigh];
+  const corpus = [caCritical, caLow, nyCritical, nationwideVeryHigh];
   const result = applyFeedFilters(
     corpus,
-    filters({ stateCodes: ['CA', 'TX'], riskTiers: ['critical', 'high'] }),
+    filters({ stateCodes: ['CA', 'TX'], riskTiers: ['critical', 'very_high'] }),
   );
   assert.deepEqual(
     result.map((entry) => entry.id),
-    [caCritical.id, nationwideHigh.id],
+    [caCritical.id, nationwideVeryHigh.id],
   );
   // The loaded corpus is untouched: same length, same members, same order.
   assert.equal(corpus.length, 4);
   assert.deepEqual(
     corpus.map((entry) => entry.id),
-    [caCritical.id, caMinimal.id, nyCritical.id, nationwideHigh.id],
+    [caCritical.id, caLow.id, nyCritical.id, nationwideVeryHigh.id],
   );
 });
 
@@ -297,7 +306,7 @@ test('explicit location beats nationwide even when nationwide is NEWER', () => {
 });
 
 test('explicit location beats nationwide even when nationwide carries HIGHER risk', () => {
-  const caMinimal = recentItem({
+  const caLow = recentItem({
     geography: geo('states', ['California']),
     classification: classified('class_III'),
   });
@@ -305,8 +314,8 @@ test('explicit location beats nationwide even when nationwide carries HIGHER ris
     geography: geo('nationwide'),
     classification: classified('class_I'),
   });
-  assert.deepEqual(visibleAllRecalls([nationalCritical, caMinimal], ['CA']).recent, [
-    caMinimal.id,
+  assert.deepEqual(visibleAllRecalls([nationalCritical, caLow], ['CA']).recent, [
+    caLow.id,
     nationalCritical.id,
   ]);
 });
@@ -449,10 +458,10 @@ test('search filters the located results without reordering them', () => {
 test('the location comparator reuses the ONE canonical risk sequence', () => {
   // Not a second copy: All Recalls and Affects me sequence risk tiers the same
   // way, so a change to the decision cannot silently apply to only one surface.
-  assert.equal(RISK_PRIORITY.critical < RISK_PRIORITY.high, true);
-  assert.equal(RISK_PRIORITY.moderate < RISK_PRIORITY.pending, true);
-  assert.equal(RISK_PRIORITY.pending < RISK_PRIORITY.low, true);
-  assert.equal(RISK_PRIORITY.pending, RISK_PRIORITY.unrated);
+  assert.equal(RISK_PRIORITY.critical < RISK_PRIORITY.very_high, true);
+  assert.equal(RISK_PRIORITY.high < RISK_PRIORITY.pending, true);
+  assert.equal(RISK_PRIORITY.pending < RISK_PRIORITY.moderate, true);
+  assert.equal(RISK_PRIORITY.pending, RISK_PRIORITY.unknown);
   const source = readFileSync(join(__dirname, 'feed-filters.ts'), 'utf8');
   assert.match(source, /import \{ RISK_PRIORITY \} from '\.\/affects-me-ranking'/);
 });

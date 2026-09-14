@@ -1148,12 +1148,16 @@ agency did not. The app therefore carries two separate layers.
   persisted before the set exists derive it from the scalar
   (`officialClassesOf`), so no backfill is required for correct display.
 - **Consumer risk tier — derived product semantics, never persisted.**
-  Five levels (Critical, High, Moderate, Low, Minimal) plus two non-scale
-  states (Pending, Unrated), computed from the class set alone by
+  Five levels (Critical, Very High, High, Moderate, Low) plus two non-scale
+  states (Pending, Unknown), computed from the class set alone by
   `src/domain/risk-tier.ts`:
-  {I}→Critical · {I,II}/{I,III}/{I,II,III}→High · {II}→Moderate ·
-  {II,III}→Low · {III}→Minimal · {} with a class still expected→Pending ·
-  {} where none is ever expected (FSIS public health alerts)→Unrated.
+  {I}→Critical · {I,II}/{I,III}/{I,II,III}→Very High · {II}→High ·
+  {II,III}→Moderate · {III}→Low · {} with a class still expected
+  (`not_yet_classified`)→Pending · every other classless case→Unknown, which
+  covers an FSIS public health alert (never classified at all), a legacy
+  `multiple_classes` scalar whose set was not persisted, and any unsupported
+  value. Pending promises an answer is coming; Unknown states that this app
+  cannot determine a supported classification, and the two are never merged.
   This is deliberate interpolation between categorical regulatory classes,
   NOT arithmetic: averaging would let nine Class III products make one
   Class I product look mild. Pure Class I is Critical because EVERY affected

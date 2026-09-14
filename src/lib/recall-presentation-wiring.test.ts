@@ -163,11 +163,15 @@ test('Affected Products renders the shared P2b table model, not screen-built row
   assert.ok(!DETAIL.includes('columns.filter'), 'the screen filters columns itself');
   // The table scrolls horizontally as ONE unit — header and rows together.
   assert.match(DETAIL, /ScrollView[\s\S]{0,40}horizontal/);
-  // The reveal control comes from the model ("See all (N)"), collapses again,
-  // and no screen-invented count exists.
-  assert.match(DETAIL, /table\.seeAllLabel/);
-  assert.match(DETAIL, /Show fewer/);
+  // The reveal control comes from the model ("See all (N)" / "Show less"),
+  // and no screen-invented count or label exists: the screen renders
+  // `DisclosureControl` values and composes no disclosure copy at all.
+  assert.match(DETAIL, /table\.rowsDisclosure/);
+  assert.match(DETAIL, /control\.expandLabel/);
+  assert.match(DETAIL, /control\.collapseLabel/);
   assert.ok(!DETAIL.includes("'See all"), 'the See all label is screen-composed');
+  assert.ok(!DETAIL.includes("'Show less"), 'the Show less label is screen-composed');
+  assert.ok(!DETAIL.includes("'Show fewer"), 'the retired collapse word returned');
   // A missing cell renders EMPTY — never a dash or placeholder text.
   assert.ok(!DETAIL.includes("?? '—'"), 'a dash placeholder is rendered');
   assert.ok(!DETAIL.includes('Unknown'), 'an unknown placeholder is rendered');
@@ -176,24 +180,45 @@ test('Affected Products renders the shared P2b table model, not screen-built row
   assert.ok(!DETAIL.includes('row.photo'), 'a version image is rendered');
 });
 
-test('row codes live inside the table: an in-cell control and a row-keyed modal, no lists below', () => {
-  // A row's collapsed code set renders through its own cell's control
-  // (`cell.codes` + the model's label) and opens the modal keyed to exactly
-  // that row — the product identity as context, this row's codes only, an
-  // explicit Close. The retired below-table row-code disclosure area cannot
-  // return, and there is no path to a sibling row's codes.
-  assert.match(DETAIL, /cell\.codes/);
-  assert.match(DETAIL, /cell\.codesLabel/);
-  assert.match(DETAIL, /RowCodesModal/);
-  assert.match(DETAIL, /rowId: row\.id, name: row\.name, codes: cell\.codes/);
-  assert.match(DETAIL, /accessibilityViewIsModal/);
-  assert.match(DETAIL, />Close</);
-  assert.ok(!DETAIL.includes('codes-${row.id}'), 'the below-table row-code disclosure returned');
-  assert.ok(!DETAIL.includes('row-${row.id}'), 'the below-table row-code toggle returned');
+test('a long cell discloses IN PLACE — no modal, no route, no sibling row leakage', () => {
+  // Every multi-value cell reveals its own values where it already is. The
+  // retired "View N codes" modal is gone entirely: no Modal import, no
+  // modal-only props, no Close control, and no navigation route replaced it.
+  assert.match(DETAIL, /cell\.disclosure/);
+  assert.match(DETAIL, /cell\.collapsedText/);
+  assert.match(DETAIL, /onToggle\(stateId\)/);
+  // Expansion is keyed by the SHARED contract's `cellStateId`, which returns
+  // the cell's pair-group identity when it has one and its column otherwise.
+  // The screen derives no key of its own, so a paired column cannot be given
+  // a state entry separate from its partner's.
+  assert.match(DETAIL, /stateId=\{cellStateId\(row\.id, cell\)\}/);
+  assert.match(DETAIL, /openCells\.has\(cellStateId\(row\.id, cell\)\)/);
+  assert.match(DETAIL, /cellStateId,\n\s+visibleCellState,/);
+  assert.ok(!DETAIL.includes('function cellStateId'), 'the screen defines its own state key');
+  assert.ok(!DETAIL.includes('function visibleCellState'), 'the screen defines its own pruning');
+  // A paired cell renders one value per line and never comma-joins, because
+  // its values can contain commas. The screen splits the model's own
+  // line-joined text rather than re-deriving which values are visible.
+  assert.match(DETAIL, /cell\.pairGroup === null/);
+  assert.match(DETAIL, /shown\.split\('\\n'\)/);
+  assert.match(DETAIL, /numberOfLines=\{1\}/);
+  assert.ok(!DETAIL.includes('values.slice('), 'the screen re-derives which values are visible');
+  for (const retired of [
+    'RowCodesModal',
+    'OpenRowCodes',
+    'accessibilityViewIsModal',
+    '>Close<',
+    'cell.codesLabel',
+    'modalBackdrop',
+  ]) {
+    assert.ok(!DETAIL.includes(retired), `the retired code modal returned: ${retired}`);
+  }
+  assert.ok(!/\bModal\b/.test(DETAIL), 'a modal is still imported or rendered');
+  assert.ok(!DETAIL.includes('router.push'), 'the disclosure became a navigation route');
   assert.ok(!DETAIL.includes('row.codes'), 'a row code set is read outside its cell');
-  // No new dependency and no separate navigation route for the modal.
-  assert.match(DETAIL, /Modal[,\s]/);
-  assert.ok(!DETAIL.includes('router.push'), 'the modal became a navigation route');
+  // Collapsing the rows drops the cell state of rows that disappear, through
+  // the shared contract's pruning rather than a screen-local copy.
+  assert.match(DETAIL, /visibleCellState\(/);
 });
 
 test('no shared-facts block can render under Affected Products', () => {
@@ -230,10 +255,22 @@ test('P3C-2: no code or date disclosure can render beneath the Affected Products
   }
   // The section renders the table and nothing else: one child, no sibling
   // control, no second heading, no "applies to all" replacement card.
-  assert.match(
-    DETAIL,
-    /<Section title="Affected Products">\s*<AffectedProductsTableView[\s\S]{0,240}?<\/Section>/,
-    'the Affected Products section renders something besides the table',
+  // The section renders the table and its heading-level row reveal — and
+  // nothing else. No second heading, no sibling control below the table, no
+  // "applies to all" replacement card.
+  const section = DETAIL.slice(
+    DETAIL.search(/<Section\s+title="Affected Products"/),
+    DETAIL.indexOf('</Section>', DETAIL.search(/<Section\s+title="Affected Products"/)),
+  );
+  assert.match(section, /<AffectedProductsTableView/);
+  assert.equal(
+    (section.match(/<AffectedProductsTableView/g) ?? []).length,
+    1,
+    'the Affected Products section renders more than one table',
+  );
+  assert.ok(
+    !/<\/AffectedProductsTableView>|<ThemedText/.test(section),
+    'the Affected Products section renders content besides the table and its reveal',
   );
   assert.ok(!DETAIL.includes('Applies to all affected versions'), 'the retired card returned');
   // And the screen never redistributes: no code set is read outside the cell
@@ -264,7 +301,7 @@ test('Home and Detail render the same shared risk state, and no explanatory risk
   // Both surfaces read RiskView labels; neither suppresses a non-rated state.
   assert.match(HOME, /model\.risk\.badgeLabel/);
   assert.match(DETAIL, /model\.risk\.headlineLabel/);
-  // P2a founder decision: "Risk pending" stands by itself — no explanatory
+  // P2a founder decision: the pending label stands by itself — no explanatory
   // note or pending-classification copy renders anywhere on Detail, and no
   // bottom classification block restates the top state.
   assert.ok(!DETAIL.includes('model.risk.note'), 'explanatory risk copy rendered');
@@ -405,16 +442,15 @@ test('P1B: the screen invents no health content and repeats no recall-specific i
 });
 
 test('P1B: Detail section order is What happened → Where it was sold → Health Risk → Products', () => {
-  const order = [
-    '<Section title="What happened">',
-    '<Section title="Where it was sold">',
-    '<Section title="Health Risk">',
-    '<Section title="Affected Products">',
-  ].map((heading) => {
-    const at = DETAIL.indexOf(heading);
-    assert.notEqual(at, -1, `${heading} is missing`);
-    return at;
-  });
+  const order = ['What happened', 'Where it was sold', 'Health Risk', 'Affected Products'].map(
+    (heading) => {
+      // Affected Products carries an `action` prop (its row reveal), so the
+      // opening tag may wrap — match the title attribute, not a literal tag.
+      const at = DETAIL.search(new RegExp(`<Section\\s+title="${heading}"`));
+      assert.notEqual(at, -1, `${heading} is missing`);
+      return at;
+    },
+  );
   for (let index = 1; index < order.length; index += 1) {
     assert.ok(order[index - 1] < order[index], 'Detail sections are out of contract order');
   }
@@ -490,7 +526,7 @@ test('P3A: optional Detail sections are model-owned — no screen-level content 
   assert.match(DETAIL, /\{affectedProducts \? \(/);
   // Every heading exists ONLY inside its section's conditional.
   for (const heading of ['Where it was sold', 'Health Risk', 'Affected Products']) {
-    const before = DETAIL.slice(0, DETAIL.indexOf(`<Section title="${heading}">`));
+    const before = DETAIL.slice(0, DETAIL.search(new RegExp(`<Section\\s+title="${heading}"`)));
     assert.match(before.slice(-400), /\? \(/, `${heading} can render unconditionally`);
   }
   // The screen never re-evaluates row/column/code content to decide.

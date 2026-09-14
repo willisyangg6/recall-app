@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,14 +11,17 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import type { UserRecallPreferences } from '@/domain/preferences';
-import type { LotCodeSet } from '@/lib/consumer-projection';
 import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
 import { fetchCaseDetail, type CaseDetail } from '@/lib/recall-feed';
 import {
   buildDetailModel,
   todayIso,
+  cellStateId,
+  visibleCellState,
   type AffectedProductsTable,
+  type AffectedProductsTableCell,
   type DetailModel,
+  type DisclosureControl,
 } from '@/lib/recall-presentation';
 import { evaluatePersonalRelevance } from '@/lib/relevance';
 
@@ -28,94 +31,109 @@ type LoadState =
   | { status: 'missing' }
   | { status: 'ready'; detail: CaseDetail };
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  /** An optional control rendered on the heading row, opposite the title —
+   * where the Affected Products row reveal belongs. Omitted sections render
+   * exactly as they always have. */
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <View style={styles.section}>
-      <ThemedText type="small" themeColor="textSecondary">
-        {title.toUpperCase()}
-      </ThemedText>
+      <View style={styles.sectionHeader}>
+        <ThemedText type="small" themeColor="textSecondary">
+          {title.toUpperCase()}
+        </ThemedText>
+        {action}
+      </View>
       {children}
     </View>
   );
 }
 
-/** The one code set a row's in-cell control has opened, for the modal. */
-interface OpenRowCodes {
-  rowId: string;
-  /** The row's product identity, shown as the modal's context. */
-  name: string | null;
-  codes: LotCodeSet;
-}
+/**
+ * Small text controls in a dense table need a bigger tappable area than their
+ * glyphs occupy; hitSlop grows the target without moving anything on screen.
+ */
+const DISCLOSURE_HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
 
 /**
- * The modal a row's "View N codes" control opens: exactly that row's codes
- * and its source-supported code/date pairs, titled by the row's product
- * identity, with an explicit Close control. A plain accessible React Native
- * modal — no dependency, no navigation route; closing returns to the same
- * table position because the table never moved.
+ * Every in-place reveal on this screen — the jurisdiction list, the product
+ * rows, and each multi-value cell — renders through this one control.
+ *
+ * It is a real button with a real expanded state, so VoiceOver announces
+ * "See all 22 lot codes, button, collapsed" rather than a bare link, and the
+ * state is never carried by colour: the visible word itself flips between
+ * "See all (22)" and "Show less". Nothing animates — the list simply grows.
  */
-function RowCodesModal({ open, onClose }: { open: OpenRowCodes | null; onClose: () => void }) {
+function DisclosureButton({
+  control,
+  expanded,
+  onPress,
+}: {
+  control: DisclosureControl;
+  expanded: boolean;
+  onPress: () => void;
+}) {
   return (
-    <Modal
-      visible={open !== null}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-      accessibilityViewIsModal>
-      <View style={styles.modalBackdrop}>
-        <ThemedView type="background" style={styles.modalCard}>
-          {open ? (
-            <>
-              {open.name ? <ThemedText type="subtitle">{open.name}</ThemedText> : null}
-              <ThemedText type="small" themeColor="textSecondary">
-                {`${open.codes.label.toUpperCase()}S · ${open.codes.count} AFFECTED`}
-              </ThemedText>
-              <ScrollView style={styles.modalScroll}>
-                {open.codes.pairs.length > 0 ? (
-                  open.codes.pairs.map((pair) => (
-                    <ThemedText key={pair.code} type="small">
-                      {pair.code} · {pair.date}
-                    </ThemedText>
-                  ))
-                ) : (
-                  <ThemedText type="small">{open.codes.codes.join(', ')}</ThemedText>
-                )}
-              </ScrollView>
-              <Pressable accessibilityRole="button" onPress={onClose}>
-                <ThemedText themeColor="link">Close</ThemedText>
-              </Pressable>
-            </>
-          ) : null}
-        </ThemedView>
-      </View>
-    </Modal>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={
+        expanded ? control.collapseAccessibilityLabel : control.expandAccessibilityLabel
+      }
+      accessibilityState={{ expanded }}
+      hitSlop={DISCLOSURE_HIT_SLOP}
+      onPress={onPress}>
+      <ThemedText themeColor="link" type="small">
+        {expanded ? control.collapseLabel : control.expandLabel}
+      </ThemedText>
+    </Pressable>
   );
 }
 
 /**
- * The compact Affected Products table (P2b, restructured): column labels
+ * The compact Affected Products table (P2b, restructured). Column labels
  * render once as the uppermost row, then one affected version per row, in
  * source order. The whole table scrolls horizontally as one unit so header
  * and row cells stay aligned. The model supplies TWO precomputed views —
- * collapsed (first three rows) and expanded — each with columns justified by
+ * collapsed (the first row) and expanded — each with columns justified by
  * exactly the rows it shows, so no rendered column is ever entirely empty.
- * An empty cell stays empty — no dash, no "unknown", no value borrowed from
+ * An empty cell stays empty: no dash, no "unknown", no value borrowed from
  * another version. A version's image renders beside its Product value only
- * when the shared image-role allocation assigned one to that exact row
- * (P2c). A row's collapsed code set renders as that row's own in-cell
- * "View N codes" control opening the row-keyed modal — the table is the only
- * affected-product presentation, and no code list renders beneath it.
+ * when the shared image-role allocation assigned one to that exact row (P2c).
+ *
+ * TWO INDEPENDENT DISCLOSURES live here, and neither knows about the other:
+ *
+ *   ROWS — owned by the screen (the control sits on the section heading) and
+ *   passed in, because a single-product recall must render with no control at
+ *   all.
+ *
+ *   CELLS — owned here, one per (row, column). A field holding more than two
+ *   values shows its first two and reveals the rest in place. The retired
+ *   "View N codes" modal is gone; nothing leaves the table.
+ *
+ * Collapsing the rows drops the cell state of rows that are about to
+ * disappear, so a hidden row can never come back already expanded. Cells in
+ * the row that stays visible keep theirs.
  */
 function AffectedProductsTableView({
   table,
   expanded,
-  onToggleExpanded,
+  openCells,
+  onToggleCell,
 }: {
   table: AffectedProductsTable;
   expanded: boolean;
-  onToggleExpanded: () => void;
+  /** Which (row, column) cells are expanded, owned by the screen so
+   * collapsing the rows can prune the ones that disappear. */
+  openCells: ReadonlySet<string>;
+  onToggleCell: (cellId: string) => void;
 }) {
-  const [openCodes, setOpenCodes] = useState<OpenRowCodes | null>(null);
   const view = expanded ? table.expanded : table.collapsed;
   return (
     <View style={styles.step}>
@@ -134,8 +152,8 @@ function AffectedProductsTableView({
           </View>
           {view.rows.map((row) => (
             <ThemedView key={row.id} type="backgroundElement" style={styles.tableRow}>
-              {row.cells.map((cell, index) =>
-                view.columns[index].key === 'product' ? (
+              {row.cells.map((cell) =>
+                cell.key === 'product' ? (
                   // The version's own image (P2c) renders left of the Product
                   // value only when the shared allocator assigned one to this
                   // exact row — no placeholder, no reserved space otherwise.
@@ -151,41 +169,76 @@ function AffectedProductsTableView({
                       {cell.text ?? ''}
                     </ThemedText>
                   </View>
-                ) : cell.codes ? (
-                  // This row's own collapsed code set: the in-cell control
-                  // opens the modal with exactly this row's codes.
-                  <View key={view.columns[index].key} style={styles.tableCell}>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() =>
-                        setOpenCodes({ rowId: row.id, name: row.name, codes: cell.codes! })
-                      }>
-                      <ThemedText themeColor="link" type="small">
-                        {cell.codesLabel}
-                      </ThemedText>
-                    </Pressable>
-                  </View>
                 ) : (
-                  <ThemedText key={view.columns[index].key} type="small" style={styles.tableCell}>
-                    {cell.text ?? ''}
-                  </ThemedText>
+                  // Reading order inside the cell is value then control, so a
+                  // screen reader hears the values before it is offered more.
+                  <ProductCell
+                    key={cell.key}
+                    cell={cell}
+                    // A PAIRED cell's expansion belongs to its GROUP, not its
+                    // column: both halves read and write the one entry, so it
+                    // is not merely discouraged but impossible for one paired
+                    // column to expand while its partner stays collapsed.
+                    stateId={cellStateId(row.id, cell)}
+                    open={openCells.has(cellStateId(row.id, cell))}
+                    onToggle={onToggleCell}
+                  />
                 ),
               )}
             </ThemedView>
           ))}
         </View>
       </ScrollView>
-      {table.seeAllLabel ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded }}
-          onPress={onToggleExpanded}>
-          <ThemedText themeColor="link" type="small">
-            {expanded ? 'Show fewer' : table.seeAllLabel}
+    </View>
+  );
+}
+
+/**
+ * One non-product cell.
+ *
+ * An ordinary field renders as one wrapping run of comma-joined text, exactly
+ * as it always has. A cell belonging to an identifier PAIR group renders one
+ * value per line instead, each capped to a single line, so line _n_ of the
+ * codes column sits level with line _n_ of its date column and the two read
+ * as the pairs the source actually stated. Those values are never
+ * comma-joined: a date like "September 30, 2027" carries its own comma.
+ *
+ * An undated code's empty partner renders as a non-breaking space rather than
+ * nothing, so the blank keeps its line and the rows below it stay aligned —
+ * an empty line that collapsed to zero height would shift every later pair
+ * against the wrong code, which is the exact defect this grouping exists to
+ * prevent.
+ */
+function ProductCell({
+  cell,
+  stateId,
+  open,
+  onToggle,
+}: {
+  cell: AffectedProductsTableCell;
+  stateId: string;
+  open: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const shown = (open ? cell.text : cell.collapsedText) ?? '';
+  return (
+    <View style={styles.tableCell}>
+      {cell.pairGroup === null ? (
+        <ThemedText type="small">{shown}</ThemedText>
+      ) : (
+        shown.split('\n').map((value, index) => (
+          <ThemedText key={`${cell.key}-${index}`} type="small" numberOfLines={1}>
+            {value === '' ? '\u00A0' : value}
           </ThemedText>
-        </Pressable>
+        ))
+      )}
+      {cell.disclosure ? (
+        <DisclosureButton
+          control={cell.disclosure}
+          expanded={open}
+          onPress={() => onToggle(stateId)}
+        />
       ) : null}
-      <RowCodesModal open={openCodes} onClose={() => setOpenCodes(null)} />
     </View>
   );
 }
@@ -193,10 +246,16 @@ function AffectedProductsTableView({
 export default function RecallDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
-  // Whether the Affected Products table shows every row or the initial three.
-  // The only expansion state the screen holds: the retired below-table code
-  // disclosures had their own, and there is nothing beneath the table now.
+  // The three in-place disclosures this screen owns. All start collapsed, all
+  // are independent, and none of them navigates anywhere.
+  //
+  //   statesExpanded — the Where-it-was-sold jurisdiction list.
+  //   tableExpanded  — Affected Products rows.
+  //   openCells      — per (row, column) multi-value cells, so collapsing the
+  //                    rows can drop the state of rows that disappear.
+  const [statesExpanded, setStatesExpanded] = useState(false);
   const [tableExpanded, setTableExpanded] = useState(false);
+  const [openCells, setOpenCells] = useState<ReadonlySet<string>>(() => new Set());
   const [prefs, setPrefs] = useState<UserRecallPreferences | null>(null);
   const insets = useSafeAreaInsets();
 
@@ -356,7 +415,19 @@ export default function RecallDetailScreen() {
             Absent when the canonical geography supports no representation. */}
         {whereSold ? (
           <Section title="Where it was sold">
-            <ThemedText>{whereSold.lead}</ThemedText>
+            {/* Five jurisdictions or fewer render complete. Beyond that the
+                model supplies the first five and its own reveal, and the list
+                grows right here — no page, no sheet, no reordering, and
+                nationwide / unspecified distribution is untouched because the
+                model gives those no control at all. */}
+            <ThemedText>{statesExpanded ? whereSold.lead : whereSold.leadCollapsed}</ThemedText>
+            {whereSold.statesDisclosure ? (
+              <DisclosureButton
+                control={whereSold.statesDisclosure}
+                expanded={statesExpanded}
+                onPress={() => setStatesExpanded((prior) => !prior)}
+              />
+            ) : null}
             {/* Community shopper reports (P1D) sit UNDER the official
                 statement, never beside or above it: they corroborate where
                 the notice says the product went, and the model nests them
@@ -420,19 +491,50 @@ export default function RecallDetailScreen() {
             is the WHOLE section (P3C-2): headers once, one affected version
             per row, at most three rows before See all (N). Every
             affected-product code and every row-applicable production date is
-            a cell of the row it belongs to — inline when the set is small,
-            behind that row's own "View N codes" control when it is not. There
-            is no code block, production-date line, or shared-facts card
-            beneath the table, and the screen has no path to render one: it
-            receives finished rows and redistributes nothing. The official
-            attachment links stay preserved in the model for a later
-            source/image surface — no orphan attachment link renders here. */}
+            a cell of the row it belongs to — inline at two values or fewer,
+            behind that cell's own in-place reveal beyond that. There is no
+            code block, production-date line, shared-facts card, or modal, and
+            the screen has no path to render one: it receives finished rows
+            and redistributes nothing. The official attachment links stay
+            preserved in the model for a later source/image surface — no
+            orphan attachment link renders here.
+
+            The row reveal sits on the heading, opposite the title. Collapsing
+            it also drops the cell state of every row about to disappear, so a
+            hidden row can never return already expanded. */}
         {affectedProducts ? (
-          <Section title="Affected Products">
+          <Section
+            title="Affected Products"
+            action={
+              affectedProducts.table.rowsDisclosure ? (
+                <DisclosureButton
+                  control={affectedProducts.table.rowsDisclosure}
+                  expanded={tableExpanded}
+                  onPress={() => {
+                    if (tableExpanded) {
+                      setOpenCells((cells) =>
+                        visibleCellState(
+                          cells,
+                          affectedProducts.table.collapsed.rows.map((row) => row.id),
+                        ),
+                      );
+                    }
+                    setTableExpanded(!tableExpanded);
+                  }}
+                />
+              ) : null
+            }>
             <AffectedProductsTableView
               table={affectedProducts.table}
               expanded={tableExpanded}
-              onToggleExpanded={() => setTableExpanded((prior) => !prior)}
+              openCells={openCells}
+              onToggleCell={(cell) =>
+                setOpenCells((prior) => {
+                  const next = new Set(prior);
+                  if (!next.delete(cell)) next.add(cell);
+                  return next;
+                })
+              }
             />
           </Section>
         ) : null}
@@ -475,6 +577,14 @@ const styles = StyleSheet.create({
   },
   centeredText: {
     textAlign: 'center',
+  },
+  // The heading row: title on the left, an optional disclosure opposite it.
+  // With no action the title sits exactly where it always did.
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
   },
   section: {
     gap: Spacing.one,
@@ -539,22 +649,4 @@ const styles = StyleSheet.create({
   },
   // The row-codes modal: a centered card over a dimmed backdrop; the code
   // list scrolls inside the card so a long set never pushes Close off-screen.
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.three,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 420,
-    maxHeight: '75%',
-    borderRadius: Radii.small,
-    padding: Spacing.three,
-    gap: Spacing.two,
-  },
-  modalScroll: {
-    flexGrow: 0,
-  },
 });

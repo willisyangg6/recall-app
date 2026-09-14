@@ -296,11 +296,16 @@ meanwhile).
 
 Home and Detail render the **same** consumer risk state from the shared
 `riskView` (P2a): rated tiers badge their tier; an unclassified FDA recall
-reads `Risk pending` on both surfaces; a PHA's absent class reads
-`Not rated` — never Unknown. Public Health Alerts always carry the explicit
-`Public Health Alert` label (the chip on Home, the badge-row label on
-Detail) — a notice type, never confused with a risk state. Founder decision:
-"Risk pending" is sufficient by itself — no explanatory classification copy
+reads `PENDING` on both surfaces; a PHA's absent class reads `UNKNOWN`.
+(The retired `Risk pending` / `Not rated` wording, and the P2a "never
+Unknown" rule it belonged to, were replaced when the consumer label set was
+finalized — Pending and Unknown are now first-class members of the one
+seven-label set, and a PHA's absence is explained precisely by the official
+block directly beneath the label.) Public Health Alerts always carry the
+explicit `Public Health Alert` label (the chip on Home, the badge-row label
+on Detail) — a notice type, never confused with a risk state. Founder
+decision: the pending label is sufficient by itself — no explanatory
+classification copy
 renders on Detail (the model's pending `official` block is null so the top
 state is never restated below), and the Detail header carries no
 `Recall · Active` metadata line: it is exactly the risk badge, the one
@@ -362,8 +367,8 @@ composes no columns, labels, or cell values of its own; wiring-test-pinned):
   codes, Batch codes, Production codes, Packaging.
 - One affected version per row, in source order. **Columns are computed
   from the rows currently rendered** (integration correction, 2026-09-02):
-  the model supplies a collapsed view (the first three rows, columns
-  justified by exactly those rows) and an expanded view (all rows, columns
+  the model supplies a collapsed view (the first row, columns
+  justified by exactly that row) and an expanded view (all rows, columns
   recomputed), so a column every currently visible row would leave empty
   never renders — `See all` may reveal a column along with the rows that
   justify it (recorded Taylor Fresh). Where at least one visible row has a
@@ -372,23 +377,74 @@ composes no columns, labels, or cell values of its own; wiring-test-pinned):
   (recorded YoCrunch). Rows show the same value only when the source
   associates it with every version, in which case it repeats inside each
   row — never in a separate visible block.
-- At most **three rows** render initially; beyond that a functional
-  `See all (N)` control reveals the rest inline and collapses again
-  (`AFFECTED_PRODUCTS_INITIAL_ROWS`).
+- Exactly **one row** renders initially (`AFFECTED_PRODUCTS_INITIAL_ROWS`);
+  beyond that a functional `See all (N)` control sits **beside the Affected
+  Products heading**, reveals every row in place, and becomes `Show less`.
+  N is the total number of rows, never the hidden remainder. A recall with a
+  single affected product renders that row normally with **no control at
+  all**. Rows are never reordered: the first row is the source's first row,
+  not the soonest expiry, the lowest lot code, or anything else this app
+  decided was more important.
 - The table scrolls horizontally as one unit, header and rows aligned.
 - Each row carries a **stable row identity** (the projection's source-row
   scope). P2c keys version-specific image assignment to it: a row whose
   identity the shared allocator confidently matched to an official image
   renders that image left of its Product value; every other row renders no
   image and no placeholder, and the hero never repeats inside the table.
-- **A version's codes live inside its own table row** (integration
+- **Every multi-value cell discloses in place, and the code modal is
+  retired.** A field holding one or two values renders in full with no
+  control. Beyond two it renders its first two values (comma-joined, with no
+  terminal "and" — that would assert the list had ended) plus its own
+  `See all (N)` / `Show less`, which expands **only that field**. One
+  threshold covers every multi-value field — dates, barcodes, package sizes,
+  lot, batch and production codes — so a shopper never has to learn which
+  columns collapse. The section-level row control and a cell's control are
+  entirely independent, and collapsing the rows drops the cell state of rows
+  that disappear so a hidden row can never return already expanded.
+
+- **Identifier pairs are the ONE exception to independent cell expansion.**
+  Independent disclosure is right for independent fields and wrong for the one
+  case where the source stated a relationship. Where a notice prints each code
+  beside its own date, two columns of unrelated lists invite exactly the
+  reading the source ruled out — that every code combines with every date.
+  Twenty-two batch codes rendered beside three best-by dates is sixty-six
+  product identities a shopper might check for; the notice named twenty-two.
+
+  So where — and only where — the projection holds explicit pairs
+  (`LotCodeSet.pairs`) AND a date column is provably their partner, the two
+  columns become **one coordinated group**:
+
+  - Both halves render **one value per line**, never comma-joined: a value
+    like "March 26, 2027" carries its own comma, and joining would destroy
+    the alignment the pairing depends on. Line _n_ of each half is the same
+    source statement, each line capped to one line so the two stay level. A
+    repeated date keeps its own line beside its own code.
+  - The collapsed view shows the **first two complete pairs**, both sides.
+  - **One** `See all (N)` serves the group, carried identically by both
+    halves, and the screen keys expansion by the GROUP rather than by column
+    (`cellStateId`) — so a state in which one paired column is open and its
+    partner closed is not merely discouraged, it is unrepresentable.
+  - The spoken label names what it reveals: `See all 22 identifier pairs`,
+    distinct from an ordinary field's `See all 3 best by`.
+
+  **The partner column is identified, never guessed.** A pair's date carries
+  no concept of its own, so the rule is SET EQUALITY: a date column qualifies
+  only when its values are precisely the distinct dates the pairs name — no
+  extra date (which alignment would silently drop from view), none missing.
+  Array position proves nothing and is never consulted. When nothing
+  qualifies, no group forms, both columns keep their ordinary independent
+  behaviour, and every value still renders — the conservative failure.
+
+  **Incomplete evidence.** A code the source left undated still renders, in
+  its own line, with an EMPTY partner cell — never a borrowed date, never a
+  dropped code. The group's control then counts the lines it reveals and its
+  spoken label says how many of them are actually paired
+  (`See all 4 identifiers (2 paired with a date)`), so the word "pairs" never
+  covers a value the source never paired.
+
+  **A version's codes still live inside its own table row** (integration
   correction, 2026-09-02 — the below-table row-code disclosure area is
-  retired; the table is the only affected-product presentation). A small
-  set renders inline in the row's Lot/Batch codes cell; a large collapsed
-  set renders as that row's own in-cell `View N codes` control, which opens
-  a plain accessible modal (no dependency, no navigation route) titled by
-  the row's product identity, showing exactly that row's codes and its
-  source-supported code/date pairs, with an explicit Close — never a
+  retired; the table is the only affected-product presentation) — never a
   sibling's codes, never a recall-wide pile, and never a long list expanded
   beneath the table. **P3C-2 made this total.** Recall-level lot, batch, case
   and production codes, and row-applicable production dates, are cells of the
@@ -398,6 +454,7 @@ composes no columns, labels, or cell values of its own; wiring-test-pinned):
   code disclosure, production-date line, or "applies to all affected
   versions" card renders beneath the table, and the screen has no path to
   build one — see "A. Row-owned lot and batch codes — P3C-2" below.
+
 - The official attachment links ("Product labels (PDF)", "Product list
   (PDF)") stay preserved in the model (`attachments`) for a later
   source/image surface; **no orphan attachment link renders** under Affected
@@ -479,7 +536,7 @@ decision and re-evaluates no rows, columns, codes, or geography — pinned by
 
 - an affected-product row carrying a consumer-facing value — a supported
   product name, or any populated approved field;
-- a row's own code set, inline or behind its in-cell "View N codes" control;
+- a row's own code set, inline or behind its in-cell reveal;
 - a recall-level code set or production date the model proved shared — which
   since P3C-2 reaches the screen as a row's cell (an anonymous evidence row
   when the notice supports no named one), never as a separate disclosure.
@@ -506,6 +563,18 @@ its one representation — the full state list, "Nationwide", a stated metro
 phrase, or the honest unspecified statement — or it is absent. The complete
 retailer/address/channel evidence stays on `DetailModel.whereSold` for the
 later retailer-list milestone; only the render decision moved.
+
+**Jurisdiction disclosure on Detail.** A state list of five or fewer
+(`WHERE_SOLD_INITIAL_STATES`) renders complete, with no control. Beyond five,
+Detail renders the first five in the notice's canonical order — comma-joined
+with no terminal "and", because an "and" would assert the list had ended —
+followed by `See all (N)`, where N is the **total** number of jurisdictions.
+Tapping expands the list in place (no page, no modal, no sheet) and the action
+becomes `Show less`. Nothing is reordered, nationwide and unknown-geography
+handling are untouched (neither carries a control), and the community
+shopper-report block stays beneath the whole official statement — the control
+included. **Home is unaffected**: the Feed card keeps its own far tighter
+two-code summary (`homeLocationSummary`, "AL, CA +8").
 
 `Health Risk` follows the same rule (`healthRiskSection`), with one extra
 gate: a **retracted** notice suppresses it entirely (see P1B).
@@ -706,9 +775,9 @@ the consumer is never shown an ownership claim the source did not make.
 table. That visual contract is retired. The set now materializes into every
 supported row; when the notice supports no named row at all, the table gets
 **one anonymous evidence row** to hold it, with no Product column and no name
-borrowed from the title. Small sets read inline in the cell; large sets keep
-the row-local `View N codes` control and its accessible modal, whose identity
-and contents come from that row's own supported facts only.
+borrowed from the title. One or two codes read inline in the cell; longer sets
+use that cell's own in-place reveal, whose count and contents come from that
+row's own supported facts only.
 
 **Presentation model.** `AffectedProductsSection` is now just
 `{ table }` — the `caseCodes`, `productionCodes` and `productionDates` slots
@@ -1298,7 +1367,7 @@ Search stays visible in both modes and is never reset by a mode switch.
   Nothing is inferred from headquarters, firm address, or retailer footprint.
   The vocabulary is the same 52 jurisdictions preferences use.
 - **Risk semantics**: the seven canonical consumer tiers
-  (`domain/risk-tier.ts`), existing labels only, Pending and Not rated as
+  (`domain/risk-tier.ts`), canonical labels only, Pending and Unknown as
   their own selectable levels — never renamed or collapsed.
 - With no search and no filters, the pipeline returns the same arrays it was
   given, so All Recalls sectioning/ordering is byte-for-byte the pre-C6

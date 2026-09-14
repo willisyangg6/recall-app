@@ -983,8 +983,11 @@ test('P3C-2 shape C: a set the source states about the whole recall repeats into
   const lot = table.expanded.columns.findIndex((column) => column.key === 'lotCodes');
   assert.equal(table.expanded.rows.length, 2);
   for (const row of table.expanded.rows) {
-    assert.equal(row.cells[lot].codesLabel, 'View 6 codes');
-    assert.deepEqual(row.cells[lot].codes!.codes, [
+    assert.equal(row.cells[lot].disclosure?.expandLabel, 'See all (6)');
+    // Collapsed shows the first two in source order; expanding reveals all
+    // six in place, still in source order.
+    assert.equal(row.cells[lot].collapsedText, 'LOT1001, LOT1002');
+    assert.deepEqual(row.cells[lot].values, [
       'LOT1001',
       'LOT1002',
       'LOT1003',

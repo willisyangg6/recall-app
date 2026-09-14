@@ -380,16 +380,32 @@ test('P3C-2 AquaStar combined: three rows, each owning only its own list', () =>
     ['2 lbs.', '2 lbs.', '1.25 lbs.'],
   );
 
-  // Row 2 and row 3 state small code sets, which read inline; row 1 states
-  // ten, which reach the row-local control. No row can see another's codes.
+  // Row 2 states two codes, which read inline with no control at all; row 3
+  // states four and row 1 states ten, which each reach their OWN in-cell
+  // reveal. No row can see another's codes.
   assert.equal(cellOf(view, 1, 'lotCodes').text, '10662 5112 11, 10662 5113 10');
+  assert.equal(cellOf(view, 1, 'lotCodes').disclosure, null);
   assert.equal(
     cellOf(view, 2, 'lotCodes').text,
     '10662 5127 10, 10662 5128 11, 10662 5133 11, 10662 5135 10',
   );
+  assert.equal(cellOf(view, 2, 'lotCodes').collapsedText, '10662 5127 10, 10662 5128 11');
+  assert.equal(cellOf(view, 2, 'lotCodes').disclosure?.expandLabel, 'See all (4)');
   const first = cellOf(view, 0, 'lotCodes');
-  assert.equal(first.codesLabel, 'View 10 codes');
-  assert.deepEqual(first.codes!.codes, [
+  assert.equal(first.disclosure?.expandLabel, 'See all (10)');
+  // Row 1's codes are PAIRED with its best-by dates, so the two columns form
+  // one coordinated group: one value per line, never comma-joined, and the
+  // collapsed view shows the first two complete pairs.
+  assert.equal(first.pairGroup, 'bestBy+lotCodes');
+  assert.equal(first.collapsedText, '10662 5085 10\n10662 5097 11');
+  const firstDates = cellOf(view, 0, 'bestBy');
+  assert.equal(firstDates.pairGroup, first.pairGroup);
+  assert.deepEqual(firstDates.disclosure, first.disclosure);
+  assert.equal(firstDates.collapsedText, 'March 26, 2027\nApril 7, 2027');
+  // Both halves hold the same number of lines, so line n of one is the
+  // partner of line n of the other.
+  assert.equal(firstDates.values.length, first.values.length);
+  assert.deepEqual(first.values, [
     '10662 5085 10',
     '10662 5097 11',
     '10662 5106 11',
@@ -401,15 +417,19 @@ test('P3C-2 AquaStar combined: three rows, each owning only its own list', () =>
     '10662 5114 10',
     '10662 5114 11',
   ]);
-  // The tuple evidence the source printed on each `<li>` survives into the
-  // row-local modal: every code keeps the date it was published beside.
-  assert.equal(first.codes!.pairs.length, 10);
+  // The tuple evidence the source printed on each `<li>` is still captured by
+  // the projection, code by code. The cell itself renders the codes only: a
+  // cell value has to be comma-joinable, and "March 26, 2027" carries its own
+  // comma. The dates keep their own column wherever the source stated them as
+  // dates.
+  const rowCodes = model.items[0].codes!;
+  assert.equal(rowCodes.pairs.length, 10);
   assert.equal(
-    first.codes!.pairs.find((pair) => pair.code === '10662 5085 10')!.date,
+    rowCodes.pairs.find((pair) => pair.code === '10662 5085 10')!.date,
     'March 26, 2027',
   );
   assert.equal(
-    first.codes!.pairs.find((pair) => pair.code === '10662 5114 11')!.date,
+    rowCodes.pairs.find((pair) => pair.code === '10662 5114 11')!.date,
     'April 24, 2027',
   );
 
@@ -428,10 +448,17 @@ test('P3C-2 AquaStar combined: three rows, each owning only its own list', () =>
   }
 
   // Row 1's ten tuples state eight distinct calendar days (04 23 27 and
-  // 04 24 27 each appear twice). P3C-1 renders a calendar day once, and the
-  // repeated tuples keep both their codes.
-  const rowOneDays = cellOf(view, 0, 'bestBy').text!.split(', ');
-  assert.equal(rowOneDays.length / 2, 8);
+  // 04 24 27 each appear twice). Now that its codes and their dates are one
+  // aligned pair group, the date half holds TEN lines — one per code — and
+  // the two repeated days appear twice each, beside the code each belongs to.
+  //
+  // This is exactly what two independent columns hid: eight dates rendered
+  // beside ten codes reads as eighty possible packages to check for, when the
+  // notice named ten.
+  const rowOneDays = cellOf(view, 0, 'bestBy').values;
+  assert.equal(rowOneDays.length, 10);
+  assert.equal(rowOneDays.length, first.values.length);
+  assert.equal(new Set(rowOneDays).size, 8);
 
   // Nothing is left over to render beneath the table.
   assert.deepEqual(model.sharedCodes, []);

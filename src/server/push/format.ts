@@ -5,9 +5,11 @@
  * reason, so a push and the screen it opens can never disagree.
  *
  * Titles carry no regulatory jargon; consumer risk speaks the ConsumerRiskTier
- * language (Critical/High/Moderate/Low/Minimal). Official Class I/II/III stays
- * on the Recall Detail screen. A Pending-risk recall is announced from its
- * hazard facts without pretending a tier exists.
+ * language (Critical/Very High/High/Moderate/Low), read from the one label
+ * record in lib/risk-display.ts so push copy can never spell a level
+ * differently from the screen it opens. Official Class I/II/III stays on the
+ * Recall Detail screen. A Pending- or Unknown-risk recall is announced from
+ * its hazard facts without pretending a tier exists.
  *
  * Every body states only facts present in the case projection or the
  * material-change rule that fired — nothing is invented.
@@ -67,7 +69,7 @@ export function formatPushContent(event: DeliverableEvent): PushContent {
 
   const tier = consumerRiskTier(projection.classification);
   const tierWord = riskTierWord(tier);
-  const rated = tier !== 'pending' && tier !== 'unrated';
+  const rated = tier !== 'pending' && tier !== 'unknown';
 
   switch (event.triggerRuleId) {
     case 'classification_assigned':

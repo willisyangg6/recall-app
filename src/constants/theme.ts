@@ -38,24 +38,31 @@ export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
  * that stays legible on it, because the label text is mandatory — color alone
  * must never carry the risk (see src/components/risk-badge.tsx).
  *
+ * The scale is five rungs deep and stayed five rungs deep when the consumer
+ * labels were replaced: these are the SAME five colours in the same severity
+ * order, re-keyed from Critical/High/Moderate/Low/Minimal to
+ * Critical/Very High/High/Moderate/Low. No colour was added, removed, or
+ * restyled. Both non-scale states (Pending, Unknown) share the one neutral
+ * token — neither is a severity.
+ *
  * Provisional, like the rest of these tokens: the brand has no final risk
  * palette yet, and swapping one lives here.
  */
 export const RiskColors = {
   light: {
     critical: { background: '#8E1519', text: '#FFFFFF' },
-    high: { background: '#B4400C', text: '#FFFFFF' },
-    moderate: { background: '#A85E06', text: '#FFFFFF' },
-    low: { background: '#8A6A00', text: '#FFFFFF' },
-    minimal: { background: '#F5DE8A', text: '#3D3200' },
+    very_high: { background: '#B4400C', text: '#FFFFFF' },
+    high: { background: '#A85E06', text: '#FFFFFF' },
+    moderate: { background: '#8A6A00', text: '#FFFFFF' },
+    low: { background: '#F5DE8A', text: '#3D3200' },
     pending: { background: '#E0E1E6', text: '#3C3F45' },
   },
   dark: {
     critical: { background: '#B3261E', text: '#FFFFFF' },
-    high: { background: '#C2450F', text: '#FFFFFF' },
-    moderate: { background: '#B06806', text: '#FFFFFF' },
-    low: { background: '#8F7000', text: '#FFFFFF' },
-    minimal: { background: '#E8D488', text: '#332A00' },
+    very_high: { background: '#C2450F', text: '#FFFFFF' },
+    high: { background: '#A85E06', text: '#FFFFFF' },
+    moderate: { background: '#8F7000', text: '#FFFFFF' },
+    low: { background: '#E8D488', text: '#332A00' },
     pending: { background: '#2E3135', text: '#B0B4BA' },
   },
 } as const;

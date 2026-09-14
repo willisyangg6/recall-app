@@ -24,6 +24,13 @@
  * docs/recall-launch-blockers.md), Terms/EULA, onboarding, sign-in, and a
  * Support row (no real contact destination exists). No dead filler rows; a
  * row appears here only once a real screen exists behind it.
+ *
+ * One row is not a product destination at all: Design Preview, the
+ * development-only screenshot harness (docs/recall-design-preview.md). It is
+ * written behind the bare `__DEV__` identifier so Metro eliminates it from a
+ * release bundle outright — there is no runtime check to get wrong, and no
+ * flag a build could set. It is last on the page, under its own label, so it
+ * can never be mistaken for a shopper-facing destination.
  */
 
 import Constants from 'expo-constants';
@@ -124,6 +131,19 @@ export default function ProfileScreen() {
             Recall information comes from official FDA and USDA FSIS notices; every recall links to
             its government source.
           </ThemedText>
+
+          {/* Development builds only — eliminated from release bundles with
+              the branch itself. Never a product destination. */}
+          {__DEV__ ? (
+            <>
+              <SectionLabel>Development</SectionLabel>
+              <LinkRow
+                label="Design Preview"
+                detail="Local tooling for screenshotting shopper-report states. Not part of the product."
+                href="/design-preview"
+              />
+            </>
+          ) : null}
         </View>
       </ScrollView>
     </ThemedView>

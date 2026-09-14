@@ -936,6 +936,7 @@ test('a genuinely unrecoverable measurement-only version demotes honestly (recor
 function nameOnlyPackageCheck(name: string): ConsumerPackageCheck {
   return {
     render: true,
+    productionDateValues: [],
     scopeStatement: 'Only packages matching the affected details below are part of this recall.',
     variants: [
       {
@@ -1127,7 +1128,7 @@ test('the What Happened subject is the shared identity decision, end to end', ()
   );
 });
 
-test('Home and Detail render the same risk state: pending, unrated, and rated', () => {
+test('Home and Detail render the same risk state: Pending, Unknown, and rated', () => {
   const pendingClassification = {
     value: 'not_yet_classified' as const,
     sourceText: null,
@@ -1141,16 +1142,19 @@ test('Home and Detail render the same risk state: pending, unrated, and rated', 
     today: TODAY,
     affectsYou: false,
   });
-  // One shared "Risk pending" on both surfaces, explained exactly once: the
-  // top-level note carries it and the duplicate official block is gone.
-  assert.equal(home.risk.badgeLabel, 'Risk pending');
-  assert.equal(detailModel.risk.headlineLabel, 'Risk pending');
+  // One shared "PENDING" on both surfaces, explained exactly once: the
+  // top-level note carries it and the duplicate official block is gone. No
+  // " RISK" suffix — an absent classification is not a level of risk.
+  assert.equal(home.risk.badgeLabel, 'PENDING');
+  assert.equal(detailModel.risk.headlineLabel, 'PENDING');
   assert.equal(home.risk.badgeLabel, detailModel.risk.headlineLabel);
   assert.ok(detailModel.risk.note);
   assert.equal(detailModel.risk.official, null);
 
-  // A PHA reads "Not rated" — never Unknown — while its notice label stays a
-  // separate concept on both screens.
+  // A PHA reads "UNKNOWN" — it never receives a classification, so nothing is
+  // pending for it — while its notice label stays a separate concept on both
+  // screens. The word alone is not the whole story: the official block below
+  // states exactly why no class exists, which is what keeps Unknown honest.
   const phaClassification = {
     value: 'not_applicable_pha' as const,
     sourceText: null,
@@ -1164,8 +1168,8 @@ test('Home and Detail render the same risk state: pending, unrated, and rated', 
     detail({ classification: phaClassification, noticeType: 'public_health_alert' }),
     { today: TODAY, affectsYou: false },
   );
-  assert.equal(phaHome.risk.badgeLabel, 'Not rated');
-  assert.equal(phaDetail.risk.headlineLabel, 'Not rated');
+  assert.equal(phaHome.risk.badgeLabel, 'UNKNOWN');
+  assert.equal(phaDetail.risk.headlineLabel, 'UNKNOWN');
   assert.equal(phaHome.noticeLabel, 'Public Health Alert');
   assert.equal(phaDetail.noticeTypeLabel, 'Public Health Alert');
   // The PHA classification block is the one place that ADDS information
@@ -1404,6 +1408,7 @@ function tableCheck(
 ): ConsumerPackageCheck {
   return {
     render: true,
+    productionDateValues: [],
     scopeStatement: 'Only packages matching the affected details below are part of this recall.',
     variants: variants.map(({ name, fields }, index) => ({
       name,
@@ -1470,10 +1475,12 @@ test('the table: headers once, Product first, columns only where a row has data'
     table!.expanded.rows[1].cells.map((cell) => cell.text),
     ['Grape Bars', null, 'October 31, 2027', '041548244044'],
   );
-  // Two rows need no reveal control, and the two views are identical.
-  assert.equal(table!.seeAllLabel, null);
-  assert.equal(table!.initialRows, 2);
-  assert.deepEqual(table!.collapsed, table!.expanded);
+  // Two rows DO now need a reveal control — only a single-product recall
+  // renders without one — and the collapsed view shows exactly the first row.
+  assert.equal(table!.rowsDisclosure?.expandLabel, 'See all (2)');
+  assert.equal(table!.initialRows, 1);
+  assert.equal(table!.collapsed.rows.length, 1);
+  assert.equal(table!.expanded.rows.length, 2);
   // Stable row identity for P2c image assignment.
   assert.deepEqual(
     table!.expanded.rows.map((row) => row.id),
@@ -1496,7 +1503,7 @@ test('the table shows at most three rows initially, with See all (N) beyond', ()
   assert.equal(table!.expanded.rows.length, 5);
   assert.equal(table!.collapsed.rows.length, AFFECTED_PRODUCTS_INITIAL_ROWS);
   assert.equal(table!.initialRows, AFFECTED_PRODUCTS_INITIAL_ROWS);
-  assert.equal(table!.seeAllLabel, 'See all (5)');
+  assert.equal(table!.rowsDisclosure?.expandLabel, 'See all (5)');
 });
 
 test('a demoted row keeps its own facts: name null, no Product masquerade', () => {
@@ -1573,7 +1580,7 @@ test('proven-shared evidence repeats in every row — no shared-facts structure'
   // Row-specific values stay row-specific — sharing one field never merges
   // the others.
   assert.notEqual(table!.expanded.rows[0].cells[1].text, table!.expanded.rows[1].cells[1].text);
-  assert.deepEqual(Object.keys(table!), ['collapsed', 'expanded', 'initialRows', 'seeAllLabel']);
+  assert.deepEqual(Object.keys(table!), ['collapsed', 'expanded', 'initialRows', 'rowsDisclosure']);
 });
 
 test('a collapsed code set is its row\u2019s own in-cell control — and its column obeys the views', () => {
@@ -1597,7 +1604,7 @@ test('a collapsed code set is its row\u2019s own in-cell control — and its col
   check.variants[3].lotCodes = codeSet;
   const table = affectedProductsTable(affectedProductsModel(check, 'Cups'));
   assert.ok(table);
-  assert.equal(table!.seeAllLabel, 'See all (4)');
+  assert.equal(table!.rowsDisclosure?.expandLabel, 'See all (4)');
   // Collapsed: no visible row justifies a codes column, so none renders.
   assert.deepEqual(
     table!.collapsed.columns.map((column) => column.key),
@@ -1612,11 +1619,11 @@ test('a collapsed code set is its row\u2019s own in-cell control — and its col
   const codesIndex = 2;
   const cells = table!.expanded.rows.map((row) => row.cells[codesIndex]);
   assert.deepEqual(
-    cells.map((cell) => cell.codesLabel),
-    [null, null, null, 'View 6 codes'],
+    cells.map((cell) => cell.disclosure?.expandLabel ?? null),
+    [null, null, null, 'See all (6)'],
   );
-  assert.deepEqual(cells[3].codes, codeSet);
-  assert.ok(cells.slice(0, 3).every((cell) => cell.text === null && cell.codes === null));
+  assert.deepEqual(cells[3].values, codeSet.codes);
+  assert.ok(cells.slice(0, 3).every((cell) => cell.text === null && cell.values.length === 0));
 });
 
 test('ambiguous case-level evidence never reaches a row cell', () => {
@@ -1780,9 +1787,11 @@ test('P3C-2: a code-only or date-only notice keeps the section, as ONE table row
   );
   assert.equal(codeTable.rows.length, 1);
   assert.equal(codeTable.rows[0].name, null);
-  // Three codes is a small set: it reads inline, with no control to tap.
+  // Three codes exceed the two-value inline limit, so the cell shows its
+  // first two and reveals the third in place.
   assert.equal(codeTable.rows[0].cells[0].text, 'A1, A2, A3');
-  assert.equal(codeTable.rows[0].cells[0].codes, null);
+  assert.equal(codeTable.rows[0].cells[0].collapsedText, 'A1, A2');
+  assert.equal(codeTable.rows[0].cells[0].disclosure?.expandLabel, 'See all (3)');
 
   const withDates = affectedProductsModel(
     {
@@ -1866,8 +1875,8 @@ test('P3C-2: a large shared code set repeats into every named row, behind its ow
   // its own control opening its own row's codes. No block below the table.
   for (const row of view.rows) {
     const cell = row.cells[2];
-    assert.equal(cell.codesLabel, 'View 6 codes');
-    assert.deepEqual(cell.codes!.codes, ['L1', 'L2', 'L3', 'L4', 'L5', 'L6']);
+    assert.equal(cell.disclosure?.expandLabel, 'See all (6)');
+    assert.deepEqual(cell.values, ['L1', 'L2', 'L3', 'L4', 'L5', 'L6']);
   }
   assert.deepEqual(
     view.rows.map((row) => row.name),
@@ -1914,8 +1923,8 @@ test('P3C-2: a row that states its OWN codes is never overwritten by the shared 
   );
   const view = affectedProductsSection(model)!.table.expanded;
   const lot = view.columns.findIndex((column) => column.key === 'lotCodes');
-  assert.deepEqual(view.rows[0].cells[lot].codes!.codes, own.codes);
-  assert.deepEqual(view.rows[1].cells[lot].codes!.codes, shared.codes);
+  assert.deepEqual(view.rows[0].cells[lot].values, own.codes);
+  assert.deepEqual(view.rows[1].cells[lot].values, shared.codes);
 });
 
 test('P3C-2: a nameless row keeps an honest empty Product cell beside a named sibling', () => {

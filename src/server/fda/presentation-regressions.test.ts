@@ -220,12 +220,15 @@ test('recorded Jaime’s Jalapeno Ranch: the exact P2b single-row table', () => 
     table!.expanded.rows[0].cells.map((cell) => cell.text),
     ['Jalapeno Ranch Dressing', '199284564923', '69, 86, 108, 113, 116, 121'],
   );
-  assert.equal(table!.seeAllLabel, null);
-  // The codes render inline in the row — nothing sits behind a control, and
+  // One product row: no section-level control at all.
+  assert.equal(table!.rowsDisclosure, null);
   // (P3C-2) there is no recall-level set left over to render anywhere else.
   assert.deepEqual(model.sharedCodes, []);
   assert.equal(model.sharedProductionDates, null);
-  assert.ok(table!.expanded.rows[0].cells.every((cell) => cell.codes === null));
+  // Six batch codes in one cell now disclose in place, two at a time.
+  const codesCell = table!.expanded.rows[0].cells[2];
+  assert.equal(codesCell.collapsedText, '69, 86');
+  assert.equal(codesCell.disclosure?.expandLabel, 'See all (6)');
 });
 
 test('recorded Chocolatey Eyeballs: each version keeps its OWN packaging and size', () => {
@@ -275,8 +278,8 @@ test('recorded Chocolatey Eyeballs: each version keeps its OWN packaging and siz
     table!.expanded.columns.map((column) => column.label),
     ['Product', 'Package Size', 'Packaging'],
   );
-  assert.equal(table!.initialRows, 3);
-  assert.equal(table!.seeAllLabel, 'See all (5)');
+  assert.equal(table!.initialRows, 1);
+  assert.equal(table!.rowsDisclosure?.expandLabel, 'See all (5)');
 });
 
 /**
@@ -532,33 +535,43 @@ test('recorded Outshine: exact flavor thumbnails, count demotion, and in-cell co
   const table = model.sections.affectedProducts!.table!;
   assert.equal(model.images.hero?.url, projection.heroImageUrl);
 
-  // Collapsed: exactly three rows, clean names, "6 Bars" in Package Size.
+  // Collapsed: exactly ONE row — the source's first — with a clean name and
+  // "6 Bars" in Package Size. Rows are never reordered, so the first row is
+  // the notice's first row, not the soonest date or the smallest code.
   const collapsed = table.collapsed;
-  assert.equal(collapsed.rows.length, 3);
+  assert.equal(collapsed.rows.length, 1);
   assert.deepEqual(
     collapsed.rows.map((row) => row.name),
-    [
-      'Outshine Fruit Bars Strawberry',
-      'Outshine Fruit Bars Grape',
-      'Outshine Fruit Bars Watermelon',
-    ],
+    ['Outshine Fruit Bars Strawberry'],
   );
   const colKey = (view: typeof collapsed, key: string) =>
     view.columns.findIndex((column) => column.key === key);
   for (const row of collapsed.rows) {
     assert.equal(row.cells[colKey(collapsed, 'size')].text, '6 Bars');
   }
-  // Every collapsed row's batch codes render as that row's own in-cell
-  // control — a code-bearing visible row never shows an empty codes cell.
-  assert.deepEqual(
-    collapsed.rows.map((row) => row.cells[colKey(collapsed, 'batchCodes')].codesLabel),
-    ['View 22 codes', 'View 9 codes', 'View 16 codes'],
-  );
-  // The long strawberry set carries its full source-supported code/date
-  // pairs for the modal — exactly this row's, nothing else's.
-  const strawberryCodes = collapsed.rows[0].cells[colKey(collapsed, 'batchCodes')].codes!;
-  assert.equal(strawberryCodes.count, 22);
-  assert.equal(strawberryCodes.pairs.length, 22);
+  // That row's twenty-two batch codes are PAIRED with its best-by dates, so
+  // the two columns are one coordinated group rather than two independent
+  // lists. Two complete pairs render inline, aligned line for line; the rest
+  // are one tap away in place.
+  const strawberry = collapsed.rows[0].cells[colKey(collapsed, 'batchCodes')];
+  const strawberryDates = collapsed.rows[0].cells[colKey(collapsed, 'bestBy')];
+  assert.equal(strawberry.values.length, 22);
+  assert.equal(strawberry.disclosure?.expandLabel, 'See all (22)');
+  assert.equal(strawberry.disclosure?.expandAccessibilityLabel, 'See all 22 identifier pairs');
+  assert.equal(strawberry.pairGroup, 'bestBy+batchCodes');
+  assert.equal(strawberryDates.pairGroup, strawberry.pairGroup);
+  // One control, carried identically by both halves — neither can move alone.
+  assert.deepEqual(strawberryDates.disclosure, strawberry.disclosure);
+  // Line-joined, never comma-joined: a best-by date carries its own comma.
+  assert.equal(strawberry.collapsedText, 'LLA616903\nLLA617003');
+  assert.equal(strawberryDates.collapsedText, 'September 30, 2027\nSeptember 30, 2027');
+  // Both halves the same length, so line n of one is the partner of line n of
+  // the other. The row states three distinct best-by dates across twenty-two
+  // codes; aligned, that is twenty-two statements, not sixty-six.
+  assert.equal(strawberryDates.values.length, 22);
+  assert.equal(new Set(strawberryDates.values).size, 3);
+  // The source-supported pairs are still captured on the model too.
+  assert.equal(model.affectedProducts.items[0].codes!.pairs.length, 22);
 
   // Expanded: all six rows; the trailing package counts moved into Package
   // Size everywhere ("6 Bars" / "24 Bars"), leaving Product clean.
@@ -574,12 +587,26 @@ test('recorded Outshine: exact flavor thumbnails, count demotion, and in-cell co
       ['Outshine Fruit Bars Variety Pack', '24 Bars'],
     ],
   );
-  // Tangerine's two codes stay inline; the other rows carry controls.
+  // Tangerine's two codes stay inline with no control. The source printed no
+  // date beside them, so that row forms NO pair group and keeps the ordinary
+  // comma-joined independent rendering — paired and unpaired rows sit in the
+  // same table without either borrowing the other's treatment.
   const codesCells = expanded.rows.map((row) => row.cells[colKey(expanded, 'batchCodes')]);
   assert.equal(codesCells[4].text, 'LLA619603, LLA619703');
+  assert.equal(codesCells[4].disclosure, null);
+  assert.equal(codesCells[4].pairGroup, null);
+  assert.equal(expanded.rows[4].cells[colKey(expanded, 'bestBy')].pairGroup, null);
+  // Every other row's codes ARE paired, and each of those groups counts only
+  // its own row's pairs.
   assert.deepEqual(
-    codesCells.map((cell) => cell.codesLabel),
-    ['View 22 codes', 'View 9 codes', 'View 16 codes', 'View 6 codes', null, 'View 5 codes'],
+    codesCells.map((cell) => cell.pairGroup),
+    Array(6)
+      .fill('bestBy+batchCodes')
+      .map((group, index) => (index === 4 ? null : group)),
+  );
+  assert.deepEqual(
+    codesCells.map((cell) => cell.disclosure?.expandLabel ?? null),
+    ['See all (22)', 'See all (9)', 'See all (16)', 'See all (6)', null, 'See all (5)'],
   );
 
   // Every flavor holds exactly its caption/UPC-proven image — including the
@@ -832,9 +859,7 @@ test('corpus audit: allocation invariants hold everywhere, and every row assignm
             return;
           }
           assert.ok(
-            view.rows.some(
-              (row) => row.cells[index].text !== null || row.cells[index].codes !== null,
-            ),
+            view.rows.some((row) => row.cells[index].text !== null),
             `${slug}: column ${column.key} entirely empty in a rendered view`,
           );
         });
@@ -981,7 +1006,7 @@ test('recorded Taylor Fresh: a column no visible row justifies waits for See all
   // and expanding recomputes the columns over every displayed row.
   const model = detailModelFor(corpusProjection('taylor-fresh-foods'));
   const table = model.sections.affectedProducts!.table!;
-  assert.ok(table.seeAllLabel, 'expected a See all control');
+  assert.ok(table.rowsDisclosure, 'expected a See all control');
   assert.deepEqual(
     table.collapsed.columns.map((column) => column.key),
     ['product', 'bestBy'],
@@ -993,22 +1018,23 @@ test('recorded Taylor Fresh: a column no visible row justifies waits for See all
 });
 
 test('recorded YoCrunch: a mixed view keeps the codes column with honest empty cells', () => {
-  // Only one of the three visible rows carries lot codes: the column exists
-  // (a code-bearing visible row never hides its codes), the code-bearing row
-  // shows its own in-cell value or control, and the others stay empty.
+  // Only one row carries lot codes: the column exists (a code-bearing visible
+  // row never hides its codes), that row shows its own value, and the others
+  // stay empty. Asserted on the expanded view, because the collapsed view is
+  // one row and computes its columns over exactly that row — a column no
+  // visible row populates correctly does not render at all.
   const model = detailModelFor(corpusProjection('yocrunchr-products'));
   const table = model.sections.affectedProducts!.table!;
-  const lotIndex = table.collapsed.columns.findIndex((column) => column.key === 'lotCodes');
+  const view = table.expanded;
+  const lotIndex = view.columns.findIndex((column) => column.key === 'lotCodes');
   assert.ok(lotIndex >= 0, 'the lot-codes column is missing');
-  const bearing = table.collapsed.rows.filter(
-    (row) => row.cells[lotIndex].text !== null || row.cells[lotIndex].codes !== null,
-  );
+  const bearing = view.rows.filter((row) => row.cells[lotIndex].text !== null);
   assert.equal(bearing.length, 1);
   // Empty cells are empty — never a dash, never a borrowed value.
-  for (const row of table.collapsed.rows) {
+  for (const row of view.rows) {
     if (bearing.includes(row)) continue;
     assert.equal(row.cells[lotIndex].text, null);
-    assert.equal(row.cells[lotIndex].codes, null);
+    assert.deepEqual(row.cells[lotIndex].values, []);
   }
 });
 
@@ -1122,7 +1148,7 @@ test('P3A corpus scan: no Detail section can render a heading above nothing', ()
       section.table.expanded.rows.some(
         (row) =>
           (row.name ?? '').trim() !== '' ||
-          row.cells.some((cell) => (cell.text ?? '').trim() !== '' || cell.codes !== null),
+          row.cells.some((cell) => (cell.text ?? '').trim() !== ''),
       );
     assert.ok(readable, `visible section with no readable content: ${slug}`);
   }
@@ -1201,9 +1227,7 @@ test('P3C-2 corpus scan: no notice keeps a code or date outside the table', () =
     for (const rendering of [section.table.collapsed, section.table.expanded]) {
       rendering.columns.forEach((column, index) => {
         assert.ok(
-          rendering.rows.some(
-            (row) => (row.cells[index].text ?? '').trim() !== '' || row.cells[index].codes !== null,
-          ),
+          rendering.rows.some((row) => (row.cells[index].text ?? '').trim() !== ''),
           `${slug}: empty ${column.key} column`,
         );
       });
@@ -1253,10 +1277,10 @@ test('P3C-2 shape B: King Arthur keeps one row per source row, each date with it
   assert.equal(new Set(codes).size, 34);
   // …and the date that used to render as a lot code is gone from the codes.
   assert.ok(!codes.includes('12/04/19'));
-  // Long tables collapse; the initial view is three rows and its columns are
-  // computed over exactly those three.
-  assert.equal(model.sections.affectedProducts!.table.seeAllLabel, 'See all (19)');
-  assert.equal(model.sections.affectedProducts!.table.collapsed.rows.length, 3);
+  // Long tables collapse; the initial view is ONE row and its columns are
+  // computed over exactly that row.
+  assert.equal(model.sections.affectedProducts!.table.rowsDisclosure?.expandLabel, 'See all (19)');
+  assert.equal(model.sections.affectedProducts!.table.collapsed.rows.length, 1);
   // No image is attached to any nameless row.
   assert.ok(view.rows.every((row) => row.image === null));
 });
@@ -1290,21 +1314,29 @@ test('P3C-2 shape B: a column-oriented grid is not read as rows', () => {
   // group codes the source never grouped — and, because its last four `<tr>`s
   // hold only the tail of the longest column, it would also publish four of
   // twenty-three codes and silently drop the rest.
-  const view = detailModelFor(corpusProjection('wawona-frozen-foods')).sections.affectedProducts!
-    .table.expanded;
+  const model = detailModelFor(corpusProjection('wawona-frozen-foods'));
+  const view = model.sections.affectedProducts!.table.expanded;
   assert.equal(view.rows.length, 1);
   assert.equal(view.rows[0].name, 'Organic Daybreak Blend 4lb bags of frozen fruit');
   const codes = cellAt(view, 0, 'lotCodes');
-  assert.equal(codes.codesLabel, 'View 23 codes');
-  assert.equal(codes.codes!.count, 23);
-  // Each code still carries the column date the source printed above it.
-  assert.equal(codes.codes!.pairs.length, 23);
+  assert.equal(codes.disclosure!.expandLabel, 'See all (23)');
+  assert.equal(codes.values.length, 23);
+  // Each code still carries the column date the source printed above it —
+  // captured on the model, which is where that pairing lives now that the
+  // cell renders the codes themselves.
+  // Wawona states its codes about the whole recalled population, so the
+  // pairing lives on the model's shared set — which the table repeats into
+  // the one row that owns it.
+  const sourceCodes =
+    model.affectedProducts.items[0].codes ??
+    model.affectedProducts.sharedCodes.find((set) => set.key === 'lotCodes')!.codes;
+  assert.equal(sourceCodes.pairs.length, 23);
   assert.equal(
-    codes.codes!.pairs.find((pair: { code: string }) => pair.code === '20082D04')!.date,
+    sourceCodes.pairs.find((pair) => pair.code === '20082D04')!.date,
     'September 23, 2023',
   );
   assert.equal(
-    codes.codes!.pairs.find((pair: { code: string }) => pair.code === '20108D08')!.date,
+    sourceCodes.pairs.find((pair) => pair.code === '20108D08')!.date,
     'October 18, 2023',
   );
 });
@@ -1332,9 +1364,9 @@ test('P3C-2 shape D: recall-level codes render as one anonymous evidence row', (
   // disclosure beneath it; now the codes ARE the table, in one anonymous row
   // whose Product column does not render.
   for (const [fragment, label, count] of [
-    ['twin-sisters-creamery', 'View 8 codes', 8],
-    ['sheng-kee-california', 'View 17 codes', 17],
-    ['hardies-fresh-foods-recalls-cucumbers', 'View 7 codes', 7],
+    ['twin-sisters-creamery', 'See all (8)', 8],
+    ['sheng-kee-california', 'See all (17)', 17],
+    ['hardies-fresh-foods-recalls-cucumbers', 'See all (7)', 7],
   ] as const) {
     const view = detailModelFor(corpusProjection(fragment)).sections.affectedProducts!.table
       .expanded;
@@ -1344,8 +1376,8 @@ test('P3C-2 shape D: recall-level codes render as one anonymous evidence row', (
       !view.columns.some((column) => column.key === 'product'),
       `${fragment}: an empty Product column rendered`,
     );
-    assert.equal(view.rows[0].cells[0].codesLabel, label, fragment);
-    assert.equal(view.rows[0].cells[0].codes!.count, count, fragment);
+    assert.equal(view.rows[0].cells[0].disclosure?.expandLabel, label, fragment);
+    assert.equal(view.rows[0].cells[0].values.length, count, fragment);
     // A nameless row never receives an image.
     assert.equal(view.rows[0].image, null, fragment);
   }
@@ -1359,14 +1391,27 @@ test('P3C-2 shape D: production codes and their readable dates are table cells',
     ['productionDates', 'lotCodes', 'productionCodes'],
   );
   assert.equal(view.rows.length, 1);
+  // Five production codes, each printed beside its own readable date: one
+  // aligned pair group, line-joined because these values carry commas.
+  const jalapenoDates = cellAt(view, 0, 'productionDates');
+  const jalapenoCodes = cellAt(view, 0, 'productionCodes');
   assert.equal(
-    cellAt(view, 0, 'productionDates').text,
-    'July 11, 2026, July 15, 2026, July 16, 2026, July 18, 2026, July 22, 2026',
+    jalapenoDates.text,
+    'July 11, 2026\nJuly 15, 2026\nJuly 16, 2026\nJuly 18, 2026\nJuly 22, 2026',
   );
+  assert.equal(jalapenoDates.pairGroup, 'productionDates+productionCodes');
+  assert.equal(jalapenoCodes.pairGroup, jalapenoDates.pairGroup);
+  assert.equal(jalapenoDates.disclosure?.expandAccessibilityLabel, 'See all 5 identifier pairs');
+  assert.equal(jalapenoDates.collapsedText, 'July 11, 2026\nJuly 15, 2026');
+  assert.equal(jalapenoCodes.collapsedText, '26192\n26196');
+  // The seven LOT codes on the same row are NOT paired with anything, so they
+  // keep their own independent comma-joined disclosure.
+  assert.equal(cellAt(view, 0, 'lotCodes').pairGroup, null);
+  assert.equal(cellAt(view, 0, 'lotCodes').collapsedText, 'X2741775, X2741859');
   // The two code sets keep their own labels: a production code is never
   // relabelled as a lot code to fit an existing column.
-  assert.equal(cellAt(view, 0, 'lotCodes').codes!.count, 7);
-  assert.deepEqual(cellAt(view, 0, 'productionCodes').codes!.codes, [
+  assert.equal(cellAt(view, 0, 'lotCodes').values.length, 7);
+  assert.deepEqual(cellAt(view, 0, 'productionCodes').values, [
     '26192',
     '26196',
     '26197',
