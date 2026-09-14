@@ -6,16 +6,26 @@ import {
   ScrollView,
   SectionList,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { Link, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FeedStateMessage } from '@/components/feed-state-message';
 import { RecallCard } from '@/components/recall-card';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { Chip } from '@/components/ui/chip';
+import { SearchBar } from '@/components/ui/search-bar';
+import { Surface } from '@/components/ui/surface';
+import { Text } from '@/components/ui/text';
+import {
+  color,
+  hitSlopToMinimum,
+  hitTarget,
+  layout,
+  radius,
+  spacing,
+  typography,
+} from '@/constants/design-tokens';
 import type { FoodCategoryId } from '@/domain/food-category';
 import { LAUNCH_CATEGORY_OPTIONS, sanitizeLaunchCategoryIds } from '@/domain/food-category-launch';
 import {
@@ -25,8 +35,19 @@ import {
   type UserRecallPreferences,
 } from '@/domain/preferences';
 import { useFeed } from '@/hooks/use-feed';
-import { useTheme } from '@/hooks/use-theme';
 import { buildAffectsMeSections } from '@/lib/affects-me-ranking';
+import {
+  FEED_EMPTY_CORPUS,
+  FEED_EMPTY_FILTERS,
+  FEED_EMPTY_PERSONALIZED,
+  FEED_EMPTY_SEARCH,
+  FEED_ERROR_TITLE,
+  FEED_LOADING,
+  FEED_NOT_CONFIGURED,
+  FEED_STALE_NOTICE,
+  OLDER_NOTICES_EXPLANATION,
+  PERSONALIZE_CTA,
+} from '@/lib/feed-copy';
 import {
   activeFilterCount,
   applyFeedFilters,
@@ -44,6 +65,25 @@ import { isFeedConfigured, type FeedItem } from '@/lib/recall-feed';
 import { buildHomeCardModel, todayIso } from '@/lib/recall-presentation';
 import { evaluatePersonalRelevance, type PersonalRelevance } from '@/lib/relevance';
 import { riskTierWord } from '@/lib/risk-display';
+
+/**
+ * The Feed (P2B1 appearance; behaviour unchanged since C10B / P2A).
+ *
+ * Visually this is Figma `home` (81:793) — the warm page, the search bar,
+ * the chip row, the section heading and the recall cards, drawn from the
+ * design tokens and the shared primitives, laid out against the real device
+ * width and safe areas. Everything the screen DOES is exactly what it did
+ * before: the one feed session, search over the loaded corpus, the All /
+ * Affects me modes, the All-only Location / Risk / Category filters and
+ * their sheets, the sectioning and ordering, the personalization verdict,
+ * the save control, and the deep link into Recall Details. Figma's
+ * notification bell has no product behaviour and is not rendered; its
+ * `Urgency` chip is the shipped `Risk` filter.
+ *
+ * The screen header is the navigator's ("Feed", styled in the tab layout).
+ * The development-only Design Preview harness is reachable from Profile
+ * alone and has no entry here.
+ */
 
 type FeedTab = 'affects_me' | 'all';
 
@@ -73,39 +113,6 @@ function usePreferences(onFirstLoad: (prefs: UserRecallPreferences) => void) {
   return prefs;
 }
 
-/** One chip in the horizontally scrollable filter bar (temporary UI). */
-function FilterChip({
-  label,
-  active,
-  onPress,
-  accessibilityLabel,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-  /**
-   * Spoken name when the visible label is a compact badge. The chip reads
-   * "Category · 2", which is right on screen and ambiguous aloud; the sheet's
-   * own name plus the count is not.
-   */
-  accessibilityLabel?: string;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      accessibilityLabel={accessibilityLabel}
-      // The chip's own padding leaves it under the 44pt minimum on a compact
-      // row; hitSlop restores the touch target without changing the layout.
-      hitSlop={{ top: Spacing.two, bottom: Spacing.two, left: Spacing.one, right: Spacing.one }}
-      onPress={onPress}>
-      <ThemedView type={active ? 'backgroundSelected' : 'backgroundElement'} style={styles.tab}>
-        <ThemedText style={active ? styles.badgeEmphasized : undefined}>{label}</ThemedText>
-      </ThemedView>
-    </Pressable>
-  );
-}
-
 /** The Location sheet's 52 canonical jurisdictions, alphabetical by name. */
 const LOCATION_OPTIONS = SUPPORTED_STATE_CODES.map((code) => ({
   value: code,
@@ -126,10 +133,44 @@ const RISK_OPTIONS = RISK_FILTER_TIERS.map((tier) => ({
  */
 const CATEGORY_OPTIONS = LAUNCH_CATEGORY_OPTIONS.map((option) => ({ ...option }));
 
+/** A one-caption-line control reaches the 44pt target through hitSlop. */
+const CAPTION_HIT_SLOP = hitSlopToMinimum(typography.caption.lineHeight);
+
 /**
- * Temporary modal multi-select for one filter dimension. Selections are a
- * DRAFT until Apply — Cancel discards, Clear empties the dimension. This is
- * browsing state for the current session, never a saved preference.
+ * A sheet action: the primary Apply as a brand-navy pill, Cancel and Clear
+ * as bordered white pills — each a full 44pt target on its own.
+ */
+function SheetButton({
+  label,
+  primary,
+  onPress,
+}: {
+  label: string;
+  primary?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => pressed && styles.pressed}>
+      <Surface
+        background={primary ? 'background/brand' : 'background/surface'}
+        border={primary ? undefined : 'border/default'}
+        radius="full"
+        style={styles.sheetButton}>
+        <Text variant="caption" color={primary ? 'text/inverse' : 'text/primary'}>
+          {label}
+        </Text>
+      </Surface>
+    </Pressable>
+  );
+}
+
+/**
+ * Modal multi-select for one filter dimension. Selections are a DRAFT until
+ * Apply — Cancel discards, Clear empties the dimension. This is browsing
+ * state for the current session, never a saved preference.
  */
 function FilterSheet({
   title,
@@ -144,6 +185,7 @@ function FilterSheet({
   onApply: (next: string[]) => void;
   onClose: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState<string[]>(selected);
   const toggle = (value: string) =>
     setDraft((prior) =>
@@ -152,8 +194,10 @@ function FilterSheet({
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.sheetBackdrop}>
-        <ThemedView style={styles.sheet}>
-          <ThemedText type="subtitle">{title}</ThemedText>
+        <Surface style={[styles.sheet, { paddingBottom: spacing[16] + insets.bottom }]}>
+          <Text variant="heading-3" accessibilityRole="header">
+            {title}
+          </Text>
           <ScrollView style={styles.sheetList} keyboardShouldPersistTaps="handled">
             {options.map((option) => {
               const isSelected = draft.includes(option.value);
@@ -163,52 +207,28 @@ function FilterSheet({
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: isSelected }}
                   accessibilityLabel={option.label}
-                  onPress={() => toggle(option.value)}>
-                  <ThemedText style={styles.sheetItem}>
-                    {isSelected ? `✓ ${option.label}` : option.label}
-                  </ThemedText>
+                  onPress={() => toggle(option.value)}
+                  style={({ pressed }) => [styles.sheetItem, pressed && styles.pressed]}>
+                  <Text variant="body">{isSelected ? `✓ ${option.label}` : option.label}</Text>
                 </Pressable>
               );
             })}
           </ScrollView>
           <View style={styles.sheetActions}>
-            <Pressable accessibilityRole="button" onPress={onClose}>
-              <ThemedView type="backgroundElement" style={styles.sheetButton}>
-                <ThemedText>Cancel</ThemedText>
-              </ThemedView>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => setDraft([])}>
-              <ThemedView type="backgroundElement" style={styles.sheetButton}>
-                <ThemedText>Clear</ThemedText>
-              </ThemedView>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
+            <SheetButton label="Cancel" onPress={onClose} />
+            <SheetButton label="Clear" onPress={() => setDraft([])} />
+            <SheetButton
+              label="Apply"
+              primary
               onPress={() => {
                 onApply(draft);
                 onClose();
-              }}>
-              <ThemedView type="backgroundSelected" style={styles.sheetButton}>
-                <ThemedText style={styles.badgeEmphasized}>Apply</ThemedText>
-              </ThemedView>
-            </Pressable>
+              }}
+            />
           </View>
-        </ThemedView>
+        </Surface>
       </View>
     </Modal>
-  );
-}
-
-function CenteredMessage({ title, body }: { title: string; body: string }) {
-  return (
-    <View style={styles.centered}>
-      <ThemedText type="subtitle" style={styles.centeredText}>
-        {title}
-      </ThemedText>
-      <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-        {body}
-      </ThemedText>
-    </View>
   );
 }
 
@@ -216,17 +236,24 @@ function CenteredMessage({ title, body }: { title: string; body: string }) {
 function PersonalizeCta({ compact }: { compact?: boolean }) {
   return (
     <Link href="/settings/personalization" asChild>
-      <Pressable accessibilityRole="button">
-        <ThemedView type="backgroundSelected" style={styles.ctaCard}>
-          <ThemedText type="subtitle">Personalize Recall</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {compact
-              ? 'Choose your state to see which recalls affect your area.'
-              : 'Choose your state, allergens, and stores — Home will show what affects you.'}
-          </ThemedText>
-        </ThemedView>
+      <Pressable accessibilityRole="button" style={({ pressed }) => pressed && styles.pressed}>
+        <Surface background="background/subtle" radius={12} style={styles.callout}>
+          <Text variant="heading-3">{PERSONALIZE_CTA.title}</Text>
+          <Text variant="body-small">
+            {compact ? PERSONALIZE_CTA.compactBody : PERSONALIZE_CTA.body}
+          </Text>
+        </Surface>
       </Pressable>
     </Link>
+  );
+}
+
+/** The warm page every Feed state sits on. */
+function Page({ children }: { children: React.ReactNode }) {
+  return (
+    <Surface background="background/page" style={styles.page}>
+      {children}
+    </Surface>
   );
 }
 
@@ -238,8 +265,6 @@ interface HomeSection {
 
 export default function HomeScreen() {
   const { state, refreshing, refresh, staleMessage } = useFeed();
-  const insets = useSafeAreaInsets();
-  const theme = useTheme();
   const [showOlder, setShowOlder] = useState(false);
   const [tab, setTab] = useState<FeedTab>('all');
   // Browsing state (C6): session-only, in memory, never persisted, never part
@@ -321,28 +346,25 @@ export default function HomeScreen() {
 
   if (!isFeedConfigured()) {
     return (
-      <ThemedView style={styles.container}>
-        <CenteredMessage
-          title="Backend not configured"
-          body="Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY in .env (see README), then restart the dev server."
-        />
-      </ThemedView>
+      <Page>
+        <FeedStateMessage {...FEED_NOT_CONFIGURED} tone="error" />
+      </Page>
     );
   }
 
   if (state.status === 'loading') {
     return (
-      <ThemedView style={styles.container}>
-        <CenteredMessage title="Loading recalls…" body="Fetching current safety notices." />
-      </ThemedView>
+      <Page>
+        <FeedStateMessage {...FEED_LOADING} tone="loading" />
+      </Page>
     );
   }
 
   if (state.status === 'error') {
     return (
-      <ThemedView style={styles.container}>
-        <CenteredMessage title="Could not load recalls" body={state.message} />
-      </ThemedView>
+      <Page>
+        <FeedStateMessage title={FEED_ERROR_TITLE} body={state.message} tone="error" />
+      </Page>
     );
   }
 
@@ -440,91 +462,105 @@ export default function HomeScreen() {
   const showTabs = preferencesAvailable() && prefs !== null;
   const filtersActive = hasActiveFilters(filters);
   const searchActive = query.trim() !== '';
+  const olderCount = personalized ? affectsCounts.older : olderActive.length;
 
   return (
-    <ThemedView style={styles.container}>
-      {/* ── FEED MODE CONTROL (C6.1) ──────────────────────────────────────
-          The top-level choice: WHICH feed you are looking at. All and
-          Affects me are mutually exclusive scopes, so they get their own
-          segmented control rather than sitting among the filter chips that
-          merely refine All. */}
-      {showTabs ? (
-        <View style={styles.modeControl}>
-          {(
-            [
-              { key: 'all', label: 'All' },
-              { key: 'affects_me', label: 'Affects me' },
-            ] as const
-          ).map(({ key, label }) => (
-            <Pressable
-              key={key}
-              accessibilityRole="button"
-              accessibilityState={{ selected: tab === key }}
-              style={styles.modeSegment}
-              onPress={() => setTab(key)}>
-              <ThemedView
-                type={tab === key ? 'backgroundSelected' : 'backgroundElement'}
-                style={styles.modeSegmentInner}>
-                <ThemedText style={tab === key ? styles.badgeEmphasized : undefined}>
-                  {label}
-                </ThemedText>
-              </ThemedView>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-      {/* ── END FEED MODE CONTROL ─────────────────────────────────────────*/}
+    <Page>
+      {/* Search lives inside the Feed and is never a destination: it filters
+          the loaded corpus and navigates nowhere. The bar is the shared
+          primitive; what it matches against is `filterBySearch`, unchanged. */}
       <View style={styles.searchRow}>
-        <TextInput
-          style={[styles.searchInput, { color: theme.text }]}
-          placeholder="Search product, company, brand, or code"
-          placeholderTextColor={theme.textSecondary}
+        <SearchBar
           value={query}
           onChangeText={setQuery}
+          placeholder="Search product, company, brand, or code"
+          accessibilityLabel="Search recalls"
+          accessibilityHint="Narrows the recalls below as you type"
           autoCapitalize="none"
           autoCorrect={false}
-          clearButtonMode="while-editing"
-          accessibilityLabel="Search recalls"
+          returnKeyType="search"
         />
       </View>
-      {/* ── ALL-ONLY FILTER ROW (C6.1) ────────────────────────────────────
-          Location and Risk refine the All Recalls feed and NOTHING else, so
-          they live at their own level, below the feed-mode control, and are
-          rendered only while All is the active mode. In Affects me they —
-          and their counts and Clear all — are absent entirely: they cannot
-          be opened, read, or cleared from there, while the selections stay
-          untouched in session state for the return to All.
 
-          Category (C10B) is a third peer in this row, deliberately last: it is
-          the only dimension whose values are DERIVED rather than stated by the
-          agency, so it sits after the two the source vouches for. It is an
-          optional discovery aid — every recall stays reachable with it
-          cleared — and it never applies to Affects me. */}
-      {tab === 'all' ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterBar}
-          contentContainerStyle={styles.filterBarContent}>
-          <FilterChip
+      {/* One horizontally scrolling chip row (the approved composition), two
+          conceptual levels (the shipped behaviour): the feed-mode pair first,
+          then — only while All is active — the filters that refine it, kept
+          visually apart by a hairline. The row may overflow sideways; the
+          page never does. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        style={styles.chipBar}
+        contentContainerStyle={styles.chipBarContent}>
+        {/* ── FEED MODE CONTROL (C6.1) ──────────────────────────────────────
+            The top-level choice: WHICH feed you are looking at. All and
+            Affects me are mutually exclusive scopes, so they are a pair of
+            either/or chips — exactly one selected — rather than toggles
+            among the filters that merely refine All. */}
+        {showTabs
+          ? (
+              [
+                { key: 'all', label: 'All' },
+                { key: 'affects_me', label: 'Affects me' },
+              ] as const
+            ).map(({ key, label }) => (
+              <Chip key={key} label={label} selected={tab === key} onPress={() => setTab(key)} />
+            ))
+          : null}
+        {/* ── END FEED MODE CONTROL ─────────────────────────────────────────*/}
+        {/* ── ALL-ONLY FILTER ROW (C6.1) ────────────────────────────────────
+            Location and Risk refine the All Recalls feed and NOTHING else, so
+            they render only while All is the active mode. In Affects me they —
+            and their counts and Clear all — are absent entirely: they cannot
+            be opened, read, or cleared from there, while the selections stay
+            untouched in session state for the return to All.
+
+            Category (C10B) is a third peer in this row, deliberately last: it is
+            the only dimension whose values are DERIVED rather than stated by the
+            agency, so it sits after the two the source vouches for. It is an
+            optional discovery aid — every recall stays reachable with it
+            cleared — and it never applies to Affects me.
+
+            Each of these opens a picker sheet, which is what the chevron says. */}
+        {tab === 'all' && showTabs ? <View style={styles.chipDivider} /> : null}
+        {tab === 'all' ? (
+          <Chip
             label={
               filters.stateCodes.length > 0 ? `Location · ${filters.stateCodes.length}` : 'Location'
             }
-            active={filters.stateCodes.length > 0}
+            selected={filters.stateCodes.length > 0}
+            trailingIcon="chevron-down"
+            accessibilityLabel={
+              filters.stateCodes.length > 0
+                ? `Location filter, ${filters.stateCodes.length} selected`
+                : 'Location filter'
+            }
             onPress={() => setOpenSheet('location')}
           />
-          <FilterChip
+        ) : null}
+        {tab === 'all' ? (
+          <Chip
             label={filters.riskTiers.length > 0 ? `Risk · ${filters.riskTiers.length}` : 'Risk'}
-            active={filters.riskTiers.length > 0}
+            selected={filters.riskTiers.length > 0}
+            trailingIcon="chevron-down"
+            accessibilityLabel={
+              filters.riskTiers.length > 0
+                ? `Risk filter, ${filters.riskTiers.length} selected`
+                : 'Risk filter'
+            }
             onPress={() => setOpenSheet('risk')}
           />
-          <FilterChip
+        ) : null}
+        {tab === 'all' ? (
+          <Chip
             label={
               filters.categoryIds.length > 0
                 ? `Category · ${filters.categoryIds.length}`
                 : 'Category'
             }
-            active={filters.categoryIds.length > 0}
+            selected={filters.categoryIds.length > 0}
+            trailingIcon="chevron-down"
             accessibilityLabel={
               filters.categoryIds.length > 0
                 ? `Category filter, ${filters.categoryIds.length} selected`
@@ -532,17 +568,17 @@ export default function HomeScreen() {
             }
             onPress={() => setOpenSheet('category')}
           />
-          {filtersActive ? (
-            <FilterChip label="Clear all" active={false} onPress={clearAllFilters} />
-          ) : null}
-        </ScrollView>
-      ) : null}
+        ) : null}
+        {tab === 'all' && filtersActive ? (
+          <Chip label="Clear all" selected={false} onPress={clearAllFilters} />
+        ) : null}
+      </ScrollView>
       {tab === 'all' && filtersActive ? (
-        <View style={styles.searchRow}>
-          <ThemedText type="small" themeColor="textSecondary">
+        <View style={styles.contextRow}>
+          <Text variant="caption" color="text/secondary">
             Filtering All recalls · {activeFilterCount(filters)} selection
             {activeFilterCount(filters) === 1 ? '' : 's'}
-          </ThemedText>
+          </Text>
         </View>
       ) : null}
       {/* ── END ALL-ONLY FILTER ROW ───────────────────────────────────────*/}
@@ -550,15 +586,17 @@ export default function HomeScreen() {
           it. Not an instruction, and no preference logic of its own — the
           link opens the one existing personalization screen. */}
       {tab === 'affects_me' && showTabs ? (
-        <View style={[styles.searchRow, styles.contextRow]}>
-          <ThemedText type="small" themeColor="textSecondary">
+        <View style={styles.contextRow}>
+          <Text variant="caption" color="text/secondary">
             Based on your personalization
-          </ThemedText>
+          </Text>
           <Link href="/settings/personalization" asChild>
-            <Pressable accessibilityRole="button" hitSlop={8}>
-              <ThemedText type="small" themeColor="link">
-                Edit
-              </ThemedText>
+            <Pressable accessibilityRole="button" hitSlop={CAPTION_HIT_SLOP}>
+              {({ pressed }) => (
+                <Text variant="caption" color="action/secondary" style={pressed && styles.pressed}>
+                  Edit
+                </Text>
+              )}
             </Pressable>
           </Link>
         </View>
@@ -602,44 +640,49 @@ export default function HomeScreen() {
             })}
           />
         )}
-        renderSectionHeader={({ section }) =>
-          section.key === 'older' ? (
-            <ThemedView style={styles.sectionHeader}>
-              <ThemedText type="small" themeColor="textSecondary">
-                {section.title.toUpperCase()} (
-                {personalized ? affectsCounts.older : olderActive.length})
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                Still listed as active by the issuing agency, but announced more than 60 days ago.
-              </ThemedText>
-              <Pressable accessibilityRole="button" onPress={() => setShowOlder((value) => !value)}>
-                <ThemedText type="small" themeColor="link">
-                  {showOlder
-                    ? 'Hide older notices'
-                    : `Show all ${personalized ? affectsCounts.older : olderActive.length}`}
-                </ThemedText>
-              </Pressable>
-            </ThemedView>
-          ) : (
-            <ThemedView style={styles.sectionHeader}>
-              <ThemedText type="small" themeColor="textSecondary">
-                {section.title.toUpperCase()}
-              </ThemedText>
-            </ThemedView>
-          )
-        }
+        // The heading words are the presentation contract's (Recent activity,
+        // Older active notices, Affects me); the composition gives them the
+        // design's section-heading type. The older section keeps its count,
+        // its plain explanation, and its reveal — which grows the list in
+        // place and never moves the reading position.
+        renderSectionHeader={({ section }) => (
+          <View style={styles.sectionHeader}>
+            <Text variant="heading-3" accessibilityRole="header">
+              {section.key === 'older' ? `${section.title} (${olderCount})` : section.title}
+            </Text>
+            {section.key === 'older' ? (
+              <>
+                <Text variant="body-small" color="text/secondary">
+                  {OLDER_NOTICES_EXPLANATION}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showOlder }}
+                  hitSlop={CAPTION_HIT_SLOP}
+                  onPress={() => setShowOlder((value) => !value)}>
+                  {({ pressed }) => (
+                    <Text
+                      variant="caption"
+                      color="action/secondary"
+                      style={pressed && styles.pressed}>
+                      {showOlder ? 'Hide older notices' : `Show all ${olderCount}`}
+                    </Text>
+                  )}
+                </Pressable>
+              </>
+            ) : null}
+          </View>
+        )}
         ListHeaderComponent={
           <>
             {/* The feed on screen is complete but possibly out of date — said
                 plainly, because silently showing stale counts as current is
-                the failure this milestone exists to prevent. */}
+                the failure this milestone exists to prevent. The neutral
+                informational callout, not the lime relevance one. */}
             {staleMessage ? (
-              <ThemedView type="backgroundElement" style={styles.noticeCard}>
-                <ThemedText type="small">
-                  Showing the last complete update — couldn’t refresh just now. Pull down to try
-                  again.
-                </ThemedText>
-              </ThemedView>
+              <Surface background="background/subtle" radius={8} style={styles.callout}>
+                <Text variant="body-small">{FEED_STALE_NOTICE}</Text>
+              </Surface>
             ) : null}
             {tab === 'affects_me' && prefs !== null ? (
               !hasAnyPreference(prefs) ? (
@@ -650,45 +693,81 @@ export default function HomeScreen() {
             ) : null}
           </>
         }
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: Spacing.four + insets.bottom },
-        ]}
+        contentContainerStyle={styles.listContent}
         style={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refresh}
+            tintColor={color['action/primary']}
+          />
+        }
         ListEmptyComponent={
           searchActive || (tab === 'all' && filtersActive) ? (
-            <CenteredMessage
-              title="No matching recalls"
-              body={
-                searchActive
-                  ? 'Nothing matches this search. Check the spelling, or clear the search and filters to see everything.'
-                  : 'No current recalls match these filters. Clear all to see the complete feed.'
-              }
-            />
+            <FeedStateMessage {...(searchActive ? FEED_EMPTY_SEARCH : FEED_EMPTY_FILTERS)} />
           ) : personalized ? (
-            <CenteredMessage
-              title="No current recalls match your preferences"
-              body="Nothing right now affects your state or matches your allergens and stores. Check All recalls for the national picture."
-            />
+            <FeedStateMessage {...FEED_EMPTY_PERSONALIZED} />
           ) : tab === 'affects_me' ? null : (
-            <CenteredMessage
-              title="No current recalls loaded"
-              body="Run the FSIS or FDA ingest against your backend, then pull to refresh."
-            />
+            <FeedStateMessage {...FEED_EMPTY_CORPUS} />
           )
         }
       />
-    </ThemedView>
+    </Page>
   );
 }
 
 const styles = StyleSheet.create({
   // No alignItems here: a centered cross-axis lets children size to intrinsic
-  // content width, which broke wrapping/clipping; centering is done by the
-  // content container's own maxWidth + alignSelf.
-  container: {
+  // content width, which broke wrapping/clipping; centering is done by each
+  // block's own maxWidth + alignSelf.
+  page: {
     flex: 1,
+  },
+  pressed: {
+    opacity: 0.6,
+  },
+  // The page margin is the one reference value that carries over to every
+  // device; the content column is whatever remains, capped only on tablets.
+  searchRow: {
+    maxWidth: layout.maxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+    paddingTop: spacing[8],
+    paddingHorizontal: layout.pageMargin,
+  },
+  // Horizontally scrollable so every chip stays reachable on small viewports;
+  // flexGrow: 0 keeps the bar its content height instead of stealing the
+  // list's. The vertical padding is what lets each chip's 44pt hit area sit
+  // inside the scroll view's own bounds.
+  chipBar: {
+    flexGrow: 0,
+    maxWidth: layout.maxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  chipBarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[8],
+    paddingHorizontal: layout.pageMargin,
+    paddingVertical: spacing[8],
+  },
+  // The two conceptual levels of the row, kept visually distinct.
+  chipDivider: {
+    width: 1,
+    height: spacing[16],
+    backgroundColor: color['border/default'],
+  },
+  contextRow: {
+    maxWidth: layout.maxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing[8],
+    paddingHorizontal: layout.pageMargin,
+    paddingBottom: spacing[8],
   },
   // flex: 1 so the list gets the screen height and can actually scroll —
   // without it the list sizes to its content and the parent just clips it.
@@ -696,102 +775,27 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
+  // The bottom navigation sits above the home indicator itself, so the list
+  // needs only its own breathing room below the last card.
   listContent: {
-    maxWidth: MaxContentWidth,
+    maxWidth: layout.maxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    padding: Spacing.three,
-    gap: Spacing.two,
+    paddingHorizontal: layout.pageMargin,
+    paddingTop: spacing[8],
+    paddingBottom: spacing[24],
+    gap: spacing[16],
   },
-  searchRow: {
-    maxWidth: MaxContentWidth,
-    width: '100%',
-    alignSelf: 'center',
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.two,
-  },
-  // The two scope segments share the row equally, so the control reads as one
-  // either/or choice rather than as two chips among many.
-  modeControl: {
-    flexDirection: 'row',
-    gap: Spacing.one,
-    maxWidth: MaxContentWidth,
-    width: '100%',
-    alignSelf: 'center',
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.two,
-  },
-  modeSegment: {
-    flex: 1,
-  },
-  modeSegmentInner: {
-    alignItems: 'center',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.one,
-    borderRadius: Radii.medium,
-  },
-  contextRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.two,
-  },
-  searchInput: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.two,
-    borderRadius: Radii.small,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#8884',
-  },
-  // Horizontally scrollable so all chips stay reachable on small viewports;
-  // flexGrow: 0 keeps the bar its content height instead of stealing the list's.
-  filterBar: {
-    flexGrow: 0,
-    maxWidth: MaxContentWidth,
-    width: '100%',
-    alignSelf: 'center',
-  },
-  filterBarContent: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.two,
-  },
-  tab: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.one,
-    borderRadius: Radii.medium,
-  },
-  ctaCard: {
-    gap: Spacing.one,
-    padding: Spacing.three,
-    borderRadius: Radii.medium,
-    marginBottom: Spacing.two,
-  },
-  noticeCard: {
-    padding: Spacing.three,
-    borderRadius: Radii.medium,
-    marginBottom: Spacing.two,
-  },
+  // Section headers stick on iOS, so they carry the page colour and cards
+  // scroll under them.
   sectionHeader: {
-    paddingTop: Spacing.two,
-    paddingBottom: Spacing.one,
-    gap: Spacing.one,
+    backgroundColor: color['background/page'],
+    paddingTop: spacing[8],
+    gap: spacing[4],
   },
-  // Card, badge and thumbnail styles moved with the card itself
-  // (components/recall-card.tsx). What stays here is screen chrome.
-  badgeEmphasized: {
-    fontWeight: '600',
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: Spacing.two,
-    padding: Spacing.four,
-  },
-  centeredText: {
-    textAlign: 'center',
+  callout: {
+    padding: spacing[12],
+    gap: spacing[4],
   },
   sheetBackdrop: {
     flex: 1,
@@ -799,34 +803,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#0006',
   },
   sheet: {
-    maxWidth: MaxContentWidth,
+    maxWidth: layout.maxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    borderTopLeftRadius: Radii.medium,
-    borderTopRightRadius: Radii.medium,
-    padding: Spacing.three,
-    gap: Spacing.two,
+    borderTopLeftRadius: radius[16],
+    borderTopRightRadius: radius[16],
+    padding: spacing[16],
+    gap: spacing[12],
   },
   sheetList: {
     maxHeight: 340,
   },
-  // 44pt is the platform minimum touch target. The row previously sized to its
-  // text (~28pt), which is a real miss on every sheet, not just Category's —
-  // fixed here rather than duplicated per dimension. Layout is otherwise
-  // unchanged: the text still sits left, the type scale is untouched.
+  // 44pt is the platform minimum touch target: every option row is at least
+  // that tall, with its text sitting left as before.
   sheetItem: {
-    paddingVertical: Spacing.one,
-    minHeight: 44,
-    lineHeight: 44,
+    minHeight: hitTarget.minimum,
+    justifyContent: 'center',
+    paddingVertical: spacing[4],
   },
   sheetActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: Spacing.two,
+    alignItems: 'center',
+    gap: spacing[8],
   },
   sheetButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.one,
-    borderRadius: Radii.medium,
+    minHeight: hitTarget.minimum,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing[16],
   },
 });

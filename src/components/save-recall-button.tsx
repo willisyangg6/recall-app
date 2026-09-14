@@ -8,17 +8,30 @@
  * what a glance down a feed needs; the accessibility label states the ACTION,
  * which is what a screen reader needs. Both come from the same contract.
  *
- * Provisional styling: an existing themed chip, the same primitive the filter
- * chips use. No icon — the app installs no icon set, and text alone is
- * unambiguous. The design-system pass replaces the appearance here without
- * touching the behavior.
+ * ## Appearance (P2B1)
+ *
+ * The design's bookmark glyph — the exported Figma icon, outline while the
+ * recall is not saved and filled once it is — beside the visible word, in
+ * brand navy. The word stays (a founder copy decision from P2A, and the
+ * state's non-colour channel); Figma's card shows the glyph alone, which is
+ * recorded as a conflict in DESIGN.md. The saved state therefore changes
+ * three things at once: the glyph's fill, the word, and the selected state
+ * a screen reader announces.
+ *
+ * ## Touch target
+ *
+ * The visible control is one 20pt glyph and a caption line, under the 44pt
+ * minimum. `hitSlop` grows the pressable to the minimum without moving
+ * anything on screen — and when the control sits inside a card, React
+ * Native's responder negotiation gives the tap to this innermost pressable,
+ * so saving never also opens the recall.
  */
 
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Radii, Spacing } from '@/constants/theme';
+import { Icon } from '@/components/ui/icon';
+import { Text } from '@/components/ui/text';
+import { hitSlopToMinimum, iconSize, spacing } from '@/constants/design-tokens';
 import { useSavedRecalls } from '@/hooks/use-saved-recalls';
 import {
   isSavedId,
@@ -27,6 +40,8 @@ import {
   SAVED_ACCESSIBILITY_LABEL,
   SAVED_ACTION_LABEL,
 } from '@/lib/saved-recalls';
+
+const HIT_SLOP = hitSlopToMinimum(iconSize[20]);
 
 export function SaveRecallButton({ caseId }: { caseId: string }) {
   const { ids, available, toggle } = useSavedRecalls();
@@ -42,27 +57,27 @@ export function SaveRecallButton({ caseId }: { caseId: string }) {
       accessibilityRole="button"
       accessibilityState={{ selected: saved }}
       accessibilityLabel={saved ? SAVED_ACCESSIBILITY_LABEL : SAVE_ACCESSIBILITY_LABEL}
-      // The chip's own padding leaves it under the 44pt minimum on a compact
-      // row; hitSlop restores the touch target without changing the layout —
-      // the same treatment the feed's filter chips get.
-      hitSlop={{ top: Spacing.two, bottom: Spacing.two, left: Spacing.two, right: Spacing.two }}
+      hitSlop={HIT_SLOP}
       onPress={() => void toggle(caseId)}>
-      <ThemedView type={saved ? 'backgroundSelected' : 'backgroundElement'} style={styles.chip}>
-        <ThemedText type="small" style={saved ? styles.savedLabel : undefined}>
-          {saved ? `✓ ${SAVED_ACTION_LABEL}` : SAVE_ACTION_LABEL}
-        </ThemedText>
-      </ThemedView>
+      {({ pressed }) => (
+        <View style={[styles.control, pressed && styles.pressed]}>
+          <Icon name={saved ? 'bookmark-filled' : 'bookmark'} size={20} color="icon/primary" />
+          <Text variant="caption" color="action/primary">
+            {saved ? SAVED_ACTION_LABEL : SAVE_ACTION_LABEL}
+          </Text>
+        </View>
+      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  chip: {
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.one,
-    borderRadius: Radii.small,
+  control: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[4],
   },
-  savedLabel: {
-    fontWeight: '600',
+  pressed: {
+    opacity: 0.6,
   },
 });

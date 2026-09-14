@@ -1624,27 +1624,30 @@ a bookmark list is the user's own data on the device. Saved shows no
 community shopper-report data and feeds nothing into ranking,
 personalization, or notifications.
 
-### Provisional appearance
+### Appearance (P2B1)
 
-Everything visual here is provisional, pending the per-screen design
-milestones. The design contract itself now exists —
-[../DESIGN.md](../DESIGN.md) (P2B0) records the tokens, the three
-destinations, and the rules below survive any restyle — and the risk label on
-the card already renders through its `RiskLabel` primitive:
+The Feed, the shared recall card, the save control and the bottom navigation
+render the Lotly design system — [../DESIGN.md](../DESIGN.md) is the
+authoritative account of the tokens, the primitives and every Figma/code
+decision. What matters here is what did **not** change: every behaviour in
+this document — the one feed session, the search fields, the two feed modes
+and the All-only filters with their sheets, the sectioning and ordering, the
+personalization verdict and the per-card flag, the save store, the deep link
+into Recall Details — is byte-for-byte the shipped behaviour, and
+`src/components/feed-design.test.ts` pins that alongside the existing
+feed-controls, navigation-structure, saved-recalls and wiring suites.
 
-- Tab labels only, no icons — the app installs no icon set, and adding a
-  dependency for one ahead of the design system would be a product decision
-  made by accident. `tabBarIconStyle: { display: 'none' }` reclaims the
-  space react-navigation reserves for the missing icon.
-- The save control is the existing themed chip primitive, the same one the
-  filter chips use.
-- Tab-bar colors and the label type now come from the design tokens (P2B0
-  follow-up: brand navy selected, secondary grey otherwise, Public Sans
-  caption, white surface); dimensions are still the platform default.
+Two small copy changes rode along, both recorded: the personalize invitation
+now says `Feed will show what affects you` (the screen is never called Home;
+the Feed's state and notice copy lives in `src/lib/feed-copy.ts`), and the
+search field's clear affordance is an explicit, labelled `Clear` control on
+every platform instead of iOS's native in-field glyph.
 
-Restyling later means touching `src/app/(tabs)/_layout.tsx`,
-`components/save-recall-button.tsx`, and `components/recall-card.tsx` —
-the structure and the contracts underneath are independent of the styling.
+The bottom navigation now carries the design's own exported glyphs beside its
+three labels (no icon library was installed; see DESIGN.md, "The icon set as
+implemented"). Saved and Profile keep the provisional appearance — including
+the platform header — until their own milestones, as does Recall Detail; the
+shared card and save control they render are already the designed ones.
 
 ## Presentation gaps from the O3 historical repair (tracked future work)
 

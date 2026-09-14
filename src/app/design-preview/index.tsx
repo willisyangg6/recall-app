@@ -28,15 +28,22 @@ import { Stack, router, useFocusEffect } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FeedStateMessage } from '@/components/feed-state-message';
+import { RecallCard } from '@/components/recall-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Chip } from '@/components/ui/chip';
 import { DisclosureControl } from '@/components/ui/disclosure-control';
+import { Icon, ICON_NAMES } from '@/components/ui/icon';
+import { RelevanceLabel } from '@/components/ui/relevance-label';
 import { RiskLabel } from '@/components/ui/risk-label';
+import { SearchBar } from '@/components/ui/search-bar';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
 import {
   CUSTOM_FONTS_INSTALLED,
   fontFamily,
+  spacing,
   typography,
   type TypographyVariant,
 } from '@/constants/design-tokens';
@@ -59,9 +66,21 @@ import {
 } from '@/lib/design-preview';
 import type { Classification, OfficialClass } from '@/domain/recall-types';
 import type { ConsumerRiskTier } from '@/domain/risk-tier';
+import {
+  FEED_EMPTY_SEARCH,
+  FEED_ERROR_TITLE,
+  FEED_LOADING,
+  PERSONALIZE_CTA,
+} from '@/lib/feed-copy';
 import { RISK_FILTER_TIERS } from '@/lib/feed-filters';
-import { fetchCaseDetail } from '@/lib/recall-feed';
-import { buildDetailModel, disclosureControl, todayIso } from '@/lib/recall-presentation';
+import { fetchCaseDetail, type FeedItem } from '@/lib/recall-feed';
+import {
+  buildDetailModel,
+  buildHomeCardModel,
+  disclosureControl,
+  todayIso,
+  type HomeCardModel,
+} from '@/lib/recall-presentation';
 import { riskView } from '@/lib/risk-display';
 
 /** How many candidates per requirement the hub offers as alternatives. */
@@ -458,6 +477,19 @@ export default function DesignPreviewScreen() {
           </ThemedText>
         </ThemedView>
 
+        {/* P2B1: the Feed's card, controls and states, rendered by the
+            production components over REAL recalls from the live feed
+            session. What is simulated is named on the gallery itself. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          FEED CARD MATRIX
+        </ThemedText>
+        <FeedCardGallery items={feed.state.status === 'ready' ? feed.state.items : []} />
+
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          FEED CONTROLS AND STATES
+        </ThemedText>
+        <FeedControlsGallery />
+
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           RECALLS IN USE
         </ThemedText>
@@ -540,6 +572,153 @@ export default function DesignPreviewScreen() {
         })}
       </ScrollView>
     </ThemedView>
+  );
+}
+
+/**
+ * The Recall Card's four states and its long-content and geography cases,
+ * each on a REAL current recall chosen from the live feed for the shape it
+ * has. Two values, and only two, are simulated, and the gallery says so on
+ * screen: the Affects-you flag (so the relevance state can be inspected
+ * without a matching personalization), and — only if every live recall
+ * happens to carry an image — the missing image on the "no image" cards.
+ * Tapping a card opens the real Recall Detail; Save writes this device's
+ * own bookmark list and nothing else.
+ */
+function FeedCardGallery({ items }: { items: FeedItem[] }) {
+  const today = todayIso();
+  const models = useMemo(
+    () => items.map((item) => buildHomeCardModel(item, { today, affectsYou: false })),
+    [items, today],
+  );
+  if (models.length === 0) {
+    return (
+      <ThemedText type="small" themeColor="textSecondary">
+        No live recalls loaded yet, so no card can be shown.
+      </ThemedText>
+    );
+  }
+
+  const withImage = models.find((model) => model.heroImageUrl !== null) ?? models[0];
+  const liveWithoutImage = models.find((model) => model.heroImageUrl === null) ?? null;
+  const withoutImage = liveWithoutImage ?? { ...withImage, heroImageUrl: null };
+  const longest = (pick: (model: HomeCardModel) => string | null) =>
+    models.reduce(
+      (best, model) => ((pick(model)?.length ?? 0) > (pick(best)?.length ?? 0) ? model : best),
+      models[0],
+    );
+  const longTitle = longest((model) => model.productName);
+  const longSummary = longest((model) => model.reasonLine);
+  const nationwide = models.find((model) => model.locationSummary === 'Nationwide') ?? null;
+  const multiState = models.find((model) => model.locationSummary.includes('+')) ?? null;
+  const alert = models.find((model) => model.noticeLabel !== null) ?? null;
+
+  const cases: { caption: string; model: HomeCardModel }[] = [
+    {
+      caption: 'Affects you · image (relevance simulated)',
+      model: { ...withImage, affectsYou: true },
+    },
+    {
+      caption: `Affects you · no image (relevance simulated${liveWithoutImage ? '' : '; image removed'})`,
+      model: { ...withoutImage, affectsYou: true },
+    },
+    { caption: 'Does not affect you · image', model: withImage },
+    {
+      caption: `Does not affect you · no image${liveWithoutImage ? '' : ' (image removed)'}`,
+      model: withoutImage,
+    },
+    { caption: 'Longest product name in the live feed', model: longTitle },
+    { caption: 'Longest summary in the live feed', model: longSummary },
+    ...(nationwide ? [{ caption: 'Nationwide distribution', model: nationwide }] : []),
+    ...(multiState
+      ? [{ caption: 'Multi-state distribution (two codes, then +N)', model: multiState }]
+      : []),
+    ...(alert ? [{ caption: 'Public Health Alert notice label', model: alert }] : []),
+  ];
+
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        Real recalls from the live feed, drawn by the product’s own Recall Card on the page colour.
+        Only the values each caption names are simulated. Tapping a card opens the real Recall
+        Detail; Save writes only this device’s bookmark list, so the saved and unsaved states can be
+        inspected by tapping it.
+      </Text>
+      {cases.map(({ caption, model }, index) => (
+        <View key={`${index}-${model.id}`} style={styles.feedCase}>
+          <Text variant="caption" color="text/secondary">
+            {caption}
+          </Text>
+          <RecallCard model={model} />
+        </View>
+      ))}
+    </Surface>
+  );
+}
+
+/**
+ * The Feed's controls and whole-screen states: the search bar, the chips in
+ * both states, the relevance label, the icon set, and the state message with
+ * the Feed's real copy. The controls here are live but wired to nothing —
+ * they narrow no feed and open no sheet.
+ */
+function FeedControlsGallery() {
+  const [query, setQuery] = useState('');
+  const [mode, setMode] = useState<'all' | 'affects_me'>('all');
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        Live controls wired to nothing: the search bar, the feed-mode pair, a filter chip in both
+        states, the relevance label and the icon set. Below them, the Feed’s state messages with
+        their real copy — the loading sample does not announce itself here.
+      </Text>
+      <SearchBar
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search product, company, brand, or code"
+        accessibilityLabel="Sample search"
+      />
+      <View style={styles.badges}>
+        <Chip label="All" selected={mode === 'all'} onPress={() => setMode('all')} />
+        <Chip
+          label="Affects me"
+          selected={mode === 'affects_me'}
+          onPress={() => setMode('affects_me')}
+        />
+        <Chip label="Location" selected={false} trailingIcon="chevron-down" onPress={() => {}} />
+        <Chip label="Location · 2" selected trailingIcon="chevron-down" onPress={() => {}} />
+      </View>
+      <RelevanceLabel />
+      <View style={styles.badges}>
+        {ICON_NAMES.map((name) => (
+          <Icon key={name} name={name} size={24} />
+        ))}
+      </View>
+      <Surface radius={12} border="border/subtle">
+        <FeedStateMessage {...FEED_LOADING} />
+      </Surface>
+      <Surface radius={12} border="border/subtle">
+        <FeedStateMessage {...FEED_EMPTY_SEARCH} />
+      </Surface>
+      <Surface radius={12} border="border/subtle">
+        <FeedStateMessage
+          title={FEED_ERROR_TITLE}
+          body="The feed session’s own error message renders here."
+        />
+      </Surface>
+      <Surface background="background/subtle" radius={12} style={styles.feedCase}>
+        <Text variant="heading-3">{PERSONALIZE_CTA.title}</Text>
+        <Text variant="body-small">{PERSONALIZE_CTA.body}</Text>
+      </Surface>
+    </Surface>
   );
 }
 
@@ -648,5 +827,14 @@ const styles = StyleSheet.create({
     borderRadius: Radii.small,
     marginTop: Spacing.one,
     gap: Spacing.half,
+  },
+  // The Feed galleries sit on the page colour with the Feed's own rhythm.
+  feedGallery: {
+    padding: spacing[16],
+    gap: spacing[16],
+  },
+  feedCase: {
+    gap: spacing[8],
+    padding: spacing[12],
   },
 });

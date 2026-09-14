@@ -152,12 +152,14 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
+  // The shared card carries no outer margin of its own (P2B1), so the list
+  // rhythm is this gap alone: the same 16pt the Feed uses between cards.
   listContent: {
     maxWidth: MaxContentWidth,
     width: '100%',
     alignSelf: 'center',
     padding: Spacing.three,
-    gap: Spacing.two,
+    gap: Spacing.three,
   },
   noticeCard: {
     padding: Spacing.three,

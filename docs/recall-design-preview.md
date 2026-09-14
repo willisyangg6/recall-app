@@ -83,8 +83,36 @@ in `src/constants/design-tokens.ts` and the primitives in
 Moderate, Low, Pending, Unknown) drawn through the real `riskView` pipeline
 from one classification per tier by the product's own `RiskLabel`, so the
 words, casing, label colours and spoken labels are the product's own — a
-wrong mapping shows up as a wrong label. Until Public Sans and IBM Plex Mono
-are installed the gallery says so and renders the platform face.
+wrong mapping shows up as a wrong label.
+
+### Feed galleries (P2B1)
+
+Two further sections make the restyled Feed inspectable without hunting for
+the right recall in the live feed:
+
+- **Feed card matrix** — the product's own `RecallCard` on the page colour,
+  over real current recalls chosen from the live feed session for the shape
+  each case needs: Affects you + image, Affects you + no image, does not
+  affect you + image, does not affect you + no image, the longest product
+  name and the longest summary in the live corpus, a nationwide recall, a
+  multi-state recall (two codes, then `+N`), and a Public Health Alert with
+  its notice label, when the corpus holds one. Exactly two values are ever
+  simulated, and each caption names them: the Affects-you flag, and — only if
+  every live recall happens to carry an image — the missing image on the
+  "no image" cards. Tapping a card opens the real Recall Detail; tapping
+  Save writes this device's own bookmark list and nothing else, which is how
+  the saved and unsaved states are inspected.
+- **Feed controls and states** — the search bar, the `All` / `Affects me`
+  pair, a filter chip in both states, the relevance label, the icon set, and
+  the Feed's state messages (loading, no results, load failure) with their
+  real copy from `src/lib/feed-copy.ts`, plus the personalize invitation. The
+  controls are live but wired to nothing: they narrow no feed and open no
+  sheet, and the loading sample does not announce itself.
+
+Loading, empty and error states on the Feed itself remain reproducible the
+ordinary way — launch, a search that matches nothing, and a backend that is
+unreachable — and pull-to-refresh, scrolling and the sheets are inspected on
+the Feed, not here.
 
 Scenarios 8 and 9 are deliberately **not simulated**. They arm a session that
 diverts nothing, so those screens read the live server exactly as they do

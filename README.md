@@ -54,6 +54,7 @@ src/
   domain/       # canonical model: types, projection, material-change rules
   lib/          # client-safe read path + display formatting
   server/       # server-only: FSIS + FDA adapters, ingestion pipeline, stores
+assets/icons/   # the design's exported icon glyphs, tinted at render time (DESIGN.md, Iconography)
 scripts/        # explicitly invoked commands (live FSIS/FDA ingest)
 supabase/       # Supabase CLI config + SQL migrations
 docs/           # design documents
@@ -590,8 +591,8 @@ misstate them), and none of this activates push delivery.
   [docs/recall-feed-usability.md](docs/recall-feed-usability.md),
   "Navigation and Profile (P2A)".
 
-- **P2B0 — design-system reconciliation and code foundation** (implemented,
-  uncommitted): the Figma system, the founder's `DESIGN.md`, and the shipped
+- **P2B0 — design-system reconciliation and code foundation** (shipped,
+  `ff810cc`): the Figma system, the founder's `DESIGN.md`, and the shipped
   product are reconciled into one design contract at [DESIGN.md](DESIGN.md)
   — Feed/Saved/Profile navigation, the Recall Detail section order including
   Health Risk, the community-report states and questionnaire, the
@@ -632,6 +633,30 @@ misstate them), and none of this activates push delivery.
   has tokens and designs), and the bottom bar's `Feed` / `Saved` / `Profile`
   labels are styled from the tokens. The tier mapping, ranking, filtering,
   and notification logic are untouched.
+
+- **P2B1 — the Lotly Feed** (implemented, uncommitted): the first restyled
+  product screen. The Feed, the shared recall card, the save control and the
+  bottom navigation render from the design tokens and the shared primitives
+  — four new ones in `src/components/ui/` (`Icon`, `RelevanceLabel`, `Chip`,
+  `SearchBar`) beside the P2B0 four — laid out against the real device width
+  and safe areas: the warm page, the elevated white search bar with an
+  explicit `Clear` control, one chip row (the `All` / `Affects me` pair, a
+  hairline, then the All-only Location / Risk / Category filters with
+  chevrons and `Clear all`), `heading-3` section headings, and the Recall
+  Card in its complete relevance × media matrix — a 112pt media tile that
+  keeps its footprint as the neutral placeholder when there is no image, the
+  lime `AFFECTS YOU` relevance label kept strictly apart from the risk label,
+  the Public Health Alert notice label, and the bookmark save control that
+  a screen reader can also reach as an action on the card itself. No icon
+  library was installed: the glyphs are the Figma file's own exported
+  vectors, rasterised into `assets/icons/` and tinted at render time. Every
+  Feed behaviour is unchanged and pinned (`src/components/feed-design.test.ts`
+  plus the existing suites); the dev-only Design Preview gained a Feed card
+  matrix and a controls-and-states gallery over real recalls. Figma's bell,
+  sliders glyph and `Urgency` chip were not reproduced (no behaviour; `Risk`
+  is the shipped filter) — the decisions are in [DESIGN.md](DESIGN.md),
+  "Known Figma/code conflicts". Recall Detail, Saved and Profile keep the
+  provisional appearance.
 
 ## Operational verification (O2)
 

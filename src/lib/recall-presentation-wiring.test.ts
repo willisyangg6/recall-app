@@ -312,7 +312,8 @@ test('Home cards carry ONE generic Affects-you flag — the legacy reason chips 
   // logic is untouched; only its rendering was removed.
   assert.ok(!HOME.includes('personalReasons'), 'Home still consumes personalReasons');
   assert.ok(!HOME.includes('.reasons.map'), 'Home still renders match-reason labels');
-  assert.match(HOME, /label="Affects you"/);
+  // P2B1: the flag is the shared Relevance Label primitive, gated on the model.
+  assert.match(HOME, /\{model\.affectsYou \? <RelevanceLabel \/> : null\}/);
 });
 
 test('Home and Detail render the same shared risk state, and no explanatory risk copy', () => {

@@ -264,6 +264,8 @@ test('the reference layout is recorded, and 16 is the one value that carries ove
   assert.equal(approved['bottom-nav-height'], `${layout.bottomNavHeight}px`);
   assert.equal(approved['search-bar-height'], `${layout.searchBarHeight}px`);
   assert.equal(approved['risk-label-height'], `${layout.riskLabelHeight}px`);
+  assert.equal(approved['card-media-size'], `${layout.cardMediaSize}px`);
+  assert.equal(approved['max-content-width'], `${layout.maxContentWidth}px`);
   assert.equal(layout.contentWidth, layout.referenceWidth - 2 * layout.pageMargin);
   assert.equal(layout.pageMargin, spacing[16]);
   assert.equal(layout.searchBarHeight, hitTarget.minimum);

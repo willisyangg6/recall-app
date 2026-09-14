@@ -24,6 +24,11 @@ const UI_FILES = [
   'ui/surface.tsx',
   'ui/disclosure-control.tsx',
   'ui/risk-label.tsx',
+  // P2B1
+  'ui/icon.tsx',
+  'ui/relevance-label.tsx',
+  'ui/chip.tsx',
+  'ui/search-bar.tsx',
 ];
 const UI = Object.fromEntries(UI_FILES.map((f) => [f, read(join('components', f))]));
 const TEXT = UI['ui/text.tsx'];
@@ -180,7 +185,7 @@ test('Affects You never passes through the Risk Label', () => {
   const cardLabels = CARD.match(/<RiskLabel[\s\S]*?\/>/g) ?? [];
   assert.equal(cardLabels.length, 1);
   assert.ok(cardLabels[0].includes('tier={model.risk.tier}'));
-  assert.ok(CARD.includes('{model.affectsYou ? <Badge label="Affects you" emphasized /> : null}'));
+  assert.ok(CARD.includes('{model.affectsYou ? <RelevanceLabel /> : null}'));
   const detailLabels = DETAIL.match(/<RiskLabel[\s\S]*?\/>/g) ?? [];
   assert.equal(detailLabels.length, 1);
   assert.ok(detailLabels[0].includes('tier={model.risk.tier}'));

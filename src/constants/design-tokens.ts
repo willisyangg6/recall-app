@@ -194,6 +194,16 @@ export const layout = {
   bottomNavHeight: 72,
   searchBarHeight: 44,
   riskLabelHeight: 24,
+  /**
+   * The recall card's square media footprint — the product image or, when
+   * there is none, the neutral placeholder, so both card geometries match.
+   */
+  cardMediaSize: 112,
+  /**
+   * The widest a content column grows, on tablets and the web; a phone
+   * never reaches it, so it changes nothing about the 393pt composition.
+   */
+  maxContentWidth: 800,
 } as const;
 
 // ── Elevation ───────────────────────────────────────────────────────────────

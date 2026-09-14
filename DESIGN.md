@@ -176,6 +176,8 @@ layout:
   bottom-nav-height: 72px
   search-bar-height: 44px
   risk-label-height: 24px
+  card-media-size: 112px
+  max-content-width: 800px
 
 components:
   search-bar:
@@ -254,12 +256,18 @@ matter above are the same values as `src/constants/design-tokens.ts`;
 `src/constants/design-tokens.test.ts` proves the two agree, and
 `src/constants/design-contract.test.ts` pins the product rules below._
 
-_Status (P2B0 and its follow-up, 2026-09-14): reconciled against Figma and the
-shipped product. The token foundation and four shared primitives exist in
-code; Public Sans and IBM Plex Mono are installed and loaded at the root; the
-app is locked to light appearance; the risk label reads its bare canonical
-word on every surface; the bottom navigation shows its three labels. No
-product screen has been restyled yet._
+_Status (P2B1, 2026-09-14): reconciled against Figma and the shipped product.
+The token foundation and eight shared primitives exist in code — `Text`,
+`Surface`, `DisclosureControl` and `RiskLabel` from P2B0; `Icon`,
+`RelevanceLabel`, `Chip` and `SearchBar` from P2B1; Public Sans and IBM Plex
+Mono are installed and loaded at the root; the app is locked to light
+appearance; the risk label reads its bare canonical word on every surface.
+**The Feed is the first restyled product screen**: its page, search bar, chip
+row, section headings, recall card, whole-screen states and the bottom
+navigation (now carrying the design's own glyphs beside the three labels)
+render from the tokens with every shipped behaviour intact. Recall Detail,
+Saved and Profile keep the provisional appearance until their own
+milestones._
 
 ## Overview
 
@@ -555,6 +563,11 @@ Lotly is designed mobile-first around a **393px-wide iPhone frame**.
 - Search field: 44px tall
 - Recall cards: full content width
 - Risk and relevance labels: 24px tall
+- Recall-card media tile: 112px square, image and placeholder alike
+  (`card-media-size`; Figma's 115 is normalized to the 4pt grid)
+- Content column cap: 800px (`max-content-width`) — reached on tablets and
+  the web only, so a phone's column is always the device width less the
+  margins
 - Common icon glyph size: 20px for utility icons, 24px in the bottom
   navigation, 16px inline with text, 12px inside labels
 
@@ -608,6 +621,24 @@ modes** and the Location / Risk / Category chips are filters that apply to the
 The Feed's section headings are decided by the presentation contract
 (`Recent activity`, `Older active notices`, `Affects me`), not by the
 composition.
+
+**As implemented (P2B1, `src/app/(tabs)/index.tsx`).** The header area is the
+navigator's own `Feed` title bar on the page colour with no shadow (Figma's
+frame has no title and a notification bell; the bell has no product behaviour
+and is not rendered — conflict 11). Then the search bar, then one horizontally
+scrolling chip row: the `All` / `Affects me` pair first, a hairline, and —
+while `All` is active — `Location`, `Risk`, `Category` (each with a chevron,
+because each opens its picker sheet) and `Clear all` once a filter is applied.
+Figma's `Urgency` chip is the shipped `Risk` filter under its shipped name;
+Figma's leading sliders glyph has no behaviour and is not rendered. In
+`Affects me` the row holds the pair alone and the `Based on your
+personalization · Edit` line follows. Section headings render in `heading-3`
+with the contract's words; the older section keeps its count, its
+explanation, and its in-place reveal. Cards sit 16px apart at the content
+width. Every whole-screen state (not configured, loading, load failure, no
+results, nothing personal, nothing loaded) is a `heading-3` title over a
+`body-small` explanation, centred; loading is announced to assistive
+technology. The stale-feed notice is the soft-blue Information callout.
 
 ### Affected Products table
 
@@ -691,6 +722,16 @@ Search must feel like a primary discovery tool, not a form field buried in
 chrome. It is a control inside the Feed: it filters the loaded feed and never
 navigates.
 
+Implemented as `src/components/ui/search-bar.tsx` (P2B1): the surface, the
+20px search glyph in `icon/secondary`, the field in `caption` type, and —
+while the field holds text — an explicit `Clear` control in `action/secondary`
+that reads aloud as `Clear search`, clears the caller's query, and hands focus
+back to the field. It replaces iOS's native in-field clear glyph so the
+affordance exists on every platform and carries a spoken name. The bar holds
+no query and matches nothing; the Feed's `filterBySearch` and the shipped
+placeholder (`Search product, company, brand, or code`, conflict 13) are
+untouched.
+
 ### Navigation Chips
 
 Navigation/filter chips use pill geometry and compact heights in the 32–36px
@@ -708,6 +749,17 @@ range.
 A 32px chip is under the minimum touch target; the pressable grows to 44pt
 through `hitSlop` without changing the layout. Do not turn every surfaced chip
 into an independent multi-select toggle.
+
+Implemented as `src/components/ui/chip.tsx` (P2B1) at the compact 32px
+height — one `caption` line with `spacing/8` above and below, `spacing/12`
+at the sides, `radius/full` — with an optional trailing 16px glyph (the
+chevron on a chip that opens a picker). It carries no behaviour and reports
+`accessibilityState.selected`; its callers make the visible label itself
+change too (the counted `Location · 2`, or the either/or pair). The Feed's
+chip row sits inside a scroll view whose own vertical padding keeps every
+chip's 44pt hit area within reach. The sheet a filter chip opens uses
+bordered white pills for Cancel and Clear and a brand-navy pill for Apply,
+each a full 44pt target.
 
 ### Risk Label
 
@@ -749,6 +801,13 @@ It uses `relevance/affects-you`: lime, navy text, a 12px flag icon, `radius/4`,
 and a 1px `#ADB600` border.
 
 Never implement `Affects You` as an additional risk/severity variant.
+
+Implemented as `src/components/ui/relevance-label.tsx` (P2B1): the same 24px
+compact-label geometry as the Risk Label, the design's flag glyph, the visible
+word `AFFECTS YOU` and the spoken label `Affects you`. It takes no props, so
+no tier can reach it, and it reads `relevancePalette` only. The card renders
+it exactly when the model's `affectsYou` verdict is true; the decision itself
+(lib/relevance.ts) is untouched.
 
 ### Recall Card
 
@@ -796,6 +855,30 @@ Card content hierarchy:
 A Public Health Alert additionally carries its explicit notice label (shipped
 behavior; not yet in Figma). Product titles and summaries must tolerate
 realistic wrapping without breaking card layout.
+
+Implemented in `src/components/recall-card.tsx` (P2B1). The card is
+`spacing/12` padding with `spacing/8` between its rows: the status row (risk
+label, the PHA notice label when there is one, and the one activity date in
+`micro-caption`, with the relevance label at the trailing edge), the content
+row (the 112px media tile, then the product name in `heading-3`, the brand in
+`caption`, and the summary in `body-small`), and `spacing/16` later the footer
+(the 12px pin glyph and the location in `caption`, with the save control
+trailing). The media tile renders the real hero image `contain`ed on
+`background/media-placeholder`, so the neutral colour shows around a tall or
+wide label photo, and the same tile with no image inside when there is none
+or the load fails. The Public Health Alert notice label is the compact-label
+geometry on `background/subtle` with a `border/default` border in `label`
+type — a notice type, so it borrows neither the risk nor the relevance
+palette. Nothing on the card is truncated or fixed in height; the text column
+takes the remaining width and wraps.
+
+The save control (`src/components/save-recall-button.tsx`) is the design's
+bookmark glyph — outline unsaved, filled saved — beside the visible `Save` /
+`Saved` word in `action/primary`, reaching 44pt through `hitSlop`; Figma
+shows the glyph alone (conflict 16). To VoiceOver the card is one element, so
+the save action is also exposed as a custom accessibility action on the card
+with the same spoken names, and the card announces `Opens the recall
+details` as its hint.
 
 ### Information Callouts
 
@@ -889,6 +972,14 @@ Icons join the labels once an icon set is chosen; they never replace them.
 Interactive targets should be comfortably tappable even when the visible glyph
 is only 20–24px: each tab is a 44pt-or-larger target.
 
+Implemented in `src/app/(tabs)/_layout.tsx` (P2B1): the design's own exported
+home, bookmark and user glyphs at 24px above each label, on a
+`background/surface` bar `bottom-nav-height` (72px) tall plus the home
+indicator's inset, with `spacing/8` above the glyphs and `border/subtle` as
+the hairline. The Feed's header is styled from the same layout — the page
+colour, no shadow, `heading-3` for the `Feed` title — because a screen's
+header is navigation chrome the navigator owns.
+
 ### Iconography
 
 Use **Lucide-style** outline icons with consistent stroke weight.
@@ -914,6 +1005,34 @@ Use semantic icon colors (`icon/primary`, `icon/secondary`, `icon/inverse`,
 utility UI without an explicit approved design. Icon glyphs come from the
 `icon-size` scale; an icon inside a label is 12, inline with text 16, a
 utility control 20, and a tab 24.
+
+### The icon set as implemented (P2B1)
+
+No icon library is installed — adding one was a dependency decision the Feed
+milestone was told not to make — so the glyphs are the Figma file's own
+exported vectors, rasterised once into `assets/icons/<name>.png` at 1x, 2x
+and 3x on a 24pt box (black on transparent) and tinted at render time by
+`src/components/ui/icon.tsx`. Nothing was drawn by hand: every export is the
+Lucide-style outline the design uses, unchanged in shape.
+
+| Icon              | Figma export (node)                    | Lucide name         | Used by                              |
+| ----------------- | -------------------------------------- | ------------------- | ------------------------------------ |
+| `home`            | `icon/home` in `nav bar` (`81:816`)    | `house`             | Feed tab                             |
+| `bookmark`        | `icon` in `nav bar` (`81:817`)         | `bookmark`          | Saved tab; the save control, unsaved |
+| `bookmark-filled` | the same path with its interior filled | `bookmark` (filled) | the save control, saved              |
+| `user`            | `icon/user` in `nav bar` (`81:818`)    | `user-round`        | Profile tab                          |
+| `search`          | `Search-Bar` glyph (`30:404`)          | `search`            | the search bar                       |
+| `map-pin`         | `Nav-Chip` glyph (`33:458`)            | `map-pin`           | the card's location line             |
+| `flag`            | `Relevance Label` glyph (`42:866`)     | `flag`              | the relevance label                  |
+| `chevron-down`    | `Nav Chip/icon` (`42:809`)             | `chevron-down`      | the Location / Risk / Category chips |
+
+Figma exports each glyph cropped to its path bounds at some scale; each was
+drawn at `export size × S / (24 × k)` centred in an `S`-point box, where `k`
+is the export's scale against the Lucide 24-unit grid, which reproduces the
+design's optical size exactly. Every export carries a stroke of about 2.4
+grid units (Figma's 20px icons scaled to 24), so the whole set lands at one
+stroke weight. Figma's bell and sliders glyphs are deliberately not in the
+set: neither has product behaviour (conflicts 11 and 17).
 
 ## Product contracts the design must carry
 
@@ -1010,7 +1129,9 @@ chance.
 
 - **Loading** — a plain secondary-text message (`Loading…`) in the content
   column; no skeleton chrome, no spinner-only screens. Nothing that could be
-  mistaken for real recall content renders while data is absent.
+  mistaken for real recall content renders while data is absent. The Feed's
+  loading state is also a polite live region that announces its title once,
+  so a screen-reader user hears that the feed is loading.
 - **Empty** — a `heading-3` title with a `body-small` secondary explanation and
   the one relevant action (for example the Feed's "No matching recalls" with
   "Clear all"). Never an empty white card.
@@ -1086,6 +1207,8 @@ decision. They are normalized to the scale and never reproduced:
 | `194.711px` text column        | card                           | flex remainder             |
 | `202.437px` title width        | Detail title column            | flex remainder             |
 | `38px` + `48px` nav padding    | bottom navigation              | equal distribution         |
+| `115px` media tile             | card                           | `card-media-size` (112)    |
+| `36px` default chip            | Nav-Chip (Default)             | 32, the selected height    |
 
 ### Extend the existing theme; do not build a parallel one
 
@@ -1097,9 +1220,10 @@ decision. They are normalized to the scale and never reproduced:
   screen's design milestone moves it onto the tokens.
 - Shared primitives live in `src/components/ui/` and consume tokens only:
   `Text` (variant + semantic color), `Surface` (semantic background, radius,
-  border, elevation), `DisclosureControl`, and `RiskLabel`. A reusable
-  component contains no hex literal, no off-scale number, and no font size of
-  its own.
+  border, elevation), `DisclosureControl`, `RiskLabel`, and from P2B1 `Icon`
+  (a glyph from the exported set, an icon-scale size, an icon colour),
+  `RelevanceLabel`, `Chip` and `SearchBar`. A reusable component contains no
+  hex literal, no off-scale number, and no font size of its own.
 - Use existing Expo Router / React Native patterns. No Tailwind, NativeWind,
   styled-components, CSS variables, DOM elements, or new state or UI
   libraries.
@@ -1124,31 +1248,36 @@ decision. They are normalized to the scale and never reproduced:
 
 ### Figma ↔ code mapping
 
-| Figma                                    | Code                                                             |
-| ---------------------------------------- | ---------------------------------------------------------------- |
-| `home` frame `81:793`                    | `src/app/(tabs)/index.tsx` — the **Feed**                        |
-| `product information` frame `81:819`     | `src/app/recall/[id].tsx` — Recall Detail                        |
-| `nav bar` `163:259`                      | `src/app/(tabs)/_layout.tsx`                                     |
-| `Search-Bar` `33:429`                    | the search `TextInput` in the Feed                               |
-| `Nav-Chip` `33:445` (Default / Selected) | `FilterChip` in the Feed (the mode control and filter chips)     |
-| `Risk Label` `42:833` (seven severities) | `src/components/ui/risk-label.tsx`                               |
-| `Relevance Label` `42:840`               | the `Affects you` badge in `recall-card.tsx` (primitive pending) |
-| `Recall-Card` `42:987` (2×2 matrix)      | `src/components/recall-card.tsx`                                 |
-| `Information` `81:681` (Warning / Info)  | the affects-you banner in Recall Detail (primitive pending)      |
-| `Product-Information` `81:719`           | `AffectedProductsTableView` in Recall Detail                     |
-| `See all (3)` / `View Retailers (10)`    | `src/components/ui/disclosure-control.tsx`                       |
-| `label/Critical` `42:832`                | **retired** — nothing in code                                    |
-| text styles                              | `typography` in `design-tokens.ts` (`Text variant=`)             |
-| `Elevation/Card`                         | `elevation.card`                                                 |
-| color / spacing / radius variables       | `color`, `spacing`, `radius` in `design-tokens.ts`, same names   |
+| Figma                                    | Code                                                           |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `home` frame `81:793`                    | `src/app/(tabs)/index.tsx` — the **Feed**                      |
+| `product information` frame `81:819`     | `src/app/recall/[id].tsx` — Recall Detail                      |
+| `nav bar` `163:259`                      | `src/app/(tabs)/_layout.tsx`                                   |
+| `Search-Bar` `33:429`                    | `src/components/ui/search-bar.tsx`                             |
+| `Nav-Chip` `33:445` (Default / Selected) | `src/components/ui/chip.tsx` (the mode pair and filter chips)  |
+| `Risk Label` `42:833` (seven severities) | `src/components/ui/risk-label.tsx`                             |
+| `Relevance Label` `42:840`               | `src/components/ui/relevance-label.tsx`                        |
+| `icon/*` glyphs                          | `src/components/ui/icon.tsx` over `assets/icons/`              |
+| `Recall-Card` `42:987` (2×2 matrix)      | `src/components/recall-card.tsx`                               |
+| `Information` `81:681` (Warning / Info)  | the affects-you banner in Recall Detail (primitive pending)    |
+| `Product-Information` `81:719`           | `AffectedProductsTableView` in Recall Detail                   |
+| `See all (3)` / `View Retailers (10)`    | `src/components/ui/disclosure-control.tsx`                     |
+| `label/Critical` `42:832`                | **retired** — nothing in code                                  |
+| text styles                              | `typography` in `design-tokens.ts` (`Text variant=`)           |
+| `Elevation/Card`                         | `elevation.card`                                               |
+| color / spacing / radius variables       | `color`, `spacing`, `radius` in `design-tokens.ts`, same names |
 
 ### Development gallery
 
 The dev-only Design Preview hub (Profile → Development → Design Preview;
 `docs/recall-design-preview.md`) renders the primitives from the tokens — the
 type scale, three surfaces, the disclosure control, and all seven risk labels
-through the real `riskView` pipeline — so they can be inspected in a simulator
-before any screen is restyled. It is not a product surface.
+through the real `riskView` pipeline — and, from P2B1, the Feed's card matrix
+(the four relevance × media states, the longest live product name and
+summary, nationwide and multi-state geography, and the Public Health Alert
+notice label, each on a real current recall) plus the Feed's controls and
+state messages with their real copy. Only the values each caption names are
+simulated. It is not a product surface.
 
 ## Known Figma/code conflicts
 
@@ -1192,11 +1321,14 @@ Figma wins on composition; open items are the founder's.
    behavior and is not implemented.
 10. **Feed mode vs. chips.** Figma renders `Affects me` as a chip in the filter
     row; the product has a separate All / Affects me mode control and hides
-    filters in Affects me mode. Composition may merge the row; behavior stays.
+    filters in Affects me mode. **Resolved in composition (P2B1):** one chip
+    row, the mode pair first and a hairline before the All-only filters;
+    behavior unchanged.
 11. **Feed header bell.** No product behavior is defined for it (notification
-    settings live under Profile). Not implemented until one is.
+    settings live under Profile). Not rendered (P2B1) until one is.
 12. **Feed heading.** Figma `Recent recalls`; product `Recent activity` /
-    `Older active notices` / `Affects me` from the presentation contract.
+    `Older active notices` / `Affects me` from the presentation contract. The
+    contract's words render in the design's `heading-3` (P2B1).
 13. **Search placeholder.** Figma `Search product, brands, or recalls.`;
     shipped `Search product, company, brand, or code` (the field genuinely
     matches codes). Copy decision pending; the shipped string stands.
@@ -1206,6 +1338,22 @@ Figma wins on composition; open items are the founder's.
 15. **Callout and table shadows.** Figma gives callouts and the product table
     `0 2px 4px 6%` and the nav bar `0 -2px 8px 8%`; only `elevation/card` is a
     token. Either bind them to `Elevation/Card` or approve named effect styles.
+    The implemented bar uses the `border/subtle` hairline and no shadow.
+16. **Save control on the card.** Figma shows the bookmark glyph alone; the
+    product shows the glyph (outline / filled) beside the visible `Save` /
+    `Saved` word — a P2A founder copy decision and the state's non-colour
+    channel. Code wins on copy; the word stays.
+17. **Feed header and filter glyph.** Figma's frame has no title bar, a bell
+    at the top right and a sliders glyph leading the chip row. The product
+    keeps the navigator's `Feed` title bar (on the page colour, no shadow)
+    and renders neither glyph, because neither has behaviour.
+18. **`Urgency` chip.** Figma's third filter chip; the product's is the
+    shipped `Risk` filter, and reads `Risk`.
+19. **Public Health Alert notice label.** Shipped on the card ahead of Figma
+    (`background/subtle`, `border/default`, `label` type, beside the risk
+    label). Figma should add it (see the corrections below).
+20. **Search clear affordance.** Figma's bar has no clear state; the product
+    shows an explicit `Clear` control while the field holds text.
 
 ## Figma corrections for Cheyenne
 
@@ -1257,7 +1405,14 @@ Changes to make in Figma itself. Nothing here changes product behavior.
       the layer names; replace the `38 + 48` padding with equal distribution;
       show the `Feed` / `Saved` / `Profile` labels beneath the icons
       (decided: labels are visible).
-- [ ] Nav-Chip: settle on one height (32 or 36) for the row.
+- [ ] Nav-Chip: settle on one height (32 or 36) for the row — code uses 32.
+- [ ] Nav-Chip: rename `Urgency` to `Risk`, remove or give behaviour to the
+      leading sliders glyph and the header bell, and add the `Clear all` chip
+      and the `Location · 2` counted state.
+- [ ] Search-Bar: add the filled state with its trailing `Clear` control.
+- [ ] Recall-Card: show the `Save` / `Saved` word beside the bookmark (outline
+      unsaved, filled saved), normalize the media tile to 112, and add the
+      Public Health Alert notice label beside the risk label.
 - [ ] Bind callout, product-table and nav-bar shadows to `Elevation/Card` or
       add named effect styles (conflict 15).
 - [ ] Add screens that exist in the product but not in Figma: Saved, Profile,
