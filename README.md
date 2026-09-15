@@ -713,6 +713,30 @@ report`, a refused submission shown beneath the action with every answer
   is the system's own ([DESIGN.md](DESIGN.md), conflict 26). Saved and
   Profile keep the provisional appearance.
 
+- **P2B4 — the Lotly Saved screen** (implemented, uncommitted): the fourth
+  restyled product screen, and a bounded visual milestone — no Saved feature
+  was added or removed. `src/app/(tabs)/saved.tsx` renders from the tokens and
+  the shared primitives: the warm page under the navigator's own `Saved` title
+  (now styled from the same `screenHeader` as the Feed's, so the two titles
+  cannot drift), the shared `RecallCard` at the Feed's exact list rhythm —
+  content width, 16pt page margins, 16px apart — and every whole-screen state
+  as the shared `StateMessage`, whose only change is an optional decorative
+  glyph above the title. The empty state is `No saved recalls` / `Save a recall
+to find it here later.` over the bookmark glyph the tab and the save control
+  already use, and it is still decided only after BOTH storage and the corpus
+  have answered, so it cannot flash at a user who has saves. The stale-feed and
+  missing-from-feed notices are the shared soft-blue Information callout, and
+  the stale sentence is now imported from `feed-copy` instead of duplicated.
+  Everything Saved DOES is unchanged: device-local persistence, the one shared
+  `useSavedRecalls` store behind Feed, Detail and Saved, save order, the card
+  tap into Recall Details, the shared feed session and its pull-to-refresh,
+  and the honest report of saved recalls the active feed no longer carries —
+  whose ids are never pruned, which stays a known limitation (no card can be
+  invented for a recall the corpus cannot describe). `src/components/saved-design.test.ts`
+  pins the restyle beside the existing suites, and the dev-only Design Preview
+  gained a Saved states-and-list gallery that neither reads nor writes the
+  device's saved list. Profile keeps the provisional appearance.
+
 ## Operational verification (O2)
 
 - **O2-A — read-only production audit, completed 2026-09-05. Final

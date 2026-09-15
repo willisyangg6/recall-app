@@ -115,6 +115,31 @@ the right recall in the live feed:
   controls are live but wired to nothing: they narrow no feed and open no
   sheet, and the loading sample does not announce itself.
 
+### Saved gallery (P2B4)
+
+A **Saved states and list** section makes the restyled Saved tab inspectable
+without arranging a particular bookmark list on the device:
+
+- Its whole-screen states with their real copy from `src/lib/saved-recalls.ts`
+  — loading, empty (with the bookmark glyph), and a load failure — followed by
+  its two information notices: the stale-feed sentence the Feed also uses, and
+  the missing-from-feed sentence on a **simulated count of two**, because that
+  notice appears only once a saved recall leaves the active corpus. The caption
+  says so.
+- Its list, drawn by the same shared `RecallCard` the Feed uses, at the same
+  rhythm, over real current recalls from the live feed session: one saved
+  recall, several, the longest product name in the live corpus, a card with no
+  image, a nationwide recall, a multi-state recall, a Public Health Alert, and
+  one card per risk label the live corpus holds (any tier the corpus does not
+  carry is named, and every label is rendered on its own in the risk-label
+  gallery).
+
+The gallery neither reads nor writes this device's saved list — it composes
+cards from feed items directly — so nothing it shows reflects what is actually
+saved. The cards are live: tapping one opens the real Recall Detail, and its
+own Save control writes this device's bookmark list exactly as it does on the
+Feed.
+
 ### Questionnaire steps and states (P2B3)
 
 A **questionnaire gallery** renders the questionnaire's steps and states one

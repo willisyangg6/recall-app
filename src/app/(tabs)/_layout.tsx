@@ -25,10 +25,11 @@
  * carried by react-navigation's `selected` accessibility state, never by
  * colour alone, and every tab item is a full-height 44pt-or-larger target.
  *
- * The Feed's own header is styled here too (the warm page colour, no
- * shadow, the heading type), because a screen's header is navigation chrome
- * the navigator owns. Saved and Profile keep the platform header until their
- * own milestones.
+ * The Feed's and Saved's own headers are styled here too (the warm page
+ * colour, no shadow, the heading type), because a screen's header is
+ * navigation chrome the navigator owns — one `screenHeader` shared by both,
+ * so the two titles can never drift apart. Profile keeps the platform header
+ * until its own milestone.
  */
 
 import { Tabs } from 'expo-router/js-tabs';
@@ -47,6 +48,13 @@ export default function TabLayout() {
   // The navigator's title style accepts only family, size and weight, so the
   // heading token is picked apart rather than spread.
   const { fontFamily, fontSize, fontWeight } = textStyle('heading-3');
+
+  /** A restyled screen's header: the warm page, no shadow, the heading type. */
+  const screenHeader = {
+    headerStyle: { backgroundColor: color['background/page'] },
+    headerShadowVisible: false,
+    headerTitleStyle: { fontFamily, fontSize, fontWeight, color: color['text/primary'] },
+  };
 
   return (
     <Tabs
@@ -75,9 +83,7 @@ export default function TabLayout() {
           tabBarLabel: 'Feed',
           tabBarAccessibilityLabel: 'Feed',
           tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
-          headerStyle: { backgroundColor: color['background/page'] },
-          headerShadowVisible: false,
-          headerTitleStyle: { fontFamily, fontSize, fontWeight, color: color['text/primary'] },
+          ...screenHeader,
         }}
       />
       <Tabs.Screen
@@ -87,6 +93,7 @@ export default function TabLayout() {
           tabBarLabel: 'Saved',
           tabBarAccessibilityLabel: 'Saved',
           tabBarIcon: ({ focused }) => <TabIcon name="bookmark" focused={focused} />,
+          ...screenHeader,
         }}
       />
       <Tabs.Screen

@@ -22,6 +22,7 @@ import {
   SAVE_ACTION_LABEL,
   SAVED_ACCESSIBILITY_LABEL,
   SAVED_ACTION_LABEL,
+  SAVED_EMPTY,
   SAVED_EMPTY_BODY,
   SAVED_EMPTY_TITLE,
   SAVED_RECALLS_SCHEMA_VERSION,
@@ -132,17 +133,19 @@ test('the control states the condition visibly and the action aloud', () => {
   assert.match(SAVE_BUTTON, /accessibilityLabel=\{saved \? SAVED_ACCESSIBILITY_LABEL/);
 });
 
-test('the empty state invites the action and says where saves live', () => {
-  assert.equal(SAVED_EMPTY_TITLE, 'Nothing saved yet');
-  assert.match(SAVED_EMPTY_BODY, /Save a recall from the feed or its detail page/);
-  assert.match(SAVED_EMPTY_BODY, /stay on this device/);
-  assert.match(SAVED_SCREEN, /title=\{SAVED_EMPTY_TITLE\} body=\{SAVED_EMPTY_BODY\}/);
+test('the empty state names the state and invites the action, in exactly these words', () => {
+  assert.equal(SAVED_EMPTY_TITLE, 'No saved recalls');
+  assert.equal(SAVED_EMPTY_BODY, 'Save a recall to find it here later.');
+  assert.deepEqual(SAVED_EMPTY, { title: SAVED_EMPTY_TITLE, body: SAVED_EMPTY_BODY });
+  // The screen renders that contract through the shared state message, with
+  // the bookmark glyph the tab and the save control already use.
+  assert.match(SAVED_SCREEN, /<StateMessage \{\.\.\.SAVED_EMPTY\} icon="bookmark" \/>/);
 });
 
 // ── Structural guarantees ───────────────────────────────────────────────────
 
 test('the empty state cannot be shown before storage and the corpus have answered', () => {
-  // Rendering "Nothing saved yet" while either is still loading would tell a
+  // Rendering "No saved recalls" while either is still loading would tell a
   // user with saved recalls that they have none.
   assert.match(SAVED_SCREEN, /if \(!loaded \|\| state\.status === 'loading'\)/);
   const emptyCheck = SAVED_SCREEN.indexOf('if (ids.length === 0)');

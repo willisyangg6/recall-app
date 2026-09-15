@@ -1,5 +1,6 @@
 /**
- * Saved (P2A) — the recalls this device bookmarked, newest save first.
+ * Saved (P2A behaviour; P2B4 appearance) — the recalls this device
+ * bookmarked, newest save first.
  *
  * ## Why this screen stores nothing
  *
@@ -13,43 +14,56 @@
  *
  * ## What it deliberately does not do
  *
- * No community-report counts (that block belongs to Recall Details and is
- * gated server-side anyway), no ranking, no personalization, no notification
- * or permission side effects, and no server call of its own. Opening this
- * tab cannot mint an installation identity.
+ * No folders, categories, notes, sorting, search or filters: Saved is one
+ * personal list, and the Feed is where recalls are found. No community-report
+ * counts (that block belongs to Recall Details and is gated server-side
+ * anyway), no ranking, no personalization, no notification or permission
+ * side effects, and no server call of its own. Opening this tab cannot mint
+ * an installation identity.
+ *
+ * ## Appearance (P2B4)
+ *
+ * The warm page under the navigator's own `Saved` title — no second in-page
+ * heading — with the Feed's list rhythm: the shared `RecallCard` at the
+ * content width, 16px apart, 16pt page margins. Every whole-screen state is
+ * the shared `StateMessage`; the empty one carries the bookmark glyph the
+ * tab and the save control already use, and the two notices (a refresh that
+ * failed over a feed we still hold, and saved recalls the active feed no
+ * longer carries) are the shared soft-blue information callout.
  *
  * Cards are the shared `RecallCard`, so a saved recall reads exactly as it
- * does in the feed.
+ * does in the feed — one implementation, never a copy that could drift.
  */
 
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet } from 'react-native';
 
 import { RecallCard } from '@/components/recall-card';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { StateMessage } from '@/components/state-message';
+import { Callout } from '@/components/ui/callout';
+import { Surface } from '@/components/ui/surface';
+import { color, layout, spacing } from '@/constants/design-tokens';
 import { useFeed } from '@/hooks/use-feed';
 import { useSavedRecalls } from '@/hooks/use-saved-recalls';
+import { FEED_STALE_NOTICE } from '@/lib/feed-copy';
 import { isFeedConfigured } from '@/lib/recall-feed';
 import { buildHomeCardModel, todayIso } from '@/lib/recall-presentation';
 import {
   missingSavedCount,
-  SAVED_EMPTY_BODY,
-  SAVED_EMPTY_TITLE,
+  SAVED_EMPTY,
+  SAVED_ERROR_TITLE,
+  SAVED_LOADING,
+  SAVED_NOT_CONFIGURED,
+  SAVED_UNAVAILABLE,
   savedMissingNotice,
   selectSavedItems,
 } from '@/lib/saved-recalls';
 
-function CenteredMessage({ title, body }: { title: string; body: string }) {
+/** The warm page every Saved state sits on. */
+function Page({ children }: { children: React.ReactNode }) {
   return (
-    <View style={styles.centered}>
-      <ThemedText type="subtitle" style={styles.centeredText}>
-        {title}
-      </ThemedText>
-      <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-        {body}
-      </ThemedText>
-    </View>
+    <Surface background="background/page" style={styles.page}>
+      {children}
+    </Surface>
   );
 }
 
@@ -59,23 +73,17 @@ export default function SavedScreen() {
 
   if (!available) {
     return (
-      <ThemedView style={styles.container}>
-        <CenteredMessage
-          title="Saving is available in the app"
-          body="Saved recalls are stored on your device. Open Recall on your phone to save one."
-        />
-      </ThemedView>
+      <Page>
+        <StateMessage {...SAVED_UNAVAILABLE} />
+      </Page>
     );
   }
 
   if (!isFeedConfigured()) {
     return (
-      <ThemedView style={styles.container}>
-        <CenteredMessage
-          title="Backend not configured"
-          body="Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY in .env (see README), then restart the dev server."
-        />
-      </ThemedView>
+      <Page>
+        <StateMessage {...SAVED_NOT_CONFIGURED} tone="error" />
+      </Page>
     );
   }
 
@@ -84,25 +92,27 @@ export default function SavedScreen() {
   // saved recalls that they have none.
   if (!loaded || state.status === 'loading') {
     return (
-      <ThemedView style={styles.container}>
-        <CenteredMessage title="Loading saved recalls…" body="Reading what you saved." />
-      </ThemedView>
+      <Page>
+        <StateMessage {...SAVED_LOADING} tone="loading" />
+      </Page>
     );
   }
 
   if (ids.length === 0) {
     return (
-      <ThemedView style={styles.container}>
-        <CenteredMessage title={SAVED_EMPTY_TITLE} body={SAVED_EMPTY_BODY} />
-      </ThemedView>
+      <Page>
+        <StateMessage {...SAVED_EMPTY} icon="bookmark" />
+      </Page>
     );
   }
 
+  // A feed read that failed says so and nothing more: the saved ids are
+  // untouched on this device, and no copy here may suggest otherwise.
   if (state.status === 'error') {
     return (
-      <ThemedView style={styles.container}>
-        <CenteredMessage title="Could not load recalls" body={state.message} />
-      </ThemedView>
+      <Page>
+        <StateMessage title={SAVED_ERROR_TITLE} body={state.message} tone="error" />
+      </Page>
     );
   }
 
@@ -111,69 +121,57 @@ export default function SavedScreen() {
   const today = todayIso();
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView
-        style={styles.list}
+    <Page>
+      <FlatList
+        data={items}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <RecallCard model={buildHomeCardModel(item, { today, affectsYou: false })} />
+        )}
+        // The feed on screen is complete but possibly out of date — said
+        // plainly, in the same words the Feed uses, because silently showing
+        // stale facts as current is the failure the sentence exists for.
+        ListHeaderComponent={
+          staleMessage ? <Callout tone="information">{FEED_STALE_NOTICE}</Callout> : null
+        }
+        // Said plainly rather than silently showing a shorter list than the
+        // user saved: these recalls left the active feed, they were not
+        // dropped by mistake, and their ids stay on the device.
+        ListFooterComponent={missing ? <Callout tone="information">{missing}</Callout> : null}
         contentContainerStyle={styles.listContent}
+        style={styles.list}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
-        }>
-        {staleMessage ? (
-          <ThemedView type="backgroundElement" style={styles.noticeCard}>
-            <ThemedText type="small">
-              Showing the last complete update — couldn’t refresh just now. Pull down to try again.
-            </ThemedText>
-          </ThemedView>
-        ) : null}
-        {items.map((item) => (
-          <RecallCard
-            key={item.id}
-            model={buildHomeCardModel(item, { today, affectsYou: false })}
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void refresh()}
+            tintColor={color['action/primary']}
           />
-        ))}
-        {/* Said plainly rather than silently showing a shorter list than the
-            user saved: these recalls left the active feed, they were not
-            dropped by mistake. */}
-        {missing ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            {missing}
-          </ThemedText>
-        ) : null}
-      </ScrollView>
-    </ThemedView>
+        }
+      />
+    </Page>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  page: {
     flex: 1,
   },
+  // flex: 1 so the list gets the screen height and can actually scroll —
+  // without it the list sizes to its content and the parent just clips it.
   list: {
     flex: 1,
     width: '100%',
   },
-  // The shared card carries no outer margin of its own (P2B1), so the list
-  // rhythm is this gap alone: the same 16pt the Feed uses between cards.
+  // The Feed's rhythm exactly: the page margin, the same gap between cards,
+  // and the same breathing room below the last one — the bottom navigation
+  // already sits above the home indicator.
   listContent: {
-    maxWidth: MaxContentWidth,
+    maxWidth: layout.maxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    padding: Spacing.three,
-    gap: Spacing.three,
-  },
-  noticeCard: {
-    padding: Spacing.three,
-    borderRadius: Spacing.three,
-    marginBottom: Spacing.two,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: Spacing.two,
-    padding: Spacing.four,
-  },
-  centeredText: {
-    textAlign: 'center',
+    paddingHorizontal: layout.pageMargin,
+    paddingTop: spacing[8],
+    paddingBottom: spacing[24],
+    gap: spacing[16],
   },
 });

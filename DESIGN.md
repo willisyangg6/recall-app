@@ -259,23 +259,24 @@ matter above are the same values as `src/constants/design-tokens.ts`;
 `src/constants/design-tokens.test.ts` proves the two agree, and
 `src/constants/design-contract.test.ts` pins the product rules below._
 
-_Status (P2B3, 2026-09-14): reconciled against Figma and the shipped product.
+_Status (P2B4, 2026-09-15): reconciled against Figma and the shipped product.
 The token foundation and thirteen shared primitives exist in code — `Text`,
 `Surface`, `DisclosureControl` and `RiskLabel` from P2B0; `Icon`,
 `RelevanceLabel`, `Chip` and `SearchBar` from P2B1; `MediaTile`, `Callout`
 and `NoticeLabel` from P2B2; `Button` and `ChoiceRow` from P2B3 — plus the
-shared `StateMessage`; Public Sans and IBM Plex Mono are installed and loaded
-at the root; the app is locked to light appearance; the risk label reads its
-bare canonical word on every surface. **The Feed (P2B1), Recall Detail
-(P2B2) and the shopper-report questionnaire (P2B3) are the restyled product
-screens**: the Feed's page, search bar, chip row, section headings, recall
-card, whole-screen states and the bottom navigation; Detail's product header,
-callouts, sections, community block and Affected Products table; and the
-questionnaire's steps, review, disclosure, endings and paused state, render
-from the tokens with every shipped behaviour intact. The pushed screens'
-header chrome is styled from the same tokens and their back control is the
-platform chevron alone. Saved and Profile keep the provisional appearance
-until their own milestones._
+shared `StateMessage`, which from P2B4 may carry a decorative glyph above its
+title; Public Sans and IBM Plex Mono are installed and loaded at the root;
+the app is locked to light appearance; the risk label reads its bare
+canonical word on every surface. **The Feed (P2B1), Recall Detail (P2B2),
+the shopper-report questionnaire (P2B3) and Saved (P2B4) are the restyled
+product screens**: the Feed's page, search bar, chip row, section headings,
+recall card, whole-screen states and the bottom navigation; Detail's product
+header, callouts, sections, community block and Affected Products table; the
+questionnaire's steps, review, disclosure, endings and paused state; and
+Saved's page, list rhythm, whole-screen states and notices, render from the
+tokens with every shipped behaviour intact. The pushed screens' header chrome
+is styled from the same tokens and their back control is the platform chevron
+alone. Profile keeps the provisional appearance until its own milestone._
 
 ## Overview
 
@@ -652,6 +653,35 @@ width. Every whole-screen state (not configured, loading, load failure, no
 results, nothing personal, nothing loaded) is a `heading-3` title over a
 `body-small` explanation, centred; loading is announced to assistive
 technology. The stale-feed notice is the soft-blue Information callout.
+
+### Saved
+
+Saved is one personal list and nothing more: the recalls this device
+bookmarked, newest save first. It has no search, no sorting controls, no
+folders, no categories, no notes, no filters, no bulk editing and no
+recommendations — recalls are found in the Feed, and Saved is where they are
+kept. It is device-local: no account, no cloud sync, and nothing about a save
+reaches the server.
+
+A save stores a case id, never a copy of the recall, so a saved card always
+renders today's official facts from the same corpus the Feed holds. A saved
+recall the active feed no longer carries is reported plainly, and its id
+stays on the device.
+
+**As implemented (P2B4, `src/app/(tabs)/saved.tsx`).** The navigator's own
+`Saved` title bar on the warm page with no shadow, styled from the same
+`screenHeader` as the Feed's, and no second in-page heading. Below it the
+list: the shared `RecallCard` at the content width, 16px apart, inside 16pt
+page margins — the Feed's rhythm exactly, with the same pull-to-refresh over
+the one shared feed session. Every whole-screen state (saving unavailable,
+backend not configured, loading, empty, load failure) is the shared
+`StateMessage`; the empty state adds the `bookmark` glyph the tab and the
+save control already use, above `No saved recalls` / `Save a recall to find
+it here later.` The stale-feed notice and the missing-from-feed notice are
+both the soft-blue Information callout. The empty state is decided only after
+storage AND the corpus have answered, so it can never flash at a user who has
+saves; a failed feed read says the recalls could not load and never that a
+save was removed.
 
 ### Affected Products table
 
@@ -1452,7 +1482,13 @@ questionnaire's steps and states drawn by the real step components (the
 single-state confirm, the multi-state and searchable nationwide pickers, the
 stateless shape, the store and timeframe questions, review in both modes,
 the refused submission, success, and the paused state) plus scenarios that
-open the real questionnaire for every flow. Only the values each caption
+open the real questionnaire for every flow; and from P2B4 Saved's
+whole-screen states with their real copy, both of its information notices,
+and its list drawn by the same shared `RecallCard` over real recalls chosen
+for the shapes a saved list has to survive (one item, several, a long
+product name, no image, nationwide, multi-state, a Public Health Alert, and
+one card per risk label the live corpus holds) — a gallery that neither
+reads nor writes this device's saved list. Only the values each caption
 names are simulated. It is not a product surface.
 
 ## Known Figma/code conflicts

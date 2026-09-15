@@ -80,9 +80,16 @@ import {
   FEED_EMPTY_SEARCH,
   FEED_ERROR_TITLE,
   FEED_LOADING,
+  FEED_STALE_NOTICE,
   PERSONALIZE_CTA,
 } from '@/lib/feed-copy';
 import { RISK_FILTER_TIERS } from '@/lib/feed-filters';
+import {
+  SAVED_EMPTY,
+  SAVED_ERROR_TITLE,
+  SAVED_LOADING,
+  savedMissingNotice,
+} from '@/lib/saved-recalls';
 import { selectHazardGuidance } from '@/lib/recall-display';
 import { fetchCaseDetail, type FeedItem } from '@/lib/recall-feed';
 import {
@@ -655,6 +662,14 @@ export default function DesignPreviewScreen() {
         </ThemedText>
         <QuestionnaireGallery source={selectionFor('reportable_with_retailers')} />
 
+        {/* P2B4: the Saved tab's whole-screen states with their real copy,
+            and its list — the same shared card the Feed draws — over real
+            recalls chosen for the shapes a saved list has to survive. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          SAVED STATES AND LIST
+        </ThemedText>
+        <SavedGallery items={feed.state.status === 'ready' ? feed.state.items : []} />
+
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           RECALLS IN USE
         </ThemedText>
@@ -828,6 +843,157 @@ function FeedCardGallery({ items }: { items: FeedItem[] }) {
           <RecallCard model={model} />
         </View>
       ))}
+    </Surface>
+  );
+}
+
+/**
+ * The Saved tab (P2B4): its whole-screen states with their real copy, its
+ * two information notices, and its list — drawn by the SAME shared
+ * `RecallCard` the Feed uses, at the same rhythm, over real current recalls
+ * chosen from the live feed for the shapes a saved list has to survive (one
+ * item, several, a long product name, no image, nationwide, multi-state, a
+ * Public Health Alert, and one card per risk label the live corpus holds).
+ *
+ * Nothing here reads or writes the device's saved list: the gallery composes
+ * cards from feed items directly, so no state below is this device's real
+ * bookmark state, and no card here is missing because it was not saved. The
+ * cards are live, so a card's own Save control writes this device's bookmark
+ * list exactly as it does on the Feed — the gallery itself never toggles it.
+ *
+ * The missing-from-feed notice is shown on a simulated count, because it
+ * appears only once a saved recall leaves the active corpus; the caption
+ * says so.
+ */
+function SavedGallery({ items }: { items: FeedItem[] }) {
+  const today = todayIso();
+  const models = useMemo(
+    () => items.map((item) => buildHomeCardModel(item, { today, affectsYou: false })),
+    [items, today],
+  );
+
+  const longest = (pick: (model: HomeCardModel) => string | null) =>
+    models.reduce(
+      (best, model) => ((pick(model)?.length ?? 0) > (pick(best)?.length ?? 0) ? model : best),
+      models[0],
+    );
+  const withImage = models.find((model) => model.heroImageUrl !== null) ?? models[0];
+  const liveWithoutImage = models.find((model) => model.heroImageUrl === null) ?? null;
+  const nationwide = models.find((model) => model.locationSummary === 'Nationwide') ?? null;
+  const multiState = models.find((model) => model.locationSummary.includes('+')) ?? null;
+  const alert = models.find((model) => model.noticeLabel !== null) ?? null;
+  const byTier = RISK_FILTER_TIERS.map((tier) => ({
+    tier,
+    model: models.find((model) => model.risk.tier === tier) ?? null,
+  }));
+  const absentTiers = byTier.filter((entry) => entry.model === null).map((entry) => entry.tier);
+
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        Saved’s whole-screen states with their real copy from lib/saved-recalls, then its list drawn
+        by the product’s own Recall Card at the Feed’s rhythm over real recalls from the live feed.
+        The gallery neither reads nor writes this device’s saved list, so nothing below reflects
+        what is actually saved; tapping a card opens the real Recall Detail, and its Save control
+        writes this device’s bookmark list exactly as it does on the Feed.
+      </Text>
+      <Surface radius={12} border="border/subtle">
+        <StateMessage {...SAVED_LOADING} />
+      </Surface>
+      <Surface radius={12} border="border/subtle">
+        <StateMessage {...SAVED_EMPTY} icon="bookmark" />
+      </Surface>
+      <Surface radius={12} border="border/subtle">
+        <StateMessage
+          title={SAVED_ERROR_TITLE}
+          body="The feed session’s own error message renders here. Nothing saved on this device is removed by a failed read."
+        />
+      </Surface>
+      <Text variant="caption" color="text/secondary">
+        The two notices: a refresh that failed over a feed already on screen, and — on a simulated
+        count of two, because it appears only once a saved recall leaves the active corpus — saved
+        recalls the active feed no longer carries.
+      </Text>
+      <Callout tone="information">{FEED_STALE_NOTICE}</Callout>
+      <Callout tone="information">{savedMissingNotice(2) ?? ''}</Callout>
+      {models.length === 0 ? (
+        <Text variant="caption" color="text/secondary">
+          No live recalls loaded yet, so no saved list can be shown.
+        </Text>
+      ) : (
+        <>
+          <View style={styles.feedCase}>
+            <Text variant="caption" color="text/secondary">
+              One saved recall
+            </Text>
+            <RecallCard model={models[0]} />
+          </View>
+          <View style={styles.feedCase}>
+            <Text variant="caption" color="text/secondary">
+              Several saved recalls, newest save first, 16px apart
+            </Text>
+            {models.slice(0, 3).map((model) => (
+              <RecallCard key={model.id} model={model} />
+            ))}
+          </View>
+          <View style={styles.feedCase}>
+            <Text variant="caption" color="text/secondary">
+              Longest product name in the live feed
+            </Text>
+            <RecallCard model={longest((model) => model.productName)} />
+          </View>
+          <View style={styles.feedCase}>
+            <Text variant="caption" color="text/secondary">
+              {liveWithoutImage ? 'No image' : 'No image (image removed from a live recall)'}
+            </Text>
+            <RecallCard model={liveWithoutImage ?? { ...withImage, heroImageUrl: null }} />
+          </View>
+          {nationwide ? (
+            <View style={styles.feedCase}>
+              <Text variant="caption" color="text/secondary">
+                Nationwide distribution
+              </Text>
+              <RecallCard model={nationwide} />
+            </View>
+          ) : null}
+          {multiState ? (
+            <View style={styles.feedCase}>
+              <Text variant="caption" color="text/secondary">
+                Multi-state distribution (two codes, then +N)
+              </Text>
+              <RecallCard model={multiState} />
+            </View>
+          ) : null}
+          {alert ? (
+            <View style={styles.feedCase}>
+              <Text variant="caption" color="text/secondary">
+                Public Health Alert notice label
+              </Text>
+              <RecallCard model={alert} />
+            </View>
+          ) : null}
+          {byTier.map(({ tier, model }) =>
+            model === null ? null : (
+              <View key={tier} style={styles.feedCase}>
+                <Text variant="caption" color="text/secondary">
+                  Risk label · {tier}
+                </Text>
+                <RecallCard model={model} />
+              </View>
+            ),
+          )}
+          {absentTiers.length > 0 ? (
+            <Text variant="caption" color="text/secondary">
+              No current recall in the live feed carries: {absentTiers.join(', ')}. Every risk label
+              is rendered on its own in the RISK LABELS gallery above.
+            </Text>
+          ) : null}
+        </>
+      )}
     </Surface>
   );
 }

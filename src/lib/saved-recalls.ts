@@ -125,11 +125,46 @@ export const SAVED_ACTION_LABEL = 'Saved';
 export const SAVE_ACCESSIBILITY_LABEL = 'Save this recall';
 export const SAVED_ACCESSIBILITY_LABEL = 'Saved. Remove from Saved';
 
-export const SAVED_EMPTY_TITLE = 'Nothing saved yet';
+/** One whole-screen state's words: a title over an explanation. */
+export interface SavedStateCopy {
+  title: string;
+  body: string;
+}
 
-export const SAVED_EMPTY_BODY =
-  'Save a recall from the feed or its detail page to keep it here. Saved recalls stay on this ' +
-  'device.';
+/** Storage and the corpus have not both answered yet. */
+export const SAVED_LOADING: SavedStateCopy = {
+  title: 'Loading saved recalls…',
+  body: 'Reading what you saved.',
+};
+
+export const SAVED_EMPTY_TITLE = 'No saved recalls';
+
+export const SAVED_EMPTY_BODY = 'Save a recall to find it here later.';
+
+export const SAVED_EMPTY: SavedStateCopy = {
+  title: SAVED_EMPTY_TITLE,
+  body: SAVED_EMPTY_BODY,
+};
+
+/**
+ * The feed read failed. Its body is the feed session's own message, and the
+ * words say nothing about the saved list: a failed read of the corpus leaves
+ * every saved id exactly where it was on this device.
+ */
+export const SAVED_ERROR_TITLE = 'Could not load recalls';
+
+/** Web has no saved-recall storage (saved-recalls-store.web.ts). */
+export const SAVED_UNAVAILABLE: SavedStateCopy = {
+  title: 'Saving is available in the app',
+  body: 'Saved recalls are stored on your device. Open Recall on your phone to save one.',
+};
+
+export const SAVED_NOT_CONFIGURED: SavedStateCopy = {
+  title: 'Backend not configured',
+  body:
+    'Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY in .env (see README), ' +
+    'then restart the dev server.',
+};
 
 /**
  * Shown when saved ids no longer appear in the active corpus. Honest about
