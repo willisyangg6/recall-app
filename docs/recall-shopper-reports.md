@@ -315,8 +315,8 @@ beside or above it. That nesting is a model decision, not a layout habit:
 community context can never outlive the official statement it corroborates,
 and an entry point can never render alone. The block is a single isolated
 component (`src/components/community-reports-section.tsx`) holding layout
-and one fetch; the provisional styling there is meant to be replaced
-wholesale in the design-system pass without touching a contract.
+and one fetch; P2B2 restyled it as part of Where It Was Sold without
+touching a contract.
 
 ### Two gates, and the silent default
 
@@ -395,6 +395,38 @@ no movement in any count). The screen has exactly one text field — the
 state-list search — and it can never become an answer. There is no field for
 anything the schema cannot store.
 
+**Unknown geography is ineligible (founder decision, 2026-09-14 — final).**
+A recall whose notice states no usable jurisdiction takes no shopper reports
+at all. A report carrying only a purchase timeframe says nothing about
+_where_ shoppers found the product, which is the whole purpose of the
+feature, and nothing surfaces it. This supersedes the earlier reading of the
+design contract, under which such a recall would have asked the timeframe
+alone.
+
+In practice nothing had to be switched off: `evaluateReportEligibility`
+already refuses unusable geography (§3), so `communityReportsSection` is
+null, Recall Detail renders no community block and no `Add your report`, and
+the questionnaire is unreachable — a deep link to `/report/<caseId>` lands on
+the screen's own `Not available` state. What P2B3's follow-up removed is the
+presentation of a timeframe-only flow: the state question is unconditional,
+and `questionnaireOutcome` reports the state question as outstanding rather
+than producing a draft without a jurisdiction. The server's requirement for a
+notice-authorized jurisdiction (§2–3) is unchanged and remains
+authoritative.
+
+**Composition (P2B3).** The questionnaire renders from the design system:
+the route (`src/app/report/[id].tsx`) holds the flow, the one
+server-authoritative load and the two mutations; the steps
+(`src/components/report-questionnaire.tsx`) are network-free components the
+route composes — a `Question 1 of 3` progress line, the question as a
+heading, the answers as radio rows in a group named by the question, `Back`
+and `Next` as 44pt pills, the review on one white surface, the
+disclosure as a static sentence with `Learn more.` beneath it as the one
+link, the primary action reading `Submit report` or `Update report`,
+a refused submission as an alert beneath it with every answer kept, and the
+endings and paused state in the same type. The exact treatment is in
+[../DESIGN.md](../DESIGN.md) ("Questionnaire → As implemented").
+
 **Removal** exists only on the edit screen (never on Detail), behind a
 native confirmation — `Remove your report?` / `This will remove it from
 community totals.` / `Cancel` / `Remove` — mirroring the "Reset app and
@@ -442,4 +474,5 @@ always true, and never leaks which refusal happened.
 No SQL, no migration, no enablement, no production write. No bottom
 navigation, Saved, onboarding, or Profile restructuring (the Privacy & Data
 Controls row it links to already existed). No design-system implementation —
-the styling is provisional and deliberately isolated.
+the P1D styling was provisional and deliberately isolated; P2B2 restyled the
+Detail block and P2B3 the questionnaire, each without touching a contract.

@@ -259,21 +259,23 @@ matter above are the same values as `src/constants/design-tokens.ts`;
 `src/constants/design-tokens.test.ts` proves the two agree, and
 `src/constants/design-contract.test.ts` pins the product rules below._
 
-_Status (P2B2, 2026-09-14): reconciled against Figma and the shipped product.
-The token foundation and eleven shared primitives exist in code — `Text`,
+_Status (P2B3, 2026-09-14): reconciled against Figma and the shipped product.
+The token foundation and thirteen shared primitives exist in code — `Text`,
 `Surface`, `DisclosureControl` and `RiskLabel` from P2B0; `Icon`,
 `RelevanceLabel`, `Chip` and `SearchBar` from P2B1; `MediaTile`, `Callout`
-and `NoticeLabel` from P2B2 — plus the shared `StateMessage`; Public Sans and
-IBM Plex Mono are installed and loaded at the root; the app is locked to
-light appearance; the risk label reads its bare canonical word on every
-surface. **The Feed (P2B1) and Recall Detail (P2B2) are the restyled product
+and `NoticeLabel` from P2B2; `Button` and `ChoiceRow` from P2B3 — plus the
+shared `StateMessage`; Public Sans and IBM Plex Mono are installed and loaded
+at the root; the app is locked to light appearance; the risk label reads its
+bare canonical word on every surface. **The Feed (P2B1), Recall Detail
+(P2B2) and the shopper-report questionnaire (P2B3) are the restyled product
 screens**: the Feed's page, search bar, chip row, section headings, recall
-card, whole-screen states and the bottom navigation, and Detail's product
-header, callouts, sections, community block and Affected Products table,
-render from the tokens with every shipped behaviour intact. The pushed
-screens' header chrome is styled from the same tokens and their back control
-is the platform chevron alone. Saved and Profile keep the provisional
-appearance until their own milestones._
+card, whole-screen states and the bottom navigation; Detail's product header,
+callouts, sections, community block and Affected Products table; and the
+questionnaire's steps, review, disclosure, endings and paused state, render
+from the tokens with every shipped behaviour intact. The pushed screens'
+header chrome is styled from the same tokens and their back control is the
+platform chevron alone. Saved and Profile keep the provisional appearance
+until their own milestones._
 
 ## Overview
 
@@ -1140,10 +1142,13 @@ When this installation already has a report:
   of the state, retailer, or timeframe submitted).
 - Removal is available only inside the edit flow, behind a confirmation.
 
-Unknown geography:
+Unknown geography — a recall whose notice states no usable jurisdiction:
 
-- Show no community geography metrics and no state choices.
-- Only the purchase-timeframe answer remains available.
+- The recall is ineligible for shopper reports entirely (founder decision,
+  2026-09-14). A report carrying only a purchase timeframe says nothing about
+  where shoppers found the product, which is the purpose of the feature, and
+  nothing surfaces it.
+- No community block, no metrics, no `Add your report`, and no questionnaire.
 
 ### Questionnaire
 
@@ -1154,7 +1159,9 @@ One question per screen, in this order:
      "No" ends the flow with nothing stored.
    - Multi-state recall: ask directly which listed state:
      `What state did you find it in?`
-   - Unknown geography: omit the state question.
+   - Unknown geography: the recall is ineligible and asks nothing at all —
+     there is no entry point and no questionnaire (see "Community shopper
+     reports" above). The state question is therefore unconditional.
 2. **Retailer** — only when the notice names canonical retailers; otherwise
    the question is absent.
 3. **Purchase timeframe.**
@@ -1172,6 +1179,54 @@ Success:
 
 Do not collect health information. There is no field for symptoms, illness,
 purchase proof, free text, or location beyond the state.
+
+**As implemented (P2B3, `src/app/report/[id].tsx` over
+`src/components/report-questionnaire.tsx`).** Figma holds no questionnaire
+frame (conflict 26), so the composition is the system's own. The warm page
+under the navigator's `Share a shopper report` header, `spacing/16` margins,
+the content column capped at `max-content-width`, the bottom inset added to
+the content padding. Each step is a `caption` progress line in
+`text/secondary` (`Question 1 of 3`, from the presentation contract), the
+question in `heading-2` as a header, the answers as Choice Rows in one radio
+group named by the question, and the actions — `Back` as a secondary pill
+after the first step, `Next` as the primary pill, inert until the question
+is answered. The single-state confirm carries its one line of context in
+`body-small` above `Yes` / `No`. The jurisdiction picker lists the notice's
+own states and, past eight of them, puts the shared Search Bar above the list
+(`Search states`, with a spoken instruction; it filters the rows and is
+never an answer; an empty match says `No state matches that search.`). The
+review step is `Review your report` in `heading-2` over one white
+`radius/12` surface with a `border/subtle` border, one row per question
+asked (the question in `caption` `text/secondary`, the answer in `body`),
+separated by hairlines; then the disclosure: the sentence as static
+`body-small` `text/secondary` text, and `Learn more.` beneath it in
+`action/secondary` as the one interactive element — a link with its own
+spoken name and hint and its own 44pt row, because the statement itself is
+not a control; then `Back` and the primary action (`Submit
+report`, or `Update report` while editing); a refused submission renders its
+message beneath them as an alert on the white surface with a `border/strong`
+border, with every answer kept; and, only while editing, the `Remove my
+report` secondary pill, which opens the platform's own confirmation. The
+three endings — submitted, declined, removed — are the contract's title in
+`heading-2` over its body in `body` `text/secondary`, announced politely,
+with `Done` as the primary pill. The paused state is the contract's sentence
+over the removal pill alone. Loading and not-available are the shared
+`StateMessage`. IBM Plex Mono appears nowhere on the screen; nothing is
+truncated; no height is fixed; the scroll view keeps the search field above
+the keyboard and dismisses it on a drag; and no transition is animated, so
+Reduce Motion has nothing to disable beyond the platform's own screen
+transition. The dev-only Design Preview renders the same step components in
+a gallery and opens the real screen for every flow (`docs/recall-design-preview.md`).
+
+Unknown geography, as implemented: nothing renders and nothing is asked.
+`evaluateReportEligibility` refuses a notice with no usable jurisdiction, so
+`communityReportsSection` is null, Recall Detail draws no community block,
+and `/report/[id]` reached by a deep link shows its own `Not available`
+state. The presentation contract models no timeframe-only flow at all — the
+state question is unconditional, and `questionnaireOutcome` reports the
+state question as outstanding rather than building a draft without a
+jurisdiction. The server's requirement for a notice-authorized jurisdiction
+is unchanged and remains authoritative.
 
 ### Detail disclosure behavior
 
@@ -1218,15 +1273,30 @@ chance.
 - **Error** — the same shape as empty, with the honest message and no
   fabricated fallback content. A missing image removes the tile or renders the
   media placeholder; it never shows a broken-image glyph.
-- **Disabled** — `text/disabled` / `action/disabled`, with
-  `accessibilityState.disabled` set so the state is announced, not just
-  dimmed.
+- **Disabled** — carried by the SURFACE, with `accessibilityState.disabled`
+  set so the state is announced, not just dimmed: a filled action drops to
+  `action/disabled`, an outlined one keeps its surface and mutes its border to
+  `border/subtle`. **A disabled label stays readable.** `text/disabled` is a
+  fill-and-border grey, not a text colour — it is 1.45:1 on the disabled fill
+  and 1.45:1 on white — so a disabled label takes the existing semantic text
+  token that clears WCAG AA on the surface it actually sits on: `text/primary`
+  on `action/disabled` (11.40:1) for a filled action, `text/secondary` on
+  `background/surface` (4.83:1) for an outlined one. No new token was
+  introduced; `design-foundation.test.ts` recomputes both ratios from the
+  token values, so a palette change that broke either one fails there.
 - **Pressed** — a brief opacity reduction on the pressed element (60% is the
   primitives' value); no color change that could read as a state change.
 - **Selected** — `background/brand` with `text/inverse` for chips and tabs,
   and `accessibilityState.selected` (or `checked` for multi-select rows) set.
   Selection is never carried by color alone: the label or a check mark also
-  changes.
+  changes. A single-choice answer (the questionnaire's Choice Row, P2B3)
+  keeps its white surface and turns its border `action/primary` while its
+  radio indicator fills — the filled dot is the non-colour channel — and
+  reports `accessibilityState.checked`.
+- **Busy** — a control whose operation is in flight is inert, reports
+  `accessibilityState.busy`, and swaps its visible word for the contract's
+  progress word (`Sending…`, `Removing…`), so the state is announced and
+  seen, never only dimmed.
 
 ## Accessibility
 
@@ -1309,7 +1379,9 @@ decision. They are normalized to the scale and never reproduced:
   `RelevanceLabel`, `Chip` and `SearchBar`, and from P2B2 `MediaTile` (a
   square image-or-placeholder at one of the three media-size tokens),
   `Callout` (the two Information tones) and `NoticeLabel` (the Public Health
-  Alert label). The whole-screen `StateMessage`
+  Alert label), and from P2B3 `Button` (the 44pt primary / secondary pill,
+  with disabled and busy states) and `ChoiceRow` with `ChoiceGroup` (a
+  single-choice answer row and its radio group). The whole-screen `StateMessage`
   (`src/components/state-message.tsx`) is shared by the Feed and Detail. A
   reusable component contains no hex literal, no off-scale number, and no
   font size of its own.
@@ -1337,27 +1409,29 @@ decision. They are normalized to the scale and never reproduced:
 
 ### Figma ↔ code mapping
 
-| Figma                                    | Code                                                           |
-| ---------------------------------------- | -------------------------------------------------------------- |
-| `home` frame `81:793`                    | `src/app/(tabs)/index.tsx` — the **Feed**                      |
-| `product information` frame `81:819`     | `src/app/recall/[id].tsx` — Recall Detail                      |
-| `nav bar` `163:259`                      | `src/app/(tabs)/_layout.tsx`                                   |
-| `Search-Bar` `33:429`                    | `src/components/ui/search-bar.tsx`                             |
-| `Nav-Chip` `33:445` (Default / Selected) | `src/components/ui/chip.tsx` (the mode pair and filter chips)  |
-| `Risk Label` `42:833` (seven severities) | `src/components/ui/risk-label.tsx`                             |
-| `Relevance Label` `42:840`               | `src/components/ui/relevance-label.tsx`                        |
-| `icon/*` glyphs                          | `src/components/ui/icon.tsx` over `assets/icons/`              |
-| `Recall-Card` `42:987` (2×2 matrix)      | `src/components/recall-card.tsx`                               |
-| `Information` `81:681` (Warning / Info)  | `src/components/ui/callout.tsx` (P2B2)                         |
-| `Product-Information` `81:719`           | `AffectedProductsTableView` in Recall Detail                   |
-| `See all (3)` / `View Retailers (10)`    | `src/components/ui/disclosure-control.tsx`                     |
-| Detail hero `81:838`, card media         | `src/components/ui/media-tile.tsx` (P2B2)                      |
-| `icon/chevron-left` `63:1343`            | the platform back control (`headerBackButtonDisplayMode`)      |
-| `share` `63:1358`                        | **not rendered** — no behaviour (conflict 9)                   |
-| `label/Critical` `42:832`                | **retired** — nothing in code                                  |
-| text styles                              | `typography` in `design-tokens.ts` (`Text variant=`)           |
-| `Elevation/Card`                         | `elevation.card`                                               |
-| color / spacing / radius variables       | `color`, `spacing`, `radius` in `design-tokens.ts`, same names |
+| Figma                                    | Code                                                                      |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| `home` frame `81:793`                    | `src/app/(tabs)/index.tsx` — the **Feed**                                 |
+| `product information` frame `81:819`     | `src/app/recall/[id].tsx` — Recall Detail                                 |
+| `nav bar` `163:259`                      | `src/app/(tabs)/_layout.tsx`                                              |
+| `Search-Bar` `33:429`                    | `src/components/ui/search-bar.tsx`                                        |
+| `Nav-Chip` `33:445` (Default / Selected) | `src/components/ui/chip.tsx` (the mode pair and filter chips)             |
+| `Risk Label` `42:833` (seven severities) | `src/components/ui/risk-label.tsx`                                        |
+| `Relevance Label` `42:840`               | `src/components/ui/relevance-label.tsx`                                   |
+| `icon/*` glyphs                          | `src/components/ui/icon.tsx` over `assets/icons/`                         |
+| `Recall-Card` `42:987` (2×2 matrix)      | `src/components/recall-card.tsx`                                          |
+| `Information` `81:681` (Warning / Info)  | `src/components/ui/callout.tsx` (P2B2)                                    |
+| `Product-Information` `81:719`           | `AffectedProductsTableView` in Recall Detail                              |
+| `See all (3)` / `View Retailers (10)`    | `src/components/ui/disclosure-control.tsx`                                |
+| Detail hero `81:838`, card media         | `src/components/ui/media-tile.tsx` (P2B2)                                 |
+| `icon/chevron-left` `63:1343`            | the platform back control (`headerBackButtonDisplayMode`)                 |
+| `share` `63:1358`                        | **not rendered** — no behaviour (conflict 9)                              |
+| `label/Critical` `42:832`                | **retired** — nothing in code                                             |
+| text styles                              | `typography` in `design-tokens.ts` (`Text variant=`)                      |
+| `Elevation/Card`                         | `elevation.card`                                                          |
+| color / spacing / radius variables       | `color`, `spacing`, `radius` in `design-tokens.ts`, same names            |
+| — (no questionnaire frame; conflict 26)  | `src/app/report/[id].tsx`, `src/components/report-questionnaire.tsx`      |
+| — (no button or radio component)         | `src/components/ui/button.tsx`, `src/components/ui/choice-row.tsx` (P2B3) |
 
 ### Development gallery
 
@@ -1373,8 +1447,13 @@ and the two callout tones, plus twenty-two further scenarios that open the
 real Recall Detail on a real recall chosen for its shape — with and without
 a hero, short and long names, nationwide, every reviewed hazard guide, the
 risk-only and absent Health Risk states, complete and incomplete
-identifier/date groups, and one recall per risk tier. Only the values each
-caption names are simulated. It is not a product surface.
+identifier/date groups, and one recall per risk tier; and from P2B3 the
+questionnaire's steps and states drawn by the real step components (the
+single-state confirm, the multi-state and searchable nationwide pickers, the
+stateless shape, the store and timeframe questions, review in both modes,
+the refused submission, success, and the paused state) plus scenarios that
+open the real questionnaire for every flow. Only the values each caption
+names are simulated. It is not a product surface.
 
 ## Known Figma/code conflicts
 
@@ -1474,6 +1553,14 @@ Sold`; the shipped titles were sentence case and rendered uppercase.
     the navigator's header (title `Recall Details`, page colour, no shadow)
     with the platform chevron alone as the back control, named `Back` for
     assistive technology, and no share glyph.
+26. **The questionnaire is not in Figma.** The `Final` page holds the Feed
+    and Recall Detail frames only; the shopper-report questionnaire, its
+    review, endings and paused state have no frame, and the file has no
+    button or radio-row component. P2B3 composed them from the system —
+    the tokens, the type scale, the Search Bar, and the two new primitives
+    — following the Feed sheet's pill actions. When frames arrive, Figma
+    owns the composition and this document records any conflict; the
+    behaviour and copy stay the contract's.
 
 ## Figma corrections for Cheyenne
 
@@ -1536,8 +1623,15 @@ Changes to make in Figma itself. Nothing here changes product behavior.
 - [ ] Bind callout, product-table and nav-bar shadows to `Elevation/Card` or
       add named effect styles (conflict 15).
 - [ ] Add screens that exist in the product but not in Figma: Saved, Profile,
-      the questionnaire (state / retailer / timeframe / review / success), and
+      the questionnaire (state / retailer / timeframe / review / success —
+      built in code in P2B3 from the system; see conflict 26 and
+      "Questionnaire → As implemented" for the composition to draw), and
       the Feed's loading, empty and error states.
+- [ ] Add a `Button` component (primary brand-navy pill, secondary bordered
+      white pill; 44pt; disabled and busy states) and a `Choice Row`
+      component (white `radius/12` row with a radio indicator; default and
+      checked), matching `src/components/ui/button.tsx` and
+      `src/components/ui/choice-row.tsx`.
 - [ ] Recall Detail: set the section bodies and the jurisdiction line in
       `text/primary` (conflict 21); set the table values in `Caption`
       (conflict 23); normalize the hero to 152 and the columns to one 144

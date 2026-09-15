@@ -215,12 +215,31 @@ export interface QuestionnaireChoices {
   retailerChoices: readonly string[];
 }
 
-/** The questions this recall actually asks. */
+/**
+ * The questions this recall actually asks. `state` is ALWAYS first and
+ * always asked.
+ *
+ * A recall whose notice states no usable geography is ineligible for
+ * shopper reports outright (founder decision, 2026-09-14): a report
+ * carrying only a purchase timeframe says nothing about where shoppers
+ * found the product, which is the whole point of the feature, and nothing
+ * would surface it. `evaluateReportEligibility` refuses such a case, so no
+ * section exists, no entry point renders, and this questionnaire is never
+ * reached — and the server refuses a submission without a
+ * notice-authorized jurisdiction regardless. There is therefore no
+ * "timeframe-only" flow to model here: every section names at least one
+ * jurisdiction, and the state question always has an answer available.
+ */
 export function questionnaireSteps(choices: QuestionnaireChoices): QuestionKey[] {
   const steps: QuestionKey[] = ['state'];
   if (choices.retailerChoices.length > 0) steps.push('retailer');
   steps.push('window');
   return steps;
+}
+
+/** "Question 1 of 3": where the shopper is in the flow, in words — never a bar alone. */
+export function questionProgressLabel(index: number, count: number): string {
+  return `Question ${index + 1} of ${count}`;
 }
 
 /** A one-state recall's location IS a yes/no question — there is nothing to pick. */
@@ -298,8 +317,14 @@ export function questionnaireOutcome(
   for (const key of questionnaireSteps(choices)) {
     if (!isAnswered(key, answers)) return { kind: 'incomplete', next: key };
   }
+  // The jurisdiction the server requires. The loop above already returned
+  // for an unanswered `state`, so this is unreachable — it stands because
+  // a draft must never be built from a missing state, and it keeps that
+  // guarantee in the code rather than in a cast that would let `null`
+  // through as a jurisdiction.
+  if (answers.stateCode === null) return { kind: 'incomplete', next: 'state' };
   const draft: ShopperReportDraft = {
-    stateCode: answers.stateCode as string,
+    stateCode: answers.stateCode,
     // "Not sure" is the ABSENCE of a retailer, never a stored string.
     retailerName:
       answers.retailer === null || answers.retailer === RETAILER_NOT_SURE ? null : answers.retailer,
@@ -330,6 +355,63 @@ export function answerLabel(key: QuestionKey, answers: QuestionnaireAnswers): st
   return answers.purchaseWindow === null ? null : purchaseWindowLabel(answers.purchaseWindow);
 }
 
+/** One line of the review step: the question as asked, and the answer given. */
+export interface ReviewRow {
+  key: QuestionKey;
+  prompt: string;
+  answer: string;
+}
+
+/**
+ * The review step's rows: exactly the questions this recall asked, each with
+ * the answer actually given. A question the recall never asked (no store
+ * choices, no jurisdiction) has no row, and an unanswered one is omitted
+ * rather than shown blank — the review confirms what was collected, and
+ * nothing else.
+ */
+export function reviewRows(
+  answers: QuestionnaireAnswers,
+  choices: QuestionnaireChoices,
+): ReviewRow[] {
+  const rows: ReviewRow[] = [];
+  for (const key of questionnaireSteps(choices)) {
+    const answer = answerLabel(key, answers);
+    if (answer === null) continue;
+    rows.push({ key, prompt: questionPrompt(key, choices), answer });
+  }
+  return rows;
+}
+
+// ── The state picker's search ───────────────────────────────────────────────
+
+/**
+ * A jurisdiction list longer than this gets a search field above it — a
+ * nationwide recall offers all 52, which nobody should scroll. The field
+ * filters the list and can never become an answer.
+ */
+export const STATE_SEARCH_MIN_OPTIONS = 8;
+
+export function isStateListSearchable(options: readonly ChoiceOption[]): boolean {
+  return options.length > STATE_SEARCH_MIN_OPTIONS;
+}
+
+/** The options whose name contains the query, case-insensitively; all of them for a blank query. */
+export function filterStateOptions(
+  options: readonly ChoiceOption[],
+  query: string,
+): ChoiceOption[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === '') return [...options];
+  return options.filter((option) => option.label.toLowerCase().includes(needle));
+}
+
+export const STATE_SEARCH_LABEL = 'Search states';
+export const STATE_SEARCH_PLACEHOLDER = 'Search states';
+/** Spoken after the field's name: what typing here does, and what it does not. */
+export const STATE_SEARCH_HINT = 'Filters the list of states below. Choose a state from the list.';
+/** Shown in place of the list when no state name matches the query. */
+export const STATE_SEARCH_NO_MATCH = 'No state matches that search.';
+
 // ── Point-of-submission disclosure, and the outcomes ────────────────────────
 
 /**
@@ -346,13 +428,18 @@ export function answerLabel(key: QuestionKey, answers: QuestionnaireAnswers): st
 export const SUBMISSION_DISCLOSURE =
   'Your anonymous report contributes to community totals and does not change official recall information.';
 export const PRIVACY_LINK_LABEL = 'Learn more.';
+/** Spoken after the disclosure link, so where it leads is never a surprise. */
+export const PRIVACY_LINK_HINT = 'Opens Privacy & Data Controls';
 
 export const PRIVACY_DOCUMENT_SLUG = 'privacy-data-controls';
+
+export const REVIEW_TITLE = 'Review your report';
 
 export const SUBMIT_ACTION = 'Submit report';
 /** The edit screen's submit control reads differently from a first submission. */
 export const UPDATE_ACTION = 'Update report';
 export const SUBMITTING_LABEL = 'Sending…';
+export const REMOVING_LABEL = 'Removing…';
 
 /**
  * Submitted successfully — the exact copy (founder decision, 2026-09-10),
@@ -407,3 +494,26 @@ export const REMOVE_FAILURE =
 export const DONE_ACTION = 'Done';
 export const BACK_ACTION = 'Back';
 export const NEXT_ACTION = 'Next';
+
+// ── The screen's own states ─────────────────────────────────────────────────
+
+export interface ReportStateCopy {
+  title: string;
+  body: string;
+}
+
+/** While the recall, the public summary and this installation's report are read. */
+export const REPORT_LOADING: ReportStateCopy = {
+  title: 'Loading…',
+  body: 'Fetching this recall.',
+};
+
+/**
+ * An ineligible recall, a recall that could not be read, or the feature
+ * being off with no report to remove. One honest message for all of them:
+ * which refusal happened reveals nothing the feed does not already show.
+ */
+export const REPORT_UNAVAILABLE: ReportStateCopy = {
+  title: 'Not available',
+  body: 'Shopper reports are not available for this recall.',
+};

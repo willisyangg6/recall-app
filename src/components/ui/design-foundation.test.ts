@@ -16,6 +16,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { color, type ColorToken } from '@/constants/design-tokens';
+
 const SRC = join(__dirname, '..', '..');
 const read = (relative: string) => readFileSync(join(SRC, relative), 'utf8');
 
@@ -33,11 +35,15 @@ const UI_FILES = [
   'ui/media-tile.tsx',
   'ui/callout.tsx',
   'ui/notice-label.tsx',
+  // P2B3
+  'ui/button.tsx',
+  'ui/choice-row.tsx',
 ];
 const UI = Object.fromEntries(UI_FILES.map((f) => [f, read(join('components', f))]));
 const TEXT = UI['ui/text.tsx'];
 const SURFACE = UI['ui/surface.tsx'];
 const DISCLOSURE = UI['ui/disclosure-control.tsx'];
+const BUTTON = UI['ui/button.tsx'];
 const RISK_LABEL = UI['ui/risk-label.tsx'];
 const CARD = read('components/recall-card.tsx');
 const DETAIL = read('app/recall/[id].tsx');
@@ -234,4 +240,54 @@ test('the gallery renders the primitives, dev-only, without inventing recall con
   assert.ok(PREVIEW.includes('Object.keys(typography)'));
   // The hub is still the only entry, still behind __DEV__ on Profile.
   assert.ok(read('app/(tabs)/profile.tsx').includes('{__DEV__ ? ('));
+});
+
+// ── Contrast: a disabled label is still text ────────────────────────────────
+
+/** WCAG 2.x relative luminance of a `#RRGGBB` token value. */
+function luminance(hex: string): number {
+  const linear = [1, 3, 5]
+    .map((at) => parseInt(hex.slice(at, at + 2), 16) / 255)
+    .map((channel) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+/** The WCAG contrast ratio between two semantic tokens, computed from their values. */
+function contrast(text: ColorToken, surface: ColorToken): number {
+  const [light, dark] = [luminance(color[text]), luminance(color[surface])].sort((a, b) => b - a);
+  return (light + 0.05) / (dark + 0.05);
+}
+
+test('every Button label clears WCAG AA on its own surface — the disabled ones included', () => {
+  // The shared Button is the only filled action in the system, so the pairs
+  // are checked once here rather than screen by screen. 4.5:1 is the AA
+  // floor for normal-size text, and `body-small-bold` (13/600) is nowhere
+  // near the large-text exemption, so every state answers to it.
+  const AA = 4.5;
+  const pairs: [name: string, text: ColorToken, surface: ColorToken][] = [
+    ['primary enabled', 'text/inverse', 'action/primary'],
+    ['primary disabled', 'text/primary', 'action/disabled'],
+    ['secondary enabled', 'text/primary', 'background/surface'],
+    ['secondary disabled', 'text/secondary', 'background/surface'],
+  ];
+  for (const [name, text, surface] of pairs) {
+    const ratio = contrast(text, surface);
+    assert.ok(ratio >= AA, `${name} is ${ratio.toFixed(2)}:1, under the ${AA}:1 floor`);
+  }
+
+  // …and the component binds exactly those tokens, by variant and state.
+  assert.ok(BUTTON.includes("primary: { enabled: 'text/inverse', disabled: 'text/primary' }"));
+  assert.ok(BUTTON.includes("secondary: { enabled: 'text/primary', disabled: 'text/secondary' }"));
+  assert.ok(BUTTON.includes("color={LABEL_COLOR[variant][inert ? 'disabled' : 'enabled']}"));
+
+  // `text/disabled` is a fill-and-border grey, not a text colour: it is the
+  // disabled surface itself, and near-invisible on white. A label may never
+  // take it, which is the regression this test exists for.
+  assert.ok(!BUTTON.includes("'text/disabled'"), 'a Button label took the disabled grey');
+  assert.ok(contrast('text/disabled', 'action/disabled') < 1.5);
+  assert.ok(contrast('text/disabled', 'background/surface') < 1.5);
+
+  // Disabled stays announced, so the state has a channel besides colour.
+  assert.ok(BUTTON.includes('accessibilityState={{ disabled: inert, busy }}'));
+  assert.ok(BUTTON.includes('disabled={inert}'));
 });

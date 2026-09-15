@@ -1,13 +1,18 @@
 /**
- * The shopper-report questionnaire (P1D) — one question per screen, then a
- * review step carrying the point-of-submission privacy disclosure.
+ * The shopper-report questionnaire (P1D; the Lotly composition from P2B3) —
+ * one question per screen, then a review step carrying the point-of-
+ * submission privacy disclosure.
  *
- * Layout and local answer state only. Every word comes from the tested
- * contract in lib/shopper-report-presentation; which questions this recall
- * asks, and the only choices each may offer, come from the shared detail
- * model (never from anything this screen derives); and the network/queue
- * behavior lives in lib/shopper-report-store, whose submit is idempotent
- * server-side so a retry can never create a second report or move a count.
+ * This file is the flow and its data: which screen is showing, the answers
+ * so far, the one server-authoritative load, and the two mutations. How a
+ * step looks lives in components/report-questionnaire (network-free, so the
+ * development preview can render a step alone); every word comes from the
+ * tested contract in lib/shopper-report-presentation; which questions this
+ * recall asks, and the only choices each may offer, come from the shared
+ * detail model (never from anything this screen derives); and the
+ * network/queue behavior lives in lib/shopper-report-store, whose submit is
+ * idempotent server-side so a retry can never create a second report or
+ * move a count.
  *
  * ## State is first, and a single-state recall's state question IS the ask
  *
@@ -32,17 +37,34 @@
  * already has a live report reaches a reduced screen offering only removal
  * — never a form whose submission would be refused. The app holds no local
  * copy of the gate.
+ *
+ * ## Composition (P2B3)
+ *
+ * The warm page under the navigator's own header, `spacing/16` margins, the
+ * content column capped at `max-content-width`, and the bottom safe-area
+ * inset added to the content padding. The scroll view keeps the jurisdiction
+ * search field and its list above the keyboard and dismisses the keyboard on
+ * a drag; a tap on a row while the keyboard is up chooses the row. No step
+ * has a fixed height and no transition is animated, so there is no motion
+ * for Reduce Motion to disable — the platform's own screen transition is the
+ * only one, and it already honours the setting.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import {
+  OutcomeStep,
+  PausedStep,
+  QuestionStep,
+  ReviewStep,
+  type ReviewBusy,
+} from '@/components/report-questionnaire';
+import { StateMessage } from '@/components/state-message';
+import { Surface } from '@/components/ui/surface';
+import { layout, spacing } from '@/constants/design-tokens';
 import type { MyShopperReport } from '@/domain/shopper-report';
 import { fetchCaseDetail } from '@/lib/recall-feed';
 import {
@@ -51,21 +73,13 @@ import {
   type CommunityReportsSection,
 } from '@/lib/recall-presentation';
 import {
-  answerLabel,
   answersFromReport,
-  BACK_ACTION,
   DECLINED_BODY,
   DECLINED_TITLE,
-  DONE_ACTION,
   EMPTY_ANSWERS,
-  isSingleStateCase,
-  NEXT_ACTION,
   PRIVACY_DOCUMENT_SLUG,
-  PRIVACY_LINK_LABEL,
-  purchaseWindowOptions,
   questionnaireOutcome,
   questionnaireSteps,
-  questionPrompt,
   REMOVE_CONFIRM_BODY,
   REMOVE_CONFIRM_CANCEL,
   REMOVE_CONFIRM_REMOVE,
@@ -73,20 +87,12 @@ import {
   REMOVE_FAILURE,
   REMOVED_BODY,
   REMOVED_TITLE,
-  REPORT_PAUSED_MESSAGE,
-  REPORT_REMOVE_ACTION,
+  REPORT_LOADING,
   REPORT_SCREEN_TITLE,
-  retailerOptions,
-  stateOptions,
-  STATE_CONFIRM_HELP,
-  STATE_CONFIRM_OPTIONS,
-  SUBMIT_ACTION,
+  REPORT_UNAVAILABLE,
   SUBMIT_FAILURE,
-  SUBMISSION_DISCLOSURE,
-  SUBMITTING_LABEL,
   SUCCESS_BODY,
   SUCCESS_TITLE,
-  UPDATE_ACTION,
   type QuestionKey,
   type QuestionnaireAnswers,
 } from '@/lib/shopper-report-presentation';
@@ -109,106 +115,6 @@ type Screen =
   | { kind: 'submitted' }
   | { kind: 'removed' };
 
-/** One tappable answer. Provisional styling; the selected state is explicit. */
-function Choice({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected }} onPress={onPress}>
-      <ThemedView
-        type={selected ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.choice}>
-        <ThemedText style={selected ? styles.choiceSelected : undefined}>
-          {selected ? `✓ ${label}` : label}
-        </ThemedText>
-      </ThemedView>
-    </Pressable>
-  );
-}
-
-/** The jurisdiction question: searchable once the list is long enough to need it. */
-function StateQuestion({
-  section,
-  value,
-  onChange,
-}: {
-  section: CommunityReportsSection;
-  value: string | null;
-  onChange: (code: string) => void;
-}) {
-  const [query, setQuery] = useState('');
-  const theme = useTheme();
-  const options = stateOptions(section.allowedStateCodes);
-  const searchable = options.length > 8;
-  const shown =
-    query.trim() === ''
-      ? options
-      : options.filter((option) => option.label.toLowerCase().includes(query.trim().toLowerCase()));
-
-  return (
-    <View style={styles.choices}>
-      {searchable ? (
-        <TextInput
-          style={[styles.search, { color: theme.text }]}
-          placeholder="Search states"
-          placeholderTextColor={theme.textSecondary}
-          value={query}
-          onChangeText={setQuery}
-          accessibilityLabel="Search states"
-        />
-      ) : null}
-      {shown.map((option) => (
-        <Choice
-          key={option.value}
-          label={option.label}
-          selected={option.value === value}
-          onPress={() => onChange(option.value)}
-        />
-      ))}
-    </View>
-  );
-}
-
-/** The single-state confirm: "Did you find this product in <State>?" Yes/No. */
-function StateConfirmQuestion({
-  section,
-  answers,
-  onAnswer,
-}: {
-  section: CommunityReportsSection;
-  answers: QuestionnaireAnswers;
-  onAnswer: (patch: Partial<QuestionnaireAnswers>) => void;
-}) {
-  const onlyState = section.allowedStateCodes[0];
-  return (
-    <View style={styles.choices}>
-      <ThemedText type="small" themeColor="textSecondary">
-        {STATE_CONFIRM_HELP}
-      </ThemedText>
-      {STATE_CONFIRM_OPTIONS.map((option) => (
-        <Choice
-          key={option.value}
-          label={option.label}
-          selected={
-            option.value === 'yes' ? answers.stateCode === onlyState : answers.declined === true
-          }
-          onPress={() =>
-            option.value === 'yes'
-              ? onAnswer({ stateCode: onlyState, declined: false })
-              : onAnswer({ declined: true, stateCode: null })
-          }
-        />
-      ))}
-    </View>
-  );
-}
-
 export default function ShopperReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -216,7 +122,9 @@ export default function ShopperReportScreen() {
   const [section, setSection] = useState<CommunityReportsSection | null>(null);
   const [answers, setAnswers] = useState<QuestionnaireAnswers>(EMPTY_ANSWERS);
   const [existing, setExisting] = useState<MyShopperReport | null>(null);
-  const [busy, setBusy] = useState(false);
+  // Which mutation is in flight, so the control that started it can say so
+  // and neither control can fire while the other is settling.
+  const [busy, setBusy] = useState<ReviewBusy>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
   useEffect(() => {
@@ -283,7 +191,7 @@ export default function ShopperReportScreen() {
 
   const submit = async () => {
     if (busy || outcome?.kind !== 'ready') return;
-    setBusy(true);
+    setBusy('submit');
     setFailure(null);
     try {
       await submitReport(id, outcome.draft);
@@ -291,16 +199,16 @@ export default function ShopperReportScreen() {
     } catch {
       // Every refusal — offline, case closed mid-flow, gate switched off —
       // ends the same way, because in every one of them the server refused
-      // before writing anything.
+      // before writing anything. The answers stay exactly as they were.
       setFailure(SUBMIT_FAILURE);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   const remove = async () => {
     if (busy) return;
-    setBusy(true);
+    setBusy('remove');
     setFailure(null);
     try {
       await withdrawReport(id);
@@ -308,7 +216,7 @@ export default function ShopperReportScreen() {
     } catch {
       setFailure(REMOVE_FAILURE);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -325,272 +233,110 @@ export default function ShopperReportScreen() {
   const openPrivacy = () =>
     router.push({ pathname: '/document/[slug]', params: { slug: PRIVACY_DOCUMENT_SLUG } });
 
+  const done = () => router.back();
+
   const body = () => {
     if (screen.kind === 'loading') {
-      return <ThemedText themeColor="textSecondary">Loading…</ThemedText>;
+      return <StateMessage {...REPORT_LOADING} tone="loading" />;
     }
     if (screen.kind === 'unavailable') {
-      return (
-        <ThemedText themeColor="textSecondary">
-          Shopper reports are not available for this recall.
-        </ThemedText>
-      );
+      return <StateMessage {...REPORT_UNAVAILABLE} />;
     }
     if (screen.kind === 'paused') {
-      return (
-        <View style={styles.step} accessibilityLiveRegion="polite">
-          <ThemedText themeColor="textSecondary">{REPORT_PAUSED_MESSAGE}</ThemedText>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={REPORT_REMOVE_ACTION}
-            accessibilityState={{ disabled: busy, busy }}
-            disabled={busy}
-            onPress={confirmRemove}>
-            <ThemedText themeColor="link">{REPORT_REMOVE_ACTION}</ThemedText>
-          </Pressable>
-          {failure ? <ThemedText accessibilityLiveRegion="polite">{failure}</ThemedText> : null}
-        </View>
-      );
+      return <PausedStep busy={busy === 'remove'} failure={failure} onRemove={confirmRemove} />;
     }
     if (screen.kind === 'declined') {
-      return <Outcome title={DECLINED_TITLE} body={DECLINED_BODY} />;
+      return <OutcomeStep title={DECLINED_TITLE} body={DECLINED_BODY} onDone={done} />;
     }
     if (screen.kind === 'submitted') {
-      return <Outcome title={SUCCESS_TITLE} body={SUCCESS_BODY} />;
+      return <OutcomeStep title={SUCCESS_TITLE} body={SUCCESS_BODY} onDone={done} />;
     }
     if (screen.kind === 'removed') {
-      return <Outcome title={REMOVED_TITLE} body={REMOVED_BODY} />;
+      return <OutcomeStep title={REMOVED_TITLE} body={REMOVED_BODY} onDone={done} />;
     }
     if (section === null) return null;
 
     if (screen.kind === 'review') {
-      return (
-        <View style={styles.step}>
-          <ThemedText type="subtitle">Review your report</ThemedText>
-          {steps.map((key) => (
-            <View key={key} style={styles.reviewRow}>
-              <ThemedText type="small" themeColor="textSecondary">
-                {questionPrompt(key, section)}
-              </ThemedText>
-              <ThemedText>{answerLabel(key, answers) ?? ''}</ThemedText>
-            </View>
-          ))}
-
-          {/* The one-line point-of-submission disclosure: stated here, at
-              the moment of submitting, not left to a document a shopper
-              would have to go looking for. */}
-          <View style={styles.disclosure}>
-            <ThemedText type="small" themeColor="textSecondary">
-              {SUBMISSION_DISCLOSURE}{' '}
-              <ThemedText
-                type="small"
-                themeColor="link"
-                accessibilityRole="link"
-                onPress={openPrivacy}>
-                {PRIVACY_LINK_LABEL}
-              </ThemedText>
-            </ThemedText>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: busy, busy }}
-            disabled={busy}
-            onPress={() => void submit()}>
-            <ThemedView type="backgroundSelected" style={styles.button}>
-              <ThemedText style={styles.buttonLabel}>
-                {busy ? SUBMITTING_LABEL : existing ? UPDATE_ACTION : SUBMIT_ACTION}
-              </ThemedText>
-            </ThemedView>
-          </Pressable>
-          {existing ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={REPORT_REMOVE_ACTION}
-              accessibilityState={{ disabled: busy }}
-              disabled={busy}
-              onPress={confirmRemove}>
-              <ThemedText themeColor="link">{REPORT_REMOVE_ACTION}</ThemedText>
-            </Pressable>
-          ) : null}
-          {failure ? <ThemedText accessibilityLiveRegion="polite">{failure}</ThemedText> : null}
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setScreen({ kind: 'question', index: steps.length - 1 })}>
-            <ThemedText themeColor="link">{BACK_ACTION}</ThemedText>
-          </Pressable>
-        </View>
+      const shared = {
+        section,
+        answers,
+        canSubmit: outcome?.kind === 'ready',
+        busy,
+        failure,
+        onSubmit: () => void submit(),
+        onBack: () => setScreen({ kind: 'question', index: steps.length - 1 }),
+        onOpenPrivacy: openPrivacy,
+      };
+      // Removal exists only here, and only while editing an existing report.
+      return existing ? (
+        <ReviewStep {...shared} mode="update" onRemove={confirmRemove} />
+      ) : (
+        <ReviewStep {...shared} mode="submit" />
       );
     }
 
     const key = steps[screen.index];
     const answered = outcome?.kind !== 'incomplete' || outcome.next !== key;
     return (
-      <View style={styles.step}>
-        <ThemedText type="subtitle" accessibilityRole="header">
-          {questionPrompt(key, section)}
-        </ThemedText>
-
-        {key === 'state' ? (
-          isSingleStateCase(section) ? (
-            <StateConfirmQuestion section={section} answers={answers} onAnswer={answer} />
-          ) : (
-            <StateQuestion
-              section={section}
-              value={answers.stateCode}
-              onChange={(code) => answer({ stateCode: code, declined: false })}
-            />
-          )
-        ) : null}
-
-        {key === 'retailer' ? (
-          <View style={styles.choices}>
-            {retailerOptions(section.retailerChoices).map((option) => (
-              <Choice
-                key={option.value}
-                label={option.label}
-                selected={answers.retailer === option.value}
-                onPress={() => answer({ retailer: option.value })}
-              />
-            ))}
-          </View>
-        ) : null}
-
-        {key === 'window' ? (
-          <View style={styles.choices}>
-            {purchaseWindowOptions().map((option) => (
-              <Choice
-                key={option.value}
-                label={option.label}
-                selected={answers.purchaseWindow === option.value}
-                onPress={() => answer({ purchaseWindow: option.value })}
-              />
-            ))}
-          </View>
-        ) : null}
-
-        <View style={styles.actions}>
-          {screen.index > 0 ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setScreen({ kind: 'question', index: screen.index - 1 })}>
-              <ThemedText themeColor="link">{BACK_ACTION}</ThemedText>
-            </Pressable>
-          ) : null}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !answered }}
-            disabled={!answered}
-            onPress={() => {
-              // A single-state "No" ends the flow here: nothing is stored,
-              // nothing is counted, and the server is never contacted.
-              if (outcome?.kind === 'declined') {
-                setScreen({ kind: 'declined' });
-                return;
-              }
-              if (screen.index + 1 < steps.length) {
-                setScreen({ kind: 'question', index: screen.index + 1 });
-                return;
-              }
-              setScreen({ kind: 'review' });
-            }}>
-            <ThemedText themeColor={answered ? 'link' : 'textSecondary'}>{NEXT_ACTION}</ThemedText>
-          </Pressable>
-        </View>
-      </View>
+      <QuestionStep
+        section={section}
+        stepKey={key}
+        stepIndex={screen.index}
+        stepCount={steps.length}
+        answers={answers}
+        canAdvance={answered}
+        onAnswer={answer}
+        onBack={
+          screen.index > 0 ? () => setScreen({ kind: 'question', index: screen.index - 1 }) : null
+        }
+        onNext={() => {
+          // A single-state "No" ends the flow here: nothing is stored,
+          // nothing is counted, and the server is never contacted.
+          if (outcome?.kind === 'declined') {
+            setScreen({ kind: 'declined' });
+            return;
+          }
+          if (screen.index + 1 < steps.length) {
+            setScreen({ kind: 'question', index: screen.index + 1 });
+            return;
+          }
+          setScreen({ kind: 'review' });
+        }}
+      />
     );
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <Surface background="background/page" style={styles.page}>
       <Stack.Screen options={{ title: REPORT_SCREEN_TITLE }} />
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: Spacing.four + insets.bottom }]}
-        keyboardShouldPersistTaps="handled">
+        contentContainerStyle={[styles.content, { paddingBottom: spacing[24] + insets.bottom }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets>
         {body()}
       </ScrollView>
-    </ThemedView>
-  );
-}
-
-/** A terminal state: what happened, what it means, and one way out. */
-function Outcome({ title, body }: { title: string; body: string }) {
-  return (
-    <View style={styles.step} accessibilityLiveRegion="polite">
-      <ThemedText type="subtitle" accessibilityRole="header">
-        {title}
-      </ThemedText>
-      <ThemedText themeColor="textSecondary">{body}</ThemedText>
-      <Pressable accessibilityRole="button" onPress={() => router.back()}>
-        <ThemedText themeColor="link">{DONE_ACTION}</ThemedText>
-      </Pressable>
-    </View>
+    </Surface>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  page: {
     flex: 1,
   },
   scroll: {
     flex: 1,
     width: '100%',
   },
+  // flexGrow lets a whole-screen state centre itself; content-driven
+  // otherwise, so a long question or list simply scrolls.
   content: {
-    maxWidth: MaxContentWidth,
+    flexGrow: 1,
+    maxWidth: layout.maxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    padding: Spacing.three,
-    gap: Spacing.two,
-  },
-  // Provisional language throughout — spacing and the existing themed
-  // surfaces only, so the design-system pass can replace this file's styles
-  // without touching a single contract.
-  step: {
-    gap: Spacing.two,
-  },
-  choices: {
-    gap: Spacing.one,
-    marginTop: Spacing.one,
-  },
-  choice: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Radii.small,
-  },
-  choiceSelected: {
-    fontWeight: '600',
-  },
-  search: {
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.two,
-    marginBottom: Spacing.one,
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.four,
-    marginTop: Spacing.three,
-  },
-  reviewRow: {
-    gap: Spacing.half,
-  },
-  disclosure: {
-    gap: Spacing.one,
-    marginTop: Spacing.three,
-    paddingTop: Spacing.three,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#8888',
-  },
-  button: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Radii.medium,
-    marginTop: Spacing.two,
-  },
-  buttonLabel: {
-    fontWeight: '600',
+    padding: spacing[16],
+    gap: spacing[16],
   },
 });

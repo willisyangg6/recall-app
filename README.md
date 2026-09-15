@@ -681,6 +681,38 @@ misstate them), and none of this activates push delivery.
   pair completeness, every risk tier) plus a Detail states-and-callouts
   gallery. Saved and Profile keep the provisional appearance.
 
+- **P2B3 — the Lotly shopper-report questionnaire** (implemented,
+  uncommitted; **feature still OFF**): the third restyled product screen.
+  `/report/[id]` renders from the tokens and the shared primitives — two new
+  ones in `src/components/ui/` (`Button`, the 44pt primary / secondary pill
+  with disabled and busy states; `ChoiceRow` with `ChoiceGroup`, a
+  single-choice radio row and its group) plus the network-free step
+  components in `src/components/report-questionnaire.tsx` that the route
+  composes — with every shipped behaviour intact: state first (the
+  single-state yes/no confirm, or the picker over the notice's own
+  jurisdictions with the shared search bar past eight of them), the store
+  question only when the notice names stores, the five purchase-time
+  buckets, a review of exactly what was asked, the one-line disclosure as a
+  single link into Privacy & Data Controls, `Submit report` / `Update
+report`, a refused submission shown beneath the action with every answer
+  kept, removal only while editing behind the native confirmation, the
+  exact success copy with no metric, and the removal-only paused screen. The
+  presentation contract gained the `Question 1 of 3` progress line, the
+  review rows, and the state-list search rules. A follow-up finalized
+  unknown-geography recalls as **ineligible** for reports (a timeframe-only
+  report says nothing about where a product was found): they expose no entry
+  point and no questionnaire, and the flow can never build a draft without a
+  jurisdiction. The same follow-up made only `Learn more.` interactive in the
+  disclosure — the sentence is static text — and gave every disabled button
+  label a token that clears WCAG AA on its own surface. No local gate, no count arithmetic, no new dependency; the server
+  gate is still the only switch. `src/components/report-design.test.ts` pins
+  the restyle beside the existing suites, and the dev-only Design Preview
+  gained five questionnaire scenarios (single-state, multi-state, searchable
+  nationwide, a refused submission, the paused owner) and a gallery of the
+  real step components. Figma holds no questionnaire frame; the composition
+  is the system's own ([DESIGN.md](DESIGN.md), conflict 26). Saved and
+  Profile keep the provisional appearance.
+
 ## Operational verification (O2)
 
 - **O2-A — read-only production audit, completed 2026-09-05. Final

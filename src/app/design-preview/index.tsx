@@ -29,6 +29,12 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RecallCard } from '@/components/recall-card';
+import {
+  OutcomeStep,
+  PausedStep,
+  QuestionStep,
+  ReviewStep,
+} from '@/components/report-questionnaire';
 import { StateMessage } from '@/components/state-message';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -67,6 +73,7 @@ import {
   type ScreenedCandidate,
 } from '@/lib/design-preview';
 import { DETAIL_ERROR_TITLE, DETAIL_LOADING, DETAIL_MISSING } from '@/lib/detail-copy';
+import { SUPPORTED_STATE_CODES } from '@/domain/preferences';
 import type { Classification, OfficialClass } from '@/domain/recall-types';
 import type { ConsumerRiskTier } from '@/domain/risk-tier';
 import {
@@ -87,6 +94,20 @@ import {
 } from '@/lib/recall-presentation';
 import { interpretReason } from '@/lib/recall-reason';
 import { riskView } from '@/lib/risk-display';
+import {
+  EMPTY_ANSWERS,
+  questionnaireOutcome,
+  questionnaireSteps,
+  REMOVE_FAILURE,
+  REPORT_UNAVAILABLE,
+  RETAILER_NOT_SURE,
+  SUBMIT_FAILURE,
+  SUCCESS_BODY,
+  SUCCESS_TITLE,
+  type QuestionKey,
+  type QuestionnaireAnswers,
+  type QuestionnaireChoices,
+} from '@/lib/shopper-report-presentation';
 
 /** How many candidates per requirement the hub offers as alternatives. */
 const CANDIDATES_SHOWN = 6;
@@ -123,6 +144,10 @@ const REQUIREMENT_LABELS: Record<PreviewCaseRequirement, string> = {
   reportable_with_retailers: 'Eligible recall naming at least one retailer',
   reportable_without_retailers: 'Eligible recall naming no retailer',
   not_reportable: 'Ineligible recall (unusable geography)',
+  // P2B3
+  reportable_single_state: 'Eligible recall naming exactly one state',
+  reportable_multi_state: 'Eligible recall naming several states',
+  reportable_nationwide: 'Eligible recall distributed nationwide',
   jurisdictions_few: 'Recall naming five jurisdictions or fewer',
   jurisdictions_many: 'Recall naming more than five jurisdictions',
   products_one: 'Recall with exactly one affected-product row',
@@ -621,6 +646,15 @@ export default function DesignPreviewScreen() {
         </ThemedText>
         <DetailStatesGallery />
 
+        {/* P2B3: the questionnaire's steps and states, rendered by the real
+            step components over choices a real eligible recall allows. The
+            flows themselves — submit, edit, remove, refuse, pause — are
+            walked on the real screen through the scenarios below. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          QUESTIONNAIRE STEPS AND STATES
+        </ThemedText>
+        <QuestionnaireGallery source={selectionFor('reportable_with_retailers')} />
+
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           RECALLS IN USE
         </ThemedText>
@@ -896,6 +930,189 @@ function DetailStatesGallery() {
         Sample information callout — the retracted-notice treatment.
       </Callout>
     </Surface>
+  );
+}
+
+/**
+ * The questionnaire's steps and states, one under another, drawn by the
+ * real step components (components/report-questionnaire) so a screenshot is
+ * of the product's own composition. The choices are a real eligible recall's
+ * own — its jurisdictions and the retailers its notice names — narrowed or
+ * widened only to give each step the shape it demonstrates: one state for
+ * the confirm, the supported-jurisdiction registry for the searchable list.
+ * Every caption names which. Rows here are live so the chosen state can be
+ * inspected; Next, Back, Submit and Done are wired to nothing, and nothing
+ * here reads or writes shopper-report state.
+ *
+ * A recall with no official geography is ineligible for reports, so it has
+ * no questionnaire at all: the gallery shows the screen's own unavailable
+ * state for it rather than a form that could never be submitted.
+ */
+function QuestionnaireGallery({ source }: { source: ScreenedCandidate | null }) {
+  const states = source?.allowedStateCodes ?? [];
+  const retailers = source?.retailerChoices ?? [];
+  const singleState: QuestionnaireChoices = {
+    allowedStateCodes: states.length > 0 ? [states[0]] : SUPPORTED_STATE_CODES.slice(0, 1),
+    retailerChoices: [],
+  };
+  const multiState: QuestionnaireChoices = {
+    allowedStateCodes: states.length > 1 ? states : SUPPORTED_STATE_CODES.slice(0, 4),
+    retailerChoices: retailers,
+  };
+  const nationwide: QuestionnaireChoices = {
+    allowedStateCodes: SUPPORTED_STATE_CODES,
+    retailerChoices: retailers,
+  };
+  const withRetailers: QuestionnaireChoices = {
+    allowedStateCodes: multiState.allowedStateCodes,
+    retailerChoices: retailers,
+  };
+  // A complete set of answers from the section's own first choices, for the
+  // review samples. Never a state or store the section does not offer.
+  const complete: QuestionnaireAnswers = {
+    declined: false,
+    stateCode: withRetailers.allowedStateCodes[0],
+    retailer: retailers[0] ?? RETAILER_NOT_SURE,
+    purchaseWindow: 'past_month',
+  };
+  const noop = () => {};
+  const origin =
+    source === null ? 'the supported-jurisdiction registry' : 'a real recall’s own choices';
+
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        The questionnaire’s steps and states, drawn by the real step components. Choices come from{' '}
+        {origin}; each caption says which. Rows are live; Next, Back, Submit and Done are wired to
+        nothing, and no shopper-report state is read or written here. A recall with no official
+        geography is ineligible for reports altogether, so it has no questionnaire to show — the
+        screen’s own unavailable state stands for it.
+      </Text>
+      <GallerySample caption="Single-state confirmation — the notice’s first state alone">
+        <LiveQuestion section={singleState} stepKey="state" />
+      </GallerySample>
+      <GallerySample
+        caption={`Multi-state picker — ${
+          states.length > 1 ? 'the notice’s own states' : 'four registry states, unsearched'
+        }`}>
+        <LiveQuestion section={multiState} stepKey="state" />
+      </GallerySample>
+      <GallerySample caption="Nationwide — every supported jurisdiction behind the search field">
+        <LiveQuestion section={nationwide} stepKey="state" />
+      </GallerySample>
+      <GallerySample caption="Unknown geography — ineligible: the questionnaire is never reached, and a deep link lands here">
+        <StateMessage {...REPORT_UNAVAILABLE} />
+      </GallerySample>
+      {retailers.length > 0 ? (
+        <GallerySample caption="Retailer choices — the notice’s own canonical stores, plus not sure">
+          <LiveQuestion section={withRetailers} stepKey="retailer" />
+        </GallerySample>
+      ) : (
+        <Text variant="body-small" color="text/secondary">
+          No eligible recall in the live feed names a retailer, so the store question cannot be
+          shown here.
+        </Text>
+      )}
+      <GallerySample caption="Purchase timeframe — the five closed buckets, one chosen">
+        <LiveQuestion
+          section={withRetailers}
+          stepKey="window"
+          initial={{ ...EMPTY_ANSWERS, purchaseWindow: 'past_month' }}
+        />
+      </GallerySample>
+      <GallerySample caption="Review and disclosure — a first submission">
+        <ReviewStep
+          section={withRetailers}
+          answers={complete}
+          canSubmit
+          busy={null}
+          failure={null}
+          onSubmit={noop}
+          onBack={noop}
+          onOpenPrivacy={noop}
+          mode="submit"
+        />
+      </GallerySample>
+      <GallerySample caption="Review while editing — the update action and the removal control">
+        <ReviewStep
+          section={withRetailers}
+          answers={complete}
+          canSubmit
+          busy={null}
+          failure={null}
+          onSubmit={noop}
+          onBack={noop}
+          onOpenPrivacy={noop}
+          mode="update"
+          onRemove={noop}
+        />
+      </GallerySample>
+      <GallerySample caption="Recoverable error — the submission was refused; answers stay">
+        <ReviewStep
+          section={withRetailers}
+          answers={complete}
+          canSubmit
+          busy={null}
+          failure={SUBMIT_FAILURE}
+          onSubmit={noop}
+          onBack={noop}
+          onOpenPrivacy={noop}
+          mode="submit"
+        />
+      </GallerySample>
+      <GallerySample caption="Success">
+        <OutcomeStep title={SUCCESS_TITLE} body={SUCCESS_BODY} onDone={noop} />
+      </GallerySample>
+      <GallerySample caption="Reporting paused with an existing report — removal only">
+        <PausedStep busy={false} failure={null} onRemove={noop} />
+      </GallerySample>
+      <GallerySample caption="Reporting paused — a refused removal">
+        <PausedStep busy={false} failure={REMOVE_FAILURE} onRemove={noop} />
+      </GallerySample>
+    </Surface>
+  );
+}
+
+function GallerySample({ caption, children }: { caption: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.feedCase}>
+      <Text variant="caption" color="text/secondary">
+        {caption}
+      </Text>
+      {children}
+    </View>
+  );
+}
+
+/** One question step holding its own answers, so a row can be chosen and inspected. */
+function LiveQuestion({
+  section,
+  stepKey,
+  initial = EMPTY_ANSWERS,
+}: {
+  section: QuestionnaireChoices;
+  stepKey: QuestionKey;
+  initial?: QuestionnaireAnswers;
+}) {
+  const [answers, setAnswers] = useState<QuestionnaireAnswers>(initial);
+  const steps = questionnaireSteps(section);
+  const outcome = questionnaireOutcome(answers, section);
+  return (
+    <QuestionStep
+      section={section}
+      stepKey={stepKey}
+      stepIndex={Math.max(0, steps.indexOf(stepKey))}
+      stepCount={steps.length}
+      answers={answers}
+      canAdvance={outcome.kind !== 'incomplete' || outcome.next !== stepKey}
+      onAnswer={(patch) => setAnswers((prior) => ({ ...prior, ...patch }))}
+      onBack={steps.indexOf(stepKey) > 0 ? () => {} : null}
+      onNext={() => {}}
+    />
   );
 }
 

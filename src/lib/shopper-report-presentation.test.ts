@@ -21,22 +21,34 @@ import {
   answersFromReport,
   communityReportsView,
   EMPTY_ANSWERS,
+  filterStateOptions,
   isAnswered,
   isSingleStateCase,
+  isStateListSearchable,
   PRIVACY_DOCUMENT_SLUG,
+  PRIVACY_LINK_HINT,
   PRIVACY_LINK_LABEL,
   purchaseWindowLabel,
   purchaseWindowOptions,
   questionnaireOutcome,
   questionnaireSteps,
+  questionProgressLabel,
   questionPrompt,
   REPORT_ADD_ACTION,
   REPORT_EDIT_ACTION,
   REPORT_ENTRY_QUESTION,
+  REPORT_LOADING,
+  REPORT_UNAVAILABLE,
   RETAILER_NOT_SURE,
   retailerOptions,
+  REVIEW_TITLE,
+  reviewRows,
   STATE_CONFIRM_OPTIONS,
   STATE_QUESTION_PROMPT,
+  STATE_SEARCH_HINT,
+  STATE_SEARCH_LABEL,
+  STATE_SEARCH_MIN_OPTIONS,
+  STATE_SEARCH_NO_MATCH,
   stateConfirmPrompt,
   stateOptions,
   SUBMISSION_DISCLOSURE,
@@ -351,6 +363,123 @@ test('every question has words, and answered-ness is explicit', () => {
   // A single-state decline counts as answered (it is a complete outcome),
   // even though no state was ever picked.
   assert.equal(isAnswered('state', { ...EMPTY_ANSWERS, declined: true }), true);
+});
+
+// ── P2B3: progress, the review rows, the stateless section, the search ──────
+
+test('progress is stated in words, from the contract, per rendered step', () => {
+  assert.equal(questionProgressLabel(0, 3), 'Question 1 of 3');
+  assert.equal(questionProgressLabel(1, 2), 'Question 2 of 2');
+  assert.equal(REVIEW_TITLE, 'Review your report');
+});
+
+test('the review lists exactly the questions asked, with the answers given', () => {
+  const full: QuestionnaireAnswers = {
+    declined: false,
+    stateCode: 'NV',
+    retailer: RETAILER_NOT_SURE,
+    purchaseWindow: 'longer_ago',
+  };
+  assert.deepEqual(reviewRows(full, MULTI), [
+    { key: 'state', prompt: STATE_QUESTION_PROMPT, answer: 'Nevada' },
+    { key: 'retailer', prompt: 'Which store did you find it at?', answer: 'I’m not sure' },
+    { key: 'window', prompt: 'When did you buy it?', answer: 'Longer ago' },
+  ]);
+  // A recall naming no store has no store row; a single-state recall's row
+  // carries the confirm question it actually asked.
+  assert.deepEqual(
+    reviewRows({ ...full, stateCode: 'CA', retailer: null }, SINGLE).map((row) => [
+      row.key,
+      row.prompt,
+    ]),
+    [
+      ['state', 'Did you find this product in California?'],
+      ['window', 'When did you buy it?'],
+    ],
+  );
+  // An unanswered question is omitted, never shown blank.
+  assert.deepEqual(
+    reviewRows({ ...EMPTY_ANSWERS, stateCode: 'CA' }, MULTI).map((row) => row.key),
+    ['state'],
+  );
+});
+
+test('the state question is always asked, and no draft is possible without a jurisdiction', () => {
+  // Unknown geography is INELIGIBLE (founder decision, 2026-09-14): a
+  // timeframe-only report says nothing about where shoppers found the
+  // product, so such a recall takes no reports and reaches no
+  // questionnaire. The contract therefore models no stateless flow — the
+  // state question is unconditional, and it is first.
+  for (const choices of [MULTI, SINGLE, SINGLE_WITH_RETAILERS]) {
+    assert.equal(questionnaireSteps(choices)[0], 'state');
+  }
+  const stateless: QuestionnaireChoices = { allowedStateCodes: [], retailerChoices: [] };
+  const withStores: QuestionnaireChoices = {
+    allowedStateCodes: [],
+    retailerChoices: ['Costco Wholesale'],
+  };
+  assert.deepEqual(questionnaireSteps(stateless), ['state', 'window']);
+  assert.deepEqual(questionnaireSteps(withStores), ['state', 'retailer', 'window']);
+  assert.equal(isSingleStateCase(stateless), false);
+
+  // Answering everything else still cannot produce a draft: the flow reports
+  // the state question as the outstanding one rather than inventing a
+  // jurisdiction the server would refuse.
+  const answered = {
+    ...EMPTY_ANSWERS,
+    retailer: RETAILER_NOT_SURE,
+    purchaseWindow: 'past_week' as const,
+  };
+  for (const choices of [MULTI, SINGLE, stateless, withStores]) {
+    assert.deepEqual(questionnaireOutcome(answered, choices), {
+      kind: 'incomplete',
+      next: 'state',
+    });
+  }
+  // With a state, the same answers are the ordinary ready draft.
+  const ready = questionnaireOutcome({ ...answered, stateCode: 'CA' }, SINGLE);
+  assert.equal(ready.kind, 'ready');
+  assert.equal(ready.kind === 'ready' && ready.draft.stateCode, 'CA');
+  // Review rows follow the same rule: state first, and only what was asked.
+  assert.deepEqual(
+    reviewRows({ ...answered, stateCode: 'CA' }, SINGLE).map((row) => row.key),
+    ['state', 'window'],
+  );
+});
+
+test('the state list is searchable only when long, filtered by name, and never an answer', () => {
+  assert.equal(STATE_SEARCH_MIN_OPTIONS, 8);
+  assert.equal(isStateListSearchable(stateOptions(MULTI.allowedStateCodes)), false);
+  const eight = stateOptions(['CA', 'NV', 'OR', 'WA', 'ID', 'UT', 'AZ', 'CO']);
+  assert.equal(isStateListSearchable(eight), false);
+  const nine = stateOptions(['CA', 'NV', 'OR', 'WA', 'ID', 'UT', 'AZ', 'CO', 'NM']);
+  assert.equal(isStateListSearchable(nine), true);
+  assert.deepEqual(filterStateOptions(nine, ''), nine);
+  assert.deepEqual(filterStateOptions(nine, '  '), nine);
+  assert.deepEqual(
+    filterStateOptions(nine, 'new').map((option) => option.label),
+    ['New Mexico'],
+  );
+  assert.deepEqual(
+    filterStateOptions(nine, 'O').map((option) => option.label),
+    ['Arizona', 'California', 'Colorado', 'Idaho', 'New Mexico', 'Oregon', 'Washington'],
+  );
+  assert.deepEqual(filterStateOptions(nine, 'zzz'), []);
+  // The field has a name, an instruction, and an honest empty message.
+  assert.equal(STATE_SEARCH_LABEL, 'Search states');
+  assert.match(STATE_SEARCH_HINT, /Filters the list/);
+  assert.match(STATE_SEARCH_HINT, /Choose a state from the list/);
+  assert.equal(STATE_SEARCH_NO_MATCH, 'No state matches that search.');
+});
+
+test('the screen’s own states carry honest copy that leaks no refusal', () => {
+  assert.equal(REPORT_LOADING.title, 'Loading…');
+  assert.equal(REPORT_UNAVAILABLE.body, 'Shopper reports are not available for this recall.');
+  assert.doesNotMatch(
+    REPORT_UNAVAILABLE.body,
+    /closed|retracted|disabled|ineligible|server|switched off/i,
+  );
+  assert.equal(PRIVACY_LINK_HINT, 'Opens Privacy & Data Controls');
 });
 
 // ── The point-of-submission disclosure ──────────────────────────────────────

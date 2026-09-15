@@ -47,6 +47,7 @@ import {
   NAME_SHORT_MAX,
   PRESENTATION_REQUIREMENTS,
   previewScenario,
+  PreviewSubmissionRefused,
   previewShopperState,
   rankCandidates,
   recordPreviewSubmission,
@@ -328,8 +329,14 @@ test('every required scenario exists, and each names its destination', () => {
       'detail_below_threshold_own_report',
       'detail_reported_own_report',
       'questionnaire_new',
-      'questionnaire_edit',
+      // P2B3: the questionnaire's own shapes and endings.
+      'questionnaire_single_state',
+      'questionnaire_multi_state',
+      'questionnaire_state_search',
       'questionnaire_no_retailer',
+      'questionnaire_edit',
+      'questionnaire_submit_refused',
+      'questionnaire_paused_own_report',
       'detail_ineligible',
       'detail_production_gated',
       'jurisdictions_complete',
@@ -375,6 +382,71 @@ test('every required scenario exists, and each names its destination', () => {
       assert.equal(scenario.destination, 'detail');
       assert.equal(scenario.simulation, null);
     }
+  }
+});
+
+test('P2B3: a scenario can pause the feature or refuse a submission, and nothing else', () => {
+  // Pausing answers `unavailable` — what the server says with the gate off —
+  // while the owner's report is still readable, so the questionnaire's
+  // reduced removal-only screen renders. It switches the simulated feature
+  // OFF; no scenario can switch anything on that the server has not.
+  inDevelopment(() => {
+    enterDesignPreview({ ...ENTRY, scenarioId: 'questionnaire_paused_own_report' });
+    const state = previewShopperState(CASE);
+    assert.deepEqual(state?.summary, { status: 'unavailable' });
+    assert.notEqual(state?.report, null);
+    assert.equal(recordPreviewWithdrawal(CASE), true);
+    assert.equal(previewShopperState(CASE)?.report, null);
+  });
+  // A refused submission throws the way the server refuses before writing:
+  // synchronously inside the store's call, changing nothing at all.
+  inDevelopment(() => {
+    enterDesignPreview({ ...ENTRY, scenarioId: 'questionnaire_submit_refused' });
+    assert.equal(previewShopperState(CASE)?.report, null);
+    assert.throws(() => recordPreviewSubmission(CASE, DRAFT, NOW), PreviewSubmissionRefused);
+    assert.equal(previewShopperState(CASE)?.report, null);
+    assert.deepEqual(previewShopperState(CASE)?.summary, { status: 'below_threshold' });
+  });
+  // Every other scenario is available and accepts submissions, exactly as before.
+  for (const scenario of DESIGN_PREVIEW_SCENARIOS) {
+    if (scenario.simulation === null) continue;
+    const paused = scenario.id === 'questionnaire_paused_own_report';
+    const refused = scenario.id === 'questionnaire_submit_refused';
+    assert.equal(scenario.simulation.featureAvailable, !paused, scenario.id);
+    assert.equal(scenario.simulation.submissionRefused, refused, scenario.id);
+    // A paused scenario names an owner, so the reduced screen has a report to remove.
+    if (paused) assert.equal(scenario.simulation.ownReport, true);
+  }
+  // Both new scenarios open the real questionnaire, never a copy.
+  for (const id of ['questionnaire_paused_own_report', 'questionnaire_submit_refused'] as const) {
+    assert.equal(previewScenario(id)?.destination, 'questionnaire');
+  }
+});
+
+test('P2B3: the state question’s three shapes are decided from the feed row', () => {
+  const single = screenCandidate(noRetailer);
+  const multi = screenCandidate(multiState);
+  const nationwide = screenCandidate({
+    ...multiState,
+    id: 'n',
+    geography: { scope: 'nationwide', states: [], confidence: 'stated', sourceText: null },
+  });
+  assert.equal(meetsRequirement(single, 'reportable_single_state'), true);
+  assert.equal(meetsRequirement(multi, 'reportable_single_state'), false);
+  assert.equal(meetsRequirement(multi, 'reportable_multi_state'), true);
+  assert.equal(meetsRequirement(single, 'reportable_multi_state'), false);
+  assert.equal(meetsRequirement(nationwide, 'reportable_multi_state'), false);
+  assert.equal(meetsRequirement(nationwide, 'reportable_nationwide'), true);
+  assert.equal(meetsRequirement(multi, 'reportable_nationwide'), false);
+  // An ineligible recall satisfies none of them.
+  for (const requirement of [
+    'reportable_single_state',
+    'reportable_multi_state',
+    'reportable_nationwide',
+  ] as const) {
+    assert.equal(meetsRequirement(screenCandidate(unknownGeography), requirement), false);
+    assert.equal(meetsRequirement(screenCandidate(closed), requirement), false);
+    assert.ok(!PRESENTATION_REQUIREMENTS.includes(requirement), `${requirement} needs no probe`);
   }
 });
 

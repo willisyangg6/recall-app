@@ -12,6 +12,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { STATE_SEARCH_LABEL } from '@/lib/shopper-report-presentation';
+
 // P2A moved Home into the (tabs) route group (the URL is still `/`) and
 // extracted its card into a shared component so Saved lists recalls through
 // the SAME one. HOME is both files: every positive pin still finds its text,
@@ -592,7 +594,27 @@ const COMMUNITY = readFileSync(
   join(__dirname, '..', 'components', 'community-reports-section.tsx'),
   'utf8',
 );
-const QUESTIONNAIRE = readFileSync(join(__dirname, '..', 'app', 'report', '[id].tsx'), 'utf8');
+// P2B3 split the questionnaire into the route (the flow, the load, the two
+// mutations) and its network-free step components. QUESTIONNAIRE is both
+// files, the way HOME is: every positive pin still finds its text, and every
+// "the questionnaire must never …" guard covers the steps too.
+const QUESTIONNAIRE_SCREEN = readFileSync(
+  join(__dirname, '..', 'app', 'report', '[id].tsx'),
+  'utf8',
+);
+const QUESTIONNAIRE_STEPS = readFileSync(
+  join(__dirname, '..', 'components', 'report-questionnaire.tsx'),
+  'utf8',
+);
+const QUESTIONNAIRE = [QUESTIONNAIRE_SCREEN, QUESTIONNAIRE_STEPS].join('\n');
+
+/** The body of one exported component in the step module. */
+function stepComponent(name: string): string {
+  const from = QUESTIONNAIRE_STEPS.indexOf(`export function ${name}(`);
+  assert.ok(from !== -1, `${name} is missing from the step module`);
+  const next = QUESTIONNAIRE_STEPS.indexOf('\nexport ', from + 1);
+  return QUESTIONNAIRE_STEPS.slice(from, next === -1 ? QUESTIONNAIRE_STEPS.length : next);
+}
 
 test('P1D: the community block nests inside Where it was sold, gated by the model', () => {
   // It renders UNDER the official statement — inside that section's own
@@ -678,9 +700,9 @@ test('P1D: there is no generic found-it step — state is always first and asked
     assert.ok(!QUESTIONNAIRE.includes(retired), `the retired found-it step returned: ${retired}`);
   }
   // The single-state confirm question is built from the contract's own
-  // function, never composed on the screen.
+  // function, never composed on the screen or in a step.
   assert.match(QUESTIONNAIRE, /isSingleStateCase\(section\)/);
-  assert.match(QUESTIONNAIRE, /questionPrompt\(key, section\)/);
+  assert.match(QUESTIONNAIRE, /questionPrompt\(stepKey, section\)/);
   assert.match(QUESTIONNAIRE, /STATE_CONFIRM_OPTIONS/);
   // No "I'm not sure" option exists for the state question at all — the
   // confirm is strictly Yes/No (pinned at the contract level:
@@ -707,12 +729,19 @@ test('P1D: the paused screen offers only removal while the feature is off with a
   // state must never expose the multi-step form or a submit control.
   assert.match(QUESTIONNAIRE, /kind: 'paused'/);
   assert.match(QUESTIONNAIRE, /REPORT_PAUSED_MESSAGE/);
-  const paused = QUESTIONNAIRE.slice(
-    QUESTIONNAIRE.indexOf("screen.kind === 'paused'"),
-    QUESTIONNAIRE.indexOf("screen.kind === 'declined'"),
+  // The route's paused branch renders the paused step and nothing else …
+  const pausedBranch = QUESTIONNAIRE_SCREEN.slice(
+    QUESTIONNAIRE_SCREEN.indexOf("screen.kind === 'paused'"),
+    QUESTIONNAIRE_SCREEN.indexOf("screen.kind === 'declined'"),
   );
-  assert.ok(!paused.includes('SUBMIT_ACTION'), 'the paused screen offers to submit');
-  assert.ok(!paused.includes('StateQuestion'), 'the paused screen renders the form');
+  assert.match(pausedBranch, /<PausedStep\b/);
+  for (const form of ['QuestionStep', 'ReviewStep', 'SUBMIT_ACTION']) {
+    assert.ok(!pausedBranch.includes(form), `the paused branch renders ${form}`);
+  }
+  // … and the paused step itself carries the removal control and no form.
+  const paused = stepComponent('PausedStep');
+  assert.ok(!paused.includes('SUBMIT_ACTION'), 'the paused step offers to submit');
+  assert.ok(!paused.includes('ChoiceRow'), 'the paused step renders a question');
   assert.match(paused, /REPORT_REMOVE_ACTION/);
 });
 
@@ -723,8 +752,12 @@ test('P1D: the questionnaire offers only model-supplied choices and stores no fr
   assert.match(QUESTIONNAIRE, /stateOptions\(section\.allowedStateCodes\)/);
   assert.match(QUESTIONNAIRE, /retailerOptions\(section\.retailerChoices\)/);
   assert.match(QUESTIONNAIRE, /purchaseWindowOptions\(\)/);
-  assert.equal(QUESTIONNAIRE.split('<TextInput').length - 1, 1, 'a second text field appeared');
-  assert.match(QUESTIONNAIRE, /accessibilityLabel="Search states"/);
+  // The one text field is the shared search bar (P2B3), and only the state
+  // picker mounts it; no raw text input exists anywhere in the flow.
+  assert.equal(QUESTIONNAIRE.split('<TextInput').length - 1, 0, 'a raw text field appeared');
+  assert.equal(QUESTIONNAIRE.split('<SearchBar').length - 1, 1, 'a second text field appeared');
+  assert.match(QUESTIONNAIRE, /accessibilityLabel=\{STATE_SEARCH_LABEL\}/);
+  assert.equal(STATE_SEARCH_LABEL, 'Search states');
   // No field exists for anything the schema cannot store.
   for (const forbidden of [
     'symptom',
@@ -748,10 +781,14 @@ test('P1D: the one-line point-of-submission disclosure renders with the submit c
   // a link a shopper would have to go find, and it is ONE line (the four-
   // line predecessor is retired: the full explanation now lives only in
   // Privacy & Data Controls).
-  const review = QUESTIONNAIRE.slice(
-    QUESTIONNAIRE.indexOf("screen.kind === 'review'"),
-    QUESTIONNAIRE.indexOf('const key = steps[screen.index]'),
+  // The route's review branch mounts the review step; the step renders the
+  // disclosure above its submit control.
+  const reviewBranch = QUESTIONNAIRE_SCREEN.slice(
+    QUESTIONNAIRE_SCREEN.indexOf("screen.kind === 'review'"),
+    QUESTIONNAIRE_SCREEN.indexOf('const key = steps[screen.index]'),
   );
+  assert.equal((reviewBranch.match(/<ReviewStep\b/g) ?? []).length, 2);
+  const review = stepComponent('ReviewStep');
   assert.ok(review.includes('SUBMISSION_DISCLOSURE'), 'the disclosure is not rendered');
   assert.ok(
     review.indexOf('SUBMISSION_DISCLOSURE') < review.indexOf('SUBMIT_ACTION'),

@@ -42,20 +42,26 @@ appear in them.
 
 ## 3. What it provides
 
-The hub lists nine scenarios. Each one arms a simulated session and pushes the
-real Recall Detail or the real questionnaire.
+The hub’s first fourteen scenarios cover the community block and the
+questionnaire. Each one arms a simulated session and pushes the real Recall
+Detail or the real questionnaire.
 
-| #   | Scenario                                               | What you should see                                                                                                                                                                                           |
-| --- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Detail · below threshold, no personal report           | `Did you find this product here?` then `Add your report`. No count.                                                                                                                                           |
-| 2   | Detail · twelve public reports, no personal report     | `12 shoppers reported finding it here` then `Add your report`.                                                                                                                                                |
-| 3   | Detail · below threshold, personal report exists       | `Edit your report` alone — no count, no invitation.                                                                                                                                                           |
-| 4   | Detail · twelve public reports, personal report exists | `12 shoppers reported finding it here` then `Edit your report`.                                                                                                                                               |
-| 5   | Questionnaire · full new report                        | State first (single-state confirm, or the direct picker for multi-state/nationwide), the store question, purchase time, review with the one-line disclosure and `Learn more.`, Submit, then the success copy. |
-| 6   | Questionnaire · edit and removal                       | Every answer pre-filled, `Update report`, `Remove my report`, and the native removal confirmation.                                                                                                            |
-| 7   | Questionnaire · recall naming no retailer              | The store question is absent entirely.                                                                                                                                                                        |
-| 8   | Detail · ineligible recall                             | No community block at all — no heading, no control, no spacing.                                                                                                                                               |
-| 9   | Detail · the real production gate                      | An eligible recall, the real server answering, the gate off: nothing renders.                                                                                                                                 |
+| #   | Scenario                                                 | What you should see                                                                                                                                                                                           |
+| --- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Detail · below threshold, no personal report             | `Did you find this product here?` then `Add your report`. No count.                                                                                                                                           |
+| 2   | Detail · twelve public reports, no personal report       | `12 shoppers reported finding it here` then `Add your report`.                                                                                                                                                |
+| 3   | Detail · below threshold, personal report exists         | `Edit your report` alone — no count, no invitation.                                                                                                                                                           |
+| 4   | Detail · twelve public reports, personal report exists   | `12 shoppers reported finding it here` then `Edit your report`.                                                                                                                                               |
+| 5   | Questionnaire · full new report                          | State first (single-state confirm, or the direct picker for multi-state/nationwide), the store question, purchase time, review with the one-line disclosure and `Learn more.`, Submit, then the success copy. |
+| 6   | Questionnaire · single-state confirmation (P2B3)         | The first question is the yes/no confirm for the one official state; `No` ends the flow with nothing stored.                                                                                                  |
+| 7   | Questionnaire · multi-state picker (P2B3)                | The direct state question over exactly the notice’s own jurisdictions, one radio row each, no search field.                                                                                                   |
+| 8   | Questionnaire · nationwide, searchable list (P2B3)       | Every supported jurisdiction behind the search field; typing filters the rows, an empty match says so, and the field is never an answer.                                                                      |
+| 9   | Questionnaire · recall naming no retailer                | The store question is absent entirely.                                                                                                                                                                        |
+| 10  | Questionnaire · edit and removal                         | Every answer pre-filled, `Update report`, `Remove my report` beneath it, and the native removal confirmation; Cancel changes nothing.                                                                         |
+| 11  | Questionnaire · recoverable submission error (P2B3)      | Submitting is refused the way the server refuses before writing: the failure renders beneath the action, every answer stays, Back still works.                                                                |
+| 12  | Questionnaire · reporting paused, existing report (P2B3) | The summary answers `unavailable` while this device holds a report: no form, no submit — the paused message and the removal control alone.                                                                    |
+| 13  | Detail · ineligible recall                               | No community block at all — no heading, no control, no spacing.                                                                                                                                               |
+| 14  | Detail · the real production gate                        | An eligible recall, the real server answering, the gate off: nothing renders.                                                                                                                                 |
 
 ### Presentation states
 
@@ -66,14 +72,14 @@ before offering it (see §4).
 
 | #   | Scenario                                               | What you should see                                                                                                                                                                 |
 | --- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 10  | Detail · five jurisdictions or fewer                   | The whole list. No control at all.                                                                                                                                                  |
-| 11  | Detail · more than five jurisdictions                  | The first five in canonical order, then `See all (N)`; expanding grows the list in place and the action becomes `Show less`. The community block stays beneath the whole statement. |
-| 12  | Detail · one affected product                          | The single row, with no control beside the Affected Products heading.                                                                                                               |
-| 13  | Detail · several affected products                     | Exactly the first row in source order, `See all (N)` beside the heading, every row after expanding.                                                                                 |
-| 14  | Detail · an UNPAIRED cell holding exactly two values   | Both values inline, no cell control.                                                                                                                                                |
-| 15  | Detail · an UNPAIRED cell holding more than two values | The first two values plus that cell's own `See all (N)`; expanding affects only that field.                                                                                         |
-| 16  | Detail · two identifier pairs                          | A code column and its date column aligned line for line, two complete pairs, and no control at all.                                                                                 |
-| 17  | Detail · several identifier pairs                      | Two complete pairs aligned across both columns behind ONE `See all (N)`; tapping reveals every remaining pair on both sides together, still aligned. Neither column can move alone. |
+| 15  | Detail · five jurisdictions or fewer                   | The whole list. No control at all.                                                                                                                                                  |
+| 16  | Detail · more than five jurisdictions                  | The first five in canonical order, then `See all (N)`; expanding grows the list in place and the action becomes `Show less`. The community block stays beneath the whole statement. |
+| 17  | Detail · one affected product                          | The single row, with no control beside the Affected Products heading.                                                                                                               |
+| 18  | Detail · several affected products                     | Exactly the first row in source order, `See all (N)` beside the heading, every row after expanding.                                                                                 |
+| 19  | Detail · an UNPAIRED cell holding exactly two values   | Both values inline, no cell control.                                                                                                                                                |
+| 20  | Detail · an UNPAIRED cell holding more than two values | The first two values plus that cell's own `See all (N)`; expanding affects only that field.                                                                                         |
+| 21  | Detail · two identifier pairs                          | A code column and its date column aligned line for line, two complete pairs, and no control at all.                                                                                 |
+| 22  | Detail · several identifier pairs                      | Two complete pairs aligned across both columns behind ONE `See all (N)`; tapping reveals every remaining pair on both sides together, still aligned. Neither column can move alone. |
 
 The hub also renders a **design foundation gallery** (P2B0): the type scale,
 three surfaces, and the shared disclosure control, all drawn from the tokens
@@ -109,6 +115,31 @@ the right recall in the live feed:
   controls are live but wired to nothing: they narrow no feed and open no
   sheet, and the loading sample does not announce itself.
 
+### Questionnaire steps and states (P2B3)
+
+A **questionnaire gallery** renders the questionnaire's steps and states one
+under another, drawn by the real step components
+(`src/components/report-questionnaire.tsx` — imported, never copied) so a
+screenshot is of the product's own composition without walking a flow: the
+single-state confirmation, the multi-state picker, the nationwide list behind
+its search field, the unavailable state an unknown-geography recall shows
+(it is ineligible for reports outright, so it has no questionnaire — see
+[recall-shopper-reports.md](recall-shopper-reports.md) §10), the store
+question, the
+timeframe with one bucket chosen, review with the disclosure as a first
+submission and as an update with the removal control, the recoverable
+submission error, success, and the paused state with and without a refused
+removal. The choices are a real eligible recall's own jurisdictions and the
+retailers its notice names, narrowed or widened only to give each step its
+shape (one state for the confirm, the supported-jurisdiction registry for the
+searchable list); each caption
+says which, and no retailer is ever invented — with no eligible recall naming
+one, the store sample says so instead. Rows are live so the chosen state can
+be inspected; Next, Back, Submit and Done are wired to nothing, and the
+gallery reads and writes no shopper-report state. The flows themselves —
+submit, edit, remove, refuse, pause — are walked on the real screen through
+scenarios 5–12.
+
 Loading, empty and error states on the Feed itself remain reproducible the
 ordinary way — launch, a search that matches nothing, and a backend that is
 unreachable — and pull-to-refresh, scrolling and the sheets are inspected on
@@ -117,7 +148,7 @@ the Feed, not here.
 ### Detail scenarios (P2B2)
 
 Twenty-two further scenarios open the **real** Recall Detail on a real
-current recall chosen for the shape each needs. As with rows 10–17, none of
+current recall chosen for the shape each needs. As with rows 15–22, none of
 them simulates anything: the hub proves each shape from the real Detail model
 (or, for nationwide and the risk tiers, from the same projection fields the
 model reads) before offering it, and says "No suitable current recall" rather
@@ -127,17 +158,17 @@ Detail`.
 
 | #     | Scenario                                        | What you should see                                                                                                                                                               |
 | ----- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 18    | Detail · header with a product image            | Risk label, date and save control; name, brand and official link beside the hero tile.                                                                                            |
-| 19    | Detail · header without a product image         | No tile and no placeholder: the identity takes the whole row.                                                                                                                     |
-| 20    | Detail · a short product name (≤ 24 characters) | One line beside the hero.                                                                                                                                                         |
-| 21    | Detail · a long product name (≥ 56 characters)  | Wraps across several lines beside the hero; never truncated.                                                                                                                      |
-| 22    | Detail · nationwide distribution                | One sentence after the pin, no list, no control.                                                                                                                                  |
-| 23–29 | Detail · Health Risk from each reviewed guide   | One row per guide (botulism, Listeria, E. coli/STEC, undeclared allergen, Salmonella, hepatitis A, Cyclospora): the risk statement, `COMMON SYMPTOMS`, and the `Learn more` link. |
-| 30    | Detail · Health Risk with no reviewed guide     | The risk-only sentence alone.                                                                                                                                                     |
-| 31    | Detail · no Health Risk section                 | Where It Was Sold followed directly by Affected Products.                                                                                                                         |
-| 32    | Detail · a complete identifier/date group       | Every code dated; no blank line.                                                                                                                                                  |
-| 33    | Detail · an incomplete identifier/date group    | An undated code keeps a blank line in the date column.                                                                                                                            |
-| 34–40 | Detail · one recall per risk tier               | CRITICAL, VERY HIGH, HIGH, MODERATE, LOW, PENDING and UNKNOWN (a Public Health Alert, beside its notice label).                                                                   |
+| 23    | Detail · header with a product image            | Risk label, date and save control; name, brand and official link beside the hero tile.                                                                                            |
+| 24    | Detail · header without a product image         | No tile and no placeholder: the identity takes the whole row.                                                                                                                     |
+| 25    | Detail · a short product name (≤ 24 characters) | One line beside the hero.                                                                                                                                                         |
+| 26    | Detail · a long product name (≥ 56 characters)  | Wraps across several lines beside the hero; never truncated.                                                                                                                      |
+| 27    | Detail · nationwide distribution                | One sentence after the pin, no list, no control.                                                                                                                                  |
+| 28–34 | Detail · Health Risk from each reviewed guide   | One row per guide (botulism, Listeria, E. coli/STEC, undeclared allergen, Salmonella, hepatitis A, Cyclospora): the risk statement, `COMMON SYMPTOMS`, and the `Learn more` link. |
+| 35    | Detail · Health Risk with no reviewed guide     | The risk-only sentence alone.                                                                                                                                                     |
+| 36    | Detail · no Health Risk section                 | Where It Was Sold followed directly by Affected Products.                                                                                                                         |
+| 37    | Detail · a complete identifier/date group       | Every code dated; no blank line.                                                                                                                                                  |
+| 38    | Detail · an incomplete identifier/date group    | An undated code keeps a blank line in the date column.                                                                                                                            |
+| 39–45 | Detail · one recall per risk tier               | CRITICAL, VERY HIGH, HIGH, MODERATE, LOW, PENDING and UNKNOWN (a Public Health Alert, beside its notice label).                                                                   |
 
 Whether a recall carries a guide is decided by the real guide pipeline
 (`selectHazardGuidance` over `interpretReason`, on the fetched projection —
@@ -152,7 +183,7 @@ loading, not-found and load-failure messages with their real copy from
 `src/lib/detail-copy.ts`, and the Information Callout in both tones on
 labelled sample sentences.
 
-Scenarios 8 and 9 are deliberately **not simulated**. They arm a session that
+Scenarios 13 and 14 are deliberately **not simulated**. They arm a session that
 diverts nothing, so those screens read the live server exactly as they do
 outside the preview — which is the only way they can prove anything.
 
@@ -168,12 +199,13 @@ stores a case id and nothing else about the notice.
 
 **Simulated — only these four, and only inside an entered session:**
 
-| Value                                   | How it is simulated                                                                                                                                                                                                          |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The public report count                 | Either the server's indistinguishable below-threshold answer, or the disclosed count `12`. Never a sub-threshold number — the server discloses none, and neither may a preview of it.                                        |
-| Whether this installation has a report  | A scenario-configured yes or no.                                                                                                                                                                                             |
-| This installation's answers             | Built from the case's **own** allowed choices: the first jurisdiction the notice lists, the first retailer it names (or none), and one purchase-time bucket (`past_month`). Never a state or store the notice does not list. |
-| Feature availability inside the session | The summary is answered locally instead of by the server. This does not switch anything on; see §6.                                                                                                                          |
+| Value                                   | How it is simulated                                                                                                                                                                                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The public report count                 | Either the server's indistinguishable below-threshold answer, or the disclosed count `12`. Never a sub-threshold number — the server discloses none, and neither may a preview of it.                                                                                                       |
+| Whether this installation has a report  | A scenario-configured yes or no.                                                                                                                                                                                                                                                            |
+| This installation's answers             | Built from the case's **own** allowed choices: the first jurisdiction the notice lists, the first retailer it names (or none), and one purchase-time bucket (`past_month`). Never a state or store the notice does not list.                                                                |
+| Feature availability inside the session | The summary is answered locally instead of by the server — as available, or (P2B3, one scenario) as `unavailable`, the server's answer while the gate is off, so the paused state can be inspected. This can only switch the simulated feature off; it does not switch anything on; see §6. |
+| Whether a submission is accepted        | Accepted, or (P2B3, one scenario) refused the way the server refuses before writing — synchronously, changing nothing — so the recoverable failure can be inspected.                                                                                                                        |
 
 The presentation scenarios simulate **nothing at all** — jurisdiction lists,
 product rows and cell values are the live notice's own, and the disclosure

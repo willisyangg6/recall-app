@@ -20,9 +20,10 @@
  *
  * SIMULATED, only inside an explicitly entered session: the four values the
  * shopper-report boundary would otherwise ask the server for — the public
- * thresholded count, whether THIS installation has a report, what that
- * report says, and whether a submission or withdrawal succeeded. Nothing
- * else.
+ * thresholded count (or, from P2B3, the server's `unavailable` answer),
+ * whether THIS installation has a report, what that report says, and
+ * whether a submission or withdrawal succeeded (a scenario may refuse one,
+ * the way the server refuses before writing). Nothing else.
  *
  * ## Why the boundary is here
  *
@@ -87,8 +88,13 @@ export type DesignPreviewScenarioId =
   | 'detail_below_threshold_own_report'
   | 'detail_reported_own_report'
   | 'questionnaire_new'
-  | 'questionnaire_edit'
+  | 'questionnaire_single_state'
+  | 'questionnaire_multi_state'
+  | 'questionnaire_state_search'
   | 'questionnaire_no_retailer'
+  | 'questionnaire_edit'
+  | 'questionnaire_submit_refused'
+  | 'questionnaire_paused_own_report'
   | 'detail_ineligible'
   | 'detail_production_gated'
   // Presentation states. None of these simulates anything: they are real
@@ -143,6 +149,13 @@ export type PreviewCaseRequirement =
   | 'reportable_without_retailers'
   /** Ineligible (unknown or unusable geography): no community entry point at all. */
   | 'not_reportable'
+  // P2B3 — the questionnaire's own shapes, decided from the feed row.
+  /** Eligible and naming exactly one official state: the yes/no confirm. */
+  | 'reportable_single_state'
+  /** Eligible and naming several official states: the direct picker, unsearched. */
+  | 'reportable_multi_state'
+  /** Eligible and nationwide: the picker over every supported jurisdiction, searchable. */
+  | 'reportable_nationwide'
   /** Five jurisdictions or fewer: the whole list renders, with no control. */
   | 'jurisdictions_few'
   /** More than five: the first five render behind a "See all (N)". */
@@ -306,6 +319,26 @@ export interface ScenarioSimulation {
   publicCount: number | null;
   /** Whether this installation already has a report on the case. */
   ownReport: boolean;
+  /**
+   * Whether the simulated summary answers as an available feature. False
+   * answers `unavailable` — what the server says while the gate is off —
+   * so the paused state can be inspected. It can only ever switch the
+   * simulated feature OFF; nothing here switches anything on.
+   */
+  featureAvailable: boolean;
+  /**
+   * Whether a simulated submission is refused, the way the server refuses
+   * before writing anything, so the recoverable failure can be inspected.
+   */
+  submissionRefused: boolean;
+}
+
+/** A simulated refusal: the server said no before writing, and nothing changed. */
+export class PreviewSubmissionRefused extends Error {
+  constructor() {
+    super('Design Preview: the simulated submission was refused before anything was written');
+    this.name = 'PreviewSubmissionRefused';
+  }
 }
 
 /** How the hub groups its scenario list. */
@@ -339,6 +372,9 @@ export const SIMULATED_REPORTED_COUNT = 12;
  */
 export const SIMULATED_PURCHASE_WINDOW: PurchaseWindow = 'past_month';
 
+/** The ordinary simulated session: the feature answers as available and submissions succeed. */
+const AVAILABLE = { featureAvailable: true, submissionRefused: false } as const;
+
 /**
  * Every state worth screenshotting, in the order the hub lists them. The
  * first four are the Detail rendering matrix
@@ -354,7 +390,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
     expectation: 'The invitation question, then Add your report. No count anywhere.',
     requirement: 'reportable_with_retailers',
     destination: 'detail',
-    simulation: { publicCount: null, ownReport: false },
+    simulation: { publicCount: null, ownReport: false, ...AVAILABLE },
   },
   {
     id: 'detail_reported',
@@ -363,7 +399,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
     expectation: 'The disclosed count replaces the question, then Add your report.',
     requirement: 'reportable_with_retailers',
     destination: 'detail',
-    simulation: { publicCount: SIMULATED_REPORTED_COUNT, ownReport: false },
+    simulation: { publicCount: SIMULATED_REPORTED_COUNT, ownReport: false, ...AVAILABLE },
   },
   {
     id: 'detail_below_threshold_own_report',
@@ -372,7 +408,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
     expectation: 'Edit your report alone — no count, no invitation.',
     requirement: 'reportable_with_retailers',
     destination: 'detail',
-    simulation: { publicCount: null, ownReport: true },
+    simulation: { publicCount: null, ownReport: true, ...AVAILABLE },
   },
   {
     id: 'detail_reported_own_report',
@@ -381,7 +417,7 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
     expectation: 'The disclosed count, then Edit your report.',
     requirement: 'reportable_with_retailers',
     destination: 'detail',
-    simulation: { publicCount: SIMULATED_REPORTED_COUNT, ownReport: true },
+    simulation: { publicCount: SIMULATED_REPORTED_COUNT, ownReport: true, ...AVAILABLE },
   },
   {
     id: 'questionnaire_new',
@@ -392,17 +428,40 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
       'purchase time, review with the one-line disclosure, submit, then the success copy.',
     requirement: 'reportable_with_retailers',
     destination: 'questionnaire',
-    simulation: { publicCount: null, ownReport: false },
+    simulation: { publicCount: null, ownReport: false, ...AVAILABLE },
   },
   {
-    id: 'questionnaire_edit',
+    id: 'questionnaire_single_state',
     group: 'questionnaire',
-    title: 'Questionnaire · edit and removal',
+    title: 'Questionnaire · single-state confirmation',
     expectation:
-      'Every answer pre-filled, Update report on review, Remove my report, and the removal confirm.',
-    requirement: 'reportable_with_retailers',
+      'The first question is the yes/no confirm for the one official state. No ends the flow with ' +
+      'nothing stored; Yes continues.',
+    requirement: 'reportable_single_state',
     destination: 'questionnaire',
-    simulation: { publicCount: null, ownReport: true },
+    simulation: { publicCount: null, ownReport: false, ...AVAILABLE },
+  },
+  {
+    id: 'questionnaire_multi_state',
+    group: 'questionnaire',
+    title: 'Questionnaire · multi-state picker',
+    expectation:
+      'The direct state question over exactly the notice’s own jurisdictions, one radio row each, ' +
+      'with no search field.',
+    requirement: 'reportable_multi_state',
+    destination: 'questionnaire',
+    simulation: { publicCount: null, ownReport: false, ...AVAILABLE },
+  },
+  {
+    id: 'questionnaire_state_search',
+    group: 'questionnaire',
+    title: 'Questionnaire · nationwide, searchable state list',
+    expectation:
+      'Every supported jurisdiction behind the search field. Typing filters the list; the field ' +
+      'is never an answer, and an empty match says so.',
+    requirement: 'reportable_nationwide',
+    destination: 'questionnaire',
+    simulation: { publicCount: null, ownReport: false, ...AVAILABLE },
   },
   {
     id: 'questionnaire_no_retailer',
@@ -411,7 +470,50 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
     expectation: 'The store question is absent entirely: state, then purchase time, then review.',
     requirement: 'reportable_without_retailers',
     destination: 'questionnaire',
-    simulation: { publicCount: null, ownReport: false },
+    simulation: { publicCount: null, ownReport: false, ...AVAILABLE },
+  },
+  {
+    id: 'questionnaire_edit',
+    group: 'questionnaire',
+    title: 'Questionnaire · edit and removal',
+    expectation:
+      'Every answer pre-filled, Update report on review, the removal control beneath it, and the ' +
+      'native removal confirm. Cancel changes nothing.',
+    requirement: 'reportable_with_retailers',
+    destination: 'questionnaire',
+    simulation: { publicCount: null, ownReport: true, ...AVAILABLE },
+  },
+  {
+    id: 'questionnaire_submit_refused',
+    group: 'questionnaire',
+    title: 'Questionnaire · recoverable submission error',
+    expectation:
+      'Submitting is refused the way the server refuses before writing: the failure renders ' +
+      'beneath the action, every answer stays, and Back still works.',
+    requirement: 'reportable_with_retailers',
+    destination: 'questionnaire',
+    simulation: {
+      publicCount: null,
+      ownReport: false,
+      featureAvailable: true,
+      submissionRefused: true,
+    },
+  },
+  {
+    id: 'questionnaire_paused_own_report',
+    group: 'questionnaire',
+    title: 'Questionnaire · reporting paused, existing report',
+    expectation:
+      'The summary answers unavailable while this device holds a report: no form, no submit — the ' +
+      'paused message and the removal control alone.',
+    requirement: 'reportable_with_retailers',
+    destination: 'questionnaire',
+    simulation: {
+      publicCount: null,
+      ownReport: true,
+      featureAvailable: false,
+      submissionRefused: false,
+    },
   },
   {
     id: 'detail_ineligible',
@@ -755,6 +857,8 @@ export interface DesignPreviewSession {
 interface InternalSession extends DesignPreviewSession {
   /** The scenario's opening state, so Reset can restore it without re-entering. */
   readonly initial: SimulatedShopperState | null;
+  /** Whether this scenario refuses simulated submissions. */
+  readonly refuseSubmissions: boolean;
 }
 
 /**
@@ -809,6 +913,7 @@ export function enterDesignPreview(input: PreviewEntryInput): DesignPreviewSessi
     caseTitle: input.caseTitle,
     simulated: initial,
     initial,
+    refuseSubmissions: scenario.simulation?.submissionRefused ?? false,
   };
   return session;
 }
@@ -818,8 +923,9 @@ function buildSimulation(
   input: PreviewEntryInput,
 ): SimulatedShopperState {
   return {
-    summary:
-      simulation.publicCount === null
+    summary: !simulation.featureAvailable
+      ? { status: 'unavailable' }
+      : simulation.publicCount === null
         ? { status: 'below_threshold' }
         : { status: 'reported', count: simulation.publicCount },
     report: simulation.ownReport ? simulatedExistingReport(input) : null,
@@ -881,6 +987,10 @@ export function previewShopperState(caseId: string): SimulatedShopperState | nul
  * count is the exact state being screenshotted, and a submission that
  * silently turned "12 shoppers reported finding it here" into thirteen would
  * make the frozen copy unphotographable.
+ *
+ * A scenario that simulates a refusal throws instead — synchronously, inside
+ * the store's call, which the screen's `await` already sits inside a try —
+ * and changes nothing, exactly as the server refuses before writing.
  */
 export function recordPreviewSubmission(
   caseId: string,
@@ -889,6 +999,7 @@ export function recordPreviewSubmission(
 ): MyShopperReport | null {
   const live = liveSession();
   if (live === null || live.caseId !== caseId || live.simulated === null) return null;
+  if (live.refuseSubmissions) throw new PreviewSubmissionRefused();
 
   const prior = live.simulated.report;
   const unchanged =
@@ -1032,9 +1143,24 @@ export function meetsRequirement(
   }
   if (requirement === 'not_reportable') return !screened.reportable;
   if (!screened.reportable) return false;
-  return requirement === 'reportable_with_retailers'
-    ? screened.retailerChoices.length > 0
-    : screened.retailerChoices.length === 0;
+  switch (requirement) {
+    case 'reportable_with_retailers':
+      return screened.retailerChoices.length > 0;
+    case 'reportable_without_retailers':
+      return screened.retailerChoices.length === 0;
+    // P2B3 — the state question's three shapes, from the eligibility
+    // evaluator's own allowed list and the row's own scope.
+    case 'reportable_single_state':
+      return screened.allowedStateCodes.length === 1;
+    case 'reportable_multi_state':
+      return (
+        screened.candidate.geography.scope === 'states' && screened.allowedStateCodes.length > 1
+      );
+    case 'reportable_nationwide':
+      return screened.candidate.geography.scope === 'nationwide';
+    default:
+      return false;
+  }
 }
 
 /**

@@ -23,6 +23,7 @@ import {
   SHOW_LESS_LABEL,
   WHERE_SOLD_INITIAL_STATES,
 } from '@/lib/recall-presentation';
+import { evaluateReportEligibility } from '@/domain/shopper-report';
 import {
   communityReportsView,
   PRIVACY_LINK_LABEL,
@@ -140,7 +141,18 @@ test('the community-report states quote the shipped copy', () => {
   assert.ok(body.includes('three or more reports'));
   assert.ok(body.includes('No personal confirmation sentence appears on Recall Detail'));
   assert.ok(body.includes('Removal is available only inside the edit flow, behind a confirmation'));
-  assert.ok(body.includes('Only the purchase-timeframe answer remains available'));
+  // Unknown geography is INELIGIBLE, not a reduced form (founder decision,
+  // 2026-09-14): the document must say so, and the shared evaluator must
+  // agree, so the contract and the code cannot drift apart.
+  assert.ok(body.includes('ineligible for shopper reports entirely'));
+  assert.ok(body.includes('no questionnaire'));
+  assert.ok(!body.includes('Only the purchase-timeframe answer remains available'));
+  const unusable = evaluateReportEligibility({
+    state: 'active',
+    geography: { scope: 'unknown', states: [], confidence: 'inferred', sourceText: null },
+    retailerNames: ['Costco Wholesale'],
+  });
+  assert.equal(unusable.eligible, false);
   assert.ok(body.includes('The server gate is authoritative'));
   assert.ok(body.includes('the app holds no local feature flag'));
 
@@ -173,7 +185,12 @@ test('the questionnaire order and copy are the shipped ones', () => {
     ['Yes', 'No'],
   );
   assert.ok(body.includes(`\`${STATE_QUESTION_PROMPT}\``));
-  assert.ok(body.includes('Unknown geography: omit the state question'));
+  assert.ok(body.includes('Unknown geography: the recall is ineligible'));
+  // …so the state question is unconditional, in the document and in code.
+  assert.deepEqual(questionnaireSteps({ allowedStateCodes: [], retailerChoices: [] }), [
+    'state',
+    'window',
+  ]);
   assert.ok(body.includes(`\`${SUBMISSION_DISCLOSURE} ${PRIVACY_LINK_LABEL}\``));
   assert.ok(body.includes(`\`${PRIVACY_LINK_LABEL}\` opens Privacy & Data Controls`));
   assert.ok(body.includes(`\`${SUCCESS_TITLE}\``));
