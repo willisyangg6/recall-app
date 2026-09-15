@@ -12,9 +12,12 @@
  * `info`). Each export was rasterised once, unchanged in shape, into
  * `assets/icons/<name>.png` at 1x/2x/3x on a 24pt box, black on transparent,
  * and is tinted here at render time. `bookmark-filled` is the same bookmark
- * path with its interior filled: the active state of the save control.
- * Nothing was drawn by hand; the exact exports, the normalisation rule and
- * the stroke weight are recorded in DESIGN.md ("Iconography").
+ * path with its interior filled: the active state of the save control, and
+ * `chevron-right` (P2B5) is the `chevron-down` export turned a quarter turn,
+ * which on the Lucide grid is exactly its `chevron-right`: the navigation
+ * affordance on Profile's rows. Nothing was drawn by hand; the exact
+ * exports, the normalisation rule and the stroke weight are recorded in
+ * DESIGN.md ("Iconography").
  *
  * Every glyph is decorative. The control or label that contains one carries
  * the spoken name, and the image itself is hidden from assistive technology,
@@ -40,6 +43,7 @@ const GLYPHS = {
   'map-pin': require('@/assets/icons/map-pin.png') as ImageSourcePropType,
   flag: require('@/assets/icons/flag.png') as ImageSourcePropType,
   'chevron-down': require('@/assets/icons/chevron-down.png') as ImageSourcePropType,
+  'chevron-right': require('@/assets/icons/chevron-right.png') as ImageSourcePropType,
   'external-link': require('@/assets/icons/external-link.png') as ImageSourcePropType,
   warning: require('@/assets/icons/warning.png') as ImageSourcePropType,
   info: require('@/assets/icons/info.png') as ImageSourcePropType,

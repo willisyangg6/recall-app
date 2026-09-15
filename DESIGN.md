@@ -268,15 +268,19 @@ shared `StateMessage`, which from P2B4 may carry a decorative glyph above its
 title; Public Sans and IBM Plex Mono are installed and loaded at the root;
 the app is locked to light appearance; the risk label reads its bare
 canonical word on every surface. **The Feed (P2B1), Recall Detail (P2B2),
-the shopper-report questionnaire (P2B3) and Saved (P2B4) are the restyled
-product screens**: the Feed's page, search bar, chip row, section headings,
-recall card, whole-screen states and the bottom navigation; Detail's product
-header, callouts, sections, community block and Affected Products table; the
-questionnaire's steps, review, disclosure, endings and paused state; and
-Saved's page, list rhythm, whole-screen states and notices, render from the
-tokens with every shipped behaviour intact. The pushed screens' header chrome
-is styled from the same tokens and their back control is the platform chevron
-alone. Profile keeps the provisional appearance until its own milestone._
+the shopper-report questionnaire (P2B3), Saved (P2B4) and the Profile hub
+(P2B5) are the restyled product screens**: the Feed's page, search bar, chip
+row, section headings, recall card, whole-screen states and the bottom
+navigation; Detail's product header, callouts, sections, community block and
+Affected Products table; the questionnaire's steps, review, disclosure,
+endings and paused state; Saved's page, list rhythm, whole-screen states and
+notices; and Profile's featured Personalization card, boxed Notifications
+row, grouped document sections, version row and development entry, render
+from the tokens with every shipped behaviour intact. The pushed screens'
+header chrome is styled from the same tokens and their back control is the
+platform chevron alone. Profile's child screens (Personalization,
+Notifications, the documents) keep the provisional appearance until their
+own milestone._
 
 ## Overview
 
@@ -683,6 +687,76 @@ storage AND the corpus have answered, so it can never flash at a user who has
 saves; a failed feed read says the recalls could not load and never that a
 save was removed.
 
+### Profile
+
+Profile is a navigation page, not a settings form, and it never implies an
+account: no name, picture, email, subscription, statistic, sync or sign-in.
+Its hierarchy is fixed (founder decision, 2026-09-15 — a hybrid of the P2B5
+Phase 1 explorations: Direction B's personalization-first lead over
+Direction A's grouped boxes, with no permanent trust callout):
+
+1. **Personalization** — the featured card
+2. **Notifications** — one boxed row
+3. **Privacy & Data** — Privacy & Data Controls, with its supporting line
+4. **About & Safety** — Sources & Methodology, How Affects Me Works, Risk
+   Levels Explained, Safety Disclaimer, Corrections Policy, by title alone,
+   with the official-source sentence as the group's caption
+5. **Legal** — Attributions
+6. **App** — the version line, a non-interactive label/value row
+7. **Development** — Design Preview, development builds only
+
+Every destination the hub had before P2B5 is still reached exactly once;
+the hub carries no toggle and no destructive action (the installation reset
+stays at the bottom of Privacy & Data Controls alone, C7.1). The unfinished
+Privacy Policy and Terms are not rows.
+
+**As implemented (P2B5, `src/app/(tabs)/profile.tsx`,
+`src/components/profile/`).** The navigator's own `Profile` title bar from
+the shared `screenHeader` — no second heading on the page — over the warm
+page, 16pt margins, the content column capped at `max-content-width`, the
+bottom safe-area inset added to the content padding, `spacing/24` between
+groups. The featured **Personalization card** (`PersonalizationCard`) is a
+white `radius/16` surface with `border/subtle` and the one canonical
+`card` lift: the `flag` glyph at 20, `Personalization` in
+`body-small-bold`, `Edit` in `caption` `action/secondary` at the trailing
+edge, then three `body-small` lines — `State`, `Allergens`, `Stores` — label
+at the leading edge in `text/secondary`, value at the trailing edge, wrapping
+beneath its label when a value or the type size asks. The whole card is one
+link to `/settings/personalization`; `Edit` is a word on it, not a nested
+control. No height is fixed.
+
+The card shows **this device's real preferences, read and never written**:
+Profile reads the one existing store on every focus (the Feed's own
+pattern), so an edit made on Personalization is on the card when the user
+returns, and it holds no second copy. Compact-display rules
+(`src/lib/profile-hub.ts`): `State` is the chosen state's name or
+`Not chosen`; `Allergens` and `Stores` read `None selected` for zero, one
+or two names in full (allergens in the canonical catalog order, stores in
+the order chosen, under canonical names), and beyond two the first two
+followed by `+N` — while the card's spoken label always carries every
+name. A read that has not resolved shows `Loading…` on each line (with the
+busy state set); a read that failed, or a platform without preferences,
+shows `Unavailable`. Neither is ever rendered as an empty choice, and a
+re-read in flight keeps the last real answer rather than flashing back to
+loading.
+
+Beneath the card, **Notifications** is one boxed `NavigationRow` with its
+supporting line. Each remaining group is a `ProfileSection`: a `caption`
+heading in capitals over a white `radius/16` surface with `border/subtle`,
+rows parted by hairlines in `border/subtle`, and an optional `caption`
+footnote beneath (About & Safety carries the sources sentence). A
+`NavigationRow` is `body` label, optional `body-small` supporting line,
+and the `chevron-right` glyph at 20 in `icon/secondary` at the trailing
+edge, at least 44pt tall with `spacing/16` × `spacing/12` padding; it is
+one link that speaks its label and a hint naming what it opens, and the
+chevron is decorative. A `ValueRow` is the same geometry with a value in
+place of the chevron and no interaction — one spoken element. The
+**development entry** (`DevelopmentEntry`) is set apart from the consumer
+groups: a `DEVELOPMENT BUILDS ONLY` heading over a `radius/8` surface in
+the page colour with `border/strong`, its row's hint saying the same; it
+renders nothing outside a development build and the live Profile wraps it
+in the bare `__DEV__` identifier besides.
+
 ### Affected Products table
 
 Affected Products intentionally uses a **horizontally scrollable table** on
@@ -1084,9 +1158,10 @@ Implemented in `src/app/(tabs)/_layout.tsx` (P2B1): the design's own exported
 home, bookmark and user glyphs at 24px above each label, on a
 `background/surface` bar `bottom-nav-height` (72px) tall plus the home
 indicator's inset, with `spacing/8` above the glyphs and `border/subtle` as
-the hairline. The Feed's header is styled from the same layout — the page
-colour, no shadow, `heading-3` for the `Feed` title — because a screen's
-header is navigation chrome the navigator owns.
+the hairline. The three destinations' headers are styled from the same
+layout — the page colour, no shadow, `heading-3` for the `Feed` / `Saved` /
+`Profile` title — because a screen's header is navigation chrome the
+navigator owns.
 
 ### Iconography
 
@@ -1133,6 +1208,7 @@ Lucide-style outline the design uses, unchanged in shape.
 | `map-pin`         | `Nav-Chip` glyph (`33:458`)                | `map-pin`           | the card's location line                        |
 | `flag`            | `Relevance Label` glyph (`42:866`)         | `flag`              | the relevance label                             |
 | `chevron-down`    | `Nav Chip/icon` (`42:809`)                 | `chevron-down`      | the Location / Risk / Category chips            |
+| `chevron-right`   | the `chevron-down` export, a quarter turn  | `chevron-right`     | Profile's navigation rows (P2B5)                |
 | `external-link`   | `external-link` in Detail (`81:837`)       | `external-link`     | the official-source and Learn more links (P2B2) |
 | `warning`         | `icon/warning` in `Information` (`78:223`) | `triangle-alert`    | the warning callout (P2B2)                      |
 | `info`            | `lucide/info` in `Information` (`81:687`)  | `info`              | the information callout (P2B2)                  |
@@ -1143,7 +1219,13 @@ is the export's scale against the Lucide 24-unit grid, which reproduces the
 design's optical size exactly. Every export carries a stroke of about 2.4
 grid units (Figma's 20px icons scaled to 24), so the whole set lands at one
 stroke weight. Figma's bell and sliders glyphs are deliberately not in the
-set: neither has product behaviour (conflicts 11 and 17).
+set: neither has product behaviour (conflicts 11 and 17). `chevron-right`
+(P2B5) has no export of its own: it is the `chevron-down` rasters rotated a
+quarter turn anticlockwise, which on the Lucide 24-unit grid is exactly
+`chevron-right` (`m9 18 6-6-6-6` is `m6 9 6 6 6-6` turned about the
+centre), so the stroke weight and optical size are the set's own; a
+lossless raster rotation, nothing redrawn. When Figma gains a Profile frame
+with its own chevron export, that export replaces these files.
 
 ## Product contracts the design must carry
 
@@ -1462,6 +1544,7 @@ decision. They are normalized to the scale and never reproduced:
 | color / spacing / radius variables       | `color`, `spacing`, `radius` in `design-tokens.ts`, same names            |
 | — (no questionnaire frame; conflict 26)  | `src/app/report/[id].tsx`, `src/components/report-questionnaire.tsx`      |
 | — (no button or radio component)         | `src/components/ui/button.tsx`, `src/components/ui/choice-row.tsx` (P2B3) |
+| — (no Profile frame; conflict 27)        | `src/app/(tabs)/profile.tsx`, `src/components/profile/` (P2B5)            |
 
 ### Development gallery
 
@@ -1488,8 +1571,13 @@ and its list drawn by the same shared `RecallCard` over real recalls chosen
 for the shapes a saved list has to survive (one item, several, a long
 product name, no image, nationwide, multi-state, a Public Health Alert, and
 one card per risk label the live corpus holds) — a gallery that neither
-reads nor writes this device's saved list. Only the values each caption
-names are simulated. It is not a product surface.
+reads nor writes this device's saved list; and from P2B5 the live
+Profile's own components, imported from production — the featured
+Personalization card in every answer the store can give (loading, empty,
+populated, long-and-summarized, read failure), a grouped section with the
+chevron rows and the value row, and the development entry — each handed the
+simulated answer its caption names, reading and writing no preference. Only
+the values each caption names are simulated. It is not a product surface.
 
 ## Known Figma/code conflicts
 
@@ -1597,6 +1685,14 @@ Sold`; the shipped titles were sentence case and rendered uppercase.
     — following the Feed sheet's pill actions. When frames arrive, Figma
     owns the composition and this document records any conflict; the
     behaviour and copy stay the contract's.
+27. **Profile is not in Figma.** No Profile frame, settings row, grouped
+    list or right-pointing chevron exists in the file. P2B5 composed the hub
+    from the system — the tokens, the type scale, the card surface and lift,
+    the `flag` glyph, and a `chevron-right` derived from the `chevron-down`
+    export (see "Iconography") — in the hierarchy the founder chose from the
+    Phase 1 explorations. When a frame arrives, Figma owns the composition
+    and this document records any conflict; the hierarchy, the read-only
+    preference summary and its display rules stay the contract's.
 
 ## Figma corrections for Cheyenne
 

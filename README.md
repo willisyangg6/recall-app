@@ -737,6 +737,29 @@ to find it here later.` over the bookmark glyph the tab and the save control
   gained a Saved states-and-list gallery that neither reads nor writes the
   device's saved list. Profile keeps the provisional appearance.
 
+- **P2B5 — the Lotly Profile hub** (implemented, uncommitted): the fifth
+  restyled product screen, in the hierarchy the founder chose from the Phase 1
+  explorations (Direction B's personalization-first lead over Direction A's
+  grouped boxes; no permanent trust callout): a featured Personalization card,
+  a boxed Notifications row, then Privacy & Data, About & Safety, Legal and
+  App as grouped sections, and the development entry last, under the same
+  navigator header as Feed and Saved. The card shows **this device's real
+  preferences, read on focus through the one existing store and never
+  written** — state, allergens and stores under compact rules (two names,
+  then `+N`; every name spoken), with honest `Loading…` and `Unavailable`
+  states that are never rendered as empty choices. Four small production
+  components in `src/components/profile/` (`ProfileSection`, `NavigationRow`,
+  `ValueRow`, `DevelopmentEntry`) plus the card, a `chevron-right` glyph
+  derived from the set's own `chevron-down`, and the registry summaries now
+  say Lotly where they named the product. Every destination is reached
+  exactly once, the reset stays inside Privacy & Data Controls, and the
+  Phase 1 directions are removed; `src/components/profile-design.test.ts`
+  and `src/lib/profile-hub.test.ts` pin it. The dev-only Design Preview
+  gained a gallery of the production components in every card state
+  ([DESIGN.md](DESIGN.md) "Profile",
+  [docs/recall-design-preview.md](docs/recall-design-preview.md)). The child
+  screens keep the provisional appearance.
+
 ## Operational verification (O2)
 
 - **O2-A — read-only production audit, completed 2026-09-05. Final

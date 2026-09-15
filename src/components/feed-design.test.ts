@@ -403,12 +403,14 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
   }
   // The icon set is exactly what a shipped control uses.
   const glyphs = [...ICON.matchAll(/^\s+'?([a-z-]+)'?: require\(/gm)].map((m) => m[1]).sort();
-  // P2B2 added the Detail frame's external-link, warning and info glyphs;
-  // there is still no bell, share, sliders or chevron-left glyph.
+  // P2B2 added the Detail frame's external-link, warning and info glyphs,
+  // P2B5 the chevron-right that Profile's navigation rows carry; there is
+  // still no bell, share, sliders or chevron-left glyph.
   assert.deepEqual(glyphs, [
     'bookmark',
     'bookmark-filled',
     'chevron-down',
+    'chevron-right',
     'external-link',
     'flag',
     'home',

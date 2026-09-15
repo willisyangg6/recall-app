@@ -44,7 +44,7 @@ const UNCERTAINTY_MEANING: Record<string, string> = {
 export const RISK_LEVELS: TrustDocument = {
   slug: 'risk-levels',
   title: 'Risk Levels Explained',
-  summary: 'Recall’s five consumer risk levels, and the two states that are not levels.',
+  summary: 'Lotly’s five consumer risk levels, and the two states that are not levels.',
   sections: [
     {
       title: null,

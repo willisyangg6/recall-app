@@ -28,6 +28,11 @@ import { Stack, router, useFocusEffect } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DevelopmentEntry } from '@/components/profile/development-entry';
+import { NavigationRow } from '@/components/profile/navigation-row';
+import { PersonalizationCard } from '@/components/profile/personalization-card';
+import { ProfileSection } from '@/components/profile/profile-section';
+import { ValueRow } from '@/components/profile/value-row';
 import { RecallCard } from '@/components/recall-card';
 import {
   OutcomeStep,
@@ -73,7 +78,14 @@ import {
   type ScreenedCandidate,
 } from '@/lib/design-preview';
 import { DETAIL_ERROR_TITLE, DETAIL_LOADING, DETAIL_MISSING } from '@/lib/detail-copy';
-import { SUPPORTED_STATE_CODES } from '@/domain/preferences';
+import {
+  APP_VERSION_LABEL,
+  DOCUMENT_HINT,
+  summarizePreferences,
+  versionLine,
+  type PreferenceSummaryState,
+} from '@/lib/profile-hub';
+import { EMPTY_PREFERENCES, SUPPORTED_STATE_CODES } from '@/domain/preferences';
 import type { Classification, OfficialClass } from '@/domain/recall-types';
 import type { ConsumerRiskTier } from '@/domain/risk-tier';
 import {
@@ -670,6 +682,15 @@ export default function DesignPreviewScreen() {
         </ThemedText>
         <SavedGallery items={feed.state.status === 'ready' ? feed.state.items : []} />
 
+        {/* P2B5: the live Profile's own components — the featured
+            Personalization card in every answer the store can give, a grouped
+            section with the chevron rows and the value row, and the
+            development entry — imported from production, never copied. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          PROFILE COMPONENTS AND STATES
+        </ThemedText>
+        <ProfileGallery />
+
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           RECALLS IN USE
         </ThemedText>
@@ -994,6 +1015,86 @@ function SavedGallery({ items }: { items: FeedItem[] }) {
           ) : null}
         </>
       )}
+    </Surface>
+  );
+}
+
+/**
+ * The live Profile's components in the states the shipped screen can reach,
+ * each handed a SIMULATED answer its caption names — the gallery reads no
+ * store and writes none, so nothing here reflects this device's real
+ * preferences. Every card and row is live: a card opens the real
+ * Personalization screen, a row the real document.
+ */
+function ProfileGallery() {
+  const ready = (prefs: Parameters<typeof summarizePreferences>[0]): PreferenceSummaryState => ({
+    status: 'ready',
+    summary: summarizePreferences(prefs),
+  });
+  const states: [caption: string, state: PreferenceSummaryState][] = [
+    ['Loading — simulated: a read that has not answered', { status: 'loading' }],
+    [
+      'Empty preferences — simulated: the store answered with nothing chosen',
+      ready(EMPTY_PREFERENCES),
+    ],
+    [
+      'Populated — simulated: California, Peanuts and Milk, Costco and Trader Joe’s',
+      ready({ state: 'CA', allergens: ['peanut', 'milk'], retailers: ['costco', 'trader-joes'] }),
+    ],
+    [
+      'Long — simulated: District of Columbia, four allergens and three stores, summarized to two names and +N',
+      ready({
+        state: 'DC',
+        allergens: ['peanut', 'tree nuts', 'milk', 'egg'],
+        retailers: ['walmart', 'target', 'costco'],
+      }),
+    ],
+    ['Read failure — simulated: the store could not be read', { status: 'unavailable' }],
+  ];
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        The Profile tab’s own components (components/profile), imported from production. Each
+        Personalization card below is handed the simulated answer its caption names — this gallery
+        neither reads nor writes this device’s preferences — and opens the real Personalization
+        screen; the rows open the real documents.
+      </Text>
+      {states.map(([caption, state]) => (
+        <GallerySample key={caption} caption={caption}>
+          <PersonalizationCard
+            label="Personalization"
+            href="/settings/personalization"
+            state={state}
+          />
+        </GallerySample>
+      ))}
+      <GallerySample caption="A grouped section: chevron rows, a value row, and a footnote caption">
+        <ProfileSection title="App" footnote="A quiet caption associated with the group.">
+          <NavigationRow
+            label="Sources & Methodology"
+            href={{ pathname: '/document/[slug]', params: { slug: 'sources-methodology' } }}
+            hint={DOCUMENT_HINT}
+          />
+          <NavigationRow
+            label="Privacy & Data Controls"
+            summary="A row with its supporting line."
+            href={{ pathname: '/document/[slug]', params: { slug: 'privacy-data-controls' } }}
+            hint={DOCUMENT_HINT}
+          />
+          <ValueRow label={APP_VERSION_LABEL} value={versionLine(null, null)} />
+        </ProfileSection>
+      </GallerySample>
+      <GallerySample caption="The development entry (renders only in a development build)">
+        <DevelopmentEntry
+          label="Design Preview"
+          summary="Local tooling for screenshotting shopper-report states. Not part of the product."
+          href="/design-preview"
+        />
+      </GallerySample>
     </Surface>
   );
 }

@@ -813,7 +813,7 @@ test('the Profile row is behind the bare __DEV__ identifier, so release bundles 
   // The label, the destination, and the word "Development" all live INSIDE
   // that branch — nothing about the harness survives the elimination.
   const branch = profile.slice(guard);
-  for (const marker of ['Design Preview', '/design-preview', '<SectionLabel>Development']) {
+  for (const marker of ['Design Preview', '/design-preview', '<DevelopmentEntry']) {
     assert.equal(
       profile.indexOf(marker) >= guard,
       true,
@@ -823,9 +823,16 @@ test('the Profile row is behind the bare __DEV__ identifier, so release bundles 
   }
   // A runtime flag would be a switch someone could set; the bare identifier
   // is replaced at build time and cannot be.
-  for (const forbidden of ['isDevelopmentBuild', 'enterDesignPreview', 'useState']) {
+  for (const forbidden of ['isDevelopmentBuild', 'enterDesignPreview']) {
     assert.ok(!profile.includes(forbidden), `Profile must not reference ${forbidden}`);
   }
+  // The entry component is the second lock on the same door: it renders
+  // nothing outside a development build, whoever mounts it.
+  const entry = codeOnly(
+    readFileSync(join(__dirname, '..', 'components', 'profile', 'development-entry.tsx'), 'utf8'),
+  );
+  assert.ok(entry.includes('if (!__DEV__) return null;'));
+  assert.ok(!entry.includes('isDevelopmentBuild'));
 });
 
 test('nothing but Profile’s development branch links to the harness', () => {

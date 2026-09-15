@@ -213,17 +213,28 @@ test('Profile offers its three primary destinations and no settings form', () =>
   assert.match(PROFILE, /PROFILE_PRIMARY_DOCUMENT_SLUG/);
   assert.match(PROFILE, /pathname: '\/document\/\[slug\]'/);
 
-  // Profile is navigation only: no controls, no state, no duplicate form.
+  // Profile is navigation only: no controls, no duplicate form, and no write
+  // path. P2B5 lets it READ preferences for the featured summary — through
+  // the one existing store, on focus, exactly as the Feed does — so the pin
+  // that forbade the store import became a pin on the write path instead.
+  assert.match(
+    PROFILE,
+    /import \{ loadPreferences, preferencesAvailable \} from '@\/lib\/preferences-store'/,
+  );
   for (const forbidden of [
-    'useState',
-    'preferences-store',
     'savePreferences',
-    'loadPreferences',
+    'flushPreferencesSync',
+    'deleteLocalPreferenceState',
+    'setInstallationPreferences',
     'push-registration',
     'getAlertStatus',
     'enableRecallAlerts',
     'CONSUMER_ALLERGENS',
     'searchRetailers',
+    'Chip',
+    'StatePicker',
+    'Switch',
+    'TextInput',
   ]) {
     assert.ok(!PROFILE.includes(forbidden), `Profile must not reference ${forbidden}`);
   }

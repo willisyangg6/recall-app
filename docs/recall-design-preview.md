@@ -28,7 +28,7 @@ four values the app would otherwise ask the server for, and then opens the
 1. Run a development build (`npm run ios`, or `npm start` and open the
    simulator). The harness is gated on `__DEV__`.
 2. Go to the **Profile** tab and scroll to the bottom.
-3. Under the `DEVELOPMENT` label, tap **Design Preview**.
+3. Under the `DEVELOPMENT BUILDS ONLY` heading, tap **Design Preview**.
 
 The row does not exist in a release build — it is written behind the bare
 `__DEV__` identifier, which Metro replaces at build time, so the branch and
@@ -139,6 +139,30 @@ cards from feed items directly — so nothing it shows reflects what is actually
 saved. The cards are live: tapping one opens the real Recall Detail, and its
 own Save control writes this device's bookmark list exactly as it does on the
 Feed.
+
+### Profile components and states (P2B5)
+
+A **Profile components and states** gallery renders the live Profile tab's
+own components (`src/components/profile/` — imported from production, never
+copied) in the states the shipped screen can reach, so each can be
+screenshotted without arranging this device's preferences:
+
+- the featured **Personalization card** while a read is pending (`Loading…`
+  on every line), with empty preferences (`Not chosen` / `None selected`),
+  populated (California, Peanuts and Milk, Costco and Trader Joe's), long
+  (District of Columbia, four allergens and three stores, summarized to two
+  names and `+N`), and after a read failure (`Unavailable`);
+- a grouped **section** with two chevron navigation rows, a value row and a
+  footnote caption;
+- the **development entry**, which renders only in a development build.
+
+Every state is **simulated** and its caption says so: the gallery hands each
+card the answer its caption names and neither reads nor writes this device's
+preferences (the live Profile reads them, read-only, on focus — see
+[recall-personalization.md](recall-personalization.md)). The cards and rows
+are live — a card opens the real Personalization screen, a row the real
+document — and the caption is the only labelling; the components themselves
+carry none.
 
 ### Questionnaire steps and states (P2B3)
 
@@ -312,8 +336,10 @@ It is deliberately self-contained. To remove it completely:
 1. Delete `src/lib/design-preview.ts`, `src/lib/design-preview.test.ts`, and
    `src/app/design-preview/`.
 2. In `src/app/(tabs)/profile.tsx`, delete the `{__DEV__ ? (…) : null}` block
-   at the end of the content view and the paragraph describing it in the file
-   header.
+   at the end of the content view, its `DevelopmentEntry` import and the
+   paragraph describing it in the file header; then delete
+   `src/components/profile/development-entry.tsx` (the entry's only purpose is
+   this row) and the `DEVELOPMENT_*` copy in `src/lib/profile-hub.ts`.
 3. In `src/lib/shopper-report-store.ts`, delete the `./design-preview` import,
    the four guard blocks at the top of `submitReport`, `withdrawReport`,
    `loadMyReport` and `loadReportSummary`, and the

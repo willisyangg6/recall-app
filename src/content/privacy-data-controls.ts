@@ -20,7 +20,7 @@ import { bullets, paragraph, type TrustDocument } from './document-model';
 export const PRIVACY_DATA_CONTROLS: TrustDocument = {
   slug: 'privacy-data-controls',
   title: 'Privacy & Data Controls',
-  summary: 'What the app stores, what it sends, and what it never collects.',
+  summary: 'What Lotly stores, what it sends, and how to delete your data.',
   sections: [
     {
       title: null,

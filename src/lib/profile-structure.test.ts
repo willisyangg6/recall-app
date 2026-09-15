@@ -27,7 +27,7 @@ const home = (): string =>
   '\n' +
   readFileSync(join(__dirname, '..', 'components', 'recall-card.tsx'), 'utf8');
 
-test('Profile owns no preference or notification state — it links to the settings screens', () => {
+test('Profile writes no preference and owns no notification state — it links to the settings screens', () => {
   const profile = read('(tabs)', 'profile.tsx');
   // P2A: the one combined screen became two, so Profile links to both rather
   // than sending two rows to the same place.
@@ -39,16 +39,18 @@ test('Profile owns no preference or notification state — it links to the setti
     profile.includes('href="/settings/notifications"'),
     'Profile must link to Notifications',
   );
-  // The existing store stays the ONLY preference implementation: Profile may
-  // not import it, duplicate it, or add another persistence layer.
+  // The existing store stays the ONLY preference implementation. P2B5's
+  // featured card READS it (on focus, the Feed's own pattern) and that is
+  // all: no write, no second persistence layer, no second identity.
+  assert.ok(profile.includes('loadPreferences()'), 'the summary reads the one store');
   for (const forbidden of [
-    'preferences-store',
     'savePreferences',
-    'loadPreferences',
+    'flushPreferencesSync',
+    'deleteLocalPreferenceState',
     'push-registration',
     'SecureStore',
     'AsyncStorage',
-    'useState',
+    'installation-id',
   ]) {
     assert.ok(!profile.includes(forbidden), `profile.tsx references ${forbidden}`);
   }

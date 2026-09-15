@@ -10,7 +10,7 @@ import { bullets, paragraph, type TrustDocument } from './document-model';
 export const SAFETY_DISCLAIMER: TrustDocument = {
   slug: 'safety-disclaimer',
   title: 'Safety Disclaimer',
-  summary: 'What Recall is for, and the limits of what it can tell you.',
+  summary: 'What Lotly is for, and the limits of what it can tell you.',
   sections: [
     {
       title: null,

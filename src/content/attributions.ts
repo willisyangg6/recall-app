@@ -12,7 +12,7 @@ import { bullets, link, paragraph, type TrustDocument } from './document-model';
 export const ATTRIBUTIONS: TrustDocument = {
   slug: 'attributions',
   title: 'Attributions',
-  summary: 'The data sources and open-source software Recall is built on.',
+  summary: 'The data sources and open-source software Lotly is built on.',
   sections: [
     {
       title: 'Recall data',

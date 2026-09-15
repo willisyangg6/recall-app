@@ -10,7 +10,7 @@ import { bullets, paragraph, type TrustDocument } from './document-model';
 export const CORRECTIONS_POLICY: TrustDocument = {
   slug: 'corrections-policy',
   title: 'Corrections Policy',
-  summary: 'How official revisions and Recall’s own corrections are handled.',
+  summary: 'How official revisions and Lotly’s own corrections are handled.',
   sections: [
     {
       title: null,

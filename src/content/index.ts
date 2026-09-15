@@ -36,27 +36,35 @@ export interface ProfileDocumentGroup {
   title: string;
   /** Slugs of the documents in this group, display order. */
   slugs: readonly string[];
+  /** A quiet caption Profile shows beneath the group, when one belongs to it. */
+  footnote?: string;
 }
 
 /**
- * The one document Profile promotes to a PRIMARY destination (P2A): Profile's
- * three primary rows are Personalization, Notifications, and Privacy & Data
- * Controls, and the third is this document rather than a row Profile invents.
- *
- * It stays registered in its group below — the registry remains the single
- * definition of what exists and where it belongs — and Profile simply skips
- * it when rendering the groups, so it appears exactly once on screen while
- * the "every document reachable exactly once" guarantee is unchanged.
+ * The one document that is a PRIMARY Profile destination (P2A): alongside
+ * Personalization and Notifications, Privacy & Data Controls — this
+ * registered document rather than a row Profile invents. On the P2B5 hub it
+ * is the one document row that keeps its supporting line; every other
+ * document reads by its title alone. It is registered in its group below
+ * like any other, so "every document reachable exactly once" is one rule.
  */
 export const PROFILE_PRIMARY_DOCUMENT_SLUG = 'privacy-data-controls';
 
 /**
- * The Profile trust-center grouping. Every slug must resolve in
- * TRUST_DOCUMENTS and every registered document must appear exactly once —
- * both enforced by tests — so Profile can never grow a dead row and a
- * finished document can never be silently unreachable.
+ * The Profile trust-center grouping, in the order the hub shows it (P2B5:
+ * Privacy & Data directly beneath the preferences, then About & Safety,
+ * then Legal). Every slug must resolve in TRUST_DOCUMENTS and every
+ * registered document must appear exactly once — both enforced by tests —
+ * so Profile can never grow a dead row and a finished document can never be
+ * silently unreachable. About & Safety carries the hub's one-sentence
+ * statement of where recall information comes from; "Recall" there is the
+ * noun, not the product.
  */
 export const PROFILE_DOCUMENT_GROUPS: readonly ProfileDocumentGroup[] = [
+  {
+    title: 'Privacy & Data',
+    slugs: ['privacy-data-controls'],
+  },
   {
     title: 'About & Safety',
     slugs: [
@@ -66,10 +74,8 @@ export const PROFILE_DOCUMENT_GROUPS: readonly ProfileDocumentGroup[] = [
       'safety-disclaimer',
       'corrections-policy',
     ],
-  },
-  {
-    title: 'Privacy & Data',
-    slugs: ['privacy-data-controls'],
+    footnote:
+      'Recall information comes from official FDA and USDA FSIS notices; every recall links to its government source.',
   },
   {
     title: 'Legal',

@@ -25,11 +25,10 @@
  * carried by react-navigation's `selected` accessibility state, never by
  * colour alone, and every tab item is a full-height 44pt-or-larger target.
  *
- * The Feed's and Saved's own headers are styled here too (the warm page
+ * The three destinations' own headers are styled here too (the warm page
  * colour, no shadow, the heading type), because a screen's header is
- * navigation chrome the navigator owns — one `screenHeader` shared by both,
- * so the two titles can never drift apart. Profile keeps the platform header
- * until its own milestone.
+ * navigation chrome the navigator owns — one `screenHeader` shared by Feed,
+ * Saved and (from P2B5) Profile, so the three titles can never drift apart.
  */
 
 import { Tabs } from 'expo-router/js-tabs';
@@ -103,6 +102,7 @@ export default function TabLayout() {
           tabBarLabel: 'Profile',
           tabBarAccessibilityLabel: 'Profile',
           tabBarIcon: ({ focused }) => <TabIcon name="user" focused={focused} />,
+          ...screenHeader,
         }}
       />
     </Tabs>
