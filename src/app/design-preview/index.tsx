@@ -34,6 +34,15 @@ import { PersonalizationCard } from '@/components/profile/personalization-card';
 import { ProfileSection } from '@/components/profile/profile-section';
 import { ValueRow } from '@/components/profile/value-row';
 import { RecallCard } from '@/components/recall-card';
+import { NotificationsPanel } from '@/components/settings/notifications-panel';
+import {
+  PersonalizationForm,
+  PreferencesNotReady,
+  StateSection,
+  StateSelectorContent,
+  StoreSection,
+  StoreSelectorContent,
+} from '@/components/settings/personalization-form';
 import {
   OutcomeStep,
   PausedStep,
@@ -78,6 +87,8 @@ import {
   type ScreenedCandidate,
 } from '@/lib/design-preview';
 import { DETAIL_ERROR_TITLE, DETAIL_LOADING, DETAIL_MISSING } from '@/lib/detail-copy';
+import { GENERIC_FAILURE, type NotificationsView } from '@/lib/notifications-screen';
+import { storeCountLabel } from '@/lib/personalization-screen';
 import {
   APP_VERSION_LABEL,
   DOCUMENT_HINT,
@@ -85,7 +96,11 @@ import {
   versionLine,
   type PreferenceSummaryState,
 } from '@/lib/profile-hub';
-import { EMPTY_PREFERENCES, SUPPORTED_STATE_CODES } from '@/domain/preferences';
+import {
+  EMPTY_PREFERENCES,
+  SUPPORTED_STATE_CODES,
+  type UserRecallPreferences,
+} from '@/domain/preferences';
 import type { Classification, OfficialClass } from '@/domain/recall-types';
 import type { ConsumerRiskTier } from '@/domain/risk-tier';
 import {
@@ -690,6 +705,22 @@ export default function DesignPreviewScreen() {
           PROFILE COMPONENTS AND STATES
         </ThemedText>
         <ProfileGallery />
+
+        {/* P2B6A: the Personalization screen's own sections and the
+            Notifications screen's own panel — imported from production,
+            never copied — in every state each screen can reach. Each
+            sample holds its state in memory here: nothing below reads or
+            writes a preference, registers a token, or asks the operating
+            system for permission. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          PERSONALIZATION STATES
+        </ThemedText>
+        <PersonalizationGallery />
+
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          NOTIFICATION STATES
+        </ThemedText>
+        <NotificationsGallery />
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           RECALLS IN USE
@@ -1344,6 +1375,201 @@ function QuestionnaireGallery({ source }: { source: ScreenedCandidate | null }) 
   );
 }
 
+/** Preferences held in this gallery's memory alone, so the sections can be worked. */
+function LivePreferences({ initial }: { initial: UserRecallPreferences }) {
+  const [prefs, setPrefs] = useState<UserRecallPreferences>(initial);
+  return (
+    <View style={styles.formSample}>
+      <PersonalizationForm prefs={prefs} onChange={setPrefs} />
+    </View>
+  );
+}
+
+/** The state row alone, its choice held here; the trigger opens the real sheet. */
+function LiveState({ initial }: { initial: string | null }) {
+  const [value, setValue] = useState<string | null>(initial);
+  return <StateSection value={value} onChange={setValue} />;
+}
+
+/** The state selector's contents inline: the sheet's search, Clear and radio rows. */
+function LiveStateContent({
+  initial,
+  initialQuery = '',
+}: {
+  initial: string | null;
+  initialQuery?: string;
+}) {
+  const [value, setValue] = useState<string | null>(initial);
+  const noop = () => {};
+  return (
+    <StateSelectorContent
+      value={value}
+      onChange={setValue}
+      onDone={noop}
+      initialQuery={initialQuery}
+    />
+  );
+}
+
+/** The store row alone, its list held here; the trigger opens the real sheet. */
+function LiveStores({ initial }: { initial: string[] }) {
+  const [selected, setSelected] = useState<string[]>(initial);
+  const toggle = (id: string) =>
+    setSelected((prior) => (prior.includes(id) ? prior.filter((r) => r !== id) : [...prior, id]));
+  return <StoreSection selected={selected} onToggle={toggle} />;
+}
+
+/** The store selector's contents inline, with the sheet's count line above. */
+function LiveStoreContent({
+  initial,
+  initialQuery = '',
+}: {
+  initial: string[];
+  initialQuery?: string;
+}) {
+  const [selected, setSelected] = useState<string[]>(initial);
+  const toggle = (id: string) =>
+    setSelected((prior) => (prior.includes(id) ? prior.filter((r) => r !== id) : [...prior, id]));
+  return (
+    <View style={styles.formSample}>
+      <Text variant="body-small" color="text/secondary" accessibilityLiveRegion="polite">
+        {storeCountLabel(selected.length)}
+      </Text>
+      <StoreSelectorContent selected={selected} onToggle={toggle} initialQuery={initialQuery} />
+    </View>
+  );
+}
+
+/**
+ * The Personalization screen's sections and selectors in every state the
+ * screen can reach. Each sample's preferences live in this gallery's memory:
+ * choosing here changes the sample and nothing else — no store is imported,
+ * so nothing can be saved or synced, and no sample contacts a backend.
+ */
+function PersonalizationGallery() {
+  const populated: UserRecallPreferences = {
+    state: 'CA',
+    allergens: ['peanut', 'milk'],
+    retailers: ['costco', 'trader-joes'],
+  };
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        The Personalization screen’s own sections and selectors (components/settings), imported from
+        production. Every sample below is simulated in this gallery’s memory: it neither reads nor
+        writes this device’s preferences, and choosing here saves nothing. A row opens its real
+        sheet over this gallery; the selector samples show the sheet’s contents inline.
+      </Text>
+      <GallerySample caption="Loading — simulated: a read that has not answered">
+        <PreferencesNotReady status="loading" />
+      </GallerySample>
+      <GallerySample caption="Empty selections — simulated: the store answered with nothing chosen">
+        <LivePreferences initial={EMPTY_PREFERENCES} />
+      </GallerySample>
+      <GallerySample caption="Populated — simulated: California, Peanuts and Milk, Costco and Trader Joe’s">
+        <LivePreferences initial={populated} />
+      </GallerySample>
+      <GallerySample caption="Read failure — simulated: the store could not be read">
+        <PreferencesNotReady status="failed" />
+      </GallerySample>
+
+      <GallerySample caption="State row, no selection — simulated: nothing chosen; the row opens the real sheet">
+        <LiveState initial={null} />
+      </GallerySample>
+      <GallerySample caption="State row, existing selection — simulated: California">
+        <LiveState initial="CA" />
+      </GallerySample>
+      <GallerySample caption="State selector, search — simulated: “new” typed, four rows match">
+        <LiveStateContent initial={null} initialQuery="new" />
+      </GallerySample>
+      <GallerySample caption="State selector, clear while open — simulated: California checked; Clear selection empties it and the list stays">
+        <LiveStateContent initial="CA" />
+      </GallerySample>
+      <GallerySample caption="State selector, replace — simulated: Nevada checked; choosing another row replaces it (on the sheet, that also closes it)">
+        <LiveStateContent initial="NV" />
+      </GallerySample>
+
+      <GallerySample caption="Store row, none selected — simulated: the row reads No stores selected and offers Add stores">
+        <LiveStores initial={[]} />
+      </GallerySample>
+      <GallerySample caption="Store row, several selected — simulated: Costco, Trader Joe’s and Walmart, with Edit stores">
+        <LiveStores initial={['costco', 'trader-joes', 'walmart']} />
+      </GallerySample>
+      <GallerySample caption="Store row, long names — simulated: five long catalog names wrapping in the row">
+        <LiveStores initial={['whole-foods', 'sprouts', 'giant-food', 'tops', 'pcc']} />
+      </GallerySample>
+      <GallerySample caption="Store selector, no query — simulated: nothing chosen, the whole catalog in order">
+        <LiveStoreContent initial={[]} />
+      </GallerySample>
+      <GallerySample caption="Store selector, filtered — simulated: “co” typed">
+        <LiveStoreContent initial={[]} initialQuery="co" />
+      </GallerySample>
+      <GallerySample caption="Store selector, several checked in place — simulated: Albertsons, Costco and Kroger checked; checking more never moves a row">
+        <LiveStoreContent initial={['albertsons', 'costco', 'kroger']} />
+      </GallerySample>
+      <GallerySample caption="Store selector, no results — simulated: a search no store matches">
+        <LiveStoreContent initial={[]} initialQuery="zzzz" />
+      </GallerySample>
+    </Surface>
+  );
+}
+
+/**
+ * The Notifications screen's panel in every permission state. The views
+ * are handed in; the three callbacks do nothing, so no sample can request
+ * permission, register a token, or open system settings.
+ */
+function NotificationsGallery() {
+  const noop = () => {};
+  const ready = (
+    alerts: 'not_enabled' | 'enabled' | 'denied',
+    error: string | null = null,
+  ): NotificationsView => ({ status: 'ready', alerts, busy: false, error });
+  const views: [caption: string, view: NotificationsView][] = [
+    ['Loading — simulated: the status read has not answered', { status: 'loading' }],
+    [
+      'Not determined — simulated: never asked, so not enabled here; the action is the explicit enable',
+      ready('not_enabled'),
+    ],
+    ['Enabled — simulated: permission granted and this device registered', ready('enabled')],
+    [
+      'Denied but askable — simulated: the OS reported a denial it can ask again about, which the status model shows as not enabled (the same screen)',
+      ready('not_enabled'),
+    ],
+    [
+      'System settings required — simulated: denied and cannot be asked again; the action opens system settings',
+      ready('denied'),
+    ],
+    ['Unavailable / unsupported — simulated: the web', { status: 'unsupported' }],
+    [
+      'Operation failure — simulated: the enable was attempted and threw; the message reads beneath the action',
+      ready('not_enabled', GENERIC_FAILURE),
+    ],
+  ];
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        The Notifications screen’s own panel (components/settings), imported from production. Every
+        view below is simulated: nothing here reads the permission, and the actions are wired to
+        nothing — no prompt, no registration, no system settings.
+      </Text>
+      {views.map(([caption, view]) => (
+        <GallerySample key={caption} caption={caption}>
+          <NotificationsPanel view={view} onEnable={noop} onDisable={noop} onOpenSettings={noop} />
+        </GallerySample>
+      ))}
+    </Surface>
+  );
+}
+
 function GallerySample({ caption, children }: { caption: string; children: React.ReactNode }) {
   return (
     <View style={styles.feedCase}>
@@ -1505,5 +1731,9 @@ const styles = StyleSheet.create({
   feedCase: {
     gap: spacing[8],
     padding: spacing[12],
+  },
+  // The Personalization sections at the screen's own rhythm.
+  formSample: {
+    gap: spacing[24],
   },
 });

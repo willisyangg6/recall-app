@@ -1,37 +1,50 @@
 /**
- * Notifications (P2A) — recall alerts for this device.
+ * Notifications (P2A structure, P2B6A design) — recall alerts for this
+ * device.
  *
- * What was the top of the former combined "Alerts" screen, now its own
- * destination so Profile can separate it from Personalization. The status
- * read, the enable/disable controls, the denied-permission path, and the
- * error handling are UNCHANGED.
+ * The route reads the status and runs the operations; what it shows is
+ * drawn by components/settings/notifications-panel.tsx, which is handed the
+ * current view and three callbacks. The status read, the enable/disable
+ * controls, the denied-permission path, and the error handling are
+ * UNCHANGED from the combined "Alerts" screen this was split out of.
  *
  * The permission prompt still fires from exactly one place: the "Enable
- * recall alerts" button below. Opening this screen only READS the current
- * status (`getAlertStatus`), which never prompts — so reaching Notifications
- * from Profile, or landing on it from the legacy `/settings` link, cannot
- * cost the user a permission dialog they did not ask for.
+ * recall alerts" action, through the `run` call below. Opening
+ * this screen only READS the current status (`getAlertStatus`), which never
+ * prompts — so reaching Notifications from Profile, or landing on it from
+ * the legacy `/settings` link, cannot cost the user a permission dialog they
+ * did not ask for. The status is re-read on every focus (not just mount):
+ * after the data reset ran on the Privacy & Data Controls screen, popping
+ * back here must show the cleared state, not a stale in-memory copy.
  *
  * Push DELIVERY itself remains deactivated on the server. This screen does
  * not claim otherwise: it says only whether alerts are on for this device.
+ *
+ * The header is the navigator's own `Notifications` title, styled by the
+ * root stack from the tokens; there is no second heading on the page.
  */
 
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Platform, ScrollView, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { NotificationsPanel } from '@/components/settings/notifications-panel';
+import { Surface } from '@/components/ui/surface';
+import { Text } from '@/components/ui/text';
+import { layout, spacing } from '@/constants/design-tokens';
 import type { AlertStatus } from '@/lib/alert-status';
+import {
+  failureMessage,
+  NOTIFICATIONS_FOOTNOTE,
+  NOTIFICATIONS_INTRO,
+  type NotificationsView,
+} from '@/lib/notifications-screen';
 import { disableRecallAlerts, enableRecallAlerts, getAlertStatus } from '@/lib/push-registration';
 
-type ControlState =
-  | { status: 'loading' }
-  | { status: 'ready'; alerts: AlertStatus; busy: boolean; error: string | null };
-
 export default function NotificationsScreen() {
-  const [state, setState] = useState<ControlState>({ status: 'loading' });
+  const insets = useSafeAreaInsets();
+  const [state, setState] = useState<NotificationsView>({ status: 'loading' });
 
   const load = useCallback(async () => {
     const alerts = await getAlertStatus();
@@ -40,9 +53,7 @@ export default function NotificationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // Read-only status on every focus (not just mount): after the data
-      // reset ran on the Privacy & Data Controls screen, popping back here
-      // must show the cleared state, not a stale in-memory copy.
+      // Read-only status on every focus.
       void load();
     }, [load]),
   );
@@ -54,97 +65,44 @@ export default function NotificationsScreen() {
       setState({ status: 'ready', alerts, busy: false, error: null });
     } catch (error) {
       setState((prev) =>
-        prev.status === 'ready'
-          ? {
-              ...prev,
-              busy: false,
-              error: error instanceof Error ? error.message : 'Something went wrong.',
-            }
-          : prev,
+        prev.status === 'ready' ? { ...prev, busy: false, error: failureMessage(error) } : prev,
       );
     }
   }, []);
 
-  if (Platform.OS === 'web') {
-    return (
-      <ThemedView style={styles.container}>
-        <View style={styles.content}>
-          <ThemedText type="subtitle">Recall alerts</ThemedText>
-          <ThemedText themeColor="textSecondary">
-            Push alerts are available in the Recall mobile app.
-          </ThemedText>
-        </View>
-      </ThemedView>
-    );
-  }
+  // Push alerts are a mobile-app capability; the web gets the message alone.
+  const view: NotificationsView = Platform.OS === 'web' ? { status: 'unsupported' } : state;
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView style={styles.scroll}>
-        <View style={styles.content}>
-          <ThemedText type="subtitle">Recall alerts</ThemedText>
-          <ThemedText themeColor="textSecondary">
-            Get a push notification when a new recall is announced or an existing one changes in a
-            way that matters — nothing else, no marketing.
-          </ThemedText>
+    <Surface background="background/page" style={styles.page}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[styles.content, { paddingBottom: spacing[24] + insets.bottom }]}>
+        {view.status !== 'unsupported' ? (
+          <Text variant="body-small" color="text/secondary">
+            {NOTIFICATIONS_INTRO}
+          </Text>
+        ) : null}
 
-          {state.status === 'loading' ? (
-            <ThemedText themeColor="textSecondary">Checking status…</ThemedText>
-          ) : (
-            <>
-              {state.alerts === 'enabled' ? (
-                <>
-                  <ThemedText>Recall alerts are on for this device.</ThemedText>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={state.busy}
-                    onPress={() => run(disableRecallAlerts)}>
-                    <ThemedView type="backgroundElement" style={styles.button}>
-                      <ThemedText>{state.busy ? 'Working…' : 'Turn off alerts'}</ThemedText>
-                    </ThemedView>
-                  </Pressable>
-                </>
-              ) : state.alerts === 'denied' ? (
-                <>
-                  <ThemedText>
-                    Notifications for Recall are turned off in your system settings.
-                  </ThemedText>
-                  <Pressable accessibilityRole="button" onPress={() => void Linking.openSettings()}>
-                    <ThemedView type="backgroundSelected" style={styles.button}>
-                      <ThemedText style={styles.buttonEmphasis}>Open system settings</ThemedText>
-                    </ThemedView>
-                  </Pressable>
-                </>
-              ) : (
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={state.busy}
-                  onPress={() => run(enableRecallAlerts)}>
-                  <ThemedView type="backgroundSelected" style={styles.button}>
-                    <ThemedText style={styles.buttonEmphasis}>
-                      {state.busy ? 'Working…' : 'Enable recall alerts'}
-                    </ThemedText>
-                  </ThemedView>
-                </Pressable>
-              )}
-              {state.error ? (
-                <ThemedText themeColor="textSecondary">{state.error}</ThemedText>
-              ) : null}
-            </>
-          )}
+        <NotificationsPanel
+          view={view}
+          onEnable={() => run(enableRecallAlerts)}
+          onDisable={() => run(disableRecallAlerts)}
+          onOpenSettings={() => void Linking.openSettings()}
+        />
 
-          <ThemedText type="small" themeColor="textSecondary" style={styles.footnote}>
-            Which recalls you are alerted about follows your personalization — your state,
-            allergens, and stores — which you set under Personalization.
-          </ThemedText>
-        </View>
+        {view.status !== 'unsupported' ? (
+          <Text variant="caption" color="text/secondary">
+            {NOTIFICATIONS_FOOTNOTE}
+          </Text>
+        ) : null}
       </ScrollView>
-    </ThemedView>
+    </Surface>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  page: {
     flex: 1,
   },
   scroll: {
@@ -152,22 +110,12 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   content: {
-    maxWidth: MaxContentWidth,
+    flexGrow: 1,
+    maxWidth: layout.maxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    padding: Spacing.three,
-    gap: Spacing.two,
-  },
-  button: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Radii.medium,
-  },
-  buttonEmphasis: {
-    fontWeight: '600',
-  },
-  footnote: {
-    marginTop: Spacing.two,
+    paddingHorizontal: layout.pageMargin,
+    paddingTop: spacing[16],
+    gap: spacing[16],
   },
 });

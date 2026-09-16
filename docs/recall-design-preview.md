@@ -164,6 +164,43 @@ are live — a card opens the real Personalization screen, a row the real
 document — and the caption is the only labelling; the components themselves
 carry none.
 
+### Personalization and Notification states (P2B6A)
+
+Two further galleries render the restyled settings screens' own components
+(`src/components/settings/` — imported from production, never copied) in
+every state each screen can reach:
+
+- **Personalization states** — the form loading (`Loading your
+preferences…`), with empty selections, populated (California, Peanuts and
+  Milk, Costco and Trader Joe's), and after a read failure (`Your
+preferences could not be read`); the **state row** with no selection and
+  with California, and the **state selector's contents** inline: searched
+  (`new` typed), cleared while open (California checked; `Clear selection`
+  empties it and the list stays), and replacing a selection (Nevada checked;
+  choosing another row replaces it); the **store row** with none selected
+  (`Add stores`), several (`Edit stores`) and five long names wrapping; and
+  the **store selector's contents** inline with its count line: no query
+  (the whole catalog in order), filtered (`co`), several checked rows that
+  stay in place when more are checked, and no results. Each sample's
+  preferences live in the gallery's memory: choosing a state, an allergen
+  or a store changes that sample and nothing else — the gallery imports no
+  store, so nothing can be saved or synced, and no sample contacts a
+  backend. A row sample opens its real sheet over the gallery.
+- **Notification states** — the panel loading (`Checking status…`), not
+  determined (the explicit enable), enabled (`Recall alerts are on for this
+device.` and `Turn off alerts`), denied-but-askable (which the status model
+  shows as not enabled — the same screen, the caption says why), requiring
+  system settings (`Open system settings`), unavailable / unsupported (the
+  web's message), and after a failed operation (the generic failure beneath
+  the action). The views are handed in and the three actions are wired to
+  nothing: no sample can request permission, register a push token or open
+  system settings.
+
+Every sample is **simulated** and its caption says so. The real screens are
+walked on the device — Profile → Personalization / Notifications — where
+opening Notifications only reads the status and never prompts (see
+[recall-push-delivery.md](recall-push-delivery.md)).
+
 ### Questionnaire steps and states (P2B3)
 
 A **questionnaire gallery** renders the questionnaire's steps and states one

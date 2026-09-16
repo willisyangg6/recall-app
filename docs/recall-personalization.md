@@ -171,7 +171,11 @@ They remain in All Recalls.
 The Settings label and helper are exactly:
 
 > **Allergens to watch**
-> Select any allergens relevant to you or anyone you shop or cook for.
+> Choose any allergens that matter to you or someone you shop for.
+
+(The C5.2B wording was "Select any allergens relevant to you or anyone you
+shop or cook for."; the founder shortened it in the P2B6A follow-up under
+[../DESIGN.md](../DESIGN.md) "Consumer copy". The household intent is kept.)
 
 Copy only. One shared allergen list, as before — no person names, no child or
 household-member records, no new preference field, no account, no schema
@@ -326,7 +330,9 @@ identity (`src/lib/installation-id.ts`); no second device identity exists.
   a strict no-op for identical values — including `updated_at` — which
   matters below.
 - **Readers**: the Feed (Affects Me, re-read on focus), the Personalization
-  screen (the only writer), and — from P2B5 — the Profile hub's featured
+  screen (the only writer — restyled in P2B6A onto the design tokens with
+  its controls, autosave and this store untouched; see
+  [../DESIGN.md](../DESIGN.md) "Personalization and Notifications"), and — from P2B5 — the Profile hub's featured
   card, which reads on every focus and never writes: it shows the state
   name, allergens in catalog order and stores in chosen order under the
   compact rules in `src/lib/profile-hub.ts`, holds no second copy, and shows

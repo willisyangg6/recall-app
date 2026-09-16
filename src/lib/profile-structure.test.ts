@@ -57,14 +57,21 @@ test('Profile writes no preference and owns no notification state — it links t
 });
 
 test('the Personalization screen keeps the preference store and the exact allergen copy', () => {
-  const settings = read('settings', 'personalization.tsx');
+  // The route plus the sections it draws (components/settings, P2B6A).
+  const settings =
+    read('settings', 'personalization.tsx') +
+    '\n' +
+    readFileSync(
+      join(__dirname, '..', 'components', 'settings', 'personalization-form.tsx'),
+      'utf8',
+    );
   assert.ok(settings.includes("from '@/lib/preferences-store'"));
   assert.ok(settings.includes('savePreferences'));
   assert.ok(settings.includes('ALLERGEN_SECTION_LABEL'));
   assert.equal(ALLERGEN_SECTION_LABEL, 'Allergens to watch');
   assert.equal(
     ALLERGEN_SECTION_HELPER,
-    'Select any allergens relevant to you or anyone you shop or cook for.',
+    'Choose any allergens that matter to you or someone you shop for.',
   );
 });
 

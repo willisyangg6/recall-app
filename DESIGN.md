@@ -259,28 +259,30 @@ matter above are the same values as `src/constants/design-tokens.ts`;
 `src/constants/design-tokens.test.ts` proves the two agree, and
 `src/constants/design-contract.test.ts` pins the product rules below._
 
-_Status (P2B4, 2026-09-15): reconciled against Figma and the shipped product.
-The token foundation and thirteen shared primitives exist in code — `Text`,
+_Status (P2B6A, 2026-09-15): reconciled against Figma and the shipped product.
+The token foundation and fourteen shared primitives exist in code — `Text`,
 `Surface`, `DisclosureControl` and `RiskLabel` from P2B0; `Icon`,
 `RelevanceLabel`, `Chip` and `SearchBar` from P2B1; `MediaTile`, `Callout`
-and `NoticeLabel` from P2B2; `Button` and `ChoiceRow` from P2B3 — plus the
-shared `StateMessage`, which from P2B4 may carry a decorative glyph above its
-title; Public Sans and IBM Plex Mono are installed and loaded at the root;
+and `NoticeLabel` from P2B2; `Button` and `ChoiceRow` from P2B3; `CheckRow`
+from P2B6A — plus the shared `StateMessage`, which from P2B4 may carry a
+decorative glyph above its title; Public Sans and IBM Plex Mono are installed and loaded at the root;
 the app is locked to light appearance; the risk label reads its bare
 canonical word on every surface. **The Feed (P2B1), Recall Detail (P2B2),
-the shopper-report questionnaire (P2B3), Saved (P2B4) and the Profile hub
-(P2B5) are the restyled product screens**: the Feed's page, search bar, chip
+the shopper-report questionnaire (P2B3), Saved (P2B4), the Profile hub
+(P2B5) and its Personalization and Notifications screens (P2B6A) are the
+restyled product screens**: the Feed's page, search bar, chip
 row, section headings, recall card, whole-screen states and the bottom
 navigation; Detail's product header, callouts, sections, community block and
 Affected Products table; the questionnaire's steps, review, disclosure,
 endings and paused state; Saved's page, list rhythm, whole-screen states and
 notices; and Profile's featured Personalization card, boxed Notifications
-row, grouped document sections, version row and development entry, render
+row, grouped document sections, version row and development entry; and
+Personalization's single-choice state, multi-choice allergens and stores
+and autosave line, and Notifications' status callout and one action — render
 from the tokens with every shipped behaviour intact. The pushed screens'
 header chrome is styled from the same tokens and their back control is the
-platform chevron alone. Profile's child screens (Personalization,
-Notifications, the documents) keep the provisional appearance until their
-own milestone._
+platform chevron alone. The trust documents keep the provisional appearance
+until their own milestone._
 
 ## Overview
 
@@ -757,6 +759,134 @@ the page colour with `border/strong`, its row's hint saying the same; it
 renders nothing outside a development build and the live Profile wraps it
 in the bare `__DEV__` identifier besides.
 
+### Personalization and Notifications
+
+Profile's two interactive children (P2B6A, selectors reworked in its
+follow-up). Both keep every behaviour, storage rule, permission boundary and
+route they had — the one preference store and its autosave, the read-only
+status check on focus, the explicit enable as the only path to the system
+prompt, the system-settings pointer, the web message — and changed in
+appearance and copy. The navigator's own `Personalization` / `Notifications`
+title from the root stack's tokenized header is the only page heading; each
+page is the warm page, 16pt margins, the content column capped at
+`max-content-width`, the bottom safe-area inset added to the content padding.
+
+**Personalization** (`src/app/settings/personalization.tsx`;
+`src/components/settings/personalization-form.tsx`). One `body-small`
+secondary intro line, then three groups `spacing/24` apart, each a
+`SettingsSection`: a content section heading (title case, `heading-3`, navy
+— see "Section headings and group labels"), a `body-small` helper line, and
+the controls.
+
+- **Your state** is one compact trigger row on the main screen
+  (`SelectorTrigger`: a white `radius/12` surface with `border/default`, the
+  `map-pin` glyph at 20, the chosen state's name in `body` or `Choose your
+state` in `text/secondary`, and `Select` / `Change` in `caption`
+  `action/secondary`; a 44pt button spoken as `State: California` /
+  `State: not chosen`). It opens the **state selector**, a page sheet
+  titled `Choose your state`: the shared Search Bar pinned under the title
+  (focused as it appears, the questionnaire's `Search states` words),
+  `Clear selection` as a secondary Button while a state is chosen, and the
+  52 jurisdictions as the questionnaire's `ChoiceRow`s in a `ChoiceGroup`
+  — radio rows, the current state checked — filtered by the query, with
+  `No state matches that search.` when nothing matches. **Choosing a row
+  replaces the state and closes the sheet. `Clear selection` sets the state
+  to null and keeps the sheet open**, so another state can be chosen at
+  once. `Close` (or a swipe down) exits without changing anything. The
+  bar's `Clear` empties the search; `Clear selection` empties the choice;
+  they are separate controls. Every visit starts from a blank search.
+- **Allergens to watch** is the nine allergens as `CheckRow`s in catalog
+  order on the main screen, under the household-aware helper (C5.2B,
+  reworded by the founder in the follow-up).
+- **Stores you shop at** is the same trigger-and-sheet shape as the state,
+  because the catalog is long. The main screen's trigger row shows **every
+  chosen store by name**, wrapping naturally, in the order chosen (or `No
+stores selected` in `text/secondary`), with one action word: `Add stores`
+  when none is chosen, `Edit stores` otherwise. The full catalog never
+  renders on the main screen, and nothing scrolls sideways. The **store
+  selector** is a page sheet titled `Choose stores`: a count line in words
+  under the title (`No stores selected`, `1 store selected`, `N stores
+selected`; a polite live region), the shared Search Bar with its `Clear`
+  (`Search stores`), and the whole catalog as `CheckRow`s **in the
+  catalog's canonical alphabetical order**. Checking a row changes its state
+  and nothing about its place; the search narrows the same stable list with
+  the catalog's own matching (names and aliases); clearing the search
+  restores the list with every selection intact; `Done` closes. Every check
+  autosaves through the route's existing `savePreferences` path the moment
+  it is made, so `Done`, a swipe down and Android's back all simply close —
+  none is a save step and none can lose a choice.
+- The autosave line beneath the form (`Saving…` / `Saved.` / `Saved on this
+device. It will sync when you are back online.`) is `body-small` secondary
+  and a polite live region.
+
+**The selector sheet** (`src/components/settings/selector-sheet.tsx`) is
+React Native's own `Modal` as a native page sheet (`presentationStyle:
+pageSheet`, swipe-to-dismiss routed through `onRequestClose`) on the warm
+page: the title in `heading-3` as a header, the one dismiss word (`Done` /
+`Close`) in `body-small-bold` `action/secondary` at the trailing edge on a
+44pt target with a hint that says the choices are already saved, the
+optional count line, the pinned controls, and the scrolling list, which
+keeps taps working while the keyboard is up, dismisses the keyboard on a
+drag, and grows its inset beneath it. When a sheet closes, focus returns to
+the trigger row that opened it. A page sheet rather than the Feed's bottom
+sheet because these lists are long (52 and the whole catalog) and need the
+full height, the pinned search and the system's own dismissal; no
+dependency was added.
+
+A read that has not answered, a read that failed, and the web each render
+the shared `StateMessage` (`Loading your preferences…`, `Your preferences
+could not be read`, `Available in the app`) in place of the form — never an
+empty form, and a re-read in flight keeps the last real answer.
+
+**The Check Row** (`src/components/ui/check-row.tsx`) is the Choice Row's
+sibling for any-of-these lists: the same white `radius/12` surface with
+`border/default`, a 20pt square `radius/4` indicator with a 2px
+`border/strong` border that fills `action/primary` and draws a check mark
+(the corner of a small rectangle in `icon/inverse`, turned — views, not a
+glyph, like the Choice Row's dot) when checked, the row border turning
+`action/primary` with it; the `checkbox` role and `accessibilityState.checked`.
+The round-versus-square indicator is what tells single- from multi-select
+before a word is read, and the mark is the non-colour channel.
+
+**Notifications** (`src/app/settings/notifications.tsx`;
+`src/components/settings/notifications-panel.tsx`). The `body-small` intro,
+then the panel: the status as the soft-blue information `Callout` with one
+truthful sentence per permission state (the approved copy below), and
+beneath it the one action that state allows, as the shared `Button`:
+primary `Enable recall alerts` (busy `Working…`, hint `May ask for
+notification permission.`), secondary `Turn off alerts` (busy `Working…`),
+or primary `Open system settings`. While the status is being read there is
+a plain `Checking status…` line in `body-small` secondary with the busy
+state and no control, so nothing can pass for a disabled one; a failed
+operation reads beneath the action on a `radius/8` `border/strong` surface
+as an alert; the web gets the `StateMessage` (`Available in the app`) and
+no control. The `caption` footnote closes the page. "On" is said only when
+permission is granted and this installation is registered — never before
+the OS confirms, and never as a promise of delivery (push delivery stays
+deactivated on the server). The copy and the status → action mapping live
+in `src/lib/notifications-screen.ts`; the permission mapping itself
+(`src/lib/alert-status.ts`) is unchanged.
+
+**Approved copy (founder, P2B6A follow-up).** Personalization intro:
+`Choose what Lotly should watch for. These preferences shape Affects me and
+your recall alerts. You can still browse every recall.` State: `Your state`
+/ `Choose the state you want Lotly to watch. Nationwide recalls are always
+included.` Allergens: `Allergens to watch` / `Choose any allergens that
+matter to you or someone you shop for.` Stores: `Stores you shop at` /
+`Choose stores you shop at. Lotly flags recalls that name them. Some notices
+do not list every store, so an unflagged recall may still apply.` Store
+search placeholder: `Search stores`. Notifications intro: `Get alerts when a
+relevant recall is announced or changes. Lotly does not send marketing
+notifications.` Off: `Alerts are off for this device. You will not receive
+notifications until you turn them on.` On: `Recall alerts are on for this
+device.` Denied: `Notifications for Lotly are turned off in your device
+settings. Allow them there, then return to Lotly to turn on alerts.`
+Footnote: `Lotly uses your state, allergens, and stores to decide which
+recall alerts to send.` The action labels (`Enable recall alerts`, `Turn off
+alerts`, `Open system settings`, `Working…`, `Checking status…`, `Something
+went wrong.`) are unchanged. The three product-name sentences from P2B6A
+(`…in the Lotly mobile app.` twice, and the denied sentence) stand.
+
 ### Affected Products table
 
 Affected Products intentionally uses a **horizontally scrollable table** on
@@ -836,6 +966,27 @@ Avoid extreme bubbly shapes on content-heavy surfaces. Full-pill geometry is
 for chips and compact controls, not large cards.
 
 ## Components
+
+### Section headings and group labels
+
+Two heading patterns, deliberately distinct (P2B6A follow-up). Choose by
+what sits beneath the heading, not by the screen.
+
+1. **Navigation group label** — a small uppercase caption: `caption`,
+   `text/secondary`, the text uppercased, a header to assistive technology.
+   It labels a group of rows that lead somewhere: Profile's `PRIVACY &
+DATA`, `ABOUT & SAFETY`, `LEGAL`, `APP` and `DEVELOPMENT BUILDS ONLY`
+   (`ProfileSection`). Recall Detail's eyebrow labels (`COMMON SYMPTOMS`)
+   are a separate, intentional pattern and are not changed by this rule.
+2. **Content section heading** — title case as written, `heading-3` (Public
+   Sans semibold, 19/26), `text/primary` navy, a header to assistive
+   technology. It heads a section the shopper reads and acts in:
+   Personalization's `Your state`, `Allergens to watch`, `Stores you shop
+at` (`SettingsSection`), and the selector sheets' titles (`Choose your
+state`, `Choose stores`). Never uppercased, never the caption.
+
+A future screen with both kinds keeps them apart the same way: groups of
+links get the label, sections of content and controls get the heading.
 
 ### Search Bar
 
@@ -1368,6 +1519,36 @@ Multi-value cells:
 - Never reconstruct pairs by array position. A pair exists only where the
   source stated it.
 
+## Consumer copy
+
+Rules for the sentences Lotly writes itself — screen intros, helpers, status
+lines, hints, empty and error states (P2B6A follow-up). They do not apply to
+official recall language, agency text, product data or sourced notice
+content, which is never rewritten under them, and they are applied screen by
+screen, never by a blind repository-wide replacement.
+
+- No em dashes in authored consumer copy. Use a full stop, a comma or a new
+  sentence.
+- Prefer short, direct sentences. Give each sentence one clear job.
+- Use concrete language that says what Lotly does (`Lotly flags recalls that
+name them`), not what it means to do.
+- Avoid vague phrases such as `in a way that matters`.
+- Avoid defensive or promotional constructions such as `nothing else` or
+  `no marketing` used as reassurance; state the fact once (`Lotly does not
+send marketing notifications.`).
+- Avoid `simply`, `just`, `easy` and unnecessary reassurance.
+- Do not over-explain routine controls; a search field or a Done action
+  needs no sentence of its own beyond its hint.
+- Name the product `Lotly` where the product is meant; keep the common noun
+  `recall` for a product recall.
+
+Applied so far to Personalization and Notifications (their copy modules,
+`src/lib/personalization-screen.ts` and `src/lib/notifications-screen.ts`,
+are pinned for it). **Recorded follow-up:** a whole-app authored-copy audit
+against these rules — the Feed, Saved, Detail, the questionnaire, Profile
+and the trust documents — is scheduled after P2B6B; nothing outside the two
+settings screens was rewritten in the follow-up.
+
 ## Interaction states
 
 Every reusable component defines these states; a screen may not leave one to
@@ -1404,7 +1585,9 @@ chance.
   changes. A single-choice answer (the questionnaire's Choice Row, P2B3)
   keeps its white surface and turns its border `action/primary` while its
   radio indicator fills — the filled dot is the non-colour channel — and
-  reports `accessibilityState.checked`.
+  reports `accessibilityState.checked`. A multi-choice option (the Check
+  Row, P2B6A) does the same with a square indicator that fills and draws a
+  check mark, under the `checkbox` role.
 - **Busy** — a control whose operation is in flight is inert, reports
   `accessibilityState.busy`, and swaps its visible word for the contract's
   progress word (`Sending…`, `Removing…`), so the state is announced and
@@ -1493,7 +1676,8 @@ decision. They are normalized to the scale and never reproduced:
   `Callout` (the two Information tones) and `NoticeLabel` (the Public Health
   Alert label), and from P2B3 `Button` (the 44pt primary / secondary pill,
   with disabled and busy states) and `ChoiceRow` with `ChoiceGroup` (a
-  single-choice answer row and its radio group). The whole-screen `StateMessage`
+  single-choice answer row and its radio group), and from P2B6A `CheckRow`
+  (the multi-choice sibling). The whole-screen `StateMessage`
   (`src/components/state-message.tsx`) is shared by the Feed and Detail. A
   reusable component contains no hex literal, no off-scale number, and no
   font size of its own.
@@ -1545,6 +1729,7 @@ decision. They are normalized to the scale and never reproduced:
 | — (no questionnaire frame; conflict 26)  | `src/app/report/[id].tsx`, `src/components/report-questionnaire.tsx`      |
 | — (no button or radio component)         | `src/components/ui/button.tsx`, `src/components/ui/choice-row.tsx` (P2B3) |
 | — (no Profile frame; conflict 27)        | `src/app/(tabs)/profile.tsx`, `src/components/profile/` (P2B5)            |
+| — (no settings frame; conflict 28)       | `src/app/settings/*.tsx`, `src/components/settings/`, `ui/check-row.tsx`  |
 
 ### Development gallery
 
@@ -1576,8 +1761,20 @@ Profile's own components, imported from production — the featured
 Personalization card in every answer the store can give (loading, empty,
 populated, long-and-summarized, read failure), a grouped section with the
 chevron rows and the value row, and the development entry — each handed the
-simulated answer its caption names, reading and writing no preference. Only
-the values each caption names are simulated. It is not a product surface.
+simulated answer its caption names, reading and writing no preference; and
+from P2B6A the Personalization sections and selectors and the
+Notifications panel, imported from production — the form loading, empty,
+populated and after a read failure; the state row with no selection and
+with one, and the state selector's contents searched, cleared while open,
+and replacing a selection; the store row with none, several and long
+names, and the store selector's contents with no query, filtered, with
+several checked rows staying in place, and with no results, each sample's
+preferences held in the gallery's memory; and the panel loading, not
+determined, enabled, denied-but-askable, requiring system settings,
+unsupported, and after a failed operation, its actions wired to nothing —
+so no sample can save a preference, register a token, raise the system
+prompt or contact a backend. Only the values each caption names are simulated.
+It is not a product surface.
 
 ## Known Figma/code conflicts
 
@@ -1693,6 +1890,17 @@ Sold`; the shipped titles were sentence case and rendered uppercase.
     Phase 1 explorations. When a frame arrives, Figma owns the composition
     and this document records any conflict; the hierarchy, the read-only
     preference summary and its display rules stay the contract's.
+28. **Personalization and Notifications are not in Figma.** No settings
+    frame, checkbox row, disclosure trigger or status panel exists in the
+    file. P2B6A composed both screens from the system — the tokens, the
+    type scale, the Search Bar, the Button, the Choice Row, the information
+    Callout, the shared state message, one new primitive, the Check Row
+    (the Choice Row with a square indicator), because the system had no
+    multi-choice control that carries its state by shape, and a native
+    page sheet (`SelectorSheet`) for the two long selection lists. When frames
+    arrive, Figma owns the composition and this document records any
+    conflict; the behaviour, the storage and permission boundaries and the
+    copy stay the contract's.
 
 ## Figma corrections for Cheyenne
 

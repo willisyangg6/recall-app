@@ -38,6 +38,8 @@ const UI_FILES = [
   // P2B3
   'ui/button.tsx',
   'ui/choice-row.tsx',
+  // P2B6A
+  'ui/check-row.tsx',
 ];
 const UI = Object.fromEntries(UI_FILES.map((f) => [f, read(join('components', f))]));
 const TEXT = UI['ui/text.tsx'];

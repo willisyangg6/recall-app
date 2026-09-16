@@ -760,6 +760,37 @@ to find it here later.` over the bookmark glyph the tab and the save control
   [docs/recall-design-preview.md](docs/recall-design-preview.md)). The child
   screens keep the provisional appearance.
 
+- **P2B6A — Lotly Personalization and Notifications** (implemented,
+  uncommitted): Profile's two interactive child screens restyled onto the
+  tokens with every behaviour, storage rule, permission boundary and route
+  intact. Personalization: the navigator's title as the only heading, then
+  three content sections (title-case `heading-3` headings) — one state and
+  the stores each as a compact trigger row that opens a native page sheet
+  (`SelectorSheet`, React Native's own `Modal`) holding the shared search
+  bar and, for the state, the questionnaire's radio `ChoiceRow`s (choosing
+  replaces and closes; `Clear selection` keeps the sheet open) or, for the
+  stores, the whole catalog as a new checkbox sibling, `CheckRow`, in a
+  stable canonical order where a checked row never moves, with a count in
+  words and `Done`; the nine allergens as `CheckRow`s on the main screen —
+  with the same autosave and offline line, and `Loading…` / read-failure /
+  web states that are never an empty form. The follow-up also set the
+  founder's approved copy on both screens and added the "Consumer copy" and
+  "Section headings and group labels" rules to DESIGN.md; a whole-app
+  authored-copy audit is recorded for after P2B6B.
+  Notifications: an information callout with one truthful sentence per
+  permission state and the one shared `Button` that state allows (`Enable
+recall alerts` is still the only path to the system prompt; opening the
+  screen only reads), a checking line while the status loads, an alert
+  surface for a failed operation. The routes keep the store and permission
+  code; the sections live in `src/components/settings/` with their copy and
+  rules in `src/lib/personalization-screen.ts` and
+  `src/lib/notifications-screen.ts`. `src/components/settings-design.test.ts`
+  and the two rules suites pin it; the dev-only Design Preview gained
+  galleries of every Personalization and Notification state that can save,
+  register and prompt nothing ([DESIGN.md](DESIGN.md) "Personalization and
+  Notifications", [docs/recall-design-preview.md](docs/recall-design-preview.md)).
+  The trust documents keep the provisional appearance.
+
 ## Operational verification (O2)
 
 - **O2-A — read-only production audit, completed 2026-09-05. Final

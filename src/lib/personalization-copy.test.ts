@@ -12,21 +12,30 @@ import { ALLERGEN_SECTION_HELPER, ALLERGEN_SECTION_LABEL } from './personalizati
 
 test('the allergen preference copy is exactly the approved household wording', () => {
   assert.equal(ALLERGEN_SECTION_LABEL, 'Allergens to watch');
+  // Reworded by the founder in the P2B6A follow-up (DESIGN.md "Consumer
+  // copy"); the household intent, "someone you shop for", is kept.
   assert.equal(
     ALLERGEN_SECTION_HELPER,
-    'Select any allergens relevant to you or anyone you shop or cook for.',
+    'Choose any allergens that matter to you or someone you shop for.',
   );
 });
 
 test('Settings renders that copy, and none of the wording it replaced', () => {
-  const settings = readFileSync(
-    path.join(__dirname, '..', 'app', 'settings', 'personalization.tsx'),
-    'utf8',
-  );
+  // The Personalization route draws its sections from components/settings
+  // (P2B6A); the allergen section is where the copy is rendered.
+  const settings =
+    readFileSync(path.join(__dirname, '..', 'app', 'settings', 'personalization.tsx'), 'utf8') +
+    '\n' +
+    readFileSync(
+      path.join(__dirname, '..', 'components', 'settings', 'personalization-form.tsx'),
+      'utf8',
+    );
   assert.match(settings, /\{ALLERGEN_SECTION_LABEL\}/);
   assert.match(settings, /\{ALLERGEN_SECTION_HELPER\}/);
-  // The pre-C5.2B wording spoke only to the person holding the phone.
+  // The pre-C5.2B wording spoke only to the person holding the phone, and
+  // the pre-follow-up wording is not retyped anywhere either.
   assert.doesNotMatch(settings, /Your allergens/);
+  assert.doesNotMatch(settings, /shop or cook for/);
 });
 
 test('the copy stays copy: no household data model came with it', () => {

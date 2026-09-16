@@ -151,7 +151,11 @@ maintenance run delivers enforcement-driven risk updates same-cycle.
   and never merely by opening the screen — that only reads the status);
   denial routes to system settings, no re-prompting. P2A split the former
   combined "Alerts" screen into Personalization and Notifications; the
-  controls and their behavior are unchanged.
+  controls and their behavior are unchanged. P2B6A restyled Notifications
+  onto the design tokens — one truthful status sentence per permission state
+  and the one action that state allows ([../DESIGN.md](../DESIGN.md)
+  "Personalization and Notifications") — with the read, the enable path,
+  the registration and this boundary untouched.
 - `expo-notifications` + `expo-secure-store` (installation id + enabled
   flag) + `expo-crypto` (random UUID). Foreground notifications show the
   system banner/list (no custom duplicate). Cold start / background /

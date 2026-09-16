@@ -17,7 +17,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { notificationsPresentation, STATUS_ON } from '@/lib/notifications-screen';
+
 const APP = join(__dirname, '..', 'app');
+const ENABLED_VIEW = { status: 'ready', alerts: 'enabled', busy: false, error: null } as const;
 const TABS = join(APP, '(tabs)');
 const read = (...parts: string[]): string => readFileSync(join(APP, ...parts), 'utf8');
 
@@ -240,9 +243,26 @@ test('Profile offers its three primary destinations and no settings form', () =>
   }
 });
 
+/**
+ * A settings screen is its route plus the production sections it draws
+ * (P2B6A extracted them to components/settings so the Design Preview can
+ * render every state), so a pin on what a screen owns covers both.
+ */
+const COMPONENTS = join(__dirname, '..', 'components', 'settings');
+const PERSONALIZATION =
+  read('settings', 'personalization.tsx') +
+  '\n' +
+  readFileSync(join(COMPONENTS, 'personalization-form.tsx'), 'utf8') +
+  '\n' +
+  readFileSync(join(__dirname, 'personalization-screen.ts'), 'utf8');
+const NOTIFICATIONS =
+  read('settings', 'notifications.tsx') +
+  '\n' +
+  readFileSync(join(COMPONENTS, 'notifications-panel.tsx'), 'utf8');
+
 test('Personalization and Notifications are genuinely separate screens', () => {
-  const personalization = read('settings', 'personalization.tsx');
-  const notifications = read('settings', 'notifications.tsx');
+  const personalization = PERSONALIZATION;
+  const notifications = NOTIFICATIONS;
 
   // Personalization owns the preference controls and nothing about permission.
   assert.match(personalization, /savePreferences/);
@@ -265,10 +285,16 @@ test('opening Notifications reads the status and never requests permission', () 
   // The focus effect calls ONLY the read-only status check.
   assert.match(notifications, /void load\(\);/);
   assert.match(notifications, /const alerts = await getAlertStatus\(\);/);
-  // The prompt is reachable exclusively from the explicit button's onPress.
+  // The prompt is reachable exclusively from the explicit action's press:
+  // the route hands the panel `onEnable`, and the panel (P2B6A) imports no
+  // permission API of its own, so no other path to the prompt exists.
   const prompts = [...notifications.matchAll(/enableRecallAlerts/g)].length;
   assert.equal(prompts, 2, 'enableRecallAlerts should appear once as an import, once on a press');
-  assert.match(notifications, /onPress=\{\(\) => run\(enableRecallAlerts\)\}/);
+  assert.match(notifications, /onEnable=\{\(\) => run\(enableRecallAlerts\)\}/);
+  const panel = readFileSync(join(COMPONENTS, 'notifications-panel.tsx'), 'utf8');
+  for (const forbidden of ['push-registration', 'expo-notifications', 'requestPermissions']) {
+    assert.ok(!panel.includes(forbidden), `the panel must not reach ${forbidden}`);
+  }
   assert.ok(
     !notifications.includes('useEffect(() => {\n    void run(enableRecallAlerts)'),
     'permission must never be requested on mount',
@@ -276,11 +302,15 @@ test('opening Notifications reads the status and never requests permission', () 
 });
 
 test('push delivery is not activated and is not claimed to be active', () => {
-  const notifications = read('settings', 'notifications.tsx');
+  const notifications = NOTIFICATIONS;
   assert.ok(!notifications.includes('push:activate'));
   // It says what is true — whether alerts are on for THIS DEVICE — and does
-  // not promise delivery the server has not been switched on for.
-  assert.match(notifications, /Recall alerts are on for this device\./);
+  // not promise delivery the server has not been switched on for. The
+  // sentence lives in the screen's copy module (P2B6A) and the panel renders
+  // that module's message for the enabled state.
+  assert.equal(STATUS_ON, 'Recall alerts are on for this device.');
+  assert.equal(notificationsPresentation(ENABLED_VIEW).message, STATUS_ON);
+  assert.match(notifications, /\{shown\.message\}/);
 });
 
 test('Profile creates no installation identity and no onboarding surface', () => {
@@ -312,7 +342,7 @@ test('returning to Feed re-reads preferences, so a personalization edit still la
   // the settings screen did not change which store either side uses.
   assert.match(FEED, /useFocusEffect\(/);
   assert.match(FEED, /void loadPreferences\(\)\.then\(/);
-  assert.match(read('settings', 'personalization.tsx'), /void savePreferences\(next\)/);
+  assert.match(PERSONALIZATION, /void savePreferences\(next\)/);
 });
 
 test('switching tabs triggers no shopper-report call and no permission prompt', () => {

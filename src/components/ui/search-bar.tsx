@@ -12,7 +12,9 @@
  * than iOS's native in-field glyph: it exists on every platform, it reads
  * aloud as "Clear search", and it hands focus back to the field so the next
  * search starts immediately. The field's own keyboard behaviour is left to
- * the platform and the caller, exactly as before.
+ * the platform and the caller, exactly as before — including whether it
+ * takes focus as it appears (`autoFocus`, which a picker that opens on a
+ * press passes so the keyboard is up when the list is).
  */
 
 import { useRef } from 'react';
@@ -49,7 +51,7 @@ export function SearchBar({
   placeholder: string;
   accessibilityLabel: string;
   accessibilityHint?: string;
-} & Pick<TextInputProps, 'autoCapitalize' | 'autoCorrect' | 'returnKeyType'>) {
+} & Pick<TextInputProps, 'autoCapitalize' | 'autoCorrect' | 'returnKeyType' | 'autoFocus'>) {
   const field = useRef<TextInput>(null);
 
   return (
