@@ -822,6 +822,33 @@ recall alerts` is still the only path to the system prompt; opening the
   [docs/recall-design-preview.md](docs/recall-design-preview.md)). The
   whole-app copy and tone audit remains the next milestone.
 
+- **P2B6C — Lotly whole-app copy and tone** (implemented, uncommitted):
+  every Lotly-authored consumer string now follows the "Consumer copy" rules
+  in [DESIGN.md](DESIGN.md), with behaviour unchanged. Shared copy modules
+  and the seven trust documents were rewritten first, then their consumers:
+  no authored em dash remains; `Recall` is never the product (`Set up
+personalization`, `Open Lotly on your phone`); prose says `Affects me`,
+  `All recalls`, `recall alerts`, `state` and `store`; hints end with a full
+  stop; the save control speaks `Remove from Saved` with its state in
+  `selected`; the Feed's Edit action names what it edits; the stale-feed
+  notice is a polite live region. Risk Levels Explained and Sources &
+  Methodology no longer claim Detail shows official classifications or that
+  the app shows a case timeline (Detail keeps the canonical Risk Label; the
+  official notice link carries the classification; a material change shows
+  as the `Update` line and the `Updated` date). Privacy & Data Controls and
+  How Affects Me Works describe community shopper reports conditionally
+  while the server gate is off, and the two interim launch placeholders (a
+  promised privacy policy, a promised support contact) are gone without
+  anything invented in their place. Feed, Saved, Detail and Notifications
+  never render a raw error message or HTTP status: one consumer sentence per
+  surface, the cause in the development console. Push bodies carry the
+  approved classification sentences on the same triggers.
+  `src/lib/consumer-copy.test.ts` pins the rules; the P2B6C audit's open
+  launch items (formal Privacy Policy and URL, support destination, App
+  Store privacy answers, shopper-report launch state, push activation, the
+  `recall-app` display name, legal review) stay in
+  [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md).
+
 ## Operational verification (O2)
 
 - **O2-A — read-only production audit, completed 2026-09-05. Final

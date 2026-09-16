@@ -28,7 +28,8 @@ export const DETAIL_MISSING: DetailStateCopy = {
 export const DETAIL_ERROR_TITLE = 'Could not load this recall';
 
 /** The body when the failure carries no message of its own. */
-export const DETAIL_ERROR_FALLBACK = 'Could not load this recall.';
+export const DETAIL_ERROR_FALLBACK =
+  'Lotly couldn’t load this recall. Check your connection and try again.';
 
 /** The retracted-notice callout, from the model's own agency label. */
 export function retractedNotice(agencyLabel: string): string {
@@ -36,4 +37,4 @@ export function retractedNotice(agencyLabel: string): string {
 }
 
 /** Spoken after an external link's label, so the leave is never a surprise. */
-export const EXTERNAL_LINK_HINT = 'Opens in your browser';
+export const EXTERNAL_LINK_HINT = 'Opens in your browser.';

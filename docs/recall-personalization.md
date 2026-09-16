@@ -72,8 +72,8 @@ deterministic core shared by the Home "Affects me" feed, the detail screen's
 Two views: **Affects me** and **All recalls** — All recalls is always one tap
 away and personalization never deletes or permanently hides anything. The
 default is Affects me once any personalization exists, otherwise All recalls
-with a compact "Personalize Recall" CTA (which never requests notification
-permission). Within Affects me:
+with a compact `Set up personalization` CTA (which never requests notification
+permission; P2B6C wording). Within Affects me:
 
 - AFFECTS ME — recent items where `affectsMe` holds, each carrying the one
   generic "Affects you" flag (risk tier stays in its own badge, visually

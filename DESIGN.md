@@ -283,7 +283,8 @@ reading page, section hierarchy, notes, label rows, links and the one reset
 control — render from the tokens with every shipped behaviour intact. The pushed screens'
 header chrome is styled from the same tokens and their back control is the
 platform chevron alone. Every product screen now renders from the
-tokens._
+tokens. P2B6C (2026-09-16) applied the consumer-copy rules below to every
+authored string; behaviour is unchanged._
 
 ## Overview
 
@@ -660,7 +661,8 @@ explanation, and its in-place reveal. Cards sit 16px apart at the content
 width. Every whole-screen state (not configured, loading, load failure, no
 results, nothing personal, nothing loaded) is a `heading-3` title over a
 `body-small` explanation, centred; loading is announced to assistive
-technology. The stale-feed notice is the soft-blue Information callout.
+technology. The stale-feed notice is the soft-blue Information callout, a
+polite live region so a failed refresh is announced (P2B6C).
 
 ### Saved
 
@@ -686,7 +688,8 @@ backend not configured, loading, empty, load failure) is the shared
 `StateMessage`; the empty state adds the `bookmark` glyph the tab and the
 save control already use, above `No saved recalls` / `Save a recall to find
 it here later.` The stale-feed notice and the missing-from-feed notice are
-both the soft-blue Information callout. The empty state is decided only after
+both the soft-blue Information callout, the stale notice as a polite live
+region (P2B6C). The empty state is decided only after
 storage AND the corpus have answered, so it can never flash at a user who has
 saves; a failed feed read says the recalls could not load and never that a
 save was removed.
@@ -885,9 +888,13 @@ device.` Denied: `Notifications for Lotly are turned off in your device
 settings. Allow them there, then return to Lotly to turn on alerts.`
 Footnote: `Lotly uses your state, allergens, and stores to decide which
 recall alerts to send.` The action labels (`Enable recall alerts`, `Turn off
-alerts`, `Open system settings`, `Working…`, `Checking status…`, `Something
-went wrong.`) are unchanged. The three product-name sentences from P2B6A
-(`…in the Lotly mobile app.` twice, and the denied sentence) stand.
+alerts`, `Open system settings`, `Working…`, `Checking status…`) are
+unchanged; the failure line beneath the action is the one consumer sentence
+`Lotly couldn’t update your alert settings. Check your connection and try
+again.` whatever the cause (P2B6C; the raw error goes to the development
+console). The web sentence reads `Recall alerts are available in the Lotly
+mobile app.` (P2B6C: `recall alerts` is the feature's name); the other two
+product-name sentences from P2B6A stand.
 
 ### Trust documents
 
@@ -939,7 +946,7 @@ table, and no ordered list, because none holds one).
   rather than scrolls, so it survives any type size.
 - `link` — an external official-source link: the label in `body`
   `action/secondary` with the 16px `external-link` glyph, the `link` role,
-  the spoken hint `Opens in your browser` and a 44pt row — Recall Detail's
+  the spoken hint `Opens in your browser.` and a 44pt row — Recall Detail's
   treatment exactly.
 - `document-link` — a link to another registered document: the same row
   with the `chevron-right` glyph and Profile's hint `Opens the document.`,
@@ -961,11 +968,15 @@ borrowed and no destructive token was added, because the system could
 already say it. Cancel in the dialog mutates nothing, and the queued
 orchestrator, its success and failure handling and every label are unchanged.
 
-**Copy.** P2B6B applied the product-name rule to the document bodies —
-`Lotly` where the product was meant, `recall` and `Recall data` where a
-recall is — and restructured nothing else: no sentence was removed, official
-agency language and link labels are untouched, and the wider tone audit
-stays scheduled after this milestone (see "Consumer copy").
+**Copy.** P2B6B applied the product-name rule to the document bodies
+(`Lotly` where the product was meant, `recall` and `Recall data` where a
+recall is). P2B6C toned them under "Consumer copy": no em dashes, `Affects
+me` and `All recalls` in prose, `state` and `store`, no claim about a Detail
+screen or a case timeline the product does not render, the shopper-report
+sections phrased conditionally while the gate is off, and the two interim
+launch-placeholder sentences removed. Official agency language and the two
+official page titles inside the Sources link labels are untouched; every
+section, block and claim is still there.
 
 ### Affected Products table
 
@@ -1277,7 +1288,8 @@ tone and a retracted notice as the information tone; the sentences are the
 presentation contract's. The lime tone is keyed by name, so generic
 information cannot land on it without saying so in code. The trust documents'
 `note` blocks render as the information tone (P2B6B); no document can reach
-the warning tone.
+the warning tone. A caller may mark a callout that appears after the screen
+is up as a polite live region (the stale-feed notice, P2B6C).
 
 ### Disclosure Control
 
@@ -1626,16 +1638,45 @@ send marketing notifications.`).
 - Name the product `Lotly` where the product is meant; keep the common noun
   `recall` for a product recall.
 
-Applied so far to Personalization and Notifications (their copy modules,
-`src/lib/personalization-screen.ts` and `src/lib/notifications-screen.ts`,
-are pinned for it). P2B6B applied only the product-name rule to the trust
-documents' bodies (`Lotly` where the product was meant; `recall` kept for a
-recall) and left their wording and punctuation otherwise as authored.
-**Recorded follow-up:** a whole-app authored-copy audit against these rules
-— the Feed, Saved, Detail, the questionnaire, Profile and the trust
-documents — is scheduled after P2B6B; nothing outside the two settings
-screens was rewritten in the follow-up, and the documents were not toned in
-P2B6B.
+Applied (P2B6A) to Personalization and Notifications, and (P2B6C,
+2026-09-16) to every other authored string: the Feed, Saved, Detail, the
+questionnaire, Profile, the reset, the push bodies and the seven trust
+documents. The audit that preceded P2B6C added these rules, which
+`src/lib/consumer-copy.test.ts` pins:
+
+- **Terminology.** `Lotly` for the product; `recall` for the event;
+  `official notice` for the agency document and `official source` for its
+  link; `Public Health Alert` for the FSIS notice type; `risk level`;
+  `personalization`; `recall alerts` for the feature and `notifications`
+  only for the OS permission and the `Notifications` title; `saved recalls`;
+  `shopper report` in the flow and `community shopper reports` for the
+  section; `state` (the catalog includes DC and Puerto Rico) and `store`,
+  never `jurisdiction` or `retailer`; `delete my data` for the outcome, with
+  `Reset app and delete my data` as the frozen action. `Affects me` in prose
+  and controls, `AFFECTS YOU` on the relevance label alone, `How Affects Me
+Works` as the document title; `All recalls` in prose and `All` on the
+  chip. The compact exceptions stay: `All`, `Risk`, `Saved`, `AFFECTS YOU`.
+- **Failure boundaries.** Feed, Saved, Detail and Notifications never render
+  a raw error message, HTTP status or operator instruction. Each has one
+  consumer sentence (`Lotly couldn’t reach the recall service. Check your
+connection and pull down to try again.` / `Lotly couldn’t load this
+recall. Check your connection and try again.` / `Lotly couldn’t update
+your alert settings. Check your connection and try again.`) and the cause
+  goes to the development console. An empty corpus reads `No recalls loaded
+yet` / `Pull down to refresh.`
+- **Accuracy.** Copy describes what the product renders: Detail shows the
+  canonical Risk Label and the official notice link, not the official
+  classes; a material change shows as the `Update` line and the `Updated`
+  date, not a timeline. While the shopper-report gate is off, the documents
+  say `When community shopper reports are available for a recall…` rather
+  than describing the feature as universal.
+- **Hints.** Authored accessibility hints end with a full stop and add
+  something the label does not; state lives in `accessibilityState` and is
+  not repeated in the label (`Remove from Saved`, with `selected`).
+- Interim launch placeholders were removed, not resolved: the privacy lead
+  no longer promises a formal policy and the Corrections Policy no longer
+  promises a support contact. Both destinations stay open blockers in
+  `docs/recall-launch-blockers.md`, and nothing was invented in their place.
 
 ## Interaction states
 
@@ -1688,7 +1729,7 @@ chance.
   The token is `hit-target.minimum` and shared primitives derive their slop
   from it.
 - **VoiceOver labels.** Every interactive element has an accessibility label
-  that names its action (`Save this recall`, `See all 10 jurisdictions`), and
+  that names its action (`Save this recall`, `See all 10 states`), and
   every status label announces its meaning (`Risk level: High`) rather than
   its visible text. Icon-only controls always carry a label.
 - **Expanded/collapsed state.** Every disclosure control sets

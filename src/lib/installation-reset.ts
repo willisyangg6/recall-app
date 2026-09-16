@@ -96,9 +96,9 @@ export function resetInstallationData(
 export const RESET_ACTION_LABEL = 'Reset app and delete my data';
 
 export const RESET_SUPPORTING_COPY =
-  'Deletes this installation’s data from Lotly’s server — your personalization choices, ' +
-  'notification registration, and alert delivery records — and clears them from this device. ' +
-  'Recall information itself is public and is not affected.';
+  'Deletes this installation’s data from Lotly’s server (your personalization choices, ' +
+  'notification registration, and alert delivery records) and clears them from this device, ' +
+  'along with your saved recalls. Recall information itself is public and is not affected.';
 
 export const RESET_CONFIRM_TITLE = 'Delete your data?';
 
@@ -120,4 +120,4 @@ export const RESET_SUCCESS_MESSAGE =
   'Your data has been deleted. The app is back to its default state.';
 
 export const RESET_FAILURE_MESSAGE =
-  'Could not delete your data — nothing was changed. Check your connection and try again.';
+  'Could not delete your data. Nothing was changed. Check your connection and try again.';

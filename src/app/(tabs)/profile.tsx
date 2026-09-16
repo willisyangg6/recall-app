@@ -167,7 +167,7 @@ export default function ProfileScreen() {
         {__DEV__ ? (
           <DevelopmentEntry
             label="Design Preview"
-            summary="Local tooling for screenshotting shopper-report states. Not part of the product."
+            summary="Local tooling for screenshotting product states. Not part of the product."
             href="/design-preview"
           />
         ) : null}

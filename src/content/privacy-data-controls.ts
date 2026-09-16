@@ -27,8 +27,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       blocks: [
         paragraph(
           'Lotly works without an account and collects as little as it can. This page explains, ' +
-            'in plain language, exactly what the current app stores and sends. A formal privacy ' +
-            'policy is being prepared; this page describes verified current behavior.',
+            'in plain language, what the current app stores and sends.',
         ),
       ],
     },
@@ -36,8 +35,8 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'What stays on your device',
       blocks: [
         bullets([
-          'Your personalization choices — state, allergens to watch, and stores — saved in the device’s secure storage. They work offline and are read locally to build Affects Me.',
-          'A random installation identifier, created on this device the first time it is needed. It contains nothing about you or your device — it is a random number used so the server can tell installations apart.',
+          'Your personalization choices (state, allergens to watch, and stores), saved in the device’s secure storage. They work offline and are read locally to build Affects me.',
+          'A random installation identifier, created on this device the first time it is needed. It contains nothing about you or your device. It is a random number the server uses to tell installations apart.',
           'Whether you turned recall alerts on.',
           'The recalls you saved, kept as a list of recall identifiers on this device only. Saving is a private bookmark: it is never sent to Lotly’s server, is not part of your personalization, and changes nothing about which recalls you are alerted to.',
           'Search text and browsing filters are session state only: searching runs entirely on this device over already-loaded notices, and what you type is never stored or sent anywhere.',
@@ -49,10 +48,10 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'What Lotly’s server stores',
       blocks: [
         bullets([
-          'A mirror of your personalization choices (state, allergens, stores), keyed by the random installation identifier — synced so alert delivery can apply exactly the same relevance rules the app shows you.',
+          'A mirror of your personalization choices (state, allergens, stores), keyed by the random installation identifier, synced so alert delivery can apply the same relevance rules the app shows you.',
           'When you enable alerts: a push registration holding the delivery token issued for this installation, the platform (iOS or Android), the app version, and timestamps for when alerts were enabled and last refreshed.',
           'Per-alert delivery records: which alert was sent to which registration and whether the delivery service accepted it.',
-          'Any community shopper report you choose to submit, keyed by the same random installation identifier — see “Community shopper reports” below for exactly what one contains.',
+          'When community shopper reports are available for a recall, any report you choose to submit, keyed by the same random installation identifier. “Community shopper reports” below lists what one contains.',
         ]),
         paragraph(
           'Server records are keyed only by the random installation identifier. Lotly’s server ' +
@@ -64,17 +63,18 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'Community shopper reports',
       blocks: [
         paragraph(
-          'Some recalls invite you to report that you found the product where you shop. ' +
+          'When community shopper reports are available for a recall, the recall invites you to ' +
+            'report that you found the product where you shop. Not every recall offers them. ' +
             'Submitting one is always your choice, and a report is never required to use ' +
             'anything else in the app.',
         ),
         bullets([
-          'A report saves four things: the state you chose, the store you chose (only from the stores the official notice names — or nothing, if you answer “I’m not sure”), roughly when you bought it, and the random installation identifier that makes the report yours to change.',
+          'A report saves four things: the state you chose, the store you chose (only from the stores the official notice names, or nothing if you answer “I’m not sure”), roughly when you bought it, and the random installation identifier that makes the report yours to change.',
           'It never includes your name, contact details, exact location or GPS, a receipt or photo, free text, or anything about your health, symptoms, or whether you ate the product. The questionnaire has no field for any of them.',
-          'Answering “No” or “I’m not sure” to whether you found the product stores nothing at all and counts nothing — the app does not send that answer anywhere.',
+          'Answering “No” or “I’m not sure” to whether you found the product stores nothing at all and counts nothing. The app does not send that answer anywhere.',
           'Individual reports are private. Other shoppers never see who reported; they see a total, and only once at least three people have reported finding that product.',
           'Reports never change the official recall information. They cannot alter the states, stores, hazard, risk level, or status a government notice states, and they never affect alerts or what appears in your feed.',
-          'You can change your report at any time, or remove it — removing it deletes it and it stops counting toward the total immediately.',
+          'You can change your report at any time, or remove it. Removing it deletes it, and it stops counting toward the total immediately.',
           'A report you leave in place is kept for up to 12 months after the last time you submitted or changed it, then it stops counting and is deleted automatically. Changing it starts the 12 months again; re-sending the same answers does not.',
           `“${RESET_ACTION_LABEL}” below also deletes every shopper report from this installation, along with the rest of your data.`,
         ]),
@@ -88,7 +88,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'No device location: Lotly never uses location services. Your state is a manual choice.',
           'No advertising identifier, no advertising, and no tracking across apps or websites.',
           'No analytics, advertising, or crash-reporting SDKs are included in the app.',
-          'No record of what you search for, which recalls you read, or what you share — none of that is stored by the app or tied to your installation identifier.',
+          'No record of what you search for, which recalls you read, or what you share. None of that is stored by the app or tied to your installation identifier.',
         ]),
         paragraph(
           'Like every internet service, requests to load recall data reach Lotly’s ' +
@@ -103,7 +103,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'Who processes data',
       blocks: [
         paragraph(
-          'Lotly’s database and image storage are hosted on Supabase. Push alerts are delivered ' +
+          'Lotly’s database and image storage are hosted on Supabase. Recall alerts are delivered ' +
             'through Expo’s push service and then Apple’s or Google’s notification infrastructure ' +
             'for your device. These providers process the data described above to provide those ' +
             'services; none of them receives it for advertising.',
@@ -117,7 +117,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'Turning off recall alerts stops delivery immediately: the app clears its local ' +
             'alerts-on flag and marks this installation’s push registration disabled on the server. ' +
             'Your personalization choices are kept, and the disabled registration record itself is ' +
-            `not deleted — deleting it is what “${RESET_ACTION_LABEL}” below is for.`,
+            `not deleted. Deleting it is what “${RESET_ACTION_LABEL}” below is for.`,
         ),
       ],
     },
@@ -126,13 +126,13 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       blocks: [
         bullets([
           'You can clear each personalization choice under Profile → Personalization; the cleared (empty) state syncs to the server mirror.',
-          `For a complete reset, use “${RESET_ACTION_LABEL}” at the bottom of this screen. It deletes this installation’s server records — the preference mirror, the push registration, and its alert delivery records — then clears your choices, the alerts setting, your saved recalls, and the installation identifier from this device and creates a fresh identifier. The app returns to its default, unpersonalized state and stays fully usable; alerts stay off until you enable them again.`,
-          'The reset asks for confirmation first, and cancelling changes nothing. If the deletion cannot reach the server, nothing is changed on this device either — you can simply try again.',
+          `For a complete reset, use “${RESET_ACTION_LABEL}” at the bottom of this screen. It deletes this installation’s server records (the preference mirror, the push registration, and its alert delivery records), then clears your choices, the alerts setting, your saved recalls, and the installation identifier from this device and creates a fresh identifier. The app returns to its default, unpersonalized state and stays fully usable; alerts stay off until you enable them again.`,
+          'The reset asks for confirmation first, and cancelling changes nothing. If the deletion cannot reach the server, nothing is changed on this device either. You can try again.',
         ]),
         paragraph(
-          'Two honest limits: standard, short-lived infrastructure logs at our hosting providers ' +
+          'Two limits: standard, short-lived infrastructure logs at our hosting providers ' +
             '(routine connection details such as IP addresses) are outside what the app can delete ' +
-            'directly — they expire on the provider’s schedule. And if you reinstalled the app in ' +
+            'directly. They expire on the provider’s schedule. And if you reinstalled the app in ' +
             'the past, a registration left by the earlier installation is kept under a different, ' +
             'now-unused identifier; it is disabled and no longer receives anything, and it is not ' +
             'reachable by this reset.',

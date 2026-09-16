@@ -159,6 +159,17 @@ Everything in §3, plus (tracked in `recall-app-store-readiness.md`):
    push delivery itself remains not activated).
 6. Final review that the shipped build's behavior still matches the label
    (the C7 tests keep the no-tracking and no-analytics claims pinned).
+7. Expo display name: `app.json` still names the app `recall-app`, which is
+   the name under the icon and in the notification-permission dialog. The
+   visible name becoming `Lotly` needs a native release verification and
+   was deliberately not changed by the P2B6C copy milestone.
+8. Shopper-report launch-state compliance: while `reports_enabled` is false
+   the in-app explanations are phrased conditionally ("When community
+   shopper reports are available for a recall…", P2B6C). Enabling the gate
+   needs the counsel review and App Privacy answers in §1–2 and a re-check
+   of that copy.
+9. Legal review of the health (allergen), attribution (public-domain) and
+   privacy claims the in-app documents make (§2).
 
 ## 5. Explicitly not blockers
 
@@ -166,7 +177,9 @@ Everything in §3, plus (tracked in `recall-app-store-readiness.md`):
   Works, Risk Levels Explained, Safety Disclaimer, Corrections Policy,
   Privacy & Data Controls, Attributions) describe verified current behavior,
   contain no placeholders or invented contacts (test-enforced), and are safe
-  to ship now.
+  to ship now. P2B6C removed the two interim placeholder sentences (a
+  promised formal privacy policy, a promised support contact) and the
+  destinations themselves remain the open items in §1, §3 and §4.
 - The data-flow and SDK audits were verified at HEAD `5cef70d` (2026-08-28)
   and revised for C7.1 deletion and the C8 feed manifest/cache; data flows
   HAVE changed since that checkpoint, so the audits are **not** blanket

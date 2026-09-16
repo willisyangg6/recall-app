@@ -47,7 +47,7 @@ export const LOADING_STATE = {
 
 export const FAILED_STATE = {
   title: 'Your preferences could not be read',
-  body: 'Nothing was changed. Leave this screen and open it again to try once more.',
+  body: 'Nothing was changed. Go back and open this screen again to retry.',
 } as const;
 
 export const UNSUPPORTED_STATE = {
@@ -213,7 +213,7 @@ export type SaveState = 'idle' | 'saving' | 'saved' | 'local_only';
 export const SAVE_STATUS: Record<Exclude<SaveState, 'idle'>, string> = {
   saving: 'Saving…',
   saved: 'Saved.',
-  local_only: 'Saved on this device. It will sync when you are back online.',
+  local_only: 'Saved on this device. It will sync the next time you open Lotly online.',
 };
 
 /** The line under the form, or null while nothing has been changed. */

@@ -45,7 +45,7 @@ export const STATUS_DENIED =
 
 export const UNSUPPORTED_STATE = {
   title: 'Available in the app',
-  body: 'Push alerts are available in the Lotly mobile app.',
+  body: 'Recall alerts are available in the Lotly mobile app.',
 } as const;
 
 export const ENABLE_ACTION = 'Enable recall alerts';
@@ -56,7 +56,8 @@ export const SETTINGS_ACTION = 'Open system settings';
 export const SETTINGS_HINT = 'Opens the system settings for this app.';
 export const WORKING_LABEL = 'Working…';
 /** The failure shown when an operation throws something without a message. */
-export const GENERIC_FAILURE = 'Something went wrong.';
+export const GENERIC_FAILURE =
+  'Lotly couldn’t update your alert settings. Check your connection and try again.';
 
 // ── The mapping ─────────────────────────────────────────────────────────────
 
@@ -129,5 +130,11 @@ export function notificationsPresentation(view: NotificationsView): Notification
 
 /** The message a thrown operation failure shows: its own words, or the generic line. */
 export function failureMessage(error: unknown): string {
-  return error instanceof Error && error.message !== '' ? error.message : GENERIC_FAILURE;
+  // The raw cause (an HTTP status, an EAS configuration message) is for the
+  // developer console, never for the screen: the shopper reads one sentence
+  // that says what did not happen and what to try.
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.warn('Recall alerts operation failed', error);
+  }
+  return GENERIC_FAILURE;
 }

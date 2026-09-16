@@ -218,7 +218,7 @@ test('the autosave line is silent when idle and honest about an offline save', (
   assert.equal(saveStatusText('saved'), 'Saved.');
   assert.equal(
     saveStatusText('local_only'),
-    'Saved on this device. It will sync when you are back online.',
+    'Saved on this device. It will sync the next time you open Lotly online.',
   );
   assert.deepEqual(Object.keys(SAVE_STATUS).sort(), ['local_only', 'saved', 'saving']);
 });

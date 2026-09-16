@@ -44,8 +44,8 @@ export const ATTRIBUTIONS: TrustDocument = {
       blocks: [
         paragraph(
           'Lotly is built with open-source software used under its respective licenses, ' +
-            'including Expo and React Native (MIT), React (MIT), and — in Lotly’s server-side ' +
-            'processing — the Supabase client library (MIT) and PDF.js (Apache-2.0) for rendering ' +
+            'including Expo and React Native (MIT), React (MIT), and, in Lotly’s server-side ' +
+            'processing, the Supabase client library (MIT) and PDF.js (Apache-2.0) for rendering ' +
             'official label documents. Thank you to their maintainers and contributors.',
         ),
       ],

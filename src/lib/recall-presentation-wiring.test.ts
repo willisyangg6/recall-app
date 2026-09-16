@@ -673,7 +673,7 @@ test('P1D: every community word comes from the contract — the UI hard-codes no
     'shoppers reported finding it here',
     'Thanks for contributing!',
     'Your report helps other shoppers make safer decisions.',
-    'Thanks — nothing was submitted',
+    'Thanks. Nothing was submitted',
     'Remove your report?',
     'This will remove it from community totals.',
   ]) {

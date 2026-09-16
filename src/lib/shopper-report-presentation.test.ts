@@ -479,7 +479,7 @@ test('the screen’s own states carry honest copy that leaks no refusal', () => 
     REPORT_UNAVAILABLE.body,
     /closed|retracted|disabled|ineligible|server|switched off/i,
   );
-  assert.equal(PRIVACY_LINK_HINT, 'Opens Privacy & Data Controls');
+  assert.equal(PRIVACY_LINK_HINT, 'Opens Privacy & Data Controls.');
 });
 
 // ── The point-of-submission disclosure ──────────────────────────────────────

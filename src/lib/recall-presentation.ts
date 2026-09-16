@@ -593,7 +593,7 @@ export const SHOW_LESS_LABEL = 'Show less';
 
 /**
  * Build the control for a list of `total` items described by `noun`
- * ("jurisdictions", "affected products", "lot codes"). `total` is always the
+ * ("states", "affected products", "lot codes"). `total` is always the
  * complete count, never the hidden remainder: "See all (10)" on a
  * ten-jurisdiction recall, not "See all (5)".
  */
@@ -709,7 +709,7 @@ export function whereSoldModel(distribution: ConsumerDistribution): WhereSoldMod
   return {
     lead,
     leadCollapsed,
-    statesDisclosure: hiddenStates ? disclosureControl(states.length, 'jurisdictions') : null,
+    statesDisclosure: hiddenStates ? disclosureControl(states.length, 'states') : null,
     states,
     retailers: distribution.retailers,
     retailerCount: distribution.retailers.length,

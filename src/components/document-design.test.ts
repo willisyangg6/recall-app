@@ -172,7 +172,7 @@ const SHAPE: Record<string, [title: string | null, kinds: string][]> = {
     ['How location matching works', 'bullets'],
     ['How allergen matching works', 'paragraph bullets'],
     ['How store matching works', 'bullets'],
-    ['What Affects Me is not', 'bullets'],
+    ['What Affects me is not', 'bullets'],
     ['Alerts use the same rules', 'paragraph'],
     ['Where your choices live', 'paragraph document-link'],
   ],
@@ -258,12 +258,12 @@ test('external links keep their exact destinations, and document links resolve t
   assert.deepEqual(external, [
     [
       'sources-methodology',
-      'FDA — Recalls, Market Withdrawals, & Safety Alerts',
+      'FDA: Recalls, Market Withdrawals, & Safety Alerts',
       'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts',
     ],
     [
       'sources-methodology',
-      'USDA FSIS — Recalls & Public Health Alerts',
+      'USDA FSIS: Recalls & Public Health Alerts',
       'https://www.fsis.usda.gov/recalls',
     ],
     ['sources-methodology', 'openFDA', 'https://open.fda.gov/'],
@@ -291,7 +291,7 @@ test('external links keep their exact destinations, and document links resolve t
 test('links are real links with the approved treatment: role, hint, glyph and a 44pt target', () => {
   // External: the same treatment as Recall Detail's official-source link.
   assert.equal(DOCUMENT_EXTERNAL_LINK_HINT, EXTERNAL_LINK_HINT);
-  assert.equal(EXTERNAL_LINK_HINT, 'Opens in your browser');
+  assert.equal(EXTERNAL_LINK_HINT, 'Opens in your browser.');
   assert.ok(BLOCKS.includes('accessibilityHint={DOCUMENT_EXTERNAL_LINK_HINT}'));
   assert.ok(BLOCKS.includes('<LinkRow label={block.label} icon="external-link" />'));
   // Internal: the navigation chevron and Profile's own hint.
@@ -368,7 +368,7 @@ test('Risk Levels renders the production Risk Label for exactly the seven tiers,
   // meaning reads as a sentence beside the label.
   for (const block of rows) {
     for (const item of block.items) {
-      assert.ok(riskLevelText(item).startsWith(`${riskTierWord(item.tier)} — `));
+      assert.ok(riskLevelText(item).startsWith(`${riskTierWord(item.tier)}: `));
       assert.match(item.meaning, /^[A-Z]/);
     }
   }
@@ -690,12 +690,12 @@ test('product-name uses became Lotly in every document without touching generic 
   assert.equal(attributions.sections[0].title, 'Recall data');
   assert.match(documentPlainText(attributions), /^Recall announcement data is collected/m);
   const sources = documentPlainText(documentBySlug('sources-methodology')!);
-  assert.match(sources, /FDA — Recalls, Market Withdrawals, & Safety Alerts/);
-  assert.match(sources, /USDA FSIS — Recalls & Public Health Alerts/);
+  assert.match(sources, /FDA: Recalls, Market Withdrawals, & Safety Alerts/);
+  assert.match(sources, /USDA FSIS: Recalls & Public Health Alerts/);
   assert.match(sources, /Where recall information comes from/);
   assert.match(
     documentPlainText(documentBySlug('how-affects-me-works')!),
-    /All Recalls always remains available/,
+    /All recalls always remains available/,
   );
   assert.match(
     documentPlainText(documentBySlug('privacy-data-controls')!),

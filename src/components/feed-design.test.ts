@@ -434,7 +434,10 @@ test('the presentation contract knows nothing about the visual layer, and the co
   // The Feed's copy module is a leaf and never says "Home".
   assert.ok(!/^import /m.test(FEED_COPY));
   assert.ok(!codeOnly(FEED_COPY).includes('Home'));
-  assert.ok(PERSONALIZE_CTA.body.includes('Feed will show what affects you'));
+  // P2B6C: the invitation names the mode it fills, and claims no knowledge of
+  // what actually affects the shopper.
+  assert.equal(PERSONALIZE_CTA.title, 'Set up personalization');
+  assert.ok(PERSONALIZE_CTA.body.includes('matching recalls in Affects me'));
   // The screen still runs the same pipeline functions in the same order.
   for (const call of [
     'buildFeedSections(allVisible)',

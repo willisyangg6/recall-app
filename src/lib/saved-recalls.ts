@@ -123,7 +123,7 @@ export const SAVED_ACTION_LABEL = 'Saved';
 
 /** Spoken names: the visible label states a condition, not the action. */
 export const SAVE_ACCESSIBILITY_LABEL = 'Save this recall';
-export const SAVED_ACCESSIBILITY_LABEL = 'Saved. Remove from Saved';
+export const SAVED_ACCESSIBILITY_LABEL = 'Remove from Saved';
 
 /** One whole-screen state's words: a title over an explanation. */
 export interface SavedStateCopy {
@@ -155,8 +155,8 @@ export const SAVED_ERROR_TITLE = 'Could not load recalls';
 
 /** Web has no saved-recall storage (saved-recalls-store.web.ts). */
 export const SAVED_UNAVAILABLE: SavedStateCopy = {
-  title: 'Saving is available in the app',
-  body: 'Saved recalls are stored on your device. Open Recall on your phone to save one.',
+  title: 'Available in the app',
+  body: 'Saved recalls are stored on your device. Open Lotly on your phone to save one.',
 };
 
 export const SAVED_NOT_CONFIGURED: SavedStateCopy = {

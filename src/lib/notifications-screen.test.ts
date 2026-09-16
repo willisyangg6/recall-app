@@ -91,7 +91,7 @@ test('the web gets the message alone: no action, and the product is named Lotly'
   const shown = notificationsPresentation({ status: 'unsupported' });
   assert.equal(shown.message, UNSUPPORTED_STATE.body);
   assert.equal(shown.action, null);
-  assert.equal(UNSUPPORTED_STATE.body, 'Push alerts are available in the Lotly mobile app.');
+  assert.equal(UNSUPPORTED_STATE.body, 'Recall alerts are available in the Lotly mobile app.');
 });
 
 test('"on" is said only for the enabled state; every state has its own sentence', () => {
@@ -126,7 +126,8 @@ test('the approved Notifications copy appears exactly, and no authored sentence 
     NOTIFICATIONS_FOOTNOTE,
     'Lotly uses your state, allergens, and stores to decide which recall alerts to send.',
   );
-  // Action labels are kept as they were.
+  // Action labels are kept as they were; the failure line is the one
+  // consumer sentence (P2B6C), never a raw cause.
   assert.deepEqual(
     [
       ENABLE_ACTION,
@@ -142,7 +143,7 @@ test('the approved Notifications copy appears exactly, and no authored sentence 
       'Open system settings',
       'Working…',
       'Checking status…',
-      'Something went wrong.',
+      'Lotly couldn’t update your alert settings. Check your connection and try again.',
     ],
   );
   for (const [name, value] of Object.entries(copy)) {
@@ -162,15 +163,34 @@ test('the approved Notifications copy appears exactly, and no authored sentence 
   }
 });
 
-test('a failed operation is carried beneath the action, in its own words or the generic line', () => {
-  assert.equal(notificationsPresentation(ready('not_enabled', 'Refused.')).error, 'Refused.');
-  assert.equal(notificationsPresentation(ready('not_enabled')).error, null);
+test('a failed operation is carried beneath the action as the one consumer sentence, never the raw cause', () => {
   assert.equal(
-    failureMessage(new Error('This build is not linked to an EAS project yet.')),
-    'This build is not linked to an EAS project yet.',
+    notificationsPresentation(ready('not_enabled', GENERIC_FAILURE)).error,
+    GENERIC_FAILURE,
   );
-  assert.equal(failureMessage(new Error('')), GENERIC_FAILURE);
-  assert.equal(failureMessage('a string'), GENERIC_FAILURE);
-  assert.equal(failureMessage(undefined), GENERIC_FAILURE);
-  assert.equal(GENERIC_FAILURE, 'Something went wrong.');
+  assert.equal(notificationsPresentation(ready('not_enabled')).error, null);
+  // P2B6C: an HTTP status or an EAS configuration message is a developer
+  // fact for the console; the screen reads one sentence whatever the cause.
+  const eas =
+    'This build is not linked to an EAS project yet. (Founder: run `eas init`, then rebuild.)';
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    for (const cause of [
+      new Error(eas),
+      new Error('Alert registration failed (HTTP 500).'),
+      new Error(''),
+      'a string',
+      undefined,
+    ]) {
+      assert.equal(failureMessage(cause), GENERIC_FAILURE);
+    }
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(
+    GENERIC_FAILURE,
+    'Lotly couldn’t update your alert settings. Check your connection and try again.',
+  );
+  assert.doesNotMatch(GENERIC_FAILURE, /HTTP|EAS|eas init|\d{3}/);
 });

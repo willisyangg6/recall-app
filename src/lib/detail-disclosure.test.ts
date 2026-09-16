@@ -117,15 +117,15 @@ const bestByCell = (view: AffectedProductsTableViewModel, row: number) => {
 // ── The shared control ──────────────────────────────────────────────────────
 
 test('every disclosure words and counts itself the same way', () => {
-  const control = disclosureControl(10, 'jurisdictions');
+  const control = disclosureControl(10, 'states');
   assert.equal(control.expandLabel, 'See all (10)');
   assert.equal(control.collapseLabel, 'Show less');
   assert.equal(SHOW_LESS_LABEL, 'Show less');
   // The count is the TOTAL, never the hidden remainder.
-  assert.equal(disclosureControl(6, 'jurisdictions').expandLabel, 'See all (6)');
+  assert.equal(disclosureControl(6, 'states').expandLabel, 'See all (6)');
   // Spoken labels name what is being revealed; a screen-reader user hearing
   // "See all (10)" alone would learn nothing about the ten things.
-  assert.equal(control.expandAccessibilityLabel, 'See all 10 jurisdictions');
+  assert.equal(control.expandAccessibilityLabel, 'See all 10 states');
   // The collapse label is spoken exactly as it is written, so Voice Control
   // matches what a sighted user would say out loud.
   assert.equal(control.collapseAccessibilityLabel, 'Show less');
@@ -156,7 +156,8 @@ test('six or more jurisdictions show the first five plus See all (N)', () => {
 
   const ten = soldIn(STATES);
   assert.equal(ten.statesDisclosure?.expandLabel, 'See all (10)');
-  assert.equal(ten.statesDisclosure?.expandAccessibilityLabel, 'See all 10 jurisdictions');
+  // Spoken in the consumer word (P2B6C): the list shows states, so the reveal says states.
+  assert.equal(ten.statesDisclosure?.expandAccessibilityLabel, 'See all 10 states');
   assert.equal(ten.statesDisclosure?.collapseLabel, 'Show less');
 });
 

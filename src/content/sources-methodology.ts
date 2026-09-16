@@ -20,7 +20,7 @@ export const SOURCES_METHODOLOGY: TrustDocument = {
       blocks: [
         paragraph(
           'Every notice in Lotly comes from an official United States government food-safety source. ' +
-            'Lotly does not write, crowdsource, or infer recall information — it collects the ' +
+            'Lotly does not write, crowdsource, or infer recall information. It collects the ' +
             'official notices, organizes them for consumers, and links every notice back to the ' +
             'government page it came from.',
         ),
@@ -36,10 +36,10 @@ export const SOURCES_METHODOLOGY: TrustDocument = {
           'Official FSIS label documents: the label PDFs FSIS publishes with its notices, which Lotly renders into viewable images.',
         ]),
         link(
-          'FDA — Recalls, Market Withdrawals, & Safety Alerts',
+          'FDA: Recalls, Market Withdrawals, & Safety Alerts',
           'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts',
         ),
-        link('USDA FSIS — Recalls & Public Health Alerts', 'https://www.fsis.usda.gov/recalls'),
+        link('USDA FSIS: Recalls & Public Health Alerts', 'https://www.fsis.usda.gov/recalls'),
         link('openFDA', 'https://open.fda.gov/'),
       ],
     },
@@ -62,7 +62,7 @@ export const SOURCES_METHODOLOGY: TrustDocument = {
           'Every government record Lotly processes is preserved as an unmodified source snapshot ' +
             'before anything is derived from it, and new snapshots are added whenever the source ' +
             'content actually changes. That means everything Lotly shows can be traced to the exact ' +
-            'official material it came from — and every notice links to its official government source.',
+            'official material it came from, and every notice links to its official government source.',
         ),
       ],
     },
@@ -71,13 +71,13 @@ export const SOURCES_METHODOLOGY: TrustDocument = {
       blocks: [
         paragraph(
           'A single real-world recall often produces several government records over time: the ' +
-            'original announcement, updates, expansions, and — for FDA recalls — a separate ' +
+            'original announcement, updates, expansions, and, for FDA recalls, a separate ' +
             'enforcement record that arrives weeks later with the official classification. Lotly ' +
             'reconciles these into one case so you see one recall, not four copies of it.',
         ),
         bullets([
           'Expansions and updates attach to the original case using the agency’s own numbering and references.',
-          'FDA enforcement records are matched to their announcement using evidence from the records themselves (firm, product, dates, codes) — a record that cannot be matched confidently is kept separate rather than guessed.',
+          'FDA enforcement records are matched to their announcement using evidence from the records themselves (firm, product, dates, codes). A record that cannot be matched confidently is kept separate rather than guessed.',
           'When two entries are found to describe the same recall, they are merged and a single case remains.',
         ]),
       ],
@@ -87,12 +87,12 @@ export const SOURCES_METHODOLOGY: TrustDocument = {
       blocks: [
         paragraph(
           'Each case carries the lifecycle state its agency gives it: active, closed, or retracted. ' +
-            'Lotly never ends, hides, or relabels a notice on its own — an agency-active notice stays ' +
-            'active in Lotly no matter how old it is.',
+            'Lotly never ends, hides, or relabels a notice on its own. A notice the agency lists as ' +
+            'active stays active in Lotly no matter how old it is.',
         ),
         bullets([
           `For readability, active notices with recent activity (within ${RECENT_WINDOW_DAYS} days) are shown ahead of older active notices, which stay fully available in their own clearly labeled section. This is presentation only; it never changes a notice’s official status.`,
-          'FSIS Public Health Alerts are labeled as public health alerts, distinct from recalls. They never receive an official recall classification, so Lotly shows their risk level as “Unknown” rather than inventing one, and the recall’s detail screen states plainly that public health alerts do not receive a formal classification.',
+          'FSIS Public Health Alerts carry their own Public Health Alert label, distinct from recalls. They never receive an official recall classification, so Lotly shows their risk level as “Unknown” rather than inventing one.',
         ]),
       ],
     },
@@ -101,7 +101,7 @@ export const SOURCES_METHODOLOGY: TrustDocument = {
       blocks: [
         paragraph(
           'When an agency revises a notice, Lotly detects whether the revision is material to ' +
-            'consumers and records it on the case timeline. Material changes include:',
+            'consumers and records it as a material change to the case. Material changes include:',
         ),
         bullets([
           'More products added to the recall.',
@@ -118,8 +118,8 @@ export const SOURCES_METHODOLOGY: TrustDocument = {
       title: 'Official sources take precedence',
       blocks: [
         note(
-          'Lotly’s summaries, risk labels, and organization are derived from the official records — ' +
-            'never a replacement for them. If anything in Lotly ever conflicts with the official ' +
+          'Lotly’s summaries, risk labels, and organization are derived from the official records. ' +
+            'They never replace them. If anything in Lotly ever conflicts with the official ' +
             'government notice, the official notice controls, which is why every case links to it.',
         ),
       ],
@@ -130,7 +130,7 @@ export const SOURCES_METHODOLOGY: TrustDocument = {
         bullets([
           'Product names, package details, and printed codes are extracted from the notice itself. Each extracted product line records whether the source stated it directly or Lotly extracted it from the notice text.',
           'A store is listed only when the notice itself says the product was sold, shipped, or distributed there. Lotly never infers stores from a chain’s known footprint.',
-          'Where a recall reached is taken only from what the notice states about distribution. When a notice does not say, Lotly reports the location as not specified — an honest “unknown” instead of a guess.',
+          'Where a recall reached is taken only from what the notice states about distribution. When a notice does not say, Lotly reports the location as not specified rather than guessing.',
         ]),
       ],
     },
@@ -150,7 +150,7 @@ export const SOURCES_METHODOLOGY: TrustDocument = {
       blocks: [
         bullets([
           'Notices vary in detail: many do not state every store, every state, or every affected product, and Lotly cannot show information the agency did not publish.',
-          'Official FDA classifications often arrive weeks after the announcement; until then a recall’s risk is honestly shown as Pending.',
+          'Official FDA classifications often arrive weeks after the announcement; until then a recall’s risk level is shown as Pending.',
           'Matching, extraction, and summarization are automated and conservative, but the underlying notices are written for many audiences and edge cases exist. When in doubt, read the official notice.',
         ]),
       ],
@@ -160,9 +160,9 @@ export const SOURCES_METHODOLOGY: TrustDocument = {
       blocks: [
         paragraph(
           'Agencies revise and occasionally retract notices. Lotly re-collects changed source ' +
-            'pages, updates the affected case, and records material changes on its timeline. How ' +
-            'corrections are handled — including mistakes in Lotly’s own presentation — is described ' +
-            'in the Corrections Policy.',
+            'pages, updates the affected case, and records material changes. The Corrections ' +
+            'Policy describes how corrections are handled, including mistakes in Lotly’s own ' +
+            'presentation.',
         ),
         documentLink('Corrections Policy', 'corrections-policy'),
       ],

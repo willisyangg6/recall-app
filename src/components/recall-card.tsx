@@ -67,7 +67,7 @@ import {
 } from '@/lib/saved-recalls';
 
 /** The spoken hint for the card's own press. */
-export const CARD_ACCESSIBILITY_HINT = 'Opens the recall details';
+export const CARD_ACCESSIBILITY_HINT = 'Opens the recall details.';
 
 /** The custom accessibility action name that toggles saving from the card. */
 const SAVE_ACTION = 'save';

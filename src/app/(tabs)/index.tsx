@@ -12,6 +12,7 @@ import { Link, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StateMessage } from '@/components/state-message';
+import { Callout } from '@/components/ui/callout';
 import { RecallCard } from '@/components/recall-card';
 import { Chip } from '@/components/ui/chip';
 import { SearchBar } from '@/components/ui/search-bar';
@@ -216,7 +217,7 @@ function FilterSheet({
           </ScrollView>
           <View style={styles.sheetActions}>
             <SheetButton label="Cancel" onPress={onClose} />
-            <SheetButton label="Clear" onPress={() => setDraft([])} />
+            <SheetButton label="Clear selection" onPress={() => setDraft([])} />
             <SheetButton
               label="Apply"
               primary
@@ -475,7 +476,7 @@ export default function HomeScreen() {
           onChangeText={setQuery}
           placeholder="Search product, company, brand, or code"
           accessibilityLabel="Search recalls"
-          accessibilityHint="Narrows the recalls below as you type"
+          accessibilityHint="Narrows the recalls below as you type."
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
@@ -576,8 +577,7 @@ export default function HomeScreen() {
       {tab === 'all' && filtersActive ? (
         <View style={styles.contextRow}>
           <Text variant="caption" color="text/secondary">
-            Filtering All recalls · {activeFilterCount(filters)} selection
-            {activeFilterCount(filters) === 1 ? '' : 's'}
+            Filtering All recalls · {activeFilterCount(filters)} selected
           </Text>
         </View>
       ) : null}
@@ -591,7 +591,10 @@ export default function HomeScreen() {
             Based on your personalization
           </Text>
           <Link href="/settings/personalization" asChild>
-            <Pressable accessibilityRole="button" hitSlop={CAPTION_HIT_SLOP}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit personalization"
+              hitSlop={CAPTION_HIT_SLOP}>
               {({ pressed }) => (
                 <Text variant="caption" color="action/secondary" style={pressed && styles.pressed}>
                   Edit
@@ -665,7 +668,7 @@ export default function HomeScreen() {
                       variant="caption"
                       color="action/secondary"
                       style={pressed && styles.pressed}>
-                      {showOlder ? 'Hide older notices' : `Show all ${olderCount}`}
+                      {showOlder ? 'Hide older notices' : 'Show older notices'}
                     </Text>
                   )}
                 </Pressable>
@@ -680,9 +683,9 @@ export default function HomeScreen() {
                 the failure this milestone exists to prevent. The neutral
                 informational callout, not the lime relevance one. */}
             {staleMessage ? (
-              <Surface background="background/subtle" radius={8} style={styles.callout}>
-                <Text variant="body-small">{FEED_STALE_NOTICE}</Text>
-              </Surface>
+              <Callout tone="information" accessibilityLiveRegion="polite">
+                {FEED_STALE_NOTICE}
+              </Callout>
             ) : null}
             {tab === 'affects_me' && prefs !== null ? (
               !hasAnyPreference(prefs) ? (

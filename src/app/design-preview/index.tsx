@@ -91,7 +91,12 @@ import {
   type PreviewScenarioGroup,
   type ScreenedCandidate,
 } from '@/lib/design-preview';
-import { DETAIL_ERROR_TITLE, DETAIL_LOADING, DETAIL_MISSING } from '@/lib/detail-copy';
+import {
+  DETAIL_ERROR_FALLBACK,
+  DETAIL_ERROR_TITLE,
+  DETAIL_LOADING,
+  DETAIL_MISSING,
+} from '@/lib/detail-copy';
 import {
   RESET_CONFIRM_BODY,
   RESET_CONFIRM_CANCEL,
@@ -117,6 +122,7 @@ import type { ConsumerRiskTier } from '@/domain/risk-tier';
 import {
   FEED_EMPTY_SEARCH,
   FEED_ERROR_TITLE,
+  FEED_LOAD_FAILURE,
   FEED_LOADING,
   FEED_STALE_NOTICE,
   PERSONALIZE_CTA,
@@ -981,10 +987,7 @@ function SavedGallery({ items }: { items: FeedItem[] }) {
         <StateMessage {...SAVED_EMPTY} icon="bookmark" />
       </Surface>
       <Surface radius={12} border="border/subtle">
-        <StateMessage
-          title={SAVED_ERROR_TITLE}
-          body="The feed session’s own error message renders here. Nothing saved on this device is removed by a failed read."
-        />
+        <StateMessage title={SAVED_ERROR_TITLE} body={FEED_LOAD_FAILURE} />
       </Surface>
       <Text variant="caption" color="text/secondary">
         The two notices: a refresh that failed over a feed already on screen, and — on a simulated
@@ -1143,7 +1146,7 @@ function ProfileGallery() {
       <GallerySample caption="The development entry (renders only in a development build)">
         <DevelopmentEntry
           label="Design Preview"
-          summary="Local tooling for screenshotting shopper-report states. Not part of the product."
+          summary="Local tooling for screenshotting product states. Not part of the product."
           href="/design-preview"
         />
       </GallerySample>
@@ -1200,10 +1203,7 @@ function FeedControlsGallery() {
         <StateMessage {...FEED_EMPTY_SEARCH} />
       </Surface>
       <Surface radius={12} border="border/subtle">
-        <StateMessage
-          title={FEED_ERROR_TITLE}
-          body="The feed session’s own error message renders here."
-        />
+        <StateMessage title={FEED_ERROR_TITLE} body={FEED_LOAD_FAILURE} />
       </Surface>
       <Surface background="background/subtle" radius={12} style={styles.feedCase}>
         <Text variant="heading-3">{PERSONALIZE_CTA.title}</Text>
@@ -1239,10 +1239,7 @@ function DetailStatesGallery() {
         <StateMessage {...DETAIL_MISSING} />
       </Surface>
       <Surface radius={12} border="border/subtle">
-        <StateMessage
-          title={DETAIL_ERROR_TITLE}
-          body="The load failure’s own error message renders here."
-        />
+        <StateMessage title={DETAIL_ERROR_TITLE} body={DETAIL_ERROR_FALLBACK} />
       </Surface>
       <Callout tone="warning">Sample warning callout — the affects-you treatment.</Callout>
       <Callout tone="information">

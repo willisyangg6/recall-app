@@ -236,10 +236,10 @@ test('the section order is unchanged, and community stays beneath the official g
 test('every disclosure threshold is the contract’s, and the screen re-derives none', () => {
   assert.equal(WHERE_SOLD_INITIAL_STATES, 5);
   assert.equal(AFFECTED_PRODUCTS_INITIAL_ROWS, 1);
-  assert.deepEqual(disclosureControl(10, 'jurisdictions'), {
+  assert.deepEqual(disclosureControl(10, 'states'), {
     expandLabel: 'See all (10)',
     collapseLabel: 'Show less',
-    expandAccessibilityLabel: 'See all 10 jurisdictions',
+    expandAccessibilityLabel: 'See all 10 states',
     collapseAccessibilityLabel: 'Show less',
   });
   // The screen renders the model's collapsed/expanded views and its

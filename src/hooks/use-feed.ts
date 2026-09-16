@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { FEED_LOAD_FAILURE } from '@/lib/feed-copy';
 import { createFeedCacheStore } from '@/lib/feed-cache-store';
 import { createFeedSession, type FeedSession } from '@/lib/feed-sync';
 import {
@@ -72,7 +73,10 @@ export function useFeed(): Feed {
       setState({ status: 'ready', items: outcome.items });
       setStaleMessage(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not load recalls.';
+      // The cause is a developer fact (an HTTP status, a stalled page); the
+      // screen gets one consumer sentence, and the console gets the error.
+      if (__DEV__) console.warn('Feed sync failed', error);
+      const message = FEED_LOAD_FAILURE;
       // A failed refresh must never cost the user a complete feed they already
       // have: keep showing it, and say plainly that it may be out of date.
       // Only a failure with nothing loaded becomes the full error screen.

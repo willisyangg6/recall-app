@@ -127,7 +127,9 @@ test('the control states the condition visibly and the action aloud', () => {
   assert.equal(SAVE_ACTION_LABEL, 'Save');
   assert.equal(SAVED_ACTION_LABEL, 'Saved');
   assert.equal(SAVE_ACCESSIBILITY_LABEL, 'Save this recall');
-  assert.equal(SAVED_ACCESSIBILITY_LABEL, 'Saved. Remove from Saved');
+  // The label names the action; the saved state is carried by `selected`,
+  // not repeated in the words (P2B6C).
+  assert.equal(SAVED_ACCESSIBILITY_LABEL, 'Remove from Saved');
   // The label is never the only signal: the control also reports selection.
   assert.match(SAVE_BUTTON, /accessibilityState=\{\{ selected: saved \}\}/);
   assert.match(SAVE_BUTTON, /accessibilityLabel=\{saved \? SAVED_ACCESSIBILITY_LABEL/);

@@ -96,7 +96,7 @@ export const DOCUMENT_BLOCK_KINDS = [
 
 /** A risk-level row as one line of text: the canonical word, then its meaning. */
 export function riskLevelText(item: RiskLevelItem): string {
-  return `${riskTierWord(item.tier)} — ${item.meaning}`;
+  return `${riskTierWord(item.tier)}: ${item.meaning}`;
 }
 
 /**

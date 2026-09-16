@@ -20,7 +20,8 @@
  * the sentence it carries is the only channel — the glyph is decorative.
  *
  * To assistive technology the callout is one element that reads its
- * sentence; nothing animates and nothing announces itself.
+ * sentence; nothing animates, and only a caller that says so (the stale-feed
+ * notice, which appears after a failed refresh) is a polite live region.
  */
 
 import { StyleSheet, View } from 'react-native';
@@ -37,7 +38,16 @@ const TONE: Record<CalloutTone, { background: BackgroundToken; icon: IconName }>
   information: { background: 'background/subtle', icon: 'info' },
 };
 
-export function Callout({ tone, children }: { tone: CalloutTone; children: string }) {
+export function Callout({
+  tone,
+  children,
+  accessibilityLiveRegion,
+}: {
+  tone: CalloutTone;
+  children: string;
+  /** `polite` for a notice that appears after the screen is already up (a failed refresh). */
+  accessibilityLiveRegion?: 'polite';
+}) {
   const treatment = TONE[tone];
   return (
     <Surface
@@ -45,6 +55,7 @@ export function Callout({ tone, children }: { tone: CalloutTone; children: strin
       radius={8}
       accessible
       accessibilityRole="text"
+      accessibilityLiveRegion={accessibilityLiveRegion}
       style={styles.callout}>
       {/* The glyph sits centred on the first line of text, whatever the
           reader's type size, because its box is one body-small line tall. */}

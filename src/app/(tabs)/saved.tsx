@@ -132,7 +132,11 @@ export default function SavedScreen() {
         // plainly, in the same words the Feed uses, because silently showing
         // stale facts as current is the failure the sentence exists for.
         ListHeaderComponent={
-          staleMessage ? <Callout tone="information">{FEED_STALE_NOTICE}</Callout> : null
+          staleMessage ? (
+            <Callout tone="information" accessibilityLiveRegion="polite">
+              {FEED_STALE_NOTICE}
+            </Callout>
+          ) : null
         }
         // Said plainly rather than silently showing a shorter list than the
         // user saved: these recalls left the active feed, they were not

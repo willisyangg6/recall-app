@@ -1638,8 +1638,10 @@ into Recall Details — is byte-for-byte the shipped behaviour, and
 feed-controls, navigation-structure, saved-recalls and wiring suites.
 
 Two small copy changes rode along, both recorded: the personalize invitation
-now says `Feed will show what affects you` (the screen is never called Home;
-the Feed's state and notice copy lives in `src/lib/feed-copy.ts`), and the
+was reworded (the screen is never called Home; the Feed's state and notice
+copy lives in `src/lib/feed-copy.ts`; P2B6C settled it as `Set up
+personalization` / `Choose your state, allergens, and stores to see matching
+recalls in Affects me.`), and the
 search field's clear affordance is an explicit, labelled `Clear` control on
 every platform instead of iOS's native in-field glyph.
 

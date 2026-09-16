@@ -83,8 +83,8 @@ const TIER_NOTE: Record<ConsumerRiskTier, string | null> = {
     'Affected products carry different official classifications, including the most serious one.',
   high: 'The agency placed this recall in its middle classification.',
   moderate:
-    'The affected products carry the agency’s two lower classifications — this is still an active recall.',
-  low: 'The affected products carry only the agency’s least serious classification — this is still an active recall.',
+    'The affected products carry the agency’s two lower classifications. This is still an active recall.',
+  low: 'The affected products carry only the agency’s least serious classification. This is still an active recall.',
   pending: 'The agency assigns a formal recall classification later in its process.',
   unknown: null,
 };

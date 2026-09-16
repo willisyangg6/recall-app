@@ -46,8 +46,8 @@ export const SAFETY_DISCLAIMER: TrustDocument = {
       title: 'Absence is not safety',
       blocks: [
         paragraph(
-          'A product that does not appear in Affects Me — or in Lotly at all — is not thereby ' +
-            'safe. Affects Me is a shortlist built from your choices and what notices state; ' +
+          'A product that does not appear in Affects me, or in Lotly at all, is not therefore ' +
+            'safe. Affects me is a shortlist built from your choices and what notices state; ' +
             'agencies do not recall every hazardous product, and notices do not state every detail. ' +
             'No part of Lotly guarantees that any product is safe.',
         ),

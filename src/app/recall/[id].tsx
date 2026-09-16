@@ -348,10 +348,10 @@ export default function RecallDetailScreen() {
         setState(detail ? { status: 'ready', detail } : { status: 'missing' });
       } catch (error) {
         if (cancelled) return;
-        setState({
-          status: 'error',
-          message: error instanceof Error ? error.message : DETAIL_ERROR_FALLBACK,
-        });
+        // The cause stays in the developer console; the shopper reads one
+        // sentence that says what did not load and what to try.
+        if (__DEV__) console.warn('Recall detail load failed', error);
+        setState({ status: 'error', message: DETAIL_ERROR_FALLBACK });
       }
     })();
     return () => {

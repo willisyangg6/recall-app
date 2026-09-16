@@ -255,8 +255,7 @@ export function stateConfirmPrompt(stateCode: string): string {
 }
 
 /** Optional context for the confirm question: why only one state is offered. */
-export const STATE_CONFIRM_HELP =
-  'Reports can only include locations listed in the official recall.';
+export const STATE_CONFIRM_HELP = 'Reports can only name states listed in the official notice.';
 
 export const QUESTION_PROMPTS: Record<Exclude<QuestionKey, 'state'>, string> = {
   retailer: 'Which store did you find it at?',
@@ -429,7 +428,7 @@ export const SUBMISSION_DISCLOSURE =
   'Your anonymous report contributes to community totals and does not change official recall information.';
 export const PRIVACY_LINK_LABEL = 'Learn more.';
 /** Spoken after the disclosure link, so where it leads is never a surprise. */
-export const PRIVACY_LINK_HINT = 'Opens Privacy & Data Controls';
+export const PRIVACY_LINK_HINT = 'Opens Privacy & Data Controls.';
 
 export const PRIVACY_DOCUMENT_SLUG = 'privacy-data-controls';
 
@@ -450,10 +449,10 @@ export const SUCCESS_TITLE = 'Thanks for contributing!';
 export const SUCCESS_BODY = 'Your report helps other shoppers make safer decisions.';
 
 /** The graceful ending for a single-state "No" — nothing stored, nothing counted. */
-export const DECLINED_TITLE = 'Thanks — nothing was submitted.';
+export const DECLINED_TITLE = 'Thanks. Nothing was submitted.';
 export const DECLINED_BODY =
-  'Only shoppers who found the recalled product add a report, so nothing was saved and nothing ' +
-  'was counted. You can come back if you find it later.';
+  'Reports are only for shoppers who found the product, so nothing was saved or counted. You ' +
+  'can come back if you find it later.';
 
 /** Withdrawal succeeded. */
 export const REMOVED_TITLE = 'Your report was removed.';
@@ -477,7 +476,7 @@ export const REMOVE_CONFIRM_REMOVE = 'Remove';
  * regardless of what the form says; only removal, which always works.
  */
 export const REPORT_PAUSED_MESSAGE =
-  'Shopper reports are temporarily unavailable, so this report can’t be edited right now — but you can still remove it.';
+  'Shopper reports are temporarily unavailable, so this report can’t be edited right now. You can still remove it.';
 
 /**
  * Every failure a shopper can hit here — network loss, a case that closed
@@ -486,10 +485,8 @@ export const REPORT_PAUSED_MESSAGE =
  * refuses before writing in every one of those cases, so this never
  * over-promises, and it never leaks WHICH refusal happened.
  */
-export const SUBMIT_FAILURE =
-  'Your report could not be sent. Nothing was saved — please try again.';
-export const REMOVE_FAILURE =
-  'Your report could not be removed. Nothing was changed — please try again.';
+export const SUBMIT_FAILURE = 'Your report could not be sent. Nothing was saved. Try again.';
+export const REMOVE_FAILURE = 'Your report could not be removed. Nothing was changed. Try again.';
 
 export const DONE_ACTION = 'Done';
 export const BACK_ACTION = 'Back';

@@ -78,21 +78,21 @@ export function formatPushContent(event: DeliverableEvent): PushContent {
         body: !rated
           ? 'The official classification of this recall changed.'
           : classificationStatus(projection.classification) === 'mixed'
-            ? `${agency} gave affected products different classifications — overall ${tierWord} risk.`
+            ? `${agency} assigned affected products different classifications. The overall risk level is ${tierWord}.`
             : `${agency} classified this recall as ${tierWord} risk.`,
       };
     case 'classification_upgraded':
       return {
         title: `Risk update: ${product}`,
         body: rated
-          ? `${agency} raised this recall's classification — now ${tierWord} risk.`
+          ? `${agency} raised this recall’s classification. Its risk level is now ${tierWord}.`
           : 'The official classification of this recall changed.',
       };
     case 'classification_downgraded':
       return {
         title: `Risk update: ${product}`,
         body: rated
-          ? `${agency} lowered this recall's classification — now ${tierWord} risk.`
+          ? `${agency} lowered this recall’s classification. Its risk level is now ${tierWord}.`
           : 'The official classification of this recall changed.',
       };
     case 'classification_changed':
@@ -100,7 +100,7 @@ export function formatPushContent(event: DeliverableEvent): PushContent {
       return {
         title: `Risk update: ${product}`,
         body: rated
-          ? `${agency} updated this recall's classifications — now ${tierWord} risk.`
+          ? `${agency} updated this recall’s classifications. Its risk level is now ${tierWord}.`
           : 'The official classification of this recall changed.',
       };
     case 'expansion_products':

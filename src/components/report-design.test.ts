@@ -309,7 +309,7 @@ test('only “Learn more.” is interactive: the disclosure sentence is static t
   assert.ok(
     SCREEN.includes("pathname: '/document/[slug]', params: { slug: PRIVACY_DOCUMENT_SLUG }"),
   );
-  assert.equal(PRIVACY_LINK_HINT, 'Opens Privacy & Data Controls');
+  assert.equal(PRIVACY_LINK_HINT, 'Opens Privacy & Data Controls.');
 });
 
 test('the primary action reads Submit report for a new report and Update report while editing', () => {
