@@ -10,9 +10,15 @@
  */
 
 import { RISK_FILTER_TIERS } from '@/lib/feed-filters';
-import { riskTierWord } from '@/lib/risk-display';
 import type { ConsumerRiskTier } from '@/domain/risk-tier';
-import { bullets, paragraph, type TrustDocument } from './document-model';
+import {
+  bullets,
+  note,
+  paragraph,
+  riskLevels,
+  type RiskLevelItem,
+  type TrustDocument,
+} from './document-model';
 
 /** The five severity levels, canonical order — everything before the non-scale states. */
 export const SEVERITY_TIERS: ConsumerRiskTier[] = RISK_FILTER_TIERS.filter(
@@ -23,23 +29,30 @@ export const UNCERTAINTY_TIERS: ConsumerRiskTier[] = RISK_FILTER_TIERS.filter(
   (tier) => tier === 'pending' || tier === 'unknown',
 );
 
-/** One consumer meaning per severity level, restating consumerRiskTier. */
+/**
+ * One consumer meaning per severity level, restating consumerRiskTier. Each
+ * is rendered beside the production Risk Label for its tier (P2B6B), so it
+ * reads as a sentence of its own.
+ */
 const SEVERITY_MEANING: Record<string, string> = {
-  critical: 'every affected product carries the agency’s most serious recall classification.',
+  critical: 'Every affected product carries the agency’s most serious recall classification.',
   very_high:
-    'affected products carry different official classifications, including the most serious one.',
-  high: 'the agency placed this recall in its middle classification.',
+    'Affected products carry different official classifications, including the most serious one.',
+  high: 'The agency placed this recall in its middle classification.',
   moderate:
-    'the affected products carry the agency’s two lower classifications — this is still an active recall.',
-  low: 'the affected products carry only the agency’s least serious classification — this is still an active recall.',
+    'The affected products carry the agency’s two lower classifications — this is still an active recall.',
+  low: 'The affected products carry only the agency’s least serious classification — this is still an active recall.',
 };
 
 const UNCERTAINTY_MEANING: Record<string, string> = {
   pending:
-    'the agency has not assigned an official classification yet. FDA recalls are routinely announced weeks before their classification arrives, so Pending is the normal early state of a fresh FDA recall — it says “not decided yet,” never “low risk.”',
+    'The agency has not assigned an official classification yet. FDA recalls are routinely announced weeks before their classification arrives, so Pending is the normal early state of a fresh FDA recall — it says “not decided yet,” never “low risk.”',
   unknown:
-    'Recall cannot determine a supported official classification for this notice. Most often that is a public health alert, which never receives a classification at all — the recall’s detail screen says exactly that beneath the level. Unknown describes missing classification information, not severity: it is not a level of risk, and it does not mean low risk. It is also never used for a recall whose classification is simply still on its way; that one is Pending.',
+    'Lotly cannot determine a supported official classification for this notice. Most often that is a public health alert, which never receives a classification at all — the recall’s detail screen says exactly that beneath the level. Unknown describes missing classification information, not severity: it is not a level of risk, and it does not mean low risk. It is also never used for a recall whose classification is simply still on its way; that one is Pending.',
 };
+
+const rows = (tiers: ConsumerRiskTier[], meaning: Record<string, string>): RiskLevelItem[] =>
+  tiers.map((tier) => ({ tier, meaning: meaning[tier] }));
 
 export const RISK_LEVELS: TrustDocument = {
   slug: 'risk-levels',
@@ -53,7 +66,7 @@ export const RISK_LEVELS: TrustDocument = {
           'Every recall carries two layers of risk information. The official layer is the ' +
             'classification the agency itself assigns — Class I, Class II, or Class III — preserved ' +
             'exactly as assigned and shown on each recall’s detail screen. The consumer layer is ' +
-            'Recall’s own plain-language risk level, derived from the official classifications and ' +
+            'Lotly’s own plain-language risk level, derived from the official classifications and ' +
             'nothing else.',
         ),
       ],
@@ -61,8 +74,8 @@ export const RISK_LEVELS: TrustDocument = {
     {
       title: 'The five risk levels',
       blocks: [
-        bullets(SEVERITY_TIERS.map((tier) => `${riskTierWord(tier)} — ${SEVERITY_MEANING[tier]}`)),
-        paragraph(
+        riskLevels(rows(SEVERITY_TIERS, SEVERITY_MEANING)),
+        note(
           'A single recall can cover products the agency classified differently; the level reflects ' +
             'the whole set of official classifications, and the individual classes stay visible on ' +
             'the detail screen. No level — including the lowest — ever means a recalled product is ' +
@@ -74,12 +87,10 @@ export const RISK_LEVELS: TrustDocument = {
       title: 'Two states that are not risk levels',
       blocks: [
         paragraph(
-          'Recall also shows two states that describe missing classification, not severity. They ' +
+          'Lotly also shows two states that describe missing classification, not severity. They ' +
             'are not additional severity levels, and neither means low risk.',
         ),
-        bullets(
-          UNCERTAINTY_TIERS.map((tier) => `${riskTierWord(tier)} — ${UNCERTAINTY_MEANING[tier]}`),
-        ),
+        riskLevels(rows(UNCERTAINTY_TIERS, UNCERTAINTY_MEANING)),
       ],
     },
     {
@@ -87,8 +98,8 @@ export const RISK_LEVELS: TrustDocument = {
       blocks: [
         bullets([
           'The FDA and USDA FSIS classify recalls as Class I (reasonable probability of serious health consequences or death), Class II (may cause temporary or medically reversible health consequences), or Class III (not likely to cause health consequences).',
-          'Recall’s level is a deterministic translation of the official class set — the same classes always produce the same level. It is never guessed from headlines, hazard wording, or illness counts, and it is never an independent judgment about a recall.',
-          'Recall’s consumer level does not replace the official agency classification. The official classification is always preserved and shown on the recall’s detail screen, and the official notice controls in any conflict.',
+          'Lotly’s level is a deterministic translation of the official class set — the same classes always produce the same level. It is never guessed from headlines, hazard wording, or illness counts, and it is never an independent judgment about a recall.',
+          'Lotly’s consumer level does not replace the official agency classification. The official classification is always preserved and shown on the recall’s detail screen, and the official notice controls in any conflict.',
         ]),
       ],
     },

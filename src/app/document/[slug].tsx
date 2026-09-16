@@ -1,55 +1,32 @@
 /**
- * The one reusable trust-document screen (C7): renders any document from the
- * content registry (src/content) in the temporary visual language. All
- * business claims live in the structured content — this file is layout only,
- * so a claim can never exist in JSX alone.
+ * The one reusable trust-document screen (C7; restyled in P2B6B): renders
+ * any document from the content registry (src/content) through the shared
+ * document renderer (components/document). All business claims live in the
+ * structured content — this file is the page and nothing else, so a claim
+ * can never exist in JSX alone.
  *
- * Text is selectable (people quote safety information), external links open
- * the official source in the system browser, and an unknown slug renders an
- * honest not-found state rather than crashing — the same convention as the
- * recall detail screen.
+ * The page is the warm page colour under the navigator's tokenized header,
+ * which names the Profile group the document sits in while the page names
+ * the document itself (lib/document-screen.ts); 16pt margins, the content
+ * column capped at `max-content-width`, the bottom safe-area inset added to
+ * the content padding. Text is selectable (people quote safety information),
+ * external links open the official source in the system browser, document
+ * links push this same route, and an unknown slug renders the shared
+ * not-found state rather than crashing — the same convention as Recall
+ * Detail. Nothing on the page scrolls sideways.
  */
 
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DocumentView } from '@/components/document/document-view';
 import { InstallationResetSection } from '@/components/installation-reset-section';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { StateMessage } from '@/components/state-message';
+import { Surface } from '@/components/ui/surface';
+import { layout, spacing } from '@/constants/design-tokens';
 import { documentBySlug } from '@/content';
-import type { DocumentBlock } from '@/content/document-model';
-
-function Block({ block }: { block: DocumentBlock }) {
-  if (block.kind === 'paragraph') {
-    return <ThemedText selectable>{block.text}</ThemedText>;
-  }
-  if (block.kind === 'bullets') {
-    return (
-      <View style={styles.bullets}>
-        {block.items.map((item) => (
-          <View key={item} style={styles.bulletRow}>
-            <ThemedText themeColor="textSecondary" style={styles.bulletMark}>
-              ·
-            </ThemedText>
-            <ThemedText selectable style={styles.bulletText}>
-              {item}
-            </ThemedText>
-          </View>
-        ))}
-      </View>
-    );
-  }
-  return (
-    <ThemedText
-      themeColor="link"
-      accessibilityRole="link"
-      onPress={() => void Linking.openURL(block.url)}>
-      {block.label}
-    </ThemedText>
-  );
-}
+import { DOCUMENT_NOT_FOUND, navigatorTitle } from '@/lib/document-screen';
 
 export default function DocumentScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -58,47 +35,31 @@ export default function DocumentScreen() {
 
   if (!doc) {
     return (
-      <ThemedView style={styles.messageContainer}>
-        <Stack.Screen options={{ title: 'Not found' }} />
-        <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-          This page could not be found.
-        </ThemedText>
-      </ThemedView>
+      <Surface background="background/page" style={styles.page}>
+        <Stack.Screen options={{ title: DOCUMENT_NOT_FOUND.title }} />
+        <StateMessage {...DOCUMENT_NOT_FOUND} />
+      </Surface>
     );
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <Stack.Screen options={{ title: doc.title }} />
+    <Surface background="background/page" style={styles.page}>
+      <Stack.Screen options={{ title: navigatorTitle(doc) }} />
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: Spacing.four + insets.bottom }]}>
-        <ThemedText type="title" accessibilityRole="header">
-          {doc.title}
-        </ThemedText>
-        {doc.sections.map((section, index) => (
-          <View key={section.title ?? `lead-${index}`} style={styles.section}>
-            {section.title ? (
-              <ThemedText type="small" themeColor="textSecondary" accessibilityRole="header">
-                {section.title.toUpperCase()}
-              </ThemedText>
-            ) : null}
-            {section.blocks.map((block, blockIndex) => (
-              <Block key={blockIndex} block={block} />
-            ))}
-          </View>
-        ))}
+        contentContainerStyle={[styles.content, { paddingBottom: spacing[24] + insets.bottom }]}>
+        <DocumentView doc={doc} />
         {/* C7.1: the one destructive data control lives at the bottom of
             Privacy & Data Controls — and only there (frozen product
             decision; pinned by the trust-center tests). */}
         {doc.slug === 'privacy-data-controls' ? <InstallationResetSection /> : null}
       </ScrollView>
-    </ThemedView>
+    </Surface>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  page: {
     flex: 1,
   },
   scroll: {
@@ -106,37 +67,10 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   content: {
-    maxWidth: MaxContentWidth,
+    maxWidth: layout.maxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    padding: Spacing.three,
-    gap: Spacing.two,
-  },
-  section: {
-    gap: Spacing.one,
-    marginTop: Spacing.two,
-  },
-  bullets: {
-    gap: Spacing.one,
-  },
-  bulletRow: {
-    flexDirection: 'row',
-    gap: Spacing.one,
-  },
-  bulletMark: {
-    lineHeight: 24,
-  },
-  bulletText: {
-    flex: 1,
-    flexShrink: 1,
-  },
-  messageContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.four,
-  },
-  centeredText: {
-    textAlign: 'center',
+    paddingHorizontal: layout.pageMargin,
+    paddingTop: spacing[16],
   },
 });

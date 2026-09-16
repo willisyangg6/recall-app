@@ -11,7 +11,7 @@
  */
 
 import { CONSUMER_ALLERGENS } from '@/domain/preferences';
-import { bullets, paragraph, type TrustDocument } from './document-model';
+import { bullets, documentLink, paragraph, type TrustDocument } from './document-model';
 
 const ALLERGEN_LABELS = CONSUMER_ALLERGENS.map((option) => option.label);
 
@@ -41,8 +41,8 @@ export const HOW_AFFECTS_ME_WORKS: TrustDocument = {
           'Stores you shop at — chosen from a catalog of named retailers.',
         ]),
         paragraph(
-          'All three are optional. Your choices are preferences, never medical information Recall ' +
-            'interprets — selecting an allergen tells Recall which notices to surface, nothing more.',
+          'All three are optional. Your choices are preferences, never medical information Lotly ' +
+            'interprets — selecting an allergen tells Lotly which notices to surface, nothing more.',
         ),
       ],
     },
@@ -54,7 +54,7 @@ export const HOW_AFFECTS_ME_WORKS: TrustDocument = {
           'A nationwide notice affects every state, so it is included once you have chosen a state.',
           'A notice that explicitly states distribution only to other states is excluded. This explicit geographic exclusion is final: a store or allergen match never overrides what the notice itself says about where the product went.',
           'A notice that does not say where the product was sold is never treated as “not you.” Unknown is unknown — it is included when one of your allergens or stores also matches, because a wrong “doesn’t affect you” is the dangerous mistake.',
-          'If you have not chosen a state, Recall cannot assess location for you, so only allergen and store matches appear in Affects Me. Nationwide notices stay in All Recalls.',
+          'If you have not chosen a state, Lotly cannot assess location for you, so only allergen and store matches appear in Affects Me. Nationwide notices stay in All Recalls.',
         ]),
       ],
     },
@@ -80,8 +80,8 @@ export const HOW_AFFECTS_ME_WORKS: TrustDocument = {
       title: 'How store matching works',
       blocks: [
         bullets([
-          'A store is flagged only when the official notice itself states the product was sold, shipped, or distributed there. Recall never infers a store from a chain’s known locations.',
-          'Recall never knows or guesses what you actually bought. There is no purchase history, no receipts, and no inference from your store list — a store match only means the notice named a store you selected. The one exception is a community shopper report you choose to submit, which you fill in yourself and which never affects Affects Me.',
+          'A store is flagged only when the official notice itself states the product was sold, shipped, or distributed there. Lotly never infers a store from a chain’s known locations.',
+          'Lotly never knows or guesses what you actually bought. There is no purchase history, no receipts, and no inference from your store list — a store match only means the notice named a store you selected. The one exception is a community shopper report you choose to submit, which you fill in yourself and which never affects Affects Me.',
           'Notices often do not state where a product was sold, so no store flag never means “not sold there.”',
         ]),
       ],
@@ -111,9 +111,10 @@ export const HOW_AFFECTS_ME_WORKS: TrustDocument = {
       blocks: [
         paragraph(
           'Your choices are saved on this device first and work offline. They are also synced to ' +
-            'Recall’s server, keyed by a random installation identifier, so alert delivery can apply ' +
+            'Lotly’s server, keyed by a random installation identifier, so alert delivery can apply ' +
             'the same rules. Details are in Privacy & Data Controls.',
         ),
+        documentLink('Privacy & Data Controls', 'privacy-data-controls'),
       ],
     },
   ],

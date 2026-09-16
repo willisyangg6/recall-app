@@ -12,5 +12,5 @@ export function resetAvailable(): boolean {
 }
 
 export async function runInstallationReset(): Promise<InstallationResetResult> {
-  return { status: 'failed', message: 'Data reset is available in the Recall mobile app.' };
+  return { status: 'failed', message: 'Data reset is available in the Lotly mobile app.' };
 }

@@ -194,7 +194,7 @@ test('the privacy document and the reset dialog both name saved recalls', () => 
   // otherwise both claims are quietly incomplete.
   const privacy = read('content', 'privacy-data-controls.ts');
   assert.match(privacy, /The recalls you saved/);
-  assert.match(privacy, /never sent to Recall’s server/);
+  assert.match(privacy, /never sent to Lotly’s server/);
   assert.match(read('lib', 'installation-reset.ts'), /removes your ' \+\n  'saved recalls/);
 });
 

@@ -201,6 +201,42 @@ walked on the device — Profile → Personalization / Notifications — where
 opening Notifications only reads the status and never prompts (see
 [recall-push-delivery.md](recall-push-delivery.md)).
 
+### Document renderer and states (P2B6B)
+
+A **Document renderer and states** gallery renders the trust documents'
+shared renderer and blocks (`src/components/document/` — imported from
+production, never copied) over the registry's **own** content, so every
+block kind can be screenshotted without opening seven documents, and the
+reset panel in states the real screen reaches only by deleting data:
+
+- the **shortest** and the **longest** registered document in full (chosen
+  by block count from the registry, so the captions name them); one real
+  section of How Affects Me Works (paragraphs under a section heading); the
+  first bulleted list in Privacy & Data Controls; How Affects Me Works'
+  **internal link** to Privacy & Data Controls (tapping opens the real
+  document); Sources & Methodology's first **external link** (tapping opens
+  its exact official URL in the browser); the Safety Disclaimer's
+  medical-advice **note** as the information callout; the **warning
+  callout** primitive on a labelled sample sentence, for comparison only —
+  no document block can use the lime tone; and Risk Levels Explained's
+  **label rows** — the five levels and the two states drawn by the
+  production `RiskLabel` — which are also the registry's only dense
+  comparison (there is no table block, and nothing on a document scrolls
+  sideways);
+- the **reset panel** idle, confirming (the platform dialog's own words
+  rendered as text, because the dialog itself opens only from the real
+  screen), busy (`Deleting…`, the button inert), succeeded and failed.
+
+The document samples are real content and say so; the reset states are
+**simulated** and say so. The panel is handed each state with its press wired
+to nothing: the gallery imports neither the reset runner nor the section that
+calls it, so no sample can open the confirmation or start a deletion —
+pinned by `src/components/document-design.test.ts`. Accessibility-large text
+is a device setting the gallery cannot simulate; set the simulator's text
+size and inspect the samples and the real documents. The real documents are
+walked from Profile, and the real reset — Cancel only, against an isolated
+local configuration — from the bottom of Privacy & Data Controls.
+
 ### Questionnaire steps and states (P2B3)
 
 A **questionnaire gallery** renders the questionnaire's steps and states one

@@ -791,6 +791,37 @@ recall alerts` is still the only path to the system prompt; opening the
   Notifications", [docs/recall-design-preview.md](docs/recall-design-preview.md)).
   The trust documents keep the provisional appearance.
 
+- **P2B6B — Lotly trust and document-screen design** (implemented,
+  uncommitted): the seven trust documents (Privacy & Data Controls, Sources &
+  Methodology, How Affects Me Works, Risk Levels Explained, Safety
+  Disclaimer, Corrections Policy, Attributions) render through one shared
+  reading page — `src/components/document/` over the unchanged content
+  registry — on the warm page under the tokenized header: the navigator's
+  bar names the Profile group (`About & Safety`, `Privacy & Data`, `Legal`)
+  and the page carries the full document title in `heading-1`, the
+  registry's summary as a standfirst, and content section headings in
+  `heading-3` over `body` prose, with sections parted by air rather than
+  cards. The content model gained three typed kinds the documents needed
+  and nothing untyped: a `note` (the information callout) for the medical,
+  source-precedence and "no level means safe" limitations, a
+  `document-link` (three, between documents that already named each other),
+  and `risk-levels` rows so Risk Levels Explained draws the production
+  `RiskLabel` for exactly the seven tiers beside each meaning. External
+  links keep Recall Detail's treatment and their exact URLs. The reset
+  section stays at the bottom of Privacy & Data Controls alone, set apart
+  by a rule and the strong border, consequence before the shared secondary
+  `Button`, with its confirmation, queue, busy, success and failure
+  behaviour untouched and no destructive token added. Product-name rule
+  applied to the document bodies and the reset copy (`Lotly` where the
+  product was meant — 46 lines; `recall`, `Recall data`, `All Recalls` and
+  the official agency titles kept); no sentence was removed and no other
+  wording changed. Every slug, route, link and safety boundary is pinned by
+  `src/components/document-design.test.ts`; the dev-only Design Preview
+  gained a gallery of the renderer over real content and the reset panel in
+  every state, wired to nothing ([DESIGN.md](DESIGN.md) "Trust documents",
+  [docs/recall-design-preview.md](docs/recall-design-preview.md)). The
+  whole-app copy and tone audit remains the next milestone.
+
 ## Operational verification (O2)
 
 - **O2-A — read-only production audit, completed 2026-09-05. Final

@@ -368,10 +368,11 @@ test('official and sourced content is not affected by the copy rules', () => {
       assert.ok(!codeOnly(source).includes(forbidden), `${name} imports ${forbidden}`);
     }
   }
-  // Document bodies keep their own wording and punctuation: documents are
-  // outside this scope, and sourced notice content is never rewritten.
+  // Document bodies keep their own wording and punctuation: the tone
+  // rewrite is outside this scope (P2B6B changed only the product name in
+  // them), and sourced notice content is never rewritten.
   assert.ok(read('content', 'how-affects-me-works.ts').includes('shop or cook for'));
-  assert.ok(read('content', 'privacy-data-controls.ts').includes('What Recall’s server stores'));
+  assert.ok(read('content', 'privacy-data-controls.ts').includes('What Lotly’s server stores'));
   assert.ok(PUSH.includes("name: 'Recall alerts',"));
   assert.equal(STATUS_ON, 'Recall alerts are on for this device.');
   assert.equal(ENABLE_ACTION, 'Enable recall alerts');

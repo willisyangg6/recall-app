@@ -28,6 +28,9 @@ import { Stack, router, useFocusEffect } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DocumentBlockView } from '@/components/document/document-blocks';
+import { DocumentSectionView, DocumentView } from '@/components/document/document-view';
+import { ResetPanel } from '@/components/installation-reset-section';
 import { DevelopmentEntry } from '@/components/profile/development-entry';
 import { NavigationRow } from '@/components/profile/navigation-row';
 import { PersonalizationCard } from '@/components/profile/personalization-card';
@@ -69,6 +72,8 @@ import {
   type TypographyVariant,
 } from '@/constants/design-tokens';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { documentBySlug, TRUST_DOCUMENTS } from '@/content';
+import type { DocumentBlock, TrustDocument } from '@/content/document-model';
 import { useFeed } from '@/hooks/use-feed';
 import {
   activeDesignPreview,
@@ -87,6 +92,12 @@ import {
   type ScreenedCandidate,
 } from '@/lib/design-preview';
 import { DETAIL_ERROR_TITLE, DETAIL_LOADING, DETAIL_MISSING } from '@/lib/detail-copy';
+import {
+  RESET_CONFIRM_BODY,
+  RESET_CONFIRM_CANCEL,
+  RESET_CONFIRM_DELETE,
+  RESET_CONFIRM_TITLE,
+} from '@/lib/installation-reset';
 import { GENERIC_FAILURE, type NotificationsView } from '@/lib/notifications-screen';
 import { storeCountLabel } from '@/lib/personalization-screen';
 import {
@@ -721,6 +732,16 @@ export default function DesignPreviewScreen() {
           NOTIFICATION STATES
         </ThemedText>
         <NotificationsGallery />
+
+        {/* P2B6B: the trust documents' shared renderer and content blocks —
+            imported from production, never copied — over the registry's own
+            real content, plus the reset panel in every state with its press
+            wired to nothing: nothing below can start a deletion, and no
+            document is rewritten here. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          DOCUMENT RENDERER AND STATES
+        </ThemedText>
+        <DocumentGallery />
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           RECALLS IN USE
@@ -1579,6 +1600,143 @@ function GallerySample({ caption, children }: { caption: string; children: React
       {children}
     </View>
   );
+}
+
+/** The first block of a kind in a registered document — real content, never a sample sentence. */
+function documentBlock(slug: string, kind: DocumentBlock['kind']): DocumentBlock | null {
+  const doc = documentBySlug(slug);
+  if (!doc) return null;
+  for (const section of doc.sections) {
+    const block = section.blocks.find((candidate) => candidate.kind === kind);
+    if (block) return block;
+  }
+  return null;
+}
+
+function documentSection(slug: string, title: string): TrustDocument['sections'][number] | null {
+  return documentBySlug(slug)?.sections.find((section) => section.title === title) ?? null;
+}
+
+/**
+ * The trust documents' renderer (components/document) and the reset panel
+ * (components/installation-reset-section), imported from production, over
+ * the registry's own content. Every document sample is REAL content — the
+ * shortest and the longest registered document in full, and one real block
+ * of each kind — because a rendered sample sentence would prove nothing
+ * about the documents. The reset panel's states are simulated: each is the
+ * panel with its state handed in and its press wired to nothing, so no
+ * sample can open the dialog or start a run; the confirming state is the
+ * dialog's own words as text, because the dialog itself is the platform's.
+ */
+function DocumentGallery() {
+  const noop = () => {};
+  const byLength = [...TRUST_DOCUMENTS].sort((a, b) => documentLength(a) - documentLength(b));
+  const shortest = byLength[0];
+  const longest = byLength[byLength.length - 1];
+  const prose = documentSection('how-affects-me-works', 'How allergen matching works');
+  const bulletsBlock = documentBlock('privacy-data-controls', 'bullets');
+  const internalLink = documentBlock('how-affects-me-works', 'document-link');
+  const externalLink = documentBlock('sources-methodology', 'link');
+  const noteBlock = documentBlock('safety-disclaimer', 'note');
+  const riskDoc = documentBySlug('risk-levels');
+  const riskBlocks = (riskDoc?.sections ?? [])
+    .flatMap((section) => section.blocks)
+    .filter((block) => block.kind === 'risk-levels');
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        The trust documents’ shared renderer and blocks (components/document), imported from
+        production, over the registry’s own real content. Nothing here is rewritten or invented. The
+        reset panel below is the production panel with each state handed in and its press wired to
+        nothing: no sample can open the confirmation or start a deletion.
+      </Text>
+      <GallerySample
+        caption={`Short document — real: ${shortest.title}, the shortest registered document, in full`}>
+        <DocumentView doc={shortest} />
+      </GallerySample>
+      <GallerySample
+        caption={`Long document — real: ${longest.title}, the longest registered document, in full`}>
+        <DocumentView doc={longest} />
+      </GallerySample>
+      {prose ? (
+        <GallerySample caption="Paragraphs and a section heading — real: one section of How Affects Me Works">
+          <DocumentSectionView section={prose} />
+        </GallerySample>
+      ) : null}
+      {bulletsBlock ? (
+        <GallerySample caption="Bulleted list — real: the first list in Privacy & Data Controls (no document holds a numbered list, so the model has none)">
+          <DocumentBlockView block={bulletsBlock} />
+        </GallerySample>
+      ) : null}
+      {internalLink ? (
+        <GallerySample caption="Internal link — real: How Affects Me Works’ link to Privacy & Data Controls; tapping opens the real document">
+          <DocumentBlockView block={internalLink} />
+        </GallerySample>
+      ) : null}
+      {externalLink ? (
+        <GallerySample caption="External link — real: Sources & Methodology’s first official-source link; tapping opens its exact URL in the browser">
+          <DocumentBlockView block={externalLink} />
+        </GallerySample>
+      ) : null}
+      {noteBlock ? (
+        <GallerySample caption="Information callout — real: the Safety Disclaimer’s medical-advice note (a note block)">
+          <DocumentBlockView block={noteBlock} />
+        </GallerySample>
+      ) : null}
+      <GallerySample caption="Warning callout — simulated: the primitive on a labelled sample sentence, for comparison; no document block uses the lime tone, which is personal relevance only">
+        <Callout tone="warning">
+          Sample warning callout: the lime tone is for personal relevance.
+        </Callout>
+      </GallerySample>
+      {riskBlocks.length > 0 ? (
+        <GallerySample caption="Risk-label explanation — real: Risk Levels Explained’s label rows, the five levels and the two states, drawn by the production Risk Label">
+          <View style={styles.formSample}>
+            {riskBlocks.map((block, index) => (
+              <DocumentBlockView key={index} block={block} />
+            ))}
+          </View>
+        </GallerySample>
+      ) : null}
+      <GallerySample caption="Dense comparison — real: the same label rows are the registry’s only comparison; there is no table block, and nothing on a document scrolls sideways">
+        {riskBlocks[0] ? <DocumentBlockView block={riskBlocks[0]} /> : null}
+      </GallerySample>
+      <GallerySample caption="Reset section, idle — simulated: the panel before a tap; the press is wired to nothing">
+        <ResetPanel state="idle" onPress={noop} />
+      </GallerySample>
+      <GallerySample caption="Reset section, confirming — simulated: the platform dialog’s own words, as text; the dialog opens only from the real screen">
+        <Surface radius={12} border="border/strong" style={styles.feedCase}>
+          <Text variant="heading-3" accessibilityRole="header">
+            {RESET_CONFIRM_TITLE}
+          </Text>
+          <Text variant="body-small">{RESET_CONFIRM_BODY}</Text>
+          <Text variant="body-small-bold" color="action/secondary">
+            {`${RESET_CONFIRM_CANCEL} · ${RESET_CONFIRM_DELETE}`}
+          </Text>
+        </Surface>
+      </GallerySample>
+      <GallerySample caption="Reset section, busy — simulated: a run in flight; the button is inert and reads Deleting…">
+        <ResetPanel state="running" onPress={noop} />
+      </GallerySample>
+      <GallerySample caption="Reset section, success — simulated: the run finished and the data was deleted">
+        <ResetPanel state="deleted" onPress={noop} />
+      </GallerySample>
+      <GallerySample caption="Reset section, failure — simulated: the server deletion failed, so nothing on the device changed">
+        <ResetPanel state="failed" onPress={noop} />
+      </GallerySample>
+      <Text variant="caption" color="text/secondary">
+        Accessibility-large text is a device setting the gallery cannot simulate: set the
+        simulator’s text size and inspect the samples and the real documents.
+      </Text>
+    </Surface>
+  );
+}
+
+function documentLength(doc: TrustDocument): number {
+  return doc.sections.reduce((total, section) => total + section.blocks.length, 0);
 }
 
 /** One question step holding its own answers, so a row can be chosen and inspected. */

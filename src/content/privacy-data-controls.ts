@@ -15,7 +15,7 @@
  */
 
 import { RESET_ACTION_LABEL } from '@/lib/installation-reset';
-import { bullets, paragraph, type TrustDocument } from './document-model';
+import { bullets, documentLink, paragraph, type TrustDocument } from './document-model';
 
 export const PRIVACY_DATA_CONTROLS: TrustDocument = {
   slug: 'privacy-data-controls',
@@ -26,7 +26,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: null,
       blocks: [
         paragraph(
-          'Recall works without an account and collects as little as it can. This page explains, ' +
+          'Lotly works without an account and collects as little as it can. This page explains, ' +
             'in plain language, exactly what the current app stores and sends. A formal privacy ' +
             'policy is being prepared; this page describes verified current behavior.',
         ),
@@ -39,13 +39,14 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'Your personalization choices — state, allergens to watch, and stores — saved in the device’s secure storage. They work offline and are read locally to build Affects Me.',
           'A random installation identifier, created on this device the first time it is needed. It contains nothing about you or your device — it is a random number used so the server can tell installations apart.',
           'Whether you turned recall alerts on.',
-          'The recalls you saved, kept as a list of recall identifiers on this device only. Saving is a private bookmark: it is never sent to Recall’s server, is not part of your personalization, and changes nothing about which recalls you are alerted to.',
+          'The recalls you saved, kept as a list of recall identifiers on this device only. Saving is a private bookmark: it is never sent to Lotly’s server, is not part of your personalization, and changes nothing about which recalls you are alerted to.',
           'Search text and browsing filters are session state only: searching runs entirely on this device over already-loaded notices, and what you type is never stored or sent anywhere.',
         ]),
+        documentLink('How Affects Me Works', 'how-affects-me-works'),
       ],
     },
     {
-      title: 'What Recall’s server stores',
+      title: 'What Lotly’s server stores',
       blocks: [
         bullets([
           'A mirror of your personalization choices (state, allergens, stores), keyed by the random installation identifier — synced so alert delivery can apply exactly the same relevance rules the app shows you.',
@@ -54,7 +55,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'Any community shopper report you choose to submit, keyed by the same random installation identifier — see “Community shopper reports” below for exactly what one contains.',
         ]),
         paragraph(
-          'Server records are keyed only by the random installation identifier. Recall’s server ' +
+          'Server records are keyed only by the random installation identifier. Lotly’s server ' +
             'has no name, email, account, or contact information to attach them to.',
         ),
       ],
@@ -80,21 +81,21 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       ],
     },
     {
-      title: 'What Recall does not collect',
+      title: 'What Lotly does not collect',
       blocks: [
         bullets([
           'No account, name, email address, phone number, contacts, or photos.',
-          'No device location: Recall never uses location services. Your state is a manual choice.',
+          'No device location: Lotly never uses location services. Your state is a manual choice.',
           'No advertising identifier, no advertising, and no tracking across apps or websites.',
           'No analytics, advertising, or crash-reporting SDKs are included in the app.',
           'No record of what you search for, which recalls you read, or what you share — none of that is stored by the app or tied to your installation identifier.',
         ]),
         paragraph(
-          'Like every internet service, requests to load recall data reach Recall’s ' +
+          'Like every internet service, requests to load recall data reach Lotly’s ' +
             'infrastructure and carry standard connection details (such as an IP address) used to ' +
             'serve the request. Recall reads are made with a shared application key and are not ' +
             'tied to your installation identifier. Product images load directly from the issuing ' +
-            'agency’s website or Recall’s image storage.',
+            'agency’s website or Lotly’s image storage.',
         ),
       ],
     },
@@ -102,7 +103,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'Who processes data',
       blocks: [
         paragraph(
-          'Recall’s database and image storage are hosted on Supabase. Push alerts are delivered ' +
+          'Lotly’s database and image storage are hosted on Supabase. Push alerts are delivered ' +
             'through Expo’s push service and then Apple’s or Google’s notification infrastructure ' +
             'for your device. These providers process the data described above to provide those ' +
             'services; none of them receives it for advertising.',

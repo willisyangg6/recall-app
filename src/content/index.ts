@@ -31,6 +31,15 @@ export function documentBySlug(slug: string): TrustDocument | undefined {
   return TRUST_DOCUMENTS.find((doc) => doc.slug === slug);
 }
 
+/**
+ * The Profile group a document is listed under (P2B6B): the document screen
+ * shows the group's title in the navigator, above the document's own full
+ * title on the page, so the two are never the same words twice.
+ */
+export function profileGroupFor(slug: string): ProfileDocumentGroup | undefined {
+  return PROFILE_DOCUMENT_GROUPS.find((group) => group.slugs.includes(slug));
+}
+
 export interface ProfileDocumentGroup {
   /** Uppercased section label on the Profile screen. */
   title: string;

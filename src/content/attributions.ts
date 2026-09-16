@@ -20,7 +20,7 @@ export const ATTRIBUTIONS: TrustDocument = {
         bullets([
           'Recall announcement data is collected from the U.S. Food and Drug Administration (FDA), including data provided through openFDA. openFDA data is dedicated to the public domain (CC0 1.0). Suggested citation: “Data provided by the U.S. Food and Drug Administration.”',
           'Meat, poultry, and egg product recall and public health alert data is collected from the U.S. Department of Agriculture, Food Safety and Inspection Service (USDA FSIS). As a work of the United States government, it is in the public domain.',
-          'Use of this public data does not imply that the FDA, the USDA, or any government agency endorses Recall.',
+          'Use of this public data does not imply that the FDA, the USDA, or any government agency endorses Lotly.',
         ]),
         link('openFDA', 'https://open.fda.gov/'),
         link('USDA FSIS', 'https://www.fsis.usda.gov/recalls'),
@@ -32,7 +32,7 @@ export const ATTRIBUTIONS: TrustDocument = {
         paragraph(
           'Product photos shown for FDA notices are the agency’s own published images, loaded ' +
             'directly from the FDA’s website. Label images shown for FSIS notices are rendered by ' +
-            'Recall from the official label PDF documents FSIS publishes, and each keeps a link to ' +
+            'Lotly from the official label PDF documents FSIS publishes, and each keeps a link to ' +
             'its original document. Labels and photos may include manufacturers’ trademarks, which ' +
             'remain the property of their owners and appear only as part of the official notice ' +
             'material.',
@@ -43,8 +43,8 @@ export const ATTRIBUTIONS: TrustDocument = {
       title: 'Open-source software',
       blocks: [
         paragraph(
-          'Recall is built with open-source software used under its respective licenses, ' +
-            'including Expo and React Native (MIT), React (MIT), and — in Recall’s server-side ' +
+          'Lotly is built with open-source software used under its respective licenses, ' +
+            'including Expo and React Native (MIT), React (MIT), and — in Lotly’s server-side ' +
             'processing — the Supabase client library (MIT) and PDF.js (Apache-2.0) for rendering ' +
             'official label documents. Thank you to their maintainers and contributors.',
         ),

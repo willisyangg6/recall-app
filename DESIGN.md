@@ -259,7 +259,7 @@ matter above are the same values as `src/constants/design-tokens.ts`;
 `src/constants/design-tokens.test.ts` proves the two agree, and
 `src/constants/design-contract.test.ts` pins the product rules below._
 
-_Status (P2B6A, 2026-09-15): reconciled against Figma and the shipped product.
+_Status (P2B6B, 2026-09-15): reconciled against Figma and the shipped product.
 The token foundation and fourteen shared primitives exist in code — `Text`,
 `Surface`, `DisclosureControl` and `RiskLabel` from P2B0; `Icon`,
 `RelevanceLabel`, `Chip` and `SearchBar` from P2B1; `MediaTile`, `Callout`
@@ -269,8 +269,8 @@ decorative glyph above its title; Public Sans and IBM Plex Mono are installed an
 the app is locked to light appearance; the risk label reads its bare
 canonical word on every surface. **The Feed (P2B1), Recall Detail (P2B2),
 the shopper-report questionnaire (P2B3), Saved (P2B4), the Profile hub
-(P2B5) and its Personalization and Notifications screens (P2B6A) are the
-restyled product screens**: the Feed's page, search bar, chip
+(P2B5), its Personalization and Notifications screens (P2B6A) and the seven
+trust documents (P2B6B) are the restyled product screens**: the Feed's page, search bar, chip
 row, section headings, recall card, whole-screen states and the bottom
 navigation; Detail's product header, callouts, sections, community block and
 Affected Products table; the questionnaire's steps, review, disclosure,
@@ -278,11 +278,12 @@ endings and paused state; Saved's page, list rhythm, whole-screen states and
 notices; and Profile's featured Personalization card, boxed Notifications
 row, grouped document sections, version row and development entry; and
 Personalization's single-choice state, multi-choice allergens and stores
-and autosave line, and Notifications' status callout and one action — render
-from the tokens with every shipped behaviour intact. The pushed screens'
+and autosave line, and Notifications' status callout and one action; and the trust documents'
+reading page, section hierarchy, notes, label rows, links and the one reset
+control — render from the tokens with every shipped behaviour intact. The pushed screens'
 header chrome is styled from the same tokens and their back control is the
-platform chevron alone. The trust documents keep the provisional appearance
-until their own milestone._
+platform chevron alone. Every product screen now renders from the
+tokens._
 
 ## Overview
 
@@ -463,9 +464,10 @@ Until then the app is locked to light appearance (founder decision,
 2026-09-14): `userInterfaceStyle` is `light` in `app.json`, which is the
 supported Expo configuration, and the root navigation theme is pinned to light
 so no screen can follow the system into dark. There is no toggle and no fake
-dark token. The legacy provisional theme the un-migrated screens still use
-carries dark values from before the system existed; they are unreachable now
-and go when the last screen migrates.
+dark token. The legacy provisional theme (`theme.ts`) still carries dark values from
+before the system existed; no product screen reads them since P2B6B — only the
+dev-only Design Preview hub and an unmounted photo gallery do — and they go
+when those last users migrate.
 
 ## Typography
 
@@ -887,6 +889,84 @@ alerts`, `Open system settings`, `Working…`, `Checking status…`, `Something
 went wrong.`) are unchanged. The three product-name sentences from P2B6A
 (`…in the Lotly mobile app.` twice, and the denied sentence) stand.
 
+### Trust documents
+
+The seven documents under Profile's Privacy & Data, About & Safety and Legal
+groups — Privacy & Data Controls, Sources & Methodology, How Affects Me
+Works, Risk Levels Explained, Safety Disclaimer, Corrections Policy and
+Attributions — are one reading page (P2B6B). Their content is the registry
+(`src/content/`, one structured document per topic, unchanged in slug, route
+and claim); the page is one shared renderer (`src/components/document/`),
+and the seven differ only where their content does.
+
+**Two titles, one rule.** The navigator's bar names the Profile group the
+document was opened from — `Privacy & Data`, `About & Safety`, `Legal`
+(`navigatorTitle`, from the registry's own grouping) — and the page names
+the document in full, so the reader sees where they are and what they are
+reading and never the same words twice. A long title (`Privacy & Data
+Controls`, `Sources & Methodology`) therefore lives in the page, where it
+wraps, not in the bar, where it would clip.
+
+**Hierarchy** (`DocumentView`): the document title in `heading-1` as a
+header; the registry's one-line summary as the standfirst in `body`
+`text/secondary`; the lead section's blocks; then each titled section — a
+content section heading (title case as written, `heading-3`, navy; see
+"Section headings and group labels") over its blocks. Sections are parted by
+`spacing/32` of air and nothing else: no card per paragraph, no rule between
+sections, no illustration, gradient or animation. Within a section the
+blocks sit `spacing/12` apart. The page is the warm page under the tokenized
+header, 16pt margins, the content column capped at `max-content-width`, the
+bottom inset added to the content padding; text is selectable; nothing
+scrolls sideways (there is no table block, because no document holds a
+table, and no ordered list, because none holds one).
+
+**Blocks** (`DocumentBlockView`), one treatment per kind in the model:
+
+- `paragraph` — `body` in `text/primary`, the scale's 1.5 leading, wrapping
+  at the content width.
+- `bullets` — a bullet in the same type beside each item, each row one
+  element to assistive technology.
+- `note` — a limitation or boundary the reader should not miss, as the
+  soft-blue information Callout; never the lime warning tone, which is
+  personal relevance. The Safety Disclaimer's medical-advice sentence, the
+  two source-precedence sentences and Risk Levels' "no level means safe"
+  sentence are notes.
+- `risk-levels` — Risk Levels Explained's rows: the production Risk Label
+  (the same component, word and colours as the feed card, spelled by
+  `riskTierLabel`) above the tier's meaning in `body`, one row per tier, the
+  five levels in one section and the two states in the next, exactly as the
+  domain orders them. This is the registry's one dense comparison; it stacks
+  rather than scrolls, so it survives any type size.
+- `link` — an external official-source link: the label in `body`
+  `action/secondary` with the 16px `external-link` glyph, the `link` role,
+  the spoken hint `Opens in your browser` and a 44pt row — Recall Detail's
+  treatment exactly.
+- `document-link` — a link to another registered document: the same row
+  with the `chevron-right` glyph and Profile's hint `Opens the document.`,
+  pushed through the router to the one document route. Three exist:
+  Sources → Corrections Policy, How Affects Me → Privacy & Data Controls,
+  Privacy → How Affects Me Works.
+
+**The reset** (`InstallationResetSection`, on Privacy & Data Controls only,
+C7.1) is set apart from the document by a `border/default` rule and
+`spacing/32`, then the content section heading `Delete my data` over one
+white `radius/12` panel with the `border/strong` border — the system's
+existing emphasis border, the one the development entry also uses to stand
+apart — holding the consequence sentence first, then the one action as the
+shared secondary `Button` (`Reset app and delete my data`, busy `Deleting…`,
+disabled while a run is in flight), then the outcome sentence as a polite
+live region. Danger is carried by the words, the border and the platform's
+own destructive confirmation dialog, never by a colour: no risk token is
+borrowed and no destructive token was added, because the system could
+already say it. Cancel in the dialog mutates nothing, and the queued
+orchestrator, its success and failure handling and every label are unchanged.
+
+**Copy.** P2B6B applied the product-name rule to the document bodies —
+`Lotly` where the product was meant, `recall` and `Recall data` where a
+recall is — and restructured nothing else: no sentence was removed, official
+agency language and link labels are untouched, and the wider tone audit
+stays scheduled after this milestone (see "Consumer copy").
+
 ### Affected Products table
 
 Affected Products intentionally uses a **horizontally scrollable table** on
@@ -982,8 +1062,10 @@ DATA`, `ABOUT & SAFETY`, `LEGAL`, `APP` and `DEVELOPMENT BUILDS ONLY`
    Sans semibold, 19/26), `text/primary` navy, a header to assistive
    technology. It heads a section the shopper reads and acts in:
    Personalization's `Your state`, `Allergens to watch`, `Stores you shop
-at` (`SettingsSection`), and the selector sheets' titles (`Choose your
-state`, `Choose stores`). Never uppercased, never the caption.
+at` (`SettingsSection`), the selector sheets' titles (`Choose your
+state`, `Choose stores`), every trust document's section headings and
+   the reset section's `Delete my data` (P2B6B). Never uppercased, never the
+   caption.
 
 A future screen with both kinds keeps them apart the same way: groups of
 links get the label, sections of content and controls get the heading.
@@ -1193,7 +1275,9 @@ text token), the glyph centred on the first line of text, and no shadow
 (conflict 15). Recall Detail renders the affects-you sentence as the warning
 tone and a retracted notice as the information tone; the sentences are the
 presentation contract's. The lime tone is keyed by name, so generic
-information cannot land on it without saying so in code.
+information cannot land on it without saying so in code. The trust documents'
+`note` blocks render as the information tone (P2B6B); no document can reach
+the warning tone.
 
 ### Disclosure Control
 
@@ -1544,10 +1628,14 @@ send marketing notifications.`).
 
 Applied so far to Personalization and Notifications (their copy modules,
 `src/lib/personalization-screen.ts` and `src/lib/notifications-screen.ts`,
-are pinned for it). **Recorded follow-up:** a whole-app authored-copy audit
-against these rules — the Feed, Saved, Detail, the questionnaire, Profile
-and the trust documents — is scheduled after P2B6B; nothing outside the two
-settings screens was rewritten in the follow-up.
+are pinned for it). P2B6B applied only the product-name rule to the trust
+documents' bodies (`Lotly` where the product was meant; `recall` kept for a
+recall) and left their wording and punctuation otherwise as authored.
+**Recorded follow-up:** a whole-app authored-copy audit against these rules
+— the Feed, Saved, Detail, the questionnaire, Profile and the trust
+documents — is scheduled after P2B6B; nothing outside the two settings
+screens was rewritten in the follow-up, and the documents were not toned in
+P2B6B.
 
 ## Interaction states
 
@@ -1730,6 +1818,7 @@ decision. They are normalized to the scale and never reproduced:
 | — (no button or radio component)         | `src/components/ui/button.tsx`, `src/components/ui/choice-row.tsx` (P2B3) |
 | — (no Profile frame; conflict 27)        | `src/app/(tabs)/profile.tsx`, `src/components/profile/` (P2B5)            |
 | — (no settings frame; conflict 28)       | `src/app/settings/*.tsx`, `src/components/settings/`, `ui/check-row.tsx`  |
+| — (no document frame; conflict 29)       | `src/app/document/[slug].tsx`, `src/components/document/` (P2B6B)         |
 
 ### Development gallery
 
@@ -1773,7 +1862,14 @@ preferences held in the gallery's memory; and the panel loading, not
 determined, enabled, denied-but-askable, requiring system settings,
 unsupported, and after a failed operation, its actions wired to nothing —
 so no sample can save a preference, register a token, raise the system
-prompt or contact a backend. Only the values each caption names are simulated.
+prompt or contact a backend; and from P2B6B the trust documents' shared
+renderer and blocks over the registry's own content — the shortest and the
+longest registered document in full, one real section, one real block of
+each kind (bullets, a document link, an external link, a note, the
+risk-label rows), the warning callout for comparison — and the reset panel
+idle, confirming (the dialog's words as text), busy, succeeded and failed,
+its press wired to nothing, so no sample can open the confirmation or start
+a deletion. Only the values each caption names are simulated.
 It is not a product surface.
 
 ## Known Figma/code conflicts
@@ -1901,6 +1997,15 @@ Sold`; the shipped titles were sentence case and rendered uppercase.
     arrive, Figma owns the composition and this document records any
     conflict; the behaviour, the storage and permission boundaries and the
     copy stay the contract's.
+29. **The trust documents are not in Figma.** No reading page, document
+    title, note, label row or link row exists in the file. P2B6B composed the
+    document page from the system — the tokens, the type scale (`heading-1`
+    for the one full title on a page, its first use), the information
+    Callout, the Risk Label, the Button, the shared state message and the
+    external-link treatment Recall Detail already had — and added no new
+    primitive and no destructive token. When frames arrive, Figma owns the
+    composition and this document records any conflict; the registry, its
+    slugs, claims, links and the reset's behaviour stay the contract's.
 
 ## Figma corrections for Cheyenne
 

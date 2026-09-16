@@ -201,7 +201,7 @@ test('the documented allergen vocabulary is exactly the canonical consumer set',
 
 test('local-first preferences and the server mirror are described', () => {
   assert.match(affectsMeText, /saved on this device first/i);
-  assert.match(affectsMeText, /synced to Recall.s server/i);
+  assert.match(affectsMeText, /synced to Lotly.s server/i);
 });
 
 test('the risk document uses the canonical tier vocabulary, five levels + two states', () => {
@@ -220,11 +220,23 @@ test('Pending and Unknown are separated from the severity levels and never calle
     (s) => s.title === 'Two states that are not risk levels',
   );
   assert.ok(fiveLevels && states, 'the two sections must exist separately');
-  const levelItems = fiveLevels.blocks.flatMap((b) => (b.kind === 'bullets' ? b.items : []));
+  // P2B6B: the levels are risk-level rows (the production Risk Label beside
+  // each meaning), not bullets — the tiers listed are exactly the five.
+  const levelItems = fiveLevels.blocks.flatMap((b) => (b.kind === 'risk-levels' ? b.items : []));
   assert.equal(levelItems.length, 5);
+  assert.deepEqual(
+    levelItems.map((item) => item.tier),
+    SEVERITY_TIERS,
+    'the five levels, in canonical order, and no state among them',
+  );
+  const stateItems = states.blocks.flatMap((b) => (b.kind === 'risk-levels' ? b.items : []));
+  assert.deepEqual(
+    stateItems.map((item) => item.tier),
+    UNCERTAINTY_TIERS,
+  );
   for (const tier of UNCERTAINTY_TIERS) {
     assert.ok(
-      !levelItems.some((item) => item.startsWith(riskTierWord(tier))),
+      !levelItems.some((item) => item.tier === tier),
       `${riskTierWord(tier)} must not be listed among the five levels`,
     );
   }

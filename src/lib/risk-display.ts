@@ -97,6 +97,21 @@ export function riskTierWord(tier: ConsumerRiskTier): string {
   return TIER_WORD[tier];
 }
 
+/**
+ * The one consumer label for a tier as the Risk Label renders and speaks it
+ * (P2B6B): the canonical word uppercased, and the spoken `Risk level: …`.
+ * `riskView` reads it for the badge and the headline, and the Risk Levels
+ * document reads it for its label rows, so a surface that shows a tier
+ * without a classification in hand still shows exactly the product's label.
+ */
+export function riskTierLabel(tier: ConsumerRiskTier): {
+  text: string;
+  accessibilityLabel: string;
+} {
+  const word = TIER_WORD[tier];
+  return { text: word.toUpperCase(), accessibilityLabel: `Risk level: ${word}` };
+}
+
 export function riskView(classification: Classification, sourceAgency: SourceAgency): RiskView {
   const tier = consumerRiskTier(classification);
   const classes = officialClassesOf(classification);
@@ -136,12 +151,12 @@ export function riskView(classification: Classification, sourceAgency: SourceAge
   // present an absent classification as a level of risk. They remain
   // first-class members of the one label set, spelled and styled exactly like
   // the five severities.
-  const word = TIER_WORD[tier];
+  const label = riskTierLabel(tier);
   return {
     tier,
-    badgeLabel: word.toUpperCase(),
-    headlineLabel: word.toUpperCase(),
-    accessibilityLabel: `Risk level: ${word}`,
+    badgeLabel: label.text,
+    headlineLabel: label.text,
+    accessibilityLabel: label.accessibilityLabel,
     note: TIER_NOTE[tier],
     official,
   };

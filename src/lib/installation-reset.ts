@@ -96,7 +96,7 @@ export function resetInstallationData(
 export const RESET_ACTION_LABEL = 'Reset app and delete my data';
 
 export const RESET_SUPPORTING_COPY =
-  'Deletes this installation’s data from Recall’s server — your personalization choices, ' +
+  'Deletes this installation’s data from Lotly’s server — your personalization choices, ' +
   'notification registration, and alert delivery records — and clears them from this device. ' +
   'Recall information itself is public and is not affected.';
 
@@ -108,7 +108,7 @@ export const RESET_CONFIRM_TITLE = 'Delete your data?';
 // the C7.1 wording is unchanged.
 export const RESET_CONFIRM_BODY =
   'This removes your personalization, your notification registration, and the data associated ' +
-  'with this installation from Recall’s server, clears them from this device, and removes your ' +
+  'with this installation from Lotly’s server, clears them from this device, and removes your ' +
   'saved recalls. The app returns to its default, unpersonalized state, and recall alerts stay ' +
   'off until you enable them again. This cannot be undone.';
 

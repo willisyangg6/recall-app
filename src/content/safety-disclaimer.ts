@@ -5,7 +5,7 @@
  * anywhere in the trust documents.
  */
 
-import { bullets, paragraph, type TrustDocument } from './document-model';
+import { bullets, note, paragraph, type TrustDocument } from './document-model';
 
 export const SAFETY_DISCLAIMER: TrustDocument = {
   slug: 'safety-disclaimer',
@@ -16,7 +16,7 @@ export const SAFETY_DISCLAIMER: TrustDocument = {
       title: null,
       blocks: [
         paragraph(
-          'Recall is an informational service. It organizes official government food-safety ' +
+          'Lotly is an informational service. It organizes official government food-safety ' +
             'notices so they are easier to find, read, and act on. It is not a safety certification, ' +
             'and it makes no judgment of its own about any product.',
         ),
@@ -25,8 +25,8 @@ export const SAFETY_DISCLAIMER: TrustDocument = {
     {
       title: 'Not medical advice',
       blocks: [
-        paragraph(
-          'Nothing in Recall is medical advice, and Recall does not provide diagnosis or ' +
+        note(
+          'Nothing in Lotly is medical advice, and Lotly does not provide diagnosis or ' +
             'treatment. If you believe you or someone you care for may have been exposed to a ' +
             'recalled product, or you feel unwell, contact a healthcare professional. In an ' +
             'emergency, contact emergency services.',
@@ -37,7 +37,7 @@ export const SAFETY_DISCLAIMER: TrustDocument = {
       title: 'The official notice controls',
       blocks: [
         bullets([
-          'Every notice in Recall links to its official government source. If anything in Recall conflicts with the official notice, the official notice controls.',
+          'Every notice in Lotly links to its official government source. If anything in Lotly conflicts with the official notice, the official notice controls.',
           'Follow the guidance in the official notice and the advice of the issuing agency and your healthcare professionals.',
         ]),
       ],
@@ -46,10 +46,10 @@ export const SAFETY_DISCLAIMER: TrustDocument = {
       title: 'Absence is not safety',
       blocks: [
         paragraph(
-          'A product that does not appear in Affects Me — or in Recall at all — is not thereby ' +
+          'A product that does not appear in Affects Me — or in Lotly at all — is not thereby ' +
             'safe. Affects Me is a shortlist built from your choices and what notices state; ' +
             'agencies do not recall every hazardous product, and notices do not state every detail. ' +
-            'No part of Recall guarantees that any product is safe.',
+            'No part of Lotly guarantees that any product is safe.',
         ),
       ],
     },
@@ -57,7 +57,7 @@ export const SAFETY_DISCLAIMER: TrustDocument = {
       title: 'No affiliation',
       blocks: [
         paragraph(
-          'Recall is an independent app. It is not affiliated with, sponsored by, or endorsed by ' +
+          'Lotly is an independent app. It is not affiliated with, sponsored by, or endorsed by ' +
             'the U.S. Food and Drug Administration, the U.S. Department of Agriculture, or any ' +
             'government agency. Agency names appear only to identify the official sources of the ' +
             'information shown.',

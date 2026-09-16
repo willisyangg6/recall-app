@@ -11,17 +11,34 @@
  * cannot start two runs — and the shared mutation queue would serialize them
  * harmlessly even if one slipped through.
  *
- * All copy comes from lib/installation-reset.ts (a tested contract shared
- * with the document text); this file is layout and state only.
+ * Appearance (P2B6B): set apart from the document above it by a rule and
+ * `spacing/32` of air, then a content section heading (`Delete my data`)
+ * over one white `radius/12` panel with the strong border — the system's
+ * existing emphasis border, the same one the development entry uses to
+ * stand apart — holding the consequence sentence FIRST, then the one action
+ * as the shared secondary Button, then the outcome. Danger is carried by
+ * the words (the heading, the label, the dialog), never by a colour: no
+ * risk token is borrowed and no destructive token was added, because the
+ * words, the border and the platform's own destructive dialog already say
+ * it. Busy is the Button's own busy state with its progress word.
+ *
+ * `ResetPanel` is the whole appearance with its state handed in, so the
+ * development gallery can show every state without being able to start a
+ * run; `InstallationResetSection` is the only thing that wires it to the
+ * runner. All copy comes from lib/installation-reset.ts (a tested contract
+ * shared with the document text) and lib/document-screen.ts; this file is
+ * layout and state only.
  */
 
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Radii, Spacing } from '@/constants/theme';
+import { Button } from '@/components/ui/button';
+import { Surface } from '@/components/ui/surface';
+import { Text } from '@/components/ui/text';
+import { color, spacing } from '@/constants/design-tokens';
 import { forgetSavedRecallsCache } from '@/hooks/use-saved-recalls';
+import { RESET_BUSY_LABEL, RESET_HEADING } from '@/lib/document-screen';
 import {
   RESET_ACTION_LABEL,
   RESET_CONFIRM_BODY,
@@ -34,7 +51,7 @@ import {
 } from '@/lib/installation-reset';
 import { resetAvailable, runInstallationReset } from '@/lib/installation-reset-runner';
 
-type ResetUiState = 'idle' | 'running' | 'deleted' | 'failed';
+export type ResetUiState = 'idle' | 'running' | 'deleted' | 'failed';
 
 export function InstallationResetSection() {
   const [state, setState] = useState<ResetUiState>('idle');
@@ -61,58 +78,54 @@ export function InstallationResetSection() {
     ]);
   };
 
+  return <ResetPanel state={state} onPress={confirm} />;
+}
+
+/** The section's whole appearance in one state; the press is the caller's. */
+export function ResetPanel({ state, onPress }: { state: ResetUiState; onPress: () => void }) {
   return (
     <View style={styles.section}>
-      <ThemedText type="small" themeColor="textSecondary" accessibilityRole="header">
-        DELETE MY DATA
-      </ThemedText>
-      <ThemedText type="small" themeColor="textSecondary" selectable>
-        {RESET_SUPPORTING_COPY}
-      </ThemedText>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={RESET_ACTION_LABEL}
-        accessibilityState={{ disabled: state === 'running', busy: state === 'running' }}
-        disabled={state === 'running'}
-        onPress={confirm}>
-        <ThemedView type="backgroundElement" style={styles.button}>
-          <ThemedText style={styles.buttonLabel}>
-            {state === 'running' ? 'Deleting…' : RESET_ACTION_LABEL}
-          </ThemedText>
-        </ThemedView>
-      </Pressable>
-      {state === 'deleted' ? (
-        <ThemedText type="small" accessibilityLiveRegion="polite">
-          {RESET_SUCCESS_MESSAGE}
-        </ThemedText>
-      ) : null}
-      {state === 'failed' ? (
-        <ThemedText type="small" accessibilityLiveRegion="polite">
-          {RESET_FAILURE_MESSAGE}
-        </ThemedText>
-      ) : null}
+      <Text variant="heading-3" accessibilityRole="header">
+        {RESET_HEADING}
+      </Text>
+      <Surface radius={12} border="border/strong" style={styles.panel}>
+        <Text variant="body-small" selectable>
+          {RESET_SUPPORTING_COPY}
+        </Text>
+        <Button
+          variant="secondary"
+          label={RESET_ACTION_LABEL}
+          busy={state === 'running'}
+          busyLabel={RESET_BUSY_LABEL}
+          disabled={state === 'running'}
+          onPress={onPress}
+        />
+        {state === 'deleted' ? (
+          <Text variant="body-small" accessibilityLiveRegion="polite">
+            {RESET_SUCCESS_MESSAGE}
+          </Text>
+        ) : null}
+        {state === 'failed' ? (
+          <Text variant="body-small" accessibilityLiveRegion="polite">
+            {RESET_FAILURE_MESSAGE}
+          </Text>
+        ) : null}
+      </Surface>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // Visual separation from the informational content above: extra distance
-  // plus a hairline rule — provisional language only, no new colors.
+  // Apart from the document: a rule, then the section's own air.
   section: {
-    marginTop: Spacing.four,
-    paddingTop: Spacing.three,
+    marginTop: spacing[32],
+    paddingTop: spacing[24],
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#8888',
-    gap: Spacing.two,
+    borderTopColor: color['border/default'],
+    gap: spacing[12],
   },
-  button: {
-    alignSelf: 'flex-start',
-    // Generous padding keeps the touch target comfortably above 44pt.
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Radii.medium,
-  },
-  buttonLabel: {
-    fontWeight: '600',
+  panel: {
+    padding: spacing[16],
+    gap: spacing[12],
   },
 });
