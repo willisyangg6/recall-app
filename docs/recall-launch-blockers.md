@@ -159,10 +159,13 @@ Everything in §3, plus (tracked in `recall-app-store-readiness.md`):
    push delivery itself remains not activated).
 6. Final review that the shipped build's behavior still matches the label
    (the C7 tests keep the no-tracking and no-analytics claims pinned).
-7. Expo display name: `app.json` still names the app `recall-app`, which is
-   the name under the icon and in the notification-permission dialog. The
-   visible name becoming `Lotly` needs a native release verification and
-   was deliberately not changed by the P2B6C copy milestone.
+7. Expo display name: **applied by P3C1 (2026-09-16)** — `app.json` now
+   names the app `Lotly`, with scheme `lotly` and bundle identifier
+   `com.willisyang.lotly` (iPhone-only). What remains is the native release
+   verification itself: the name under the icon, the
+   notification-permission dialog, and `lotly://` deep links have not been
+   seen on a device, because no signed build exists. See
+   [recall-release-readiness.md](recall-release-readiness.md).
 8. Shopper-report launch-state compliance: while `reports_enabled` is false
    the in-app explanations are phrased conditionally ("When community
    shopper reports are available for a recall…", P2B6C). Enabling the gate

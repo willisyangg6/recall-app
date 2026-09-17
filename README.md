@@ -34,8 +34,10 @@ attributions), pinned to the implementation by
 [docs/recall-data-flow-audit.md](docs/recall-data-flow-audit.md),
 [docs/recall-app-store-readiness.md](docs/recall-app-store-readiness.md),
 [docs/recall-privacy-policy-draft.md](docs/recall-privacy-policy-draft.md)
-(draft — not published), and
-[docs/recall-launch-blockers.md](docs/recall-launch-blockers.md).
+(draft — not published),
+[docs/recall-launch-blockers.md](docs/recall-launch-blockers.md), and
+[docs/recall-release-readiness.md](docs/recall-release-readiness.md) (build
+identity, EAS profiles, and what Apple enrollment still blocks).
 
 ## Tech stack
 
@@ -187,7 +189,31 @@ npm run ios
 With `.env` configured, the home screen shows current FSIS and FDA recalls and
 FSIS Public Health Alerts (newest activity first, source-labeled); tapping an
 item opens a detail view with the official government source link. Without
-configuration it shows setup instructions.
+configuration a development build shows setup instructions; a release build
+shows a shopper sentence instead, and names no environment variable.
+
+### Release builds (EAS)
+
+The installed app is **Lotly** (`lotly://`, `com.willisyang.lotly`,
+iPhone-only), built from the EAS project `@willisyangg6/recall-app`. Three
+profiles, no inheritance between them:
+
+```bash
+npx eas-cli build --profile development --platform ios   # dev client
+npx eas-cli build --profile preview     --platform ios   # internal, release config
+npx eas-cli build --profile production  --platform ios   # App Store archive
+npx eas-cli submit --profile production --platform ios
+```
+
+`app.json`'s `version` is the marketing version and is edited by hand. Build
+numbers are **not** in the repository: `appVersionSource` is `remote`, so EAS
+holds and increments `CFBundleVersion` for each preview and production build
+(development builds do not consume one). Every one of these commands needs an
+Apple Developer account, which does not exist yet.
+
+Full detail — identity, profiles, the two required `EXPO_PUBLIC_` variables on
+EAS, what is verified, and what Apple enrollment still blocks — is in
+[docs/recall-release-readiness.md](docs/recall-release-readiness.md).
 
 ## What the FSIS slice supports
 
@@ -845,9 +871,12 @@ personalization`, `Open Lotly on your phone`); prose says `Affects me`,
   approved classification sentences on the same triggers.
   `src/lib/consumer-copy.test.ts` pins the rules; the P2B6C audit's open
   launch items (formal Privacy Policy and URL, support destination, App
-  Store privacy answers, shopper-report launch state, push activation, the
-  `recall-app` display name, legal review) stay in
-  [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md).
+  Store privacy answers, shopper-report launch state, push activation, legal
+  review) stay in
+  [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md). The
+  display name is no longer among them: P3C1 renamed the installed app to
+  Lotly (see
+  [docs/recall-release-readiness.md](docs/recall-release-readiness.md)).
 
 ## Operational verification (O2)
 

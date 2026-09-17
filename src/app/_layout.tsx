@@ -11,9 +11,18 @@ import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 
+import { AppErrorBoundary } from '@/components/app-error-boundary';
 import { color, textStyle } from '@/constants/design-tokens';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { flushPreferencesSync } from '@/lib/preferences-store';
+
+/**
+ * The app-wide error boundary (P3C1). Expo Router looks for this exact export
+ * name on a route; exporting it from the ROOT layout is what makes it cover
+ * every screen rather than one. The component lives in its own file so the
+ * fallback shares none of this module's imports — see the note there.
+ */
+export { AppErrorBoundary as ErrorBoundary };
 
 // Keep the native splash up until the fonts below have loaded (or failed), so
 // the first screen never paints in a stand-in face and then reflows. Called at

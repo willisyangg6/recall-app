@@ -174,6 +174,19 @@ export interface ReconcileOptions {
   retryPolicy?: RetryPolicy;
   /** Injectable sleep/jitter/warn seam so retry tests need no real time. */
   retryHooks?: RetryHooks;
+  /**
+   * Injectable clock, forwarded to `enrichCaseWithMatches` — tests only;
+   * production runs pass nothing and get the real `new Date()`.
+   *
+   * Enrichment decides backfill suppression by comparing FDA's own
+   * classification date against this clock and a 30-day horizon, so whether a
+   * proposed change is `currentlyDeliverable` is a function of the CURRENT
+   * TIME. A test that asserts deliverability and does not pass this is not
+   * testing a fixture: it is testing how long ago the fixture was written,
+   * and it starts failing 30 days later. The same seam already exists on
+   * `EnrichOptions` and `IngestOptions`; it was only missing here.
+   */
+  now?: () => Date;
 }
 
 /** JSON-friendly stats — persisted as job-run metrics. */
@@ -350,7 +363,9 @@ export async function reconcileFdaEnforcement(
       recallCase.id,
       result.accepted,
       rawByRecallNumber,
-      { apply },
+      // `now` is undefined in production, and `EnrichOptions` falls back to
+      // the real clock, so forwarding it changes no production behaviour.
+      { apply, now: options.now },
     );
     if (!outcome) continue;
     // The tier comes from the enrichment's own re-projection — the exact

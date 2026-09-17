@@ -131,9 +131,16 @@ test('Saved remains one of the three destinations, under the navigator’s own t
 
 test('every whole-screen state is the shared StateMessage with the contract’s words', () => {
   assert.match(SAVED, /import \{ StateMessage \} from '@\/components\/state-message'/);
-  for (const state of ['SAVED_UNAVAILABLE', 'SAVED_NOT_CONFIGURED', 'SAVED_LOADING']) {
+  for (const state of ['SAVED_UNAVAILABLE', 'SAVED_LOADING']) {
     assert.ok(SAVED.includes(`<StateMessage {...${state}}`), `${state} is not rendered`);
   }
+  // The not-configured state is the one with two wordings (P3C1): the
+  // shopper's, and the developer's behind `__DEV__`. Both go through the
+  // same shared StateMessage.
+  assert.ok(
+    SAVED.includes('{...(__DEV__ ? SAVED_NOT_CONFIGURED_DEV : SAVED_NOT_CONFIGURED)}'),
+    'SAVED_NOT_CONFIGURED is not rendered',
+  );
   assert.ok(SAVED.includes('<StateMessage {...SAVED_EMPTY} icon="bookmark" />'));
   assert.ok(
     SAVED.includes('<StateMessage title={SAVED_ERROR_TITLE} body={state.message} tone="error" />'),
@@ -337,7 +344,15 @@ test('the Saved gallery is development-only and mutates no persistence', () => {
   assert.ok(gallery.includes('savedMissingNotice(2)'));
   assert.ok(/simulated[\s\n]+count of two/.test(gallery), 'the simulated count is not labelled');
   // Saved itself carries no development entry point.
-  for (const forbidden of ['design-preview', 'DesignPreview', '__DEV__', 'isDevelopmentBuild']) {
+  for (const forbidden of ['design-preview', 'DesignPreview', 'isDevelopmentBuild']) {
     assert.ok(!codeOnly(SAVED).includes(forbidden), `Saved references ${forbidden}`);
   }
+  // Saved's single build-type branch is a copy switch, not an entry point:
+  // it picks the developer wording of the not-configured state, which a
+  // release build never selects (P3C1; lib/release-exposure.test.ts).
+  assert.deepEqual(codeOnly(SAVED).match(/__DEV__/g), ['__DEV__'], 'Saved uses __DEV__ twice');
+  assert.ok(
+    codeOnly(SAVED).includes('{...(__DEV__ ? SAVED_NOT_CONFIGURED_DEV : SAVED_NOT_CONFIGURED)}'),
+    'Saved’s only __DEV__ branch is not the not-configured wording',
+  );
 });

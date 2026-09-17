@@ -13,7 +13,30 @@ export interface FeedStateCopy {
   body: string;
 }
 
+/**
+ * The public backend configuration is missing (P3C1).
+ *
+ * A shopper can never act on the cause, and naming environment variables to
+ * one would say more about how the app is built than it says about what to
+ * do, so the release sentence says what did not happen in the same form as
+ * every other failure surface. The developer's version of the same state is
+ * `FEED_NOT_CONFIGURED_DEV`, and the Feed picks between them on `__DEV__`,
+ * which React Native sets to false in a release build.
+ *
+ * Both sentences are still compiled into the release bundle: Metro does not
+ * tree-shake an unused module export. That is not a leak, because what the
+ * developer sentence names is the two EXPO_PUBLIC_ variables, which are
+ * client-safe by definition and inlined into the bundle anyway. The point of
+ * the split is what a SHOPPER reads, and a shopper only ever reads the one
+ * above.
+ */
 export const FEED_NOT_CONFIGURED: FeedStateCopy = {
+  title: 'Recalls are unavailable',
+  body: 'Lotly couldn’t reach the recall service. Please try again later.',
+};
+
+/** The same state said to whoever can fix it. Development builds only. */
+export const FEED_NOT_CONFIGURED_DEV: FeedStateCopy = {
   title: 'Backend not configured',
   body:
     'Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY in .env (see README), ' +

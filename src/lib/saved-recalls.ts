@@ -159,7 +159,20 @@ export const SAVED_UNAVAILABLE: SavedStateCopy = {
   body: 'Saved recalls are stored on your device. Open Lotly on your phone to save one.',
 };
 
+/**
+ * The public backend configuration is missing (P3C1). Same rule as the
+ * Feed's (`feed-copy.ts`, which explains the split): the release sentence
+ * names no environment variable, and adds the one fact that matters here,
+ * which is that nothing saved was lost. `SAVED_NOT_CONFIGURED_DEV` is the
+ * developer's version, and Saved picks between them on `__DEV__`.
+ */
 export const SAVED_NOT_CONFIGURED: SavedStateCopy = {
+  title: 'Recalls are unavailable',
+  body: 'Lotly couldn’t reach the recall service. Your saved recalls are still on this device.',
+};
+
+/** The same state said to whoever can fix it. Development builds only. */
+export const SAVED_NOT_CONFIGURED_DEV: SavedStateCopy = {
   title: 'Backend not configured',
   body:
     'Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY in .env (see README), ' +

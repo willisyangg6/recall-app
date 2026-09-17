@@ -21,6 +21,20 @@ import { MemoryStore } from '../store/memory-store';
 import type { OpenFdaEnforcementRaw } from './parse';
 import { reconcileFdaEnforcement } from './reconcile';
 
+/**
+ * The frozen clock every reconciliation in this file runs against, the same
+ * instant `enrich.test.ts` uses.
+ *
+ * Enrichment suppresses a notification as backfill when FDA's own
+ * classification date is more than 30 days behind the clock, so
+ * `currentlyDeliverable` below is a function of the current time. Pinned at
+ * 2026-08-25, the fixture's `center_classification_date` of 2026-08-18 is 7
+ * days old: recent news, deliverable. Read from the real clock instead, the
+ * same fixture was deliverable until 2026-09-17 and backfill for ever after,
+ * which is how this file came to fail on a date rather than on a change.
+ */
+const NOW = () => new Date('2026-08-25T12:00:00Z');
+
 function announcement(overrides: Partial<NormalizedSourceRecord>): NormalizedSourceRecord {
   return {
     sourceSystem: 'fda_announcement',
@@ -164,7 +178,7 @@ test('ambiguous, candidate, and unmatched cases never reach the preview', async 
   const corpus = { records: [rawEnforcement({})], exportDate: '2026-08-25', totalRecords: 1 };
   const client = fakeClient([matched, unmatched]);
 
-  const stats = await reconcileFdaEnforcement(client, store, { apply: false, corpus });
+  const stats = await reconcileFdaEnforcement(client, store, { apply: false, corpus, now: NOW });
 
   assert.equal(stats.casesExamined, 2);
   assert.equal(stats.matched, 1);
@@ -185,7 +199,7 @@ test('the preview total equals assignments plus reclassifications, and zero prop
   const client = fakeClient([unmatched]);
   const corpus = { records: [], exportDate: '2026-08-25', totalRecords: 0 };
 
-  const stats = await reconcileFdaEnforcement(client, store, { apply: false, corpus });
+  const stats = await reconcileFdaEnforcement(client, store, { apply: false, corpus, now: NOW });
 
   assert.equal(stats.assignments, 0);
   assert.equal(stats.reclassifications, 0);
@@ -230,7 +244,7 @@ test('the preview total tracks assignments + reclassifications across several ca
   };
   const client = fakeClient([caseA, caseB]);
 
-  const stats = await reconcileFdaEnforcement(client, store, { apply: false, corpus });
+  const stats = await reconcileFdaEnforcement(client, store, { apply: false, corpus, now: NOW });
 
   assert.equal(stats.assignments, 2);
   assert.equal(stats.reclassifications, 0);
@@ -280,7 +294,8 @@ test('a run proposing more changes than the review ceiling fails loudly with the
   const client = fakeClient([caseA, caseB]);
 
   await assert.rejects(
-    () => reconcileFdaEnforcement(client, store, { apply: false, corpus, reviewCeiling: 1 }),
+    () =>
+      reconcileFdaEnforcement(client, store, { apply: false, corpus, reviewCeiling: 1, now: NOW }),
     /classification-change review ceiling exceeded: 2 proposed changes > 1/,
   );
   // Nothing was written — this is a review-output failure, not a data write.
@@ -311,9 +326,15 @@ test('push-active state is attached to every preview entry', async () => {
     {
       apply: false,
       corpus,
+      now: NOW,
     },
   );
   assert.equal(active.classificationChanges[0].pushActive, true);
+  // Deliverable requires BOTH halves, so both are stated: push is active, and
+  // the change is recent enough not to be suppressed as backfill. Asserting
+  // the suppression state directly is what keeps a future failure legible —
+  // it says which half moved instead of only that the conjunction did.
+  assert.equal(active.classificationChanges[0].suppressed, null);
   assert.equal(active.classificationChanges[0].currentlyDeliverable, true);
 
   const store2 = new MemoryStore();
@@ -330,6 +351,7 @@ test('push-active state is attached to every preview entry', async () => {
     {
       apply: false,
       corpus,
+      now: NOW,
     },
   );
   assert.equal(inactive.classificationChanges[0].pushActive, false);

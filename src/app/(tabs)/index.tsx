@@ -45,6 +45,7 @@ import {
   FEED_ERROR_TITLE,
   FEED_LOADING,
   FEED_NOT_CONFIGURED,
+  FEED_NOT_CONFIGURED_DEV,
   FEED_STALE_NOTICE,
   OLDER_NOTICES_EXPLANATION,
   PERSONALIZE_CTA,
@@ -348,7 +349,10 @@ export default function HomeScreen() {
   if (!isFeedConfigured()) {
     return (
       <Page>
-        <StateMessage {...FEED_NOT_CONFIGURED} tone="error" />
+        {/* `__DEV__` is false in a release build, so a shopper reads the
+            shopper sentence and never the one naming environment
+            variables. See lib/feed-copy.ts. */}
+        <StateMessage {...(__DEV__ ? FEED_NOT_CONFIGURED_DEV : FEED_NOT_CONFIGURED)} tone="error" />
       </Page>
     );
   }

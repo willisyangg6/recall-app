@@ -375,10 +375,22 @@ test('the Feed and the bar carry no development entry; the harness keeps its gua
     ['feed', FEED],
     ['tab layout', TAB_LAYOUT],
   ]) {
-    for (const forbidden of ['design-preview', 'DesignPreview', '__DEV__', 'isDevelopmentBuild']) {
+    for (const forbidden of ['design-preview', 'DesignPreview', 'isDevelopmentBuild']) {
       assert.ok(!codeOnly(source).includes(forbidden), `${name} references ${forbidden}`);
     }
   }
+  // The tab bar branches on the build type for nothing at all.
+  assert.ok(!codeOnly(TAB_LAYOUT).includes('__DEV__'), 'the tab layout references __DEV__');
+  // The Feed has exactly one such branch, and it is a COPY switch, not a way
+  // in: it chooses the developer wording of the not-configured state, which
+  // a release build (where `__DEV__` is false) never selects (P3C1; pinned
+  // in lib/release-exposure.test.ts). Anything else would be a development
+  // entry point on a shopper's screen.
+  assert.deepEqual(codeOnly(FEED).match(/__DEV__/g), ['__DEV__'], 'the Feed uses __DEV__ twice');
+  assert.ok(
+    codeOnly(FEED).includes('{...(__DEV__ ? FEED_NOT_CONFIGURED_DEV : FEED_NOT_CONFIGURED)}'),
+    'the Feed’s only __DEV__ branch is not the not-configured wording',
+  );
   assert.ok(PROFILE.includes('{__DEV__ ? ('));
   assert.ok(PREVIEW.includes('if (!isDevelopmentBuild())'));
   // The gallery renders the product's card over live recalls and names its

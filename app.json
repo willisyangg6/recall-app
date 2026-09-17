@@ -1,15 +1,16 @@
 {
   "expo": {
-    "name": "recall-app",
+    "name": "Lotly",
     "slug": "recall-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "recallapp",
+    "scheme": "lotly",
     "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.willisyang.recall"
+      "bundleIdentifier": "com.willisyang.lotly",
+      "supportsTablet": false
     },
     "android": {
       "adaptiveIcon": {

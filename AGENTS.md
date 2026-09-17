@@ -40,6 +40,7 @@ it in the same change rather than describing the new behavior somewhere else.
 | Imagery                                            | [docs/recall-imagery.md](docs/recall-imagery.md)                           |
 | Data-flow audit                                    | [docs/recall-data-flow-audit.md](docs/recall-data-flow-audit.md)           |
 | App Store readiness                                | [docs/recall-app-store-readiness.md](docs/recall-app-store-readiness.md)   |
+| Release identity, EAS profiles, build numbers      | [docs/recall-release-readiness.md](docs/recall-release-readiness.md)       |
 | Launch blockers and founder inputs                 | [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md)           |
 | Privacy policy (draft, unpublished)                | [docs/recall-privacy-policy-draft.md](docs/recall-privacy-policy-draft.md) |
 | Milestone prompts, reports, context, model routing | [docs/recall-agent-workflow.md](docs/recall-agent-workflow.md)             |

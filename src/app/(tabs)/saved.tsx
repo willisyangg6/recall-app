@@ -53,6 +53,7 @@ import {
   SAVED_ERROR_TITLE,
   SAVED_LOADING,
   SAVED_NOT_CONFIGURED,
+  SAVED_NOT_CONFIGURED_DEV,
   SAVED_UNAVAILABLE,
   savedMissingNotice,
   selectSavedItems,
@@ -82,7 +83,11 @@ export default function SavedScreen() {
   if (!isFeedConfigured()) {
     return (
       <Page>
-        <StateMessage {...SAVED_NOT_CONFIGURED} tone="error" />
+        {/* Developer wording only when `__DEV__`, as on the Feed. */}
+        <StateMessage
+          {...(__DEV__ ? SAVED_NOT_CONFIGURED_DEV : SAVED_NOT_CONFIGURED)}
+          tone="error"
+        />
       </Page>
     );
   }
