@@ -494,7 +494,9 @@ test('frozen and protected copy is still present, word for word', () => {
     codeOnly(read('lib', 'recall-presentation.ts')).includes("'Warning: This recall affects you.'"),
   );
   assert.ok(SCREENS.detail.includes('title="What Happened"'));
-  assert.ok(SCREENS.detail.includes('COMMON SYMPTOMS'));
+  // P2B7H: the eyebrow keeps its caption treatment, cased as written.
+  assert.ok(SCREENS.detail.includes('Common symptoms'));
+  assert.ok(!SCREENS.detail.includes('COMMON SYMPTOMS'));
   // The approved P2B6C sentences themselves.
   assert.equal(DECLINED_TITLE, 'Thanks. Nothing was submitted.');
   assert.equal(SUBMIT_FAILURE, 'Your report could not be sent. Nothing was saved. Try again.');
@@ -523,7 +525,9 @@ test('frozen and protected copy is still present, word for word', () => {
     SAVE_STATUS.local_only,
     'Saved on this device. It will sync the next time you open Lotly online.',
   );
-  assert.equal(SAVED_ACCESSIBILITY_LABEL, 'Remove from Saved');
+  // P2B7H: the save control is icon-only, so its spoken name is the only
+  // wording it has and names the ACTION rather than the condition.
+  assert.equal(SAVED_ACCESSIBILITY_LABEL, 'Remove from saved recalls');
 });
 
 // ── Accessibility copy ──────────────────────────────────────────────────────

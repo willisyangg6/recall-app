@@ -37,6 +37,7 @@ import { PersonalizationCard } from '@/components/profile/personalization-card';
 import { ProfileSection } from '@/components/profile/profile-section';
 import { ValueRow } from '@/components/profile/value-row';
 import { RecallCard } from '@/components/recall-card';
+import { SaveControlAppearance } from '@/components/save-recall-button';
 import { NotificationsPanel } from '@/components/settings/notifications-panel';
 import {
   PersonalizationForm,
@@ -62,6 +63,7 @@ import { Chip } from '@/components/ui/chip';
 import { DisclosureControl } from '@/components/ui/disclosure-control';
 import { Icon, ICON_NAMES } from '@/components/ui/icon';
 import { MediaTile } from '@/components/ui/media-tile';
+import { NoticeLabel } from '@/components/ui/notice-label';
 import { OfficialImageSet } from '@/components/ui/official-image-set';
 import { RelevanceLabel } from '@/components/ui/relevance-label';
 import { RiskLabel } from '@/components/ui/risk-label';
@@ -80,7 +82,7 @@ import {
   type TypographyVariant,
 } from '@/constants/design-tokens';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { documentBySlug, TRUST_DOCUMENTS } from '@/content';
+import { documentBySlug, PROFILE_DOCUMENT_GROUPS, TRUST_DOCUMENTS } from '@/content';
 import type { DocumentBlock, TrustDocument } from '@/content/document-model';
 import { useFeed } from '@/hooks/use-feed';
 import {
@@ -117,6 +119,7 @@ import { GENERIC_FAILURE, type NotificationsView } from '@/lib/notifications-scr
 import { storeCountLabel } from '@/lib/personalization-screen';
 import {
   APP_VERSION_LABEL,
+  DEVELOPMENT_HEADING,
   DOCUMENT_HINT,
   summarizePreferences,
   versionLine,
@@ -143,6 +146,7 @@ import {
   SAVED_EMPTY,
   SAVED_ERROR_TITLE,
   SAVED_LOADING,
+  saveControlState,
   savedMissingNotice,
 } from '@/lib/saved-recalls';
 import { selectHazardGuidance } from '@/lib/recall-display';
@@ -153,6 +157,7 @@ import {
   disclosureControl,
   IMAGE_DOTS_MAX,
   todayIso,
+  cardSummaryText,
   type DetailImageSet,
   type HomeCardModel,
 } from '@/lib/recall-presentation';
@@ -750,6 +755,14 @@ export default function DesignPreviewScreen() {
           CATEGORY TAG TREATMENTS
         </ThemedText>
         <CategoryTagGallery items={feed.state.status === 'ready' ? feed.state.items : []} />
+
+        {/* P2B7H: the date metadata beside every status shape, the
+            icon-only save control in both states, and the card summary
+            rule — the compact-card details this milestone changed. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          STATUS METADATA AND SAVE CONTROL
+        </ThemedText>
+        <StatusMetadataGallery />
 
         {/* P2B1: the Feed's card, controls and states, rendered by the
             production components over REAL recalls from the live feed
@@ -1405,6 +1418,32 @@ function ProfileGallery() {
           />
         </GallerySample>
       ))}
+      {/* P2B7H: the hub's OWN group labels, from the registry, in the
+          corrected title case — the convention that replaced the shouted
+          caption. Rendered by the production `ProfileSection`, so a label
+          that started shouting again would show here first. */}
+      {PROFILE_DOCUMENT_GROUPS.map((group) => (
+        <GallerySample key={group.title} caption={`Group label: ${group.title}`}>
+          <ProfileSection title={group.title} footnote={group.footnote}>
+            {group.slugs.map((slug) => {
+              const doc = documentBySlug(slug);
+              return doc ? (
+                <NavigationRow
+                  key={doc.slug}
+                  label={doc.title}
+                  href={{ pathname: '/document/[slug]', params: { slug: doc.slug } }}
+                  hint={DOCUMENT_HINT}
+                />
+              ) : null;
+            })}
+          </ProfileSection>
+        </GallerySample>
+      ))}
+      <GallerySample caption={`Group label: App, and ${DEVELOPMENT_HEADING}`}>
+        <ProfileSection title="App">
+          <ValueRow label={APP_VERSION_LABEL} value={versionLine(null, null)} />
+        </ProfileSection>
+      </GallerySample>
       <GallerySample caption="A grouped section: chevron rows, a value row, and a footnote caption">
         <ProfileSection title="App" footnote="A quiet caption associated with the group.">
           <NavigationRow
@@ -2216,6 +2255,121 @@ function ErrorBoundaryProbe() {
       onPress={() => setThrown(true)}
       accessibilityHint="Shows the real failure screen. Try again returns to the app."
     />
+  );
+}
+
+/**
+ * P2B7H: the three compact-card details this milestone changed, shown where
+ * they can be compared rather than hunted for screen by screen.
+ *
+ *   1. The activity date beside EVERY major status shape — all seven risk
+ *      labels, the Public Health Alert notice label, and the Affects You
+ *      relevance label — so the metadata hierarchy can be judged against
+ *      the thing it sits next to rather than on its own.
+ *   2. The icon-only save control in both states, drawn by the PRODUCT's own
+ *      `SaveControlAppearance` over a state this gallery decides. Nothing
+ *      here reads or writes this device's bookmark list, so both states are
+ *      always visible; the live cards in the Feed and Saved galleries are
+ *      where a real tap is inspected.
+ *   3. The summary rule over source text with and without punctuation,
+ *      including the strings it must REFUSE to change.
+ *
+ * The real risk labels, notice label and relevance label are the production
+ * components; the dates are the production `activityDisplay` wording.
+ */
+function StatusMetadataGallery() {
+  const dates = ['Updated Today', 'Updated Aug 21', 'Announced Sep 15'];
+  const punctuation: [source: string, note: string][] = [
+    ['Import violation.', 'a Lotly line — the stop is dropped'],
+    ['Undeclared peanut allergen.', 'a Lotly line — the stop is dropped'],
+    ['Potential Listeria monocytogenes contamination.', 'a Lotly line — the stop is dropped'],
+    ['Net weight 1.5 oz.', 'a unit abbreviation — kept'],
+    ['Recalled by Acme Foods Inc.', 'a company suffix — kept'],
+    ['Undeclared milk. Undeclared soy.', 'multi-sentence source text — kept'],
+    ['Reason unclear…', 'an ellipsis — kept'],
+    ['Produced without required inspection', 'already unpunctuated — unchanged'],
+  ];
+
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        P2B7H. The production status components with the card&rsquo;s own date token beside them,
+        the icon-only save control in both states, and the summary rule over real wording. Nothing
+        here reads or writes this device&rsquo;s saved list.
+      </Text>
+
+      <GallerySample caption="The date beside every risk label — caption, 12pt, text/secondary">
+        <View style={styles.feedCase}>
+          {RISK_FILTER_TIERS.map((tier) => {
+            const risk = riskView(TIER_SAMPLE[tier], 'FDA');
+            return (
+              <View key={tier} style={styles.treatmentStatusRow}>
+                <RiskLabel
+                  tier={risk.tier}
+                  label={risk.badgeLabel ?? ''}
+                  accessibilityLabel={risk.accessibilityLabel}
+                />
+                <Text variant="caption" color="text/secondary">
+                  {dates[0]}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </GallerySample>
+
+      <GallerySample caption="The date beside the notice label and the relevance label, in all three wordings">
+        <View style={styles.feedCase}>
+          {dates.map((date) => (
+            <View key={date} style={styles.treatmentStatusRow}>
+              <NoticeLabel label="Public Health Alert" />
+              <Text variant="caption" color="text/secondary">
+                {date}
+              </Text>
+              <RelevanceLabel />
+            </View>
+          ))}
+        </View>
+      </GallerySample>
+
+      <GallerySample caption="Icon-only save — unsaved (outline) and saved (filled), the product's own control">
+        <View style={styles.treatmentStatusRow}>
+          {[false, true].map((saved) => (
+            <View key={String(saved)} style={styles.treatmentStatusRow}>
+              <SaveControlAppearance state={saveControlState(saved)} />
+              <Text variant="caption" color="text/secondary">
+                {saveControlState(saved).accessibilityLabel}
+                {saveControlState(saved).selected ? ' · selected' : ''}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </GallerySample>
+
+      <GallerySample caption="Icon-only save, pressed">
+        <View style={styles.treatmentStatusRow}>
+          <SaveControlAppearance state={saveControlState(false)} pressed />
+          <SaveControlAppearance state={saveControlState(true)} pressed />
+        </View>
+      </GallerySample>
+
+      <GallerySample caption="The summary rule: source text → the card's line (the rule is presentation-only)">
+        <View style={styles.feedCase}>
+          {punctuation.map(([source, note]) => (
+            <View key={source}>
+              <Text variant="body-small">{cardSummaryText(source)}</Text>
+              <Text variant="caption" color="text/secondary">
+                {`${source} — ${note}`}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </GallerySample>
+    </Surface>
   );
 }
 

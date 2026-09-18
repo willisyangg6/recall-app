@@ -41,7 +41,7 @@ export function profileGroupFor(slug: string): ProfileDocumentGroup | undefined 
 }
 
 export interface ProfileDocumentGroup {
-  /** Uppercased section label on the Profile screen. */
+  /** The group's label on the Profile screen, rendered as written (title case). */
   title: string;
   /** Slugs of the documents in this group, display order. */
   slugs: readonly string[];

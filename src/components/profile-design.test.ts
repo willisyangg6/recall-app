@@ -387,7 +387,12 @@ test('every navigation row is the shared primitive carrying the canonical chevro
   assert.ok(SECTION.includes('<Surface radius={16} border="border/subtle"'));
   assert.ok(SECTION.includes('borderTopWidth: StyleSheet.hairlineWidth'));
   assert.ok(SECTION.includes('accessibilityRole="header"'));
-  assert.ok(SECTION.includes('{title.toUpperCase()}'));
+  // P2B7H: the group label keeps the caption treatment that distinguishes it
+  // from a content heading, but renders the words as written — no style and
+  // no call may shout them back.
+  assert.ok(SECTION.includes('{title}'));
+  assert.ok(!SECTION.includes('toUpperCase'), 'the group label is uppercased again');
+  assert.ok(!SECTION.includes('textTransform'), 'the group label is transformed again');
 });
 
 test('interactive rows meet the 44pt minimum and nothing on the hub has a fixed height', () => {
@@ -423,7 +428,9 @@ test('the development entry and the harness remain development-only', () => {
   assert.ok(!DEV_ENTRY.includes('isDevelopmentBuild'));
   // It is named for what it is, visibly and spoken, and drawn apart from the
   // consumer groups: outlined on the page colour with the strong border.
-  assert.ok(DEV_ENTRY.includes('{DEVELOPMENT_HEADING.toUpperCase()}'));
+  // P2B7H: rendered as written, like every other Profile group label.
+  assert.ok(DEV_ENTRY.includes('{DEVELOPMENT_HEADING}'));
+  assert.ok(!DEV_ENTRY.includes('toUpperCase'));
   assert.ok(MODEL.includes("DEVELOPMENT_HEADING = 'Development builds only'"));
   assert.ok(
     MODEL.includes("DEVELOPMENT_HINT = 'Development builds only. Not part of the product.'"),

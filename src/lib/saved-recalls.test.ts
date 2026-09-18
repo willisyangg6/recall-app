@@ -19,9 +19,7 @@ import {
   parseSavedRecalls,
   sanitizeSavedIds,
   SAVE_ACCESSIBILITY_LABEL,
-  SAVE_ACTION_LABEL,
   SAVED_ACCESSIBILITY_LABEL,
-  SAVED_ACTION_LABEL,
   saveControlState,
   SAVED_EMPTY,
   SAVED_EMPTY_BODY,
@@ -124,13 +122,12 @@ test('a saved recall that left the active feed is skipped and counted, never inv
 
 // ── Copy ────────────────────────────────────────────────────────────────────
 
-test('the control states the condition visibly and the action aloud', () => {
-  assert.equal(SAVE_ACTION_LABEL, 'Save');
-  assert.equal(SAVED_ACTION_LABEL, 'Saved');
-  assert.equal(SAVE_ACCESSIBILITY_LABEL, 'Save this recall');
-  // The label names the action; the saved state is carried by `selected`,
-  // not repeated in the words (P2B6C).
-  assert.equal(SAVED_ACCESSIBILITY_LABEL, 'Remove from Saved');
+test('the icon-only control speaks the action and reports the condition', () => {
+  // P2B7H: there is no visible word left, so the spoken names carry the
+  // whole meaning and name the ACTION a tap performs; the condition is the
+  // announced selection, not a word (P2B6C's rule, now the only rule).
+  assert.equal(SAVE_ACCESSIBILITY_LABEL, 'Save recall');
+  assert.equal(SAVED_ACCESSIBILITY_LABEL, 'Remove from saved recalls');
   // The label is never the only signal: the control also reports selection.
   // Both come from the one save contract (P2B7E), which also carries the
   // glyph — see `save-control-state.test.ts` for the behavioural proofs.
@@ -138,16 +135,19 @@ test('the control states the condition visibly and the action aloud', () => {
   assert.match(SAVE_BUTTON, /accessibilityLabel=\{state\.accessibilityLabel\}/);
   assert.deepEqual(saveControlState(false), {
     icon: 'bookmark',
-    label: SAVE_ACTION_LABEL,
     accessibilityLabel: SAVE_ACCESSIBILITY_LABEL,
     selected: false,
   });
   assert.deepEqual(saveControlState(true), {
     icon: 'bookmark-filled',
-    label: SAVED_ACTION_LABEL,
     accessibilityLabel: SAVED_ACCESSIBILITY_LABEL,
     selected: true,
   });
+  // The retired visible-word constants are gone, not merely unrendered.
+  const MODULE = readFileSync(join(__dirname, 'saved-recalls.ts'), 'utf8');
+  for (const gone of ['SAVE_ACTION_LABEL', 'SAVED_ACTION_LABEL']) {
+    assert.ok(!MODULE.includes(gone), `${gone} survived as unrendered copy`);
+  }
 });
 
 test('the empty state names the state and invites the action, in exactly these words', () => {

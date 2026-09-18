@@ -503,7 +503,9 @@ Use it for:
 - lot codes and identifiers when shown as compact metadata
 - other terse structured facts where monospacing improves recognition
 
-Risk labels are uppercase.
+Risk labels are uppercase — as are the relevance and notice labels, and
+nothing else the product authors. See "Capitalization" under "Section
+headings and group labels" for the complete rule.
 
 Do not use IBM Plex Mono for paragraph copy, buttons, navigation labels,
 product titles, or long instructions.
@@ -1068,25 +1070,56 @@ for chips and compact controls, not large cards.
 ### Section headings and group labels
 
 Two heading patterns, deliberately distinct (P2B6A follow-up). Choose by
-what sits beneath the heading, not by the screen.
+what sits beneath the heading, not by the screen. **Both render their words
+as written** — the difference is treatment, never casing (P2B7H).
 
-1. **Navigation group label** — a small uppercase caption: `caption`,
-   `text/secondary`, the text uppercased, a header to assistive technology.
-   It labels a group of rows that lead somewhere: Profile's `PRIVACY &
-DATA`, `ABOUT & SAFETY`, `LEGAL`, `APP` and `DEVELOPMENT BUILDS ONLY`
-   (`ProfileSection`). Recall Detail's eyebrow labels (`COMMON SYMPTOMS`)
-   are a separate, intentional pattern and are not changed by this rule.
-2. **Content section heading** — title case as written, `heading-3` (Public
-   Sans semibold, 19/26), `text/primary` navy, a header to assistive
-   technology. It heads a section the shopper reads and acts in:
-   Personalization's `Your state`, `Allergens to watch`, `Stores you shop
-at` (`SettingsSection`), the selector sheets' titles (`Choose your
-state`, `Choose stores`), every trust document's section headings and
-   the reset section's `Delete my data` (P2B6B). Never uppercased, never the
-   caption.
+1. **Navigation group label** — a small caption: `caption`,
+   `text/secondary`, a header to assistive technology. It labels a group of
+   rows that lead somewhere: Profile's `Privacy & Data`, `About & Safety`,
+   `Legal`, `App` and `Development builds only` (`ProfileSection`). Recall
+   Detail's eyebrow labels (`Common symptoms`) are the same pattern.
+2. **Content section heading** — `heading-3` (Public Sans semibold, 19/26),
+   `text/primary` navy, a header to assistive technology. It heads a section
+   the shopper reads and acts in: Personalization's `Your state`, `Allergens
+to watch`, `Stores you shop at` (`SettingsSection`), the selector sheets'
+   titles (`Choose your state`, `Choose stores`), every trust document's
+   section headings and the reset section's `Delete my data` (P2B6B).
 
 A future screen with both kinds keeps them apart the same way: groups of
 links get the label, sections of content and controls get the heading.
+
+#### Capitalization (P2B7H)
+
+Lotly-authored interface text is written and rendered in natural case. This
+**replaces** the earlier convention in which `ProfileSection` and
+`DevelopmentEntry` uppercased their titles at render time and Detail's
+symptom eyebrow was typed `COMMON SYMPTOMS`; nothing in the product
+transforms case in a style, and `textTransform` is not used.
+
+Uppercase is reserved for **compact status badges**, where shouting is the
+established component treatment and the word is a token rather than
+language:
+
+- the seven risk labels (`CRITICAL`, `VERY HIGH`, `HIGH`, `MODERATE`, `LOW`,
+  `PENDING`, `UNKNOWN`) — `riskTierLabel` cases the canonical word;
+- the relevance label (`AFFECTS YOU`);
+- the notice label (`PUBLIC HEALTH ALERT`) — `NoticeLabel` cases the
+  contract's own words.
+
+Each of those speaks in natural case: a screen reader hears `Risk level:
+High`, `Affects you`, `Public Health Alert`, never the shouted token.
+
+Never recased, in either direction: official notice prose, the trust and
+legal documents, product and brand names (P2B7G), acronyms and agencies
+(FDA, USDA, FSIS, CDC, UPC, URL), state codes, roman-numeral recall classes,
+codes, identifiers, units, and the raw government strings the source-data
+normalization modules match against. The development-only Design Preview
+harness keeps its own uppercase gallery labels; it is not shopper-facing.
+
+The contract is enforced by `src/components/capitalization-design.test.ts`,
+which scopes the scan to the files that render Lotly-authored chrome and
+allow-lists the approved acronyms and badge words individually — a new
+uppercase string in scope fails until it is reviewed and named there.
 
 ### Search Bar
 
@@ -1289,7 +1322,7 @@ realistic wrapping without breaking card layout.
 Implemented in `src/components/recall-card.tsx` (P2B1). The card is
 `spacing/12` padding with `spacing/8` between its rows: the status row (risk
 label, the PHA notice label when there is one, and the one activity date in
-`micro-caption`, with the relevance label at the trailing edge), the content
+`caption`, with the relevance label at the trailing edge), the content
 row (the 112px media tile, then the product name in `heading-3`, the brand in
 `caption`, the optional Category Tag, and the summary in `body-small`), and
 `spacing/16` later the footer
@@ -1304,12 +1337,17 @@ palette. Nothing on the card is truncated or fixed in height; the text column
 takes the remaining width and wraps.
 
 The save control (`src/components/save-recall-button.tsx`) is the design's
-bookmark glyph — outline unsaved, filled saved — beside the visible `Save` /
-`Saved` word in `action/primary`, reaching 44pt through `hitSlop`; Figma
-shows the glyph alone (conflict 16). To VoiceOver the card is one element, so
-the save action is also exposed as a custom accessibility action on the card
-with the same spoken names, and the card announces `Opens the recall
-details` as its hint.
+bookmark glyph alone — outline unsaved, the same bookmark filled saved, in
+`icon/primary`, reaching 44pt through `hitSlop`. It carries no visible word
+(P2B7H, resolving conflict 16). The state's non-colour channel is therefore
+the glyph pair, and the wording moves entirely into the accessible contract:
+`accessibilityRole="button"`, an action label (`Save recall` / `Remove from
+saved recalls`) and `accessibilityState.selected`. All three come from one
+pure function, `saveControlState`, so Feed, Saved and Detail cannot drift
+apart, and there is no label in the contract for a surface to render. To
+VoiceOver the card is one element, so the save action is also exposed as a
+custom accessibility action on the card with the same spoken names, and the
+card announces `Opens the recall details` as its hint.
 
 ### Information Callouts
 
@@ -1404,7 +1442,7 @@ padding. The navigation header is the navigator's own (`Recall Details` in
 alone — see "Bottom Navigation" for the pushed-screen chrome. The product
 header: the Risk Label, the Public Health Alert notice label when there is
 one, and the one activity date in `caption` on the status row, with the
-shared save control (glyph and `Save` / `Saved` word) at its trailing edge —
+shared save control (the bookmark glyph alone, P2B7H) at its trailing edge —
 in the body with the recall's identity, per the P2A founder decision,
 rather than in Figma's utility row (conflict 9); then the product name in
 `heading-2`, the brand in `body-small` `text/secondary`, and the
@@ -2115,10 +2153,13 @@ Figma wins on composition; open items are the founder's.
     token. Either bind them to `Elevation/Card` or approve named effect styles.
     The implemented bar, callouts and table (P2B2) use surface colour and the
     `border/subtle` hairline with no shadow.
-16. **Save control on the card.** Figma shows the bookmark glyph alone; the
-    product shows the glyph (outline / filled) beside the visible `Save` /
-    `Saved` word — a P2A founder copy decision and the state's non-colour
-    channel. Code wins on copy; the word stays.
+16. **Save control on the card.** Figma showed the bookmark glyph alone; the
+    product showed the glyph beside a visible `Save` / `Saved` word (a P2A
+    founder copy decision). **Resolved (P2B7H) in Figma's favour** — node
+    `81:792`: the control is the bookmark alone on cards and on Detail
+    alike. The state's non-colour channel is now the glyph pair (outline /
+    filled), and the wording lives in the accessible contract (an action
+    label plus `accessibilityState.selected`). No conflict remains.
 17. **Feed header and filter glyph.** Figma's frame has no title bar, a bell
     at the top right and a sliders glyph leading the chip row. The product
     keeps the navigator's `Feed` title bar (on the page colour, no shadow)
@@ -2141,7 +2182,11 @@ Sold`; the shipped titles were sentence case and rendered uppercase.
     in `heading-3`.
 23. **Table cell values.** Figma's `Product-Information` sets values in
     `micro-caption` (10px); the product renders them in `caption` (12px) —
-    a lot code or date is checked against a package, not glanced at.
+    a lot code or date is checked against a package, not glanced at. The
+    same reasoning now governs the **card's activity date** (P2B7H): it was
+    `micro-caption`, measured smaller than the brand and category beside
+    it, and read as a footnote; it is `caption`, matching Detail's status
+    row, so Feed, Saved and Detail carry one metadata hierarchy.
 24. **Jurisdiction reveal placement.** Figma's `View Retailers (10)` sits on
     the Where It Was Sold heading row; the product's jurisdiction `See all
 (N)` takes that place (the retailer action does not exist; conflict 5).
@@ -2259,9 +2304,11 @@ Changes to make in Figma itself. Nothing here changes product behavior.
       leading sliders glyph and the header bell, and add the `Clear all` chip
       and the `Location · 2` counted state.
 - [ ] Search-Bar: add the filled state with its trailing `Clear` control.
-- [ ] Recall-Card: show the `Save` / `Saved` word beside the bookmark (outline
-      unsaved, filled saved), normalize the media tile to 112, and add the
-      Public Health Alert notice label beside the risk label.
+- [ ] Recall-Card: normalize the media tile to 112, add the Public Health
+      Alert notice label beside the risk label, and set the activity date in
+      `Caption` rather than `Micro-caption` (conflict 23). The save control
+      needs no change — P2B7H adopted Figma's icon-only bookmark
+      (conflict 16, resolved).
 - [ ] Bind callout, product-table and nav-bar shadows to `Elevation/Card` or
       add named effect styles (conflict 15).
 - [ ] Add screens that exist in the product but not in Figma: Saved, Profile,
@@ -2277,9 +2324,8 @@ Changes to make in Figma itself. Nothing here changes product behavior.
 - [ ] Recall Detail: set the section bodies and the jurisdiction line in
       `text/primary` (conflict 21); set the table values in `Caption`
       (conflict 23); normalize the hero to 152 and the columns to one 144
-      width; show the `Save` / `Saved` control on the status row instead of
-      the bookmark in the utility row, and remove the share glyph (conflict
-      9); replace the frame's own chevron row with a navigator header
+      width; move the bookmark control from the utility row to the status
+      row, and remove the share glyph (conflict 9); replace the frame's own chevron row with a navigator header
       placeholder (conflict 25); and add the no-image header, the retracted
       information callout, and the loading / not-found / load-failure
       states.

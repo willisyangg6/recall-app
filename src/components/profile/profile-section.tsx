@@ -5,6 +5,17 @@
  * hub takes (Privacy & Data, About & Safety, Legal, App), so the groups can
  * never drift apart from one another.
  *
+ * ## The label is rendered as it is written (P2B7H)
+ *
+ * The heading keeps the small `caption` / `text/secondary` treatment that
+ * distinguishes a navigation GROUP label from a content section heading —
+ * but the words are no longer shouted. `title` arrives in natural title
+ * case ("Privacy & Data") and renders exactly that way: the group labels
+ * are ordinary interface language, not compact status badges, and only the
+ * risk, relevance and notice labels earn uppercase in this product. The
+ * casing therefore lives in the one place the words are written, where it
+ * can be read and reviewed, rather than in a style the caller cannot see.
+ *
  * The heading is a header to assistive technology, so a screen-reader user
  * can move between groups; the rows inside are whatever the caller renders
  * (navigation rows, a value row) and keep their own semantics.
@@ -35,7 +46,7 @@ export function ProfileSection({
         color="text/secondary"
         accessibilityRole="header"
         style={styles.heading}>
-        {title.toUpperCase()}
+        {title}
       </Text>
       <Surface radius={16} border="border/subtle" style={styles.surface}>
         {rows.map((row, index) => (

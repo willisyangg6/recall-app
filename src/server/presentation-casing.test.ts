@@ -41,7 +41,11 @@ import {
   reasonClauseCasing,
 } from '../lib/consumer-summary';
 import { buildSearchEntry, matchesSearch, parseSearchQuery } from '../lib/feed-search';
-import { buildDetailModel, buildHomeCardModel } from '../lib/recall-presentation';
+import {
+  buildDetailModel,
+  buildHomeCardModel,
+  conciseReasonLine,
+} from '../lib/recall-presentation';
 import { interpretReason } from '../lib/recall-reason';
 import { buildShareMessage } from '../lib/share-message';
 import type { FeedItem } from '../lib/recall-feed';
@@ -562,21 +566,88 @@ test('recorded preservation: generic source title casing still flattens to natur
 
 test('Home and Detail render compatible casing for every corrected semantic span (P3A parity)', () => {
   // Home's concise reason line keeps the source's own casing as a standalone
-  // sentence; Detail embeds the same phrase mid-sentence. After P3E the two
+  // label; Detail embeds the same phrase mid-sentence. After P3E the two
   // agree on every semantic span — Home can no longer show "Cronobacter
   // sakazakii" while Detail flattens it.
+  //
+  // P2B7H: the card's line carries no final full stop (`cardSummaryText`,
+  // presentation-only — the sentence `conciseReasonLine` composes is
+  // unchanged, and so is Detail's prose). That is punctuation, not casing,
+  // and the CASING parity this test exists for is unaffected: every span
+  // below still matches Detail span for span.
   const nutramigen = modelsOf('nutramigen-hypoallergenic-infant');
-  assert.equal(nutramigen.home.reasonLine, 'Potential Cronobacter sakazakii contamination.');
+  assert.equal(nutramigen.home.reasonLine, 'Potential Cronobacter sakazakii contamination');
   assert.ok(nutramigen.detail.whatHappened.text.includes('Cronobacter sakazakii'));
   const byheart = modelsOf('byheart-issues-voluntary-recall');
   assert.equal(
     byheart.home.reasonLine,
-    'Potential for cross-contamination with Cronobacter sakazakii.',
+    'Potential for cross-contamination with Cronobacter sakazakii',
   );
   assert.ok(byheart.detail.whatHappened.text.includes('Cronobacter sakazakii'));
   const littleRemedies = modelsOf('little-remediesr-honey-cough-syrup');
-  assert.equal(littleRemedies.home.reasonLine, 'Potential Foodborne Illness – Bacillus cereus.');
+  assert.equal(littleRemedies.home.reasonLine, 'Potential Foodborne Illness – Bacillus cereus');
   assert.ok(littleRemedies.detail.whatHappened.text.includes('Bacillus cereus'));
+  // Detail's own prose still ends in a full stop — the card's rule stopped
+  // at the card.
+  for (const model of [nutramigen, byheart, littleRemedies]) {
+    assert.ok(model.detail.whatHappened.text.endsWith('.'));
+  }
+});
+
+test('P2B7H: across the whole corpus, card summaries drop only a sentence stop', () => {
+  // The risk in a punctuation rule is not the lines it changes — it is the
+  // ones it should have left alone. So the rule is run over every recorded
+  // FDA and FSIS notice and checked against the sentence it came from: the
+  // card's line must be either identical to `conciseReasonLine`'s output or
+  // exactly that output minus one final '.', never anything else.
+  let stripped = 0;
+  let kept = 0;
+  for (const { id, projection } of CORPUS) {
+    const item = feedItemOf(id, projection);
+    const sentence = conciseReasonLine({
+      reasonText: item.reasonText,
+      hazardCategory: item.hazardCategory,
+      pathogenOrAllergen: item.pathogenOrAllergen,
+      title: item.title,
+    });
+    const card = buildHomeCardModel(item, { today: TODAY, affectsYou: false }).reasonLine;
+    if (sentence === null) {
+      assert.equal(card, null, `${id} invented a card line`);
+      continue;
+    }
+    assert.ok(card !== null, `${id} lost its card line`);
+    if (card === sentence) {
+      kept += 1;
+      continue;
+    }
+    stripped += 1;
+    assert.equal(`${card}.`, sentence, `${id} changed more than the final stop`);
+    // Nothing that is not a sentence stop was taken.
+    assert.ok(!card!.endsWith('.'), `${id} left a stop behind`);
+    assert.ok(!/(?:\.\.|…)$/.test(sentence), `${id} had an ellipsis stripped`);
+  }
+  // This test's invariant is the per-line equality above, not a count: the
+  // only thing asserted about the corpus totals is that the path was
+  // actually exercised on real data. What the rule REFUSES to strip is
+  // pinned by name in `components/card-presentation-design.test.ts`, where
+  // the inputs are fixed and a corpus that happens to contain no
+  // abbreviation this month cannot weaken the test.
+  assert.ok(stripped > 0, 'no corpus line reached the card summary rule');
+  assert.equal(stripped + kept > 0, true);
+});
+
+test('P2B7H: Detail prose keeps every stop the card dropped', () => {
+  // The same corpus, the other surface: the card rule must not have reached
+  // Detail's narrative, which is prose and ends in a full stop.
+  for (const { id, projection } of CORPUS) {
+    const detail = buildDetailModel(
+      { id, projection, timeline: [], affectedProducts: projection.affectedProducts, visuals: [] },
+      { today: TODAY, affectsYou: false },
+    );
+    const text = detail.whatHappened.text.trim();
+    if (text === '') continue;
+    assert.ok(/[.!?]$/.test(text), `${id} lost Detail's sentence punctuation: ${text.slice(-60)}`);
+  }
 });
 
 test('share copy inherits the corrected clause from the one shared sentence', () => {

@@ -199,6 +199,31 @@ saved. The cards are live: tapping one opens the real Recall Detail, and its
 own Save control writes this device's bookmark list exactly as it does on the
 Feed.
 
+### Status metadata and save control (P2B7H)
+
+A **Status metadata and save control** gallery makes the three compact-card
+details P2B7H changed inspectable side by side, rather than screen by
+screen:
+
+- the **activity date** beside every major status shape — all seven risk
+  labels, the Public Health Alert notice label and the `AFFECTS YOU`
+  relevance label — in the card's own `caption` token, in each of the three
+  real wordings (`Updated Today`, `Updated Aug 21`, `Announced Sep 15`), so
+  the metadata hierarchy is judged against what it sits next to;
+- the **icon-only save control** in both states and pressed, drawn by the
+  product's own `SaveControlAppearance` over a state the gallery decides —
+  so both states are always visible. It reads and writes nothing: this
+  device's real bookmark list is exercised by tapping a live card in the
+  Feed or Saved galleries;
+- the **summary punctuation rule** over real wording, showing both the
+  lines whose trailing stop is dropped and the strings it must refuse to
+  change (a unit abbreviation, a company suffix, multi-sentence source
+  text, an ellipsis).
+
+Cards with and without images, `Affects You` cards, long product names and
+large Dynamic Type stay where they already were — the Feed card matrix, the
+Detail title treatments, and scenarios 57–58.
+
 ### Profile components and states (P2B5)
 
 A **Profile components and states** gallery renders the live Profile tab's
@@ -211,6 +236,10 @@ screenshotted without arranging this device's preferences:
   populated (California, Peanuts and Milk, Costco and Trader Joe's), long
   (District of Columbia, four allergens and three stores, summarized to two
   names and `+N`), and after a read failure (`Unavailable`);
+- every real **Profile group label** from the registry — `Privacy & Data`,
+  `About & Safety`, `Legal` and `App` — drawn by the production
+  `ProfileSection` in the corrected title case (P2B7H), each over its own
+  document rows, so a label that started shouting again shows up here;
 - a grouped **section** with two chevron navigation rows, a value row and a
   footnote caption;
 - the **development entry**, which renders only in a development build.
@@ -344,7 +373,7 @@ Detail`.
 | 25    | Detail · a short product name (≤ 24 characters) | One line beside the hero.                                                                                                                                                         |
 | 26    | Detail · a long product name (≥ 56 characters)  | Wraps across several lines beside the hero; never truncated.                                                                                                                      |
 | 27    | Detail · nationwide distribution                | One sentence after the pin, no list, no control.                                                                                                                                  |
-| 28–34 | Detail · Health Risk from each reviewed guide   | One row per guide (botulism, Listeria, E. coli/STEC, undeclared allergen, Salmonella, hepatitis A, Cyclospora): the risk statement, `COMMON SYMPTOMS`, and the `Learn more` link. |
+| 28–34 | Detail · Health Risk from each reviewed guide   | One row per guide (botulism, Listeria, E. coli/STEC, undeclared allergen, Salmonella, hepatitis A, Cyclospora): the risk statement, `Common symptoms`, and the `Learn more` link. |
 | 35    | Detail · Health Risk with no reviewed guide     | The risk-only sentence alone.                                                                                                                                                     |
 | 36    | Detail · no Health Risk section                 | Where It Was Sold followed directly by Affected Products.                                                                                                                         |
 | 37    | Detail · a complete identifier/date group       | Every code dated; no blank line.                                                                                                                                                  |

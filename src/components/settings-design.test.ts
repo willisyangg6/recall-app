@@ -300,7 +300,7 @@ test('the edited values are exactly what the store saves and the Profile summary
 
 // ── Headings: two patterns ──────────────────────────────────────────────────
 
-test('content section headings are title case in heading-3 navy; navigation group labels stay uppercase captions', () => {
+test('content section headings are title case in heading-3 navy; navigation group labels are captions in the same title case', () => {
   const heading = SECTION.slice(SECTION.indexOf('<Text variant="heading-3"'));
   assert.ok(heading.startsWith('<Text variant="heading-3" accessibilityRole="header">'));
   assert.ok(!SECTION.includes('toUpperCase'));
@@ -312,9 +312,14 @@ test('content section headings are title case in heading-3 navy; navigation grou
     assert.equal(title, title.charAt(0).toUpperCase() + title.slice(1));
     assert.notEqual(title, title.toUpperCase());
   }
-  // Profile's navigation group label is untouched: caption, secondary, uppercased.
+  // Profile's navigation group label keeps its own TREATMENT — the small
+  // secondary caption, which is what separates a group of links from a
+  // section of content — but no longer its own CASING: since P2B7H both
+  // patterns render the words as written, and only compact status badges
+  // shout (P2B7H, DESIGN.md "Section headings and group labels").
   assert.ok(PROFILE_SECTION.includes('variant="caption"'));
-  assert.ok(PROFILE_SECTION.includes('{title.toUpperCase()}'));
+  assert.ok(PROFILE_SECTION.includes('{title}'));
+  assert.ok(!PROFILE_SECTION.includes('toUpperCase'));
   assert.ok(PROFILE_SECTION.includes('accessibilityRole="header"'));
   // The sheets' titles use the content heading too.
   assert.ok(SHEET.includes('<Text variant="heading-3" accessibilityRole="header"'));

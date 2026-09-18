@@ -4,7 +4,8 @@
  * audibly apart from the consumer settings — outlined on the page colour
  * with the strong border rather than filled white, under a heading that
  * says it exists in development builds only, with a hint that says the
- * same.
+ * same. The heading renders as written (P2B7H) — `Development builds
+ * only`, not shouted — like every other Profile group label.
  *
  * It renders nothing outside a development build. The live Profile also
  * wraps it in the bare `__DEV__` identifier so Metro eliminates the branch
@@ -39,7 +40,7 @@ export function DevelopmentEntry({
         color="text/secondary"
         accessibilityRole="header"
         style={styles.heading}>
-        {DEVELOPMENT_HEADING.toUpperCase()}
+        {DEVELOPMENT_HEADING}
       </Text>
       <Surface background="background/page" radius={8} border="border/strong">
         <NavigationRow label={label} summary={summary} href={href} hint={DEVELOPMENT_HINT} />

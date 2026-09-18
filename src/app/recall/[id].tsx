@@ -570,7 +570,7 @@ export default function RecallDetailScreen() {
               {healthRisk.symptoms ? (
                 <View style={styles.symptoms}>
                   <Text variant="caption" color="text/secondary" accessibilityRole="header">
-                    COMMON SYMPTOMS
+                    Common symptoms
                   </Text>
                   <View accessibilityRole="list" style={styles.symptomList}>
                     {healthRisk.symptoms.map((symptom) => (

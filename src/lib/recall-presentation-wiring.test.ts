@@ -439,7 +439,7 @@ test('P1B: Health Risk renders the model-decided standardized section', () => {
   // The symptom list is a labelled bulleted group with list semantics, and
   // each symptom is one accessible node labelled with the symptom alone, so
   // the bullet glyph is never announced.
-  assert.match(DETAIL, /COMMON SYMPTOMS/);
+  assert.match(DETAIL, /Common symptoms/);
   assert.match(DETAIL, /accessibilityRole="list"/);
   assert.match(DETAIL, /accessibilityLabel=\{symptom\}/);
   // The official source link is an accessible link whose LABEL comes from the

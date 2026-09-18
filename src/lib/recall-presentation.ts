@@ -2112,6 +2112,78 @@ export function cardCategoryLabel(productCategories: unknown): string | null {
   return displayable === undefined ? null : foodCategoryLabel(displayable);
 }
 
+// ── Card summary punctuation ────────────────────────────────────────────────
+
+/**
+ * Tails that are NOT sentence-ending punctuation, and must survive intact.
+ *
+ *   - an ellipsis, typed (`...`) or composed (`…`) — it marks elision, and
+ *     removing one dot of three produces nonsense;
+ *   - an abbreviation or an initial — `1.5 oz.`, `Whole Foods Market Inc.`,
+ *     `Route 9 Co.`, a lone initial `J.` — where the period belongs to the
+ *     token, not to the sentence. A single letter counts, which also covers
+ *     the last dot of `U.S.`.
+ *
+ * Deliberately conservative: this list decides what is KEPT, so an unlisted
+ * abbreviation loses a period it should have kept, which is a cosmetic
+ * error on a card. The inverse — a rule that stripped aggressively — would
+ * mangle a code or a measurement, which is a correctness error, and recall
+ * correctness is the product.
+ */
+const NON_TERMINAL_TAIL =
+  /(?:\.\.\.|…|(?:^|[\s(\[/-])(?:[A-Za-z]|[Nn]o|[Ii]nc|[Cc]orp|[Cc]os?|[Ll]td|[Ll]lc|[Ss]t|[Aa]ve|[Mm]t|[Dd]r|[Mm]rs?|[Mm]s|[Jj]r|[Ss]r|[Vv]s|etc|approx|est|min|max|oz|lb|lbs|fl|pt|qt|gal|ct|pkg|pcs|dept|mfg|no)\.)$/;
+
+/**
+ * More than one sentence: a break INSIDE the text, not just the final stop.
+ *
+ * A stop followed by whitespace is not enough — `Potential E. coli
+ * contamination.` would read as two sentences and keep a period every other
+ * card had dropped (13 recorded FDA/FSIS notices do exactly this). A real
+ * break starts a new sentence, so the next non-space character must be
+ * capitalised or a digit; `E. coli`, `U.S. distribution` and `1.5 oz` are
+ * not breaks.
+ */
+const INTERIOR_SENTENCE_BREAK = /[.!?]["')\]]?\s+[A-Z0-9]/;
+
+/**
+ * The compact-card rendering of a Lotly-generated hazard/reason summary
+ * (P2B7H): the same sentence `conciseReasonLine` composed, without its
+ * final full stop.
+ *
+ * ## Why this exists, and why it is HERE
+ *
+ * On a card the summary is a compact label sitting among a risk badge, a
+ * category tag, a date and a location — none of which is punctuated — and
+ * a lone trailing period on the one line that has it reads as a stray mark
+ * rather than as grammar. On Detail the same reason is prose inside a
+ * paragraph and keeps its stop.
+ *
+ * So this is PRESENTATION ONLY, applied at the narrowest boundary that both
+ * card surfaces share and Detail does not: `buildHomeCardModel`, the one
+ * builder behind the shared `RecallCard`. Feed and Saved both reach the card
+ * through it and therefore cannot disagree. Nothing upstream changes —
+ * `conciseReasonLine` still returns its sentence, Detail's narrative
+ * (`detailNarrative`) is untouched, and no stored field is rewritten. The
+ * period is dropped on the way to the card and nowhere else.
+ *
+ * ## What it will not touch
+ *
+ * Only a single trailing `.` on a single-sentence string. An ellipsis, an
+ * abbreviation, an initial, a decimal, a code, a question or exclamation,
+ * and any text carrying an interior sentence break are all returned exactly
+ * as given — a multi-sentence verbatim source reason keeps every stop it
+ * came with, because removing only the last one would leave the text
+ * inconsistently punctuated rather than unpunctuated.
+ */
+export function cardSummaryText(line: string | null): string | null {
+  if (line === null) return null;
+  const text = line.trimEnd();
+  if (!text.endsWith('.')) return text;
+  if (NON_TERMINAL_TAIL.test(text)) return text;
+  if (INTERIOR_SENTENCE_BREAK.test(text)) return text;
+  return text.slice(0, -1);
+}
+
 // ── Home card model ─────────────────────────────────────────────────────────
 
 export interface HomeCardModel {
@@ -2160,12 +2232,18 @@ export function buildHomeCardModel(item: FeedItem, context: HomeCardContext): Ho
     // The SAME typed interpretation Detail renders, over the canonical
     // evidence a feed row carries (P3A). Home never names a material,
     // agent, allergen or family Detail would not — see `interpretReason`.
-    reasonLine: conciseReasonLine({
-      reasonText: item.reasonText,
-      hazardCategory: item.hazardCategory,
-      pathogenOrAllergen: item.pathogenOrAllergen,
-      title: item.title,
-    }),
+    // The SAME sentence Detail's reason clause is built from, rendered for
+    // a compact card: `cardSummaryText` drops its trailing full stop and
+    // changes nothing else (P2B7H). Feed and Saved both build their cards
+    // here, so the two can never punctuate the same recall differently.
+    reasonLine: cardSummaryText(
+      conciseReasonLine({
+        reasonText: item.reasonText,
+        hazardCategory: item.hazardCategory,
+        pathogenOrAllergen: item.pathogenOrAllergen,
+        title: item.title,
+      }),
+    ),
     // The STORED answer, launch-filtered and capped at one. Feed and Saved
     // both reach the card through this builder, so the same recall carries
     // the same tag on both — there is no second display rule to drift.

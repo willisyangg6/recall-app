@@ -53,9 +53,7 @@ import { createSavedRecallsCache } from './saved-recalls-cache';
 import {
   isSavedId,
   SAVE_ACCESSIBILITY_LABEL,
-  SAVE_ACTION_LABEL,
   SAVED_ACCESSIBILITY_LABEL,
-  SAVED_ACTION_LABEL,
   saveControlState,
   toggleSavedId,
 } from './saved-recalls';
@@ -80,22 +78,50 @@ const ASSETS = join(__dirname, '..', '..', 'assets', 'icons');
 
 // ── 1. The save control's two states ────────────────────────────────────────
 
-test('P2B7E: the unsaved state is the OUTLINE bookmark beside "Save"', () => {
+test('P2B7H: the unsaved state is the OUTLINE bookmark, alone, spoken as an action', () => {
   const state = saveControlState(false);
   assert.equal(state.icon, 'bookmark');
-  assert.equal(state.label, SAVE_ACTION_LABEL);
-  assert.equal(state.label, 'Save');
   assert.equal(state.accessibilityLabel, SAVE_ACCESSIBILITY_LABEL);
+  assert.equal(state.accessibilityLabel, 'Save recall');
   assert.equal(state.selected, false);
 });
 
-test('P2B7E: the saved state is the FILLED bookmark beside "Saved"', () => {
+test('P2B7H: the saved state is the FILLED bookmark, alone, spoken as an action', () => {
   const state = saveControlState(true);
   assert.equal(state.icon, 'bookmark-filled');
-  assert.equal(state.label, SAVED_ACTION_LABEL);
-  assert.equal(state.label, 'Saved');
   assert.equal(state.accessibilityLabel, SAVED_ACCESSIBILITY_LABEL);
+  assert.equal(state.accessibilityLabel, 'Remove from saved recalls');
   assert.equal(state.selected, true);
+});
+
+test('P2B7H: the contract carries NO visible word for a surface to render', () => {
+  // The icon-only direction is enforced where the state is decided, not
+  // only where it is drawn: with no label in the contract, a screen cannot
+  // put the word back on one surface and leave the other two without it.
+  for (const saved of [false, true]) {
+    const state = saveControlState(saved);
+    assert.deepEqual(Object.keys(state).sort(), ['accessibilityLabel', 'icon', 'selected']);
+    assert.ok(!('label' in state));
+  }
+});
+
+test('P2B7H: the spoken name states the ACTION, and the condition is the selected state', () => {
+  // With no visible word, the accessibility label is the control's only
+  // wording. It must say what a tap DOES — "Saved" spoken alone would state
+  // a condition and leave the action unguessable — while the condition is
+  // announced conventionally, as selected.
+  const unsaved = saveControlState(false);
+  const saved = saveControlState(true);
+  for (const state of [unsaved, saved]) {
+    assert.match(state.accessibilityLabel, /^[A-Z]/, 'the spoken name is not a sentence');
+    assert.ok(state.accessibilityLabel.length > 0);
+    // An action, not a bare condition word.
+    assert.notEqual(state.accessibilityLabel, 'Save');
+    assert.notEqual(state.accessibilityLabel, 'Saved');
+  }
+  assert.notEqual(unsaved.accessibilityLabel, saved.accessibilityLabel);
+  assert.equal(unsaved.selected, false);
+  assert.equal(saved.selected, true);
 });
 
 test('P2B7E: NEITHER state can render without a bookmark', () => {
@@ -183,8 +209,12 @@ test('P2B7E: repeated toggling never removes the icon, in either direction', asy
     store.toggle(id);
     const after = renderedSaveState(store.cache, id);
     assert.match(after.icon, /^bookmark/, `icon lost after tap ${tap}`);
-    // Glyph and word always move together.
-    assert.equal(after.icon === 'bookmark-filled', after.label === SAVED_ACTION_LABEL);
+    // Glyph, spoken action and selected state always move together.
+    assert.equal(after.icon === 'bookmark-filled', after.selected);
+    assert.equal(
+      after.icon === 'bookmark-filled',
+      after.accessibilityLabel === SAVED_ACCESSIBILITY_LABEL,
+    );
     assert.notEqual(after.icon, before.icon, `tap ${tap} did not change the glyph`);
   }
   unsubscribe();
@@ -214,7 +244,7 @@ test('P2B7E: Feed, Detail and Saved read ONE save state — they cannot disagree
   store.toggle(id);
   for (const surface of everySurface()) {
     assert.equal(surface.icon, 'bookmark-filled');
-    assert.equal(surface.label, SAVED_ACTION_LABEL);
+    assert.equal(surface.accessibilityLabel, SAVED_ACCESSIBILITY_LABEL);
     assert.equal(surface.selected, true);
   }
 
@@ -227,7 +257,7 @@ test('P2B7E: Feed, Detail and Saved read ONE save state — they cannot disagree
   for (const stop of stops) stop();
 });
 
-test('P2B7E: a save that fails leaves icon and word honest, and agreeing', async () => {
+test('P2B7E: a save that fails leaves icon and spoken state honest, and agreeing', async () => {
   const store = storeWithStorage();
   const id = 'case-1';
   const unsubscribe = store.cache.subscribe(() => {});
@@ -235,11 +265,11 @@ test('P2B7E: a save that fails leaves icon and word honest, and agreeing', async
 
   store.failedToggle(id);
   const state = renderedSaveState(store.cache, id);
-  // Storage never changed, so the control still says "Save" — with its
+  // Storage never changed, so the control still offers to save — with its
   // outline bookmark. No optimistic half-state, and no missing glyph.
   assert.deepEqual(store.stored(), []);
   assert.equal(state.icon, 'bookmark');
-  assert.equal(state.label, SAVE_ACTION_LABEL);
+  assert.equal(state.accessibilityLabel, SAVE_ACCESSIBILITY_LABEL);
   assert.equal(state.selected, false);
   unsubscribe();
 });
@@ -254,7 +284,8 @@ test('P2B7E: saved state survives rehydration from storage', async () => {
 
   const state = renderedSaveState(store.cache, 'case-1');
   assert.equal(state.icon, 'bookmark-filled');
-  assert.equal(state.label, SAVED_ACTION_LABEL);
+  assert.equal(state.accessibilityLabel, SAVED_ACCESSIBILITY_LABEL);
+  assert.equal(state.selected, true);
   unsubscribe();
 });
 

@@ -141,11 +141,13 @@ test('every Feed surface draws its text from the type scale and the tokens, neve
       assert.ok(!code.includes(forbidden), `${name} contains ${forbidden}`);
     }
   }
-  // Every Text element on the Feed and the card names its variant.
+  // Every Text element on the Feed and the card names its variant. The save
+  // control is absent from this list because since P2B7H it renders NO Text
+  // at all — the icon-only test below pins that directly, which is a
+  // stronger statement than "its Text names a variant".
   for (const [name, source] of [
     ['feed', FEED],
     ['card', CARD],
-    ['save button', SAVE_BUTTON],
     ['state message', STATE_MESSAGE],
   ]) {
     const openings = source.match(/<Text\b[^>]*>/g) ?? [];
@@ -183,7 +185,13 @@ test('IBM Plex Mono is used only for compact status labels, never for words peop
   assert.ok(CARD.includes("import { NoticeLabel } from '@/components/ui/notice-label';"));
   assert.equal((codeOnly(NOTICE_LABEL).match(/variant="label"/g) ?? []).length, 1);
   // The timestamp, name, brand, summary and location are Public Sans tokens.
-  assert.ok(CARD.includes('<Text variant="micro-caption" color="text/secondary">'));
+  // P2B7H: the activity date is `caption` (12pt), not `micro-caption`
+  // (10pt) — see the readable-metadata test below for the size contract.
+  assert.ok(CARD.includes('<Text variant="caption" color="text/secondary">'));
+  assert.ok(
+    !codeOnly(CARD).includes('variant="micro-caption"'),
+    'the card reintroduced the 10pt micro-caption',
+  );
   assert.ok(
     /<Text variant="heading-3" numberOfLines=\{3\}>\s*\{model\.productName\}\s*<\/Text>/.test(CARD),
   );
@@ -307,15 +315,22 @@ test('All and Affects me are two either/or chips that only switch the mode', () 
 
 // ── 6. Save behaviour is unchanged ──────────────────────────────────────────
 
-test('the save control still toggles the same device-local store with the same words', () => {
+test('the save control still toggles the same device-local store, now icon-only', () => {
   assert.ok(SAVE_BUTTON.includes("from '@/hooks/use-saved-recalls'"));
   assert.ok(SAVE_BUTTON.includes('onPress={() => void toggle(caseId)}'));
   assert.ok(SAVE_BUTTON.includes('if (!available) return null;'));
-  // P2B7E: glyph and word are ONE decision (`saveControlState`) rather than
-  // two inline conditionals that could drift apart — the shape of the
-  // regression where the word changed and the bookmark disappeared.
+  // P2B7E: everything the control renders is ONE decision
+  // (`saveControlState`) rather than inline conditionals that could drift
+  // apart — the shape of the regression where the word changed and the
+  // bookmark disappeared.
   assert.ok(SAVE_BUTTON.includes('saveControlState(isSavedId(ids, caseId))'));
-  assert.ok(SAVE_BUTTON.includes('{state.label}'));
+  // P2B7H: the Figma direction (node 81:792) is the bookmark ALONE. The
+  // control renders no Text element and reaches for no copy constant, so
+  // the word cannot come back by accident on one surface only.
+  assert.ok(!SAVE_BUTTON.includes('<Text'), 'the save control renders a visible word again');
+  for (const gone of ['SAVE_ACTION_LABEL', 'SAVED_ACTION_LABEL', 'state.label']) {
+    assert.ok(!SAVE_BUTTON.includes(gone), `the save control still carries ${gone}`);
+  }
   assert.ok(SAVE_BUTTON.includes('<Icon name={state.icon} size={20} color="icon/primary" />'));
   // The icon is not inside any conditional in this file.
   assert.ok(

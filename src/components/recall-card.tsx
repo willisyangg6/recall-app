@@ -58,13 +58,14 @@
  *
  * To VoiceOver the card is one element — risk, date, relevance, product,
  * brand, category, reason, location and the save state, read in that order
- * — and iOS
- * does not let a screen reader reach a control nested inside such an
- * element. The save action is therefore also exposed as a custom
- * accessibility action on the card itself ("Save this recall" / "Saved.
- * Remove from Saved", the same spoken names the control uses), so a
- * screen-reader user can save without leaving the card. The visible control
- * stays for everyone else.
+ * — and iOS does not let a screen reader reach a control nested inside such
+ * an element. The save action is therefore also exposed as a custom
+ * accessibility action on the card itself ("Save recall" / "Remove from
+ * saved recalls", the same spoken names the control itself uses, read from
+ * the same `saveControlState`), so a screen-reader user can save without
+ * leaving the card. The visible control stays for everyone else — and since
+ * P2B7H it is the bookmark glyph alone, with no visible word, on the card
+ * exactly as on Detail.
  */
 
 import { Link } from 'expo-router';
@@ -132,7 +133,18 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
               ) : null}
               {/* Public Health Alerts are always explicitly labeled. */}
               {model.noticeLabel ? <NoticeLabel label={model.noticeLabel} /> : null}
-              <Text variant="micro-caption" color="text/secondary">
+              {/* The activity date is READ, not glanced at: "Updated Aug 21"
+                  is how someone decides whether they have already seen this
+                  recall, so it takes the readable `caption` (12pt) — the
+                  same token Detail's status row uses, so Feed, Saved and
+                  Detail carry one metadata hierarchy. It was `micro-caption`
+                  (10pt) through P2B7G, which measured smaller than the brand
+                  and category text beside it and read as a footnote
+                  (P2B7H). `micro-caption` stays for genuinely incidental
+                  labels; a date the product asks the reader to act on is
+                  not one. No height is fixed here, so Dynamic Type grows the
+                  row rather than clipping it. */}
+              <Text variant="caption" color="text/secondary">
                 {model.activity.text}
               </Text>
             </View>

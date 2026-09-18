@@ -115,15 +115,26 @@ export function missingSavedCount(
 
 // ── User-facing copy — a tested contract, not incidental strings ────────────
 
-/** The control's label while the recall is NOT saved. */
-export const SAVE_ACTION_LABEL = 'Save';
-
-/** The control's label while it IS saved (tapping again removes it). */
-export const SAVED_ACTION_LABEL = 'Saved';
-
-/** Spoken names: the visible label states a condition, not the action. */
-export const SAVE_ACCESSIBILITY_LABEL = 'Save this recall';
-export const SAVED_ACCESSIBILITY_LABEL = 'Remove from Saved';
+/**
+ * The spoken names of the save control (P2B7H).
+ *
+ * The control is ICON-ONLY on every surface, so these are no longer a
+ * second channel beside a visible word — they are the ONLY words the
+ * control has, and they carry its whole meaning to anyone who cannot see
+ * the bookmark. They therefore name the ACTION a tap performs, not the
+ * condition the control is in: "Saved" spoken alone would state a fact and
+ * leave a screen-reader user guessing what pressing it would do. The
+ * condition is announced separately and conventionally, as the control's
+ * selected state (`SaveControlState.selected` → `accessibilityState`), so
+ * assistive technology reads "Remove from saved recalls, selected" rather
+ * than the product inventing its own way to say "on".
+ *
+ * The visible `Save` / `Saved` words these replaced are gone, and so are
+ * their constants: a copy constant nothing renders is a string that drifts
+ * out of agreement with the product unnoticed.
+ */
+export const SAVE_ACCESSIBILITY_LABEL = 'Save recall';
+export const SAVED_ACCESSIBILITY_LABEL = 'Remove from saved recalls';
 
 /**
  * The approved bookmark glyphs, named here rather than at the call site
@@ -138,22 +149,23 @@ export type SaveControlIcon = 'bookmark' | 'bookmark-filled';
  * Everything the one save control renders, decided from one boolean.
  *
  * Why this exists (P2B7E): the control appears on the Feed card, on Recall
- * Detail, and on Saved, and its saved state changes FOUR things at once —
- * the glyph, the visible word, the spoken name, and the announced selection.
- * Deriving them separately at three call sites is how three of them can
- * agree while the fourth silently drifts, which is precisely the shape of
+ * Detail, and on Saved, and its saved state changes several things at once.
+ * Deriving them separately at three call sites is how some of them can
+ * agree while another silently drifts, which is precisely the shape of
  * "the word changed to Saved but the icon went away". There is one function,
  * it is pure, and the icon is not optional in either state.
  *
- * The visible label states the CONDITION ("Save" / "Saved") because that is
- * what a glance down a feed needs; the accessibility label states the
- * ACTION, which is what a screen reader needs.
+ * P2B7H made the control ICON-ONLY (the Figma direction, node 81:792), so
+ * the state now decides THREE things rather than four: the glyph, the
+ * spoken action, and the announced selection. The bookmark carries the
+ * state visually — outline unsaved, the same bookmark filled once saved —
+ * which is why the glyph pair, not a word, is the non-colour channel. No
+ * surface may add a visible word back on its own: there is no label in
+ * this contract to render.
  */
 export interface SaveControlState {
   /** The bookmark: outline while unsaved, the same bookmark filled once saved. */
   icon: SaveControlIcon;
-  /** The visible word. */
-  label: string;
   /** The spoken name of the action a tap performs. */
   accessibilityLabel: string;
   /** What a screen reader announces as the control's selected state. */
@@ -164,13 +176,11 @@ export function saveControlState(saved: boolean): SaveControlState {
   return saved
     ? {
         icon: 'bookmark-filled',
-        label: SAVED_ACTION_LABEL,
         accessibilityLabel: SAVED_ACCESSIBILITY_LABEL,
         selected: true,
       }
     : {
         icon: 'bookmark',
-        label: SAVE_ACTION_LABEL,
         accessibilityLabel: SAVE_ACCESSIBILITY_LABEL,
         selected: false,
       };
