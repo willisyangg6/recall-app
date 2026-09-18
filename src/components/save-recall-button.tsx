@@ -33,13 +33,7 @@ import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { hitSlopToMinimum, iconSize, spacing } from '@/constants/design-tokens';
 import { useSavedRecalls } from '@/hooks/use-saved-recalls';
-import {
-  isSavedId,
-  SAVE_ACCESSIBILITY_LABEL,
-  SAVE_ACTION_LABEL,
-  SAVED_ACCESSIBILITY_LABEL,
-  SAVED_ACTION_LABEL,
-} from '@/lib/saved-recalls';
+import { isSavedId, saveControlState } from '@/lib/saved-recalls';
 
 const HIT_SLOP = hitSlopToMinimum(iconSize[20]);
 
@@ -50,20 +44,24 @@ export function SaveRecallButton({ caseId }: { caseId: string }) {
   // control that cannot persist would be worse than not offering one.
   if (!available) return null;
 
-  const saved = isSavedId(ids, caseId);
+  // The ONE decision (P2B7E): glyph, word, spoken name and announced
+  // selection all come from `saveControlState`, so no state of this control
+  // can render three of the four and drop the fourth.
+  const state = saveControlState(isSavedId(ids, caseId));
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ selected: saved }}
-      accessibilityLabel={saved ? SAVED_ACCESSIBILITY_LABEL : SAVE_ACCESSIBILITY_LABEL}
+      accessibilityState={{ selected: state.selected }}
+      accessibilityLabel={state.accessibilityLabel}
       hitSlop={HIT_SLOP}
       onPress={() => void toggle(caseId)}>
       {({ pressed }) => (
         <View style={[styles.control, pressed && styles.pressed]}>
-          <Icon name={saved ? 'bookmark-filled' : 'bookmark'} size={20} color="icon/primary" />
+          {/* Never conditional: BOTH states carry a bookmark. */}
+          <Icon name={state.icon} size={20} color="icon/primary" />
           <Text variant="caption" color="action/primary">
-            {saved ? SAVED_ACTION_LABEL : SAVE_ACTION_LABEL}
+            {state.label}
           </Text>
         </View>
       )}

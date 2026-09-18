@@ -260,12 +260,24 @@ test('the section order is unchanged, and community stays beneath the official g
   assert.ok(!DETAIL.slice(order[0], order[1]).includes('CommunityReportsBlock'));
   assert.ok(!DETAIL.slice(DETAIL.indexOf('styles.header'), order[0]).includes('CommunityReports'));
   assert.ok(!DETAIL.slice(order[2]).includes('CommunityReportsBlock'));
-  // Every section after the first is preceded by the hairline inside its
-  // own conditional, so a section that does not render leaves no divider.
+  // Every section after the first is preceded by its own hairline, so a
+  // section that does not render leaves no divider. Where It Was Sold is
+  // unconditional (P2B7E) and carries the divider directly; the optional
+  // sections still keep theirs inside their own conditional.
   for (const index of order.slice(1)) {
-    const before = DETAIL.slice(0, index).slice(-260);
-    assert.match(before, /\? \(\s*<>\s*<View style=\{styles\.divider\} \/>/);
+    const before = DETAIL.slice(0, index).slice(-360);
+    assert.match(
+      before,
+      /(\? \(\s*<>\s*<View style=\{styles\.divider\} \/>|<View style=\{styles\.divider\} \/>\s*$)/,
+    );
   }
+  // Where It Was Sold has NO presence condition at all: it is not wrapped in
+  // a `whereSold ? … : null`, so no raw distribution value can remove it.
+  const whereSoldOpen = DETAIL.slice(0, order[1]).slice(-360);
+  assert.ok(
+    !/\{whereSold \?/.test(whereSoldOpen),
+    'Where It Was Sold regained a presence condition',
+  );
   assert.ok(!DETAIL.slice(0, order[0]).includes('styles.divider'));
   // The community block is styled as part of the section, from the tokens.
   assert.ok(COMMUNITY.includes("import { Text } from '@/components/ui/text';"));

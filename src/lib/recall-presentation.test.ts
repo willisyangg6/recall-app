@@ -13,7 +13,7 @@ import { test } from 'node:test';
 
 import { HAZARD_GUIDES } from '@/content/hazard-guides';
 import { classifyIllnessReport } from '@/domain/illness';
-import type { CaseProjection, TimelineEntry } from '@/domain/recall-types';
+import type { CaseProjection, Geography, TimelineEntry } from '@/domain/recall-types';
 import type { CaseDetail, CaseVisual, FeedItem } from './recall-feed';
 import type { RecallImage } from './recall-images';
 import {
@@ -28,7 +28,6 @@ import {
   imagePositionLabel,
   IMAGE_DOTS_MAX,
   productImagery,
-  communityReportsSection,
   caseIdentity,
   buildHomeCardModel,
   cleanProductName,
@@ -36,7 +35,9 @@ import {
   displayBrand,
   formatActivityDate,
   healthRiskSection,
+  geographyLocationState,
   homeLocationSummary,
+  UNSPECIFIED_DISTRIBUTION,
   illnessLine,
   officialSourceLink,
   stripTrailingMeasurement,
@@ -2195,20 +2196,94 @@ test('P3C-2: a nameless row keeps an honest empty Product cell beside a named si
   assert.equal(view.rows[1].name, null);
 });
 
-test('P3A: Where it was sold is absent when the geography supports no representation', () => {
+test('P2B7E: Where it was sold is ALWAYS present, and never leads with nothing', () => {
   const stated = whereSoldModel({
     ...emptyDistribution(),
     scopeType: 'states',
     states: ['Texas', 'Oklahoma'],
   });
   assert.equal(whereSoldSection(stated), stated);
-  // No states and no stated area text: the lead is empty, so no heading.
+  assert.equal(stated.locationState, 'states');
+
+  // No states and no stated area text. This used to produce an empty lead
+  // and no section at all; the honest line is not optional.
   const silent = whereSoldModel(emptyDistribution());
-  assert.equal(silent.lead, '');
-  assert.equal(whereSoldSection(silent), null);
-  // A whitespace-only area text is equally not a representation.
+  assert.equal(silent.lead, UNSPECIFIED_DISTRIBUTION);
+  assert.equal(silent.leadCollapsed, UNSPECIFIED_DISTRIBUTION);
+  assert.equal(silent.locationState, 'unspecified');
+  assert.equal(whereSoldSection(silent), silent);
+
+  // A whitespace-only area text is equally not a representation, and is
+  // replaced by the same honest line rather than removing the section.
   const blank = whereSoldModel({ ...emptyDistribution(), areaText: '   ' });
-  assert.equal(whereSoldSection(blank), null);
+  assert.equal(blank.lead, UNSPECIFIED_DISTRIBUTION);
+  assert.equal(whereSoldSection(blank), blank);
+
+  // THE regression this milestone repairs (biQ-FEL, case
+  // 1b5ead1a-4f0c-42a8-af9e-477824c8e114): an unspecified distribution that
+  // still names an online platform. The projection leaves `areaText` empty
+  // for exactly this shape, which silently removed the section.
+  const onlineOnly = whereSoldModel({
+    ...emptyDistribution(),
+    areaText: '',
+    onlinePlatforms: ['Amazon'],
+  });
+  assert.equal(onlineOnly.lead, UNSPECIFIED_DISTRIBUTION);
+  assert.equal(whereSoldSection(onlineOnly), onlineOnly);
+
+  // The same for a named retailer and for a bare channel.
+  for (const distribution of [
+    { ...emptyDistribution(), areaText: '', retailers: ['Costco Wholesale'] },
+    { ...emptyDistribution(), areaText: '', channels: ['convenience stores'] },
+  ]) {
+    const model = whereSoldModel(distribution);
+    assert.equal(model.lead, UNSPECIFIED_DISTRIBUTION);
+    assert.notEqual(whereSoldSection(model), null);
+  }
+});
+
+test('P2B7E: Feed and Detail read ONE location-state contract', () => {
+  // Same verdict, two widths. The card abbreviates; Detail lists in full;
+  // neither may answer "nowhere".
+  const nationwide: Geography = {
+    scope: 'nationwide',
+    states: [],
+    confidence: 'stated',
+    sourceText: null,
+  };
+  assert.equal(geographyLocationState(nationwide), 'nationwide');
+  assert.equal(homeLocationSummary(nationwide), 'Nationwide');
+  assert.equal(
+    whereSoldModel({ ...emptyDistribution(), scopeType: 'nationwide', areaText: 'Nationwide.' })
+      .locationState,
+    'nationwide',
+  );
+
+  const states: Geography = {
+    scope: 'states',
+    states: ['California', 'Nevada'],
+    confidence: 'stated',
+    sourceText: null,
+  };
+  assert.equal(geographyLocationState(states), 'states');
+  assert.equal(homeLocationSummary(states), 'CA, NV');
+
+  // A "states" scope with no states is NOT a known location on either side.
+  const empty: Geography = { scope: 'states', states: [], confidence: 'stated', sourceText: null };
+  assert.equal(geographyLocationState(empty), 'unspecified');
+  assert.equal(homeLocationSummary(empty), UNSPECIFIED_DISTRIBUTION);
+
+  const unknown: Geography = {
+    scope: 'unknown',
+    states: [],
+    confidence: 'inferred',
+    sourceText: null,
+  };
+  assert.equal(geographyLocationState(unknown), 'unspecified');
+  assert.equal(homeLocationSummary(unknown), UNSPECIFIED_DISTRIBUTION);
+
+  // The unspecified state renders the SAME words on both surfaces.
+  assert.equal(homeLocationSummary(unknown), whereSoldModel(emptyDistribution()).lead);
 });
 
 // ── P3D: display capitalization through the shared models ───────────────────
@@ -2613,13 +2688,11 @@ test('P1D: the community section can never outlive the statement it corroborates
   // coupled in the MODEL rather than by luck in the screen. The coupling is
   // direct: with no host section there is no community section, whatever
   // the case's own eligibility would otherwise say.
-  assert.equal(
-    communityReportsSection('case-1', projection({ state: 'active', geography: STATES_GEO }), null),
-    null,
-    'a community block survived its host section',
-  );
-  // And across every geography the corpus produces, a community section
-  // implies a host section — the invariant the screen's nesting relies on.
+  // The coupling is now STRUCTURAL: `DetailSections.whereSold` is not
+  // nullable, so a community block cannot outlive its host section by
+  // construction rather than by a runtime guard that a caller could skip.
+  // Across every geography the corpus produces, a community section still
+  // implies a host section — and so does every other case.
   const geographies = [
     STATES_GEO,
     {

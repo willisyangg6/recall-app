@@ -22,6 +22,7 @@ import {
   SAVE_ACTION_LABEL,
   SAVED_ACCESSIBILITY_LABEL,
   SAVED_ACTION_LABEL,
+  saveControlState,
   SAVED_EMPTY,
   SAVED_EMPTY_BODY,
   SAVED_EMPTY_TITLE,
@@ -131,8 +132,22 @@ test('the control states the condition visibly and the action aloud', () => {
   // not repeated in the words (P2B6C).
   assert.equal(SAVED_ACCESSIBILITY_LABEL, 'Remove from Saved');
   // The label is never the only signal: the control also reports selection.
-  assert.match(SAVE_BUTTON, /accessibilityState=\{\{ selected: saved \}\}/);
-  assert.match(SAVE_BUTTON, /accessibilityLabel=\{saved \? SAVED_ACCESSIBILITY_LABEL/);
+  // Both come from the one save contract (P2B7E), which also carries the
+  // glyph — see `save-control-state.test.ts` for the behavioural proofs.
+  assert.match(SAVE_BUTTON, /accessibilityState=\{\{ selected: state\.selected \}\}/);
+  assert.match(SAVE_BUTTON, /accessibilityLabel=\{state\.accessibilityLabel\}/);
+  assert.deepEqual(saveControlState(false), {
+    icon: 'bookmark',
+    label: SAVE_ACTION_LABEL,
+    accessibilityLabel: SAVE_ACCESSIBILITY_LABEL,
+    selected: false,
+  });
+  assert.deepEqual(saveControlState(true), {
+    icon: 'bookmark-filled',
+    label: SAVED_ACTION_LABEL,
+    accessibilityLabel: SAVED_ACCESSIBILITY_LABEL,
+    selected: true,
+  });
 });
 
 test('the empty state names the state and invites the action, in exactly these words', () => {

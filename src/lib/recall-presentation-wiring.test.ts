@@ -625,14 +625,22 @@ test('P3A: optional Detail sections are model-owned — no screen-level content 
     DETAIL,
     /const \{ whereSold, communityReports, healthRisk, affectedProducts \} = model\.sections/,
   );
-  assert.match(DETAIL, /\{whereSold \? \(/);
   assert.match(DETAIL, /\{healthRisk \? \(/);
   assert.match(DETAIL, /\{affectedProducts \? \(/);
-  // Every heading exists ONLY inside its section's conditional.
-  for (const heading of ['Where It Was Sold', 'Health Risk', 'Affected Products']) {
+  // Every OPTIONAL heading exists ONLY inside its section's conditional.
+  for (const heading of ['Health Risk', 'Affected Products']) {
     const before = DETAIL.slice(0, DETAIL.search(new RegExp(`<Section\\s+title="${heading}"`)));
     assert.match(before.slice(-400), /\? \(/, `${heading} can render unconditionally`);
   }
+  // Where It Was Sold is NOT optional (P2B7E). It is the one section every
+  // valid recall renders, because "we do not know where this went" is an
+  // answer a shopper is owed rather than a reason to remove the question.
+  // The screen must therefore hold no presence predicate for it at all.
+  assert.ok(!/\{whereSold \?/.test(DETAIL), 'Where It Was Sold regained a presence condition');
+  assert.ok(
+    !/whereSold\s*===\s*null|whereSold\s*!==\s*null|whereSold &&/.test(DETAIL),
+    'the screen tests Where It Was Sold for presence',
+  );
   // The screen never re-evaluates row/column/code content to decide.
   assert.ok(!DETAIL.includes('items.length'), 'the screen counts model items');
   assert.ok(!DETAIL.includes('rows.length'), 'the screen counts table rows');

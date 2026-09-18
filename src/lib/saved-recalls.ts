@@ -125,6 +125,57 @@ export const SAVED_ACTION_LABEL = 'Saved';
 export const SAVE_ACCESSIBILITY_LABEL = 'Save this recall';
 export const SAVED_ACCESSIBILITY_LABEL = 'Remove from Saved';
 
+/**
+ * The approved bookmark glyphs, named here rather than at the call site
+ * (P2B7E). These are `IconName`s from `components/ui/icon`, but this module
+ * is a LEAF — the client/server boundary and the bundle both depend on it
+ * importing no component — so the two names are a literal union, pinned
+ * against the real glyph set by `saved-recalls.test.ts`.
+ */
+export type SaveControlIcon = 'bookmark' | 'bookmark-filled';
+
+/**
+ * Everything the one save control renders, decided from one boolean.
+ *
+ * Why this exists (P2B7E): the control appears on the Feed card, on Recall
+ * Detail, and on Saved, and its saved state changes FOUR things at once —
+ * the glyph, the visible word, the spoken name, and the announced selection.
+ * Deriving them separately at three call sites is how three of them can
+ * agree while the fourth silently drifts, which is precisely the shape of
+ * "the word changed to Saved but the icon went away". There is one function,
+ * it is pure, and the icon is not optional in either state.
+ *
+ * The visible label states the CONDITION ("Save" / "Saved") because that is
+ * what a glance down a feed needs; the accessibility label states the
+ * ACTION, which is what a screen reader needs.
+ */
+export interface SaveControlState {
+  /** The bookmark: outline while unsaved, the same bookmark filled once saved. */
+  icon: SaveControlIcon;
+  /** The visible word. */
+  label: string;
+  /** The spoken name of the action a tap performs. */
+  accessibilityLabel: string;
+  /** What a screen reader announces as the control's selected state. */
+  selected: boolean;
+}
+
+export function saveControlState(saved: boolean): SaveControlState {
+  return saved
+    ? {
+        icon: 'bookmark-filled',
+        label: SAVED_ACTION_LABEL,
+        accessibilityLabel: SAVED_ACCESSIBILITY_LABEL,
+        selected: true,
+      }
+    : {
+        icon: 'bookmark',
+        label: SAVE_ACTION_LABEL,
+        accessibilityLabel: SAVE_ACCESSIBILITY_LABEL,
+        selected: false,
+      };
+}
+
 /** One whole-screen state's words: a title over an explanation. */
 export interface SavedStateCopy {
   title: string;

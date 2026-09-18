@@ -309,8 +309,17 @@ test('the save control still toggles the same device-local store with the same w
   assert.ok(SAVE_BUTTON.includes("from '@/hooks/use-saved-recalls'"));
   assert.ok(SAVE_BUTTON.includes('onPress={() => void toggle(caseId)}'));
   assert.ok(SAVE_BUTTON.includes('if (!available) return null;'));
-  assert.ok(SAVE_BUTTON.includes('{saved ? SAVED_ACTION_LABEL : SAVE_ACTION_LABEL}'));
-  assert.ok(SAVE_BUTTON.includes("name={saved ? 'bookmark-filled' : 'bookmark'}"));
+  // P2B7E: glyph and word are ONE decision (`saveControlState`) rather than
+  // two inline conditionals that could drift apart — the shape of the
+  // regression where the word changed and the bookmark disappeared.
+  assert.ok(SAVE_BUTTON.includes('saveControlState(isSavedId(ids, caseId))'));
+  assert.ok(SAVE_BUTTON.includes('{state.label}'));
+  assert.ok(SAVE_BUTTON.includes('<Icon name={state.icon} size={20} color="icon/primary" />'));
+  // The icon is not inside any conditional in this file.
+  assert.ok(
+    !/\{[^}]*\?[^}]*<Icon/.test(SAVE_BUTTON),
+    'the save control renders its icon conditionally',
+  );
   assert.ok(SAVE_BUTTON.includes('hitSlop={HIT_SLOP}'));
   for (const forbidden of ['expo-router', 'router.', 'fetch(', 'supabase']) {
     assert.ok(!SAVE_BUTTON.includes(forbidden), `save control references ${forbidden}`);
@@ -338,7 +347,8 @@ test('saving is a nested pressable inside the card link, and the card exposes it
       'if (event.nativeEvent.actionName === SAVE_ACTION) void savedRecalls.toggle(model.id);',
     ),
   );
-  assert.ok(CARD.includes('label: saved ? SAVED_ACCESSIBILITY_LABEL : SAVE_ACCESSIBILITY_LABEL'));
+  assert.ok(CARD.includes('label: save.accessibilityLabel'));
+  assert.ok(CARD.includes('saveControlState(isSavedId(savedRecalls.ids, model.id))'));
 });
 
 // ── 8. Long content wraps ───────────────────────────────────────────────────

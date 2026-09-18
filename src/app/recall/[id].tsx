@@ -509,46 +509,45 @@ export default function RecallDetailScreen() {
         {/* Where it was sold: only the full state representation (P2a founder
             decision). Retailers, addresses, online routes, and channel
             evidence stay in the model for the later retailer-list milestone.
-            Absent when the canonical geography supports no representation. */}
-        {whereSold ? (
-          <>
-            <View style={styles.divider} />
-            <Section
-              title="Where It Was Sold"
-              action={
-                // Five jurisdictions or fewer render complete. Beyond that
-                // the model supplies the first five and its own reveal, on
-                // the heading row, and the list grows right here — no page,
-                // no sheet, no reordering; nationwide / unspecified
-                // distribution is untouched because the model gives those no
-                // control at all.
-                whereSold.statesDisclosure ? (
-                  <DisclosureControl
-                    control={whereSold.statesDisclosure}
-                    expanded={statesExpanded}
-                    onPress={() => setStatesExpanded((prior) => !prior)}
-                  />
-                ) : null
-              }>
-              <View style={styles.geography}>
-                <View style={styles.geographyGlyph}>
-                  <Icon name="map-pin" size={12} color="icon/primary" />
-                </View>
-                <Text variant="body-small" style={styles.geographyText}>
-                  {statesExpanded ? whereSold.lead : whereSold.leadCollapsed}
-                </Text>
-              </View>
-              {/* Community shopper reports (P1D) sit UNDER the official
-                  statement, never beside or above it: they corroborate where
-                  the notice says the product went, and the model nests them
-                  here so an entry point can never outlive the statement it
-                  corroborates. The block stays silent unless the server
-                  discloses something — while the feature gate is off it
-                  renders nothing at all. */}
-              {communityReports ? <CommunityReportsBlock section={communityReports} /> : null}
-            </Section>
-          </>
-        ) : null}
+            ALWAYS rendered (P2B7E): the model's lead is never empty, so a
+            recall whose distribution the notice never stated says
+            "Distribution not specified" here — with the same map pin as any
+            other location state — rather than losing the section. There is
+            no condition left on this section to regress. */}
+        <View style={styles.divider} />
+        <Section
+          title="Where It Was Sold"
+          action={
+            // Five jurisdictions or fewer render complete. Beyond that
+            // the model supplies the first five and its own reveal, on
+            // the heading row, and the list grows right here — no page,
+            // no sheet, no reordering; nationwide / unspecified
+            // distribution is untouched because the model gives those no
+            // control at all.
+            whereSold.statesDisclosure ? (
+              <DisclosureControl
+                control={whereSold.statesDisclosure}
+                expanded={statesExpanded}
+                onPress={() => setStatesExpanded((prior) => !prior)}
+              />
+            ) : null
+          }>
+          <View style={styles.geography}>
+            <View style={styles.geographyGlyph}>
+              <Icon name="map-pin" size={12} color="icon/primary" />
+            </View>
+            <Text variant="body-small" style={styles.geographyText}>
+              {statesExpanded ? whereSold.lead : whereSold.leadCollapsed}
+            </Text>
+          </View>
+          {/* Community shopper reports (P1D) sit UNDER the official
+              statement, never beside or above it: they corroborate where the
+              notice says the product went, and the model nests them here so
+              an entry point can never outlive the statement it corroborates.
+              The block stays silent unless the server discloses something —
+              while the feature gate is off it renders nothing at all. */}
+          {communityReports ? <CommunityReportsBlock section={communityReports} /> : null}
+        </Section>
 
         {/* Health Risk (P1B): standardized, reviewed hazard education owned by
             the shared contract — the same recognized hazard renders the same

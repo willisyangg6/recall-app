@@ -73,11 +73,7 @@ import { Text } from '@/components/ui/text';
 import { layout, spacing } from '@/constants/design-tokens';
 import { useSavedRecalls } from '@/hooks/use-saved-recalls';
 import type { HomeCardModel } from '@/lib/recall-presentation';
-import {
-  isSavedId,
-  SAVE_ACCESSIBILITY_LABEL,
-  SAVED_ACCESSIBILITY_LABEL,
-} from '@/lib/saved-recalls';
+import { isSavedId, saveControlState } from '@/lib/saved-recalls';
 
 /** The spoken hint for the card's own press. */
 export const CARD_ACCESSIBILITY_HINT = 'Opens the recall details.';
@@ -87,7 +83,9 @@ const SAVE_ACTION = 'save';
 
 export function RecallCard({ model }: { model: HomeCardModel }) {
   const savedRecalls = useSavedRecalls();
-  const saved = isSavedId(savedRecalls.ids, model.id);
+  // The card's custom accessibility action reads the SAME save contract the
+  // visible control does, so the two can never announce different actions.
+  const save = saveControlState(isSavedId(savedRecalls.ids, model.id));
 
   return (
     <Link href={{ pathname: '/recall/[id]', params: { id: model.id } }} asChild>
@@ -99,7 +97,7 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
             ? [
                 {
                   name: SAVE_ACTION,
-                  label: saved ? SAVED_ACCESSIBILITY_LABEL : SAVE_ACCESSIBILITY_LABEL,
+                  label: save.accessibilityLabel,
                 },
               ]
             : []

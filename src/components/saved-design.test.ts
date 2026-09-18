@@ -335,13 +335,13 @@ test('the list keeps the Feed’s rhythm, margins and content width', () => {
 
 test('the card’s save action, its spoken names and the 44pt minimum are intact', () => {
   assert.ok(CARD.includes('accessibilityActions={'));
-  assert.ok(CARD.includes('label: saved ? SAVED_ACCESSIBILITY_LABEL : SAVE_ACCESSIBILITY_LABEL'));
+  assert.ok(CARD.includes('label: save.accessibilityLabel'));
   assert.ok(
     CARD.includes(
       'if (event.nativeEvent.actionName === SAVE_ACTION) void savedRecalls.toggle(model.id);',
     ),
   );
-  assert.match(SAVE_BUTTON, /accessibilityState=\{\{ selected: saved \}\}/);
+  assert.match(SAVE_BUTTON, /accessibilityState=\{\{ selected: state\.selected \}\}/);
   assert.match(SAVE_BUTTON, /hitSlop=\{HIT_SLOP\}/);
   assert.match(SAVE_BUTTON, /hitSlopToMinimum\(iconSize\[20\]\)/);
   assert.equal(hitTarget.minimum, 44);

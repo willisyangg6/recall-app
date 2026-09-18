@@ -251,13 +251,21 @@ reported.`; source silence → the line is omitted entirely. Silence is never
 
 ### Geography
 
-- **Home** (`homeLocationSummary`): one or two state abbreviations, then
-  `CA, WA +N`; `Nationwide`; or the honest `Distribution not specified`.
+Both surfaces read ONE location contract (P2B7E): the typed verdict
+`LocationState` and the single `UNSPECIFIED_DISTRIBUTION` string
+(`Distribution not specified`), exported from `lib/recall-presentation.ts`.
+The map-pin glyph accompanies the location line on **both** surfaces, in
+every state — known jurisdictions, `Nationwide`, and unspecified alike.
+
+- **Home** (`homeLocationSummary`, via `geographyLocationState`): one or two
+  state abbreviations, then `CA, WA +N`; `Nationwide`; or the honest
+  `Distribution not specified`.
   States come from the canonical tri-state geography, whose derivation
   already applies the exclusions (containment artifacts, firm-address noise)
   before display — nothing is re-added here.
-- **Detail** (`whereSoldModel` over the consumer distribution — P2a founder
-  decision): the section renders **only the one state representation** — the
+- **Detail** (`whereSoldModel` over the consumer distribution, via
+  `distributionLocationState` — P2a founder decision): the section is
+  **always present** and renders **only the one state representation** — the
   complete full-name state list (never a "13 states." count beside the same
   names), `Nationwide`, a stated metro phrase, or the honest unspecified
   line — with **no trailing period** ("Texas", not "Texas."). The separate
@@ -567,11 +575,43 @@ A minimal row is preserved on purpose: **a supported product name alone is
 meaningful.** A real affected product is never hidden because the notice
 states no size, barcode, date, or code for it.
 
-`Where it was sold` follows the same rule (`whereSoldSection`): it renders
-its one representation — the full state list, "Nationwide", a stated metro
-phrase, or the honest unspecified statement — or it is absent. The complete
-retailer/address/channel evidence stays on `DetailModel.whereSold` for the
-later retailer-list milestone; only the render decision moved.
+`Where it was sold` is the ONE section that is **not** optional (P2B7E).
+`whereSoldSection` is total: every valid recall renders the heading, and
+`DetailSections.whereSold` is not nullable, so no raw distribution value can
+remove the section. It renders its one representation — the full state list,
+"Nationwide", a stated metro phrase, or the honest
+`Distribution not specified`. The complete retailer/address/channel evidence
+stays on `DetailModel.whereSold` for the later retailer-list milestone; only
+the render decision moved.
+
+**Why it is not optional.** It used to return `null` whenever the model's
+lead was empty, and the consumer projection leaves `areaText` empty for one
+specific shape: an unspecified distribution that still names a retailer, an
+online platform, or a channel. That emptiness was written when those routes
+rendered inside this section and carried the answer themselves; the P2a
+founder decision removed all of them from the screen, which left that shape
+with no line at all and therefore no section. The visible result was a recall
+reading `Distribution not specified` on its Feed card and losing Where It Was
+Sold entirely on its own detail screen — measured at **35 of 895 active
+cases** on 2026-09-17, including case
+`1b5ead1a-4f0c-42a8-af9e-477824c8e114` (a 500mL supplement bottle whose only
+stated route is Amazon). `whereSoldModel` now falls back to
+`UNSPECIFIED_DISTRIBUTION` instead of an empty lead. "We do not know where
+this went" is an answer a shopper is owed, not a reason to remove the
+question.
+
+**One location contract.** Feed and Detail read the same typed verdict,
+`LocationState` (`nationwide` | `states` | `areas` | `unspecified`), exported
+from `lib/recall-presentation.ts` together with the single
+`UNSPECIFIED_DISTRIBUTION` string both surfaces render. `homeLocationSummary`
+derives it through `geographyLocationState` from the canonical tri-state
+geography; `whereSoldModel` derives it through `distributionLocationState`
+from the consumer projection and carries it on `WhereSoldModel.locationState`.
+The two surfaces still render different WIDTHS of the same verdict — the
+card's `CT, IL +4` against Detail's complete jurisdiction list, and Detail
+additionally resolves a stated metro phrase the card's input cannot represent
+— but neither may answer "nowhere", and the unspecified state renders the
+same words on both.
 
 **Jurisdiction disclosure on Detail.** A state list of five or fewer
 (`WHERE_SOLD_INITIAL_STATES`) renders complete, with no control. Beyond five,
@@ -595,8 +635,10 @@ empty heading. No fallback copy is ever invented to fill an optional section.
 Measured over every recorded FDA and FSIS notice (230 records): the Affected
 Products section is visible for 177 both before and after — **zero legitimate
 rows lost** — and 53 empty headings disappear, each proven to have carried no
-rows, no codes and no dates. Nine notices lose an empty `Where it was sold`
-heading. Corpus-scanned in both presentation-regression suites.
+rows, no codes and no dates. Corpus-scanned in both presentation-regression
+suites. (`Where it was sold` was originally measured as losing nine empty
+headings; that removal was the P2B7E defect and no longer happens — the
+section is always present.)
 
 ### What the Detail page no longer renders (P2a founder decision)
 

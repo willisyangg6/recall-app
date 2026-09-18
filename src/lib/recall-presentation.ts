@@ -546,17 +546,64 @@ export function illnessLine(report: IllnessReport): string | null {
 // ── Geography ───────────────────────────────────────────────────────────────
 
 /**
+ * THE shopper-facing location state (P2B7E). Feed and Detail render where a
+ * recall reached at very different widths — the card's compact "CT, IL +4"
+ * against Detail's complete jurisdiction list — but they must never disagree
+ * about WHICH of these four things is true of a recall, and above all about
+ * whether the app knows where the product went at all.
+ *
+ * Feed's input is the canonical tri-state `Geography`, which has no notion of
+ * a sub-state area, so a card can only ever reach `nationwide`, `states` or
+ * `unspecified`. Detail's input is the consumer projection's distribution,
+ * which additionally carries a stated metro phrase. That is a difference of
+ * GRANULARITY, not of verdict: a surface that knows less says less, and
+ * neither surface may answer "nowhere".
+ */
+export type LocationState = 'nationwide' | 'states' | 'areas' | 'unspecified';
+
+/**
+ * The exact words for "the notice does not say where the product went", and
+ * the ONLY thing an unspecified distribution may render — on either surface.
+ *
+ * An empty string is not a representation of this state. Detail used to let
+ * one through (an unspecified distribution that named a retailer, an online
+ * platform or a channel produced an empty lead, which the section-presence
+ * rule then read as "nothing to say" and removed the whole heading), so a
+ * recall read "Distribution not specified" on the card and lost Where It Was
+ * Sold entirely on its own detail screen. Measured over the live corpus that
+ * was 35 of 895 active cases. The honest line is not optional: a shopper who
+ * cannot be told where a product went must be told that, on both surfaces.
+ */
+export const UNSPECIFIED_DISTRIBUTION = 'Distribution not specified';
+
+/** Feed's location state, from the canonical tri-state geography. */
+export function geographyLocationState(geography: Geography): LocationState {
+  if (geography.scope === 'nationwide') return 'nationwide';
+  if (geography.scope === 'states' && geography.states.length > 0) return 'states';
+  return 'unspecified';
+}
+
+/**
+ * Detail's location state. The consumer projection already decided this from
+ * the same canonical geography plus the places the source stated, so this
+ * names the contract rather than re-deriving it — the point is that both
+ * screens read one typed verdict instead of each inspecting raw fields.
+ */
+export function distributionLocationState(distribution: ConsumerDistribution): LocationState {
+  return distribution.scopeType;
+}
+
+/**
  * Compact Home location: one or two state abbreviations, "+N" beyond that,
- * "Nationwide", or an honest unspecified line. States arrive from the
+ * "Nationwide", or the honest unspecified line. States arrive from the
  * canonical tri-state geography — exclusions (containment artifacts,
  * firm-address noise) are applied by that derivation before display, and
  * nothing here re-adds a state it removed.
  */
 export function homeLocationSummary(geography: Geography): string {
-  if (geography.scope === 'nationwide') return 'Nationwide';
-  if (geography.scope !== 'states' || geography.states.length === 0) {
-    return 'Distribution not specified';
-  }
+  const state = geographyLocationState(geography);
+  if (state === 'nationwide') return 'Nationwide';
+  if (state !== 'states') return UNSPECIFIED_DISTRIBUTION;
   const codes = geography.states.map((name) => STATE_TO_POSTAL[name] ?? name);
   if (codes.length <= 2) return codes.join(', ');
   return `${codes[0]}, ${codes[1]} +${codes.length - 2}`;
@@ -618,11 +665,18 @@ export function disclosureControl(total: number, noun: string): DisclosureContro
 export const WHERE_SOLD_INITIAL_STATES = 5;
 
 export interface WhereSoldModel {
+  /**
+   * The shared location verdict (P2B7E) — the same contract the Feed card
+   * reads. Carried so the two surfaces can be pinned equivalent instead of
+   * each re-inspecting scopes, states and area text.
+   */
+  locationState: LocationState;
   /** The ONE rendered representation of where the recall reached (P2a
    * founder decision): the complete full-name state list, "Nationwide", a
    * stated metro phrase, or the honest unspecified statement — no trailing
    * period, never a bare count beside the list, and the only thing the
-   * Where-it-was-sold section renders at this stage. */
+   * Where-it-was-sold section renders at this stage. NEVER empty: an
+   * unspecified distribution renders `UNSPECIFIED_DISTRIBUTION`. */
   lead: string;
   /**
    * The lead as Detail renders it BEFORE the jurisdiction list is expanded:
@@ -693,8 +747,18 @@ function joinNames(names: string[]): string {
  * never a second copy of the same list. Leads carry no trailing period.
  */
 export function whereSoldModel(distribution: ConsumerDistribution): WhereSoldModel {
-  const states = distribution.scopeType === 'states' ? distribution.states : [];
-  const lead = states.length > 0 ? joinNames(states) : distribution.areaText.replace(/\.$/, '');
+  const locationState = distributionLocationState(distribution);
+  const states = locationState === 'states' ? distribution.states : [];
+  const stated = states.length > 0 ? joinNames(states) : distribution.areaText.replace(/\.$/, '');
+  // The projection leaves `areaText` EMPTY for an unspecified distribution
+  // that still named a retailer, an online platform or a channel — written
+  // when those routes rendered in this section and carried the answer
+  // themselves. The P2a founder decision removed all of them from the
+  // screen, which left that case with no line at all and, downstream, no
+  // section. The fallback is stated here rather than in the projection so
+  // the display decision stays in the display contract and no stored
+  // projection changes (P2B7E).
+  const lead = stated.trim() === '' ? UNSPECIFIED_DISTRIBUTION : stated;
   // Only a state list can be too long to show at once. Nationwide, a stated
   // metro phrase, and the honest unspecified statement are single sentences
   // with nothing to reveal, so they keep `lead` verbatim and get no control —
@@ -710,6 +774,7 @@ export function whereSoldModel(distribution: ConsumerDistribution): WhereSoldMod
         ? `Sold at ${shown.join(', ')}, and ${hidden} more ${hidden === 1 ? 'retailer' : 'retailers'}.`
         : `Sold at ${joinNames(shown)}.`;
   return {
+    locationState,
     lead,
     leadCollapsed,
     statesDisclosure: hiddenStates ? disclosureControl(states.length, 'states') : null,
@@ -1776,19 +1841,26 @@ export function affectedProductsSection(
 }
 
 /**
- * The "Where it was sold" section, or `null`. The section renders exactly one
- * thing at this stage (the P2a founder decision): the full state
- * representation, "Nationwide", a stated metro phrase, or the honest
- * unspecified statement. When the canonical geography supports none of those
- * the lead is empty, and the heading must not render alone — measured over
- * the recorded corpus, 9 notices reach that state.
+ * The "Where it was sold" section. ALWAYS present for a valid recall
+ * (P2B7E) — this function is total, and the section is not optional.
+ *
+ * The section renders exactly one thing at this stage (the P2a founder
+ * decision): the full state representation, "Nationwide", a stated metro
+ * phrase, or the honest unspecified statement. Those four cases are
+ * exhaustive, because `whereSoldModel` now falls back to
+ * `UNSPECIFIED_DISTRIBUTION` rather than to an empty lead.
+ *
+ * It used to return `null` on an empty lead, which is how a recall could say
+ * "Distribution not specified" on its Feed card and then omit Where It Was
+ * Sold entirely on its own detail screen. "We do not know" is an answer a
+ * shopper is owed, not a reason to remove the question.
  *
  * The complete evidence model (retailers, store addresses, online platforms,
  * channels) stays on `DetailModel.whereSold` for the later retailer-list
  * milestone; only the RENDER decision lives here.
  */
-export function whereSoldSection(model: WhereSoldModel): WhereSoldModel | null {
-  return model.lead.trim() === '' ? null : model;
+export function whereSoldSection(model: WhereSoldModel): WhereSoldModel {
+  return model;
 }
 
 /**
@@ -1801,7 +1873,8 @@ export function whereSoldSection(model: WhereSoldModel): WhereSoldModel | null {
  * unrepresentable.
  */
 export interface DetailSections {
-  whereSold: WhereSoldModel | null;
+  /** Never null (P2B7E): every valid recall renders Where It Was Sold. */
+  whereSold: WhereSoldModel;
   /** Community shopper reports (P1D), nested under Where it was sold. */
   communityReports: CommunityReportsSection | null;
   healthRisk: HealthRiskSection | null;
@@ -1843,15 +1916,18 @@ export interface CommunityReportsSection {
 }
 
 /**
- * Decide the community section for one case. `whereSold` is the already
- * decided Where-it-was-sold section: null there means null here.
+ * Decide the community section for one case.
+ *
+ * The block is nested under Where it was sold, and that host section is now
+ * present for every valid recall (P2B7E), so the nesting invariant is
+ * STRUCTURAL — `DetailSections.whereSold` is not nullable — rather than a
+ * runtime argument this function has to re-check. What remains here is the
+ * block's own eligibility, unchanged.
  */
 export function communityReportsSection(
   caseId: string,
   projection: CaseProjection,
-  whereSold: WhereSoldModel | null,
 ): CommunityReportsSection | null {
-  if (whereSold === null) return null;
   const eligibility = evaluateReportEligibility({
     state: projection.state,
     geography: projection.geography,
@@ -2315,7 +2391,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     affectedProducts: affectedProductsView,
     sections: {
       whereSold: whereSoldDecision,
-      communityReports: communityReportsSection(detail.id, projection, whereSoldDecision),
+      communityReports: communityReportsSection(detail.id, projection),
       healthRisk: healthRiskSection(hazardGuidance, standardizedRisk, {
         retracted: projection.state === 'retracted',
       }),
