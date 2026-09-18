@@ -1685,32 +1685,121 @@ export interface DetailImageSet {
 export const OFFICIAL_LABEL_ALT = 'Official product label';
 
 /**
- * The largest set that still shows position DOTS. Beyond it the dots stop
- * being countable at a glance and the compact numeric counter replaces them
- * (founder decision, P2B7C correction) — never both.
+ * How many position DOTS the indicator may draw at once (P2B7I correction,
+ * founder decision).
+ *
+ * This bounds the INDICATOR and nothing else. Every usable official photo
+ * stays swipeable however many there are — a 74-photo notice pages from
+ * `1 / 74` to `74 / 74` — and the dots become a moving window over those
+ * pages rather than one mark each, because seventy-four marks under a
+ * 152pt tile communicate nothing. The number of dots therefore never says
+ * anything about how many images a shopper can reach; the counter does
+ * that.
  */
-export const IMAGE_DOTS_MAX = 5;
+export const IMAGE_DOTS_WINDOW = 5;
+
+/** Which indicator a rendered image set carries — see `imagePageView`. */
+export type ImageIndicator = 'none' | 'dots' | 'dots-and-counter';
 
 /**
- * The spoken position of one page: `Image 2 of 15`.
- *
- * Composed here, not in the component, because it is consumer copy — and
- * taken over the pages a shopper can actually reach, which the pager knows
- * (a candidate whose image fails to load leaves the set).
+ * A `DetailImageSet` as the pager should render it right now — the pure
+ * decision, so the component owns no rule of its own.
  */
-export function imagePositionLabel(index: number, count: number): string {
-  return `Image ${index + 1} of ${count}`;
+export interface ImagePageView {
+  /**
+   * EVERY page a shopper can swipe to, in official order: the complete set
+   * minus the candidates known to have failed. There is no presentation
+   * cap. A failed candidate simply leaves the set, and the healthy images
+   * after it stay reachable; when every candidate has failed this is empty
+   * and the header takes its no-image shape.
+   */
+  pages: DetailImage[];
+  /** How many official photos the source published — the whole set, failed or not. */
+  officialCount: number;
+  /**
+   * How many of them can actually be shown — `pages.length`, named so the
+   * counter's denominator and the failure wording read from one field.
+   * Equal to `officialCount` until something fails.
+   */
+  usableCount: number;
+  /**
+   * `none` for a lone page (a static tile: nothing to swipe, so nothing to
+   * indicate); `dots` while every published photo is reachable and few
+   * enough to mark individually; `dots-and-counter` beyond that, or when a
+   * failure means fewer pages than the agency published. The counter is
+   * only ever ADDED beside the dots, never swapped for them.
+   */
+  indicator: ImageIndicator;
+}
+
+export function imagePageView(set: DetailImageSet, failed: ReadonlySet<string>): ImagePageView {
+  // No cap, no slice: the pager gets every usable page and virtualizes.
+  const pages = set.images.filter((image) => !failed.has(image.url));
+  const officialCount = set.images.length;
+  const usableCount = pages.length;
+  const indicator: ImageIndicator =
+    usableCount < 2
+      ? 'none'
+      : usableCount > IMAGE_DOTS_WINDOW || usableCount < officialCount
+        ? 'dots-and-counter'
+        : 'dots';
+  return { pages, officialCount, usableCount, indicator };
 }
 
 /**
- * The visible counter for a set of `IMAGE_DOTS_MAX` + 1 images or more:
- * `2 / 15`, current over reachable. Deliberately not a sentence — the
- * rejected `Showing 6 of 15 official images.` prose is gone, and no
- * explanatory word replaces it. Assistive technology hears
- * `imagePositionLabel` instead, so the slash is never read aloud.
+ * Which page indices the dots stand for right now — a window of at most
+ * `IMAGE_DOTS_WINDOW`, sliding over a longer set.
+ *
+ * At the beginning it is the first pages, through the middle it follows the
+ * current page (centred, so the active dot is never at an edge while pages
+ * remain on both sides), and at the end it is the final pages — so the
+ * marks always contain the current position and a reader can tell which end
+ * of the set they are near. A set that fits is simply all of it.
  */
-export function imageCounterText(index: number, count: number): string {
-  return `${index + 1} / ${count}`;
+export function imageDotWindow(current: number, pageCount: number): number[] {
+  const size = Math.min(IMAGE_DOTS_WINDOW, pageCount);
+  const centred = current - Math.floor(size / 2);
+  const start = Math.min(Math.max(centred, 0), pageCount - size);
+  return Array.from({ length: size }, (_, offset) => start + offset);
+}
+
+/**
+ * The spoken position of one page, over the pages a shopper can actually
+ * reach: `Image 2 of 74`. Every counted page IS reachable — there is no
+ * cap — so the count needs no qualifier. When images have failed it counts
+ * the survivors, and the one sentence about what could not be shown rides
+ * the counter instead (`imageUnavailableLabel`), not every page.
+ *
+ * Composed here, not in the component, because it is consumer copy.
+ */
+export function imagePositionLabel(index: number, usableCount: number): string {
+  return `Image ${index + 1} of ${usableCount}`;
+}
+
+/**
+ * The visible counter beside the dots: `2 / 74`, current page over the
+ * pages that can be shown. With nothing failing that IS the agency's
+ * official total, exactly; when something fails the denominator drops to
+ * what is reachable, because a denominator a shopper cannot swipe to is
+ * the defect this milestone exists to close. Deliberately not a sentence —
+ * the rejected `Showing 6 of 74 official images.` prose is gone.
+ */
+export function imageCounterText(index: number, usableCount: number): string {
+  return `${index + 1} / ${usableCount}`;
+}
+
+/**
+ * The one spoken sentence about images that could not be loaded, or null
+ * when every published photo is reachable (the ordinary case, where the
+ * page's own `Image 2 of 74` already says everything and a second
+ * announcement would only repeat it).
+ *
+ * It keeps the two numbers apart — what can be shown, and what the agency
+ * published — so a failed image is never implied to be viewable.
+ */
+export function imageUnavailableLabel(usableCount: number, officialCount: number): string | null {
+  if (usableCount >= officialCount) return null;
+  return `${usableCount} of ${officialCount} official images can be shown; the rest could not be loaded`;
 }
 
 /**

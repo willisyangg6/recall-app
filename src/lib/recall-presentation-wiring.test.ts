@@ -609,10 +609,16 @@ test('P2B7C: the header renders a model-decided set, and no label gallery exists
       `the component decides imagery itself: ${decision}`,
     );
   }
-  // The component's one filter is the FAILURE filter — pages that cannot
-  // render leave the set, so the indicator never counts a blank page.
-  assert.match(IMAGE_SET, /set\.images\.filter\(\(image\) => !failed\.has\(image\.url\)\)/);
-  assert.match(IMAGE_SET, /data=\{usable\}/);
+  // The component filters nothing itself (P2B7I): the pages it renders are
+  // the contract's `imagePageView` — the failure filter and the bound live
+  // there — so the indicator never counts a blank page and the component
+  // never decides how many pages exist.
+  assert.match(IMAGE_SET, /imagePageView\(set, failed\)/);
+  assert.match(IMAGE_SET, /data=\{pages\}/);
+  // Its one `.filter` seeds the failure state from the session memory; it
+  // never filters the pages it renders.
+  const filters = IMAGE_SET_CODE.match(/\.filter\(\(image\) => [^)]*\)/g) ?? [];
+  assert.deepEqual(filters, ['.filter((image) => hasImageFailed(image.url)']);
   assert.ok(!IMAGE_SET_CODE.includes('aspectRatio'), 'the component lays out by aspect ratio');
   assert.ok(!IMAGE_SET_CODE.includes('.caption'), 'the component reads image captions');
 });
@@ -929,7 +935,7 @@ test('hero accessibility text inherits the shared model product name (P3D)', () 
   // recall-presentation.test.ts, and pinned here as the screen passing the
   // model's labels through rather than composing text of its own.
   assert.match(HOME, /alt=\{model\.productName\}/);
-  assert.match(IMAGE_SET, /alt=\{usable\[0\]\.accessibilityLabel\}/);
+  assert.match(IMAGE_SET, /alt=\{pages\[0\]\.accessibilityLabel\}/);
   assert.match(IMAGE_SET, /alt=\{item\.accessibilityLabel\}/);
   for (const composed of ['productName', 'Official product label', 'Image ', 'Label page ']) {
     assert.ok(!IMAGE_SET.includes(`'${composed}`), `the component composes copy: ${composed}`);

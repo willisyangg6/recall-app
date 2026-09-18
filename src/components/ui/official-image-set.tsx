@@ -1,12 +1,13 @@
 /**
- * The official image set (P2B7C, as corrected) — the header's official FDA
- * product photography, paged by hand.
+ * The official image set (P2B7C, as corrected; indicators and failure
+ * settled in P2B7I) — the header's official FDA product photography, paged
+ * by hand.
  *
  * It takes a finished `DetailImageSet` from the shared presentation contract
- * and renders exactly those images, in exactly that order. It collects
- * nothing, ranks nothing, deduplicates nothing, reads no caption, and looks
- * at no pixel: which official images exist and what each is called was
- * decided once, by the image-role allocation (`src/lib/recall-images.ts`)
+ * and renders the pages `imagePageView` hands back, in exactly that order. It
+ * collects nothing, ranks nothing, deduplicates nothing, reads no caption,
+ * and looks at no pixel: which official images exist and what each is called
+ * was decided once, by the image-role allocation (`src/lib/recall-images.ts`)
  * and the presentation contract on top of it. The first page is the stored
  * hero — the same picture the Feed card showed for this recall.
  *
@@ -15,25 +16,47 @@
  * image on Detail is a thumbnail the allocator matched to an exact
  * affected-product row, which that row draws itself.
  *
- * ## What the shopper can reach is what the indicator says
+ * ## Every usable image is a page; the dots are only a window
  *
- * There is no presentation cap: every official photo is navigable, and the
- * pager virtualizes rather than dropping images, so a 51-photo notice mounts
- * and fetches a page at a time.
+ * THERE IS NO PRESENTATION CAP. Every official photo that loads is
+ * swipeable — a 74-photo notice pages from `1 / 74` all the way to
+ * `74 / 74` — because a total a shopper cannot reach is a lie about what
+ * the agency published. The pager virtualizes instead of dropping images,
+ * so the long sets cost what a short one costs until they are swiped.
  *
- * A candidate whose image cannot load LEAVES THE SET. That is the P2B7C
- * correction: a failed page used to stay in the pager as a grey placeholder
- * and stay counted, so a recall could show two dots over two blank squares.
- * Now the set shrinks to what actually renders, and the shape follows it:
+ * What IS bounded is the indicator, and only the indicator. Two marks say
+ * two different things, and above the threshold they COEXIST:
+ *
+ *   - the DOTS are a window of at most `IMAGE_DOTS_WINDOW`, sliding over
+ *     the pages — the first pages at the start, the current page through
+ *     the middle, the last pages at the end. How many dots there are says
+ *     NOTHING about how many images there are.
+ *   - the COUNTER (`2 / 74`) is the current page over the pages that can
+ *     be shown. It is added beside the dots, never swapped for them.
  *
  *   0 usable → nothing at all (Detail's approved no-image header)
- *   1 usable → the static tile, with no indicator
- *   2–5      → position dots
- *   6+       → the compact `2 / 15` counter, and never dots as well
+ *   1 usable → the static tile, with no indicator (nothing to swipe)
+ *   2–5      → one dot each, no counter: every published photo is there
+ *   6+       → a five-dot window, and the counter beside it
+ *   (a failure that leaves fewer pages than published also takes the
+ *    counter, so the shortfall is visible even in a small set)
+ *
+ * There is no prose — no `Showing 6 of 74 official images`.
+ *
+ * ## Failure
+ *
+ * A candidate whose image cannot load LEAVES THE SET (the P2B7C correction:
+ * a failed page used to stay in the pager as a grey placeholder and stay
+ * counted). Only that page goes — every healthy image after it stays
+ * reachable — and when every candidate fails the header returns to its
+ * no-image shape. A verdict is remembered for the session
+ * (`image-failures`), so reopening the recall neither re-requests the broken
+ * URL nor shows a blank page first.
  *
  * The visible page is tracked by IMAGE IDENTITY, not by index, so a late
  * failure on a page the shopper cannot see never moves the page they are
- * looking at.
+ * looking at; when the page they ARE looking at is the one that failed, the
+ * pager settles on whatever now sits at that position, once, and stays.
  *
  * ## What paging is, and is not
  *
@@ -52,9 +75,17 @@
  * ## Accessibility
  *
  * Each image keeps its own factual label and announces its position through
- * `accessibilityValue` (`Image 2 of 15`), composed by the presentation
- * contract. The dots and the counter are decoration and are hidden outright,
- * so nothing reads the slash aloud.
+ * `accessibilityValue`, composed by the presentation contract over the pages
+ * that can be reached: `Image 2 of 74`. Every counted page IS reachable, so
+ * the count needs no qualifier.
+ *
+ * The dots are decoration and are hidden outright. The counter is hidden
+ * too while nothing has failed — the pages already announce the same two
+ * numbers, and a second element would only duplicate them. When something
+ * HAS failed the counter becomes the one element that keeps the totals
+ * apart (`72 of 74 official images can be shown; the rest could not be
+ * loaded`), so a failed image is never implied to be viewable and the slash
+ * is still never read aloud.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -69,10 +100,13 @@ import {
 import { MediaTile } from '@/components/ui/media-tile';
 import { Text } from '@/components/ui/text';
 import { color, layout, radius, spacing } from '@/constants/design-tokens';
+import { hasImageFailed } from '@/lib/image-failures';
 import {
   imageCounterText,
+  imageDotWindow,
+  imagePageView,
   imagePositionLabel,
-  IMAGE_DOTS_MAX,
+  imageUnavailableLabel,
   type DetailImage,
   type DetailImageSet,
 } from '@/lib/recall-presentation';
@@ -81,8 +115,15 @@ import {
 const PAGE = layout.detailMediaSize;
 
 export function OfficialImageSet({ set }: { set: DetailImageSet }) {
-  /** URLs whose image reported a load failure. They leave the set. */
-  const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
+  /**
+   * URLs whose image reported a load failure. Seeded from the session's
+   * memory, so a candidate that already failed elsewhere is out before the
+   * first render rather than after a blank page.
+   */
+  const [failed, setFailed] = useState<ReadonlySet<string>>(
+    () =>
+      new Set(set.images.filter((image) => hasImageFailed(image.url)).map((image) => image.url)),
+  );
   /**
    * The visible page, as both the IMAGE showing (so an offscreen removal
    * cannot move it) and the position it settled at (the fallback for when
@@ -94,27 +135,29 @@ export function OfficialImageSet({ set }: { set: DetailImageSet }) {
   });
   const pager = useRef<FlatList<DetailImage> | null>(null);
 
-  const usable = set.images.filter((image) => !failed.has(image.url));
-  const found = visible.url === null ? -1 : usable.findIndex((image) => image.url === visible.url);
+  const { pages, officialCount, usableCount, indicator } = imagePageView(set, failed);
+  /** The one sentence about images that could not be loaded, or null. */
+  const unavailable = imageUnavailableLabel(usableCount, officialCount);
+  const found = visible.url === null ? -1 : pages.findIndex((image) => image.url === visible.url);
   // The image that was showing, or — when that is the one that just failed —
   // whatever now sits where it was.
   const current =
-    usable.length === 0 ? 0 : found >= 0 ? found : Math.min(visible.at, usable.length - 1);
+    pages.length === 0 ? 0 : found >= 0 ? found : Math.min(visible.at, pages.length - 1);
 
-  // Keep the pager on the current page when the set shrinks under it.
+  // Keep the pager on the current page when the set changes under it.
   useEffect(() => {
-    if (usable.length < 2) return;
+    if (pages.length < 2) return;
     pager.current?.scrollToOffset({ offset: current * PAGE, animated: false });
-  }, [current, usable.length]);
+  }, [current, pages.length]);
 
   const onSettled = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const raw = Math.round(event.nativeEvent.contentOffset.x / PAGE);
-      const at = Math.min(Math.max(raw, 0), usable.length - 1);
-      const image = usable[at];
+      const at = Math.min(Math.max(raw, 0), pages.length - 1);
+      const image = pages[at];
       if (image) setVisible({ url: image.url, at });
     },
-    [usable],
+    [pages],
   );
 
   const onFailed = useCallback((url: string) => {
@@ -124,16 +167,16 @@ export function OfficialImageSet({ set }: { set: DetailImageSet }) {
   // Every candidate failed: this recall has no usable official image, so the
   // header takes its approved no-image shape rather than keeping a blank tile
   // with indicators over it.
-  if (usable.length === 0) return null;
+  if (pages.length === 0) return null;
 
   // One usable image is the static tile Detail has always shown: no dots, no
   // counter, nothing to swipe.
-  if (usable.length === 1) {
+  if (pages.length === 1) {
     return (
       <View style={styles.set}>
         <MediaTile
-          uri={usable[0].url}
-          alt={usable[0].accessibilityLabel}
+          uri={pages[0].url}
+          alt={pages[0].accessibilityLabel}
           size={layout.detailMediaSize}
           onLoadFailed={onFailed}
         />
@@ -145,13 +188,16 @@ export function OfficialImageSet({ set }: { set: DetailImageSet }) {
     <View style={styles.set}>
       <FlatList
         ref={pager}
-        data={usable}
+        data={pages}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         keyExtractor={(image) => image.url}
-        // Virtualized so the corpus outlier (51 official photos) mounts and
-        // fetches a page at a time instead of all of them at once.
+        // Virtualized, which is what makes an UNCAPPED set affordable: only
+        // the visible page and its immediate neighbours are mounted, and a
+        // page's image is requested when its page mounts — so the 74- and
+        // 87-photo notices in the corpus cost the same as a two-photo one
+        // until the shopper swipes.
         initialNumToRender={1}
         maxToRenderPerBatch={2}
         windowSize={3}
@@ -165,28 +211,48 @@ export function OfficialImageSet({ set }: { set: DetailImageSet }) {
             uri={item.url}
             alt={item.accessibilityLabel}
             size={layout.detailMediaSize}
-            positionLabel={imagePositionLabel(index, usable.length)}
+            positionLabel={imagePositionLabel(index, usableCount)}
             onLoadFailed={onFailed}
           />
         )}
       />
-      {/* Decoration only — the spoken position rides each image instead, so
-          nothing here is announced (the counter's slash is never read aloud)
-          and nothing here is tappable. Dots up to the threshold, the compact
-          counter beyond it, and never both. */}
-      <View
-        style={styles.indicator}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants">
-        {usable.length <= IMAGE_DOTS_MAX ? (
-          usable.map((image, index) => (
-            <View key={image.url} style={[styles.dot, index === current && styles.dotCurrent]} />
-          ))
-        ) : (
-          <Text variant="caption" color="text/secondary">
-            {imageCounterText(current, usable.length)}
+      <View style={styles.indicator}>
+        {/* The dots: a window of at most `IMAGE_DOTS_WINDOW`, sliding over
+            the pages, decoration only — the spoken position rides each
+            image instead, so nothing here is announced and nothing here is
+            tappable. How many dots there are says nothing about how many
+            images there are; the counter says that. */}
+        <View
+          style={styles.dots}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants">
+          {imageDotWindow(current, usableCount).map((page) => (
+            <View
+              key={pages[page].url}
+              style={[styles.dot, page === current && styles.dotCurrent]}
+            />
+          ))}
+        </View>
+        {/* The counter, BESIDE the dots — never instead of them — once the
+            set outgrows one dot each, or once a failure means fewer pages
+            than the agency published. It reads current over REACHABLE, so
+            every denominator can be swiped to.
+
+            Assistive technology hears the slash from neither: with nothing
+            failing, each image already announces `Image 2 of 74` and a
+            second element would only repeat it, so the counter is hidden;
+            when something failed it carries the one sentence that keeps the
+            two totals apart. */}
+        {indicator === 'dots-and-counter' ? (
+          <Text
+            variant="caption"
+            color="text/secondary"
+            accessible={unavailable !== null}
+            accessibilityLabel={unavailable ?? undefined}
+            importantForAccessibility={unavailable === null ? 'no-hide-descendants' : 'auto'}>
+            {imageCounterText(current, usableCount)}
           </Text>
-        )}
+        ) : null}
       </View>
     </View>
   );
@@ -199,14 +265,26 @@ const styles = StyleSheet.create({
     width: layout.detailMediaSize,
     gap: spacing[8],
   },
+  // A ScrollView's base style grows (`flexGrow: 1`); pinned to 0 so the
+  // pager stays exactly the tile and the indicator sits directly beneath it
+  // even when a long product name makes the identity column taller (P2B7I).
   viewport: {
     width: layout.detailMediaSize,
     height: layout.detailMediaSize,
+    flexGrow: 0,
   },
+  // Dots and counter share one centred row; at a large text size the
+  // counter wraps beneath the dots rather than pushing them off the tile.
   indicator: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing[8],
+  },
+  dots: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing[8],
   },
   dot: {

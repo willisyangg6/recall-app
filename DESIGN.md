@@ -584,8 +584,9 @@ Lotly is designed mobile-first around a **393px-wide iPhone frame**.
 - Search field: 44px tall
 - Recall cards: full content width
 - Risk and relevance labels: 24px tall
-- Recall-card media tile: 112px square, image and placeholder alike
-  (`card-media-size`; Figma's 115 is normalized to the 4pt grid)
+- Recall-card media tile: 112px square (`card-media-size`; Figma's 115 is
+  normalized to the 4pt grid), rendered only when the recall has a usable
+  image — a no-image card has no media column (P2B7I)
 - Content column cap: 800px (`max-content-width`) — reached on tablets and
   the web only, so a phone's column is always the device width less the
   margins
@@ -594,8 +595,9 @@ Lotly is designed mobile-first around a **393px-wide iPhone frame**.
   photography that loads — one photo as a static tile, several as a manually
   paged, virtualized set in the same footprint (P2B7C)
 - Position dot under a paged image set: 8px (`page-dot-size`), decorative and
-  never interactive, and shown only up to five images — beyond that a compact
-  `current / total` counter replaces the dots
+  never interactive; one per image up to five, and beyond that a sliding
+  window of five dots over all the pages, with a compact `current / total`
+  counter beside it (P2B7I). The dot count never bounds the page count
 - Affected Products version image: 40px square (`row-media-size`), rendered
   only for a row the allocator matched an image to
 - Affected Products column: 144px (`table-column-width`), one width for every
@@ -1296,10 +1298,25 @@ The complete supported matrix is:
 - Does not affect you + Image
 - Does not affect you + No Image
 
-If a product image exists, show the actual product image. If it does not,
-preserve the same media footprint and render `background/media-placeholder`
-(`#EEF1F1`). Do not collapse the media area, leave a broken-image icon, or
-substitute an unrelated stock image.
+If a usable product image exists, show the actual product image, `contain`ed
+on `background/media-placeholder` (`#EEF1F1`) so the neutral colour shows
+around a tall or wide label photo. If it does not — no stored hero, or a hero
+whose URL failed to load — **there is no media column at all** (P2B7I,
+founder direction): the title, brand, category tag and summary take the
+card's full width, and everything around the content row (the status row,
+the three-line title clamp, the location/save footer) is identical in both
+shapes. Never a grey placeholder square, a broken-image icon, an unrelated
+stock image, generated imagery, a mascot, a decorative "image unavailable"
+illustration, or a pressable stand-in. A remote image that is still loading
+may hold its square on the placeholder colour only while the request is
+active — the square is the final size, so the image arriving reflows
+nothing; once a failure is known the card settles into the no-image shape,
+once, and the verdict is remembered for the session so a recycled card
+neither re-requests the URL nor flickers between a square and none.
+
+Through P2B7H the card kept the tile's footprint in every state and drew the
+bare placeholder for "none" and "failed" alike — the persistent grey
+rectangle on no-image cards that P2B7I removed.
 
 A relevance badge is shown only when the recall affects the user.
 
@@ -1329,8 +1346,10 @@ row (the 112px media tile, then the product name in `heading-3`, the brand in
 (the 12px pin glyph and the location in `caption`, with the save control
 trailing). The media tile renders the real hero image `contain`ed on
 `background/media-placeholder`, so the neutral colour shows around a tall or
-wide label photo, and the same tile with no image inside when there is none
-or the load fails. The Public Health Alert notice label is the compact-label
+wide label photo — and renders nothing at all when there is no image or the
+load fails, so the content row is the text column alone (`MediaTile` decides
+this; the card holds no media rule and reserves no width, which is how Feed
+and Saved stay identical). The Public Health Alert notice label is the compact-label
 geometry on `background/subtle` with a `border/default` border in `label`
 type — a notice type, so it borrows neither the risk nor the relevance
 palette. Nothing on the card is truncated or fixed in height; the text column
@@ -1453,32 +1472,52 @@ official photography. With no image the identity takes the whole row: Detail
 removes the tile rather than reserving its space, the second of the two
 approved no-image treatments.
 
-**Official imagery (P2B7C).** The tile position holds the notice's official
-FDA product photography, as the shared presentation contract assembles it:
-the image-role allocation's hero first — **the same picture the Feed card
-showed for that recall** — then its gallery in the agency's own order,
-**complete**. There is no presentation cap: every photo is a page a shopper
-can reach, and the pager virtualizes so a fifty-one-photo notice mounts and
-fetches one page at a time.
+**Official imagery (P2B7C; indicators settled in P2B7I).** The tile position
+holds the notice's official FDA product photography, as the shared
+presentation contract assembles it: the image-role allocation's hero first —
+**the same picture the Feed card showed for that recall** — then its gallery
+in the agency's own order, **complete**.
 
-The indicator describes **reachable pages**, and takes one of three shapes:
+**There is no presentation cap.** Every official photo that loads is a page
+a shopper can swipe to: a 74-photo notice pages from `1 / 74` to `74 / 74`.
+A denominator the reader cannot reach would be a lie about what the agency
+published, so the set is never truncated for presentation; the pager
+virtualizes instead (`FlatList`, one page mounted and fetched at a time —
+the live corpus holds 74- and 87-photo notices, the recorded one 51).
 
-| Usable images | Indicator                                                          |
-| ------------- | ------------------------------------------------------------------ |
-| 1             | none — the static `detail-media-size` tile, as before              |
-| 2–5           | `page-dot-size` dots (`border/strong`; current `background/brand`) |
-| 6 or more     | the compact counter `2 / 15` in `caption` `text/secondary`         |
+What **is** bounded is the indicator, and it bounds nothing else. Two marks
+say two different things, and above the threshold they **coexist**:
 
-Never both at once, and **no prose**: the rejected
-`Showing 6 of N official images.` sentence and every explanatory word with it
-are gone. Assistive technology hears `Image 2 of 15` from the image itself,
-so the slash is never read aloud.
+| Official photos | Pages | Indicator                                                                                                              |
+| --------------- | ----- | ---------------------------------------------------------------------------------------------------------------------- |
+| 0               | —     | nothing at all — the no-image header                                                                                   |
+| 1               | 1     | none — the static `detail-media-size` tile, as before                                                                  |
+| 2–5             | 2–5   | `page-dot-size` dots, one per image (`border/strong`; current `background/brand`)                                      |
+| 6 or more       | all   | a sliding window of at most **five** dots **and** the compact counter `2 / 74` in `caption` `text/secondary` beside it |
 
-A candidate whose image cannot load **leaves the set**: the dots, the counter
-and the spoken position all describe what actually rendered. If every
-candidate fails, the header takes its no-image shape rather than showing a
-blank tile under an indicator — a grey square that still counted as a page is
-the exact defect this rule closes.
+The **dots** say where the shopper is inside the carousel — a window of at
+most `IMAGE_DOTS_WINDOW` (5) marks that slides: the first pages at the
+beginning, centred on the current page through the middle, the final pages
+at the end, always containing the active position. **How many dots there
+are never says how many images there are.** The **counter** says the current
+page over the pages that can be shown — which is the agency's official total
+until something fails — and is added beside the dots, never swapped for
+them. Both update as the shopper swipes. Dots and counter share one centred
+row under the tile; at a large text size the counter wraps beneath the dots.
+**No prose**: the rejected `Showing 6 of N official images.` sentence and
+every explanatory word with it are gone.
+
+A candidate whose image cannot load **leaves the set** — only that page, so
+every healthy image after it stays reachable; the dots, the counter and the
+spoken position all describe what actually rendered. The counter's
+denominator then drops to the reachable count (`2 / 72`), never the
+published one, and the shortfall is stated once to assistive technology
+rather than implying a failed image is viewable. If every candidate fails,
+the header takes its no-image shape rather than showing a blank tile under
+an indicator — a grey square that still counted as a page is the exact
+defect this rule closes. A failure is remembered for the session, so
+reopening the recall neither re-requests the broken URL nor shows a blank
+page first.
 
 Rules the composition must keep:
 
@@ -1493,9 +1532,15 @@ Rules the composition must keep:
   placeholder, never cropped or stretched to fill the square.
 - **Only the pager moves sideways.** The page's own scroll view keeps
   vertical scrolling, so a drag that starts vertically scrolls Detail.
-- **The dots and the counter are decoration** — hidden from assistive
-  technology. Position is announced on the image itself instead
-  (`Image 2 of 15`), after its factual label.
+- **The dots are decoration** — hidden from assistive technology. Position
+  is announced on the image itself instead, after its factual label, over
+  the pages that can be reached: `Image 2 of 74`. Every counted page IS
+  reachable, so the count needs no qualifier. The counter is hidden too
+  while nothing has failed, because each page already announces those two
+  numbers and a second element would only duplicate them; when something
+  has failed it becomes the one spoken element, labelled with the sentence
+  that keeps the totals apart (`72 of 74 official images can be shown; the
+rest could not be loaded`), so the slash is never read aloud.
 - **Feed imagery stays single-image**, and it is the same image. The Recall
   Card's 112px tile shows one official photo (conflict 30) — the stored hero,
   which is also Detail's first page. Neither screen selects or transforms it.
@@ -1847,12 +1892,17 @@ chance.
   the one relevant action (for example the Feed's "No matching recalls" with
   "Clear all"). Never an empty white card.
 - **Error** — the same shape as empty, with the honest message and no
-  fabricated fallback content. A missing image removes the tile or renders the
-  media placeholder; it never shows a broken-image glyph. Inside a paged image
-  set, failure is **per page and removes the page**: it leaves the set, so the
-  indicator never counts it, and when the last one goes the header returns to
-  its no-image shape. An image set has no loading state of its own, so none
-  can be left stuck.
+  fabricated fallback content. A missing or failed image **removes the tile**
+  everywhere — the card's media column, Detail's header, an affected-product
+  row's thumbnail — and never shows a broken-image glyph or a grey
+  placeholder square (P2B7I). Inside a paged image set, failure is **per page
+  and removes the page**: it leaves the set, every healthy image after it
+  stays reachable, the indicator never counts it, and when the last one goes
+  the header returns to its no-image shape. A failure is
+  settled once and remembered for the session — no retry, no remount, no
+  flicker as a list recycles. An image has no loading state of its own
+  beyond holding its square on the placeholder colour while the request is
+  active, so none can be left stuck.
 - **Disabled** — carried by the SURFACE, with `accessibilityState.disabled`
   set so the state is announced, not just dimmed: a filled action drops to
   `action/disabled`, an outlined one keeps its surface and mutes its border to
@@ -1977,7 +2027,7 @@ decision. They are normalized to the scale and never reproduced:
   `RelevanceLabel`, `Chip` and `SearchBar`, and from P2B2 `MediaTile` (a
   square image-or-placeholder at one of the three media-size tokens),
   `Callout` (the two Information tones) and `NoticeLabel` (the Public Health
-  Alert label), from P2B7C `OfficialImageSet` (one bounded set of official
+  Alert label), from P2B7C `OfficialImageSet` (the complete set of official
   images, static or manually paged, in a compact or evidence footprint), and
   from P2B3 `Button` (the 44pt primary / secondary pill,
   with disabled and busy states) and `ChoiceRow` with `ChoiceGroup` (a
@@ -2236,8 +2286,10 @@ Sold`; the shipped titles were sentence case and rendered uppercase.
     hero tile (`81:838`), which was the whole imagery contract while a recall
     could show one official photo. **Founder decision, P2B7C:** where a
     notice publishes several official FDA product photos, Detail pages
-    through ALL of them in that same tile position — dots up to five, a
-    compact `current / total` counter beyond. Feed imagery is unchanged and
+    through ALL of them in that same tile position — no cap (P2B7I) — with
+    one dot per image up to five, a sliding five-dot window beyond that, and
+    the compact `current / total` counter added beside the dots, never
+    replacing them. Feed imagery is unchanged and
     stays single-image, showing the same stored hero that leads Detail's set.
     Nothing else about the tile moved: same position, same
     `detail-media-size` square, same `contain`, same placeholder, same
@@ -2356,7 +2408,10 @@ Changes to make in Figma itself. Nothing here changes product behavior.
 - **Don't** hardcode `FDA` as the source agency.
 - **Don't** allow the Affected Products table to make the entire screen
   scroll sideways.
-- **Don't** collapse no-image Recall Cards into a different card geometry.
+- **Don't** reserve a media footprint on a no-image Recall Card: the media
+  column is absent, and the text takes the width (P2B7I). Don't fill the
+  absence with a placeholder square, stock or generated imagery, a mascot,
+  an "image unavailable" illustration, or a pressable stand-in.
 - **Don't** use raw primitive colors in reusable components when a semantic
   token exists.
 - **Don't** introduce arbitrary spacing or corner-radius values when a defined

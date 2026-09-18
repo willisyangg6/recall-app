@@ -155,7 +155,7 @@ import {
   buildDetailModel,
   buildHomeCardModel,
   disclosureControl,
-  IMAGE_DOTS_MAX,
+  IMAGE_DOTS_WINDOW,
   todayIso,
   cardSummaryText,
   type DetailImageSet,
@@ -251,6 +251,7 @@ const REQUIREMENT_LABELS: Record<PreviewCaseRequirement, string> = {
   images_two: 'Recall with exactly two official product photos',
   images_five: 'Recall with exactly five official product photos',
   images_six: 'Recall with exactly six official product photos',
+  images_seven: 'Recall with exactly seven official product photos',
   images_many: 'Recall with fifteen or more official product photos',
   images_largest: 'Recall with the largest official set in the live corpus',
   image_portrait: 'Recall whose set holds an unusually tall official photo',
@@ -1169,6 +1170,11 @@ function FeedCardGallery({ items }: { items: FeedItem[] }) {
   const nationwide = models.find((model) => model.locationSummary === 'Nationwide') ?? null;
   const multiState = models.find((model) => model.locationSummary.includes('+')) ?? null;
   const alert = models.find((model) => model.noticeLabel !== null) ?? null;
+  // P2B7I: the one card state the live corpus cannot supply on demand — a
+  // stored hero whose URL cannot load. A real card's own model with its hero
+  // swapped for a deliberately unreachable official-host URL; the caption
+  // says so.
+  const failingImage: HomeCardModel = { ...withImage, heroImageUrl: unreachableImage('card') };
 
   const cases: { caption: string; model: HomeCardModel }[] = [
     {
@@ -1184,7 +1190,28 @@ function FeedCardGallery({ items }: { items: FeedItem[] }) {
       caption: `Does not affect you · no image${liveWithoutImage ? '' : ' (image removed)'}`,
       model: withoutImage,
     },
+    {
+      caption:
+        'SIMULATED: the image fails to load (an unreachable URL). While the request is active ' +
+        'the card holds the square; once the failure is known it settles into the no-image ' +
+        'layout and stays there — no grey rectangle, and no second request on later visits, ' +
+        'because the session remembers the verdict.',
+      model: failingImage,
+    },
     { caption: 'Longest product name in the live feed', model: longTitle },
+    {
+      caption:
+        'Longest product name · no image (image removed): the three-line clamp at the full ' +
+        'card width, with no gap where a tile would have been.',
+      model: { ...longTitle, heroImageUrl: null },
+    },
+    {
+      caption:
+        'No image at an accessibility text size — a device setting this harness cannot ' +
+        'simulate: set Settings › Accessibility › Display & Text Size › Larger Text first, ' +
+        'then inspect this card. The text-led layout wraps; nothing is clipped or fixed.',
+      model: withoutImage,
+    },
     { caption: 'Longest summary in the live feed', model: longSummary },
     ...(nationwide ? [{ caption: 'Nationwide distribution', model: nationwide }] : []),
     ...(multiState
@@ -1542,17 +1569,26 @@ function FeedControlsGallery() {
  * corpus cannot supply on demand: a candidate whose image fails to load.
  *
  * It is not recall content and is never presented as one — the caption says
- * it is simulated. What it proves is the P2B7C correction's rule: a page that
- * cannot render leaves the set, so the dots and the counter always describe
- * pages a shopper can actually reach.
+ * it is simulated. What it proves is the P2B7C correction's rule, kept in
+ * P2B7I: a page that cannot render leaves the set, so the dots and the
+ * counter always describe pages a shopper can actually reach.
+ *
+ * Each simulated failure gets its OWN unreachable URL. A failure is
+ * remembered for the session (`image-failures`), so two samples sharing one
+ * URL would let the first settle the second before it ever tried.
  */
-const UNREACHABLE_IMAGE = 'https://www.fda.gov/files/design-preview-unreachable-sample.png';
+function unreachableImage(name: string): string {
+  return `https://www.fda.gov/files/design-preview-unreachable-${name}.png`;
+}
 
 /**
  * The production `OfficialImageSet` over the REAL header sets the probed
- * recalls produced — one sample per indicator shape, plus the simulated
- * failure. Nothing here is a copy of the component or of a recall: the sets
- * are `DetailModel.productImages` exactly as Detail receives them.
+ * recalls produced — one sample per indicator shape (P2B7I: none, dots
+ * only, dots AND counter, the largest), plus the two simulated failures.
+ * Nothing here is a copy of the component or of a recall: the sets are
+ * `DetailModel.productImages` exactly as Detail receives them, and a
+ * simulated sample is a real set's own photographs with unreachable
+ * candidates added — never an invented image.
  */
 function ImagerySampleGallery({ confirmed }: { confirmed: Record<string, ConfirmedSections> }) {
   const sets = Object.values(confirmed)
@@ -1561,47 +1597,85 @@ function ImagerySampleGallery({ confirmed }: { confirmed: Record<string, Confirm
   const withCount = (predicate: (count: number) => boolean) =>
     sets.find((set) => predicate(set.images.length)) ?? null;
   const one = withCount((count) => count === 1);
-  const dots = withCount((count) => count >= 2 && count <= IMAGE_DOTS_MAX);
-  const counter = withCount((count) => count > IMAGE_DOTS_MAX);
+  // Dots only: the five-photo set when the probes found one (the largest
+  // shape still marked one dot per image), else any set at or under it.
+  const complete =
+    withCount((count) => count === IMAGE_DOTS_WINDOW) ??
+    withCount((count) => count >= 2 && count <= IMAGE_DOTS_WINDOW);
+  // Dots AND counter: the six-photo set when found (the first shape whose
+  // dots become a sliding window), else any larger set.
+  const windowed =
+    withCount((count) => count === IMAGE_DOTS_WINDOW + 1) ??
+    withCount((count) => count > IMAGE_DOTS_WINDOW);
   const largest = sets.reduce<DetailImageSet | null>(
     (best, set) => (best === null || set.images.length > best.images.length ? set : best),
     null,
   );
-  // The failure sample: a real set's own images plus one unreachable
-  // candidate, so the settling behaviour is visible on real photography.
-  const failure: DetailImageSet | null =
-    dots === null
+  const paged = complete ?? windowed;
+  const unreachable = (name: string, accessibilityLabel: string) => ({
+    url: unreachableImage(name),
+    accessibilityLabel,
+    aspectRatio: null,
+  });
+  // A failed MIDDLE page: two real photographs around one unreachable
+  // candidate, so the settling behaviour — and the survival of the healthy
+  // pages on either side — is visible on real photography.
+  const middleFailure: DetailImageSet | null =
+    paged === null
       ? null
       : {
           images: [
-            ...dots.images.slice(0, 2),
-            {
-              url: UNREACHABLE_IMAGE,
-              accessibilityLabel: dots.images[0].accessibilityLabel,
-              aspectRatio: null,
-            },
+            paged.images[0],
+            unreachable('page', paged.images[0].accessibilityLabel),
+            paged.images[1],
           ],
+        };
+  // Every candidate unreachable: the set must render nothing at all.
+  const allFailed: DetailImageSet | null =
+    paged === null
+      ? null
+      : {
+          images: ['all-1', 'all-2', 'all-3'].map((name) =>
+            unreachable(name, paged.images[0].accessibilityLabel),
+          ),
         };
 
   const samples: { caption: string; set: DetailImageSet | null }[] = [
     { caption: 'One official photo — the static tile, with no indicator.', set: one },
     {
-      caption: `Two to ${IMAGE_DOTS_MAX} — position dots, one per reachable page.`,
-      set: dots,
+      caption:
+        `Two to ${IMAGE_DOTS_WINDOW} official photos` +
+        `${complete ? ` (this one: ${complete.images.length})` : ''} — one dot per image, and ` +
+        'no counter: everything the agency published is a page.',
+      set: complete,
     },
     {
-      caption: `More than ${IMAGE_DOTS_MAX} — the compact counter replaces the dots.`,
-      set: counter,
+      caption:
+        `More than ${IMAGE_DOTS_WINDOW}` +
+        `${windowed ? ` (this one: ${windowed.images.length})` : ''} — a sliding window of at ` +
+        `most ${IMAGE_DOTS_WINDOW} dots AND the compact counter beside it. Swipe to the end: ` +
+        'the window follows you, the counter reaches the last page, and every image is ' +
+        'reachable. Never one indicator without the other.',
+      set: windowed,
     },
     {
-      caption: 'The largest set these probes found: every page is reachable, none is dropped.',
+      caption:
+        `The largest set these probes found${largest ? ` (${largest.images.length} official photos)` : ''}: ` +
+        'every one of them is a page. Swiping to the last proves the counter never names an ' +
+        'image you cannot reach.',
       set: largest,
     },
     {
       caption:
-        'SIMULATED: three candidates, one of them unreachable. The failed page leaves the set, ' +
-        'so the indicator settles on the pages that actually render — never a blank counted page.',
-      set: failure,
+        'SIMULATED: three candidates, the middle one unreachable. The failed page leaves the ' +
+        'set and the two real photographs stay — two dots, no counter, never a blank counted page.',
+      set: middleFailure,
+    },
+    {
+      caption:
+        'SIMULATED: every candidate unreachable. Nothing renders under this caption — that empty ' +
+        'space is the correct result, the same no-image shape Detail’s header takes.',
+      set: allFailed,
     },
   ];
 
@@ -1613,7 +1687,8 @@ function ImagerySampleGallery({ confirmed }: { confirmed: Record<string, Confirm
       style={styles.feedGallery}>
       <Text variant="caption" color="text/secondary">
         The product’s own image set over real header sets from the recalls this hub probed. Only the
-        last sample simulates anything, and it says so.
+        last two samples simulate anything, and each says so. A simulated failure is remembered for
+        the session, so it settles immediately on later visits to this hub.
       </Text>
       {samples.map((sample) => (
         <View key={sample.caption} style={styles.imagerySample}>

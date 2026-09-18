@@ -693,8 +693,10 @@ misstate them), and none of this activates push delivery.
   explicit `Clear` control, one chip row (the `All` / `Affects me` pair, a
   hairline, then the All-only Location / Risk / Category filters with
   chevrons and `Clear all`), `heading-3` section headings, and the Recall
-  Card in its complete relevance × media matrix — a 112pt media tile that
-  keeps its footprint as the neutral placeholder when there is no image, the
+  Card in its complete relevance × media matrix — a 112pt media tile beside
+  the text when the recall has a usable image and no media column at all
+  when it does not (P2B7I: the text takes the width; never a grey
+  placeholder square), the
   lime `AFFECTS YOU` relevance label kept strictly apart from the risk label,
   the Public Health Alert notice label, and the bookmark save control that
   a screen reader can also reach as an action on the card itself. No icon

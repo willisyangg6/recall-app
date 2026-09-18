@@ -99,15 +99,24 @@ the right recall in the live feed:
 - **Feed card matrix** — the product's own `RecallCard` on the page colour,
   over real current recalls chosen from the live feed session for the shape
   each case needs: Affects you + image, Affects you + no image, does not
-  affect you + image, does not affect you + no image, the longest product
-  name and the longest summary in the live corpus, a nationwide recall, a
+  affect you + image, does not affect you + no image, a card whose image
+  fails to load, the longest product name (with and without an image) and
+  the longest summary in the live corpus, the no-image card labelled for
+  inspection at an accessibility text size, a nationwide recall, a
   multi-state recall (two codes, then `+N`), and a Public Health Alert with
-  its notice label, when the corpus holds one. Exactly two values are ever
-  simulated, and each caption names them: the Affects-you flag, and — only if
-  every live recall happens to carry an image — the missing image on the
-  "no image" cards. Tapping a card opens the real Recall Detail; tapping
-  Save writes this device's own bookmark list and nothing else, which is how
-  the saved and unsaved states are inspected.
+  its notice label, when the corpus holds one. Three values are ever
+  simulated, and each caption names them: the Affects-you flag, the missing
+  image on a "no image" card (removed from a real card when every live
+  recall happens to carry one, and always on the long-title case), and the
+  failing image (P2B7I) — a real card's own model with its hero swapped for
+  a deliberately unreachable official-host URL, so the settle-once behaviour
+  is visible: the square holds while the request is active, then the card
+  becomes text-led and stays so, and later visits to the hub settle
+  immediately because the session remembers the failure. The accessibility
+  size is a device setting the harness cannot simulate; the caption says to
+  set it first. Tapping a card opens the real Recall Detail; tapping Save
+  writes this device's own bookmark list and nothing else, which is how the
+  saved and unsaved states are inspected.
 - **Feed controls and states** — the search bar, the `All` / `Affects me`
   pair, a filter chip in both states, the relevance label, the icon set, and
   the Feed's state messages (loading, no results, load failure) with their
@@ -388,52 +397,73 @@ The **saved and unsaved** header states are inspected by tapping the save
 control on any of these; the **affects-you** callout renders on any recall
 that matches this device's personalization.
 
-### Official imagery scenarios (P2B7C)
+### Official imagery scenarios (P2B7C, P2B7I)
 
-Twelve further scenarios open the real Recall Detail on a recall whose own
+Thirteen further scenarios open the real Recall Detail on a recall whose own
 **official imagery** exercises one shape. As with every presentation
 scenario, nothing is simulated: the hub reads the real Detail model and
 offers a row only once that model proves the shape (see §4). Set sizes exist
 nowhere on a feed row — only in the model — so the hub probes more recalls
 that carry a hero, and the FSIS notices whose label PDFs prove that nothing
-renders them. The group is `Official imagery on Detail`.
+renders them. The group is `Official imagery on Detail`. The indicator
+contract they demonstrate is P2B7I as corrected: **no cap** — every usable
+official photo is swipeable — with one dot per image up to five, a sliding
+five-dot window beyond that, and the compact `current / total` counter
+**added beside** the dots, never replacing them.
 
-| #     | Scenario                                      | What you should see                                                                                                                  |
-| ----- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| 46    | Detail · one official product photo           | The static header tile: no dots, no counter, nothing to swipe.                                                                       |
-| 47    | Detail · two official product photos          | The same tile, swipeable, with two dots. Nothing advances on its own; a vertical drag over the tile still scrolls the page.          |
-| 48    | Detail · five official product photos         | Five dots — the largest set that still uses them.                                                                                    |
-| 49    | Detail · six official product photos          | The dots are replaced by the compact counter `1 / 6`, updating as you page. Never both.                                              |
-| 50    | Detail · fifteen or more photos               | `1 / N` over the whole set; paging to the last page proves every one is reachable. No truncation sentence anywhere.                  |
-| 51    | Detail · the largest set in the live corpus   | The outlier (51 photos in the recorded corpus). It opens as fast as any other recall: the pager is virtualized.                      |
-| 52    | Detail · an unusually tall official photo     | The whole photo contained in the tile, letterboxed on the placeholder colour; never cropped.                                         |
-| 53    | Detail · an unusually wide official photo     | The same on the other axis.                                                                                                          |
-| 54    | Detail · long product name beside a paged set | The name wraps beside the tile, never truncated; at an accessibility text size the header stacks and stays stacked.                  |
-| 55    | Detail · an image matched to an exact row     | Inside Affected Products: a thumbnail beside that row's Product value (the Outshine shape) — the only imagery that section may show. |
-| 56    | Detail · a notice whose label pages exist     | **Nothing** renders them: no gallery above the table, no standalone section, nothing in the header (founder decision).               |
-| 57–58 | Detail · paged imagery at accessibility sizes | Set the text size first (see below). The indicator and the header stack grow with the text; no page is left half-shown.              |
+| #     | Scenario                                      | What you should see                                                                                                                                            |
+| ----- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 46    | Detail · one official product photo           | The static header tile: no dots, no counter, nothing to swipe.                                                                                                 |
+| 47    | Detail · two official product photos          | The same tile, swipeable, with two dots. Nothing advances on its own; a vertical drag over the tile still scrolls the page.                                    |
+| 48    | Detail · five official product photos         | Five dots, one per image — the largest set marked that way. No counter: every published photo is a page.                                                       |
+| 49    | Detail · six official product photos          | The first sliding window: five dots AND `1 / 6`, updating as you page. Swipe to the end — `6 / 6` is reachable.                                                |
+| 50    | Detail · seven official product photos        | Five dots AND `1 / 7` beside them. The counter is added to the dots, never swapped for them — and photo 7 IS a page: swipe to `7 / 7`.                         |
+| 51    | Detail · fifteen or more photos               | Five dots beside `1 / N`, N being what the agency published. Every one of the N is a page: swipe to `N / N`. No truncation sentence anywhere.                  |
+| 52    | Detail · the largest set in the live corpus   | The outlier (74 and 87 photos in the live corpus): five dots beside `1 / N`, all N reachable. It opens as fast as any other recall — the pager is virtualized. |
+| 53    | Detail · an unusually tall official photo     | The whole photo contained in the tile, letterboxed on the placeholder colour; never cropped.                                                                   |
+| 54    | Detail · an unusually wide official photo     | The same on the other axis.                                                                                                                                    |
+| 55    | Detail · long product name beside a paged set | The name wraps beside the tile, never truncated; at an accessibility text size the header stacks and stays stacked.                                            |
+| 56    | Detail · an image matched to an exact row     | Inside Affected Products: a thumbnail beside that row's Product value (the Outshine shape) — the only imagery that section may show.                           |
+| 57    | Detail · a notice whose label pages exist     | **Nothing** renders them: no gallery above the table, no standalone section, nothing in the header (founder decision).                                         |
+| 58–59 | Detail · paged imagery at accessibility sizes | Set the text size first (see below). The indicator and the header stack grow with the text; no page is left half-shown.                                        |
 
 Text size is a **device setting the harness cannot simulate** (the same is
 true of the document gallery). The accessibility rows open an ordinary
 two-photo recall; set the simulator's size first — Settings › Accessibility ›
-Display & Text Size › Larger Text — and revisit rows 50, 54 and 56 at that
-size too. The **no-image** header is row 24, which already covers a recall
-whose model resolved no photography at all.
+Display & Text Size › Larger Text — and revisit rows 50, 51, 55 and 57 at
+that size too (at a large size the counter wraps beneath the dots). The
+**no-image** header is row 24, which already covers a recall whose model
+resolved no photography at all — the zero-image case of the matrix.
 
-### Official imagery and failure (P2B7C)
+### Official imagery and failure (P2B7C, P2B7I)
 
 A gallery renders the product's own `OfficialImageSet` over the **real**
 header sets the probed recalls produced — one sample per indicator shape (no
-indicator, dots, counter) and the largest set those probes found — so the
-three shapes can be compared side by side without hunting for three recalls.
+indicator; one dot per image, preferring the five-photo set; the sliding
+five-dot window with the counter, preferring the six-photo set; and the
+largest set those probes found) — so the shapes can be compared side by side
+without hunting for four recalls. Swiping the last two to the end is the
+check that matters: the window follows, the counter reaches `N / N`, and no
+image is out of reach.
 
-Its last sample is the one state the live corpus cannot supply on demand and
-the only **simulated** thing in the section: a real set's own photographs
-plus one deliberately unreachable candidate. It demonstrates the rule that
-closed the reported acceptance defect — a page whose image cannot load leaves
-the set, so the dots and the counter always describe pages that actually
-rendered, and a grey square can never sit under an indicator. The caption
-says so on screen.
+Its last two samples are the states the live corpus cannot supply on demand
+and the only **simulated** things in the section, each captioned as such:
+
+- **A failed middle page** — two of a real set's own photographs around one
+  deliberately unreachable candidate. The failed page leaves the set and the
+  two real photographs stay, with two dots and no blank counted page: the
+  rule that closed the reported acceptance defect, and P2B7I's guarantee
+  that one failure never costs a healthy page.
+- **Every candidate unreachable** — three unreachable candidates. Nothing
+  renders under the caption; that empty space is the correct result, the
+  same no-image shape Detail's header takes.
+
+Each simulated failure uses its own unreachable URL, because a failure is
+remembered for the session (`src/lib/image-failures.ts`): once a URL has
+failed, every later mount of it settles immediately, so a shared URL would
+let the first sample pre-settle the next. On a second visit to the hub the
+simulated samples therefore settle at once — which is itself the behaviour
+under inspection.
 
 ### Icon set (P2B7C)
 

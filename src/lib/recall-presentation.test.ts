@@ -25,8 +25,11 @@ import {
   buildDetailModel,
   detailImageSet,
   imageCounterText,
+  imageDotWindow,
+  imagePageView,
   imagePositionLabel,
-  IMAGE_DOTS_MAX,
+  imageUnavailableLabel,
+  IMAGE_DOTS_WINDOW,
   productImagery,
   caseIdentity,
   buildHomeCardModel,
@@ -740,19 +743,171 @@ test('the header set is complete and in official order — there is no presentat
   assert.deepEqual(Object.keys(set), ['images']);
 });
 
-test('the spoken position and the visible counter are the contract’s, over reachable pages', () => {
-  assert.equal(imagePositionLabel(0, 15), 'Image 1 of 15');
-  assert.equal(imagePositionLabel(1, 15), 'Image 2 of 15');
-  assert.equal(imagePositionLabel(14, 15), 'Image 15 of 15');
-  // The visible counter is the compact form, and carries no explanatory word.
-  assert.equal(imageCounterText(1, 15), '2 / 15');
+test('the spoken position and the visible counter are the contract\u2019s, over reachable pages', () => {
+  // AMENDED BY THE P2B7I CORRECTION: the six-page cap is gone, so every
+  // counted page is reachable and the position needs no `shown` qualifier.
+  assert.equal(imagePositionLabel(0, 74), 'Image 1 of 74');
+  assert.equal(imagePositionLabel(1, 74), 'Image 2 of 74');
+  assert.equal(imagePositionLabel(73, 74), 'Image 74 of 74');
+  // The visible counter is the compact form over the pages that can be
+  // shown \u2014 which IS the official total until something fails.
+  assert.equal(imageCounterText(1, 74), '2 / 74');
+  assert.equal(imageCounterText(73, 74), '74 / 74');
   assert.equal(imageCounterText(0, 6), '1 / 6');
-  for (const rejected of ['Showing', 'official images', 'label pages', 'of 6 official']) {
-    assert.ok(!imageCounterText(1, 15).includes(rejected));
-    assert.ok(!imagePositionLabel(1, 15).includes(rejected));
+  // Nothing failed: no second announcement, because each page already says
+  // the same two numbers.
+  assert.equal(imageUnavailableLabel(74, 74), null);
+  assert.equal(imageUnavailableLabel(6, 6), null);
+  // Something failed: the two totals are kept apart, and the visible
+  // denominator stays the reachable one.
+  assert.equal(
+    imageUnavailableLabel(72, 74),
+    '72 of 74 official images can be shown; the rest could not be loaded',
+  );
+  assert.equal(imageCounterText(1, 72), '2 / 72');
+  assert.equal(imagePositionLabel(1, 72), 'Image 2 of 72');
+  for (const rejected of ['Showing', 'shown', 'label pages']) {
+    assert.ok(!imageCounterText(1, 74).includes(rejected));
+    assert.ok(!imagePositionLabel(1, 74).includes(rejected));
   }
-  // Dots up to five, the counter from six: one threshold, in one place.
-  assert.equal(IMAGE_DOTS_MAX, 5);
+});
+
+test('P2B7I correction: the page view is UNCAPPED \u2014 every usable image is a page', () => {
+  const urls = (count: number) =>
+    Array.from({ length: count }, (_, index) => `https://www.fda.gov/files/p-${index + 1}.jpg`);
+  const setOf = (count: number) =>
+    detailImageSet(
+      urls(count).map((url) => officialImage(url)),
+      'Widget',
+    )!;
+  const none = new Set<string>();
+  assert.equal(detailImageSet([], 'Widget'), null);
+  // The founder's matrix. `pages` always equals the official count, because
+  // nothing is ever dropped for presentation \u2014 74 official photos are 74
+  // swipeable pages, and page 7 and page 74 are both reachable.
+  for (const [count, indicator] of [
+    [1, 'none'],
+    [2, 'dots'],
+    [5, 'dots'],
+    [6, 'dots-and-counter'],
+    [7, 'dots-and-counter'],
+    [74, 'dots-and-counter'],
+    [87, 'dots-and-counter'],
+  ] as const) {
+    const view = imagePageView(setOf(count), none);
+    assert.equal(view.pages.length, count, `${count} official: a page was dropped`);
+    assert.equal(view.usableCount, count, `${count} official`);
+    assert.equal(view.officialCount, count, `${count} official`);
+    assert.equal(view.indicator, indicator, `${count} official`);
+    // Complete and in official order \u2014 the hero first, the last page last.
+    assert.deepEqual(
+      view.pages.map((image) => image.url),
+      urls(count),
+      `${count} official`,
+    );
+  }
+  // Explicitly: the pages the old cap would have hidden.
+  const many = imagePageView(setOf(74), none);
+  assert.equal(many.pages[6].url, 'https://www.fda.gov/files/p-7.jpg', 'page 7 is unreachable');
+  assert.equal(many.pages[73].url, 'https://www.fda.gov/files/p-74.jpg', 'page 74 is unreachable');
+  assert.equal(imageCounterText(73, many.usableCount), '74 / 74');
+  // The counter is only ever ADDED beside the dots; there is no shape with a
+  // counter and no dots.
+  assert.ok(!(['none', 'dots', 'dots-and-counter'] as const).includes('counter' as never));
+});
+
+test('P2B7I correction: a failed page leaves the set and every healthy image after it stays reachable', () => {
+  const urls = (count: number) =>
+    Array.from({ length: count }, (_, index) => `https://www.fda.gov/files/p-${index + 1}.jpg`);
+  const setOf = (count: number) =>
+    detailImageSet(
+      urls(count).map((url) => officialImage(url)),
+      'Widget',
+    )!;
+  // An EARLY failure in a long set: 73 pages remain, and the last official
+  // photo is still reachable \u2014 paging does not stop at six.
+  const many = setOf(74);
+  const earlyFailed = imagePageView(many, new Set([many.images[1].url]));
+  assert.equal(earlyFailed.pages.length, 73);
+  assert.equal(earlyFailed.usableCount, 73);
+  assert.equal(earlyFailed.officialCount, 74, 'a failure changes what was published');
+  assert.ok(!earlyFailed.pages.some((image) => image.url === many.images[1].url));
+  assert.equal(earlyFailed.pages[72].url, many.images[73].url, 'the last photo became unreachable');
+  assert.equal(earlyFailed.indicator, 'dots-and-counter');
+  // The denominator is the reachable count, and the shortfall is a separate
+  // sentence \u2014 the failed image is never implied to be viewable.
+  assert.equal(imageCounterText(72, earlyFailed.usableCount), '73 / 73');
+  assert.equal(
+    imageUnavailableLabel(earlyFailed.usableCount, earlyFailed.officialCount),
+    '73 of 74 official images can be shown; the rest could not be loaded',
+  );
+  // A small set: a failure leaves fewer pages than were published, so the
+  // counter appears even under the dot window to say so.
+  const three = setOf(3);
+  const oneOfThree = imagePageView(three, new Set([three.images[1].url]));
+  assert.deepEqual(
+    oneOfThree.pages.map((image) => image.url),
+    [three.images[0].url, three.images[2].url],
+  );
+  assert.equal(oneOfThree.indicator, 'dots-and-counter');
+  assert.equal(imageCounterText(1, oneOfThree.usableCount), '2 / 2');
+  // Down to one page: the static tile, no indicator at all.
+  const two = setOf(2);
+  assert.equal(imagePageView(two, new Set([two.images[0].url])).indicator, 'none');
+  // Every candidate failed: nothing to render.
+  const allFailed = imagePageView(three, new Set(three.images.map((image) => image.url)));
+  assert.equal(allFailed.pages.length, 0);
+  assert.equal(allFailed.indicator, 'none');
+  // The set itself is untouched \u2014 the view is derived, never written back.
+  assert.equal(many.images.length, 74);
+  assert.equal(three.images.length, 3);
+});
+
+test('P2B7I correction: the dot window is at most five, follows the page, and never bounds the set', () => {
+  assert.equal(IMAGE_DOTS_WINDOW, 5);
+  // A set that fits is marked one dot each, from the first page to the last.
+  assert.deepEqual(imageDotWindow(0, 2), [0, 1]);
+  assert.deepEqual(imageDotWindow(4, 5), [0, 1, 2, 3, 4]);
+  // Beyond it the window slides: the first pages at the beginning, the
+  // current page through the middle, the final pages at the end.
+  assert.deepEqual(imageDotWindow(0, 74), [0, 1, 2, 3, 4]);
+  assert.deepEqual(imageDotWindow(1, 74), [0, 1, 2, 3, 4]);
+  assert.deepEqual(imageDotWindow(2, 74), [0, 1, 2, 3, 4]);
+  assert.deepEqual(imageDotWindow(3, 74), [1, 2, 3, 4, 5]);
+  assert.deepEqual(imageDotWindow(36, 74), [34, 35, 36, 37, 38]);
+  assert.deepEqual(imageDotWindow(71, 74), [69, 70, 71, 72, 73]);
+  assert.deepEqual(imageDotWindow(73, 74), [69, 70, 71, 72, 73]);
+  // Whatever the set size, the window is bounded, contains the current page
+  // (so the active dot is never off-window), and is contiguous and ordered.
+  for (const count of [1, 2, 5, 6, 7, 15, 51, 74, 87]) {
+    for (const current of [0, 1, Math.floor(count / 2), count - 2, count - 1]) {
+      if (current < 0 || current >= count) continue;
+      const window = imageDotWindow(current, count);
+      assert.ok(window.length <= IMAGE_DOTS_WINDOW, `${count}/${current}: too many dots`);
+      assert.equal(window.length, Math.min(IMAGE_DOTS_WINDOW, count), `${count}/${current}`);
+      assert.ok(window.includes(current), `${count}/${current}: the active page has no dot`);
+      assert.ok(window[0] >= 0 && window[window.length - 1] < count, `${count}/${current}`);
+      assert.deepEqual(
+        window,
+        [...window].sort((a, b) => a - b),
+        `${count}/${current}`,
+      );
+    }
+  }
+  // THE SEPARATION: the dot count never limits the page count.
+  const urls = Array.from(
+    { length: 74 },
+    (_, index) => `https://www.fda.gov/files/p-${index + 1}.jpg`,
+  );
+  const view = imagePageView(
+    detailImageSet(
+      urls.map((url) => officialImage(url)),
+      'Widget',
+    )!,
+    new Set<string>(),
+  );
+  assert.equal(imageDotWindow(0, view.usableCount).length, IMAGE_DOTS_WINDOW);
+  assert.equal(view.pages.length, 74);
 });
 
 test('zero images is a null set; one image is a set of one', () => {

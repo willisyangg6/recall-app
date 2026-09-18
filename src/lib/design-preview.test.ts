@@ -376,6 +376,7 @@ test('every required scenario exists, and each names its destination', () => {
       'images_two',
       'images_five',
       'images_six',
+      'images_seven',
       'images_many',
       'images_largest',
       'image_portrait',

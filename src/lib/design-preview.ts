@@ -138,6 +138,7 @@ export type DesignPreviewScenarioId =
   | 'images_two'
   | 'images_five'
   | 'images_six'
+  | 'images_seven'
   | 'images_many'
   | 'images_largest'
   | 'image_portrait'
@@ -226,16 +227,19 @@ export type PreviewCaseRequirement =
   | 'pairs_incomplete'
   // P2B7C — the header's official image set, confirmed against the real
   // Detail model. Each size is its own requirement because the INDICATOR
-  // changes shape across them: none, dots, then the numeric counter.
+  // changes shape across them (P2B7I as corrected): none, one dot each,
+  // then a sliding dot window AND the counter. The PAGES are never bounded.
   /** Exactly one official product photo: the static tile, no indicator. */
   | 'images_one'
   /** Exactly two: the smallest paged set, dots. */
   | 'images_two'
-  /** Exactly five: the largest set that still uses dots. */
+  /** Exactly five: the largest set still marked one dot per image, no counter. */
   | 'images_five'
-  /** Exactly six: the first set that uses the numeric counter. */
+  /** Exactly six: the first set whose dots become a sliding window, beside `1 / 6`. */
   | 'images_six'
-  /** Fifteen or more: a long set on the counter. */
+  /** Exactly seven: five dots and `1 / 7`, with page 7 reachable. */
+  | 'images_seven'
+  /** Fifteen or more: a long set — five dots beside `1 / N`, paging to `N / N`. */
   | 'images_many'
   /** The largest set the live corpus holds, whatever that is today. */
   | 'images_largest'
@@ -316,6 +320,7 @@ export const PRESENTATION_REQUIREMENTS: readonly PreviewCaseRequirement[] = [
   'images_two',
   'images_five',
   'images_six',
+  'images_seven',
   'images_many',
   'images_largest',
   'image_portrait',
@@ -362,8 +367,9 @@ export interface PreviewDetailFacts {
   hasIncompletePairGroup: boolean;
   /**
    * How many official FDA product photos the header set holds — the model's
-   * own `productImages.images.length`. There is no cap, so this is also how
-   * many pages a shopper can reach.
+   * own `productImages.images.length`. There is no presentation cap, so it
+   * is both the official total and how many pages a shopper can reach; only
+   * the DOTS are bounded (`IMAGE_DOTS_WINDOW`), and they bound no pages.
    */
   productImageCount: number;
   /** How many official FSIS label pages the allocation holds. They render
@@ -939,7 +945,9 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
     id: 'images_five',
     group: 'imagery',
     title: 'Detail · five official product photos',
-    expectation: 'Five dots — the largest set that still uses them. No numeric counter.',
+    expectation:
+      'Five dots, one per image — the largest set marked that way. No counter: every published ' +
+      'photo is a page, and the dots already say which one you are on.',
     requirement: 'images_five',
     destination: 'detail',
     simulation: null,
@@ -949,8 +957,21 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
     group: 'imagery',
     title: 'Detail · six official product photos',
     expectation:
-      'The dots are replaced by the compact counter: 1 / 6, updating as you page. Never both.',
+      'The first set whose dots become a sliding window: five dots AND the counter 1 / 6 ' +
+      'beside them. Swipe to the end — the window follows, and 6 / 6 is reachable.',
     requirement: 'images_six',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'images_seven',
+    group: 'imagery',
+    title: 'Detail · seven official product photos',
+    expectation:
+      'Five dots AND the compact counter 1 / 7 beside them, updating as you page. The counter ' +
+      'is added to the dots, never swapped for them — and the SEVENTH photo is reachable: ' +
+      'swipe to 7 / 7.',
+    requirement: 'images_seven',
     destination: 'detail',
     simulation: null,
   },
@@ -959,8 +980,9 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
     group: 'imagery',
     title: 'Detail · fifteen or more official product photos',
     expectation:
-      'The counter reads 1 / N over the WHOLE set — every page is reachable, and paging to the ' +
-      'last one proves it. No truncation sentence anywhere.',
+      'Five dots beside 1 / N, where N is what the agency published. Every one of the N is a ' +
+      'page: swipe to the end and the counter reads N / N while the dot window slides with ' +
+      'you. No truncation sentence anywhere.',
     requirement: 'images_many',
     destination: 'detail',
     simulation: null,
@@ -970,8 +992,10 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
     group: 'imagery',
     title: 'Detail · the largest official set in the live corpus',
     expectation:
-      'The outlier (fifty-one photos in the recorded corpus). It must open as fast as any other ' +
-      'recall: the pager is virtualized, so only the visible page is mounted and fetched.',
+      'The outlier (74 and 87 photos in the live corpus, 51 in the recorded one): five dots ' +
+      'beside 1 / N, and all N reachable — swipe to N / N. It must open as fast as any other ' +
+      'recall: the pager is virtualized, so only the visible page and its neighbours are ' +
+      'mounted and fetched.',
     requirement: 'images_largest',
     destination: 'detail',
     simulation: null,
@@ -1361,6 +1385,8 @@ export function meetsRequirement(
         return facts.productImageCount === 5;
       case 'images_six':
         return facts.productImageCount === 6;
+      case 'images_seven':
+        return facts.productImageCount === 7;
       case 'images_many':
         return facts.productImageCount >= 15;
       case 'images_largest':

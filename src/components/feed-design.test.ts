@@ -108,8 +108,10 @@ test('the card renders relevance and media as two independent, upstream-decided 
   // Relevance: the shared primitive, gated on the model's verdict and nothing else.
   assert.ok(CARD.includes('{model.affectsYou ? <RelevanceLabel /> : null}'));
   assert.equal((CARD.match(/<RelevanceLabel \/>/g) ?? []).length, 1);
-  // Media: rendered unconditionally — the tile exists in every state. The
-  // tile itself is the shared primitive (P2B2 extracted it for Detail).
+  // Media: the card hands the tile every state unconditionally and the
+  // shared primitive (P2B2 extracted it for Detail) decides what renders —
+  // since P2B7I, nothing at all for an absent or failed image — so the card
+  // holds no media rule of its own that Saved could drift from.
   assert.match(
     CARD,
     /<MediaTile\s+uri=\{model\.heroImageUrl\}\s+alt=\{model\.productName\}\s+size=\{layout\.cardMediaSize\}\s*\/>/,
@@ -225,18 +227,28 @@ test('the relevance label cannot be handed a risk tier, and the risk label canno
 
 // ── 4. No-image geometry ────────────────────────────────────────────────────
 
-test('the media tile keeps the same square footprint with an image, a failed image, or none', () => {
+test('the media column exists only for a usable image — no placeholder square for an absent or failed one', () => {
+  // AMENDED FOR P2B7I (founder direction). Through P2B7H the tile kept its
+  // square in every state and drew the bare placeholder for "none" and
+  // "failed" — the persistent grey rectangle on no-image cards. Now the
+  // square exists only for a real image; the placeholder colour shows only
+  // around a contained photo and while its request is active.
   assert.equal(layout.cardMediaSize, 112);
   assert.ok(CARD.includes('size={layout.cardMediaSize}'));
-  // The shared tile (P2B2) is a square of the caller's size in every state.
   assert.ok(MEDIA_TILE.includes('{ width: size, height: size }'));
   assert.ok(MEDIA_TILE.includes('background="background/media-placeholder"'));
-  // A failed load falls back to the placeholder, exactly as before; P2B7C
-  // added an optional report to a caller that must stop counting the page
-  // (the header pager), which the card deliberately does not pass.
-  assert.ok(MEDIA_TILE.includes('setFailed(true);'));
+  assert.ok(
+    MEDIA_TILE.includes(
+      'if (uri === null || failedUri === uri || hasImageFailed(uri)) return null;',
+    ),
+  );
+  // A failed load is recorded for the session and reported to a caller that
+  // must stop counting the page (the header pager); the card passes no
+  // callback because its own shape already follows the tile's.
+  assert.ok(MEDIA_TILE.includes('recordImageFailure(uri);'));
   assert.ok(MEDIA_TILE.includes('onLoadFailed?.(uri)'));
   assert.ok(!CARD.includes('onLoadFailed'), 'the card counts pages');
+  assert.ok(!CARD.includes('media-placeholder'), 'the card draws a placeholder of its own');
   assert.ok(
     MEDIA_TILE.includes('resizeMode="contain"'),
     'a label photo is never cropped or distorted',
@@ -244,7 +256,7 @@ test('the media tile keeps the same square footprint with an image, a failed ima
   // No broken-image glyph and no substitute picture: the only image source
   // is the model's own hero URL.
   assert.equal((codeOnly(MEDIA_TILE).match(/source=\{/g) ?? []).length, 1);
-  assert.ok(MEDIA_TILE.includes('source={{ uri: image }}'));
+  assert.ok(MEDIA_TILE.includes('source={{ uri }}'));
   assert.ok(!CARD.includes('source={'), 'the card renders no image of its own');
   assert.ok(!CARD.includes('PhotoThumbnail'));
   assert.ok(!CARD.includes('require('), 'the card bundles no stock image');

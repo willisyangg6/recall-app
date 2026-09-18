@@ -36,7 +36,8 @@ import {
   disclosureControl,
   imageCounterText,
   imagePositionLabel,
-  IMAGE_DOTS_MAX,
+  imageUnavailableLabel,
+  IMAGE_DOTS_WINDOW,
   WHERE_SOLD_INITIAL_STATES,
 } from '@/lib/recall-presentation';
 
@@ -412,16 +413,20 @@ test('the callout, media tile and notice label are token-only primitives with th
   assert.ok(CALLOUT.includes('<Text variant="body-small" style={styles.text}>'));
   assert.ok(!CALLOUT.includes('riskPalette'), 'a callout can never borrow a risk colour');
   assert.ok(!CALLOUT.includes('accessibilityRole="alert"'));
-  // The tile keeps its square, shows only the model's image, and hides the
-  // bare placeholder from assistive technology.
+  // The tile keeps its square for a real image, shows only the model's
+  // image, and — AMENDED FOR P2B7I — renders nothing at all for an absent or
+  // failed one, so there is no bare placeholder to hide from assistive
+  // technology: the tile is an image element or it is not there.
   assert.ok(
     MEDIA_TILE.includes("(typeof layout)['cardMediaSize' | 'detailMediaSize' | 'rowMediaSize']"),
   );
   assert.ok(
     MEDIA_TILE.includes(
-      "importantForAccessibility={image !== null ? 'auto' : 'no-hide-descendants'}",
+      'if (uri === null || failedUri === uri || hasImageFailed(uri)) return null;',
     ),
   );
+  assert.ok(MEDIA_TILE.includes('accessibilityRole="image"'));
+  assert.ok(!MEDIA_TILE.includes('no-hide-descendants'), 'a hidden placeholder survives');
   assert.ok(MEDIA_TILE.includes('resizeMode="contain"'));
   // AMENDED FOR P2B7C. Detail used to render the hero tile directly, gated
   // on `model.heroImageUrl`. The founder decision moved the header's imagery
@@ -437,7 +442,7 @@ test('the callout, media tile and notice label are token-only primitives with th
   assert.ok(!DETAIL.includes('model.heroImageUrl'));
   // One usable image is still exactly the tile Detail always showed, and
   // every page of a set is that same tile.
-  assert.match(IMAGE_SET, /<MediaTile\s+uri=\{usable\[0\]\.url\}/);
+  assert.match(IMAGE_SET, /<MediaTile\s+uri=\{pages\[0\]\.url\}/);
   assert.match(IMAGE_SET, /<MediaTile\s+uri=\{item\.url\}/);
   // The notice label: label type on the neutral surface, spoken as the contract's words.
   assert.ok(NOTICE_LABEL.includes('accessibilityLabel={label}'));
@@ -476,12 +481,14 @@ test('the image set is one tokenized component, and the only carousel in the app
   assert.ok(!OFF_SCALE_NUMBER.test(IMAGE_SET_CODE));
   assert.ok(!IMAGE_SET.includes('ThemedText'));
   // No new dependency, and no network or data access: React, React Native,
-  // the shared primitives, the tokens and the contract — nothing else.
+  // the shared primitives, the tokens, the contract and (P2B7I) the
+  // session's failure memory — nothing else.
   const imports = [...IMAGE_SET.matchAll(/from '([^']+)'/g)].map((match) => match[1]).sort();
   assert.deepEqual(imports, [
     '@/components/ui/media-tile',
     '@/components/ui/text',
     '@/constants/design-tokens',
+    '@/lib/image-failures',
     '@/lib/recall-presentation',
     'react',
     'react-native',
@@ -497,61 +504,90 @@ test('the image set is one tokenized component, and the only carousel in the app
 });
 
 test('the whole official set is navigable — no presentation cap survives', () => {
-  // AMENDED BY THE P2B7C CORRECTION. The component used to render at most six
-  // pages and disclose the rest in prose; both are retired, because a count
-  // the shopper cannot reach is misleading. Every image is a page now, and
-  // the pager virtualizes so the corpus outlier does not mount or fetch them
-  // all at once.
-  assert.ok(IMAGE_SET.includes('data={usable}'));
+  // RESTORED BY THE P2B7I CORRECTION (founder decision). P2B7I had briefly
+  // bounded the pager to six pages; that is reverted, because a counter's
+  // denominator a shopper cannot swipe to is exactly the defect this work
+  // exists to close. The CONTRACT still decides the pages (`imagePageView`
+  // removes what failed and nothing else) and the pager renders all of
+  // them, virtualized.
+  assert.ok(
+    IMAGE_SET.includes(
+      'const { pages, officialCount, usableCount, indicator } = imagePageView(set, failed);',
+    ),
+  );
+  assert.ok(IMAGE_SET.includes('data={pages}'));
   assert.ok(IMAGE_SET.includes('initialNumToRender={1}'));
   assert.ok(IMAGE_SET.includes('maxToRenderPerBatch={2}'));
   assert.ok(IMAGE_SET.includes('windowSize={3}'));
   assert.ok(IMAGE_SET.includes('removeClippedSubviews'));
   assert.ok(IMAGE_SET.includes('getItemLayout='));
   assert.ok(IMAGE_SET.includes('<FlatList'));
+  // Neither the contract nor the component truncates the set. The only
+  // bound in either is the INDICATOR's, and it bounds no pages.
+  assert.ok(!PRESENTATION.includes('IMAGE_PAGES_MAX'), 'the six-page cap returned');
+  assert.ok(!PRESENTATION.includes('.slice(0, IMAGE_PAGES_MAX)'), 'the six-page cap returned');
+  assert.equal(IMAGE_DOTS_WINDOW, 5);
   for (const retired of [
     'DETAIL_IMAGE_SET_MAX',
+    'IMAGE_PAGES_MAX',
     'truncationNote',
-    'officialCount',
     'Showing ',
-    '.slice(0, 6)',
+    '.slice(',
   ]) {
-    assert.ok(!IMAGE_SET_CODE.includes(retired), `the retired cap survives: ${retired}`);
+    assert.ok(!IMAGE_SET_CODE.includes(retired), `the component caps or discloses: ${retired}`);
   }
-  assert.ok(!PRESENTATION.includes('DETAIL_IMAGE_SET_MAX'), 'the contract still caps the set');
+  assert.ok(!PRESENTATION.includes('DETAIL_IMAGE_SET_MAX'), 'the retired cap name returned');
   assert.ok(!PRESENTATION.includes('truncationNote'), 'the contract still composes the prose');
 });
 
 test('a page that cannot load leaves the set, and the indicator follows it', () => {
   // The reported acceptance failure: two dots over two blank grey squares.
-  // A failed page is no longer a page — it leaves `usable`, so the dots, the
-  // counter and the spoken position all describe what actually renders.
-  assert.ok(
-    IMAGE_SET.includes('const usable = set.images.filter((image) => !failed.has(image.url))'),
-  );
+  // A failed page is no longer a page — it leaves the contract's `pages`, so
+  // the dots, the counter and the spoken position all describe what
+  // actually renders. P2B7I: the tile itself renders NOTHING once it has
+  // failed, and the verdict is remembered for the session so the pager is
+  // seeded with it on the next visit.
+  assert.ok(PRESENTATION.includes('set.images.filter((image) => !failed.has(image.url))'));
   assert.ok(IMAGE_SET.includes('onLoadFailed={onFailed}'));
+  assert.ok(IMAGE_SET.includes('hasImageFailed(image.url)'));
   assert.ok(MEDIA_TILE.includes('onLoadFailed?: (uri: string) => void;'));
-  assert.ok(MEDIA_TILE.includes('if (uri !== null) onLoadFailed?.(uri);'));
+  assert.ok(MEDIA_TILE.includes('recordImageFailure(uri);'));
+  assert.ok(MEDIA_TILE.includes('onLoadFailed?.(uri);'));
   // Every candidate failed: the header returns to its approved no-image
   // shape rather than keeping a blank tile with indicators over it.
-  assert.ok(IMAGE_SET.includes('if (usable.length === 0) return null;'));
+  assert.ok(IMAGE_SET.includes('if (pages.length === 0) return null;'));
   // One usable image is the static tile, with no indicator at all.
-  assert.ok(IMAGE_SET.includes('if (usable.length === 1) {'));
+  assert.ok(IMAGE_SET.includes('if (pages.length === 1) {'));
   // The visible page is tracked by IMAGE IDENTITY, so a late failure on an
   // offscreen page cannot move the page the shopper is looking at.
-  assert.ok(IMAGE_SET.includes('usable.findIndex((image) => image.url === visible.url)'));
-  assert.ok(IMAGE_SET.includes('Math.min(visible.at, usable.length - 1)'));
+  assert.ok(IMAGE_SET.includes('pages.findIndex((image) => image.url === visible.url)'));
+  assert.ok(IMAGE_SET.includes('Math.min(visible.at, pages.length - 1)'));
   assert.ok(IMAGE_SET.includes('setVisible({ url: image.url, at })'));
 });
 
-test('dots up to five, the numeric counter beyond — and never both', () => {
-  assert.equal(IMAGE_DOTS_MAX, 5);
-  assert.ok(IMAGE_SET.includes('usable.length <= IMAGE_DOTS_MAX ? ('));
-  assert.ok(IMAGE_SET.includes('{imageCounterText(current, usable.length)}'));
+test('a bounded dot WINDOW, and the counter ADDED beside it — never one instead of the other', () => {
+  // AMENDED FOR P2B7I AND ITS CORRECTION. Through P2B7H the counter
+  // REPLACED the dots from six images (`IMAGE_DOTS_MAX`); the founder
+  // rejected that. The dots are now always present in a paged set, drawn as
+  // a sliding window of at most five, and the counter joins them — the
+  // window bounds the marks, never the pages.
+  assert.ok(IMAGE_SET.includes('{imageDotWindow(current, usableCount).map((page) => ('));
+  assert.ok(IMAGE_SET.includes("{indicator === 'dots-and-counter' ? ("));
+  assert.ok(IMAGE_SET.includes('{imageCounterText(current, usableCount)}'));
   assert.ok(IMAGE_SET.includes('styles.dot'));
-  // The counter is the contract's compact form, with no explanatory word.
-  assert.equal(imageCounterText(1, 15), '2 / 15');
-  assert.equal(imagePositionLabel(1, 15), 'Image 2 of 15');
+  assert.ok(!IMAGE_SET.includes('IMAGE_DOTS_MAX'), 'the replaced-dots threshold survives');
+  assert.ok(!PRESENTATION.includes('IMAGE_DOTS_MAX'), 'the replaced-dots threshold survives');
+  // The counter is the contract's compact form over the pages that can be
+  // shown — which is the official total until something fails — and the
+  // spoken position counts the same reachable pages.
+  assert.equal(imageCounterText(1, 74), '2 / 74');
+  assert.equal(imageCounterText(73, 74), '74 / 74');
+  assert.equal(imagePositionLabel(1, 74), 'Image 2 of 74');
+  assert.equal(imageUnavailableLabel(74, 74), null);
+  assert.equal(
+    imageUnavailableLabel(72, 74),
+    '72 of 74 official images can be shown; the rest could not be loaded',
+  );
   // The component composes no copy of its own — the rejected prose cannot
   // return through it.
   for (const composed of ['Showing', 'official images', 'label pages', 'of 6']) {
@@ -617,16 +653,22 @@ test('an image is contained, never cropped, and one failure never collapses the 
   }
 });
 
-test('position is spoken, dots and counter are decoration', () => {
-  // Each image keeps its factual label and announces its own position.
-  assert.ok(IMAGE_SET.includes('positionLabel={imagePositionLabel(index, usable.length)}'));
+test('position is spoken, the dots are decoration, the counter speaks the official total once', () => {
+  // Each image keeps its factual label and announces its own position over
+  // the pages that can be reached — never over a total it cannot.
+  assert.ok(IMAGE_SET.includes('positionLabel={imagePositionLabel(index, usableCount)}'));
   assert.ok(MEDIA_TILE.includes('accessibilityValue={'));
   assert.ok(MEDIA_TILE.includes('{ text: positionLabel }'));
-  // The indicator — dots or counter — is hidden from assistive technology on
-  // both platforms, so the slash is never read aloud and nothing there is
-  // focusable or pressable.
+  // The dots are hidden from assistive technology on both platforms, so
+  // nothing there is focusable or pressable. AMENDED FOR P2B7I AND ITS
+  // CORRECTION: the counter is hidden too while every published photo is
+  // reachable (each page already announces the same two numbers), and
+  // becomes the one spoken element — labelled with a sentence, never its
+  // slash — only when a failure means fewer pages than were published.
   assert.ok(IMAGE_SET.includes('accessibilityElementsHidden'));
   assert.ok(IMAGE_SET.includes('importantForAccessibility="no-hide-descendants"'));
+  assert.ok(IMAGE_SET.includes('accessible={unavailable !== null}'));
+  assert.ok(IMAGE_SET.includes('accessibilityLabel={unavailable ?? undefined}'));
   // Nothing here caps Dynamic Type or truncates a line.
   assert.ok(!IMAGE_SET.includes('maxFontSizeMultiplier'));
   assert.ok(!IMAGE_SET.includes('numberOfLines'));
@@ -697,6 +739,7 @@ test('the preview offers every required Detail scenario, on real recalls, simula
     'images_two',
     'images_five',
     'images_six',
+    'images_seven',
     'images_many',
     'images_largest',
     'image_portrait',
@@ -732,8 +775,9 @@ test('the preview offers every required Detail scenario, on real recalls, simula
   assert.ok(PREVIEW.includes('<ImagerySampleGallery confirmed={confirmed} />'));
   assert.ok(PREVIEW.includes('imageSet: model.productImages'));
   assert.ok(PREVIEW.includes('<OfficialImageSet set={sample.set} />'));
-  assert.ok(PREVIEW.includes('UNREACHABLE_IMAGE'));
-  assert.ok(PREVIEW.includes('SIMULATED: three candidates, one of them unreachable.'));
+  assert.ok(PREVIEW.includes('function unreachableImage(name: string): string {'));
+  assert.ok(PREVIEW.includes('SIMULATED: three candidates, the middle one unreachable.'));
+  assert.ok(PREVIEW.includes('SIMULATED: every candidate unreachable.'));
   assert.ok(PREVIEW.includes('ICON SET ('));
   assert.ok(PREVIEW.includes('{ICON_NAMES.map((name) => ('));
   // The retired label-gallery scenarios are gone from the harness too.

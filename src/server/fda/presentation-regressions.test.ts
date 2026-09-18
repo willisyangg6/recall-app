@@ -28,6 +28,9 @@ import {
   caseIdentity,
   cleanProductName,
   conciseReasonLine,
+  imageDotWindow,
+  imagePageView,
+  IMAGE_DOTS_WINDOW,
   whereSoldModel,
 } from '../../lib/recall-presentation';
 import { interpretReason } from '../../lib/recall-reason';
@@ -1478,6 +1481,39 @@ test('recorded notices produce every image-set shape: 0, 1, 2, 6, 7 and 51 offic
     // Every image speaks the model's own product name, never a caption.
     for (const image of set.images) {
       assert.equal(image.accessibilityLabel, model.productName, shape.fragment);
+    }
+  }
+});
+
+test('P2B7I correction: every recorded shape is fully navigable \u2014 the dots window, the pages do not', () => {
+  // The recorded corpus's own shapes, rendered: one photo is a static tile,
+  // two to five are marked one dot each, and six or more take the sliding
+  // five-dot window beside the counter. In EVERY case the page count is the
+  // official count \u2014 the fifty-one-photo notice pages to 51 / 51.
+  const none = new Set<string>();
+  for (const shape of IMAGE_SET_SHAPES) {
+    if (shape.images === 0) continue;
+    const set = detailModelFor(corpusProjection(shape.fragment)).productImages!;
+    const view = imagePageView(set, none);
+    assert.equal(view.officialCount, shape.images, shape.fragment);
+    assert.equal(view.pages.length, shape.images, `${shape.fragment}: a page was dropped`);
+    assert.equal(view.usableCount, shape.images, shape.fragment);
+    assert.equal(
+      view.indicator,
+      shape.images === 1 ? 'none' : shape.images <= IMAGE_DOTS_WINDOW ? 'dots' : 'dots-and-counter',
+      shape.fragment,
+    );
+    // Complete, hero first, in official order \u2014 including the last page.
+    assert.deepEqual(
+      view.pages.map((image) => image.url),
+      set.images.map((image) => image.url),
+      shape.fragment,
+    );
+    // However many pages, the dots stay bounded and mark the current one.
+    for (const current of [0, Math.floor(shape.images / 2), shape.images - 1]) {
+      const window = imageDotWindow(current, view.usableCount);
+      assert.ok(window.length <= IMAGE_DOTS_WINDOW, shape.fragment);
+      assert.ok(window.includes(current), shape.fragment);
     }
   }
 });

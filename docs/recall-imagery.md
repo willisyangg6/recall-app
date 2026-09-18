@@ -270,14 +270,16 @@ Run `npx expo start --go --ios` (never `npm run ios`):
    an oversight (§14).
 
 3. Open an FDA case publishing several photos: the header tile pages by hand
-   through ALL of them, with position dots up to five and the compact
-   `current / total` counter beyond, no automatic movement, and no
-   explanatory sentence anywhere.
+   through ALL of them, with one position dot per image up to five, a sliding
+   five-dot window beyond that, and the compact `current / total` counter
+   beside the dots (§14, P2B7I) — no automatic movement, and no explanatory
+   sentence anywhere.
 4. Pull-to-refresh: feed behavior unchanged; no recall re-dating,
    reordering, or notification.
-5. Broken/absent images render nothing — never a broken-image placeholder. In
-   a paged set one failed image shows that page's placeholder and the rest of
-   the set still pages.
+5. Broken/absent images render nothing — never a broken-image placeholder
+   and never a grey square (P2B7I): a Feed or Saved card without a usable
+   image has no media column, and in a paged set a failed image leaves the
+   set while the rest still pages.
 6. Web (`npx expo start --web`): same behavior.
 
 ## 12. Professional card imagery: research findings and deferral (C9.1)
@@ -493,20 +495,25 @@ re-reviewed, not re-pinned blindly.
 Nothing in this section touches ingestion, projection, storage, or the
 frozen policies above: allocation is display-time, derived, and reversible.
 
-## 14. On-screen presentation of the allocated roles (P2B7C)
+## 14. On-screen presentation of the allocated roles (P2B7C, P2B7I)
 
 Implemented 2026-09-17; **corrected the same day** after founder inspection
-(see "What the correction changed" below). §13 decides which official images
-hold which role; this section decides **where those images appear and how
-many of them**. It is presentation only: no schema, ingestion, projection,
-storage, API, or allocation behaviour changed, and no image is collected,
-ranked, deduplicated, or described by any screen.
+(see "What the correction changed" below); the no-image card shape, the
+coexisting indicators and the failure memory settled 2026-09-18 (P2B7I, "The
+indicator, and why there is still no cap" and "Cards without imagery"
+below). §13 decides which official images hold which role; this
+section decides **where those images appear and how many of them**. It is
+presentation only: no schema, ingestion, projection, storage, API, or
+allocation behaviour changed, and no image is collected, ranked,
+deduplicated, or described by any screen.
 
 The contract lives in `src/lib/recall-presentation.ts` (`DetailImageSet`,
-`detailImageSet`, `productImagery`, `imagePositionLabel`, `imageCounterText`)
-and is rendered by one component,
-`src/components/ui/official-image-set.tsx`. The visual composition is
-recorded in [../DESIGN.md](../DESIGN.md) ("Recall Detail", conflict 30).
+`detailImageSet`, `productImagery`, `IMAGE_DOTS_WINDOW`, `imagePageView`,
+`imageDotWindow`, `imagePositionLabel`, `imageCounterText`,
+`imageUnavailableLabel`) and is rendered by one component, `src/components/ui/official-image-set.tsx`, over
+the shared tile `src/components/ui/media-tile.tsx` and the session failure
+memory `src/lib/image-failures.ts`. The visual composition is recorded in
+[../DESIGN.md](../DESIGN.md) ("Recall Card", "Recall Detail", conflict 30).
 
 ### Where official imagery appears — the complete list
 
@@ -537,41 +544,124 @@ their preview scenarios are removed. What survives is the Outshine shape: a
 per-row thumbnail, matched through §13's evidence gates.
 
 The same correction retired the six-image presentation cap and the sentence
-that disclosed it (`Showing 6 of N official images.`) — see below.
+that disclosed it (`Showing 6 of N official images.`). Both stay retired.
+P2B7I briefly reintroduced a six-page bound and the founder rejected it: see
+the next heading.
 
-### The indicator, and why there is no cap
+### The indicator, and why there is still no cap
 
-Every official product photo is navigable. A cap would make any count the
+**Every usable official photo is navigable.** A cap would make any count the
 screen showed a lie about what a shopper can reach, so the set carries
 everything the allocation produced and the pager virtualizes instead
-(`FlatList`, one page mounted and fetched at a time — the corpus outlier is
-51 photos).
+(`FlatList`, one page mounted and fetched at a time). A 74-photo notice
+pages from `1 / 74` to `74 / 74`. `imagePageView(set, failed)` removes what
+failed and nothing else; there is no `.slice`, no maximum page count, and no
+promotion logic to fill one.
 
-| Usable images | Indicator                            |
-| ------------- | ------------------------------------ |
-| 0             | nothing at all (the no-image header) |
-| 1             | none — the static tile               |
-| 2–5           | position dots (`IMAGE_DOTS_MAX`)     |
-| 6 or more     | the compact counter `2 / 15`         |
+What **is** bounded is the indicator. Two marks say two different things,
+and above the threshold they **coexist** (`ImagePageView.indicator`):
 
-Never both. There is no prose: no `Showing`, no "official images", no
-truncation sentence. Assistive technology hears `Image 2 of 15` from the
-image itself, so the slash is never read aloud.
+| Usable images | Pages | Indicator                                                              |
+| ------------- | ----- | ---------------------------------------------------------------------- |
+| 0             | —     | nothing at all (the no-image header; the set is `null`)                |
+| 1             | 1     | `none` — the static tile, nothing to swipe                             |
+| 2–5           | 2–5   | `dots` — one position dot per image                                    |
+| 6 or more     | all   | `dots-and-counter` — a five-dot sliding window, and `2 / 74` beside it |
+
+- The **dots** communicate swipe position within the rendered carousel: a
+  window of at most `IMAGE_DOTS_WINDOW` (5) marks, computed by
+  `imageDotWindow(current, pageCount)` — the first pages at the beginning,
+  centred on the current page through the middle, the final pages at the
+  end, always containing the active position. **The number of dots never
+  determines the number of accessible images.**
+- The **counter** (`imageCounterText`) communicates the current position
+  against the total that can be shown — the agency's official total whenever
+  nothing has failed. It is added beside the dots, never replaces them, and
+  both follow the shopper as they swipe.
+
+There is no prose: no `Showing`, no "official images" sentence, no
+truncation sentence.
+
+**Denominator semantics.** With no failures, `current / official total` is
+exact and every denominator is reachable. With failures the denominator
+becomes the **usable** count (`2 / 72` of 74 published), because a number a
+shopper cannot swipe to is the defect this section exists to prevent; the
+published total is then stated separately, once, to assistive technology.
+
+**Accessibility.** Each image announces its position as its value
+(`imagePositionLabel`): `Image 2 of 74` — no qualifier, because every
+counted page is reachable. The dots are decoration and hidden. The counter
+is hidden too while nothing has failed (the pages already announce those
+numbers, and a second element would duplicate them); when something has
+failed it becomes the one spoken element, labelled
+`imageUnavailableLabel` — `72 of 74 official images can be shown; the rest
+could not be loaded` — so the slash is never read aloud and a failed image
+is never implied to be viewable.
+
+**Performance.** The uncapped pager is affordable because it is virtualized,
+not because it is short: `initialNumToRender={1}`, `maxToRenderPerBatch={2}`,
+`windowSize={3}`, `removeClippedSubviews` and a constant-height
+`getItemLayout`. Only the visible page and its immediate neighbours are
+mounted, and a page's image is requested when its page mounts — so the
+87-photo outlier costs what a two-photo notice costs until it is swiped, and
+swiping to page 74 has mounted a bounded number of tiles, not 74. This is
+the configuration that shipped uncapped in P2B7C and was inspected then; it
+is unchanged.
 
 ### Usable, not merely candidate
 
-A candidate whose image fails to load **leaves the set**. The indicator
-therefore describes pages that actually rendered, not URLs that were
-attempted:
+A candidate whose image fails to load **leaves the set** — only that page.
+Every healthy image after it stays reachable: an early failure in a 74-photo
+notice leaves 73 pages and the last official photo is still swipeable. The
+indicator therefore describes pages that actually rendered, not URLs that
+were attempted:
 
 - all candidates fail → the header's no-image shape (never a blank tile with
   dots over it);
 - one left → the static tile, no indicator;
-- two to five left → dots over the survivors;
-- six or more left → the counter over the survivors.
+- two to five left, everything published shown → one dot per survivor;
+- six or more left → the five-dot window and the counter;
+- fewer left than were published → the counter appears whatever the size, so
+  the shortfall is visible, with the spoken sentence above saying how many
+  of the published photos could not be loaded.
 
 The visible page is tracked by image identity, so a late failure on an
-offscreen page never moves the page the shopper is looking at.
+offscreen page never moves the page the shopper is looking at; when the
+visible page is the one that failed, the pager settles once on whatever now
+sits at that position (the index is clamped to the surviving pages) with no
+animation, no second programmatic scroll, and no retry.
+
+A failure is remembered for the session in `src/lib/image-failures.ts` — a
+URL-keyed, in-memory, never-persisted set with no imports. The tile records a
+failure the moment the platform reports it, and every later mount of that URL
+(a Feed card scrolled back into view, the Saved list, the pager's page for
+it) reads the verdict and renders nothing immediately: no second request, no
+square that reserves space and then collapses, and the pager is seeded so a
+previously failed page is out before its first render. The next cold launch
+retries. The stored imagery is untouched by any of this and stays traceable
+to its official source.
+
+### Cards without imagery (P2B7I)
+
+The Feed and Saved card (`src/components/recall-card.tsx`, one component)
+has **no media column** when the recall has no usable image — no stored
+hero, or a hero that failed. The tile itself renders nothing for those states
+(`MediaTile` returns `null`; the card holds no media rule and reserves no
+width), so the title, brand, category tag and summary take the card's full
+width, the three-line title clamp, the risk/date row and the location/save
+footer are unchanged, and Feed and Saved cannot drift. A remote image that
+is still loading holds its square on the placeholder colour only while the
+request is active. Nothing stands in for an absent image: no stock or
+generated photo, no mascot, no "image unavailable" illustration, no pressable
+placeholder. Detail's no-image header was already text-led and is unchanged;
+an affected-product row whose matched thumbnail fails now shows the plain
+text cell rather than a grey square.
+
+Through P2B7H the card kept the tile in every state and the tile drew the
+bare `background/media-placeholder` square for "no image" and "failed" alike
+— the persistent grey rectangle the founder rejected. On 2026-09-18 the live
+feed held 896 active cases, 265 of them (30%) without a hero — every one of
+those cards showed the rectangle by design.
 
 This closes the reported acceptance defect: an FDA recall (A&P Creations /
 biQ-FEL) whose Feed card showed its photo opened to a grey Detail tile with
@@ -601,24 +691,40 @@ component (`detail-design.test.ts`).
 
 Each image keeps the factual label the model already had — the product name,
 never a source caption or anything inferred from the pixels (§13's row-image
-rule, applied to the set). Position is announced as the element's value
-(`Image 2 of 15`); the indicator is decoration and is hidden from assistive
-technology.
+rule, applied to the set). Position is announced as the element's value over
+the pages that can be reached (`Image 2 of 74`) — every counted page is
+reachable, so the count needs no qualifier. The dots are decoration and are
+hidden from assistive technology; the counter is silent unless something
+failed, in which case it carries the one sentence that keeps the usable and
+the published totals apart. The tile is an image element or it is absent —
+there is no hidden placeholder.
 
 ### Pins
 
 `src/lib/recall-presentation.test.ts` pins the set contract (completeness,
-order, wording, the source filter, the hero-first/biQ-FEL regression, and
-that no label gallery exists in the model).
-`src/server/fda/presentation-regressions.test.ts` proves the shapes on
-recorded official announcements — 0, 1, 2, 6, 7 and 51 official photos — and
-audits the whole recorded corpus for completeness, uniqueness, https URLs,
-role exclusivity, and the absence of any label placement.
+order, wording, the source filter, the hero-first/biQ-FEL regression, that
+no label gallery exists in the model, and — P2B7I as corrected — the page
+view: the 0/1/2/5/6/7/74 indicator matrix, that `pages` always equals the
+usable count, that pages 7 and 74 are reachable, the sliding dot window at
+beginning/middle/end, an early failure leaving later images reachable, and
+every-failure → nothing). `src/server/fda/presentation-regressions.test.ts` proves the
+shapes on recorded official announcements — 0, 1, 2, 6, 7 and 51 official
+photos, each fully navigable with a bounded dot window — and audits the whole
+recorded corpus for completeness, uniqueness, https URLs, role exclusivity,
+and the absence of any label placement.
+`src/components/imagery-presentation-design.test.ts` (P2B7I) pins the
+no-image card shape, Feed/Saved parity, the failure memory and the absence
+of any retry loop, dots-and-counter coexistence, the five-dot window
+following beginning/middle/end while bounding no pages, the counter updating
+through the final page, decorative dots and the honest spoken wording,
+failed-page index correction, and the preserved interaction and imagery
+roles.
 `src/components/detail-design.test.ts` and
 `src/lib/recall-presentation-wiring.test.ts` pin the component and the
-screen: one imagery component, virtualized, no cap, no prose, failure removes
-a page, dots-or-counter, no auto-advance, no arrows, no press target,
-`contain` only, decorative indicators, and no screen-side collection or
-ranking. `src/components/feed-design.test.ts` pins that Feed imagery stays
-single-image. `src/components/ui/design-foundation.test.ts` pins that every
-declared icon name resolves to a real, non-empty asset at 1x, 2x and 3x.
+screen: one imagery component, the contract's complete set, virtualized, no
+cap, no prose, failure removes a page, no auto-advance, no arrows, no press target,
+`contain` only, and no screen-side collection or ranking.
+`src/components/feed-design.test.ts` pins that Feed imagery stays
+single-image and that the card draws no placeholder of its own.
+`src/components/ui/design-foundation.test.ts` pins that every declared icon
+name resolves to a real, non-empty asset at 1x, 2x and 3x.

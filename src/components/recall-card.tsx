@@ -18,11 +18,18 @@
  * relevance (`model.affectsYou`, the personalization verdict) and media
  * (`model.heroImageUrl`, the shared image-role allocation). Affects You +
  * Image, Affects You + No Image, Does not affect you + Image, Does not
- * affect you + No Image — and the card's geometry is the same in all four:
- * the media tile keeps its footprint and renders the neutral placeholder
- * when there is no usable image, never a broken-image glyph and never a
- * substitute picture. A Public Health Alert additionally carries its
- * explicit notice label (shipped behaviour, ahead of Figma).
+ * affect you + No Image. The media dimension changes the card's SHAPE
+ * (P2B7I, founder direction): with a usable image the tile sits beside the
+ * identity column; without one — no stored hero, or a hero that failed to
+ * render — there is no media column at all, and the title, brand, category
+ * and summary take the card's full width. Never a grey placeholder square,
+ * never a broken-image glyph, never a substitute picture, and never a
+ * pressable stand-in. The tile itself decides that (`MediaTile` renders
+ * nothing for an absent or failed image), so the Feed and Saved cards —
+ * this one component — cannot drift. Everything around the content row
+ * (the status row, the three-line title clamp, the location/save footer)
+ * is identical in both shapes. A Public Health Alert additionally carries
+ * its explicit notice label (shipped behaviour, ahead of Figma).
  *
  * The card's height is its content's. No height is fixed: a long product
  * name or summary wraps beside the media, and the type scales with the
@@ -156,7 +163,10 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
           </View>
 
           {/* Product identity stays dominant; the media is a recognition aid
-              beside it, and keeps its footprint when there is no image. */}
+              beside it. The tile renders NOTHING for an absent or failed
+              image (P2B7I), and this row is a gapped flex row, so the text
+              column then starts at the card's edge and takes its full width
+              — no empty gap, no reserved footprint. */}
           <View style={styles.content}>
             <MediaTile
               uri={model.heroImageUrl}
@@ -166,11 +176,12 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
             <View style={styles.identity}>
               <View>
                 {/* At most three lines, ellipsized at the tail (the RN
-                    default). The line clamp bounds the VISUAL box only: the
-                    node's content stays the complete name, which is what the
-                    card's grouped accessibility element announces — so a
-                    screen-reader user hears the whole title exactly once,
-                    with no second element and no truncation. */}
+                    default), in both card shapes. The line clamp bounds the
+                    VISUAL box only: the node's content stays the complete
+                    name, which is what the card's grouped accessibility
+                    element announces — so a screen-reader user hears the
+                    whole title exactly once, with no second element and no
+                    truncation. */}
                 <Text variant="heading-3" numberOfLines={3}>
                   {model.productName}
                 </Text>
@@ -240,7 +251,7 @@ const styles = StyleSheet.create({
     gap: spacing[12],
   },
   // flex + minWidth 0 let long product names wrap instead of pushing the
-  // media off the card.
+  // media off the card — and, with no media column, fill the whole row.
   identity: {
     flex: 1,
     minWidth: 0,

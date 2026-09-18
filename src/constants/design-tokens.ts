@@ -226,8 +226,9 @@ export const layout = {
   /**
    * The diameter of one position dot under a paged image set (P2B7C). Dots
    * are decorative and never interactive, so this is a mark size, not a
-   * touch target — and they render only up to `IMAGE_DOTS_MAX` images, after
-   * which a compact numeric counter replaces them.
+   * touch target. There is one per swipeable page, never more than
+   * `IMAGE_PAGES_MAX`; a larger official set adds a compact counter beside
+   * them (P2B7I) rather than replacing them.
    */
   pageDotSize: 8,
   /**
