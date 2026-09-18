@@ -534,3 +534,61 @@ test('the presentation contract knows nothing about the visual layer, and the co
     assert.ok(FEED.includes(call), `the Feed no longer calls ${call}`);
   }
 });
+
+// ── P2B7F: a Feed mode switch cannot take a glyph away ──────────────────────
+//
+// Switching All ⇄ Affects me replaces the list's data, which remounts the
+// cards and the filter row. Measured over one cycle, the glyphs that remount
+// are exactly the ones a founder saw disappear — map-pin, bookmark,
+// bookmark-filled, flag and chevron-down — while the tab bar, the search
+// field and the development gear sit outside that boundary and never remount.
+// The disappearance itself is a development-server failure, recorded in
+// docs/recall-development-assets.md. What these tests hold is the app half of
+// the contract: no icon inside the remounting boundary is conditional on the
+// mode, so a transition cannot be what removes it.
+
+test('P2B7F: every Feed-content glyph renders independently of the mode', () => {
+  // The card's location pin and the Affects-You flag are rendered outright,
+  // with no `tab`/mode expression anywhere near them.
+  assert.ok(CARD.includes('<Icon name="map-pin" size={12} color="icon/primary" />'));
+  assert.ok(RELEVANCE_LABEL.includes('<Icon name="flag" size={12} tint={palette.foreground} />'));
+
+  // The save control's glyph comes from the save state alone — never from a
+  // feed mode, a filter, or a loading flag.
+  assert.ok(SAVE_BUTTON.includes('<Icon name={state.icon} size={20} color="icon/primary" />'));
+
+  // No `Icon` in any Feed surface sits inside a mode conditional. A card that
+  // rendered its pin only in `All` would lose it on the very transition this
+  // milestone investigated.
+  for (const [name, source] of Object.entries(FEED_SURFACES)) {
+    for (const match of source.matchAll(/<Icon\b[^>]*>/g)) {
+      const line = source.slice(0, match.index).split('\n').length;
+      const context = source
+        .split('\n')
+        .slice(Math.max(0, line - 4), line)
+        .join('\n');
+      assert.ok(
+        !/\btab\b\s*[=!]==?/.test(context),
+        `${name} renders an icon behind a feed-mode conditional`,
+      );
+    }
+  }
+});
+
+test('P2B7F: the glyphs outside the remount boundary are unchanged', () => {
+  // The tab bar, the search field and the chip chevron each keep rendering
+  // through the one primitive. They survived the reported failure because a
+  // mode switch never remounts them — not because they are special — so a
+  // change that pulled them into the Feed's data path would newly expose
+  // them. Pinning them here keeps that visible.
+  for (const glyph of ['home', 'bookmark', 'user']) {
+    assert.ok(TAB_LAYOUT.includes(`<TabIcon name="${glyph}" focused={focused} />`));
+  }
+  assert.ok(SEARCH_BAR.includes('<Icon name="search" size={20} color="icon/secondary" />'));
+
+  // The filter chips' chevron is drawn whenever the chip declares one, and
+  // its presence is decided by the chip's own prop rather than by feed state.
+  assert.ok(CHIP.includes('{trailingIcon ? ('));
+  assert.ok(CHIP.includes('name={trailingIcon}'));
+  assert.ok(!/trailingIcon[^\n]*\btab\b/.test(CHIP), 'the chevron depends on the feed mode');
+});

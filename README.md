@@ -184,7 +184,16 @@ one tap away. Design and safety proofs:
 ```bash
 npm start            # dev server (press i for iOS Simulator)
 npm run ios
+npm run dev:reset    # stop this project's dev servers, clear caches, start fresh
 ```
+
+If icons disappear from a running development session — glyphs gone while
+their labels stay — that is the dev server, not the app. In development every
+icon is fetched from the address baked into the loaded bundle, so a server
+that moved port or LAN IP leaves each newly mounted icon with nothing to
+draw. `npm run dev:reset` is the cure; release builds embed their assets and
+are unaffected. See
+[docs/recall-development-assets.md](docs/recall-development-assets.md).
 
 With `.env` configured, the home screen shows current FSIS and FDA recalls and
 FSIS Public Health Alerts (newest activity first, source-labeled); tapping an

@@ -381,3 +381,64 @@ test('every Button label clears WCAG AA on its own surface — the disabled ones
   assert.ok(BUTTON.includes('accessibilityState={{ disabled: inert, busy }}'));
   assert.ok(BUTTON.includes('disabled={inert}'));
 });
+
+// ── P2B7F: an icon's source survives every remount ──────────────────────────
+//
+// In development a required PNG is fetched from the dev server at the address
+// baked into the loaded bundle, so an icon that MOUNTS while that address is
+// stale has nothing to draw while icons already on screen keep their bitmaps.
+// That is an environment failure, not an app one
+// (docs/recall-development-assets.md) — but it is indistinguishable on screen
+// from an app bug that drops a source on re-render, and only these invariants
+// keep the two apart. Each one, if broken, WOULD make the glyphs vanish in a
+// release build too.
+
+test('P2B7F: the primitive can never render an Image without a source', () => {
+  const icon = read('components/ui/icon.tsx');
+
+  // The source is passed straight from the table, unconditionally. Not
+  // behind a ternary, not optional, not defaulted — there is no render path
+  // that reaches `Image` without one.
+  assert.ok(icon.includes('source={GLYPHS[name]}'), 'the source is no longer passed directly');
+  assert.ok(
+    !/source=\{[^}]*\?[^}]*\}/.test(icon),
+    'the icon source became conditional — a remount could render it empty',
+  );
+  assert.ok(!/source=\{[^}]*undefined/.test(icon), 'the icon source can be undefined');
+
+  // Exactly one `Image` renders here, so there is no second path with a
+  // different source rule.
+  assert.equal(
+    [...icon.matchAll(/<Image\b/g)].length,
+    1,
+    'the primitive renders more than one Image',
+  );
+});
+
+test('P2B7F: the glyph table is a module constant that no render can mutate', () => {
+  const icon = read('components/ui/icon.tsx');
+
+  // Built once, at module scope, frozen by `as const`. If it were rebuilt per
+  // render the source identity would change on every re-render, which forces
+  // the native view to re-request the asset — turning an ordinary re-render
+  // into the fetch that fails.
+  assert.ok(icon.includes('const GLYPHS = {'), 'the glyph table is no longer a const');
+  assert.ok(icon.includes('} as const;'), 'the glyph table is no longer frozen by `as const`');
+  const tableStart = icon.indexOf('const GLYPHS = {');
+  const componentStart = icon.indexOf('export function Icon(');
+  assert.ok(tableStart > -1 && componentStart > -1);
+  assert.ok(tableStart < componentStart, 'the glyph table moved inside the component');
+
+  // Nothing writes to it, at any point in the module's life.
+  assert.ok(!/GLYPHS\[[^\]]+\]\s*=/.test(icon), 'something assigns into the glyph table');
+  assert.ok(!/GLYPHS\s*=/.test(icon.slice(tableStart + 'const GLYPHS ='.length)));
+  assert.ok(!/Object\.assign\(\s*GLYPHS/.test(icon), 'the glyph table is mutated');
+  assert.ok(!/delete\s+GLYPHS/.test(icon), 'a glyph is deleted from the table');
+
+  // The component holds no state, ref or memo of its own: there is no cached
+  // copy of a resolved source that a remount could restore stale or empty.
+  const component = icon.slice(componentStart);
+  for (const hook of ['useState', 'useRef', 'useMemo', 'useEffect']) {
+    assert.ok(!component.includes(hook), `the primitive caches its source in ${hook}`);
+  }
+});

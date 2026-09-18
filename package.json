@@ -42,6 +42,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "dev:reset": "node scripts/dev-reset.mjs",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",

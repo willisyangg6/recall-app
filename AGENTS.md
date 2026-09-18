@@ -35,6 +35,7 @@ it in the same change rather than describing the new behavior somewhere else.
 | Personalization and Affects-Me                     | [docs/recall-personalization.md](docs/recall-personalization.md)           |
 | Community shopper reports                          | [docs/recall-shopper-reports.md](docs/recall-shopper-reports.md)           |
 | Design Preview (dev-only screenshot harness)       | [docs/recall-design-preview.md](docs/recall-design-preview.md)             |
+| Development asset serving and the dev reset        | [docs/recall-development-assets.md](docs/recall-development-assets.md)     |
 | Design system: tokens, semantics, Figma mapping    | [DESIGN.md](DESIGN.md)                                                     |
 | Push delivery                                      | [docs/recall-push-delivery.md](docs/recall-push-delivery.md)               |
 | Imagery                                            | [docs/recall-imagery.md](docs/recall-imagery.md)                           |
