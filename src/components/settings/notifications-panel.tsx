@@ -44,7 +44,13 @@ export function NotificationsPanel({
   onOpenSettings: () => void;
 }) {
   if (view.status === 'unsupported') {
-    return <StateMessage title={UNSUPPORTED_STATE.title} body={UNSUPPORTED_STATE.body} />;
+    return (
+      <StateMessage
+        scrollable={false}
+        title={UNSUPPORTED_STATE.title}
+        body={UNSUPPORTED_STATE.body}
+      />
+    );
   }
 
   const shown = notificationsPresentation(view);

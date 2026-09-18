@@ -192,6 +192,14 @@ export const layout = {
   pageMargin: 16,
   contentWidth: 361,
   bottomNavHeight: 72,
+  /**
+   * The navigator header's bar, excluding the status-bar inset — the
+   * platform's own 44pt. It is a FLOOR, not a fixed height: the header grows
+   * past it when the reader's text size needs more room (see
+   * `(tabs)/_layout.tsx`), because the title honours Dynamic Type and a bar
+   * that stayed 44pt would clip it.
+   */
+  navHeaderHeight: 44,
   searchBarHeight: 44,
   riskLabelHeight: 24,
   /**

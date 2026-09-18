@@ -101,8 +101,13 @@ test('the app is portrait, light-only and carries no hand-set iOS build number',
 
 // ── The EAS profiles ────────────────────────────────────────────────────────
 
-test('exactly three build profiles exist, each defined in full', () => {
-  assert.deepEqual(Object.keys(EAS.build).sort(), ['development', 'preview', 'production']);
+test('exactly four build profiles exist, each defined in full', () => {
+  assert.deepEqual(Object.keys(EAS.build).sort(), [
+    'development',
+    'preview',
+    'production',
+    'simulator',
+  ]);
   // No profile inherits from another. `extends` is what would let a
   // development setting reach production through a chain nobody re-reads,
   // so every profile states its own values and this stays empty.
@@ -114,7 +119,7 @@ test('exactly three build profiles exist, each defined in full', () => {
 test('development is the ONLY profile that builds a development client', () => {
   assert.equal(EAS.build.development.developmentClient, true);
   assert.equal(EAS.build.development.distribution, 'internal');
-  for (const name of ['preview', 'production']) {
+  for (const name of ['preview', 'production', 'simulator']) {
     assert.equal(
       EAS.build[name].developmentClient,
       false,
@@ -129,6 +134,23 @@ test('production is a store build and can never be installed as an ad-hoc previe
   assert.notEqual(EAS.build.production.distribution, EAS.build.development.distribution);
 });
 
+test('the simulator profile can never become a store or credentialed build', () => {
+  // P3C1.5: added so a native build can be produced at all — the local
+  // toolchain cannot compile this project (see docs/recall-release-readiness.md)
+  // and a simulator build is the one iOS build that needs no Apple account.
+  // That is exactly why it must stay boxed in: it is the profile most likely
+  // to be run casually, and a simulator binary is not signable or shippable.
+  const simulator = EAS.build.simulator;
+  assert.equal(simulator.ios?.simulator, true, 'the whole point of the profile');
+  assert.equal(simulator.distribution, 'internal', 'never "store"');
+  assert.equal(simulator.developmentClient, false);
+  assert.equal(simulator.extends, undefined, 'it must not inherit production anything');
+  assert.equal(simulator.autoIncrement, false, 'it must not consume a build number');
+  // It draws from the development environment, never production's.
+  assert.equal(simulator.environment, 'development');
+  assert.notEqual(simulator.environment, EAS.build.production.environment);
+});
+
 test('each profile draws its variables from the EAS environment of the same name', () => {
   // Without an explicit `environment`, which EAS environment supplies
   // EXPO_PUBLIC_SUPABASE_URL and the publishable key to a build is not
@@ -137,12 +159,17 @@ test('each profile draws its variables from the EAS environment of the same name
   for (const name of ['development', 'preview', 'production']) {
     assert.equal(EAS.build[name].environment, name, `${name} must name its own EAS environment`);
   }
+  // The simulator profile is the exception, and names development's on purpose.
+  assert.equal(EAS.build.simulator.environment, 'development');
   assert.notEqual(EAS.build.production.environment, EAS.build.development.environment);
 });
 
-test('no profile builds for the simulator, and none injects environment values', () => {
+test('no DISTRIBUTABLE profile builds for the simulator, and none injects env values', () => {
   for (const [name, profile] of Object.entries(EAS.build)) {
-    assert.equal(profile.ios?.simulator, false, `${name} must target devices`);
+    // Every profile that produces something installable on a real phone
+    // targets devices. `simulator` is the single, explicitly named exception.
+    const expected = name === 'simulator';
+    assert.equal(profile.ios?.simulator, expected, `${name} targets the wrong destination`);
     // Public configuration is supplied by EAS environment variables, not
     // committed here: eas.json is in git, and a committed value cannot be
     // rotated without a commit. See docs/recall-release-readiness.md.
@@ -175,6 +202,26 @@ test('the root layout exports an ErrorBoundary, so every screen is covered', () 
   const layout = readFileSync(join(ROOT, 'src', 'app', '_layout.tsx'), 'utf8');
   assert.match(layout, /export \{ AppErrorBoundary as ErrorBoundary \};/);
   assert.match(layout, /from '@\/components\/app-error-boundary'/);
+});
+
+test('the boundary can be exercised in development, and only there', () => {
+  // P3C1.5. The failure screen is unreachable by using the app correctly, so
+  // the Design Preview hub can throw on purpose and show the REAL one.
+  const hub = readFileSync(join(ROOT, 'src', 'app', 'design-preview', 'index.tsx'), 'utf8');
+  assert.match(hub, /function ErrorBoundaryProbe\(\)/);
+  // Guarded twice over: the bare `__DEV__` identifier, which Metro resolves
+  // away in a release bundle, inside a route that is already inert there.
+  assert.match(hub, /if \(!__DEV__\) return null;/);
+  const probe = hub.slice(
+    hub.indexOf('function ErrorBoundaryProbe()'),
+    hub.indexOf('function GallerySample('),
+  );
+  assert.ok(probe.indexOf('if (!__DEV__) return null;') < probe.indexOf('throw new Error('));
+  // Nothing outside the harness may throw on purpose.
+  for (const screen of ['(tabs)/index.tsx', '(tabs)/saved.tsx', '(tabs)/profile.tsx']) {
+    const source = readFileSync(join(ROOT, 'src', 'app', ...screen.split('/')), 'utf8');
+    assert.ok(!source.includes('throw new Error('), `${screen} throws on purpose`);
+  }
 });
 
 test('the failure screen shows no error detail, and keeps it for development', () => {

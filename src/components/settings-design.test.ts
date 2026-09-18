@@ -445,11 +445,11 @@ test('the panel renders the mapping’s sentence and its one action for every st
       .action?.kind,
     'settings',
   );
-  assert.ok(
-    PANEL.includes(
-      '<StateMessage title={UNSUPPORTED_STATE.title} body={UNSUPPORTED_STATE.body} />',
-    ),
-  );
+  assert.match(PANEL, /<StateMessage\s+scrollable=\{false\}\s+title=\{UNSUPPORTED_STATE\.title\}/);
+  // P3C1.5: a whole-screen state scrolls when the text outgrows the screen,
+  // but this panel already sits inside the Notifications screen's own
+  // ScrollView, so it opts out rather than nesting a second one.
+  assert.ok(PANEL.includes('scrollable={false}'));
 });
 
 // ── Loading and failure ─────────────────────────────────────────────────────
@@ -461,8 +461,17 @@ test('loading and failure are rendered as themselves — never as an empty form 
   assert.ok(ROUTE_P.includes("setLoad({ status: 'unsupported' });"));
   assert.match(ROUTE_P, /load\.status === 'ready' \? \(/);
   assert.ok(ROUTE_P.includes('<PreferencesNotReady status={load.status} />'));
-  assert.ok(FORM.includes('<StateMessage tone="loading" title={LOADING_STATE.title}'));
-  assert.ok(FORM.includes('<StateMessage tone="error" title={FAILED_STATE.title}'));
+  assert.match(
+    FORM,
+    /<StateMessage\s+scrollable=\{false\}\s+tone="loading"\s+title=\{LOADING_STATE\.title\}/,
+  );
+  assert.match(
+    FORM,
+    /<StateMessage\s+scrollable=\{false\}\s+tone="error"\s+title=\{FAILED_STATE\.title\}/,
+  );
+  // Same reason as the notifications panel: this form renders inside the
+  // Personalization screen's ScrollView (P3C1.5).
+  assert.equal((FORM.match(/scrollable=\{false\}/g) ?? []).length, 3);
   for (const word of [NOT_CHOSEN, NONE_SELECTED]) {
     assert.ok(!LOADING_STATE.title.includes(word) && !FAILED_STATE.title.includes(word));
   }

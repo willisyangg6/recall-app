@@ -13,46 +13,27 @@
  * authority. Every toggle resolves with what STORAGE now holds, and that is
  * what gets published — a write that failed publishes the unchanged list
  * rather than an optimistic lie.
+ *
+ * The store itself lives in `lib/saved-recalls-cache` (P3C1.5): it is pure,
+ * so the cold-launch sequence every screen depends on is driven directly in
+ * `saved-recalls-cache.test.ts` instead of being reasoned about. This module
+ * is the wiring — the single app-wide instance, bound to real storage.
  */
 
 import { useCallback, useSyncExternalStore } from 'react';
 
+import { createSavedRecallsCache } from '@/lib/saved-recalls-cache';
 import {
   loadSavedRecalls,
   savedRecallsAvailable,
   toggleSavedRecall,
 } from '@/lib/saved-recalls-store';
 
-/** Null until the first read from storage resolves. */
-let snapshot: readonly string[] | null = null;
-let loading: Promise<void> | null = null;
-const listeners = new Set<() => void>();
-
-/** Stable empty snapshot: a new array each read would loop the subscription. */
-const NOT_LOADED: readonly string[] = [];
-
-function publish(ids: readonly string[]): void {
-  snapshot = ids;
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  // First subscriber triggers the single read; later ones join it.
-  if (snapshot === null && loading === null && savedRecallsAvailable()) {
-    loading = loadSavedRecalls().then(
-      (ids) => publish(ids),
-      () => publish([]),
-    );
-  }
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function getSnapshot(): readonly string[] {
-  return snapshot ?? NOT_LOADED;
-}
+/** The app's single saved-list cache. */
+const cache = createSavedRecallsCache({
+  load: loadSavedRecalls,
+  available: savedRecallsAvailable,
+});
 
 export interface SavedRecalls {
   /** Saved case ids, newest save first. Empty until storage has answered. */
@@ -66,18 +47,20 @@ export interface SavedRecalls {
 }
 
 export function useSavedRecalls(): SavedRecalls {
-  const ids = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  // Both values come through the ONE subscribed snapshot. Reading `loaded`
+  // from anywhere else would be state React cannot see changing — which is
+  // precisely what stranded a cold launch into Saved on its loading state.
+  const { ids, loaded } = useSyncExternalStore(
+    cache.subscribe,
+    cache.getSnapshot,
+    cache.getSnapshot,
+  );
   const toggle = useCallback(async (id: string) => {
     if (!savedRecallsAvailable()) return;
-    publish(await toggleSavedRecall(id));
+    cache.publish(await toggleSavedRecall(id));
   }, []);
 
-  return {
-    ids,
-    loaded: snapshot !== null || !savedRecallsAvailable(),
-    available: savedRecallsAvailable(),
-    toggle,
-  };
+  return { ids, loaded, available: savedRecallsAvailable(), toggle };
 }
 
 /**
@@ -86,8 +69,5 @@ export function useSavedRecalls(): SavedRecalls {
  * deleted list until the next launch.
  */
 export function forgetSavedRecallsCache(): void {
-  // The reset deleted the stored document, so an empty list is the truth —
-  // not a "not yet loaded" state that would re-read the file for nothing.
-  loading = Promise.resolve();
-  publish([]);
+  cache.forget();
 }

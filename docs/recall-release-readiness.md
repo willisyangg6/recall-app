@@ -50,7 +50,7 @@ product's own subject matter — are untouched and correct.
 
 ## 2. Build profiles
 
-`eas.json` defines exactly three profiles. **None of them uses `extends`**: a
+`eas.json` defines exactly four profiles. **None of them uses `extends`**: a
 shared base is the usual way a development setting reaches production through
 a chain nobody re-reads, so every profile states all of its own values.
 
@@ -58,6 +58,7 @@ a chain nobody re-reads, so every profile states all of its own values.
 | ------------- | ------------- | ------------------- | -------------- | --------------- | ------------------------------------------------- |
 | `development` | `development` | `true`              | `internal`     | `false`         | A debug build hosting the dev client and Metro.   |
 | `preview`     | `preview`     | `false`             | `internal`     | `true`          | A release-configuration build installable ad hoc. |
+| `simulator`   | `development` | `false`             | `internal`     | `false`         | A `.app` for an iOS Simulator. No Apple account.  |
 | `production`  | `production`  | `false`             | `store`        | `true`          | The App Store / TestFlight archive.               |
 
 What keeps production honest, each pinned by a test:
@@ -69,6 +70,13 @@ What keeps production honest, each pinned by a test:
   build cannot silently pick up development values.
 - No profile carries an `env` block. Configuration values are not committed to
   `eas.json`, which is in git and cannot be rotated without a commit.
+- `simulator` (added P3C1.5) is the one profile that sets `ios.simulator:
+true`, and it is boxed in for that reason: `internal`, no development
+  client, no `autoIncrement`, no `extends`, and the `development` environment
+  rather than production's. It exists because it is the only iOS build this
+  project can currently produce at all (§6), which also makes it the profile
+  most likely to be run casually — and a simulator binary can never be signed
+  or shipped.
 
 ### Environment variables on EAS
 
@@ -162,9 +170,10 @@ invocation above does — see §6.
 
 ## 5. What is verified today
 
-All of this was run on 2026-09-16 at the working tree described in §8.
+All of this was run at the working tree described in §8 (offline checks
+2026-09-16; the native evidence in §5.1 on 2026-09-17).
 
-- `npm run check` — typecheck, lint, and **2,388 tests, all passing**. Lint
+- `npm run check` — typecheck, lint, and **2,402 tests, all passing**. Lint
   reports 0 errors and 3 warnings, all pre-existing in `src/server` test files
   this milestone did not touch.
 - `npx expo-doctor` — 21/21 checks pass.
@@ -175,7 +184,7 @@ All of this was run on 2026-09-16 at the working tree described in §8.
   - the strings `SUPABASE_SECRET_KEY`, `WATCHDOG_SHARED_SECRET`,
     `EXPO_ACCESS_TOKEN`, `service_role` and `sb_secret_` appear nowhere in it;
   - both `EXPO_PUBLIC_` values are inlined, as intended.
-- `npx eas-cli config --platform ios --profile <profile>` — all three
+- `npx eas-cli config --platform ios --profile <profile>` — all four
   profiles resolve against the CLI's own schema and print the expected
   identity (`Lotly`, `lotly`, `com.willisyang.lotly`, `supportsTablet: false`,
   slug and project id unchanged). This validation is what caught the one
@@ -187,6 +196,65 @@ All of this was run on 2026-09-16 at the working tree described in §8.
   build-number scheme, the error boundary's silence about errors, the
   environment-variable boundary, the client/server import boundary, and the
   route inventory.
+
+### 5.1 Native evidence, from the simulator build (P3C1.5)
+
+The `simulator` profile produced a real `Lotly.app`, installed on an iPhone 17
+Pro simulator (iOS 26.3) with `xcrun simctl`. It is a **release-configuration**
+build, which is what makes the gating evidence below meaningful.
+
+The artifact all of the following was verified against:
+
+- Build `e5bab902-4f23-4f4d-8a35-89b67456b679`
+- `https://expo.dev/artifacts/eas/q_nY6InnEuYJ3ZHK1LfEhAXNuaaeE5t7Bk-6qHNMTK8.tar.gz`
+
+Two earlier simulator builds were made and superseded: `11fc5aa8` (the first
+native build, which found the `StateMessage` wrapping defect) and `fbd4ba0f`
+(which found the vertical-overflow defect the wrapping fix exposed).
+
+From the shipped bundle's own `Info.plist`:
+
+| Checked               | Value                           |
+| --------------------- | ------------------------------- |
+| `CFBundleDisplayName` | `Lotly`                         |
+| `CFBundleIdentifier`  | `com.willisyang.lotly`          |
+| `UIDeviceFamily`      | `[1]` — iPhone only             |
+| `CFBundleURLSchemes`  | `lotly`, `com.willisyang.lotly` |
+
+Observed on the running app:
+
+- **The installed name is Lotly** — it is the name under the icon on the home
+  screen, and iOS's own cross-app prompt reads _Open in "Lotly"?_.
+- **`lotly://` opens the app**, from a cold start (the app terminated first).
+- **Deep links resolve and reach a FINAL state**, each from a cold launch:
+  `lotly://saved` lands on the Saved tab, `lotly://profile` on Profile,
+  `lotly://recall/<id>` on a pushed Recall Details. None sat on a loading
+  state.
+- **Development routes are guarded.** A cold `lotly://design-preview` reaches
+  an inert page reading "Design Preview is a development-only tool and is not
+  available in this build." No harness, no simulated data, no controls.
+- **The release wording is what ships.** Every screen showed the shopper
+  sentence ("Recalls are unavailable / Lotly couldn't reach the recall
+  service…"), never the developer wording that names environment variables —
+  first-hand confirmation that `__DEV__` is false in this build and that the
+  P3C1 copy split works.
+- **Nothing clips at accessibility sizes.** At
+  `accessibility-extra-extra-extra-large`, with a cold `lotly://saved`: the
+  navigator title "Saved" renders in full in a grown bar; the state message's
+  title and body wrap within the screen's horizontal bounds with no text cut
+  off at either edge; the first line of the title is present; and scrolling
+  reaches the last word of the explanation. Nothing overlaps. Restoring the
+  simulator to the default text size renders the same screen exactly as
+  before — one-line title, two-line body, vertically centred. Getting here
+  took two corrections; both are described in §8.
+
+**What this build cannot show.** It carries no `EXPO_PUBLIC_` configuration,
+because none is set on EAS (§2) and populating it was out of scope. Every
+feed-dependent path therefore short-circuits to the not-configured state, so
+this build cannot exercise: a populated feed, a real recall on Detail, or the
+Saved screen's _loading_ gate — `SavedScreen` returns the not-configured state
+before reaching it. The cold-launch Saved symptom P3C1.5 set out to reproduce
+is consequently **still unreproduced**; see §8.
 
 **Not verified, because it requires a signed build:** that the app launches
 under a release configuration on a physical device, that the error boundary
@@ -214,12 +282,29 @@ for a device and device builds require signing credentials:
 - [ ] Set the two `EXPO_PUBLIC_` variables in each EAS environment (§2). Not
       itself Apple-blocked, but pointless before a build can run.
 
-One consequence worth a decision: a **simulator** build needs no Apple
-account, and would be the only way to run a custom development client before
-enrollment. All three profiles set `ios.simulator: false`, so producing one
-today would mean changing a profile. That is recorded here as an option rather
-than done, because the three profiles are the ones this milestone was asked
-for.
+**The simulator route, taken in P3C1.5.** A simulator build needs no Apple
+account, so the `simulator` profile above is the one way to get a native
+Lotly binary before enrollment. It is what §5's native evidence comes from.
+
+**The local toolchain cannot substitute for it.** `npx expo prebuild` succeeds
+and generates a correct project (`ios/Lotly.xcodeproj`, display name `Lotly`,
+`PRODUCT_BUNDLE_IDENTIFIER = com.willisyang.lotly`), but `xcodebuild` fails in
+the `ExpoModulesJSI` xcframework phase, reproduced 2026-09-17 against
+`expo-modules-jsi@57.1.0`:
+
+```
+node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h:53:26:
+error: 'RuntimeScheduler' cannot be annotated with either SWIFT_RETURNS_RETAINED
+or SWIFT_RETURNS_UNRETAINED because it is not returning a SWIFT_SHARED_REFERENCE type
+```
+
+`class RuntimeScheduler` annotates its constructors `SWIFT_RETURNS_RETAINED`
+without being declared a `SWIFT_SHARED_REFERENCE` type. Swift 6.3 accepts it;
+the Swift 6.2.4 in Xcode 26.3 — the only Xcode on this machine — rejects it.
+The podspec always builds that xcframework from source (`build-xcframework.sh`,
+no prebuilt download path), so there is no project-level flag that avoids
+compiling the header, and the only local fixes would edit `node_modules`. EAS
+Build's image carries a newer Swift and compiles it.
 
 ## 7. Still pending, not blocked by Apple
 
@@ -248,6 +333,64 @@ for.
 
 Branch `master`, in sync with `origin/master`, based on `608d257`. Nothing was
 committed, pushed, deployed, or written to any live service by this milestone.
+
+### P3C1.5 — the two clipping defects, and the one that got away
+
+**Fixed: the navigator title clipped at accessibility sizes.** The shared
+`screenHeader` left the bar at the platform's flat 44pt while its title
+honours Dynamic Type, so at the accessibility sizes the title's line box was
+taller than the bar. The bar now grows instead: `minHeight` of the scaled
+`heading-3` line box plus its padding, floored at `layout.navHeaderHeight`
+and offset by the status-bar inset. `minHeight` rather than `height` leaves
+the platform's own notch/landscape maths alone. Verified on the simulator at
+`accessibility-extra-extra-extra-large`. Pushed screens are untouched: they
+use the NATIVE stack header, which iOS sizes itself and which does not accept
+a height from here.
+
+**Fixed, in two steps: whole-screen state messages clipped.** Found by the
+simulator runs, not by reading the code — which is the argument for having
+made the native build at all.
+
+1. _They did not wrap._ `StateMessage`'s container sets
+   `alignItems: 'center'`, so each `Text` was laid out at its own intrinsic
+   width — and an unwrapped sentence is as wide as the sentence. At ordinary
+   sizes it still fit the screen, which is why this was invisible; at the
+   accessibility sizes the title and body were clipped off both edges. They
+   now stretch to the container's content width (`alignSelf: 'stretch'`) and
+   wrap.
+2. _Wrapping made them taller than the phone._ The next build showed the
+   consequence: a wrapped message at those sizes exceeds the screen, and
+   `justifyContent: 'center'` clips an overflow at BOTH ends — the first line
+   of the title as well as the last of the body. `StateMessage` now grows and
+   then scrolls: a `ScrollView` whose `contentContainerStyle` uses
+   `flexGrow: 1`, so it is centred while it fits and reachable when it is not.
+   Scrolling is opt-OUT (`scrollable`, default true) so that the two settings
+   panels — which already render inside their screen's own `ScrollView` —
+   do not nest a second one.
+
+This was NOT part of the milestone's brief; it is the same defect class, on
+the same screens, at the same setting, and DESIGN.md already required 200%
+text without clipping.
+
+**Not reproduced: the cold-launch Saved deep link.** The reported symptom is a
+cold launch into `/saved` sitting on its loading state. It could not be
+reproduced, because no build available in this milestone can reach that state:
+the local toolchain cannot compile the project (§6), and the EAS simulator
+build has no `EXPO_PUBLIC_` configuration, so `SavedScreen` returns the
+not-configured state before the loading gate — the cold deep link was
+confirmed to reach that expected final unconfigured state, which is routing
+evidence, not evidence about the loading gate. What WAS found and fixed is a
+genuine render-safety defect on that exact path: `useSavedRecalls` computed
+`loaded` as `snapshot !== null`, a read of module-level mutable state during
+render, beside `useSyncExternalStore` rather than through it. React only
+tracks what `getSnapshot` returns, and the React Compiler (enabled in
+`app.json`) does not treat that read as a dependency of the memoization it
+inserts. The warm path masks it — a Feed card drives the store to loaded long
+before Saved mounts — while the cold path needs `loaded` to flip after mount.
+`loaded` is now part of the published snapshot
+(`src/lib/saved-recalls-cache.ts`), with the cold and warm sequences driven
+directly in `saved-recalls-cache.test.ts`. **It is not claimed that this was
+the whole of the reported symptom.** Re-check once a configured build exists.
 
 ### The one pre-existing failure, diagnosed and fixed
 

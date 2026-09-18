@@ -400,6 +400,42 @@ test('the Feed and the bar carry no development entry; the harness keeps its gua
   assert.ok(PREVIEW.includes('relevance simulated'));
 });
 
+test('the shared header grows with Dynamic Type instead of clipping its title', () => {
+  // P3C1.5. Feed and Saved both clipped their navigator title vertically at
+  // the accessibility text sizes: the title honours Dynamic Type (no
+  // `maxFontSizeMultiplier` anywhere, DESIGN.md "Dynamic Type and text
+  // wrapping"), but the bar containing it was the platform's flat 44pt.
+  //
+  // The bar is what moves. Nothing here may cap, shrink or opt the title out
+  // of scaling — that would trade a clipped title for an unreadable one.
+  for (const forbidden of [
+    'maxFontSizeMultiplier',
+    'allowFontScaling={false}',
+    'headerTitleAllowFontScaling: false',
+    'adjustsFontSizeToFit',
+    'numberOfLines',
+  ]) {
+    assert.ok(!codeOnly(TAB_LAYOUT).includes(forbidden), `the header caps text with ${forbidden}`);
+  }
+  // The reader's current text size is an input, read reactively so a change
+  // to the setting resizes the bar rather than waiting for a cold launch.
+  assert.ok(TAB_LAYOUT.includes('const { fontScale } = useWindowDimensions();'));
+  assert.ok(TAB_LAYOUT.includes('* fontScale'));
+  // A MINIMUM, not a height: the platform still owns the status bar, the
+  // notch and landscape, and this only raises the floor when text needs it.
+  assert.ok(TAB_LAYOUT.includes('minHeight: headerMinHeight'));
+  assert.ok(!/headerStyle: \{[^}]*\bheight:/.test(TAB_LAYOUT), 'a fixed height would clip again');
+  // The floor is the token, and the title's own line box is what scales.
+  assert.ok(TAB_LAYOUT.includes('layout.navHeaderHeight'));
+  assert.equal(layout.navHeaderHeight, 44);
+  assert.ok(TAB_LAYOUT.includes('insets.top +'), 'the minimum covers the status bar too');
+  // The title style still carries no lineHeight: React Native does not scale
+  // a fixed one with Dynamic Type, so passing it would clip inside the Text.
+  assert.ok(!/headerTitleStyle: \{[^}]*lineHeight/.test(TAB_LAYOUT));
+  // One header for all three destinations, so none of this can drift apart.
+  assert.equal((TAB_LAYOUT.match(/\.\.\.screenHeader/g) ?? []).length, 3);
+});
+
 // ── 12. No Figma-only inert control ─────────────────────────────────────────
 
 test('no bell, no Urgency, no filter glyph, no dead control was added from Figma', () => {

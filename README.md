@@ -201,8 +201,20 @@ profiles, no inheritance between them:
 ```bash
 npx eas-cli build --profile development --platform ios   # dev client
 npx eas-cli build --profile preview     --platform ios   # internal, release config
+npx eas-cli build --profile simulator   --platform ios   # iOS Simulator .app
 npx eas-cli build --profile production  --platform ios   # App Store archive
 npx eas-cli submit --profile production --platform ios
+```
+
+The `simulator` profile is the only one that needs no Apple Developer
+account, and today it is the only iOS build this project can produce at all:
+a local `xcodebuild` fails in `expo-modules-jsi` under the Swift shipped with
+Xcode 26.3 (the error, and why it cannot be worked around here, is in the
+release-readiness document). Install a finished build with:
+
+```bash
+xcrun simctl install booted <path to Lotly.app>
+xcrun simctl launch booted com.willisyang.lotly
 ```
 
 `app.json`'s `version` is the marketing version and is edited by hand. Build

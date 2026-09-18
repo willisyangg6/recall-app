@@ -517,8 +517,11 @@ test('the Profile navigator header matches the Feed and Saved treatment, with no
   const profileTab = TAB_LAYOUT.slice(TAB_LAYOUT.indexOf('name="profile"'));
   assert.ok(profileTab.includes('...screenHeader'));
   assert.ok(TAB_LAYOUT.includes("title: 'Profile'"));
-  assert.ok(TAB_LAYOUT.includes("headerStyle: { backgroundColor: color['background/page'] }"));
+  assert.ok(TAB_LAYOUT.includes("backgroundColor: color['background/page']"));
   assert.ok(TAB_LAYOUT.includes('headerShadowVisible: false'));
+  // Profile shares the one `screenHeader`, so it gets the Dynamic Type
+  // minimum Feed and Saved get — the three cannot drift apart.
+  assert.ok(TAB_LAYOUT.includes('minHeight: headerMinHeight'));
   // The screen adds no heading of its own and sets no header options.
   assert.ok(!PROFILE.includes('Stack.Screen'));
   assert.ok(!codeOnly(PROFILE).includes('variant="heading'));

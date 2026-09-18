@@ -479,12 +479,32 @@ export function PreferencesNotReady({
   status: Exclude<PreferencesLoadState['status'], 'ready'>;
 }) {
   if (status === 'loading') {
-    return <StateMessage tone="loading" title={LOADING_STATE.title} body={LOADING_STATE.body} />;
+    return (
+      <StateMessage
+        scrollable={false}
+        tone="loading"
+        title={LOADING_STATE.title}
+        body={LOADING_STATE.body}
+      />
+    );
   }
   if (status === 'failed') {
-    return <StateMessage tone="error" title={FAILED_STATE.title} body={FAILED_STATE.body} />;
+    return (
+      <StateMessage
+        scrollable={false}
+        tone="error"
+        title={FAILED_STATE.title}
+        body={FAILED_STATE.body}
+      />
+    );
   }
-  return <StateMessage title={UNSUPPORTED_STATE.title} body={UNSUPPORTED_STATE.body} />;
+  return (
+    <StateMessage
+      scrollable={false}
+      title={UNSUPPORTED_STATE.title}
+      body={UNSUPPORTED_STATE.body}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

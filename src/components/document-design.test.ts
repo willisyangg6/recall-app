@@ -654,6 +654,8 @@ test('the Design Preview document gallery renders the production renderer and ca
     'Reset section, busy',
     'Reset section, success',
     'Reset section, failure',
+    // P3C1.5: the probe that shows the real root error boundary.
+    'Root error boundary',
   ]) {
     assert.ok(
       DOCUMENT_GALLERY.includes(`caption={\`${label} —`) ||
@@ -661,7 +663,7 @@ test('the Design Preview document gallery renders the production renderer and ca
       label,
     );
   }
-  assert.equal(count(DOCUMENT_GALLERY, '— real:'), 9);
+  assert.equal(count(DOCUMENT_GALLERY, '— real:'), 10);
   assert.equal(count(DOCUMENT_GALLERY, '— simulated:'), 6);
 });
 

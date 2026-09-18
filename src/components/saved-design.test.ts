@@ -47,6 +47,10 @@ const SAVE_BUTTON = read('components', 'save-recall-button.tsx');
 const STATE_MESSAGE = read('components', 'state-message.tsx');
 const CALLOUT = read('components', 'ui', 'callout.tsx');
 const HOOK = read('hooks', 'use-saved-recalls.ts');
+const CACHE = read('lib', 'saved-recalls-cache.ts');
+
+/** Occurrences of a literal, for "exactly one of these exists" pins. */
+const count = (source: string, needle: string) => source.split(needle).length - 1;
 
 /** Source with comments removed, so a file may document what it does not do. */
 function codeOnly(source: string): string {
@@ -158,6 +162,34 @@ test('every whole-screen state is the shared StateMessage with the contract’s 
   assert.ok(SAVED_UNAVAILABLE.title.length > 0 && SAVED_NOT_CONFIGURED.title.length > 0);
 });
 
+test('a whole-screen state wraps at accessibility text sizes instead of clipping', () => {
+  // P3C1.5, found on the simulator at accessibility-XXXL: `centered` sets
+  // `alignItems: 'center'`, so each Text was laid out at its own intrinsic
+  // width. An unwrapped sentence is as wide as the sentence, which at those
+  // sizes is wider than the phone — so the title and body were clipped off
+  // both edges rather than wrapping onto more lines. DESIGN.md requires 200%
+  // text without clipping.
+  assert.match(STATE_MESSAGE, /alignSelf: 'stretch'/);
+  // And nothing truncates instead of wrapping: no single-line cap, no
+  // shrink-to-fit, no ellipsis on a whole-screen state.
+  for (const forbidden of ['numberOfLines', 'adjustsFontSizeToFit', 'ellipsizeMode']) {
+    assert.ok(!STATE_MESSAGE.includes(forbidden), `the state message uses ${forbidden}`);
+  }
+  // Wrapping alone was not enough: the wrapped message is then TALLER than
+  // the phone at those sizes, and a centred flex container clips an overflow
+  // at BOTH ends — the first line of the title as well as the last of the
+  // body. Verified on the simulator, which is how this was caught.
+  assert.match(STATE_MESSAGE, /<ScrollView/);
+  assert.match(STATE_MESSAGE, /contentContainerStyle=\{styles\.centered\}/);
+  // `flexGrow`, not `flex`: a content container must be allowed to exceed
+  // its scroll view, and `flex: 1` would pin it to the screen and clip again.
+  assert.match(STATE_MESSAGE, /flexGrow: 1,/);
+  assert.ok(!/centered: \{\s*\n\s*flex: 1,/.test(STATE_MESSAGE));
+  // Scrolling is opt-OUT, for the two panels that already sit in a
+  // ScrollView of their own; everything whole-screen gets it by default.
+  assert.match(STATE_MESSAGE, /scrollable = true,/);
+});
+
 test('the loading state cannot flash the empty one, and neither can the error state', () => {
   // Both answers — storage and the corpus — gate everything that follows.
   const loadGate = SAVED.indexOf("if (!loaded || state.status === 'loading')");
@@ -167,9 +199,13 @@ test('the loading state cannot flash the empty one, and neither can the error st
   assert.ok(emptyGate > loadGate, 'the empty state must be decided after loading');
   assert.ok(errorGate > emptyGate, 'the error state must be decided after the empty one');
   // The hook answers "not loaded" until storage resolves, so `loaded` is a
-  // real answer rather than an assumption the screen makes.
-  assert.match(HOOK, /loaded: snapshot !== null \|\| !savedRecallsAvailable\(\)/);
-  assert.match(HOOK, /let snapshot: readonly string\[\] \| null = null;/);
+  // real answer rather than an assumption the screen makes — and it arrives
+  // through the SUBSCRIBED snapshot (P3C1.5). Reading it from module scope
+  // beside `useSyncExternalStore`, as this hook used to, is state React does
+  // not track: harmless warm, and a stranded loading state cold.
+  assert.match(HOOK, /const \{ ids, loaded \} = useSyncExternalStore\(/);
+  assert.ok(!HOOK.includes('snapshot !== null'), 'loaded must not be read from module scope');
+  assert.ok(!/let snapshot/.test(HOOK), 'the hook must not own mutable module state');
 });
 
 test('a failed feed read says so without claiming anything about the saved list', () => {
@@ -217,11 +253,15 @@ test('unsaving happens through the shared card, the shared control and the one s
   assert.match(SAVE_BUTTON, /from '@\/hooks\/use-saved-recalls'/);
   assert.match(CARD, /from '@\/hooks\/use-saved-recalls'/);
   assert.match(SAVED, /from '@\/hooks\/use-saved-recalls'/);
-  // One module-level snapshot, published to every listener — which is what
-  // makes an unsave on Saved show up on the Feed and on Detail at once.
-  assert.match(HOOK, /const listeners = new Set<\(\) => void>\(\);/);
-  assert.match(HOOK, /useSyncExternalStore\(subscribe, getSnapshot, getSnapshot\)/);
-  assert.match(HOOK, /publish\(await toggleSavedRecall\(id\)\);/);
+  // ONE store for the whole app, published to every listener — which is what
+  // makes an unsave on Saved show up on the Feed and on Detail at once. It
+  // lives in lib/saved-recalls-cache now (P3C1.5) so the cold-launch sequence
+  // is driven directly in tests; the hook holds the single instance.
+  assert.match(HOOK, /const cache = createSavedRecallsCache\(\{/);
+  assert.equal(count(HOOK, 'createSavedRecallsCache('), 1, 'exactly one store is created');
+  assert.match(CACHE, /const listeners = new Set<\(\) => void>\(\);/);
+  assert.match(HOOK, /useSyncExternalStore\(\s*cache\.subscribe,\s*cache\.getSnapshot,/);
+  assert.match(HOOK, /cache\.publish\(await toggleSavedRecall\(id\)\);/);
   // No undo, no confirmation, no animation was invented around the removal.
   for (const forbidden of ['Undo', 'Animated', 'LayoutAnimation', 'Alert.alert', 'Haptics']) {
     assert.ok(!codeOnly(SAVED).includes(forbidden), `Saved added ${forbidden}`);

@@ -32,6 +32,7 @@
  */
 
 import { Tabs } from 'expo-router/js-tabs';
+import { useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '@/components/ui/icon';
@@ -44,13 +45,44 @@ function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  // Re-read on every text-size change, so the header below resizes when the
+  // reader changes their setting rather than only at the next cold launch.
+  const { fontScale } = useWindowDimensions();
   // The navigator's title style accepts only family, size and weight, so the
-  // heading token is picked apart rather than spread.
-  const { fontFamily, fontSize, fontWeight } = textStyle('heading-3');
+  // heading token is picked apart rather than spread. `lineHeight` is
+  // deliberately NOT passed to the title: React Native does not scale a fixed
+  // lineHeight with Dynamic Type, so handing one over would clip the glyphs
+  // inside their own line box. It is used below for the bar's height instead.
+  const { fontFamily, fontSize, fontWeight, lineHeight } = textStyle('heading-3');
+
+  /**
+   * How tall the bar has to be for the title to fit at the reader's text size
+   * (P3C1.5).
+   *
+   * The header title honours Dynamic Type — DESIGN.md requires 200% text
+   * without clipping, and there is no `maxFontSizeMultiplier` anywhere — but
+   * the bar itself was a flat 44pt, so at the accessibility sizes the title's
+   * line box was taller than the bar that contained it and Feed and Saved
+   * both clipped their titles vertically.
+   *
+   * The bar grows with the text instead of the text shrinking to the bar:
+   * `heading-3`'s own line box, scaled, plus the bar's breathing room above
+   * and below, and never less than the platform's 44pt at ordinary sizes.
+   * It is expressed as `minHeight` rather than `height` because
+   * `getDefaultHeaderHeight` already accounts for the status bar, notch and
+   * landscape; a minimum raises that floor when the text needs it and leaves
+   * the platform's own answer alone when it does not. The inset is added
+   * because the value covers the whole header, status bar included.
+   */
+  // `TextStyle` types both as optional; the token always carries them, and a
+  // 0 here would simply leave the platform's 44pt floor in charge.
+  const titleLineBox = Math.ceil(Number(lineHeight ?? fontSize ?? 0) * fontScale);
+  const headerMinHeight =
+    insets.top + Math.max(layout.navHeaderHeight, titleLineBox + spacing[8] * 2);
 
   /** A restyled screen's header: the warm page, no shadow, the heading type. */
   const screenHeader = {
-    headerStyle: { backgroundColor: color['background/page'] },
+    headerStyle: { backgroundColor: color['background/page'], minHeight: headerMinHeight },
     headerShadowVisible: false,
     headerTitleStyle: { fontFamily, fontSize, fontWeight, color: color['text/primary'] },
   };

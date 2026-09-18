@@ -105,13 +105,23 @@ test('the pushed-screen back control is the platform chevron, named Back — nev
 });
 
 test('the pushed-screen header is styled from the same tokens as the Feed header', () => {
+  // Same page colour, same absence of a shadow, same heading token on both.
   for (const source of [ROOT_LAYOUT, TAB_LAYOUT]) {
-    assert.ok(source.includes("headerStyle: { backgroundColor: color['background/page'] }"));
+    assert.ok(source.includes("backgroundColor: color['background/page']"));
     assert.ok(source.includes('headerShadowVisible: false'));
-    assert.ok(
-      source.includes("const { fontFamily, fontSize, fontWeight } = textStyle('heading-3')"),
-    );
+    assert.ok(source.includes("textStyle('heading-3')"));
+    assert.ok(source.includes('headerTitleStyle: { fontFamily, fontSize, fontWeight'));
   }
+  // They differ in exactly one respect, and deliberately (P3C1.5): the tab
+  // headers are JS headers whose bar this app sizes itself, so they carry a
+  // Dynamic Type minimum; the pushed screens use the NATIVE stack header,
+  // which iOS sizes for the reader's text size on its own and which does not
+  // accept a height here at all.
+  assert.ok(TAB_LAYOUT.includes('minHeight: headerMinHeight'));
+  assert.ok(
+    !ROOT_LAYOUT.includes('minHeight'),
+    'the native stack header must not be given a height it ignores',
+  );
   assert.ok(ROOT_LAYOUT.includes("headerTintColor: color['action/primary']"));
   assert.ok(!HEX_LITERAL.test(codeOnly(ROOT_LAYOUT)));
 });

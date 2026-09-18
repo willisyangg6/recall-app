@@ -22,6 +22,15 @@
         "simulator": false
       }
     },
+    "simulator": {
+      "environment": "development",
+      "developmentClient": false,
+      "distribution": "internal",
+      "autoIncrement": false,
+      "ios": {
+        "simulator": true
+      }
+    },
     "production": {
       "environment": "production",
       "developmentClient": false,

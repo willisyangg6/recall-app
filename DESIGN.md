@@ -1739,7 +1739,14 @@ chance.
   `maxFontSizeMultiplier` caps anywhere. Product names, summaries, and cell
   values wrap rather than truncate; only a paired identifier/date line is
   capped to one line, so the two columns stay aligned. Layouts must survive a
-  200% text size without overlapping or clipping.
+  200% text size without overlapping or clipping. **Fixed-height chrome grows
+  with the text rather than capping it.** The navigator header is the worked
+  example: its title is `heading-3` and scales, so the bar carries a
+  `minHeight` of the scaled line box plus its padding, floored at
+  `layout.navHeaderHeight` (44) and offset by the status-bar inset, instead of
+  the platform's flat 44pt that clipped Feed and Saved at the accessibility
+  sizes. A fixed `height`, a capped multiplier, or a `lineHeight` handed to a
+  scaling title would each reintroduce the clipping.
 - **Reduced motion.** The system has no essential motion: disclosures grow in
   place, tabs switch without animation, and the only motion is the platform's
   own navigation transition, which respects the Reduce Motion setting. Any

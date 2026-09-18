@@ -55,6 +55,7 @@ import {
 import { StateMessage } from '@/components/state-message';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { Chip } from '@/components/ui/chip';
 import { DisclosureControl } from '@/components/ui/disclosure-control';
@@ -1588,6 +1589,38 @@ function NotificationsGallery() {
   );
 }
 
+/**
+ * Development-only: make the REAL root error boundary appear (P3C1.5).
+ *
+ * The boundary is the one screen that cannot be reached by using the app
+ * correctly, so without this the only way to see it was to break something on
+ * purpose and rebuild. Pressing the control below throws during render, which
+ * is exactly the class of failure `AppErrorBoundary` exists to catch — so
+ * what appears is the production failure screen itself, not a copy of it, and
+ * its "Try again" really is Expo Router's `retry()` putting the app back.
+ *
+ * It is not a product surface and cannot become one: the whole body is behind
+ * the bare `__DEV__` identifier, so a release bundle drops the throw with it,
+ * and the only thing that renders this lives inside the Design Preview hub,
+ * which is itself unreachable in a release build.
+ */
+function ErrorBoundaryProbe() {
+  const [thrown, setThrown] = useState(false);
+  if (!__DEV__) return null;
+  if (thrown) {
+    // Deliberate, and only ever reachable from the press below.
+    throw new Error('Design Preview: deliberate render failure (development only).');
+  }
+  return (
+    <Button
+      label="Throw a render error"
+      variant="secondary"
+      onPress={() => setThrown(true)}
+      accessibilityHint="Shows the real failure screen. Try again returns to the app."
+    />
+  );
+}
+
 function GallerySample({ caption, children }: { caption: string; children: React.ReactNode }) {
   return (
     <View style={styles.feedCase}>
@@ -1723,6 +1756,9 @@ function DocumentGallery() {
       </GallerySample>
       <GallerySample caption="Reset section, failure — simulated: the server deletion failed, so nothing on the device changed">
         <ResetPanel state="failed" onPress={noop} />
+      </GallerySample>
+      <GallerySample caption="Root error boundary — real: this throws for real and the production failure screen catches it; Try again is Expo Router’s own retry">
+        <ErrorBoundaryProbe />
       </GallerySample>
       <Text variant="caption" color="text/secondary">
         Accessibility-large text is a device setting the gallery cannot simulate: set the
