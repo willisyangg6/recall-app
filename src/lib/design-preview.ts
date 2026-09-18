@@ -131,7 +131,22 @@ export type DesignPreviewScenarioId =
   | 'risk_moderate'
   | 'risk_low'
   | 'risk_pending'
-  | 'risk_unknown';
+  | 'risk_unknown'
+  // P2B7C official imagery. Still real recalls chosen for their own shape;
+  // nothing is simulated on any of them.
+  | 'images_one'
+  | 'images_two'
+  | 'images_five'
+  | 'images_six'
+  | 'images_many'
+  | 'images_largest'
+  | 'image_portrait'
+  | 'image_landscape'
+  | 'name_long_images'
+  | 'row_image_matched'
+  | 'labels_unrendered'
+  | 'text_accessibility_large'
+  | 'text_accessibility_xxxl';
 
 /**
  * What kind of real recall a scenario needs to be shown on.
@@ -208,7 +223,32 @@ export type PreviewCaseRequirement =
   /** A pair group where every code has its date: no blank line. */
   | 'pairs_complete'
   /** A pair group with an undated code: the blank keeps its line. */
-  | 'pairs_incomplete';
+  | 'pairs_incomplete'
+  // P2B7C — the header's official image set, confirmed against the real
+  // Detail model. Each size is its own requirement because the INDICATOR
+  // changes shape across them: none, dots, then the numeric counter.
+  /** Exactly one official product photo: the static tile, no indicator. */
+  | 'images_one'
+  /** Exactly two: the smallest paged set, dots. */
+  | 'images_two'
+  /** Exactly five: the largest set that still uses dots. */
+  | 'images_five'
+  /** Exactly six: the first set that uses the numeric counter. */
+  | 'images_six'
+  /** Fifteen or more: a long set on the counter. */
+  | 'images_many'
+  /** The largest set the live corpus holds, whatever that is today. */
+  | 'images_largest'
+  /** The header set contains an unusually TALL official photo. */
+  | 'image_portrait'
+  /** The header set contains an unusually WIDE official photo. */
+  | 'image_landscape'
+  /** A long product name beside a paged image set — the tightest header. */
+  | 'name_long_images'
+  /** An affected-product row the allocator matched an image to (Outshine). */
+  | 'row_image_matched'
+  /** A notice whose official label pages exist and are deliberately unrendered. */
+  | 'labels_unrendered';
 
 /** The guide each `guide_*` requirement is satisfied by — one per reviewed guide. */
 export const GUIDE_REQUIREMENTS: Record<HazardGuideKey, PreviewCaseRequirement> = {
@@ -240,6 +280,18 @@ export const RISK_REQUIREMENTS: Record<ConsumerRiskTier, PreviewCaseRequirement>
 export const NAME_SHORT_MAX = 24;
 export const NAME_LONG_MIN = 56;
 
+/**
+ * What counts as an extreme image shape, as width ÷ height of the source's
+ * own published dimensions.
+ *
+ * Measured over the recorded FDA corpus, whose official photography runs from
+ * 0.28 (a tall bag-label shot) to 5.85 (a wide date-code strip). These
+ * thresholds are for CHOOSING a screenshot example — nothing in the product
+ * lays out by aspect ratio, because every image renders `contain`.
+ */
+export const EXTREME_PORTRAIT_MAX_ASPECT = 0.5;
+export const EXTREME_LANDSCAPE_MIN_ASPECT = 2;
+
 /** Which requirements need a confirmed Detail model rather than a feed row. */
 export const PRESENTATION_REQUIREMENTS: readonly PreviewCaseRequirement[] = [
   'jurisdictions_few',
@@ -259,6 +311,18 @@ export const PRESENTATION_REQUIREMENTS: readonly PreviewCaseRequirement[] = [
   'health_risk_absent',
   'pairs_complete',
   'pairs_incomplete',
+  // P2B7C
+  'images_one',
+  'images_two',
+  'images_five',
+  'images_six',
+  'images_many',
+  'images_largest',
+  'image_portrait',
+  'image_landscape',
+  'name_long_images',
+  'row_image_matched',
+  'labels_unrendered',
 ];
 
 /**
@@ -296,6 +360,23 @@ export interface PreviewDetailFacts {
   hasCompletePairGroup: boolean;
   /** Whether any pair group carries an undated code (a blank partner line). */
   hasIncompletePairGroup: boolean;
+  /**
+   * How many official FDA product photos the header set holds — the model's
+   * own `productImages.images.length`. There is no cap, so this is also how
+   * many pages a shopper can reach.
+   */
+  productImageCount: number;
+  /** How many official FSIS label pages the allocation holds. They render
+   * nowhere (founder decision); the count exists so the harness can offer a
+   * notice that PROVES nothing renders. */
+  labelPageCount: number;
+  /** Whether the allocator matched an image to at least one exact
+   * affected-product row — the only imagery Affected Products may show. */
+  rowImageCount: number;
+  /** Whether the rendered header set contains an unusually tall photo. */
+  hasExtremePortraitImage: boolean;
+  /** Whether it contains an unusually wide one. */
+  hasExtremeLandscapeImage: boolean;
 }
 
 export type PreviewDestination = 'detail' | 'questionnaire';
@@ -343,7 +424,7 @@ export class PreviewSubmissionRefused extends Error {
 
 /** How the hub groups its scenario list. */
 export type PreviewScenarioGroup =
-  'community' | 'questionnaire' | 'disclosure' | 'header' | 'health' | 'risk';
+  'community' | 'questionnaire' | 'disclosure' | 'header' | 'health' | 'risk' | 'imagery';
 
 export interface PreviewScenario {
   id: DesignPreviewScenarioId;
@@ -831,6 +912,147 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
     destination: 'detail',
     simulation: null,
   },
+  // ── P2B7C: official imagery ───────────────────────────────────────────────
+  {
+    id: 'images_one',
+    group: 'imagery',
+    title: 'Detail · one official product photo',
+    expectation:
+      'The static header tile exactly as before: no dots, no disclosure, nothing to swipe.',
+    requirement: 'images_one',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'images_two',
+    group: 'imagery',
+    title: 'Detail · two official product photos',
+    expectation:
+      'The same tile, now swipeable: two position dots, the official order, and no page moves ' +
+      'on its own. Swiping sideways must not move the page sideways; a vertical drag over the ' +
+      'tile still scrolls Detail.',
+    requirement: 'images_two',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'images_five',
+    group: 'imagery',
+    title: 'Detail · five official product photos',
+    expectation: 'Five dots — the largest set that still uses them. No numeric counter.',
+    requirement: 'images_five',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'images_six',
+    group: 'imagery',
+    title: 'Detail · six official product photos',
+    expectation:
+      'The dots are replaced by the compact counter: 1 / 6, updating as you page. Never both.',
+    requirement: 'images_six',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'images_many',
+    group: 'imagery',
+    title: 'Detail · fifteen or more official product photos',
+    expectation:
+      'The counter reads 1 / N over the WHOLE set — every page is reachable, and paging to the ' +
+      'last one proves it. No truncation sentence anywhere.',
+    requirement: 'images_many',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'images_largest',
+    group: 'imagery',
+    title: 'Detail · the largest official set in the live corpus',
+    expectation:
+      'The outlier (fifty-one photos in the recorded corpus). It must open as fast as any other ' +
+      'recall: the pager is virtualized, so only the visible page is mounted and fetched.',
+    requirement: 'images_largest',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'image_portrait',
+    group: 'imagery',
+    title: 'Detail · an unusually tall official photo',
+    expectation:
+      'The whole photo fits inside the tile, letterboxed on the placeholder colour. Nothing is ' +
+      'cropped and nothing is stretched.',
+    requirement: 'image_portrait',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'image_landscape',
+    group: 'imagery',
+    title: 'Detail · an unusually wide official photo',
+    expectation: 'The same, on the other axis: contained, never cropped to fill the square.',
+    requirement: 'image_landscape',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'name_long_images',
+    group: 'imagery',
+    title: 'Detail · a long product name beside a paged set',
+    expectation:
+      'The name wraps beside the tile and is never truncated. At an accessibility text size the ' +
+      'header stacks — name at full width, the paged tile beneath it — and stays stacked.',
+    requirement: 'name_long_images',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'row_image_matched',
+    group: 'imagery',
+    title: 'Detail · an image matched to an exact affected-product row',
+    expectation:
+      'Inside Affected Products: a thumbnail beside the Product value of the row the allocator ' +
+      'proved it depicts (the Outshine shape). This is the ONLY imagery that section may show.',
+    requirement: 'row_image_matched',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'labels_unrendered',
+    group: 'imagery',
+    title: 'Detail · a notice whose official label pages are not rendered',
+    expectation:
+      'An FSIS notice that published rendered label pages. NOTHING renders them: no gallery ' +
+      'above the table, no standalone section, and nothing in the header. The pages stay in the ' +
+      'allocation for the evidence pipeline (founder decision).',
+    requirement: 'labels_unrendered',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'text_accessibility_large',
+    group: 'imagery',
+    title: 'Detail · paged imagery at accessibility-large text',
+    expectation:
+      'Set the simulator to an accessibility text size (Settings › Accessibility › Display & ' +
+      'Text Size › Larger Text) before opening. The dots, the disclosure and the label heading ' +
+      'all grow with the text, the tile keeps its footprint, and no page is left half-shown.',
+    requirement: 'images_two',
+    destination: 'detail',
+    simulation: null,
+  },
+  {
+    id: 'text_accessibility_xxxl',
+    group: 'imagery',
+    title: 'Detail · paged imagery at accessibility-XXXL text',
+    expectation:
+      'The largest accessibility size. The header stacks, the product name still wraps without ' +
+      'splitting a word, and the set stays on whole pages through the re-layout.',
+    requirement: 'images_two',
+    destination: 'detail',
+    simulation: null,
+  },
 ];
 
 export function previewScenario(id: string): PreviewScenario | null {
@@ -1129,6 +1351,30 @@ export function meetsRequirement(
         return facts.hasCompletePairGroup;
       case 'pairs_incomplete':
         return facts.hasIncompletePairGroup;
+      // P2B7C — the exact set sizes, so each rendering shape gets its own
+      // real recall rather than one case standing in for several.
+      case 'images_one':
+        return facts.productImageCount === 1;
+      case 'images_two':
+        return facts.productImageCount === 2;
+      case 'images_five':
+        return facts.productImageCount === 5;
+      case 'images_six':
+        return facts.productImageCount === 6;
+      case 'images_many':
+        return facts.productImageCount >= 15;
+      case 'images_largest':
+        return facts.productImageCount >= 20;
+      case 'image_portrait':
+        return facts.hasExtremePortraitImage;
+      case 'image_landscape':
+        return facts.hasExtremeLandscapeImage;
+      case 'name_long_images':
+        return facts.productNameLength >= NAME_LONG_MIN && facts.productImageCount > 1;
+      case 'row_image_matched':
+        return facts.rowImageCount > 0;
+      case 'labels_unrendered':
+        return facts.labelPageCount > 0;
       default:
         // The seven guide requirements: the real pipeline's guide, by key.
         return (

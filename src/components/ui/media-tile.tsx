@@ -15,7 +15,15 @@
  *
  * To assistive technology the tile is an image, labelled with the caller's
  * text, only while a real image is showing; the bare placeholder is hidden
- * so nothing announces an image that is not there.
+ * so nothing announces an image that is not there. A caller rendering the
+ * tile as one page of a set (P2B7C) may also pass that page's position, which
+ * is spoken after the label as the image's value — the label still describes
+ * the product, and the position says where in the set it sits.
+ *
+ * A failed load is reported to that caller too (`onLoadFailed`), because a
+ * pager has to know: a page whose image cannot render must leave the set
+ * rather than stay counted as a blank one. The card and the affected-product
+ * rows pass no callback and keep the placeholder, which is their contract.
  */
 
 import { useState } from 'react';
@@ -31,12 +39,26 @@ export function MediaTile({
   uri,
   alt,
   size,
+  positionLabel = null,
+  onLoadFailed,
 }: {
   uri: string | null;
   /** The spoken description of the image — the model's product name. */
   alt: string;
   /** The square footprint — `card-media-size`, `detail-media-size` or `row-media-size`. */
   size: MediaSize;
+  /**
+   * The presentation contract's `Image X of N` for this page, when the tile
+   * is one page of a paged set. Spoken as the image's value; null for a tile
+   * that stands alone, which has no position to announce.
+   */
+  positionLabel?: string | null;
+  /**
+   * Called once with this tile's `uri` when the image reports a load failure,
+   * for a caller that must stop counting it. Omitted by callers for whom the
+   * placeholder IS the answer.
+   */
+  onLoadFailed?: (uri: string) => void;
 }) {
   const [failed, setFailed] = useState(false);
   const image = uri !== null && !failed ? uri : null;
@@ -49,6 +71,9 @@ export function MediaTile({
       accessible={image !== null}
       accessibilityRole={image !== null ? 'image' : undefined}
       accessibilityLabel={image !== null ? alt : undefined}
+      accessibilityValue={
+        image !== null && positionLabel !== null ? { text: positionLabel } : undefined
+      }
       importantForAccessibility={image !== null ? 'auto' : 'no-hide-descendants'}>
       {image !== null ? (
         <Image
@@ -56,7 +81,10 @@ export function MediaTile({
           style={styles.image}
           resizeMode="contain"
           accessible={false}
-          onError={() => setFailed(true)}
+          onError={() => {
+            setFailed(true);
+            if (uri !== null) onLoadFailed?.(uri);
+          }}
         />
       ) : null}
     </Surface>

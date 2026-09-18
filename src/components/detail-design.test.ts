@@ -15,7 +15,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -34,6 +34,9 @@ import {
 import {
   AFFECTED_PRODUCTS_INITIAL_ROWS,
   disclosureControl,
+  imageCounterText,
+  imagePositionLabel,
+  IMAGE_DOTS_MAX,
   WHERE_SOLD_INITIAL_STATES,
 } from '@/lib/recall-presentation';
 
@@ -47,6 +50,7 @@ const COMMUNITY = read('components', 'community-reports-section.tsx');
 const STATE_MESSAGE = read('components', 'state-message.tsx');
 const CALLOUT = read('components', 'ui', 'callout.tsx');
 const MEDIA_TILE = read('components', 'ui', 'media-tile.tsx');
+const IMAGE_SET = read('components', 'ui', 'official-image-set.tsx');
 const NOTICE_LABEL = read('components', 'ui', 'notice-label.tsx');
 const ICON = read('components', 'ui', 'icon.tsx');
 const DETAIL_COPY = read('lib', 'detail-copy.ts');
@@ -65,6 +69,21 @@ function codeOnly(source: string): string {
       return !trimmed.startsWith('//') && !trimmed.startsWith('*');
     })
     .join('\n');
+}
+
+/** Every client source file, so a rule can be proven over the whole app. */
+function clientSourceFiles(): { path: string; source: string }[] {
+  const out: { path: string; source: string }[] = [];
+  for (const dir of ['app', 'components', 'lib', 'hooks', 'constants', 'content', 'domain']) {
+    for (const entry of readdirSync(join(SRC, dir), { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile() || !/\.tsx?$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name)) {
+        continue;
+      }
+      const path = join(entry.parentPath, entry.name);
+      out.push({ path: path.slice(SRC.length + 1), source: readFileSync(path, 'utf8') });
+    }
+  }
+  return out;
 }
 
 const HEX_LITERAL = /#[0-9a-fA-F]{3,8}\b/;
@@ -145,6 +164,17 @@ test('Detail draws every word from the type scale and every colour from the toke
   ]) {
     assert.ok(!DETAIL.includes(legacy), `Detail still uses ${legacy}`);
   }
+  // The pre-design-system photo gallery (`PhotoGallery`, `PhotoThumbnail`,
+  // `ComparePhotos`) was unmounted from every screen by P2B1/P2B2 and is
+  // superseded by the shared `MediaTile` and, from P2B7C, the tokenized
+  // `OfficialImageSet`. P2B7C deleted the module rather than reviving it:
+  // its legacy-theme colours and its own aspect-ratio tile sizing are both
+  // contrary to the shipped contract.
+  assert.ok(
+    !existsSync(join(SRC, 'components', 'photo-gallery.tsx')),
+    'the retired photo gallery returned',
+  );
+  assert.ok(existsSync(join(SRC, 'components', 'ui', 'official-image-set.tsx')));
   // Every Text names its variant; nothing sets a size, weight, face or hex
   // colour of its own, and every spacing and radius comes from the scale.
   const texts = code.match(/<Text\b[^>]*>/g) ?? [];
@@ -181,7 +211,14 @@ test('Detail geometry comes from the layout tokens, fixes no height, and truncat
   assert.equal(layout.detailMediaSize, 152);
   assert.equal(layout.rowMediaSize, 40);
   assert.equal(layout.tableColumnWidth, 144);
-  assert.ok(DETAIL.includes('size={layout.detailMediaSize}'));
+  // AMENDED FOR P2B7C: the header's media footprint is still
+  // `detail-media-size`, but the screen no longer names it — the shared
+  // imagery component owns the header tile and the label-evidence page, and
+  // takes both sizes from the same tokens.
+  assert.ok(IMAGE_SET.includes('size={layout.detailMediaSize}'));
+  assert.ok(IMAGE_SET.includes('width: layout.detailMediaSize'));
+  assert.ok(IMAGE_SET.includes('height: layout.detailMediaSize'));
+  assert.equal(layout.pageDotSize, 8);
   assert.ok(DETAIL.includes('size={layout.rowMediaSize}'));
   assert.ok(DETAIL.includes('width: layout.tableColumnWidth'));
   assert.ok(DETAIL.includes('maxWidth: layout.maxContentWidth'));
@@ -374,10 +411,22 @@ test('the callout, media tile and notice label are token-only primitives with th
     ),
   );
   assert.ok(MEDIA_TILE.includes('resizeMode="contain"'));
-  // Detail renders the hero tile only with an image — never a placeholder
-  // square beside the title, never a broken image.
-  assert.equal(DETAIL.split('model.heroImageUrl').length - 1, 2);
-  assert.match(DETAIL, /\{model\.heroImageUrl \? \(\s*<MediaTile/);
+  // AMENDED FOR P2B7C. Detail used to render the hero tile directly, gated
+  // on `model.heroImageUrl`. The founder decision moved the header's imagery
+  // behind the model's bounded image SET, rendered by the one shared
+  // component — so the same promise is pinned in its new shape: the header
+  // renders imagery only when the model produced a set, and never a
+  // placeholder square beside the title.
+  assert.equal(DETAIL.split('model.productImages').length - 1, 2);
+  assert.match(
+    DETAIL,
+    /\{model\.productImages \? <OfficialImageSet set=\{model\.productImages\} \/> : null\}/,
+  );
+  assert.ok(!DETAIL.includes('model.heroImageUrl'));
+  // One usable image is still exactly the tile Detail always showed, and
+  // every page of a set is that same tile.
+  assert.match(IMAGE_SET, /<MediaTile\s+uri=\{usable\[0\]\.url\}/);
+  assert.match(IMAGE_SET, /<MediaTile\s+uri=\{item\.url\}/);
   // The notice label: label type on the neutral surface, spoken as the contract's words.
   assert.ok(NOTICE_LABEL.includes('accessibilityLabel={label}'));
   assert.ok(NOTICE_LABEL.includes('<Text variant="label">{label.toUpperCase()}</Text>'));
@@ -391,6 +440,211 @@ test('the callout, media tile and notice label are token-only primitives with th
       '<StateMessage title={DETAIL_ERROR_TITLE} body={state.message} tone="error" />',
     ),
   );
+});
+
+// ── 7b. The official image set (P2B7C, as corrected) ────────────────────────
+
+const IMAGE_SET_CODE = codeOnly(IMAGE_SET);
+
+test('the image set is one tokenized component, and the only carousel in the app', () => {
+  assert.ok(IMAGE_SET.includes('export function OfficialImageSet('));
+  // ONE pager exists in the whole client. A second one would be the thing
+  // this milestone exists to avoid — and, since the P2B7C correction, the
+  // label gallery that used to be the second one is gone entirely.
+  const pagers = clientSourceFiles().filter(({ source }) => /pagingEnabled/.test(source));
+  assert.deepEqual(
+    pagers.map(({ path }) => path),
+    ['components/ui/official-image-set.tsx'],
+  );
+  // It is a shared primitive: tokens in, no legacy theme, no hex, no
+  // off-scale spacing, and no recall content of its own.
+  assert.ok(IMAGE_SET.includes("from '@/constants/design-tokens'"));
+  assert.ok(!IMAGE_SET.includes("from '@/constants/theme'"));
+  assert.ok(!HEX_LITERAL.test(IMAGE_SET_CODE));
+  assert.ok(!OFF_SCALE_NUMBER.test(IMAGE_SET_CODE));
+  assert.ok(!IMAGE_SET.includes('ThemedText'));
+  // No new dependency, and no network or data access: React, React Native,
+  // the shared primitives, the tokens and the contract — nothing else.
+  const imports = [...IMAGE_SET.matchAll(/from '([^']+)'/g)].map((match) => match[1]).sort();
+  assert.deepEqual(imports, [
+    '@/components/ui/media-tile',
+    '@/components/ui/text',
+    '@/constants/design-tokens',
+    '@/lib/recall-presentation',
+    'react',
+    'react-native',
+  ]);
+  // The set has ONE presentation now: the header. The evidence presentation
+  // existed only for the retired label gallery.
+  for (const retired of ['presentation=', 'evidence', 'fullWidth', 'evidenceMediaHeight']) {
+    assert.ok(
+      !IMAGE_SET_CODE.includes(retired),
+      `the retired label presentation survives: ${retired}`,
+    );
+  }
+});
+
+test('the whole official set is navigable — no presentation cap survives', () => {
+  // AMENDED BY THE P2B7C CORRECTION. The component used to render at most six
+  // pages and disclose the rest in prose; both are retired, because a count
+  // the shopper cannot reach is misleading. Every image is a page now, and
+  // the pager virtualizes so the corpus outlier does not mount or fetch them
+  // all at once.
+  assert.ok(IMAGE_SET.includes('data={usable}'));
+  assert.ok(IMAGE_SET.includes('initialNumToRender={1}'));
+  assert.ok(IMAGE_SET.includes('maxToRenderPerBatch={2}'));
+  assert.ok(IMAGE_SET.includes('windowSize={3}'));
+  assert.ok(IMAGE_SET.includes('removeClippedSubviews'));
+  assert.ok(IMAGE_SET.includes('getItemLayout='));
+  assert.ok(IMAGE_SET.includes('<FlatList'));
+  for (const retired of [
+    'DETAIL_IMAGE_SET_MAX',
+    'truncationNote',
+    'officialCount',
+    'Showing ',
+    '.slice(0, 6)',
+  ]) {
+    assert.ok(!IMAGE_SET_CODE.includes(retired), `the retired cap survives: ${retired}`);
+  }
+  assert.ok(!PRESENTATION.includes('DETAIL_IMAGE_SET_MAX'), 'the contract still caps the set');
+  assert.ok(!PRESENTATION.includes('truncationNote'), 'the contract still composes the prose');
+});
+
+test('a page that cannot load leaves the set, and the indicator follows it', () => {
+  // The reported acceptance failure: two dots over two blank grey squares.
+  // A failed page is no longer a page — it leaves `usable`, so the dots, the
+  // counter and the spoken position all describe what actually renders.
+  assert.ok(
+    IMAGE_SET.includes('const usable = set.images.filter((image) => !failed.has(image.url))'),
+  );
+  assert.ok(IMAGE_SET.includes('onLoadFailed={onFailed}'));
+  assert.ok(MEDIA_TILE.includes('onLoadFailed?: (uri: string) => void;'));
+  assert.ok(MEDIA_TILE.includes('if (uri !== null) onLoadFailed?.(uri);'));
+  // Every candidate failed: the header returns to its approved no-image
+  // shape rather than keeping a blank tile with indicators over it.
+  assert.ok(IMAGE_SET.includes('if (usable.length === 0) return null;'));
+  // One usable image is the static tile, with no indicator at all.
+  assert.ok(IMAGE_SET.includes('if (usable.length === 1) {'));
+  // The visible page is tracked by IMAGE IDENTITY, so a late failure on an
+  // offscreen page cannot move the page the shopper is looking at.
+  assert.ok(IMAGE_SET.includes('usable.findIndex((image) => image.url === visible.url)'));
+  assert.ok(IMAGE_SET.includes('Math.min(visible.at, usable.length - 1)'));
+  assert.ok(IMAGE_SET.includes('setVisible({ url: image.url, at })'));
+});
+
+test('dots up to five, the numeric counter beyond — and never both', () => {
+  assert.equal(IMAGE_DOTS_MAX, 5);
+  assert.ok(IMAGE_SET.includes('usable.length <= IMAGE_DOTS_MAX ? ('));
+  assert.ok(IMAGE_SET.includes('{imageCounterText(current, usable.length)}'));
+  assert.ok(IMAGE_SET.includes('styles.dot'));
+  // The counter is the contract's compact form, with no explanatory word.
+  assert.equal(imageCounterText(1, 15), '2 / 15');
+  assert.equal(imagePositionLabel(1, 15), 'Image 2 of 15');
+  // The component composes no copy of its own — the rejected prose cannot
+  // return through it.
+  for (const composed of ['Showing', 'official images', 'label pages', 'of 6']) {
+    assert.ok(!IMAGE_SET_CODE.includes(composed), `the component composes copy: ${composed}`);
+  }
+});
+
+test('paging is a hand gesture: no auto-advance, no arrows, no animation, no press target', () => {
+  assert.ok(IMAGE_SET.includes('pagingEnabled'));
+  // Nothing advances a page on its own, and nothing animates.
+  for (const automatic of [
+    'setInterval',
+    'setTimeout',
+    'requestAnimationFrame',
+    'Animated',
+    'autoPlay',
+    'autoplay',
+    'LayoutAnimation',
+    'reduceMotion',
+  ]) {
+    assert.ok(
+      !IMAGE_SET_CODE.includes(automatic),
+      `the set advances or animates itself: ${automatic}`,
+    );
+  }
+  // The one programmatic scroll keeps the set from resting between pages
+  // when it shrinks, and it is explicitly not animated.
+  assert.equal((IMAGE_SET_CODE.match(/scrollToOffset\(/g) ?? []).length, 1);
+  assert.ok(IMAGE_SET.includes('animated: false'));
+  assert.ok(!IMAGE_SET.includes('animated: true'));
+  // No next/previous controls, and the images are not pressable — this
+  // milestone has no full-screen destination to send anyone to.
+  for (const control of [
+    'Pressable',
+    'TouchableOpacity',
+    'onPress',
+    'Next',
+    'Previous',
+    'chevron',
+    'arrow',
+  ]) {
+    assert.ok(!IMAGE_SET_CODE.includes(control), `an image control appeared: ${control}`);
+  }
+  // Only this row scrolls sideways, and it never scrolls vertically: the
+  // page's own ScrollView keeps vertical scrolling.
+  // One pager element; the `useRef<FlatList<…>>` generic is not one.
+  assert.equal((IMAGE_SET_CODE.match(/<FlatList\n/g) ?? []).length, 1);
+  assert.ok(IMAGE_SET.includes('horizontal'));
+  assert.ok(!IMAGE_SET_CODE.includes('nestedScrollEnabled'));
+  assert.ok(!IMAGE_SET_CODE.includes('scrollEnabled={false}'));
+});
+
+test('an image is contained, never cropped, and one failure never collapses the set', () => {
+  // Every page is the shared media tile, which contains rather than crops,
+  // and no aspect ratio is used to size or trim a page.
+  assert.ok(MEDIA_TILE.includes('resizeMode="contain"'));
+  assert.ok(!IMAGE_SET_CODE.includes('cover'));
+  assert.ok(!IMAGE_SET_CODE.includes('aspectRatio'));
+  assert.equal((IMAGE_SET.match(/<MediaTile/g) ?? []).length, 2); // static + paged
+  // There is no loading state at all, so none can be left stuck.
+  for (const busy of ['loading', 'Loading', 'ActivityIndicator', 'onLoadStart', 'spinner']) {
+    assert.ok(!IMAGE_SET_CODE.includes(busy), `a stuck-able activity state appeared: ${busy}`);
+  }
+});
+
+test('position is spoken, dots and counter are decoration', () => {
+  // Each image keeps its factual label and announces its own position.
+  assert.ok(IMAGE_SET.includes('positionLabel={imagePositionLabel(index, usable.length)}'));
+  assert.ok(MEDIA_TILE.includes('accessibilityValue={'));
+  assert.ok(MEDIA_TILE.includes('{ text: positionLabel }'));
+  // The indicator — dots or counter — is hidden from assistive technology on
+  // both platforms, so the slash is never read aloud and nothing there is
+  // focusable or pressable.
+  assert.ok(IMAGE_SET.includes('accessibilityElementsHidden'));
+  assert.ok(IMAGE_SET.includes('importantForAccessibility="no-hide-descendants"'));
+  // Nothing here caps Dynamic Type or truncates a line.
+  assert.ok(!IMAGE_SET.includes('maxFontSizeMultiplier'));
+  assert.ok(!IMAGE_SET.includes('numberOfLines'));
+  assert.ok(!IMAGE_SET.includes('ellipsizeMode'));
+});
+
+test('no label gallery exists anywhere on the screen or in the contract', () => {
+  // AMENDED BY THE P2B7C CORRECTION (founder decision). A general gallery of
+  // a notice's FSIS label renders — above the Affected Products table, and
+  // as a standalone section for a notice without one — was built in P2B7C
+  // and is removed: imagery under Affected Products is ONLY ever an image
+  // matched to that exact product row. The pages stay stored and allocated.
+  for (const retired of [
+    'Official product labels',
+    'OFFICIAL_LABELS_TITLE',
+    'officialLabels',
+    'labelPages',
+    'labelEvidence',
+    'presentation="evidence"',
+  ]) {
+    assert.ok(!DETAIL.includes(retired), `the retired label gallery survives: ${retired}`);
+    assert.ok(!PRESENTATION.includes(retired), `the contract still models it: ${retired}`);
+  }
+  // The one image Affected Products may still show is the matched row
+  // thumbnail, drawn by the row itself.
+  assert.match(DETAIL, /\{row\.image \? \(/);
+  assert.ok(DETAIL.includes('uri={row.image.url}'));
+  assert.ok(DETAIL.includes('size={layout.rowMediaSize}'));
+  // And the header renders exactly one image surface.
+  assert.equal((DETAIL.match(/<OfficialImageSet\b/g) ?? []).length, 1);
 });
 
 // ── 8. The development preview ──────────────────────────────────────────────
@@ -426,6 +680,20 @@ test('the preview offers every required Detail scenario, on real recalls, simula
     'pairs_many',
     'pairs_complete',
     'pairs_incomplete',
+    // official imagery (P2B7C, as corrected)
+    'images_one',
+    'images_two',
+    'images_five',
+    'images_six',
+    'images_many',
+    'images_largest',
+    'image_portrait',
+    'image_landscape',
+    'name_long_images',
+    'row_image_matched',
+    'labels_unrendered',
+    'text_accessibility_large',
+    'text_accessibility_xxxl',
     // risk
     ...Object.values(RISK_REQUIREMENTS),
   ]) {
@@ -444,6 +712,28 @@ test('the preview offers every required Detail scenario, on real recalls, simula
   assert.ok(PREVIEW.includes('riskTier: riskView(item.classification, item.sourceAgency).tier'));
   assert.ok(PREVIEW.includes('DETAIL STATES AND CALLOUTS'));
   assert.ok(PREVIEW.includes('<StateMessage {...DETAIL_LOADING} />'));
+  // P2B7C (as corrected): the imagery gallery renders the PRODUCTION set
+  // over real models, including the one state the live corpus cannot supply
+  // on demand — a candidate whose image cannot load — and the complete icon
+  // set is inspectable in one place.
+  assert.ok(PREVIEW.includes('OFFICIAL IMAGERY AND FAILURE'));
+  assert.ok(PREVIEW.includes('<ImagerySampleGallery confirmed={confirmed} />'));
+  assert.ok(PREVIEW.includes('imageSet: model.productImages'));
+  assert.ok(PREVIEW.includes('<OfficialImageSet set={sample.set} />'));
+  assert.ok(PREVIEW.includes('UNREACHABLE_IMAGE'));
+  assert.ok(PREVIEW.includes('SIMULATED: three candidates, one of them unreachable.'));
+  assert.ok(PREVIEW.includes('ICON SET ('));
+  assert.ok(PREVIEW.includes('{ICON_NAMES.map((name) => ('));
+  // The retired label-gallery scenarios are gone from the harness too.
+  for (const retired of [
+    'labels_one',
+    'labels_several',
+    'labels_many',
+    'Official product labels',
+  ]) {
+    assert.ok(!PREVIEW_LIB.includes(retired), `a retired label scenario survives: ${retired}`);
+    assert.ok(!PREVIEW.includes(retired), `a retired label scenario survives: ${retired}`);
+  }
   // Still dev-only, still pushing the real screen.
   assert.ok(PREVIEW.includes('if (!isDevelopmentBuild())'));
   assert.ok(read('app', '(tabs)', 'profile.tsx').includes('{__DEV__ ? ('));

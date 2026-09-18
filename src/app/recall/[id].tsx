@@ -55,6 +55,7 @@ import { DisclosureControl } from '@/components/ui/disclosure-control';
 import { Icon } from '@/components/ui/icon';
 import { MediaTile } from '@/components/ui/media-tile';
 import { NoticeLabel } from '@/components/ui/notice-label';
+import { OfficialImageSet } from '@/components/ui/official-image-set';
 import { RiskLabel } from '@/components/ui/risk-label';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
@@ -474,17 +475,16 @@ export default function RecallDetailScreen() {
                 <ExternalLinkLabel label={model.officialSource.label} />
               </Pressable>
             </View>
-            {/* The hero renders ONCE, beside the title, from the shared
-                image-role allocation (P2c): the same underlying asset can
-                never also appear as a row image or gallery entry. Null
-                renders nothing, and the identity takes the full width. */}
-            {model.heroImageUrl ? (
-              <MediaTile
-                uri={model.heroImageUrl}
-                alt={model.productName}
-                size={layout.detailMediaSize}
-              />
-            ) : null}
+            {/* The official FDA product photography renders ONCE, beside the
+                title, from the shared image-role allocation (P2c) through the
+                presentation contract (P2B7C): the allocator's hero — the same
+                image the Feed card showed — first, then its gallery order,
+                complete, and never a label render. Null renders nothing and
+                the identity takes the full width; one usable image is the
+                static tile Detail has always shown; several page by hand
+                inside that same tile. The screen picks no image, orders none,
+                and counts none. */}
+            {model.productImages ? <OfficialImageSet set={model.productImages} /> : null}
           </View>
         </View>
 

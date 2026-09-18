@@ -456,7 +456,10 @@ via manual input, not location permissions. See
 
 Accounts/auth, onboarding flow, quiet hours and other notification
 preferences, ingest-time retailer enrichment of stored projections, pet-food
-scope, Spanish records, CPSC/NHTSA, analytics, final visual design.
+scope, Spanish records, CPSC/NHTSA, analytics, final visual design. Native
+sharing is deferred on purpose — its founder contract (an HTTPS Lotly
+Universal Link, blocked on the final domain) is in
+[docs/recall-launch-blockers.md](docs/recall-launch-blockers.md) §6.
 
 ## Consumer presentation milestones (P3 series) — implemented and shipped
 
@@ -889,6 +892,35 @@ personalization`, `Open Lotly on your phone`); prose says `Affects me`,
   display name is no longer among them: P3C1 renamed the installed app to
   Lotly (see
   [docs/recall-release-readiness.md](docs/recall-release-readiness.md)).
+
+- **P2B7C — official Recall Detail imagery** (implemented and corrected,
+  uncommitted): Detail now renders the official FDA product photography the
+  P2c allocation had been computing since 2026-09-02 but nothing displayed.
+  The header tile holds the whole set — the stored hero first (the same image
+  the Feed card shows), then the allocator's gallery order, **complete and
+  uncapped**, virtualized so the 51-photo corpus outlier mounts one page at a
+  time. One photo is the static tile exactly as before; two to five add
+  position dots; six or more replace the dots with the compact `2 / 15`
+  counter, and no prose accompanies either. A candidate whose image cannot
+  load **leaves the set**, so the indicator always describes pages that
+  actually rendered and a blank tile can never sit under one; if every
+  candidate fails the header returns to its no-image shape. Everything renders
+  `contain`, nothing advances on its own, there are no arrow controls, and
+  the images are not pressable. One tokenized primitive
+  (`src/components/ui/official-image-set.tsx`) renders it; the retired
+  pre-design-system `PhotoGallery` was deleted. **FSIS label renders are
+  rendered nowhere** — the label galleries this milestone first built were
+  removed by founder decision, and the only imagery under Affected Products
+  is a thumbnail matched to that exact product row. Feed imagery is unchanged
+  and stays single-image. No schema, ingestion, API, allocation, or
+  production-data change; the Design Preview gained twelve real-recall
+  imagery scenarios, an imagery-and-failure gallery and a complete icon
+  gallery. Native sharing stays **deferred** and its founder contract — an
+  HTTPS Lotly Universal Link, never `lotly://`, blocked on the final domain —
+  is recorded in
+  [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md) §6
+  ([docs/recall-imagery.md](docs/recall-imagery.md) §14,
+  [DESIGN.md](DESIGN.md) "Recall Detail").
 
 ## Operational verification (O2)
 

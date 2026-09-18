@@ -268,6 +268,9 @@ test('the reference layout is recorded, and 16 is the one value that carries ove
   assert.equal(approved['max-content-width'], `${layout.maxContentWidth}px`);
   assert.equal(approved['detail-media-size'], `${layout.detailMediaSize}px`);
   assert.equal(approved['row-media-size'], `${layout.rowMediaSize}px`);
+  // P2B7C: the position dot under a paged image set.
+  assert.equal(approved['page-dot-size'], `${layout.pageDotSize}px`);
+  assert.equal(layout.pageDotSize, spacing[8]);
   assert.equal(approved['table-column-width'], `${layout.tableColumnWidth}px`);
   assert.equal(layout.contentWidth, layout.referenceWidth - 2 * layout.pageMargin);
   assert.equal(layout.pageMargin, spacing[16]);

@@ -1429,3 +1429,119 @@ test('P3C-2 shape D: a case-level set repeats into the named row that owns it', 
   assert.equal(view.rows[0].name, 'Bison Burgers & Bison Ground');
   assert.equal(cellAt(view, 0, 'productionDates').text, 'April 30, 2019');
 });
+
+// ── P2B7C: the header's official image set ──────────────────────────────────
+
+/**
+ * The image-set shapes, proven on recorded official announcements rather
+ * than constructed ones: a notice with no photo, one, two, exactly six,
+ * seven, and the corpus's largest set at fifty-one.
+ *
+ * AMENDED BY THE P2B7C CORRECTION: these used to pin a six-image cap and the
+ * truncation sentence it disclosed. Both are retired — every official photo
+ * is navigable now — so each shape pins the COMPLETE set instead, still in
+ * the allocator's order (hero first, then its gallery).
+ */
+const IMAGE_SET_SHAPES: { fragment: string; images: number }[] = [
+  { fragment: 'recall-certain-comforts', images: 0 },
+  { fragment: 'fischer-wieser', images: 1 },
+  { fragment: 'great-one-trading', images: 2 },
+  { fragment: 'town-food-service', images: 6 },
+  { fragment: 'gina-marie-bakery', images: 7 },
+  { fragment: 'lyons-magnus-expands', images: 51 },
+];
+
+test('recorded notices produce every image-set shape: 0, 1, 2, 6, 7 and 51 official photos', () => {
+  for (const shape of IMAGE_SET_SHAPES) {
+    const model = detailModelFor(corpusProjection(shape.fragment));
+    const set = model.productImages;
+    if (shape.images === 0) {
+      // No photo is honestly no set: the header renders nothing at all.
+      assert.equal(set, null, shape.fragment);
+      assert.equal(model.heroImageUrl, null, shape.fragment);
+      continue;
+    }
+    assert.ok(set, shape.fragment);
+    // Complete: nothing is dropped, so any count a screen shows is reachable.
+    assert.equal(set.images.length, shape.images, shape.fragment);
+    // The stored hero leads — the same image the Feed card showed — and the
+    // rest follow the allocator's gallery order exactly.
+    assert.equal(set.images[0].url, model.heroImageUrl, shape.fragment);
+    assert.deepEqual(
+      set.images.map((image) => image.url),
+      [model.heroImageUrl, ...model.images.gallery.map((image) => image.url)],
+      shape.fragment,
+    );
+    // Every image speaks the model's own product name, never a caption.
+    for (const image of set.images) {
+      assert.equal(image.accessibilityLabel, model.productName, shape.fragment);
+    }
+  }
+});
+
+test('every recorded notice: the header set is complete, unique, official, and photography only', () => {
+  let withSets = 0;
+  let paged = 0;
+  let beyondDots = 0;
+  for (const entry of corpus) {
+    const projection = projectCase([
+      parseFdaAnnouncement({
+        listing: entry.listing,
+        detailMainHtml: entry.mainHtml,
+        path: entry.path,
+      }),
+    ]);
+    const label = slugFromPath(entry.path);
+    const model = detailModelFor(projection);
+    const set = model.productImages;
+    // A notice with no usable official photo produces no set at all — the
+    // approved no-image header, never a placeholder.
+    if (set === null) {
+      assert.equal(model.heroImageUrl, null, `${label}: a hero with no set`);
+      assert.equal(model.images.gallery.length, 0, `${label}: a gallery with no set`);
+      continue;
+    }
+    withSets += 1;
+    if (set.images.length > 1) paged += 1;
+    if (set.images.length > 5) beyondDots += 1;
+    assert.ok(set.images.length >= 1, `${label}: an empty set`);
+    // The set is the WHOLE allocation for this surface: no cap, so the
+    // indicator can never name a page a shopper cannot reach.
+    assert.equal(
+      set.images.length,
+      (model.heroImageUrl === null ? 0 : 1) + model.images.gallery.length,
+      `${label}: the set disagrees with the allocation`,
+    );
+    // No duplicate URL inside the set, and none of them is a row image: the
+    // allocation's role exclusivity survives.
+    const urls = set.images.map((image) => image.url);
+    assert.equal(new Set(urls).size, urls.length, `${label}: a repeated image`);
+    const rowUrls = [...model.images.rowImages.values()].map((entry) => entry.image.url);
+    for (const [index, url] of urls.entries()) {
+      // Role exclusivity, with P2c's ONE sanctioned exception intact: in a
+      // multi-version table the HERO may also be the thumbnail of the row it
+      // provably depicts (case hero and exact-version thumbnail are two
+      // different contexts — docs/recall-imagery.md §13). Every image after
+      // the hero is a gallery image, and a gallery image never backs a row.
+      if (index > 0) {
+        assert.ok(!rowUrls.includes(url), `${label}: a gallery image also backs a row`);
+      }
+      assert.ok(url.startsWith('https://'), `${label}: a non-https official image`);
+    }
+    // No screen surface anywhere carries a label gallery: the section type
+    // holds the table and nothing else, and there is no standalone section.
+    if (model.sections.affectedProducts !== null) {
+      assert.deepEqual(
+        Object.keys(model.sections.affectedProducts),
+        ['table'],
+        `${label}: the Affected Products section grew an image gallery`,
+      );
+    }
+    assert.ok(!('officialLabels' in model.sections), `${label}: a standalone label section`);
+  }
+  // The corpus genuinely exercises the three indicator shapes, so this audit
+  // is not vacuously passing on a corpus of single-photo notices.
+  assert.ok(withSets >= 100, `only ${withSets} notices produced an image set`);
+  assert.ok(paged >= 50, `only ${paged} notices produced a paged set`);
+  assert.ok(beyondDots >= 5, `only ${beyondDots} notices exceed the dot threshold`);
+});

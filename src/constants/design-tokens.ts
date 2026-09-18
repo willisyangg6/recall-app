@@ -224,6 +224,13 @@ export const layout = {
    */
   rowMediaSize: 40,
   /**
+   * The diameter of one position dot under a paged image set (P2B7C). Dots
+   * are decorative and never interactive, so this is a mark size, not a
+   * touch target — and they render only up to `IMAGE_DOTS_MAX` images, after
+   * which a compact numeric counter replaces them.
+   */
+  pageDotSize: 8,
+  /**
    * One fixed column width for the Affected Products table, so the header
    * row and every version row stay aligned while the table scrolls sideways
    * as one unit. Wide enough for a paired "Month DD, YYYY" line, which is

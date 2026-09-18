@@ -14,7 +14,8 @@ import { test } from 'node:test';
 import { HAZARD_GUIDES } from '@/content/hazard-guides';
 import { classifyIllnessReport } from '@/domain/illness';
 import type { CaseProjection, TimelineEntry } from '@/domain/recall-types';
-import type { CaseDetail, FeedItem } from './recall-feed';
+import type { CaseDetail, CaseVisual, FeedItem } from './recall-feed';
+import type { RecallImage } from './recall-images';
 import {
   activityDisplay,
   AFFECTED_PRODUCTS_INITIAL_ROWS,
@@ -22,6 +23,11 @@ import {
   affectedProductsSection,
   affectedProductsTable,
   buildDetailModel,
+  detailImageSet,
+  imageCounterText,
+  imagePositionLabel,
+  IMAGE_DOTS_MAX,
+  productImagery,
   communityReportsSection,
   caseIdentity,
   buildHomeCardModel,
@@ -663,6 +669,222 @@ test('absent imagery is a null model field, and the detail gallery deduplicates 
   assert.equal(noHero.images.hero, null);
   assert.deepEqual(noHero.images.gallery, []);
   assert.equal(noHero.images.rowImages.size, 0);
+});
+
+// ── 21b: the header's official product imagery (P2B7C, as corrected) ────────
+
+/** One normalized official image, as the allocator hands it over. */
+function officialImage(
+  url: string,
+  source: RecallImage['source'] = 'fda_announcement',
+  aspectRatio: number | null = 1,
+): RecallImage {
+  return {
+    url,
+    source,
+    caption: null,
+    classification: null,
+    width: null,
+    height: null,
+    aspectRatio,
+  };
+}
+
+/** One affected-product row with enough stated identity to open the section. */
+function productRow() {
+  return {
+    sourceNativeId: 'p1',
+    name: '5-oz. plastic cups containing "ACME CHICKEN SALAD"',
+    rawText: '5-oz. plastic cups containing "ACME CHICKEN SALAD" with lot code 1234',
+    extractionConfidence: 'stated' as const,
+  };
+}
+
+/** N official label pages, in the page order the renderer stored them. */
+function labelVisuals(count: number): CaseVisual[] {
+  return Array.from({ length: count }, (_, index) => ({
+    url: `https://cdn.example/label-${index + 1}.webp`,
+    role: 'package_label',
+    page: index + 1,
+    width: 1024,
+    height: 768,
+    sourceUrl: 'https://www.fsis.usda.gov/label.pdf',
+  }));
+}
+
+test('the header set is complete and in official order — there is no presentation cap', () => {
+  // AMENDED BY THE P2B7C CORRECTION. This test used to pin a six-image cap
+  // and the sentence it disclosed ("Showing 6 of 51 official images."). Both
+  // are retired by founder decision: a count a shopper cannot navigate to is
+  // misleading, so every official photo is now reachable and the pager
+  // virtualizes instead of dropping images.
+  const urls = Array.from({ length: 51 }, (_, index) => `https://www.fda.gov/files/${index}.jpg`);
+  const set = detailImageSet(
+    urls.map((url) => officialImage(url)),
+    'Chicken Salad Cup',
+  );
+  assert.ok(set);
+  assert.equal(set.images.length, 51, 'the corpus outlier lost pages');
+  assert.deepEqual(
+    set.images.map((image) => image.url),
+    urls,
+    'the official order changed',
+  );
+  // Every image keeps the one factual label; no set-level count or copy
+  // exists for a screen to render as prose.
+  assert.deepEqual(
+    new Set(set.images.map((image) => image.accessibilityLabel)),
+    new Set(['Chicken Salad Cup']),
+  );
+  assert.deepEqual(Object.keys(set), ['images']);
+});
+
+test('the spoken position and the visible counter are the contract’s, over reachable pages', () => {
+  assert.equal(imagePositionLabel(0, 15), 'Image 1 of 15');
+  assert.equal(imagePositionLabel(1, 15), 'Image 2 of 15');
+  assert.equal(imagePositionLabel(14, 15), 'Image 15 of 15');
+  // The visible counter is the compact form, and carries no explanatory word.
+  assert.equal(imageCounterText(1, 15), '2 / 15');
+  assert.equal(imageCounterText(0, 6), '1 / 6');
+  for (const rejected of ['Showing', 'official images', 'label pages', 'of 6 official']) {
+    assert.ok(!imageCounterText(1, 15).includes(rejected));
+    assert.ok(!imagePositionLabel(1, 15).includes(rejected));
+  }
+  // Dots up to five, the counter from six: one threshold, in one place.
+  assert.equal(IMAGE_DOTS_MAX, 5);
+});
+
+test('zero images is a null set; one image is a set of one', () => {
+  assert.equal(detailImageSet([], 'Widget'), null);
+  const one = detailImageSet([officialImage('https://www.fda.gov/files/a.jpg')], 'Widget')!;
+  assert.equal(one.images.length, 1);
+  assert.equal(one.images[0].url, 'https://www.fda.gov/files/a.jpg');
+});
+
+test('the header takes FDA photography only — a label render can never enter it', () => {
+  const hero = officialImage('https://www.fda.gov/files/hero.jpg');
+  const photo = officialImage('https://www.fda.gov/files/second.jpg');
+  const label = officialImage('https://cdn.example/label-1.webp', 'fsis_label_render');
+  // The hero leads, then the gallery in its own order; the label render is
+  // filtered out by SOURCE, not by position.
+  assert.deepEqual(
+    productImagery({ hero, rowImages: new Map(), gallery: [photo, label], supporting: [] }).map(
+      (image) => image.url,
+    ),
+    [hero.url, photo.url],
+  );
+  // Even a stored hero that somehow pointed at a label render (the frozen
+  // imagery policy forbids it, and qa:imagery gates on it) stays out of the
+  // header rather than leading it.
+  assert.deepEqual(
+    productImagery({
+      hero: label,
+      rowImages: new Map(),
+      gallery: [photo],
+      supporting: [],
+    }).map((image) => image.url),
+    [photo.url],
+  );
+});
+
+test('an FSIS notice’s label pages reach NO screen surface — no gallery, no section', () => {
+  // The P2B7C correction: a general label gallery under Affected Products,
+  // and the standalone section for a notice without one, are both removed.
+  // The pages stay in the allocation for the evidence pipeline.
+  const withTable = buildDetailModel(
+    detail(
+      { sourceAgency: 'FSIS', heroImageUrl: null },
+      { affectedProducts: [productRow()], visuals: labelVisuals(6) },
+    ),
+    { today: TODAY, affectsYou: false },
+  );
+  assert.equal(withTable.productImages, null, 'a label render reached the header');
+  assert.ok(withTable.sections.affectedProducts, 'the product table disappeared');
+  assert.deepEqual(
+    Object.keys(withTable.sections.affectedProducts),
+    ['table'],
+    'the section still carries a label gallery',
+  );
+  assert.ok(!('officialLabels' in withTable.sections), 'the standalone label section survives');
+  // Preserved: the pages are still allocated, so the evidence pipeline and
+  // row matching keep everything they had.
+  assert.equal(withTable.images.gallery.length, 6);
+  assert.ok(withTable.images.gallery.every((image) => image.source === 'fsis_label_render'));
+
+  // The notice that used to get the standalone section: no table at all.
+  const withoutTable = buildDetailModel(
+    detail({ sourceAgency: 'FSIS', heroImageUrl: null }, { visuals: labelVisuals(1) }),
+    { today: TODAY, affectsYou: false },
+  );
+  assert.equal(withoutTable.sections.affectedProducts, null);
+  assert.equal(withoutTable.productImages, null);
+  assert.ok(!('officialLabels' in withoutTable.sections));
+  assert.equal(withoutTable.images.gallery.length, 1);
+});
+
+test('an image matched to an exact affected-product row still renders on that row', () => {
+  // The one image Affected Products may show, and the rule that survives the
+  // correction: the allocator matched it to THIS version, so it is evidence
+  // about the row it sits in.
+  const model = buildDetailModel(
+    detail(
+      {
+        heroImageUrl: 'https://www.fda.gov/files/hero.jpg',
+      },
+      { affectedProducts: [productRow()] },
+    ),
+    { today: TODAY, affectsYou: false },
+  );
+  const rows = model.sections.affectedProducts?.table.expanded.rows ?? [];
+  assert.ok(rows.length >= 1);
+  for (const row of rows) {
+    // Either no image (nothing was matched) or the allocator's own verdict —
+    // never an unmatched image handed to a row to fill space.
+    if (row.image === null) continue;
+    const assignment = [...model.images.rowImages.values()].map((entry) => entry.image.url);
+    assert.ok(assignment.includes(row.image.url));
+  }
+});
+
+test('P2B7C regression (biQ-FEL): the Feed hero IS Detail image one, from one identity', () => {
+  // The reported acceptance failure: the Feed card showed this recall's
+  // photo, and opening it produced an empty grey Detail tile with two dots.
+  // The recorded identities below are the live case's own (A&P Creations /
+  // biQ-FEL, FDA): Home and Detail resolve the SAME hero URL, and that hero
+  // is the first page Detail renders — neither screen selects or transforms
+  // it. (The grey tile itself was a RENDER failure, which the pager now
+  // removes from the set instead of counting; component-level pins live in
+  // detail-design.test.ts.)
+  const hero =
+    'https://www.fda.gov/files/styles/recall_image_small/public/image_1_237.png?itok=-77FKfJv';
+  const second =
+    'https://www.fda.gov/files/styles/recall_image_small/public/image_2_185.png?itok=StVjAsIY';
+  const summaryHtml =
+    `<p><img src="${hero}" alt="biQ-FEL front label"/>` +
+    `<img src="${second}" alt="biQ-FEL back label"/></p>`;
+  const source = detail({
+    title: 'A&P Creations LLC Issues Nationwide Recall of biQ-FEL',
+    heroImageUrl: hero,
+    summaryHtml,
+  });
+  const card = buildHomeCardModel(
+    feedItem({ id: source.id, title: source.projection.title, heroImageUrl: hero }),
+    { today: TODAY, affectsYou: false },
+  );
+  const model = buildDetailModel(source, { today: TODAY, affectsYou: false });
+  // One authoritative hero identity, byte-identical on both surfaces.
+  assert.equal(card.heroImageUrl, hero);
+  assert.equal(model.heroImageUrl, hero);
+  assert.equal(card.heroImageUrl, model.heroImageUrl);
+  // …and it is Detail's first page, with the second official photo after it.
+  assert.ok(model.productImages);
+  assert.equal(model.productImages.images[0].url, hero);
+  assert.equal(model.productImages.images.length, 2);
+  assert.equal(model.productImages.images[1].url, second);
+  // No query rewriting, no normalization drift, no re-encoding.
+  assert.ok(
+    model.productImages.images.every((image) => image.url.startsWith('https://www.fda.gov/')),
+  );
 });
 
 // ── 22: official-link labels ────────────────────────────────────────────────

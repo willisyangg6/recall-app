@@ -1,11 +1,12 @@
 # Official imagery: reliability and enrichment foundation (C9)
 
 Audited and implemented 2026-08-29; corrected 2026-08-30; display
-image-role allocation (P2c) added 2026-09-02 (§13). This document is
+image-role allocation (P2c) added 2026-09-02 (§13); on-screen presentation
+of the allocated roles (P2B7C) added and corrected 2026-09-17 (§14). This document is
 the imagery system's contract: where every image comes from, what counts as
-card imagery versus detail evidence, how display roles are allocated, the
-URL and fetch security rules, and why no third-party image provider is
-integrated.
+card imagery versus detail evidence, how display roles are allocated, how
+they are presented, the URL and fetch security rules, and why no third-party
+image provider is integrated.
 
 Two governing principles:
 
@@ -47,15 +48,16 @@ Two official image sources exist, and only two:
 - **FSIS label-PDF renders** — official label PDFs rasterized server-side
   (`src/server/fsis/labels.ts`) into the public `product-visuals` storage
   bucket and recorded in `product_visuals` (content-addressed, deduplicated,
-  ≤ 6 pages per document). The detail screen merges them into the Product
-  Photos gallery. **They are never automatically promoted to
-  `heroImageUrl`** — the frozen interim policy below.
+  ≤ 6 pages per document). They are retained evidence: allocated, available
+  to the pipeline, and **rendered on no screen** (§14 — founder decision).
+  **They are never automatically promoted to `heroImageUrl`** — the frozen
+  interim policy below.
 
 ### Frozen interim policy (unchanged by C9.1)
 
 1. Existing FDA `heroImageUrl` behavior stays byte-identical.
-2. FSIS rendered label pages remain in `product_visuals` and the detail
-   gallery.
+2. FSIS rendered label pages remain in `product_visuals`, and remain
+   unrendered on every consumer surface (§14).
 3. An FSIS label page is not automatically a card hero. No pipeline,
    job, or repair path promotes one; `src/server/imagery-guards.test.ts`
    keeps every such path removed, and `qa:imagery` gates on zero
@@ -241,8 +243,8 @@ compare-and-set infrastructure, with its own dry run.
 - One FSIS document (047-2023) is gone at the source; that case keeps its
   PDF link but can have no render until FSIS restores the file.
 - When several _distinct_ cases link one identical PDF, the visuals rows
-  attach to the first candidate case; the siblings show no render in the
-  detail gallery. Bounded follow-up if evidence-coverage pressure warrants.
+  attach to the first candidate case; the siblings show no label evidence on
+  Detail. Bounded follow-up if evidence-coverage pressure warrants.
 - 87+ FDA announcements publish no photo; most closed FSIS cases have no
   label PDF. These are honest gaps, not defects.
 - FSIS's CDN 403s minimal client fingerprints from some networks; the
@@ -254,13 +256,29 @@ compare-and-set infrastructure, with its own dry run.
 Run `npx expo start --go --ios` (never `npm run ios`):
 
 1. Home: FDA cases show their photo thumbnails exactly as before; FSIS
-   cases show no thumbnail (frozen policy — unchanged from pre-C9).
-2. Open an FSIS case with label renders: the detail gallery still shows
-   the rendered label pages.
-3. Pull-to-refresh: feed behavior unchanged; no recall re-dating,
+   cases show no thumbnail (frozen policy — unchanged from pre-C9). Feed
+   imagery is one tile per card and stays that way (§14).
+2. Open an FSIS case with label renders: **nothing** shows them — no gallery
+   above the Affected Products table, no standalone section, nothing in the
+   header. Only an image matched to an exact product row appears, inside
+   that row.
+
+   _History._ Before P2B7C this step read "the detail gallery still shows the
+   rendered label pages", which had been untrue since P2a — the allocated
+   gallery was computed and nothing rendered it. P2B7C briefly rendered one,
+   and the founder rejected it; unrendered is now the decided contract, not
+   an oversight (§14).
+
+3. Open an FDA case publishing several photos: the header tile pages by hand
+   through ALL of them, with position dots up to five and the compact
+   `current / total` counter beyond, no automatic movement, and no
+   explanatory sentence anywhere.
+4. Pull-to-refresh: feed behavior unchanged; no recall re-dating,
    reordering, or notification.
-4. Broken/absent images render nothing — never a broken-image placeholder.
-5. Web (`npx expo start --web`): same behavior.
+5. Broken/absent images render nothing — never a broken-image placeholder. In
+   a paged set one failed image shows that page's placeholder and the rest of
+   the set still pages.
+6. Web (`npx expo start --web`): same behavior.
 
 ## 12. Professional card imagery: research findings and deferral (C9.1)
 
@@ -365,7 +383,8 @@ verdicts and never rank, match, clean, or deduplicate images themselves —
 
 ### Roles
 
-- **hero** — zero or one image, rendered exactly once near the Detail title.
+- **hero** — zero or one image, rendered exactly once near the Detail title
+  (from P2B7C, as the first page of the header's product set — §14).
   The allocator never selects a hero: it resolves the stored authoritative
   selection (`projection.heroImageUrl`, the frozen policy of §2) into the
   normalized image set. A hero URL not among the currently extracted photos
@@ -375,8 +394,9 @@ verdicts and never rank, match, clean, or deduplicate images themselves —
   by the stable P2b row identity, rendered left of the row's Product value.
   Absence renders nothing: no placeholder, no reserved space.
 - **gallery** — the remaining unique suitable official images (recognizable
-  announcement photos in source order, then FSIS label renders), preserved
-  for the future top carousel. Not rendered yet.
+  announcement photos in source order, then FSIS label renders). Its FDA
+  photographs follow the hero into the Detail header (§14); its label renders
+  are retained and rendered nowhere.
 - **supporting** — retained non-visible assets (barcode/date-code close-ups
   and other supplementary images), preserved for the package-comparison
   surface. Never product imagery.
@@ -472,3 +492,133 @@ re-reviewed, not re-pinned blindly.
 
 Nothing in this section touches ingestion, projection, storage, or the
 frozen policies above: allocation is display-time, derived, and reversible.
+
+## 14. On-screen presentation of the allocated roles (P2B7C)
+
+Implemented 2026-09-17; **corrected the same day** after founder inspection
+(see "What the correction changed" below). §13 decides which official images
+hold which role; this section decides **where those images appear and how
+many of them**. It is presentation only: no schema, ingestion, projection,
+storage, API, or allocation behaviour changed, and no image is collected,
+ranked, deduplicated, or described by any screen.
+
+The contract lives in `src/lib/recall-presentation.ts` (`DetailImageSet`,
+`detailImageSet`, `productImagery`, `imagePositionLabel`, `imageCounterText`)
+and is rendered by one component,
+`src/components/ui/official-image-set.tsx`. The visual composition is
+recorded in [../DESIGN.md](../DESIGN.md) ("Recall Detail", conflict 30).
+
+### Where official imagery appears — the complete list
+
+| Surface                         | What renders                                            |
+| ------------------------------- | ------------------------------------------------------- |
+| Feed / Saved card               | the stored hero, one image (unchanged since C9)         |
+| Detail header                   | the FDA product-photo set, hero first, paged            |
+| Affected Products, inside a row | the image the allocator matched to that exact row (§13) |
+| anywhere else                   | **nothing**                                             |
+
+**FSIS label renders are rendered nowhere.** They stay in `product_visuals`,
+they stay in the allocation's gallery, and the evidence pipeline keeps them —
+but no screen shows them. The header takes the `fda_announcement` partition
+only (by SOURCE, not by position, so even a stored hero pointing at a label
+render could not lead it), and Affected Products shows only row-matched
+images.
+
+### What the correction changed
+
+P2B7C first shipped a general gallery of a notice's label pages — above the
+Affected Products table, and as a standalone `Official product labels`
+section for a notice without that table. **The founder rejected both.** An
+image that cannot be tied to a specific affected-product row is not evidence
+about any row on screen, and a section must never be fabricated to hold
+imagery. Both placements, the model fields behind them
+(`AffectedProductsSection.labelPages`, `DetailSections.officialLabels`) and
+their preview scenarios are removed. What survives is the Outshine shape: a
+per-row thumbnail, matched through §13's evidence gates.
+
+The same correction retired the six-image presentation cap and the sentence
+that disclosed it (`Showing 6 of N official images.`) — see below.
+
+### The indicator, and why there is no cap
+
+Every official product photo is navigable. A cap would make any count the
+screen showed a lie about what a shopper can reach, so the set carries
+everything the allocation produced and the pager virtualizes instead
+(`FlatList`, one page mounted and fetched at a time — the corpus outlier is
+51 photos).
+
+| Usable images | Indicator                            |
+| ------------- | ------------------------------------ |
+| 0             | nothing at all (the no-image header) |
+| 1             | none — the static tile               |
+| 2–5           | position dots (`IMAGE_DOTS_MAX`)     |
+| 6 or more     | the compact counter `2 / 15`         |
+
+Never both. There is no prose: no `Showing`, no "official images", no
+truncation sentence. Assistive technology hears `Image 2 of 15` from the
+image itself, so the slash is never read aloud.
+
+### Usable, not merely candidate
+
+A candidate whose image fails to load **leaves the set**. The indicator
+therefore describes pages that actually rendered, not URLs that were
+attempted:
+
+- all candidates fail → the header's no-image shape (never a blank tile with
+  dots over it);
+- one left → the static tile, no indicator;
+- two to five left → dots over the survivors;
+- six or more left → the counter over the survivors.
+
+The visible page is tracked by image identity, so a late failure on an
+offscreen page never moves the page the shopper is looking at.
+
+This closes the reported acceptance defect: an FDA recall (A&P Creations /
+biQ-FEL) whose Feed card showed its photo opened to a grey Detail tile with
+two dots over it. Traced end to end, the data was correct — Feed and Detail
+resolved the byte-identical stored hero, and both official URLs answered
+HTTP 200 — so the defect was presentation: failed renders stayed in the pager
+and stayed counted. The hero-first rule is now pinned on the model
+(`recall-presentation.test.ts`), and the removal-on-failure rule on the
+component (`detail-design.test.ts`).
+
+### Founder rules this encodes
+
+1. Zero photos: the existing no-image header, unchanged.
+2. One photo: the existing static tile, unchanged.
+3. Two or more: the same tile, manually swiped. Never auto-advancing, never
+   with arrow controls, never pressable (there is no full-screen
+   destination).
+4. `contain` everywhere — an unusually tall or wide official image is
+   letterboxed, never cropped.
+5. The Feed hero is Detail's first page: one authoritative hero identity
+   (`projection.heroImageUrl`), never independently selected or transformed.
+6. Label renders are stored, allocated, and rendered nowhere.
+7. Affected Products shows only row-matched imagery.
+8. Feed imagery is unchanged and stays single-image.
+
+### Accessibility
+
+Each image keeps the factual label the model already had — the product name,
+never a source caption or anything inferred from the pixels (§13's row-image
+rule, applied to the set). Position is announced as the element's value
+(`Image 2 of 15`); the indicator is decoration and is hidden from assistive
+technology.
+
+### Pins
+
+`src/lib/recall-presentation.test.ts` pins the set contract (completeness,
+order, wording, the source filter, the hero-first/biQ-FEL regression, and
+that no label gallery exists in the model).
+`src/server/fda/presentation-regressions.test.ts` proves the shapes on
+recorded official announcements — 0, 1, 2, 6, 7 and 51 official photos — and
+audits the whole recorded corpus for completeness, uniqueness, https URLs,
+role exclusivity, and the absence of any label placement.
+`src/components/detail-design.test.ts` and
+`src/lib/recall-presentation-wiring.test.ts` pin the component and the
+screen: one imagery component, virtualized, no cap, no prose, failure removes
+a page, dots-or-counter, no auto-advance, no arrows, no press target,
+`contain` only, decorative indicators, and no screen-side collection or
+ranking. `src/components/feed-design.test.ts` pins that Feed imagery stays
+single-image. `src/components/ui/design-foundation.test.ts` pins that every
+declared icon name resolves to a real, non-empty asset at 1x, 2x and 3x.

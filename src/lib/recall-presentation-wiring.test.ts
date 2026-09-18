@@ -28,6 +28,22 @@ const DISCLOSURE = readFileSync(
   join(__dirname, '..', 'components', 'ui', 'disclosure-control.tsx'),
   'utf8',
 );
+/** The one imagery component (P2B7C) both Detail image surfaces render through. */
+const IMAGE_SET = readFileSync(
+  join(__dirname, '..', 'components', 'ui', 'official-image-set.tsx'),
+  'utf8',
+);
+
+/** Source with comments removed, so a file may document what it refuses to do. */
+function codeOnly(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+}
+
+const IMAGE_SET_CODE = codeOnly(IMAGE_SET);
 
 /** Formatting entry points the screens must no longer call directly. */
 const RETIRED_SCREEN_FORMATTERS = [
@@ -368,7 +384,7 @@ test('Affected Products renders data only — no helper, coverage, or disclaimer
   assert.ok(!DETAIL.includes('FIND THE CODE'), 'Find the Code heading rendered');
 });
 
-test('the retired lower sections are gone; the hero renders once near the title', () => {
+test('the retired lower sections are gone; the product imagery renders once, near the title', () => {
   // AMENDED FOR P1B — Health Risk is now intentionally rendered.
   //
   // This suite previously pinned the ABSENCE of the Health Risk section
@@ -377,17 +393,39 @@ test('the retired lower sections are gone; the hero renders once near the title'
   // recall app that never explains what the hazard does was the gap it
   // closes. The positive contract now lives in the P1B tests below.
   //
+  // AMENDED FOR P2B7C — "one hero" is now "one bounded product image set".
+  //
+  // This test used to pin exactly two mentions of `model.heroImageUrl`: the
+  // header's condition and its tile's `uri`. That was the shipped rule
+  // while a recall could show exactly one official photo. The founder
+  // decision of P2B7C replaces it: where a notice published several official
+  // FDA product photos, the header pages through up to six of them in the
+  // same tile position (DESIGN.md, "Recall Detail"). The image-role
+  // allocation is unchanged, the stored hero is unchanged and still leads
+  // the set, Feed imagery stays single-image, and the screen still decides
+  // nothing — so what is pinned below is the same invariant in its new
+  // shape: ONE product-imagery element on the screen, fed by the model.
+  //
   // Every other exclusion here is STILL FINAL and unchanged: no generic
-  // consumer-action section, no lower photo gallery, one hero.
+  // consumer-action section, and no screen-side photo collection.
   assert.ok(!DETAIL.includes('What you should do'), 'What You Should Do rendered');
   assert.ok(!DETAIL.includes('model.action'), 'consumer action rendered');
   // Still pinned, and now sharper: the screen may render the model's DECIDED
   // section (`sections.healthRisk`) but never the raw evidence string, which
   // carries no tiering, no source citation, and no omission decision.
   assert.ok(!DETAIL.includes('model.healthRisk'), 'raw health-risk evidence rendered');
-  assert.ok(!DETAIL.includes('galleryPhotos'), 'a lower photo gallery rendered');
-  // Exactly one hero render.
-  assert.equal(DETAIL.split('model.heroImageUrl').length - 1, 2); // condition + uri
+  assert.ok(!DETAIL.includes('galleryPhotos'), 'the screen collects photos itself');
+  // Exactly one product-imagery render: the model's own bounded set, in the
+  // header, through the one shared component.
+  assert.equal(DETAIL.split('model.productImages').length - 1, 2); // condition + prop
+  assert.match(
+    DETAIL,
+    /\{model\.productImages \? <OfficialImageSet set=\{model\.productImages\} \/> : null\}/,
+  );
+  assert.equal((DETAIL.match(/<OfficialImageSet\b/g) ?? []).length, 1);
+  // The header reads the SET, never the raw hero field or the allocation.
+  assert.ok(!DETAIL.includes('model.heroImageUrl'), 'the screen renders the hero field directly');
+  assert.ok(!DETAIL.includes('images.hero'), 'the screen reads the allocation');
 });
 
 test('P1B: Health Risk renders the model-decided standardized section', () => {
@@ -527,13 +565,56 @@ test('P2c: row images render only the shared allocation — no screen-local matc
   assert.ok(!DETAIL.includes('rowImages.get'), 'Detail re-derives row assignments');
   assert.ok(!DETAIL.includes('measurementKey'), 'Detail matches identity keys itself');
   assert.ok(!HOME.includes('images.'), 'Home reads the detail allocation');
-  // No gallery or supporting imagery renders yet (the carousel is a later
-  // milestone), and no placeholder ever renders for an absent image.
-  assert.ok(!DETAIL.includes('images.gallery'), 'a lower gallery rendered');
+  // P2B7C renders the gallery — but only ever through the model's own
+  // bounded sets. The screen still never touches the allocation itself, and
+  // no placeholder ever renders for an absent image.
+  assert.ok(!DETAIL.includes('images.gallery'), 'the screen reads the raw gallery');
   assert.ok(!DETAIL.includes('images.supporting'), 'supporting close-ups rendered');
   // The thumbnail render is gated on the assignment itself — an unassigned
   // row reaches no image element at all, so no placeholder can exist.
   assert.match(DETAIL, /\{row\.image \? \(/);
+});
+
+test('P2B7C: the header renders a model-decided set, and no label gallery exists', () => {
+  // ONE image surface: the header's set. The general label gallery this
+  // milestone first built — above the Affected Products table, and as a
+  // standalone section for a notice without one — was REMOVED by founder
+  // decision in the P2B7C correction. Imagery under Affected Products is
+  // only ever a thumbnail matched to that exact row.
+  assert.match(DETAIL, /<OfficialImageSet set=\{model\.productImages\} \/>/);
+  assert.equal((DETAIL.match(/<OfficialImageSet\b/g) ?? []).length, 1);
+  for (const retired of [
+    'Official product labels',
+    'OFFICIAL_LABELS_TITLE',
+    'officialLabels',
+    'labelPages',
+    'presentation="evidence"',
+  ]) {
+    assert.ok(!DETAIL.includes(retired), `the retired label gallery survives: ${retired}`);
+  }
+  // Neither the screen nor the component decides WHICH images exist: no
+  // source split, no sort, no cap, no dedup, no count anywhere outside the
+  // contract.
+  for (const decision of [
+    'fsis_label_render',
+    'fda_announcement',
+    '.sort(',
+    '.slice(',
+    'DETAIL_IMAGE_SET_MAX',
+    'Showing ',
+  ]) {
+    assert.ok(!DETAIL.includes(decision), `Detail decides imagery itself: ${decision}`);
+    assert.ok(
+      !IMAGE_SET_CODE.includes(decision),
+      `the component decides imagery itself: ${decision}`,
+    );
+  }
+  // The component's one filter is the FAILURE filter — pages that cannot
+  // render leave the set, so the indicator never counts a blank page.
+  assert.match(IMAGE_SET, /set\.images\.filter\(\(image\) => !failed\.has\(image\.url\)\)/);
+  assert.match(IMAGE_SET, /data=\{usable\}/);
+  assert.ok(!IMAGE_SET_CODE.includes('aspectRatio'), 'the component lays out by aspect ratio');
+  assert.ok(!IMAGE_SET_CODE.includes('.caption'), 'the component reads image captions');
 });
 
 test('P3A: optional Detail sections are model-owned — no screen-level content predicate', () => {
@@ -833,6 +914,16 @@ test('P1D: the questionnaire route is registered and is the block’s only desti
 test('hero accessibility text inherits the shared model product name (P3D)', () => {
   // The corrected display name reaches assistive tech through the same model
   // field the visible title uses — no screen-local casing or alt text.
+  //
+  // AMENDED FOR P2B7C: on Detail the alt text now reaches the image through
+  // the model's own image set (`DetailImage.accessibilityLabel`), which the
+  // contract fills with that same `productName` — pinned on the model in
+  // recall-presentation.test.ts, and pinned here as the screen passing the
+  // model's labels through rather than composing text of its own.
   assert.match(HOME, /alt=\{model\.productName\}/);
-  assert.match(DETAIL, /alt=\{model\.productName\}/);
+  assert.match(IMAGE_SET, /alt=\{usable\[0\]\.accessibilityLabel\}/);
+  assert.match(IMAGE_SET, /alt=\{item\.accessibilityLabel\}/);
+  for (const composed of ['productName', 'Official product label', 'Image ', 'Label page ']) {
+    assert.ok(!IMAGE_SET.includes(`'${composed}`), `the component composes copy: ${composed}`);
+  }
 });

@@ -18,7 +18,8 @@ Identity & destinations (currently none of these exist — none were invented):
       URL, the Profile "Support" row, and the Corrections Policy's
       report-a-problem path).
 - [ ] Public domain/URL to host the Privacy Policy (and later the trust
-      documents' web versions).
+      documents' web versions). **This is also what blocks native sharing**
+      — the shared URL must be a Lotly Universal Link on that domain (§6).
 - [ ] Privacy Policy effective date (set at publication).
 
 Product decisions with policy consequences:
@@ -200,3 +201,43 @@ Everything in §3, plus (tracked in `recall-app-store-readiness.md`):
   still returns zero. **Not re-run**: the exported-bundle secret scans and
   the privacy-manifest re-read (both dated 2026-08-28) — re-run them during
   submission prep, per §4.6.
+
+## 6. Deferred product decision — native sharing and the shared recall URL
+
+Recorded 2026-09-17 (P2B7C). **Nothing here is implemented, and none of it
+was built in that milestone.** This is the founder's decision about what
+sharing must be when it is built, written down so the cheap version is not
+shipped by accident.
+
+**Native sharing is intentionally deferred.** Recall Detail has no share
+control today; the Figma frame's share glyph is unrendered
+([../DESIGN.md](../DESIGN.md), conflict 9), and
+`src/lib/share-message.ts` — a pure message builder from C6 — has no caller.
+
+**Sharing only the official agency URL was considered and rejected.** It is
+the version that could ship immediately, and it gives Lotly no acquisition
+loop at all: the recipient lands on fda.gov or fsis.usda.gov, never learns
+the app exists, and the sender gets no credit for the thing they actually
+found useful. A share that cannot bring anyone back is not worth the control
+it costs.
+
+What sharing must be when it is built:
+
+1. The shared URL is an **HTTPS Lotly Universal Link** on the final Lotly
+   domain. A custom `lotly://` URL is never the externally shared URL — it
+   dead-ends for everyone without the app installed, and messaging clients
+   treat it as untrustworthy or unlinkable.
+2. A recipient **with the app installed** lands on that exact Recall Detail
+   screen.
+3. A recipient **without it** lands on a small branded recall preview page:
+   the recall's identity, an App Store call to action, and a link to the
+   official agency notice. Official attribution is never dropped for
+   branding — the preview cites the source, as every Lotly surface does.
+4. The minimum set of public routes is therefore **recall preview, privacy,
+   and support** — the same domain the Privacy Policy and support
+   destination in §1 need, which is why one decision unblocks all three.
+
+**Blocked on:** acquiring the final domain (§1). Until it exists there is no
+Universal Link to share, no `apple-app-site-association` file to host, and no
+preview page to land on. Sharing stays absent rather than shipping an
+official-URL-only version in the meantime.

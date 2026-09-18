@@ -180,6 +180,7 @@ layout:
   max-content-width: 800px
   detail-media-size: 152px
   row-media-size: 40px
+  page-dot-size: 8px
   table-column-width: 144px
 
 components:
@@ -467,8 +468,8 @@ supported Expo configuration, and the root navigation theme is pinned to light
 so no screen can follow the system into dark. There is no toggle and no fake
 dark token. The legacy provisional theme (`theme.ts`) still carries dark values from
 before the system existed; no product screen reads them since P2B6B — only the
-dev-only Design Preview hub and an unmounted photo gallery do — and they go
-when those last users migrate.
+dev-only Design Preview hub does, now that P2B7C deleted the unmounted photo
+gallery that was its other reader — and they go when that last user migrates.
 
 ## Typography
 
@@ -586,9 +587,15 @@ Lotly is designed mobile-first around a **393px-wide iPhone frame**.
 - Content column cap: 800px (`max-content-width`) — reached on tablets and
   the web only, so a phone's column is always the device width less the
   margins
-- Recall Detail hero tile: 152px square (`detail-media-size`; Figma's 150 is
-  normalized to the 4pt grid), rendered only when the recall has an image
-- Affected Products version image: 40px square (`row-media-size`)
+- Recall Detail product media: 152px square (`detail-media-size`; Figma's 150
+  is normalized to the 4pt grid), rendered only when the recall has official
+  photography that loads — one photo as a static tile, several as a manually
+  paged, virtualized set in the same footprint (P2B7C)
+- Position dot under a paged image set: 8px (`page-dot-size`), decorative and
+  never interactive, and shown only up to five images — beyond that a compact
+  `current / total` counter replaces the dots
+- Affected Products version image: 40px square (`row-media-size`), rendered
+  only for a row the allocator matched an image to
 - Affected Products column: 144px (`table-column-width`), one width for every
   column so the header row and each version row stay aligned
 - Common icon glyph size: 20px for utility icons, 24px in the bottom
@@ -1317,7 +1324,8 @@ Header hierarchy:
 3. product title
 4. manufacturer/brand
 5. official source link
-6. product image
+6. product imagery — one official photo, or a bounded manually paged set of
+   them (P2B7C)
 
 The official-source copy is data-driven. The shipped label is
 `View the official {agency} report` (`…alert` for a Public Health Alert),
@@ -1352,10 +1360,68 @@ rather than in Figma's utility row (conflict 9); then the product name in
 `heading-2`, the brand in `body-small` `text/secondary`, and the
 official-source link — `caption` in `action/secondary` with the 16px
 `external-link` glyph, a `link` role, the spoken hint `Opens in your
-browser`, and a 44pt target — beside the 152px hero tile when the recall has
-an image. With no image the identity takes the whole row: Detail removes the
-tile rather than reserving its space, the second of the two approved
-no-image treatments. At accessibility text sizes, where one `heading-2`
+browser`, and a 44pt target — beside the 152px media tile when the recall has
+official photography. With no image the identity takes the whole row: Detail
+removes the tile rather than reserving its space, the second of the two
+approved no-image treatments.
+
+**Official imagery (P2B7C).** The tile position holds the notice's official
+FDA product photography, as the shared presentation contract assembles it:
+the image-role allocation's hero first — **the same picture the Feed card
+showed for that recall** — then its gallery in the agency's own order,
+**complete**. There is no presentation cap: every photo is a page a shopper
+can reach, and the pager virtualizes so a fifty-one-photo notice mounts and
+fetches one page at a time.
+
+The indicator describes **reachable pages**, and takes one of three shapes:
+
+| Usable images | Indicator                                                          |
+| ------------- | ------------------------------------------------------------------ |
+| 1             | none — the static `detail-media-size` tile, as before              |
+| 2–5           | `page-dot-size` dots (`border/strong`; current `background/brand`) |
+| 6 or more     | the compact counter `2 / 15` in `caption` `text/secondary`         |
+
+Never both at once, and **no prose**: the rejected
+`Showing 6 of N official images.` sentence and every explanatory word with it
+are gone. Assistive technology hears `Image 2 of 15` from the image itself,
+so the slash is never read aloud.
+
+A candidate whose image cannot load **leaves the set**: the dots, the counter
+and the spoken position all describe what actually rendered. If every
+candidate fails, the header takes its no-image shape rather than showing a
+blank tile under an indicator — a grey square that still counted as a page is
+the exact defect this rule closes.
+
+Rules the composition must keep:
+
+- **No page advances on its own.** There is no timer, no auto-advance, no
+  animated transition of ours, and therefore nothing for Reduce Motion to
+  turn off.
+- **No arrows, and the images are not pressable.** There is no full-screen
+  image destination in the product, and a control that leads nowhere is worse
+  than none. If an image control is ever added it takes the 44pt minimum.
+- **`contain`, always.** Government photography runs from about 0.28 to 5.85
+  in width ÷ height; a tall or wide photo is letterboxed on the media
+  placeholder, never cropped or stretched to fill the square.
+- **Only the pager moves sideways.** The page's own scroll view keeps
+  vertical scrolling, so a drag that starts vertically scrolls Detail.
+- **The dots and the counter are decoration** — hidden from assistive
+  technology. Position is announced on the image itself instead
+  (`Image 2 of 15`), after its factual label.
+- **Feed imagery stays single-image**, and it is the same image. The Recall
+  Card's 112px tile shows one official photo (conflict 30) — the stored hero,
+  which is also Detail's first page. Neither screen selects or transforms it.
+
+**Official label pages are not rendered (P2B7C, corrected).** FSIS label PDFs
+are rasterized into official label-page images and stay in the allocation for
+the evidence pipeline, but **no screen shows them as a gallery**. The
+`Official product labels` gallery above the Affected Products table, and the
+standalone section for a notice without that table, were both built in P2B7C
+and **removed by founder decision**: imagery under Affected Products is only
+ever an image the allocator matched to that exact affected-product row — the
+Outshine shape, where each photo depicts the version in the row it sits in.
+An image that cannot be tied to a row is not evidence about any row on
+screen, and a section is never fabricated to hold one. At accessibility text sizes, where one `heading-2`
 word can be wider than the column beside the tile, the header stacks — the
 identity at full width, the tile beneath it — decided from the name's own
 text layout (a line that ended mid-word) and latched, so a product name
@@ -1694,7 +1760,11 @@ chance.
   "Clear all"). Never an empty white card.
 - **Error** — the same shape as empty, with the honest message and no
   fabricated fallback content. A missing image removes the tile or renders the
-  media placeholder; it never shows a broken-image glyph.
+  media placeholder; it never shows a broken-image glyph. Inside a paged image
+  set, failure is **per page and removes the page**: it leaves the set, so the
+  indicator never counts it, and when the last one goes the header returns to
+  its no-image shape. An image set has no loading state of its own, so none
+  can be left stuck.
 - **Disabled** — carried by the SURFACE, with `accessibilityState.disabled`
   set so the state is announced, not just dimmed: a filled action drops to
   `action/disabled`, an outlined one keeps its surface and mutes its border to
@@ -1735,6 +1805,15 @@ chance.
 - **Expanded/collapsed state.** Every disclosure control sets
   `accessibilityState.expanded`, so its state is announced and its visible
   word (`See all (N)` / `Show less`) changes with it.
+- **Position in a set.** An image that is one page of a set keeps its own
+  factual label (the product name) and carries its position as the element's
+  `accessibilityValue` — `Image 2 of 15` — so a reader hears where they are
+  without a visible caption. The indicator, dots or counter alike, is
+  decoration and is hidden outright (`accessibilityElementsHidden`,
+  `importantForAccessibility`), so `2 / 15` is never read as a fraction.
+- **Never describe a picture from its pixels.** An image's spoken label comes
+  from the model's own supported identity — never from a source caption, and
+  never from anything inferred about the image itself.
 - **Dynamic Type and text wrapping.** Text scales with the user's setting; no
   `maxFontSizeMultiplier` caps anywhere. Product names, summaries, and cell
   values wrap rather than truncate; only a paired identifier/date line is
@@ -1810,7 +1889,9 @@ decision. They are normalized to the scale and never reproduced:
   `RelevanceLabel`, `Chip` and `SearchBar`, and from P2B2 `MediaTile` (a
   square image-or-placeholder at one of the three media-size tokens),
   `Callout` (the two Information tones) and `NoticeLabel` (the Public Health
-  Alert label), and from P2B3 `Button` (the 44pt primary / secondary pill,
+  Alert label), from P2B7C `OfficialImageSet` (one bounded set of official
+  images, static or manually paged, in a compact or evidence footprint), and
+  from P2B3 `Button` (the 44pt primary / secondary pill,
   with disabled and busy states) and `ChoiceRow` with `ChoiceGroup` (a
   single-choice answer row and its radio group), and from P2B6A `CheckRow`
   (the multi-choice sibling). The whole-screen `StateMessage`
@@ -1856,6 +1937,7 @@ decision. They are normalized to the scale and never reproduced:
 | `Product-Information` `81:719`           | `AffectedProductsTableView` in Recall Detail                              |
 | `See all (3)` / `View Retailers (10)`    | `src/components/ui/disclosure-control.tsx`                                |
 | Detail hero `81:838`, card media         | `src/components/ui/media-tile.tsx` (P2B2)                                 |
+| — (no multi-image frame; conflict 30)    | `src/components/ui/official-image-set.tsx` (P2B7C)                        |
 | `icon/chevron-left` `63:1343`            | the platform back control (`headerBackButtonDisplayMode`)                 |
 | `share` `63:1358`                        | **not rendered** — no behaviour (conflict 9)                              |
 | `label/Critical` `42:832`                | **retired** — nothing in code                                             |
@@ -2054,6 +2136,23 @@ Sold`; the shipped titles were sentence case and rendered uppercase.
     primitive and no destructive token. When frames arrive, Figma owns the
     composition and this document records any conflict; the registry, its
     slugs, claims, links and the reset's behaviour stay the contract's.
+
+30. **Multi-image Detail media is not in Figma.** The Detail frame draws one
+    hero tile (`81:838`), which was the whole imagery contract while a recall
+    could show one official photo. **Founder decision, P2B7C:** where a
+    notice publishes several official FDA product photos, Detail pages
+    through ALL of them in that same tile position — dots up to five, a
+    compact `current / total` counter beyond. Feed imagery is unchanged and
+    stays single-image, showing the same stored hero that leads Detail's set.
+    Nothing else about the tile moved: same position, same
+    `detail-media-size` square, same `contain`, same placeholder, same
+    no-image treatment. The set is composed from the system (the media tile,
+    the tokens, the `caption` type) and added one primitive
+    (`OfficialImageSet`) and one layout token (`page-dot-size`). FSIS label
+    galleries were built here and removed by founder decision — see "Official
+    label pages are not rendered". When a frame arrives, Figma owns the
+    composition of the dots and the counter; the official order, the
+    reachability rule and the placements stay the contract's.
 
 ## Figma corrections for Cheyenne
 

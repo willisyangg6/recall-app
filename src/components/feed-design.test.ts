@@ -214,7 +214,12 @@ test('the media tile keeps the same square footprint with an image, a failed ima
   // The shared tile (P2B2) is a square of the caller's size in every state.
   assert.ok(MEDIA_TILE.includes('{ width: size, height: size }'));
   assert.ok(MEDIA_TILE.includes('background="background/media-placeholder"'));
-  assert.ok(MEDIA_TILE.includes('onError={() => setFailed(true)}'));
+  // A failed load falls back to the placeholder, exactly as before; P2B7C
+  // added an optional report to a caller that must stop counting the page
+  // (the header pager), which the card deliberately does not pass.
+  assert.ok(MEDIA_TILE.includes('setFailed(true);'));
+  assert.ok(MEDIA_TILE.includes('onLoadFailed?.(uri)'));
+  assert.ok(!CARD.includes('onLoadFailed'), 'the card counts pages');
   assert.ok(
     MEDIA_TILE.includes('resizeMode="contain"'),
     'a label photo is never cropped or distorted',
@@ -226,6 +231,21 @@ test('the media tile keeps the same square footprint with an image, a failed ima
   assert.ok(!CARD.includes('source={'), 'the card renders no image of its own');
   assert.ok(!CARD.includes('PhotoThumbnail'));
   assert.ok(!CARD.includes('require('), 'the card bundles no stock image');
+  // P2B7C: Detail's product imagery can page through up to six official
+  // photos; FEED IMAGERY STAYS SINGLE-IMAGE (founder decision, DESIGN.md
+  // "Recall Card"). The card renders exactly one media tile, has no paging
+  // component, and reads no image set or gallery.
+  assert.equal((CARD.match(/<MediaTile\b/g) ?? []).length, 1);
+  for (const forbidden of [
+    'OfficialImageSet',
+    'productImages',
+    'images.gallery',
+    'pagingEnabled',
+    'positionLabel',
+  ]) {
+    assert.ok(!CARD.includes(forbidden), `feed imagery is no longer single-image: ${forbidden}`);
+    assert.ok(!FEED.includes(forbidden), `feed imagery is no longer single-image: ${forbidden}`);
+  }
 });
 
 // ── 5. Search and the feed modes are unchanged ──────────────────────────────

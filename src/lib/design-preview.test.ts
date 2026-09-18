@@ -371,6 +371,20 @@ test('every required scenario exists, and each names its destination', () => {
       'risk_low',
       'risk_pending',
       'risk_unknown',
+      // P2B7C: the official image sets. Real recalls, nothing simulated.
+      'images_one',
+      'images_two',
+      'images_five',
+      'images_six',
+      'images_many',
+      'images_largest',
+      'image_portrait',
+      'image_landscape',
+      'name_long_images',
+      'row_image_matched',
+      'labels_unrendered',
+      'text_accessibility_large',
+      'text_accessibility_xxxl',
     ],
   );
   for (const scenario of DESIGN_PREVIEW_SCENARIOS) {
@@ -378,7 +392,12 @@ test('every required scenario exists, and each names its destination', () => {
     assert.ok(scenario.expectation.length > 0);
     assert.equal(previewScenario(scenario.id)?.id, scenario.id);
     // Every P2B2 scenario opens the real Detail and simulates nothing.
-    if (scenario.group === 'header' || scenario.group === 'health' || scenario.group === 'risk') {
+    if (
+      scenario.group === 'header' ||
+      scenario.group === 'health' ||
+      scenario.group === 'risk' ||
+      scenario.group === 'imagery'
+    ) {
       assert.equal(scenario.destination, 'detail');
       assert.equal(scenario.simulation, null);
     }
@@ -697,6 +716,11 @@ test('confirmed detail facts decide each presentation requirement exactly', () =
     healthGuideKey: null,
     hasCompletePairGroup: false,
     hasIncompletePairGroup: false,
+    productImageCount: 0,
+    labelPageCount: 0,
+    rowImageCount: 0,
+    hasExtremePortraitImage: false,
+    hasExtremeLandscapeImage: false,
     ...over,
   });
   const ok = (requirement: Parameters<typeof meetsRequirement>[1], f: PreviewDetailFacts) =>
@@ -756,6 +780,44 @@ test('confirmed detail facts decide each presentation requirement exactly', () =
   );
   assert.equal(ok('health_risk_absent', facts({ healthRisk: false })), true);
   assert.equal(ok('health_risk_absent', facts({ healthRisk: true })), false);
+  // P2B7C — each image-set size is its own scenario, so no shape stands in
+  // for another, and the label counts are measured apart from the photos.
+  assert.equal(ok('images_one', facts({ productImageCount: 1 })), true);
+  assert.equal(ok('images_one', facts({ productImageCount: 2 })), false);
+  assert.equal(ok('images_two', facts({ productImageCount: 2 })), true);
+  assert.equal(ok('images_two', facts({ productImageCount: 3 })), false);
+  // Five is the last set on dots; six is the first on the numeric counter.
+  assert.equal(ok('images_five', facts({ productImageCount: 5 })), true);
+  assert.equal(ok('images_five', facts({ productImageCount: 6 })), false);
+  assert.equal(ok('images_six', facts({ productImageCount: 6 })), true);
+  assert.equal(ok('images_six', facts({ productImageCount: 7 })), false);
+  assert.equal(ok('images_many', facts({ productImageCount: 15 })), true);
+  assert.equal(ok('images_many', facts({ productImageCount: 14 })), false);
+  assert.equal(ok('images_largest', facts({ productImageCount: 51 })), true);
+  assert.equal(ok('images_largest', facts({ productImageCount: 6 })), false);
+  assert.equal(ok('images_one', facts({ labelPageCount: 1 })), false);
+  // Label pages are a case SHAPE the harness can find, never something a
+  // screen renders: the scenario exists to prove nothing shows.
+  assert.equal(ok('labels_unrendered', facts({ labelPageCount: 1 })), true);
+  assert.equal(ok('labels_unrendered', facts({ labelPageCount: 0 })), false);
+  assert.equal(ok('row_image_matched', facts({ rowImageCount: 1 })), true);
+  assert.equal(ok('row_image_matched', facts({ rowImageCount: 0 })), false);
+  assert.equal(ok('image_portrait', facts({ hasExtremePortraitImage: true })), true);
+  assert.equal(ok('image_portrait', facts({ hasExtremeLandscapeImage: true })), false);
+  assert.equal(ok('image_landscape', facts({ hasExtremeLandscapeImage: true })), true);
+  // The tightest header needs BOTH a long name and something to page.
+  assert.equal(
+    ok('name_long_images', facts({ productNameLength: NAME_LONG_MIN, productImageCount: 2 })),
+    true,
+  );
+  assert.equal(
+    ok('name_long_images', facts({ productNameLength: NAME_LONG_MIN, productImageCount: 1 })),
+    false,
+  );
+  assert.equal(
+    ok('name_long_images', facts({ productNameLength: NAME_LONG_MIN - 1, productImageCount: 2 })),
+    false,
+  );
   assert.equal(ok('pairs_complete', facts({ hasCompletePairGroup: true })), true);
   assert.equal(ok('pairs_incomplete', facts({ hasIncompletePairGroup: true })), true);
   assert.equal(ok('pairs_incomplete', facts({ hasCompletePairGroup: true })), false);

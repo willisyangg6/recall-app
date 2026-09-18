@@ -12,7 +12,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -40,6 +40,8 @@ const UI_FILES = [
   'ui/choice-row.tsx',
   // P2B6A
   'ui/check-row.tsx',
+  // P2B7C
+  'ui/official-image-set.tsx',
 ];
 const UI = Object.fromEntries(UI_FILES.map((f) => [f, read(join('components', f))]));
 const TEXT = UI['ui/text.tsx'];
@@ -242,6 +244,92 @@ test('the gallery renders the primitives, dev-only, without inventing recall con
   assert.ok(PREVIEW.includes('Object.keys(typography)'));
   // The hub is still the only entry, still behind __DEV__ on Profile.
   assert.ok(read('app/(tabs)/profile.tsx').includes('{__DEV__ ? ('));
+});
+
+// ── The icon set resolves to real assets ────────────────────────────────────
+
+test('every declared icon name resolves to a real, non-empty asset at 1x, 2x and 3x', () => {
+  // The P2B7C correction's icon investigation: when glyphs stop rendering,
+  // the first question is whether the app is asking for an asset that is not
+  // there. This pins the whole mapping — every `IconName` the primitive
+  // exports, every scale Metro may pick — so a renamed, deleted, emptied, or
+  // wrongly-cased file fails here instead of appearing as a blank square on
+  // a screen nobody screenshotted.
+  const ICONS = join(SRC, '..', 'assets', 'icons');
+  // React Native cannot load under Node, so the declared set is read from the
+  // primitive's own `GLYPHS` map as text — the same technique this suite uses
+  // for every other component contract.
+  const icon = read('components/ui/icon.tsx');
+  const ICON_NAMES = [...icon.matchAll(/^\s{2}'?([a-z-]+)'?: require\(/gm)].map((m) => m[1]);
+  assert.ok(ICON_NAMES.length >= 12, `only ${ICON_NAMES.length} icons are declared`);
+  for (const name of ICON_NAMES) {
+    for (const suffix of ['', '@2x', '@3x']) {
+      const file = join(ICONS, `${name}${suffix}.png`);
+      assert.ok(existsSync(file), `missing icon asset: ${name}${suffix}.png`);
+      assert.ok(statSync(file).size > 0, `empty icon asset: ${name}${suffix}.png`);
+      // Metro resolves by exact, case-sensitive name: a file that differs
+      // only in case resolves on macOS and fails on a case-sensitive CI or
+      // device bundle.
+      const onDisk = readdirSync(ICONS).find((entry) => entry === `${name}${suffix}.png`);
+      assert.equal(onDisk, `${name}${suffix}.png`, `icon asset case mismatch: ${name}${suffix}`);
+    }
+  }
+  // Every asset in the directory belongs to a declared name: an orphan file
+  // is either a glyph nothing renders or a name the primitive forgot.
+  for (const entry of readdirSync(ICONS)) {
+    const name = entry.replace(/(@[23]x)?\.png$/, '');
+    assert.ok(ICON_NAMES.includes(name), `${entry} is not declared by the icon primitive`);
+  }
+  // The primitive requires each glyph statically (Metro cannot bundle a
+  // computed path), tints it, and hides it from assistive technology.
+  for (const name of ICON_NAMES) {
+    assert.ok(
+      icon.includes(`require('@/assets/icons/${name}.png')`),
+      `${name} is not statically required`,
+    );
+  }
+  assert.ok(!/require\(`/.test(icon), 'a computed require cannot be bundled');
+  assert.ok(icon.includes('tintColor: tint ?? color[colorToken]'));
+  assert.ok(icon.includes('accessibilityElementsHidden'));
+});
+
+test('every icon surface renders through the one primitive — no local images or glyph text', () => {
+  // A missing glyph is never patched screen by screen: every surface the
+  // correction pass inspected draws from `Icon`, and none of them bundles an
+  // image or types a symbol character of its own.
+  const surfaces = [
+    'app/(tabs)/_layout.tsx', // the three tab glyphs
+    'app/(tabs)/index.tsx', // search, the card's pin, the chips' chevron
+    'app/recall/[id].tsx', // the external-link and map-pin glyphs
+    'components/recall-card.tsx',
+    'components/save-recall-button.tsx', // bookmark / bookmark-filled
+    'components/ui/search-bar.tsx',
+    'components/ui/callout.tsx', // warning and info
+    'components/profile/navigation-row.tsx', // the chevron
+    'components/profile/personalization-card.tsx',
+    'components/settings/selector-trigger.tsx',
+  ];
+  for (const path of surfaces) {
+    const source = read(path);
+    assert.match(source, /<Icon\b|Icon\b/, `${path} renders no icon`);
+    assert.ok(!/require\('\.\.?\/.*\.png'\)/.test(source), `${path} bundles its own image`);
+  }
+  // …and none of the ICON-BEARING primitives substitutes a typed symbol for
+  // a glyph, which is how a missing-asset defect gets papered over screen by
+  // screen. (The Feed's filter sheet marks its selected option with a `✓`
+  // character by its own shipped design — that is a selection channel, not
+  // an icon stand-in, and it is deliberately not covered here.)
+  for (const path of [
+    'components/save-recall-button.tsx',
+    'components/ui/callout.tsx',
+    'components/profile/navigation-row.tsx',
+    'app/(tabs)/_layout.tsx',
+  ]) {
+    const source = read(path);
+    for (const glyph of ['✓', '✔', '×', '→', '★', '🔖']) {
+      assert.ok(!source.includes(glyph), `${path} types a glyph character: ${glyph}`);
+    }
+  }
 });
 
 // ── Contrast: a disabled label is still text ────────────────────────────────

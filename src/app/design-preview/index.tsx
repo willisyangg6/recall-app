@@ -60,6 +60,7 @@ import { Callout } from '@/components/ui/callout';
 import { Chip } from '@/components/ui/chip';
 import { DisclosureControl } from '@/components/ui/disclosure-control';
 import { Icon, ICON_NAMES } from '@/components/ui/icon';
+import { OfficialImageSet } from '@/components/ui/official-image-set';
 import { RelevanceLabel } from '@/components/ui/relevance-label';
 import { RiskLabel } from '@/components/ui/risk-label';
 import { SearchBar } from '@/components/ui/search-bar';
@@ -87,6 +88,8 @@ import {
   resetDesignPreview,
   type DesignPreviewSession,
   type PreviewCaseRequirement,
+  EXTREME_LANDSCAPE_MIN_ASPECT,
+  EXTREME_PORTRAIT_MAX_ASPECT,
   type PreviewDetailFacts,
   type PreviewScenario,
   type PreviewScenarioGroup,
@@ -141,7 +144,9 @@ import {
   buildDetailModel,
   buildHomeCardModel,
   disclosureControl,
+  IMAGE_DOTS_MAX,
   todayIso,
+  type DetailImageSet,
   type HomeCardModel,
 } from '@/lib/recall-presentation';
 import { interpretReason } from '@/lib/recall-reason';
@@ -172,10 +177,19 @@ const CANDIDATES_CONFIRMED = 5;
  * this notice hold more than two values". These are the same read-only detail
  * requests the Detail screen itself makes.
  */
-const DETAIL_PROBE_LIMIT = 60;
+const DETAIL_PROBE_LIMIT = 80;
 
 /** How many feed rows each P2B2 hint bucket contributes to the probes. */
 const HINTS_PER_BUCKET = 3;
+
+/**
+ * How many extra rows each P2B7C imagery bucket contributes. Image-set size
+ * and label-page count exist only in the real Detail model, so the imagery
+ * scenarios are satisfied by breadth of probing rather than by any feed-row
+ * hint — and a bucket the live corpus cannot fill still says "No suitable
+ * current recall" instead of substituting one.
+ */
+const IMAGERY_HINTS = 10;
 
 /**
  * Feed-row HINTS for the reviewed hazard guides — where a recall carrying
@@ -221,6 +235,17 @@ const REQUIREMENT_LABELS: Record<PreviewCaseRequirement, string> = {
   no_image: 'Recall whose Detail model resolved no hero image',
   name_short: 'Recall with a short product name',
   name_long: 'Recall with a long product name',
+  images_one: 'Recall with exactly one official product photo',
+  images_two: 'Recall with exactly two official product photos',
+  images_five: 'Recall with exactly five official product photos',
+  images_six: 'Recall with exactly six official product photos',
+  images_many: 'Recall with fifteen or more official product photos',
+  images_largest: 'Recall with the largest official set in the live corpus',
+  image_portrait: 'Recall whose set holds an unusually tall official photo',
+  image_landscape: 'Recall whose set holds an unusually wide official photo',
+  name_long_images: 'Recall with a long product name and a paged image set',
+  row_image_matched: 'Recall with an image matched to an exact product row',
+  labels_unrendered: 'Notice with official label pages (rendered nowhere)',
   guide_botulism: 'Recall the pipeline matches to the botulism guide',
   guide_listeria: 'Recall the pipeline matches to the Listeria guide',
   guide_stec: 'Recall the pipeline matches to the E. coli (STEC) guide',
@@ -241,6 +266,7 @@ const GROUP_LABELS: Record<PreviewScenarioGroup, string> = {
   header: 'Product header',
   health: 'Health Risk',
   risk: 'Risk labels on Detail',
+  imagery: 'Official imagery on Detail',
 };
 
 /**
@@ -270,6 +296,8 @@ function classificationOf(classes: OfficialClass[]): Classification {
 
 /** What the real detail model actually produced for a case. */
 interface ConfirmedSections {
+  /** The REAL header image set this case produced, for the imagery gallery. */
+  imageSet: DetailImageSet | null;
   healthRisk: boolean;
   affectedProducts: boolean;
   community: boolean;
@@ -357,6 +385,9 @@ export default function DesignPreviewScreen() {
       ].includes(item.hazardCategory),
     );
     const withHero = items.filter((item) => item.heroImageUrl !== null);
+    // FSIS notices are the only source of rendered label pages (the FDA
+    // announcements publish photographs instead).
+    const fsis = items.filter((item) => item.sourceAgency === 'FSIS');
     const withoutHero = items.filter((item) => item.heroImageUrl === null);
     const byTitleLength = [...items].sort((a, b) => a.title.length - b.title.length);
     const picked: string[] = [];
@@ -377,6 +408,14 @@ export default function DesignPreviewScreen() {
       ...withoutHero.slice(0, HINTS_PER_BUCKET),
       ...byTitleLength.slice(0, 2),
       ...byTitleLength.slice(-2),
+      // P2B7C hints. How many official photos a notice published is not on
+      // the feed row at all — only the real Detail model knows — so the hub
+      // probes MORE recalls that carry a hero (a notice with several photos
+      // always has one) and the FSIS notices whose label PDFs are the only
+      // source of label-page evidence. Every one is still confirmed against
+      // the real model before any imagery scenario can use it.
+      ...withHero.slice(HINTS_PER_BUCKET, HINTS_PER_BUCKET + IMAGERY_HINTS),
+      ...fsis.slice(0, IMAGERY_HINTS),
     ]) {
       if (!picked.includes(item.id) && picked.length < DETAIL_PROBE_LIMIT) picked.push(item.id);
     }
@@ -447,6 +486,7 @@ export default function DesignPreviewScreen() {
             return [
               id,
               {
+                imageSet: model.productImages,
                 healthRisk: sections.healthRisk !== null,
                 affectedProducts: sections.affectedProducts !== null,
                 community: sections.communityReports !== null,
@@ -463,6 +503,25 @@ export default function DesignPreviewScreen() {
                   healthGuideKey: sections.healthRisk !== null && guide !== null ? guide.key : null,
                   hasCompletePairGroup: pairCompleteness.includes(false),
                   hasIncompletePairGroup: pairCompleteness.includes(true),
+                  // P2B7C (as corrected): the model's own complete header
+                  // set, so a scenario lands on a recall that really has that
+                  // many REACHABLE pages; the label count comes from the
+                  // allocation, which still holds pages no screen renders.
+                  productImageCount: model.productImages?.images.length ?? 0,
+                  labelPageCount: model.images.gallery.filter(
+                    (image) => image.source === 'fsis_label_render',
+                  ).length,
+                  rowImageCount: model.images.rowImages.size,
+                  hasExtremePortraitImage: (model.productImages?.images ?? []).some(
+                    (image) =>
+                      image.aspectRatio !== null &&
+                      image.aspectRatio <= EXTREME_PORTRAIT_MAX_ASPECT,
+                  ),
+                  hasExtremeLandscapeImage: (model.productImages?.images ?? []).some(
+                    (image) =>
+                      image.aspectRatio !== null &&
+                      image.aspectRatio >= EXTREME_LANDSCAPE_MIN_ASPECT,
+                  ),
                 },
               },
             ] as const;
@@ -697,6 +756,23 @@ export default function DesignPreviewScreen() {
           DETAIL STATES AND CALLOUTS
         </ThemedText>
         <DetailStatesGallery />
+
+        {/* P2B7C: the production image set over REAL image sets from the
+            probed recalls — the indicator shapes side by side, plus the one
+            simulated case the live corpus cannot supply (a candidate whose
+            image cannot load). */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          OFFICIAL IMAGERY AND FAILURE
+        </ThemedText>
+        <ImagerySampleGallery confirmed={confirmed} />
+
+        {/* The complete icon set, every declared glyph with its name, so a
+            missing or wrongly-mapped asset is visible in one place rather
+            than screen by screen. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          ICON SET ({ICON_NAMES.length})
+        </ThemedText>
+        <IconGallery />
 
         {/* P2B3: the questionnaire's steps and states, rendered by the real
             step components over choices a real eligible recall allows. The
@@ -1221,6 +1297,127 @@ function FeedControlsGallery() {
  * the real affects-you and retracted-notice sentences are the presentation
  * contract's and render only on a real Detail.
  */
+/**
+ * A URL that is deliberately unreachable, for the ONE imagery state the live
+ * corpus cannot supply on demand: a candidate whose image fails to load.
+ *
+ * It is not recall content and is never presented as one — the caption says
+ * it is simulated. What it proves is the P2B7C correction's rule: a page that
+ * cannot render leaves the set, so the dots and the counter always describe
+ * pages a shopper can actually reach.
+ */
+const UNREACHABLE_IMAGE = 'https://www.fda.gov/files/design-preview-unreachable-sample.png';
+
+/**
+ * The production `OfficialImageSet` over the REAL header sets the probed
+ * recalls produced — one sample per indicator shape, plus the simulated
+ * failure. Nothing here is a copy of the component or of a recall: the sets
+ * are `DetailModel.productImages` exactly as Detail receives them.
+ */
+function ImagerySampleGallery({ confirmed }: { confirmed: Record<string, ConfirmedSections> }) {
+  const sets = Object.values(confirmed)
+    .map((entry) => entry.imageSet)
+    .filter((set): set is DetailImageSet => set !== null);
+  const withCount = (predicate: (count: number) => boolean) =>
+    sets.find((set) => predicate(set.images.length)) ?? null;
+  const one = withCount((count) => count === 1);
+  const dots = withCount((count) => count >= 2 && count <= IMAGE_DOTS_MAX);
+  const counter = withCount((count) => count > IMAGE_DOTS_MAX);
+  const largest = sets.reduce<DetailImageSet | null>(
+    (best, set) => (best === null || set.images.length > best.images.length ? set : best),
+    null,
+  );
+  // The failure sample: a real set's own images plus one unreachable
+  // candidate, so the settling behaviour is visible on real photography.
+  const failure: DetailImageSet | null =
+    dots === null
+      ? null
+      : {
+          images: [
+            ...dots.images.slice(0, 2),
+            {
+              url: UNREACHABLE_IMAGE,
+              accessibilityLabel: dots.images[0].accessibilityLabel,
+              aspectRatio: null,
+            },
+          ],
+        };
+
+  const samples: { caption: string; set: DetailImageSet | null }[] = [
+    { caption: 'One official photo — the static tile, with no indicator.', set: one },
+    {
+      caption: `Two to ${IMAGE_DOTS_MAX} — position dots, one per reachable page.`,
+      set: dots,
+    },
+    {
+      caption: `More than ${IMAGE_DOTS_MAX} — the compact counter replaces the dots.`,
+      set: counter,
+    },
+    {
+      caption: 'The largest set these probes found: every page is reachable, none is dropped.',
+      set: largest,
+    },
+    {
+      caption:
+        'SIMULATED: three candidates, one of them unreachable. The failed page leaves the set, ' +
+        'so the indicator settles on the pages that actually render — never a blank counted page.',
+      set: failure,
+    },
+  ];
+
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        The product’s own image set over real header sets from the recalls this hub probed. Only the
+        last sample simulates anything, and it says so.
+      </Text>
+      {samples.map((sample) => (
+        <View key={sample.caption} style={styles.imagerySample}>
+          <Text variant="caption" color="text/secondary">
+            {sample.caption}
+          </Text>
+          {sample.set === null ? (
+            <Text variant="body-small">No suitable recall among the probed cases.</Text>
+          ) : (
+            <OfficialImageSet set={sample.set} />
+          )}
+        </View>
+      ))}
+    </Surface>
+  );
+}
+
+/** Every declared glyph with its name, at the two sizes the product uses. */
+function IconGallery() {
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        Every name the icon primitive declares, tinted as the product tints them. A blank cell here
+        is a missing or wrongly-mapped asset, wherever it would otherwise have shown up.
+      </Text>
+      <View style={styles.iconGrid}>
+        {ICON_NAMES.map((name) => (
+          <View key={name} style={styles.iconCell}>
+            <Icon name={name} size={24} />
+            <Icon name={name} size={16} color="icon/secondary" />
+            <Text variant="micro-caption" color="text/secondary">
+              {name}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </Surface>
+  );
+}
+
 function DetailStatesGallery() {
   return (
     <Surface
@@ -1915,6 +2112,19 @@ const styles = StyleSheet.create({
     gap: Spacing.half,
   },
   // The Feed galleries sit on the page colour with the Feed's own rhythm.
+  imagerySample: {
+    gap: spacing[8],
+  },
+  iconGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[16],
+  },
+  iconCell: {
+    alignItems: 'center',
+    gap: spacing[4],
+    width: 72,
+  },
   feedGallery: {
     padding: spacing[16],
     gap: spacing[16],

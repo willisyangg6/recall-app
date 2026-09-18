@@ -50,6 +50,7 @@ import type { CodeLocation } from './fact-types';
 import type { ProductPhoto } from './product-photos';
 import {
   allocateRecallImages,
+  type RecallImage,
   type RecallImageAllocation,
   type RowImageAssignment,
   type RowImageCandidate,
@@ -1572,6 +1573,121 @@ function emptyCell(key: AffectedProductsTableColumnKey): AffectedProductsTableCe
   return { key, values: [], text: null, collapsedText: null, disclosure: null, pairGroup: null };
 }
 
+// ── The header's official product imagery (P2B7C) ───────────────────────────
+
+/** One official product photograph as the header renders it. */
+export interface DetailImage {
+  /** The authoritative official URL — never rehosted, never rewritten. */
+  url: string;
+  /**
+   * The factual spoken description: the model's own product name, the same
+   * text the single hero tile has always carried. Never a source caption,
+   * and never anything derived from the pixels.
+   */
+  accessibilityLabel: string;
+  /**
+   * The source's published aspect ratio, carried for provenance and QA (the
+   * Design Preview picks its extreme-shape examples by it). It is NOT layout
+   * input: every image renders `contain`, so an unusually tall or wide one
+   * is letterboxed rather than cropped, whatever this says.
+   */
+  aspectRatio: number | null;
+}
+
+/**
+ * The header's official FDA product photography, in the allocator's own
+ * order and complete — every candidate is navigable.
+ *
+ * There is NO presentation cap. A cap would make any count the screen showed
+ * a lie about what a shopper can reach (the P2B7C correction: the counter
+ * must describe reachable pages), so the set carries everything the
+ * allocation produced and the pager virtualizes instead of dropping images.
+ *
+ * The set is never re-ranked, re-deduplicated, or re-collected downstream: a
+ * screen renders exactly `images`, in exactly this order.
+ */
+export interface DetailImageSet {
+  /** Every official product photo, in official order. Never empty — an empty
+   * set is `null`, so no surface can render an indicator over nothing. */
+  images: DetailImage[];
+}
+
+/** The stored wording for a rendered FSIS label page — ours, not the source's. */
+export const OFFICIAL_LABEL_ALT = 'Official product label';
+
+/**
+ * The largest set that still shows position DOTS. Beyond it the dots stop
+ * being countable at a glance and the compact numeric counter replaces them
+ * (founder decision, P2B7C correction) — never both.
+ */
+export const IMAGE_DOTS_MAX = 5;
+
+/**
+ * The spoken position of one page: `Image 2 of 15`.
+ *
+ * Composed here, not in the component, because it is consumer copy — and
+ * taken over the pages a shopper can actually reach, which the pager knows
+ * (a candidate whose image fails to load leaves the set).
+ */
+export function imagePositionLabel(index: number, count: number): string {
+  return `Image ${index + 1} of ${count}`;
+}
+
+/**
+ * The visible counter for a set of `IMAGE_DOTS_MAX` + 1 images or more:
+ * `2 / 15`, current over reachable. Deliberately not a sentence — the
+ * rejected `Showing 6 of 15 official images.` prose is gone, and no
+ * explanatory word replaces it. Assistive technology hears
+ * `imagePositionLabel` instead, so the slash is never read aloud.
+ */
+export function imageCounterText(index: number, count: number): string {
+  return `${index + 1} / ${count}`;
+}
+
+/**
+ * The header's image set, or null for "render nothing".
+ *
+ * The images arrive in the allocator's order and leave in it. This function
+ * labels them — it never sorts, caps, filters by quality, re-reads a
+ * caption, or looks at a pixel.
+ */
+export function detailImageSet(
+  images: readonly RecallImage[],
+  accessibilityLabel: string,
+): DetailImageSet | null {
+  if (images.length === 0) return null;
+  return {
+    images: images.map((image) => ({
+      url: image.url,
+      accessibilityLabel,
+      aspectRatio: image.aspectRatio,
+    })),
+  };
+}
+
+/**
+ * The allocation's official FDA PRODUCT PHOTOGRAPHY, hero first, in the
+ * allocator's own order.
+ *
+ * Two rules live in this one filter:
+ *
+ *  - The stored hero leads, so the picture a shopper saw on the Feed card is
+ *    the first page of Detail's set. Home and Detail read one authoritative
+ *    hero identity (`projection.heroImageUrl`); neither selects or transforms
+ *    it, so the two can never disagree.
+ *  - FSIS label renders are excluded ENTIRELY, and by source rather than by
+ *    position — so even a stored hero that pointed at a label render (the
+ *    frozen imagery policy forbids it, and `qa:imagery` gates on it) could
+ *    not reach the header. Label renders stay in `images.gallery` for the
+ *    allocation and evidence pipeline; no screen renders them as a gallery
+ *    (P2B7C correction — founder decision: imagery under Affected Products
+ *    is only ever an image matched to that exact product row).
+ */
+export function productImagery(allocation: RecallImageAllocation): RecallImage[] {
+  const ordered = [...(allocation.hero ? [allocation.hero] : []), ...allocation.gallery];
+  return ordered.filter((image) => image.source === 'fda_announcement');
+}
+
 // ── Optional section visibility (P3A) ───────────────────────────────────────
 
 /**
@@ -1647,6 +1763,12 @@ export function affectedProductsSection(
   rowImages: ReadonlyMap<string, RowImageAssignment> = new Map(),
 ): AffectedProductsSection | null {
   const built = affectedProductsTable(model, rowImages);
+  // Imagery is never a reason to open this section, and never its content:
+  // the ONLY image this section may show is one the allocator matched to an
+  // exact affected-product row (`AffectedProductsTableRow.image`), inside
+  // that row. A general gallery of the notice's label pages was built in
+  // P2B7C and REMOVED by founder decision in its correction — an image that
+  // cannot be tied to a row is not evidence about any row on screen.
   if (built === null || !tableHasContent(built)) return null;
   return { table: built };
 }
@@ -1932,8 +2054,22 @@ export interface DetailModel {
   productName: string;
   brand: BrandDisplay;
   officialSource: OfficialSourceLink;
-  /** The SAME selected hero image Home shows; null renders nothing. */
+  /** The SAME selected hero image Home shows; null renders nothing. Home's
+   * card field and the stored selection — Detail renders `productImages`,
+   * which begins with this image when there is one. */
   heroImageUrl: string | null;
+  /**
+   * The header's official FDA product photography (P2B7C): the allocator's
+   * hero — the same image the Feed card shows — followed by its gallery
+   * order, complete and uncapped, so every page the indicator counts can
+   * actually be reached.
+   *
+   * Null renders nothing (the approved no-image header). One image renders
+   * the static tile Detail has always shown; several page by hand in that
+   * same tile. FSIS label renders are never in here, and are rendered
+   * nowhere else either.
+   */
+  productImages: DetailImageSet | null;
   affectsYou: boolean;
   /** The generic approved banner text, shown iff `affectsYou`. */
   affectsYouBanner: string;
@@ -2022,7 +2158,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
   // Official label renders join the photo evidence exactly as before.
   const labelVisuals: ProductPhoto[] = detail.visuals.map((visual, index) => ({
     url: visual.url,
-    alt: 'Official product label',
+    alt: OFFICIAL_LABEL_ALT,
     order: consumer.photos.length + index,
     role: visual.role as ProductPhoto['role'],
     width: visual.width,
@@ -2053,6 +2189,14 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     }),
   });
   const heroImageUrl = images.hero?.url ?? null;
+  // The ONE visible image surface (P2B7C, as corrected): the header's
+  // official FDA product photography, hero first. FSIS label renders stay in
+  // the allocation for the evidence pipeline and are rendered nowhere; the
+  // only other imagery on the screen is a thumbnail the allocator matched to
+  // an exact affected-product row. The header collects, reorders, and
+  // deduplicates nothing of its own.
+  const productImages = detailImageSet(productImagery(images), productName);
+  const productsSection = affectedProductsSection(affectedProductsView, images.rowImages);
   const sold = whereSoldModel(consumer.distribution);
   // The standardized health guide (P1B) is selected from the SAME typed
   // reason What Happened rendered — `interpretReason` is pure, so calling it
@@ -2099,6 +2243,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
       projection.officialUrl,
     ),
     heroImageUrl,
+    productImages,
     affectsYou: context.affectsYou,
     affectsYouBanner: 'Warning: This recall affects you.',
     whatHappened: {
@@ -2117,7 +2262,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
       healthRisk: healthRiskSection(hazardGuidance, standardizedRisk, {
         retracted: projection.state === 'retracted',
       }),
-      affectedProducts: affectedProductsSection(affectedProductsView, images.rowImages),
+      affectedProducts: productsSection,
     },
     action: consumer.action,
     healthRisk: standardizedRisk,

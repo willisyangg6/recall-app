@@ -300,6 +300,62 @@ The **saved and unsaved** header states are inspected by tapping the save
 control on any of these; the **affects-you** callout renders on any recall
 that matches this device's personalization.
 
+### Official imagery scenarios (P2B7C)
+
+Twelve further scenarios open the real Recall Detail on a recall whose own
+**official imagery** exercises one shape. As with every presentation
+scenario, nothing is simulated: the hub reads the real Detail model and
+offers a row only once that model proves the shape (see §4). Set sizes exist
+nowhere on a feed row — only in the model — so the hub probes more recalls
+that carry a hero, and the FSIS notices whose label PDFs prove that nothing
+renders them. The group is `Official imagery on Detail`.
+
+| #     | Scenario                                      | What you should see                                                                                                                  |
+| ----- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 46    | Detail · one official product photo           | The static header tile: no dots, no counter, nothing to swipe.                                                                       |
+| 47    | Detail · two official product photos          | The same tile, swipeable, with two dots. Nothing advances on its own; a vertical drag over the tile still scrolls the page.          |
+| 48    | Detail · five official product photos         | Five dots — the largest set that still uses them.                                                                                    |
+| 49    | Detail · six official product photos          | The dots are replaced by the compact counter `1 / 6`, updating as you page. Never both.                                              |
+| 50    | Detail · fifteen or more photos               | `1 / N` over the whole set; paging to the last page proves every one is reachable. No truncation sentence anywhere.                  |
+| 51    | Detail · the largest set in the live corpus   | The outlier (51 photos in the recorded corpus). It opens as fast as any other recall: the pager is virtualized.                      |
+| 52    | Detail · an unusually tall official photo     | The whole photo contained in the tile, letterboxed on the placeholder colour; never cropped.                                         |
+| 53    | Detail · an unusually wide official photo     | The same on the other axis.                                                                                                          |
+| 54    | Detail · long product name beside a paged set | The name wraps beside the tile, never truncated; at an accessibility text size the header stacks and stays stacked.                  |
+| 55    | Detail · an image matched to an exact row     | Inside Affected Products: a thumbnail beside that row's Product value (the Outshine shape) — the only imagery that section may show. |
+| 56    | Detail · a notice whose label pages exist     | **Nothing** renders them: no gallery above the table, no standalone section, nothing in the header (founder decision).               |
+| 57–58 | Detail · paged imagery at accessibility sizes | Set the text size first (see below). The indicator and the header stack grow with the text; no page is left half-shown.              |
+
+Text size is a **device setting the harness cannot simulate** (the same is
+true of the document gallery). The accessibility rows open an ordinary
+two-photo recall; set the simulator's size first — Settings › Accessibility ›
+Display & Text Size › Larger Text — and revisit rows 50, 54 and 56 at that
+size too. The **no-image** header is row 24, which already covers a recall
+whose model resolved no photography at all.
+
+### Official imagery and failure (P2B7C)
+
+A gallery renders the product's own `OfficialImageSet` over the **real**
+header sets the probed recalls produced — one sample per indicator shape (no
+indicator, dots, counter) and the largest set those probes found — so the
+three shapes can be compared side by side without hunting for three recalls.
+
+Its last sample is the one state the live corpus cannot supply on demand and
+the only **simulated** thing in the section: a real set's own photographs
+plus one deliberately unreachable candidate. It demonstrates the rule that
+closed the reported acceptance defect — a page whose image cannot load leaves
+the set, so the dots and the counter always describe pages that actually
+rendered, and a grey square can never sit under an indicator. The caption
+says so on screen.
+
+### Icon set (P2B7C)
+
+A gallery renders **every** glyph the icon primitive declares, each at 24 and
+16 with its name beneath, tinted the way the product tints them. A blank cell
+here is a missing or wrongly-mapped asset — visible in one place instead of
+screen by screen. `src/components/ui/design-foundation.test.ts` pins the same
+mapping offline (every declared name resolves to a real, non-empty 1x/2x/3x
+asset), so a broken icon fails the suite before it reaches a screenshot.
+
 A further gallery, **Detail states and callouts**, renders Recall Detail's
 loading, not-found and load-failure messages with their real copy from
 `src/lib/detail-copy.ts`, and the Information Callout in both tones on
@@ -349,7 +405,10 @@ content rather than merely looking like it should. Up to sixty recalls are
 probed on open (read-only detail requests, the same the Detail screen makes):
 the longest product tables, single-line notices, the widest jurisdiction
 lists, and from P2B2 a few rows per hazard-guide hint, rows with and without
-a hero, and the shortest and longest titles.
+a hero, and the shortest and longest titles. P2B7C raised the probe budget to
+eighty and added two imagery buckets — more hero-carrying recalls (a notice
+with several photos always has one) and the FSIS notices whose label PDFs are
+the only source of label pages.
 
 Tap **Choose another** on any bucket to pick a different real recall. Each
 option shows its real attributes. If the live corpus contains nothing that
