@@ -279,6 +279,15 @@ the one relevance evaluation (`lib/relevance.ts`, unchanged) says
 you.` exactly when the same verdict holds; match-reason bullets are not added
 to the banner. Matching logic itself is unchanged.
 
+### Product category tag
+
+Home cards carry one optional product-category word — `HomeCardModel.categoryLabel`,
+built by `cardCategoryLabel` from the stored `productCategories` and nothing
+else. Detail carries none. The complete display contract, including which
+categories may appear and why, is
+[Category (C10B): the card tag (P2B7D)](#the-card-tag-p2b7d) below, because
+the rule is a property of the category vocabulary rather than of the card.
+
 ### Official source
 
 Home cards carry **no per-card source attribution**. Detail shows the dynamic
@@ -1532,6 +1541,63 @@ never touches Affects Me membership or ranking. Selections are sanitized
 against the launch allowlist at the state boundary, so a hidden, unknown,
 duplicate or malformed id cannot enter the filter through any path. With no
 category selected, All Recalls is byte-identical to its pre-C10B self.
+
+### The card tag (P2B7D)
+
+C10B put Category in the filter. P2B7D also **shows** it: one quiet word on
+each Feed and Saved card, under the brand, so a shopper scanning the list can
+tell what kind of product a recall is without reading the title.
+
+It is a display of the same stored answer the filter reads. No new
+classifier, no ingestion change, no schema change, no client-side inference:
+`lib/recall-presentation.ts` → `cardCategoryLabel(item.productCategories)` is
+the only rule, it takes one argument, and there is no overload by which a
+title, brand, reason, agency, hazard or image could reach it.
+
+**Which categories may appear.** Exactly the nine the filter offers, decided
+by the same `sanitizeLaunchCategoryIds` boundary rather than a second list.
+`prepared_foods`, `supplements` and `other` render **nothing** — they are
+hidden for the measured reasons in
+[recall-food-categories.md](recall-food-categories.md) §8, and a card tagged
+with an aisle the Category sheet does not offer would be a visible dead end.
+
+**How many.** At most one. 2.5% of active cases carry more than one id; the
+tag takes the first launch-visible one in the frozen vocabulary's display
+order. That order is a fixed display order, not a confidence ranking — every
+stored id is one the source's own product text named — so this is a stable
+choice among equally valid answers, not a demotion of the others. Sorting
+happens before the pick, so a list that arrived out of order still reads the
+same. Measured against the live feed on 2026-09-17: **695 of 895** loaded
+cards show a tag and the per-label counts sum to exactly 695, which is what
+"at most one" looks like from outside.
+
+**Absence.** A case with no stored categories, or only hidden ones, renders no
+element at all — no placeholder word, no container, no reserved height, no
+spacer, and nothing for a screen reader to land on. Missing is still not
+`other`.
+
+**Parity.** Feed and Saved both render the shared `RecallCard` from the same
+`buildHomeCardModel(item, …)` over the same `FeedItem`, so the same recall
+cannot show different categories on the two screens; neither screen imports
+the vocabulary to spell a label of its own. Verified in the simulator by
+saving a recall and comparing the two cards.
+
+**What it does not change.** Filtering reads the raw stored ids and is
+untouched — a case whose only _visible_ id is its second one still matches a
+filter on its first. Detail renders no category. Affects Me, risk,
+personalization, search and notifications are unchanged, which
+`category-invariance.test.ts` and `qa:product-categories` already enforce
+structurally.
+
+**The honest risk.** As a filter, a miscategorization is a discovery miss with
+the whole feed behind it. As a **tag it is a visible statement on the card**,
+which is a different failure mode and, arguably, a higher bar. The number
+that governs it is the founder-accepted **1.0% (2/200)** unreasonable-placement
+rate rather than the 87.5% exact-set figure: of those two reviewed cases, one
+(the cantaloupe row) resolves to `other` and so shows nothing at all, and the
+other (a milk pan under Dairy & eggs) would show a wrong word. The tag makes
+no safety or completeness claim, is visually secondary, and sits beside the
+authoritative product name and image that immediately correct it.
 
 ## Sharing
 

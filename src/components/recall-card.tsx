@@ -4,9 +4,10 @@
  * derives no recall wording of its own, so every surface that lists recalls
  * says the same thing. Hierarchy (P1, unchanged): risk + the one activity
  * date, the Affects-you relevance label, the product media, product name,
- * brand, concise reason, compact location, and the save control. The raw
- * government headline never appears here, and cards carry no per-card agency
- * label — source attribution lives on the detail screen.
+ * brand, the product-category tag, concise reason, compact location, and the
+ * save control. The raw government headline never appears here, and cards
+ * carry no per-card agency label — source attribution lives on the detail
+ * screen.
  *
  * Extracted from the Feed in P2A so the Saved tab lists recalls through the
  * SAME component rather than a second implementation that could drift.
@@ -27,6 +28,16 @@
  * product name or summary wraps beside the media, and the type scales with
  * the reader's Dynamic Type setting.
  *
+ * ## The product-category tag (P2B7D)
+ *
+ * A third, OPTIONAL dimension, and the only one that can remove an element
+ * rather than change it: `model.categoryLabel` is the one launch-visible
+ * product category the presentation contract read out of the stored
+ * projection, or null. Null renders nothing — see the comment at the call
+ * site — so a card with no displayable category is byte-identical to its
+ * pre-P2B7D self. The card decides nothing about which categories are
+ * shown or what they are called; see `cardCategoryLabel`.
+ *
  * ## Interaction
  *
  * The whole card opens Recall Details. The save control is a nested
@@ -37,7 +48,8 @@
  * ## Accessibility
  *
  * To VoiceOver the card is one element — risk, date, relevance, product,
- * brand, reason, location and the save state, read in that order — and iOS
+ * brand, category, reason, location and the save state, read in that order
+ * — and iOS
  * does not let a screen reader reach a control nested inside such an
  * element. The save action is therefore also exposed as a custom
  * accessibility action on the card itself ("Save this recall" / "Saved.
@@ -50,6 +62,7 @@ import { Link } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { SaveRecallButton } from '@/components/save-recall-button';
+import { CategoryTag } from '@/components/ui/category-tag';
 import { Icon } from '@/components/ui/icon';
 import { MediaTile } from '@/components/ui/media-tile';
 import { NoticeLabel } from '@/components/ui/notice-label';
@@ -138,6 +151,14 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
                   {model.brand.text}
                 </Text>
               </View>
+              {/* The product category, when the case carries a launch-visible
+                  one. Placed under the identity it describes rather than in
+                  the status row above, which belongs to risk and relevance;
+                  it is quiet metadata and must never read as a third status.
+                  A case with none renders NOTHING here — the identity column
+                  is a gapped flex column, so an omitted child leaves no gap,
+                  no spacer and no accessibility element behind it. */}
+              {model.categoryLabel ? <CategoryTag label={model.categoryLabel} /> : null}
               {model.reasonLine ? (
                 <Text variant="body-small" color="text/secondary">
                   {model.reasonLine}

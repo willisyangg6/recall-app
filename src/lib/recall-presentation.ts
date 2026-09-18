@@ -17,6 +17,8 @@
  *    with a fixed date and no formatting depends on the process timezone.
  */
 
+import { foodCategoryLabel } from '@/domain/food-category';
+import { sanitizeLaunchCategoryIds } from '@/domain/food-category-launch';
 import { classifyIllnessReport, type IllnessReport } from '@/domain/illness';
 import { hasMaterialUpdate, materialActivityAt } from '@/domain/material-activity';
 import type {
@@ -1987,6 +1989,51 @@ export function detailNarrative(reasonText: string, quantitySentence: string | n
   return quantitySentence ? `${reasonText} ${quantitySentence}` : reasonText;
 }
 
+// ── Product category tag (P2B7D) ────────────────────────────────────────────
+
+/**
+ * The ONE product category a recall card may show, as its shopper-facing
+ * label — or null, which renders nothing at all.
+ *
+ * ## It displays an answer; it never computes one
+ *
+ * The only input is `FeedItem.productCategories`: the ids the server-side
+ * classifier derived and `projection.productCategories` stored, read back by
+ * `domain/product-categories-stored.ts`. Nothing here looks at the title,
+ * brand, reason, agency, hazard or image, and no other overload exists — a
+ * second, weaker, on-device classifier is the failure this signature is shaped
+ * to prevent (docs/recall-food-categories.md §8, `category-invariance.test.ts`).
+ *
+ * ## Why `sanitizeLaunchCategoryIds` and not a list of our own
+ *
+ * It is THE boundary the Category filter already puts every id through: it
+ * drops non-strings and unknown ids, drops the three launch-hidden ids,
+ * collapses duplicates, and sorts into the frozen vocabulary's display order.
+ * Reusing it — rather than re-deciding here what a shopper may see — is what
+ * makes it impossible for a card to show a category the filter does not offer.
+ * A card tagged `Prepared foods` with no Prepared foods chip behind it would
+ * be a visible dead end, and `supplements` has no validation at all
+ * (docs/recall-food-categories.md §8, "Launch-visible allowlist").
+ *
+ * ## Why the FIRST one, and why at most one
+ *
+ * 2.5% of active cases carry more than one category, and the vocabulary's
+ * order is a fixed display order, not a confidence ranking — every stored id
+ * is one the source's own product text genuinely named, so there is no
+ * "primary" to demote. Taking the first launch-visible id after the canonical
+ * sort is therefore an arbitrary-but-stable choice among equally valid
+ * answers, and stability is what matters: Feed and Saved read the same stored
+ * list through this same function and cannot disagree.
+ *
+ * Null for: no stored categories (an un-enriched case — NOT `other`), and a
+ * list whose every id is launch-hidden. Both render nothing: no placeholder
+ * word, no empty container, no spacer, no spoken element.
+ */
+export function cardCategoryLabel(productCategories: unknown): string | null {
+  const [displayable] = sanitizeLaunchCategoryIds(productCategories);
+  return displayable === undefined ? null : foodCategoryLabel(displayable);
+}
+
 // ── Home card model ─────────────────────────────────────────────────────────
 
 export interface HomeCardModel {
@@ -2000,6 +2047,12 @@ export interface HomeCardModel {
   productName: string;
   brand: BrandDisplay;
   reasonLine: string | null;
+  /**
+   * The one displayable product category ("Bakery"), or null when the case
+   * has none stored or carries only launch-hidden ids. Quiet metadata, never
+   * a risk, a relevance or a completeness statement — see `cardCategoryLabel`.
+   */
+  categoryLabel: string | null;
   heroImageUrl: string | null;
   locationSummary: string;
 }
@@ -2035,6 +2088,10 @@ export function buildHomeCardModel(item: FeedItem, context: HomeCardContext): Ho
       pathogenOrAllergen: item.pathogenOrAllergen,
       title: item.title,
     }),
+    // The STORED answer, launch-filtered and capped at one. Feed and Saved
+    // both reach the card through this builder, so the same recall carries
+    // the same tag on both — there is no second display rule to drift.
+    categoryLabel: cardCategoryLabel(item.productCategories),
     heroImageUrl: item.heroImageUrl,
     locationSummary: homeLocationSummary(item.geography),
   };

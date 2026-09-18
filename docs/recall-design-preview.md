@@ -115,6 +115,37 @@ the right recall in the live feed:
   controls are live but wired to nothing: they narrow no feed and open no
   sheet, and the loading sample does not announce itself.
 
+### Category tag treatments (P2B7D)
+
+A **Category tag treatments** section, sitting directly above the feed card
+matrix, is the decision record for how the product-category tag is drawn. It
+compares three token-compliant options over the **same two real recalls** —
+the shortest and the longest product name in the live feed that actually
+carries a launch-visible category — each drawn at the recall card's own
+geometry (its status row and content row; the footer is omitted because no
+treatment reaches it):
+
+| Option | Treatment                                  | Outcome                                                                        |
+| ------ | ------------------------------------------ | ------------------------------------------------------------------------------ |
+| A      | Inline metadata appended to the brand line | Rejected — no fixed position, and at real brand lengths it reads as more brand |
+| B      | A subtle outlined tag under the brand      | **Shipped**                                                                    |
+| C      | A filled neutral tag in the status row     | Rejected — it wraps under the risk badge and reads as a second status          |
+
+Nothing is simulated: the category on each sample is the one the live
+projection stores. **B is the product's own `CategoryTag`; A and C are drawn
+here and nowhere else**, so neither rejected treatment exists in the shipped
+app — the harness is `__DEV__`-gated and Metro eliminates it from a release
+build.
+
+The section closes with two references: every launch-visible label rendered
+as the shipped tag, so all nine words can be checked at their real width
+(the three launch-hidden ids have no tag and cannot be rendered — nothing
+maps an id to a word outside the frozen vocabulary), and a live census of
+how many loaded recalls show a tag versus none. The census is a useful
+sanity check as well as a caption: the per-label counts sum to the number of
+tagged cards, which is what "at most one tag per recall" looks like from
+outside.
+
 ### Saved gallery (P2B4)
 
 A **Saved states and list** section makes the restyled Saved tab inspectable

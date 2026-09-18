@@ -57,9 +57,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { CategoryTag } from '@/components/ui/category-tag';
 import { Chip } from '@/components/ui/chip';
 import { DisclosureControl } from '@/components/ui/disclosure-control';
 import { Icon, ICON_NAMES } from '@/components/ui/icon';
+import { MediaTile } from '@/components/ui/media-tile';
 import { OfficialImageSet } from '@/components/ui/official-image-set';
 import { RelevanceLabel } from '@/components/ui/relevance-label';
 import { RiskLabel } from '@/components/ui/risk-label';
@@ -67,8 +69,11 @@ import { SearchBar } from '@/components/ui/search-bar';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
 import {
+  color,
   CUSTOM_FONTS_INSTALLED,
   fontFamily,
+  layout,
+  radius,
   spacing,
   typography,
   type TypographyVariant,
@@ -116,6 +121,7 @@ import {
   versionLine,
   type PreferenceSummaryState,
 } from '@/lib/profile-hub';
+import { LAUNCH_CATEGORY_OPTIONS } from '@/domain/food-category-launch';
 import {
   EMPTY_PREFERENCES,
   SUPPORTED_STATE_CODES,
@@ -736,6 +742,14 @@ export default function DesignPreviewScreen() {
           </ThemedText>
         </ThemedView>
 
+        {/* P2B7D: the three category-tag treatments compared over the same
+            real recalls, kept as the decision record. B is the product's own
+            component; A and C are drawn nowhere else. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          CATEGORY TAG TREATMENTS
+        </ThemedText>
+        <CategoryTagGallery items={feed.state.status === 'ready' ? feed.state.items : []} />
+
         {/* P2B1: the Feed's card, controls and states, rendered by the
             production components over REAL recalls from the live feed
             session. What is simulated is named on the gallery itself. */}
@@ -915,6 +929,182 @@ export default function DesignPreviewScreen() {
         })}
       </ScrollView>
     </ThemedView>
+  );
+}
+
+/**
+ * CATEGORY TAG TREATMENTS (P2B7D) — the decision record.
+ *
+ * Three token-compliant ways to put one product category on a recall card,
+ * compared side by side over the SAME two real recalls before one of them was
+ * wired into the shipped card. It stays in the harness so the comparison can
+ * be re-inspected rather than re-argued, and so a future restyling can see
+ * what was rejected and why.
+ *
+ * Each sample reproduces the part of the card every treatment touches — the
+ * status row and the content row, at the card's own geometry — and varies
+ * nothing else. The footer is omitted because no treatment reaches it.
+ *
+ *   A · inline metadata — the category joins the brand line after a middot.
+ *       No container, no added height, and no fixed position: where it lands
+ *       depends on how long the brand is, and it is the same type, size and
+ *       colour as the brand, so it reads as more brand.
+ *   B · subtle neutral tag — its own hairline-bordered mark under the brand,
+ *       at a fixed left edge on every card. SHIPPED.
+ *   C · filled neutral tag in the status row — the strongest treatment that
+ *       still borrows no risk or relevance colour. It takes the card's most
+ *       prominent metadata position, beside the risk badge, and a filled
+ *       rectangle there reads as a second status.
+ *
+ * Only the real `CategoryTag` renders B; A and C are drawn here and nowhere
+ * else, so neither rejected treatment exists in the product.
+ */
+
+type TagTreatment = 'inline' | 'tag' | 'status';
+
+const TAG_TREATMENTS: readonly { key: TagTreatment; caption: string }[] = [
+  {
+    key: 'inline',
+    caption: 'A · inline metadata on the brand line — rejected: no fixed position, reads as brand',
+  },
+  { key: 'tag', caption: 'B · subtle neutral tag under the brand — SHIPPED' },
+  {
+    key: 'status',
+    caption: 'C · filled neutral tag in the status row — rejected: competes with the risk badge',
+  },
+];
+
+function TreatmentSample({ model, treatment }: { model: HomeCardModel; treatment: TagTreatment }) {
+  const label = model.categoryLabel;
+  return (
+    <Surface radius={16} border="border/subtle" elevation="card" style={styles.treatmentCard}>
+      <View style={styles.treatmentStatusRow}>
+        {model.risk.badgeLabel ? (
+          <RiskLabel
+            tier={model.risk.tier}
+            label={model.risk.badgeLabel}
+            accessibilityLabel={model.risk.accessibilityLabel}
+          />
+        ) : null}
+        <Text variant="micro-caption" color="text/secondary">
+          {model.activity.text}
+        </Text>
+        {treatment === 'status' && label ? (
+          <View style={styles.filledCategoryTag}>
+            <Text variant="caption">{label}</Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.treatmentContent}>
+        <MediaTile uri={model.heroImageUrl} alt={model.productName} size={layout.cardMediaSize} />
+        <View style={styles.treatmentIdentity}>
+          <View>
+            <Text variant="heading-3">{model.productName}</Text>
+            <Text variant="caption" color="text/secondary">
+              {treatment === 'inline' && label
+                ? `${model.brand.text} · ${label}`
+                : model.brand.text}
+            </Text>
+          </View>
+          {treatment === 'tag' && label ? <CategoryTag label={label} /> : null}
+          {model.reasonLine ? (
+            <Text variant="body-small" color="text/secondary">
+              {model.reasonLine}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+    </Surface>
+  );
+}
+
+function CategoryTagGallery({ items }: { items: FeedItem[] }) {
+  const today = todayIso();
+  const models = useMemo(
+    () => items.map((item) => buildHomeCardModel(item, { today, affectsYou: false })),
+    [items, today],
+  );
+  const tagged = models.filter((model) => model.categoryLabel !== null);
+  const untagged = models.length - tagged.length;
+
+  if (tagged.length === 0) {
+    return (
+      <ThemedText type="small" themeColor="textSecondary">
+        No live recall with a launch-visible category is loaded yet, so no treatment can be shown.
+      </ThemedText>
+    );
+  }
+
+  // The shortest and the longest real product name that actually carries a
+  // displayable category: the two shapes a treatment has to survive.
+  const shortest = tagged.reduce(
+    (best, model) => (model.productName.length < best.productName.length ? model : best),
+    tagged[0],
+  );
+  const longest = tagged.reduce(
+    (best, model) => (model.productName.length > best.productName.length ? model : best),
+    tagged[0],
+  );
+  const samples: { title: string; model: HomeCardModel }[] = [
+    { title: `Short card · ${shortest.categoryLabel}`, model: shortest },
+    { title: `Long card · ${longest.categoryLabel}`, model: longest },
+  ];
+
+  // Which labels the live feed actually produces, and how often.
+  const counts = new Map<string, number>();
+  for (const model of tagged) {
+    const label = model.categoryLabel!;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const census = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, count]) => `${label} ${count}`)
+    .join(' · ');
+
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        Three token-compliant treatments over the same two real recalls, drawn at the card’s own
+        geometry. Nothing is simulated: the category on each sample is the one the live projection
+        stores. B is the product’s own CategoryTag; A and C exist only here.
+      </Text>
+      {samples.map((sample) => (
+        <View key={sample.model.id} style={styles.feedCase}>
+          <Text variant="body-small-bold">{sample.title}</Text>
+          {TAG_TREATMENTS.map((treatment) => (
+            <View key={treatment.key} style={styles.feedCase}>
+              <Text variant="caption" color="text/secondary">
+                {treatment.caption}
+              </Text>
+              <TreatmentSample model={sample.model} treatment={treatment.key} />
+            </View>
+          ))}
+        </View>
+      ))}
+
+      <View style={styles.feedCase}>
+        <Text variant="caption" color="text/secondary">
+          Every launch-visible label as the shipped tag, so all nine words can be checked at their
+          real width. The three launch-hidden ids (Prepared foods, Supplements, Other) have no tag
+          and cannot be rendered here — nothing maps an id to a word outside the frozen vocabulary.
+        </Text>
+        <View style={styles.badges}>
+          {LAUNCH_CATEGORY_OPTIONS.map((option) => (
+            <CategoryTag key={option.value} label={option.label} />
+          ))}
+        </View>
+      </View>
+
+      <Text variant="caption" color="text/secondary">
+        Live feed census — {tagged.length} of {models.length} loaded recalls show a tag; {untagged}{' '}
+        show none (no stored categories, or only launch-hidden ones) and render no container, no
+        spacer and nothing spoken. {census}
+      </Text>
+    </Surface>
   );
 }
 
@@ -2132,6 +2322,38 @@ const styles = StyleSheet.create({
   feedCase: {
     gap: spacing[8],
     padding: spacing[12],
+  },
+  // P2B7D: the recall card's own geometry, reproduced for the treatment
+  // comparison so the three options are judged at the size they would ship
+  // at. The footer row is omitted — no treatment reaches it.
+  treatmentCard: {
+    padding: spacing[12],
+    gap: spacing[8],
+  },
+  treatmentStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing[8],
+  },
+  treatmentContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[12],
+  },
+  treatmentIdentity: {
+    flex: 1,
+    minWidth: 0,
+    gap: spacing[8],
+  },
+  // Treatment C only: the strongest neutral fill the system offers, which is
+  // the media placeholder's own grey. Rejected, and drawn nowhere else.
+  filledCategoryTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: color['background/media-placeholder'],
+    borderRadius: radius[4],
+    paddingHorizontal: spacing[8],
+    paddingVertical: spacing[4],
   },
   // The Personalization sections at the screen's own rhythm.
   formSample: {

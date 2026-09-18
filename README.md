@@ -922,6 +922,33 @@ personalization`, `Open Lotly on your phone`); prose says `Affects me`,
   ([docs/recall-imagery.md](docs/recall-imagery.md) §14,
   [DESIGN.md](DESIGN.md) "Recall Detail").
 
+- **P2B7D — product-category tags on recall cards** (implemented,
+  uncommitted): Feed and Saved cards now show one quiet product-category
+  word under the brand, so a shopper scanning the list can tell what kind of
+  product a recall is. It **displays** the category C10B already derives,
+  stores and filters on — no classifier, no inference in UI code, and no
+  schema, ingestion, projection or production-data change. The rule is one
+  function in the shared presentation contract
+  (`cardCategoryLabel`), so Feed and Saved reach it through the same
+  `buildHomeCardModel` and cannot disagree. Which categories may appear is
+  decided by the **same launch allowlist the Category filter uses**, not a
+  second list: the nine offered ids render their frozen label, and
+  `prepared_foods`, `supplements` and `other` render **nothing** — no
+  placeholder, no container, no spacer, nothing spoken. At most one tag per
+  recall (the first launch-visible id in canonical display order); measured
+  on the live feed, 695 of 895 loaded cards show one and the per-label
+  counts sum to exactly 695. One tokenized primitive
+  (`src/components/ui/category-tag.tsx`): an outlined `radius/4` mark in
+  Public Sans `caption`, no fill, no icon, no risk or relevance colour, no
+  uppercase, no interactivity — deliberately not the Navigation Chip's pill
+  and not the compact mono status labels. Recall Detail, filtering, Affects
+  Me, risk, search, Save and the Detail carousel are unchanged. Three
+  treatments were compared in Design Preview over the same real recalls
+  before one shipped, and the comparison stays there as the decision record
+  ([docs/recall-feed-usability.md](docs/recall-feed-usability.md) "The card
+  tag (P2B7D)", [DESIGN.md](DESIGN.md) "Category Tag",
+  [docs/recall-food-categories.md](docs/recall-food-categories.md) §8).
+
 ## Operational verification (O2)
 
 - **O2-A — read-only production audit, completed 2026-09-05. Final

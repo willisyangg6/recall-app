@@ -39,6 +39,7 @@ const ICON = read('components', 'ui', 'icon.tsx');
 const CHIP = read('components', 'ui', 'chip.tsx');
 const SEARCH_BAR = read('components', 'ui', 'search-bar.tsx');
 const RELEVANCE_LABEL = read('components', 'ui', 'relevance-label.tsx');
+const CATEGORY_TAG = read('components', 'ui', 'category-tag.tsx');
 const RISK_LABEL = read('components', 'ui', 'risk-label.tsx');
 const PRESENTATION = read('lib', 'recall-presentation.ts');
 const FEED_COPY = read('lib', 'feed-copy.ts');
@@ -52,6 +53,9 @@ const FEED_SURFACES: Record<string, string> = {
   chip: CHIP,
   'search bar': SEARCH_BAR,
   'relevance label': RELEVANCE_LABEL,
+  // P2B7D: the product-category tag is a Feed surface too — same tokens,
+  // same type scale, and (below) deliberately NOT the mono label type.
+  'category tag': CATEGORY_TAG,
   'tab layout': TAB_LAYOUT,
 };
 
@@ -164,6 +168,9 @@ test('IBM Plex Mono is used only for compact status labels, never for words peop
     ['chip', CHIP],
     ['search bar', SEARCH_BAR],
     ['state message', STATE_MESSAGE],
+    // P2B7D: the category tag is product metadata a shopper reads, not a
+    // compact status label — so it is Public Sans, like the brand beside it.
+    ['category tag', CATEGORY_TAG],
     ['tab layout', TAB_LAYOUT],
   ]) {
     assert.ok(!codeOnly(source).includes('variant="label'), `${name} uses the mono label type`);

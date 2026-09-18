@@ -693,6 +693,22 @@ Hidden ≠ deleted. Cases keep carrying these ids, the backfill keeps writing
 them, QA keeps reporting them, and every one of those recalls stays in the
 unfiltered feed. Un-hiding is a one-line change plus a QA acknowledgement.
 
+**The allowlist now has two consumers, not one (P2B7D).** Feed and Saved
+cards also DISPLAY one category, and they decide which through the same
+`sanitizeLaunchCategoryIds` boundary rather than a list of their own — so a
+card can never show an aisle the Category sheet does not offer, and
+un-hiding an id would light up both surfaces together. Displaying
+`prepared_foods` on a card while keeping its chip hidden was considered and
+rejected: its 94.6% precision would arguably support the per-card claim, but
+a card tagged with an aisle the filter has no chip for is a visible dead end,
+and a second visibility list is exactly what this file exists to prevent. The
+display contract — one tag, canonical order, absence renders nothing — is
+[recall-feed-usability.md](recall-feed-usability.md), "The card tag (P2B7D)".
+The risk it carries differs in kind from the filter's and is stated there: a
+miscategorized chip is a discovery miss, a miscategorized tag is a visible
+wrong word, and the number that governs it is the 1.0%
+unreasonable-placement rate rather than the 87.5% exact-set figure.
+
 ## 8b. Commands
 
 ```bash
@@ -862,7 +878,8 @@ What it may **not** do is re-measure against `c10a2_natural`. It is spent.
 ### What is still open
 
 - **Designed no-image fallbacks**, which is what the taxonomy was originally
-  wanted for. Category ids are now available on every card to key them from.
+  wanted for. Category ids are now available on every card to key them from,
+  and since P2B7D the launch-visible label is on the card already.
 - **Prepared foods and Supplements are hidden**, not fixed. Un-hiding either
   requires new evidence: for Prepared foods a materially better recall than
   64.8%, for Supplements any holdout that actually contains supplement rows.

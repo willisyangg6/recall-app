@@ -1190,6 +1190,54 @@ no tier can reach it, and it reads `relevancePalette` only. The card renders
 it exactly when the model's `affectsYou` verdict is true; the decision itself
 (lib/relevance.ts) is untouched.
 
+### Category Tag
+
+The one product-category mark on a recall card (P2B7D) — Feed and Saved, the
+same component, one call site in the shared card. It answers "what kind of
+product is this", and it is the quietest labelled thing on the card by
+design.
+
+- **Shape and type.** `radius/4`, a 1px `border/subtle` outline, **no fill of
+  its own** (the card's own `background/surface` shows through), `spacing/8`
+  horizontal and `spacing/4` vertical padding, `alignSelf: flex-start`. The
+  word is `caption` in `text/secondary` — Public Sans, sentence case, the
+  vocabulary's own label verbatim.
+- **Placement.** In the identity column, directly beneath the brand and above
+  the recall summary. Never in the status row (risk and relevance live there)
+  and never in the footer (the save control's tap target lives there).
+- **What it deliberately is not.** Not a risk tier: it reads neither
+  `riskPalette` nor `relevancePalette`, and having no fill it survives
+  greyscale because colour carries nothing. Not a compact status label: it is
+  **not** IBM Plex Mono, **not** uppercase, and carries no glyph. Not a
+  control: `radius/full` is the Navigation Chip's pill and is deliberately
+  not used here, and the tag has no press handler, no button role and no
+  hitSlop. Nothing about it animates.
+- **Absence.** A recall with no displayable category renders **no element** —
+  no container, no reserved height, no spacer, nothing spoken. The identity
+  column is a gapped flex column, so the omitted child leaves no gap.
+- **Dynamic Type.** No fixed height and no cap: the box is the caption's own
+  line box, so at accessibility sizes the label wraps inside the outline and
+  the outline grows with it. Verified in the simulator at default,
+  accessibility-extra-large and the largest supported size.
+- **Accessibility.** `accessibilityRole="text"` with the spoken label
+  `Category: <label>` — named once, in the Risk Label's
+  `Risk level: <tier>` shape, because the bare word is ambiguous aloud
+  between a brand and a reason.
+
+Three token-compliant treatments were compared in Design Preview over the
+same two real recalls before this one shipped; the comparison stays in the
+harness as the decision record
+([docs/recall-design-preview.md](docs/recall-design-preview.md)). The two
+rejected options were an inline metadata label on the brand line — no fixed
+position, and at real brand lengths it reads as more brand — and a filled
+neutral tag in the status row, which wraps directly under the risk badge and
+reads as a second status.
+
+Which categories appear, and why three of the twelve never do, is a product
+rule rather than a visual one:
+[docs/recall-feed-usability.md](docs/recall-feed-usability.md), "The card tag
+(P2B7D)". Implemented in `src/components/ui/category-tag.tsx`.
+
 ### Recall Card
 
 Recall Card is the primary feed object. It is a white card at the content
@@ -1229,9 +1277,10 @@ Card content hierarchy:
 3. product media
 4. product title
 5. manufacturer/brand
-6. one-sentence recall summary
-7. affected location
-8. save/bookmark affordance
+6. the product-category tag, when the recall has a displayable one
+7. one-sentence recall summary
+8. affected location
+9. save/bookmark affordance
 
 A Public Health Alert additionally carries its explicit notice label (shipped
 behavior; not yet in Figma). Product titles and summaries must tolerate
@@ -1242,7 +1291,8 @@ Implemented in `src/components/recall-card.tsx` (P2B1). The card is
 label, the PHA notice label when there is one, and the one activity date in
 `micro-caption`, with the relevance label at the trailing edge), the content
 row (the 112px media tile, then the product name in `heading-3`, the brand in
-`caption`, and the summary in `body-small`), and `spacing/16` later the footer
+`caption`, the optional Category Tag, and the summary in `body-small`), and
+`spacing/16` later the footer
 (the 12px pin glyph and the location in `caption`, with the save control
 trailing). The media tile renders the real hero image `contain`ed on
 `background/media-placeholder`, so the neutral colour shows around a tall or
