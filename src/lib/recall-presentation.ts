@@ -42,7 +42,7 @@ import { PACKAGE_FIELD_LABEL, type PackageField, type PackageFieldKey } from './
 import {
   capitalizeLeadingWord,
   companyDisplayName,
-  displayHeadlineCase,
+  displayProductTitle,
   extractAttachmentLinks,
   humanizeAllCaps,
   productDisplayName,
@@ -345,10 +345,12 @@ export function cleanProductName(input: ProductNameInput): string {
     : input.packageEvidence;
   name = stripTrailingMeasurement(name, evidence);
   name = stripBrandPrefix(name, input.displayedBrands);
-  // The one shared headline pipeline (P3D): ALL-CAPS is un-shouted, a
-  // defectively lowercase headline is headline-cased, and an already-cased
-  // name passes through untouched. Push copy uses the same composition.
-  return displayHeadlineCase(name);
+  // The one shared shopper-title pipeline (P3D, extended by P2B7G): a jammed
+  // quantity+unit boundary is spaced, ALL-CAPS is un-shouted, a defectively
+  // lowercase headline is headline-cased, a lowercase leading article opens
+  // with a capital, and an already-cased name passes through untouched. Push
+  // copy uses the same composition.
+  return displayProductTitle(name);
 }
 
 // ── Concise reason line (Home) ──────────────────────────────────────────────

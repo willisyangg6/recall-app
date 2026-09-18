@@ -146,6 +146,34 @@ sanity check as well as a caption: the per-label counts sum to the number of
 tagged cards, which is what "at most one tag per recall" looks like from
 outside.
 
+### Detail title treatments (P2B7G)
+
+A **Detail title treatments** section, directly below the Detail states, is
+the decision record for how Recall Detail should present extremely long
+official product names. It compares three treatments over the **longest real
+shopper titles in the live feed session**, each at Detail's own heading type
+and identity-beside-media geometry (the hero footprint is simulated with the
+shared media tile; each caption names the title's character count):
+
+| Treatment | Presentation                                                   | Status                             |
+| --------- | -------------------------------------------------------------- | ---------------------------------- |
+| 1         | The full unbounded title                                       | **Shipped** — production unchanged |
+| 2         | A four-line bound with an accessible `Show full title` control | Drawn here and nowhere else        |
+| 3         | A deterministic concise head clause over the bounded full name | Drawn here and nowhere else        |
+
+Treatment 2's disclosure is a real button with a real expanded state
+(`Show full title` / `Show less`), and the clamped node's content stays the
+complete name, so VoiceOver always speaks the whole title. Treatment 3
+derives ONLY when the source itself separates a head clause from its
+enumeration (`… Cheese including: …`); an enumerated multi-product name has
+no concise form that keeps every product variant, so nothing is derived for
+one — when no loaded title qualifies, the section says so rather than
+inventing a sample. The comparison also renders the leading treatments
+without imagery, at a simulated large type size (the caption names the
+factor — real Dynamic Type behaviour is verified on the device), and
+treatment 2 over the next-longest titles. Nothing here changes the shipped
+Detail screen.
+
 ### Saved gallery (P2B4)
 
 A **Saved states and list** section makes the restyled Saved tab inspectable

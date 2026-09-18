@@ -1553,6 +1553,52 @@ test('a trailing measurement LIST is removed only when every size is preserved',
   );
 });
 
+// ── P2B7G: the 500mL escape class, end to end through both models ──────────
+
+test('P2B7G: the live 500mL escape renders spaced and cased on Home, Detail, and share alt', () => {
+  // The recorded production shape: a stylized brand whose prefix is stripped
+  // from the structured description, leaving "500mL supplement bottle" — the
+  // uppercase L inside the jammed unit token defeated the P3D whole-string
+  // gate, and no rule spaced the quantity.
+  const item = feedItem({
+    title:
+      'A&P Creations LLC Issues Nationwide Recall of biQ-FEL Due to Undeclared Sildenafil and Tadalafil',
+    productDescription: 'biQ-FEL 500mL supplement bottle',
+    brands: ['biQ-FEL'],
+    firmName: 'A&P Creations LLC',
+  });
+  const home = buildHomeCardModel(item, { today: TODAY, affectsYou: false });
+  assert.equal(home.productName, '500 mL Supplement Bottle');
+  // The stylized brand itself is never rewritten.
+  assert.equal(home.brand.text, 'biQ-FEL');
+
+  const model = buildDetailModel(
+    detail({
+      title: item.title,
+      productDescription: item.productDescription,
+      brands: item.brands,
+      recallingFirm: { displayName: 'A&P Creations LLC', rawVariants: ['A&P Creations LLC'] },
+    }),
+    { today: TODAY, affectsYou: false },
+  );
+  // Detail receives the COMPLETE normalized title — identical to Home's, so
+  // the two surfaces cannot disagree about product identity.
+  assert.equal(model.productName, home.productName);
+  // The exact official headline stays available, byte-identical to source.
+  assert.equal(model.officialTitle, item.title);
+});
+
+test('P2B7G: normalization never mutates the stored fields the models read', () => {
+  const item = feedItem({
+    productDescription: 'biQ-FEL 500mL supplement bottle',
+    brands: ['biQ-FEL'],
+  });
+  buildHomeCardModel(item, { today: TODAY, affectsYou: false });
+  assert.equal(item.productDescription, 'biQ-FEL 500mL supplement bottle');
+  assert.deepEqual(item.brands, ['biQ-FEL']);
+  assert.equal(item.title, 'Acme Foods Recalls Widgets');
+});
+
 test('a description-derived name counts its own trailing sizes as evidence', () => {
   // The projection's description-size guarantee preserves these as Size
   // evidence, so the shared cleaner may move them out of the title — Home and
@@ -1566,7 +1612,10 @@ test('a description-derived name counts its own trailing sizes as evidence', () 
     }),
     'Garlic Infused Olive Oil',
   );
-  // A TITLE-derived name keeps the strict line-evidence gate.
+  // A TITLE-derived name keeps the strict line-evidence gate: the size is
+  // NOT stripped without evidence. P2B7G spaces the jammed quantity+unit
+  // ("150g" → "150 g") — spacing preserves the measurement, it never moves
+  // or removes it.
   assert.equal(
     cleanProductName({
       title: 'Acme Recalls Enoki Mushroom 150g',
@@ -1574,7 +1623,7 @@ test('a description-derived name counts its own trailing sizes as evidence', () 
       displayedBrands: [],
       packageEvidence: [],
     }),
-    'Enoki Mushroom 150g',
+    'Enoki Mushroom 150 g',
   );
 });
 

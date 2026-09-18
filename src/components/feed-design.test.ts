@@ -184,7 +184,9 @@ test('IBM Plex Mono is used only for compact status labels, never for words peop
   assert.equal((codeOnly(NOTICE_LABEL).match(/variant="label"/g) ?? []).length, 1);
   // The timestamp, name, brand, summary and location are Public Sans tokens.
   assert.ok(CARD.includes('<Text variant="micro-caption" color="text/secondary">'));
-  assert.ok(CARD.includes('<Text variant="heading-3">{model.productName}</Text>'));
+  assert.ok(
+    /<Text variant="heading-3" numberOfLines=\{3\}>\s*\{model\.productName\}\s*<\/Text>/.test(CARD),
+  );
   assert.ok(CARD.includes('<Text variant="body-small" color="text/secondary">'));
 });
 
@@ -351,11 +353,24 @@ test('saving is a nested pressable inside the card link, and the card exposes it
   assert.ok(CARD.includes('saveControlState(isSavedId(savedRecalls.ids, model.id))'));
 });
 
-// ── 8. Long content wraps ───────────────────────────────────────────────────
+// ── 8. Long content wraps; the title alone is line-bounded (P2B7G) ──────────
 
-test('nothing on the card truncates or fixes a height around real product text', () => {
-  assert.ok(!CARD.includes('numberOfLines'));
+test('the product name is the ONE clamped element: three lines, tail ellipsis', () => {
+  // The clamp is a LINE count on the title Text only — it scales with
+  // Dynamic Type, unlike a fixed height, and the tail ellipsis is the RN
+  // default (no ellipsizeMode override anywhere on the card).
+  assert.equal((CARD.match(/numberOfLines=/g) ?? []).length, 1);
+  assert.ok(/variant="heading-3" numberOfLines=\{3\}/.test(CARD));
   assert.ok(!CARD.includes('ellipsizeMode'));
+  // The clamped node's CONTENT stays the complete product name — no slicing,
+  // no substring, no separate visual string — so the card's grouped
+  // accessibility element announces the full title and no override hides it.
+  assert.ok(/numberOfLines=\{3\}>\s*\{model\.productName\}/.test(CARD));
+  assert.ok(!CARD.includes('accessibilityLabel={model.productName'));
+  assert.ok(!/\.slice\(|\.substring\(/.test(codeOnly(CARD)));
+});
+
+test('nothing else on the card truncates or fixes a height around real product text', () => {
   assert.ok(!CARD.includes('maxFontSizeMultiplier'));
   // The card fixes no height at all; the media tile's square is the shared
   // primitive's, sized by the token the card passes it.

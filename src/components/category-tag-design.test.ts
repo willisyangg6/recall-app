@@ -238,11 +238,15 @@ test('Dynamic Type is honoured, and long labels wrap instead of clipping', () =>
   ]) {
     assert.ok(!TAG.includes(forbidden), `the tag caps or clips text with ${forbidden}`);
   }
-  // The card as a whole still caps nothing either (P2B1's promise, re-pinned
-  // now that a new element sits inside its text column).
-  for (const forbidden of ['numberOfLines', 'ellipsizeMode', 'maxFontSizeMultiplier']) {
+  // The card caps nothing around the tag either (P2B1's promise, re-scoped
+  // by P2B7G: the product-name Text now carries the card's ONE deliberate
+  // three-line clamp — feed-design.test.ts owns that contract — and no other
+  // capping or clipping prop exists anywhere on the card).
+  for (const forbidden of ['ellipsizeMode', 'maxFontSizeMultiplier']) {
     assert.ok(!CARD.includes(forbidden), `the card caps text with ${forbidden}`);
   }
+  assert.equal((CARD.match(/numberOfLines=/g) ?? []).length, 1);
+  assert.ok(/variant="heading-3" numberOfLines=\{3\}/.test(CARD));
   assert.deepEqual(codeOnly(CARD).match(/\bheight: [^,]+/g) ?? [], []);
 });
 

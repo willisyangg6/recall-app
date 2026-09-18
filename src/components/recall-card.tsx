@@ -24,9 +24,18 @@
  * substitute picture. A Public Health Alert additionally carries its
  * explicit notice label (shipped behaviour, ahead of Figma).
  *
- * The card's height is its content's. Nothing is fixed or clipped: a long
- * product name or summary wraps beside the media, and the type scales with
- * the reader's Dynamic Type setting.
+ * The card's height is its content's. No height is fixed: a long product
+ * name or summary wraps beside the media, and the type scales with the
+ * reader's Dynamic Type setting. The ONE bounded element (P2B7G) is the
+ * product name, which shows at most three lines with a tail ellipsis — the
+ * corpus holds official multi-product names past 250 characters, and an
+ * unbounded card title buries the reason, location, and every card below it.
+ * The bound is a LINE count, never a height: three lines scale with Dynamic
+ * Type, so no text size clips vertically. The full name stays the Text
+ * node's content, so the card's single grouped VoiceOver element still
+ * speaks the complete title (visual truncation never reaches the
+ * accessibility tree), Search matches the full stored fields, and Detail
+ * renders the complete name.
  *
  * ## The product-category tag (P2B7D)
  *
@@ -144,7 +153,15 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
             />
             <View style={styles.identity}>
               <View>
-                <Text variant="heading-3">{model.productName}</Text>
+                {/* At most three lines, ellipsized at the tail (the RN
+                    default). The line clamp bounds the VISUAL box only: the
+                    node's content stays the complete name, which is what the
+                    card's grouped accessibility element announces — so a
+                    screen-reader user hears the whole title exactly once,
+                    with no second element and no truncation. */}
+                <Text variant="heading-3" numberOfLines={3}>
+                  {model.productName}
+                </Text>
                 <Text variant="caption" color="text/secondary">
                   {model.brand.text}
                 </Text>

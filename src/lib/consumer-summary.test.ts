@@ -4,11 +4,12 @@ import { test } from 'node:test';
 import {
   capitalizeLeadingWord,
   companyDisplayName,
-  displayHeadlineCase,
+  displayProductTitle,
   companyLine,
   extractAttachmentLinks,
   headlineCaseIfLowercase,
   humanizeAllCaps,
+  normalizeUnitSpacing,
   parseProductLine,
   productSummaryFromTitle,
   reasonClauseCasing,
@@ -367,13 +368,13 @@ test('companyDisplayName opens a defectively lowercase company with a capital', 
   assert.equal(companyDisplayName('iHerb, LLC'), 'iHerb');
 });
 
-test('displayHeadlineCase is the one composed pipeline both cards and push use', () => {
+test('displayProductTitle is the one composed pipeline both cards and push use', () => {
   // ALL-CAPS is un-shouted (humanizeAllCaps side of the composition).
-  assert.equal(displayHeadlineCase('TOP SIRLOIN BUTT'), 'Top Sirloin Butt');
-  assert.equal(displayHeadlineCase('FDA UPC LMSI'), 'FDA UPC LMSI'); // acronyms kept
+  assert.equal(displayProductTitle('TOP SIRLOIN BUTT'), 'Top Sirloin Butt');
+  assert.equal(displayProductTitle('FDA UPC LMSI'), 'FDA UPC LMSI'); // acronyms kept
   // A defectively lowercase headline is headline-cased (the other side).
   assert.equal(
-    displayHeadlineCase('dietary supplements marketed for male sexual enhancement'),
+    displayProductTitle('dietary supplements marketed for male sexual enhancement'),
     'Dietary Supplements Marketed For Male Sexual Enhancement',
   );
   // Correct mixed casing passes through untouched.
@@ -383,13 +384,109 @@ test('displayHeadlineCase is the one composed pipeline both cards and push use',
     'iHerb',
     'E. coli',
   ]) {
-    assert.equal(displayHeadlineCase(value), value);
+    assert.equal(displayProductTitle(value), value);
   }
-  // The two gates are mutually exclusive, so the composition is idempotent.
-  for (const input of ['TOP SIRLOIN BUTT', 'dietary supplements', 'Crunchy Trail Mix', '', '   ']) {
-    const once = displayHeadlineCase(input);
-    assert.equal(displayHeadlineCase(once), once, `not idempotent: ${input}`);
+  // Idempotent: no stage recreates an earlier stage's precondition.
+  for (const input of [
+    'TOP SIRLOIN BUTT',
+    'dietary supplements',
+    'Crunchy Trail Mix',
+    '500mL supplement bottle',
+    'a Frozen Pepperoni Pizza',
+    '',
+    '   ',
+  ]) {
+    const once = displayProductTitle(input);
+    assert.equal(displayProductTitle(once), once, `not idempotent: ${input}`);
   }
+});
+
+// ── Shopper-title normalization (P2B7G) ─────────────────────────────────────
+
+test('the production 500mL escape is spaced AND headline-cased (P2B7G)', () => {
+  // The recorded live defect: after brand-prefix stripping, the shopper title
+  // was "500mL supplement bottle" — the uppercase L inside the jammed unit
+  // token defeated the P3D whole-string defect gate, so the defectively
+  // lowercase remainder rendered as-is.
+  assert.equal(displayProductTitle('500mL supplement bottle'), '500 mL Supplement Bottle');
+});
+
+test('normalizeUnitSpacing spaces the jammed quantity+unit shapes the corpus writes', () => {
+  const corpus: [string, string][] = [
+    ['500mL supplement bottle', '500 mL supplement bottle'],
+    ['Robust Radish Mix, 5oz Cups', 'Robust Radish Mix, 5 oz Cups'],
+    [
+      'Organic Daybreak Blend 4lb bags of frozen fruit',
+      'Organic Daybreak Blend 4 lb bags of frozen fruit',
+    ],
+    ['24 oz cans and 0.6oz packets', '24 oz cans and 0.6 oz packets'],
+    [
+      'in 6pc (2.5oz), 12pc (5oz), and 24pc (10oz) boxes',
+      'in 6 pc (2.5 oz), 12 pc (5 oz), and 24 pc (10 oz) boxes',
+    ],
+    ['Enoki Mushrooms 150g package', 'Enoki Mushrooms 150 g package'],
+    ['in 12.6 and 19.8oz cans', 'in 12.6 and 19.8 oz cans'],
+    [
+      '4oz (113g) and (12 oz (340g) flexible foil pouches',
+      '4 oz (113 g) and (12 oz (340 g) flexible foil pouches',
+    ],
+    ['Requeson 1lb. clamshell packages', 'Requeson 1 lb. clamshell packages'],
+    [
+      'Cinnamon Powder 40g, best before date 15.09.2027',
+      'Cinnamon Powder 40 g, best before date 15.09.2027',
+    ],
+  ];
+  for (const [input, expected] of corpus) {
+    assert.equal(normalizeUnitSpacing(input), expected);
+    // Idempotent: the inserted space breaks the digit-unit adjacency.
+    assert.equal(normalizeUnitSpacing(expected), expected);
+  }
+});
+
+test('normalizeUnitSpacing never touches codes, identifiers, dates, or intentional shorthand', () => {
+  for (const value of [
+    'E. coli O157:H7', // outbreak serotype — letter-then-digit, not a unit
+    'Vitamin D3 Drops', // designation — digit after the letter
+    'Model A100L', // unit letter preceded by more letters
+    'Model A100g', // in-set unit letter, but the quantity follows letters
+    'Lot 24TJ0055', // alphanumeric lot code
+    'best before 15.09.2027', // date — digits after the dot
+    '2L soda bottle', // intentional packaging shorthand, uppercase excluded
+    'NET WT 38 OZ', // uppercase units are un-shouting's business
+    'for ages 0-12months', // "months" is not an abbreviated unit
+    '90-day supply', // hyphenated tokens have no digit-unit adjacency
+    '4-lb., or various weight packages', // already-hyphenated FSIS prose
+    'serving 24cm pan', // cm deliberately outside the closed set
+    '500 mL', // already spaced
+    '',
+  ]) {
+    assert.equal(normalizeUnitSpacing(value), value);
+  }
+});
+
+test('the refined defect gate: unit and code uppercase does not shield a lowercase headline', () => {
+  // Uppercase confined to digit-bearing / unit tokens is notation, not
+  // intentional casing — the ordinary words still headline-case.
+  assert.equal(headlineCaseIfLowercase('500 mL supplement bottle'), '500 mL Supplement Bottle');
+  // Uppercase in ANY ordinary token is intentional and preserves everything.
+  for (const value of [
+    'iHerb multivitamin gummies',
+    'a Frozen Pepperoni Pizza',
+    'Ready-to-eat chicken',
+  ]) {
+    assert.equal(headlineCaseIfLowercase(value), value);
+  }
+});
+
+test('a lowercase leading article opens with a capital in the composed title (P2B7G)', () => {
+  // The recorded live FSIS case: "…Alert for a Frozen Pepperoni Pizza…".
+  assert.equal(displayProductTitle('a Frozen Pepperoni Pizza'), 'A Frozen Pepperoni Pizza');
+  // Stylized leading identities keep their own casing (digit/uppercase gate).
+  assert.equal(
+    displayProductTitle('a2 Platinum Premium Infant Formula'),
+    'a2 Platinum Premium Infant Formula',
+  );
+  assert.equal(displayProductTitle('iHerb Gummies'), 'iHerb Gummies');
 });
 
 // ── Reason-clause sentence-interior casing (P3E) ────────────────────────────

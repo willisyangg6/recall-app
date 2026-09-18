@@ -10,7 +10,8 @@ contaminant-category unification shipped (`48870a1`) with its production
 repair applied 2026-09-04; P3C-1 and P3C-2 affected-product correctness
 shipped 2026-09-04 (`aab6588`, `51c1a7b`); P3D display capitalization
 shipped 2026-09-04 (`cae9732`); P3E reason-clause casing shipped 2026-09-05
-(`b4a1a12`). Functional milestones on
+(`b4a1a12`); P2B7G shopper-title normalization and the card title bound
+implemented 2026-09-18. Functional milestones on
 the temporary UI — final visual design happens separately and may restyle
 everything here without touching the business logic, which lives entirely in
 pure libs._
@@ -1260,6 +1261,99 @@ quantities, imagery, search entries, the feed-cache schema, push copy
 (`reasonLine` renders the source verbatim and never reaches this transform),
 and material-change detection are all byte-identical; no stored notification
 event changes and no material-change event can be triggered.
+
+### P2B7G — shopper-title normalization and the card title bound (IMPLEMENTED)
+
+The production defect this milestone corrected: one Home card title read
+`500mL supplement bottle` — lowercase ordinary words behind a jammed
+quantity+unit token. Root cause, traced to the shared boundary rather than
+patched per-example: the P3D headline gate judged intentional casing over the
+WHOLE string, so the uppercase `L` inside `500mL` (unit notation, not press
+casing) shielded the defectively lowercase remainder after
+`stripBrandPrefix` removed the stylized brand `biQ-FEL`; and no rule spaced a
+quantity jammed against its unit anywhere in the pipeline.
+
+**The one shopper-title pipeline.** `displayProductTitle`
+(`lib/consumer-summary.ts`) replaces `displayHeadlineCase` as the single
+composed boundary both `cleanProductName` (Home, Detail, share, hero
+accessibility text) and the push formatter call:
+
+1. **Unit spacing** — `normalizeUnitSpacing` inserts the conventional space
+   in a jammed quantity+unit token (`500mL` → `500 mL`, `(2.5oz)` →
+   `(2.5 oz)`). Closed unit set (`gal`, `lb`/`lbs`, `oz`, `kg`, `mg`, `ml`,
+   `mL`, `ct`, `pk`, `pc`, `qt`, `pt`, `g`): the lowercase abbreviations the
+   corpus actually jams plus the litre convention `mL`. Deliberately outside
+   the set: bare `l`/`L` (`2L` is intentional packaging shorthand) and every
+   uppercase form (`6OZ` belongs to un-shouting). The quantity must not
+   follow a letter, digit, or dot, so model identifiers (`A100g`), decimals,
+   and dates never split. Spacing-only: nothing is recased, converted, or
+   reordered, and the transform is idempotent.
+2. **Un-shouting** (`humanizeAllCaps`, unchanged).
+3. **The refined headline gate** — `headlineCaseIfLowercase` now judges
+   intentional casing over ORDINARY tokens only: uppercase confined to
+   preserved tokens (digit-bearing tokens, the abbreviated-unit set — which
+   gained `mL`, `L`, `pc`, and tolerance for surrounding brackets and
+   trailing punctuation) no longer shields a defectively lowercase headline.
+   Uppercase in any ordinary token still preserves the value untouched, so
+   `iHerb`, `a2`, `E. coli`, and every genuinely cased headline survive by
+   construction, exactly as P3D promised.
+4. **Leading word** — `capitalizeLeadingWord` (the established P3D
+   leading-word mode, now also applied to the composed title) opens a
+   lowercase leading article with a capital: the live FSIS PHA title
+   `a Frozen Pepperoni Pizza` renders `A Frozen Pepperoni Pizza`, while
+   `a2 …` and `iHerb …` are untouched by that helper's own digit/uppercase
+   gate.
+
+Each stage is idempotent and no later stage recreates an earlier stage's
+precondition, so the composition is idempotent (asserted corpus-wide).
+
+**Corpus evidence (read-only audit, 2026-09-18, 896 active cases).** Shopper
+title lengths: p50 = 25, p90 = 55, p95 = 69, p99 = 98, max = 255 characters;
+five titles exceed 120. Exactly one gate-escape (`500mL supplement bottle`),
+one lowercase-leading title (`a Frozen Pepperoni Pizza`), zero entirely
+lowercase and zero all-caps titles, eleven titles with jammed unit tokens
+(`5oz`, `40g`, `4lb`, `0.6oz`, `2.5oz`, `10oz`, `150g`, `30g`, `19.8oz`,
+`4oz`, `113g`, `340g`, `1lb`, `500mL`). One title with a genuinely repeated
+clause (the Glutinous Rice Balls pair — two real product variants, so no
+deterministic dedup applies; deliberately left unchanged). The 255-character
+maximum is the source's own truncation of FDA's product-description field
+mid-word (`…Flavored Chee`), stored faithfully. Deliberately unchanged:
+stylized identities (`biQ-FEL`, `VidaSlim`, `NuGo`, `HelloFresh`, `OnYum`),
+acronyms (`BBQ`, `IQF`, `RTE`, `NRTE`, `USP`), codes (`O157:H7`, `D3`,
+`0-12months`, `mg/mL`), and every already-correct title.
+
+**Frozen corpus guards.** `src/server/presentation-casing.test.ts` freezes:
+the exact recorded names unit spacing changes (six, all genuine jams); that
+the refined gate fires on no recorded name the P3D whole-string gate spared;
+that spacing is space-insertion-only (byte-identical after despacing,
+corpus-wide); and pipeline idempotence. Widening any set fails with an
+instruction to review, never to update casually.
+
+**The card title bound.** The shared `RecallCard` title (Feed and Saved — the
+one component, so the two cannot differ) renders at most THREE lines with a
+tail ellipsis (`numberOfLines={3}`, the RN default ellipsis). The bound is a
+line count, never a height, so it scales with Dynamic Type without clipping.
+The accessibility contract is deliberate: the clamped node's content stays
+the complete product name, so the card's single grouped VoiceOver element
+speaks the whole title exactly once — no duplicate element, no override, no
+truncation in the accessibility tree. Search matches the complete stored
+fields (substring matching, so the displayed spaced form also matches), and
+Detail renders the complete normalized title; `officialTitle` preserves the
+exact official headline whenever the cleaned name differs.
+
+**Detail titles are deliberately unchanged.** The Design Preview hub gained a
+`Detail title treatments` decision-record section (see
+[recall-design-preview.md](recall-design-preview.md)) comparing the shipped
+unbounded title, a four-line bound with an accessible `Show full title`
+disclosure, and a deterministic concise head clause where the source
+separates one from its enumeration. Production Detail keeps the unbounded
+title plus this milestone's normalization only.
+
+**Boundaries.** Display-time only: canonical stored text, projections,
+search entries and results, identity, deduplication, the feed-cache schema
+(raw fields cached, presentation derived at render — no payload shape
+change), material-change detection, and recorded notification events are all
+unchanged. No production write of any kind.
 
 ### P1B — standardized health guidance (IMPLEMENTED, display-time)
 

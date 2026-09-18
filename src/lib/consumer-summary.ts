@@ -204,8 +204,13 @@ export function humanizeAllCaps(text: string): string {
  * ("16 oz.", "5 kg"). Deliberately narrow: spelled-out unit nouns ("quart",
  * "pounds") are ordinary headline words and are NOT listed here. Digit-bearing
  * tokens ("4-lb.,", "8-oz") never reach this check — they are preserved first.
+ *
+ * P2B7G: the litre family's meaningful mixed casing ("mL", "L") and the
+ * piece-count "pc" join the set, and a unit may sit against punctuation the
+ * corpus actually writes around sizes — "(2.5 oz)", "40 g," — so surrounding
+ * brackets and trailing punctuation no longer disqualify the token.
  */
-const UNIT_ABBREVIATION = /^(?:oz|lbs?|g|kg|mg|ml|l|ct|pk|qt|pt|gal|fl|ea)[.,;]*$/;
+const UNIT_ABBREVIATION = /^[([]*(?:oz|lbs?|g|kg|mg|ml|mL|l|L|ct|pk|pc|qt|pt|gal|fl|ea)[.,;:)\]]*$/;
 
 /** A scientific genus abbreviation opening ("e." in "e. coli"). */
 const SCIENTIFIC_MARKER = /^[a-z]\.$/;
@@ -226,21 +231,42 @@ function capitalizeHeadlineToken(token: string): string {
 }
 
 /**
+ * A token the headline transform preserves verbatim and therefore also
+ * ignores when judging whether a value's casing is intentional (P2B7G):
+ * whitespace, digit-bearing tokens ("4-lb.,", "500mL", codes), and the
+ * abbreviated units above ("oz.", "mL"). Uppercase inside such a token is
+ * unit or code notation, not evidence that a press office cased the headline.
+ */
+function isPreservedHeadlineToken(token: string): boolean {
+  return /^\s*$/.test(token) || /\p{Nd}/u.test(token) || UNIT_ABBREVIATION.test(token);
+}
+
+/**
  * Headline capitalization for a defectively lowercase headline (P3D founder
- * contract): fires ONLY when the value has lowercase letters and no uppercase
- * letter at all — an entirely-lowercase source headline ("dietary supplements
- * marketed for male sexual enhancement"). Every ordinary word is then
- * capitalized, including short connectives ("For", "To") and each hyphen/
- * slash segment; apostrophes capitalize only the lead ("red's" → "Red's").
- * Preserved within a transformed headline: digit-bearing tokens ("4-lb.,",
- * "8-oz"), the abbreviated units above ("oz.", "kg"), and the word after a
- * scientific genus marker ("e. coli" → "E. coli", never "E. Coli").
- * Idempotent: any transformed value contains an uppercase letter, which
- * disqualifies it from transforming again; a value that is all preserved
- * tokens ("16 oz.") is a fixed point.
+ * contract): fires ONLY when every ORDINARY word is lowercase — the P2B7G
+ * refinement of the original whole-string gate. Uppercase anywhere in an
+ * ordinary (digit-free, non-unit) token is intentional casing evidence and
+ * preserves the value untouched ("iHerb gummies" never transforms); uppercase
+ * confined to preserved tokens is unit or code notation and does not shield
+ * the rest of a defectively lowercase headline ("500 mL supplement bottle" —
+ * the recorded production escape — now transforms). Every ordinary word is
+ * then capitalized, including short connectives ("For", "To") and each
+ * hyphen/slash segment; apostrophes capitalize only the lead ("red's" →
+ * "Red's"). Preserved within a transformed headline: digit-bearing tokens
+ * ("4-lb.,", "8-oz"), the abbreviated units above ("oz.", "mL"), and the word
+ * after a scientific genus marker ("e. coli" → "E. coli", never "E. Coli").
+ * Idempotent: any transformed value carries uppercase in an ordinary token,
+ * which disqualifies it from transforming again; a value that is all
+ * preserved tokens ("16 oz.") is a fixed point.
  */
 export function headlineCaseIfLowercase(text: string): string {
-  if (ANY_UPPER.test(text) || !ANY_LOWER.test(text)) return text;
+  let sawOrdinaryLowercase = false;
+  for (const token of text.split(/(\s+)/)) {
+    if (isPreservedHeadlineToken(token)) continue;
+    if (ANY_UPPER.test(token)) return text; // intentional casing evidence
+    if (ANY_LOWER.test(token)) sawOrdinaryLowercase = true;
+  }
+  if (!sawOrdinaryLowercase) return text;
   let afterScientificMarker = false;
   return text
     .split(/(\s+)/)
@@ -250,8 +276,7 @@ export function headlineCaseIfLowercase(text: string): string {
       afterScientificMarker = SCIENTIFIC_MARKER.test(token);
       if (afterScientificMarker) return token.toUpperCase(); // "e." → "E."
       if (wasAfterMarker) return token; // "coli" keeps its lowercase species name
-      if (/\p{Nd}/u.test(token)) return token; // codes, "4-lb.,", "8-oz"
-      if (UNIT_ABBREVIATION.test(token)) return token;
+      if (isPreservedHeadlineToken(token)) return token; // codes, "4-lb.,", "8-oz", "mL"
       if (!ANY_LOWER.test(token)) return token; // punctuation-only
       return capitalizeHeadlineToken(token);
     })
@@ -274,18 +299,53 @@ export function capitalizeLeadingWord(text: string): string {
   return text.replace(/^\p{Ll}/u, (c) => c.toUpperCase());
 }
 
+// ── Shopper-title normalization (P2B7G) ─────────────────────────────────────
+
 /**
- * The complete headline casing pipeline for a consumer product name: un-shout
- * an ALL-CAPS source value (`humanizeAllCaps`), then headline-case a
- * defectively all-lowercase one (`headlineCaseIfLowercase`). The two gates are
- * mutually exclusive — a value has no lowercase or no uppercase, never both —
- * so exactly one transform can fire and the composition stays idempotent.
- * Home/Detail's cleaned product name and the push formatter's product slot
- * both flow through THIS function, so a card and the notification that opens
- * it can never disagree about a name's casing.
+ * A quantity jammed against its abbreviated unit inside one token — the
+ * "500mL" class the sources actually write ("5oz Cups", "40g,", "(2.5oz)",
+ * "19.8oz", "1lb.", "6pc"). The closed unit set is the casing the corpus
+ * jams: the lowercase abbreviations plus the litre convention "mL".
+ * Deliberately excluded: bare "l"/"L" ("2L" is intentional packaging
+ * shorthand), and every uppercase form — "6OZ" inside an all-caps value is
+ * un-shouting's business, never spacing's. The quantity must not follow a
+ * letter, digit, or dot, so model identifiers ("A100L"), decimals mid-match
+ * ("2.5oz" splits once, before the 2), and dates ("15.09.2027") never split;
+ * the unit must end the token ("months", "gal" vs "g" — the longest
+ * alternative that reaches a boundary wins).
  */
-export function displayHeadlineCase(text: string): string {
-  return headlineCaseIfLowercase(humanizeAllCaps(text));
+const JAMMED_QUANTITY_UNIT =
+  /(?<![\p{L}\p{Nd}.])(\p{Nd}+(?:\.\p{Nd}+)?)(gal|lbs?|oz|kg|mg|ml|mL|ct|pk|pc|qt|pt|g)(?![\p{L}\p{Nd}])/gu;
+
+/**
+ * Insert the conventional space between a quantity and its abbreviated unit
+ * ("500mL" → "500 mL", "(2.5oz)" → "(2.5 oz)"). Spacing only: no unit is
+ * recased, reordered, converted, or invented, and a value with no jammed
+ * quantity+unit token is returned byte-identical. Idempotent — the inserted
+ * space breaks the digit-unit adjacency the pattern requires.
+ */
+export function normalizeUnitSpacing(text: string): string {
+  return text.replace(JAMMED_QUANTITY_UNIT, '$1 $2');
+}
+
+/**
+ * THE shopper-title normalization pipeline (P3D, extended by P2B7G): space a
+ * jammed quantity+unit boundary (`normalizeUnitSpacing`), un-shout an
+ * ALL-CAPS source value (`humanizeAllCaps`), headline-case a defectively
+ * lowercase one (`headlineCaseIfLowercase`), and open a lowercase leading
+ * article on an otherwise-cased name with a capital (`capitalizeLeadingWord`
+ * — "a Frozen Pepperoni Pizza" → "A Frozen Pepperoni Pizza", while "a2 …"
+ * and "iHerb …" stay untouched by that helper's own digit/uppercase gate).
+ * Each stage is idempotent and no later stage recreates an earlier stage's
+ * precondition, so the composition is idempotent. Home/Detail's cleaned
+ * product name and the push formatter's product slot both flow through THIS
+ * function, so a card and the notification that opens it can never disagree
+ * about a name.
+ */
+export function displayProductTitle(text: string): string {
+  return capitalizeLeadingWord(
+    headlineCaseIfLowercase(humanizeAllCaps(normalizeUnitSpacing(text))),
+  );
 }
 
 // ── Reason-clause sentence-interior casing (P3E) ────────────────────────────

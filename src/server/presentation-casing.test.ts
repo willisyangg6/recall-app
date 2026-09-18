@@ -33,9 +33,10 @@ import { projectCase } from '../domain/projection';
 import type { CaseProjection } from '../domain/recall-types';
 import {
   capitalizeLeadingWord,
-  displayHeadlineCase,
+  displayProductTitle,
   headlineCaseIfLowercase,
   humanizeAllCaps,
+  normalizeUnitSpacing,
   productDisplayName,
   reasonClauseCasing,
 } from '../lib/consumer-summary';
@@ -287,8 +288,9 @@ test('corpus guard: the P3D transforms change exactly the approved source values
 
 /**
  * Push-only ALL-CAPS humanization deltas, frozen separately from the two P3D
- * lowercase deltas above. Push now shares the full `displayHeadlineCase`
- * composition (un-shout + headline-case) with Home/Detail; the un-shout half
+ * lowercase deltas above. Push now shares the full `displayProductTitle`
+ * composition (spacing + un-shout + headline-case + leading word) with
+ * Home/Detail; the un-shout half
  * fires on no recorded product name at the push boundary, so this approved
  * set is EMPTY. A value appearing here means a fixture gained an ALL-CAPS
  * product name — review it against the Home/Detail rendering before approving.
@@ -306,16 +308,90 @@ test('corpus guard: un-shouting fires on no recorded push product name', () => {
   assert.deepEqual([...observed].sort(), [...APPROVED_PUSH_HUMANIZE_DELTAS].sort());
 });
 
-test('push and Home/Detail share one casing pipeline for every recorded name', () => {
-  // Parity by construction: both surfaces call displayHeadlineCase. Proven
+test('push and Home/Detail share one title pipeline for every recorded name', () => {
+  // Parity by construction: both surfaces call displayProductTitle. Proven
   // corpus-wide over the shared semantic input (the raw display name) —
   // Home/Detail additionally strip measurements/brand prefixes, which changes
-  // words, never their casing treatment.
+  // words, never their normalization treatment.
   for (const { projection } of CORPUS) {
     const raw = productDisplayName(projection.productDescription ?? null, projection.title);
-    assert.equal(displayHeadlineCase(raw), headlineCaseIfLowercase(humanizeAllCaps(raw)));
-    const once = displayHeadlineCase(raw);
-    assert.equal(displayHeadlineCase(once), once); // idempotent corpus-wide
+    assert.equal(
+      displayProductTitle(raw),
+      capitalizeLeadingWord(headlineCaseIfLowercase(humanizeAllCaps(normalizeUnitSpacing(raw)))),
+    );
+    const once = displayProductTitle(raw);
+    assert.equal(displayProductTitle(once), once); // idempotent corpus-wide
+  }
+});
+
+// ── P2B7G: shopper-title normalization guards ───────────────────────────────
+
+/**
+ * The complete approved population of recorded product names the P2B7G
+ * unit-spacing rule changes — audited 2026-09-18: every one is a genuine
+ * quantity jammed against its abbreviated unit ("0.6oz", "14oz (397g)",
+ * "30g", "20.36oz", "19.8oz", "4lb"), and no code, identifier, or stylized
+ * value appears. As with the P3D set above: a new value here means a fixture
+ * gained a jammed unit — review it against docs/recall-feed-usability.md
+ * (P2B7G) before approving, never silently.
+ */
+const APPROVED_UNIT_SPACING_DELTAS = new Set([
+  'fda:byheart-updates-information-regarding-voluntary-recall-all-batches-byheart-whole-nutrition-infant § spacing § Whole Nutrition Infant formula 24 oz cans and 0.6oz packets',
+  'fda:kettle-cuisine-recalls-marketside-tomato-bisque-soup-kit-sold-exclusively-walmart-stores-because § spacing § Tomato Bisque Soup Kit 14oz (397g)',
+  'fda:orgain-issues-voluntary-allergy-alert-possible-undeclared-peanut-residue-single-batch-30g-protein § spacing § 30g Plant Protein Complete Protein Powder – Chocolate',
+  'fda:palermo-villa-inc-issues-recall-1728-connies-thin-crust-cheese-frozen-pizzas-due-possible-plastic § spacing § Thin crust cheese frozen pizza, 20.36oz',
+  'fda:reckittmead-johnson-nutrition-voluntarily-recalls-select-batches-nutramigen-hypoallergenic-infant § spacing § Nutramigen Powder infant formula in 12.6 and 19.8oz cans',
+  'fda:wawona-frozen-foods-voluntarily-recalls-organic-daybreak-blend-processed-and-sold-2022-due-possible § spacing § Organic Daybreak Blend 4lb bags of frozen fruit',
+]);
+
+test('corpus guard: unit spacing changes exactly the approved recorded names', () => {
+  const observed = new Set<string>();
+  for (const { id, projection } of CORPUS) {
+    const raw = productDisplayName(projection.productDescription ?? null, projection.title);
+    if (normalizeUnitSpacing(raw) !== raw) {
+      observed.add(`${id} § spacing § ${raw}`);
+    }
+  }
+  assert.deepEqual(
+    [...observed].sort(),
+    [...APPROVED_UNIT_SPACING_DELTAS].sort(),
+    'The set of recorded names the P2B7G unit-spacing rule changes has widened or shrunk. ' +
+      'Review the new delta against the P2B7G contract before editing this set.',
+  );
+});
+
+test('corpus guard: the refined defect gate fires on no recorded name the P3D gate spared', () => {
+  // The P2B7G gate refinement (uppercase confined to digit/unit tokens no
+  // longer shields a lowercase headline) widens rendering for the live
+  // "500mL" class; on the RECORDED corpus it must change nothing — every
+  // recorded defect was already caught by the whole-string gate. A value
+  // appearing here is a new fixture of the escape class: review it against
+  // the P2B7G contract, then extend this frozen set deliberately.
+  const observed = new Set<string>();
+  for (const { id, projection } of CORPUS) {
+    const spaced = normalizeUnitSpacing(
+      productDisplayName(projection.productDescription ?? null, projection.title),
+    );
+    const legacyGateFires = !/\p{Lu}/u.test(spaced) && /\p{Ll}/u.test(spaced);
+    if (!legacyGateFires && headlineCaseIfLowercase(spaced) !== spaced) {
+      observed.add(`${id} § refined-gate § ${spaced}`);
+    }
+  }
+  assert.deepEqual([...observed].sort(), []);
+});
+
+test('corpus guard: unit spacing is length-1 additive and never reorders characters', () => {
+  // Spacing may only INSERT spaces between a digit and a unit — proven
+  // corpus-wide by removing the inserted spaces and comparing byte-identical.
+  for (const { projection } of CORPUS) {
+    const values = [
+      productDisplayName(projection.productDescription ?? null, projection.title),
+      ...projection.affectedProducts.map((product) => product.name),
+    ];
+    for (const value of values) {
+      const spaced = normalizeUnitSpacing(value);
+      assert.equal(spaced.replace(/ /g, ''), value.replace(/ /g, ''));
+    }
   }
 });
 
@@ -386,7 +462,7 @@ test('the push formatter stays a pure server-safe module (structural)', () => {
   // formatting can never write the ledger or attempt a delivery.
   assert.ok(!/from '.*(push-store|expo-transport|worker)'/.test(source));
   assert.ok(!/from '(react|react-native|expo)/.test(source));
-  assert.match(source, /displayHeadlineCase/);
+  assert.match(source, /displayProductTitle/);
 });
 
 // ── P3E: reason-clause sentence-interior casing ─────────────────────────────
@@ -642,7 +718,9 @@ test('the corrected notices change no canonical, search, push, or materiality be
   // the source reason verbatim — the P3E clause transform never reaches it.
   const { projection } = caseOf('nutramigen-hypoallergenic-infant');
   assert.deepEqual(initialPushOf(projection), {
-    title: 'Recall alert: Nutramigen Powder infant formula in 12.6 and 19.8oz cans',
+    // P2B7G: the one approved unit-spacing delta ("19.8oz" → "19.8 oz") —
+    // see APPROVED_UNIT_SPACING_DELTAS above.
+    title: 'Recall alert: Nutramigen Powder infant formula in 12.6 and 19.8 oz cans',
     body: 'Possible contamination. Check your package.',
   });
 });

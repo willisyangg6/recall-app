@@ -1317,7 +1317,10 @@ test('P3C-2 shape B: a column-oriented grid is not read as rows', () => {
   const model = detailModelFor(corpusProjection('wawona-frozen-foods'));
   const view = model.sections.affectedProducts!.table.expanded;
   assert.equal(view.rows.length, 1);
-  assert.equal(view.rows[0].name, 'Organic Daybreak Blend 4lb bags of frozen fruit');
+  // P2B7G: the row is named by the shared cleaned product name, which now
+  // spaces the jammed "4lb" (an approved unit-spacing delta — see
+  // presentation-casing.test.ts APPROVED_UNIT_SPACING_DELTAS).
+  assert.equal(view.rows[0].name, 'Organic Daybreak Blend 4 lb bags of frozen fruit');
   const codes = cellAt(view, 0, 'lotCodes');
   assert.equal(codes.disclosure!.expandLabel, 'See all (23)');
   assert.equal(codes.values.length, 23);

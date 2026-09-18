@@ -72,6 +72,7 @@ import {
   color,
   CUSTOM_FONTS_INSTALLED,
   fontFamily,
+  hitSlopToMinimum,
   layout,
   radius,
   spacing,
@@ -775,6 +776,16 @@ export default function DesignPreviewScreen() {
             probed recalls — the indicator shapes side by side, plus the one
             simulated case the live corpus cannot supply (a candidate whose
             image cannot load). */}
+        {/* P2B7G: the Detail-title exploration — three treatments for
+            extremely long official product names over the longest REAL
+            titles in the live feed session. A decision record only:
+            production Detail is unchanged, and treatments 2 and 3 exist
+            nowhere else. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          DETAIL TITLE TREATMENTS
+        </ThemedText>
+        <DetailTitleGallery items={feed.state.status === 'ready' ? feed.state.items : []} />
+
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           OFFICIAL IMAGERY AND FAILURE
         </ThemedText>
@@ -1637,6 +1648,206 @@ function DetailStatesGallery() {
   );
 }
 
+// ── Detail title treatments (P2B7G) ─────────────────────────────────────────
+
+/**
+ * The simulated large-type factor for the title comparison. iOS's
+ * accessibility sizes reach well past this; 1.6 approximates the first
+ * accessibility step so the treatments can be compared side by side in one
+ * screenshot. It multiplies the reader's real Dynamic Type setting rather
+ * than replacing it, and the caption says the size is simulated — the real
+ * behaviour is verified on the device, where the whole screen scales.
+ */
+const SIMULATED_LARGE_TYPE = 1.6;
+
+/** The bounded treatment's line count before disclosure (treatment 2). */
+const BOUNDED_TITLE_LINES = 4;
+
+/**
+ * A concise head clause is derivable ONLY when the source itself separates
+ * one from its enumeration ("Various sizes of Hard and Soft Cheese
+ * including: Ricotta Cheese, …"). An enumeration with no head clause has no
+ * concise form that keeps every product variant, so no other shape derives.
+ */
+const CONCISE_HEAD_CLAUSE = /^(.{12,80}?)[,;:]?\s+(?:including:?|such as)\s/i;
+
+function conciseHeadClause(title: string): string | null {
+  const match = title.match(CONCISE_HEAD_CLAUSE);
+  return match ? match[1].trim() : null;
+}
+
+/** Treatment 2: the bound plus its explicit, accessible disclosure. */
+function BoundedTitleSample({ title, typeScale }: { title: string; typeScale?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const scaled =
+    typeScale !== undefined
+      ? {
+          fontSize: typography['heading-2'].fontSize * typeScale,
+          lineHeight: typography['heading-2'].lineHeight * typeScale,
+        }
+      : undefined;
+  return (
+    <View style={styles.titleSampleBlock}>
+      <Text
+        variant="heading-2"
+        accessibilityRole="header"
+        numberOfLines={expanded ? undefined : BOUNDED_TITLE_LINES}
+        style={scaled}>
+        {title}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel={
+          expanded ? 'Show less of the product name' : 'Show the full product name'
+        }
+        hitSlop={hitSlopToMinimum(typography.caption.lineHeight)}
+        onPress={() => setExpanded((prior) => !prior)}>
+        {({ pressed }) => (
+          <Text variant="caption" color="action/secondary" style={pressed && { opacity: 0.6 }}>
+            {expanded ? 'Show less' : 'Show full title'}
+          </Text>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * P2B7G: the Detail-title exploration — the decision record for how Recall
+ * Detail should present extremely long official product names, compared over
+ * the LONGEST real shopper titles in the live feed session at the Detail
+ * header's own heading-2 type and identity-beside-media geometry.
+ *
+ *   1. The shipped unbounded title (production behaviour, unchanged).
+ *   2. A four-line bound with an explicit accessible disclosure that grows
+ *      the title in place. The clamped node's content stays the complete
+ *      name, so VoiceOver always speaks the whole title.
+ *   3. A deterministic concise display title — rendered only for a title
+ *      whose source separates a head clause from its enumeration; the
+ *      caption says when the live corpus provides none, and an enumerated
+ *      multi-product name is never cut (that would drop real variants).
+ *
+ * Treatments 2 and 3 are drawn here and nowhere else; the hero footprint is
+ * simulated with the shared media tile at the Detail media size.
+ */
+function DetailTitleGallery({ items }: { items: FeedItem[] }) {
+  const today = todayIso();
+  const models = useMemo(
+    () => items.map((item) => buildHomeCardModel(item, { today, affectsYou: false })),
+    [items, today],
+  );
+  if (models.length === 0) {
+    return (
+      <ThemedText type="small" themeColor="textSecondary">
+        No live recalls loaded yet, so no title can be shown.
+      </ThemedText>
+    );
+  }
+
+  const byLength = [...models].sort((a, b) => b.productName.length - a.productName.length);
+  const longest = byLength[0];
+  const runnersUp = byLength.slice(1, 3);
+  const concise = byLength.find((model) => conciseHeadClause(model.productName) !== null) ?? null;
+  const heroUri =
+    longest.heroImageUrl ?? byLength.find((m) => m.heroImageUrl)?.heroImageUrl ?? null;
+
+  const identityRow = (children: React.ReactNode, withImage: boolean) => (
+    <View style={styles.titleIdentityRow}>
+      <View style={styles.titleIdentity}>{children}</View>
+      {withImage ? (
+        <MediaTile uri={heroUri} alt={longest.productName} size={layout.detailMediaSize} />
+      ) : null}
+    </View>
+  );
+
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        The longest real product names in the live feed, at Detail’s own heading type. Treatment 1
+        is the shipped screen; treatments 2 and 3 are drawn only here. The hero footprint is
+        simulated with the shared media tile; the large-type samples are simulated at ×
+        {SIMULATED_LARGE_TYPE} on top of the current text size.
+      </Text>
+
+      <GallerySample
+        caption={`Treatment 1 · unbounded (shipped) — ${longest.productName.length} characters, with imagery`}>
+        {identityRow(
+          <Text variant="heading-2" accessibilityRole="header">
+            {longest.productName}
+          </Text>,
+          true,
+        )}
+      </GallerySample>
+      <GallerySample
+        caption={`Treatment 2 · bounded at ${BOUNDED_TITLE_LINES} lines with “Show full title”, with imagery`}>
+        {identityRow(<BoundedTitleSample title={longest.productName} />, true)}
+      </GallerySample>
+      {concise ? (
+        <GallerySample
+          caption={`Treatment 3 · deterministic concise head clause (“${conciseHeadClause(concise.productName)}”) — derivable only where the source separates a head clause from its enumeration; the full name stays one disclosure away`}>
+          {identityRow(
+            <View style={styles.titleSampleBlock}>
+              <Text variant="heading-2" accessibilityRole="header">
+                {conciseHeadClause(concise.productName)}
+              </Text>
+              <BoundedTitleSample title={concise.productName} />
+            </View>,
+            false,
+          )}
+        </GallerySample>
+      ) : (
+        <Text variant="caption" color="text/secondary">
+          Treatment 3 — no loaded title separates a head clause from its enumeration, so no concise
+          display title can be derived without dropping product variants; nothing is invented.
+        </Text>
+      )}
+
+      <GallerySample caption="Treatment 1 vs 2 · no imagery — the identity takes the full width">
+        {identityRow(
+          <Text variant="heading-2" accessibilityRole="header">
+            {longest.productName}
+          </Text>,
+          false,
+        )}
+        {identityRow(<BoundedTitleSample title={longest.productName} />, false)}
+      </GallerySample>
+
+      <GallerySample
+        caption={`Treatment 1 vs 2 · simulated large type (×${SIMULATED_LARGE_TYPE}), with imagery`}>
+        {identityRow(
+          <Text
+            variant="heading-2"
+            accessibilityRole="header"
+            style={{
+              fontSize: typography['heading-2'].fontSize * SIMULATED_LARGE_TYPE,
+              lineHeight: typography['heading-2'].lineHeight * SIMULATED_LARGE_TYPE,
+            }}>
+            {longest.productName}
+          </Text>,
+          true,
+        )}
+        {identityRow(
+          <BoundedTitleSample title={longest.productName} typeScale={SIMULATED_LARGE_TYPE} />,
+          true,
+        )}
+      </GallerySample>
+
+      {runnersUp.map((model) => (
+        <GallerySample
+          key={model.id}
+          caption={`Treatment 2 · next-longest title — ${model.productName.length} characters`}>
+          {identityRow(<BoundedTitleSample title={model.productName} />, false)}
+        </GallerySample>
+      ))}
+    </Surface>
+  );
+}
+
 /**
  * The questionnaire's steps and states, one under another, drawn by the
  * real step components (components/report-questionnaire) so a screenshot is
@@ -2322,6 +2533,21 @@ const styles = StyleSheet.create({
   feedCase: {
     gap: spacing[8],
     padding: spacing[12],
+  },
+  // P2B7G: the Detail header's identity-beside-media geometry, reproduced
+  // for the title-treatment comparison ([id].tsx identityRow/identity).
+  titleIdentityRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[12],
+  },
+  titleIdentity: {
+    flex: 1,
+    minWidth: 0,
+    gap: spacing[8],
+  },
+  titleSampleBlock: {
+    gap: spacing[4],
   },
   // P2B7D: the recall card's own geometry, reproduced for the treatment
   // comparison so the three options are judged at the size they would ship

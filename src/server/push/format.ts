@@ -15,7 +15,7 @@
  * material-change rule that fired — nothing is invented.
  */
 
-import { displayHeadlineCase, productDisplayName } from '../../lib/consumer-summary';
+import { displayProductTitle, productDisplayName } from '../../lib/consumer-summary';
 import { reasonLine } from '../../lib/recall-display';
 import { agencyLabel, riskTierWord } from '../../lib/risk-display';
 import { consumerRiskTier, classificationStatus } from '../../domain/risk-tier';
@@ -39,13 +39,14 @@ export interface PushContent {
 
 export function formatPushContent(event: DeliverableEvent): PushContent {
   const projection = event.projection;
-  // The same shared headline pipeline the app's cards use (P3D): ALL-CAPS is
+  // The same shared shopper-title pipeline the app's cards use (P3D, extended
+  // by P2B7G): a jammed quantity+unit boundary is spaced, ALL-CAPS is
   // un-shouted and a defectively lowercase name is headline-cased before
-  // truncation, so a push and the card it opens can never disagree about
-  // casing. Formatting only — rendered at delivery time, never stored in the
+  // truncation, so a push and the card it opens can never disagree about a
+  // name. Formatting only — rendered at delivery time, never stored in the
   // ledger, and delivery stays dormant until push is explicitly activated.
   const product = truncateForPush(
-    displayHeadlineCase(
+    displayProductTitle(
       productDisplayName(projection.productDescription ?? null, projection.title),
     ),
   );

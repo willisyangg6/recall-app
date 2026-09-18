@@ -143,3 +143,25 @@ test('raw announcement HTML is not part of the searchable surface', () => {
   const entry = buildSearchEntry(recall());
   assert.deepEqual(Object.keys(entry).sort(), ['codes', 'text']);
 });
+
+test('P2B7G: the displayed spaced-unit form still finds the jammed source text', () => {
+  // The card renders "500 mL Supplement Bottle" while the stored description
+  // says "500mL" — matching is substring over the normalized stored fields,
+  // so a shopper typing either form finds the recall, and search needed no
+  // change for the display normalization.
+  const entry = buildSearchEntry(
+    recall({
+      title: 'A&P Creations LLC Issues Nationwide Recall of biQ-FEL',
+      productDescription: 'biQ-FEL 500mL supplement bottle',
+    }),
+  );
+  for (const typed of [
+    '500 mL supplement',
+    '500mL supplement',
+    '500 ml Bottle',
+    'supplement bottle',
+  ]) {
+    const parsed = parseSearchQuery(typed);
+    assert.ok(parsed && matchesSearch(entry, parsed), `display-form query missed: ${typed}`);
+  }
+});
