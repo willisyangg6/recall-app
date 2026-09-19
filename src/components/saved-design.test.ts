@@ -65,13 +65,14 @@ function codeOnly(source: string): string {
 
 test('Saved lists the shared RecallCard and composes no card of its own', () => {
   assert.match(SAVED, /import \{ RecallCard \} from '@\/components\/recall-card'/);
-  assert.match(
-    SAVED,
-    /<RecallCard model=\{buildHomeCardModel\(item, \{ today, affectsYou: false \}\)\} \/>/,
-  );
-  // Both screens build the card model with the same contract function, so a
-  // saved recall cannot word, order or label anything differently.
-  assert.ok(FEED.includes('buildHomeCardModel(item, {'));
+  // Both screens build the card model with the same contract function AND
+  // the same arguments, so a saved recall cannot word, order, label or
+  // PERSONALIZE anything differently. The two call sites are byte-identical
+  // (P2B7N.1): Saved previously passed a literal `affectsYou: false` here,
+  // which silently stripped AFFECTS YOU from every saved card.
+  const CALL = '<RecallCard model={buildHomeCardModel(item, { today, prefs })} />';
+  assert.ok(SAVED.includes(CALL));
+  assert.ok(FEED.includes(CALL));
   // Nothing on Saved reassembles a card: no label, no media, no save control,
   // no detail model, no risk or reason derivation of its own.
   for (const forbidden of [

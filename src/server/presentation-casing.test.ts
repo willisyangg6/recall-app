@@ -159,7 +159,7 @@ function modelsOf(fragment: string) {
   const { id, projection } = caseOf(fragment);
   const home = buildHomeCardModel(feedItemOf(id, projection), {
     today: TODAY,
-    affectsYou: false,
+    prefs: null,
   });
   const detail = buildDetailModel(
     { id, projection, timeline: [], affectedProducts: projection.affectedProducts, visuals: [] },
@@ -711,7 +711,7 @@ test('P2B7H: across the whole corpus, card summaries drop only a sentence stop',
       pathogenOrAllergen: item.pathogenOrAllergen,
       title: item.title,
     });
-    const card = buildHomeCardModel(item, { today: TODAY, affectsYou: false }).reasonLine;
+    const card = buildHomeCardModel(item, { today: TODAY, prefs: null }).reasonLine;
     if (sentence === null) {
       assert.equal(card, null, `${id} invented a card line`);
       continue;

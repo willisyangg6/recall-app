@@ -492,6 +492,25 @@ review. Nothing here is a launch blocker — those live in
   alternatives in Design Preview before anything ships — the same way the
   category tag was settled (P2B7D).
 
+- **P2B7Q — Lotly-authored copy audit.** Every shopper-facing sentence Lotly
+  CONSTRUCTS rather than reproduces verbatim from an agency source needs one
+  audit, because the failure mode is shared: a template that reads as an
+  official statement while asserting something the source never said. In
+  scope are the What Happened templates, update and timeline summaries (the
+  SK Food Group PHA's `Updated Feb 9, 2024: additional affected products were
+added.` is the worked example — correct today, and exactly the shape that
+  needs checking), illness notices, hazard summaries, health-risk
+  explanations, distribution fallbacks, no-image and failure text,
+  older-active-notice explanations, search-match explanations, retailer copy,
+  push notifications, accessibility labels, and empty and error states. For
+  each: classify it as agency text, deterministic transformation, or
+  Lotly-authored template; state its input evidence; check grammar,
+  pluralization and date behaviour; check the edge cases; confirm absence is
+  represented honestly and that the wording cannot overstate certainty;
+  confirm it reads consistently across Feed, Saved, Detail, push, share and
+  accessibility; and record its test and corpus coverage. Recorded during
+  P2B7N.1; the Feb 9 note is not currently considered a defect.
+
 - **Illness-repair ledger checkpointing (operational hardening).** The illness
   repair CLI (`npm run repair:illness-flags`) writes its durable apply ledger
   only after the write loop completes. An exception mid-loop could therefore

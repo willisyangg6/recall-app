@@ -298,8 +298,12 @@ test('the summary refreshes whenever Profile regains focus, and a stale read is 
   assert.ok(PROFILE.includes('let current = true;'));
   assert.ok(PROFILE.includes('current = false;'));
   assert.ok(PROFILE.includes('if (current) setSummary('));
-  // The same pattern the Feed and the Personalization screen use.
-  assert.match(read('app', '(tabs)', 'index.tsx'), /useFocusEffect\(/);
+  // The same pattern the card screens and the Personalization screen use.
+  // Since P2B7N.1 the Feed reads preferences through the SHARED hook rather
+  // than its own focus effect — the refocus rule lives there, once, for the
+  // Feed, Saved and Detail alike.
+  assert.match(read('hooks', 'use-preferences.ts'), /useFocusEffect\(/);
+  assert.ok(read('app', '(tabs)', 'index.tsx').includes('usePreferences('));
   assert.match(read('app', 'settings', 'personalization.tsx'), /void savePreferences\(next\)/);
 });
 

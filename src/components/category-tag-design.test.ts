@@ -73,11 +73,12 @@ test('the tag is written once, in the shared card, so Feed and Saved cannot disa
     "import { LAUNCH_CATEGORY_OPTIONS, sanitizeLaunchCategoryIds } from '@/domain/food-category-launch';",
   ]);
   // Both screens reach the card through the same builder with the same
-  // arguments, so the same recall carries the same word on both.
-  assert.ok(
-    SAVED.includes('<RecallCard model={buildHomeCardModel(item, { today, affectsYou: false })} />'),
-  );
-  assert.ok(FEED.includes('buildHomeCardModel(item, {'));
+  // arguments, so the same recall carries the same word on both. Since
+  // P2B7N.1 the two call sites are BYTE-IDENTICAL — there is no longer a
+  // per-screen argument for one of them to get wrong.
+  const CALL = '<RecallCard model={buildHomeCardModel(item, { today, prefs })} />';
+  assert.ok(SAVED.includes(CALL));
+  assert.ok(FEED.includes(CALL));
   assert.ok(FEED.includes("import { RecallCard } from '@/components/recall-card';"));
   assert.ok(SAVED.includes("import { RecallCard } from '@/components/recall-card';"));
   // The card reads the model's finished word and maps no id to a label.

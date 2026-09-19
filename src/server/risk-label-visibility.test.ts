@@ -93,7 +93,7 @@ function feedItemOf(id: string, projection: CaseProjection): FeedItem {
  */
 function modelsOf(projection: CaseProjection, id = 'case-under-test') {
   return {
-    card: buildHomeCardModel(feedItemOf(id, projection), { today: TODAY, affectsYou: false }),
+    card: buildHomeCardModel(feedItemOf(id, projection), { today: TODAY, prefs: null }),
     detail: buildDetailModel(
       { id, projection, timeline: [], affectedProducts: projection.affectedProducts, visuals: [] },
       { today: TODAY, affectsYou: false },

@@ -17,9 +17,17 @@
  * No folders, categories, notes, sorting, search or filters: Saved is one
  * personal list, and the Feed is where recalls are found. No community-report
  * counts (that block belongs to Recall Details and is gated server-side
- * anyway), no ranking, no personalization, no notification or permission
- * side effects, and no server call of its own. Opening this tab cannot mint
- * an installation identity.
+ * anyway), no ranking, no notification or permission side effects, and no
+ * server call of its own. Opening this tab cannot mint an installation
+ * identity.
+ *
+ * It does read PREFERENCES, and the distinction matters (P2B7N.1). What
+ * Saved does not do is PERSONALIZE — it never ranks, filters or selects by
+ * relevance; the list is save order, the whole list, always. But a card that
+ * says AFFECTS YOU in the Feed and stays silent here is not restraint, it is
+ * the same recall making two different claims about the same shopper. So the
+ * preferences are read through the shared hook and handed to the shared card
+ * builder, which derives the verdict; this screen still decides nothing.
  *
  * ## Appearance (P2B4)
  *
@@ -43,6 +51,7 @@ import { Callout } from '@/components/ui/callout';
 import { Surface } from '@/components/ui/surface';
 import { color, layout, spacing } from '@/constants/design-tokens';
 import { useFeed } from '@/hooks/use-feed';
+import { usePreferences } from '@/hooks/use-preferences';
 import { useSavedRecalls } from '@/hooks/use-saved-recalls';
 import { FEED_STALE_NOTICE } from '@/lib/feed-copy';
 import { isFeedConfigured } from '@/lib/recall-feed';
@@ -71,6 +80,11 @@ function Page({ children }: { children: React.ReactNode }) {
 export default function SavedScreen() {
   const { state, refreshing, refresh, staleMessage } = useFeed();
   const { ids, loaded, available } = useSavedRecalls();
+  // Read for the SAME reason the Feed reads them, through the same hook:
+  // "Affects you" is a claim about the current user, so a saved card has to
+  // be built against the profile that exists right now. Hooks run before any
+  // early return, so every state below this line is reached identically.
+  const prefs = usePreferences();
 
   if (!available) {
     return (
@@ -130,9 +144,7 @@ export default function SavedScreen() {
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <RecallCard model={buildHomeCardModel(item, { today, affectsYou: false })} />
-        )}
+        renderItem={({ item }) => <RecallCard model={buildHomeCardModel(item, { today, prefs })} />}
         // The feed on screen is complete but possibly out of date — said
         // plainly, in the same words the Feed uses, because silently showing
         // stale facts as current is the failure the sentence exists for.

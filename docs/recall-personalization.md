@@ -67,6 +67,50 @@ deterministic core shared by the Home "Affects me" feed, the detail screen's
   ([docs/recall-feed-usability.md](recall-feed-usability.md)); the reasons
   stay available for ranking, QA, and future surfaces.
 
+### The one Affects-You verdict every surface renders (P2B7N.1)
+
+`affectsYouVerdict(caseFacts, preferences | null)` wraps that core for the
+surfaces that show the **AFFECTS YOU** label. It answers `false` for `null`
+preferences (not read yet, or a platform without preference storage) and for
+a profile with nothing chosen, and otherwise returns `affectsMe`.
+
+It exists because "affects you" is a claim about the CURRENT user, not a
+property of the recall, so the answer has to come from one function over two
+inputs — the case's facts and the preferences saved on this device right
+now. Before P2B7N.1 each surface answered for itself and the Saved tab,
+which had no preferences in scope, passed a literal `false`. The same saved
+Public Health Alert therefore read as relevant in the Feed and irrelevant in
+Saved.
+
+The rule this establishes:
+
+- **The card builder takes the inputs, never the answer.**
+  `buildHomeCardModel(item, { today, prefs })` derives the verdict itself, so
+  a card surface has no boolean to pass and therefore none it can get wrong.
+  Feed and Saved hand it byte-identical arguments.
+- **Preferences are read through one hook.** `hooks/use-preferences.ts`
+  reloads on focus, so an edit made in Settings lands on the tab underneath —
+  for the Feed, Saved and Detail alike.
+- **Nothing is snapshotted.** Saving records a case id and nothing else
+  (`lib/saved-recalls.ts`). The verdict is recomputed on every render, so
+  removing a preference removes the label on both surfaces and adding one
+  adds it on both — including for recalls saved before the preference
+  existed.
+- **Save state is not a personalization signal.** Saving or unsaving changes
+  the bookmark and cannot change the verdict.
+- **All versus Affects me changes membership only.** The mode decides which
+  cards are listed, never what a listed card claims.
+
+The Feed additionally keeps a corpus-wide `evaluatePersonalRelevance` index
+for Affects Me ranking and membership. That is the same function over the
+same facts, so ranking and the card label agree by construction.
+
+Feed/Saved card parity is pinned field-by-field, over recorded real notices
+and through each screen's own list adapter, in
+`src/server/feed-saved-parity.test.ts`. The audit is driven off the card
+model's own key set, so a new card field cannot be added without a parity
+decision.
+
 ## Home
 
 Two views: **Affects me** and **All recalls** — All recalls is always one tap

@@ -333,7 +333,11 @@ test('paired identifier/date cells still render line for line, with the blank li
 
 test('no gate, store, or contract moved: the screen and block read the same seams as before', () => {
   assert.ok(DETAIL.includes('buildDetailModel(state.detail, { today: todayIso(), affectsYou })'));
-  assert.ok(DETAIL.includes('evaluatePersonalRelevance('));
+  // P2B7N.1: Detail reaches the SAME matcher through the shared verdict the
+  // card surfaces use, rather than calling `evaluatePersonalRelevance` with
+  // its own hand-listed facts — one relevance answer for all three screens.
+  assert.ok(DETAIL.includes('affectsYouVerdict('));
+  assert.ok(!codeOnly(DETAIL).includes('evaluatePersonalRelevance('));
   assert.ok(DETAIL.includes('fetchCaseDetail(id)'));
   assert.ok(COMMUNITY.includes('communityReportsView(loaded.summary, loaded.report)'));
   assert.ok(COMMUNITY.includes("from '@/lib/shopper-report-store'"));

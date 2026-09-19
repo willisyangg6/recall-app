@@ -69,7 +69,7 @@ function item(overrides: Partial<FeedItem> = {}): FeedItem {
 const labelOf = (categories: FoodCategoryId[] | undefined): string | null =>
   buildHomeCardModel(item({ productCategories: categories }), {
     today: TODAY,
-    affectsYou: false,
+    prefs: null,
   }).categoryLabel;
 
 // ── 1. The authoritative value reaches the shared card model ────────────────
@@ -80,7 +80,7 @@ test('the stored category — and only the stored category — reaches the card 
   assert.equal(labelOf(['produce']), 'Fruits & vegetables');
   // The model field exists on every card, and is null rather than absent, so
   // no screen has to distinguish "no category" from "field not built".
-  const model = buildHomeCardModel(item(), { today: TODAY, affectsYou: false });
+  const model = buildHomeCardModel(item(), { today: TODAY, prefs: null });
   assert.ok('categoryLabel' in model);
   assert.equal(model.categoryLabel, null);
 });
@@ -194,14 +194,14 @@ test('the label ignores every input a classifier would use — title, brand, rea
     assert.equal(
       buildHomeCardModel(item({ ...overrides, productCategories: ['beverages'] }), {
         today: TODAY,
-        affectsYou: false,
+        prefs: null,
       }).categoryLabel,
       'Beverages',
       `${JSON.stringify(overrides)} changed the stored label`,
     );
     // With none stored, no amount of suggestive text invents one.
     assert.equal(
-      buildHomeCardModel(item(overrides), { today: TODAY, affectsYou: false }).categoryLabel,
+      buildHomeCardModel(item(overrides), { today: TODAY, prefs: null }).categoryLabel,
       null,
       `${JSON.stringify(overrides)} invented a label`,
     );
@@ -300,7 +300,7 @@ test('the rule holds over the reviewed real corpus, in every state it actually c
   for (const row of GOLD) {
     const model = buildHomeCardModel(
       item({ id: row.caseId, title: row.title, productCategories: row.expected }),
-      { today: TODAY, affectsYou: false },
+      { today: TODAY, prefs: null },
     );
     const label = model.categoryLabel;
     if (label !== null) {
@@ -321,7 +321,7 @@ test('the rule holds over the reviewed real corpus, in every state it actually c
     assert.equal(
       buildHomeCardModel(item({ id: row.caseId, title: row.title }), {
         today: TODAY,
-        affectsYou: false,
+        prefs: null,
       }).categoryLabel,
       null,
     );

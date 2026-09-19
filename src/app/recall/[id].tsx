@@ -35,7 +35,7 @@
  * each of these.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Linking,
   Pressable,
@@ -44,7 +44,7 @@ import {
   View,
   type TextLayoutLine,
 } from 'react-native';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommunityReportsBlock } from '@/components/community-reports-section';
@@ -61,7 +61,6 @@ import { RiskLabel } from '@/components/ui/risk-label';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
 import { color, hitSlopToMinimum, layout, spacing, typography } from '@/constants/design-tokens';
-import type { UserRecallPreferences } from '@/domain/preferences';
 import {
   DETAIL_ERROR_FALLBACK,
   DETAIL_ERROR_TITLE,
@@ -70,7 +69,6 @@ import {
   EXTERNAL_LINK_HINT,
   retractedNotice,
 } from '@/lib/detail-copy';
-import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
 import { fetchCaseDetail, type CaseDetail } from '@/lib/recall-feed';
 import {
   buildDetailModel,
@@ -81,7 +79,8 @@ import {
   type AffectedProductsTableCell,
   type DetailModel,
 } from '@/lib/recall-presentation';
-import { evaluatePersonalRelevance } from '@/lib/relevance';
+import { usePreferences } from '@/hooks/use-preferences';
+import { affectsYouVerdict } from '@/lib/relevance';
 
 type LoadState =
   | { status: 'loading' }
@@ -334,7 +333,7 @@ export default function RecallDetailScreen() {
   const [statesExpanded, setStatesExpanded] = useState(false);
   const [tableExpanded, setTableExpanded] = useState(false);
   const [openCells, setOpenCells] = useState<ReadonlySet<string>>(() => new Set());
-  const [prefs, setPrefs] = useState<UserRecallPreferences | null>(null);
+  const prefs = usePreferences();
   // Latched once the name's own layout shows a word broken beside the hero:
   // the header then stacks (identity at full width, tile beneath) and stays
   // stacked, so the layout can never oscillate between the two shapes.
@@ -361,16 +360,6 @@ export default function RecallDetailScreen() {
     };
   }, [id]);
 
-  useFocusEffect(
-    useCallback(() => {
-      // Read-only preference load for the affects-you banner; never prompts
-      // for anything. On focus (not just mount) so a detail screen beneath
-      // the stack cannot keep stale personalization after a Settings edit or
-      // a C7.1 data reset.
-      if (preferencesAvailable()) void loadPreferences().then(setPrefs);
-    }, []),
-  );
-
   if (state.status !== 'ready') {
     return (
       <Page>
@@ -389,18 +378,16 @@ export default function RecallDetailScreen() {
   // The one deterministic mapping shared with the Feed (lib/recall-presentation):
   // the screen renders the model and derives no recall wording of its own.
   // Same predicate as Affects me membership — matching logic unchanged.
-  const affectsYou =
-    prefs !== null &&
-    evaluatePersonalRelevance(
-      {
-        geography: projection.geography,
-        pathogenOrAllergen: projection.pathogenOrAllergen,
-        retailerNames: projection.retailerNames ?? [],
-        hazardCategory: projection.hazardCategory,
-        reasonText: projection.reasonText,
-      },
-      prefs,
-    ).affectsMe;
+  const affectsYou = affectsYouVerdict(
+    {
+      geography: projection.geography,
+      pathogenOrAllergen: projection.pathogenOrAllergen,
+      retailerNames: projection.retailerNames ?? [],
+      hazardCategory: projection.hazardCategory,
+      reasonText: projection.reasonText,
+    },
+    prefs,
+  );
   const model: DetailModel = buildDetailModel(state.detail, { today: todayIso(), affectsYou });
   // Optional sections are DECIDED by the shared contract (P3A). The screen
   // renders a section when the model gives it one and renders nothing at all

@@ -102,12 +102,21 @@ test('Home cards carry no per-card source attribution and exactly one activity l
   assert.ok(!HOME.includes('lastPublicActivityAt)'), 'a card formats its own activity date');
 });
 
-test('the Affects-you flag is fed from the shared relevance verdict in every feed mode', () => {
+test('the Affects-you flag is DERIVED by the card builder, in every feed mode', () => {
   // Relevance is evaluated whenever preferences exist — not gated on the
-  // Affects me tab — and the card flag reads that same verdict.
+  // Affects me tab. The corpus-wide index below still drives Affects me
+  // MEMBERSHIP and ranking.
   assert.match(HOME, /const hasPersonalization = prefs !== null && hasAnyPreference\(prefs\)/);
   assert.match(HOME, /if \(hasPersonalization\) \{/);
-  assert.match(HOME, /affectsYou: relevanceById\.get\(item\.id\)\?\.affectsMe \?\? false/);
+  // P2B7N.1: the card FLAG is not handed over by the screen at all. The
+  // builder takes `prefs` and derives the verdict, so the Feed cannot pass
+  // one value while Saved passes another — which is exactly what happened
+  // when Saved passed a literal `affectsYou: false`.
+  assert.match(HOME, /buildHomeCardModel\(item, \{ today, prefs \}\)/);
+  assert.ok(
+    !codeOnly(HOME).includes('affectsYou:'),
+    'a card screen states the Affects-you verdict itself',
+  );
 });
 
 test('Detail renders from the presentation model, not its own formatting', () => {
@@ -549,11 +558,17 @@ test('P1B: the still-final exclusions survive the Health Risk reversal', () => {
 });
 
 test('both screens share one relevance evaluation — matching logic is not duplicated', () => {
-  // Each screen calls the one canonical evaluator; nobody reimplements
-  // geography/allergen/retailer matching inline.
-  assert.match(HOME, /evaluatePersonalRelevance\(/);
-  assert.match(DETAIL, /evaluatePersonalRelevance\(/);
-  assert.match(DETAIL, /\.affectsMe/);
+  // Nobody reimplements geography/allergen/retailer matching inline: every
+  // surface reaches `lib/relevance.ts`. Detail and the card builder go
+  // through the shared `affectsYouVerdict`; the Feed additionally holds a
+  // corpus-wide `evaluatePersonalRelevance` index for Affects me ranking,
+  // which is the same function over the same facts (P2B7N.1).
+  assert.match(HOME, /evaluatePersonalRelevance\(item, prefs\)/);
+  assert.match(DETAIL, /affectsYouVerdict\(/);
+  assert.ok(
+    !codeOnly(DETAIL).includes('evaluatePersonalRelevance('),
+    'Detail re-lists the facts relevance reads',
+  );
 });
 
 test('P2c: row images render only the shared allocation — no screen-local matching', () => {

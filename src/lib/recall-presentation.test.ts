@@ -625,20 +625,34 @@ test('the Where It Was Sold model has no separate consumer AREAS field but keeps
 
 // ── 20: affects-you flag on Home cards ──────────────────────────────────────
 
-test('the Affects-you state rides the Home card model in any feed mode', () => {
-  const flagged = buildHomeCardModel(feedItem(), { today: TODAY, affectsYou: true });
+test('the Affects-you state is DERIVED on the Home card model, in any feed mode', () => {
+  // P2B7N.1: the builder takes the preferences, not the answer. A card
+  // surface has no verdict to hand over and therefore none it can get wrong
+  // — which is exactly how Saved used to pass a literal `false`.
+  const nationwide = feedItem({
+    geography: { scope: 'nationwide', states: [], confidence: 'stated', sourceText: 'Nationwide' },
+  });
+  const flagged = buildHomeCardModel(nationwide, {
+    today: TODAY,
+    prefs: { state: 'CA', allergens: [], retailers: [] },
+  });
   assert.equal(flagged.affectsYou, true);
-  const unflagged = buildHomeCardModel(feedItem(), { today: TODAY, affectsYou: false });
-  assert.equal(unflagged.affectsYou, false);
+  // Preferences not read yet, and a profile with nothing chosen, are both
+  // "no match" — neither may be reported as relevance.
+  assert.equal(buildHomeCardModel(nationwide, { today: TODAY, prefs: null }).affectsYou, false);
+  assert.equal(
+    buildHomeCardModel(nationwide, {
+      today: TODAY,
+      prefs: { state: null, allergens: [], retailers: [] },
+    }).affectsYou,
+    false,
+  );
 });
 
 // ── 21: optional imagery ────────────────────────────────────────────────────
 
 test('absent imagery is a null model field, and the detail gallery deduplicates the hero', () => {
-  assert.equal(
-    buildHomeCardModel(feedItem(), { today: TODAY, affectsYou: false }).heroImageUrl,
-    null,
-  );
+  assert.equal(buildHomeCardModel(feedItem(), { today: TODAY, prefs: null }).heroImageUrl, null);
 
   const withHero = buildDetailModel(
     detail(
@@ -1026,7 +1040,7 @@ test('P2B7C regression (biQ-FEL): the Feed hero IS Detail image one, from one id
   });
   const card = buildHomeCardModel(
     feedItem({ id: source.id, title: source.projection.title, heroImageUrl: hero }),
-    { today: TODAY, affectsYou: false },
+    { today: TODAY, prefs: null },
   );
   const model = buildDetailModel(source, { today: TODAY, affectsYou: false });
   // One authoritative hero identity, byte-identical on both surfaces.
@@ -1416,7 +1430,9 @@ test('Home and Detail agree on identity, name, brand, activity, and imagery', ()
       heroImageUrl: shared.hero,
       productNames: shared.productNames,
     }),
-    { today: TODAY, affectsYou: true },
+    // Relevance is not what this test compares; both surfaces are built
+    // without it so the identity fields below are the only variable.
+    { today: TODAY, prefs: null },
   );
   const detailModel = buildDetailModel(
     {
@@ -1438,7 +1454,7 @@ test('Home and Detail agree on identity, name, brand, activity, and imagery', ()
       })),
       visuals: [],
     },
-    { today: TODAY, affectsYou: true },
+    { today: TODAY, affectsYou: false },
   );
 
   assert.equal(home.id, detailModel.id);
@@ -1515,7 +1531,7 @@ test('Home and Detail render the same risk state: Pending, Unknown, and rated', 
   };
   const home = buildHomeCardModel(feedItem({ classification: pendingClassification }), {
     today: TODAY,
-    affectsYou: false,
+    prefs: null,
   });
   const detailModel = buildDetailModel(detail({ classification: pendingClassification }), {
     today: TODAY,
@@ -1542,7 +1558,7 @@ test('Home and Detail render the same risk state: Pending, Unknown, and rated', 
   };
   const phaHome = buildHomeCardModel(
     feedItem({ classification: phaClassification, noticeType: 'public_health_alert' }),
-    { today: TODAY, affectsYou: false },
+    { today: TODAY, prefs: null },
   );
   const phaDetail = buildDetailModel(
     detail({ classification: phaClassification, noticeType: 'public_health_alert' }),
@@ -1566,7 +1582,7 @@ test('Home and Detail render the same risk state: Pending, Unknown, and rated', 
     feedItem({
       classification: { value: 'class_I', sourceText: 'Class I', officialClasses: ['class_I'] },
     }),
-    { today: TODAY, affectsYou: false },
+    { today: TODAY, prefs: null },
   );
   assert.equal(rated.risk.badgeLabel, 'CRITICAL');
 });
@@ -1729,7 +1745,7 @@ test('P2B7G: the live 500mL escape renders spaced and cased on Home, Detail, and
     brands: ['biQ-FEL'],
     firmName: 'A&P Creations LLC',
   });
-  const home = buildHomeCardModel(item, { today: TODAY, affectsYou: false });
+  const home = buildHomeCardModel(item, { today: TODAY, prefs: null });
   assert.equal(home.productName, '500 mL Supplement Bottle');
   // The stylized brand itself is never rewritten.
   assert.equal(home.brand.text, 'biQ-FEL');
@@ -1755,7 +1771,7 @@ test('P2B7G: normalization never mutates the stored fields the models read', () 
     productDescription: 'biQ-FEL 500mL supplement bottle',
     brands: ['biQ-FEL'],
   });
-  buildHomeCardModel(item, { today: TODAY, affectsYou: false });
+  buildHomeCardModel(item, { today: TODAY, prefs: null });
   assert.equal(item.productDescription, 'biQ-FEL 500mL supplement bottle');
   assert.deepEqual(item.brands, ['biQ-FEL']);
   assert.equal(item.title, 'Acme Foods Recalls Widgets');
@@ -2513,7 +2529,7 @@ test('P3D named regression (synthetic): dynacare renders as Dynacare on every su
     hazardCategory: 'chemical_contamination',
     pathogenOrAllergen: 'asbestos',
   });
-  const home = buildHomeCardModel(item, { today: TODAY, affectsYou: false });
+  const home = buildHomeCardModel(item, { today: TODAY, prefs: null });
   const model = buildDetailModel(
     detail({
       title: item.title,
@@ -2542,7 +2558,7 @@ test('P3D named regression (synthetic): the lowercase supplements headline is he
   // product description that rendered verbatim as a Home card title.
   const description = 'dietary supplements marketed for male sexual enhancement';
   const item = feedItem({ productDescription: description });
-  const home = buildHomeCardModel(item, { today: TODAY, affectsYou: false });
+  const home = buildHomeCardModel(item, { today: TODAY, prefs: null });
   const model = buildDetailModel(detail({ productDescription: description }), {
     today: TODAY,
     affectsYou: false,
@@ -2566,7 +2582,7 @@ test('P3D: the stylized brand a2 is preserved on the brand line and as sentence 
     brands: overrides.brands,
     productDescription: overrides.productDescription,
   });
-  const home = buildHomeCardModel(item, { today: TODAY, affectsYou: false });
+  const home = buildHomeCardModel(item, { today: TODAY, prefs: null });
   const model = buildDetailModel(detail(overrides), { today: TODAY, affectsYou: false });
   // Brand identity wins over sentence-opening convention (P3D founder
   // decision A): never "A2".

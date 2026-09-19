@@ -8,7 +8,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Link, useFocusEffect } from 'expo-router';
+import { Link } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StateMessage } from '@/components/state-message';
@@ -36,6 +36,7 @@ import {
   type UserRecallPreferences,
 } from '@/domain/preferences';
 import { useFeed } from '@/hooks/use-feed';
+import { usePreferences } from '@/hooks/use-preferences';
 import { buildAffectsMeSections } from '@/lib/affects-me-ranking';
 import {
   FEED_EMPTY_CORPUS,
@@ -62,7 +63,7 @@ import {
 } from '@/lib/feed-filters';
 import { buildSearchEntry, filterBySearch, type SearchEntry } from '@/lib/feed-search';
 import { buildFeedSections } from '@/lib/feed-relevance';
-import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
+import { preferencesAvailable } from '@/lib/preferences-store';
 import { isFeedConfigured, type FeedItem } from '@/lib/recall-feed';
 import { buildHomeCardModel, todayIso } from '@/lib/recall-presentation';
 import { evaluatePersonalRelevance, type PersonalRelevance } from '@/lib/relevance';
@@ -88,32 +89,6 @@ import { riskTierWord } from '@/lib/risk-display';
  */
 
 type FeedTab = 'affects_me' | 'all';
-
-/**
- * The user's preferences, reloaded on every focus so edits in Settings
- * recalculate "Affects me" immediately. The default tab is chosen ONCE per
- * app session from whether any personalization exists — after that the tab
- * is the user's own choice.
- */
-function usePreferences(onFirstLoad: (prefs: UserRecallPreferences) => void) {
-  const [prefs, setPrefs] = useState<UserRecallPreferences | null>(null);
-  const initialized = useRef(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!preferencesAvailable()) return;
-      void loadPreferences().then((loaded) => {
-        setPrefs(loaded);
-        if (!initialized.current) {
-          initialized.current = true;
-          onFirstLoad(loaded);
-        }
-      });
-    }, [onFirstLoad]),
-  );
-
-  return prefs;
-}
 
 /** The Location sheet's 52 canonical jurisdictions, alphabetical by name. */
 const LOCATION_OPTIONS = SUPPORTED_STATE_CODES.map((code) => ({
@@ -394,27 +369,22 @@ export default function HomeScreen() {
   const olderActive = orderByLocationTiers(sectioned.olderActive, filters.stateCodes);
 
   const personalized = tab === 'affects_me' && prefs !== null && hasAnyPreference(prefs);
-  // One relevance evaluation per case whenever preferences exist — the same
-  // deterministic verdict (lib/relevance.ts) powers Affects me membership AND
-  // the per-card "Affects you" flag, which is available in the normal All
-  // feed too, never only in the Affects me view.
+  // One relevance evaluation per case whenever preferences exist, for Affects
+  // me MEMBERSHIP and ranking only. The per-card "Affects you" label is not
+  // read from here: the card builder derives it from `prefs` itself
+  // (`affectsYouVerdict`), so Saved — which does no ranking — reaches the
+  // identical verdict without this screen handing it over. Both come from the
+  // same function over the same facts, so membership and the label agree by
+  // construction, and the label is available in the All feed exactly as
+  // before, never only in the Affects me view.
   const hasPersonalization = prefs !== null && hasAnyPreference(prefs);
   const relevanceById = new Map<string, PersonalRelevance>();
   if (hasPersonalization) {
+    // The row is passed WHOLE: a FeedItem already satisfies `RelevanceInput`,
+    // so there is no field list here to fall out of step with the one the
+    // card builder evaluates against.
     for (const item of state.items) {
-      relevanceById.set(
-        item.id,
-        evaluatePersonalRelevance(
-          {
-            geography: item.geography,
-            pathogenOrAllergen: item.pathogenOrAllergen,
-            retailerNames: item.retailerNames,
-            hazardCategory: item.hazardCategory,
-            reasonText: item.reasonText,
-          },
-          prefs,
-        ),
-      );
+      relevanceById.set(item.id, evaluatePersonalRelevance(item, prefs));
     }
   }
   // The injected calendar date every card's activity line is formatted
@@ -639,14 +609,7 @@ export default function HomeScreen() {
         ref={listRef}
         sections={sections}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <RecallCard
-            model={buildHomeCardModel(item, {
-              today,
-              affectsYou: relevanceById.get(item.id)?.affectsMe ?? false,
-            })}
-          />
-        )}
+        renderItem={({ item }) => <RecallCard model={buildHomeCardModel(item, { today, prefs })} />}
         // The heading words are the presentation contract's (Recent activity,
         // Older active notices, Affects me); the composition gives them the
         // design's section-heading type. The older section keeps its count,

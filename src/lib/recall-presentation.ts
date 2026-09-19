@@ -33,6 +33,7 @@ import type {
   SourceAgency,
   TimelineEntry,
 } from '@/domain/recall-types';
+import type { UserRecallPreferences } from '@/domain/preferences';
 import { evaluateReportEligibility } from '@/domain/shopper-report';
 import { STATE_TO_POSTAL } from '@/domain/us-geography';
 import {
@@ -71,6 +72,7 @@ import {
   type HazardGuidance,
 } from './recall-display';
 import { interpretReason } from './recall-reason';
+import { affectsYouVerdict } from './relevance';
 import { agencyLabel, riskView, type RiskView } from './risk-display';
 import {
   measurementKey,
@@ -2232,8 +2234,24 @@ export interface HomeCardModel {
 export interface HomeCardContext {
   /** Injected calendar date (YYYY-MM-DD) — see `todayIso`. */
   today: string;
-  /** Whether saved preferences establish a match (lib/relevance.ts verdict). */
-  affectsYou: boolean;
+  /**
+   * The preferences saved on this device RIGHT NOW, or null when they have
+   * not been read yet (or the platform has no preference storage).
+   *
+   * P2B7N.1 replaced an `affectsYou: boolean` here, and the change is the
+   * whole point rather than a refactor. A boolean made the personalization
+   * verdict a screen's answer to give: the Feed computed it, Saved — which
+   * had no preferences in scope — passed a literal `false`, and the same
+   * saved recall lost its AFFECTS YOU the moment it was read from the other
+   * tab. Taking the inputs instead of the answer means a surface has no
+   * verdict to pass and therefore none it can get wrong; both card screens
+   * hand over the same two things and necessarily receive the same model.
+   *
+   * Nothing is snapshotted: the verdict is recomputed from these live
+   * preferences on every build, so changing a preference changes every
+   * surface at once (`affectsYouVerdict`).
+   */
+  prefs: UserRecallPreferences | null;
 }
 
 export function buildHomeCardModel(item: FeedItem, context: HomeCardContext): HomeCardModel {
@@ -2243,7 +2261,11 @@ export function buildHomeCardModel(item: FeedItem, context: HomeCardContext): Ho
     noticeLabel: noticeLabel(item.noticeType),
     risk: riskView(item.classification, item.sourceAgency, item.noticeType),
     activity: activityDisplay(item.publishedAt, item.timeline, context.today),
-    affectsYou: context.affectsYou,
+    // Derived HERE, from the current preferences, for every card surface.
+    // A feed row already satisfies `RelevanceInput` in full, so it is passed
+    // whole — no surface re-lists the facts relevance reads, and none can
+    // omit one (P2B7N.1).
+    affectsYou: affectsYouVerdict(item, context.prefs),
     productName: cleanProductName({
       title: item.title,
       productDescription: item.productDescription,

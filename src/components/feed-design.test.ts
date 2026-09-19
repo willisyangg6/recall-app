@@ -413,17 +413,17 @@ test('the card renders the contract’s location summary: two codes, then +N', (
   assert.ok(CARD.includes('{model.locationSummary}'));
   const three = buildHomeCardModel(
     item({ geography: geo('states', ['California', 'New York', 'Texas']) }),
-    { today: '2026-09-14', affectsYou: false },
+    { today: '2026-09-14', prefs: null },
   );
   assert.equal(three.locationSummary, 'CA, NY +1');
   const two = buildHomeCardModel(item({ geography: geo('states', ['California', 'New York']) }), {
     today: '2026-09-14',
-    affectsYou: false,
+    prefs: null,
   });
   assert.equal(two.locationSummary, 'CA, NY');
   const national = buildHomeCardModel(item({ geography: geo('nationwide') }), {
     today: '2026-09-14',
-    affectsYou: false,
+    prefs: null,
   });
   assert.equal(national.locationSummary, 'Nationwide');
 });
@@ -475,7 +475,7 @@ test('the Feed and the bar carry no development entry; the harness keeps its gua
   // The gallery renders the product's card over live recalls and names its
   // two simulated values; it invents no recall content.
   assert.ok(PREVIEW.includes('FEED CARD MATRIX'));
-  assert.ok(PREVIEW.includes('buildHomeCardModel(item, { today, affectsYou: false })'));
+  assert.ok(PREVIEW.includes('buildHomeCardModel(item, { today, prefs: null })'));
   assert.ok(PREVIEW.includes('relevance simulated'));
 });
 

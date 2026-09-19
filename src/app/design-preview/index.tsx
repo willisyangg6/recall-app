@@ -1107,7 +1107,7 @@ function TreatmentSample({ model, treatment }: { model: HomeCardModel; treatment
 function CategoryTagGallery({ items }: { items: FeedItem[] }) {
   const today = todayIso();
   const models = useMemo(
-    () => items.map((item) => buildHomeCardModel(item, { today, affectsYou: false })),
+    () => items.map((item) => buildHomeCardModel(item, { today, prefs: null })),
     [items, today],
   );
   const tagged = models.filter((model) => model.categoryLabel !== null);
@@ -1207,7 +1207,7 @@ function CategoryTagGallery({ items }: { items: FeedItem[] }) {
 function FeedCardGallery({ items }: { items: FeedItem[] }) {
   const today = todayIso();
   const models = useMemo(
-    () => items.map((item) => buildHomeCardModel(item, { today, affectsYou: false })),
+    () => items.map((item) => buildHomeCardModel(item, { today, prefs: null })),
     [items, today],
   );
   if (models.length === 0) {
@@ -1326,7 +1326,7 @@ function FeedCardGallery({ items }: { items: FeedItem[] }) {
 function SavedGallery({ items }: { items: FeedItem[] }) {
   const today = todayIso();
   const models = useMemo(
-    () => items.map((item) => buildHomeCardModel(item, { today, affectsYou: false })),
+    () => items.map((item) => buildHomeCardModel(item, { today, prefs: null })),
     [items, today],
   );
 
@@ -1909,7 +1909,7 @@ function BoundedTitleSample({ title, typeScale }: { title: string; typeScale?: n
 function DetailTitleGallery({ items }: { items: FeedItem[] }) {
   const today = todayIso();
   const models = useMemo(
-    () => items.map((item) => buildHomeCardModel(item, { today, affectsYou: false })),
+    () => items.map((item) => buildHomeCardModel(item, { today, prefs: null })),
     [items, today],
   );
   if (models.length === 0) {
@@ -2151,7 +2151,7 @@ function IllnessNoticeGallery({ items }: { items: FeedItem[] }) {
   const today = todayIso();
   const heroUri = useMemo(() => {
     for (const item of items) {
-      const model = buildHomeCardModel(item, { today, affectsYou: false });
+      const model = buildHomeCardModel(item, { today, prefs: null });
       if (model.heroImageUrl) return model.heroImageUrl;
     }
     return null;

@@ -29,6 +29,7 @@ import { normalizedAllergenTokens } from '@/domain/hazard';
 import {
   allergenLabelForToken,
   CONSUMER_ALLERGENS,
+  hasAnyPreference,
   stateNameForCode,
   type UserRecallPreferences,
 } from '@/domain/preferences';
@@ -155,6 +156,49 @@ export function evaluatePersonalRelevance(
   }
 
   return { geographic, matchedAllergens, matchedRetailers, affectsMe, reasons };
+}
+
+/**
+ * The ONE Affects-You verdict every card surface renders (P2B7N.1).
+ *
+ * ## Why this exists
+ *
+ * "Affects you" is a claim about the CURRENT user, not a property of the
+ * recall, so every surface that shows it has to answer the same question
+ * from the same two inputs: this case's facts, and the preferences saved on
+ * this device right now. Before this function each surface answered for
+ * itself — and the Saved tab, which had no preferences in scope at all,
+ * answered `false` for every card. The same recall therefore read as
+ * relevant in the Feed and irrelevant in Saved, which is the one thing a
+ * personalization label may never do: a shopper who saved a recall BECAUSE
+ * it affects them opened Saved and was told, silently, that it does not.
+ *
+ * So the verdict is a function, not a screen decision, and the card builder
+ * (`buildHomeCardModel`) is its only caller on the card path. A surface
+ * hands over the case and the preferences; it has no boolean to pass, and
+ * therefore no boolean it can get wrong.
+ *
+ * ## Why `null` and "no preferences" are the same answer
+ *
+ * `null` is preferences not yet read (or a platform without preference
+ * storage); an empty profile is a user who has chosen nothing. Neither is a
+ * match, and neither may be reported as one. The `hasAnyPreference` gate is
+ * explicit rather than incidental: `evaluatePersonalRelevance` already
+ * returns `affectsMe: false` for a profile with no state, no allergen and
+ * no retailer, but relying on that would make the card's behaviour a
+ * side effect of the matcher's internals rather than a stated rule.
+ *
+ * This is deliberately NOT a stored snapshot. Saving a recall records an
+ * id and nothing else (`lib/saved-recalls.ts`), so the verdict is recomputed
+ * from today's preferences on every render: change a preference and both
+ * surfaces change together, because both are reading the same live answer.
+ */
+export function affectsYouVerdict(
+  input: RelevanceInput,
+  prefs: UserRecallPreferences | null,
+): boolean {
+  if (prefs === null || !hasAnyPreference(prefs)) return false;
+  return evaluatePersonalRelevance(input, prefs).affectsMe;
 }
 
 /**

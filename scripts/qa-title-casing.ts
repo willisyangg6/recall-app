@@ -222,7 +222,7 @@ function runBoundaryGate(): Failure[] {
   const projection = escapeShapedProjection();
   const id = '00000000-0000-4000-8000-000000000000';
   const item = feedItemOf({ id, projection, merged_into: null, created_at: '2026-09-01' });
-  const home = buildHomeCardModel(item, { today: TODAY, affectsYou: false });
+  const home = buildHomeCardModel(item, { today: TODAY, prefs: null });
   const detail = buildDetailModel(
     { id, projection, timeline: [], affectedProducts: [], visuals: [] },
     { today: TODAY, affectsYou: false },
@@ -493,7 +493,7 @@ async function main(): Promise<void> {
     const item = feedItemOf(row);
     return {
       row,
-      title: buildHomeCardModel(item, { today: TODAY, affectsYou: false }).productName,
+      title: buildHomeCardModel(item, { today: TODAY, prefs: null }).productName,
     };
   });
 

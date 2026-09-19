@@ -340,8 +340,18 @@ test('the unfinished Privacy Policy stays hidden from the simplified Profile', (
 test('returning to Feed re-reads preferences, so a personalization edit still lands', () => {
   // Affects Me recalculates from a focus-time preference read; the split of
   // the settings screen did not change which store either side uses.
-  assert.match(FEED, /useFocusEffect\(/);
-  assert.match(FEED, /void loadPreferences\(\)\.then\(/);
+  //
+  // P2B7N.1: the focus-time read moved INTO the shared `usePreferences`
+  // hook, so it happens identically for the Feed, Saved and Detail. The
+  // rule is the same one — a preference edited in Settings has to land on
+  // the tab underneath — and it is now impossible for one card screen to
+  // have it while another does not.
+  const HOOK = read('..', 'hooks', 'use-preferences.ts');
+  assert.match(HOOK, /useFocusEffect\(/);
+  assert.match(HOOK, /void loadPreferences\(\)\.then\(/);
+  for (const screen of [FEED, read('(tabs)', 'saved.tsx')]) {
+    assert.match(screen, /usePreferences\(/);
+  }
   assert.match(PERSONALIZATION, /void savePreferences\(next\)/);
 });
 

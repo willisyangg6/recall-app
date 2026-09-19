@@ -218,7 +218,7 @@ function item(overrides: Partial<FeedItem> = {}): FeedItem {
 
 test('P2B7H: the Lotly-generated card summary ends without a full stop', () => {
   const today = todayIso();
-  const built = buildHomeCardModel(item(), { today, affectsYou: false });
+  const built = buildHomeCardModel(item(), { today, prefs: null });
   assert.equal(built.reasonLine, 'Import violation');
 
   const allergen = buildHomeCardModel(
@@ -227,7 +227,7 @@ test('P2B7H: the Lotly-generated card summary ends without a full stop', () => {
       reasonText: 'unreported allergens',
       pathogenOrAllergen: 'undeclared peanuts',
     }),
-    { today, affectsYou: false },
+    { today, prefs: null },
   );
   // The prompt's own example, end to end through the real builder.
   assert.equal(allergen.reasonLine, 'Undeclared peanut allergen');
