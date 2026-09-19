@@ -7,7 +7,7 @@ import {
   displayProductTitle,
   companyLine,
   extractAttachmentLinks,
-  headlineCaseIfLowercase,
+  headlineCaseShopperTitle,
   humanizeAllCaps,
   normalizeUnitSpacing,
   parseProductLine,
@@ -222,23 +222,50 @@ test('official PDF attachments are extracted from summary HTML only', () => {
 
 // ── Display capitalization (P3D) ────────────────────────────────────────────
 
-test('headlineCaseIfLowercase fixes a defectively lowercase headline', () => {
+test('headlineCaseShopperTitle fixes a defectively lowercase headline', () => {
   // Synthetic reproduction of the production-observed defect (P3D audit):
   // this exact FDA product description rendered entirely lowercase on Home.
+  // P2B7M amendment: minor words stay lowercase mid-title ("for", not "For").
   assert.equal(
-    headlineCaseIfLowercase('dietary supplements marketed for male sexual enhancement'),
-    'Dietary Supplements Marketed For Male Sexual Enhancement',
+    headlineCaseShopperTitle('dietary supplements marketed for male sexual enhancement'),
+    'Dietary Supplements Marketed for Male Sexual Enhancement',
   );
   // Recorded-corpus defect (Town Food Service saucepans description).
   assert.equal(
-    headlineCaseIfLowercase('4 sizes of aluminum saucepans from 1 quart to 3 quarts'),
-    '4 Sizes Of Aluminum Saucepans From 1 Quart To 3 Quarts',
+    headlineCaseShopperTitle('4 sizes of aluminum saucepans from 1 quart to 3 quarts'),
+    '4 Sizes of Aluminum Saucepans from 1 Quart to 3 Quarts',
   );
 });
 
-test('headlineCaseIfLowercase is a no-op on any value carrying uppercase', () => {
+test('headlineCaseShopperTitle capitalizes a lowercase tail under a capitalized head', () => {
+  // THE P2B7M defect class. Both are the exact live shopper titles that
+  // escaped the P3D/P2B7G whole-string gate: their capitalized opening words
+  // were read as proof the entire title was intentionally cased.
+  assert.equal(
+    headlineCaseShopperTitle('All purpose flour, bread mix, flat bread pizza mix'),
+    'All Purpose Flour, Bread Mix, Flat Bread Pizza Mix',
+  );
+  assert.equal(
+    headlineCaseShopperTitle('Whole Nutrition Infant formula 24 oz cans and 0.6 oz packets'),
+    'Whole Nutrition Infant Formula 24 oz Cans and 0.6 oz Packets',
+  );
+  // The shape, not the words: any capitalized head over a lowercase tail.
+  assert.equal(
+    headlineCaseShopperTitle('Kirkland Signature almond butter cups'),
+    'Kirkland Signature Almond Butter Cups',
+  );
+  // A single capitalized word late in the title shields nothing either.
+  assert.equal(
+    headlineCaseShopperTitle('frozen pizza with Italian sausage and peppers'),
+    'Frozen Pizza with Italian Sausage and Peppers',
+  );
+});
+
+test('headlineCaseShopperTitle leaves every uppercase-carrying segment alone', () => {
+  // The contract is strictly ADDITIVE: it only ever adds a capital to an
+  // ordinary lowercase segment, so no intentional identity can be rebuilt.
   for (const value of [
-    'Dietary Supplements Marketed For Male Sexual Enhancement', // already correct
+    'Dietary Supplements Marketed for Male Sexual Enhancement', // already correct
     'ALL CAPS SHOUTING', // humanizeAllCaps territory, never this helper
     'FDA',
     'USDA',
@@ -248,6 +275,11 @@ test('headlineCaseIfLowercase is a no-op on any value carrying uppercase', () =>
     'iHerb',
     '4Earth',
     'McCain',
+    'biQ-FEL',
+    'VidaSlim',
+    'a2',
+    'O157:H7',
+    'D3',
     'CuttleFish Flavoured Seafood Ball',
     'ProSource Produce',
     'Murray Int’l Trading',
@@ -255,39 +287,95 @@ test('headlineCaseIfLowercase is a no-op on any value carrying uppercase', () =>
     '500 mL',
     'Thickened Dairy Drink - Mildly Thick/Nectar Consistency',
   ]) {
-    assert.equal(headlineCaseIfLowercase(value), value);
+    assert.equal(headlineCaseShopperTitle(value), value);
   }
 });
 
-test('headlineCaseIfLowercase preserves protected tokens inside a lowercase headline', () => {
+test('headlineCaseShopperTitle preserves protected tokens inside a lowercase headline', () => {
   // Scientific genus abbreviation: "E. coli", never "E. Coli".
   assert.equal(
-    headlineCaseIfLowercase('e. coli contaminated product'),
+    headlineCaseShopperTitle('e. coli contaminated product'),
     'E. coli Contaminated Product',
   );
+  // Full binomials keep their species epithet, from the genus vocabulary and
+  // from the parenthesized shape the sources write for species identification.
+  assert.equal(
+    headlineCaseShopperTitle('oven dried fish (Scomberomorus cavalla)'),
+    'Oven Dried Fish (Scomberomorus cavalla)',
+  );
+  assert.equal(
+    headlineCaseShopperTitle('cheese with Listeria monocytogenes risk'),
+    'Cheese with Listeria monocytogenes Risk',
+  );
   // Digit-bearing tokens (codes, model numbers, attached measurements).
-  assert.equal(headlineCaseIfLowercase('item 4875 baby powder'), 'Item 4875 Baby Powder');
-  assert.equal(headlineCaseIfLowercase('4-lb. smoked sausage'), '4-lb. Smoked Sausage');
-  assert.equal(headlineCaseIfLowercase('8-oz cups of dip'), '8-oz Cups Of Dip');
+  assert.equal(headlineCaseShopperTitle('item 4875 baby powder'), 'Item 4875 Baby Powder');
+  assert.equal(headlineCaseShopperTitle('4-lb. smoked sausage'), '4-lb. Smoked Sausage');
+  assert.equal(headlineCaseShopperTitle('8-oz cups of dip'), '8-oz Cups of Dip');
+  assert.equal(headlineCaseShopperTitle('lot 24TJ0055 recalled'), 'Lot 24TJ0055 Recalled');
+  assert.equal(
+    headlineCaseShopperTitle('best before date 15.09.2027'),
+    'Best Before Date 15.09.2027',
+  );
   // Abbreviated units stay lowercase; spelled-out units are ordinary words.
-  assert.equal(headlineCaseIfLowercase('16 oz. cream cheese'), '16 oz. Cream Cheese');
-  assert.equal(headlineCaseIfLowercase('5 kg bag of flour'), '5 kg Bag Of Flour');
-  assert.equal(headlineCaseIfLowercase('1 quart to 3 quarts'), '1 Quart To 3 Quarts');
+  assert.equal(headlineCaseShopperTitle('16 oz. cream cheese'), '16 oz. Cream Cheese');
+  assert.equal(headlineCaseShopperTitle('5 kg bag of flour'), '5 kg Bag of Flour');
+  assert.equal(headlineCaseShopperTitle('1 quart to 3 quarts'), '1 Quart to 3 Quarts');
+  // Slash-joined unit notation, both halves protected.
+  assert.equal(
+    headlineCaseShopperTitle('USP 30 mg/ 30 mL (1 mg/mL) multi dose vial'),
+    'USP 30 mg/ 30 mL (1 mg/mL) Multi Dose Vial',
+  );
+  // Conventionally lowercase Latin abbreviations.
+  assert.equal(
+    headlineCaseShopperTitle('finished products (e.g. dips and salsa)'),
+    'Finished Products (e.g. Dips and Salsa)',
+  );
   // Stylized numeric brand survives even in an otherwise lowercase value.
-  assert.equal(headlineCaseIfLowercase('a2 infant formula'), 'a2 Infant Formula');
+  assert.equal(headlineCaseShopperTitle('a2 infant formula'), 'a2 Infant Formula');
 });
 
-test('headlineCaseIfLowercase handles punctuation, segments, and Unicode', () => {
-  assert.equal(headlineCaseIfLowercase('ready-to-eat pickled goat'), 'Ready-To-Eat Pickled Goat');
+test('headlineCaseShopperTitle applies headline style to minor words and clauses', () => {
+  // Minor words stay lowercase INSIDE the title…
   assert.equal(
-    headlineCaseIfLowercase('mildly thick/nectar consistency'),
+    headlineCaseShopperTitle('bags of flour with nuts and seeds in a box'),
+    'Bags of Flour with Nuts and Seeds in a Box',
+  );
+  // …and capitalize when they open the title.
+  assert.equal(headlineCaseShopperTitle('the variety pack'), 'The Variety Pack');
+  assert.equal(headlineCaseShopperTitle('a frozen pepperoni pizza'), 'A Frozen Pepperoni Pizza');
+  // A colon opens an independently titled clause; a comma does NOT — commas
+  // separate the items of a product enumeration, whose "and" stays lowercase.
+  assert.equal(
+    headlineCaseShopperTitle('crabmeat: the jumbo and lump grades'),
+    'Crabmeat: The Jumbo and Lump Grades',
+  );
+  assert.equal(
+    headlineCaseShopperTitle('cheddar cheese, sour cream, and butter'),
+    'Cheddar Cheese, Sour Cream, and Butter',
+  );
+  // Romance-language name particles behave as minor words ("Pico de Gallo").
+  assert.equal(
+    headlineCaseShopperTitle('finished products such as pico de gallo'),
+    'Finished Products Such as Pico de Gallo',
+  );
+});
+
+test('headlineCaseShopperTitle handles punctuation, segments, and Unicode', () => {
+  // Hyphenated compounds: each ordinary half titles, minor halves do not.
+  assert.equal(headlineCaseShopperTitle('ready-to-eat pickled goat'), 'Ready-to-Eat Pickled Goat');
+  assert.equal(
+    headlineCaseShopperTitle('non-dairy, gluten-free, plant-based bars'),
+    'Non-Dairy, Gluten-Free, Plant-Based Bars',
+  );
+  assert.equal(
+    headlineCaseShopperTitle('mildly thick/nectar consistency'),
     'Mildly Thick/Nectar Consistency',
   );
-  assert.equal(headlineCaseIfLowercase("red's all natural"), "Red's All Natural");
-  assert.equal(headlineCaseIfLowercase('baked bites (chocolate)'), 'Baked Bites (Chocolate)');
-  assert.equal(headlineCaseIfLowercase('jalapeño ranch dip'), 'Jalapeño Ranch Dip');
-  assert.equal(headlineCaseIfLowercase(''), '');
-  assert.equal(headlineCaseIfLowercase('   '), '   ');
+  assert.equal(headlineCaseShopperTitle("red's all natural"), "Red's All Natural");
+  assert.equal(headlineCaseShopperTitle('baked bites (chocolate)'), 'Baked Bites (Chocolate)');
+  assert.equal(headlineCaseShopperTitle('jalapeño ranch dip'), 'Jalapeño Ranch Dip');
+  assert.equal(headlineCaseShopperTitle(''), '');
+  assert.equal(headlineCaseShopperTitle('   '), '   ');
 });
 
 test('capitalizeLeadingWord fixes a lowercase-leading label or sentence only', () => {
@@ -353,8 +441,8 @@ test('both P3D helpers are idempotent across the whole example matrix', () => {
     '   ',
   ];
   for (const input of inputs) {
-    const headline = headlineCaseIfLowercase(input);
-    assert.equal(headlineCaseIfLowercase(headline), headline, `headline not idempotent: ${input}`);
+    const headline = headlineCaseShopperTitle(input);
+    assert.equal(headlineCaseShopperTitle(headline), headline, `headline not idempotent: ${input}`);
     const leading = capitalizeLeadingWord(input);
     assert.equal(capitalizeLeadingWord(leading), leading, `leading not idempotent: ${input}`);
   }
@@ -375,7 +463,7 @@ test('displayProductTitle is the one composed pipeline both cards and push use',
   // A defectively lowercase headline is headline-cased (the other side).
   assert.equal(
     displayProductTitle('dietary supplements marketed for male sexual enhancement'),
-    'Dietary Supplements Marketed For Male Sexual Enhancement',
+    'Dietary Supplements Marketed for Male Sexual Enhancement',
   );
   // Correct mixed casing passes through untouched.
   for (const value of [
@@ -464,18 +552,25 @@ test('normalizeUnitSpacing never touches codes, identifiers, dates, or intention
   }
 });
 
-test('the refined defect gate: unit and code uppercase does not shield a lowercase headline', () => {
+test('unit and code uppercase does not shield a lowercase headline (P2B7G)', () => {
   // Uppercase confined to digit-bearing / unit tokens is notation, not
   // intentional casing — the ordinary words still headline-case.
-  assert.equal(headlineCaseIfLowercase('500 mL supplement bottle'), '500 mL Supplement Bottle');
-  // Uppercase in ANY ordinary token is intentional and preserves everything.
-  for (const value of [
-    'iHerb multivitamin gummies',
-    'a Frozen Pepperoni Pizza',
-    'Ready-to-eat chicken',
-  ]) {
-    assert.equal(headlineCaseIfLowercase(value), value);
-  }
+  assert.equal(headlineCaseShopperTitle('500 mL supplement bottle'), '500 mL Supplement Bottle');
+});
+
+test('uppercase in an ordinary word shields only THAT word (P2B7M)', () => {
+  // P2B7M amendment. Under the P3D/P2B7G whole-string gate each of these was
+  // returned untouched, because one uppercase letter anywhere was read as
+  // proof the whole value was intentionally cased. That gate is exactly what
+  // let the two confirmed live escapes through, so the uppercase segment is
+  // now the ONLY thing preserved and its lowercase neighbours are corrected.
+  assert.equal(
+    headlineCaseShopperTitle('iHerb multivitamin gummies'),
+    'iHerb Multivitamin Gummies',
+  );
+  assert.equal(headlineCaseShopperTitle('Ready-to-eat chicken'), 'Ready-to-Eat Chicken');
+  // The leading article still capitalizes, now from the contract itself.
+  assert.equal(headlineCaseShopperTitle('a Frozen Pepperoni Pizza'), 'A Frozen Pepperoni Pizza');
 });
 
 test('a lowercase leading article opens with a capital in the composed title (P2B7G)', () => {

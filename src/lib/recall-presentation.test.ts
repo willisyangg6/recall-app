@@ -297,7 +297,10 @@ test('a duplicated brand prefix is removed from the product name, never the bran
     displayedBrands: ['VidaSlim'],
     packageEvidence: [],
   });
-  assert.equal(vidaslim, 'VidaSlim Brand 90-day Original Root Capsules');
+  // P2B7M: the hyphenated compound follows the same headline convention as
+  // "Ready-to-Eat" and "Non-Dairy" — each ordinary half titles, so "90-day"
+  // renders "90-Day". The brand and the official wording are untouched.
+  assert.equal(vidaslim, 'VidaSlim Brand 90-Day Original Root Capsules');
 });
 
 // ── 8–10: concise reason line ───────────────────────────────────────────────
@@ -2538,8 +2541,9 @@ test('P3D named regression (synthetic): the lowercase supplements headline is he
     today: TODAY,
     affectsYou: false,
   });
-  // Founder contract: every ordinary word capitalized, including "For".
-  assert.equal(home.productName, 'Dietary Supplements Marketed For Male Sexual Enhancement');
+  // Founder contract: every ordinary word capitalized. P2B7M amendment:
+  // minor words follow headline style mid-title, so "for" stays lowercase.
+  assert.equal(home.productName, 'Dietary Supplements Marketed for Male Sexual Enhancement');
   assert.equal(model.productName, home.productName);
 });
 

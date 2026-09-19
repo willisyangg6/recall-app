@@ -235,7 +235,9 @@ test('P3D: a defectively lowercase product name is headline-cased in push copy o
   const content = formatPushContent(makeEvent('initial', 'new_recall', projection));
   assert.equal(
     content.title,
-    'Recall alert: Dietary Supplements Marketed For Male Sexual Enhancement',
+    // P2B7M: minor words follow headline style, and push gets the same
+    // rendering as the card it opens because both call displayProductTitle.
+    'Recall alert: Dietary Supplements Marketed for Male Sexual Enhancement',
   );
   // Canonical input keeps its source casing.
   assert.equal(

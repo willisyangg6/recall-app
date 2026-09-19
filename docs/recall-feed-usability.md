@@ -11,7 +11,8 @@ repair applied 2026-09-04; P3C-1 and P3C-2 affected-product correctness
 shipped 2026-09-04 (`aab6588`, `51c1a7b`); P3D display capitalization
 shipped 2026-09-04 (`cae9732`); P3E reason-clause casing shipped 2026-09-05
 (`b4a1a12`); P2B7G shopper-title normalization and the card title bound
-implemented 2026-09-18. Functional milestones on
+implemented 2026-09-18; P2B7M the permanent shopper-title capitalization
+invariant implemented 2026-09-19. Functional milestones on
 the temporary UI — final visual design happens separately and may restyle
 everything here without touching the business logic, which lives entirely in
 pure libs._
@@ -1291,14 +1292,15 @@ accessibility text) and the push formatter call:
    and dates never split. Spacing-only: nothing is recased, converted, or
    reordered, and the transform is idempotent.
 2. **Un-shouting** (`humanizeAllCaps`, unchanged).
-3. **The refined headline gate** — `headlineCaseIfLowercase` now judges
+3. **The refined headline gate** — `headlineCaseIfLowercase` judged
    intentional casing over ORDINARY tokens only: uppercase confined to
    preserved tokens (digit-bearing tokens, the abbreviated-unit set — which
    gained `mL`, `L`, `pc`, and tolerance for surrounding brackets and
-   trailing punctuation) no longer shields a defectively lowercase headline.
-   Uppercase in any ordinary token still preserves the value untouched, so
-   `iHerb`, `a2`, `E. coli`, and every genuinely cased headline survive by
-   construction, exactly as P3D promised.
+   trailing punctuation) no longer shielded a defectively lowercase headline.
+   Uppercase in any ordinary token still preserved the value untouched.
+   **Superseded by P2B7M below**, which removed the whole-string gate
+   entirely: keeping ANY whole-value gate is what let partially sentence-cased
+   titles escape.
 4. **Leading word** — `capitalizeLeadingWord` (the established P3D
    leading-word mode, now also applied to the composed title) opens a
    lowercase leading article with a capital: the live FSIS PHA title
@@ -1326,10 +1328,11 @@ acronyms (`BBQ`, `IQF`, `RTE`, `NRTE`, `USP`), codes (`O157:H7`, `D3`,
 
 **Frozen corpus guards.** `src/server/presentation-casing.test.ts` freezes:
 the exact recorded names unit spacing changes (six, all genuine jams); that
-the refined gate fires on no recorded name the P3D whole-string gate spared;
-that spacing is space-insertion-only (byte-identical after despacing,
+spacing is space-insertion-only (byte-identical after despacing,
 corpus-wide); and pipeline idempotence. Widening any set fails with an
-instruction to review, never to update casually.
+instruction to review, never to update casually. (The gate-comparison guard
+this section originally listed was replaced by P2B7M's inverse: the contract
+must now DISAGREE with the legacy whole-string gate on recorded titles.)
 
 **The card title bound.** The shared `RecallCard` title (Feed and Saved — the
 one component, so the two cannot differ) renders at most THREE lines with a
@@ -1356,6 +1359,124 @@ search entries and results, identity, deduplication, the feed-cache schema
 (raw fields cached, presentation derived at render — no payload shape
 change), material-change detection, and recorded notification events are all
 unchanged. No production write of any kind.
+
+### P2B7M — the permanent shopper-title capitalization invariant (IMPLEMENTED)
+
+P2B7G fixed the examples it was given and left the gate that produced them.
+Newly ingested notices kept escaping, in a shape the gate could not see:
+
+| Live rendering (before)                                        | Correct                                                        |
+| -------------------------------------------------------------- | -------------------------------------------------------------- |
+| `All purpose flour, bread mix, flat bread pizza mix`           | `All Purpose Flour, Bread Mix, Flat Bread Pizza Mix`           |
+| `Whole Nutrition Infant formula 24 oz cans and 0.6 oz packets` | `Whole Nutrition Infant Formula 24 oz Cans and 0.6 oz Packets` |
+
+**Root cause: the gate itself, not its width.** Every version of the headline
+transform asked ONE question about the WHOLE value — "does any uppercase
+letter appear where a press office would have put one?" — and returned the
+value untouched when the answer was yes. P3D asked it over the whole string;
+P2B7G narrowed it to ordinary tokens. Both are defeated by the same thing: a
+title that opens with correctly capitalized words (`All …`, `Whole Nutrition
+Infant …`) is evidence about its OPENING, and a whole-value gate reads it as
+evidence about the tail. Widening the gate again would have moved the
+boundary, not removed it.
+
+**The contract.** `headlineCaseShopperTitle` (`lib/consumer-summary.ts`)
+replaces `headlineCaseIfLowercase`. There is no gate. Each hyphen/slash
+SEGMENT is decided on its own, in this order:
+
+1. A segment carrying any **uppercase** letter is intentional identity and is
+   returned verbatim. This single rule protects `biQ-FEL`, `iHerb`,
+   `VidaSlim`, `ReadyMeals`, `FDA`, `USDA`, `FSIS`, `UPC`, `O157:H7`, `D3`,
+   `mL`, `NET WT`, and every already-correct word — and it makes the contract
+   **strictly additive**: it only ever ADDS a capital to an ordinary lowercase
+   segment, and never removes one the source or un-shouting produced. Nothing
+   is ever lowercased and rebuilt.
+2. **Protected notation** is returned verbatim: digit-bearing segments (lot
+   codes, barcodes, dates, model identifiers, measurements, `90`), the closed
+   abbreviated-unit set, and the conventionally lowercase Latin abbreviations
+   (`e.g.`, `i.e.`, `etc.`, the `w/` that abbreviates "with"). Deciding per
+   segment is what lets `mg/mL)` protect both halves while `ready-to-eat`
+   still titles each half.
+3. A **minor word** — `a an the and or nor but of to in on at by for from
+with as`, plus the romance name particles `de del da di du van von` —
+   stays lowercase mid-title and capitalizes when it opens the title or an
+   independently titled clause. A **colon** or en/em dash opens a clause; a
+   **comma does not**, because commas separate the items of a product
+   enumeration whose `and` must stay lowercase.
+4. A **species epithet** keeps its lowercase, from the shared genus
+   vocabulary (`Listeria monocytogenes`, `Cronobacter sakazakii`) and from
+   the parenthesized binomial shape the sources write
+   (`(Scomberomorus cavalla)`). The abbreviated genus marker still corrects
+   `e. coli` → `E. coli`, never `E. Coli`.
+5. Every other lowercase segment is capitalized on its first letter, so
+   apostrophes capitalize only the lead (`red's` → `Red's`).
+
+**Hyphenated compounds** follow one convention, applied by the same rules:
+each ordinary half titles and minor halves do not — `Ready-to-Eat`,
+`Non-Dairy`, `Gluten-Free`, `Plant-Based`, `Made-to-Order`, `90-Day`,
+`Store-Made`, `Re-Inspection`.
+
+Idempotent by construction: every segment the contract capitalizes then
+carries an uppercase letter, which rule 1 returns verbatim.
+
+**Minor words are a restraint on capitalization, never a decapitalization.**
+An ALL-CAPS source un-shouts to `Chicken And Waffles` and keeps its `And`,
+because rule 1 outranks rule 3. This is the deliberate boundary that keeps
+the whole pipeline additive.
+
+**Corpus evidence (read-only audit, 2026-09-19, 1,931 cases — 898 active
+consumer-visible, 13 merged-hidden, 1,020 closed/retracted, 733 FDA, 1,198
+FSIS).** The contract changes 229 titles, all casing-only and all reviewed
+individually:
+
+| Change class                                      | Titles |
+| ------------------------------------------------- | -----: |
+| Lowercase tail corrected under a capitalized head |    223 |
+| Minor word relaxed to headline style              |      6 |
+
+Measured before → after: mixed headline/sentence case 219 → 1, lowercase tail
+after a capitalized prefix 218 → 0, inconsistent comma enumerations 28 → 0,
+lowercase ordinary leading word 1 → 0, non-idempotent titles 223 → 0.
+All-lowercase, all-uppercase and jammed-unit titles were already 0 and stayed
+0 (P2B7G). The single remaining flag is
+`Oven Dried Fish (Scomberomorus cavalla)`, whose mixed case is the protected
+binomial — a true reading of a correct title, not a defect. 227 of the 229
+changes are FDA product descriptions; FSIS headlines arrive title-cased.
+
+**What prevents recurrence on NEW notices.** Two layers, deliberately
+separate:
+
+- **`src/server/presentation-casing.test.ts`** guards the title slot by
+  PROPERTIES over the whole recorded corpus, not by a frozen list of today's
+  strings: casing-only, additive (no uppercase letter is ever lost),
+  idempotent, and complete (no ordinary lowercase word survives a
+  correction). It also asserts the contract DISAGREES with the legacy
+  whole-string gate on recorded titles — restoring that gate fails the suite.
+  The narrow transforms (leading word, unit spacing, reason clauses) keep
+  their frozen approved-delta sets, which is still the right instrument for
+  them.
+- **`npm run qa:titles`** (`scripts/qa-title-casing.ts`, read-only) runs a
+  boundary gate with no corpus at all: 18 shapes the contract must answer for
+  — both confirmed escapes, a lowercase leading article, jammed units,
+  mixed-case brands, acronyms and codes, dates and lot tokens, binomials,
+  clause openers, idempotence, and a non-destructive check — plus a
+  behavioural proof that Feed/Saved, Detail, share/accessibility copy and
+  push all render ONE synthetic escape-shaped notice identically. A surface
+  that starts building its own title fails it. The live-corpus half is
+  measurement only and never gates: corpus counts move as the agencies
+  publish.
+
+A newly ingested title of either confirmed SHAPE is corrected by the
+contract, and a regression that reintroduces the gate fails both layers
+regardless of which words the future notice contains.
+
+**Boundaries.** Display-time only. Canonical stored text, projections, search
+entries and results, identity, deduplication, the feed-cache schema,
+material-change detection and recorded notification events are all unchanged;
+search stays case- and punctuation-insensitive over the raw fields, so both
+the official spelling and the rendered display form match. Feed and Saved keep
+the three-line clamp with the complete accessible title; Detail stays
+unbounded. No production write of any kind.
 
 ### P1B — standardized health guidance (IMPLEMENTED, display-time)
 

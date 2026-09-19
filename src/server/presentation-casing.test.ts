@@ -1,21 +1,30 @@
 /**
- * P3D/P3E corpus-wide display-capitalization contract, proven over every
+ * P3D/P3E/P2B7M corpus-wide display-capitalization contract, proven over every
  * recorded FDA and FSIS notice at full pipeline depth (raw fixture → parse →
  * projectCase → shared presentation models).
  *
- * Two guarantees, both pinned exactly:
+ * Three guarantees:
  *
- *  1. Recorded regressions — the two audited defective notices render
- *     corrected, and the audited preservation cases (the stylized brand "a2",
- *     the FSIS package-prose row names) render byte-identical to before.
+ *  1. Recorded regressions — the audited defective notices render corrected
+ *     (including both confirmed P2B7M live escapes), and the audited
+ *     preservation cases (the stylized brand "a2", the FSIS package-prose row
+ *     names) render byte-identical to before.
  *
- *  2. The unexpected-delta guard — across the WHOLE corpus, the set of source
- *     values the P3D display transforms change is EXACTLY the approved set
- *     from the P3D-A audit. If this test fails because a new value entered
- *     the set, do not add it here to make the test pass: stop and review the
- *     new delta against docs/recall-feed-usability.md (P3D) first — silent
- *     widening of a casing transform is the regression this guard exists to
+ *  2. The unexpected-delta guard, for the NARROW transforms — the leading-word
+ *     helper, unit spacing, and reason-clause casing each change exactly the
+ *     approved set of source values. If one of these fails because a new value
+ *     entered the set, do not add it to make the test pass: stop and review the
+ *     new delta against docs/recall-feed-usability.md first — silent widening
+ *     of a narrow casing transform is the regression these guards exist to
  *     catch.
+ *
+ *  3. PROPERTY guards, for the shopper-title contract — which is supposed to
+ *     touch most titles, so an "exactly these values" guard would be the wrong
+ *     instrument. Instead every recorded title must satisfy the properties that
+ *     make the contract safe on titles nobody has reviewed: casing-only,
+ *     additive (never decapitalizes), idempotent, and complete (no ordinary
+ *     lowercase word survives a correction). These cannot be satisfied by
+ *     memorizing today's corpus.
  *
  * Display-only invariants are asserted alongside: canonical projections keep
  * the raw source casing, search matches identically for any query casing, and
@@ -34,7 +43,7 @@ import type { CaseProjection } from '../domain/recall-types';
 import {
   capitalizeLeadingWord,
   displayProductTitle,
-  headlineCaseIfLowercase,
+  headlineCaseShopperTitle,
   humanizeAllCaps,
   normalizeUnitSpacing,
   productDisplayName,
@@ -189,14 +198,16 @@ test('recorded regression: the terrafina brand renders corrected on every surfac
 test('recorded regression: the lowercase saucepans description is headline-cased', () => {
   const { projection, home, detail } = modelsOf('town-food-service-equipment');
   // Founder decision B: spelled-out units are ordinary headline words
-  // ("Quart"/"Quarts"); digit tokens are preserved.
-  const expected = '4 Sizes Of Aluminum Saucepans With Capacities Ranging From 1 Quart To 3 Quarts';
+  // ("Quart"/"Quarts"); digit tokens are preserved. P2B7M amendment: the
+  // minor words now follow headline style ("of"/"with"/"from"/"to"), where
+  // the original all-ordinary-words rule shouted them.
+  const expected = '4 Sizes of Aluminum Saucepans with Capacities Ranging from 1 Quart to 3 Quarts';
   assert.equal(home.productName, expected);
   assert.equal(detail.productName, expected);
   // Future push copy uses the same shared contract (founder decision D).
   assert.equal(
     initialPushOf(projection).title,
-    'Recall alert: 4 Sizes Of Aluminum Saucepans With Capacities Ranging From…',
+    'Recall alert: 4 Sizes of Aluminum Saucepans with Capacities Ranging from…',
   );
   // The canonical description keeps the raw source casing.
   assert.equal(
@@ -244,24 +255,25 @@ test('recorded preservation: a measurement-only row name is untouched', () => {
 // ── The corpus-wide unexpected-delta guard ──────────────────────────────────
 
 /**
- * The complete approved population of source values the P3D transforms may
- * change, from the P3D-A audit (2026-09-04): one defectively lowercase FDA
- * brand entry and one defectively lowercase FDA product description. Nothing
- * else in the recorded corpus is defect-shaped at any call site.
+ * The complete approved population of source values the LEADING-WORD transform
+ * may change, from the P3D-A audit (2026-09-04): one defectively lowercase FDA
+ * brand entry. Nothing else in the recorded corpus is defect-shaped at the
+ * brand, company or package-row slots.
+ *
+ * P2B7M narrowed this guard to those three slots deliberately. The shopper
+ * TITLE slot left it: its transform is no longer a narrow defect gate whose
+ * widening is the thing to fear, but a headline-style contract that is
+ * SUPPOSED to touch most titles. The title slot is guarded below by properties
+ * that hold for every value instead — additive, casing-only, idempotent —
+ * which cannot be satisfied by memorizing today's strings.
  */
 const APPROVED_DELTAS = new Set([
   'fda:sunco-frenchie-issues-allergy-alert-undeclared-sulfites-golden-raisins § brand § terrafina',
-  'fda:town-food-service-equipment-co-inc-recalls-aluminum-saucepans-because-possible-health-risk § headline § 4 sizes of aluminum saucepans with capacities ranging from 1 quart to 3 quarts',
 ]);
 
-test('corpus guard: the P3D transforms change exactly the approved source values', () => {
+test('corpus guard: the leading-word transform changes exactly the approved values', () => {
   const observed = new Set<string>();
   for (const { id, projection } of CORPUS) {
-    // Headline slot (product name for Home/Detail/share/push).
-    const headline = productDisplayName(projection.productDescription ?? null, projection.title);
-    if (headlineCaseIfLowercase(headline) !== headline) {
-      observed.add(`${id} § headline § ${headline}`);
-    }
     // Brand slots (brand line, What Happened subject).
     for (const brand of projection.brands ?? []) {
       const trimmed = brand.trim();
@@ -285,8 +297,100 @@ test('corpus guard: the P3D transforms change exactly the approved source values
   assert.deepEqual(
     [...observed].sort(),
     [...APPROVED_DELTAS].sort(),
-    'The set of source values the P3D display transforms change has widened or shrunk. ' +
+    'The set of source values the leading-word transform changes has widened or shrunk. ' +
       'Do not edit APPROVED_DELTAS to make this pass — review the new delta first (P3D contract).',
+  );
+});
+
+// ── P2B7M: the shopper-title contract, guarded by properties ────────────────
+
+/** The staged title a shopper surface hands to the capitalization contract. */
+function stagedTitleOf(projection: CaseProjection): string {
+  return humanizeAllCaps(
+    normalizeUnitSpacing(
+      productDisplayName(projection.productDescription ?? null, projection.title),
+    ),
+  );
+}
+
+/** Whether the pre-P2B7M whole-string gate would have fired on a value. */
+function legacyGateFires(staged: string): boolean {
+  return !/\p{Lu}/u.test(staged) && /\p{Ll}/u.test(staged);
+}
+
+test('corpus guard: the title contract is additive, casing-only, and idempotent', () => {
+  // The three properties that make the contract safe on values nobody has
+  // reviewed — including every notice ingested after this test was written.
+  // No frozen list can express these, and no frozen list is needed to.
+  for (const { id, projection } of CORPUS) {
+    const staged = stagedTitleOf(projection);
+    const rendered = headlineCaseShopperTitle(staged);
+    // Casing-only: the letters and their order never change.
+    assert.equal(rendered.toLowerCase(), staged.toLowerCase(), `${id}: not casing-only`);
+    assert.equal(rendered.length, staged.length, `${id}: length changed`);
+    // Additive: every uppercase letter the source carried is still uppercase,
+    // so no stylized identity ("biQ-FEL", "iHerb", "a2") can be rebuilt.
+    for (let index = 0; index < staged.length; index += 1) {
+      if (/\p{Lu}/u.test(staged[index])) {
+        assert.equal(rendered[index], staged[index], `${id}: decapitalized at ${index}`);
+      }
+    }
+    // Idempotent: rendering a rendered title is a fixed point.
+    assert.equal(headlineCaseShopperTitle(rendered), rendered, `${id}: not idempotent`);
+  }
+});
+
+test('corpus guard: the P2B7M escape class is corrected across the recorded corpus', () => {
+  // The defect: a title whose capitalized opening words convinced the old
+  // whole-string gate that its lowercase tail was intentional. The recorded
+  // corpus reproduces this class widely, so it is real evidence rather than a
+  // pair of pinned examples — and every member must now render with no
+  // ordinary lowercase word left behind.
+  const escapes: string[] = [];
+  for (const { id, projection } of CORPUS) {
+    const staged = stagedTitleOf(projection);
+    if (legacyGateFires(staged)) continue; // the old gate already fixed these
+    const rendered = headlineCaseShopperTitle(staged);
+    if (rendered === staged) continue;
+    escapes.push(`${id} § ${staged}`);
+    // The correction is complete: no ordinary lowercase word survives except
+    // the minor words and protected notation headline style keeps lowercase.
+    for (const token of rendered.split(/\s+/)) {
+      if (token === '' || !/\p{Ll}/u.test(token)) continue; // punctuation, "&"
+      if (/\p{Nd}/u.test(token) || /\p{Lu}/u.test(token)) continue; // codes, cased words
+      assert.match(
+        token,
+        /^[([]*(?:a|an|the|and|or|nor|but|of|to|in|on|at|by|for|from|with|as|de|del|da|di|du|van|von|e\.g\.|i\.e\.|etc\.|w|oz|lbs?|g|kg|mg|ml|mL|l|L|ct|pk|pc|qt|pt|gal|fl|ea|[a-z]+[)\]])[.,;:)\]]*$/,
+        `${id}: "${token}" escaped capitalization in "${rendered}"`,
+      );
+    }
+  }
+  assert.ok(
+    escapes.length > 0,
+    'the recorded corpus no longer reproduces the P2B7M escape class — if the ' +
+      'fixtures changed deliberately, re-record one; do not delete this guard.',
+  );
+});
+
+test('recorded regression: both confirmed live escapes render corrected end to end', () => {
+  // The exact two titles the founder reported, driven through the recorded
+  // pipeline rather than asserted against the helper in isolation.
+  const byheart = modelsOf('byheart-updates-information-regarding-voluntary-recall-all-batches');
+  const expectedByheart = 'Whole Nutrition Infant Formula 24 oz Cans and 0.6 oz Packets';
+  assert.equal(byheart.home.productName, expectedByheart);
+  assert.equal(byheart.detail.productName, expectedByheart);
+  assert.equal(initialPushOf(byheart.projection).title, `Recall alert: ${expectedByheart}`);
+  // Canonical stored text keeps the raw source casing and spacing.
+  assert.equal(
+    byheart.projection.productDescription,
+    'Whole Nutrition Infant formula 24 oz cans and 0.6oz packets',
+  );
+  // The flour notice is live-only (no recorded fixture), so its SHAPE is
+  // pinned at the contract boundary; scripts/qa-title-casing.ts measures the
+  // live corpus itself.
+  assert.equal(
+    displayProductTitle('All purpose flour, bread mix, flat bread pizza mix'),
+    'All Purpose Flour, Bread Mix, Flat Bread Pizza Mix',
   );
 });
 
@@ -321,7 +425,7 @@ test('push and Home/Detail share one title pipeline for every recorded name', ()
     const raw = productDisplayName(projection.productDescription ?? null, projection.title);
     assert.equal(
       displayProductTitle(raw),
-      capitalizeLeadingWord(headlineCaseIfLowercase(humanizeAllCaps(normalizeUnitSpacing(raw)))),
+      capitalizeLeadingWord(headlineCaseShopperTitle(humanizeAllCaps(normalizeUnitSpacing(raw)))),
     );
     const once = displayProductTitle(raw);
     assert.equal(displayProductTitle(once), once); // idempotent corpus-wide
@@ -364,24 +468,21 @@ test('corpus guard: unit spacing changes exactly the approved recorded names', (
   );
 });
 
-test('corpus guard: the refined defect gate fires on no recorded name the P3D gate spared', () => {
-  // The P2B7G gate refinement (uppercase confined to digit/unit tokens no
-  // longer shields a lowercase headline) widens rendering for the live
-  // "500mL" class; on the RECORDED corpus it must change nothing — every
-  // recorded defect was already caught by the whole-string gate. A value
-  // appearing here is a new fixture of the escape class: review it against
-  // the P2B7G contract, then extend this frozen set deliberately.
-  const observed = new Set<string>();
-  for (const { id, projection } of CORPUS) {
-    const spaced = normalizeUnitSpacing(
-      productDisplayName(projection.productDescription ?? null, projection.title),
-    );
-    const legacyGateFires = !/\p{Lu}/u.test(spaced) && /\p{Ll}/u.test(spaced);
-    if (!legacyGateFires && headlineCaseIfLowercase(spaced) !== spaced) {
-      observed.add(`${id} § refined-gate § ${spaced}`);
-    }
-  }
-  assert.deepEqual([...observed].sort(), []);
+test('corpus guard: the legacy whole-string gate no longer governs any title', () => {
+  // A mutation guard with teeth: it recomputes what the pre-P2B7M gate would
+  // have decided and asserts the contract does NOT agree with it — on the
+  // recorded corpus there are titles the old gate spared that the contract
+  // corrects. Restoring the whole-string gate (returning `text` whenever any
+  // ordinary token carries uppercase) makes this set empty and fails here.
+  const correctedDespiteLegacyGate = CORPUS.filter(({ projection }) => {
+    const staged = stagedTitleOf(projection);
+    return !legacyGateFires(staged) && headlineCaseShopperTitle(staged) !== staged;
+  });
+  assert.ok(
+    correctedDespiteLegacyGate.length >= 20,
+    `the contract now agrees with the old whole-string gate on all but ${correctedDespiteLegacyGate.length} ` +
+      'recorded titles — the P2B7M per-segment decision has been weakened or reverted.',
+  );
 });
 
 test('corpus guard: unit spacing is length-1 additive and never reorders characters', () => {
@@ -412,7 +513,7 @@ test('corpus guard: the P3D transforms are casing-only, so they can never collid
       ...projection.affectedProducts.map((product) => product.name),
     ];
     for (const value of values) {
-      assert.equal(headlineCaseIfLowercase(value).toLowerCase(), value.toLowerCase());
+      assert.equal(headlineCaseShopperTitle(value).toLowerCase(), value.toLowerCase());
       assert.equal(capitalizeLeadingWord(value).toLowerCase(), value.toLowerCase());
     }
   }
@@ -790,8 +891,10 @@ test('the corrected notices change no canonical, search, push, or materiality be
   const { projection } = caseOf('nutramigen-hypoallergenic-infant');
   assert.deepEqual(initialPushOf(projection), {
     // P2B7G: the one approved unit-spacing delta ("19.8oz" → "19.8 oz") —
-    // see APPROVED_UNIT_SPACING_DELTAS above.
-    title: 'Recall alert: Nutramigen Powder infant formula in 12.6 and 19.8 oz cans',
+    // see APPROVED_UNIT_SPACING_DELTAS above. P2B7M: the lowercase tail under
+    // the capitalized "Nutramigen Powder" head is now corrected too, and push
+    // gets the correction at the same instant Feed, Saved and Detail do.
+    title: 'Recall alert: Nutramigen Powder Infant Formula in 12.6 and 19.8 oz Cans',
     body: 'Possible contamination. Check your package.',
   });
 });

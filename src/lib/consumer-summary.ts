@@ -189,15 +189,20 @@ export function humanizeAllCaps(text: string): string {
     .join(' ');
 }
 
-// ── Display capitalization (P3D) ────────────────────────────────────────────
+// ── Display capitalization (P3D, re-based by P2B7M) ─────────────────────────
 //
-// Two defect-gated, idempotent display transforms. Both fire only on values
-// whose casing is evidence of a source defect (entirely-lowercase headlines,
-// lowercase-leading labels); any uppercase letter anywhere in the gated span
-// is treated as intentional and preserves the value untouched. Stylized
-// identities therefore survive by construction: "a2", "iHerb", "4Earth",
-// acronyms, scientific notation, and codes are never rewritten. Display-only —
-// canonical stored text, search keys, and identity are never modified.
+// Two idempotent display transforms. `capitalizeLeadingWord` stays
+// defect-gated over its whole value (labels, brand and company names, package
+// row names): any uppercase or digit in the first word is intentional
+// identity and the value is left alone. `headlineCaseShopperTitle` is the
+// shopper-facing TITLE contract and decides PER SEGMENT — the P2B7M fix for
+// partially sentence-cased titles, whose capitalized opening words used to
+// convince a whole-string gate that the entire title was intentional.
+//
+// Both are strictly additive on capitals, so stylized identities survive by
+// construction: "a2", "iHerb", "biQ-FEL", "4Earth", acronyms, scientific
+// notation, and codes are never rewritten. Display-only — canonical stored
+// text, search keys, and identity are never modified.
 
 /**
  * Conventional abbreviated units, preserved verbatim in headline mode
@@ -212,73 +217,206 @@ export function humanizeAllCaps(text: string): string {
  */
 const UNIT_ABBREVIATION = /^[([]*(?:oz|lbs?|g|kg|mg|ml|mL|l|L|ct|pk|pc|qt|pt|gal|fl|ea)[.,;:)\]]*$/;
 
-/** A scientific genus abbreviation opening ("e." in "e. coli"). */
-const SCIENTIFIC_MARKER = /^[a-z]\.$/;
+/**
+ * A scientific genus abbreviation opening — "e." in "e. coli", and the
+ * already-corrected "E." too, so a rendered value is a fixed point of the
+ * title contract rather than shouting its species epithet on a second pass.
+ */
+const SCIENTIFIC_MARKER = /^\p{L}\.$/u;
+
+/**
+ * Conventionally lowercase Latin abbreviations. They read as ordinary words
+ * to the segment rules below ("e.g." is letters, no digit, no unit) and would
+ * otherwise be shouted into "E.g.".
+ */
+const LOWERCASE_ABBREVIATION = new Set(['e.g.', 'i.e.', 'etc.', 'e.g', 'i.e', 'etc', 'w']);
+
+/**
+ * Words headline style leaves lowercase when they sit INSIDE a title: the
+ * articles, the coordinating conjunctions, the short prepositions, and the
+ * romance-language name particles the corpus actually writes ("Pico de
+ * Gallo", "Raiz de Tejocote" — capitalizing those corrupts a proper name).
+ *
+ * Deliberately narrow. Longer function words ("containing", "without",
+ * "such", "including") are ordinary headline words and capitalize, which is
+ * both standard style and the safe direction: a missed lowercase reads as
+ * house style, a wrongly-lowercased product noun reads as a bug. The romance
+ * ARTICLES ("la", "el", "los") are deliberately absent — they are usually
+ * capitalized inside Spanish product names ("Tacos Los Amigos").
+ */
+const MINOR_WORDS = new Set([
+  'a',
+  'an',
+  'the',
+  'and',
+  'or',
+  'nor',
+  'but',
+  'of',
+  'to',
+  'in',
+  'on',
+  'at',
+  'by',
+  'for',
+  'from',
+  'with',
+  'as',
+  'de',
+  'del',
+  'da',
+  'di',
+  'du',
+  'van',
+  'von',
+]);
+
+/**
+ * Organism genera whose binomial casing is restored in reason clauses and
+ * protected in shopper titles: the genus is capitalized and the species
+ * epithet stays lowercase ("Cronobacter sakazakii", "Bacillus cereus",
+ * "Talaromyces penicillium"). Display-only vocabulary: extraction,
+ * classification, and canonical data never read this list.
+ */
+const ORGANISM_GENUS_CASING = ['Cronobacter', 'Bacillus', 'Talaromyces'];
+
+/**
+ * Genus names whose binomial the shared hazard vocabulary records, plus the
+ * organism genera the reason-clause casing already restores. A lowercase word
+ * directly after one of these is a species epithet ("Listeria monocytogenes",
+ * "Cronobacter sakazakii") and must stay lowercase — capitalizing it corrupts
+ * a taxonomic name. Deliberately excludes genera the corpus writes before
+ * ordinary English words ("Salmonella contamination").
+ */
+const BINOMIAL_GENUS = new Set(
+  PATHOGENS.filter((name) => /^\p{Lu}\p{Ll}+ \p{Ll}+$/u.test(name))
+    .map((name) => name.split(' ')[0])
+    .concat(ORGANISM_GENUS_CASING),
+);
+
+/** "(Scomberomorus" — a parenthetical opening with a capitalized Latin genus. */
+const PARENTHESIZED_GENUS = /^[(\[]\p{Lu}\p{Ll}+$/u;
+
+/** "cavalla)" — the lowercase species epithet closing that parenthetical. */
+const PARENTHESIZED_EPITHET = /^\p{Ll}+[)\]][.,;:]?$/u;
+
+/**
+ * Punctuation that opens an independently titled clause, so a minor word
+ * directly after it capitalizes ("Cheese: The Aged Variety"). A COMMA is
+ * deliberately excluded: commas in these titles separate the items of a
+ * product enumeration, and "…, and BBQ Riblet" must keep its lowercase "and".
+ * A full stop is excluded too — it ends abbreviations and sizes far more
+ * often than clauses here ("16 oz. of cheese").
+ */
+const CLAUSE_OPENER = /[:\u2013\u2014]$/;
 
 const ANY_UPPER = /\p{Lu}/u;
 const ANY_LOWER = /\p{Ll}/u;
 
-/** Capitalize the first lowercase letter of each hyphen/slash segment. */
-function capitalizeHeadlineToken(token: string): string {
-  return token
-    .split(/([-/])/)
-    .map((segment) =>
-      segment === '-' || segment === '/'
-        ? segment
-        : segment.replace(/\p{Ll}/u, (c) => c.toUpperCase()),
-    )
-    .join('');
+/** The segment with its surrounding punctuation stripped ("(dips," → "dips"). */
+function segmentCore(segment: string): string {
+  return segment.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 }
 
 /**
- * A token the headline transform preserves verbatim and therefore also
- * ignores when judging whether a value's casing is intentional (P2B7G):
- * whitespace, digit-bearing tokens ("4-lb.,", "500mL", codes), and the
- * abbreviated units above ("oz.", "mL"). Uppercase inside such a token is
- * unit or code notation, not evidence that a press office cased the headline.
+ * A SEGMENT the title contract preserves as notation — the unit of protection
+ * is the hyphen/slash segment, not the whole token, so "mg/mL)" protects both
+ * halves while "ready-to-eat" still titles each half.
+ *
+ * Preserved: digit-bearing segments (codes, lot numbers, dates, measurements,
+ * "90"), the abbreviated units ("oz.", "mL"), and the conventionally
+ * lowercase Latin abbreviations.
  */
-function isPreservedHeadlineToken(token: string): boolean {
-  return /^\s*$/.test(token) || /\p{Nd}/u.test(token) || UNIT_ABBREVIATION.test(token);
+function isProtectedNotation(segment: string): boolean {
+  if (/\p{Nd}/u.test(segment)) return true;
+  if (UNIT_ABBREVIATION.test(segment)) return true;
+  const core = segmentCore(segment).toLowerCase();
+  return LOWERCASE_ABBREVIATION.has(core) || LOWERCASE_ABBREVIATION.has(segment.toLowerCase());
 }
 
 /**
- * Headline capitalization for a defectively lowercase headline (P3D founder
- * contract): fires ONLY when every ORDINARY word is lowercase — the P2B7G
- * refinement of the original whole-string gate. Uppercase anywhere in an
- * ordinary (digit-free, non-unit) token is intentional casing evidence and
- * preserves the value untouched ("iHerb gummies" never transforms); uppercase
- * confined to preserved tokens is unit or code notation and does not shield
- * the rest of a defectively lowercase headline ("500 mL supplement bottle" —
- * the recorded production escape — now transforms). Every ordinary word is
- * then capitalized, including short connectives ("For", "To") and each
- * hyphen/slash segment; apostrophes capitalize only the lead ("red's" →
- * "Red's"). Preserved within a transformed headline: digit-bearing tokens
- * ("4-lb.,", "8-oz"), the abbreviated units above ("oz.", "mL"), and the word
- * after a scientific genus marker ("e. coli" → "E. coli", never "E. Coli").
- * Idempotent: any transformed value carries uppercase in an ordinary token,
- * which disqualifies it from transforming again; a value that is all
- * preserved tokens ("16 oz.") is a fixed point.
+ * A fragment carrying too little evidence to call it a word — a stray
+ * one-letter hyphen/slash segment ("e-cigarette", "w/") or bare punctuation.
+ * Checked AFTER the minor-word rule, so a standalone leading article ("a
+ * frozen pizza") still capitalizes as the title's first word.
  */
-export function headlineCaseIfLowercase(text: string): string {
-  let sawOrdinaryLowercase = false;
-  for (const token of text.split(/(\s+)/)) {
-    if (isPreservedHeadlineToken(token)) continue;
-    if (ANY_UPPER.test(token)) return text; // intentional casing evidence
-    if (ANY_LOWER.test(token)) sawOrdinaryLowercase = true;
-  }
-  if (!sawOrdinaryLowercase) return text;
+function isShortFragment(segment: string): boolean {
+  return segmentCore(segment).replace(/[^\p{L}]/gu, '').length < 2;
+}
+
+/**
+ * THE shopper-facing title-capitalization contract (P2B7M), replacing the
+ * P3D/P2B7G whole-string defect gate that let partially sentence-cased titles
+ * escape: "All purpose flour, bread mix, flat bread pizza mix" and "Whole
+ * Nutrition Infant formula 24 oz cans and 0.6 oz packets" both carried
+ * capitalized opening words, and the old gate read that as proof the whole
+ * headline was intentionally cased.
+ *
+ * The decision is now made PER SEGMENT, never over the whole string, so an
+ * already-capitalized opening phrase cannot shield a lowercase tail:
+ *
+ *  - A segment carrying any UPPERCASE letter is intentional identity and is
+ *    returned verbatim. This is what protects "biQ-FEL", "iHerb", "VidaSlim",
+ *    "FDA", "O157:H7", "D3" and "mL" — and it makes the contract strictly
+ *    ADDITIVE: it only ever adds a capital to an ordinary lowercase word, and
+ *    never removes one the source or un-shouting produced.
+ *  - A preserved segment (see `isPreservedSegment`) is returned verbatim.
+ *  - A minor word stays lowercase unless it opens the title or an
+ *    independently titled clause.
+ *  - Every other lowercase segment is capitalized on its first letter, so
+ *    apostrophes capitalize only the lead ("red's" → "Red's") and hyphenated
+ *    compounds title each ordinary half ("ready-to-eat" → "Ready-to-Eat",
+ *    "non-dairy" → "Non-Dairy").
+ *  - The word after a scientific genus marker keeps its lowercase species
+ *    name ("e. coli" → "E. coli", never "E. Coli").
+ *
+ * Idempotent by construction: every segment this function capitalizes then
+ * carries an uppercase letter, which the first rule returns verbatim; minor
+ * words and preserved segments are fixed points of their own rules.
+ */
+export function headlineCaseShopperTitle(text: string): string {
+  let atClauseStart = true;
   let afterScientificMarker = false;
+  let afterGenus = false;
+  let afterParenthesizedGenus = false;
   return text
     .split(/(\s+)/)
     .map((token) => {
       if (/^\s*$/.test(token)) return token;
       const wasAfterMarker = afterScientificMarker;
+      const wasAfterGenus = afterGenus;
+      const wasAfterParenthesizedGenus = afterParenthesizedGenus;
       afterScientificMarker = SCIENTIFIC_MARKER.test(token);
+      afterGenus = BINOMIAL_GENUS.has(segmentCore(token));
+      afterParenthesizedGenus = PARENTHESIZED_GENUS.test(token);
+      const startsClause = atClauseStart;
+      atClauseStart = CLAUSE_OPENER.test(token);
       if (afterScientificMarker) return token.toUpperCase(); // "e." → "E."
-      if (wasAfterMarker) return token; // "coli" keeps its lowercase species name
-      if (isPreservedHeadlineToken(token)) return token; // codes, "4-lb.,", "8-oz", "mL"
-      if (!ANY_LOWER.test(token)) return token; // punctuation-only
-      return capitalizeHeadlineToken(token);
+      if (wasAfterMarker) return token; // "coli" keeps its species name
+      // A species epithet directly after a known genus ("Listeria
+      // monocytogenes") or closing a parenthesized binomial ("(Scomberomorus
+      // cavalla)") keeps its lowercase: binomial nomenclature, not a defect.
+      if (wasAfterGenus && /^\p{Ll}+[).,;:]?$/u.test(token)) return token;
+      if (wasAfterParenthesizedGenus && PARENTHESIZED_EPITHET.test(token)) return token;
+      let leading = true;
+      return token
+        .split(/([-/])/)
+        .map((segment) => {
+          if (segment === '-' || segment === '/') return segment;
+          const opensToken = leading;
+          if (segment !== '') leading = false;
+          if (segment === '' || ANY_UPPER.test(segment) || !ANY_LOWER.test(segment)) return segment;
+          if (isProtectedNotation(segment)) return segment;
+          const opensTitleOrClause = startsClause && opensToken;
+          if (MINOR_WORDS.has(segmentCore(segment).toLowerCase())) {
+            return opensTitleOrClause
+              ? segment.replace(/\p{Ll}/u, (c) => c.toUpperCase())
+              : segment;
+          }
+          if (isShortFragment(segment)) return segment;
+          return segment.replace(/\p{Ll}/u, (c) => c.toUpperCase());
+        })
+        .join('');
     })
     .join('');
 }
@@ -329,22 +467,29 @@ export function normalizeUnitSpacing(text: string): string {
 }
 
 /**
- * THE shopper-title normalization pipeline (P3D, extended by P2B7G): space a
- * jammed quantity+unit boundary (`normalizeUnitSpacing`), un-shout an
- * ALL-CAPS source value (`humanizeAllCaps`), headline-case a defectively
- * lowercase one (`headlineCaseIfLowercase`), and open a lowercase leading
- * article on an otherwise-cased name with a capital (`capitalizeLeadingWord`
- * — "a Frozen Pepperoni Pizza" → "A Frozen Pepperoni Pizza", while "a2 …"
- * and "iHerb …" stay untouched by that helper's own digit/uppercase gate).
+ * THE shopper-title normalization pipeline (P3D, extended by P2B7G, and
+ * re-based on the P2B7M per-segment contract): space a jammed quantity+unit
+ * boundary (`normalizeUnitSpacing`), un-shout an ALL-CAPS source value
+ * (`humanizeAllCaps`), apply the shopper-title capitalization contract
+ * (`headlineCaseShopperTitle`), and open a lowercase leading article with a
+ * capital (`capitalizeLeadingWord` — which now only ever confirms what the
+ * contract already did, and is kept because the brand/company/row-name slots
+ * call it on their own).
+ *
  * Each stage is idempotent and no later stage recreates an earlier stage's
- * precondition, so the composition is idempotent. Home/Detail's cleaned
- * product name and the push formatter's product slot both flow through THIS
- * function, so a card and the notification that opens it can never disagree
- * about a name.
+ * precondition, so the composition is idempotent. The composition is also
+ * ADDITIVE on capitals: no stage removes an uppercase letter the source
+ * carried, so it can never decapitalize an intentional identity.
+ *
+ * EVERY shopper-facing surface flows through THIS function — Feed and Saved
+ * cards and Recall Detail via `cleanProductName`, share and accessibility
+ * copy from the same model field, and push copy via the push formatter — so a
+ * card, the screen it opens, and the notification that opened it can never
+ * disagree about a name.
  */
 export function displayProductTitle(text: string): string {
   return capitalizeLeadingWord(
-    headlineCaseIfLowercase(humanizeAllCaps(normalizeUnitSpacing(text))),
+    headlineCaseShopperTitle(humanizeAllCaps(normalizeUnitSpacing(text))),
   );
 }
 
@@ -373,7 +518,7 @@ export function displayProductTitle(text: string): string {
  * this casing. Display-only vocabulary: extraction, classification, and
  * canonical data never read this list.
  */
-const ORGANISM_GENUS_CASING = ['Cronobacter', 'Bacillus', 'Talaromyces'];
+// (declared above the shopper-title contract, which shares this vocabulary)
 
 /**
  * Canonical spans restored after sentence-interior lowercasing, as

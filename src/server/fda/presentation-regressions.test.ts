@@ -1322,8 +1322,10 @@ test('P3C-2 shape B: a column-oriented grid is not read as rows', () => {
   assert.equal(view.rows.length, 1);
   // P2B7G: the row is named by the shared cleaned product name, which now
   // spaces the jammed "4lb" (an approved unit-spacing delta — see
-  // presentation-casing.test.ts APPROVED_UNIT_SPACING_DELTAS).
-  assert.equal(view.rows[0].name, 'Organic Daybreak Blend 4 lb bags of frozen fruit');
+  // presentation-casing.test.ts APPROVED_UNIT_SPACING_DELTAS). P2B7M: this is
+  // also a member of the escape class — the capitalized "Organic Daybreak
+  // Blend" head used to shield the lowercase tail from the whole-string gate.
+  assert.equal(view.rows[0].name, 'Organic Daybreak Blend 4 lb Bags of Frozen Fruit');
   const codes = cellAt(view, 0, 'lotCodes');
   assert.equal(codes.disclosure!.expandLabel, 'See all (23)');
   assert.equal(codes.values.length, 23);

@@ -85,6 +85,8 @@ npm run qa:personalization  # geography/allergen/retailer coverage report
                             # (read-only against the live DB)
 npm run qa:feed      # feed-completeness QA: drives the real Home loader and
                      # proves it holds every active case (read-only, live DB)
+npm run qa:titles    # shopper-title casing QA: an offline boundary gate (the
+                     # exit code) plus a read-only live-corpus measurement
 ```
 
 The test suite never touches the network: it runs against real FSIS API
@@ -471,23 +473,12 @@ sharing is deferred on purpose — its founder contract (an HTTPS Lotly
 Universal Link, blocked on the final domain) is in
 [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md) §6.
 
-## Known defects and planned milestones (P2B7M–P2B7O)
+## Known defects and planned milestones (P2B7N–P2B7O)
 
 Recorded, not implemented. Each is an observed defect with its evidence, not a
 speculative improvement; each needs its own milestone and its own founder
 review. Nothing here is a launch blocker — those live in
 [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md).
-
-- **P2B7M — title-capitalization invariant.** Newly ingested sentence-case
-  titles are escaping display normalization, so the Feed shows titles such as
-  "All purpose flour, bread mix, flat bread pizza mix" and "Whole Nutrition
-  Infant formula 24 oz cans and 0.6 oz packets" beside correctly cased
-  neighbours. The fix must be **deterministic and idempotent** (running it twice
-  changes nothing, and it never re-cases what is already correct), safe for
-  brands, acronyms, product codes and units (`UPC`, `LLC`, `oz`, `mg`, `pH`),
-  and **shared by every surface** — Feed, Saved, Detail, share copy and push
-  copy read one function, the way `cardCategoryLabel` already is, so two screens
-  cannot disagree about the same title.
 
 - **P2B7N — PHA status presentation.** FSIS Public Health Alerts render a grey
   `UNKNOWN` risk badge beside `PUBLIC HEALTH ALERT`, which says nothing: a PHA
@@ -508,6 +499,15 @@ ALERT` label, and must leave no empty gap where the badge was. Unknown risk
   also revisit how retailers are presented on cards and Detail, comparing
   alternatives in Design Preview before anything ships — the same way the
   category tag was settled (P2B7D).
+
+- **Illness-repair ledger checkpointing (operational hardening).** The illness
+  repair CLI (`npm run repair:illness-flags`) writes its durable apply ledger
+  only after the write loop completes. An exception mid-loop could therefore
+  leave rows written with no apply ledger recording them. The retained
+  pre-apply artifact still provides recovery evidence, so this is a hardening
+  item rather than a correctness defect; the fix is to checkpoint or finalize
+  the ledger inside failure handling. Recorded during P2B7M; deliberately NOT
+  implemented there, as it is unrelated to title presentation.
 
 ## Consumer presentation milestones (P3 series) — implemented and shipped
 

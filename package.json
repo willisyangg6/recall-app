@@ -71,6 +71,7 @@
     "qa:categories:launch": "tsx scripts/qa-categories-launch.ts",
     "qa:categories:frozen": "tsx scripts/qa-categories.ts",
     "qa:imagery": "tsx scripts/qa-imagery.ts",
+    "qa:titles": "tsx scripts/qa-title-casing.ts",
     "qa:product-categories": "tsx scripts/qa-product-categories.ts",
     "reconcile:fda-enforcement": "tsx scripts/reconcile-fda-enforcement.ts",
     "qa:fda-enforcement": "tsx scripts/qa-fda-enforcement.ts",
