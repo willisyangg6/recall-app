@@ -473,20 +473,12 @@ sharing is deferred on purpose — its founder contract (an HTTPS Lotly
 Universal Link, blocked on the final domain) is in
 [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md) §6.
 
-## Known defects and planned milestones (P2B7N–P2B7O)
+## Known defects and planned milestones (P2B7O)
 
 Recorded, not implemented. Each is an observed defect with its evidence, not a
 speculative improvement; each needs its own milestone and its own founder
 review. Nothing here is a launch blocker — those live in
 [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md).
-
-- **P2B7N — PHA status presentation.** FSIS Public Health Alerts render a grey
-  `UNKNOWN` risk badge beside `PUBLIC HEALTH ALERT`, which says nothing: a PHA
-  has no recall class to be unknown about. The fix hides the unknown risk badge
-  **for PHAs specifically**, on Feed, Saved and Detail, keeps the `PUBLIC HEALTH
-ALERT` label, and must leave no empty gap where the badge was. Unknown risk
-  stays visible for ordinary recalls — this is not a global suppression, and
-  conflating the two would hide a real gap in recall data.
 
 - **P2B7O — search explainability and retailer presentation.** Search returns
   results whose match is invisible on the card: "Baloian Farms" returns recalls

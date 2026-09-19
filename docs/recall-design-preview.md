@@ -227,7 +227,15 @@ screen:
 - the **summary punctuation rule** over real wording, showing both the
   lines whose trailing stop is dropped and the strings it must refuse to
   change (a unit abbreviation, a company suffix, multi-sentence source
-  text, an ellipsis).
+  text, an ellipsis);
+- the **status-treatment matrix** (P2B7N): the four notice-type/classification
+  combinations one under the other — a public health alert on `unknown`
+  (`PUBLIC HEALTH ALERT` alone, no risk label), a recall on `unknown`
+  (`UNKNOWN`), a pending recall (`PENDING`) and a Class I recall
+  (`CRITICAL`) — each built by the real `riskView` from a real classification
+  and notice type and rendered by the production `RiskLabel` and `NoticeLabel`
+  in the card's own status-row order. The gallery is not told what to draw, so
+  it cannot claim a treatment the product does not actually produce.
 
 Cards with and without images, `Affects You` cards, long product names and
 large Dynamic Type stay where they already were — the Feed card matrix, the
@@ -387,7 +395,7 @@ Detail`.
 | 36    | Detail · no Health Risk section                 | Where It Was Sold followed directly by Affected Products.                                                                                                                         |
 | 37    | Detail · a complete identifier/date group       | Every code dated; no blank line.                                                                                                                                                  |
 | 38    | Detail · an incomplete identifier/date group    | An undated code keeps a blank line in the date column.                                                                                                                            |
-| 39–45 | Detail · one recall per risk tier               | CRITICAL, VERY HIGH, HIGH, MODERATE, LOW, PENDING and UNKNOWN (a Public Health Alert, beside its notice label).                                                                   |
+| 39–45 | Detail · one recall per risk tier               | CRITICAL, VERY HIGH, HIGH, MODERATE, LOW, PENDING, and a Public Health Alert — which since P2B7N shows its notice label with NO risk label beside it.                             |
 
 Whether a recall carries a guide is decided by the real guide pipeline
 (`selectHazardGuidance` over `interpretReason`, on the fetched projection —

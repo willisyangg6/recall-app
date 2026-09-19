@@ -19,7 +19,7 @@
  * or match evidence — that provenance is internal.
  */
 
-import type { Classification, SourceAgency } from '@/domain/recall-types';
+import type { Classification, NoticeType, SourceAgency } from '@/domain/recall-types';
 import {
   classificationStatus,
   consumerRiskTier,
@@ -39,16 +39,28 @@ export interface OfficialClassificationView {
 
 export interface RiskView {
   tier: ConsumerRiskTier;
-  /** Home card badge ("HIGH"); null when there is no rated tier to badge. */
+  /**
+   * Home/Saved card badge ("HIGH"), or null when this notice carries no risk
+   * label at all — see `riskLabelSuppressed`. A surface renders the badge iff
+   * this is non-null and renders NOTHING otherwise: no wrapper, no spacer, no
+   * accessibility node.
+   */
   badgeLabel: string | null;
   /**
    * Detail label ("HIGH") — the same canonical word as `badgeLabel` (founder
    * decision, 2026-09-14: the visible label is exactly the tier word on every
    * surface; the former " RISK" suffix is retired). Kept as its own field so
-   * the two surfaces stay independently addressable.
+   * the two surfaces stay independently addressable. Null in exactly the same
+   * cases as `badgeLabel`, from the same one rule, so Detail cannot show a
+   * label the cards hide.
    */
   headlineLabel: string | null;
-  /** Spoken label — risk is never communicated by color alone. */
+  /**
+   * Spoken label — risk is never communicated by color alone. Rendered ONLY
+   * as the label's own accessibility label, so a suppressed label speaks
+   * nothing: with no `badgeLabel`/`headlineLabel` there is no node to carry
+   * it, and the tier is never announced from anywhere else.
+   */
   accessibilityLabel: string;
   /** One consumer sentence about what the tier means. */
   note: string | null;
@@ -112,7 +124,44 @@ export function riskTierLabel(tier: ConsumerRiskTier): {
   return { text: word.toUpperCase(), accessibilityLabel: `Risk level: ${word}` };
 }
 
-export function riskView(classification: Classification, sourceAgency: SourceAgency): RiskView {
+/**
+ * THE one rule for whether a notice shows a risk label at all (P2B7N).
+ *
+ * An FSIS Public Health Alert never receives a recall classification — not
+ * yet, not ever. `consumerRiskTier` therefore lands it on `unknown`, which is
+ * the honest DOMAIN answer and stays exactly as it is in storage, in search,
+ * in filtering and in sorting. As a BADGE, though, `UNKNOWN` beside
+ * `PUBLIC HEALTH ALERT` reads as a missing value — as though the app had
+ * failed to parse something — when in truth the alert is complete and
+ * correctly processed. The notice label already states what the notice is, so
+ * the risk label beside it carries no information and costs credibility.
+ *
+ * Suppression is deliberately narrow, and needs BOTH halves:
+ *
+ *  - the notice type is a public health alert, and
+ *  - the derived tier is `unknown`.
+ *
+ * So a genuinely unclassifiable RECALL still reads `UNKNOWN` — that absence is
+ * real information about a recall that should have had a class — and a PHA
+ * that ever arrives carrying an official class would badge that class rather
+ * than have it silently discarded. Nothing here is a data rewrite: this
+ * function decides visibility and nothing else.
+ *
+ * It is called from exactly one place (`riskView`), so Feed, Saved and Detail
+ * all inherit it through the shared presentation contract and no surface
+ * re-decides it. `server/risk-label-visibility.test.ts` pins that: the rule
+ * has exactly one caller in the shipped app, and no screen may spell the
+ * notice-type check itself.
+ */
+export function riskLabelSuppressed(noticeType: NoticeType, tier: ConsumerRiskTier): boolean {
+  return noticeType === 'public_health_alert' && tier === 'unknown';
+}
+
+export function riskView(
+  classification: Classification,
+  sourceAgency: SourceAgency,
+  noticeType: NoticeType,
+): RiskView {
   const tier = consumerRiskTier(classification);
   const classes = officialClassesOf(classification);
   const status = classificationStatus(classification);
@@ -151,11 +200,19 @@ export function riskView(classification: Classification, sourceAgency: SourceAge
   // present an absent classification as a level of risk. They remain
   // first-class members of the one label set, spelled and styled exactly like
   // the five severities.
+  //
+  // A Public Health Alert's `unknown` is the one absence that is not worth
+  // badging (P2B7N): `riskLabelSuppressed` drops the label — on both surfaces
+  // at once, from this one decision — and the notice label speaks for the
+  // notice. The tier, the note and the official block below are untouched, so
+  // Detail still states "Not assigned · Public health alerts do not receive a
+  // formal classification" exactly where that belongs.
   const label = riskTierLabel(tier);
+  const suppressed = riskLabelSuppressed(noticeType, tier);
   return {
     tier,
-    badgeLabel: label.text,
-    headlineLabel: label.text,
+    badgeLabel: suppressed ? null : label.text,
+    headlineLabel: suppressed ? null : label.text,
     accessibilityLabel: label.accessibilityLabel,
     note: TIER_NOTE[tier],
     official,

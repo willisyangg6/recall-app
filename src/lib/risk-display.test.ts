@@ -26,8 +26,12 @@ function classificationOf(classes: OfficialClass[]): Classification {
   };
 }
 
+// Every golden below is a RECALL unless it says otherwise. The notice type is
+// explicit because `riskView` requires it (P2B7N): a Public Health Alert is
+// the one notice whose risk label is suppressed, and no caller may leave that
+// dimension unstated.
 function view(classes: OfficialClass[], agency: SourceAgency = 'FDA') {
-  return riskView(classificationOf(classes), agency);
+  return riskView(classificationOf(classes), agency, 'recall');
 }
 
 test('A. Class I only — Critical, official Class I', () => {
@@ -101,25 +105,40 @@ test('G. unmatched FDA recall — Pending on both surfaces, explained once', () 
   assert.equal(v.official, null);
 });
 
-test('a public health alert is Unknown, never Pending forever', () => {
-  const v = riskView(
-    { value: 'not_applicable_pha', sourceText: null, officialClasses: [] },
-    'FSIS',
-  );
+test('a public health alert is Unknown, never Pending forever — and badges nothing', () => {
+  const classification: Classification = {
+    value: 'not_applicable_pha',
+    sourceText: null,
+    officialClasses: [],
+  };
+  const v = riskView(classification, 'FSIS', 'public_health_alert');
+  // The DOMAIN answer is unchanged and still Unknown: no fabricated class and
+  // no invented level. Storage, filtering, sorting and search all read this
+  // tier, and P2B7N did not touch any of them.
   assert.equal(v.tier, 'unknown');
-  // No fabricated class and no invented level: Unknown on both surfaces,
-  // with no " RISK" suffix. The precise reason is NOT left to that one word —
-  // the official block immediately below says a public health alert never
-  // receives a formal classification, which is what keeps Unknown honest
-  // here. The notice-type label (Public Health Alert) stays a separate
-  // concept.
-  assert.equal(v.headlineLabel, 'UNKNOWN');
-  assert.equal(v.badgeLabel, 'UNKNOWN');
+  // What changed is only whether that absence is BADGED. A PHA carries its own
+  // explicit notice label, so "UNKNOWN" beside "PUBLIC HEALTH ALERT" added no
+  // information and read as a parsing failure on a correctly processed alert.
+  // Both surfaces lose it from the same one decision — Detail cannot keep a
+  // label the cards drop.
+  assert.equal(v.headlineLabel, null);
+  assert.equal(v.badgeLabel, null);
+  // The precise reason is still NOT left unsaid: the official block below the
+  // header states that a public health alert never receives a formal
+  // classification, exactly as before. Suppressing the badge removed a
+  // redundant token, not the explanation.
   assert.deepEqual(v.official, {
     heading: 'Official USDA FSIS classification',
     text: 'Not assigned',
     note: 'Public health alerts do not receive a formal classification.',
   });
+  // The suppression is keyed on the NOTICE TYPE, not on the classification
+  // value: the identical classification on a recall still badges UNKNOWN, so
+  // the exception cannot leak into the rest of the corpus.
+  const asRecall = riskView(classification, 'FSIS', 'recall');
+  assert.equal(asRecall.tier, 'unknown');
+  assert.equal(asRecall.badgeLabel, 'UNKNOWN');
+  assert.equal(asRecall.headlineLabel, 'UNKNOWN');
 });
 
 test('FSIS classifications map through the same scale, with agency provenance', () => {
@@ -222,7 +241,7 @@ test('every label reaches the badge, the headline and the spoken label intact', 
   ];
   assert.equal(cases.length, RISK_FILTER_TIERS.length);
   for (const [classification, tier] of cases) {
-    const v = riskView(classification, 'FDA');
+    const v = riskView(classification, 'FDA', 'recall');
     const word = riskTierWord(tier);
     assert.equal(v.tier, tier);
     assert.equal(v.accessibilityLabel, `Risk level: ${word}`);
@@ -251,6 +270,7 @@ test('no retired risk label survives anywhere riskView can render it', () => {
   const pha = riskView(
     { value: 'not_applicable_pha', sourceText: null, officialClasses: [] },
     'FSIS',
+    'recall',
   );
   everything.push(
     pha.badgeLabel ?? '',
@@ -284,7 +304,7 @@ test('every rendered risk label is one of the seven canonical words — on both 
   const seen = new Set<string>();
   for (const classification of classifications) {
     for (const agency of ['FDA', 'FSIS'] as const) {
-      const v = riskView(classification, agency);
+      const v = riskView(classification, agency, 'recall');
       assert.ok(v.badgeLabel !== null && canonical.includes(v.badgeLabel), `${v.badgeLabel}`);
       assert.ok(
         v.headlineLabel !== null && canonical.includes(v.headlineLabel),
@@ -298,4 +318,25 @@ test('every rendered risk label is one of the seven canonical words — on both 
   // Every one of the seven is reachable, so the vocabulary is complete as
   // well as closed.
   assert.deepEqual([...seen].sort(), [...canonical].sort());
+
+  // The notice type can only SUPPRESS a label, never rewrite one. Over the
+  // same classifications read as a Public Health Alert, every label that
+  // survives is still one of the seven canonical words and still identical on
+  // both surfaces — the PHA exception introduces no eighth word, no "N/A", and
+  // no blank-but-present label.
+  for (const classification of classifications) {
+    for (const agency of ['FDA', 'FSIS'] as const) {
+      const v = riskView(classification, agency, 'public_health_alert');
+      assert.equal(v.headlineLabel, v.badgeLabel);
+      if (v.badgeLabel === null) {
+        assert.equal(v.tier, 'unknown');
+        continue;
+      }
+      assert.ok(canonical.includes(v.badgeLabel), `${v.badgeLabel}`);
+      // A PHA that ever arrives carrying a real classification keeps it: only
+      // the meaningless `unknown` is dropped, so meaningful agency data can
+      // never be silently discarded by this rule.
+      assert.notEqual(v.tier, 'unknown');
+    }
+  }
 });

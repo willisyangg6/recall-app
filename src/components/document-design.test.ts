@@ -357,7 +357,9 @@ test('Risk Levels renders the production Risk Label for exactly the seven tiers,
     unknown: { value: 'not_applicable_pha', sourceText: null, officialClasses: [] },
   };
   for (const tier of RISK_FILTER_TIERS) {
-    const view = riskView(sample[tier], 'FDA');
+    // The Risk Levels document explains the seven words themselves, not one
+    // notice — so every row is read as a recall, where no label is suppressed.
+    const view = riskView(sample[tier], 'FDA', 'recall');
     assert.equal(view.tier, tier);
     assert.equal(riskTierLabel(tier).text, view.badgeLabel);
     assert.equal(riskTierLabel(tier).accessibilityLabel, view.accessibilityLabel);

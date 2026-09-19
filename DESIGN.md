@@ -1213,6 +1213,19 @@ card, reading exactly `CRITICAL`, `VERY HIGH`, `HIGH`, `MODERATE`, `LOW`,
 (founder decision, 2026-09-14); `risk-display.test.ts` pins the closed
 seven-word vocabulary on both surfaces.
 
+A Public Health Alert renders **no** Risk Label (P2B7N). The vocabulary is
+unchanged — this is a visibility rule, not an eighth word: a PHA never
+receives a classification, so `UNKNOWN` beside `PUBLIC HEALTH ALERT` stated
+nothing and made a correctly processed alert look incomplete. The presentation
+contract decides it once (`riskLabelSuppressed` → `riskView`, so Feed, Saved
+and Detail cannot drift), and the surfaces render the label only when the model
+gives them one. A hidden label leaves nothing behind: the status rows are
+gapped, wrapping flex rows with no fixed height, so `PUBLIC HEALTH ALERT` takes
+the leading position and the activity date stays beside it. A _recall_ whose
+classification is genuinely unknown keeps `UNKNOWN`. See
+[docs/recall-feed-usability.md](docs/recall-feed-usability.md) for the rule and
+its matrix.
+
 ### Relevance Label
 
 Relevance Label is separate from Risk Label.

@@ -479,10 +479,15 @@ test('benchmark: GreenWise blueberries / Publix — roles distinct, casing stand
   // Classification pending is intentional, not missing data: one shared
   // "PENDING" state, with no duplicate bottom classification block.
   assert.equal(
-    riskView(row.projection.classification, row.projection.sourceAgency).tier,
+    riskView(row.projection.classification, row.projection.sourceAgency, row.projection.noticeType)
+      .tier,
     'pending',
   );
-  assert.equal(riskView(row.projection.classification, row.projection.sourceAgency).official, null);
+  assert.equal(
+    riskView(row.projection.classification, row.projection.sourceAgency, row.projection.noticeType)
+      .official,
+    null,
+  );
   // UPCs are inside the app — no reading the FDA notice required.
   assert.ok(
     row.packageCheck.identifiers.some((i) => i.label === 'UPC' && i.value === '41415-06453'),
@@ -500,7 +505,11 @@ test('benchmark: Momchipz — formatting, roles, and no required external readin
     brandLine(row.projection.brands, row.projection.recallingFirm.displayName, row.product),
     'Momchipz',
   );
-  assert.equal(riskView(row.projection.classification, row.projection.sourceAgency).official, null);
+  assert.equal(
+    riskView(row.projection.classification, row.projection.sourceAgency, row.projection.noticeType)
+      .official,
+    null,
+  );
   // The UPC is extracted from prose — the in-app checker works and the user
   // is never told to go read the FDA page.
   assert.deepEqual(row.packageCheck.identifiers, [{ label: 'UPC', value: '6 28634 44216 6' }]);

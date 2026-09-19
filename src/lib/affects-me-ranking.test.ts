@@ -189,10 +189,18 @@ test('Pending and Unknown rank below High and above Moderate — and are never r
   assert.equal(consumerRiskTier(unrated.classification), 'unknown');
   // Ordering never becomes a label: the risk layer still says Pending /
   // Unknown, and neither is ever badged as a rated tier on a card.
-  assert.equal(riskView(pending.classification, 'FDA').tier, 'pending');
-  assert.equal(riskView(pending.classification, 'FDA').badgeLabel, 'PENDING');
-  assert.equal(riskView(unrated.classification, 'FSIS').tier, 'unknown');
-  assert.equal(riskView(unrated.classification, 'FSIS').badgeLabel, 'UNKNOWN');
+  assert.equal(riskView(pending.classification, 'FDA', pending.noticeType).tier, 'pending');
+  assert.equal(riskView(pending.classification, 'FDA', pending.noticeType).badgeLabel, 'PENDING');
+  // `unrated` is a Public Health Alert, so its Unknown is the one absence that
+  // is no longer badged (P2B7N). What matters HERE is that suppressing the
+  // badge changed nothing about ranking: the tier the priority sequence reads
+  // is still `unknown`, and the assertions below still place it exactly where
+  // it always sat. Presentation visibility and ordering are separate layers.
+  assert.equal(riskView(unrated.classification, 'FSIS', unrated.noticeType).tier, 'unknown');
+  assert.equal(riskView(unrated.classification, 'FSIS', unrated.noticeType).badgeLabel, null);
+  // Read as a recall, the identical classification still badges UNKNOWN — the
+  // exception is the notice type's, not the tier's.
+  assert.equal(riskView(unrated.classification, 'FSIS', 'recall').badgeLabel, 'UNKNOWN');
 
   const pendingPriority = affectsMePriority(pending, relevanceOf(CALIFORNIAN)(pending));
   const unratedPriority = affectsMePriority(unrated, relevanceOf(CALIFORNIAN)(unrated));

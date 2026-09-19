@@ -912,8 +912,12 @@ export const DESIGN_PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   {
     id: 'risk_unknown',
     group: 'risk',
-    title: 'Detail · UNKNOWN (Public Health Alert)',
-    expectation: 'The neutral unknown label beside the PUBLIC HEALTH ALERT notice label.',
+    title: 'Detail · a Public Health Alert’s absent classification',
+    expectation:
+      'NO risk label at all (P2B7N): PUBLIC HEALTH ALERT leads the status row with the ' +
+      'activity date beside it, and nothing occupies the space UNKNOWN used to. Further down, ' +
+      'the official block still states "Not assigned · Public health alerts do not receive a ' +
+      'formal classification" — the explanation stays, only the redundant badge is gone.',
     requirement: 'risk_unknown',
     destination: 'detail',
     simulation: null,

@@ -1530,10 +1530,11 @@ test('Home and Detail render the same risk state: Pending, Unknown, and rated', 
   assert.ok(detailModel.risk.note);
   assert.equal(detailModel.risk.official, null);
 
-  // A PHA reads "UNKNOWN" — it never receives a classification, so nothing is
-  // pending for it — while its notice label stays a separate concept on both
-  // screens. The word alone is not the whole story: the official block below
-  // states exactly why no class exists, which is what keeps Unknown honest.
+  // A PHA never receives a classification, so nothing is pending for it and
+  // its tier is Unknown. Since P2B7N that absence is NOT badged: "UNKNOWN"
+  // beside "PUBLIC HEALTH ALERT" stated nothing and made a correctly
+  // processed alert look half-parsed. Both surfaces drop it together, and the
+  // notice label — the one that carries actual information — stays.
   const phaClassification = {
     value: 'not_applicable_pha' as const,
     sourceText: null,
@@ -1547,8 +1548,13 @@ test('Home and Detail render the same risk state: Pending, Unknown, and rated', 
     detail({ classification: phaClassification, noticeType: 'public_health_alert' }),
     { today: TODAY, affectsYou: false },
   );
-  assert.equal(phaHome.risk.badgeLabel, 'UNKNOWN');
-  assert.equal(phaDetail.risk.headlineLabel, 'UNKNOWN');
+  assert.equal(phaHome.risk.badgeLabel, null);
+  assert.equal(phaDetail.risk.headlineLabel, null);
+  // Parity is the point: the two surfaces make ONE decision, not two.
+  assert.equal(phaHome.risk.badgeLabel, phaDetail.risk.headlineLabel);
+  // The tier itself is untouched — filtering, sorting and search still read it.
+  assert.equal(phaHome.risk.tier, 'unknown');
+  assert.equal(phaDetail.risk.tier, 'unknown');
   assert.equal(phaHome.noticeLabel, 'Public Health Alert');
   assert.equal(phaDetail.noticeTypeLabel, 'Public Health Alert');
   // The PHA classification block is the one place that ADDS information

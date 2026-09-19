@@ -2241,7 +2241,7 @@ export function buildHomeCardModel(item: FeedItem, context: HomeCardContext): Ho
   return {
     id: item.id,
     noticeLabel: noticeLabel(item.noticeType),
-    risk: riskView(item.classification, item.sourceAgency),
+    risk: riskView(item.classification, item.sourceAgency, item.noticeType),
     activity: activityDisplay(item.publishedAt, item.timeline, context.today),
     affectsYou: context.affectsYou,
     productName: cleanProductName({
@@ -2478,7 +2478,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
       projection.noticeType === 'public_health_alert' ? 'Public Health Alert' : 'Recall',
     lifecycleLabel: lifecycleLabel(projection),
     retracted: projection.state === 'retracted',
-    risk: riskView(projection.classification, projection.sourceAgency),
+    risk: riskView(projection.classification, projection.sourceAgency, projection.noticeType),
     activity: activityDisplay(projection.publishedAt, detail.timeline, context.today),
     productName,
     brand,

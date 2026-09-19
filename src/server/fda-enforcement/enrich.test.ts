@@ -359,7 +359,8 @@ test('mixed classifications are preserved as a set and never collapse to one cla
   assert.equal(outcome?.riskTierAfter, 'very_high');
   assert.equal(consumerRiskTier(updated.projection.classification), 'very_high');
   assert.equal(
-    riskView(updated.projection.classification, 'FDA').official?.text,
+    riskView(updated.projection.classification, 'FDA', updated.projection.noticeType).official
+      ?.text,
     'Class I and Class II',
   );
   // Exactly one authoritative event for the transition.

@@ -138,7 +138,12 @@ import {
   SUPPORTED_STATE_CODES,
   type UserRecallPreferences,
 } from '@/domain/preferences';
-import type { Classification, OfficialClass } from '@/domain/recall-types';
+import type {
+  Classification,
+  NoticeType,
+  OfficialClass,
+  SourceAgency,
+} from '@/domain/recall-types';
 import type { ConsumerRiskTier } from '@/domain/risk-tier';
 import {
   FEED_EMPTY_SEARCH,
@@ -165,6 +170,7 @@ import {
   IMAGE_DOTS_WINDOW,
   todayIso,
   cardSummaryText,
+  noticeLabel,
   type DetailImageSet,
   type HomeCardModel,
 } from '@/lib/recall-presentation';
@@ -306,6 +312,43 @@ const TIER_SAMPLE: Record<ConsumerRiskTier, Classification> = {
   unknown: { value: 'not_applicable_pha', sourceText: null, officialClasses: [] },
 };
 
+/**
+ * P2B7N status-treatment matrix inputs. Real classification shapes and real
+ * notice types — the gallery derives what shows from them through `riskView`
+ * rather than being told, so a change to the rule changes this matrix.
+ */
+const STATUS_TREATMENTS: readonly {
+  caption: string;
+  classification: Classification;
+  agency: SourceAgency;
+  noticeType: NoticeType;
+}[] = [
+  {
+    caption: 'Public health alert · unknown → PUBLIC HEALTH ALERT only, no risk label',
+    classification: { value: 'not_applicable_pha', sourceText: null, officialClasses: [] },
+    agency: 'FSIS',
+    noticeType: 'public_health_alert',
+  },
+  {
+    caption: 'Recall · unknown → UNKNOWN (a recall’s missing class is real information)',
+    classification: { value: 'multiple_classes', sourceText: null },
+    agency: 'FDA',
+    noticeType: 'recall',
+  },
+  {
+    caption: 'Recall · not yet classified → PENDING',
+    classification: { value: 'not_yet_classified', sourceText: null, officialClasses: [] },
+    agency: 'FDA',
+    noticeType: 'recall',
+  },
+  {
+    caption: 'Recall · Class I → CRITICAL',
+    classification: { value: 'class_I', sourceText: 'Class I', officialClasses: ['class_I'] },
+    agency: 'FDA',
+    noticeType: 'recall',
+  },
+];
+
 function classificationOf(classes: OfficialClass[]): Classification {
   return {
     value: classes.length === 1 ? classes[0] : 'multiple_classes',
@@ -354,7 +397,7 @@ export default function DesignPreviewScreen() {
       lastPublicActivityAt: item.lastPublicActivityAt,
       // The same derivation the Detail model makes from the same stored
       // classification, so the risk scenarios land on the tier they name.
-      riskTier: riskView(item.classification, item.sourceAgency).tier,
+      riskTier: riskView(item.classification, item.sourceAgency, item.noticeType).tier,
     }));
   }, [feed.state]);
 
@@ -738,7 +781,7 @@ export default function DesignPreviewScreen() {
           </ThemedText>
           <View style={styles.badges}>
             {RISK_FILTER_TIERS.map((tier) => {
-              const risk = riskView(TIER_SAMPLE[tier], 'FDA');
+              const risk = riskView(TIER_SAMPLE[tier], 'FDA', 'recall');
               return (
                 <RiskLabel
                   key={tier}
@@ -751,7 +794,7 @@ export default function DesignPreviewScreen() {
           </View>
           <ThemedText type="small" themeColor="textSecondary">
             {RISK_FILTER_TIERS.map(
-              (tier) => riskView(TIER_SAMPLE[tier], 'FDA').accessibilityLabel,
+              (tier) => riskView(TIER_SAMPLE[tier], 'FDA', 'recall').accessibilityLabel,
             ).join(' · ')}
           </ThemedText>
         </ThemedView>
@@ -2672,7 +2715,7 @@ function StatusMetadataGallery() {
       <GallerySample caption="The date beside every risk label — caption, 12pt, text/secondary">
         <View style={styles.feedCase}>
           {RISK_FILTER_TIERS.map((tier) => {
-            const risk = riskView(TIER_SAMPLE[tier], 'FDA');
+            const risk = riskView(TIER_SAMPLE[tier], 'FDA', 'recall');
             return (
               <View key={tier} style={styles.treatmentStatusRow}>
                 <RiskLabel
@@ -2682,6 +2725,44 @@ function StatusMetadataGallery() {
                 />
                 <Text variant="caption" color="text/secondary">
                   {dates[0]}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </GallerySample>
+
+      {/* P2B7N: the four status treatments side by side, each built by the
+          REAL `riskView` from a real classification and notice type and
+          rendered by the production components in the card's own status-row
+          order — so this matrix cannot claim a treatment the product does not
+          actually produce. The first row is the milestone's whole point: a
+          Public Health Alert's `unknown` carries no risk label at all, and
+          PUBLIC HEALTH ALERT moves into the leading position with nothing
+          left behind it. */}
+      <GallerySample caption="P2B7N · status treatments: what each notice type and classification shows">
+        <View style={styles.feedCase}>
+          {STATUS_TREATMENTS.map((sample) => {
+            const risk = riskView(sample.classification, sample.agency, sample.noticeType);
+            return (
+              <View key={sample.caption} style={styles.feedCase}>
+                <View style={styles.treatmentStatusRow}>
+                  {risk.badgeLabel ? (
+                    <RiskLabel
+                      tier={risk.tier}
+                      label={risk.badgeLabel}
+                      accessibilityLabel={risk.accessibilityLabel}
+                    />
+                  ) : null}
+                  {noticeLabel(sample.noticeType) ? (
+                    <NoticeLabel label={noticeLabel(sample.noticeType)!} />
+                  ) : null}
+                  <Text variant="caption" color="text/secondary">
+                    {dates[0]}
+                  </Text>
+                </View>
+                <Text variant="micro-caption" color="text/secondary">
+                  {sample.caption}
                 </Text>
               </View>
             );

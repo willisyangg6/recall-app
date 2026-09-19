@@ -764,7 +764,11 @@ test('the preview offers every required Detail scenario, on real recalls, simula
   assert.ok(PREVIEW.includes('selectHazardGuidance('));
   assert.ok(PREVIEW.includes('hasHeroImage: model.heroImageUrl !== null'));
   assert.ok(PREVIEW.includes('productNameLength: model.productName.length'));
-  assert.ok(PREVIEW.includes('riskTier: riskView(item.classification, item.sourceAgency).tier'));
+  // The scenario screener reads the tier from the real pipeline over the real
+  // row — including its notice type, which `riskView` now requires (P2B7N).
+  assert.ok(
+    PREVIEW.includes('riskTier: riskView(item.classification, item.sourceAgency, item.noticeType)'),
+  );
   assert.ok(PREVIEW.includes('DETAIL STATES AND CALLOUTS'));
   assert.ok(PREVIEW.includes('<StateMessage {...DETAIL_LOADING} />'));
   // P2B7C (as corrected): the imagery gallery renders the PRODUCTION set

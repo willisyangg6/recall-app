@@ -316,15 +316,47 @@ meanwhile).
 ### Notice and risk labels
 
 Home and Detail render the **same** consumer risk state from the shared
-`riskView` (P2a): rated tiers badge their tier; an unclassified FDA recall
-reads `PENDING` on both surfaces; a PHA's absent class reads `UNKNOWN`.
-(The retired `Risk pending` / `Not rated` wording, and the P2a "never
-Unknown" rule it belonged to, were replaced when the consumer label set was
-finalized — Pending and Unknown are now first-class members of the one
-seven-label set, and a PHA's absence is explained precisely by the official
-block directly beneath the label.) Public Health Alerts always carry the
+`riskView` (P2a): rated tiers badge their tier, and an unclassified FDA recall
+reads `PENDING` on both surfaces. (The retired `Risk pending` / `Not rated`
+wording, and the P2a "never Unknown" rule it belonged to, were replaced when
+the consumer label set was finalized — Pending and Unknown are now first-class
+members of the one seven-label set.) Public Health Alerts always carry the
 explicit `Public Health Alert` label (the chip on Home, the badge-row label
-on Detail) — a notice type, never confused with a risk state. Founder
+on Detail) — a notice type, never confused with a risk state.
+
+**A Public Health Alert shows no risk label at all (P2B7N).** A PHA never
+receives a recall classification, so its consumer tier is `unknown` — the
+honest domain answer, and still the value stored, filtered, sorted, searched,
+ranked and pushed on. As a _badge_, though, `UNKNOWN` beside
+`PUBLIC HEALTH ALERT` added no information and made a completely, correctly
+processed alert read as though something had failed to parse. So the label,
+and only the label, is dropped: `riskLabelSuppressed(noticeType, tier)` in
+`lib/risk-display.ts` returns true for a public health alert whose tier is
+`unknown`, and `riskView` then leaves `badgeLabel` and `headlineLabel` null.
+Feed, Saved and Detail all reach their risk state through that one function,
+so none of them decides — and a null label renders nothing at all: no wrapper,
+no spacer, no accessibility node, and nothing that announces the tier.
+`PUBLIC HEALTH ALERT` simply moves into the leading position of the status row.
+
+The exception is deliberately narrow, and needs **both** halves:
+
+| Notice type | Tier           | Visible                                    |
+| ----------- | -------------- | ------------------------------------------ |
+| PHA         | `unknown`      | `PUBLIC HEALTH ALERT` only                 |
+| PHA         | any real class | that class's label + `PUBLIC HEALTH ALERT` |
+| Recall      | `unknown`      | `UNKNOWN`                                  |
+| Recall      | `pending`      | `PENDING`                                  |
+| Recall      | rated          | the tier's label                           |
+
+A recall whose class genuinely cannot be resolved still reads `UNKNOWN`: that
+absence _is_ information about a notice that should have carried a class. And
+a PHA that ever arrived carrying a real agency classification would badge it,
+so meaningful source data can never be silently discarded by this rule. On
+Detail the official block below the header still reads
+`Not assigned · Public health alerts do not receive a formal classification` —
+the explanation stays; only the redundant token is gone. Measured at
+2026-09-19, the live corpus held 168 PHAs (all `not_applicable_pha`, all
+`unknown`) and no non-PHA notice on `unknown` at all. Founder
 decision: the pending label is sufficient by itself — no explanatory
 classification copy
 renders on Detail (the model's pending `official` block is null so the top
