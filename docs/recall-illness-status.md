@@ -12,6 +12,14 @@ education, and supplier-chain and hedged prose are held back on their
 semantics rather than on a word (§4.4). Eight cases reclassify and the prepared
 repair moves from 77 to 79 (§5.3). Still read-only: nothing was written._
 
+_Completed 2026-09-19 (P2B7L.2): `botulism` joins the other disease names and
+the infant-formula population is resolved on its semantics (§4.5); attribution
+is separated from assertion so the answer no longer depends on where the prose
+was punctuated (§4.6); and the repair dry run surfaced a live false positive —
+`neither X nor Y received reports of illnesses` read as a report — which is
+closed (§4.7). Nine cases reclassify and the prepared repair moves from 79 to
+76 (§5.3). Still read-only: nothing was written, and push remains inactive._
+
 This document is the authoritative home for how Lotly determines and presents
 reported illnesses. Part 4 of
 [recall-domain-architecture.md](recall-domain-architecture.md) remains the
@@ -308,6 +316,23 @@ The sentence is never deleted from `What Happened`. It backs no status, so
 `narrativeWithoutIllness` has nothing it may drop, and the source's own words
 stay on the screen.
 
+### 4.3 Supersession and contradiction
+
+`resolveIllnessStatus(newestFirst)`:
+
+1. **Silence never supersedes.** A later notice that says nothing leaves an
+   earlier report standing — an update about packaging does not retract an
+   outbreak.
+2. **A denial never supersedes a report.** If the newest establishing notice
+   denies illnesses but an older linked notice reported them, the result is
+   `reported_unspecified` carrying both statements, never `explicit_none`. The
+   contradicted count is dropped rather than guessed.
+3. A later report with a **larger** count supersedes normally.
+
+---
+
+---
+
 ### 4.4 A disease name is neither education nor evidence (P2B7L.1)
 
 **A disease name alone is never evidence that anyone became ill, and never
@@ -402,36 +427,246 @@ a report a report.
 None of this is a per-case list. There is no allowlist and no denylist of
 recalls anywhere in the classifier; every rule above is a sentence shape.
 
-#### Two boundaries left deliberately in place
+#### Two boundaries, both closed in P2B7L.2
 
-- **A disease name still needs human harm beside it.** Eligibility is gated on
-  `MENTIONS_HARM`, and the disease names are not in it, so "Nine cases of
-  salmonellosis have been reported in connection with this product" reads
-  `unknown`. No notice in the live corpus states its illnesses that way, so
-  nothing is lost today, and the miss renders nothing rather than guessing.
-- **`botulism` is still a bare name in `EDUCATION`.** It has the same defect —
-  17 live sentences are held only by the word, including the ByHeart infant
-  formula outbreak. But that population is hedged outbreak prose on an **active
-  investigation** whose own notice states the FDA "has not identified a direct
-  link between any infant formula and these cases", so the answer is a founder
-  semantic call of the same weight as the qualified-none decision (§4.2), not a
-  mechanical extension of this one. Inert is the conservative state; it stays
-  inert until that call is made.
+P2B7L.1 left these open and named them as conservative misses. Both cost real
+reports once the infant-formula recalls arrived, and §4.5 closes them.
+
+- **A disease name needed human harm beside it.** Eligibility was gated on
+  `MENTIONS_HARM`, and the disease names were not in it, so "Nine cases of
+  salmonellosis have been reported in connection with this product" read
+  `unknown`. No notice then stated its illnesses that way. The FDA
+  infant-formula advisories do exactly that — "a total of 31 infants with
+  suspected or confirmed **infant botulism** … have been reported" never writes
+  the word _illness_ — so the disease names are now in `MENTIONS_HARM`.
+  Eligibility is not evidence: it means only that the sentence is read.
+- **`botulism` was still a bare name in `EDUCATION`.** It is now matched in the
+  same explanatory frame as the other two. §4.5 is the audit that settled it.
 
 ---
 
-### 4.3 Supersession and contradiction
+### 4.5 Botulism: the whole population, and what each shape means (P2B7L.2)
 
-`resolveIllnessStatus(newestFirst)`:
+**27 stored cases** name `botulism` or `botulinum` — 25 FDA, 2 FSIS-closed,
+read read-only over the whole 1,931-case table. Before this correction, **22
+sentences across 10 of them** were held back by the bare word alone.
 
-1. **Silence never supersedes.** A later notice that says nothing leaves an
-   earlier report standing — an update about packaging does not retract an
-   outbreak.
-2. **A denial never supersedes a report.** If the newest establishing notice
-   denies illnesses but an older linked notice reported them, the result is
-   `reported_unspecified` carrying both statements, never `explicit_none`. The
-   contradicted count is dropped rather than guessed.
-3. A later report with a **larger** count supersedes normally.
+The word was doing two incompatible jobs at once: silencing genuine education
+and silencing genuine reports. Splitting them is the whole correction.
+
+| Shape                                | Cases   | Example (verbatim)                                                                                                   | Answer                     |
+| ------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| Contamination risk + explicit denial | 20      | "…has the potential to be contaminated with Clostridium botulinum" + "No illnesses have been reported to date."      | `explicit_none`            |
+| Contamination risk, source silent    | 4       | "…may have experienced temperature deviation and may contain Clostridium perfringens … and/or Clostridium botulinum" | `unknown`                  |
+| Disease education                    | (in 10) | "Infant botulism **is** a rare but potentially fatal illness…"                                                       | inert                      |
+| Symptom education                    | (in 20) | "**Symptoms** of botulism include dizziness, blurred or double vision…"                                              | inert                      |
+| Category hazard                      | (in 5)  | "Uneviscerated fish have been linked to outbreaks of botulism poisoning."                                            | inert                      |
+| Investigation exists                 | (in 3)  | "The FDA has an ongoing investigation of infant botulism among babies in the U.S."                                   | inert                      |
+| Authority declines the link          | 1       | "The FDA **has not identified a direct link** between any infant formula and these cases…"                           | `unknown` — never a denial |
+| Cases linked by exposure             | 1       | "…31 infants with suspected or confirmed infant botulism and **confirmed exposure to** ByHeart … have been reported" | `reported_unspecified`     |
+| Cases linked by consumption          | 1       | "…3 cases of infant botulism in infants who CDC reported **had consumed** Nara formula"                              | `reported_count` (3)       |
+
+**`Clostridium botulinum` is deliberately not a disease name.** It names the
+ORGANISM, and "has the potential to be contaminated with Clostridium botulinum"
+is the standard uneviscerated-fish and low-acid-canning hazard sentence — a
+statement about the product, not about anyone's health. Twenty live cases rest
+on that wording and none of them reports an illness.
+
+#### The three infant-formula cases
+
+The founder named these; the third is a different firm in the same
+investigation, which is what makes the set worth reading together.
+
+**`815dc152` — ByHeart, November 7 2025 → `unknown`.** The notice states 83
+cases of infant botulism reported **nationwide**, notes that 13 infants
+"received ByHeart formula **at some point**", and states twice that "The FDA
+has not identified a direct link between any infant formula and these cases."
+Nothing here reports illnesses **for this product**: the cases are a national
+population, receipt of a product is exposure rather than illness, and the
+authority explicitly declines the connection. A linkage denial denies a LINK,
+not an illness, so the answer is `unknown` and **not** `explicit_none` — telling
+a shopper "No illnesses reported" over an active outbreak investigation would be
+its own false statement.
+
+**`55ee81ad` — ByHeart, November 19 2025 → `reported_unspecified`.** The update
+drops the no-direct-link disclaimer, states that ByHeart's own testing
+"identified Clostridium botulinum in some samples", and writes "a total of 31
+infants with suspected or confirmed infant botulism and **confirmed exposure to**
+ByHeart Whole Nutrition infant formula (various lots) have been reported from 15
+states." That is people, a disease, and an explicit tie to the recalled product,
+so it reports.
+
+It reports **no count**. The notice carries two figures and neither is an
+illness count the source states: **31** is "suspected **or** confirmed", and
+**27** is "cases with illness onset **information available**" — the subset whose
+onset date investigators happen to hold. The shipped classifier was printing
+`27 illnesses reported`, quoting a real number of the source's against a fact it
+was never given for. §4.8 is the general guard.
+
+**`decd41aa` — Nara Organics, June 2026 → `reported_count` (3).** A different
+firm, the same investigation. "The FDA and CDC contacted Nara Organics … and
+provided information about **3 cases of infant botulism in infants who CDC
+reported had consumed Nara formula**." People, the disease, an explicit count,
+and linkage by **consumption** — every element the conservative rule requires,
+so the count stands. Its neighbours stay inert: "The 3 infants were
+hospitalized" is a hospitalization with no illness stated, "There are no
+reported deaths" denies only deaths, and "Nara infant formula has not tested
+positive for C. botulinum" denies a **test result**, not an illness.
+
+#### The rule, stated once
+
+A notice reports illnesses when it says that **people became ill** and ties
+those people to **this recall or the recalled product** — by consumption, by
+confirmed exposure, or by a link the notice draws itself. It reports a **count**
+only when the source states that number **for those linked illnesses**.
+
+Everything else is inert: general education about the disease, its symptoms, its
+severity, the food category's hazard, the existence of an investigation, a
+national case population, an upstream supplier's or ingredient's outbreak, a
+hedged link, and an authority's statement that no link has been identified. The
+seriousness of botulism is never evidence that anyone fell ill, and the absence
+of evidence is never a zero.
+
+There is **no per-case allowlist or denylist anywhere in the classifier.** Every
+rule above is a sentence shape, and the reviewed notices are preserved as
+bounded fixtures (§5.4), not as identifiers the code branches on.
+
+---
+
+### 4.6 Attribution, not position: the segmentation correction (P2B7L.2)
+
+**The defect.** Every frame — supplier chain, hedged linkage — was tested
+against the candidate sentence alone, so the answer depended on where
+`splitSentences` happened to cut. Walmart's notice reads, as one published
+sentence:
+
+> The recall was initiated because this product may contain recalled whole
+> cucumbers **supplied by** SunFed Produce, LLC of Rio Rico, AZ, **which**
+> initiated a recall after the FDA notified SunFed that the cucumbers described
+> above were associated with reported salmonellosis illnesses.
+
+Split it at the relative clause — the same words, two sentences — and the half
+carrying the illnesses no longer carried "supplied by". Measured on the real
+notices: `a37f3a42` turned from `unknown` into `reported_unspecified`, and on
+`95adea9a` the supplier's outbreak **overrode the firm's own explicit denial**
+("To date, no illnesses have been reported for the recalled Marketside Fresh Cut
+Cucumber Slices"), which is the exact failure the supply framing exists to
+prevent.
+
+**The correction has two halves.**
+
+**1. Attribution is separated from assertion.** `assertsIllness` now answers only
+_"is this a positive illness statement?"_; a separate `provenanceOf` answers
+_"about whom?"_. Evidence attributed elsewhere is **discarded**, not outranked:
+
+```
+own assertion      →  reported_count / reported_unspecified
+else own denial    →  explicit_none
+else                  unknown
+```
+
+This is deliberately **not** "denials beat assertions". An own-product report
+still beats an own-product denial, which is what keeps a notice that reports
+illnesses and later says "no additional illnesses" positive. What a supplier's
+outbreak cannot do is beat the recalling firm's own denial — because it was
+never this recall's evidence to begin with.
+
+Provenance, in order:
+
+| Test                                                                   | Result      |
+| ---------------------------------------------------------------------- | ----------- |
+| A direct-victim clause, or a link the sentence draws to _this_ product | `own`       |
+| The notice states no direct link has been identified                   | `elsewhere` |
+| Confirmed exposure to the recalled product                             | `own`       |
+| Cases scoped to the country (`nationwide`)                             | `elsewhere` |
+| Supplier chain or hedged linkage **in the framing context**            | `elsewhere` |
+| Otherwise                                                              | `own`       |
+
+**2. Framing reaches across a punctuation split — but only into a
+continuation.** A well-formed sentence in this corpus opens with a capitalised
+subject ("Twelve illnesses and one death have been reported to date"). The
+fragment a split leaves behind opens lowercase, or with a relative pronoun or a
+bare conjunction. Framing carries forward only into the latter, walking back
+through consecutive continuations, so a clause broken into three pieces is
+reassembled as surely as one broken into two and there is no window size to
+tune.
+
+A purely positional window was tried first and **measured to be wrong**: letting
+any preceding sentence frame the next silenced seven genuine reports in the live
+corpus, among them "Twelve illnesses and one death have been reported to date",
+which merely happened to follow a sentence naming the firm's supplier.
+Adjacency is not framing.
+
+**Measured invariance** over all 1,931 stored notices, comparing each notice's
+answer with the same notice re-punctuated:
+
+| Re-punctuation                 | Before | After |
+| ------------------------------ | ------ | ----- |
+| split at `, which`             | 2      | **0** |
+| split at `, which` capitalised | 2      | **0** |
+| split at `, and`               | 1      | **0** |
+| semicolons become periods      | 1      | **0** |
+| periods become semicolons      | 0      | **0** |
+| newlines deleted               | 4      | 4     |
+
+The last row is **not a re-segmentation and is out of scope by design.** In this
+corpus a newline _is_ a sentence boundary — FSIS and FDA summaries are stripped
+HTML whose hard breaks often carry no terminal punctuation, which is why
+`splitSentences` treats them as boundaries (`domain/text.ts`). Deleting them
+glues a table row onto a sentence ("Expiration Range: 07/26-03/27 No illnesses
+or allergic reactions have been reported to date"), manufacturing a number
+beside a harm noun. That is input corruption, not the same prose re-punctuated,
+and the four affected cases are identical before and after this milestone.
+
+---
+
+### 4.7 `neither X nor Y` — a live false positive the repair would have stored
+
+Found by the P2B7L.2 dry run, not by reading code. **Four live cases** asserted
+illnesses over a notice that denies them outright:
+
+> **Neither** FSIS **nor** the company received any reports of illnesses
+> associated with consumption of this product.
+
+`neither` was not among the denial leads (`no`, `not`, `never`, `without`), so
+the denial guard let the sentence through and the verb-leading assertion pattern
+— "received … reports of … illness" — matched it word for word. This is the §3.2
+class, the most serious one: the app stating the inverse of the official notice.
+It mattered immediately, because all four carried a stored `false` that the
+prepared repair was about to overwrite with `true`.
+
+`neither` is now a denial lead. The guard still requires an **illness** word, so
+the four neighbouring notices that deny only injuries or only adverse reactions
+("Neither the company nor FSIS has received any reports of injury…") remain
+`unknown` rather than becoming false zeros.
+
+---
+
+### 4.8 A figure the source gives for something else is not a count
+
+Two shapes, both real, both quoting a number the source wrote against a fact it
+never stated it for. Same family as the existing year guard.
+
+- **Availability subsets.** "For **27 cases with illness onset information
+  available**, illnesses started on dates…"; "Traceback for **11 case-patients
+  for whom data was available**…". The figure counts records whose datum is
+  known.
+- **Further-harm subsets.** "Among the 6 case-patients…, **1 case-patient was
+  hospitalized**." The figure counts which of the ill were hospitalized.
+
+Deliberately narrow: "9 illnesses, 8 hospitalizations, and 1 death" keeps its
+**9**, because there the hospitalizations are a separate figure beside the
+illness count rather than a predicate on it. Only a number whose own noun phrase
+is the subject of the further-harm verb is disowned.
+
+Two counts are **recovered** by this: `5f7e9891` now reads `14 illnesses
+reported` (its 11-case traceback subset no longer collides with the 14 the
+notice states) and `57ae49ff` reads `6 illnesses reported`.
+
+A related misreading is closed with them: **"about" is not always a hedge.**
+"provided information **about** 3 cases" is the preposition, and reading it as
+an approximation printed `Approximately 3 illnesses reported` over a source that
+states exactly three. No case in the live corpus renders `Approximately …`.
 
 ---
 
@@ -462,14 +697,14 @@ Re-derived over the same 898 active, consumer-visible cases. The P2B7K column
 is the milestone measurement; the last is a fresh read-only re-derivation on
 2026-09-18 after §4.2 and §4.4:
 
-|                        | shipped before | P2B7K | now   |
-| ---------------------- | -------------- | ----- | ----- |
-| `explicit_none`        | 692            | 552   | 554   |
-| `reported_count`       | 10             | 30    | 30    |
-| `reported_unspecified` | 32             | 18    | 13    |
-| renders nothing        | 165            | 298   | 301   |
-| false positives (§3.2) | 5              | **0** | **0** |
-| false zeros (§3.3)     | 150            | **0** | **0** |
+|                        | shipped before | P2B7K | P2B7L.1 | now   |
+| ---------------------- | -------------- | ----- | ------- | ----- |
+| `explicit_none`        | 692            | 552   | 554     | 557   |
+| `reported_count`       | 10             | 30    | 30      | 30    |
+| `reported_unspecified` | 32             | 18    | 13      | 12    |
+| renders nothing        | 165            | 298   | 301     | 299   |
+| false positives (§3.2) | 5              | **0** | **0**   | **0** |
+| false zeros (§3.3)     | 150            | **0** | **0**   | **0** |
 
 `reported_unspecified` fell from 18 to 13 across the two later corrections:
 §4.2 made the qualified-none notices inert, and §4.4 moved two supplier-chain
@@ -477,10 +712,19 @@ notices to the denial their own firms wrote while admitting one genuine report
 (SunFed). The `explicit_none` rise is those two firms' denials becoming
 audible.
 
-Counts now displayed: 1, 2, 3, 4, 7, 8, 9, 11, 12, 17, 26, 27, 28, 38, 39, 55,
-92, 345 — `11` is HMC Farms, which §4.4 recovered. No case in the corpus states
-a qualified illness count, so `Approximately …` is still unexercised in
-production and is pinned by unit test only.
+Counts now displayed: 1, 2, 3, 4, 7, 8, 9, 11, 12, 17, 26, 28, 38, 39, 55, 92,
+345 — `11` is HMC Farms, which §4.4 recovered, and `3` is Nara Organics, which
+§4.5 recovered. **`27` is gone**: it was ByHeart's availability subset, and the
+notice now reports without a count (§4.8). No case in the corpus states a
+qualified illness count, so `Approximately …` is unexercised in production —
+measured over all 1,931 stored cases, zero render it — and is pinned by unit
+test only.
+
+P2B7L.2 moved three of these 898: ByHeart from a wrong count to an uncounted
+report, Nara from silence to `3 illnesses reported`, and two of the
+`neither … nor` denials (§4.7) from a false "Illnesses reported" to the denial
+their notices actually wrote. The `explicit_none` rise is those denials becoming
+audible.
 
 `unknown` rose from 165 to 298 because injury-only and adverse-reaction-only
 statements now correctly establish nothing. FSIS is where this bites hardest —
@@ -550,15 +794,44 @@ move in or out of the plan:
 The direction split is unchanged at 46 true → false, because the two additions
 and two removals cancel exactly; all of the net growth is in false → true.
 
+**After P2B7L.2: 76 stale values.** Re-measured read-only over the same whole
+table on 2026-09-19. Nine cases reclassify and five of them move in or out of
+the plan:
+
+```
+ 79  (P2B7L.1 classifier)
+ +1  false → true  Nara Organics — 3 cases of infant botulism in infants who
+                    consumed the recalled formula, silenced until now by the
+                    bare `botulism` word (§4.5)
+ −4  false → true  Tyson Fresh Meats, Skyline Provisions, Pork King Good,
+                    Champion Foods — "neither X nor Y received any reports of
+                    illnesses" is a DENIAL, so their stored false is already
+                    right and the plan was about to overwrite it (§4.7)
+───
+ 76  (P2B7L.2 classifier)
+```
+
+The other four reclassifications move no plan row, because the stored flag
+already agreed with the corrected answer: ByHeart `55ee81ad` stays a
+false → true correction but as `reported_unspecified` rather than a wrong count
+of 27; `7a45af45` moves from silence to an audible denial (stored `false`,
+derived `false`); and `5f7e9891` and `57ae49ff` recover a count they had lost to
+a subset figure while staying `true` (§4.8).
+
+The direction split is now **46 true → false, 30 false → true** — the true →
+false side is untouched by every correction since P2B7L, and all movement has
+been on the false → true side, which is the side that would have written a
+claim of illness into storage.
+
 | Scope                    | Total  | true → false | false → true |
 | ------------------------ | ------ | ------------ | ------------ |
-| Active, consumer-visible | 59     | 38           | 21           |
+| Active, consumer-visible | 58     | 38           | 20           |
 | Active but merged-hidden | 1      | 0            | 1            |
-| Closed                   | 19     | 8            | 11           |
-| **Whole table**          | **79** | **46**       | **33**       |
+| Closed                   | 17     | 8            | 9            |
+| **Whole table**          | **76** | **46**       | **30**       |
 
 Refused: 0 (`no-evidence` 0, `missing-flag` 0). Plan failures: 0. Already
-correct: 1,852. The dry run's own totals read `active 60 / inactive 1020`,
+correct: 1,855. The dry run's own totals read `active 59 / inactive 1020`,
 counting the merged-hidden case among the active.
 
 The single merged-hidden case is `9ccfa5b4…` (Infinite Herbs basil, merged into
@@ -567,9 +840,11 @@ active cases reads one higher than a consumer-scope audit of the same corpus.
 
 **The correction does not go through re-projection.** `reportsIllness` is the
 one field `detectChanges` diffs, and a normal re-projection of these cases
-would raise **32** `health_impact` notification-ledger events for notices that
+would raise **29** `health_impact` notification-ledger events for notices that
 have not changed since publication, while also rewriting other projected fields
-on **78 of the 79**. The repair instead writes the single key through a narrow
+on **75 of the 76** (re-measured 2026-09-19; `sourceIdentifiers` moves on almost
+every one, `affectedProducts`, `classification`, `retailerNames` and
+`heroImageUrl` on many). No case was unavailable and no re-projection threw. The repair instead writes the single key through a narrow
 compare-and-set port (`updateCaseReportsIllness`), using this same shared
 contract, so a later legitimate re-projection recomputes the identical answer
 rather than erasing a repaired one. Operational detail, guardrails and the
@@ -587,11 +862,14 @@ removing the qualifier sentence changes nothing, which is the evidence the
 sentence carried no fact. It also pins Detail, `reportsIllness` and the repair
 plan to one answer per case, under mutation as well as on the quiet path.
 
-**Disease-name corpus (P2B7L.1).** The 19 cases whose notices name
-`salmonellosis` or `listeriosis` outside an educational frame are recorded the
-same way in `src/domain/fixtures/illness-disease-corpus.json` (re-record with
+**Disease-name corpus (P2B7L.1, widened P2B7L.2).** The **29** cases whose
+notices name `salmonellosis`, `listeriosis` or `botulism` outside an educational
+frame are recorded the same way in
+`src/domain/fixtures/illness-disease-corpus.json` (re-record with
 `npx tsx scripts/record-illness-disease-corpus.ts`, read-only) and pinned by
-`src/domain/illness-disease-corpus.test.ts`. The population is heterogeneous on
+`src/domain/illness-disease-corpus.test.ts`. The recorder reads the disease list
+from the contract itself (`DISEASE_NAME`), so the recorded population cannot
+drift from the population the classifier governs. The population is heterogeneous on
 purpose — counted reports, uncounted reports, explicit denials, supplier-chain
 prose, hedged linkage and education-only headings — because telling those apart
 is the whole job. The suite derives fresh and asserts the recorded answer back,
@@ -601,6 +879,23 @@ it is removed, that turning a report into education silences it, and that one
 genuine illness sentence is still heard over every notice in the corpus. The
 repair plan and `health_impact` eligibility are pinned against the same
 fixture in `src/server/illness-repair.test.ts`.
+
+**Segmentation invariance (P2B7L.2).** `src/domain/illness-status.test.ts`
+carries an `assertSegmentationInvariant` helper that re-punctuates a notice five
+ways — splitting at `, which` in both capitalisations, at `, and`, and
+converting between semicolons and periods — and asserts one answer throughout.
+It is applied to both ByHeart notices, Nara, Walmart against both of its
+suppliers, the Walmart denial in both orders, SunFed, Baloian, Adams Farms and
+the two recovered counts. The same sweep run over all 1,931 stored notices
+reports zero differences on every punctuation-preserving mutation (§4.6).
+
+Alongside it the suite mutates meaning rather than formatting: removing the
+direct linkage from the Nara sentence silences it, replacing that linkage with a
+hedge silences it, adding a genuine explicit count is heard, "no additional
+illnesses" after a real report keeps the report, and a real illness sentence
+appended to any notice in the disease corpus is heard over it. Each of those is
+a property the classifier must have in both directions, not a single expected
+value.
 
 ---
 

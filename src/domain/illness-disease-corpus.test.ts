@@ -1,10 +1,11 @@
 /**
- * P2B7L.1: the disease-name correction, proved against the REAL notices.
+ * The disease-name correction (P2B7L.1, extended P2B7L.2), proved against the
+ * REAL notices.
  *
- * `fixtures/illness-disease-corpus.json` holds every stored case whose
- * official notice names `salmonellosis` or `listeriosis` in a sentence that is
- * not hazard education, recorded read-only from production with its verbatim
- * `summaryText`.
+ * `fixtures/illness-disease-corpus.json` holds every stored case whose official
+ * notice names one of the contract's disease names — `salmonellosis`,
+ * `listeriosis`, `botulism` — in a sentence that is not hazard education,
+ * recorded read-only from production with its verbatim `summaryText`.
  *
  * Before this correction the bare disease names were alternations inside the
  * `EDUCATION` guard, so `isNonReportProse` removed EVERY sentence naming
@@ -18,6 +19,12 @@
  *      unreachable, because any sentence it could match was filtered first;
  *   3. supplier-chain prose was suppressed for the wrong reason — the word,
  *      not the semantics — so the suppression could not be relied on.
+ *
+ * P2B7L.2 gave `botulism` the same treatment and widened the population from
+ * 19 cases to 29. That is where the last two weaknesses surfaced: the
+ * infant-formula notices state their linked cases as a DISEASE with no illness
+ * word beside it, and one of them was having a subset figure ("For 27 cases
+ * with illness onset information available") quoted back as its illness count.
  *
  * This population is heterogeneous on purpose: counted reports, uncounted
  * reports, explicit denials, supplier-chain prose, hedged linkage and
@@ -71,8 +78,8 @@ const A_REAL_REPORT = 'Illnesses have been reported in connection with these pro
 
 test('the recorded corpus is the whole disease-name population, not a sample', () => {
   assert.equal(CORPUS.cases.length, CORPUS.count);
-  assert.equal(CORPUS.count, 19, 'the population measured read-only on 2026-09-18');
-  assert.equal(new Set(CORPUS.cases.map((c) => c.recallCaseId)).size, 19, 'no duplicates');
+  assert.equal(CORPUS.count, 29, 'the population measured read-only on 2026-09-19');
+  assert.equal(new Set(CORPUS.cases.map((c) => c.recallCaseId)).size, 29, 'no duplicates');
   for (const c of CORPUS.cases) {
     assert.ok(c.summaryText.trim().length > 0, `${label(c)} has recorded prose`);
     assert.ok(
@@ -170,11 +177,11 @@ test('a reported status always names illnesses or people, never only a disease',
     assert.ok(statements.length > 0, `${label(c)} has backing evidence`);
     assert.ok(
       statements.some((s) =>
-        /\b(?:illness(?:es)?|ill\b|sick(?:ened)?|case-patients?|people|persons?|infected)\b/i.test(
+        /\b(?:illness(?:es)?|ill\b|sick(?:ened)?|case-patients?|cases?|people|persons?|individuals?|patients?|infants?|babies|children|consumers?|infected)\b/i.test(
           s,
         ),
       ),
-      `${label(c)} evidence names human harm, not just a disease`,
+      `${label(c)} evidence names human harm or the people it befell, not just a disease`,
     );
   }
 });

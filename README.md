@@ -129,7 +129,7 @@ npm run repair:geography:dry             # applied 2026-09-02 (completed)
 npm run repair:allergens:dry             # applied 2026-09-02 (completed)
 npm run repair:hazards:dry               # P2e-B, applied 2026-09-03 (completed)
 npm run repair:fda-contaminants:dry      # P3B, applied 2026-09-04 (completed)
-npm run repair:illness-flags:dry         # P2B7L, PREPARED — 77 rows measured, not applied
+npm run repair:illness-flags:dry         # P2B7L, PREPARED — 76 rows measured, not applied
 ```
 
 ### Push notifications (Phase C2)
@@ -470,6 +470,44 @@ scope, Spanish records, CPSC/NHTSA, analytics, final visual design. Native
 sharing is deferred on purpose — its founder contract (an HTTPS Lotly
 Universal Link, blocked on the final domain) is in
 [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md) §6.
+
+## Known defects and planned milestones (P2B7M–P2B7O)
+
+Recorded, not implemented. Each is an observed defect with its evidence, not a
+speculative improvement; each needs its own milestone and its own founder
+review. Nothing here is a launch blocker — those live in
+[docs/recall-launch-blockers.md](docs/recall-launch-blockers.md).
+
+- **P2B7M — title-capitalization invariant.** Newly ingested sentence-case
+  titles are escaping display normalization, so the Feed shows titles such as
+  "All purpose flour, bread mix, flat bread pizza mix" and "Whole Nutrition
+  Infant formula 24 oz cans and 0.6 oz packets" beside correctly cased
+  neighbours. The fix must be **deterministic and idempotent** (running it twice
+  changes nothing, and it never re-cases what is already correct), safe for
+  brands, acronyms, product codes and units (`UPC`, `LLC`, `oz`, `mg`, `pH`),
+  and **shared by every surface** — Feed, Saved, Detail, share copy and push
+  copy read one function, the way `cardCategoryLabel` already is, so two screens
+  cannot disagree about the same title.
+
+- **P2B7N — PHA status presentation.** FSIS Public Health Alerts render a grey
+  `UNKNOWN` risk badge beside `PUBLIC HEALTH ALERT`, which says nothing: a PHA
+  has no recall class to be unknown about. The fix hides the unknown risk badge
+  **for PHAs specifically**, on Feed, Saved and Detail, keeps the `PUBLIC HEALTH
+ALERT` label, and must leave no empty gap where the badge was. Unknown risk
+  stays visible for ordinary recalls — this is not a global suppression, and
+  conflating the two would hide a real gap in recall data.
+
+- **P2B7O — search explainability and retailer presentation.** Search returns
+  results whose match is invisible on the card: "Baloian Farms" returns recalls
+  whose displayed company is a different firm, and "Walmart" returns recalls
+  that never visibly mention Walmart. The milestone must first **audit which
+  fields are actually searchable** and separate retailer, supplier, source-text,
+  product, identifier and visible-field matches; confirm whether `retailerNames`
+  or other projected metadata is what produces these hits; then surface enough
+  match context that a result cannot look unrelated to what was typed. It should
+  also revisit how retailers are presented on cards and Detail, comparing
+  alternatives in Design Preview before anything ships — the same way the
+  category tag was settled (P2B7D).
 
 ## Consumer presentation milestones (P3 series) — implemented and shipped
 

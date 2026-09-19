@@ -1,10 +1,11 @@
 /**
- * Record the P2B7L.1 disease-name corpus — READ-ONLY, writes no production row.
+ * Record the disease-name corpus — READ-ONLY, writes no production row.
  *
  *   npx tsx scripts/record-illness-disease-corpus.ts
  *
- * Captures every stored case whose official notice names `salmonellosis` or
- * `listeriosis` in a sentence that is NOT hazard education, into
+ * Captures every stored case whose official notice names one of the contract's
+ * disease names (`salmonellosis`, `listeriosis`, `botulism`) in a sentence that
+ * is NOT hazard education, into
  * src/domain/fixtures/illness-disease-corpus.json, with each notice's verbatim
  * `summaryText`.
  *
@@ -16,6 +17,14 @@
  * that has resulted in eleven illnesses") along with the genuine education.
  * The positive branch that named the diseases was unreachable for the same
  * reason.
+ *
+ * P2B7L.2 added `botulism` to the same treatment and widened this corpus from
+ * 19 cases to 29. Its population is where the last two classifier weaknesses
+ * were found: the ByHeart/Nara infant-formula notices state their linked cases
+ * as a DISEASE with no illness word ("31 infants with suspected or confirmed
+ * infant botulism … have been reported"), and the FDA advisory's "For 27 cases
+ * with illness onset information available" was being quoted as an illness
+ * count for a fact the source never stated it for.
  *
  * The population is heterogeneous by design — genuine counted reports,
  * supplier-chain prose, hedged linkage, explicit denials and education-only
@@ -33,14 +42,19 @@
 import { writeFileSync } from 'node:fs';
 
 import { deriveIllnessStatus, statusReportsIllness } from '../src/domain/illness-status';
-import { isNonReportProse } from '../src/domain/illness';
+import { DISEASE_NAME, isNonReportProse } from '../src/domain/illness';
 import { splitSentences } from '../src/domain/text';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
 
 const FIXTURE = 'src/domain/fixtures/illness-disease-corpus.json';
 
-/** The two disease names that were bare alternations in `EDUCATION`. */
-const DISEASE = /\b(?:salmonellosis|listeriosis)\b/i;
+/**
+ * The disease names, read from the contract itself rather than restated here,
+ * so the recorded population can never drift from the population the
+ * classifier governs. P2B7L.2 added `botulism`, which widened this corpus from
+ * the two P2B7L.1 names to all three.
+ */
+const DISEASE = new RegExp(String.raw`\b${DISEASE_NAME}\b`, 'i');
 
 const flatten = (sentence: string) => sentence.replace(/\s+/g, ' ').trim();
 
@@ -98,11 +112,12 @@ async function main(): Promise<void> {
     JSON.stringify(
       {
         _comment: [
-          'P2B7L.1 disease-name corpus — RECORDED FROM LIVE PRODUCTION, read-only, 2026-09-18.',
-          "Every stored case naming 'salmonellosis' or 'listeriosis' in a sentence that is NOT",
-          'hazard education. Before P2B7L.1 the bare disease names sat in the EDUCATION guard, so',
-          'every sentence naming either disease was inert and the positive branch that named them',
-          'was unreachable; 8 cases classified differently as a result.',
+          'Disease-name corpus — RECORDED FROM LIVE PRODUCTION, read-only.',
+          "Every stored case naming 'salmonellosis', 'listeriosis' or 'botulism' in a sentence",
+          'that is NOT hazard education. Before P2B7L.1 the bare disease names sat in the EDUCATION',
+          'guard, so every sentence naming either of the first two was inert and the positive branch',
+          'that named them was unreachable; 8 cases classified differently as a result. P2B7L.2 gave',
+          'botulism the same treatment and widened the population from 19 cases to 29.',
           'kind / illnesses / reportsIllness are a regression pin: the test derives fresh from',
           'summaryText and asserts it gets these back.',
           'Never hand-edit: re-record with scripts/record-illness-disease-corpus.ts.',

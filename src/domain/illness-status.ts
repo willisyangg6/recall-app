@@ -42,7 +42,7 @@
  */
 
 import { splitSentences } from './text';
-import { isNonReportProse } from './illness';
+import { DISEASE_NAME, isNonReportProse } from './illness';
 
 export type IllnessStatusKind =
   'reported_count' | 'reported_unspecified' | 'explicit_none' | 'unknown';
@@ -130,7 +130,54 @@ const ILLNESS_COUNT: RegExp[] = [
   ),
   new RegExp(String.raw`\b${NUM}\b\s+sick\s+(?:people|persons?|individuals?)\b`, 'gi'),
   new RegExp(String.raw`\b${NUM}\b\s+cases?\s+of\s+illness\b`, 'gi'),
+  // "3 cases of infant botulism", "nine cases of salmonellosis" — a count of
+  // NAMED-DISEASE cases is a count of illnesses (P2B7L.2). Whether those
+  // illnesses belong to THIS recall is a separate question, settled by
+  // attribution below, so this pattern may safely read the figure.
+  new RegExp(
+    String.raw`\b${NUM}\b\s+(?:\w+\s+){0,2}?cases?\s+of\s+(?:\w+\s+){0,2}?${DISEASE_NAME}\b`,
+    'gi',
+  ),
 ];
+
+/**
+ * A figure that counts the records for which some DATUM IS KNOWN, not the
+ * illnesses themselves.
+ *
+ * The FDA outbreak advisory for the ByHeart infant-formula recall states three
+ * of these in two sentences:
+ *
+ *   "For 27 cases with illness ONSET INFORMATION AVAILABLE, illnesses started
+ *    on dates ranging from August 9 to November 13, 2025."
+ *   "For 23 infants with age and 24 infants with sex INFORMATION AVAILABLE…"
+ *
+ * The outbreak's own size in that notice is 31. `27` is the subset whose onset
+ * date the investigators happen to hold, and displaying "27 illnesses reported"
+ * quotes a real number of the source's against a fact it was never stated for —
+ * the same class of error as reading a year as a count, and guarded the same
+ * way.
+ */
+const AVAILABILITY_SUBSET =
+  /\b(?:information|data)\s+(?:is\s+|was\s+|are\s+)?available\b|\bavailable\s+(?:\w+\s+){0,2}?(?:information|data)\b|\bfor\s+whom\s+data\b/i;
+
+/** How far past a figure the availability qualifier may sit and still disown it. */
+const AVAILABILITY_REACH = 60;
+
+/**
+ * A figure counting how many of the case-patients suffered a FURTHER harm —
+ * "1 case-patient WAS HOSPITALIZED", "2 case-patients died". It counts a subset
+ * of the illnesses, never the illnesses.
+ *
+ * Narrow on purpose. "9 illnesses, 8 hospitalizations, and 1 death" must keep
+ * its 9: there the hospitalizations are a separate figure beside the illness
+ * count, not a predicate on it. Only a number whose own noun phrase is the
+ * SUBJECT of the further-harm verb is disowned.
+ */
+const FURTHER_HARM_SUBSET =
+  /^\s*(?:\w+[-\s]){0,3}?(?:was|were|has been|have been)\s+(?:hospitali[sz]|died|hospitalized)/i;
+
+/** How far past a figure its own verb may sit. */
+const SUBSET_VERB_REACH = 40;
 
 /**
  * One unambiguous count, or null. Two different numbers for the same fact
@@ -142,15 +189,40 @@ function countIn(text: string, patterns: RegExp[]): number | null {
   for (const pattern of patterns) {
     for (const match of text.matchAll(pattern)) {
       const value = numberFrom(match[1]);
-      if (value !== null) found.add(value);
+      if (value === null) continue;
+      // The figure counts records with a datum available, not illnesses.
+      const trailing = text.slice(match.index, match.index + match[0].length + AVAILABILITY_REACH);
+      if (AVAILABILITY_SUBSET.test(trailing)) continue;
+      // The figure counts which of the case-patients were hospitalized or died.
+      const after = text.slice(
+        match.index + match[0].length,
+        match.index + match[0].length + SUBSET_VERB_REACH,
+      );
+      if (FURTHER_HARM_SUBSET.test(after)) continue;
+      found.add(value);
     }
   }
   return found.size === 1 ? [...found][0] : null;
 }
 
-/** "approximately 470 reports", "about 12 illnesses", "at least 9 illnesses". */
-const APPROXIMATE =
-  /\b(?:approximately|about|around|at least|more than|over|nearly|roughly|some)\s+(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)/i;
+/** "approximately 470 reports", "at least 9 illnesses" — unambiguous hedges. */
+const APPROXIMATE_HEDGE =
+  /\b(?:approximately|around|at least|more than|over|nearly|roughly|some)\s+(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)/i;
+
+/**
+ * "about 12 illnesses" hedges a quantity. "provided information ABOUT 3 cases
+ * of infant botulism" does not — there `about` is the preposition, and the
+ * source states exactly three. Reading it as a hedge printed "Approximately 3
+ * illnesses reported" over the Nara Organics notice (P2B7L.2), which is the app
+ * adding uncertainty the source did not express.
+ */
+const APPROXIMATE_ABOUT =
+  /(?<!\b(?:information|informed|informing|notified|notify|notice|notices|details?|data|reports?|reported|reporting|learned|told|concerns?|questions?|complaints?|inquir(?:y|ies))\s)\babout\s+(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)/i;
+
+/** Did the source qualify its own figure? */
+function isApproximate(text: string): boolean {
+  return APPROXIMATE_HEDGE.test(text) || APPROXIMATE_ABOUT.test(text);
+}
 
 /**
  * Two harm families joined in one phrase — "illness or adverse reactions",
@@ -175,11 +247,20 @@ const JOINED_HARMS =
  * accepts `not`/`never` as well as a standalone `no`, so "has not received
  * reports of illnesses" is a denial rather than a report.
  *
+ * `neither` was added in P2B7L.2, off the repair dry run. Four live cases read
+ * as REPORTS over a notice that denies illnesses outright — "Neither FSIS nor
+ * the company received any reports of illnesses associated with consumption of
+ * this product" — because `neither` is not `no`, `not`, `never` or `without`,
+ * so the denial guard let the sentence through and the verb-leading assertion
+ * pattern ("received … reports of … illness") then matched it word for word.
+ * That is the §3.2 class: the app asserting the inverse of the official notice,
+ * and the prepared repair was about to write it into storage.
+ *
  * "no other/additional/further" is excluded here, and only here, so the
  * qualifier disqualifies its OWN denial and not every denial beside it in the
  * same sentence.
  */
-const DENIAL_LEAD = String.raw`(?:\bno\b(?!\s+(?:other|additional|further)\b)|\bnot\b|\bnever\b|\bwithout\b)`;
+const DENIAL_LEAD = String.raw`(?:\bno\b(?!\s+(?:other|additional|further)\b)|\bnot\b|\bnever\b|\bwithout\b|\bneither\b)`;
 
 const DENIES_ILLNESS = new RegExp(
   String.raw`${DENIAL_LEAD}[^.]{0,80}?\b(?:illness(?:es)?|sickness(?:es)?|sickened|ill\b)`,
@@ -240,6 +321,13 @@ function qualifierEstablishesNothing(sentence: string): boolean {
  * supplier-chain wording where the recall's own cause is an outbreak already
  * reported ("associated with reported salmonellosis illnesses").
  */
+/**
+ * Nouns that name HUMAN BEINGS (or the case records that stand for them). Used
+ * to decide whether a sentence reports people rather than describing a product
+ * or a pathogen — the thing that makes a report a report.
+ */
+const PEOPLE = String.raw`(?:case-patients?|cases?|people|persons?|individuals?|patients?|infants?|babies|children|consumers?|customers?)`;
+
 const ASSERTS_ILLNESS: RegExp[] = [
   /\b(?:illness(?:es)?|sick people|case-patients?)\b[^.]{0,60}\b(?:have|has) been (?:reported|confirmed|identified|received)/i,
   /\b(?:several|multiple|numerous)\s+(?:\w+\s+){0,2}?illness(?:es)?\b/i,
@@ -250,6 +338,21 @@ const ASSERTS_ILLNESS: RegExp[] = [
   // shape ("has NOT received reports of illnesses") is rejected before this is
   // reached, by `DENIES_ILLNESS` in `assertsIllness`.
   /\b(?:receives?d?|there (?:have|has) been)\b[^.]{0,40}\breports?\s+of\b[^.]{0,30}\b(?:illness(?:es)?|sick)/i,
+  // People, the named disease, and the agency's verb of record — the shape
+  // the FDA outbreak advisories use when they never write "illness" at all
+  // (P2B7L.2):
+  //
+  //   "a total of 31 infants with suspected or confirmed INFANT BOTULISM and
+  //    confirmed exposure to ByHeart Whole Nutrition infant formula (various
+  //    lots) HAVE BEEN REPORTED from 15 states"
+  //
+  // It needs all three parts. A disease name beside a verb of record but no
+  // people ("Uneviscerated fish have been linked to outbreaks of botulism
+  // poisoning") is a statement about a food, and stays inert.
+  new RegExp(
+    String.raw`\b${PEOPLE}\b[^.]{0,60}?\b${DISEASE_NAME}\b[^.]{0,120}?\b(?:have|has)\s+been\s+(?:reported|confirmed|identified)\b`,
+    'i',
+  ),
 ];
 
 /**
@@ -324,8 +427,10 @@ const SUPPLIER_CHAIN =
  * the sentence reports PEOPLE, which is the thing that makes a report a
  * report.
  */
-const DIRECT_VICTIM =
-  /\b(?:case-patients?|people|persons?|individuals?|consumers?|patients?)\b[^.]{0,80}?\b(?:consumed|ate|became ill|fell ill|were sickened|sickened|reported (?:eating|consuming))/i;
+const DIRECT_VICTIM = new RegExp(
+  String.raw`\b${PEOPLE}\b[^.]{0,80}?\b(?:consumed|ate|became ill|fell ill|were sickened|sickened|reported (?:eating|consuming))`,
+  'i',
+);
 
 /**
  * A count this sentence attaches to illness AND another harm at once, so the
@@ -337,26 +442,154 @@ function sharesFigureWithOtherHarm(sentence: string): boolean {
   return JOINED_HARMS.test(sentence) && countIn(sentence, ILLNESS_COUNT) !== null;
 }
 
+// ── Attribution: whose illnesses are these? ─────────────────────────────────
+
 /**
- * Does this sentence attribute its illnesses somewhere other than THIS recall,
- * or hedge the attribution itself? Either way it establishes nothing here.
+ * The notice itself says the link between the product and the cases HAS NOT
+ * BEEN ESTABLISHED.
  *
- * Applied to assertion only, never to denial: a notice that denies illnesses
- * for its own product is still denying them however it describes its supply
- * chain, and losing that denial would turn an `explicit_none` into silence.
+ *   "The FDA HAS NOT IDENTIFIED A DIRECT LINK between any infant formula and
+ *    these cases and there is no historical precedent of infant formula
+ *    causing infant botulism."
+ *
+ * This is the founder's rule for the ByHeart shape: an investigation exists,
+ * cases exist, exposure exists, and the authority explicitly declines to
+ * connect them. `unknown` is the state for that — NOT `explicit_none`. A
+ * linkage denial denies a LINK, not an illness, and a notice that says nobody
+ * has tied these cases to the product has not said the product caused none.
+ * `deniesIllness` refuses it for exactly that reason.
+ *
+ * It is read over the WHOLE notice, not a window, because it is a statement
+ * about the investigation rather than about the sentence beside it — and
+ * because the ByHeart notice states it both before and after the case count,
+ * which is precisely the order-dependence this milestone removes.
  */
-function attributesIllnessElsewhere(sentence: string): boolean {
-  if (DIRECT_VICTIM.test(sentence)) return false;
-  return HEDGED_LINKAGE.test(sentence) || SUPPLIER_CHAIN.test(sentence);
+const LINKAGE_DENIAL =
+  /\b(?:has|have|had)\s+not\s+(?:yet\s+)?(?:been\s+)?(?:identified|established|found|determined|confirmed|linked)\b[^.]{0,60}?\b(?:link|linked|association|associated|connection)\b|\bno\s+(?:direct\s+|confirmed\s+|established\s+)?link\b/i;
+
+/**
+ * People are stated to have been EXPOSED to the recalled product — weaker than
+ * having fallen ill from it, stronger than sharing a country with an outbreak.
+ *
+ *   "31 infants with suspected or confirmed infant botulism and CONFIRMED
+ *    EXPOSURE TO ByHeart Whole Nutrition infant formula"
+ *
+ * Exposure ties the people to this product, so it is own evidence — unless the
+ * notice carries a linkage denial, which is the authority saying that exposure
+ * is exactly what has NOT been shown to explain the illnesses. That single
+ * distinction is what separates the two live ByHeart notices: the November 7
+ * one pairs "13 infants received ByHeart formula at some point" with the FDA's
+ * no-direct-link statement and establishes nothing; the November 19 one drops
+ * the disclaimer and writes "confirmed exposure", and reports.
+ */
+const EXPOSURE_ANCHOR = /\b(?:confirmed\s+|documented\s+|reported\s+)?exposure\s+to\b/i;
+
+/**
+ * The sentence ties the illnesses to THIS recall in its own words. Outranks
+ * every frame above, including a linkage denial elsewhere in the notice: a
+ * notice that explicitly links illnesses to its own product has reported them
+ * whatever else it says.
+ */
+const OWN_LINKAGE =
+  /\b(?:linked to|associated with|attributed to|traced (?:back )?to|in connection with)\b[^.]{0,80}?\b(?:this|these|the recalled|the affected|our)\b|\bconsumption of\s+(?:these|this|the recalled|the affected)\b/i;
+
+/**
+ * The sentence scopes its cases to the COUNTRY rather than to this recall —
+ * the outbreak the notice is reporting about, not the outbreak it is reporting.
+ *
+ *   "an estimated 83 cases of infant botulism that were reported NATIONWIDE
+ *    since August 2025"
+ *
+ * Read against the SENTENCE, never the framing window, and deliberately narrow.
+ * "multistate outbreak" is not here: FSIS and FDA describe a recall's OWN
+ * outbreak that way in the very sentence that counts its illnesses ("a
+ * multistate outbreak of 28 Salmonella Hadar illnesses in 12 states"), and
+ * "distributed nationwide" is ordinary distribution prose. Tested over the
+ * whole 1,931-case table, no notice backs an illness status with a sentence
+ * containing `nationwide`, so this costs nothing and closes the shape where a
+ * national case count would otherwise be adopted as this product's.
+ */
+const NATIONAL_SCOPE = /\bnation(?:wide|ally)\b/i;
+
+/** Where a sentence's illnesses belong. */
+type Provenance = 'own' | 'elsewhere';
+
+/**
+ * A sentence that cannot stand on its own — the fragment a punctuation split
+ * leaves behind.
+ *
+ * A well-formed sentence in this corpus opens with a capitalised subject
+ * ("Twelve illnesses and one death have been reported to date", "Based on
+ * epidemiological investigation, one case-patient has been identified"). A
+ * fragment opens lowercase, or with a relative pronoun or a bare conjunction,
+ * because the clause it belongs to is upstream.
+ *
+ * That difference is the whole segmentation fix. Framing reaches forward across
+ * a split ONLY into a continuation, so recombining the halves and leaving them
+ * apart give the same reading, while a self-contained report standing next to
+ * unrelated supplier prose keeps its own subject.
+ *
+ * Measured: a purely positional window (any preceding sentence frames the next)
+ * silenced seven genuine reports in the live corpus, among them "Twelve
+ * illnesses and one death have been reported to date", which merely happened to
+ * follow a sentence naming the firm's supplier. Adjacency is not framing.
+ */
+const CONTINUATION_LOWERCASE = /^[a-z]/;
+const CONTINUATION_WORD = /^(?:which|who|whom|whose|that|and|but|or|nor)\b/i;
+
+function isContinuation(sentence: string): boolean {
+  return CONTINUATION_LOWERCASE.test(sentence) || CONTINUATION_WORD.test(sentence);
 }
 
-/** Does this sentence positively assert an illness (as opposed to denying one)? */
+/**
+ * The candidate sentence, prefixed by the clause it was split out of.
+ *
+ * Walks back through consecutive continuations, so a clause broken into three
+ * pieces is reassembled as surely as one broken into two, with no window size
+ * to tune.
+ */
+function framingContext(sentences: readonly string[], index: number): string {
+  let start = index;
+  while (start > 0 && isContinuation(sentences[start])) start -= 1;
+  return sentences.slice(start, index + 1).join(' ');
+}
+
+/**
+ * Whose illnesses a sentence is reporting.
+ *
+ * Attribution is a property of the EVIDENCE, not a tie-break between rival
+ * answers. Evidence attributed elsewhere is discarded rather than outranked, so
+ * a supplier's outbreak cannot beat the recalling firm's own denial — and,
+ * equally, a denial never beats an own-product report, which is what keeps "we
+ * reported 9 illnesses; no additional illnesses since" positive.
+ */
+function provenanceOf(sentence: string, frame: string, noticeDeniesLinkage: boolean): Provenance {
+  // People who ate the product or fell ill from it, or an explicit link the
+  // notice draws itself. Nothing downgrades these.
+  if (DIRECT_VICTIM.test(sentence) || OWN_LINKAGE.test(sentence)) return 'own';
+  // The authority says the link is not established: exposure and background
+  // both stop being this recall's evidence.
+  if (noticeDeniesLinkage) return 'elsewhere';
+  if (EXPOSURE_ANCHOR.test(sentence)) return 'own';
+  // Cases counted for the country, with nothing tying them to this product.
+  if (NATIONAL_SCOPE.test(sentence)) return 'elsewhere';
+  if (SUPPLIER_CHAIN.test(frame) || HEDGED_LINKAGE.test(frame)) return 'elsewhere';
+  return 'own';
+}
+
+/**
+ * Does this sentence positively assert an illness (as opposed to denying one)?
+ *
+ * Attribution is NOT asked here any more (P2B7L.2). This predicate answers only
+ * "is this a positive illness statement?", and `provenanceOf` separately answers
+ * "about whom?". Keeping them apart is what makes the evidence orderable by
+ * subject instead of by position.
+ */
 function assertsIllness(sentence: string): boolean {
   if (sharesFigureWithOtherHarm(sentence)) return false;
-  // The illnesses belong to a supplier's product, or the link to this one is
-  // hedged (P2B7L.1). Checked before the count reader below, so a figure that
-  // counts the SUPPLIER's outbreak is not adopted as this recall's own.
-  if (attributesIllnessElsewhere(sentence)) return false;
+  // A linkage denial is a statement about what has NOT been shown. It asserts
+  // nothing, and (see `deniesIllness`) it denies nothing either.
+  if (LINKAGE_DENIAL.test(sentence)) return false;
   // A qualified none with no figure of its own asserts nothing (P2B7L). This
   // must come before ASSERTS_ILLNESS below, whose verb-leading pattern
   // ("...has received ... reports of ... illness") matches the FSIS closure
@@ -383,6 +616,11 @@ function deniesIllness(sentence: string): boolean {
   // is not a denial either, whether or not it carries a figure.
   if (QUALIFIED_NONE_ILLNESS.test(sentence)) return false;
   if (sharesFigureWithOtherHarm(sentence)) return false;
+  // "The FDA has not identified a direct link between any infant formula and
+  // these cases" denies a LINK, not an illness. Reading it as a denial would
+  // print "No illnesses reported" over an active outbreak investigation
+  // (founder decision, P2B7L.2).
+  if (LINKAGE_DENIAL.test(sentence)) return false;
   return DENIES_ILLNESS.test(sentence);
 }
 
@@ -392,29 +630,64 @@ function deniesIllness(sentence: string): boolean {
  * Used only to find the sentences worth reading. A sentence that mentions an
  * injury or an adverse reaction is examined and then, correctly, produces no
  * illness status; that is different from never looking at it.
+ *
+ * Disease NAMES were added in P2B7L.2 and are eligibility only. The FDA states
+ * the infant-formula outbreak's linked cases without ever writing "illness" —
+ * "31 infants with suspected or confirmed infant botulism … have been reported"
+ * — so gating on the generic harm words alone made the report unreadable.
+ * Becoming eligible means only that a sentence is LOOKED AT; education,
+ * attribution and denial all still decide what it establishes.
  */
-const MENTIONS_HARM =
-  /\b(?:illness(?:es)?|ill|sick(?:ened)?|case-patients?|infected|adverse (?:reactions?|events?|health events?|health effects?)|allergic reactions?|injur(?:y|ies)|hospitali[sz]\w*|deaths?|fatalit(?:y|ies))\b/i;
+const MENTIONS_HARM = new RegExp(
+  String.raw`\b(?:illness(?:es)?|ill|sick(?:ened)?|case-patients?|infected|adverse (?:reactions?|events?|health events?|health effects?)|allergic reactions?|injur(?:y|ies)|hospitali[sz]\w*|deaths?|fatalit(?:y|ies)|` +
+    DISEASE_NAME +
+    String.raw`)\b`,
+  'i',
+);
 
 // ── Derivation ──────────────────────────────────────────────────────────────
 
 /**
  * Derive the illness status of ONE notice from its summary prose.
  *
- * The exclusion of advice, hazard education and discovery prose is shared
- * with `domain/illness.ts` (`isNonReportProse`), so "Salmonella can cause
- * serious illness" cannot become a report in one module and education in the
- * other.
+ * Three passes, in this order and for this reason:
+ *
+ *   1. ELIGIBILITY — advice, hazard education and discovery prose are dropped,
+ *      through the predicate shared with `domain/illness.ts`, so "Salmonella
+ *      can cause serious illness" cannot become a report in one module and
+ *      education in the other.
+ *   2. ATTRIBUTION — each surviving positive statement is assigned to this
+ *      recall or to somewhere else, from the framing its neighbourhood
+ *      establishes. Evidence attributed elsewhere is DISCARDED here, not
+ *      weighed later.
+ *   3. RESOLUTION — an own-product report wins; otherwise an own-product
+ *      denial; otherwise nothing is known.
+ *
+ * Because attribution happens before resolution, the answer does not depend on
+ * which statement came first, and — because framing reaches across sentence
+ * boundaries — it does not depend on how the prose was punctuated either.
  */
 export function deriveIllnessStatus(summaryText: string | null): IllnessStatus {
   if (!summaryText) return UNKNOWN;
 
-  const eligible = splitSentences(summaryText).filter(
-    (sentence) => !isNonReportProse(sentence) && MENTIONS_HARM.test(sentence),
-  );
+  const sentences = splitSentences(summaryText);
+  const eligible: { sentence: string; frame: string }[] = [];
+  for (const [index, sentence] of sentences.entries()) {
+    if (isNonReportProse(sentence) || !MENTIONS_HARM.test(sentence)) continue;
+    eligible.push({ sentence, frame: framingContext(sentences, index) });
+  }
   if (eligible.length === 0) return UNKNOWN;
 
-  const asserted = eligible.filter(assertsIllness);
+  // A statement about what the investigation has NOT shown, made anywhere in
+  // the notice. Read whole-notice on purpose: it is not a property of its
+  // neighbours, and the notice that motivated it states it on both sides of
+  // the evidence.
+  const noticeDeniesLinkage = sentences.some((sentence) => LINKAGE_DENIAL.test(sentence));
+
+  const asserted = eligible
+    .filter(({ sentence }) => assertsIllness(sentence))
+    .filter(({ sentence, frame }) => provenanceOf(sentence, frame, noticeDeniesLinkage) === 'own')
+    .map(({ sentence }) => sentence);
 
   if (asserted.length > 0) {
     const text = asserted.join(' ');
@@ -424,12 +697,18 @@ export function deriveIllnessStatus(summaryText: string | null): IllnessStatus {
     return {
       kind: count === null ? 'reported_unspecified' : 'reported_count',
       illnesses: count,
-      approximate: count !== null && APPROXIMATE.test(text),
+      approximate: count !== null && isApproximate(text),
       statements: asserted.slice(0, 3),
     };
   }
 
-  const denials = eligible.filter(deniesIllness);
+  // Denials are never re-attributed. A firm that denies illnesses for its own
+  // product is denying them however it describes its supply chain, and losing
+  // that denial would turn an `explicit_none` into silence — the opposite of
+  // the conservative direction.
+  const denials = eligible
+    .filter(({ sentence }) => deniesIllness(sentence))
+    .map(({ sentence }) => sentence);
   if (denials.length > 0) {
     return {
       kind: 'explicit_none',

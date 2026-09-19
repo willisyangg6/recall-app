@@ -674,18 +674,37 @@ test('the disease-named positive branch is reachable at all', () => {
   }
 });
 
-test('but the disease name still needs human harm beside it — a boundary, on purpose', () => {
-  // Eligibility is gated on a HARM word (`MENTIONS_HARM`), and the disease
-  // names are deliberately not in it: a sentence naming only the disease is
-  // never enough on its own. Both of these are conservative misses, and both
-  // render nothing rather than guessing — no notice in the live corpus states
-  // its illnesses this way and nothing is lost today.
-  for (const missed of [
-    'The products were linked to reported listeriosis among consumers in several states.',
-    'Nine cases of salmonellosis have been reported in connection with this product.',
+test('and P2B7L.2 closes the boundary: a disease name alone is enough to be READ', () => {
+  // P2B7L.1 left `MENTIONS_HARM` without the disease names, so a sentence that
+  // stated its illnesses only as a named disease was never even looked at. That
+  // was recorded as a conservative miss costing nothing, because no notice in
+  // the corpus then stated its illnesses that way.
+  //
+  // The infant-formula recalls do exactly that — "a total of 31 infants with
+  // suspected or confirmed INFANT BOTULISM … have been reported" never uses the
+  // word "illness" — so the boundary started costing real reports and is closed.
+  // Eligibility is not evidence: it means only that the sentence is read.
+  assert.equal(
+    deriveIllnessStatus(
+      'The products were linked to reported listeriosis among consumers in several states.',
+    ).kind,
+    'reported_unspecified',
+  );
+  assert.equal(
+    textOf('Nine cases of salmonellosis have been reported in connection with this product.'),
+    '9 illnesses reported',
+  );
+
+  // What became eligible did NOT become positive. Each of these is read now and
+  // still establishes nothing.
+  for (const inert of [
+    'Botulism is a potentially fatal form of food poisoning.',
+    'Symptoms of botulism include dizziness, blurred or double vision, and trouble with speaking or swallowing.',
+    'Uneviscerated fish have been linked to outbreaks of botulism poisoning.',
+    'Salmonellosis usually lasts four to seven days.',
   ]) {
-    assert.equal(deriveIllnessStatus(missed).kind, 'unknown', missed);
-    assert.equal(copyOf(missed), null, missed);
+    assert.equal(deriveIllnessStatus(inert).kind, 'unknown', inert);
+    assert.equal(copyOf(inert), null, inert);
   }
 });
 
@@ -778,4 +797,323 @@ test('MUTATION: the education/report distinction is load-bearing in both directi
     'reported_count',
   );
   assert.equal(deriveIllnessStatus('It is treated with antibiotics.').kind, 'unknown');
+});
+
+// ── P2B7L.2: botulism, and evidence that survives re-punctuation ────────────
+//
+// Every sentence below is copied verbatim from a live case's projected summary
+// prose. The case id is named so a disagreement can be taken back to the
+// source. See docs/recall-illness-status.md §4.5 for the population these were
+// drawn from and §4.6 for the segmentation rule.
+
+/** The whole notice, re-punctuated without changing a word. */
+const RESEGMENT: [string, (text: string) => string][] = [
+  ['split at ", which"', (t) => t.replace(/,\s+which\s+/g, '. which ')],
+  ['split at ", which" capitalised', (t) => t.replace(/,\s+which\s+/g, '. Which ')],
+  ['split at ", and"', (t) => t.replace(/,\s+and\s+/g, '. and ')],
+  ['semicolons become periods', (t) => t.replace(/;\s+/g, '. ')],
+  ['periods become semicolons', (t) => t.replace(/\.\s+(?=[a-z])/g, '; ')],
+];
+
+/** Assert a notice reads the same however its clauses are punctuated. */
+function assertSegmentationInvariant(notice: string, expected: string): void {
+  const base = deriveIllnessStatus(notice);
+  assert.equal(`${base.kind}/${base.illnesses}`, expected, 'as published');
+  for (const [label, mutate] of RESEGMENT) {
+    const got = deriveIllnessStatus(mutate(notice));
+    assert.equal(`${got.kind}/${got.illnesses}`, expected, label);
+  }
+}
+
+// ── Botulism: the seven shapes the live corpus actually publishes ───────────
+
+test('botulism education is inert — the seriousness of the disease proves nothing', () => {
+  // `decd41aa`, `815dc152`, `55ee81ad` all carry this sentence; twenty more
+  // cases carry the "potentially fatal form of food poisoning" variant.
+  for (const education of [
+    'Infant botulism is a rare but potentially fatal illness that presents a serious threat to the health of infants which occurs when Clostridium botulinum spores are ingested and colonize the intestinal tract, producing botulinum neurotoxins in the immature gut of infants.',
+    'Botulism is extremely uncommon in dairy products or infant formula, and is naturally occurring in environmental sources like soil, select vegetables, and dust.',
+    'Botulism , a potentially fatal form of food poisoning, can cause the following symptoms: general weakness, dizziness, double-vision and trouble with speaking or swallowing.',
+    'Clostridium botulinum is a bacterium which can cause life- threatening illness or death.',
+  ]) {
+    assert.equal(deriveIllnessStatus(education).kind, 'unknown', education);
+    assert.equal(copyOf(education), null, education);
+  }
+});
+
+test('a contamination risk is a statement about the product, not about anyone', () => {
+  // The dominant botulism shape: twenty live cases recall a food because it
+  // COULD carry the organism. Nobody is said to be ill, and nobody is said not
+  // to be. `Clostridium botulinum` names the organism and is deliberately not a
+  // disease name.
+  for (const risk of [
+    'Tops Friendly Markets of Williamsville, NY is recalling all codes of Christopher Ranch Peeled Garlic and Garland Peeled Garlic because it has the potential to be contaminated with Clostridium botulinum due to the product being kept at insufficient temperatures.',
+    'The sale of uneviscerated fish is prohibited under New York State Agriculture and Markets regulations because Clostridium botulinum spores are more likely to be concentrated in the viscera than any other portion of the fish.',
+  ]) {
+    assert.equal(deriveIllnessStatus(risk).kind, 'unknown', risk);
+  }
+});
+
+test('an investigation existing is not an illness report', () => {
+  // `815dc152` and `55ee81ad`. An outbreak being investigated says that a
+  // question is open, not that this recall answered it.
+  for (const investigation of [
+    'The FDA has an ongoing investigation of infant botulism among babies in the U.S.',
+    'FDA and CDC, in collaboration with the California Department of Public Health (CDPH), Infant Botulism Treatment and Prevention Program (IBTPP), and other state and local partners, continue to investigate a multistate outbreak of infant botulism.',
+    'The recall was initiated in response to an ongoing investigation into a recent outbreak of infant botulism and since then Clostridium botulinum was identified by ByHeart in some samples of its formula.',
+  ]) {
+    assert.equal(deriveIllnessStatus(investigation).kind, 'unknown', investigation);
+  }
+});
+
+test('"has not identified a direct link" is unknown — never a denial', () => {
+  // `815dc152`. The FDA declining to connect the cases to the product is not
+  // the firm saying nobody fell ill, so it must not print "No illnesses
+  // reported"; and it is not a report either.
+  const status = deriveIllnessStatus(
+    'The FDA has not identified a direct link between any infant formula and these cases and there is no historical precedent of infant formula causing infant botulism.',
+  );
+  assert.equal(status.kind, 'unknown');
+  assert.equal(illnessNoticeCopy(status), null);
+});
+
+test('ByHeart, November 7: cases, exposure, and an explicit no-direct-link — unknown', () => {
+  // `815dc152`, verbatim and in the source's own order. 83 cases exist
+  // nationwide; 13 infants had the formula "at some point"; the FDA says the
+  // link is not established. Exposure is not causation, so nothing is reported.
+  const notice =
+    'ByHeart was notified by the FDA on November 7, 2025 of an estimated 83 cases of infant botulism that were reported nationwide since August 2025. ' +
+    'Of these, the FDA also noted that 13 infants received ByHeart formula at some point. ' +
+    'The FDA has not identified a direct link between any infant formula and these cases and there is no historical precedent of infant formula causing infant botulism.';
+  assertSegmentationInvariant(notice, 'unknown/null');
+  assert.equal(copyOf(notice), null);
+
+  // The disclaimer is what holds it. Remove it and the exposure sentence still
+  // establishes nothing on its own, because exposure is not illness.
+  assert.equal(
+    deriveIllnessStatus(
+      'Of these, the FDA also noted that 13 infants received ByHeart formula at some point.',
+    ).kind,
+    'unknown',
+  );
+});
+
+test('ByHeart, November 19: linked cases, and no count the source states for them', () => {
+  // `55ee81ad`. The update drops the no-direct-link disclaimer and writes
+  // CONFIRMED EXPOSURE, so the cases are this recall's and it reports them.
+  //
+  // It reports no trustworthy COUNT. 31 is "suspected or confirmed"; 27 is the
+  // subset whose onset date is known. Neither is "31 illnesses", so the notice
+  // says illnesses were reported and declines to put a number on them.
+  const notice =
+    'As of November 19, 2025, a total of 31 infants with suspected or confirmed infant botulism and confirmed exposure to ByHeart Whole Nutrition infant formula (various lots) have been reported from 15 states (see map). ' +
+    'Laboratory confirmation for some cases is ongoing. ' +
+    'For 27 cases with illness onset information available, illnesses started on dates ranging from August 9 to November 13, 2025. ' +
+    'All 31 infants were hospitalized. No deaths have been reported to date.';
+  assertSegmentationInvariant(notice, 'reported_unspecified/null');
+  assert.equal(textOf(notice), 'Illnesses reported');
+
+  // 27 is never printed. It is the source's number for a different fact.
+  assert.notEqual(textOf(notice), '27 illnesses reported');
+  // And the deaths-only denial beside it does not become an illness denial.
+  assert.equal(deriveIllnessStatus('No deaths have been reported to date.').kind, 'unknown');
+});
+
+test('Nara Organics: three cases, explicitly linked by consumption — a counted report', () => {
+  // `decd41aa`. The CDC reports three infants with infant botulism who CONSUMED
+  // the recalled formula. That is people, an illness, and an explicit link to
+  // this product, which is the whole positive test.
+  const notice =
+    'The Food and Drug Administration (FDA) and Center for Disease Control (CDC) contacted Nara Organics late Friday, June 12, 2026, and provided information about 3 cases of infant botulism in infants who CDC reported had consumed Nara formula. ' +
+    'The 3 infants were hospitalized and treated with BabyBIG (Botulism Immune Globulin Intravenous) in California, Washington, and Pennsylvania. ' +
+    'There are no reported deaths. ' +
+    'To date, Nara infant formula has not tested positive for C. botulinum.';
+  assertSegmentationInvariant(notice, 'reported_count/3');
+  assert.equal(textOf(notice), '3 illnesses reported');
+
+  // "information ABOUT 3 cases" is the preposition, not a hedge. The source
+  // states exactly three, so the app must not say "approximately".
+  assert.equal(deriveIllnessStatus(notice).approximate, false);
+
+  // A negative TEST result is not a denial of illness — the notice reports
+  // three while its own product has not tested positive.
+  assert.equal(
+    deriveIllnessStatus('To date, Nara infant formula has not tested positive for C. botulinum.')
+      .kind,
+    'unknown',
+  );
+});
+
+test('MUTATION: remove the linkage from Nara and the report goes quiet', () => {
+  const linked =
+    'FDA and CDC provided information about 3 cases of infant botulism in infants who CDC reported had consumed Nara formula.';
+  assert.equal(deriveIllnessStatus(linked).kind, 'reported_count');
+
+  // Same three cases, no statement that anyone consumed the product.
+  const unlinked = 'FDA and CDC provided information about 3 cases of infant botulism nationwide.';
+  assert.equal(deriveIllnessStatus(unlinked).kind, 'unknown');
+
+  // Same three cases, the link hedged rather than stated.
+  const hedged =
+    'FDA and CDC provided information about 3 cases of infant botulism that may be associated with Nara formula.';
+  assert.equal(deriveIllnessStatus(hedged).kind, 'unknown');
+
+  // And a genuine explicit count, explicitly linked, is heard.
+  assert.equal(
+    textOf('Nine illnesses have been reported in connection with the recalled formula.'),
+    '9 illnesses reported',
+  );
+});
+
+test('an explicit denial about the recalled product is explicit_none, botulism or not', () => {
+  const notice =
+    'Tops Friendly Markets is recalling all codes of Christopher Ranch Peeled Garlic because it has the potential to be contaminated with Clostridium botulinum. ' +
+    'Botulism , a potentially fatal form of food poisoning, can cause the following symptoms: general weakness, dizziness, double-vision and trouble with speaking or swallowing. ' +
+    'No illnesses have been reported to date.';
+  assertSegmentationInvariant(notice, 'explicit_none/null');
+  assert.equal(textOf(notice), 'No illnesses reported');
+});
+
+// ── Segmentation invariance on the supplier-chain corpus ───────────────────
+
+test('SEGMENTATION: a supplier clause frames its illnesses across a sentence break', () => {
+  // `a37f3a42`, as published: one sentence. Before P2B7L.2, splitting it at the
+  // relative clause moved the illnesses out of reach of "supplied by" and the
+  // supplier's outbreak became Walmart's.
+  const walmart =
+    'The recall was initiated because this product may contain recalled whole cucumbers supplied by SunFed Produce, LLC of Rio Rico, AZ, which initiated a recall after the U.S. Food and Drug Administration (“FDA”) notified SunFed that the cucumbers described above were associated with reported salmonellosis illnesses.';
+  assertSegmentationInvariant(walmart, 'unknown/null');
+
+  // The same clause in the SUPPLIER's own notice reports, because there the
+  // recalled product is the cucumbers themselves (`fbd54ba0`).
+  assert.equal(
+    deriveIllnessStatus(
+      'SunFed initiated this recall after the US Food and Drug Administration (“FDA”) notified SunFed that the cucumbers described above were associated with reported salmonellosis illnesses between October 12 – November 15, 2024.',
+    ).kind,
+    'reported_unspecified',
+  );
+});
+
+test("SEGMENTATION: a supplier's outbreak never overrides the firm's own denial", () => {
+  // `95adea9a`. Walmart's notice carries both, and the firm's own denial is
+  // what a shopper must see. Splitting the supplier sentence used to let the
+  // supplier's illnesses win.
+  const supplier =
+    'The recall was initiated because this product may contain recalled whole cucumbers supplied by Bedner Growers, Inc. of Boynton Beach, FL, which initiated a recall after the US Food and Drug Administration ("FDA") notified Bedner Growers Inc. that the cucumbers described above were associated with reported salmonellosis illnesses.';
+  const denial =
+    'To date, no illnesses have been reported for the recalled Marketside Fresh Cut Cucumber Slices.';
+
+  // Denial after the supplier prose, and denial before it: same answer.
+  assertSegmentationInvariant(`${supplier} ${denial}`, 'explicit_none/null');
+  assertSegmentationInvariant(`${denial} ${supplier}`, 'explicit_none/null');
+});
+
+test('SEGMENTATION: a direct-victim report survives "supplied by" beside it', () => {
+  // FSIS uses "supplied by" for the RECALLING establishment in the very
+  // sentence that reports the victims (Adams Farms). Suppressing it would
+  // discard five people who ate the recalled beef.
+  const adams =
+    'Traceback information was available for 5 case-patients and indicated that all 5 case-patients consumed beef products supplied by Adams Farms Slaughterhouse.';
+  assertSegmentationInvariant(adams, 'reported_count/5');
+
+  // And it still reports when unrelated supplier prose sits next to it.
+  const withNeighbour = `This product may contain recalled ingredients supplied by another firm. ${adams}`;
+  assert.equal(deriveIllnessStatus(withNeighbour).kind, 'reported_count');
+});
+
+test('SEGMENTATION: hedged linkage stays hedged however it is punctuated', () => {
+  // `eb2dd0e5`, Baloian Farms. The hedge is on the LINK, and it holds.
+  const baloian =
+    'Baloian initiated this recall after learning from SunFed Produce, LLC, that its supplier of American cucumbers, “Agrotato, S.A. de C.V.,” may be associated with reported salmonellosis illnesses between October 12 – and November 15, 2024.';
+  assertSegmentationInvariant(baloian, 'unknown/null');
+});
+
+test('SEGMENTATION: order alone never decides — a report outranks a later qualified none', () => {
+  // The invariant that must NOT be satisfied by "denials always win": a notice
+  // may report illnesses and then say there have been no additional ones, and
+  // it is still a positive report (`760612b0`, HMC Farms shape).
+  const report =
+    'The recalled peaches have been linked to an outbreak of Listeriosis that has resulted in eleven illnesses.';
+  const qualified = 'No additional illnesses have been reported to date.';
+
+  for (const notice of [`${report} ${qualified}`, `${qualified} ${report}`]) {
+    assert.equal(textOf(notice), '11 illnesses reported', notice);
+  }
+
+  // The qualifier alone still establishes nothing at all.
+  assert.equal(deriveIllnessStatus(qualified).kind, 'unknown');
+});
+
+// ── Counts the source gives for something else ─────────────────────────────
+
+test('a figure qualified by "information available" counts records, not illnesses', () => {
+  // `55ee81ad` and `5f7e9891`. The subset whose data investigators happen to
+  // hold is not the size of the outbreak.
+  assert.equal(
+    deriveIllnessStatus(
+      'For 27 cases with illness onset information available, illnesses started on dates ranging from August 9 to November 13, 2025.',
+    ).illnesses,
+    null,
+  );
+
+  // The unqualified figure in the same notice is still read (`5f7e9891`).
+  const ptFarm =
+    'Based on epidemiological investigation, 14 case-patients have been identified with illness onset dates ranging from June 15 to July 10, 2016. ' +
+    'Traceback for 11 case-patients for whom data was available led back to a single slaughter date at PT Farm.';
+  assert.equal(textOf(ptFarm), '14 illnesses reported');
+});
+
+test('a figure counting which case-patients were hospitalized is not an illness count', () => {
+  // `57ae49ff`. Six case-patients; one of them hospitalized. The notice reports
+  // six illnesses, not one.
+  const notice =
+    'Based on epidemiologic investigation, 6 case-patients have been identified in Minnesota with illness onset dates ranging from August, 17, 2014 to September, 27, 2014. ' +
+    'Among the 6 case-patients with available information, 1 case-patient was hospitalized; 0 deaths have been reported. ' +
+    'All 6 case-patients reported chicken Kiev consumption prior to illness onset.';
+  assertSegmentationInvariant(notice, 'reported_count/6');
+
+  // The separate-figures shape is untouched: "9 illnesses, 8 hospitalizations,
+  // and 1 death" must keep its 9.
+  assert.equal(
+    textOf(
+      'To date, there have been 9 illnesses, 8 hospitalizations, and 1 death linked to the soft cheese products.',
+    ),
+    '9 illnesses reported',
+  );
+});
+
+test('a precaution that does not work is education, not a denial of illness', () => {
+  // `753a28b9`. "Thoroughly cooking product does not prevent illness" describes
+  // a heat-stable toxin. Read as a denial it prints "No illnesses reported".
+  for (const education of [
+    'Thoroughly cooking product does not prevent illness.',
+    'Freezing will not kill the organism.',
+  ]) {
+    assert.equal(deriveIllnessStatus(education).kind, 'unknown', education);
+    assert.equal(copyOf(education), null, education);
+  }
+});
+
+test('"neither X nor Y received reports of illnesses" is a denial, not a report', () => {
+  // Found by the P2B7L.2 repair dry run. Four live cases asserted illnesses
+  // over a notice that denies them, because `neither` was not a denial lead and
+  // the verb-leading assertion pattern then matched "received … reports of …
+  // illness" word for word. The prepared repair was about to store that.
+  for (const denial of [
+    'Neither FSIS nor the company received any reports of illnesses associated with consumption of this product.',
+    'To date, neither Pork King Good nor our suppliers have received any reports of illness or injury related to these products.',
+    'Neither Too Good Gourmet or Meijer have received any customer complaints or claims of illness associated with this recall to date.',
+  ]) {
+    assert.equal(textOf(denial), 'No illnesses reported', denial);
+  }
+
+  // And it must not manufacture an ILLNESS denial out of some other harm. These
+  // deny only injuries or only adverse reactions, and stay silent.
+  for (const otherHarm of [
+    'Neither the company nor FSIS has received any reports of injury associated with consumption of this product.',
+    'Neither FSIS nor the company has received reports of adverse reactions due to consumption of these products.',
+  ]) {
+    assert.equal(deriveIllnessStatus(otherHarm).kind, 'unknown', otherHarm);
+    assert.equal(copyOf(otherHarm), null, otherHarm);
+  }
 });
