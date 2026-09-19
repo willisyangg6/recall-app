@@ -1027,6 +1027,19 @@ personalization`, `Open Lotly on your phone`); prose says `Affects me`,
 - **O2-B — documentation reconciliation only** (this closeout): repository
   docs updated to the verified state; no code, configuration, or production
   change.
+- **P2B7R — read-only production and launch-readiness audit, completed
+  2026-09-19. Final classification: `healthy`.** Re-verified the watchdog as
+  the freshness owner (100% heartbeat delivery, worst fast-channel gap 56 min,
+  zero failed runs in seven days, zero duplicate executions in thirty), traced
+  the executable ingestion path end to end, and established that **no AI or
+  LLM dependency exists anywhere in production**. It also confirmed that
+  pushing `master` _is_ deployment — a push changes what the next run
+  executes, never when it runs. Findings, the failure-mode table, alerting
+  gaps, freshness SLOs, cost model, and the P0/P1/P2 launch list are in
+  [docs/recall-production-runbook.md](docs/recall-production-runbook.md); the
+  dated operational measurements are in
+  [docs/recall-operations.md](docs/recall-operations.md) ("Production
+  verification (P2B7R, 2026-09-19)"). No production action was taken.
 - Push delivery remains deliberately inactive and was outside O2's scope.
 
 ## Ingest-pipeline atomicity and historical repair (O3)

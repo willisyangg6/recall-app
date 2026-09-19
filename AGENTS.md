@@ -30,6 +30,7 @@ it in the same change rather than describing the new behavior somewhere else.
 | Illness status: semantics and presentation         | [docs/recall-illness-status.md](docs/recall-illness-status.md)             |
 | Scheduling, jobs, secrets, repairs                 | [docs/recall-operations.md](docs/recall-operations.md)                     |
 | Scheduler watchdog (permanent fallback)            | [docs/recall-scheduler-watchdog.md](docs/recall-scheduler-watchdog.md)     |
+| Runbook: failures, alerting, SLOs, cost            | [docs/recall-production-runbook.md](docs/recall-production-runbook.md)     |
 | Feed sync and cache                                | [docs/recall-feed-sync.md](docs/recall-feed-sync.md)                       |
 | Feed usability and filtering                       | [docs/recall-feed-usability.md](docs/recall-feed-usability.md)             |
 | Product categories                                 | [docs/recall-food-categories.md](docs/recall-food-categories.md)           |

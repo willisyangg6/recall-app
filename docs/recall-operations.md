@@ -7,6 +7,14 @@ delivery**: until the founder runs `push:activate -- --confirm`, the job is
 a no-send no-op and no device notification is sent (see
 docs/recall-push-delivery.md)._
 
+_This document is authoritative for **job semantics** — schedules, locking,
+skip gates, run bookkeeping, health thresholds, failure semantics, and the
+dated repair history. What happens when something **breaks** — failure modes,
+detection, alerting gaps, freshness SLOs, recovery, cost, and the P0/P1/P2
+launch list — lives in
+[recall-production-runbook.md](recall-production-runbook.md), written from the
+P2B7R read-only production audit (2026-09-19)._
+
 ## Architecture
 
 **GitHub Actions scheduled workflows running the existing tsx scripts, with
@@ -222,6 +230,42 @@ It remains an open, separate operational follow-up. Re-run
 `npm run ops:health` to check current status; the three permanently
 failing FSIS label PDFs remain the other known, unrelated backlog (see the
 labels section).
+
+### Production verification (P2B7R, 2026-09-19) [DATED MEASUREMENT]
+
+A second read-only audit re-measured the live system fourteen days after O2-A
+and classified it **healthy**. No production write, job, dispatch, or
+deployment occurred. Full findings, the failure-mode table, alerting gaps,
+SLOs, and the launch classification are in
+[recall-production-runbook.md](recall-production-runbook.md); the operational
+headline:
+
+- **The watchdog is unambiguously the freshness owner.** 2,016 of 2,016
+  expected invocations in seven days (100%; gap p50 5.00 min, max 5.11), 207
+  dispatch claims — 206 accepted, 1 `github_server_error` retried
+  automatically — every one targeting `scheduled-ingest.yml` at `ref: master`.
+- **Fast-channel cadence is now dependable**: 248 FDA and 248 FSIS executions
+  in seven days, median gap 44 min, **worst gap 56 min** (O2-A measured 52.5
+  min max — unchanged in character). **Zero failed runs in seven days**; the
+  only four failures in thirty days are the already-hardened 2026-09-08/09
+  incident.
+- **Zero lease skips and zero same-job execution overlaps in thirty days.**
+  The run "clusters" visible in `ingest_runs` are one workflow run's four
+  sequential steps sharing a git SHA — not duplicate schedules or retries.
+- **`daily-maintenance` is currently healthy on GitHub cron alone**: 7 of 7
+  days, median gap 23.9 h, worst 26.1 h — inside the 30 h warning. The
+  watchdog still does not cover it; this is now a watch item rather than a
+  concern.
+- **The skip gate is carrying the cost**: FSIS took it on 238/248 runs (96%,
+  1.7 s vs 17.8 s mean), FDA on 124/248 (50%, 1.1 s vs 114.4 s mean).
+- **Pushing master is deploying.** Observed live: `73e5dd6` pushed 18:58 Z,
+  nothing ran, and the 19:25 Z watchdog dispatch started a run holding the
+  lease as `...:73e5dd643502`. A push changes what the next run executes,
+  never when it runs.
+- **Two gaps the runbook raises as P0/P1 and this document does not own**: no
+  dead-man alert if the watchdog itself stops (`ops:health` is manual), and
+  `SUPABASE_SECRET_KEY` is set at workflow **job** level, so `npm ci` runs
+  with the service-role key in its environment.
 
 ### The unchanged-source skip gate
 
