@@ -253,6 +253,81 @@ const ASSERTS_ILLNESS: RegExp[] = [
 ];
 
 /**
+ * The sentence hedges the LINK between this recall and the illnesses — "may
+ * be associated with", "might be linked to", "possibly related".
+ *
+ * A hedged link is not a report about this product. The source is saying it
+ * does not yet know, and `unknown` is the state for exactly that:
+ *
+ *   "Baloian initiated this recall after learning from SunFed Produce, LLC,
+ *    that its supplier of American cucumbers, “Agrotato, S.A. de C.V.,” MAY BE
+ *    ASSOCIATED WITH reported salmonellosis illnesses…"
+ *
+ * This hedges the association itself, which is why it is written against
+ * `associated|linked|related|connected` rather than against `may` at large: a
+ * notice may say a product "may be contaminated" and still report illnesses
+ * plainly in the next sentence, and that report must still count.
+ */
+const HEDGED_LINKAGE =
+  /\b(?:may|might|could)\s+(?:be\s+)?(?:associated|linked|related|connected)\b|\bpossibly\s+(?:associated|linked|related)\b|\bpotential(?:ly)?\s+link/i;
+
+/**
+ * The illnesses in this sentence belong to ANOTHER party's product — the
+ * supplier's lot, the ingredient, the upstream recall this one follows from.
+ *
+ * The distinction the live corpus forced (P2B7L.1). Two FDA notices carry the
+ * same clause, "the cucumbers described above were associated with reported
+ * salmonellosis illnesses", and they mean different things:
+ *
+ *   SunFed's own notice recalls those cucumbers — the illnesses are the
+ *   recalled product's, and it reports them.
+ *
+ *   Walmart's notice recalls cut cucumber SLICES that "MAY CONTAIN RECALLED
+ *   whole cucumbers SUPPLIED BY SunFed… which initiated a recall after the FDA
+ *   notified SunFed that the cucumbers described above were associated with
+ *   reported salmonellosis illnesses". The illnesses are SunFed's whole
+ *   cucumbers'; Walmart's own notice states none for the slices, and one of the
+ *   two Walmart notices explicitly says so ("To date, no illnesses have been
+ *   reported for the recalled Marketside Fresh Cut Cucumber Slices").
+ *
+ * Attributing the supplier's outbreak to the downstream recall would tell a
+ * shopper this product made people ill when its own notice does not say that.
+ * So a sentence whose illness clause is framed by supplier chain establishes
+ * nothing, and the rest of the notice decides — which is what lets the
+ * explicit denial in the Walmart notice be heard.
+ *
+ * Deliberately NOT a suppressor: "produced by", "manufactured by". FSIS names
+ * the recalling establishment that way in the very sentence that links the
+ * illnesses to it ("a link between the Listeria monocytogenes illnesses and
+ * ready-to-eat pork products produced by Long Phung Foods"), and those are
+ * genuine reports.
+ */
+const SUPPLIER_CHAIN =
+  /\bsupplied by\b|\bits supplier\b|\bsupplier(?:'s)?\s+(?:lot|of)\b|\bmay contain\b[^.]{0,80}?\brecalled\b/i;
+
+/**
+ * People are stated to have fallen ill or to have EATEN the product. That is a
+ * direct report about human beings, and it outranks the supply framing around
+ * it.
+ *
+ * Needed because "supplied by" does not always name a third party — FSIS uses
+ * it for the RECALLING establishment in the very sentence that reports the
+ * victims:
+ *
+ *   "Traceback information was available for 5 case-patients and indicated
+ *    that all 5 case-patients CONSUMED beef products SUPPLIED BY Adams Farms
+ *    Slaughterhouse."
+ *
+ * Suppressing that as supplier prose would discard a report of five people who
+ * ate the recalled beef. Distinguishing the two uses by firm identity is not
+ * something this module can do, so it does not try: it asks instead whether
+ * the sentence reports PEOPLE, which is the thing that makes a report a
+ * report.
+ */
+const DIRECT_VICTIM =
+  /\b(?:case-patients?|people|persons?|individuals?|consumers?|patients?)\b[^.]{0,80}?\b(?:consumed|ate|became ill|fell ill|were sickened|sickened|reported (?:eating|consuming))/i;
+
+/**
  * A count this sentence attaches to illness AND another harm at once, so the
  * illness share is unknowable. Only a sentence that actually carries a number
  * qualifies: joined wording alone ("no illnesses or injuries") is an ordinary
@@ -262,9 +337,26 @@ function sharesFigureWithOtherHarm(sentence: string): boolean {
   return JOINED_HARMS.test(sentence) && countIn(sentence, ILLNESS_COUNT) !== null;
 }
 
+/**
+ * Does this sentence attribute its illnesses somewhere other than THIS recall,
+ * or hedge the attribution itself? Either way it establishes nothing here.
+ *
+ * Applied to assertion only, never to denial: a notice that denies illnesses
+ * for its own product is still denying them however it describes its supply
+ * chain, and losing that denial would turn an `explicit_none` into silence.
+ */
+function attributesIllnessElsewhere(sentence: string): boolean {
+  if (DIRECT_VICTIM.test(sentence)) return false;
+  return HEDGED_LINKAGE.test(sentence) || SUPPLIER_CHAIN.test(sentence);
+}
+
 /** Does this sentence positively assert an illness (as opposed to denying one)? */
 function assertsIllness(sentence: string): boolean {
   if (sharesFigureWithOtherHarm(sentence)) return false;
+  // The illnesses belong to a supplier's product, or the link to this one is
+  // hedged (P2B7L.1). Checked before the count reader below, so a figure that
+  // counts the SUPPLIER's outbreak is not adopted as this recall's own.
+  if (attributesIllnessElsewhere(sentence)) return false;
   // A qualified none with no figure of its own asserts nothing (P2B7L). This
   // must come before ASSERTS_ILLNESS below, whose verb-leading pattern
   // ("...has received ... reports of ... illness") matches the FSIS closure

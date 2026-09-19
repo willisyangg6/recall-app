@@ -552,3 +552,77 @@ test('the drift audit reports a missing case rather than throwing', async () => 
   const drift = await auditReprojectionDrift(store, ['00000000-0000-0000-0000-000000000000']);
   assert.equal(drift[0].unavailable, 'case not found');
 });
+
+// ── The disease-name corpus, through the repair port (P2B7L.1) ─────────────
+
+interface DiseaseCorpusCase {
+  recallCaseId: string;
+  title: string;
+  storedReportsIllness: boolean;
+  kind: string;
+  illnesses: number | null;
+  reportsIllness: boolean;
+  summaryText: string;
+}
+
+const DISEASE_CORPUS: { count: number; cases: DiseaseCorpusCase[] } = JSON.parse(
+  readFileSync(
+    join(import.meta.dirname, '..', 'domain', 'fixtures', 'illness-disease-corpus.json'),
+    'utf8',
+  ),
+);
+
+const diseaseLabel = (c: DiseaseCorpusCase) =>
+  `${c.recallCaseId.slice(0, 8)} ${c.title.slice(0, 56)}`;
+
+test('PARITY: the repair plans exactly what the shared contract derives, case by case', async () => {
+  // The repair must never become a second reader of illness prose. Every case
+  // in the live disease-name population is planned here through the real port
+  // and checked against the contract Recall Detail renders from.
+  assert.equal(DISEASE_CORPUS.cases.length, DISEASE_CORPUS.count);
+  for (const c of DISEASE_CORPUS.cases) {
+    const store = await storeWith(
+      projection({ summaryText: c.summaryText, reportsIllness: c.storedReportsIllness }),
+    );
+    const plan = planIllnessFlag(only(store));
+    const status = deriveIllnessStatus(c.summaryText);
+
+    assert.equal(plan.statusKind, status.kind, `${diseaseLabel(c)} kind`);
+    assert.equal(plan.statusKind, c.kind, `${diseaseLabel(c)} kind matches the record`);
+    assert.equal(plan.illnesses, c.illnesses, `${diseaseLabel(c)} count`);
+    assert.equal(plan.derivedValue, statusReportsIllness(status), `${diseaseLabel(c)} flag`);
+    assert.equal(plan.derivedValue, c.reportsIllness, `${diseaseLabel(c)} flag matches the record`);
+    assert.equal(plan.storedValue, c.storedReportsIllness, `${diseaseLabel(c)} stored`);
+    // Never refused: every case in this population has prose and a boolean.
+    assert.ok(
+      ['update', 'unchanged'].includes(plan.outcome),
+      `${diseaseLabel(c)} is decided, not refused (${plan.outcome})`,
+    );
+    assert.equal(
+      plan.outcome,
+      c.storedReportsIllness === c.reportsIllness ? 'unchanged' : 'update',
+      `${diseaseLabel(c)} outcome`,
+    );
+  }
+});
+
+test('PUSH ELIGIBILITY: health_impact fires on exactly the corrected flag, never on the prose', async () => {
+  // `health_impact` is the notification the flag will eventually drive. It
+  // must key off the corrected value and nothing else — a notice naming a
+  // disease, or a supplier's outbreak, may not raise one by itself.
+  for (const c of DISEASE_CORPUS.cases) {
+    const derived = statusReportsIllness(deriveIllnessStatus(c.summaryText));
+    const before = projection({ summaryText: c.summaryText, reportsIllness: false });
+    const after = projection({ summaryText: c.summaryText, reportsIllness: derived });
+
+    const raised = detectChanges(before, after).material.some((m) => m.ruleId === 'health_impact');
+    assert.equal(raised, derived, `${diseaseLabel(c)} raises health_impact iff it reports`);
+
+    // And a case already carrying the corrected value raises nothing at all.
+    assert.equal(
+      detectChanges(after, after).material.some((m) => m.ruleId === 'health_impact'),
+      false,
+      `${diseaseLabel(c)} is quiet once correct`,
+    );
+  }
+});

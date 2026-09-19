@@ -611,3 +611,171 @@ test('the status shape has no field for any harm but illness', () => {
     assert.ok(!keys.some((key) => key.includes(forbidden)), `a count is not a ${forbidden}`);
   }
 });
+
+// ── A disease name is not education, and not a report either (P2B7L.1) ──────
+
+/**
+ * The distinction this section pins is structural, not lexical.
+ *
+ * `salmonellosis` and `listeriosis` used to sit as bare alternations inside
+ * the education guard, so naming the disease was enough to silence a sentence.
+ * That silenced the sentences in which FSIS and FDA actually report the
+ * outbreak, and it made the positive branch that names the diseases
+ * unreachable. What makes a sentence education is the disease standing as the
+ * subject of a general statement; what makes it a report is people.
+ */
+
+test('educational disease prose reports nothing, in either disease', () => {
+  for (const education of [
+    'Consumption of food contaminated with Salmonella can cause salmonellosis, a foodborne illness.',
+    'Consumption of food contaminated with Listeria monocytogenes can cause listeriosis, a serious infection that primarily affects older adults.',
+    'Listeriosis is treated with antibiotics.',
+    'Listeriosis can cause fever, muscle aches, headache, stiff neck, confusion, loss of balance and convulsions.',
+    'Symptoms of salmonellosis usually start 6 hours to 6 days after infection and last 4 to 7 days.',
+  ]) {
+    assert.equal(deriveIllnessStatus(education).kind, 'unknown', education);
+    assert.equal(copyOf(education), null, education);
+  }
+});
+
+test('a disease name with a count is the count the source stated', () => {
+  // FSIS's epidemiologic finding, verbatim from two live notices. Before
+  // P2B7L.1 the word `listeriosis` alone made this inert.
+  const status = deriveIllnessStatus(
+    'The epidemiologic investigation identified a total of four listeriosis confirmed illnesses, including one death, between July 8, 2017 and August 11, 2018.',
+  );
+  assert.equal(status.kind, 'reported_count');
+  assert.equal(status.illnesses, 4);
+  assert.equal(illnessNoticeCopy(status)!.text, '4 illnesses reported');
+});
+
+test('a disease-named outbreak linked to the recalled product reports it', () => {
+  // HMC Farms, verbatim. The recalled product is the subject, the link is
+  // stated outright, and the count is the source's own.
+  const status = deriveIllnessStatus(
+    'The recalled peaches have been linked to an outbreak of Listeriosis that has resulted in eleven illnesses.',
+  );
+  assert.equal(status.kind, 'reported_count');
+  assert.equal(status.illnesses, 11);
+});
+
+test('the disease-named positive branch is reachable at all', () => {
+  // The branch `associated with … reported … salmonellosis|listeriosis` could
+  // not fire before P2B7L.1: any sentence able to match it was removed as
+  // education first. These reach it — the first through its `illnesses`, the
+  // second and third through the disease name itself, which is the alternative
+  // that had never once run in production.
+  for (const reported of [
+    'The cucumbers described above were associated with reported salmonellosis illnesses between October 12 and November 15, 2024.',
+    'Ill consumers were linked to reported salmonellosis in several states.',
+    'The product was associated with reported listeriosis among ill consumers.',
+  ]) {
+    assert.equal(deriveIllnessStatus(reported).kind, 'reported_unspecified', reported);
+  }
+});
+
+test('but the disease name still needs human harm beside it — a boundary, on purpose', () => {
+  // Eligibility is gated on a HARM word (`MENTIONS_HARM`), and the disease
+  // names are deliberately not in it: a sentence naming only the disease is
+  // never enough on its own. Both of these are conservative misses, and both
+  // render nothing rather than guessing — no notice in the live corpus states
+  // its illnesses this way and nothing is lost today.
+  for (const missed of [
+    'The products were linked to reported listeriosis among consumers in several states.',
+    'Nine cases of salmonellosis have been reported in connection with this product.',
+  ]) {
+    assert.equal(deriveIllnessStatus(missed).kind, 'unknown', missed);
+    assert.equal(copyOf(missed), null, missed);
+  }
+});
+
+test("a supplier's outbreak is not this recall's illness report", () => {
+  // Walmart recalls cut slices that MAY CONTAIN RECALLED cucumbers SUPPLIED BY
+  // another firm; the illnesses are that firm's product's. Telling a shopper
+  // this product made people ill is the failure being prevented.
+  const status = deriveIllnessStatus(
+    'The recall was initiated because this product may contain recalled whole cucumbers supplied by SunFed Produce, LLC of Rio Rico, AZ, which initiated a recall after the FDA notified SunFed that the cucumbers described above were associated with reported salmonellosis illnesses.',
+  );
+  assert.equal(status.kind, 'unknown');
+  assert.equal(illnessNoticeCopy(status), null);
+});
+
+test("and the supplier's own notice, recalling that product, does report it", () => {
+  // The same clause, in the notice that recalls the cucumbers themselves.
+  // Identical words, opposite answers — which is the point.
+  assert.equal(
+    deriveIllnessStatus(
+      'SunFed initiated this recall after the FDA notified SunFed that the cucumbers described above were associated with reported salmonellosis illnesses between October 12 and November 15, 2024.',
+    ).kind,
+    'reported_unspecified',
+  );
+});
+
+test('a hedged link establishes nothing, however many illnesses it names', () => {
+  // "may be linked" is the source saying it does not yet know. An outbreak
+  // total that only MIGHT belong to this product is not this product's count.
+  for (const hedged of [
+    'At this time, the FDA and CDC have reported that the outbreak may be linked to Rosabella Moringa Capsules.',
+    'To date, there have been 7 illnesses resulting in 3 hospitalizations across the United States due to Salmonella contamination, 3 of which may be linked to a single product.',
+    'Baloian initiated this recall after learning that its supplier of American cucumbers may be associated with reported salmonellosis illnesses.',
+  ]) {
+    assert.equal(deriveIllnessStatus(hedged).kind, 'unknown', hedged);
+  }
+});
+
+test('a hedge on CONTAMINATION never silences a report beside it', () => {
+  // The hedge guard is written against the link, not against the word "may".
+  // A notice may call contamination possible and still report illnesses.
+  const status = deriveIllnessStatus(
+    'The product may be contaminated with Listeria monocytogenes. The epidemiologic investigation identified a total of four listeriosis confirmed illnesses.',
+  );
+  assert.equal(status.kind, 'reported_count');
+  assert.equal(status.illnesses, 4);
+});
+
+test('people who ate the recalled product are a report, whoever supplied it', () => {
+  // FSIS names the RECALLING establishment with "supplied by" in the very
+  // sentence that reports the victims. Reading that as supplier prose would
+  // discard five people who ate the recalled beef.
+  assert.equal(
+    deriveIllnessStatus(
+      'Traceback information was available for 5 case-patients and indicated that all 5 case-patients consumed beef products supplied by Adams Farms Slaughterhouse.',
+    ).kind,
+    'reported_count',
+  );
+});
+
+test("a firm's own denial survives the supplier prose above it", () => {
+  // Both sentences are real and sit in the same FDA notice. The supplier's
+  // outbreak must not overrule the firm's explicit statement about its own
+  // product — and a denial must not be read as silence either.
+  const status = deriveIllnessStatus(
+    'The FDA and CDC are investigating illnesses in a multistate outbreak of Salmonella infections linked to fresh jalapeños supplied by Coast Citrus Distributors. To date, Taylor Fresh Foods is not aware of any reported illnesses linked to its products containing jalapeños.',
+  );
+  assert.equal(status.kind, 'explicit_none');
+  assert.equal(illnessNoticeCopy(status)!.text, 'No illnesses reported');
+});
+
+test('MUTATION: the education/report distinction is load-bearing in both directions', () => {
+  const report =
+    'The epidemiologic investigation identified a total of four listeriosis confirmed illnesses.';
+  const education = 'Listeriosis is treated with antibiotics.';
+
+  // Same disease, same length of prose, opposite answers.
+  assert.equal(deriveIllnessStatus(report).kind, 'reported_count');
+  assert.equal(deriveIllnessStatus(education).kind, 'unknown');
+
+  // Swapping one for the other flips the notice, and nothing else does.
+  assert.equal(deriveIllnessStatus(`${education} ${report}`).kind, 'reported_count');
+  assert.equal(deriveIllnessStatus(`${education} ${education}`).kind, 'unknown');
+
+  // Removing the disease word from the report leaves it a report; removing it
+  // from the education leaves it inert. The word is not what decides.
+  assert.equal(
+    deriveIllnessStatus(
+      'The epidemiologic investigation identified a total of four confirmed illnesses.',
+    ).kind,
+    'reported_count',
+  );
+  assert.equal(deriveIllnessStatus('It is treated with antibiotics.').kind, 'unknown');
+});

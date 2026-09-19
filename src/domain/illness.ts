@@ -30,9 +30,47 @@ export interface IllnessReport {
 const ADVICE =
   /concerned about (an? )?(illness|injury|reaction)|contact a (healthcare|health care) provider|seek (medical|emergency)/i;
 
-/** Hazard education about what the pathogen can do — not a report. */
-const EDUCATION =
-  /\bcan cause\b|\bmay cause\b|symptoms?\b|incubation|\binfection (can|may|is)\b|salmonellosis|listeriosis|botulism|(older adults|pregnant|weakened immune|young children)|serious (and sometimes )?(illness|infection)|invasive infection|wound infection/i;
+/**
+ * Hazard education about what the pathogen can do — not a report.
+ *
+ * A DISEASE NAME ALONE IS NOT EDUCATION (P2B7L.1). `salmonellosis` and
+ * `listeriosis` were bare alternations here, so every sentence naming either
+ * disease was inert — including the sentences in which FSIS and FDA actually
+ * report the outbreak:
+ *
+ *   "The epidemiologic investigation identified a total of four listeriosis
+ *    confirmed illnesses, including one death…"
+ *   "The recalled peaches have been linked to an outbreak of Listeriosis that
+ *    has resulted in eleven illnesses."
+ *
+ * Measured read-only on the live corpus, 5 cases were suppressed that way, 4 of
+ * them carrying an exact count. What makes a sentence education is its
+ * EXPLANATORY STRUCTURE — the disease as the subject of a general statement
+ * ("Listeriosis is treated with antibiotics", "Salmonellosis usually lasts…")
+ * — not the mere presence of the word, so the names are matched only in that
+ * frame. The other education alternations already carry the rest: "can cause
+ * listeriosis" is held by `can cause`, "Symptoms of salmonellosis" by
+ * `symptoms`.
+ *
+ * Over the whole 1,931-case table this keeps 122 education sentences filtered
+ * and releases 23, every one of them reviewed.
+ *
+ * `botulism` is deliberately left bare. It has the same defect, but its live
+ * population is hedged outbreak prose on an ACTIVE infant-formula
+ * investigation whose own notice states the FDA "has not identified a direct
+ * link" — a semantic call of the same weight as the qualified-none decision,
+ * not a mechanical extension of this one. Inert is the conservative state, and
+ * it stays inert until that call is made (docs/recall-illness-status.md §4.4).
+ */
+const DISEASE_AS_SUBJECT = String.raw`\b(?:salmonellosis|listeriosis)\b\s+(?:is|are|can|may|usually|typically|often|generally)\b`;
+
+const EDUCATION = new RegExp(
+  String.raw`\bcan cause\b|\bmay cause\b|symptoms?\b|incubation|\binfection (can|may|is)\b|` +
+    DISEASE_AS_SUBJECT +
+    String.raw`|botulism|(older adults|pregnant|weakened immune|young children)|` +
+    String.raw`serious (and sometimes )?(illness|infection)|invasive infection|wound infection`,
+  'i',
+);
 
 /** How the problem was found — not a report. */
 const DISCOVERY =

@@ -1532,25 +1532,30 @@ founder authorization, against a count re-measured immediately beforehand.
 illness contract (`src/domain/illness-status.ts`). Recall Detail derives fresh
 on every render, so the screen corrected itself immediately; the stored flag did
 not, because incremental ingestion re-projects a case only when its source
-page's content hash moves. **77 stored values are stale** — 46 true → false, 31
-false → true; 58 active consumer-visible, 1 active merged-hidden, 18 closed.
+page's content hash moves. **79 stored values are stale** — 46 true → false, 33
+false → true; 59 active consumer-visible, 1 active merged-hidden, 19 closed.
 Refused: 0. See [recall-illness-status.md](recall-illness-status.md) §5.3 for
-the full measurement and its reconciliation with the earlier 95-row plan.
+the full measurement and its reconciliation with the earlier 95-row and 77-row
+plans.
 
-**A classifier correction came first.** The first dry run (95 rows) surfaced a
-defect rather than just stale data: 23 corrections would have written "reported
-illnesses" into storage on the strength of FSIS closure boilerplate alone. That
-was fixed in the shared contract, not in this repair — see
-[recall-illness-status.md](recall-illness-status.md) §4.2. No exclusion list
-exists here, and this repair contains no illness-prose reader of its own.
+**Two classifier corrections came first.** The first dry run (95 rows) surfaced
+a defect rather than just stale data: 23 corrections would have written
+"reported illnesses" into storage on the strength of FSIS closure boilerplate
+alone (§4.2, plan falls to 77). Auditing the remainder surfaced a second: the
+bare disease names `salmonellosis` and `listeriosis` sat in the education
+guard, so five notices that genuinely report an outbreak established nothing
+while three that describe a supplier's outbreak were held back for the wrong
+reason (§4.4, plan rises to 79). Both were fixed in the shared contract, not in
+this repair. No exclusion list exists here, and this repair contains no
+illness-prose reader of its own.
 
 **Why it may not simply be re-projected.** `reportsIllness` is the one
 corrected field `detectChanges` diffs: false → true raises a `health_impact`
 material change, whose ledgered copy announces that the notice now reports
 illnesses. Measured on the same dry run, a normal re-projection of the affected
-cases would raise **30** such events for notices that have not changed since
-publication, and would additionally rewrite other projected fields on **76 of
-77**. Push being inactive does not make that safe: the notification ledger is
+cases would raise **32** such events for notices that have not changed since
+publication, and would additionally rewrite other projected fields on **78 of
+79**. Push being inactive does not make that safe: the notification ledger is
 the durable record of what the app believes it told people. The repair
 therefore uses a narrow compare-and-set port, `updateCaseReportsIllness`, which
 writes that one key and never reaches material-change detection.
@@ -1558,7 +1563,7 @@ writes that one key and never reaches material-change detection.
 ```
 npm run repair:illness-flags:dry                         # read-only report
 npm run repair:illness-flags:dry -- --drift-audit        # …plus what a re-projection would also change
-npm run repair:illness-flags -- --confirm --expect 77    # APPLY — needs ALL THREE flags
+npm run repair:illness-flags -- --confirm --expect 79    # APPLY — needs ALL THREE flags
 npm run repair:illness-flags:dry                         # verify: "would change" must be 0
 ```
 
@@ -1567,7 +1572,7 @@ refused, and `--apply` with `--dry-run` is refused as a contradiction. The
 `--expect` count is the number of corrections the reviewed dry run reported: if
 the live corpus has drifted from it the run aborts having written nothing and
 exits nonzero. Re-run the dry run immediately before applying and use the count
-it prints — 77 is the measurement of 2026-09-18, not a constant. Every write is
+it prints — 79 is the measurement of 2026-09-18, not a constant. Every write is
 a compare-and-set on `last_changed_at`, is re-read and verified from live state,
 and is recorded in the durable ledger with its before value — which is the
 rollback data.
