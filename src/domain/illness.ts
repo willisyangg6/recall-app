@@ -57,6 +57,21 @@ const EXPLICIT_NONE =
 const REPORTED =
   /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|several|multiple)\b[^.]{0,120}\b(sick (people|persons?)|ill(ness(es)?)?|hospitaliz\w*|deaths?|case-patients?)\b[^.]{0,120}\b(identified|reported|confirmed|linked|occurred)|\b(illness(es)?|adverse reactions?|injur(y|ies)|hospitalizations?|deaths?)\b[^.]{0,80}\b(have|has) been (reported|confirmed|received|identified)|\b(received|there (are|have been)) (reports? of|confirmed)\b[^.]{0,60}\b(illness|adverse|injur|sick)|\b\d+\b[^.]{0,60}\b(people|persons?|individuals)\b[^.]{0,80}\b(infected|sickened)\b[^.]{0,120}\b(reported|confirmed)|\bassociated with\b[^.]{0,40}\breported\b[^.]{0,60}\b(illness|salmonellosis|listeriosis|infections?)|\b(receives?|continues to receive)\b[^.]{0,50}\b(adverse event|illness|injury) reports?|\b(a |one |an? )?(consumer|customer|person|individual)s?\b[^.]{0,60}\breported\b[^.]{0,60}\b(allergic reaction|illness|injur|adverse)/i;
 
+/**
+ * Prose that mentions harm but reports none: healthcare advice, hazard
+ * education, and how the problem was found.
+ *
+ * Exported so a second reader of the same sentences cannot drift from this
+ * one — the P2B7J status contract (`illness-status.ts`) needs exactly this
+ * exclusion before it looks for denials, and duplicating the three patterns
+ * there would let "Salmonella can cause serious illness" become a report in
+ * one module and education in the other. Behaviour here is unchanged: the
+ * predicate is the same test `isReportSentence` already applied inline.
+ */
+export function isNonReportProse(sentence: string): boolean {
+  return ADVICE.test(sentence) || EDUCATION.test(sentence) || DISCOVERY.test(sentence);
+}
+
 function isReportSentence(sentence: string): boolean {
   if (ADVICE.test(sentence) || DISCOVERY.test(sentence)) return false;
   if (!HARM.test(sentence)) return false;

@@ -62,6 +62,14 @@ colors:
   relevance/affects-you/foreground: '#001F3E'
   relevance/affects-you/border: '#ADB600'
 
+  illness-notice/reported/background: '#FFFFFF'
+  illness-notice/reported/foreground: '#001F3E'
+  illness-notice/reported/border: '#89969B'
+
+  illness-notice/none/background: '#C0D6EB'
+  illness-notice/none/foreground: '#001F3E'
+  illness-notice/none/border: '#C0D6EB'
+
 typography:
   display:
     fontFamily: Public Sans
@@ -1224,6 +1232,53 @@ word `AFFECTS YOU` and the spoken label `Affects you`. It takes no props, so
 no tier can reach it, and it reads `relevancePalette` only. The card renders
 it exactly when the model's `affectsYou` verdict is true; the decision itself
 (lib/relevance.ts) is untouched.
+
+### Illness Notice
+
+The compact illness notice (P2B7K) answers one question — **did the official
+notice report illnesses?** — in Recall Detail's identity area, below the brand
+and above the official FDA/FSIS report link.
+
+It is a third, independent question. It is not severity and not personal
+relevance:
+
+- **Not a Risk Label.** A Critical recall can report no illnesses; a Low one
+  can report many. The Risk Label is uppercase IBM Plex Mono on a filled
+  severity colour at a 24px minimum height. The notice is sentence-case
+  `caption` sans on a foundation surface, `radius/4`, 8×4 padding, auto-width.
+- **Not an Affects You callout.** That is a full-width lime Callout about
+  _this shopper_. The notice is compact and about the recall.
+
+Two states, and a third that renders nothing:
+
+**Reported** — `illness-notice/reported` (white surface, `border/strong`
+border, navy text), the 12px `warning` glyph, and the count copy:
+`1 illness reported`, `12 illnesses reported`, `Approximately 12 illnesses
+reported`, or `Illnesses reported` when the notice gives no trustworthy count.
+
+**Explicit none** — `illness-notice/none` (`background/subtle`, no contrasting
+border), the 12px `info` glyph, and `No illnesses reported`.
+
+**Unknown** — nothing renders. No row, no placeholder, no spacer, no spoken
+element. Absence of an illness statement is never displayed as a zero.
+
+It carries **illnesses only**. Injuries, adverse reactions, hospitalizations
+and deaths never appear in it and never produce one; those facts stay in the
+source's own words. Never add a harm-family variant to this component.
+
+`illnessNoticePalette` exists so the notice never borrows Critical's red:
+**the Risk Label remains the only consumer of `riskPalette`.** Every value in
+it is an existing foundation colour under a semantic name, so the notice
+introduces no new hex. A softer danger tint for the reported state would be a
+new approved colour and a deliberate design decision; until then urgency is
+carried by the word, the glyph and the border.
+
+Implemented as `src/components/ui/illness-notice.tsx`. Its only input is the
+finished copy from the presentation contract, so it can neither classify prose
+nor acquire a second subject. It is informational: no press target, no button
+role, no hint. To assistive technology it is one element speaking one sentence,
+with the glyph decorative. Semantics and copy live in
+[docs/recall-illness-status.md](docs/recall-illness-status.md).
 
 ### Category Tag
 

@@ -126,6 +126,36 @@ export const relevancePalette = {
   'affects-you': { background: '#E2EE57', foreground: '#001F3E', border: '#ADB600' },
 } as const satisfies Record<string, LabelPalette>;
 
+/**
+ * The compact illness notice (P2B7K) — whether the official notice reported
+ * illnesses, shown in Recall Detail's identity area.
+ *
+ * NOT a risk level and NOT personal relevance. It answers a third, independent
+ * question, so it gets a third, independent treatment and its own object: it
+ * cannot be indexed by a risk tier, and the Risk Label remains the only
+ * consumer of `riskPalette` (founder decision, P2B7K).
+ *
+ * ## Why these values and no new colour
+ *
+ * Every value below is an existing foundation token, re-expressed under a
+ * semantic name:
+ *
+ *   reported  `background/surface` + `border/strong` + `text/primary`
+ *   none      `background/subtle`  + `background/subtle` + `text/primary`
+ *
+ * The design system has no soft-danger tint — the only reds are `risk/*`, and
+ * reusing those would give Critical a second treatment, which is exactly what
+ * the one-treatment rule forbids. A genuinely soft red would be a new approved
+ * hex, which is a design decision, not an implementation one. Until that hex
+ * exists, the reported state carries its urgency the way the rest of Lotly
+ * does: the word, the `warning` glyph, and the stronger border. Swapping in an
+ * approved tint later is a one-line change here and nowhere else.
+ */
+export const illnessNoticePalette = {
+  reported: { background: '#FFFFFF', foreground: '#001F3E', border: '#89969B' },
+  none: { background: '#C0D6EB', foreground: '#001F3E', border: '#C0D6EB' },
+} as const satisfies Record<string, LabelPalette>;
+
 // ── Spacing, radius, size ───────────────────────────────────────────────────
 
 /** The only spacing values: `spacing/4` … `spacing/48` in Figma. */

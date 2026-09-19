@@ -29,6 +29,7 @@ import {
   iconSize,
   layout,
   radius,
+  illnessNoticePalette,
   relevancePalette,
   REQUIRED_FONT_FACES,
   RISK_TOKEN_NAME,
@@ -138,6 +139,9 @@ test('the contract names no colour the code lacks, and vice versa', () => {
       ['background', 'foreground', 'border'].map((part) => `${RISK_TOKEN_NAME[tier]}/${part}`),
     ),
     ...['background', 'foreground', 'border'].map((part) => `relevance/affects-you/${part}`),
+    ...['reported', 'none'].flatMap((state) =>
+      ['background', 'foreground', 'border'].map((part) => `illness-notice/${state}/${part}`),
+    ),
   ].sort();
   assert.deepEqual(inCode, approved);
 });
@@ -147,9 +151,54 @@ test('every colour is an uppercase six-digit hex — the form the contract write
     ...Object.values(color),
     ...Object.values(riskPalette).flatMap((p) => [p.background, p.foreground, p.border]),
     ...Object.values(relevancePalette).flatMap((p) => [p.background, p.foreground, p.border]),
+    ...Object.values(illnessNoticePalette).flatMap((p) => [p.background, p.foreground, p.border]),
     elevation.card.shadowColor,
   ];
   for (const value of all) assert.match(value, HEX);
+});
+
+test('the illness notice introduces no colour the foundation lacks, and no risk colour', () => {
+  // Every value is an existing foundation token re-expressed under a semantic
+  // name, so the notice cannot become a second Critical and cannot smuggle in
+  // an unapproved tint. Swapping in an approved soft-danger hex later is a
+  // deliberate edit here, not an accident.
+  const foundation = new Set<string>(Object.values(color));
+  for (const [state, palette] of Object.entries(illnessNoticePalette)) {
+    for (const part of ['background', 'foreground', 'border'] as const) {
+      assert.ok(
+        foundation.has(palette[part]),
+        `illness-notice/${state}/${part} must be an existing foundation colour`,
+      );
+    }
+  }
+  // Illness status is not a severity level, so no colour from the severity
+  // spectrum may appear here. `pending` and `unknown` are excluded because
+  // they are not severity: they ARE foundation colours (`background/subtle`,
+  // `background/media-placeholder`) that the risk palette reuses to say
+  // "classification state, not danger", and the notice may reuse them for the
+  // same reason.
+  const severityColours = new Set(
+    (['critical', 'very_high', 'high', 'moderate', 'low'] as const).flatMap((tier) => [
+      riskPalette[tier].background,
+      riskPalette[tier].border,
+    ]),
+  );
+  for (const palette of Object.values(illnessNoticePalette)) {
+    assert.ok(!severityColours.has(palette.background), 'the notice must not wear a severity fill');
+    assert.ok(!severityColours.has(palette.border), 'the notice must not wear a severity border');
+  }
+  // Nor personal relevance: lime belongs to Affects You alone.
+  for (const palette of Object.values(illnessNoticePalette)) {
+    assert.notEqual(palette.background, relevancePalette['affects-you'].background);
+  }
+});
+
+test('the reported and none states are visually distinguishable from each other', () => {
+  assert.notEqual(
+    illnessNoticePalette.reported.background,
+    illnessNoticePalette.none.background,
+    'the two states must not share a surface — colour is a redundant channel, not the only one',
+  );
 });
 
 test('the primitive Figma reds (tomato/500, tomato/300) are not tokens', () => {

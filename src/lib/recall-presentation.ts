@@ -19,7 +19,12 @@
 
 import { foodCategoryLabel } from '@/domain/food-category';
 import { sanitizeLaunchCategoryIds } from '@/domain/food-category-launch';
-import { classifyIllnessReport, type IllnessReport } from '@/domain/illness';
+import {
+  deriveIllnessStatus,
+  illnessNoticeCopy,
+  narrativeWithoutIllness,
+  type IllnessNoticeCopy,
+} from '@/domain/illness-status';
 import { hasMaterialUpdate, materialActivityAt } from '@/domain/material-activity';
 import type {
   CaseProjection,
@@ -463,87 +468,14 @@ export function conciseReasonLine(input: ReasonInput): string | null {
   }
 }
 
-// ── Illness line ────────────────────────────────────────────────────────────
-
-const NUMBER_WORDS: Record<string, number> = {
-  one: 1,
-  two: 2,
-  three: 3,
-  four: 4,
-  five: 5,
-  six: 6,
-  seven: 7,
-  eight: 8,
-  nine: 9,
-  ten: 10,
-  eleven: 11,
-  twelve: 12,
-};
-
-/**
- * Counted-illness patterns. Deliberately narrow: a number qualifies only when
- * it directly counts illnesses or sick people — hospitalization and death
- * counts never fold in, and "27 states" or "120 cases (packages)" never match.
- */
-const COUNTED_ILLNESS = [
-  /\b(\d{1,4}(?:,\d{3})?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b\s+(?:confirmed\s+|reported\s+)?(?:illness(?:es)?|case-patients?)\b/gi,
-  /\b(\d{1,4}(?:,\d{3})?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b\s+(?:sick(?:ened)?\s+)?(?:people|persons?|individuals?)\b[^.]{0,80}?\b(?:infected|sickened|ill\b|illness)/gi,
-];
-
-function countedIllnesses(statements: string[]): number | null {
-  const counts = new Set<number>();
-  for (const statement of statements) {
-    for (const pattern of COUNTED_ILLNESS) {
-      for (const match of statement.matchAll(pattern)) {
-        const raw = match[1].toLowerCase();
-        const value = NUMBER_WORDS[raw] ?? Number(raw.replace(/,/g, ''));
-        if (Number.isFinite(value) && value > 0) counts.add(value);
-      }
-    }
-  }
-  // One unambiguous count or nothing — two different numbers cannot be summed
-  // or chosen between without inventing a figure the source never stated.
-  return counts.size === 1 ? [...counts][0] : null;
-}
-
-/**
- * A negated report statement ("No customer illnesses have been reported…")
- * that slipped past the domain classifier's explicit-zero patterns. The
- * presentation boundary must never turn a negation into a positive report,
- * so the guard is enforced here as well — display-only; the canonical
- * classifier and stored `reportsIllness` derivations are untouched.
- * "No other/additional/further" qualifiers imply a prior report and are
- * deliberately NOT treated as zero.
- */
-const NEGATED_REPORT =
-  /\bno\b[^.]{0,80}\b(?:illness(?:es)?|adverse reactions?|allergic reactions?|injur(?:y|ies)|sickness(?:es)?)\b[^.]{0,80}\b(?:reported|received|confirmed|associated)/i;
-
-function isNegatedReport(statement: string): boolean {
-  if (/\bno (?:other|additional|further)\b/i.test(statement)) return false;
-  return NEGATED_REPORT.test(statement);
-}
-
-/**
- * The four honest illness states. Explicit zero → "No illnesses reported.";
- * a reliably counted report → "N illness(es) reported."; reported without a
- * reliable count → "Illnesses have been reported."; source silence → null
- * (the line is omitted — silence is never converted to zero).
- */
-export function illnessLine(report: IllnessReport): string | null {
-  switch (report.status) {
-    case 'none_reported':
-      return 'No illnesses reported.';
-    case 'reported': {
-      const positive = report.statements.filter((statement) => !isNegatedReport(statement));
-      if (positive.length === 0 && report.statements.length > 0) return 'No illnesses reported.';
-      const count = countedIllnesses(positive);
-      if (count === null) return 'Illnesses have been reported.';
-      return count === 1 ? '1 illness reported.' : `${count} illnesses reported.`;
-    }
-    case 'unknown':
-      return null;
-  }
-}
+// ── Illness status ──────────────────────────────────────────────────────────
+//
+// There is no illness classifier here any more (P2B7K). `illnessLine`, its
+// private count patterns, and its second negation guard lived in this file and
+// disagreed with both `domain/illness.ts` and the stored `reportsIllness`
+// flag — the same recall could be described one way on Detail and the opposite
+// way in the notification ledger. `domain/illness-status.ts` is now the one
+// reader of illness prose, and this contract only renders what it decides.
 
 // ── Geography ───────────────────────────────────────────────────────────────
 
@@ -2057,9 +1989,10 @@ export function communityReportsSection(
  *     given health copy it cannot support.
  *
  * Recall-specific illness facts are NOT here. Whether this recall reported
- * illnesses is a separate canonical fact rendered in What Happened
- * (`DetailModel.illnessLine`); merging them would imply that the general
- * symptoms below were experienced in this recall.
+ * illnesses is a separate canonical fact, rendered by the compact illness
+ * notice in the Detail identity area (`DetailModel.illnessNotice`, P2B7K);
+ * merging them would imply that the general symptoms below were experienced
+ * in this recall.
  */
 export interface HealthRiskSection {
   /** The standardized risk statement — always present when the section is. */
@@ -2382,7 +2315,13 @@ export interface DetailModel {
    * quantity field for a screen to style on its own.
    */
   whatHappened: { text: string; update: string | null };
-  illnessLine: string | null;
+  /**
+   * The compact illness notice (P2B7K), or null when the official notice never
+   * established illness status — in which case Detail renders nothing at all
+   * for it. It carries ONLY illness: injuries, adverse reactions,
+   * hospitalizations and deaths stay in `whatHappened`, in the source's words.
+   */
+  illnessNotice: IllnessNoticeCopy | null;
   /**
    * The complete evidence models. These are PRESERVED SOURCE EVIDENCE for
    * traceability, matching, and later milestones — they are NOT the render
@@ -2525,6 +2464,10 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     projection.reasonText,
   );
 
+  // Derived once and used twice: the notice renders it, and the What Happened
+  // narrative is de-duplicated against the very sentences it came from.
+  const illnessStatus = deriveIllnessStatus(projection.summaryText);
+
   // Decided once: the community block nests under this section, so both
   // read the same verdict rather than recomputing it.
   const whereSoldDecision = whereSoldSection(sold);
@@ -2549,13 +2492,21 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     affectsYou: context.affectsYou,
     affectsYouBanner: 'Warning: This recall affects you.',
     whatHappened: {
-      text: detailNarrative(
-        happened.text,
-        recallQuantitySentence(projection.sourceAgency, consumer.quantityText, happened.text),
+      // The illness sentence is removed from the narrative only when the
+      // notice completely represents it (P2B7K). A sentence that also carries
+      // a hospitalization, a death, an injury, an adverse reaction or a
+      // qualification the notice cannot show stays here, duplicated, because
+      // dropping it would take a fact out of the app.
+      text: narrativeWithoutIllness(
+        detailNarrative(
+          happened.text,
+          recallQuantitySentence(projection.sourceAgency, consumer.quantityText, happened.text),
+        ),
+        illnessStatus,
       ),
       update: happened.update,
     },
-    illnessLine: illnessLine(classifyIllnessReport(projection.summaryText)),
+    illnessNotice: illnessNoticeCopy(illnessStatus),
     whereSold: sold,
     affectedProducts: affectedProductsView,
     sections: {

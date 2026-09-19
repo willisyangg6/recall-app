@@ -12,7 +12,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { HAZARD_GUIDES } from '@/content/hazard-guides';
-import { classifyIllnessReport } from '@/domain/illness';
+import { deriveIllnessStatus, illnessNoticeCopy } from '@/domain/illness-status';
 import type { CaseProjection, Geography, TimelineEntry } from '@/domain/recall-types';
 import type { CaseDetail, CaseVisual, FeedItem } from './recall-feed';
 import type { RecallImage } from './recall-images';
@@ -41,7 +41,6 @@ import {
   geographyLocationState,
   homeLocationSummary,
   UNSPECIFIED_DISTRIBUTION,
-  illnessLine,
   officialSourceLink,
   stripTrailingMeasurement,
   whereSoldModel,
@@ -478,46 +477,45 @@ test('a Public Health Alert keeps alert wording and its explicit label', () => {
 });
 
 // ── 13–17: illness states ───────────────────────────────────────────────────
+//
+// The states themselves are pinned in domain/illness-status.test.ts, which
+// owns the contract. What belongs HERE is the presentation seam: that the
+// Detail model surfaces the notice rather than a sentence, that it carries
+// illnesses and nothing else, and that unknown yields no notice at all.
 
-test('explicit zero illnesses — including negated statements — reads No illnesses reported', () => {
-  const report = classifyIllnessReport(
-    'No customer illnesses have been reported to date in connection with this problem.',
+test('the Detail model carries a notice, not an illness sentence', () => {
+  const copy = illnessNoticeCopy(
+    deriveIllnessStatus('One illness has been reported to date in connection with this product.'),
   );
-  assert.equal(illnessLine(report), 'No illnesses reported.');
+  assert.equal(copy?.text, '1 illness reported');
+  assert.equal(copy?.tone, 'reported');
 });
 
-test('one illness reads with singular grammar', () => {
-  const report = classifyIllnessReport(
-    'One illness has been reported to date in connection with this product.',
+test('an explicit denial reads as the informational state', () => {
+  const copy = illnessNoticeCopy(
+    deriveIllnessStatus(
+      'No customer illnesses have been reported to date in connection with this problem.',
+    ),
   );
-  assert.equal(illnessLine(report), '1 illness reported.');
+  assert.equal(copy?.text, 'No illnesses reported');
+  assert.equal(copy?.tone, 'none');
 });
 
-test('a stated count is preserved with plural grammar', () => {
-  const report = classifyIllnessReport(
-    'A total of 55 illnesses have been reported in connection with this outbreak.',
-  );
-  assert.equal(illnessLine(report), '55 illnesses reported.');
-});
-
-test('reported illnesses without a reliable count read as a plain report', () => {
-  const report = classifyIllnessReport(
-    'Several illnesses have been reported in connection with this product.',
-  );
-  assert.equal(illnessLine(report), 'Illnesses have been reported.');
-  // Hospitalization/death counts never become the illness count.
-  const mixed = classifyIllnessReport(
-    'Illnesses have been reported, and three deaths have been reported in connection with the outbreak.',
-  );
-  assert.equal(illnessLine(mixed), 'Illnesses have been reported.');
-});
-
-test('source silence omits the illness line entirely — never inferred zero', () => {
-  assert.equal(illnessLine(classifyIllnessReport(null)), null);
+test('source silence yields NO notice — never an inferred zero', () => {
+  assert.equal(illnessNoticeCopy(deriveIllnessStatus(null)), null);
   assert.equal(
-    illnessLine(classifyIllnessReport('The product was distributed to retail stores in Ohio.')),
+    illnessNoticeCopy(deriveIllnessStatus('The product was distributed to retail stores in Ohio.')),
     null,
   );
+});
+
+test('the notice never carries a harm other than illness', () => {
+  const copy = illnessNoticeCopy(
+    deriveIllnessStatus(
+      'Illnesses have been reported, and three deaths have been reported in connection with the outbreak.',
+    ),
+  )!;
+  assert.doesNotMatch(`${copy.text} ${copy.spoken}`, /death|hospitali|injur|adverse/i);
 });
 
 // ── 18: quantity ────────────────────────────────────────────────────────────
@@ -2807,7 +2805,7 @@ test('recall-specific illness facts stay out of the standardized hazard content'
     { today: TODAY, affectsYou: false },
   );
   assert.deepEqual(reported.sections.healthRisk, silent.sections.healthRisk);
-  assert.ok(reported.illnessLine, 'the reported-illness fact was lost');
+  assert.ok(reported.illnessNotice, 'the reported-illness fact was lost');
   // And the illness fact appears in exactly one place — never inside the guide.
   const section = reported.sections.healthRisk;
   assert.ok(section);

@@ -149,6 +149,11 @@ test('the feed card and Recall Detail render risk through the one Risk Label, at
 test('Critical has exactly one treatment: the palette is read only by the Risk Label', () => {
   // A READ of the palette (`riskPalette[` / `riskPalette.`), not a mention:
   // theme.ts re-exports it and comments may name it.
+  //
+  // P2B7K keeps this absolute. The compact illness notice needed a treatment
+  // of its own and got one — `illnessNoticePalette`, built entirely from
+  // foundation colours — precisely so that illness status could never borrow
+  // Critical's red and become a second Critical. Illness is not severity.
   const readers = clientSources()
     .filter(({ source }) => /riskPalette[[.]/.test(source))
     .map(({ path }) => path)
@@ -156,6 +161,18 @@ test('Critical has exactly one treatment: the palette is read only by the Risk L
   assert.deepEqual(readers, [
     'components/ui/design-foundation.test.ts',
     'components/ui/risk-label.tsx',
+    'constants/design-tokens.test.ts',
+  ]);
+});
+
+test('the illness notice is its own treatment, read only by its own component', () => {
+  const readers = clientSources()
+    .filter(({ source }) => /illnessNoticePalette[[.]/.test(source))
+    .map(({ path }) => path)
+    .sort();
+  assert.deepEqual(readers, [
+    'components/ui/design-foundation.test.ts',
+    'components/ui/illness-notice.tsx',
     'constants/design-tokens.test.ts',
   ]);
 });

@@ -120,7 +120,7 @@ test('Detail renders from the presentation model, not its own formatting', () =>
   assert.match(DETAIL, /model\.brand\.text/);
   assert.match(DETAIL, /model\.activity\.text/);
   assert.match(DETAIL, /model\.whatHappened\.text/);
-  assert.match(DETAIL, /model\.illnessLine/);
+  assert.match(DETAIL, /model\.illnessNotice/);
   assert.match(DETAIL, /model\.officialSource\.label/);
   assert.match(DETAIL, /model\.affectsYouBanner/);
   // Optional sections are read from the model's OWN visibility decision.
@@ -137,12 +137,15 @@ test('the recall quantity is narrative the model composed, never screen styling 
   assert.ok(!DETAIL.includes('The recall covers'), 'Detail composes quantity copy of its own');
   assert.ok(!DETAIL.includes('quantityText'), 'Detail reads the raw quantity fact');
   assert.ok(!DETAIL.includes('detailNarrative('), 'Detail assembles the narrative itself');
-  // The narrative renders BEFORE the illness status, so the order a reader
-  // gets is reason, quantity, illness.
+  // P2B7K moved the illness status OUT of What Happened and into the identity
+  // area, so the narrative no longer has an illness sentence after it. What is
+  // pinned now is that the screen still composes nothing: the notice arrives
+  // finished and the narrative arrives already de-duplicated.
   assert.ok(
-    DETAIL.indexOf('model.whatHappened.text') < DETAIL.indexOf('model.illnessLine'),
-    'the illness status renders before the narrative',
+    !DETAIL.includes('narrativeWithoutIllness('),
+    'Detail de-duplicates the narrative itself',
   );
+  assert.ok(!DETAIL.includes('deriveIllnessStatus('), 'Detail classifies illness prose itself');
   // And nothing in What Happened is muted secondary text except the Update
   // line the P1 contract put there.
   const section = DETAIL.slice(
@@ -488,12 +491,13 @@ test('P1B: the screen invents no health content and repeats no recall-specific i
   ]) {
     assert.ok(!DETAIL.toLowerCase().includes(invented), `health copy "${invented}" on screen`);
   }
-  // Recall-specific illness facts stay in What happened and are never
-  // repeated inside Health Risk: one illness line exists on the screen, and
-  // it renders before the Health Risk section.
-  assert.equal(DETAIL.split('model.illnessLine').length - 1, 2, 'illness status rendered twice');
+  // Recall-specific illness facts are never repeated inside Health Risk: the
+  // notice exists once on the screen, in the identity area, and it renders
+  // before the Health Risk section. Health Risk is what the HAZARD can cause;
+  // the notice is what this notice reported.
+  assert.equal(DETAIL.split('model.illnessNotice').length - 1, 2, 'illness status rendered twice');
   assert.ok(
-    DETAIL.indexOf('model.illnessLine') < DETAIL.indexOf('<Section title="Health Risk">'),
+    DETAIL.indexOf('model.illnessNotice') < DETAIL.indexOf('<Section title="Health Risk">'),
     'the illness status renders after Health Risk',
   );
   // No alert/warning treatment, and no second disclaimer surface.

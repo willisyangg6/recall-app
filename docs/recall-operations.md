@@ -1520,6 +1520,64 @@ this document — it is in no way covered by the completed P3B authorization
 above. See [recall-feed-usability.md](recall-feed-usability.md), "P3C —
 affected-product data and presentation correctness".
 
+## Illness flag: a PREPARED historical correction (P2B7L)
+
+**Status: prepared and measured, NOT applied.** The tooling exists, its dry
+run has been run read-only against production, and no row has been written.
+The classifier question it surfaced is now **resolved** (P2B7L founder
+decision, corrected in the shared contract). Applying it needs its own explicit
+founder authorization, against a count re-measured immediately beforehand.
+
+**What is stale.** P2B7K re-pointed `projection.reportsIllness` at the shared
+illness contract (`src/domain/illness-status.ts`). Recall Detail derives fresh
+on every render, so the screen corrected itself immediately; the stored flag did
+not, because incremental ingestion re-projects a case only when its source
+page's content hash moves. **77 stored values are stale** — 46 true → false, 31
+false → true; 58 active consumer-visible, 1 active merged-hidden, 18 closed.
+Refused: 0. See [recall-illness-status.md](recall-illness-status.md) §5.3 for
+the full measurement and its reconciliation with the earlier 95-row plan.
+
+**A classifier correction came first.** The first dry run (95 rows) surfaced a
+defect rather than just stale data: 23 corrections would have written "reported
+illnesses" into storage on the strength of FSIS closure boilerplate alone. That
+was fixed in the shared contract, not in this repair — see
+[recall-illness-status.md](recall-illness-status.md) §4.2. No exclusion list
+exists here, and this repair contains no illness-prose reader of its own.
+
+**Why it may not simply be re-projected.** `reportsIllness` is the one
+corrected field `detectChanges` diffs: false → true raises a `health_impact`
+material change, whose ledgered copy announces that the notice now reports
+illnesses. Measured on the same dry run, a normal re-projection of the affected
+cases would raise **30** such events for notices that have not changed since
+publication, and would additionally rewrite other projected fields on **76 of
+77**. Push being inactive does not make that safe: the notification ledger is
+the durable record of what the app believes it told people. The repair
+therefore uses a narrow compare-and-set port, `updateCaseReportsIllness`, which
+writes that one key and never reaches material-change detection.
+
+```
+npm run repair:illness-flags:dry                         # read-only report
+npm run repair:illness-flags:dry -- --drift-audit        # …plus what a re-projection would also change
+npm run repair:illness-flags -- --confirm --expect 77    # APPLY — needs ALL THREE flags
+npm run repair:illness-flags:dry                         # verify: "would change" must be 0
+```
+
+`--apply` alone is refused, `--apply --confirm` without `--expect <n>` is
+refused, and `--apply` with `--dry-run` is refused as a contradiction. The
+`--expect` count is the number of corrections the reviewed dry run reported: if
+the live corpus has drifted from it the run aborts having written nothing and
+exits nonzero. Re-run the dry run immediately before applying and use the count
+it prints — 77 is the measurement of 2026-09-18, not a constant. Every write is
+a compare-and-set on `last_changed_at`, is re-read and verified from live state,
+and is recorded in the durable ledger with its before value — which is the
+rollback data.
+
+**Rollback.** The ledger's `rollback` array carries
+`{recallCaseId, previousValue, writtenValue}` per write. Replaying
+`previousValue` through the same port restores the exact pre-apply corpus; a
+test pins that the data is sufficient. Nothing else moved, so there is nothing
+else to restore.
+
 ## Enforcement: weekly-gated
 
 The daily job reads the one-request openFDA bulk manifest and compares its

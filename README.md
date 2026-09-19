@@ -129,6 +129,7 @@ npm run repair:geography:dry             # applied 2026-09-02 (completed)
 npm run repair:allergens:dry             # applied 2026-09-02 (completed)
 npm run repair:hazards:dry               # P2e-B, applied 2026-09-03 (completed)
 npm run repair:fda-contaminants:dry      # P3B, applied 2026-09-04 (completed)
+npm run repair:illness-flags:dry         # P2B7L, PREPARED — 77 rows measured, not applied
 ```
 
 ### Push notifications (Phase C2)

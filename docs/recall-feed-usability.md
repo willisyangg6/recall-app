@@ -229,16 +229,17 @@ Happened paragraph.
   grammar. PHAs keep alert wording — "A public health alert was issued for …
   from <company>" — the from-clause states official provenance, not shelf
   identity.
-- **Illness** is one line with four honest states (`illnessLine`): explicit
-  zero → `No illnesses reported.`; a reliably counted report → `1 illness
-reported.` / `55 illnesses reported.` (a count only when exactly one
-  unambiguous illness count is stated — hospitalizations and deaths never
-  fold in); reported without a reliable count → `Illnesses have been
-reported.`; source silence → the line is omitted entirely. Silence is never
-  converted to zero, and a **negated statement** ("No customer illnesses have
-  been reported…") that slips past the domain classifier's explicit-zero
-  patterns is re-checked at this boundary so it can never render as a
-  positive report. Home carries no illness line.
+- **Illness** is no longer a line in this contract at all (P2B7K). It is a
+  compact notice in Detail's identity area — below the brand, above the
+  official report link — and `DetailModel.illnessNotice` carries the finished
+  copy or `null`. The four states, the copy, and why injuries, adverse
+  reactions, hospitalizations and deaths get no notice of their own live in
+  [recall-illness-status.md](recall-illness-status.md). This contract composes
+  none of it: `domain/illness-status.ts` is the only reader of illness prose,
+  and the presentation layer's own classifier (`illnessLine`, its count
+  patterns, its second negation guard) was deleted because it disagreed with
+  both the domain classifier and the stored `reportsIllness` flag. Home carries
+  no illness notice.
 - **Quantity** (`recallQuantitySentence`, FDA only — the FSIS `quantityText`
   field is the amount _recovered_, a different fact, and stays unshown): the
   complete authoritative quantity as `The recall covers <quantity>.`, never
@@ -246,9 +247,10 @@ reported.`; source silence → the line is omitted entirely. Silence is never
   carrying a clipped reason tail keeps its full quantity and drops only the
   non-quantity clause. Omitted when What Happened already states the figure.
   Since P3C-1 it is a **sentence of the What Happened narrative**, not a field
-  of its own: `detailNarrative` composes reason → quantity, the illness line
-  follows, and there is no separate model value for a screen to style. See
-  "P3C — affected-product data and presentation correctness", item E.
+  of its own: `detailNarrative` composes reason → quantity, and there is no
+  separate model value for a screen to style. The illness status no longer
+  follows it — P2B7K moved that into the identity area. See "P3C —
+  affected-product data and presentation correctness", item E.
 
 ### Geography
 

@@ -579,6 +579,27 @@ export interface RecallStore {
     expectedLastChangedAt: string,
   ): Promise<boolean>;
   /**
+   * The same narrow contract for `projection.reportsIllness` (P2B7L).
+   *
+   * A correction-only write for the stale illness flags the unified
+   * classifier left behind: timeline and `last_changed_at` stay
+   * byte-identical, so it can never fire a notification, re-date a case, or
+   * appear as public activity.
+   *
+   * Unlike the sibling fields above, `detectChanges` DOES diff this one —
+   * `health_impact` fires when `reportsIllness` goes false → true. That is
+   * precisely why the repair may not go through the pipeline: 23 stale
+   * `false` values would each be announced as "the notice now reports
+   * illnesses" for a notice that has not changed since it was published.
+   * This port is the only write path that corrects the flag without
+   * reaching material-change detection at all.
+   */
+  updateCaseReportsIllness(
+    id: string,
+    reportsIllness: boolean,
+    expectedLastChangedAt: string,
+  ): Promise<boolean>;
+  /**
    * Compare-and-swap ONE field inside `normalized`: `pathogenOrAllergen`
    * (P2d-B). Unlike the projection CAS methods, source records carry no
    * version column an ingest reliably moves (`last_seen_at` moves on every

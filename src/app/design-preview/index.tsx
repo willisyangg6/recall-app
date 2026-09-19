@@ -60,6 +60,7 @@ import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { CategoryTag } from '@/components/ui/category-tag';
 import { Chip } from '@/components/ui/chip';
+import { IllnessNotice } from '@/components/ui/illness-notice';
 import { DisclosureControl } from '@/components/ui/disclosure-control';
 import { Icon, ICON_NAMES } from '@/components/ui/icon';
 import { MediaTile } from '@/components/ui/media-tile';
@@ -82,6 +83,12 @@ import {
   type TypographyVariant,
 } from '@/constants/design-tokens';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import {
+  deriveIllnessStatus,
+  illnessNoticeCopy,
+  narrativeWithoutIllness,
+  type IllnessNoticeCopy,
+} from '@/domain/illness-status';
 import { documentBySlug, PROFILE_DOCUMENT_GROUPS, TRUST_DOCUMENTS } from '@/content';
 import type { DocumentBlock, TrustDocument } from '@/content/document-model';
 import { useFeed } from '@/hooks/use-feed';
@@ -799,6 +806,17 @@ export default function DesignPreviewScreen() {
           DETAIL TITLE TREATMENTS
         </ThemedText>
         <DetailTitleGallery items={feed.state.status === 'ready' ? feed.state.items : []} />
+
+        {/* P2B7K: the SHIPPED compact illness notice in every state the live
+            corpus produces, in its real place in the Detail identity area,
+            with the What Happened narrative each state leaves behind. The
+            notice is about illnesses alone — injury, adverse-reaction,
+            hospitalization and mixed-figure rows all render no notice and keep
+            their sentence in the narrative. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          ILLNESS NOTICE
+        </ThemedText>
+        <IllnessNoticeGallery items={feed.state.status === 'ready' ? feed.state.items : []} />
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           OFFICIAL IMAGERY AND FAILURE
@@ -1962,6 +1980,280 @@ function DetailTitleGallery({ items }: { items: FeedItem[] }) {
   );
 }
 
+// ── Illness notice (P2B7K) ──────────────────────────────────────────────────
+
+/**
+ * The SHIPPED compact illness notice, in every state the live corpus produces,
+ * and the `What Happened` narrative each one leaves behind.
+ *
+ * Nothing here is a mock-up or an alternative: `IllnessNotice` is the
+ * production component, the copy is the production contract's own output, and
+ * the identity column is reproduced at Recall Detail's real geometry — `flex:
+ * 1` beside a `layout.detailMediaSize` hero — because that geometry is what
+ * the notice actually gets. Beside imagery on a 390pt screen the column is
+ * about 194pt wide, which is why the notice is auto-width and shrinkable
+ * rather than a full-width band.
+ *
+ * The founder's rule is visible in the last four rows: an injury, an adverse
+ * reaction, a hospitalization and a mixed figure each produce NO notice, and
+ * each sentence stays in the narrative exactly as the source wrote it.
+ */
+const ILLNESS_STATES: readonly { caption: string; source: string }[] = [
+  { caption: '1 illness', source: 'One consumer illness has been reported to date.' },
+  {
+    caption: 'multiple illnesses',
+    source:
+      'There have been reports of 12 confirmed cases of consumers experiencing stomach illness linked to this product.',
+  },
+  {
+    caption: 'qualified illness count',
+    source: 'To date, approximately 470 illnesses have been reported to the agency.',
+  },
+  {
+    caption: 'illnesses without a count',
+    source:
+      'Illnesses have been reported; the number and extent of which are currently under investigation.',
+  },
+  {
+    caption: 'explicit no illnesses',
+    source: 'No illnesses have been reported to date.',
+  },
+  {
+    caption: 'unknown — no notice renders',
+    source: 'The product was distributed to retail stores in Ohio and Indiana.',
+  },
+  {
+    caption: 'injury statement — no notice; the sentence stays in What Happened',
+    source: 'One consumer reported a dental injury from consuming the product.',
+  },
+  {
+    caption: 'adverse-reaction statement — no notice; the sentence stays in What Happened',
+    source:
+      'There have been no confirmed reports of adverse reactions due to consumption of these products.',
+  },
+  {
+    caption: 'hospitalization and death — retained in What Happened, never in the notice',
+    source:
+      'To date, there have been 9 illnesses, 8 hospitalizations, and 1 death linked to the soft cheese products.',
+  },
+  {
+    caption: 'mixed figure — no fabricated illness count; the statement is retained',
+    source:
+      'To date, the company has received approximately 470 reports of illness or adverse reactions.',
+  },
+];
+
+const ILLNESS_SHORT_TITLE = 'Soft Ripened Cheese';
+const ILLNESS_LONG_TITLE =
+  'Various sizes of Hard and Soft Cheese including: Ricotta Cheese, Fresh Mozzarella, Smoked Scamorza and Aged Provolone Wedges';
+
+/** The notice in its real place: below the brand, above the official link. */
+function IllnessPlacement({
+  copy,
+  title,
+  brand,
+  images,
+  typeScale,
+  heroUri,
+}: {
+  copy: IllnessNoticeCopy | null;
+  title: string;
+  brand: string;
+  images: 0 | 1 | 2;
+  typeScale?: number;
+  heroUri: string | null;
+}) {
+  const scaled =
+    typeScale === undefined
+      ? undefined
+      : {
+          fontSize: typography['heading-2'].fontSize * typeScale,
+          lineHeight: typography['heading-2'].lineHeight * typeScale,
+        };
+  return (
+    <View style={styles.illnessIdentityRow}>
+      <View style={styles.illnessIdentity}>
+        <View style={styles.illnessTitleBlock}>
+          <Text variant="heading-2" accessibilityRole="header" style={scaled}>
+            {title}
+          </Text>
+          <Text variant="body-small" color="text/secondary">
+            {brand}
+          </Text>
+        </View>
+        {/* Unknown renders NOTHING here — no row, no spacer, no placeholder. */}
+        {copy ? <IllnessNotice copy={copy} /> : null}
+        <View style={styles.illnessLink}>
+          <Text variant="caption" color="action/secondary">
+            Read the official FDA notice
+          </Text>
+          <Icon name="external-link" size={16} color="icon/brand" />
+        </View>
+      </View>
+      {images > 0 ? (
+        <View style={styles.illnessMediaColumn}>
+          <MediaTile uri={heroUri} alt={title} size={layout.detailMediaSize} />
+          {images > 1 ? (
+            <Text variant="caption" color="text/secondary">
+              1 of 3
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function IllnessNoticeGallery({ items }: { items: FeedItem[] }) {
+  const today = todayIso();
+  const heroUri = useMemo(() => {
+    for (const item of items) {
+      const model = buildHomeCardModel(item, { today, affectsYou: false });
+      if (model.heroImageUrl) return model.heroImageUrl;
+    }
+    return null;
+  }, [items, today]);
+
+  const states = useMemo(
+    () =>
+      ILLNESS_STATES.map((state) => {
+        const status = deriveIllnessStatus(state.source);
+        return { ...state, status, copy: illnessNoticeCopy(status) };
+      }),
+    [],
+  );
+  const withSeverity = states.find((state) => state.caption.startsWith('hospitalization'))!;
+
+  return (
+    <Surface
+      background="background/page"
+      radius={16}
+      border="border/subtle"
+      style={styles.feedGallery}>
+      <Text variant="caption" color="text/secondary">
+        The shipped component, over real source prose from the live corpus. The notice carries
+        illnesses and nothing else: an injury, an adverse reaction, a hospitalization and a figure
+        shared between two harms all render no notice at all, and every one of those sentences stays
+        in What Happened untouched.
+      </Text>
+
+      <Text variant="body-small-bold">The notice, state by state</Text>
+      {states.map((state) => (
+        <GallerySample key={state.caption} caption={state.caption}>
+          {state.copy ? (
+            <IllnessNotice copy={state.copy} />
+          ) : (
+            <Text variant="caption" color="text/secondary">
+              No notice renders — the source never established illness status, and silence is not a
+              zero.
+            </Text>
+          )}
+        </GallerySample>
+      ))}
+
+      <Text variant="body-small-bold">In place: below the brand, above the official link</Text>
+      <GallerySample
+        caption={`With one image — the identity column is ${layout.detailMediaSize}pt narrower than the page`}>
+        <IllnessPlacement
+          copy={withSeverity.copy}
+          title={ILLNESS_SHORT_TITLE}
+          brand="Fromagerie Bel"
+          images={1}
+          heroUri={heroUri}
+        />
+      </GallerySample>
+      <GallerySample caption="No image — the identity takes the full width">
+        <IllnessPlacement
+          copy={withSeverity.copy}
+          title={ILLNESS_SHORT_TITLE}
+          brand="Fromagerie Bel"
+          images={0}
+          heroUri={null}
+        />
+      </GallerySample>
+      <GallerySample caption="Multiple images and a long title">
+        <IllnessPlacement
+          copy={states[1].copy}
+          title={ILLNESS_LONG_TITLE}
+          brand="Savello USA"
+          images={2}
+          heroUri={heroUri}
+        />
+      </GallerySample>
+      <GallerySample caption="Explicit no illnesses, long title, no image">
+        <IllnessPlacement
+          copy={states[4].copy}
+          title={ILLNESS_LONG_TITLE}
+          brand="Savello USA"
+          images={0}
+          heroUri={null}
+        />
+      </GallerySample>
+      <GallerySample
+        caption={`Simulated accessibility type (×${SIMULATED_LARGE_TYPE}) beside a hero`}>
+        <IllnessPlacement
+          copy={withSeverity.copy}
+          title={ILLNESS_SHORT_TITLE}
+          brand="Fromagerie Bel"
+          images={1}
+          typeScale={SIMULATED_LARGE_TYPE}
+          heroUri={heroUri}
+        />
+      </GallerySample>
+      <GallerySample caption="With the Affects You warning directly below the header">
+        <IllnessPlacement
+          copy={withSeverity.copy}
+          title={ILLNESS_SHORT_TITLE}
+          brand="Fromagerie Bel"
+          images={1}
+          heroUri={heroUri}
+        />
+        <Callout tone="warning">Warning: This recall affects you.</Callout>
+      </GallerySample>
+
+      <GallerySample caption="Beside the CRITICAL risk badge — an illness count is not a risk level">
+        <View style={styles.illnessStatusRow}>
+          <RiskLabel tier="critical" label="Critical" accessibilityLabel="Risk level: Critical" />
+          <Text variant="caption" color="text/secondary">
+            Updated 12 Sep
+          </Text>
+        </View>
+        <IllnessNotice copy={withSeverity.copy!} />
+        <IllnessNotice copy={states[4].copy!} />
+      </GallerySample>
+
+      <Text variant="body-small-bold">What Happened, beside the notice</Text>
+      <Text variant="caption" color="text/secondary">
+        An illness sentence is removed only when the notice completely represents it. A sentence
+        that also carries a hospitalization, a death, an injury, an adverse reaction or a
+        qualification stays — showing a count twice is a blemish, dropping a death is a correctness
+        failure.
+      </Text>
+      {states.map((state) => {
+        const narrative = `The firm is recalling the product after routine testing found Listeria monocytogenes. ${state.source} The recall covers 1,200 cases.`;
+        const deduped = narrativeWithoutIllness(narrative, state.status);
+        return (
+          <GallerySample key={`wh-${state.caption}`} caption={state.caption}>
+            {state.copy ? (
+              <IllnessNotice copy={state.copy} />
+            ) : (
+              <Text variant="caption" color="text/secondary">
+                No notice renders.
+              </Text>
+            )}
+            <Text variant="caption" color="text/secondary">
+              {deduped === narrative
+                ? 'What Happened (unchanged)'
+                : 'What Happened (de-duplicated)'}
+            </Text>
+            <Text variant="body-small">{deduped}</Text>
+          </GallerySample>
+        );
+      })}
+    </Surface>
+  );
+}
+
 /**
  * The questionnaire's steps and states, one under another, drawn by the
  * real step components (components/report-questionnaire) so a screenshot is
@@ -2765,6 +3057,37 @@ const styles = StyleSheet.create({
   },
   // P2B7G: the Detail header's identity-beside-media geometry, reproduced
   // for the title-treatment comparison ([id].tsx identityRow/identity).
+  // ── Illness status treatments (P2B7J) ──
+  // Detail's own identity-beside-hero geometry, reproduced so the width the
+  // treatment gets in the proposed location is the real one.
+  illnessIdentityRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[12],
+  },
+  illnessIdentity: {
+    flex: 1,
+    minWidth: 0,
+    gap: spacing[8],
+  },
+  illnessTitleBlock: {
+    gap: spacing[4],
+  },
+  illnessMediaColumn: {
+    gap: spacing[4],
+    alignItems: 'center',
+  },
+  illnessLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[4],
+  },
+  illnessStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing[8],
+  },
   titleIdentityRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

@@ -16,6 +16,7 @@ import type {
   SourceIdentifier,
 } from './recall-types';
 import { deriveGeography } from './geography-evidence';
+import { deriveIllnessStatus, statusReportsIllness } from './illness-status';
 import { deriveRetailerNames } from './retailer-evidence';
 import { isOfficialClass, officialClassesOf } from './risk-tier';
 import type { NormalizedSourceRecord } from './source-record';
@@ -206,10 +207,30 @@ function combineProducts(records: NormalizedSourceRecord[]): AffectedProduct[] {
   return products;
 }
 
-/** Does an illness statement report actual illnesses (vs an explicit "none reported")? */
+/**
+ * Does this illness statement report an actual ILLNESS?
+ *
+ * The canonical flag behind `CaseProjection.reportsIllness`, which drives
+ * material-change detection (`health_impact`) and, when push is activated,
+ * the notification that says illnesses are now reported. It is therefore a
+ * claim the app will eventually make on a lock screen, and it must be true
+ * only for a confirmed illness.
+ *
+ * It delegates to the shared contract rather than deciding for itself
+ * (P2B7K). The regex it replaced — `!/\bno\b[^.]*\b(reports?|illness|adverse|injur)/i` —
+ * was a fourth, weaker reader of the same prose, and it was wrong in both
+ * directions on the live corpus: "has **not** received any confirmed reports
+ * of illnesses" contains no standalone `no`, so a firm's explicit denial
+ * counted as a report on 20 active cases, while a genuine report that happened
+ * to contain the word "no" elsewhere counted as none. Delegating makes the
+ * ledger and Recall Detail structurally incapable of disagreeing.
+ *
+ * TRUE for: a trustworthy illness count, and illness reported without one.
+ * FALSE for: an explicit denial, silence, injuries, adverse reactions,
+ * hospitalizations and deaths with no illness stated, and hazard education.
+ */
 export function statementReportsIllness(statement: string | null): boolean {
-  if (statement === null) return false;
-  return !/\bno\b[^.]*\b(reports?|illness|adverse|injur)/i.test(statement);
+  return statusReportsIllness(deriveIllnessStatus(statement));
 }
 
 /**
@@ -372,7 +393,15 @@ function projectCaseFields(records: NormalizedSourceRecord[]): CaseProjection {
     affectedProducts: combineProducts(voiced),
     quantityText: newest.quantityText,
     illnessStatement: newest.illnessStatement,
-    reportsIllness: statementReportsIllness(newest.illnessStatement),
+    // Derived from the notice's OWN prose, not from the extracted statement
+    // (P2B7K). `illnessStatement` is whatever the sentence extractor kept, and
+    // on the live corpus it is empty for FSIS outbreak notices that plainly
+    // report illnesses — which left `reportsIllness` false while Recall Detail
+    // showed "8 illnesses reported" for the same case. Reading `summaryText`
+    // here is what makes the ledger and the screen structurally incapable of
+    // disagreeing: both now classify the identical input with the identical
+    // contract.
+    reportsIllness: statusReportsIllness(deriveIllnessStatus(newest.summaryText)),
     consumerAction: primary.consumerAction,
     contactText: primary.contactText,
     officialUrl: primary.officialUrl,

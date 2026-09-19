@@ -27,6 +27,7 @@ it in the same change rather than describing the new behavior somewhere else.
 | -------------------------------------------------- | -------------------------------------------------------------------------- |
 | Domain model, ingestion, lifecycle                 | [docs/recall-domain-architecture.md](docs/recall-domain-architecture.md)   |
 | Verified FDA/FSIS source behavior                  | [docs/recall-source-contract.md](docs/recall-source-contract.md)           |
+| Illness status: semantics and presentation         | [docs/recall-illness-status.md](docs/recall-illness-status.md)             |
 | Scheduling, jobs, secrets, repairs                 | [docs/recall-operations.md](docs/recall-operations.md)                     |
 | Scheduler watchdog (permanent fallback)            | [docs/recall-scheduler-watchdog.md](docs/recall-scheduler-watchdog.md)     |
 | Feed sync and cache                                | [docs/recall-feed-sync.md](docs/recall-feed-sync.md)                       |

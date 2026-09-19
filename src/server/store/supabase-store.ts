@@ -971,6 +971,30 @@ export class SupabaseStore implements RecallStore {
     return (data?.length ?? 0) > 0;
   }
 
+  async updateCaseReportsIllness(
+    id: string,
+    reportsIllness: boolean,
+    expectedLastChangedAt: string,
+  ): Promise<boolean> {
+    // Identical contract to updateCasePathogenOrAllergen: re-read so the merge
+    // happens against the freshest projection, then make the write itself
+    // conditional on `last_changed_at`, so an ingest landing in between loses
+    // nothing — the update matches no row and the caller reports a conflict
+    // rather than rolling newer data back. `timeline` and `last_changed_at`
+    // are not in the payload at all, so no material change, no notification
+    // event and no public-activity date can follow from this write.
+    const current = await this.getCase(id);
+    if (!current || current.lastChangedAt !== expectedLastChangedAt) return false;
+    const { data, error } = await this.client
+      .from('recall_cases')
+      .update({ projection: { ...current.projection, reportsIllness } })
+      .eq('id', id)
+      .eq('last_changed_at', expectedLastChangedAt)
+      .select('id');
+    if (error) this.fail('updateCaseReportsIllness', error);
+    return (data?.length ?? 0) > 0;
+  }
+
   async updateCaseHazard(
     id: string,
     hazard: { hazardCategory: HazardCategory; pathogenOrAllergen: string | null },

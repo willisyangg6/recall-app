@@ -51,6 +51,7 @@ import { CommunityReportsBlock } from '@/components/community-reports-section';
 import { SaveRecallButton } from '@/components/save-recall-button';
 import { StateMessage } from '@/components/state-message';
 import { Callout } from '@/components/ui/callout';
+import { IllnessNotice } from '@/components/ui/illness-notice';
 import { DisclosureControl } from '@/components/ui/disclosure-control';
 import { Icon } from '@/components/ui/icon';
 import { MediaTile } from '@/components/ui/media-tile';
@@ -466,6 +467,16 @@ export default function RecallDetailScreen() {
                   {model.brand.text}
                 </Text>
               </View>
+              {/* The compact illness notice (P2B7K): whether the OFFICIAL
+                  notice reported illnesses, below the brand and above the
+                  source link. It is about illnesses alone — injuries, adverse
+                  reactions, hospitalizations and deaths stay in What Happened
+                  in the source's own words — and it is informational, never a
+                  control. Null renders nothing at all: a notice that never
+                  established illness status gets no row, no placeholder and no
+                  spacer, because silence is not a zero. The screen decides
+                  none of this; the contract hands it finished copy. */}
+              {model.illnessNotice ? <IllnessNotice copy={model.illnessNotice} /> : null}
               <Pressable
                 accessibilityRole="link"
                 accessibilityHint={EXTERNAL_LINK_HINT}
@@ -494,8 +505,12 @@ export default function RecallDetailScreen() {
             (P3C-1): the reason sentence and, where the source states one the
             reason did not already carry, the recall quantity arrive as ONE
             body paragraph. The screen composes and styles nothing — there is
-            no separate quantity slot, and the illness status follows the
-            narrative in the same body type. Only the Update line is muted. */}
+            no separate quantity slot. The illness status is no longer a line
+            here: it renders as the compact notice in the identity area above
+            (P2B7K), and this narrative has had the sentence backing it removed
+            — but only when that notice completely represents it, so a
+            hospitalization, death, injury or adverse reaction is never dropped
+            to avoid a duplicate. Only the Update line is muted. */}
         <Section title="What Happened">
           <Text variant="body-small">{model.whatHappened.text}</Text>
           {model.whatHappened.update ? (
@@ -503,7 +518,6 @@ export default function RecallDetailScreen() {
               {model.whatHappened.update}
             </Text>
           ) : null}
-          {model.illnessLine ? <Text variant="body-small">{model.illnessLine}</Text> : null}
         </Section>
 
         {/* Where it was sold: only the full state representation (P2a founder

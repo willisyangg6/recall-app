@@ -91,6 +91,8 @@
     "repair:allergens": "tsx scripts/repair-allergens.ts --apply",
     "repair:hazards:dry": "tsx scripts/repair-hazards.ts",
     "repair:hazards": "tsx scripts/repair-hazards.ts --apply",
+    "repair:illness-flags:dry": "tsx scripts/repair-illness-flags.ts",
+    "repair:illness-flags": "tsx scripts/repair-illness-flags.ts --apply",
     "repair:fda-contaminants:dry": "tsx scripts/repair-fda-contaminants.ts",
     "repair:fda-contaminants": "tsx scripts/repair-fda-contaminants.ts --apply",
     "labels:fsis:dry": "tsx scripts/render-fsis-labels.ts",

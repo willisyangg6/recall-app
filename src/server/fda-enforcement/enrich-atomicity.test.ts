@@ -251,8 +251,14 @@ test('enforcement overlapping a concurrent announcement write re-reads and keeps
       const announcementRecord = [...store.sourceRecords.values()].find(
         (r) => r.sourceSystem === 'fda_announcement',
       )!;
+      // A real announcement re-parse updates the prose AND the extracted
+      // statement together — `reportsIllness` is derived from `summaryText`
+      // (P2B7K), the same input Recall Detail classifies, so setting the
+      // statement alone would not represent an ingestion write.
       announcementRecord.normalized = {
         ...announcementRecord.normalized,
+        summaryText:
+          `${announcementRecord.normalized.summaryText ?? ''} Two illnesses have been reported.`.trim(),
         illnessStatement: 'Two illnesses have been reported.',
       };
       // The concurrent announcement writer read the case BEFORE the
