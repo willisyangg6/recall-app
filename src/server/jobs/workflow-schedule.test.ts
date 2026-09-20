@@ -229,7 +229,8 @@ function parseSteps(yaml: string): WorkflowStep[] {
       const [, key, value] = property;
       if (key === 'run') current.run = value;
       if (key === 'uses') current.uses = value;
-      if (key === 'run' || key === 'uses') current.label = value;
+      // `run: |` carries no label of its own; keep the step's `name:`.
+      if ((key === 'run' || key === 'uses') && value !== '|') current.label = value;
       inEnv = key === 'env';
       continue;
     }
@@ -377,4 +378,201 @@ test('no workflow uploads an artifact, so nothing can carry state out of a run',
   for (const name of PRODUCTION_WORKFLOWS) {
     assert.doesNotMatch(workflow(name), /upload-artifact|actions\/cache@/, name);
   }
+});
+
+// ── Trust boundary: the production environment (P2B7S.2) ────────────────────
+
+/**
+ * The GitHub Environment that owns every production credential.
+ *
+ * `workflow_dispatch` accepts an arbitrary ref, so before this existed a
+ * user with write access could push a branch, dispatch it, and receive the
+ * service-role key. A YAML `if: github.ref == ...` guard does NOT fix that:
+ * the branch being dispatched supplies the workflow file, so it can delete
+ * its own guard in the same commit.
+ *
+ * The environment is a real boundary because it is enforced outside the
+ * repository. Production secrets live ONLY here, and the environment allows
+ * deployments from `master` alone; GitHub matches that against the run's
+ * `github.ref` before the job starts, so a disallowed ref fails the job and
+ * stops the run with no secret in its environment. A branch that deletes
+ * `environment: production` gets a job with no production secrets; a branch
+ * that renames it gets an empty auto-created environment, which also has
+ * none. No edit to the workflow reaches the key.
+ *
+ * This assertion set is what keeps the YAML half of that true.
+ */
+const PRODUCTION_ENVIRONMENT = 'production';
+
+/** The disallowed-ref tripwire. A diagnostic, deliberately not the boundary. */
+const REF_TRIPWIRE = 'Assert production ref';
+
+interface WorkflowJob {
+  id: string;
+  /** The job's `environment:` value, or null when it declares none. */
+  environment: string | null;
+  /** The job's own YAML slice, parseable by parseSteps. */
+  body: string;
+}
+
+/**
+ * Split the `jobs:` block by job id. Only the scalar `environment: <name>`
+ * form is recognised; the mapping form reads as null and therefore FAILS the
+ * assertion below rather than silently passing it.
+ */
+function parseJobs(yaml: string): WorkflowJob[] {
+  const lines = yaml.split('\n');
+  const start = lines.findIndex((line) => /^jobs:\s*$/.test(line));
+  assert.ok(start >= 0, 'no jobs: block found');
+  const jobs: WorkflowJob[] = [];
+  let current: { id: string; environment: string | null; lines: string[] } | null = null;
+  for (const line of lines.slice(start + 1)) {
+    const header = line.match(/^ {2}([A-Za-z_][\w-]*):\s*$/);
+    if (header) {
+      if (current) jobs.push({ ...current, body: current.lines.join('\n') });
+      current = { id: header[1], environment: null, lines: [] };
+      continue;
+    }
+    if (current === null) continue;
+    if (/^\S/.test(line) && line.trim() !== '') break; // left jobs:
+    const environment = line.match(/^ {4}environment:\s*(\S+)\s*$/);
+    if (environment) current.environment = environment[1];
+    current.lines.push(line);
+  }
+  if (current) jobs.push({ ...current, body: current.lines.join('\n') });
+  return jobs;
+}
+
+/** Does this job's own steps pull any credential-grade secret? */
+function touchesProduction(job: WorkflowJob): boolean {
+  const sensitive: readonly string[] = SENSITIVE_SECRETS;
+  return parseSteps(job.body).some((step) =>
+    step.secrets.some((secret) => sensitive.includes(secret)),
+  );
+}
+
+test('every job that consumes a production secret runs in the production environment', () => {
+  // The single assertion the whole boundary rests on. A job that reads a
+  // credential without declaring the environment would, once the
+  // repository-level copies are deleted, either break production or (if the
+  // copies came back) reopen the arbitrary-ref hole silently.
+  for (const name of PRODUCTION_WORKFLOWS) {
+    const jobs = parseJobs(workflow(name));
+    assert.ok(jobs.length >= 1, `${name}: no jobs parsed`);
+    const guarded = jobs.filter(touchesProduction);
+    assert.ok(guarded.length >= 1, `${name}: expected a production-secret job`);
+    for (const job of guarded) {
+      assert.equal(
+        job.environment,
+        PRODUCTION_ENVIRONMENT,
+        `${name}: job "${job.id}" reads a production secret outside the production environment`,
+      );
+    }
+  }
+});
+
+test('no job declares the production environment without needing it', () => {
+  // The environment is the credential boundary, not decoration. Attaching it
+  // to a job that holds no secret would blur what it means and create
+  // deployment records for nothing.
+  for (const name of PRODUCTION_WORKFLOWS) {
+    for (const job of parseJobs(workflow(name))) {
+      if (job.environment === null) continue;
+      assert.ok(
+        touchesProduction(job),
+        `${name}: job "${job.id}" claims the production environment but reads no secret`,
+      );
+    }
+  }
+});
+
+test('the disallowed-ref tripwire runs before any repository code', () => {
+  // It must precede checkout: a disallowed ref should stop before the
+  // branch's own code is fetched, let alone executed. This is a diagnostic —
+  // the environment is the boundary — but a diagnostic that runs after the
+  // thing it guards against is worthless.
+  for (const name of PRODUCTION_WORKFLOWS) {
+    const steps = parseSteps(workflow(name));
+    assert.equal(steps[0]?.label, REF_TRIPWIRE, `${name}: the ref tripwire is not the first step`);
+    assert.deepEqual(steps[0].secrets, [], `${name}: the tripwire must hold no secret`);
+    const checkout = steps.findIndex((step) => (step.uses ?? '').startsWith('actions/checkout@'));
+    assert.ok(checkout > 0, `${name}: checkout must come after the tripwire`);
+  }
+});
+
+test('a GitHub context reaches a shell only through env:, never inlined into a run:', () => {
+  // A branch name is attacker-chosen text. Interpolating `${{ github.ref }}`
+  // straight into a `run:` body pastes it into bash — the documented script-
+  // injection vector, and exactly the mistake a ref check invites. Through
+  // `env:` the value is a quoted variable and cannot become code.
+  for (const name of PRODUCTION_WORKFLOWS) {
+    for (const [index, line] of workflow(name).split('\n').entries()) {
+      if (!line.includes('${{ github.')) continue;
+      assert.match(
+        line,
+        /^ {10}[A-Z_]+: \$\{\{ github\.[\w.]+ \}\}$/,
+        `${name}:${index + 1} interpolates a github context outside a step env: block`,
+      );
+    }
+  }
+});
+
+test('scheduled and watchdog runs stay unattended', () => {
+  // The environment must never gain anything that waits for a human: these
+  // workflows run unobserved, twice an hour. Required reviewers and wait
+  // timers are account settings and cannot be asserted here (the runbook
+  // owns that check) — what IS assertable is that neither trigger was
+  // narrowed and that a dispatch needs no operator input to start.
+  for (const name of PRODUCTION_WORKFLOWS) {
+    const yaml = workflow(name);
+    const triggers = yaml.slice(yaml.indexOf('\non:'), yaml.indexOf('\nconcurrency:'));
+    assert.match(triggers, /^\s*schedule:/m, `${name} lost its schedule`);
+    assert.match(
+      triggers,
+      /^\s*workflow_dispatch:\s*\{\}$/m,
+      `${name}: workflow_dispatch must stay input-free, or a dispatch needs a human`,
+    );
+  }
+});
+
+test('the dead-man heartbeat is still the last thing scheduled ingestion does', () => {
+  // Healthchecks is the only thing that notices silence. The tripwire step
+  // was inserted at the TOP of the same steps list, so assert the bottom of
+  // that list did not move.
+  const steps = parseSteps(workflow('scheduled-ingest.yml'));
+  const last = steps[steps.length - 1];
+  assert.equal(last.run, 'npm run ops:heartbeat', 'the heartbeat is no longer the final step');
+  assert.ok(last.secrets.includes('HEARTBEAT_URL'), 'the heartbeat lost its ping URL');
+});
+
+test('no document presents the YAML ref check as the security boundary', () => {
+  // The failure mode this guards is documentation drift, not code: a future
+  // reader who believes the tripwire is the control will delete the
+  // environment and feel safe. Anywhere the ref check is described, the
+  // disclaimer and the real boundary must be described with it.
+  const sources = [
+    join('.github', 'workflows', 'scheduled-ingest.yml'),
+    join('.github', 'workflows', 'daily-maintenance.yml'),
+    join('docs', 'recall-production-runbook.md'),
+    join('docs', 'recall-operations.md'),
+  ];
+  let described = 0;
+  for (const relative of sources) {
+    // Flattened: these are Prettier-wrapped Markdown and hard-wrapped YAML
+    // comments, so any fixed phrase can be split across a line break.
+    const text = readFileSync(join(ROOT, relative), 'utf8').replace(/\s+/g, ' ');
+    if (!/tripwire|Assert production ref/i.test(text)) continue;
+    described += 1;
+    assert.match(
+      text,
+      /(?:is )?NOT the security boundary/i,
+      `${relative} describes the ref check without saying it is not the boundary`,
+    );
+    assert.match(
+      text,
+      /deployment[- ]branch/i,
+      `${relative} describes the ref check without naming the real boundary`,
+    );
+  }
+  assert.ok(described >= 3, 'the boundary is undocumented in the workflows and the runbook');
 });

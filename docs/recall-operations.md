@@ -62,6 +62,18 @@ so `npm ci` never sees the service-role key, and both SHA-pin their actions;
 the rationale, the pinned commits and the update procedure are in
 docs/recall-production-runbook.md §17, and the whole shape is pinned by
 `src/server/jobs/workflow-schedule.test.ts`.
+
+Both secret-consuming jobs also run in the **`production` GitHub
+Environment**, which holds the production credentials and whose
+deployment-branch rule allows `master` alone. That is what stops a
+`workflow_dispatch` on an arbitrary ref from collecting the service-role
+key, and it is enforced by GitHub outside the repository, so branch content
+cannot weaken it. The `Assert production ref` step at the top of each
+workflow is a **tripwire for misconfiguration and is NOT the security
+boundary** — branch code could delete it. The boundary, the reasoning and
+the founder settings procedure are owned by
+docs/recall-production-runbook.md §17.4.
+
 Agency polling runs around the clock — quiet hours are a notification-
 delivery concern (Phase C2), never an ingestion one.
 

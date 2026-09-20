@@ -54,8 +54,27 @@
 #    (`gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`), replace both the
 #    SHA and the version comment, and name the release in the commit message.
 #
-# Both rules are enforced by src/server/jobs/workflow-schedule.test.ts, so a
-# later edit cannot quietly widen the secret scope or float a tag again.
+# 3. The secret-consuming job runs in the `production` GitHub Environment,
+#    and the production secrets live ONLY in that environment — never at
+#    repository scope. The environment allows deployments from `master`
+#    alone, and GitHub evaluates that against the run's github ref BEFORE
+#    the job starts: a `workflow_dispatch` on any other ref fails the job
+#    and stops the run, with no secret ever placed in its environment.
+#
+#    That is the actual security boundary, and it survives a hostile branch
+#    editing THIS FILE, which a YAML ref check does not. A branch that drops
+#    `environment: production` gets a job with no production secrets in it;
+#    a branch that renames it to something else gets an empty auto-created
+#    environment, which also has no secrets. There is no edit to this file
+#    that hands a non-master ref the service-role key.
+#
+#    The `Assert production ref` step below is a tripwire for
+#    misconfiguration — it is NOT the security boundary, because branch code
+#    could delete it.
+#
+# All three rules are enforced by src/server/jobs/workflow-schedule.test.ts,
+# so a later edit cannot quietly widen the secret scope, float a tag again,
+# or take the secret-consuming job out of the production environment.
 
 name: scheduled-ingest
 
@@ -75,9 +94,31 @@ jobs:
   ingest:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # The real security boundary (hardening note 3): production secrets live
+    # only in this environment, and this environment allows only `master`.
+    environment: production
     # No job-level `env:` on purpose. Every production secret is declared on
     # the individual step that needs it (hardening note 1 above).
     steps:
+      # Tripwire, NOT the security boundary — see hardening note 3. Branch
+      # code could delete this step; what it cannot delete is the
+      # environment's deployment-branch restriction. This exists to fail
+      # fast and legibly if the `production` environment ever loses that
+      # restriction, and it runs FIRST so a disallowed ref stops before any
+      # repository code is checked out or executed.
+      #
+      # The ref reaches the shell only through `env:`. A branch name is
+      # attacker-chosen text, and inlining a context straight into a `run:`
+      # body is the documented script-injection vector.
+      - name: Assert production ref
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          echo "event=$GITHUB_EVENT_NAME ref=$WORKFLOW_REF"
+          if [ "$WORKFLOW_REF" != "refs/heads/master" ]; then
+            echo "::error::Refusing to run production ingestion from $WORKFLOW_REF"
+            exit 1
+          fi
       # SHA-pinned v7 majors (see the hardening note above). v7 is the
       # current stable major for both and runs the node24 action runtime;
       # v4 ran the deprecated node20 one. Verified against the actions'

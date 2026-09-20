@@ -192,13 +192,13 @@ timeouts differ.
 | Purpose                 | Fast channel: FDA + FSIS + labels + push                                      | openFDA enforcement + full label sweep                   |
 | Schedule (UTC)          | `7,37 * * * *`                                                                | `15 9 * * *`                                             |
 | Timezone                | UTC only (GitHub cron has no timezone)                                        | UTC                                                      |
-| `workflow_dispatch`     | Yes — the watchdog's target and your recovery path                            | Yes                                                      |
+| `workflow_dispatch`     | Yes — the watchdog's target and your recovery path; **`master` only** (§17.4) | Yes, `master` only                                       |
 | `push` / `pull_request` | **None**                                                                      | **None**                                                 |
 | Default-branch behavior | `schedule` runs only on `master` (GitHub rule)                                | Same                                                     |
 | Permissions             | `contents: read` (explicitly narrowed)                                        | `contents: read`                                         |
 | Concurrency             | group `scheduled-ingest`, `cancel-in-progress: false`                         | group `daily-maintenance`, same                          |
 | Cancellation            | Queues, never cancels a running job                                           | Same                                                     |
-| Environment             | None (no GitHub Environment protection rules)                                 | None                                                     |
+| Environment             | **`production`** — deployment branches restricted to `master` (§17.4)         | Same                                                     |
 | Runner                  | `ubuntu-latest`, Node 24, npm cache                                           | Same                                                     |
 | Timeout                 | 25 min                                                                        | 110 min                                                  |
 | Retry                   | None at the workflow level — the next tick is it                              | Same                                                     |
@@ -207,7 +207,7 @@ timeouts differ.
 | Commands                | `jobs:fda`, `jobs:fsis`, `jobs:labels`, `jobs:push`, `ops:heartbeat`          | `jobs:enforcement`, `jobs:labels -- --full`, `jobs:push` |
 | Artifacts retained      | None — only GitHub's own run logs                                             | None                                                     |
 | Secrets referenced      | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `HEARTBEAT_*` (unset)                  | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`                    |
-| Secret scope            | **Per step.** No job-level `env:`; `npm ci` receives nothing                  | Same                                                     |
+| Secret scope            | **Per step**, inside the `production` environment; `npm ci` receives nothing  | Same                                                     |
 | Production services     | www.fda.gov, www.fsis.usda.gov, Supabase, exp.host                            | api.fda.gov, www.fsis.usda.gov, Supabase, exp.host       |
 | Third-party actions     | `actions/checkout`, `actions/setup-node` — GitHub-owned, **SHA-pinned** (§17) | Same                                                     |
 
@@ -293,15 +293,15 @@ summarized, or classified by a model.
 
 ### Secrets, by name only
 
-| Name                                   | Lives in                                    | Purpose                                                            |
-| -------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------ |
-| `SUPABASE_URL`                         | GitHub Actions repo secret; local `.env`    | Supabase project endpoint                                          |
-| `SUPABASE_SECRET_KEY`                  | GitHub Actions repo secret; local `.env`    | **Service role — bypasses RLS entirely.** Server-only.             |
-| `EXPO_ACCESS_TOKEN`                    | Optional, server env only                   | Expo enhanced push security; not currently required                |
-| `GITHUB_ACTIONS_TOKEN`                 | Supabase Edge Function secret **only**      | Fine-grained PAT, this repo only, Actions: RW. Expires 2027-08-28. |
-| `WATCHDOG_SHARED_SECRET`               | Edge Function secret + Vault + local `.env` | Authenticates pg_cron → Edge Function                              |
-| `EXPO_PUBLIC_SUPABASE_URL`             | App bundle (public by design)               | Client read endpoint                                               |
-| `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | App bundle (public by design)               | Client key, constrained by RLS to read-only                        |
+| Name                                   | Lives in                                                 | Purpose                                                                                      |
+| -------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `SUPABASE_URL`                         | GitHub Actions repo secret; local `.env`                 | Supabase project endpoint                                                                    |
+| `SUPABASE_SECRET_KEY`                  | GitHub `production` **environment** secret; local `.env` | **Service role — bypasses RLS entirely.** Server-only. Reachable only from `master` (§17.4). |
+| `EXPO_ACCESS_TOKEN`                    | Optional, server env only                                | Expo enhanced push security; not currently required                                          |
+| `GITHUB_ACTIONS_TOKEN`                 | Supabase Edge Function secret **only**                   | Fine-grained PAT, this repo only, Actions: RW. Expires 2027-08-28.                           |
+| `WATCHDOG_SHARED_SECRET`               | Edge Function secret + Vault + local `.env`              | Authenticates pg_cron → Edge Function                                                        |
+| `EXPO_PUBLIC_SUPABASE_URL`             | App bundle (public by design)                            | Client read endpoint                                                                         |
+| `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | App bundle (public by design)                            | Client key, constrained by RLS to read-only                                                  |
 
 No value appears in this document, in any table, log, migration, or the app
 bundle.
@@ -494,22 +494,23 @@ documented off switch.
 
 ## 9. Security and secret boundaries
 
-| Finding                                                                                                                                                                                                                                                                                                                                      | Grade                   |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| The app embeds only the **publishable** key. RLS limits it to `recall_cases`, `affected_products`, `product_visuals`, and the `consumer_feed_manifest` view.                                                                                                                                                                                 | Acceptable              |
-| Every other table has RLS enabled with **no policies and no anon grants** — structurally unreachable by the client.                                                                                                                                                                                                                          | Acceptable              |
-| The unauthenticated write surface is exactly 4 `SECURITY DEFINER` RPCs (push register/disable, preferences, installation deletion) plus 4 shopper-report RPCs, each with `set search_path = public`, strict shape validation, and no enumeration oracle. Shopper reports are **disabled** in production (`reports_enabled = false`, 0 rows). | Acceptable              |
-| Installation ids are `Crypto.randomUUID()` in SecureStore — 122 bits. Guessing another installation is infeasible.                                                                                                                                                                                                                           | Acceptable              |
-| Workflow `permissions: contents: read` — narrower than default.                                                                                                                                                                                                                                                                              | Acceptable              |
-| **No `pull_request` or `pull_request_target` trigger exists**, so no fork PR can run these workflows or reach production secrets at all.                                                                                                                                                                                                     | Acceptable              |
-| Secrets are masked by GitHub, never printed by any job, and the iOS export is grepped for secret markers as a standing gate.                                                                                                                                                                                                                 | Acceptable              |
-| ~~`SUPABASE_SECRET_KEY` is set at job level, so `npm ci` runs with the service-role key in its environment.~~ **FIXED (P2B7S, local).** No job-level `env:` remains; each secret is declared on the step that needs it and `npm ci` receives none. Pinned by tests (§17.1).                                                                  | Resolved locally        |
-| ~~`actions/checkout@v7` / `actions/setup-node@v7` are mutable tags, not SHA-pinned.~~ **FIXED (P2B7S, local).** Both pinned to full commit SHAs with their release in a comment, byte-identical to what the tags resolved to (§17.2).                                                                                                        | Resolved locally        |
-| **`workflow_dispatch` can target an arbitrary ref.** Anyone with write access (or a token with Actions: write) could push a branch and dispatch it with the production service-role secret. No GitHub Environment protection rules exist.                                                                                                    | **Important hardening** |
-| Anyone with repository write access can read all repository secrets (GitHub's documented model). Currently a sole-owner repository.                                                                                                                                                                                                          | Acceptable now          |
-| **Branch protection on `master` is not verifiable from the repository** and must be inspected in GitHub settings. Since master _is_ the deploy channel, this matters.                                                                                                                                                                        | **Unknown — inspect**   |
-| **Whether GitHub emails you when a _watchdog-dispatched_ run fails is unverified.** GitHub notifies "workflows you've triggered"; for scheduled workflows, the creator. Watchdog dispatches are made by a PAT, not by the cron.                                                                                                              | **Unknown — inspect**   |
-| No secret rotation runbook exists for `SUPABASE_SECRET_KEY` or `GITHUB_ACTIONS_TOKEN` (which expires 2027-08-28).                                                                                                                                                                                                                            | Important hardening     |
+| Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Grade                           |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| The app embeds only the **publishable** key. RLS limits it to `recall_cases`, `affected_products`, `product_visuals`, and the `consumer_feed_manifest` view.                                                                                                                                                                                                                                                                                                            | Acceptable                      |
+| Every other table has RLS enabled with **no policies and no anon grants** — structurally unreachable by the client.                                                                                                                                                                                                                                                                                                                                                     | Acceptable                      |
+| The unauthenticated write surface is exactly 4 `SECURITY DEFINER` RPCs (push register/disable, preferences, installation deletion) plus 4 shopper-report RPCs, each with `set search_path = public`, strict shape validation, and no enumeration oracle. Shopper reports are **disabled** in production (`reports_enabled = false`, 0 rows).                                                                                                                            | Acceptable                      |
+| Installation ids are `Crypto.randomUUID()` in SecureStore — 122 bits. Guessing another installation is infeasible.                                                                                                                                                                                                                                                                                                                                                      | Acceptable                      |
+| Workflow `permissions: contents: read` — narrower than default.                                                                                                                                                                                                                                                                                                                                                                                                         | Acceptable                      |
+| **No `pull_request` or `pull_request_target` trigger exists**, so no fork PR can run these workflows or reach production secrets at all.                                                                                                                                                                                                                                                                                                                                | Acceptable                      |
+| Secrets are masked by GitHub, never printed by any job, and the iOS export is grepped for secret markers as a standing gate.                                                                                                                                                                                                                                                                                                                                            | Acceptable                      |
+| ~~`SUPABASE_SECRET_KEY` is set at job level, so `npm ci` runs with the service-role key in its environment.~~ **FIXED (P2B7S, local).** No job-level `env:` remains; each secret is declared on the step that needs it and `npm ci` receives none. Pinned by tests (§17.1).                                                                                                                                                                                             | Resolved locally                |
+| ~~`actions/checkout@v7` / `actions/setup-node@v7` are mutable tags, not SHA-pinned.~~ **FIXED (P2B7S, local).** Both pinned to full commit SHAs with their release in a comment, byte-identical to what the tags resolved to (§17.2).                                                                                                                                                                                                                                   | Resolved locally                |
+| ~~**`workflow_dispatch` can target an arbitrary ref.** Anyone with write access could push a branch and dispatch it with the production service-role secret.~~ **FIXED IN CODE (P2B7S.2, local); needs one founder settings change to take effect.** Both secret-consuming jobs now declare `environment: production`; once the credentials live only in that environment and it allows only `master`, a dispatch on any other ref fails before the job starts (§17.4). | Resolved locally + founder step |
+| Only a run whose ref is `master` can obtain a production credential — so production access equals **whatever can reach `master`**. Branch protection on `master` is therefore load-bearing, and is still unverified (below).                                                                                                                                                                                                                                            | Follows from §17.4              |
+| Anyone with repository write access can read all repository secrets (GitHub's documented model). Currently a sole-owner repository.                                                                                                                                                                                                                                                                                                                                     | Acceptable now                  |
+| **Branch protection on `master` is not verifiable from the repository** and must be inspected in GitHub settings. Since master _is_ the deploy channel, this matters.                                                                                                                                                                                                                                                                                                   | **Unknown — inspect**           |
+| **Whether GitHub emails you when a _watchdog-dispatched_ run fails is unverified.** GitHub notifies "workflows you've triggered"; for scheduled workflows, the creator. Watchdog dispatches are made by a PAT, not by the cron.                                                                                                                                                                                                                                         | **Unknown — inspect**           |
+| No secret rotation runbook exists for `SUPABASE_SECRET_KEY` or `GITHUB_ACTIONS_TOKEN` (which expires 2027-08-28).                                                                                                                                                                                                                                                                                                                                                       | Important hardening             |
 
 ---
 
@@ -583,11 +584,16 @@ Nothing about this milestone requires a database change.
    receive failure email for **watchdog-dispatched** runs (they are
    triggered by a PAT, not by you), and confirm **branch protection on
    `master`**, which is the deploy channel. Checklist in §20.4.
-5. **Close `workflow_dispatch` on an arbitrary ref.** Anyone with write
-   access could push a branch and dispatch it with the production
-   service-role secret. A GitHub Environment with a protection rule on the
-   ingestion job is the fix. Not done: it is an account-settings change,
-   which this milestone did not make.
+5. ~~**Close `workflow_dispatch` on an arbitrary ref.**~~ **CODE DONE
+   (P2B7S.2, local, §17.4); one founder settings change remains.** Both
+   secret-consuming jobs declare `environment: production`. The boundary
+   becomes real when the `production` environment exists with its
+   deployment branches restricted to `master` and the credentials moved
+   into it — a settings change, which this milestone again did not make.
+   The step-by-step procedure is §17.4. **Until it is done the repository
+   is exactly as exposed as before**: the workflow change alone protects
+   nothing, because GitHub auto-creates a referenced-but-absent environment
+   with no rules.
 6. ~~Adopt explicit freshness SLOs and encode them.~~ **DONE (P2B7S).**
    The 90-minute agency SLO is encoded in
    `src/server/watchdog/heartbeat.ts` and is operational only (§18).
@@ -802,7 +808,8 @@ and never read, printed, or tested the secret):
 - Failure and recovery notifications **test-delivered**, both directions.
 - Period 1 hour, grace 1 hour restored — matched to the ~45-minute nominal
   cycle, so the alarm fires after roughly two hours of genuine silence.
-- `HEARTBEAT_URL` added to GitHub Actions repository secrets.
+- `HEARTBEAT_URL` added to GitHub Actions secrets. (P2B7S.2 moves it to
+  the `production` environment along with the service-role key — §17.4.)
 - **The check is currently paused.**
 
 **Remaining, and it is the last step of P0-1:**
@@ -908,6 +915,180 @@ Audited; all already correct and now pinned by tests so they stay that way:
 
 The one control **not** fixed here is `workflow_dispatch` accepting an
 arbitrary ref (§9). It is unchanged and still open — see §11 P1.
+
+---
+
+### 17.4 The `production` environment — closing the arbitrary-ref hole
+
+#### The exact vulnerability
+
+`workflow_dispatch` lets whoever dispatches choose the ref. Until this
+change both workflows read `SUPABASE_SECRET_KEY` from **repository** scope,
+and a repository secret is handed to every run of that workflow whatever its
+ref. So anyone with write access — or any token holding Actions: write,
+including the watchdog's own PAT — could:
+
+1. push a branch containing one extra `run:` step of their choosing,
+2. dispatch `scheduled-ingest.yml` against that branch,
+3. and receive the service-role key, which bypasses RLS on every production
+   table, in a step they wrote.
+
+No review gate, no approval, and nothing in the run log that looks unusual.
+The per-step scoping from §17.1 does not help: it decides _which step_ gets
+the key, and the attacker writes the step.
+
+#### Why a YAML ref check is not the fix
+
+The obvious patch is `if: github.ref == 'refs/heads/master'`. It is not a
+security boundary, because **the branch being dispatched supplies the
+workflow file**. The same commit that adds the malicious step deletes the
+guard. A ref check catches an accident; it does not catch an adversary, and
+writing it down as the control is worse than not having it, because it reads
+like protection.
+
+#### What actually fixes it
+
+A GitHub Environment, because it is enforced by GitHub _outside_ the
+repository, where branch content cannot reach:
+
+- production credentials live **only** as `production` environment secrets —
+  never at repository scope;
+- the environment's **deployment branches** rule allows `master` only;
+- both secret-consuming jobs declare `environment: production`.
+
+GitHub matches the deployment-branch rule against the run's `github.ref`
+_before the job starts_: "Actions will check the value of `github.ref`
+against the configuration and if it does not match the job will fail and the
+run will stop." The job never begins, so the secret is never placed in any
+step's environment.
+
+#### Why it survives a hostile branch
+
+A branch can edit the workflow file freely. Every edit available to it loses:
+
+| What the branch does to the workflow     | What it gets                                                                                         |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Keeps `environment: production`          | The job fails at the deployment-branch gate before any step runs                                     |
+| Deletes `environment: production`        | The job runs, but the secrets are not at repository scope, so `secrets.SUPABASE_SECRET_KEY` is empty |
+| Renames it to `environment: anything`    | GitHub auto-creates that environment **empty** — no rules and, crucially, no secrets                 |
+| Deletes the `Assert production ref` step | Nothing, that step was never the boundary                                                            |
+
+There is no edit to the repository that hands a non-`master` ref a
+production credential. That is the difference between this and a ref check.
+
+**The one precondition** is that the repository-level copies of the
+credentials are actually deleted. While they exist, every branch still gets
+them and none of the above is true — which is why the migration order below
+ends with deleting them and re-verifying.
+
+#### Availability on this repository
+
+`recall-app` is a **public** repository (confirmed read-only: the
+unauthenticated GitHub API returns 200 for it). Environments, environment
+secrets, and deployment-branch rules are all available for public
+repositories on every plan, including Free — GitHub's plan restriction
+applies to _private_ repositories, which need Pro, Team or Enterprise. So
+there is no plan limitation to work around here and no weaker fallback was
+needed.
+
+#### The ref tripwire, and what it is not
+
+Both workflows now start with an `Assert production ref` step that fails the
+run when `github.ref` is not `refs/heads/master`. It is a **tripwire for
+misconfiguration, not the security boundary** — branch code can delete it,
+and once the environment is configured a disallowed ref never reaches it
+anyway. It earns its place for two reasons: between landing this commit and
+the founder finishing the settings change it is the only guard at all, and
+afterwards it turns a silent loss of the environment rule into a loud,
+legible failure.
+
+It reads the ref through `env:` rather than interpolating `${{ github.ref }}`
+into the shell, because a branch name is attacker-chosen text and inlining a
+context into a `run:` body is the documented script-injection vector. A test
+pins that.
+
+#### Residual risk (unchanged by this, and worth stating)
+
+- Anyone who can get a commit onto `master` still gets production access.
+  The boundary converts "anyone with write access" into "whatever can reach
+  `master`" — which is why **branch protection on `master` is load-bearing**
+  and still unverified (§20.4).
+- A repository **admin** can edit the environment's rules. Sole-owner
+  repository today.
+- `SUPABASE_URL` deliberately stays a repository secret. It is the project
+  endpoint, already public in the app bundle as
+  `EXPO_PUBLIC_SUPABASE_URL`, and useless without the key. **Do not delete
+  it** — every job needs it.
+
+#### Founder procedure (browser, in this order)
+
+This is a settings change and **this milestone made none of it**. Nothing
+below asks you to paste a secret into a chat or a file, and no step prints a
+value. Two values must be fetched from their own dashboards, noted below.
+
+Do steps 1–6 **before** the workflow change reaches `master`, or after — both
+are safe. While both the environment secrets and the repository secrets
+exist, runs succeed either way; nothing breaks until step 7, which is the
+one reversible moment of truth.
+
+1. **Create the environment.** Repo → **Settings** → **Environments** → **New
+   environment** → name it exactly `production` → **Configure environment**.
+   (If a `production` environment already exists because a workflow run
+   auto-created it, open that one instead — it will have no rules.)
+2. **Restrict deployment branches.** In that environment → **Deployment
+   branches and tags** → change **All branches** to **Selected branches and
+   tags** → **Add deployment branch or tag rule** → type `master` → **Add
+   rule**. The list must end up containing `master` and nothing else.
+3. **Leave the gates off.** **Required reviewers** unchecked and **Wait
+   timer** unchecked. Ingestion runs unattended twice an hour; a reviewer
+   gate would stall every scheduled run and every watchdog dispatch. Leave
+   **Allow administrators to bypass** at its default.
+4. **Add `SUPABASE_SECRET_KEY` as an environment secret.** Still inside the
+   `production` environment → **Environment secrets** → **Add environment
+   secret** → name `SUPABASE_SECRET_KEY`. **You must fetch the value
+   yourself**: Supabase → Project Settings → API keys → the service key.
+   Paste it into the GitHub field only.
+5. **Add `HEARTBEAT_URL` as an environment secret.** Same place, name
+   `HEARTBEAT_URL`. **You must fetch the value yourself**: Healthchecks →
+   your check → its ping URL. If you ever added `HEARTBEAT_FDA_URL` /
+   `HEARTBEAT_FSIS_URL`, add those here too; if you never did, skip them.
+6. **Verify by name only.** The environment page must now list
+   `SUPABASE_SECRET_KEY` and `HEARTBEAT_URL` under Environment secrets.
+   GitHub never shows a value again — names are all you can and should
+   check.
+7. **Run one `master` workflow and confirm it is green.** Actions →
+   **scheduled-ingest** → **Run workflow** → branch `master` → Run. Expect:
+   the job shows the **production** environment badge, `Assert production
+ref` prints `ref=refs/heads/master` and passes, ingestion succeeds, and
+   the last step prints `heartbeat OK: … pinging overall.` This proves the
+   environment attaches and the gate admits `master`. It does **not** yet
+   prove the environment secrets are correct — the repository copies are
+   still there.
+8. **Delete the repository-level copies — the moment of truth.** Settings →
+   **Secrets and variables** → **Actions** → **Repository secrets** → delete
+   `SUPABASE_SECRET_KEY`, and `HEARTBEAT_URL` if it is there. **Leave
+   `SUPABASE_URL` alone.** Then immediately dispatch `scheduled-ingest` on
+   `master` again. This run is the real proof: it can only succeed on the
+   environment-held values.
+   **Rollback, if that run fails:** re-add `SUPABASE_SECRET_KEY` as a
+   _repository_ secret and ingestion is healthy again within one dispatch.
+   Nothing was revoked or destroyed — a mistyped environment secret is the
+   likely cause, so fix it in the environment and repeat step 8.
+9. **Prove a non-`master` dispatch is refused.** Push a branch that is
+   **identical to `master`** (`git push origin master:refs/heads/env-gate-test`)
+   — identical on purpose, so that if the gate somehow failed open the worst
+   case is an ordinary ingestion run. Actions → scheduled-ingest → **Run
+   workflow** → pick `env-gate-test` → Run. Expect the run to fail
+   immediately with **"Branch 'env-gate-test' is not allowed to deploy to
+   production due to environment protection rules"**, with no steps
+   executed. Then delete the branch. This produces one red run and one
+   failure email, both expected.
+10. **Confirm Healthchecks is still Up.** Its dashboard should show the ping
+    from step 7 or 8 and remain **Up**. The step-9 failure pings nothing,
+    which is correct — a withheld ping is the alarm, and one skipped ping
+    inside a 1-hour period with a 1-hour grace does not trip it.
+
+Afterwards, update §11 P1-5 and §20.4 to record the date.
 
 ---
 
@@ -1041,15 +1222,15 @@ catch a class of bug the fixture suite already catches.
 
 No value appears anywhere below; secrets are named only.
 
-| Secret                                          | Owner / provider      | Configured in                               | Runtime consumer                     | Least privilege it should hold             |
-| ----------------------------------------------- | --------------------- | ------------------------------------------- | ------------------------------------ | ------------------------------------------ |
-| `SUPABASE_URL`                                  | Supabase              | GitHub Actions secret; local `.env`         | every `jobs:*` step, `ops:heartbeat` | not secret, but kept together with the key |
-| `SUPABASE_SECRET_KEY`                           | Supabase              | GitHub Actions secret; local `.env`         | same steps only (§17.1)              | service role; no narrower key exists today |
-| `GITHUB_ACTIONS_TOKEN`                          | GitHub (fine-grained) | Supabase Edge Function secret **only**      | `ingest-watchdog` dispatch call      | this repo only, Actions: read+write        |
-| `WATCHDOG_SHARED_SECRET`                        | self-generated        | Edge Function secret + Vault; local `.env`  | pg_cron → Edge Function auth         | one random value, no other use             |
-| `HEARTBEAT_URL` (+ `_FDA`, `_FSIS`)             | monitoring vendor     | GitHub Actions secret — **not yet set**     | `ops:heartbeat` step only            | ping-only endpoint, no read access         |
-| `EXPO_ACCESS_TOKEN`                             | Expo                  | optional server env; not currently required | `jobs:push` (inactive)               | push send only                             |
-| `EXPO_PUBLIC_SUPABASE_URL` / `_PUBLISHABLE_KEY` | Supabase              | app bundle — **public by design**           | the mobile client                    | RLS-constrained read only                  |
+| Secret                                          | Owner / provider      | Configured in                                            | Runtime consumer                     | Least privilege it should hold             |
+| ----------------------------------------------- | --------------------- | -------------------------------------------------------- | ------------------------------------ | ------------------------------------------ |
+| `SUPABASE_URL`                                  | Supabase              | GitHub Actions secret; local `.env`                      | every `jobs:*` step, `ops:heartbeat` | not secret, but kept together with the key |
+| `SUPABASE_SECRET_KEY`                           | Supabase              | GitHub `production` **environment** secret; local `.env` | same steps only (§17.1)              | service role; no narrower key exists today |
+| `GITHUB_ACTIONS_TOKEN`                          | GitHub (fine-grained) | Supabase Edge Function secret **only**                   | `ingest-watchdog` dispatch call      | this repo only, Actions: read+write        |
+| `WATCHDOG_SHARED_SECRET`                        | self-generated        | Edge Function secret + Vault; local `.env`               | pg_cron → Edge Function auth         | one random value, no other use             |
+| `HEARTBEAT_URL` (+ `_FDA`, `_FSIS`)             | monitoring vendor     | GitHub `production` **environment** secret               | `ops:heartbeat` step only            | ping-only endpoint, no read access         |
+| `EXPO_ACCESS_TOKEN`                             | Expo                  | optional server env; not currently required              | `jobs:push` (inactive)               | push send only                             |
+| `EXPO_PUBLIC_SUPABASE_URL` / `_PUBLISHABLE_KEY` | Supabase              | app bundle — **public by design**                        | the mobile client                    | RLS-constrained read only                  |
 
 ### 20.1 Rotating `SUPABASE_SECRET_KEY`
 
@@ -1058,7 +1239,10 @@ ingestion stops between the two steps.
 
 1. Supabase dashboard → Project Settings → API keys → **create** a new
    service key. Do not revoke the old one yet.
-2. Update the GitHub Actions repository secret `SUPABASE_SECRET_KEY`.
+2. Update the GitHub **`production` environment** secret
+   `SUPABASE_SECRET_KEY` (Settings → Environments → `production` →
+   Environment secrets), **not** a repository secret — there is no longer a
+   repository copy, and re-creating one would reopen §17.4.
 3. Update your local `.env`.
 4. Verify **before** revoking: `npm run ops:health` (uses the local value),
    then dispatch one run (`npm run scheduler:probe -- --dispatch`) and
@@ -1104,13 +1288,15 @@ leave it broken.
 
 ### 20.4 Standing checks
 
-| Check                          | Where                                                                                                      | Cadence             |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------- | ------------------- |
-| Branch protection on `master`  | GitHub → Settings → Branches. Master IS the deploy channel                                                 | Now, then quarterly |
-| Watchdog-dispatched run alerts | GitHub → Settings → Notifications; confirm you get email for runs **the PAT triggered**, not just your own | Now                 |
-| Actions minutes                | GitHub → Settings → Billing → Actions. ~1,900-4,800 min/month against 2,000 free on a private repo         | Monthly             |
-| Supabase database + egress     | Supabase → Reports → Database / Network                                                                    | Monthly             |
-| `GITHUB_ACTIONS_TOKEN` expiry  | `npm run ops:health` warns 30 days out                                                                     | Automatic           |
+| Check                              | Where                                                                                                                                      | Cadence             |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| Branch protection on `master`      | GitHub → Settings → Branches. Master IS the deploy channel                                                                                 | Now, then quarterly |
+| Watchdog-dispatched run alerts     | GitHub → Settings → Notifications; confirm you get email for runs **the PAT triggered**, not just your own                                 | Now                 |
+| Actions minutes                    | GitHub → Settings → Billing → Actions. ~1,900-4,800 min/month, but this repository is **public**, where standard-runner minutes are free   | Monthly             |
+| `production` environment rules     | GitHub → Settings → Environments → `production`. Deployment branches = `master` only; no required reviewer; no wait timer (§17.4)          | Now, then quarterly |
+| No repository copy of a credential | GitHub → Settings → Secrets and variables → Actions. `SUPABASE_SECRET_KEY` and `HEARTBEAT_URL` must NOT appear here; `SUPABASE_URL` should | Quarterly           |
+| Supabase database + egress         | Supabase → Reports → Database / Network                                                                                                    | Monthly             |
+| `GITHUB_ACTIONS_TOKEN` expiry      | `npm run ops:health` warns 30 days out                                                                                                     | Automatic           |
 
 Neither the branch-protection state nor the watchdog-dispatch notification
 behavior is verifiable from the repository, and **this milestone changed no
