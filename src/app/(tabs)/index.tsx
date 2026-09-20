@@ -12,7 +12,6 @@ import { Link } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StateMessage } from '@/components/state-message';
-import { Callout } from '@/components/ui/callout';
 import { RecallCard } from '@/components/recall-card';
 import { Chip } from '@/components/ui/chip';
 import { SearchBar } from '@/components/ui/search-bar';
@@ -47,7 +46,6 @@ import {
   FEED_LOADING,
   FEED_NOT_CONFIGURED,
   FEED_NOT_CONFIGURED_DEV,
-  FEED_STALE_NOTICE,
   OLDER_NOTICES_EXPLANATION,
   PERSONALIZE_CTA,
 } from '@/lib/feed-copy';
@@ -241,7 +239,7 @@ interface HomeSection {
 }
 
 export default function HomeScreen() {
-  const { state, refreshing, refresh, staleMessage } = useFeed();
+  const { state, refreshing, refresh } = useFeed();
   const [showOlder, setShowOlder] = useState(false);
   const [tab, setTab] = useState<FeedTab>('all');
   // Browsing state (C6): session-only, in memory, never persisted, never part
@@ -643,17 +641,13 @@ export default function HomeScreen() {
             ) : null}
           </View>
         )}
+        // No freshness, staleness or "last checked" surface of any kind
+        // (P2B7S, founder decision). A refresh that fails over a corpus
+        // already on screen changes nothing here: the recalls keep showing,
+        // silently. Whether ingestion is healthy is answered by the
+        // operational dead-man heartbeat, not by the app.
         ListHeaderComponent={
           <>
-            {/* The feed on screen is complete but possibly out of date — said
-                plainly, because silently showing stale counts as current is
-                the failure this milestone exists to prevent. The neutral
-                informational callout, not the lime relevance one. */}
-            {staleMessage ? (
-              <Callout tone="information" accessibilityLiveRegion="polite">
-                {FEED_STALE_NOTICE}
-              </Callout>
-            ) : null}
             {tab === 'affects_me' && prefs !== null ? (
               !hasAnyPreference(prefs) ? (
                 <PersonalizeCta />

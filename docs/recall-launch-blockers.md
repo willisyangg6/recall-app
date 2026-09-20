@@ -128,6 +128,35 @@ gate **disabled** — see [recall-shopper-reports.md](recall-shopper-reports.md)
       selected state, optional retailer, and purchase-time range keyed to
       the installation identifier — all before the feature is enabled.
 
+## 2b. Operational monitoring (P2B7S, 2026-09-19)
+
+Ingestion freshness is **operations-only**: shoppers never see when recalls
+were last checked, and are never told a refresh failed over recalls already
+on screen. That is a deliberate product decision
+([recall-production-runbook.md](recall-production-runbook.md) §18), so the
+founder is the only audience for an ingestion problem — which makes the
+dead-man alert the whole alerting story.
+
+Already done by the founder:
+
+- [x] Healthchecks check created.
+- [x] Failure and recovery notifications test-delivered.
+- [x] 1-hour period and 1-hour grace restored.
+- [x] `HEARTBEAT_URL` added to GitHub Actions secrets.
+
+Remaining, and it is the **P0**:
+
+- [ ] **Unpause the Healthchecks check**, after the workflow that pings it
+      is on `master`. Until then the check is paused and nothing is
+      watching; the workflow step itself is harmless either way (it exits 0
+      and prints `NOT CONFIGURED` when the secret is absent).
+- [ ] Confirm branch protection on `master` (it is the deploy channel) and
+      whether GitHub emails you when a **watchdog-dispatched** run fails.
+
+No migration is required. The heartbeat reads `ingest_runs` with the
+service role it already holds; the consumer-facing freshness view was
+designed, reviewed and then deleted unused.
+
 ## 3. Publication blockers — Privacy Policy (and its Profile row)
 
 The policy may not be published, and no Profile row may link it, until ALL of

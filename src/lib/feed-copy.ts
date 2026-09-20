@@ -79,9 +79,14 @@ export const FEED_EMPTY_CORPUS: FeedStateCopy = {
   body: 'Pull down to refresh.',
 };
 
-/** The feed on screen is complete but could not be refreshed just now. */
-export const FEED_STALE_NOTICE =
-  'Showing the last complete update. Lotly couldn’t refresh just now. Pull down to try again.';
+/*
+ * There is deliberately NO "could not refresh" sentence here any more.
+ *
+ * A refresh that fails over a corpus already on screen is silent (P2B7S,
+ * founder decision): the recalls keep showing and the app says nothing
+ * about its own ingestion. `FEED_LOAD_FAILURE` above survives because it
+ * serves the different, honest case of having NO data to show at all.
+ */
 
 /** Why the Older active notices section is collapsed by default. */
 export const OLDER_NOTICES_EXPLANATION =

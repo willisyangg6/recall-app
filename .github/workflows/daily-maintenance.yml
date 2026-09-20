@@ -12,6 +12,28 @@
 #
 # Same secrets and overlap layering as scheduled-ingest.yml.
 
+# ── Supply-chain and secret hardening (P2B7S) ────────────────────────────────
+#
+# 1. SUPABASE_SECRET_KEY is set PER STEP, never at job level. It is the
+#    service-role key: it bypasses RLS entirely and can read and write every
+#    production table. At job scope it was also in the environment of
+#    `npm ci`, so a malicious `postinstall` anywhere in the dependency tree
+#    could have exfiltrated full production access without touching this
+#    repository. Checkout, setup-node and npm ci now run with no production
+#    secret in scope at all; only the steps that talk to Supabase get it.
+#
+# 2. Third-party actions are pinned to a full commit SHA with the release in
+#    a trailing comment. A tag is a mutable pointer the action's owner can
+#    move; a SHA is not. Both actions are GitHub-owned and the pinned commits
+#    are byte-identical to what the `v7` tags resolved to on 2026-09-19, so
+#    this changes nothing about what runs today. To update: read the action's
+#    release notes, resolve the new tag to its commit
+#    (`gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`), replace both the
+#    SHA and the version comment, and name the release in the commit message.
+#
+# Both rules are enforced by src/server/jobs/workflow-schedule.test.ts, so a
+# later edit cannot quietly widen the secret scope or float a tag again.
+
 name: daily-maintenance
 
 on:
@@ -30,25 +52,36 @@ jobs:
   maintain:
     runs-on: ubuntu-latest
     timeout-minutes: 110
-    env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    # No job-level `env:` on purpose — see hardening note 1 above.
     steps:
-      # v7 majors — same rationale and verification as scheduled-ingest.yml.
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      # SHA-pinned v7 majors — same rationale, verification and update
+      # procedure as scheduled-ingest.yml. These steps receive NO production
+      # secret.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
+      # Receives NO secret: this is the step that runs third-party
+      # lifecycle scripts.
       - run: npm ci
       - name: FDA enforcement (weekly-gated)
         run: npm run jobs:enforcement
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       - name: FSIS label visuals (full sweep)
         if: ${{ !cancelled() }}
         run: npm run jobs:labels -- --full
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       # Enforcement reconciliation can create classification NotificationEvents;
       # delivering here means risk updates go out in the same daily cycle
       # instead of waiting for the next 30-minute tick.
       - name: Push delivery + receipts
         if: ${{ !cancelled() }}
         run: npm run jobs:push
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}

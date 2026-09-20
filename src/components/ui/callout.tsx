@@ -45,7 +45,7 @@ export function Callout({
 }: {
   tone: CalloutTone;
   children: string;
-  /** `polite` for a notice that appears after the screen is already up (a failed refresh). */
+  /** `polite` for a notice that appears after the screen is already up. */
   accessibilityLiveRegion?: 'polite';
 }) {
   const treatment = TONE[tone];

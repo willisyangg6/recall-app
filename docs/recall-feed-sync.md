@@ -264,3 +264,85 @@ been made yet.
   `reconcile-duplicate-cases.ts` page with `.range()` and **no `.order()`**,
   which Postgres does not guarantee stable — their sweeps can in principle
   skip/repeat rows across pages.
+
+## 8. Foreground revalidation (P2B7S)
+
+C8 made the corpus cheap to keep current. It did not make the app refresh
+unless the shopper asked. That is fixed here.
+
+**Nothing in this section is shopper-visible.** Ingestion freshness is an
+operations concern — see §9.
+
+### 8a. The contract
+
+`FOREGROUND_REVALIDATE_AFTER_MINUTES = 15`, declared in
+[`feed-sync.ts`](../src/lib/feed-sync.ts) beside the session it governs. On
+`AppState` → `active`, the hook calls `session.syncIfOlderThan(15 min)`.
+
+Every safety property lives in the SESSION, not the React effect, which is
+what makes duplicate listeners harmless and every case a unit test:
+
+| Property                           | Mechanism                                                     |
+| ---------------------------------- | ------------------------------------------------------------- |
+| Concurrent calls coalesce          | one in-flight promise, shared by cold launch, pull and return |
+| Rapid AppState events cost nothing | the 15-minute threshold IS the debounce                       |
+| A failed attempt buys no silence   | the age is measured from the last **successful** sync         |
+| A backward clock cannot freeze it  | negative elapsed revalidates rather than assuming freshness   |
+| A failed refresh keeps the cache   | the corpus stays on screen, silently                          |
+| The list never flashes empty       | the cache fills a not-yet-ready state before any request      |
+
+iOS reports `inactive` for the app switcher, Control Centre and the
+notification shade, and a return from any of those looks exactly like a real
+foreground. The threshold drops all of them without a request.
+
+**Network cost.** One revalidation is one manifest request: measured
+**82.4 KB raw / 37.9 KB gzipped** for today's 898 cases, plus ~418 B gzipped
+per changed row (measured: 2 of 898 cases changed in 24 h, so usually zero).
+A shopper who returns ten separate times across a day spends well under
+400 KB. A full cold load is 1.72 MB raw / 367 KB gzipped.
+
+### 8b. A failed refresh is silent
+
+Founder product decision: **shoppers never see ingestion freshness, "last
+checked" times, delayed/stale state, or refresh-failure messaging.**
+
+When a refresh fails over a corpus already on screen, the app keeps showing
+that corpus and says nothing — no notice, no banner, no timestamp, no
+accessibility announcement. The cache is never cleared by a failed sync.
+
+The one surviving failure surface is the honest no-data state: a sync that
+fails with **nothing** loaded still becomes the full error screen
+(`FEED_ERROR_TITLE` + `FEED_LOAD_FAILURE`), because an empty list would
+otherwise read as "there are no current recalls", which is a false
+statement about the world.
+
+This is enforced repo-wide by
+[`no-shopper-freshness.test.ts`](../src/lib/no-shopper-freshness.test.ts),
+which sweeps the entire shipped client bundle rather than a named list of
+screens.
+
+### 8c. What the client does NOT fetch or store
+
+The client makes **no freshness request** and the cache document stores
+**no freshness metadata**. Nothing on the device reads either, so fetching
+would cost a request on every sync and caching would be dead weight in
+every document.
+
+The cache schema is **v4**. v3 briefly carried an ingestion-freshness
+snapshot and was never shipped; the number goes forward rather than back to
+2, because reusing a version is how a document written under one shape gets
+read as another later.
+
+## 9. Ingestion freshness is operations-only
+
+Whether ingestion is healthy is answered by the **dead-man heartbeat**,
+which pages the founder when it stops — not by the app telling shoppers
+about its own plumbing. See
+[recall-production-runbook.md §16](recall-production-runbook.md) for the
+heartbeat, its SLO and its activation, and §18 for why there is no
+consumer-facing surface.
+
+There is no `consumer_ingest_freshness` view and no migration: the
+heartbeat reads `ingest_runs` directly with the service role it already
+holds. A database projection would only have been needed to expose those
+values to an unprivileged reader, and there is none.

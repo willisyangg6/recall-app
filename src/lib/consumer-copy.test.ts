@@ -40,7 +40,6 @@ import {
   FEED_EMPTY_CORPUS,
   FEED_EMPTY_PERSONALIZED,
   FEED_LOAD_FAILURE,
-  FEED_STALE_NOTICE,
   OLDER_NOTICES_EXPLANATION,
   PERSONALIZE_CTA,
 } from '@/lib/feed-copy';
@@ -326,7 +325,10 @@ test('a raw error message or HTTP status can never reach the four consumer failu
   // writes the one sentence; the cause goes to the development console.
   const hook = codeOnly(USE_FEED);
   assert.ok(hook.includes("import { FEED_LOAD_FAILURE } from '@/lib/feed-copy';"));
-  assert.ok(hook.includes('const message = FEED_LOAD_FAILURE;'));
+  // Written inline into the one error state the hook can produce. (It was
+  // bound to a local until P2B7S removed the stale-notice path that also
+  // used it; the guarantee is unchanged — one approved sentence, no cause.)
+  assert.ok(hook.includes("{ status: 'error', message: FEED_LOAD_FAILURE }"));
   assert.ok(!hook.includes('error.message'), 'the feed hook exposes error.message');
   assert.ok(hook.includes("if (__DEV__) console.warn('Feed sync failed', error);"));
   assert.ok(SCREENS.saved.includes('body={state.message}'));
@@ -506,10 +508,6 @@ test('frozen and protected copy is still present, word for word', () => {
     'Shopper reports are temporarily unavailable, so this report can’t be edited right now. You can still remove it.',
   );
   assert.equal(
-    FEED_STALE_NOTICE,
-    'Showing the last complete update. Lotly couldn’t refresh just now. Pull down to try again.',
-  );
-  assert.equal(
     OLDER_NOTICES_EXPLANATION,
     'Still listed as active by the issuing agency, with no announcement or update in the last 60 days.',
   );
@@ -556,12 +554,23 @@ test('authored hints end with a full stop, and the Feed’s Edit action names wh
     SCREENS.card.includes("export const CARD_ACCESSIBILITY_HINT = 'Opens the recall details.';"),
   );
   assert.ok(SCREENS.feed.includes('accessibilityLabel="Edit personalization"'));
-  // A failed refresh is announced: the stale notice is a polite live region
-  // on both screens that show it.
-  assert.ok(SCREENS.feed.includes('<Callout tone="information" accessibilityLiveRegion="polite">'));
-  assert.ok(
-    SCREENS.saved.includes('<Callout tone="information" accessibilityLiveRegion="polite">'),
-  );
+  // A failed refresh over a corpus already on screen is now SILENT
+  // (P2B7S, founder decision): no notice, no live region, no announcement.
+  // Shoppers are never told about ingestion state; the dead-man heartbeat
+  // tells the founder instead. The only surviving failure surface is the
+  // honest no-data error, which is a StateMessage and not a live region.
+  for (const [name, screen] of [
+    ['feed', SCREENS.feed],
+    ['saved', SCREENS.saved],
+  ] as const) {
+    assert.ok(
+      !codeOnly(screen).includes('accessibilityLiveRegion'),
+      `${name} announces a refresh-state change`,
+    );
+    assert.ok(!codeOnly(screen).includes('Freshness'), `${name} regained a freshness surface`);
+  }
+  // The Callout primitive keeps its live-region option for the surfaces
+  // that legitimately use it; nothing in the feed path passes it.
   assert.ok(
     read('components', 'ui', 'callout.tsx').includes("accessibilityLiveRegion?: 'polite';"),
   );

@@ -150,7 +150,6 @@ import {
   FEED_ERROR_TITLE,
   FEED_LOAD_FAILURE,
   FEED_LOADING,
-  FEED_STALE_NOTICE,
   PERSONALIZE_CTA,
 } from '@/lib/feed-copy';
 import { RISK_FILTER_TIERS } from '@/lib/feed-filters';
@@ -1369,11 +1368,10 @@ function SavedGallery({ items }: { items: FeedItem[] }) {
         <StateMessage title={SAVED_ERROR_TITLE} body={FEED_LOAD_FAILURE} />
       </Surface>
       <Text variant="caption" color="text/secondary">
-        The two notices: a refresh that failed over a feed already on screen, and — on a simulated
-        count of two, because it appears only once a saved recall leaves the active corpus — saved
-        recalls the active feed no longer carries.
+        The one notice Saved can show, on a simulated count of two, because it appears only once a
+        saved recall leaves the active corpus. A refresh that fails over a feed already on screen
+        shows nothing at all (P2B7S): the recalls simply keep rendering.
       </Text>
-      <Callout tone="information">{FEED_STALE_NOTICE}</Callout>
       <Callout tone="information">{savedMissingNotice(2) ?? ''}</Callout>
       {models.length === 0 ? (
         <Text variant="caption" color="text/secondary">

@@ -35,6 +35,28 @@
 # workflow_dispatch (it is the watchdog's target and the manual recovery
 # path).
 
+# ── Supply-chain and secret hardening (P2B7S) ────────────────────────────────
+#
+# 1. SUPABASE_SECRET_KEY is set PER STEP, never at job level. It is the
+#    service-role key: it bypasses RLS entirely and can read and write every
+#    production table. At job scope it was also in the environment of
+#    `npm ci`, so a malicious `postinstall` anywhere in the dependency tree
+#    could have exfiltrated full production access without touching this
+#    repository. Checkout, setup-node and npm ci now run with no production
+#    secret in scope at all; only the steps that talk to Supabase get it.
+#
+# 2. Third-party actions are pinned to a full commit SHA with the release in
+#    a trailing comment. A tag is a mutable pointer the action's owner can
+#    move; a SHA is not. Both actions are GitHub-owned and the pinned commits
+#    are byte-identical to what the `v7` tags resolved to on 2026-09-19, so
+#    this changes nothing about what runs today. To update: read the action's
+#    release notes, resolve the new tag to its commit
+#    (`gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`), replace both the
+#    SHA and the version comment, and name the release in the commit message.
+#
+# Both rules are enforced by src/server/jobs/workflow-schedule.test.ts, so a
+# later edit cannot quietly widen the secret scope or float a tag again.
+
 name: scheduled-ingest
 
 on:
@@ -53,28 +75,40 @@ jobs:
   ingest:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    # No job-level `env:` on purpose. Every production secret is declared on
+    # the individual step that needs it (hardening note 1 above).
     steps:
-      # v7 majors: current stable, node24 action runtime (v4 ran the
-      # deprecated node20 runtime). Verified against the actions' official
-      # READMEs 2026-08-28: no input we use changed behaviour, and the v7
-      # fork-PR safety default cannot apply (no pull_request_target here).
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      # SHA-pinned v7 majors (see the hardening note above). v7 is the
+      # current stable major for both and runs the node24 action runtime;
+      # v4 ran the deprecated node20 one. Verified against the actions'
+      # official READMEs 2026-08-28: no input we use changed behaviour, and
+      # the v7 fork-PR safety default cannot apply (no pull_request_target
+      # here). These steps receive NO production secret.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
+      # Installs the dependency tree. Deliberately receives NO secret: this
+      # is the step that executes third-party lifecycle scripts.
       - run: npm ci
       - name: FDA announcements
         run: npm run jobs:fda
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       - name: FSIS recalls/PHAs
         if: ${{ !cancelled() }}
         run: npm run jobs:fsis
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       - name: FSIS label visuals (recent)
         if: ${{ !cancelled() }}
         run: npm run jobs:labels
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       # Push delivery runs after ingestion so events created THIS tick are
       # delivered in the same cycle; receipts from the previous tick (30 min
       # ago) satisfy Expo's check-after-15-minutes guidance. Until the founder
@@ -82,3 +116,25 @@ jobs:
       - name: Push delivery + receipts
         if: ${{ !cancelled() }}
         run: npm run jobs:push
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      # Dead-man heartbeat (P2B7S). LAST on purpose, and it is the only step
+      # that sees the heartbeat secrets. It re-reads freshness from the
+      # database and pings the external monitor ONLY when both required
+      # agency channels satisfy the SLO, so a run that completed without
+      # actually ingesting cannot report itself healthy. It never fails the
+      # workflow and never writes: a withheld ping IS the alarm.
+      #
+      # Until the founder creates HEARTBEAT_URL the step prints that
+      # monitoring is NOT configured and exits 0. Nothing in the app or this
+      # file claims external monitoring is active before then.
+      - name: Ingestion freshness heartbeat
+        if: ${{ !cancelled() }}
+        run: npm run ops:heartbeat
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          HEARTBEAT_URL: ${{ secrets.HEARTBEAT_URL }}
+          HEARTBEAT_FDA_URL: ${{ secrets.HEARTBEAT_FDA_URL }}
+          HEARTBEAT_FSIS_URL: ${{ secrets.HEARTBEAT_FSIS_URL }}

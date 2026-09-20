@@ -100,15 +100,26 @@ function componentBody(source: string, name: string): string {
   return source.slice(from, ends.length ? Math.min(...ends) : source.length);
 }
 
-/** The hub's two settings galleries, each alone. */
+/**
+ * The hub's two settings galleries, each alone.
+ *
+ * Bounded by the NEXT top-level function rather than by a named one. The
+ * notifications slice used to run all the way to `GallerySample`, which
+ * silently swept in every function declared in between — so an unrelated
+ * gallery added later (P2B7S's freshness gallery, which legitimately says
+ * "sync") failed the notifications scope assertion below. The slice now
+ * means what its name says.
+ */
+function untilNextFunction(source: string, start: string): string {
+  const from = source.indexOf(start);
+  const next = source.indexOf('\nfunction ', from + start.length);
+  return source.slice(from, next === -1 ? source.length : next);
+}
 const PERSONALIZATION_GALLERY = HUB.slice(
   HUB.indexOf('function LivePreferences('),
   HUB.indexOf('function NotificationsGallery('),
 );
-const NOTIFICATIONS_GALLERY = HUB.slice(
-  HUB.indexOf('function NotificationsGallery('),
-  HUB.indexOf('function GallerySample('),
-);
+const NOTIFICATIONS_GALLERY = untilNextFunction(HUB, 'function NotificationsGallery(');
 
 const SETTINGS_SOURCES = {
   routeP: ROUTE_P,

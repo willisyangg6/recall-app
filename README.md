@@ -10,7 +10,16 @@ detection → notification ledger) and renders both agencies on the same
 dashboard. FDA Phase B (openFDA enforcement reconciliation — the official
 Class I/II/III arriving weeks later onto the same case) is implemented and
 runs as the scheduled, weekly-gated daily maintenance job. Personalization
-(Phase C3) is implemented. Push delivery machinery — registration, the
+(Phase C3) is implemented. Foreground revalidation (P2B7S) is
+implemented: the app now refreshes when it returns to the foreground, not
+only on cold launch and pull-to-refresh. **Ingestion freshness is
+operations-only** — shoppers never see "last checked" times or stale-state
+messaging, and a refresh that fails over recalls already on screen is
+silent; the founder is alerted instead by a dead-man heartbeat, which is
+built and wired but **not yet live** (the Healthchecks check is paused
+pending a push). No migration is involved. See
+[docs/recall-production-runbook.md](docs/recall-production-runbook.md) §16
+and §18. Push delivery machinery — registration, the
 notification-event ledger, the delivery job, and copy formatting — is
 implemented but **deliberately inactive**: until the founder runs
 `push:activate -- --confirm`, `jobs:push` is a no-send no-op and no device
@@ -111,6 +120,11 @@ npm run jobs:labels -- --full   # daily full sweep + failure retries
 npm run jobs:enforcement    # openFDA reconcile, gated on the weekly export date
 npm run jobs:push           # push delivery + Expo receipt processing
 npm run ops:health          # source/job health from the database, non-zero when unhealthy
+npm run ops:heartbeat       # dead-man heartbeat (P2B7S) — read-only, pings the external
+                            # monitor only when BOTH agency channels satisfy the 90-minute
+                            # SLO. Reads ingest_runs directly (no view, no migration).
+                            # Prints "NOT CONFIGURED" and exits 0 without HEARTBEAT_URL;
+                            # never fails a run, never prints a URL.
 ```
 
 `--dry-run` on `jobs:fda`/`jobs:fsis` runs the full pipeline in memory and

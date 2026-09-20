@@ -8,6 +8,7 @@
 
 import type { FeedItem, FeedManifestEntry } from './recall-feed';
 import type { FeedCacheStore } from './feed-cache-store';
+import type { FeedSyncTransport } from './feed-sync';
 
 const STATES = [['CA'], ['CA', 'TX'], ['NY'], ['WA', 'OR'], ['FL']];
 const ALLERGENS = ['sesame', 'peanut', 'milk', null, null];
@@ -136,11 +137,7 @@ export function memoryCacheStore(initial: string | null = null) {
 }
 
 export interface ScriptedTransport {
-  transport: {
-    fetchManifest(): Promise<FeedManifestEntry[]>;
-    fetchAll(): Promise<FeedItem[]>;
-    fetchByIds(ids: string[]): Promise<FeedItem[]>;
-  };
+  transport: FeedSyncTransport;
   calls: { manifest: number; all: number; byIds: string[][] };
   setManifest(entries: FeedManifestEntry[] | Error): void;
   setAll(items: FeedItem[] | Error): void;

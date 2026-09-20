@@ -53,7 +53,6 @@ import { color, layout, spacing } from '@/constants/design-tokens';
 import { useFeed } from '@/hooks/use-feed';
 import { usePreferences } from '@/hooks/use-preferences';
 import { useSavedRecalls } from '@/hooks/use-saved-recalls';
-import { FEED_STALE_NOTICE } from '@/lib/feed-copy';
 import { isFeedConfigured } from '@/lib/recall-feed';
 import { buildHomeCardModel, todayIso } from '@/lib/recall-presentation';
 import {
@@ -78,7 +77,7 @@ function Page({ children }: { children: React.ReactNode }) {
 }
 
 export default function SavedScreen() {
-  const { state, refreshing, refresh, staleMessage } = useFeed();
+  const { state, refreshing, refresh } = useFeed();
   const { ids, loaded, available } = useSavedRecalls();
   // Read for the SAME reason the Feed reads them, through the same hook:
   // "Affects you" is a claim about the current user, so a saved card has to
@@ -145,16 +144,6 @@ export default function SavedScreen() {
         data={items}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <RecallCard model={buildHomeCardModel(item, { today, prefs })} />}
-        // The feed on screen is complete but possibly out of date — said
-        // plainly, in the same words the Feed uses, because silently showing
-        // stale facts as current is the failure the sentence exists for.
-        ListHeaderComponent={
-          staleMessage ? (
-            <Callout tone="information" accessibilityLiveRegion="polite">
-              {FEED_STALE_NOTICE}
-            </Callout>
-          ) : null
-        }
         // Said plainly rather than silently showing a shorter list than the
         // user saved: these recalls left the active feed, they were not
         // dropped by mistake, and their ids stay on the device.

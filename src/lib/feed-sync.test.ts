@@ -472,3 +472,211 @@ test('recovery after a manifest outage returns to incremental syncs', async () =
   assert.equal(warm.mode, 'incremental');
   assert.equal(warm.downloadedRows, 0);
 });
+
+// ── Cache resilience (P2B7S) ───────────────────────────────────────────────
+
+test('a failed sync leaves the cached corpus untouched', async () => {
+  const corpus = makeCorpus(20);
+  const scripted = scriptedTransport(corpus);
+  const cache = memoryCacheStore();
+  await syncFeed({ store: cache.store, transport: scripted.transport, now: NOW });
+  const before = cache.current();
+
+  scripted.setManifest(new Error('offline'));
+  scripted.setAll(new Error('offline'));
+  await assert.rejects(syncFeed({ store: cache.store, transport: scripted.transport, now: NOW }));
+
+  assert.equal(cache.current(), before, 'a failed refresh rewrote the cache');
+  assert.equal(parseFeedCache(cache.current()!)!.items.length, 20);
+});
+
+test('a cache from any other app version is discarded whole, never half-read', async () => {
+  // Rejected by version, so the next load is cold and complete rather than
+  // a corpus of unknown field coverage.
+  //
+  // v3 is in this list deliberately. P2B7S briefly wrote a v3 document
+  // carrying an ingestion-freshness snapshot; that field is gone and the
+  // document shape is v2's again, so the version stayed at 2 rather than
+  // advancing to a number whose shape would have been identical anyway.
+  // The only devices holding a v3 are development ones, and this is what
+  // makes their caches drop cleanly instead of being half-read.
+  const cache = memoryCacheStore();
+  for (const stale of [1, 3, 99]) {
+    cache.setStored(
+      JSON.stringify({
+        schemaVersion: stale,
+        syncedAt: '2026-08-28T12:00:00.000Z',
+        items: makeCorpus(5),
+        versions: {},
+        freshness: { observedAt: 'x', receivedAtDeviceMs: 1 },
+      }),
+    );
+    assert.equal(await loadCachedFeed(cache.store), null, `v${stale} was accepted`);
+    assert.equal(cache.current(), null, `v${stale} was not discarded`);
+  }
+});
+
+test('the committed document stores the corpus and its tokens, and nothing else', async () => {
+  // No freshness, no operational metadata: the device keeps recall content
+  // and sync tokens only.
+  const corpus = makeCorpus(8);
+  const scripted = scriptedTransport(corpus);
+  const cache = memoryCacheStore();
+  await syncFeed({ store: cache.store, transport: scripted.transport, now: NOW });
+
+  const raw = JSON.parse(cache.current()!) as Record<string, unknown>;
+  assert.deepEqual(Object.keys(raw).sort(), ['items', 'schemaVersion', 'syncedAt', 'versions']);
+  assert.ok(!cache.current()!.includes('freshness'));
+  assert.ok(!cache.current()!.includes('checkedAt'));
+});
+
+// ── Foreground revalidation (P2B7S) ─────────────────────────────────────────
+
+/** A session over a settable device clock, so thresholds are testable. */
+function foregroundSession(corpus = makeCorpus(12)) {
+  const scripted = scriptedTransport(corpus);
+  const cache = memoryCacheStore();
+  let clock = Date.parse('2026-08-28T12:00:00.000Z');
+  const session = createFeedSession({
+    store: cache.store,
+    transport: scripted.transport,
+    now: () => new Date(clock),
+  });
+  return {
+    session,
+    scripted,
+    cache,
+    advanceMinutes: (minutes: number) => {
+      clock += minutes * 60_000;
+    },
+    setClock: (ms: number) => {
+      clock = ms;
+    },
+  };
+}
+
+const FIFTEEN_MINUTES = 15 * 60_000;
+
+test('a foreground return inside the threshold issues no request at all', async () => {
+  const { session, scripted, advanceMinutes } = foregroundSession();
+  await session.sync();
+  assert.equal(scripted.calls.manifest, 1);
+
+  advanceMinutes(14);
+  assert.equal(await session.syncIfOlderThan(FIFTEEN_MINUTES), null);
+  assert.equal(scripted.calls.manifest, 1, 'a skipped foreground still hit the network');
+});
+
+test('a foreground return past the threshold revalidates exactly once', async () => {
+  const { session, scripted, advanceMinutes } = foregroundSession();
+  await session.sync();
+  advanceMinutes(15);
+
+  const outcome = await session.syncIfOlderThan(FIFTEEN_MINUTES);
+  assert.ok(outcome, 'the threshold boundary did not revalidate');
+  assert.equal(scripted.calls.manifest, 2);
+});
+
+test('rapid AppState events cost one request, not one each', async () => {
+  // iOS reports `inactive` for the app switcher, Control Centre and the
+  // notification shade; a return from any of those looks exactly like a
+  // real foreground. The threshold IS the debounce.
+  const { session, scripted, advanceMinutes } = foregroundSession();
+  await session.sync();
+  advanceMinutes(20);
+
+  const results = await Promise.all(
+    Array.from({ length: 12 }, () => session.syncIfOlderThan(FIFTEEN_MINUTES)),
+  );
+  assert.equal(scripted.calls.manifest, 2, 'a burst of transitions fanned out into requests');
+  // Every caller got the same in-flight reconciliation.
+  const synced = results.filter((outcome) => outcome !== null);
+  assert.equal(synced.length, 12);
+  assert.equal(new Set(synced).size, 1);
+});
+
+test('a foreground return JOINS a sync already in flight rather than starting a second', async () => {
+  const { session, scripted, advanceMinutes } = foregroundSession();
+  await session.sync();
+  advanceMinutes(60);
+
+  let release: ((entries: ReturnType<typeof manifestFor>) => void) | null = null;
+  const pending = new Promise<ReturnType<typeof manifestFor>>((resolve) => {
+    release = resolve;
+  });
+  scripted.setManifest([]);
+  const slow = { ...scripted.transport, fetchManifest: () => pending };
+  const joined = createFeedSession({ store: memoryCacheStore().store, transport: slow });
+
+  const pull = joined.sync();
+  const foreground = joined.syncIfOlderThan(FIFTEEN_MINUTES);
+  assert.equal(await Promise.race([foreground, Promise.resolve('pending')]), 'pending');
+  release!(manifestFor([]));
+  assert.equal(await pull, await foreground);
+});
+
+test('the threshold is measured from the last SUCCESSFUL sync, not the last attempt', async () => {
+  // A failed attempt must not buy silence: the corpus never updated, so the
+  // next foreground has to try again rather than wait out the window.
+  const { session, scripted, advanceMinutes } = foregroundSession();
+  await session.sync();
+  advanceMinutes(20);
+
+  scripted.setManifest(new Error('offline'));
+  scripted.setAll(new Error('offline'));
+  await assert.rejects(session.syncIfOlderThan(FIFTEEN_MINUTES));
+  const attempts = scripted.calls.manifest;
+
+  advanceMinutes(1); // well inside the window since the FAILED attempt
+  scripted.setManifest(manifestFor([]));
+  scripted.setAll([]);
+  const retried = await session.syncIfOlderThan(FIFTEEN_MINUTES);
+  assert.ok(retried, 'a failed attempt was treated as a refresh');
+  assert.equal(scripted.calls.manifest, attempts + 1);
+});
+
+test('a session that has never synced always revalidates on foreground', async () => {
+  const { session, scripted } = foregroundSession();
+  const outcome = await session.syncIfOlderThan(FIFTEEN_MINUTES);
+  assert.ok(outcome);
+  assert.equal(scripted.calls.manifest, 1);
+});
+
+test('a device clock that jumps BACKWARD revalidates rather than believing it is fresh', async () => {
+  // Clamping the elapsed time to zero would leave the session permanently
+  // convinced it had just synced. One extra manifest request is the safe
+  // outcome.
+  const { session, scripted, setClock } = foregroundSession();
+  await session.sync();
+  const synced = session.lastSyncedAtMs()!;
+  setClock(synced - 3_600_000);
+
+  assert.ok(await session.syncIfOlderThan(FIFTEEN_MINUTES));
+  assert.equal(scripted.calls.manifest, 2);
+});
+
+test('the cached corpus is available before any request, so the list never flashes empty', async () => {
+  const corpus = makeCorpus(9);
+  const { session, scripted, cache } = foregroundSession(corpus);
+  await session.sync();
+
+  const warm = createFeedSession({ store: cache.store, transport: scripted.transport });
+  const cached = await warm.getCached();
+  assert.ok(cached);
+  assert.equal(cached.length, 9);
+  assert.equal(scripted.calls.manifest, 1, 'reading the cache issued a request');
+});
+
+test('no cache and no network yields nothing to show, and says so by throwing', async () => {
+  // The screens turn this into their error state. What must never happen is
+  // resolving with an empty corpus, which would render as "no current
+  // recalls" — a false statement about the world.
+  const scripted = scriptedTransport([]);
+  scripted.setManifest(new Error('offline'));
+  scripted.setAll(new Error('offline'));
+  const cache = memoryCacheStore();
+  const session = createFeedSession({ store: cache.store, transport: scripted.transport });
+
+  assert.equal(await session.getCached(), null);
+  await assert.rejects(session.sync());
+});

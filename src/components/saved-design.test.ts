@@ -25,7 +25,6 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { hitTarget, layout, spacing } from '@/constants/design-tokens';
-import { FEED_STALE_NOTICE } from '@/lib/feed-copy';
 import {
   SAVED_EMPTY,
   SAVED_ERROR_TITLE,
@@ -305,9 +304,15 @@ test('Saved spells no colour, size, family, radius or spacing of its own', () =>
   assert.match(SAVED, /<Surface background="background\/page" style=\{styles\.page\}>/);
   assert.match(SAVED, /import \{ Callout \} from '@\/components\/ui\/callout'/);
   assert.ok(CALLOUT.includes("background: 'background/subtle'"));
-  // The stale sentence is the Feed's own, not a second copy of it.
-  assert.match(SAVED, /import \{ FEED_STALE_NOTICE \} from '@\/lib\/feed-copy'/);
-  assert.ok(!SAVED.includes(FEED_STALE_NOTICE.slice(0, 24)), 'the notice is duplicated inline');
+  // Saved says nothing about refresh state at all (P2B7S, founder
+  // decision): a refresh that fails over a corpus already on screen leaves
+  // the recalls rendering and shows no notice. The one Callout it still
+  // owns is the saved-but-no-longer-active footer, whose sentence comes
+  // from the shared copy module rather than being typed here.
+  assert.ok(!SAVED.includes('Freshness'), 'Saved regained a freshness surface');
+  assert.ok(!SAVED.includes('staleMessage'), 'Saved regained a stale-state flag');
+  assert.equal(count(SAVED, '<Callout'), 1, 'Saved grew a second callout');
+  assert.match(SAVED, /ListFooterComponent=\{missing \? <Callout tone="information">/);
 });
 
 test('the list keeps the Feed’s rhythm, margins and content width', () => {

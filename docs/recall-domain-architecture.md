@@ -74,7 +74,9 @@ Three persisted states, each solving a real source problem — plus one internal
 
 **Correction (2026-08-21, from live data): agency-active ≠ consumer-current.** FSIS has no closure mechanism for Public Health Alerts, so they stay `Active` indefinitely — verified live: 167 of 178 active cases were PHAs, dating back to 2014. An earlier reading of this section implicitly equated "FSIS Active" with primary-feed placement; that is wrong for consumers. The rule is: **source lifecycle** (`active`, truthful, never changed by us based on age) and **consumer feed relevance** (a display tier) are separate concerns. The Home feed shows the Recent tier as the primary experience and presents older agency-active items in a clearly separated, collapsed-by-default section with honest ages — never terminated, hidden, or relabeled.
 
-Every card shows its authoritative date ("Announced Aug 18" / "Updated Mar 9") plus a global "sources last checked" indicator from ingestion run metadata — freshness honesty is part of the trust proposition.
+Every card shows its authoritative date ("Announced Aug 18" / "Updated Mar 9").
+
+**Superseded (2026-09-19, P2B7S founder decision): there is no global "sources last checked" indicator, and there will not be one.** This section originally paired the per-card date with a shopper-visible ingestion-freshness stamp drawn from run metadata. That was built and then removed: ingestion freshness is **operations-only**. Shoppers are never shown when the agencies were last checked, never told that updates are delayed or stale, and never told that a refresh failed over recalls already on screen — a failed refresh silently keeps showing the cached corpus. Freshness honesty remains part of the trust proposition, but it is discharged by never presenting stale data as fresh and by alerting the FOUNDER when ingestion stops (a dead-man heartbeat), not by narrating pipeline state to shoppers. The per-card authoritative dates above are unaffected: they are source facts about a recall, not claims about our plumbing. See [recall-production-runbook.md](recall-production-runbook.md) §18.
 
 **Refinement (2026-08-26, C3.2): two activity dates, one window.** `lastPublicActivityAt` is source-published, but it is `max(publishedAt, lastModifiedAt)` across a case's records, so it also moves on wording edits and `field_last_modified_date` churn — measured live, ahead of the last material event on 354 of 895 active cases. All Recalls keeps using it (a source edit IS public activity, and that view makes no relevance claim). The personalized "Affects me" view applies the same 60-day boundary to **material activity** instead: `max(publishedAt, latest material timeline entry)`, i.e. Part 9 Layer-2 verdicts only. A recall may therefore re-enter recent activity on a genuine expansion or classification, but never on bookkeeping — and never on our own maintenance writes, which append no timeline entry at all. Because every material entry is stamped with the source-published activity date, material activity ≤ `lastPublicActivityAt` always, so the personalized window is a strict tightening of the general one. See `docs/recall-personalization.md` for the full ordering model.
 
@@ -124,7 +126,7 @@ The residual races are benign and self-correcting on the next refresh: a case in
 
 **5. `NotificationEvent`** — append-only: `(recallCaseId, kind: initial|material_update, triggerRuleId, dedupKey, materialChangeRef, createdAt)`. _Why:_ the dedup ledger and audit trail that make the founder's notification rules enforceable (Part 10). Exists from day one even though delivery infrastructure doesn't.
 
-**Plus one operational table, not a domain entity:** `IngestRun` — per adapter: startedAt, outcome, itemsSeen/changed, error. Powers idempotent polling, stale-source detection (Part 8), and the dashboard's "last checked" stamp.
+**Plus one operational table, not a domain entity:** `IngestRun` — per adapter: startedAt, outcome, itemsSeen/changed, error. Powers idempotent polling, stale-source detection (Part 8), `ops:health`, and the dead-man heartbeat that alerts the founder when ingestion stops. It is read by operations only — no consumer surface reads it, and no shopper-visible "last checked" stamp exists (P2B7S; see the correction in Part 2.3).
 
 **Deliberately not entities:**
 
@@ -433,18 +435,18 @@ Delivery infrastructure is out of scope; what we design now is the **eligibility
 
 Check of each future dashboard need against the model — no UI design here, only "can the model serve it":
 
-| Dashboard need                 | Served by                                                                                           |
-| ------------------------------ | --------------------------------------------------------------------------------------------------- |
-| Current recalls                | `state = active`, tiered by `lastPublicActivityAt` (Part 2.3)                                       |
-| Newest recalls                 | `publishedAt` ordering (source-published, not fetch time)                                           |
-| Category/source filters        | `sourceAgency`, `noticeType`, `hazardCategory`, `classification`                                    |
-| State relevance / "Affects me" | Part 5 value object incl. the unknown-distribution section                                          |
-| Severity display               | `classification` with honest `not_yet_classified` rendering                                         |
-| Affected product specifics     | `AffectedProduct` rows incl. rawText fallback + "see official notice" empty state                   |
-| Official source links          | `officialUrls` (≥1 required) + per-record URLs                                                      |
-| Freshness                      | `lastPublicActivityAt`, `lastChangedAt`, global IngestRun "last checked"                            |
-| Search                         | title, brands, firm displayName+variants, product rawText, pathogenOrAllergen — all present as text |
-| Update history on a card       | `timeline`                                                                                          |
+| Dashboard need                 | Served by                                                                                                                        |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| Current recalls                | `state = active`, tiered by `lastPublicActivityAt` (Part 2.3)                                                                    |
+| Newest recalls                 | `publishedAt` ordering (source-published, not fetch time)                                                                        |
+| Category/source filters        | `sourceAgency`, `noticeType`, `hazardCategory`, `classification`                                                                 |
+| State relevance / "Affects me" | Part 5 value object incl. the unknown-distribution section                                                                       |
+| Severity display               | `classification` with honest `not_yet_classified` rendering                                                                      |
+| Affected product specifics     | `AffectedProduct` rows incl. rawText fallback + "see official notice" empty state                                                |
+| Official source links          | `officialUrls` (≥1 required) + per-record URLs                                                                                   |
+| Freshness                      | `lastPublicActivityAt`, `lastChangedAt` (per-card source dates). IngestRun freshness is **operations-only** — no shopper surface |
+| Search                         | title, brands, firm displayName+variants, product rawText, pathogenOrAllergen — all present as text                              |
+| Update history on a card       | `timeline`                                                                                                                       |
 
 One deliberate UX-over-normalization choice already embedded: preserved _prose_ fields (consumer action, retailer text, illness statement, product rawText) are first-class canonical data, not parse failures — the dashboard renders source words wherever structure is absent, which is both the honest and the more useful behavior given §6.
 
