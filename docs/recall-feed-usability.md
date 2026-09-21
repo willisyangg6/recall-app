@@ -1721,6 +1721,136 @@ substring, **never fuzzy**: one wrong digit does not match. Raw announcement
 HTML/prose is not searched; no external service is queried; empty search is a
 strict no-op (same array instance).
 
+### The searchable-field inventory, and why matching stays silent (P2B7O)
+
+Search reads six stored fields. The Feed card renders **none of them
+directly**, and two it never renders at all. So a result can be perfectly
+correct and give the reader no visible reason for being there: measured live
+on the 898 consumer-visible active cases, "Walmart" returns 23 recalls and not
+one card shows the word.
+
+| Stored field         | On the card?                                             | Cases populated | …carrying a word the card never shows |
+| -------------------- | -------------------------------------------------------- | --------------- | ------------------------------------- |
+| `title`              | **never** (the raw government headline is not card copy) | 898             | 898                                   |
+| `productDescription` | usually — it is the product name's source                | 720             | 33                                    |
+| `productNames`       | never                                                    | 397             | 397                                   |
+| `brands`             | usually — capped at two plus "+N"                        | 720             | 75                                    |
+| `firmName`           | only when no consumer brand is displayed                 | 825             | 643                                   |
+| `retailerNames`      | **never**                                                | 171             | 140                                   |
+
+Measured 2026-09-20 over the live active feed (`npm run qa:search`). Every
+consumer-visible case carries at least one searchable word its card does not
+show.
+
+**This is intended behaviour, not a defect.** P2B7O built a per-result
+explanation for it — "Matched retailer: Walmart", "Matched in the official
+notice headline" — and the founder **rejected the concept**: consumers are not
+shown why a search result appeared. Matching is silent. Searching may change
+WHICH cards appear and nothing about any card, on every surface.
+
+What that costs, stated plainly: a shopper who searches a store name or an
+upstream company sees results whose connection to the query is not on screen.
+That is accepted. The alternative — naming the matched field — either states a
+relationship the notice never typed (the `title` and `productNames` cases,
+which are unstructured prose) or adds copy to a card that is already dense.
+
+Consequences the code holds to:
+
+- `lib/feed-search.ts` is **byte-for-byte its pre-P2B7O self**. There is no
+  provenance type, no second matcher, and no field-inventory abstraction in
+  the app — the inventory above lives in the read-only audit
+  (`scripts/qa-search.ts`), which proves it by making each field the only
+  place a probe token can match.
+- `HomeCardModel` carries no match field and `buildHomeCardModel` takes no
+  query, so a screen cannot begin explaining matches by accident. Feed, Affects
+  me and Saved render identical cards with a query and without one.
+- Retailer evidence and printed codes stay fully searchable. A UPC typed with
+  or without separators still finds its recall; one wrong digit still finds
+  nothing.
+
+## Where It Was Sold: the stores a notice named (P2B7O — IMPLEMENTED)
+
+P2a removed the retailer summary from Detail and recorded the collapsed
+retailer list as "a later milestone". This is that milestone, and it ships the
+**names only** — no interactive list, no disclosure control, no chips, no
+horizontal scroller, and no revival of the dead `View Retailers (10)`
+affordance.
+
+**Recall Detail is the only surface in the app that names a retailer.** Feed
+and Saved carry none: the card model has no retailer field at all, so neither
+screen can render one.
+
+The block sits under the geography line, never instead of it, shaped like
+Health Risk's "Common symptoms" — a quiet caption heading over the names in
+body type:
+
+> **Retailers:**
+> Walmart, Target
+
+### Why the label says "Retailers", against the app-wide rule
+
+Consumer copy otherwise says "state" and "store" and never "jurisdiction" or
+"retailer" — rule 4 of the consumer-copy contract
+(`lib/consumer-copy.test.ts`). This one label is a **deliberate founder
+override**, and the reason is consistency with personalization: a shopper
+chooses the places they shop under **Retailers** in their preferences, and this
+block answers that same question for one recall. Meeting a different word here
+would read as a different concept.
+
+The override is scoped as narrowly as the contract can express it. The
+exemption is an exact string match on `Retailers:`, and the test additionally
+asserts the label appears on exactly one screen — so a new sentence using
+"retailer" anywhere in consumer copy, including a second use of this label,
+still fails. Everywhere else the app still says "store".
+
+The wording claims nothing beyond what the announcement said. It does not say
+the product was _sold_ at these retailers — the evidence behind the field
+covers shipped-to and distributed-to constructions too — and it asserts no
+purchase, no completed sale and no exclusivity. Every nameable retailer is
+listed, with no "+N more": a truncated list would hide retailers with no way to
+reveal them.
+
+Nothing renders when no trustworthy retailer exists: no heading, no empty row,
+no spacing left behind.
+
+### Which retailer list, and why it is not the other one
+
+`ConsumerDistribution` carries two:
+
+- `retailers` — the full evidence: the verb-gated sentence seam **plus**
+  source store-list blocks **plus** source table columns. Kept whole for
+  traceability, and **never rendered**.
+- `statedRetailers` — `projection.retailerNames` alone, the hardened field.
+
+The distinction is measured, not assumed. Over the 898 consumer-visible active
+cases the wider read contributes **280 distinct names the hardened field does
+not**, among them the table headings `"Type of Label"` and `"PLU"`, the cheese
+attributes `"Raw Milk – Aged"`, `"60 days"` and `"Belgian"`, and the freight
+carrier `"Alaska Marine Lines"`. None of those is somewhere a person shopped,
+which is exactly what `domain/retailer-evidence.ts` predicted when it hardened
+the persisted field.
+
+### The display gate
+
+`domain/retailer-display.ts` decides whether a stored string may be printed as
+a retailer. The rule is the extractor's own "one entity has one role", read
+**per segment** instead of per string: a name is refused when any
+comma/`and`/`&`-delimited segment of it is a US state or city. That is the same
+class of escape P2B7M found in title casing — a whole-string gate that a
+compound value walks straight through.
+
+Measured over the live corpus: 151 distinct stored strings, **1 rejected** —
+`"Roseville and Sacr"`, two truncated California city names that reached the
+field because neither half is the whole string — and 1 of the 171
+retailer-bearing cases left with no nameable retailer, which is the correct
+answer for it. It is **not** a catalog membership test: 70 of the 151 strings resolve
+to no canonical chain and every one of them is a genuine local grocer.
+Source-merged runs the extractor kept whole ("Target and Walmart", 12 of the 151) are the source's own wording and render verbatim.
+
+Nothing here mutates stored data. A rejected string stays in the projection,
+stays **searchable**, and still admits its case to the results — suppressing a
+name from Detail never removes a recall from a search.
+
 ## Category (C10B): shipped as an optional discovery filter
 
 "Category" (produce/meat/dairy/bakery…) is a canonical projection field,

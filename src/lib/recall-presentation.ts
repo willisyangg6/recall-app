@@ -34,6 +34,7 @@ import type {
   TimelineEntry,
 } from '@/domain/recall-types';
 import type { UserRecallPreferences } from '@/domain/preferences';
+import { displayableRetailerNames } from '@/domain/retailer-display';
 import { evaluateReportEligibility } from '@/domain/shopper-report';
 import { STATE_TO_POSTAL } from '@/domain/us-geography';
 import {
@@ -636,9 +637,27 @@ export interface WhereSoldModel {
   /** Source-stated retailers, preserved in full for the model. */
   retailers: string[];
   retailerCount: number;
-  /** Simple noninteractive retailer summary — no retailer-list disclosure
-   * exists yet, so a plain sentence stands in ("Sold at X, Y, and 3 more"). */
-  retailerSummary: string | null;
+  /**
+   * The retailers to NAME on Detail — the source's own spellings, comma
+   * joined — or null when the notice named no store this app will vouch for
+   * (P2B7O). Detail is the only surface that renders it; Feed and Saved
+   * carry no retailer content at all.
+   *
+   * Built from `distribution.statedRetailers` — the hardened sold-at
+   * evidence — passed through the display gate, and NOT from `retailers`
+   * above, which carries table headings and product attributes alongside
+   * real stores. Measured live: 171 of 898 consumer-visible active cases
+   * carry hardened evidence, 151 distinct strings, of which the gate rejects
+   * exactly one.
+   *
+   * Every nameable store is listed; there is no "+N more". A truncated list
+   * would hide stores with no way to reveal them, and the section's label
+   * ("Retailers named in the notice") already scopes the claim to what the
+   * announcement said rather than to everywhere the product was sold. The
+   * app states no purchase and no completed sale — only that the notice
+   * named these stores.
+   */
+  retailersNamed: string | null;
   /** Specific store addresses the source lists, behind their own disclosure. */
   retailLocations: string[];
   onlinePlatforms: string[];
@@ -650,8 +669,6 @@ export interface WhereSoldModel {
    * `channels` but are never rendered as if they were stores. */
   venueChannels: string[];
 }
-
-const RETAILERS_SUMMARIZED = 3;
 
 /**
  * Trade/distribution channels: routes a shopper cannot identify a purchase
@@ -701,14 +718,10 @@ export function whereSoldModel(distribution: ConsumerDistribution): WhereSoldMod
   // their handling is deliberately untouched here.
   const hiddenStates = states.length > WHERE_SOLD_INITIAL_STATES;
   const leadCollapsed = hiddenStates ? states.slice(0, WHERE_SOLD_INITIAL_STATES).join(', ') : lead;
-  const shown = distribution.retailers.slice(0, RETAILERS_SUMMARIZED);
-  const hidden = distribution.retailers.length - shown.length;
-  const retailerSummary =
-    distribution.retailers.length === 0
-      ? null
-      : hidden > 0
-        ? `Sold at ${shown.join(', ')}, and ${hidden} more ${hidden === 1 ? 'retailer' : 'retailers'}.`
-        : `Sold at ${joinNames(shown)}.`;
+  // Nameable stores only, and from the hardened field alone (P2B7O). The
+  // full `retailers` evidence stays on the model untouched for traceability.
+  const nameable = displayableRetailerNames(distribution.statedRetailers);
+  const retailersNamed = nameable.length === 0 ? null : nameable.join(', ');
   return {
     locationState,
     lead,
@@ -717,7 +730,7 @@ export function whereSoldModel(distribution: ConsumerDistribution): WhereSoldMod
     states,
     retailers: distribution.retailers,
     retailerCount: distribution.retailers.length,
-    retailerSummary,
+    retailersNamed,
     retailLocations: distribution.retailLocations,
     onlinePlatforms: distribution.onlinePlatforms,
     channels: distribution.channels,

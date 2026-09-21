@@ -60,7 +60,14 @@ import { OfficialImageSet } from '@/components/ui/official-image-set';
 import { RiskLabel } from '@/components/ui/risk-label';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
-import { color, hitSlopToMinimum, layout, spacing, typography } from '@/constants/design-tokens';
+import {
+  color,
+  hitSlopToMinimum,
+  iconSize,
+  layout,
+  spacing,
+  typography,
+} from '@/constants/design-tokens';
 import {
   DETAIL_ERROR_FALLBACK,
   DETAIL_ERROR_TITLE,
@@ -541,6 +548,39 @@ export default function RecallDetailScreen() {
               {statesExpanded ? whereSold.lead : whereSold.leadCollapsed}
             </Text>
           </View>
+          {/* The retailers the notice named (P2B7O) — the milestone P2a
+              deferred when it removed the retailer summary from this section,
+              and the ONLY surface in the app that shows retailers: Feed and
+              Saved carry none.
+
+              It sits UNDER the geography, never instead of it: where the
+              product went is the answer this section owes every reader, and a
+              store list is a narrowing detail only some notices state. A
+              labelled block in the same shape as Health Risk's "Common
+              symptoms" — a quiet caption heading over the names in body type
+              — so the label and the names are each announced exactly once and
+              neither is a control. The model decides which names may appear
+              at all and hands over the finished list; the screen adds only
+              the heading. Null renders nothing: no heading, no empty row, no
+              spacing left behind.
+
+              The heading says RETAILER, which is a deliberate founder
+              override of the app-wide shopper vocabulary that otherwise says
+              "store" and never "retailer" (lib/consumer-copy.test.ts, rule 4,
+              where this one label is the single carved-out exception).
+              Retailer is the right consumer concept HERE because it is the
+              word personalization already uses: a shopper picks the stores
+              they shop at under "Retailers" in their preferences, and this
+              block answers the same question on a specific recall. The rest
+              of the app still says "store". */}
+          {whereSold.retailersNamed ? (
+            <View style={styles.retailers}>
+              <Text variant="caption" color="text/secondary" accessibilityRole="header">
+                Retailers:
+              </Text>
+              <Text variant="body-small">{whereSold.retailersNamed}</Text>
+            </View>
+          ) : null}
           {/* Community shopper reports (P1D) sit UNDER the official
               statement, never beside or above it: they corroborate where the
               notice says the product went, and the model nests them here so
@@ -768,6 +808,15 @@ const styles = StyleSheet.create({
   },
   geographyText: {
     flex: 1,
+  },
+  // Indented to the geography TEXT, not the glyph, so the retailers read as
+  // a detail of the location statement above them rather than a second
+  // top-level fact. A gapped column with no height of its own: the names
+  // wrap at any Dynamic Type setting instead of clipping.
+  retailers: {
+    marginTop: spacing[8],
+    marginLeft: iconSize[12] + spacing[4],
+    gap: spacing[4],
   },
   // The Health Risk symptom list: a labelled group of bulleted lines in the
   // section's body type — no card, no icon, no alert treatment.

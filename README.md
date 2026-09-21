@@ -96,6 +96,12 @@ npm run qa:feed      # feed-completeness QA: drives the real Home loader and
                      # proves it holds every active case (read-only, live DB)
 npm run qa:titles    # shopper-title casing QA: an offline boundary gate (the
                      # exit code) plus a read-only live-corpus measurement
+npm run qa:search    # search-correctness QA: an offline boundary gate (the
+                     # exit code) proving every searchable field is still
+                     # reachable on its own and that codes match exactly,
+                     # plus a read-only measurement of the field inventory
+                     # and stored retailer-evidence quality. `-- --report`
+                     # also writes a durable artifact under .reports/
 ```
 
 The test suite never touches the network: it runs against real FSIS API
@@ -487,24 +493,30 @@ sharing is deferred on purpose — its founder contract (an HTTPS Lotly
 Universal Link, blocked on the final domain) is in
 [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md) §6.
 
-## Known defects and planned milestones (P2B7O)
+## Known defects and planned milestones
 
 Recorded, not implemented. Each is an observed defect with its evidence, not a
 speculative improvement; each needs its own milestone and its own founder
 review. Nothing here is a launch blocker — those live in
 [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md).
 
-- **P2B7O — search explainability and retailer presentation.** Search returns
-  results whose match is invisible on the card: "Baloian Farms" returns recalls
-  whose displayed company is a different firm, and "Walmart" returns recalls
-  that never visibly mention Walmart. The milestone must first **audit which
-  fields are actually searchable** and separate retailer, supplier, source-text,
-  product, identifier and visible-field matches; confirm whether `retailerNames`
-  or other projected metadata is what produces these hits; then surface enough
-  match context that a result cannot look unrelated to what was typed. It should
-  also revisit how retailers are presented on cards and Detail, comparing
-  alternatives in Design Preview before anything ships — the same way the
-  category tag was settled (P2B7D).
+- **P2B7O — search field audit and retailer presentation. IMPLEMENTED
+  2026-09-20.** The audit found search reads six stored fields the Feed card
+  renders none of directly, two of which it never renders at all — so
+  "Walmart" returns 23 active recalls and no card shows the word. A
+  per-result explanation was built for that and **rejected by founder
+  decision**: consumers are not shown why a result matched, so matching stays
+  silent and `lib/feed-search.ts` is byte-for-byte its pre-P2B7O self. What
+  shipped is the retailer summary P2a deferred, on **Recall Detail only** —
+  the retailers a notice named (labelled `Retailers:`, a deliberate founder
+  override of the app-wide "store, never retailer" copy rule, scoped to that
+  one exact string so personalization and Detail use the same word), from the
+  hardened sold-at evidence through a per-segment display gate — not from the
+  wider evidence list a live census showed carries table headings, product
+  attributes and a freight carrier.
+  Feed and Saved carry no retailer content. Contract and measurements:
+  [docs/recall-feed-usability.md](docs/recall-feed-usability.md); read-only
+  audit: `npm run qa:search`.
 
 - **P2B7Q — Lotly-authored copy audit.** Every shopper-facing sentence Lotly
   CONSTRUCTS rather than reproduces verbatim from an agency source needs one

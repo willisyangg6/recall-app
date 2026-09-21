@@ -172,11 +172,15 @@ test('Detail introduces none of the disallowed dead controls', () => {
   for (const dead of ['View Retailers', 'View retailers', 'what should I do?', 'Save']) {
     assert.ok(!DETAIL.includes(`>${dead}<`), `dead control "${dead}" rendered on Detail`);
   }
-  // No retailer control of any kind yet (P2a founder decision): the collapsed
-  // retailer list is a later milestone, and a summary line is not rendered in
-  // its place. The named-retailer data stays preserved in the model.
-  assert.ok(!DETAIL.includes('retailerSummary'), 'a retailer summary is rendered');
+  // P2B7O renders the retailers a notice NAMED — the one thing P2a deferred.
+  // What stays absent is everything P2a actually objected to: an interactive
+  // retailer list, a disclosure control, and the dead "View Retailers (10)".
+  assert.ok(DETAIL.includes('whereSold.retailersNamed'), 'the retailer names are not rendered');
   assert.ok(!DETAIL.includes('View all'), 'a retailer-list disclosure control was reintroduced');
+  // The screen renders the model's finished list and builds none of its own.
+  for (const forbidden of ['whereSold.retailers)', 'retailerCount', 'retailersShown']) {
+    assert.ok(!DETAIL.includes(forbidden), `Detail composes its own retailer list: ${forbidden}`);
+  }
 });
 
 test('Affected Products renders the shared P2b table model, not screen-built rows', () => {

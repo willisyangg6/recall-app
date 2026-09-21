@@ -10,7 +10,9 @@
  *     dash vocabulary for what the notices themselves contain.
  *  3. The development-only Design Preview keeps its caption convention.
  *  4. Consumer copy says `state` and `store`, never `jurisdiction` or
- *     `retailer`.
+ *     `retailer` — with ONE founder-approved exception, Detail's
+ *     `Retailers:` label (P2B7O), which is exempt by exact string and
+ *     nowhere else.
  *  5. `Recall` is never the product; the product is `Lotly`.
  *  6. `Affects me`, `All recalls`, `recall alerts`, `state` and `store`
  *     follow their approved rules; `AFFECTS YOU` lives on the label alone.
@@ -223,6 +225,20 @@ test('the development-only Design Preview keeps its caption convention and is no
 /** A quoted string that is a sentence or label, not an identifier or key. */
 const isProse = (literal: string) => /\s/.test(literal.slice(1, -1));
 
+/**
+ * The ONE approved use of the word "retailer" in consumer copy (P2B7O,
+ * founder override). Detail's Where It Was Sold labels the retailers a notice
+ * named with exactly this string.
+ *
+ * The rule below is otherwise unchanged: everywhere else the app says
+ * "store". This is an exception granted for one label, not a relaxation —
+ * "retailer" is the right consumer concept HERE because it is the word
+ * personalization already uses, so a shopper who chose their Retailers in
+ * preferences meets the same word on a recall. The exemption is an exact
+ * string match, so a new "retailers" sentence anywhere still fails.
+ */
+const APPROVED_RETAILER_LABEL = 'Retailers:';
+
 test('consumer copy says state and store, never jurisdiction or retailer', () => {
   const sources = { ...COPY_MODULES, ...DOCUMENT_SOURCES, ...SCREENS };
   for (const [name, source] of Object.entries(sources)) {
@@ -231,9 +247,18 @@ test('consumer copy says state and store, never jurisdiction or retailer', () =>
       assert.doesNotMatch(literal, /\bretailers?\b/i, `${name}: ${literal}`);
     }
     for (const text of jsxText(source)) {
-      assert.doesNotMatch(text, /\b(jurisdictions?|retailers?)\b/i, `${name}: ${text}`);
+      assert.doesNotMatch(text, /\bjurisdictions?\b/i, `${name}: ${text}`);
+      if (text === APPROVED_RETAILER_LABEL) continue;
+      assert.doesNotMatch(text, /\bretailers?\b/i, `${name}: ${text}`);
     }
   }
+  // The exemption is spent on exactly one label, on exactly one screen.
+  const usages = Object.entries(sources).flatMap(([name, source]) =>
+    jsxText(source)
+      .filter((text) => text === APPROVED_RETAILER_LABEL)
+      .map(() => name),
+  );
+  assert.deepEqual(usages, ['detail'], 'the approved retailer label moved or multiplied');
   for (const doc of TRUST_DOCUMENTS) {
     assert.doesNotMatch(documentPlainText(doc), /\b(jurisdictions?|retailers?)\b/i, doc.slug);
   }

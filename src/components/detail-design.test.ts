@@ -802,3 +802,93 @@ test('the preview offers every required Detail scenario, on real recalls, simula
   assert.ok(PREVIEW.includes('if (!isDevelopmentBuild())'));
   assert.ok(read('app', '(tabs)', 'profile.tsx').includes('{__DEV__ ? ('));
 });
+
+// ── Retailer visibility in Where It Was Sold (P2B7O) ────────────────────────
+
+test('the retailers a notice named render under the geography, never instead of it', () => {
+  const section = DETAIL.slice(
+    DETAIL.indexOf('<Section\n          title="Where It Was Sold"'),
+    DETAIL.indexOf('{/* Health Risk (P1B)'),
+  );
+  assert.ok(section.length > 0, 'the Where It Was Sold section moved');
+  // Geography still leads, with its map pin, and still renders first.
+  assert.ok(
+    section.indexOf('whereSold.lead') < section.indexOf('whereSold.retailersNamed'),
+    'the retailers were placed above the geography they narrow',
+  );
+  assert.match(section, /name="map-pin"/);
+  // A labelled block: the heading is the screen's (as Health Risk's "Common
+  // symptoms" is), the NAMES are the model's finished string. The screen
+  // joins nothing, counts nothing, and reads neither the wider evidence list
+  // nor the retailer count.
+  // The label is exactly "Retailers:" — a founder override of the app-wide
+  // "store, never retailer" vocabulary, granted for this one label because
+  // personalization already calls them Retailers. `consumer-copy.test.ts`
+  // holds the exemption to this exact string; here we pin the string itself
+  // so a well-meaning rewrite to "Stores" fails in both places.
+  const rendered = section.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+  assert.match(rendered, />\s*Retailers:\s*</);
+  assert.ok(!/Stores named in the notice/.test(rendered), 'the approved label was rewritten');
+  assert.match(section, /\{whereSold\.retailersNamed\}/);
+  for (const forbidden of ['.join(', '.slice(', 'retailerCount', 'whereSold.retailers)']) {
+    assert.ok(!section.includes(forbidden), `Detail builds its own retailer list: ${forbidden}`);
+  }
+  // It claims no purchase and no completed sale, and implies no exhaustive
+  // list — the section says what the NOTICE named and nothing more.
+  for (const forbidden of ['Sold at', 'You bought', 'Purchased', 'Available at', 'Only at']) {
+    assert.ok(!section.includes(forbidden), `the retailer block overclaims: "${forbidden}"`);
+  }
+});
+
+test('the retailer block is quiet metadata: no chips, no scroller, no control', () => {
+  const block = DETAIL.slice(
+    DETAIL.indexOf('{whereSold.retailersNamed ?'),
+    DETAIL.indexOf('{/* Community shopper reports'),
+  );
+  assert.ok(block.length > 0, 'the retailer block moved');
+  for (const forbidden of [
+    'Chip',
+    'CategoryTag',
+    'Callout',
+    'horizontal',
+    'ScrollView',
+    'FlatList',
+    'Pressable',
+    'onPress',
+    'DisclosureControl',
+    'Link',
+  ]) {
+    assert.ok(!block.includes(forbidden), `the retailer block introduced ${forbidden}`);
+  }
+  // Announced once each, in reading order: the label is a header, the names
+  // are the text under it. Exactly one header, no relabelling, and no second
+  // accessible element wrapping the pair — so a screen-reader user hears
+  // "Retailers:" then the stores, once, and never twice.
+  assert.equal((block.match(/accessibilityRole="header"/g) ?? []).length, 1);
+  assert.match(block, /accessibilityRole="header">\s*Retailers:/);
+  assert.ok(!block.includes('accessibilityLabel'), 'the retailer block relabels itself');
+  assert.ok(!/\baccessible\b/.test(block), 'the retailer block groups itself into one element');
+});
+
+test('the retailer names wrap and fix no height', () => {
+  const styles = DETAIL.slice(DETAIL.indexOf('retailers: {'), DETAIL.indexOf('// The Health Risk'));
+  assert.ok(styles.length > 0, 'the retailer styles moved');
+  for (const forbidden of ['height:', 'maxHeight:', 'overflow:', 'flexDirection']) {
+    assert.ok(!styles.includes(forbidden), `the retailer block fixes ${forbidden}`);
+  }
+  const block = DETAIL.slice(
+    DETAIL.indexOf('{whereSold.retailersNamed ?'),
+    DETAIL.indexOf('{/* Community shopper reports'),
+  );
+  assert.ok(!block.includes('numberOfLines'), 'the retailer names are clamped');
+  assert.ok(!block.includes('ellipsizeMode'), 'the retailer names truncate');
+  // The layout the founder approved, pinned so a copy change cannot move it:
+  // indented from the geography glyph, spaced below the geography line, and
+  // the names on their own line under the label (a gapped COLUMN, never a row).
+  assert.match(styles, /marginLeft: iconSize\[12\] \+ spacing\[4\]/);
+  assert.match(styles, /marginTop: spacing\[8\]/);
+  assert.match(styles, /gap: spacing\[4\]/);
+  const label = block.indexOf('Retailers:');
+  const names = block.indexOf('{whereSold.retailersNamed}');
+  assert.ok(label !== -1 && names > label, 'the names no longer follow the label');
+});

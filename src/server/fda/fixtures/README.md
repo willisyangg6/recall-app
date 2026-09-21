@@ -39,6 +39,19 @@ listing row + page `<main>`, each stamped with its `capturedAt` date and
 - `announcement-jaimes-spanish-village-jalapeno-ranch.json` — the P2b
   single-row Affected Products table: prose UPC + lot list with no size or
   date evidence (recorded 2026-09-02).
+- `announcement-baloian-farms-arizona-whole-fresh-american-cucumbers.json` and
+  `announcement-fresh-creative-foods-gyro-meal-kit-baloian-cucumber.json` —
+  the two notices the founder's "Baloian Farms" search report named, backing
+  `src/server/search-and-retailer-presentation.test.ts` (P2B7O). They are the
+  two ways a correct search result can look inexplicable: the first matches
+  through the RECALLING FIRM while the card displays the consumer brand "PAM
+  PAK", and the second matches only through the official HEADLINE ("…Linked to
+  Baloian Farms Recall") on a card that shows a gyro meal kit. Matching is
+  deliberately silent, so what they now pin is that both results still appear
+  and still say nothing about why. Unlike the excerpt fixtures below these are
+  full recorded announcements, so they extend corpus coverage like any other.
+  Recorded 2026-09-20 from their archived production `source_snapshots`
+  payloads (both captured 2026-08-22), verbatim and unedited.
 
 ## Pinned production notices (P3B)
 

@@ -53,6 +53,7 @@ function distribution(overrides: Partial<ConsumerDistribution> = {}): ConsumerDi
     areas: [],
     coverage: [],
     retailers: [],
+    statedRetailers: [],
     retailersShown: [],
     retailersHidden: 0,
     retailLocations: [],
@@ -244,13 +245,11 @@ test('retailer presentation is not touched by the jurisdiction disclosure', () =
       scopeType: 'states',
       states: STATES,
       retailers: ['Costco Wholesale', 'Kroger', 'Publix', 'Safeway'],
+      statedRetailers: ['Costco Wholesale', 'Kroger', 'Publix', 'Safeway'],
     }),
   );
   assert.equal(sold.retailerCount, 4);
-  assert.equal(
-    sold.retailerSummary,
-    'Sold at Costco Wholesale, Kroger, Publix, and 1 more retailer.',
-  );
+  assert.equal(sold.retailersNamed, 'Costco Wholesale, Kroger, Publix, Safeway');
   assert.deepEqual(sold.retailers, ['Costco Wholesale', 'Kroger', 'Publix', 'Safeway']);
 });
 

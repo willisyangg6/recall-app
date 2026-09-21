@@ -185,6 +185,24 @@ export interface ConsumerDistribution {
   coverage: RetailerCoverage[];
   /** Explicitly named stores and chains. */
   retailers: string[];
+  /**
+   * The HARDENED sold-at evidence alone (`projection.retailerNames`) — the
+   * only retailer list a consumer surface may render (P2B7O).
+   *
+   * `retailers` above is the full evidence model: the verb-gated sentence
+   * seam PLUS source store-list blocks PLUS source table columns. That wider
+   * read is right for traceability and wrong for print, and the live corpus
+   * says so precisely — over the 898 consumer-visible active cases it adds
+   * 280 distinct names the hardened field does not carry, among them the
+   * table headings "Type of Label" and "PLU", the cheese attributes
+   * "Raw Milk – Aged", "60 days" and "Belgian", and the freight carrier
+   * "Alaska Marine Lines". None of those is somewhere a person shopped.
+   *
+   * So the two stay separate rather than one being cleaned into the other:
+   * the evidence keeps everything the notice offered, and the display list
+   * keeps only what the notice STATED in a gated construction.
+   */
+  statedRetailers: string[];
   /** Retailers to show before the disclosure; the rest sit behind "view all". */
   retailersShown: string[];
   /** How many named retailers are held back. */
@@ -2097,6 +2115,11 @@ export function buildDistribution(
     areas,
     coverage: [...coverage.values()],
     retailers: namedRetailers,
+    // The stored field only, never the sentence re-extraction `retailers`
+    // falls back to: `deriveRetailerNames` additionally bars geography and
+    // collapses a chain's spellings, and a case that has not been projected
+    // through it should show no stores rather than unvetted ones.
+    statedRetailers: projection.retailerNames ?? [],
     retailersShown: namedRetailers.slice(0, RETAILERS_LISTED),
     retailersHidden: Math.max(0, namedRetailers.length - RETAILERS_LISTED),
     retailLocations,

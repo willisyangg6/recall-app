@@ -611,16 +611,70 @@ test('the Where It Was Sold model has no separate consumer AREAS field but keeps
     projection({
       summaryText:
         'The product was distributed in California and Washington and sold at Kroger, Safeway, Albertsons, Aldi, and Wegmans stores.',
+      retailerNames: ['Kroger', 'Safeway', 'Albertsons', 'Aldi', 'Wegmans'],
     }),
     [],
   );
   const sold = whereSoldModel(consumer.distribution);
   assert.equal(sold.retailerCount, 5);
   assert.equal(sold.retailers.length, 5);
-  // Noninteractive summary — a plain sentence, no dead disclosure control.
-  assert.match(sold.retailerSummary!, /^Sold at /);
-  assert.match(sold.retailerSummary!, /and 2 more retailers\.$/);
+  // P2B7O: the NAMES only — Detail supplies the "Retailers named in the
+  // notice" heading. Every nameable store is listed: a "+N more" would hide
+  // stores with no way to reveal them, and the heading already scopes the
+  // claim to what the announcement said.
+  assert.equal(sold.retailersNamed, 'Kroger, Safeway, Albertsons, Aldi, Wegmans');
   assert.ok(!('areas' in sold));
+});
+
+test('the rendered retailer names come from the HARDENED field, never the wider evidence', () => {
+  // The live corpus distinction P2B7O measured: the full `retailers`
+  // evidence merges the verb-gated sentence seam with source store-list
+  // blocks and TABLE COLUMNS, and over the 898 consumer-visible active cases
+  // that wider read contributes 280 distinct names the hardened field does
+  // not — among them the column headings "Type of Label" and "PLU". A table
+  // heading must never be printed as somewhere a person shopped.
+  const sold = whereSoldModel({
+    scopeType: 'unspecified',
+    areaText: '',
+    states: [],
+    areas: [],
+    coverage: [],
+    retailers: ['Type of Label', 'PLU', 'Costco'],
+    statedRetailers: ['Costco'],
+    retailersShown: ['Type of Label', 'PLU', 'Costco'],
+    retailersHidden: 0,
+    retailLocations: [],
+    onlinePlatforms: [],
+    channels: [],
+    unspecified: false,
+  });
+  assert.equal(sold.retailersNamed, 'Costco');
+  // The evidence itself is untouched — it stays whole for traceability.
+  assert.deepEqual(sold.retailers, ['Type of Label', 'PLU', 'Costco']);
+});
+
+test('a stored retailer string that names a PLACE is never printed as a store', () => {
+  // The single live defect the census found: "Roseville and Sacr" — two
+  // truncated California city names that reached the hardened field because
+  // the extractor's geography check tested the whole string. The case keeps
+  // its evidence and stays searchable; it simply names no store.
+  const sold = whereSoldModel({
+    scopeType: 'unspecified',
+    areaText: '',
+    states: [],
+    areas: [],
+    coverage: [],
+    retailers: ['Roseville and Sacr'],
+    statedRetailers: ['Roseville and Sacr'],
+    retailersShown: ['Roseville and Sacr'],
+    retailersHidden: 0,
+    retailLocations: [],
+    onlinePlatforms: [],
+    channels: [],
+    unspecified: false,
+  });
+  assert.equal(sold.retailersNamed, null);
+  assert.deepEqual(sold.retailers, ['Roseville and Sacr']);
 });
 
 // ── 20: affects-you flag on Home cards ──────────────────────────────────────
@@ -1610,6 +1664,7 @@ test('the states lead is the ONE representation — a count lead becomes the ful
     areas: [],
     coverage: [],
     retailers: [],
+    statedRetailers: [],
     retailersShown: [],
     retailersHidden: 0,
     retailLocations: [],
@@ -1630,6 +1685,7 @@ test('the states lead is the ONE representation — a count lead becomes the ful
       areas: [],
       coverage: [],
       retailers: [],
+      statedRetailers: [],
       retailersShown: [],
       retailersHidden: 0,
       retailLocations: [],
@@ -1649,6 +1705,7 @@ test('named retailers render; trade channels stay in the model, off the screen',
     areas: [],
     coverage: [],
     retailers: ['Walmart'],
+    statedRetailers: ['Walmart'],
     retailersShown: ['Walmart'],
     retailersHidden: 0,
     retailLocations: [],
@@ -1662,8 +1719,8 @@ test('named retailers render; trade channels stay in the model, off the screen',
     ],
     unspecified: false,
   });
-  // The Mangoes shape: the named retailer summary is untouched.
-  assert.equal(sold.retailerSummary, 'Sold at Walmart.');
+  // The Mangoes shape: the one named retailer, from the hardened field.
+  assert.equal(sold.retailersNamed, 'Walmart');
   // Robust Radish / Jalapeño Ranch shapes: trade channels never render, but
   // the evidence survives in the model for traceability.
   assert.deepEqual(sold.venueChannels, ['farmers markets']);
@@ -2132,6 +2189,7 @@ function emptyDistribution(): ConsumerDistribution {
     areas: [],
     coverage: [],
     retailers: [],
+    statedRetailers: [],
     retailersShown: [],
     retailersHidden: 0,
     retailLocations: [],

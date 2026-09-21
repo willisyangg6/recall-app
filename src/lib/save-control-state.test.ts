@@ -337,6 +337,7 @@ function distribution(overrides: Partial<ConsumerDistribution> = {}): ConsumerDi
     areas: [],
     coverage: [],
     retailers: [],
+    statedRetailers: [],
     retailersShown: [],
     retailersHidden: 0,
     retailLocations: [],
