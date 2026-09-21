@@ -11,7 +11,20 @@ import { projectCase } from '../domain/projection';
 import type { CaseProjection, Geography, TimelineEntry } from '../domain/recall-types';
 import { backfillRetailerNames, planCaseRetailers } from './retailer-backfill';
 import { MemoryStore } from './store/memory-store';
-import type { RecallCaseRow } from './store/types';
+import type { RecallCaseRow, RecallStore } from './store/types';
+
+/** The dry run every operator starts from. */
+const dryRun = { apply: false, expectedUpdates: null };
+
+/**
+ * Apply exactly what a dry run over the same store plans — the operator's
+ * real two-step workflow (read the dry run, authorize its count) expressed
+ * once, so every apply below goes through the count gate rather than round it.
+ */
+async function applyPlanned(store: RecallStore) {
+  const { plannedChanges } = await backfillRetailerNames(store, dryRun);
+  return backfillRetailerNames(store, { apply: true, expectedUpdates: plannedChanges });
+}
 
 const GEO: Geography = { scope: 'unknown', states: [], confidence: 'stated', sourceText: null };
 
@@ -82,18 +95,44 @@ test('a dry run writes nothing but reports exactly what an apply would do', asyn
   const store = await storeWith(projection());
   const before = structuredClone(only(store));
 
-  const report = await backfillRetailerNames(store, { apply: false });
+  const report = await backfillRetailerNames(store, dryRun);
 
   assert.equal(report.wouldUpdate, 1);
   assert.equal(report.caseWrites, 0);
   assert.deepEqual(only(store), before, 'the dry run must not mutate the store');
 });
 
+test('a count mismatch aborts the WHOLE run, not a suffix of it', async () => {
+  // Two correctable cases; the operator authorized one. Because the corpus is
+  // planned in full before the first write, the answer is zero writes.
+  const store = await storeWith(
+    projection(),
+    projection({ officialUrl: 'https://example.gov/002-2026' }),
+  );
+  const before = [...store.cases.values()].map((row) => structuredClone(row));
+
+  const report = await backfillRetailerNames(store, { apply: true, expectedUpdates: 1 });
+
+  assert.ok(report.aborted, 'a mismatch must abort');
+  assert.equal(report.aborted!.expected, 1);
+  assert.equal(report.caseWrites, 0);
+  assert.deepEqual([...store.cases.values()], before, 'not one case may move');
+});
+
+test('an apply with no authorized count writes nothing', async () => {
+  const store = await storeWith(projection());
+  const before = structuredClone(only(store));
+  const report = await backfillRetailerNames(store, { apply: true, expectedUpdates: null });
+  assert.ok(report.aborted);
+  assert.equal(report.caseWrites, 0);
+  assert.deepEqual(only(store), before);
+});
+
 test('an apply writes the retailer names and nothing else', async () => {
   const store = await storeWith(projection());
   const before = structuredClone(only(store));
 
-  const report = await backfillRetailerNames(store, { apply: true });
+  const report = await applyPlanned(store);
 
   assert.equal(report.caseWrites, 1);
   const after = only(store);
@@ -109,7 +148,7 @@ test('identity, lineage, dates and material timestamps are untouched by a repair
   const store = await storeWith(projection());
   const before = structuredClone(only(store));
 
-  await backfillRetailerNames(store, { apply: true });
+  await applyPlanned(store);
 
   const after = only(store);
   assert.equal(after.id, before.id, 'case identity');
@@ -129,7 +168,7 @@ test('identity, lineage, dates and material timestamps are untouched by a repair
 test('a repair creates no RecallCase and no NotificationEvent', async () => {
   const store = await storeWith(projection(), projection({ summaryText: 'No retailer named.' }));
 
-  const report = await backfillRetailerNames(store, { apply: true });
+  const report = await applyPlanned(store);
 
   assert.equal(store.cases.size, 2, 'no case is created, merged, or split');
   assert.equal(store.notifications.size, 0, 'no notification event is ever written');
@@ -140,18 +179,18 @@ test('a repair creates no RecallCase and no NotificationEvent', async () => {
 test('re-running after an apply is a no-op — the operation is idempotent', async () => {
   const store = await storeWith(projection());
 
-  const first = await backfillRetailerNames(store, { apply: true });
+  const first = await applyPlanned(store);
   assert.equal(first.caseWrites, 1);
   const afterFirst = structuredClone(only(store));
 
-  const second = await backfillRetailerNames(store, { apply: true });
+  const second = await applyPlanned(store);
   assert.equal(second.wouldUpdate, 0, 'nothing left to update');
   assert.equal(second.caseWrites, 0);
   assert.equal(second.unchanged, 1);
   assert.deepEqual(only(store), afterFirst, 'a second apply changes nothing');
 
   // And the dry run is the verification report: zero remaining writes.
-  const verify = await backfillRetailerNames(store, { apply: false });
+  const verify = await backfillRetailerNames(store, dryRun);
   assert.equal(verify.wouldUpdate, 0);
 });
 
@@ -161,7 +200,7 @@ test('a case whose source names no retailer is left alone', async () => {
   );
   const before = structuredClone(only(store));
 
-  const report = await backfillRetailerNames(store, { apply: true });
+  const report = await applyPlanned(store);
 
   assert.equal(report.noEvidence, 1);
   assert.equal(report.caseWrites, 0);
@@ -173,7 +212,7 @@ test('valid stored evidence is never erased by a derivation that finds nothing',
     projection({ retailerNames: ['Publix'], summaryText: 'No retailer is named here.' }),
   );
 
-  const report = await backfillRetailerNames(store, { apply: true });
+  const report = await applyPlanned(store);
 
   assert.equal(report.caseWrites, 0);
   assert.deepEqual(only(store).projection.retailerNames, ['Publix']);
@@ -189,7 +228,7 @@ test('stored evidence the contract rejects is reported as a conflict, and the ca
   );
   const before = structuredClone(only(store));
 
-  const report = await backfillRetailerNames(store, { apply: true });
+  const report = await applyPlanned(store);
 
   assert.equal(report.conflicts.length, 1);
   assert.deepEqual(report.conflicts[0].rejectedCarried, ['Mexico']);
@@ -204,7 +243,7 @@ test('the report separates active from inactive and FDA from FSIS', async () => 
     projection({ state: 'active', sourceAgency: 'FDA', summaryText: 'No retailer named.' }),
   );
 
-  const report = await backfillRetailerNames(store, { apply: false });
+  const report = await backfillRetailerNames(store, dryRun);
 
   assert.equal(report.casesExamined, 3);
   assert.equal(report.active, 2);
@@ -233,7 +272,7 @@ test('the plan is pure: it reaches no network and no store', () => {
 
 test('the backfill reports zero network requests because it performs none', async () => {
   const store = await storeWith(projection());
-  const report = await backfillRetailerNames(store, { apply: false });
+  const report = await backfillRetailerNames(store, dryRun);
   assert.equal(report.networkRequests, 0);
 });
 
@@ -275,7 +314,7 @@ test('the repair and normal projection run the SAME derivation, not two parsers'
   ]);
   // What the historical repair would write for the same text.
   const store = await storeWith(projection({ summaryText }));
-  await backfillRetailerNames(store, { apply: true });
+  await applyPlanned(store);
 
   assert.deepEqual(only(store).projection.retailerNames, projected.retailerNames);
   assert.ok(projected.retailerNames.length > 0, 'the fixture must actually carry evidence');
@@ -378,7 +417,7 @@ test('a full run interleaved with ingestion keeps the newer data and re-derives 
     lastChangedAt: '2026-01-06T00:00:00.000Z',
   });
 
-  const report = await backfillRetailerNames(store, { apply: true });
+  const report = await applyPlanned(store);
 
   const after = only(store);
   // The ingest's changes stand.
@@ -419,7 +458,7 @@ test('a case that keeps moving is surfaced as concurrently modified, not overwri
     lastChangedAt: '2026-01-06T00:00:00.000Z',
   });
 
-  const report = await backfillRetailerNames(store, { apply: true });
+  const report = await applyPlanned(store);
 
   assert.equal(report.caseWrites, 0, 'nothing is written while the row keeps moving');
   assert.deepEqual(report.concurrentlyModified, [only(store).id], 'the case is surfaced');
@@ -440,7 +479,7 @@ test('a rerun after a concurrent skip enriches the case from its latest state', 
   // The case moved and was skipped; now it is quiet again.
   simulateIngest(store, id);
 
-  const rerun = await backfillRetailerNames(store, { apply: true });
+  const rerun = await applyPlanned(store);
 
   assert.equal(rerun.caseWrites, 1);
   assert.deepEqual(rerun.concurrentlyModified, []);
@@ -450,7 +489,7 @@ test('a rerun after a concurrent skip enriches the case from its latest state', 
   assert.equal(only(store).lastChangedAt, '2026-02-01T00:00:00.000Z');
 
   // And a third run is a no-op — idempotency survives the concurrency guard.
-  const third = await backfillRetailerNames(store, { apply: true });
+  const third = await applyPlanned(store);
   assert.equal(third.caseWrites, 0);
   assert.equal(third.wouldUpdate, 0);
   assert.equal(third.unchanged, 1);

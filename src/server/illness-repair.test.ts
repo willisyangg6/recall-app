@@ -21,10 +21,15 @@ import {
   auditReprojectionDrift,
   planIllnessFlag,
   repairIllnessFlags,
-  resolveIllnessRepairMode,
+  ILLNESS_REPAIR_COMMAND,
 } from './illness-repair';
+import { resolveRepairAuthorization } from './repair-authorization';
 import { MemoryStore } from './store/memory-store';
 import type { RecallCaseRow } from './store/types';
+
+/** This repair, resolved through the one shared contract. */
+const resolveIllnessRepairMode = (argv: string[]) =>
+  resolveRepairAuthorization(argv, ILLNESS_REPAIR_COMMAND);
 
 /** Real FSIS shapes from the P2B7K live audit (docs/recall-illness-status.md §3). */
 const DENIES_ILLNESS =

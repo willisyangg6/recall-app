@@ -13,7 +13,21 @@ import { projectCase } from '../../domain/projection';
 import type { NormalizedSourceRecord } from '../../domain/source-record';
 import { MemoryStore } from '../store/memory-store';
 import { backfillFdaHeroImages } from './image-backfill';
+import type { RecallStore } from '../store/types';
 import { parseFdaAnnouncement } from './parse';
+
+/** The dry run every operator starts from. */
+const dryRun = { apply: false, expectedUpdates: null };
+
+/**
+ * Apply exactly what a dry run over the same store plans — the operator's
+ * real two-step workflow (read the dry run, authorize its count) expressed
+ * once, so every apply below goes through the count gate rather than round it.
+ */
+async function applyPlanned(store: RecallStore) {
+  const { plannedChanges } = await backfillFdaHeroImages(store, dryRun);
+  return backfillFdaHeroImages(store, { apply: true, expectedUpdates: plannedChanges });
+}
 
 /** A detail region in the shape FDA serves, with product photos. */
 function detailHtml(options: { images: string[]; title?: string }): string {
@@ -122,7 +136,7 @@ test('an existing case gains its hero image from the preserved snapshot', async 
   });
   assert.equal((await store.getCase(recallCase.id))!.projection.heroImageUrl, null);
 
-  const report = await backfillFdaHeroImages(store, { apply: true });
+  const report = await applyPlanned(store);
 
   const expected =
     'https://www.fda.gov/files/styles/recall_image_small/public/widget-front.jpg?itok=abc';
@@ -149,7 +163,7 @@ test('a case whose source publishes no photo is left completely untouched', asyn
     [...store.sourceRecords.values()].find((row) => row.id === record.id),
   );
 
-  const report = await backfillFdaHeroImages(store, { apply: true });
+  const report = await applyPlanned(store);
 
   assert.deepEqual(await store.getCase(recallCase.id), before);
   assert.deepEqual(
@@ -172,12 +186,44 @@ test('a correct existing hero image is never rewritten', async () => {
   });
   const before = structuredClone(await store.getCase(recallCase.id));
 
-  const report = await backfillFdaHeroImages(store, { apply: true });
+  const report = await applyPlanned(store);
 
   assert.deepEqual(await store.getCase(recallCase.id), before);
   assert.equal(report.alreadyPopulated, 1);
   assert.equal(report.caseWrites, 0);
   assert.equal(report.sourceRecordWrites, 0);
+});
+
+test('a count mismatch writes nothing — not one record, not one case', async () => {
+  const store = new MemoryStore();
+  const { recallCase } = await seedCase(store, {
+    path: '/safety/recalls-market-withdrawals-safety-alerts/acme-foods-recalls-widget-snacks',
+    html: detailHtml({ images: ['widget-front.jpg'] }),
+  });
+  const before = structuredClone(await store.getCase(recallCase.id));
+  const recordsBefore = structuredClone([...store.sourceRecords.values()]);
+
+  const report = await backfillFdaHeroImages(store, { apply: true, expectedUpdates: 99 });
+
+  assert.ok(report.aborted, 'a mismatch must abort');
+  assert.equal(report.aborted!.expected, 99);
+  assert.equal(report.caseWrites, 0);
+  assert.equal(report.sourceRecordWrites, 0);
+  assert.deepEqual(await store.getCase(recallCase.id), before);
+  assert.deepEqual([...store.sourceRecords.values()], recordsBefore);
+});
+
+test('an apply with no authorized count writes nothing', async () => {
+  const store = new MemoryStore();
+  const { recallCase } = await seedCase(store, {
+    path: '/safety/recalls-market-withdrawals-safety-alerts/acme-foods-recalls-widget-snacks',
+    html: detailHtml({ images: ['widget-front.jpg'] }),
+  });
+  const before = structuredClone(await store.getCase(recallCase.id));
+  const report = await backfillFdaHeroImages(store, { apply: true, expectedUpdates: null });
+  assert.ok(report.aborted);
+  assert.equal(report.caseWrites + report.sourceRecordWrites, 0);
+  assert.deepEqual(await store.getCase(recallCase.id), before);
 });
 
 test('a dry run writes nothing at all', async () => {
@@ -189,7 +235,7 @@ test('a dry run writes nothing at all', async () => {
   const before = structuredClone(await store.getCase(recallCase.id));
   const recordsBefore = structuredClone([...store.sourceRecords.values()]);
 
-  const report = await backfillFdaHeroImages(store, { apply: false });
+  const report = await backfillFdaHeroImages(store, dryRun);
 
   assert.deepEqual(await store.getCase(recallCase.id), before);
   assert.deepEqual([...store.sourceRecords.values()], recordsBefore);
@@ -205,10 +251,10 @@ test('re-running is idempotent: the second pass is a complete no-op', async () =
     path: '/safety/recalls-market-withdrawals-safety-alerts/acme-foods-recalls-widget-snacks',
     html: detailHtml({ images: ['widget-front.jpg'] }),
   });
-  await backfillFdaHeroImages(store, { apply: true });
+  await applyPlanned(store);
   const afterFirst = structuredClone([...store.cases.values()]);
 
-  const second = await backfillFdaHeroImages(store, { apply: true });
+  const second = await applyPlanned(store);
 
   assert.deepEqual([...store.cases.values()], afterFirst);
   assert.equal(second.eligible, 0);
@@ -236,7 +282,7 @@ test('the backfill never creates cases, records, snapshots, or notifications', a
     runs: store.ingestRuns.size,
   };
 
-  const report = await backfillFdaHeroImages(store, { apply: true });
+  const report = await applyPlanned(store);
 
   assert.equal(store.cases.size, counts.cases);
   assert.equal(store.sourceRecords.size, counts.records);
@@ -260,7 +306,7 @@ test('identity, lineage, dates, and the timeline survive the write untouched', a
     [...store.sourceRecords.values()].find((row) => row.id === record.id),
   )!;
 
-  await backfillFdaHeroImages(store, { apply: true });
+  await applyPlanned(store);
 
   const caseAfter = (await store.getCase(recallCase.id))!;
   const recordAfter = [...store.sourceRecords.values()].find((row) => row.id === record.id)!;
@@ -337,7 +383,7 @@ test('FSIS records are never visited', async () => {
   });
   const before = structuredClone(await store.getCase(fsisCase.id));
 
-  const report = await backfillFdaHeroImages(store, { apply: true });
+  const report = await applyPlanned(store);
 
   assert.deepEqual(await store.getCase(fsisCase.id), before);
   assert.equal(report.casesExamined, 0);
@@ -352,7 +398,7 @@ test('a snapshot without detail HTML is reported, never guessed at', async () =>
   });
   const before = structuredClone(await store.getCase(recallCase.id));
 
-  const report = await backfillFdaHeroImages(store, { apply: true });
+  const report = await applyPlanned(store);
 
   assert.deepEqual(await store.getCase(recallCase.id), before);
   assert.equal(report.recordsMissingSnapshotHtml, 1);
@@ -415,7 +461,7 @@ test('a merged multi-record case resolves its hero by projection precedence', as
     });
   }
 
-  const report = await backfillFdaHeroImages(store, { apply: true });
+  const report = await applyPlanned(store);
 
   assert.equal(report.casesExamined, 1);
   assert.equal(report.caseWrites, 1);
@@ -440,7 +486,7 @@ test('an unreadable snapshot is reported as undetermined, never as "no photo"', 
     html: detailHtml({ images: [] }),
   });
 
-  const report = await backfillFdaHeroImages(store, { apply: false });
+  const report = await backfillFdaHeroImages(store, dryRun);
 
   assert.equal(report.casesUndetermined, 1);
   assert.equal(report.casesWithoutSourceImage, 1);

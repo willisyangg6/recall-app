@@ -55,13 +55,22 @@ import {
   auditGeographyReprojectionDrift,
   planCaseGeography,
   repairGeography,
-  resolveGeographyRepairMode,
+  GEOGRAPHY_REPAIR_COMMAND,
+  GEOGRAPHY_ROLLBACK_COMMAND,
   rollbackGeography,
   type GeographyCasePlan,
   type GeographyDriftRow,
   type GeographyRepairReport,
   type GeographyRollbackEntry,
 } from '../src/server/geography-repair';
+import {
+  applyCommandLine,
+  dryRunClosingLine,
+  resolveFlagValue,
+  resolvePositional,
+  resolveRepairAuthorization,
+  DRY_RUN_DESPITE_ACKNOWLEDGMENTS,
+} from '../src/server/repair-authorization';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
 
 /** Representative profiles, mirroring the personalization QA report. */
@@ -80,37 +89,11 @@ function loadDotEnv(): void {
   }
 }
 
-/** Flags that consume the argument after them. */
-const VALUE_FLAGS = ['--json', '--expect'];
-
-function flagValue(argv: string[], flag: string): string | null {
-  const index = argv.indexOf(flag);
-  if (index < 0) return null;
-  const value = argv[index + 1];
-  if (!value || value.startsWith('--')) {
-    console.error(`${flag} requires a file path argument.`);
-    process.exit(1);
-  }
-  return value;
-}
-
 /**
- * The first bare argument — the rollback ledger path — skipping any argument
- * that belongs to a flag. Without this, `--expect 61 ledger.json` reads "61"
- * as the ledger and fails with a confusing file error instead of doing what
- * the operator asked.
+ * Flags that consume the argument after them, so `--expect 61 ledger.json`
+ * finds ledger.json rather than reading "61" as the ledger path.
  */
-function positionalArg(argv: string[]): string | null {
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (VALUE_FLAGS.includes(arg)) {
-      index += 1;
-      continue;
-    }
-    if (!arg.startsWith('--')) return arg;
-  }
-  return null;
-}
+const VALUE_FLAGS = ['--json', '--expect'];
 
 const HELP = `
 Canonical geography repair (P2B7Q.2)
@@ -118,8 +101,8 @@ Canonical geography repair (P2B7Q.2)
   npm run repair:geography:dry                                 dry run; writes nothing
   npm run repair:geography:dry -- --drift-audit                …and what a re-projection would also change
   npm run repair:geography:dry -- --json <path>                …and write the ledger where you want it
-  npm run repair:geography -- --apply --confirm --expect <n>   APPLY — all three flags are required
-  npm run repair:geography:rollback -- <ledger.json> --apply --confirm --expect <n>
+  ${applyCommandLine(GEOGRAPHY_REPAIR_COMMAND)}   APPLY — all three flags are required
+  ${applyCommandLine(GEOGRAPHY_ROLLBACK_COMMAND)}
 
 A production write needs every one of:
   --apply          the intent, typed by a human; no package script supplies it
@@ -236,8 +219,11 @@ async function runRollback(
   console.log(
     mode.apply
       ? '\n  Done.\n'
-      : '\n  Dry run complete — nothing was written. Restore with:' +
-          `\n    npm run repair:geography:rollback -- ${ledgerPath} --apply --confirm --expect ${entries.length}\n`,
+      : entries.length === 0
+        ? '\n  Dry run complete — nothing was written.' +
+          '\n  No apply needed: the ledger holds no entries to restore.\n'
+        : '\n  Dry run complete — nothing was written. Restore with:' +
+          `\n    ${applyCommandLine({ ...GEOGRAPHY_ROLLBACK_COMMAND, positional: ledgerPath }, entries.length)}\n`,
   );
 }
 
@@ -254,19 +240,30 @@ async function main(): Promise<void> {
   // until it passes. A refusal here has opened no database connection, so a
   // missing --apply, --confirm or --expect cannot reach a write-capable
   // client at all — proved structurally by repair-cli.test.ts.
+  // `--rollback` selects the mode and carries NO authorization: a rollback
+  // write needs the same three typed flags an apply needs, plus its ledger.
   const rollback = argv.includes('--rollback');
-  const mode = resolveGeographyRepairMode(argv.filter((arg) => arg !== '--rollback'));
+  const form = rollback ? GEOGRAPHY_ROLLBACK_COMMAND : GEOGRAPHY_REPAIR_COMMAND;
+  const mode = resolveRepairAuthorization(
+    argv.filter((arg) => arg !== '--rollback'),
+    form,
+  );
   if (mode.error) {
     console.error(mode.error);
     process.exit(1);
   }
-  const jsonPath = flagValue(argv, '--json');
+  const json = resolveFlagValue(argv, '--json');
+  if (json.error) {
+    console.error(json.error);
+    process.exit(1);
+  }
+  const jsonPath = json.value;
   const wantsDriftAudit = argv.includes('--drift-audit');
-  const ledgerPath = rollback ? positionalArg(argv) : null;
+  const ledgerPath = rollback ? resolvePositional(argv, VALUE_FLAGS) : null;
   if (rollback && ledgerPath === null) {
     console.error(
       'Rollback needs the apply ledger path:\n' +
-        '  npm run repair:geography:rollback -- <ledger.json> --apply --confirm --expect <n>',
+        `  ${applyCommandLine(GEOGRAPHY_ROLLBACK_COMMAND)}`,
     );
     process.exit(1);
   }
@@ -274,10 +271,7 @@ async function main(): Promise<void> {
   // still a dry run, and says so — an operator must never believe they have
   // applied because they typed two thirds of the contract.
   if (!mode.apply && (argv.includes('--confirm') || mode.expectedUpdates !== null)) {
-    console.log(
-      '\n  NOTE: --confirm/--expect were given WITHOUT --apply.' +
-        '\n  This is a dry run. Nothing will be written.',
-    );
+    console.log(DRY_RUN_DESPITE_ACKNOWLEDGMENTS);
   }
 
   const url = process.env.SUPABASE_URL;
@@ -516,9 +510,8 @@ async function main(): Promise<void> {
   }
   console.log(
     mode.apply
-      ? '\n  Done. Re-run the dry run to verify: "would update" must now be 0.\n'
-      : '\n  Dry run complete — nothing was written. Apply with:' +
-          `\n    npm run repair:geography -- --apply --confirm --expect ${report.wouldUpdate}\n`,
+      ? '\n  Done. Re-run the dry run to verify: "No apply needed".\n'
+      : dryRunClosingLine(GEOGRAPHY_REPAIR_COMMAND, report.plannedChanges),
   );
 }
 

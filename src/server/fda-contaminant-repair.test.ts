@@ -29,8 +29,10 @@ import {
   inGovernedCategory,
   planRecord,
   repairFdaContaminants,
-  resolveRepairMode,
+  CONTAMINANT_REPAIR_COMMAND,
+  type ContaminantRepairReport,
 } from './fda-contaminant-repair';
+import { applyCommandLine, resolveRepairAuthorization } from './repair-authorization';
 import { parseFdaAnnouncement, type FdaListingItem } from './fda/parse';
 import { parseFsisRecord, type FsisRawRecord } from './fsis/parse';
 import { MemoryStore } from './store/memory-store';
@@ -213,14 +215,58 @@ function writeProofStore(store: MemoryStore): RecallStore {
 
 // ── Contract ─────────────────────────────────────────────────────────────────
 
-test('no-flag execution is a dry run, and --apply alone is refused', () => {
-  assert.deepEqual(resolveRepairMode([]), { apply: false, error: null });
-  const refused = resolveRepairMode(['--apply']);
-  assert.equal(refused.apply, false);
-  assert.match(refused.error!, /--confirm/);
-  assert.match(refused.error!, /repair:fda-contaminants/);
-  assert.deepEqual(resolveRepairMode(['--apply', '--confirm']), { apply: true, error: null });
-  assert.deepEqual(resolveRepairMode(['--confirm']), { apply: false, error: null });
+/** The dry run every operator starts from. */
+const dryRun = { apply: false, expectedUpdates: null };
+
+/**
+ * Apply exactly what a dry run over the same store plans — the operator's
+ * real two-step workflow (read the dry run, authorize its count) expressed
+ * once, so every apply below goes through the count gate rather than round it.
+ */
+async function applyPlanned(store: RecallStore): Promise<ContaminantRepairReport> {
+  const { plannedChanges } = await repairFdaContaminants(store, dryRun);
+  return repairFdaContaminants(store, { apply: true, expectedUpdates: plannedChanges });
+}
+
+test('no-flag execution is a dry run, and a partial contract never applies', () => {
+  // The contract itself is pinned permutation-by-permutation in
+  // repair-authorization.test.ts; this fixes THIS repair to that one contract.
+  const form = CONTAMINANT_REPAIR_COMMAND;
+  assert.equal(resolveRepairAuthorization([], form).apply, false);
+  assert.equal(resolveRepairAuthorization(['--apply'], form).apply, false);
+  assert.equal(resolveRepairAuthorization(['--apply', '--confirm'], form).apply, false);
+  assert.equal(resolveRepairAuthorization(['--confirm', '--expect', '2'], form).apply, false);
+  assert.equal(
+    resolveRepairAuthorization(['--apply', '--confirm', '--expect', '2'], form).apply,
+    true,
+  );
+  assert.match(
+    resolveRepairAuthorization(['--apply'], form).error!,
+    /repair:fda-contaminants -- --apply --confirm --expect/,
+  );
+  assert.equal(
+    applyCommandLine(form, 2),
+    'npm run repair:fda-contaminants -- --apply --confirm --expect 2',
+  );
+});
+
+test('the count gate stops an apply whose corpus moved, with zero writes', async () => {
+  const store = await productionShapedStore();
+  const before = snapshotState(store);
+  const report = await repairFdaContaminants(store, { apply: true, expectedUpdates: 99 });
+  assert.ok(report.aborted, 'a mismatch must abort');
+  assert.equal(report.aborted!.expected, 99);
+  assert.equal(report.sourceRecordWrites + report.caseWrites, 0);
+  assert.deepEqual(snapshotState(store), before, 'not one row may move');
+});
+
+test('an apply with no authorized count writes nothing', async () => {
+  const store = await productionShapedStore();
+  const before = snapshotState(store);
+  const report = await repairFdaContaminants(store, { apply: true, expectedUpdates: null });
+  assert.ok(report.aborted);
+  assert.equal(report.sourceRecordWrites + report.caseWrites, 0);
+  assert.deepEqual(snapshotState(store), before);
 });
 
 test('the approved transition tables are exactly the reviewed P3B set', () => {
@@ -276,7 +322,7 @@ test('a dry run performs zero writes and leaves the store byte-identical', async
   const store = await productionShapedStore();
   const before = snapshotState(store);
 
-  const report = await repairFdaContaminants(writeProofStore(store), { apply: false });
+  const report = await repairFdaContaminants(writeProofStore(store), dryRun);
   assert.equal(report.recordWouldChange, 3);
   assert.equal(report.caseWouldChange, 3);
   assert.equal(report.population, 'approved');
@@ -289,7 +335,7 @@ test('a dry run performs zero writes and leaves the store byte-identical', async
 
 test('the dry run reports exactly the reviewed transitions', async () => {
   const store = await productionShapedStore();
-  const report = await repairFdaContaminants(store, { apply: false });
+  const report = await repairFdaContaminants(store, dryRun);
   assert.deepEqual(report.transitionCounts, { 'foreign_material → chemical_contamination': 3 });
   assert.deepEqual(report.agentTransitionCounts, {
     '(null) → Cesium-137': 2,
@@ -309,7 +355,7 @@ test('an apply corrects the hazard pair and nothing else', async () => {
   const store = await productionShapedStore();
   const before = snapshotState(store);
 
-  const report = await repairFdaContaminants(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.sourceRecordWrites, 3);
   assert.equal(report.caseWrites, 3);
   assert.equal(report.notificationEvents, 0);
@@ -373,7 +419,7 @@ test('only the four permitted fields ever enter a write payload', async () => {
     },
   }) as unknown as RecallStore;
 
-  await repairFdaContaminants(observed, { apply: true });
+  await applyPlanned(observed);
   assert.equal(recordPayloads.length, 3);
   assert.equal(casePayloads.length, 3);
   for (const payload of [...recordPayloads, ...casePayloads]) {
@@ -386,10 +432,10 @@ test('only the four permitted fields ever enter a write payload', async () => {
 
 test('a completed repair is idempotent — the rerun is a settled no-op', async () => {
   const store = await productionShapedStore();
-  await repairFdaContaminants(store, { apply: true });
+  await applyPlanned(store);
   const settled = snapshotState(store);
 
-  const rerun = await repairFdaContaminants(store, { apply: true });
+  const rerun = await applyPlanned(store);
   assert.equal(rerun.recordWouldChange, 0);
   assert.equal(rerun.caseWouldChange, 0);
   assert.equal(rerun.population, 'settled');
@@ -410,7 +456,7 @@ test('an interrupted repair resumes: the remaining rows are corrected', async ()
     { hazardCategory: 'chemical_contamination', pathogenOrAllergen: 'asbestos' },
     { hazardCategory: 'foreign_material', pathogenOrAllergen: null },
   );
-  const partial = await repairFdaContaminants(store, { apply: false });
+  const partial = await repairFdaContaminants(store, dryRun);
   // Two records remain — not the reviewed population, so the apply refuses
   // until a human re-reviews. The refusal is the safety property; the
   // remaining work is still fully described in the ledger.
@@ -441,7 +487,7 @@ test('FSIS records and other FDA categories are never planned', async () => {
   ]);
   const before = snapshotState(store);
 
-  const report = await repairFdaContaminants(writeProofStore(store), { apply: true });
+  const report = await applyPlanned(writeProofStore(store));
   assert.equal(report.inScopeRecords, 0);
   assert.equal(report.recordWouldChange, 0);
   assert.equal(report.population, 'settled');
@@ -463,7 +509,7 @@ test('a genuine foreign-material recall inside the governed category is left alo
   await seedCase(store, [{ stored, rawPayload: payload }]);
   const before = snapshotState(store);
 
-  const report = await repairFdaContaminants(writeProofStore(store), { apply: true });
+  const report = await applyPlanned(writeProofStore(store));
   assert.equal(report.inScopeRecords, 1);
   assert.equal(report.recordWouldChange, 0);
   assert.deepEqual(snapshotState(store), before);
@@ -493,7 +539,7 @@ test('an unreviewed category transition refuses the entire apply', async () => {
   ]);
   const before = snapshotState(store);
 
-  const report = await repairFdaContaminants(writeProofStore(store), { apply: true });
+  const report = await applyPlanned(writeProofStore(store));
   assert.equal(report.refusedTransitions.length, 1);
   assert.equal(report.refusedTransitions[0].correctedHazardCategory, 'foreign_material');
   assert.match(report.applyBlockedReason!, /category transition nobody reviewed/);
@@ -519,7 +565,7 @@ test('an unreviewed agent transition refuses the entire apply', async () => {
   ]);
   const before = snapshotState(store);
 
-  const report = await repairFdaContaminants(writeProofStore(store), { apply: true });
+  const report = await applyPlanned(writeProofStore(store));
   assert.equal(report.refusedAgentTransitions.length, 1);
   assert.equal(report.refusedAgentTransitions[0].storedPathogenOrAllergen, 'lead');
   assert.match(report.applyBlockedReason!, /agent along a transition nobody reviewed/);
@@ -538,7 +584,7 @@ test('a missing snapshot refuses the entire apply', async () => {
   ]);
   const before = snapshotState(store);
 
-  const report = await repairFdaContaminants(writeProofStore(store), { apply: true });
+  const report = await applyPlanned(writeProofStore(store));
   assert.equal(report.missingSnapshots.length, 1);
   assert.match(report.applyBlockedReason!, /no readable archived snapshot/);
   assert.deepEqual(snapshotState(store), before);
@@ -565,7 +611,7 @@ test('a snapshot the canonical adapter cannot parse refuses the entire apply', a
   ]);
   const before = snapshotState(store);
 
-  const report = await repairFdaContaminants(writeProofStore(store), { apply: true });
+  const report = await applyPlanned(writeProofStore(store));
   assert.equal(report.parseFailures.length, 1);
   assert.match(report.applyBlockedReason!, /failed the canonical adapter/);
   assert.deepEqual(snapshotState(store), before);
@@ -577,7 +623,7 @@ test('a population that is not the reviewed one refuses the entire apply', async
   await seedCase(store, [{ stored, rawPayload }], { state: 'active' });
   const before = snapshotState(store);
 
-  const report = await repairFdaContaminants(writeProofStore(store), { apply: true });
+  const report = await applyPlanned(writeProofStore(store));
   assert.equal(report.recordWouldChange, 1);
   assert.equal(report.population, 'needs-review');
   assert.match(report.applyBlockedReason!, /approved exactly 3 record and 3 case corrections/);
@@ -608,7 +654,7 @@ test('a row that changed since the plan read is skipped and reported', async () 
     },
   }) as unknown as RecallStore;
 
-  const report = await repairFdaContaminants(conflicting, { apply: true });
+  const report = await applyPlanned(conflicting);
   assert.equal(report.sourceRecordWrites, 2);
   assert.equal(report.skippedConflicts.length, 1);
   assert.equal(report.skippedConflicts[0].kind, 'record');
@@ -637,7 +683,7 @@ test('a multi-source case is reconstructed by projectCase, never patched', async
     { state: 'active' },
   );
 
-  const report = await repairFdaContaminants(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.recordWouldChange, 3);
   assert.equal(report.multiSourceChangedCases.length <= 1, true);
   // Whatever the projection owner decides for the mixed case, the repair

@@ -73,6 +73,11 @@ import type { IllnessStatusKind } from '../domain/illness-status';
 import { projectCase } from '../domain/projection';
 import type { CaseProjection } from '../domain/recall-types';
 import type { RecallCaseRow, RecallStore } from './store/types';
+import {
+  resolveCountGate,
+  type CountGateAbort,
+  type MutationCommandForm,
+} from './repair-authorization';
 
 export type IllnessFlagOutcome =
   /** Stored flag disagrees with the shared classifier: correctable. */
@@ -147,7 +152,12 @@ export interface IllnessRepairReport {
    * The apply never started because the planned count did not match the
    * count the operator authorized. Zero writes happened.
    */
-  aborted: { reason: string; expected: number; actual: number } | null;
+  aborted: CountGateAbort | null;
+  /**
+   * The number an operator authorizes with `--expect <n>`. Named so the CLI,
+   * the report and the gate cannot drift apart.
+   */
+  plannedChanges: number;
   caseWrites: number;
   /** Writes that lost the compare-and-set to concurrent ingestion. */
   concurrentlyModified: string[];
@@ -238,6 +248,7 @@ function emptyReport(): IllnessRepairReport {
     plans: [],
     refused: [],
     aborted: null,
+    plannedChanges: 0,
     caseWrites: 0,
     concurrentlyModified: [],
     failures: [],
@@ -321,30 +332,13 @@ export async function repairIllnessFlags(
     rowsById.set(row.id, row);
   }
 
-  if (!options.apply) {
-    // A dry run may still be gated, so a mismatch is reported the same way and
-    // the caller can exit nonzero on it. Nothing was going to be written.
-    if (options.expectedUpdates !== null && options.expectedUpdates !== report.wouldUpdate) {
-      report.aborted = {
-        reason: 'planned corrections do not match the authorized count',
-        expected: options.expectedUpdates,
-        actual: report.wouldUpdate,
-      };
-    }
-    return report;
-  }
-
-  if (options.expectedUpdates === null || options.expectedUpdates !== report.wouldUpdate) {
-    report.aborted = {
-      reason:
-        options.expectedUpdates === null
-          ? 'apply requires an authorized correction count'
-          : 'the live corpus drifted from the reviewed dry run',
-      expected: options.expectedUpdates ?? -1,
-      actual: report.wouldUpdate,
-    };
-    return report;
-  }
+  // ── PLANNING IS COMPLETE. The whole corpus has been examined and not one
+  // row has been written yet, so a corpus that moved since the reviewed dry
+  // run costs zero writes rather than a partial, unreviewed one. The gate is
+  // the shared one every mutation CLI uses.
+  report.plannedChanges = report.wouldUpdate;
+  report.aborted = resolveCountGate(options, report.plannedChanges);
+  if (report.aborted !== null || !options.apply) return report;
 
   for (const plan of report.plans) {
     const row = rowsById.get(plan.recallCaseId)!;
@@ -457,58 +451,8 @@ export async function auditReprojectionDrift(
 }
 
 /**
- * CLI contract, tested directly.
- *
- * With no flags the command is a dry run. An apply needs THREE deliberate
- * acknowledgments, and is refused without all of them:
- *
- *   --apply            the intent
- *   --confirm          the second acknowledgment (the repair:* house rule)
- *   --expect <n>       the reviewed correction count, matched exactly
- *
- * `--dry-run` alongside `--apply` is a contradiction, not a preference, and is
- * refused rather than resolved in either direction.
+ * The command form this repair prints everywhere — CLI help, refusals, the
+ * dry-run closing line, the README and the runbook all render from this one
+ * value, so they cannot disagree about what an operator must type.
  */
-export function resolveIllnessRepairMode(argv: string[]): {
-  apply: boolean;
-  expectedUpdates: number | null;
-  error: string | null;
-} {
-  const refuse = (error: string) => ({ apply: false, expectedUpdates: null, error });
-
-  const wantsApply = argv.includes('--apply');
-  const wantsDryRun = argv.includes('--dry-run');
-  const confirmed = argv.includes('--confirm');
-
-  if (wantsApply && wantsDryRun) {
-    return refuse('--apply and --dry-run contradict each other. Nothing was written.');
-  }
-
-  let expectedUpdates: number | null = null;
-  const expectIndex = argv.indexOf('--expect');
-  if (expectIndex >= 0) {
-    const raw = argv[expectIndex + 1];
-    if (raw === undefined || raw.startsWith('--')) {
-      return refuse('--expect requires the reviewed correction count. Nothing was written.');
-    }
-    if (!/^\d+$/.test(raw)) {
-      return refuse(`--expect must be a non-negative integer, got "${raw}". Nothing was written.`);
-    }
-    expectedUpdates = Number(raw);
-  }
-
-  if (wantsApply && !confirmed) {
-    return refuse(
-      '--apply requires the explicit second acknowledgment --confirm ' +
-        '(npm run repair:illness-flags -- --confirm --expect <n>). Nothing was written.',
-    );
-  }
-  if (wantsApply && expectedUpdates === null) {
-    return refuse(
-      '--apply requires --expect <n>, the correction count from the reviewed dry run. ' +
-        'Nothing was written.',
-    );
-  }
-
-  return { apply: wantsApply && confirmed, expectedUpdates, error: null };
-}
+export const ILLNESS_REPAIR_COMMAND: MutationCommandForm = { script: 'repair:illness-flags' };

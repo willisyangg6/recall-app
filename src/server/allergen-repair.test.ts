@@ -12,7 +12,12 @@ import { test } from 'node:test';
 import { projectCase } from '../domain/projection';
 import type { TimelineEntry } from '../domain/recall-types';
 import type { NormalizedSourceRecord } from '../domain/source-record';
-import { repairAllergens, resolveRepairMode } from './allergen-repair';
+import {
+  ALLERGEN_REPAIR_COMMAND,
+  repairAllergens,
+  type AllergenRepairReport,
+} from './allergen-repair';
+import { applyCommandLine, resolveRepairAuthorization } from './repair-authorization';
 import type { FdaListingItem } from './fda/parse';
 import { parseFdaAnnouncement } from './fda/parse';
 import { parseFsisRecord, type FsisRawRecord } from './fsis/parse';
@@ -128,14 +133,56 @@ function snapshotState(store: MemoryStore) {
 
 // ── CLI contract ─────────────────────────────────────────────────────────────
 
-test('no-flag execution is a dry run, and --apply alone is refused', () => {
-  assert.deepEqual(resolveRepairMode([]), { apply: false, error: null });
-  const refused = resolveRepairMode(['--apply']);
-  assert.equal(refused.apply, false);
-  assert.match(refused.error!, /--confirm/);
-  assert.deepEqual(resolveRepairMode(['--apply', '--confirm']), { apply: true, error: null });
-  // The acknowledgment alone never applies either.
-  assert.deepEqual(resolveRepairMode(['--confirm']), { apply: false, error: null });
+/** The dry run every operator starts from. */
+const dryRun = { apply: false, expectedUpdates: null };
+
+/**
+ * Apply exactly what a dry run over the same store plans — the operator's
+ * real two-step workflow (read the dry run, authorize its count) expressed
+ * once, so every apply below goes through the count gate rather than round it.
+ */
+async function applyPlanned(store: RecallStore): Promise<AllergenRepairReport> {
+  const { plannedChanges } = await repairAllergens(store, dryRun);
+  return repairAllergens(store, { apply: true, expectedUpdates: plannedChanges });
+}
+
+test('no-flag execution is a dry run, and a partial contract never applies', () => {
+  // The contract itself is pinned permutation-by-permutation in
+  // repair-authorization.test.ts; this fixes THIS repair to that one contract.
+  const form = ALLERGEN_REPAIR_COMMAND;
+  assert.equal(resolveRepairAuthorization([], form).apply, false);
+  assert.equal(resolveRepairAuthorization(['--apply'], form).apply, false);
+  assert.equal(resolveRepairAuthorization(['--apply', '--confirm'], form).apply, false);
+  assert.equal(resolveRepairAuthorization(['--confirm', '--expect', '2'], form).apply, false);
+  assert.equal(
+    resolveRepairAuthorization(['--apply', '--confirm', '--expect', '2'], form).apply,
+    true,
+  );
+  assert.equal(
+    applyCommandLine(form, 2),
+    'npm run repair:allergens -- --apply --confirm --expect 2',
+  );
+});
+
+test('the count gate stops an apply whose corpus moved, with zero writes', async () => {
+  const { store } = await burritoStore();
+  const report = await repairAllergens(store, { apply: true, expectedUpdates: 99 });
+  assert.ok(report.aborted, 'a mismatch must abort');
+  assert.equal(report.aborted!.expected, 99);
+  assert.equal(report.aborted!.actual, report.plannedChanges);
+  assert.equal(report.sourceRecordWrites, 0);
+  assert.equal(report.caseWrites, 0);
+  // Not one row moved.
+  const row = [...store.sourceRecords.values()][0];
+  assert.equal(row.normalized.pathogenOrAllergen, null);
+  assert.equal([...store.cases.values()][0].projection.pathogenOrAllergen, null);
+});
+
+test('an apply with no authorized count writes nothing', async () => {
+  const { store } = await burritoStore();
+  const report = await repairAllergens(store, { apply: true, expectedUpdates: null });
+  assert.ok(report.aborted);
+  assert.equal(report.sourceRecordWrites + report.caseWrites, 0);
 });
 
 // ── Dry-run behavior ─────────────────────────────────────────────────────────
@@ -175,7 +222,7 @@ test('a dry run performs zero writes and leaves the store byte-identical', async
     },
   }) as unknown as RecallStore;
 
-  const report = await repairAllergens(guarded, { apply: false });
+  const report = await repairAllergens(guarded, dryRun);
   assert.equal(report.recordWouldChange, 1);
   assert.equal(report.caseWouldChange, 1);
   assert.equal(report.sourceRecordWrites, 0);
@@ -187,7 +234,7 @@ test('a dry run performs zero writes and leaves the store byte-identical', async
 
 test('Steak Burrito produces the expected null → undeclared egg correction', async () => {
   const { store } = await burritoStore();
-  const report = await repairAllergens(store, { apply: false });
+  const report = await repairAllergens(store, dryRun);
 
   assert.equal(report.ledger.length, 1);
   const plan = report.ledger[0];
@@ -220,7 +267,7 @@ test('a corrected FDA multi-allergen record preserves every supported allergen',
   };
   await seedCase(store, [{ stored, rawPayload }]);
 
-  const report = await repairAllergens(store, { apply: false });
+  const report = await repairAllergens(store, dryRun);
   const record = report.ledger[0].records[0];
   assert.equal(record.outcome, 'update');
   assert.equal(record.correctedValue, 'undeclared crustacean shellfish and milk');
@@ -246,7 +293,7 @@ test('unchanged, pathogen, and negative records propose nothing', async () => {
   assert.equal(negativeParsed.pathogenOrAllergen, null);
   await seedCase(store, [{ stored: negativeParsed, rawPayload: negative }]);
 
-  const report = await repairAllergens(store, { apply: false });
+  const report = await repairAllergens(store, dryRun);
   assert.equal(report.casesExamined, 3);
   assert.equal(report.recordWouldChange, 0);
   assert.equal(report.caseWouldChange, 0);
@@ -272,7 +319,7 @@ test('the Yellow 5/Yellow 6 fallback quirk stays outside this repair', async () 
     { stored: parsed, rawPayload: { listing, detailMainHtml: null, path: listing.path } },
   ]);
 
-  const report = await repairAllergens(store, { apply: false });
+  const report = await repairAllergens(store, dryRun);
   assert.equal(report.recordWouldChange, 0);
   assert.equal(report.caseWouldChange, 0);
 });
@@ -288,7 +335,7 @@ test('normalized-only drift is reported without a projection write', async () =>
     pathogenOrAllergen: 'undeclared egg',
   });
 
-  const report = await repairAllergens(store, { apply: false });
+  const report = await repairAllergens(store, dryRun);
   assert.equal(report.recordWouldChange, 1);
   assert.equal(report.caseWouldChange, 0);
   assert.equal(report.ledger.length, 1);
@@ -304,7 +351,7 @@ test('projection-only drift is reported without a record write', async () => {
     pathogenOrAllergen: null, // stale projection
   });
 
-  const report = await repairAllergens(store, { apply: false });
+  const report = await repairAllergens(store, dryRun);
   assert.equal(report.recordWouldChange, 0);
   assert.equal(report.caseWouldChange, 1);
   assert.equal(report.ledger.length, 1);
@@ -314,7 +361,7 @@ test('projection-only drift is reported without a record write', async () => {
 
 test('both-layer drift proposes both writes for the same case', async () => {
   const { store } = await burritoStore();
-  const report = await repairAllergens(store, { apply: false });
+  const report = await repairAllergens(store, dryRun);
   assert.equal(report.recordWouldChange, 1);
   assert.equal(report.caseWouldChange, 1);
   assert.equal(report.ledger[0].recordWrites.length, 1);
@@ -328,7 +375,7 @@ test('a missing snapshot is reported and never guessed', async () => {
   const stored = { ...parseFsisRecord(STEAK_BURRITO), pathogenOrAllergen: null };
   await seedCase(store, [{ stored, rawPayload: STEAK_BURRITO, withSnapshot: false }]);
 
-  const report = await repairAllergens(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.missingSnapshots.length, 1);
   assert.equal(report.missingSnapshots[0].nativeId, 'PHA-07292026-01');
   assert.equal(report.snapshotCoverage.fsis.missing, 1);
@@ -346,7 +393,7 @@ test('a value change outside allergen-category records is refused and reported',
   const stored = { ...parseFsisRecord(outbreak), pathogenOrAllergen: 'Listeria' };
   await seedCase(store, [{ stored, rawPayload: outbreak }]);
 
-  const report = await repairAllergens(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.changesOutsideAllergenCategory.length, 1);
   assert.equal(report.pathogenValueChanges.length, 1);
   assert.equal(report.recordWouldChange, 0);
@@ -367,7 +414,7 @@ test('a re-parse that moves the hazard category itself is refused', async () => 
   };
   await seedCase(store, [{ stored, rawPayload: STEAK_BURRITO }]);
 
-  const report = await repairAllergens(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.categoryConflicts.length, 1);
   assert.equal(report.categoryConflicts[0].correctedHazardCategory, 'allergen');
   assert.equal(report.recordWouldChange, 0);
@@ -383,7 +430,7 @@ test('an apply writes the two allowed fields and nothing else, byte for byte', a
   const { store, caseId, recordId } = await burritoStore();
   const before = snapshotState(store);
 
-  const report = await repairAllergens(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.sourceRecordWrites, 1);
   assert.equal(report.caseWrites, 1);
   assert.equal(report.skippedConflicts.length, 0);
@@ -411,14 +458,14 @@ test('an apply writes the two allowed fields and nothing else, byte for byte', a
 
 test('re-running the apply is idempotent, and the dry run verifies it', async () => {
   const { store } = await burritoStore();
-  const first = await repairAllergens(store, { apply: true });
+  const first = await applyPlanned(store);
   assert.equal(first.sourceRecordWrites + first.caseWrites, 2);
 
-  const verify = await repairAllergens(store, { apply: false });
+  const verify = await repairAllergens(store, dryRun);
   assert.equal(verify.recordWouldChange, 0);
   assert.equal(verify.caseWouldChange, 0);
 
-  const second = await repairAllergens(store, { apply: true });
+  const second = await applyPlanned(store);
   assert.equal(second.sourceRecordWrites, 0);
   assert.equal(second.caseWrites, 0);
 });
@@ -461,7 +508,7 @@ test('concurrently changed rows fail compare-and-swap and are skipped', async ()
     },
   }) as unknown as RecallStore;
 
-  const report = await repairAllergens(proxied, { apply: true });
+  const report = await applyPlanned(proxied);
   assert.equal(report.sourceRecordWrites, 0);
   assert.equal(report.caseWrites, 0);
   assert.equal(report.skippedConflicts.length, 2);
@@ -489,19 +536,19 @@ test('an interrupted apply resumes cleanly on the next run', async () => {
     },
   }) as unknown as RecallStore;
 
-  await assert.rejects(repairAllergens(crashing, { apply: true }), /simulated crash/);
+  await assert.rejects(applyPlanned(crashing), /simulated crash/);
   // Partial state: the record is corrected, the projection is not yet.
   const row = [...store.sourceRecords.values()][0];
   assert.equal(row.normalized.pathogenOrAllergen, 'undeclared egg');
   assert.equal([...store.cases.values()][0].projection.pathogenOrAllergen, null);
 
   // The rerun decides from current state and finishes exactly the remainder.
-  const resumed = await repairAllergens(store, { apply: true });
+  const resumed = await applyPlanned(store);
   assert.equal(resumed.sourceRecordWrites, 0);
   assert.equal(resumed.caseWrites, 1);
   assert.equal([...store.cases.values()][0].projection.pathogenOrAllergen, 'undeclared egg');
 
-  const verify = await repairAllergens(store, { apply: false });
+  const verify = await repairAllergens(store, dryRun);
   assert.equal(verify.recordWouldChange + verify.caseWouldChange, 0);
 });
 
@@ -518,7 +565,7 @@ test('notification and material-change writers are structurally unreachable', as
     },
   }) as unknown as RecallStore;
 
-  const report = await repairAllergens(armed, { apply: true });
+  const report = await applyPlanned(armed);
   assert.equal(report.notificationEvents, 0);
   assert.equal(report.newCases, 0);
   assert.equal(store.notifications.size, 0);
@@ -550,7 +597,7 @@ test('a multi-source case resolves its projection by canonical precedence', asyn
     },
   ]);
 
-  const report = await repairAllergens(store, { apply: false });
+  const report = await repairAllergens(store, dryRun);
   assert.equal(report.recordWouldChange, 2);
   assert.deepEqual(report.multiSourceChangedCases, [caseId]);
   const expected = projectCase([
@@ -602,7 +649,7 @@ test('111-2015 proposes the complete supported allergen list, never null', async
   const stored = { ...parseFsisRecord(raw), pathogenOrAllergen: 'undeclared milk' };
   await seedCase(store, [{ stored, rawPayload: raw }]);
 
-  const report = await repairAllergens(store, { apply: false });
+  const report = await repairAllergens(store, dryRun);
   const record = report.ledger[0].records[0];
   assert.equal(record.outcome, 'update');
   assert.equal(record.storedValue, 'undeclared milk');
@@ -626,14 +673,14 @@ test('no proposed canonical value contains duplicate singular/plural families', 
   const stored = { ...parseFsisRecord(raw), pathogenOrAllergen: 'undeclared peanut' };
   await seedCase(store, [{ stored, rawPayload: raw }]);
 
-  const report = await repairAllergens(store, { apply: false });
+  const report = await repairAllergens(store, dryRun);
   assert.equal(report.recordWouldChange, 0);
   assert.equal(report.caseWouldChange, 0);
   // And a stale stored duplicate is corrected TO the deduplicated form.
   const store2 = new MemoryStore();
   const stored2 = { ...parseFsisRecord(raw), pathogenOrAllergen: 'undeclared peanut and peanuts' };
   await seedCase(store2, [{ stored: stored2, rawPayload: raw }]);
-  const report2 = await repairAllergens(store2, { apply: false });
+  const report2 = await repairAllergens(store2, dryRun);
   const record2 = report2.ledger[0].records[0];
   assert.equal(record2.correctedValue, 'undeclared peanut');
   for (const plan of report2.ledger) {

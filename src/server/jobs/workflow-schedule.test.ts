@@ -162,6 +162,39 @@ test('scheduled execution shares the canonical runner with manual execution', ()
   }
 });
 
+test('daily maintenance still runs exactly its three job steps', () => {
+  // The slow channel was never pinned by name before. The middle step is the
+  // one that matters here: the daily full label sweep is `jobs:labels --full`,
+  // the job runner — NOT the human-gated `labels:fsis` backfill CLI.
+  const invoked = [...workflow('daily-maintenance.yml').matchAll(/^\s*run:\s*(npm run .+)$/gm)].map(
+    (match) => match[1].trim(),
+  );
+  assert.deepEqual(invoked, [
+    'npm run jobs:enforcement',
+    'npm run jobs:labels -- --full',
+    'npm run jobs:push',
+  ]);
+});
+
+test('the scheduled label steps are the job runner, never the manual backfill', () => {
+  const scripts = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts as Record<
+    string,
+    string
+  >;
+  // Two different commands, deliberately: one is unattended and leases, the
+  // other needs a human to type --apply --confirm --expect.
+  assert.equal(scripts['jobs:labels'], 'tsx scripts/run-job.ts labels');
+  assert.equal(scripts['labels:fsis'], 'tsx scripts/render-fsis-labels.ts');
+  for (const name of PRODUCTION_WORKFLOWS) {
+    const yaml = workflow(name);
+    assert.ok(
+      !/npm run labels:fsis/.test(yaml),
+      `${name} invokes labels:fsis, the human-gated backfill. The scheduled label ` +
+        'step is `npm run jobs:labels`.',
+    );
+  }
+});
+
 // ── Secret scope (P2B7S) ────────────────────────────────────────────────────
 
 const PRODUCTION_WORKFLOWS = ['scheduled-ingest.yml', 'daily-maintenance.yml'] as const;

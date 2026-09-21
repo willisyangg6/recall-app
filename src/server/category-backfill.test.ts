@@ -16,7 +16,20 @@ import { MemoryStore } from './store/memory-store';
 import { projectCase } from '../domain/projection';
 import type { CaseProjection, NoticeType, SourceAgency } from '../domain/recall-types';
 import type { NormalizedSourceRecord } from '../domain/source-record';
-import type { RecallCaseRow } from './store/types';
+import type { RecallCaseRow, RecallStore } from './store/types';
+
+/** The dry run every operator starts from. */
+const dryRun = { apply: false, expectedUpdates: null };
+
+/**
+ * Apply exactly what a dry run over the same store plans — the operator's
+ * real two-step workflow (read the dry run, authorize its count) expressed
+ * once, so every apply below goes through the count gate rather than round it.
+ */
+async function applyPlanned(store: RecallStore) {
+  const { plannedChanges } = await backfillProductCategories(store, dryRun);
+  return backfillProductCategories(store, { apply: true, expectedUpdates: plannedChanges });
+}
 
 function record(overrides: Partial<NormalizedSourceRecord> = {}): NormalizedSourceRecord {
   return {
@@ -113,21 +126,46 @@ test('a stale stored list is planned for correction', async () => {
 
 test('the dry run writes nothing and reports the same plan the apply performs', async () => {
   const { store } = await storeWith([legacyProjection(), legacyProjection()]);
-  const dry = await backfillProductCategories(store, { apply: false });
+  const dry = await backfillProductCategories(store, dryRun);
   assert.equal(dry.wouldUpdate, 2);
   assert.equal(dry.caseWrites, 0);
   for (const row of await store.listCases()) {
     assert.equal(row.projection.productCategories, undefined);
   }
-  const applied = await backfillProductCategories(store, { apply: true });
+  const applied = await applyPlanned(store);
   assert.equal(applied.wouldUpdate, 2);
   assert.equal(applied.caseWrites, 2);
+});
+
+test('a count mismatch aborts the WHOLE run, not a suffix of it', async () => {
+  // Two correctable cases; the operator authorized one. Because the corpus is
+  // planned in full before the first write, the answer is zero writes — never
+  // "write the one you authorized and stop".
+  const { store } = await storeWith([legacyProjection(), legacyProjection()]);
+  const before = (await store.listCases()).map((row) => structuredClone(row));
+
+  const report = await backfillProductCategories(store, { apply: true, expectedUpdates: 1 });
+
+  assert.ok(report.aborted, 'a mismatch must abort');
+  assert.equal(report.aborted!.expected, 1);
+  assert.equal(report.aborted!.actual, 2);
+  assert.equal(report.caseWrites, 0);
+  assert.deepEqual(await store.listCases(), before, 'not one case may move');
+});
+
+test('an apply with no authorized count writes nothing', async () => {
+  const { store } = await storeWith([legacyProjection()]);
+  const before = (await store.listCases()).map((row) => structuredClone(row));
+  const report = await backfillProductCategories(store, { apply: true, expectedUpdates: null });
+  assert.ok(report.aborted);
+  assert.equal(report.caseWrites, 0);
+  assert.deepEqual(await store.listCases(), before);
 });
 
 test('the apply writes exactly one field and nothing else moves', async () => {
   const { store, rows } = await storeWith([legacyProjection()]);
   const before = rows[0];
-  await backfillProductCategories(store, { apply: true });
+  await applyPlanned(store);
   const after = (await store.getCase(before.id))!;
 
   assert.deepEqual(after.projection.productCategories, ['bakery_grains']);
@@ -146,7 +184,7 @@ test('the apply writes exactly one field and nothing else moves', async () => {
 test('the run creates no case, no notification and no ingest run', async () => {
   const { store } = await storeWith([legacyProjection(), legacyProjection()]);
   const casesBefore = (await store.listCases()).length;
-  const report = await backfillProductCategories(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal((await store.listCases()).length, casesBefore);
   assert.equal(report.newCases, 0);
   assert.equal(report.notificationEvents, 0);
@@ -156,11 +194,11 @@ test('the run creates no case, no notification and no ingest run', async () => {
 
 test('re-running after an apply plans zero updates', async () => {
   const { store } = await storeWith([legacyProjection(), legacyProjection()]);
-  await backfillProductCategories(store, { apply: true });
-  const second = await backfillProductCategories(store, { apply: false });
+  await applyPlanned(store);
+  const second = await backfillProductCategories(store, dryRun);
   assert.equal(second.wouldUpdate, 0);
   assert.equal(second.unchanged, 2);
-  const third = await backfillProductCategories(store, { apply: true });
+  const third = await applyPlanned(store);
   assert.equal(third.caseWrites, 0);
 });
 
@@ -184,7 +222,7 @@ test('a case that moved mid-run is re-read, re-derived and retried once', async 
     return original(caseId, categories, expected);
   };
 
-  const report = await backfillProductCategories(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.caseWrites, 1);
   assert.deepEqual(report.concurrentlyModified, []);
   // The retry used the NEWER text, not the text the run started with.
@@ -196,7 +234,7 @@ test('a case still moving after the retry is reported, never overwritten', async
   const id = rows[0].id;
   store.updateCaseProductCategories = async () => false;
 
-  const report = await backfillProductCategories(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.caseWrites, 0);
   assert.deepEqual(report.concurrentlyModified, [id]);
   // The row was left exactly as it was.
@@ -213,7 +251,7 @@ test('a concurrent re-projection that already got it right is not fought', async
     return false;
   };
 
-  const report = await backfillProductCategories(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.caseWrites, 0);
   assert.deepEqual(report.concurrentlyModified, [id]);
   assert.deepEqual((await store.getCase(id))!.projection.productCategories, ['bakery_grains']);
@@ -238,7 +276,7 @@ test('the report counts distribution, multi-category and other-only cases', asyn
     legacyProjection({ productDescription: 'Metal Cookware Items' }),
     legacyProjection({ productDescription: 'Frozen Waffle and Turkey Sausage Products' }),
   ]);
-  const report = await backfillProductCategories(store, { apply: false });
+  const report = await backfillProductCategories(store, dryRun);
   assert.equal(report.casesExamined, 3);
   assert.equal(report.otherOnly, 1);
   assert.equal(report.multiCategory, 1);
@@ -264,7 +302,7 @@ test('a mixed corpus separates missing, unchanged and changed in one run', async
   };
   const { store } = await storeWith([missing, unchanged, stale]);
 
-  const report = await backfillProductCategories(store, { apply: false });
+  const report = await backfillProductCategories(store, dryRun);
   assert.equal(report.casesExamined, 3);
   assert.equal(report.currentlyBearing, 2);
   assert.equal(report.unchanged, 1);
@@ -272,14 +310,14 @@ test('a mixed corpus separates missing, unchanged and changed in one run', async
   assert.equal(report.updatesOverExisting, 1);
   assert.equal(report.caseWrites, 0);
 
-  const applied = await backfillProductCategories(store, { apply: true });
+  const applied = await applyPlanned(store);
   assert.equal(applied.caseWrites, 2);
   assert.equal(applied.timelineWrites, 0);
   assert.equal(applied.notificationEvents, 0);
   assert.equal(applied.newCases, 0);
 
   // Idempotent: a hypothetical rerun plans nothing.
-  const rerun = await backfillProductCategories(store, { apply: false });
+  const rerun = await backfillProductCategories(store, dryRun);
   assert.equal(rerun.wouldUpdate, 0);
   assert.equal(rerun.unchanged, 3);
 });
@@ -309,7 +347,7 @@ test('the backfill re-derives through the announcement, like every other caller'
   assert.deepEqual(plan.next, ['prepared_foods']);
   assert.equal(plan.outcome, 'update');
 
-  await backfillProductCategories(store, { apply: true });
+  await applyPlanned(store);
   const after = await store.getCase(rows[0].id);
   assert.deepEqual(after?.projection.productCategories, ['prepared_foods']);
   // …and a full re-projection agrees, which is what makes the write durable.

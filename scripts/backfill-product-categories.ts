@@ -2,8 +2,18 @@
  * Historical product-category enrichment — an explicit maintenance command,
  * never scheduled and deliberately separate from production ingestion.
  *
- *   npm run backfill:product-categories:dry    # report only, writes nothing
- *   npm run backfill:product-categories        # apply the category writes
+ *   npm run backfill:product-categories:dry                                 # report only, writes nothing
+ *   npm run backfill:product-categories -- --apply --confirm --expect <n>   # APPLY (all three, typed)
+ *
+ * NO PACKAGE SCRIPT CARRIES `--apply`. It used to: `backfill:product-categories`
+ * was `tsx scripts/backfill-product-categories.ts --apply`, so the apply was a
+ * command an operator could run without typing a single acknowledgment. All
+ * three flags are now typed by a human, resolved and refused BEFORE a
+ * write-capable database client is constructed, and the whole corpus is
+ * planned before the first write (P2B7T).
+ *
+ * This backfill is DONE (C10B). It remains executable, and gated, rather than
+ * deleted so the derivation stays verifiable by dry run.
  *
  * Re-derives `projection.productCategories` for every stored case using the
  * same canonical derivation `projectCase` now owns, from text already
@@ -20,9 +30,32 @@
 
 import { backfillProductCategories } from '../src/server/category-backfill';
 import { FOOD_CATEGORIES, foodCategoryLabel } from '../src/domain/food-category';
+import {
+  applyCommandLine,
+  dryRunClosingLine,
+  resolveRepairAuthorization,
+  DRY_RUN_DESPITE_ACKNOWLEDGMENTS,
+  type MutationCommandForm,
+} from '../src/server/repair-authorization';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
 
-const apply = process.argv.includes('--apply');
+const COMMAND: MutationCommandForm = { script: 'backfill:product-categories' };
+
+const HELP = `
+Historical product-category enrichment (C10A/C10B — already applied)
+
+  npm run backfill:product-categories:dry                       dry run; writes nothing
+  ${applyCommandLine(COMMAND)}   APPLY — all three flags are required
+
+A production write needs every one of:
+  --apply          the intent, typed by a human; no package script supplies it
+  --confirm        the repair:* house rule
+  --expect <n>     the planned-change count from the dry run you actually read
+
+Omit any one and the command exits nonzero before opening a database
+connection. A count that no longer matches the live corpus aborts the run with
+zero writes.
+`;
 
 function loadDotEnv(): void {
   try {
@@ -36,6 +69,29 @@ const pct = (n: number, d: number): string => (d === 0 ? '—' : `${((n / d) * 1
 
 async function main(): Promise<void> {
   loadDotEnv();
+  const argv = process.argv.slice(2);
+
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(HELP);
+    return;
+  }
+
+  // ── The authorization contract is resolved FIRST, and nothing below runs
+  // until it passes. A refusal here has opened no database connection, so a
+  // missing --apply, --confirm or --expect cannot reach a write-capable
+  // client at all — proved structurally by mutation-cli.test.ts.
+  const mode = resolveRepairAuthorization(argv, COMMAND);
+  if (mode.error) {
+    console.error(mode.error);
+    process.exit(1);
+  }
+  const apply = mode.apply;
+  // Two thirds of the contract is still a dry run, and says so — an operator
+  // must never believe they applied because they typed part of it.
+  if (!apply && (argv.includes('--confirm') || mode.expectedUpdates !== null)) {
+    console.log(DRY_RUN_DESPITE_ACKNOWLEDGMENTS);
+  }
+
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
   if (!url || !secretKey) {
@@ -51,6 +107,7 @@ async function main(): Promise<void> {
   let lastPrinted = 0;
   const report = await backfillProductCategories(store, {
     apply,
+    expectedUpdates: mode.expectedUpdates,
     onProgress: (done, total) => {
       if (done === total || done - lastPrinted >= 250) {
         lastPrinted = done;
@@ -114,10 +171,20 @@ async function main(): Promise<void> {
     }
   }
 
+  if (report.aborted) {
+    console.log(
+      `\n  ✗ ABORTED — ${report.aborted.reason}.` +
+        `\n    authorized ${report.aborted.expected}, live plan ${report.aborted.actual}.` +
+        '\n    Nothing was written. Re-run the dry run, review the difference, and' +
+        '\n    re-authorize with the new count.\n',
+    );
+    process.exit(1);
+  }
+
   console.log(
     apply
-      ? `\nApplied. Re-run the dry run to verify — expect "would update: 0".\n`
-      : `\nDry run only. Nothing was written.\n`,
+      ? '\n  Applied. Re-run the dry run to verify: "No apply needed".\n'
+      : dryRunClosingLine(COMMAND, report.plannedChanges),
   );
 }
 

@@ -80,6 +80,11 @@ import type { NormalizedSourceRecord } from '../domain/source-record';
 import { parseFdaAnnouncement, type FdaAnnouncementSource, type FdaListingItem } from './fda/parse';
 import { parseFsisRecord, type FsisRawRecord } from './fsis/parse';
 import type { RecallCaseRow, RecallStore, SourceRecordRow } from './store/types';
+import {
+  resolveCountGate,
+  type CountGateAbort,
+  type MutationCommandForm,
+} from './repair-authorization';
 
 /**
  * The category corrections P2e-A source-reviewed and the founder approved.
@@ -236,6 +241,14 @@ export interface HazardRepairReport {
   multiSourceChangedCases: string[];
   /** Every case with any proposed write — the reviewable per-record ledger. */
   ledger: HazardCasePlan[];
+  /**
+   * The number an operator authorizes with `--expect <n>`: cases carrying any
+   * proposed write. It is `ledger.length`, named so the CLI, the report and
+   * the gate cannot drift apart.
+   */
+  plannedChanges: number;
+  /** Set when the live corpus is not what was authorized. Zero writes follow. */
+  aborted: CountGateAbort | null;
   affectsMe: {
     activeCasesChanged: number;
     /** Active cases entering the allergen category (newly preference-eligible). */
@@ -254,30 +267,21 @@ export interface HazardRepairReport {
 
 export interface HazardRepairOptions {
   apply: boolean;
+  /**
+   * The reviewed `--expect <n>`. Required for an apply (the CLI refuses
+   * before this is reached without it) and optional for a dry run, which
+   * reports a mismatch so the count can be rehearsed.
+   */
+  expectedUpdates: number | null;
   onProgress?: (done: number, total: number) => void;
 }
 
 /**
- * CLI contract, tested directly: with no flags the command is a dry run, and
- * `--apply` alone is refused — the second deliberate acknowledgment
- * (`--confirm`) must accompany it before a single write is reachable.
+ * The command form this repair prints everywhere — CLI help, refusals, the
+ * dry-run closing line, the README and the runbook all render from this one
+ * value, so they cannot disagree about what an operator must type.
  */
-export function resolveRepairMode(argv: string[]): {
-  apply: boolean;
-  error: string | null;
-} {
-  const wantsApply = argv.includes('--apply');
-  const confirmed = argv.includes('--confirm');
-  if (wantsApply && !confirmed) {
-    return {
-      apply: false,
-      error:
-        '--apply requires the explicit second acknowledgment --confirm ' +
-        '(npm run repair:hazards -- --confirm). Nothing was written.',
-    };
-  }
-  return { apply: wantsApply && confirmed, error: null };
-}
+export const HAZARD_REPAIR_COMMAND: MutationCommandForm = { script: 'repair:hazards' };
 
 /** The archived FSIS payload is the raw API record itself. */
 function asFsisInput(payload: unknown): FsisRawRecord | null {
@@ -516,6 +520,8 @@ export async function repairHazards(
     preexistingProjectionDrift: [],
     multiSourceChangedCases: [],
     ledger: [],
+    plannedChanges: 0,
+    aborted: null,
     affectsMe: { activeCasesChanged: 0, activeCasesEnteringAllergen: 0 },
     networkRequests: 0,
     sourceRecordWrites: 0,
@@ -629,9 +635,23 @@ export async function repairHazards(
         }
       }
     }
+  }
 
-    if (!options.apply) continue;
+  // ── PLANNING IS COMPLETE. The whole corpus has been examined and not one
+  // row has been written yet, so the count below is the count the operator
+  // authorized against — and a corpus that moved since the reviewed dry run
+  // costs zero writes rather than a partial, unreviewed one.
+  report.plannedChanges = report.ledger.length;
+  report.aborted = resolveCountGate(options, report.plannedChanges);
+  if (report.aborted !== null || !options.apply) {
+    report.transitionCounts = sortedCounts(report.transitionCounts);
+    return report;
+  }
 
+  // ── WRITE PHASE. Exactly the writes the reviewed plan proposed, each still
+  // guarded on the value/version it was planned from, in the same order and
+  // with the same scope as before this gate existed.
+  for (const plan of report.ledger) {
     for (const recordPlan of plan.recordWrites) {
       const written = await store.updateSourceRecordHazard(
         recordPlan.recordId,
@@ -654,8 +674,9 @@ export async function repairHazards(
       }
     }
     if (plan.caseWriteNeeded) {
+      const recallCase = caseRows.get(plan.recallCaseId)!;
       const written = await store.updateCaseHazard(
-        recallCaseId,
+        plan.recallCaseId,
         {
           hazardCategory: plan.correctedHazardCategory as HazardCategory,
           pathogenOrAllergen: plan.correctedPathogenOrAllergen,
@@ -663,7 +684,7 @@ export async function repairHazards(
         recallCase.lastChangedAt,
       );
       if (written) report.caseWrites += 1;
-      else report.skippedConflicts.push({ kind: 'case', id: recallCaseId, nativeId: null });
+      else report.skippedConflicts.push({ kind: 'case', id: plan.recallCaseId, nativeId: null });
     }
   }
 

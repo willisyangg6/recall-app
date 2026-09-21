@@ -90,6 +90,11 @@ import type { NormalizedSourceRecord } from '../domain/source-record';
 import { decodeEntities } from '../domain/text';
 import { parseFdaAnnouncement, type FdaAnnouncementSource, type FdaListingItem } from './fda/parse';
 import type { RecallCaseRow, RecallStore, SourceRecordRow } from './store/types';
+import {
+  resolveCountGate,
+  type CountGateAbort,
+  type MutationCommandForm,
+} from './repair-authorization';
 
 /** The one disjunctive FDA reason category this repair governs. */
 export const TARGET_FDA_CATEGORY = 'Potential Metal or Chemical Contaminant';
@@ -246,6 +251,14 @@ export interface ContaminantRepairReport {
   multiSourceChangedCases: string[];
   /** Every case with any proposed write — the reviewable per-record ledger. */
   ledger: ContaminantCasePlan[];
+  /**
+   * The number an operator authorizes with `--expect <n>`: cases carrying any
+   * proposed write. It is `ledger.length`, named so the CLI, the report and
+   * the gate cannot drift apart.
+   */
+  plannedChanges: number;
+  /** Set when the live corpus is not what was authorized. Zero writes follow. */
+  aborted: CountGateAbort | null;
   affectsMe: {
     activeCasesChanged: number;
     /**
@@ -271,27 +284,23 @@ export interface ContaminantRepairReport {
 
 export interface ContaminantRepairOptions {
   apply: boolean;
+  /**
+   * The reviewed `--expect <n>`. Required for an apply (the CLI refuses
+   * before this is reached without it) and optional for a dry run, which
+   * reports a mismatch so the count can be rehearsed.
+   */
+  expectedUpdates: number | null;
   onProgress?: (done: number, total: number) => void;
 }
 
 /**
- * CLI contract, tested directly: with no flags the command is a dry run, and
- * `--apply` alone is refused — the second deliberate acknowledgment
- * (`--confirm`) must accompany it before a single write is reachable.
+ * The command form this repair prints everywhere — CLI help, refusals, the
+ * dry-run closing line, the README and the runbook all render from this one
+ * value, so they cannot disagree about what an operator must type.
  */
-export function resolveRepairMode(argv: string[]): { apply: boolean; error: string | null } {
-  const wantsApply = argv.includes('--apply');
-  const confirmed = argv.includes('--confirm');
-  if (wantsApply && !confirmed) {
-    return {
-      apply: false,
-      error:
-        '--apply requires the explicit second acknowledgment --confirm ' +
-        '(npm run repair:fda-contaminants -- --confirm). Nothing was written.',
-    };
-  }
-  return { apply: wantsApply && confirmed, error: null };
-}
+export const CONTAMINANT_REPAIR_COMMAND: MutationCommandForm = {
+  script: 'repair:fda-contaminants',
+};
 
 /** The archived FDA payload: listing row and/or fetched detail HTML. */
 export function asFdaInput(payload: unknown): FdaAnnouncementSource | null {
@@ -542,6 +551,8 @@ export async function repairFdaContaminants(
     preexistingProjectionDrift: [],
     multiSourceChangedCases: [],
     ledger: [],
+    plannedChanges: 0,
+    aborted: null,
     affectsMe: { activeCasesChanged: 0, activeCasesEnteringAllergen: 0 },
     population: 'settled',
     applyBlockedReason: null,
@@ -700,8 +711,17 @@ export async function repairFdaContaminants(
   report.population = classifyPopulation(report.recordWouldChange, report.caseWouldChange);
   report.applyBlockedReason = applyBlocker(report);
 
+  // ── PLANNING IS COMPLETE. The whole corpus has been examined and not one
+  // row has been written yet, so the count below is the count the operator
+  // authorized against — and a corpus that moved since the reviewed dry run
+  // costs zero writes rather than a partial, unreviewed one.
+  report.plannedChanges = report.ledger.length;
+  report.aborted = resolveCountGate(options, report.plannedChanges);
+
   // ── Phase 3: apply, only when the whole reviewed plan is clean ────────────
-  if (!options.apply || report.applyBlockedReason !== null) return report;
+  if (!options.apply || report.applyBlockedReason !== null || report.aborted !== null) {
+    return report;
+  }
 
   for (const plan of report.ledger) {
     for (const recordPlan of plan.recordWrites) {

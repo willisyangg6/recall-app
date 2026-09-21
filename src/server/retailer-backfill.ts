@@ -56,6 +56,7 @@ import { evaluateRetailerEvidence } from '../domain/retailer-evidence';
 import { canonicalRetailerIds } from '../domain/retailer-catalog';
 import type { CaseProjection } from '../domain/recall-types';
 import type { RecallCaseRow, RecallStore } from './store/types';
+import { resolveCountGate, type CountGateAbort } from './repair-authorization';
 
 /** What the repair decided about one case. */
 export type RetailerCaseOutcome =
@@ -92,6 +93,13 @@ export interface RetailerBackfillReport {
   safelyDerivable: number;
   activeSafelyDerivable: number;
   wouldUpdate: number;
+  /**
+   * The number an operator authorizes with `--expect <n>`. Equal to
+   * `wouldUpdate`, named so the CLI, the report and the gate cannot drift.
+   */
+  plannedChanges: number;
+  /** Set when the live corpus is not what was authorized. Zero writes follow. */
+  aborted: CountGateAbort | null;
   /** Of the planned updates, how many touch a case that already had names. */
   updatesOverExisting: number;
   unchanged: number;
@@ -123,6 +131,12 @@ export interface RetailerBackfillReport {
 
 export interface RetailerBackfillOptions {
   apply: boolean;
+  /**
+   * The reviewed `--expect <n>`. Required for an apply (the CLI refuses
+   * before this is reached without it) and optional for a dry run, which
+   * reports a mismatch so the count can be rehearsed.
+   */
+  expectedUpdates: number | null;
   /** Progress reporting; the script prints, tests stay silent. */
   onProgress?: (done: number, total: number) => void;
 }
@@ -179,6 +193,9 @@ export async function backfillRetailerNames(
 ): Promise<RetailerBackfillReport> {
   const cases = await store.listCases();
 
+  /** The reviewed plan, held complete before the first write is reachable. */
+  const planned: { plan: RetailerCasePlan; row: RecallCaseRow }[] = [];
+
   const report: RetailerBackfillReport = {
     casesExamined: 0,
     active: 0,
@@ -189,6 +206,8 @@ export async function backfillRetailerNames(
     safelyDerivable: 0,
     activeSafelyDerivable: 0,
     wouldUpdate: 0,
+    plannedChanges: 0,
+    aborted: null,
     updatesOverExisting: 0,
     unchanged: 0,
     noEvidence: 0,
@@ -274,8 +293,22 @@ export async function backfillRetailerNames(
     }
     if (report.examples.length < 8) report.examples.push(plan);
 
-    if (!options.apply) continue;
+    planned.push({ plan, row });
+  }
 
+  // ── PLANNING IS COMPLETE. The whole corpus has been examined and not one
+  // row has been written yet, so a corpus that moved since the reviewed dry
+  // run costs zero writes rather than a partial, unreviewed one.
+  report.plannedChanges = report.wouldUpdate;
+  report.aborted = resolveCountGate(options, report.plannedChanges);
+  if (report.aborted !== null || !options.apply) {
+    finalize(report, distinct);
+    return report;
+  }
+
+  // ── WRITE PHASE. Exactly the writes the reviewed plan proposed, with the
+  // same one-field scope and the same compare-and-set as before this gate.
+  for (const { plan, row } of planned) {
     // Minimum required projection state: one field, written only while the
     // row still reads as it did when this run loaded it. Timeline and
     // lastChangedAt are not in the payload at all — a maintenance repair is
@@ -309,11 +342,15 @@ export async function backfillRetailerNames(
     report.concurrentlyModified.push(row.id);
   }
 
+  finalize(report, distinct);
+  return report;
+}
+
+/** Catalog census, computed identically whether the run wrote or aborted. */
+function finalize(report: RetailerBackfillReport, distinct: Set<string>): void {
   report.distinctRetailerStrings = distinct.size;
   report.resolvedThroughCatalog = [...distinct].filter(
     (name) => canonicalRetailerIds([name]).length > 0,
   ).length;
   report.intentionallyUnresolved = distinct.size - report.resolvedThroughCatalog;
-
-  return report;
 }

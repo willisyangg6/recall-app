@@ -3,9 +3,9 @@
  * maintenance command, never scheduled and deliberately separate from
  * production ingestion and from the settled P2e-B hazard repair.
  *
- *   npm run repair:fda-contaminants:dry            # report only, writes nothing
- *   npm run repair:fda-contaminants -- --confirm   # APPLY (requires BOTH flags)
- *   npm run repair:fda-contaminants:dry            # verify: "would change" must be 0
+ *   npm run repair:fda-contaminants:dry                                 # report only, writes nothing
+ *   npm run repair:fda-contaminants -- --apply --confirm --expect <n>   # APPLY (all three, typed)
+ *   npm run repair:fda-contaminants:dry                                 # verify: "No apply needed"
  *
  * Re-parses the archived official snapshot of every FDA announcement record
  * whose recorded reason category is `Potential Metal or Chemical
@@ -17,11 +17,18 @@
  * pipeline, no `detectChanges`, no notifications — see
  * src/server/fda-contaminant-repair.ts for the full safety contract.
  *
- * `--apply` alone is refused: the apply needs the second acknowledgment
- * `--confirm`, so an accidental invocation can never write. The apply is
- * additionally refused outright — before any row is touched — by a missing
- * snapshot, a parse failure, an unreviewed category or agent transition, or
- * a population that is not the reviewed one.
+ * NO PACKAGE SCRIPT CARRIES `--apply`. It used to: `repair:fda-contaminants`
+ * was `tsx scripts/repair-fda-contaminants.ts --apply`, so an operator who
+ * typed only `--confirm` was applying without ever writing the word. The flag
+ * is now typed by a human or the run is a dry run (P2B7T).
+ *
+ * THREE acknowledgments are required before a single write is reachable:
+ * `--apply` (the intent), `--confirm` (the repair:* house rule), and
+ * `--expect <n>` (the planned-change count from the reviewed dry run). All
+ * three are resolved and refused BEFORE a write-capable database client is
+ * constructed. The apply is additionally refused outright — before any row is
+ * touched — by a missing snapshot, a parse failure, an unreviewed category or
+ * agent transition, or a population that is not the reviewed one.
  *
  * DURABLE LEDGER: an apply always leaves a complete machine-readable report
  * behind rather than trusting terminal scrollback. `--json <path>` writes it
@@ -40,11 +47,35 @@ import {
   APPROVED_RECORD_CORRECTIONS,
   TARGET_FDA_CATEGORY,
   repairFdaContaminants,
-  resolveRepairMode,
+  CONTAMINANT_REPAIR_COMMAND,
   type ContaminantCasePlan,
   type ContaminantRepairReport,
 } from '../src/server/fda-contaminant-repair';
+import {
+  applyCommandLine,
+  dryRunClosingLine,
+  resolveFlagValue,
+  resolveRepairAuthorization,
+  DRY_RUN_DESPITE_ACKNOWLEDGMENTS,
+} from '../src/server/repair-authorization';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
+
+const HELP = `
+Historical FDA contaminant-category correction (P3B)
+
+  npm run repair:fda-contaminants:dry                           dry run; writes nothing
+  npm run repair:fda-contaminants:dry -- --json <path>          …and write the ledger where you want it
+  ${applyCommandLine(CONTAMINANT_REPAIR_COMMAND)}   APPLY — all three flags are required
+
+A production write needs every one of:
+  --apply          the intent, typed by a human; no package script supplies it
+  --confirm        the repair:* house rule
+  --expect <n>     the planned-change count from the dry run you actually read
+
+Omit any one and the command exits nonzero before opening a database
+connection. A count that no longer matches the live corpus aborts the run with
+zero writes.
+`;
 
 function loadDotEnv(): void {
   try {
@@ -52,17 +83,6 @@ function loadDotEnv(): void {
   } catch {
     // Environment may be configured another way.
   }
-}
-
-function jsonPathFromArgv(argv: string[]): string | null {
-  const index = argv.indexOf('--json');
-  if (index < 0) return null;
-  const value = argv[index + 1];
-  if (!value || value.startsWith('--')) {
-    console.error('--json requires a file path argument.');
-    process.exit(1);
-  }
-  return value;
 }
 
 const show = (value: string | null) => value ?? '(null)';
@@ -145,12 +165,33 @@ function writeLedger(report: ContaminantRepairReport, apply: boolean, jsonPath: 
 
 async function main(): Promise<void> {
   loadDotEnv();
-  const mode = resolveRepairMode(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(HELP);
+    return;
+  }
+
+  // ── The authorization contract is resolved FIRST, and nothing below runs
+  // until it passes. A refusal here has opened no database connection, so a
+  // missing --apply, --confirm or --expect cannot reach a write-capable
+  // client at all — proved structurally by mutation-cli.test.ts.
+  const mode = resolveRepairAuthorization(argv, CONTAMINANT_REPAIR_COMMAND);
   if (mode.error) {
     console.error(mode.error);
     process.exit(1);
   }
-  const jsonPath = jsonPathFromArgv(process.argv.slice(2));
+  const json = resolveFlagValue(argv, '--json');
+  if (json.error) {
+    console.error(json.error);
+    process.exit(1);
+  }
+  const jsonPath = json.value;
+  // Two thirds of the contract is still a dry run, and says so — an operator
+  // must never believe they applied because they typed part of it.
+  if (!mode.apply && (argv.includes('--confirm') || mode.expectedUpdates !== null)) {
+    console.log(DRY_RUN_DESPITE_ACKNOWLEDGMENTS);
+  }
 
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -169,6 +210,7 @@ async function main(): Promise<void> {
   let lastPrinted = 0;
   const report = await repairFdaContaminants(store, {
     apply: mode.apply,
+    expectedUpdates: mode.expectedUpdates,
     onProgress: (done, total) => {
       if (done === total || done - lastPrinted >= 100) {
         lastPrinted = done;
@@ -277,6 +319,16 @@ async function main(): Promise<void> {
 
   writeLedger(report, mode.apply, jsonPath);
 
+  if (report.aborted) {
+    console.log(
+      `\n  ✗ ABORTED — ${report.aborted.reason}.` +
+        `\n    authorized ${report.aborted.expected}, live plan ${report.aborted.actual}.` +
+        '\n    Nothing was written. Re-run the dry run, review the difference, and' +
+        '\n    re-authorize with the new count.\n',
+    );
+    process.exit(1);
+  }
+
   if (report.notificationEvents !== 0 || report.newCases !== 0) {
     console.error('\n  SAFETY VIOLATION: this repair must never notify or create cases.');
     process.exit(1);
@@ -297,9 +349,8 @@ async function main(): Promise<void> {
   }
   console.log(
     mode.apply
-      ? '\n  ✓ Applied. Re-run the dry run to verify: "would change" must be 0.\n'
-      : '\n  Dry run complete — nothing was written. Apply (once authorized) with:' +
-          '\n    npm run repair:fda-contaminants -- --confirm\n',
+      ? '\n  ✓ Applied. Re-run the dry run to verify: "No apply needed".\n'
+      : dryRunClosingLine(CONTAMINANT_REPAIR_COMMAND, report.plannedChanges),
   );
 }
 

@@ -9,12 +9,18 @@
  *
  *   npm run reconcile:applied-state:dry                       # census + plan (writes the plan JSON only)
  *   npm run reconcile:applied-state:dry -- --json <path>      # plan to an explicit path (must not exist)
- *   npm run reconcile:applied-state -- --confirm \
- *       --plan <reviewed-plan.json> --digest <plan digest>    # APPLY (all four gates required)
+ *   npm run reconcile:applied-state -- --apply --confirm --expect <n> \
+ *       --plan <reviewed-plan.json> --digest <plan digest>    # APPLY (all gates required)
+ *
+ * NO PACKAGE SCRIPT CARRIES `--apply`. It used to: `reconcile:applied-state`
+ * was `tsx scripts/reconcile-applied-state.ts --apply`, so an operator who
+ * typed only `--confirm --plan … --digest …` was applying without ever writing
+ * the word, and the comment here said so out loud (P2B7T).
  *
  * Apply gates (every one required, in addition to the reviewed plan file):
- *   --apply     the intent flag (the npm alias passes it);
+ *   --apply     the intent flag, typed by a human; no package script supplies it;
  *   --confirm   the second acknowledgment, as in the repair commands;
+ *   --expect    the seedable count from the reviewed plan — zero writes on a mismatch;
  *   --plan      the REVIEWED plan file — immutable input, revalidated by digest;
  *   --digest    the plan digest the reviewer approved, printed by the dry run.
  * The engine additionally refuses a plan whose content was edited (its own
@@ -44,7 +50,37 @@ import {
   type AuditPageSizes,
   type ReconcilePlan,
 } from '../src/server/applied-state-reconcile';
+import {
+  applyCommandLine,
+  resolveFlagValue,
+  resolveRepairAuthorization,
+  DRY_RUN_DESPITE_ACKNOWLEDGMENTS,
+  type MutationCommandForm,
+} from '../src/server/repair-authorization';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
+
+const COMMAND: MutationCommandForm = {
+  script: 'reconcile:applied-state',
+  extraApplyFlags: ['--plan <reviewed-plan.json>', '--digest <plan digest>'],
+};
+
+const HELP = `
+Applied-state reconciliation (O3-B2)
+
+  npm run reconcile:applied-state:dry                    census + reviewable plan; writes no row
+  npm run reconcile:applied-state:dry -- --json <path>   …plan to an explicit path (must not exist)
+  ${applyCommandLine(COMMAND)}
+
+A production write needs every one of:
+  --apply          the intent, typed by a human; no package script supplies it
+  --confirm        the repair:* house rule
+  --expect <n>     the seedable count from the reviewed plan
+  --plan <file>    the reviewed plan file
+  --digest <d>     that plan's digest
+
+Every flag is resolved and refused BEFORE a database connection is opened. A
+plan whose seedable count differs from --expect is refused with zero writes.
+`;
 
 function loadDotEnv(): void {
   try {
@@ -54,15 +90,14 @@ function loadDotEnv(): void {
   }
 }
 
+/** A value flag, refused rather than guessed — resolved before any I/O. */
 function flagValue(argv: string[], flag: string): string | null {
-  const index = argv.indexOf(flag);
-  if (index < 0) return null;
-  const value = argv[index + 1];
-  if (!value || value.startsWith('--')) {
-    console.error(`${flag} requires a value argument.`);
+  const resolved = resolveFlagValue(argv, flag);
+  if (resolved.error) {
+    console.error(resolved.error);
     process.exit(1);
   }
-  return value;
+  return resolved.value;
 }
 
 /**
@@ -121,11 +156,36 @@ function pageSizeOverride(): Partial<AuditPageSizes> | undefined {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  const apply = argv.includes('--apply');
-  const confirm = argv.includes('--confirm');
+
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(HELP);
+    return;
+  }
+
+  // ── EVERY flag, count, mode and path is resolved and refused HERE, before
+  // any credential is read and before any client exists. A refusal below has
+  // opened no database connection — proved structurally by mutation-cli.test.ts.
+  const mode = resolveRepairAuthorization(argv, COMMAND);
+  if (mode.error) {
+    console.error(mode.error);
+    process.exit(1);
+  }
+  const apply = mode.apply;
   const planPath = flagValue(argv, '--plan');
   const digest = flagValue(argv, '--digest');
   const jsonPath = flagValue(argv, '--json');
+  if (apply && (!planPath || !digest)) {
+    console.error(
+      'APPLY REFUSED: apply requires ALL of --apply, --confirm, --expect <n>, ' +
+        '--plan <reviewed file>, and --digest <plan digest>.\n' +
+        'Run the dry run first, review its plan, then pass that exact file and digest.\n' +
+        `  ${applyCommandLine(COMMAND)}\nNothing was written.`,
+    );
+    process.exit(1);
+  }
+  if (!apply && (argv.includes('--confirm') || mode.expectedUpdates !== null)) {
+    console.log(DRY_RUN_DESPITE_ACKNOWLEDGMENTS);
+  }
 
   loadDotEnv();
   const url = process.env.SUPABASE_URL;
@@ -185,26 +245,36 @@ async function main(): Promise<void> {
     console.log(`  plan digest:           ${plan.planDigest}`);
     console.log(`  equivalence contract:  ${plan.equivalenceContract}`);
     console.log(
-      '\n  To seed the consistent legacy population after review:\n' +
-        `    npm run reconcile:applied-state -- --confirm --plan ${target} --digest ${plan.planDigest}\n`,
+      s.seedableCount === 0
+        ? '\n  No apply needed: the plan seeds no records.\n'
+        : '\n  To seed the consistent legacy population after review:\n    ' +
+            applyCommandLine(COMMAND, s.seedableCount, [
+              `--plan ${target}`,
+              `--digest ${plan.planDigest}`,
+            ]) +
+            '\n',
     );
     return;
   }
 
   // ── Apply: every gate explicit; the plan is immutable reviewed input ───────
-  if (!confirm || !planPath || !digest) {
+  let plan: ReconcilePlan;
+  try {
+    plan = JSON.parse(readFileSync(planPath!, 'utf8')) as ReconcilePlan;
+  } catch (error) {
     console.error(
-      'APPLY REFUSED: apply requires ALL of --confirm, --plan <reviewed file>, and --digest <plan digest>.\n' +
-        'Run the dry run first, review its plan, then pass that exact file and digest.',
+      `Could not read the plan at ${planPath!}: ${error instanceof Error ? error.message : error}`,
     );
     process.exit(1);
   }
-  let plan: ReconcilePlan;
-  try {
-    plan = JSON.parse(readFileSync(planPath, 'utf8')) as ReconcilePlan;
-  } catch (error) {
+  // The shared count gate, checked against the REVIEWED plan before a single
+  // row is seeded. The digest below pins the plan's contents; this pins the
+  // number the operator actually read and authorized.
+  const seedable = plan.summary?.seedableCount ?? -1;
+  if (seedable !== mode.expectedUpdates) {
     console.error(
-      `Could not read the plan at ${planPath}: ${error instanceof Error ? error.message : error}`,
+      `APPLY REFUSED: --expect ${mode.expectedUpdates} does not match the reviewed ` +
+        `plan's ${seedable} seedable record(s).\nNothing was written.`,
     );
     process.exit(1);
   }
@@ -212,7 +282,7 @@ async function main(): Promise<void> {
   console.log(
     `\n${'═'.repeat(72)}\nApplied-state reconciliation — PLAN-BOUND APPLY (marker seeding only)\n${'═'.repeat(72)}\n`,
   );
-  console.log(`  plan:        ${planPath}`);
+  console.log(`  plan:        ${planPath!}`);
   console.log(`  plan schema: ${plan.schemaVersion} (supported: ${PLAN_SCHEMA_VERSION})`);
   console.log(
     `  equivalence: ${plan.equivalenceContract ?? '(none)'} (supported: ${LEGACY_EQUIVALENCE_CONTRACT})`,
@@ -220,7 +290,7 @@ async function main(): Promise<void> {
   console.log(`  seedable:    ${plan.seedable?.length ?? 0} entr(ies)\n`);
   try {
     const report = await applySeedPlan(store, plan, {
-      expectedDigest: digest,
+      expectedDigest: digest!,
       currentGitCommit: gitCommit,
     });
     console.log(`  entries checked:     ${report.entriesChecked}`);

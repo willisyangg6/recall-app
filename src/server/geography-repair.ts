@@ -68,6 +68,11 @@ import { evaluateGeographyEvidence, readDistributionProse } from '../domain/geog
 import type { CaseProjection, Geography } from '../domain/recall-types';
 import { projectCase } from '../domain/projection';
 import type { RecallCaseRow, RecallStore } from './store/types';
+import {
+  resolveCountGate,
+  type CountGateAbort,
+  type MutationCommandForm,
+} from './repair-authorization';
 
 export type GeographyCaseOutcome =
   /** Gains states, or gains a scope it did not have. */
@@ -157,7 +162,12 @@ export interface GeographyRepairReport {
    * The apply never started because the planned count did not match the count
    * the operator authorized. Zero writes happened.
    */
-  aborted: { reason: string; expected: number; actual: number } | null;
+  aborted: CountGateAbort | null;
+  /**
+   * The number an operator authorizes with `--expect <n>`. Named so the CLI,
+   * the report and the gate cannot drift apart.
+   */
+  plannedChanges: number;
   concurrentlyModified: string[];
   failures: { recallCaseId: string; reason: string }[];
   caseWrites: number;
@@ -298,6 +308,7 @@ function emptyReport(): GeographyRepairReport {
     conflicts: [],
     refused: [],
     aborted: null,
+    plannedChanges: 0,
     concurrentlyModified: [],
     failures: [],
     caseWrites: 0,
@@ -412,28 +423,12 @@ export async function repairGeography(
 
   report.unresolvedTokens = [...unresolved].sort();
 
-  // ── Phase 2: the authorization gate. ─────────────────────────────────────
-  if (!options.apply) {
-    if (options.expectedUpdates !== null && options.expectedUpdates !== report.wouldUpdate) {
-      report.aborted = {
-        reason: 'planned corrections do not match the authorized count',
-        expected: options.expectedUpdates,
-        actual: report.wouldUpdate,
-      };
-    }
-    return report;
-  }
-  if (options.expectedUpdates === null || options.expectedUpdates !== report.wouldUpdate) {
-    report.aborted = {
-      reason:
-        options.expectedUpdates === null
-          ? 'apply requires an authorized correction count'
-          : 'the live corpus drifted from the reviewed dry run',
-      expected: options.expectedUpdates ?? -1,
-      actual: report.wouldUpdate,
-    };
-    return report;
-  }
+  // ── Phase 2: the authorization gate, shared with every other mutation CLI.
+  // PLANNING IS COMPLETE and not one row has been written, so a corpus that
+  // moved since the reviewed dry run costs zero writes.
+  report.plannedChanges = report.wouldUpdate;
+  report.aborted = resolveCountGate(options, report.plannedChanges);
+  if (report.aborted !== null || !options.apply) return report;
 
   // ── Phase 3: write the reviewed plan, one field, verified. ───────────────
   for (const plan of report.plans) {
@@ -487,7 +482,7 @@ export interface GeographyRollbackReport {
   concurrentlyModified: string[];
   failures: { recallCaseId: string; reason: string }[];
   verified: number;
-  aborted: { reason: string; expected: number; actual: number } | null;
+  aborted: CountGateAbort | null;
 }
 
 /**
@@ -511,22 +506,10 @@ export async function rollbackGeography(
     verified: 0,
     aborted: null,
   };
-  if (options.expectedUpdates !== null && options.expectedUpdates !== entries.length) {
-    report.aborted = {
-      reason: 'the ledger does not hold the authorized number of entries',
-      expected: options.expectedUpdates,
-      actual: entries.length,
-    };
-    return report;
-  }
-  if (options.apply && options.expectedUpdates === null) {
-    report.aborted = {
-      reason: 'a rollback apply requires an authorized entry count',
-      expected: -1,
-      actual: entries.length,
-    };
-    return report;
-  }
+  // A rollback is authorized exactly like an apply — the same three typed
+  // flags, gated on the same shared count check, against the ledger's entries.
+  report.aborted = resolveCountGate(options, entries.length);
+  if (report.aborted !== null) return report;
 
   for (const entry of entries) {
     const row = await store.getCase(entry.recallCaseId);
@@ -632,65 +615,12 @@ export async function auditGeographyReprojectionDrift(
 }
 
 /**
- * CLI contract, tested directly.
- *
- * With no flags the command is a dry run. An apply needs THREE deliberate
- * acknowledgments, and is refused without all of them:
- *
- *   --apply            the intent
- *   --confirm          the second acknowledgment (the repair:* house rule)
- *   --expect <n>       the reviewed correction count, matched exactly
- *
- * All three are typed by the operator. No package script supplies `--apply`
- * (P2B7Q.2): `repair:geography` used to append it, so `-- --confirm --expect
- * <n>` applied without anyone writing the word, and the command in the docs
- * did not match the contract in the docs.
- *
- * `--dry-run` alongside `--apply` is a contradiction, not a preference, and is
- * refused rather than resolved in either direction. Two thirds of the contract
- * is not two thirds of an authorization: `--confirm --expect <n>` without
- * `--apply` resolves to a DRY RUN, never to a write.
+ * The command forms this repair prints everywhere — CLI help, refusals, the
+ * dry-run closing line, the README and the runbook all render from these two
+ * values, so they cannot disagree about what an operator must type.
  */
-export function resolveGeographyRepairMode(argv: string[]): {
-  apply: boolean;
-  expectedUpdates: number | null;
-  error: string | null;
-} {
-  const refuse = (error: string) => ({ apply: false, expectedUpdates: null, error });
-
-  const wantsApply = argv.includes('--apply');
-  const wantsDryRun = argv.includes('--dry-run');
-  const confirmed = argv.includes('--confirm');
-
-  if (wantsApply && wantsDryRun) {
-    return refuse('--apply and --dry-run contradict each other. Nothing was written.');
-  }
-
-  let expectedUpdates: number | null = null;
-  const expectIndex = argv.indexOf('--expect');
-  if (expectIndex >= 0) {
-    const raw = argv[expectIndex + 1];
-    if (raw === undefined || raw.startsWith('--')) {
-      return refuse('--expect requires the reviewed correction count. Nothing was written.');
-    }
-    if (!/^\d+$/.test(raw)) {
-      return refuse(`--expect must be a non-negative integer, got "${raw}". Nothing was written.`);
-    }
-    expectedUpdates = Number(raw);
-  }
-
-  if (wantsApply && !confirmed) {
-    return refuse(
-      '--apply requires the explicit second acknowledgment --confirm ' +
-        '(npm run repair:geography -- --apply --confirm --expect <n>). Nothing was written.',
-    );
-  }
-  if (wantsApply && expectedUpdates === null) {
-    return refuse(
-      '--apply requires --expect <n>, the correction count from the reviewed dry run. ' +
-        'Nothing was written.',
-    );
-  }
-
-  return { apply: wantsApply && confirmed, expectedUpdates, error: null };
-}
+export const GEOGRAPHY_REPAIR_COMMAND: MutationCommandForm = { script: 'repair:geography' };
+export const GEOGRAPHY_ROLLBACK_COMMAND: MutationCommandForm = {
+  script: 'repair:geography:rollback',
+  positional: '<ledger.json>',
+};

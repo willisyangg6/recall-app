@@ -530,8 +530,8 @@ maintenance command, never scheduled, and deliberately NOT a repair:
 
 ```bash
 npm run reconcile:applied-state:dry                          # census + reviewable PLAN (writes nothing to the DB)
-npm run reconcile:applied-state -- --confirm \
-    --plan <reviewed-plan.json> --digest <plan digest>       # APPLY: marker seeding only, all four gates required
+npm run reconcile:applied-state -- --apply --confirm --expect <n> \
+    --plan <reviewed-plan.json> --digest <plan digest>       # APPLY: marker seeding only, all gates required
 ```
 
 What it does, and refuses to do:
@@ -777,7 +777,8 @@ consumer-material cases last.
 ```bash
 npm run rederive:historical:dry -- --json <path>               # full census plan (never appliable)
 npm run rederive:historical:dry -- --wave <wave> --json <path> # wave-bound reviewable plan
-npm run rederive:historical -- --confirm --wave <wave>     --plan <reviewed-plan.json> --digest <plan digest>         # APPLY exactly one wave
+npm run rederive:historical -- --apply --confirm --expect <n> \
+    --wave <wave> --plan <reviewed-plan.json> --digest <plan digest>   # APPLY exactly one wave
 ```
 
 Waves (stable identifiers; membership derived from evidence at dry-run
@@ -968,6 +969,52 @@ replacement atomic and auditable). Per-URL failures live in
 the FDA image backfill stays a maintenance tool and is deliberately **not**
 scheduled (normal FDA parsing derives hero images).
 
+**The scheduled label step is NOT the manual backfill.** Both scheduled
+workflows run `npm run jobs:labels` (`scripts/run-job.ts` →
+`src/server/fsis/label-sync.ts`), which takes the Postgres lease and needs no
+human input. The manual `npm run labels:fsis`
+(`scripts/render-fsis-labels.ts`) is a different command on a different code
+path, and it is gated on the typed three-flag contract — a cron can never
+reach it. `src/server/mutation-cli.test.ts` enumerates every workflow command
+and fails if a scheduled step ever resolves to a gated CLI, transitively
+included.
+
+### The manual backfill's plan and its `--expect`
+
+```bash
+npm run labels:fsis:dry                        # plan; writes nothing, fetches nothing
+npm run labels:fsis:dry -- --verify-revisions  # …and audit already-rendered PDFs
+npm run labels:fsis:dry -- --limit 8           # …and render 8 locally to eyeball
+npm run labels:fsis -- --apply --confirm --expect <n>   # APPLY
+```
+
+`--expect <n>` is the **planned upload count** — the number of PDFs the run
+would write, not the number it walks. P2B7T could only bind it to the corpus
+size, because fetch → hash → check → render → upload were interleaved in one
+loop and the upload count was unknown until the run ended; a corpus can be
+exactly the size you reviewed while the set of documents needing work is
+entirely different.
+
+Planning is now its own complete phase (`src/server/fsis/label-backfill.ts`):
+
+- a PDF with **no** `product_visuals` rows needs an upload, and the database
+  says so with no agency request — that is the whole historical-backfill
+  population;
+- a PDF that **already has** rows needs its bytes to decide whether it was
+  revised in place. That audit is opt-in (`--verify-revisions`); without it
+  the plan makes no agency request and says plainly that it did not check.
+  The daily scheduled `jobs:labels --full` sweep owns recent-window
+  re-verification either way;
+- `--limit` bounds the dry run's **local render sample** only. It never
+  bounds the plan, so the count always describes the apply.
+
+A mismatch aborts before the first upload, with zero uploads. During the write
+phase each entry is re-verified — against the sha it was planned with, and
+against the freshest `product_visuals` state — so uploads land **at or under**
+the authorized count and never over it, and each shortfall
+(`changed-since-plan`, `already-rendered-since-plan`, `fetch-failed`,
+`render-failed`) is named in the report rather than absorbed.
+
 C9 (2026-08-29) hardened this pipeline at two seams (docs/recall-imagery.md):
 href resolution goes through the canonical resolver in
 `src/lib/official-urls.ts` (protocol-relative hrefs used to become the
@@ -991,7 +1038,7 @@ npm run qa:categories:launch              # the same launch gate, named after it
 npm run qa:categories:frozen              # offline; the FROZEN C10A.2 report, verbatim
 npm run qa:product-categories             # read-only; live distribution + persisted gates
 npm run backfill:product-categories:dry   # read-only; the historical write plan
-npm run backfill:product-categories       # APPLY — authorized and executed once (C10B)
+npm run backfill:product-categories -- --apply --confirm --expect <n>   # APPLY — authorized and executed once (C10B)
 ```
 
 `projectCase` derives `projection.productCategories`, so new and re-projected
@@ -1093,8 +1140,8 @@ caller until that deferral is revisited.
 
 ```
 npm run backfill:retailers:dry    # report only, writes nothing
-npm run backfill:retailers        # apply
-npm run backfill:retailers:dry    # verify: "would update" must be 0
+npm run backfill:retailers -- --apply --confirm --expect <n>   # APPLY
+npm run backfill:retailers:dry    # verify: "No apply needed"
 ```
 
 `projection.retailerNames` is derived by `projectCase` (C3.1), so every new
@@ -1347,8 +1394,8 @@ below are kept as operational record and for the standing verification, not
 as an invitation to rerun the apply:
 
 ```
-npm run repair:allergens:dry           # verify: "would change" must be 0 — safe to rerun any time
-npm run repair:allergens -- --confirm  # HISTORICAL APPLY — already run 2026-09-02; do NOT rerun casually.
+npm run repair:allergens:dry           # verify: "No apply needed" — safe to rerun any time
+npm run repair:allergens -- --apply --confirm --expect <n>   # HISTORICAL APPLY — already run 2026-09-02; do NOT rerun casually.
 ```
 
 The same post-apply report also listed 22 outside-category refusals and one
@@ -1417,8 +1464,8 @@ recurring operation** — the commands below are kept as operational record and
 for the standing verification, not as an invitation to rerun the apply:
 
 ```
-npm run repair:hazards:dry           # verify: "would change" must be 0 — safe to rerun any time
-npm run repair:hazards -- --confirm  # HISTORICAL APPLY — already run 2026-09-03; do NOT rerun casually.
+npm run repair:hazards:dry           # verify: "No apply needed" — safe to rerun any time
+npm run repair:hazards -- --apply --confirm --expect <n>   # HISTORICAL APPLY — already run 2026-09-03; do NOT rerun casually.
                                       # The approved-population guard (49/48) would refuse a second apply
                                       # anyway once the corpus is settled, but this is not a substitute
                                       # for treating it as a one-time operation.
@@ -1562,8 +1609,8 @@ commands below are kept as operational record and for the standing
 verification, not as an invitation to rerun the apply:
 
 ```
-npm run repair:fda-contaminants:dry            # verify: "would change" must be 0 — safe to rerun any time
-npm run repair:fda-contaminants -- --confirm   # HISTORICAL APPLY — already run 2026-09-04; do NOT rerun casually.
+npm run repair:fda-contaminants:dry            # verify: "No apply needed" — safe to rerun any time
+npm run repair:fda-contaminants -- --apply --confirm --expect <n>   # HISTORICAL APPLY — already run 2026-09-04; do NOT rerun casually.
                                                 # Requires BOTH flags. The approved-population guard would refuse a
                                                 # second apply once the corpus is settled, but that is not a
                                                 # substitute for treating it as a one-time operation.
@@ -1781,8 +1828,8 @@ writes that one key and never reaches material-change detection.
 ```
 npm run repair:illness-flags:dry                         # read-only report
 npm run repair:illness-flags:dry -- --drift-audit        # …plus what a re-projection would also change
-npm run repair:illness-flags -- --confirm --expect 76    # APPLY — needs ALL THREE flags
-npm run repair:illness-flags:dry                         # verify: "would change" must be 0
+npm run repair:illness-flags -- --apply --confirm --expect <n>   # APPLY — needs ALL THREE flags
+npm run repair:illness-flags:dry                         # verify: "No apply needed"
 ```
 
 `--apply` alone is refused, `--apply --confirm` without `--expect <n>` is

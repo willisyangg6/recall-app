@@ -4,8 +4,8 @@
  *
  *   npm run repair:illness-flags:dry                            # report only, writes nothing
  *   npm run repair:illness-flags:dry -- --drift-audit           # …plus what a re-projection would also change
- *   npm run repair:illness-flags -- --confirm --expect <n>      # APPLY (requires ALL THREE)
- *   npm run repair:illness-flags:dry                            # verify: "would change" must be 0
+ *   npm run repair:illness-flags -- --apply --confirm --expect <n>   # APPLY (all three, typed)
+ *   npm run repair:illness-flags:dry                            # verify: "No apply needed"
  *
  * Re-derives `projection.reportsIllness` for every stored case from the
  * `projection.summaryText` already persisted beside it, through the canonical
@@ -38,12 +38,37 @@ import path from 'node:path';
 import {
   auditReprojectionDrift,
   repairIllnessFlags,
-  resolveIllnessRepairMode,
+  ILLNESS_REPAIR_COMMAND,
   type IllnessFlagCasePlan,
   type IllnessRepairReport,
   type ReprojectionDriftRow,
 } from '../src/server/illness-repair';
+import {
+  applyCommandLine,
+  dryRunClosingLine,
+  resolveFlagValue,
+  resolveRepairAuthorization,
+  DRY_RUN_DESPITE_ACKNOWLEDGMENTS,
+} from '../src/server/repair-authorization';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
+
+const HELP = `
+Stale illness-flag correction (P2B7L)
+
+  npm run repair:illness-flags:dry                                dry run; writes nothing
+  npm run repair:illness-flags:dry -- --drift-audit               …and what a re-projection would also change
+  npm run repair:illness-flags:dry -- --json <path>               …and write the ledger where you want it
+  ${applyCommandLine(ILLNESS_REPAIR_COMMAND)}   APPLY — all three flags are required
+
+A production write needs every one of:
+  --apply          the intent, typed by a human; no package script supplies it
+  --confirm        the repair:* house rule
+  --expect <n>     the planned-change count from the dry run you actually read
+
+Omit any one and the command exits nonzero before opening a database
+connection. --dry-run alongside --apply is refused rather than resolved. A
+count that no longer matches the live corpus aborts the run with zero writes.
+`;
 
 function loadDotEnv(): void {
   try {
@@ -51,17 +76,6 @@ function loadDotEnv(): void {
   } catch {
     // Environment may be configured another way.
   }
-}
-
-function jsonPathFromArgv(argv: string[]): string | null {
-  const index = argv.indexOf('--json');
-  if (index < 0) return null;
-  const value = argv[index + 1];
-  if (!value || value.startsWith('--')) {
-    console.error('--json requires a file path argument.');
-    process.exit(1);
-  }
-  return value;
 }
 
 /** A bounded quote of the official sentence the classifier read. */
@@ -156,13 +170,33 @@ function writeLedger(
 async function main(): Promise<void> {
   loadDotEnv();
   const argv = process.argv.slice(2);
-  const mode = resolveIllnessRepairMode(argv);
+
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(HELP);
+    return;
+  }
+
+  // ── The authorization contract is resolved FIRST, and nothing below runs
+  // until it passes. A refusal here has opened no database connection, so a
+  // missing --apply, --confirm or --expect cannot reach a write-capable
+  // client at all — proved structurally by mutation-cli.test.ts.
+  const mode = resolveRepairAuthorization(argv, ILLNESS_REPAIR_COMMAND);
   if (mode.error) {
     console.error(mode.error);
     process.exit(1);
   }
-  const jsonPath = jsonPathFromArgv(argv);
+  const json = resolveFlagValue(argv, '--json');
+  if (json.error) {
+    console.error(json.error);
+    process.exit(1);
+  }
+  const jsonPath = json.value;
   const wantsDriftAudit = argv.includes('--drift-audit');
+  // Two thirds of the contract is still a dry run, and says so — an operator
+  // must never believe they applied because they typed part of it.
+  if (!mode.apply && (argv.includes('--confirm') || mode.expectedUpdates !== null)) {
+    console.log(DRY_RUN_DESPITE_ACKNOWLEDGMENTS);
+  }
 
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -291,8 +325,8 @@ async function main(): Promise<void> {
   }
   console.log(
     mode.apply
-      ? '\n  Done. Re-run the dry run to verify: "would change" must now be 0.\n'
-      : '\n  Dry run complete. Nothing was written.\n',
+      ? '\n  Done. Re-run the dry run to verify: "No apply needed".\n'
+      : dryRunClosingLine(ILLNESS_REPAIR_COMMAND, report.plannedChanges),
   );
 }
 

@@ -36,6 +36,7 @@ import { projectCase } from '../../domain/projection';
 import type { NormalizedSourceRecord } from '../../domain/source-record';
 import type { RecallStore, SourceRecordRow } from '../store/types';
 import { FdaParseError, parseFdaAnnouncement, type FdaAnnouncementSource } from './parse';
+import { resolveCountGate, type CountGateAbort } from '../repair-authorization';
 
 /** Why one record did or did not yield an image. */
 export type BackfillOutcome =
@@ -95,6 +96,13 @@ export interface BackfillReport {
   networkRequests: number;
   sourceRecordWrites: number;
   caseWrites: number;
+  /**
+   * The number an operator authorizes with `--expect <n>`: cases carrying any
+   * planned write, case-level or record-level.
+   */
+  plannedChanges: number;
+  /** Set when the live corpus is not what was authorized. Zero writes follow. */
+  aborted: CountGateAbort | null;
   notificationEvents: number;
   newCases: number;
   /** Sample of the changes, for the dry-run report. */
@@ -210,6 +218,12 @@ export async function planCase(
 
 export interface BackfillOptions {
   apply: boolean;
+  /**
+   * The reviewed `--expect <n>`. Required for an apply (the CLI refuses
+   * before this is reached without it) and optional for a dry run, which
+   * reports a mismatch so the count can be rehearsed.
+   */
+  expectedUpdates: number | null;
   /** Progress reporting; the script prints, tests stay silent. */
   onProgress?: (done: number, total: number) => void;
 }
@@ -246,10 +260,15 @@ export async function backfillFdaHeroImages(
     networkRequests: 0,
     sourceRecordWrites: 0,
     caseWrites: 0,
+    plannedChanges: 0,
+    aborted: null,
     notificationEvents: 0,
     newCases: 0,
     examples: [],
   };
+
+  /** The reviewed plan, held complete before the first write is reachable. */
+  const planned: { plan: CasePlan; caseRecords: SourceRecordRow[] }[] = [];
 
   let done = 0;
   for (const [recallCaseId, caseRecords] of byCase) {
@@ -280,17 +299,7 @@ export async function backfillFdaHeroImages(
       else report.casesWithoutSourceImage += 1;
       // Even with no case write pending, a record's own payload may still be
       // stale (its image is not the case's winning one) — keep it consistent.
-      if (plan.recordWrites.length > 0 && options.apply) {
-        for (const record of plan.recordWrites) {
-          const row = caseRecords.find((candidate) => candidate.id === record.recordId)!;
-          await store.updateSourceRecord(record.recordId, {
-            normalized: withDerivedImages(row, record),
-          });
-          report.sourceRecordWrites += 1;
-        }
-      } else if (plan.recordWrites.length > 0) {
-        report.sourceRecordWrites += plan.recordWrites.length;
-      }
+      if (plan.recordWrites.length > 0) planned.push({ plan, caseRecords });
       continue;
     }
 
@@ -302,12 +311,29 @@ export async function backfillFdaHeroImages(
       });
     }
 
-    if (!options.apply) {
-      report.sourceRecordWrites += plan.recordWrites.length;
-      report.caseWrites += 1;
-      continue;
-    }
+    planned.push({ plan, caseRecords });
+  }
 
+  // ── PLANNING IS COMPLETE. Every case has been examined and not one row has
+  // been written yet, so `plannedChanges` is the count the operator authorized
+  // against — and a corpus that moved since the reviewed dry run costs zero
+  // writes rather than a partial, unreviewed one.
+  report.plannedChanges = planned.length;
+  report.aborted = resolveCountGate(options, report.plannedChanges);
+  if (report.aborted !== null) return report;
+
+  if (!options.apply) {
+    // What an apply WOULD write, reported without writing it.
+    for (const { plan } of planned) {
+      report.sourceRecordWrites += plan.recordWrites.length;
+      if (plan.caseWriteNeeded) report.caseWrites += 1;
+    }
+    return report;
+  }
+
+  // ── WRITE PHASE. Exactly the writes the reviewed plan proposed, with the
+  // same image-only scope as before this gate existed.
+  for (const { plan, caseRecords } of planned) {
     for (const record of plan.recordWrites) {
       const row = caseRecords.find((candidate) => candidate.id === record.recordId)!;
       await store.updateSourceRecord(record.recordId, {
@@ -315,12 +341,13 @@ export async function backfillFdaHeroImages(
       });
       report.sourceRecordWrites += 1;
     }
+    if (!plan.caseWriteNeeded) continue;
 
     // Minimum required projection state: one field. The timeline and
     // lastChangedAt are carried through untouched — a maintenance backfill is
     // not public activity and must not reorder or re-date anything.
-    const recallCase = (await store.getCase(recallCaseId))!;
-    await store.updateCase(recallCaseId, {
+    const recallCase = (await store.getCase(plan.recallCaseId))!;
+    await store.updateCase(plan.recallCaseId, {
       projection: { ...recallCase.projection, heroImageUrl: plan.nextHeroImageUrl },
       timeline: recallCase.timeline,
       lastChangedAt: recallCase.lastChangedAt,

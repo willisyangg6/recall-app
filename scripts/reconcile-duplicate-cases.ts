@@ -1,8 +1,14 @@
 /**
  * Reconcile deterministic duplicate RecallCases into one case each.
  *
- *   npx tsx scripts/reconcile-duplicate-cases.ts            # dry run (default)
- *   npx tsx scripts/reconcile-duplicate-cases.ts --apply    # perform the merges
+ *   npm run reconcile:duplicates                                   # dry run (default)
+ *   npm run reconcile:duplicates -- --apply --confirm --expect <n> # perform the merges
+ *
+ * A merge is a production write, so it needs the same three typed flags every
+ * other mutation CLI needs (P2B7T). They are resolved and refused BEFORE a
+ * write-capable client is constructed, every candidate pair is verified before
+ * the first merge, and a count that no longer matches the live corpus aborts
+ * the run having merged nothing.
  *
  * Only pairs the duplicate detector classifies as DETERMINISTIC (an FDA
  * slug-collision identity signal plus corroborating firm/hazard/title
@@ -29,6 +35,14 @@ import { projectCase } from '../src/domain/projection';
 import type { CaseProjection, TimelineEntry } from '../src/domain/recall-types';
 import type { NormalizedSourceRecord } from '../src/domain/source-record';
 import {
+  applyCommandLine,
+  dryRunClosingLine,
+  resolveCountGate,
+  resolveRepairAuthorization,
+  DRY_RUN_DESPITE_ACKNOWLEDGMENTS,
+  type MutationCommandForm,
+} from '../src/server/repair-authorization';
+import {
   findDuplicateCandidates,
   isExpansionOfSameEvent,
   isRevisionOfSameEvent,
@@ -36,7 +50,23 @@ import {
   type CaseFingerprint,
 } from '../src/server/duplicates';
 
-const apply = process.argv.includes('--apply');
+const COMMAND: MutationCommandForm = { script: 'reconcile:duplicates' };
+
+const HELP = `
+Deterministic duplicate-case reconciliation
+
+  npm run reconcile:duplicates                          dry run; writes nothing
+  ${applyCommandLine(COMMAND)}   MERGE — all three flags are required
+
+A production write needs every one of:
+  --apply          the intent, typed by a human; no package script supplies it
+  --confirm        the repair:* house rule
+  --expect <n>     the verified merge count from the dry run you actually read
+
+Omit any one and the command exits nonzero before opening a database
+connection. Every pair is verified before the first merge, and a count that no
+longer matches the live corpus aborts the run having merged nothing.
+`;
 
 function loadDotEnv(): void {
   try {
@@ -48,6 +78,29 @@ function loadDotEnv(): void {
 
 async function main(): Promise<void> {
   loadDotEnv();
+  const argv = process.argv.slice(2);
+
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(HELP);
+    return;
+  }
+
+  // ── The authorization contract is resolved FIRST, and nothing below runs
+  // until it passes. A refusal here has opened no database connection, so a
+  // missing --apply, --confirm or --expect cannot reach a write-capable
+  // client at all — proved structurally by mutation-cli.test.ts.
+  const mode = resolveRepairAuthorization(argv, COMMAND);
+  if (mode.error) {
+    console.error(mode.error);
+    process.exit(1);
+  }
+  const apply = mode.apply;
+  // Two thirds of the contract is still a dry run, and says so — an operator
+  // must never believe they merged because they typed part of it.
+  if (!apply && (argv.includes('--confirm') || mode.expectedUpdates !== null)) {
+    console.log(DRY_RUN_DESPITE_ACKNOWLEDGMENTS);
+  }
+
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
   if (!url || !secretKey) {
@@ -91,6 +144,14 @@ async function main(): Promise<void> {
     `${deterministic.length} deterministic duplicate pair(s)${apply ? '' : ' — DRY RUN, nothing will be written'}`,
   );
 
+  /** Verified merges, planned complete before the first write is reachable. */
+  const planned: {
+    survivor: CaseFingerprint;
+    absorbed: CaseFingerprint;
+    absorbedRecords: { id: string; native_id: string; recall_case_id: string }[];
+  }[] = [];
+
+  // ── Phase 1: VERIFY every candidate. No row is written in this pass.
   for (const pair of deterministic) {
     // Survivor selection: for a slug collision the base (non-suffixed)
     // announcement's case survives; for a declared-expansion pair the case
@@ -151,8 +212,28 @@ async function main(): Promise<void> {
     console.log(`    absorbed: ${absorbed.title.slice(0, 90)}`);
     console.log(`    survivor: ${survivor.title.slice(0, 90)}`);
     console.log(`    signals:  ${pair.signals.join(', ')}`);
-    if (!apply) continue;
+    planned.push({ survivor, absorbed, absorbedRecords });
+  }
 
+  // ── PLANNING IS COMPLETE. Nothing has been written, so a corpus that moved
+  // since the reviewed dry run costs zero merges rather than a partial set.
+  const aborted = resolveCountGate(mode, planned.length);
+  if (aborted) {
+    console.error(
+      `\n  ✗ ABORTED — ${aborted.reason}.` +
+        `\n    authorized ${aborted.expected}, live plan ${aborted.actual}.` +
+        '\n    Nothing was written. Re-run the dry run, review the difference, and' +
+        '\n    re-authorize with the new count.\n',
+    );
+    process.exit(1);
+  }
+  if (!apply) {
+    console.log(dryRunClosingLine(COMMAND, planned.length));
+    return;
+  }
+
+  // ── Phase 2: MERGE exactly the verified pairs the dry run reported.
+  for (const { survivor, absorbed, absorbedRecords } of planned) {
     const nowIso = new Date().toISOString();
 
     // 1. Re-link the absorbed case's source records to the survivor.

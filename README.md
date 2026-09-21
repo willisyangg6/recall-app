@@ -140,20 +140,27 @@ persists nothing (zero configuration needed); on `jobs:labels`/
 unchanged-source gate after a code change.
 
 Historical corrections are separate, explicitly invoked maintenance commands,
-never scheduled. Each is dry-run by default and needs a second acknowledgment
-(`--confirm`) before it writes; each leaves a durable JSON ledger on apply.
-The completed ones are kept as operational record — see
-[docs/recall-operations.md](docs/recall-operations.md) for each one's exact
-status and semantics.
+never scheduled. **Every** one of them is dry-run by default, and a production
+write requires the operator to type all three of `--apply --confirm --expect
+<fresh-count>` — no package script, wrapper or internal argv rewrite supplies
+any of them (P2B7T). The flags are resolved and refused before a database
+client is constructed, the whole corpus is planned before the first write, and
+a count that no longer matches the live corpus aborts with zero writes. Each
+leaves a durable JSON ledger on apply. The completed ones are kept as
+operational record — see [docs/recall-operations.md](docs/recall-operations.md)
+for each one's exact status and semantics.
 
 ```bash
 npm run repair:geography:dry             # P2B7Q.2, PREPARED — 61 cases measured, NOT applied
-# the apply is typed in full, and no package script supplies --apply:
-#   npm run repair:geography -- --apply --confirm --expect <fresh count>
 npm run repair:allergens:dry             # applied 2026-09-02 (completed)
 npm run repair:hazards:dry               # P2e-B, applied 2026-09-03 (completed)
 npm run repair:fda-contaminants:dry      # P3B, applied 2026-09-04 (completed)
 npm run repair:illness-flags:dry         # P2B7L, PREPARED — 76 rows measured, not applied
+
+# Every apply is typed in full; --help prints the contract at the terminal:
+#   npm run repair:geography -- --apply --confirm --expect <fresh count>
+#   npm run repair:illness-flags -- --apply --confirm --expect <fresh count>
+# A dry run with nothing to do prints "No apply needed" and offers no command.
 ```
 
 ### Push notifications (Phase C2)
@@ -461,17 +468,18 @@ Veterinary` co-tags) is deliberately deferred, not silently included.
   visible text and a spoken label.
 - **FSIS label visuals.** Official label PDFs are rasterized once, server-side
   (no OCR), into content-addressed WebP pages that join the ordinary Product
-  Photos gallery (`npm run labels:fsis:dry` for the bounded local dry run); the
-  PDF link remains as provenance.
+  Photos gallery; the PDF link remains as provenance. The scheduled work is
+  `npm run jobs:labels` (the job runner, with its Postgres lease);
+  `npm run labels:fsis:dry` is the separate manual historical backfill's plan.
 - **Maintenance backfills are explicit, never folded into ingestion.** Fields
   derived at parse time only reach older records when something re-parses
   them, and incremental ingestion deliberately skips unchanged pages. A
   backfill therefore re-derives from the preserved snapshots — the archived
   source bytes — through the same canonical parser, with no network fetch and
   no second extractor: `npm run backfill:fda-images:dry` reports what would
-  change (it doubles as the post-apply verification report),
-  `npm run backfill:fda-images` writes only `heroImageUrl` and the record's
-  image fields. It cannot create a case, write a notification, re-date a
+  change (it doubles as the post-apply verification report), and
+  `npm run backfill:fda-images -- --apply --confirm --expect <n>` writes only
+  `heroImageUrl` and the record's image fields. It cannot create a case, write a notification, re-date a
   recall, or touch FSIS, and re-running it is a no-op.
 - Extraction-quality benchmark over recorded real announcements
   ([src/server/fda/fixtures/](src/server/fda/fixtures/)) with hand-verified

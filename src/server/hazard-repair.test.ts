@@ -17,8 +17,10 @@ import {
   classifyPopulation,
   planRecord,
   repairHazards,
-  resolveRepairMode,
+  HAZARD_REPAIR_COMMAND,
+  type HazardRepairReport,
 } from './hazard-repair';
+import { applyCommandLine, resolveRepairAuthorization } from './repair-authorization';
 import { parseFsisRecord, type FsisRawRecord } from './fsis/parse';
 import { MemoryStore } from './store/memory-store';
 import type { RecallStore, SourceRecordRow } from './store/types';
@@ -120,13 +122,52 @@ function snapshotState(store: MemoryStore) {
 
 // ── CLI contract ─────────────────────────────────────────────────────────────
 
-test('no-flag execution is a dry run, and --apply alone is refused', () => {
-  assert.deepEqual(resolveRepairMode([]), { apply: false, error: null });
-  const refused = resolveRepairMode(['--apply']);
-  assert.equal(refused.apply, false);
-  assert.match(refused.error!, /--confirm/);
-  assert.deepEqual(resolveRepairMode(['--apply', '--confirm']), { apply: true, error: null });
-  assert.deepEqual(resolveRepairMode(['--confirm']), { apply: false, error: null });
+/** The dry run every operator starts from. */
+const dryRun = { apply: false, expectedUpdates: null };
+
+/**
+ * Apply exactly what a dry run over the same store plans — the operator's
+ * real two-step workflow (read the dry run, authorize its count) expressed
+ * once, so every apply below goes through the count gate rather than round it.
+ */
+async function applyPlanned(store: RecallStore): Promise<HazardRepairReport> {
+  const { plannedChanges } = await repairHazards(store, dryRun);
+  return repairHazards(store, { apply: true, expectedUpdates: plannedChanges });
+}
+
+test('no-flag execution is a dry run, and a partial contract never applies', () => {
+  // The contract itself is pinned permutation-by-permutation in
+  // repair-authorization.test.ts; this fixes THIS repair to that one contract.
+  const form = HAZARD_REPAIR_COMMAND;
+  assert.equal(resolveRepairAuthorization([], form).apply, false);
+  assert.equal(resolveRepairAuthorization(['--apply'], form).apply, false);
+  assert.equal(resolveRepairAuthorization(['--apply', '--confirm'], form).apply, false);
+  assert.equal(resolveRepairAuthorization(['--confirm', '--expect', '2'], form).apply, false);
+  assert.equal(
+    resolveRepairAuthorization(['--apply', '--confirm', '--expect', '2'], form).apply,
+    true,
+  );
+  assert.equal(applyCommandLine(form, 2), 'npm run repair:hazards -- --apply --confirm --expect 2');
+});
+
+test('the count gate stops an apply whose corpus moved, with zero writes', async () => {
+  const { store } = await staleCategoryStore();
+  const before = snapshotState(store);
+  const report = await repairHazards(store, { apply: true, expectedUpdates: 99 });
+  assert.ok(report.aborted, 'a mismatch must abort');
+  assert.equal(report.aborted!.expected, 99);
+  assert.equal(report.sourceRecordWrites, 0);
+  assert.equal(report.caseWrites, 0);
+  assert.deepEqual(snapshotState(store), before, 'not one row may move');
+});
+
+test('an apply with no authorized count writes nothing', async () => {
+  const { store } = await staleCategoryStore();
+  const before = snapshotState(store);
+  const report = await repairHazards(store, { apply: true, expectedUpdates: null });
+  assert.ok(report.aborted);
+  assert.equal(report.sourceRecordWrites + report.caseWrites, 0);
+  assert.deepEqual(snapshotState(store), before);
 });
 
 test('the approved transition table is exactly the P2e-A + expanded P2e-B set', () => {
@@ -178,7 +219,7 @@ test('a dry run performs zero writes and leaves the store byte-identical', async
     },
   }) as unknown as RecallStore;
 
-  const report = await repairHazards(guarded, { apply: false });
+  const report = await repairHazards(guarded, dryRun);
   assert.equal(report.recordWouldChange, 1);
   assert.equal(report.caseWouldChange, 1);
   assert.equal(report.sourceRecordWrites, 0);
@@ -193,7 +234,7 @@ test('an apply corrects the hazard pair and nothing else', async () => {
   const { store, caseId, recordId } = await staleCategoryStore();
   const before = snapshotState(store);
 
-  const report = await repairHazards(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.sourceRecordWrites, 1);
   assert.equal(report.caseWrites, 1);
   assert.equal(report.notificationEvents, 0);
@@ -229,10 +270,10 @@ test('an apply corrects the hazard pair and nothing else', async () => {
 
 test('a completed repair is idempotent — the rerun is a no-op', async () => {
   const { store } = await staleCategoryStore();
-  await repairHazards(store, { apply: true });
+  await applyPlanned(store);
   const settled = snapshotState(store);
 
-  const rerun = await repairHazards(store, { apply: true });
+  const rerun = await applyPlanned(store);
   assert.equal(rerun.recordWouldChange, 0);
   assert.equal(rerun.caseWouldChange, 0);
   assert.equal(rerun.sourceRecordWrites, 0);
@@ -254,7 +295,7 @@ test('an unreviewed category transition is refused, never written', async () => 
   await seedCase(store, [{ stored, rawPayload: GLASS_CONTAMINATION }]);
   const before = snapshotState(store);
 
-  const report = await repairHazards(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.recordWouldChange, 0);
   assert.equal(report.sourceRecordWrites, 0);
   assert.equal(report.caseWrites, 0);
@@ -289,7 +330,7 @@ test('an agent-only difference on a non-allergen record is refused (083-2016)', 
   ]);
   const before = snapshotState(store);
 
-  const report = await repairHazards(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.sourceRecordWrites, 0);
   assert.equal(report.caseWrites, 0);
   assert.equal(report.refusedAgentOnly.length, 1);
@@ -304,7 +345,7 @@ test('a genuine foreign-material recall is left exactly as it is', async () => {
   await seedCase(store, [{ stored, rawPayload: GLASS_CONTAMINATION }]);
   const before = snapshotState(store);
 
-  const report = await repairHazards(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.recordWouldChange, 0);
   assert.equal(report.refusedTransitions.length, 0);
   assert.equal(report.refusedAgentOnly.length, 0);
@@ -334,7 +375,7 @@ test('a generic foreign-matter notice with no named material is accepted (expand
   };
   const { caseId, records } = await seedCase(store, [{ stored, rawPayload: raw }]);
 
-  const report = await repairHazards(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.recordWouldChange, 1);
   assert.equal(report.refusedTransitions.length, 0);
   assert.deepEqual(report.transitionCounts, { 'unknown → foreign_material': 1 });
@@ -367,7 +408,7 @@ test('a packaging-only false positive reverts to unknown (expanded scope)', asyn
   };
   const { caseId, records } = await seedCase(store, [{ stored, rawPayload: raw }]);
 
-  const report = await repairHazards(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.recordWouldChange, 1);
   assert.equal(report.refusedTransitions.length, 0);
   assert.deepEqual(report.transitionCounts, { 'foreign_material → unknown': 1 });
@@ -404,7 +445,7 @@ test('two source records for one case moving unknown -> foreign_material togethe
     { stored: storedOf(expansion), rawPayload: expansion },
   ]);
 
-  const report = await repairHazards(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.recordWouldChange, 2);
   assert.equal(report.caseWouldChange, 1);
   assert.deepEqual(report.multiSourceChangedCases, [caseId]);
@@ -421,7 +462,7 @@ test('a record with no archived snapshot is reported, never guessed', async () =
   await seedCase(store, [{ stored, rawPayload: LABELING_ONLY, withSnapshot: false }]);
   const before = snapshotState(store);
 
-  const report = await repairHazards(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.missingSnapshots.length, 1);
   assert.equal(report.sourceRecordWrites, 0);
   assert.deepEqual(snapshotState(store), before);
@@ -464,7 +505,7 @@ test('a multi-source case takes its projection from projectCase, not one record'
     { stored: newer, rawPayload: LABELING_ONLY },
   ]);
 
-  const report = await repairHazards(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.recordWouldChange, 2);
   assert.equal(report.caseWouldChange, 1);
   assert.deepEqual(report.multiSourceChangedCases, [caseId]);
@@ -510,7 +551,7 @@ test('concurrently changed rows fail compare-and-swap and are skipped', async ()
     },
   }) as unknown as RecallStore;
 
-  const report = await repairHazards(proxied, { apply: true });
+  const report = await applyPlanned(proxied);
   assert.equal(report.sourceRecordWrites, 0);
   assert.equal(report.caseWrites, 0);
   assert.equal(report.skippedConflicts.length, 2);
@@ -533,14 +574,14 @@ test('an interrupted apply resumes cleanly on the next run', async () => {
     },
   }) as unknown as RecallStore;
 
-  await assert.rejects(repairHazards(crashing, { apply: true }), /simulated crash/);
+  await assert.rejects(applyPlanned(crashing), /simulated crash/);
   // Partial state: the record is corrected, the projection is not yet.
   const row = [...store.sourceRecords.values()].find((r) => r.id === recordId)!;
   assert.equal(row.normalized.hazardCategory, 'allergen');
   assert.equal(store.cases.get(caseId)!.projection.hazardCategory, 'other_regulatory');
 
   // The rerun decides from current state and finishes exactly the remainder.
-  const resumed = await repairHazards(store, { apply: true });
+  const resumed = await applyPlanned(store);
   assert.equal(resumed.sourceRecordWrites, 0);
   assert.equal(resumed.caseWrites, 1);
   assert.equal(store.cases.get(caseId)!.projection.hazardCategory, 'allergen');
@@ -553,7 +594,7 @@ test('pre-existing projection drift is reported, not silently absorbed', async (
     // A projection that disagrees with its own stored record.
     hazardCategory: 'unknown',
   });
-  const report = await repairHazards(store, { apply: false });
+  const report = await repairHazards(store, dryRun);
   assert.equal(report.preexistingProjectionDrift.length, 1);
   assert.equal(report.preexistingProjectionDrift[0].stored.hazardCategory, 'unknown');
   assert.equal(report.preexistingProjectionDrift[0].recomputed.hazardCategory, 'foreign_material');
@@ -579,7 +620,7 @@ test('every P2d-corrected record stays exactly as P2d left it', async () => {
   ]);
   const before = snapshotState(store);
 
-  const report = await repairHazards(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.recordWouldChange, 0);
   assert.equal(report.caseWouldChange, 0);
   assert.equal(report.refusedTransitions.length, 0);
@@ -609,7 +650,7 @@ test('an allergen record whose agent alone drifts is refused, never rewritten', 
   ]);
   const before = snapshotState(store);
 
-  const report = await repairHazards(store, { apply: true });
+  const report = await applyPlanned(store);
   assert.equal(report.sourceRecordWrites, 0);
   assert.equal(report.caseWrites, 0);
   assert.equal(report.refusedAgentOnly.length, 1);

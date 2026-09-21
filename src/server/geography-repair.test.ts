@@ -13,11 +13,16 @@ import type { CaseProjection, Geography, TimelineEntry } from '../domain/recall-
 import {
   planCaseGeography,
   repairGeography,
-  resolveGeographyRepairMode,
+  GEOGRAPHY_REPAIR_COMMAND,
   rollbackGeography,
 } from './geography-repair';
+import { resolveRepairAuthorization } from './repair-authorization';
 import { MemoryStore } from './store/memory-store';
 import type { RecallCaseRow } from './store/types';
+
+/** This repair, resolved through the one shared contract. */
+const resolveGeographyRepairMode = (argv: string[]) =>
+  resolveRepairAuthorization(argv, GEOGRAPHY_REPAIR_COMMAND);
 
 const UNKNOWN: Geography = { scope: 'unknown', states: [], confidence: 'stated', sourceText: null };
 
@@ -527,7 +532,7 @@ test('an apply with no authorized count writes nothing at all', async () => {
   const before = structuredClone(only(store));
   const report = await repairGeography(store, { apply: true, expectedUpdates: null });
   assert.ok(report.aborted);
-  assert.match(report.aborted!.reason, /authorized correction count/);
+  assert.match(report.aborted!.reason, /authorized change count/);
   assert.equal(report.caseWrites, 0);
   assert.deepEqual(only(store), before);
 });

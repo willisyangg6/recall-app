@@ -51,6 +51,7 @@ import { FOOD_CATEGORY_IDS, type FoodCategoryId } from '../domain/food-category'
 import { deriveProductCategories, readProductCategories } from '../domain/projection';
 import type { CaseProjection } from '../domain/recall-types';
 import type { RecallCaseRow, RecallStore } from './store/types';
+import { resolveCountGate, type CountGateAbort } from './repair-authorization';
 
 /** What the enrichment decided about one case. */
 export type CategoryCaseOutcome =
@@ -79,6 +80,13 @@ export interface CategoryBackfillReport {
   /** Cases that already carried a derived category list. */
   currentlyBearing: number;
   wouldUpdate: number;
+  /**
+   * The number an operator authorizes with `--expect <n>`. Equal to
+   * `wouldUpdate`, named so the CLI, the report and the gate cannot drift.
+   */
+  plannedChanges: number;
+  /** Set when the live corpus is not what was authorized. Zero writes follow. */
+  aborted: CountGateAbort | null;
   /** Of the planned updates, how many overwrite an existing (stale) list. */
   updatesOverExisting: number;
   unchanged: number;
@@ -106,6 +114,12 @@ export interface CategoryBackfillReport {
 
 export interface CategoryBackfillOptions {
   apply: boolean;
+  /**
+   * The reviewed `--expect <n>`. Required for an apply (the CLI refuses
+   * before this is reached without it) and optional for a dry run, which
+   * reports a mismatch so the count can be rehearsed.
+   */
+  expectedUpdates: number | null;
   /** Progress reporting; the script prints, tests stay silent. */
   onProgress?: (done: number, total: number) => void;
 }
@@ -160,6 +174,9 @@ export async function backfillProductCategories(
   // a case row carries its whole projection.
   const cases = await store.listCases();
 
+  /** The reviewed plan, held complete before the first write is reachable. */
+  const planned: { plan: CategoryCasePlan; row: RecallCaseRow }[] = [];
+
   const emptyDistribution = (): Record<string, number> =>
     Object.fromEntries(FOOD_CATEGORY_IDS.map((id) => [id, 0]));
 
@@ -171,6 +188,8 @@ export async function backfillProductCategories(
     fsis: 0,
     currentlyBearing: 0,
     wouldUpdate: 0,
+    plannedChanges: 0,
+    aborted: null,
     updatesOverExisting: 0,
     unchanged: 0,
     distribution: emptyDistribution(),
@@ -234,8 +253,19 @@ export async function backfillProductCategories(
     if (plan.current !== null) report.updatesOverExisting += 1;
     if (report.examples.length < 8) report.examples.push(plan);
 
-    if (!options.apply) continue;
+    planned.push({ plan, row });
+  }
 
+  // ── PLANNING IS COMPLETE. The whole corpus has been examined and not one
+  // row has been written yet, so a corpus that moved since the reviewed dry
+  // run costs zero writes rather than a partial, unreviewed one.
+  report.plannedChanges = report.wouldUpdate;
+  report.aborted = resolveCountGate(options, report.plannedChanges);
+  if (report.aborted !== null || !options.apply) return report;
+
+  // ── WRITE PHASE. Exactly the writes the reviewed plan proposed, with the
+  // same one-field scope and the same compare-and-set as before this gate.
+  for (const { plan, row } of planned) {
     // Minimum required projection state: one field, written only while the row
     // still reads as it did when this run loaded it. Timeline and
     // lastChangedAt are not in the payload at all — a maintenance enrichment

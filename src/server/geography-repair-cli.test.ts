@@ -19,13 +19,26 @@
  *   3. the rollback does not synthesize `--apply` for itself;
  *   4. every command string in the CLI, the README and the operations runbook
  *      is the same command.
+ *
+ * P2B7T generalized all four to EVERY mutation CLI in `mutation-cli.test.ts`,
+ * which enumerates them from disk. What stays here is what is specific to this
+ * repair: its rollback, and its ledger path.
  */
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { resolveGeographyRepairMode } from './geography-repair';
+import { GEOGRAPHY_REPAIR_COMMAND } from './geography-repair';
+import {
+  resolvePositional,
+  resolveRepairAuthorization,
+  DRY_RUN_DESPITE_ACKNOWLEDGMENTS,
+} from './repair-authorization';
+
+/** This repair, resolved through the one shared contract. */
+const resolveGeographyRepairMode = (argv: string[]) =>
+  resolveRepairAuthorization(argv, GEOGRAPHY_REPAIR_COMMAND);
 
 const CLI = readFileSync('scripts/repair-geography.ts', 'utf8');
 const PACKAGE: { scripts: Record<string, string> } = JSON.parse(
@@ -90,15 +103,25 @@ test('two thirds of the contract is a dry run, never a write', () => {
   assert.equal(mode.error, null);
   assert.equal(mode.expectedUpdates, 61, 'the count still gates the dry run');
   // And the operator is told, so nobody believes they applied.
-  assert.match(CLI, /--confirm\/--expect were given WITHOUT --apply/);
+  assert.match(CLI, /DRY_RUN_DESPITE_ACKNOWLEDGMENTS/);
+  assert.match(DRY_RUN_DESPITE_ACKNOWLEDGMENTS, /--confirm\/--expect were given WITHOUT --apply/);
+  assert.match(DRY_RUN_DESPITE_ACKNOWLEDGMENTS, /Nothing was written/);
 });
 
 test('a flag value is never mistaken for the rollback ledger path', () => {
   // `--expect 61 ledger.json` must find ledger.json, not "61".
-  const helper = CLI.slice(CLI.indexOf('function positionalArg'));
-  assert.match(helper, /VALUE_FLAGS/);
+  assert.equal(resolvePositional(['--expect', '61', 'ledger.json'], VALUE_FLAGS), 'ledger.json');
+  assert.equal(
+    resolvePositional(['--json', 'out.json', '--expect', '61', 'ledger.json'], VALUE_FLAGS),
+    'ledger.json',
+  );
+  // And the CLI really passes its own value flags to that resolver.
   assert.match(CLI, /const VALUE_FLAGS = \['--json', '--expect'\]/);
+  assert.match(CLI, /resolvePositional\(argv, VALUE_FLAGS\)/);
 });
+
+/** The value flags the geography CLI declares, kept in step with the CLI. */
+const VALUE_FLAGS = ['--json', '--expect'];
 
 test('the CLI, the README and the runbook print the SAME apply command', () => {
   const APPLY = 'npm run repair:geography -- --apply --confirm --expect';
