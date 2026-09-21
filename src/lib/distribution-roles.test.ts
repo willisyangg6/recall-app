@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { CaseProjection } from '@/domain/recall-types';
+import { deriveGeography } from '@/domain/geography-evidence';
 import { buildConsumerCase } from './consumer-projection';
 
 function projection(overrides: Partial<CaseProjection>): CaseProjection {
@@ -55,21 +56,22 @@ function projection(overrides: Partial<CaseProjection>): CaseProjection {
 }
 
 test('golden Kippered Herring: every state in "throughout MI, MN, and ND" is retained', () => {
-  const consumer = buildConsumerCase(
-    projection({
-      summaryText:
-        'The recalled "Ma Cohens Kippered Herring" were distributed in retail grocery stores throughout MI, MN, and ND.',
-      // The persisted geography carried only the one state the old ", XX"
-      // reader could see; display-side recovery must widen it.
-      geography: {
-        scope: 'states',
-        states: ['Minnesota'],
-        confidence: 'inferred',
-        sourceText: null,
-      },
-    }),
-    [],
-  );
+  const summaryText =
+    'The recalled "Ma Cohens Kippered Herring" were distributed in retail grocery stores throughout MI, MN, and ND.';
+  // The recovery happens ONCE, in the canonical derivation `projectCase` owns
+  // (P2B7Q.2): a case whose persisted geography carried only the one state
+  // the old ", XX" reader could see is widened where the answer can still
+  // reach the Feed row, the Location filter and Affects Me.
+  const geography = deriveGeography({
+    title: 'Ma Cohens Recalls Kippered Herring',
+    summaryText,
+    summaryHtml: null,
+    carried: { scope: 'states', states: ['Minnesota'], confidence: 'inferred', sourceText: null },
+  });
+  assert.deepEqual(geography.states, ['Michigan', 'Minnesota', 'North Dakota']);
+
+  // Detail then STATES that set and never re-reads the prose for its own.
+  const consumer = buildConsumerCase(projection({ summaryText, geography }), []);
   assert.equal(consumer.distribution.areaText, 'Michigan, Minnesota, and North Dakota.');
   assert.deepEqual(consumer.distribution.states, ['Michigan', 'Minnesota', 'North Dakota']);
   assert.deepEqual(consumer.distribution.retailers, []);

@@ -321,3 +321,112 @@ test('derivation is deterministic and idempotent', () => {
   assert.deepEqual(twice.geography.states, once.geography.states);
   assert.deepEqual(twice.addedStates, []);
 });
+
+// ── P2B7Q.2: what is cut out of a good sentence ─────────────────────────────
+
+test('a dateline and a supplier farm are cut out of the sentence that carries them', () => {
+  // Verbatim first sentence of the BrightFarms announcement. It states a
+  // distribution fact AND names two places that are not destinations: the
+  // press dateline, and the farm the spinach was grown on.
+  const evidence = derive(
+    'Selinsgrove, PA (January 17, 2024) –– BrightFarms has issued a voluntary recall of ' +
+      'spinach grown by its supplier Element Farms in their Pompton Plains, New Jersey farm ' +
+      'and distributed under the BrightFarms brand because the spinach has the potential to ' +
+      'be contaminated with Listeria monocytogenes .',
+  );
+  assert.equal(evidence.geography.scope, 'unknown');
+  assert.deepEqual(evidence.geography.states, []);
+});
+
+test('a firm’s own apposition is cut out, and the destination in the same sentence survives', () => {
+  // Cutting the whole SENTENCE is what this replaced, and it cost real states:
+  // the Wawona announcement carries its dateline and its five destination
+  // states in one line.
+  const wawona = derive(
+    '(Clovis, California) Wawona Frozen Foods is voluntarily recalling year-old packages of ' +
+      'its Organic DayBreak Blend distributed to Costco Wholesale stores in Arizona, ' +
+      'California, Colorado, Utah and Washington from April 15, 2022 to June 26, 2022.',
+  );
+  assert.deepEqual(wawona.geography.states, [
+    'Arizona',
+    'California',
+    'Colorado',
+    'Utah',
+    'Washington',
+  ]);
+
+  // And the apposition alone is still not a destination.
+  const cooperstown = derive(
+    'Cooperstown Cheese Company of Milford, NY, is recalling 1400 pounds of cheese purchased, ' +
+      'sold or distributed from June 21, 2023 to July 10, 2023 because it has the potential to ' +
+      'be contaminated with Listeria monocytogenes.',
+  );
+  assert.equal(cooperstown.geography.scope, 'unknown');
+});
+
+test('a shipping origin is not a destination', () => {
+  // Verbatim: the same notice states the origin and the destinations, and only
+  // the destinations are geography.
+  const evidence = derive(
+    'The eggs were produced and distributed from farms in Texas between June 6, 2026 and ' +
+      'July 3, 2026.\n' +
+      'The eggs were shipped to foodservice and retail customers in Oklahoma and Louisiana.',
+  );
+  assert.deepEqual(evidence.geography.states, ['Louisiana', 'Oklahoma']);
+});
+
+test('an exception clause excludes its own places without vetoing the sentence', () => {
+  // Verbatim Publix. Six states are affirmed; four Florida metros are excepted
+  // — and Florida itself stays, because the notice says the product went there.
+  const evidence = derive(
+    'The product was distributed to stores located in Alabama, Georgia, Kentucky, South ' +
+      'Carolina, Tennessee and Florida, except for stores in Jacksonville, Tallahassee, Tampa ' +
+      'and Sarasota. Publix locations in Virgina and North Carolina are not impacted by this ' +
+      'voluntary recall.',
+  );
+  assert.deepEqual(evidence.geography.states, [
+    'Alabama',
+    'Florida',
+    'Georgia',
+    'Kentucky',
+    'South Carolina',
+    'Tennessee',
+  ]);
+  assert.deepEqual(evidence.excludedStates, ['North Carolina']);
+});
+
+test('a state health department is a laboratory, not a destination', () => {
+  const evidence = derive(
+    'This recall is being initiated as a result of routine sampling by the Arkansas Department ' +
+      'of Health which revealed that the finished products contained elevated levels of lead.\n' +
+      'Product was distributed mostly through California retail stores.',
+  );
+  assert.deepEqual(evidence.geography.states, ['California']);
+});
+
+test('"Washington DC" is the District, never the state', () => {
+  const evidence = derive(
+    'Angelicae Sinensis was distributed in the following states. New York, Washington DC, and Texas.',
+  );
+  assert.deepEqual(evidence.geography.states, ['District of Columbia', 'New York', 'Texas']);
+});
+
+test('"North and South Carolina" names two states', () => {
+  const evidence = derive('The pints were sold in North and South Carolina Harris Teeter stores.');
+  assert.deepEqual(evidence.geography.states, ['North Carolina', 'South Carolina']);
+});
+
+test('a retailer footprint counts only where the notice ties it to the product', () => {
+  const tied = derive(
+    'The product was distributed to all Lidl US store locations. Lidl US has store locations ' +
+      'in Delaware, Georgia and Virginia.',
+  );
+  assert.deepEqual(tied.geography.states, ['Delaware', 'Georgia', 'Virginia']);
+
+  // The same shape in a paragraph that states no distribution is boilerplate.
+  const boilerplate = derive(
+    'Publix, the largest employee-owned company in the U.S. with more than 260,000 associates, ' +
+      'currently operates 1,421 stores in Florida, Georgia, Alabama and Tennessee.',
+  );
+  assert.equal(boilerplate.geography.scope, 'unknown');
+});

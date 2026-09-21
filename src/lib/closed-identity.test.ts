@@ -26,6 +26,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { CaseProjection } from '@/domain/recall-types';
+import { deriveGeography } from '@/domain/geography-evidence';
 import { buildConsumerCase } from './consumer-projection';
 
 function projection(overrides: Partial<CaseProjection>): CaseProjection {
@@ -174,13 +175,20 @@ const POUNDED_YAM_HTML = `
   <ul><li>California</li><li>Georgia</li><li>Illinois</li><li>New Jersey</li><li>New York</li><li>Texas</li></ul>`;
 
 test('golden Pounded Yam: states are distribution, never variants; the expiration range is complete', () => {
+  const title = 'Fayus Inc., dba Yusol International Foods Expands Recall of OLA-OLA POUNDED YAM';
+  const summaryText =
+    'This recall includes the following product packaging sizes with the expiration dates between November 2028 through May 2029: 2lbs (0.907kg), 4lbs (1.815kg), 5lbs (2.267kg), and 10lbs (4.53kg). OLA-OLA POUNDED YAM was distributed through distribution outlets in the African and Caribbean markets between December 2025 – May 2026 in Canada, Australia and the following United States:\nCalifornia\nGeorgia\nIllinois\nNew Jersey\nNew York\nTexas';
+  // A declared list continues past the sentence that introduced it, and the
+  // canonical derivation is what follows it (P2B7Q.2) — so the states reach
+  // the stored field the card, the filter and Affects Me all read.
+  const geography = deriveGeography({
+    title,
+    summaryText,
+    summaryHtml: POUNDED_YAM_HTML,
+    carried: { scope: 'unknown', states: [], confidence: 'inferred', sourceText: null },
+  });
   const consumer = buildConsumerCase(
-    projection({
-      title: 'Fayus Inc., dba Yusol International Foods Expands Recall of OLA-OLA POUNDED YAM',
-      summaryHtml: POUNDED_YAM_HTML,
-      summaryText:
-        'This recall includes the following product packaging sizes with the expiration dates between November 2028 through May 2029: 2lbs (0.907kg), 4lbs (1.815kg), 5lbs (2.267kg), and 10lbs (4.53kg). OLA-OLA POUNDED YAM was distributed through distribution outlets in the African and Caribbean markets between December 2025 – May 2026 in Canada, Australia and the following United States:\nCalifornia\nGeorgia\nIllinois\nNew Jersey\nNew York\nTexas',
-    }),
+    projection({ title, summaryHtml: POUNDED_YAM_HTML, summaryText, geography }),
     [],
   );
   // The geography list never becomes affected versions.

@@ -28,6 +28,7 @@ import {
 import { classifyIllnessReport } from '../../domain/illness';
 import { extractRetailerNames } from '../../domain/retailer';
 import { statesInText } from '../../domain/us-geography';
+import { deriveGeography, distributionSentences } from '../../domain/geography-evidence';
 import { declaresExpansion, declaresRevision } from '../duplicates';
 import { extractProductPhotos, primaryPhoto } from '../../lib/product-photos';
 import type { Classification, Geography, HazardCategory } from '../../domain/recall-types';
@@ -294,67 +295,49 @@ export function extractTableProductLines(bodyHtml: string | null): string[] {
   return lines;
 }
 
-// ── Geography (architecture Part 5: deterministic, honest unknowns) ──────────
+// ── Geography (architecture Part 5: deterministic, honest unknowns) ─────────
 //
-// State recognition lives in the shared us-geography module, so the ingest
-// parser and the display projection read a clause like "throughout MI, MN,
-// and ND" identically — every explicitly named state retained, arbitrary
-// two-letter uppercase strings never promoted to states.
-
-// Deliberately excludes "stores in …": corporate-profile boilerplate
-// ("currently operates 1,404 stores in Alabama, …") would masquerade as
-// distribution. Verified against the recorded Publix announcement.
-const DISTRIBUTION_SENTENCE =
-  /\bdistribut\w+|\bsold\b|\bshipped\b|\bavailable (?:in|at)\b|\bnationwide\b/i;
-
-const NATIONWIDE =
-  /\bnationwide\b|\bnationally\b|\bacross the (?:country|united states)\b|\ball 50 states\b/i;
+// There is ONE reader of distribution prose in this codebase and it is
+// `domain/geography-evidence`. This parser used to hold a second one — a bare
+// keyword gate over sentences — and the two disagreed: the keyword gate had no
+// negation handling, no exclusion handling, no origin handling and no way to
+// follow a declared list past the sentence that introduced it, so it wrote
+// false positives into `normalized.geography` that the canonical derivation
+// then carried forever (it widens, it does not narrow). Delegating means an
+// FDA record is parsed with exactly the evidence rules a repair and a
+// re-projection apply, and a case can no longer be born with geography no
+// contract would have given it.
 
 /**
- * Distribution from the announcement's own prose, per the architecture Part 5
- * rules: the literal "nationwide", or explicitly named states; anything less
- * (regions, retailer footprints, "eight-state operating area") stays
- * `unknown` with the source sentence preserved and displayed. Confidence is
- * always 'inferred' — FDA distribution is prose, never structured.
+ * Distribution from the announcement's own prose, through the canonical
+ * evidence contract: the literal "nationwide", or explicitly named states.
+ * Anything less (regions, retailer footprints, "eight-state operating area")
+ * stays `unknown`. Confidence is always 'inferred' — FDA distribution is
+ * prose, never structured.
  */
 export function parseFdaGeography(bodyText: string, title: string): Geography {
-  const sentences = splitSentences(bodyText).filter(
-    (s) => DISTRIBUTION_SENTENCE.test(s) && !CONSUMER_ACTION_PATTERN.test(s),
-  );
-  const sourceOf = (list: string[]) => list.slice(0, 2).join(' ').slice(0, 400) || null;
+  const derived = deriveGeography({
+    title,
+    summaryText: bodyText,
+    summaryHtml: null,
+    carried: { scope: 'unknown', states: [], confidence: 'inferred', sourceText: null },
+  });
+  if (derived.scope !== 'unknown') return derived;
 
-  const nationwideSentence = sentences.find((s) => NATIONWIDE.test(s));
-  if (nationwideSentence) {
-    return {
-      scope: 'nationwide',
-      states: [],
-      confidence: 'inferred',
-      sourceText: nationwideSentence.slice(0, 400),
-    };
-  }
-  const withStates = sentences.filter((s) => statesInText(s).length > 0);
-  if (withStates.length > 0) {
-    return {
-      scope: 'states',
-      states: [...new Set(withStates.flatMap(statesInText))].sort(),
-      confidence: 'inferred',
-      sourceText: sourceOf(withStates),
-    };
-  }
-  if (sentences.length > 0) {
-    return {
-      scope: 'unknown',
-      states: [],
-      confidence: 'inferred',
-      sourceText: sourceOf(sentences),
-    };
-  }
-  // Titles sometimes carry the only distribution statement ("…34 Texas Stores…").
+  // An unknown still carries the distribution sentence it read, so the detail
+  // screen can show what the notice did say, and titles sometimes carry the
+  // only distribution statement ("…34 Texas Stores…").
   const titleStates = statesInText(title);
   if (titleStates.length > 0) {
     return { scope: 'states', states: titleStates, confidence: 'inferred', sourceText: title };
   }
-  return { scope: 'unknown', states: [], confidence: 'inferred', sourceText: null };
+  const sentences = distributionSentences(bodyText);
+  return {
+    scope: 'unknown',
+    states: [],
+    confidence: 'inferred',
+    sourceText: sentences.slice(0, 2).join(' ').slice(0, 400) || null,
+  };
 }
 
 // ── Quantity (task Part 10: preserve when the source states it) ──────────────

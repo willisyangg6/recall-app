@@ -12,6 +12,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { HAZARD_GUIDES } from '@/content/hazard-guides';
+import { deriveGeography } from '@/domain/geography-evidence';
 import { deriveIllnessStatus, illnessNoticeCopy } from '@/domain/illness-status';
 import type { CaseProjection, Geography, TimelineEntry } from '@/domain/recall-types';
 import type { CaseDetail, CaseVisual, FeedItem } from './recall-feed';
@@ -584,24 +585,46 @@ test('Home location: one and two states as abbreviations, then +N, nationwide, u
 });
 
 test('Detail geography: full state names, a state derived from a stated metro, and exclusions', () => {
-  // "Seattle and Tacoma metro areas in WA" — the display state comes from the
-  // clearly identified area the source itself ties to Washington.
+  const carried: Geography = {
+    scope: 'unknown',
+    states: [],
+    confidence: 'inferred',
+    sourceText: null,
+  };
+
+  // "Seattle and Tacoma metro areas in WA" — the state comes from the clearly
+  // identified area the source itself ties to Washington, and it is read ONCE,
+  // by the canonical derivation, so the card, the Location filter and Affects
+  // Me get the same answer Detail shows (P2B7Q.2).
+  const metroText =
+    'The recalled product was sold at grocery stores within the Seattle and Tacoma metro areas in WA.';
+  const metroGeography = deriveGeography({
+    title: 'A Bakery Recalls Bread',
+    summaryText: metroText,
+    summaryHtml: null,
+    carried,
+  });
+  assert.deepEqual(metroGeography.states, ['Washington']);
   const metro = buildConsumerCase(
-    projection({
-      summaryText:
-        'The recalled product was sold at grocery stores within the Seattle and Tacoma metro areas in WA.',
-    }),
+    projection({ summaryText: metroText, geography: metroGeography }),
     [],
   );
   const sold = whereSoldModel(metro.distribution);
   assert.deepEqual(sold.states, ['Washington']);
 
-  // Exclusions hold: the firm's own address is never display geography.
+  // Exclusions hold: the firm's own address is never geography, on either
+  // side of the boundary.
+  const firmText =
+    'Metro Produce Distributors Inc. of Minneapolis, Minnesota, is voluntarily recalling the product.';
+  const firmGeography = deriveGeography({
+    title: 'Metro Produce Distributors Inc. Recalls Product',
+    summaryText: firmText,
+    summaryHtml: null,
+    carried,
+  });
+  assert.equal(firmGeography.scope, 'unknown');
   const firmOnly = buildConsumerCase(
-    projection({
-      summaryText:
-        'Metro Produce Distributors Inc. of Minneapolis, Minnesota, is voluntarily recalling the product.',
-    }),
+    projection({ summaryText: firmText, geography: firmGeography }),
     [],
   );
   const unspecified = whereSoldModel(firmOnly.distribution);

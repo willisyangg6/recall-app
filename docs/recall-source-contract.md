@@ -311,6 +311,56 @@ Legend: **S** = reliably structured · **s** = sometimes structured · **P** = u
 
 ---
 
+### 6.1 How announcements actually state distribution (P2B7Q.2)
+
+Read over all 1,931 stored cases. Every shape below is quoted from a real
+notice; the derivation that decides them is
+[recall-domain-architecture.md §5.4](recall-domain-architecture.md).
+
+**Shapes that STATE distribution.**
+
+| Shape                                                                         | Verbatim                                                                                                                                                                                                  |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Declared list, continued past its own sentence                                | "Angelicae Sinensis was distributed in the following states. New York, New Jersey, Pennsylvania, …"                                                                                                       |
+| Declared list, continued past a full stop the source wrote instead of a comma | "…the following States in the United States: Arizona, California. Maryland, New Jersey, Tennessee, …"                                                                                                     |
+| Declared list, one state per line                                             | "…and the following United States:" ⏎ "California" ⏎ "Georgia" ⏎ …                                                                                                                                        |
+| Declared list, per-retailer                                                   | "The impacted products were distributed to retail stores as follows:" ⏎ "H-E-B label - Texas" ⏎ "Trader Joe's label – …"                                                                                  |
+| Declared list, bare code run                                                  | "Distributed to select stores in:" ⏎ "AK, AR, AZ, CA, CO, ID, …"                                                                                                                                          |
+| Store addresses under a "sold at" lead-in                                     | "…and were sold at the following locations:" ⏎ "Harvest Market- 308 Main St. Milford, OH 45150" ⏎ …                                                                                                       |
+| A second distribution sentence after the first                                | "Product was distributed to distribution centers … within the following states: Georgia, Massachusetts, and New York. Product was **sent to** retail stores located in New York, Massachusetts, Maine, …" |
+| Destination in parentheses, no preposition                                    | "Product was distributed (CA, TX, OR, WA, TX, IL, FL) ."                                                                                                                                                  |
+| A labelled field                                                              | "Distribution: AZ, CA, CO, HI, NJ, NV, OR, TX, WA – online and retail stores."                                                                                                                            |
+| A declared list with no verb of its own                                       | "The states involved are AL, AR, GA, IL, IN, KY, LA, MI, MO, MS, OH, SC, TN, TX and WV."                                                                                                                  |
+| An intervening phrase inside the frame                                        | "They were **available to consumers at** Kroger stores in Texas and Louisiana, …"                                                                                                                         |
+| A modal find                                                                  | "The product **can be found at** PCC Markets in Washington State and Earth Fare Stores in Florida & South Carolina…"                                                                                      |
+| Recall scope as destination                                                   | "This recall **extends only to** Sun International stores in Florida,, Brookshire Brothers stores in Texas, …"                                                                                            |
+| A retailer footprint the notice TIES to the product                           | "The product was distributed to all Lidl US store locations. Lidl US has store locations in Delaware, District of Columbia, …"                                                                            |
+| A subscriber cohort                                                           | "…distributes through E-commerce through Farm Fresh to You or Full Circle subscribers. Farm Fresh to You subscribers are located in California & Nevada."                                                 |
+| Nationwide, stated                                                            | "The recalled ' Aviator Sundried Tomato Halves' was distributed nationwide."                                                                                                                              |
+| Nationwide with an exception                                                  | "The Product was distributed nationwide in retail grocery stores in all U.S. states other than Alaska."                                                                                                   |
+| An elided conjunction                                                         | "The pints were sold in North and South Carolina Harris Teeter stores." — TWO states                                                                                                                      |
+
+**Shapes that do NOT state distribution, however many places they name.**
+
+| Shape                                   | Verbatim                                                                                                                                                      |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| News dateline                           | "LAKELAND, Fla., Oct. 15, 2025 - Publix has initiated…", "Cincinnati, Ohio (October 31, 2025) Blue Oven Bakery…"                                              |
+| The firm's own apposition               | "Cooperstown Cheese Company **of Milford, NY**, is recalling…"                                                                                                |
+| Corporate-profile footprint             | "Publix … currently **operates 1,421 stores in** Florida, Georgia, Alabama, …" — three paragraphs from the recall                                             |
+| Explicitly unaffected                   | "Publix locations in Virgina and North Carolina **are not impacted** by this voluntary recall."                                                               |
+| The sampling laboratory                 | "routine sampling by the **Arkansas Department of Health**", "a routine sampling program by the **Michigan Department of Agriculture and Rural Development**" |
+| A place inside a company name           | "**Maryland & Virginia** Milk Producers Cooperative Association", "**OK** Produce - Grocery Outlet in California"                                             |
+| Supplier or grower site                 | "spinach **grown by its supplier Element Farms in their Pompton Plains, New Jersey farm**"                                                                    |
+| Shipping origin                         | "The eggs were produced and distributed **from farms in Texas**"                                                                                              |
+| A regional phrase with no state list    | "distributed to Publix grocery stores in the company's **eight-state operating area**" — honest `unknown`                                                     |
+| A city the source never ties to a state | "sold by Dandelion at their retail stores (in San Francisco and Las Vegas)" — no state is asserted                                                            |
+
+**Source defects worth knowing about.** Announcements misspell state names
+("Virgina", "Massachutes", "Alaksa"), and a misspelled state is simply lost —
+no fuzzy matching is applied, because guessing a state is the failure this
+whole contract exists to prevent. "Washington, DC" appears in 16 stored cases
+and had been read as Washington State on every one of them.
+
 ## 7. Lifecycle examples (verified end-to-end)
 
 ### 7.1 FDA — Albertsons tuna salad (Listeria), July 2025, openFDA event 97306

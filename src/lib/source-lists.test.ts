@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { deriveGeography } from '@/domain/geography-evidence';
 import { buildConsumerCase } from './consumer-projection';
 import type { CaseProjection } from '@/domain/recall-types';
 import { classifyListRole, extractAffectedProductLists } from './source-lists';
@@ -93,12 +94,20 @@ test('golden White Cheddar: each list item keeps its own lot code', () => {
 });
 
 test('golden Primavera: flavor list becomes variants with the lead-in size, distribution recovers both states', () => {
+  const summaryText =
+    'Product was distributed by Primavera Nueva Inc. in California and Nevada to retail stores.\nThe following 4-count tamales, produced between October 10, 2024 and October 10, 2025 are included:\nRoasted Green Chile & Jack Cheese\nBlack Bean Bonanza & Jack Cheese';
+  // Both states are recovered by the canonical derivation (P2B7Q.2) — the
+  // sentence splitter must not cut "Inc." and strand the half holding them —
+  // and Detail then states exactly what was stored.
+  const geography = deriveGeography({
+    title: 'Primavera Nueva Recalls Tamales',
+    summaryText,
+    summaryHtml: PRIMAVERA_HTML,
+    carried: { scope: 'unknown', states: [], confidence: 'inferred', sourceText: null },
+  });
+  assert.deepEqual(geography.states, ['California', 'Nevada']);
   const consumer = buildConsumerCase(
-    projection({
-      summaryHtml: PRIMAVERA_HTML,
-      summaryText:
-        'Product was distributed by Primavera Nueva Inc. in California and Nevada to retail stores.\nThe following 4-count tamales, produced between October 10, 2024 and October 10, 2025 are included:\nRoasted Green Chile & Jack Cheese\nBlack Bean Bonanza & Jack Cheese',
-    }),
+    projection({ summaryHtml: PRIMAVERA_HTML, summaryText, geography }),
     [],
   );
   assert.equal(consumer.distribution.areaText, 'California and Nevada.');

@@ -147,7 +147,9 @@ The completed ones are kept as operational record — see
 status and semantics.
 
 ```bash
-npm run repair:geography:dry             # applied 2026-09-02 (completed)
+npm run repair:geography:dry             # P2B7Q.2, PREPARED — 61 cases measured, NOT applied
+# the apply is typed in full, and no package script supplies --apply:
+#   npm run repair:geography -- --apply --confirm --expect <fresh count>
 npm run repair:allergens:dry             # applied 2026-09-02 (completed)
 npm run repair:hazards:dry               # P2e-B, applied 2026-09-03 (completed)
 npm run repair:fda-contaminants:dry      # P3B, applied 2026-09-04 (completed)
@@ -582,34 +584,76 @@ products were added.`) is **kept, verbatim** — the source states the
   Contracts: [docs/recall-copy-contract.md](docs/recall-copy-contract.md),
   [docs/recall-illness-status.md](docs/recall-illness-status.md) §1.2.
 
-- **P2B7Q.2 — repair the canonical geography derivation, then re-project.**
-  The one location value the Feed card, the Location filter and Affects Me all
-  read (`projection.geography`) is **incomplete**, and Recall Detail's separate
-  consumer-distribution derivation is incomplete in the opposite direction.
-  Measured read-only over the 898 active consumer-visible cases, they disagree
-  on **18**:
+- **P2B7Q.2 — the canonical geography repair. IMPLEMENTED 2026-09-20; the
+  production correction is PREPARED AND NOT APPLIED.**
 
-  - 11 where the canonical scope is `unknown` while the announcement body
-    names states — `14825b36`: "Angelicae Sinensis was distributed in the
-    following states." followed by a list of 14, none of which the derivation
-    kept;
-  - 7 where both say `states` but name different ones — `dcd7279f` keeps the
-    3 distribution-centre states from one sentence and drops the 6 retail
-    states in the next; `85303552` keeps 2 of 10.
+  One location value now answers for the Feed card, Saved, Recall Detail, the
+  Location filter, Affects Me and anything push ever reads —
+  `projection.geography`, derived in one place
+  ([docs/recall-domain-architecture.md §5.4](docs/recall-domain-architecture.md)).
 
-  Neither existing derivation may simply win. The canonical one is the only
-  one that applies the exclusions — `4c7d29d6`: "Publix locations in Virginia
-  and **North Carolina are not impacted**", which the body re-read adds anyway
-  — so adopting the body read would ship false positives into Affects Me,
-  while adopting the canonical read (attempted in P2B7Q.1) ships the misses
-  above. The repair is to read the body **with** the exclusion hardening, and
-  it cannot be done at display time: the resolved states have to reach the
-  Feed row for the filter to use them, and the feed row carries no
-  `summaryText` by the egress contract. So this needs an ingest-side
-  derivation change plus a governed re-projection of the affected cases —
-  its own authority, dry run first, founder approval before apply. Until then
-  Detail keeps its own richer-but-unhardened list and the card, filter and
-  Affects Me keep the hardened one, exactly as they did before P2B7Q.1.
+  **The defect.** There were four readers. Recall Detail had its own, and it
+  worked at PARAGRAPH scope: every state anywhere in a paragraph that mentioned
+  distribution was admitted. So Detail named states no other surface had —
+  **19 of 911 active cases** — and some of them were wrong in the dangerous
+  direction: North Carolina from "Publix locations in Virgina and North
+  Carolina are **not** impacted by this voluntary recall", Michigan from the
+  state Department of Agriculture that ran the sampling, Maryland and Virginia
+  from a company called Maryland & Virginia Milk Producers Cooperative. The
+  canonical derivation was incomplete in the opposite direction: it required a
+  preposition frame in a single sentence, so it lost every declared list that
+  continued past its own sentence ("Angelicae Sinensis was distributed in the
+  following states." and the fourteen that followed), "Product was **sent to**
+  retail stores located in…", "available **to consumers** at…", and the
+  state list after "Distribution:". It also read "Washington, DC" as
+  Washington State on **16** stored cases.
+
+  **The fix, upstream.** The evidence contract now reads at sentence and clause
+  scope, requires an affirmative distribution frame, cuts non-destination spans
+  (dateline, firm apposition, supplier farm, shipping origin) out of an
+  otherwise good sentence rather than vetoing the sentence, follows a declared
+  list past the full stop the source wrote instead of a comma, preserves
+  negation, excludes what the notice rules out, unions every affirmative
+  clause, and refuses a state the notice both affirms and denies. Nationwide
+  must be stated and is never inferred from a long list. `parseFdaGeography`
+  delegates to it, so a new case is born with the corrected answer and no
+  repair participates in derivation. Detail's reader is deleted; structural
+  tests fail if any surface grows one again.
+
+  **What it changes, measured read-only over all 1,931 stored cases.** 61
+  cases (54 active consumer-visible), +414 states, −25, 27 unknown → states,
+  0 states → unknown, 0 nationwide either way, 0 conflicts, 0 contradictions.
+  Location-filter membership changes on 53 active cases and the Affects Me
+  verdict on 27. Washington loses 8 matches — those were "Washington, D.C."
+  Texas gains 16, New York 12, Virginia 11.
+
+  **Why the repair is narrow.** An ordinary re-projection of the same 61 cases
+  would also move `sourceIdentifiers` on 60, `classification` on 20,
+  `retailerNames` and `affectedProducts` on 19 each, and would raise **53
+  `expansion_geography` notifications** — "this recall expanded" for notices
+  that have not changed since publication. The repair writes one field, raises
+  none, and is gated on `--apply --confirm --expect <n>` — all three typed by a
+  person, since no package script carries `--apply` — with the whole corpus
+  planned before the first write, every write verified by re-reading the row,
+  and a durable ledger that
+  `npm run repair:geography:rollback -- <ledger.json> --apply --confirm --expect <n>`
+  replays backwards.
+
+  **Not yet applied.** The stored corpus still carries the old answers, so
+  until the repair runs Recall Detail shows the stored (smaller) list rather
+  than the one it used to read for itself. Final live Feed/Detail/filter/
+  Affects-Me QA belongs after a separately authorized apply.
+
+  **Founder decision, recorded: city-level evidence stays truthful and stays
+  unknown.** A notice that names a city without a state — "sold by Dandelion at
+  their retail stores (in San Francisco and Las Vegas)", 1 active case — keeps
+  that phrase on Detail, because the notice says it. It is never resolved to
+  California or Nevada: the notice does not say them, and a gazetteer lookup
+  would be the app inventing distribution. The card therefore says
+  `Distribution not specified`, no Location filter matches, and Affects Me
+  reads `unknown`. This is a property of the evidence class with no per-case
+  rule behind it, pinned by
+  [`src/lib/geography-boundary.test.ts`](src/lib/geography-boundary.test.ts).
 
 - **Illness-repair ledger checkpointing (operational hardening).** The illness
   repair CLI (`npm run repair:illness-flags`) writes its durable apply ledger

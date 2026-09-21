@@ -151,6 +151,14 @@ What Happened paragraph against the card's compact reason; and **retailers,
 which are Detail-only by founder decision** (P2B7O) — Feed and Saved carry no
 retailer content at all, while search still matches on retailer names silently.
 
+**Location is one VALUE, formatted two ways (P2B7Q.2).** `CT, IL +4` and the
+complete list are the same `projection.geography.states`, and so are the
+Location filter's verdict and the geography half of Affects Me. Detail no
+longer reads the announcement for states of its own. The rule that makes this
+safe is upstream, not here: the derivation must be RIGHT, because every surface
+now repeats it. See
+[recall-domain-architecture.md §5.4](recall-domain-architecture.md).
+
 ## 8. Founder exceptions on the record
 
 - **`Retailers:`** — the one place consumer copy says "retailer" rather than
@@ -167,7 +175,7 @@ retailer content at all, while search still matches on retailer names silently.
 ## 9. Open items
 
 One of P2B7Q's four was closed by founder decision in P2B7Q.1; one was moot;
-two remain, and one of those is larger than P2B7Q measured.
+one was closed by P2B7Q.2; one remains.
 
 **Closed.**
 
@@ -177,27 +185,27 @@ two remain, and one of those is larger than P2B7Q measured.
    gained a line; 3 of them previously rendered no notice at all.
 2. ~~`Update:` versus `Updated <date>:`~~ Moot: the update note is gone (§5).
 
+**Closed by P2B7Q.2.**
+
+3. ~~The card and Detail disagree about location.~~ Closed: one derivation now
+   answers for every surface, and it is a corrected one. The disagreement was
+   **19** of 911 active cases at its final measurement — 11 where the card said
+   `Distribution not specified` while Detail named up to 15 states, 7 where
+   both named states but different ones, and 1 where Detail named a metro area
+   the card cannot express. Neither old derivation could simply win: the
+   canonical one missed states stated later in the body, while the display-time
+   one worked at PARAGRAPH scope and swept up "Publix locations in Virgina and
+   North Carolina are **not** impacted" and the Michigan Department of
+   Agriculture that ran the sampling. The repair was upstream, where it had to
+   be — the feed row carries no announcement prose, so a display-time answer
+   can never reach the Location filter. Contract:
+   [recall-domain-architecture.md §5.4](recall-domain-architecture.md);
+   stored rows are corrected by `npm run repair:geography`, which needs its own
+   founder authorization.
+
 **Still open.**
 
-1. **The card and Detail disagree about location on 18 of 898 active cases** —
-   more than the 11 P2B7Q first reported. On 11 the card says
-   `Distribution not specified` while Detail names up to 14 states; on 7 both
-   name states but different ones. Two geography derivations, each incomplete
-   in a different direction: the canonical one misses states stated later in
-   the announcement body (`dcd7279f`), while the consumer distribution ignores
-   the exclusions the canonical derivation applies (`4c7d29d6` — "Publix
-   locations in Virginia and North Carolina are **not** impacted"). Because
-   the Location filter and Affects Me read the canonical value, its
-   incompleteness is a **personalization and filtering miss**, not a display
-   blemish.
-
-   **This is not fixable at display time.** Making the surfaces agree by
-   picking either derivation ships a knowingly incomplete answer — P2B7Q.1
-   tried exactly that and it was rejected. The repair is upstream: read the
-   body with the exclusion hardening applied, and re-project the affected
-   cases. Tracked as its own milestone in [README.md](../README.md).
-
-2. **A stored `productDescription` clipped at 255 characters enters the What
+1. **A stored `productDescription` clipped at 255 characters enters the What
    Happened sentence mid-word** on 1 active case ("… Flavored Chee because the
    products may be contaminated…"), and 3 cases end the product slot on a
    dangling adverb ("… Ineligible Meat and Poultry Products Illegally

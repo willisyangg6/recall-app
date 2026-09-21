@@ -22,14 +22,8 @@ import {
   looksLikeColumnHeading,
   retailersWithPlaces,
 } from '@/domain/retailer';
-import { distributionTableStates } from '@/domain/geography-evidence';
 import { cleanDisplayText, stripHtml } from '@/domain/text';
-import {
-  isUsCityName,
-  normalizeStateToken,
-  splitAdjacentCities,
-  statesInText,
-} from '@/domain/us-geography';
+import { isUsCityName, normalizeStateToken, splitAdjacentCities } from '@/domain/us-geography';
 import {
   CONCEPT_LABEL,
   conceptForLabel,
@@ -71,11 +65,7 @@ import {
   type ProductPhoto,
 } from './product-photos';
 import { extractProseIdentifiers, extractProseVariantLines } from './prose-identifiers';
-import {
-  extractAffectedProductLists,
-  extractDistributionListStates,
-  extractIdentifierListOwners,
-} from './source-lists';
+import { extractAffectedProductLists, extractIdentifierListOwners } from './source-lists';
 import { interpretTables, type SemanticFact } from './source-tables';
 import {
   captionContradictsPackage,
@@ -2004,29 +1994,26 @@ export function buildDistribution(
   );
 
   const geography = projection.geography;
-  // Display-side state recovery: the persisted geography was extracted at
-  // ingest time, and parser improvements must reach already-stored cases.
-  // Supplement (never narrow) the geography with the states the notice's own
-  // distribution sentences name — this is what restores "MI, MN, and ND" to
-  // all three states, and what widens an FSIS structured state list when the
-  // notice's prose explicitly names more states than the field carries. A
-  // declared geography LIST under a distribution lead-in counts the same way:
-  // "…and the following United States:" followed by one state per bullet is a
-  // distribution statement the sentence extractors cannot see. A union can
-  // only widen; a stated Nationwide scope is never second-guessed.
-  const supplemental =
-    geography.scope === 'nationwide'
-      ? []
-      : [
-          ...statesInText(distributionText),
-          ...places.states,
-          ...extractDistributionListStates(projection.summaryHtml),
-          // A state-role table column is a distribution statement too, and it
-          // is read here through the same canonical function that persists
-          // the field, so display and stored geography cannot disagree.
-          ...distributionTableStates(projection.summaryHtml).states,
-        ];
-  const states = [...new Set([...geography.states, ...supplemental])].sort();
+  // THE canonical state set, read and never re-derived (P2B7Q.2).
+  //
+  // This used to supplement the stored geography with states it read out of
+  // the notice itself, so that a parser improvement reached an already-stored
+  // case. It was the second reader, it worked at PARAGRAPH scope, and it was
+  // wrong in the direction that matters: it admitted every state anywhere in a
+  // paragraph that mentioned distribution, which put North Carolina on a
+  // recall whose notice says "Publix locations in Virgina and North Carolina
+  // are not impacted", and Michigan on one whose only Michigan is the state
+  // Department of Agriculture that ran the sampling. Detail showed those
+  // states; the card, the Location filter and Affects Me — which read the
+  // stored field — did not, so the four surfaces disagreed on 19 active cases.
+  //
+  // The recovery it existed for now happens where it belongs: at ingest and
+  // projection, in `domain/geography-evidence`, whose clause-scope reader
+  // handles exclusions, origins and declared lists and whose answer reaches
+  // the Feed row. Detail therefore states exactly what the card, the filter
+  // and Affects Me state — the complete list against the card's "CT, IL +4" —
+  // and no shopper surface interprets location prose on its own.
+  const states = [...geography.states].sort();
 
   const scopeType: ConsumerDistribution['scopeType'] =
     geography.scope === 'nationwide'

@@ -154,8 +154,16 @@ export function normalizeStateToken(token: string): string | null {
 
 /**
  * Postal codes in the unambiguous ", XX" address/list form ("Detroit, MI").
+ *
+ * A code followed by a capitalized word is part of a NAME, not an address:
+ * "Brookshire Brothers stores in Texas, OK Produce - Grocery Outlet in
+ * California" reads "OK Produce" as a company, which is what it is. The same
+ * guard already governs a lone code after a locality preposition below ("in
+ * NE Ohio" is a compass direction); an address form needs it for the same
+ * reason. A real address continues with a ZIP, punctuation or a line end, so
+ * "Milford, OH 45150" and ", MI, MN, and ND" are untouched.
  */
-const ADDRESS_CODE = /,\s+([A-Z]{2})(?![A-Za-z])/g;
+const ADDRESS_CODE = /,\s+([A-Z]{2})(?![A-Za-z])(?!\s+[A-Z][a-z])/g;
 
 /**
  * A run of postal codes after a locality preposition:
@@ -188,6 +196,17 @@ const CODE_RUN = /\b[A-Z]{2}\b(?:\s*(?:,|and|or|&)\s*(?:and\s+)?\b[A-Z]{2}\b)+/g
 /** Longest first, so "West Virginia" is claimed before "Virginia" can be. */
 const NAMES_LONGEST_FIRST = [...STATE_NAMES].sort((a, b) => b.length - a.length);
 
+/** "Washington DC", "Washington, D.C." — the District, never the state. */
+const WASHINGTON_DC = /\bWashington,?\s+D\.?\s?C\.?(?![A-Za-z])/g;
+
+/**
+ * The elided conjunction: "sold in North and South Carolina Harris Teeter
+ * stores" names TWO states, and reading only the one that is spelled out
+ * whole told North Carolina shoppers a recall had missed them. Only the two
+ * pairs that exist are recognized, so nothing is generalized into a guess.
+ */
+const PAIRED_DIRECTION = /\b(North|South)\s+and\s+(North|South)\s+(Carolina|Dakota)\b/g;
+
 /**
  * Full state names a text contains, ignoring any whose only occurrence sits
  * INSIDE a longer state name.
@@ -202,6 +221,25 @@ const NAMES_LONGEST_FIRST = [...STATE_NAMES].sort((a, b) => b.length - a.length)
 function namedStates(text: string): { name: string; onlyInsideLongerName: boolean }[] {
   const claimed: { start: number; end: number }[] = [];
   const out: { name: string; onlyInsideLongerName: boolean }[] = [];
+  // "Washington DC" is the District of Columbia, and reading Washington out of
+  // it tells a shopper 2,300 miles away that a recall reached them. The span
+  // is claimed for DC BEFORE any name is matched, so the containment rule
+  // below resolves it the one correct way — the same mechanism that keeps
+  // Virginia out of "West Virginia".
+  for (const match of text.matchAll(PAIRED_DIRECTION)) {
+    claimed.push({ start: match.index!, end: match.index! + match[0].length });
+    for (const direction of [match[1], match[2]]) {
+      const name = `${direction} ${match[3]}`;
+      if (!out.some((entry) => entry.name === name))
+        out.push({ name, onlyInsideLongerName: false });
+    }
+  }
+  for (const match of text.matchAll(WASHINGTON_DC)) {
+    claimed.push({ start: match.index!, end: match.index! + match[0].length });
+    if (!out.some((entry) => entry.name === 'District of Columbia')) {
+      out.push({ name: 'District of Columbia', onlyInsideLongerName: false });
+    }
+  }
   for (const name of NAMES_LONGEST_FIRST) {
     let standalone = 0;
     let contained = 0;

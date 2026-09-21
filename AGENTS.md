@@ -112,7 +112,9 @@ activates it.
 
 For any migration, repair, or backfill, run the dry-run first, report what it would change, and
 apply only after separate explicit approval. Never rerun a completed one-time backfill — the
-historical category backfill (C10B), the retailer repair, and the geography repair are done.
+historical category backfill (C10B) and the retailer repair are done. `repair:geography` is NOT:
+its C5.2A run completed, and P2B7Q.2 then corrected the derivation itself, so the stored corpus is
+behind the contract again and the repair is prepared but unapplied.
 
 ## Verification
 

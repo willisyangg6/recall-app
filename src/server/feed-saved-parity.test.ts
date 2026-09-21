@@ -181,9 +181,14 @@ const CRITICAL_CALIFORNIA = feedItemOf(
 // preference is therefore the ONLY thing that can decide this card — a
 // nationwide notice would match on the chosen state alone and prove nothing
 // about whether preferences reach Saved.
+// A recall whose notice names a store but never says where it went: the only
+// thing that can make it personal is the retailer preference. (Braga Fresh
+// used to play this part; P2B7Q.2 recovered the twenty distribution states its
+// notice actually lists, which makes it a geography case now — as it did for
+// Wawona's five.)
 const RETAILER_ONLY = feedItemOf(
-  'fda-braga-fresh',
-  fdaFixture('braga-fresh-issues-voluntary-and-precautionary-advisory'),
+  'fda-lunds-byerlys',
+  fdaFixture('lunds-byerlys-voluntarily-recalls-lb-lone-star-dip-due-potential-mold'),
 );
 const PENDING_FL_IL_IN = feedItemOf('fda-lipari', fdaFixture('lipari-foods-issues-recall-ham'));
 const PENDING_WITH_IMAGE = feedItemOf(
@@ -205,10 +210,10 @@ const CORPUS: FeedItem[] = [
 const NO_PREFERENCES: UserRecallPreferences = { state: null, allergens: [], retailers: [] };
 const CALIFORNIA: UserRecallPreferences = { state: 'CA', allergens: [], retailers: [] };
 const TEXAS: UserRecallPreferences = { state: 'TX', allergens: [], retailers: [] };
-const TEXAS_PLUS_WALMART: UserRecallPreferences = {
+const TEXAS_PLUS_STORE: UserRecallPreferences = {
   state: 'TX',
   allergens: [],
-  retailers: ['walmart'],
+  retailers: ['lunds-byerlys'],
 };
 
 // ── The two screen adapters, as the screens actually run them ───────────────
@@ -471,11 +476,11 @@ test('case 6 — saving changes the bookmark and nothing about the verdict', () 
 // ── 5. Required cases 7–8: preferences change, both surfaces follow ─────────
 
 test('case 7 — removing the matching preference removes AFFECTS YOU on both', () => {
-  const matching: SurfaceContext = { today: TODAY, prefs: TEXAS_PLUS_WALMART };
+  const matching: SurfaceContext = { today: TODAY, prefs: TEXAS_PLUS_STORE };
   const removed: SurfaceContext = { today: TODAY, prefs: TEXAS };
   const saved = [RETAILER_ONLY.id];
 
-  assert.deepEqual(RETAILER_ONLY.retailerNames, ['Walmart']);
+  assert.deepEqual(RETAILER_ONLY.retailerNames, ['Lunds & Byerlys']);
   assert.equal(RETAILER_ONLY.geography.scope, 'unknown');
   assert.equal(feedCards(CORPUS, matching).get(RETAILER_ONLY.id)!.affectsYou, true);
   assert.equal(savedCards(saved, CORPUS, matching).get(RETAILER_ONLY.id)!.affectsYou, true);
@@ -494,7 +499,7 @@ test('case 7 — removing the matching preference removes AFFECTS YOU on both', 
 
 test('case 8 — adding a preference adds AFFECTS YOU to an already-saved recall on both', () => {
   const before: SurfaceContext = { today: TODAY, prefs: TEXAS };
-  const after: SurfaceContext = { today: TODAY, prefs: TEXAS_PLUS_WALMART };
+  const after: SurfaceContext = { today: TODAY, prefs: TEXAS_PLUS_STORE };
   const saved = [RETAILER_ONLY.id];
 
   assert.equal(savedCards(saved, CORPUS, before).get(RETAILER_ONLY.id)!.affectsYou, false);
@@ -683,7 +688,7 @@ test('mutation — using save state as the match verdict is caught', () => {
 test('mutation — a stale stored verdict overriding current preferences is caught', () => {
   // A verdict frozen when the recall was saved (the user was then in
   // California and it matched), replayed after they moved to Texas.
-  const frozen = buildHomeCardModel(RETAILER_ONLY, { today: TODAY, prefs: TEXAS_PLUS_WALMART });
+  const frozen = buildHomeCardModel(RETAILER_ONLY, { today: TODAY, prefs: TEXAS_PLUS_STORE });
   assert.equal(frozen.affectsYou, true);
   const now: SurfaceContext = { today: TODAY, prefs: TEXAS };
   const live = savedCards([RETAILER_ONLY.id], CORPUS, now).get(RETAILER_ONLY.id)!;

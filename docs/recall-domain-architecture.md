@@ -240,6 +240,94 @@ Inference from government prose is **acceptable and necessary** (openFDA distrib
 3. `confidence: 'inferred'` is rendered visibly (badge/tooltip) — uncertainty is displayed, not hidden.
 4. Ambiguous extraction (e.g. "in." vs Indiana) → drop to `unknown`, keep the text. Precision beats coverage _for geography specifically_ because a wrong "doesn't affect you" is dangerous.
 
+### 5.4 The evidence contract, and who owns it (P2B7Q.2) **[DECISION]**
+
+`projection.geography` is derived in exactly one place —
+[`src/domain/geography-evidence.ts`](../src/domain/geography-evidence.ts) —
+and every surface reads that one stored value. Before P2B7Q.2 there were four
+readers: the FDA parser's own keyword gate, this contract, the feed card's read
+of the stored field, and a display-time re-read of the announcement inside
+`buildDistribution`. The last one worked at PARAGRAPH scope, so Recall Detail
+named states the card, the Location filter and Affects Me had never heard of —
+19 of 911 active cases — and some of those states were places the notice says
+are **not** affected.
+
+**What the value means.** Where the recalled product was affirmatively
+distributed, shipped for distribution or sale, offered for sale, or sold.
+
+**What is never geography, however many place names it contains:** the
+recalling firm's address, a headquarters, a manufacturer, processor or supplier
+site, a shipping origin, an importer, a laboratory or the state department that
+ran the sampling, a contact address, a news dateline, an illness or
+case-patient location, a legal jurisdiction, a retailer's own headquarters, a
+place embedded in a company or product name, or a place the notice explicitly
+describes as unaffected.
+
+**How it is read.**
+
+1. **Sentence and clause scope, never paragraph scope.** A paragraph that
+   mentions distribution does not make every state in it a destination.
+2. **An affirmative frame is required** — a distribution verb plus the
+   preposition that introduces its destination, or a declared-list statement
+   ("the states involved are…"). A bare keyword is not enough: "sold under the
+   following sales order numbers" says where nothing went.
+3. **Non-destination spans are cut out of a good sentence**, rather than the
+   sentence being vetoed. The opening line of an announcement routinely
+   carries the dateline AND the distribution statement — "(Clovis, California)
+   Wawona Frozen Foods is voluntarily recalling … distributed to Costco
+   Wholesale stores in Arizona, California, Colorado, Utah and Washington" —
+   and vetoing it costs five real states.
+4. **A declared list continues past the sentence that introduced it**, across a
+   full stop the source wrote instead of a comma, across line breaks, and into
+   a block of store addresses under "…were sold at the following locations:".
+   It stops at the first unit that names no state.
+5. **Negation is preserved.** A sentence that says a place is not impacted
+   contributes that place to an EXCLUDED set; an exception clause inside an
+   affirmative sentence excludes only its own half. A state both affirmed and
+   excluded is refused and reported, never guessed either way.
+6. **Every affirmative clause is unioned.** The reader never stops at the first
+   distribution sentence.
+7. **Nationwide must be stated.** It is never inferred from a long state list,
+   and absence never becomes presence — an unknown stays unknown.
+8. **Widening only**, with two proven exceptions: a containment artifact
+   ("Virginia" read out of "West Virginia", "Washington" out of "Washington
+   DC") and an explicitly excluded state. Each removal carries its reason.
+9. **No LLM, no external service, no probabilistic runtime.** Deterministic and
+   offline, so an ingest, a re-projection and a repair cannot disagree.
+
+**Ownership.** `parseFdaGeography` (ingest) delegates to this contract;
+`projectCase` re-derives through it from the case's own persisted text; the
+geography repair calls the same function and has no parser of its own. FSIS
+`field_states` stays a structured SOURCE field, combined into `carried` and
+then widened — never a rival reader.
+
+**Consumer egress.** The feed row carries `geography` and no announcement
+prose ([recall-feed-usability.md](recall-feed-usability.md)), which is why a
+display-time reader could never have fixed this: the resolved states have to
+reach the row for the Location filter to use them.
+
+**City-level evidence is outside this contract, not an exception to it
+(founder decision, P2B7Q.2).** Some notices state a place the tri-state
+`Geography` cannot hold: "It was sold by Dandelion at their retail stores (in
+San Francisco and Las Vegas)". The city is **stated** and therefore stays on
+Recall Detail — deleting it would remove a fact the notice gives a shopper —
+and it is **never resolved to a state**, because the notice does not say
+California or Nevada and a gazetteer lookup would be this app inventing
+distribution. So the case is `unknown` everywhere it counts: the card says
+`Distribution not specified`, no Location filter matches it, and Affects Me
+reads `unknown` rather than `matches` or `does_not_match`. This is a property
+of the evidence class, pinned by contract in
+[`src/lib/geography-boundary.test.ts`](../src/lib/geography-boundary.test.ts);
+there is no per-case rule for it anywhere, and one active case carries it
+today. Promoting cities to states would need a new stored representation and
+is not in scope here.
+
+**Regression corpus.** `src/domain/fixtures/geography-evidence-corpus.json`
+records one real announcement per evidence shape plus all nineteen cases the
+surfaces disagreed on, with verbatim prose; re-record it read-only with
+`npx tsx scripts/record-geography-corpus.ts`. The shapes themselves are
+catalogued in [recall-source-contract.md §6.1](recall-source-contract.md).
+
 ### 5.3 "Affects me" semantics (design-era sketch; personalization has since shipped)
 
 _This subsection is the pre-implementation sketch, kept as design record. The

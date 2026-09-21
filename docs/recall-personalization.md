@@ -49,6 +49,23 @@ deterministic core shared by the Home "Affects me" feed, the detail screen's
   Authoritative state list containing the home state ⇒ matches; a known list
   without it ⇒ does_not_match; source silent ⇒ unknown. Nothing is ever
   inferred from company or retailer headquarters.
+
+  The state list is `projection.geography.states` and nothing else — the same
+  value the feed card prints and the Location filter matches on (P2B7Q.2).
+  Recall Detail used to derive a richer list of its own from the announcement
+  prose, so a shopper could read a state on Detail that this function had
+  never seen; that reader is gone, and the derivation that recovers those
+  states now runs at ingest and projection where its answer reaches the feed
+  row ([recall-domain-architecture.md §5.4](recall-domain-architecture.md)).
+  Parity is pinned structurally by
+  [`src/lib/geography-boundary.test.ts`](../src/lib/geography-boundary.test.ts).
+
+  A geographic exclusion is only as good as the derivation behind it, which is
+  why the contract refuses a place the notice merely mentions: a state read out
+  of a sampling laboratory or a company's name would say "affects you" to
+  people a recall never reached, and a state the derivation MISSES says "does
+  not affect you" to people it did.
+
 - `matchedAllergens` / `matchedRetailers`: the deterministic intersections of
   the user's selections with the case's authoritative facts.
 - `affectsMe`: with a state chosen — geography matches, OR geography unknown

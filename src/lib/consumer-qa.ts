@@ -12,14 +12,10 @@
  * coverage, and honest omission is correct behavior.
  */
 
+import { readDistributionProse } from '@/domain/geography-evidence';
 import { classifyIllnessReport } from '@/domain/illness';
 import { extractRetailerNames, retailersWithPlaces } from '@/domain/retailer';
-import {
-  isUsCityName,
-  normalizeStateToken,
-  STATE_TO_POSTAL,
-  statesInText,
-} from '@/domain/us-geography';
+import { isUsCityName, normalizeStateToken, STATE_TO_POSTAL } from '@/domain/us-geography';
 import { isGeographicName, variantIdentityRejection } from './variant-identity';
 import type { AffectedProduct, CaseProjection } from '@/domain/recall-types';
 import {
@@ -150,8 +146,9 @@ export interface QaRecordResult {
     unapprovedFieldLabels: number;
     crossDestinationLeaks: number;
     /** Distribution entity roles. */
-    statesInSourceClause: number;
-    statesRetained: number;
+    statesAffirmedInSource: number;
+    /** States the notice affirms that the STORED geography does not carry. */
+    statesBehindCanonical: number;
     citiesAsRetailers: number;
     retailerCoverageEntries: number;
     /** Source-declared affected-product lists. */
@@ -1173,30 +1170,38 @@ export function auditConsumerCase(
   if (citiesAsRetailers.length > 0) {
     push(violations, 'city-as-retailer', 'critical', citiesAsRetailers.join(' | '));
   }
-  const distributionLines = summary
-    .split('\n')
-    .filter(
-      (line) =>
-        /\bdistribut\w+|\bsold\b|\bshipped\b|\bavailable (?:in|at|through)\b/i.test(line) &&
-        !/\b(?:is|are|has|have)\s+(?:voluntarily\s+)?recalling\b|\bheadquarter/i.test(line) &&
-        !/\bcall\b|\bcontact\b|\bquestions\b|@|\b\d{3}-\d{3}-\d{4}\b/i.test(line),
+  // The display boundary (P2B7Q.2). This check used to read the notice itself
+  // at PARAGRAPH scope and demand that Detail show every state it found, which
+  // made the false positives the canonical contract refuses — North Carolina
+  // from "Publix locations in Virgina and North Carolina are not impacted",
+  // Arkansas from the state Department of Health that ran the sampling,
+  // Maryland and Virginia from a company called Maryland & Virginia Milk
+  // Producers — into a shipping gate. It now proves the invariant that
+  // actually matters: Detail states the canonical set and never narrows it.
+  const canonical = projection.geography;
+  if (canonical.scope !== 'nationwide') {
+    const narrowed = canonical.states.filter(
+      (state) => !consumer.distribution.states.includes(state),
     );
-  const clauseStates = statesInText(distributionLines.join(' '));
-  // A nationwide scope subsumes every named state — nothing is "dropped".
-  const statesRetained =
-    consumer.distribution.scopeType === 'nationwide'
-      ? clauseStates
-      : clauseStates.filter((state) => consumer.distribution.states.includes(state));
-  if (
-    consumer.distribution.scopeType !== 'nationwide' &&
-    statesRetained.length < clauseStates.length
-  ) {
-    push(
-      violations,
-      'state-dropped-from-multi-state-clause',
-      'critical',
-      clauseStates.filter((state) => !statesRetained.includes(state)).join(', '),
-    );
+    if (narrowed.length > 0) {
+      push(violations, 'state-dropped-by-display', 'critical', narrowed.join(', '));
+    }
+  }
+  // And the other direction: a stored geography that lags what the notice's
+  // own affirmative distribution clauses say. Zero on a freshly projected
+  // record by construction; over live rows it counts the repair backlog, which
+  // is `npm run repair:geography:dry`.
+  // A nationwide scope already subsumes every state the prose could name, so
+  // it is never "behind" anything.
+  const affirmed = readDistributionProse(summary);
+  const behind =
+    canonical.scope === 'nationwide'
+      ? []
+      : affirmed.states.filter(
+          (state) => !affirmed.excludedStates.includes(state) && !canonical.states.includes(state),
+        );
+  if (behind.length > 0) {
+    push(violations, 'geography-behind-canonical-derivation', 'major', behind.join(', '));
   }
   // A retailer the source explicitly tied to places must still be a retailer.
   // Consignees and distribution infrastructure ("TRIMAR USA LLC", "Wakefern
@@ -1434,8 +1439,8 @@ export function auditConsumerCase(
       statesSurfaced: consumer.distribution.states.length > 0,
       unapprovedFieldLabels: renderedLabels.filter((label) => !APPROVED_LABELS.has(label)).length,
       crossDestinationLeaks,
-      statesInSourceClause: clauseStates.length,
-      statesRetained: statesRetained.length,
+      statesAffirmedInSource: affirmed.states.length,
+      statesBehindCanonical: behind.length,
       citiesAsRetailers: citiesAsRetailers.length,
       retailerCoverageEntries: consumer.distribution.coverage.length,
       listDetected: listItems.length > 0,
@@ -1620,8 +1625,8 @@ export function summarizeQa(results: QaRecordResult[]): QaSummary {
     rejectedInvalidType: sum((r) => r.signals.rejectedInvalidType),
     rejectedIntentionallySuppressed: sum((r) => r.signals.rejectedIntentionallySuppressed),
     // Distribution entity roles.
-    statesInSourceClauses: sum((r) => r.signals.statesInSourceClause),
-    statesRetainedFromClauses: sum((r) => r.signals.statesRetained),
+    statesAffirmedInSource: sum((r) => r.signals.statesAffirmedInSource),
+    statesBehindCanonical: sum((r) => r.signals.statesBehindCanonical),
     citiesAsRetailers: sum((r) => r.signals.citiesAsRetailers),
     retailerCoverageEntries: sum((r) => r.signals.retailerCoverageEntries),
     // Source-declared product lists.

@@ -56,10 +56,12 @@ const GLUED_BOUNDARY = /(?<=[a-z])\s+(?=(?:There (?:have|has) been|Anyone concer
  * Nevada" into two fragments, and the half carrying the states no longer
  * contained a distribution verb — so the recall's geography was lost. The
  * same applies to the "Eugene, Ore. establishment" state abbreviations FSIS
- * uses in every notice.
+ * uses in every notice, and to "sold through Mt. Capra’s web store ( … ) or
+ * one retail store in Chehalis, Washington", whose state sat in the half that
+ * lost the verb.
  */
 const ABBREVIATION_PERIOD =
-  /(?<!\b(?:Inc|Corp|Co|Ltd|LLC|L\.L\.C|LLP|No|Nos|vs|etc|Mr|Mrs|Ms|Dr|St|Ave|Blvd|U\.S|U\.S\.A|D\.C|Ala|Ariz|Ark|Calif|Colo|Conn|Del|Fla|Ga|Ill|Ind|Kan|Ky|La|Mass|Md|Mich|Minn|Miss|Mo|Mont|Neb|Nev|Okla|Ore|Pa|Tenn|Tex|Va|Vt|Wash|Wis|Wyo)\.)/;
+  /(?<!\b(?:Inc|Corp|Co|Ltd|LLC|L\.L\.C|LLP|No|Nos|vs|etc|Mr|Mrs|Ms|Dr|St|Mt|Ave|Blvd|U\.S|U\.S\.A|D\.C|Ala|Ariz|Ark|Calif|Colo|Conn|Del|Fla|Ga|Ill|Ind|Kan|Ky|La|Mass|Md|Mich|Minn|Miss|Mo|Mont|Neb|Nev|Okla|Ore|Pa|Tenn|Tex|Va|Vt|Wash|Wis|Wyo)\.)/;
 
 const SENTENCE_BOUNDARY = new RegExp(`(?<=[.!?])${ABBREVIATION_PERIOD.source}\\s+`);
 

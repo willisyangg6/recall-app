@@ -265,8 +265,8 @@ every state — known jurisdictions, `Nationwide`, and unspecified alike.
   state abbreviations, then `CA, WA +N`; `Nationwide`; or the honest
   `Distribution not specified`.
   States come from the canonical tri-state geography, whose derivation
-  already applies the exclusions (containment artifacts, firm-address noise)
-  before display — nothing is re-added here.
+  already applies the exclusions (containment artifacts, firm-address noise,
+  places the notice rules out) before display — nothing is re-added here.
 - **Detail** (`whereSoldModel` over the consumer distribution, via
   `distributionLocationState` — P2a founder decision): the section is
   **always present** and renders **only the one state representation** — the
@@ -282,6 +282,39 @@ every state — known jurisdictions, `Nationwide`, and unspecified alike.
   nouns — wholesalers, distributors, independent retailers, food service —
   are never rendered as if they were stores. Affects-Me relevance and
   personalization semantics are untouched by any of this.
+
+**One set, four formattings (P2B7Q.2).** The card's `CT, IL +4` and Detail's
+complete list are the SAME `projection.geography.states`, and so are the
+Location filter's verdict and the geography half of Affects Me. Detail no
+longer re-reads the announcement for states of its own: `buildDistribution`
+takes `geography.states` and sorts them, full stop. It used to supplement them
+with everything it could find in any paragraph that mentioned distribution,
+which is how "Publix locations in Virgina and North Carolina are **not**
+impacted by this voluntary recall" put North Carolina on that recall's Detail
+screen, and how the Michigan Department of Agriculture's sampling programme put
+Michigan on another's — states the card, the filter and Affects Me never had.
+Measured over the 898 active consumer-visible cases when P2B7Q.2 opened, the
+two answers disagreed on **19**.
+
+The recovery that reader existed for now happens at ingest and projection
+([recall-domain-architecture.md §5.4](recall-domain-architecture.md)), which is
+the only place it can work: the feed row carries `geography` and no
+announcement prose, so a display-time answer can never reach the Location
+filter. What Detail may still hold of its own is a place the notice states that the
+tri-state `Geography` cannot express — a city or metro with no state attached.
+It never contributes a state, a filter match or an Affects-Me verdict: one
+active case carries one, and it reads `Distribution not specified` on the card
+while Detail says "San Francisco and Las Vegas". That is the founder decision
+(P2B7Q.2) — the phrase is true and stays; the state is not stated and is not
+invented. It is the one remaining granularity difference between the surfaces,
+and it is a property of the evidence class rather than a rule about that case:
+see [recall-domain-architecture.md §5.4](recall-domain-architecture.md).
+
+Structural tests keep the boundary closed:
+[`src/lib/geography-boundary.test.ts`](../src/lib/geography-boundary.test.ts)
+fails if `buildDistribution` reads announcement text again, if the filter or
+Affects Me read a different source, or if the FDA parser rebuilds a gate of its
+own.
 
 ### Affects you
 

@@ -445,24 +445,3 @@ export function extractIdentifierListOwners(summaryHtml: string | null): ListVar
   }
   return out;
 }
-
-/**
- * States stated as a declared geography list under a distribution lead-in —
- * "OLA-OLA POUNDED YAM was distributed … in Canada, Australia and the
- * following United States:" followed by one state per bullet. These are
- * distribution facts the sentence-level extractors cannot see (each state
- * stands on its own line), and losing them left the case with no geography at
- * all while the states rendered as product variants.
- */
-export function extractDistributionListStates(summaryHtml: string | null): string[] {
-  const states: string[] = [];
-  for (const list of declaredLists(summaryHtml)) {
-    if (list.role !== 'geography') continue;
-    if (!/\b(?:distribut\w+|sold|shipped|available|deliver\w+)\b/i.test(list.lead)) continue;
-    for (const item of list.items) {
-      const state = normalizeStateToken(item.trim());
-      if (state && !states.includes(state)) states.push(state);
-    }
-  }
-  return states;
-}

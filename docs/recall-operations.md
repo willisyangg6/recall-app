@@ -1138,13 +1138,71 @@ for the length of a maintenance pass would stall the agency feeds, and a
 crash mid-pass would strand them until the TTL expired — a worse failure than
 skipping a handful of cases that the next run picks up anyway.
 
-## Geography: a one-time historical repair (C5.2A)
+## Geography: the canonical repair (C5.2A, re-opened by P2B7Q.2)
 
 ```
-npm run repair:geography:dry    # report only, writes nothing
-npm run repair:geography        # apply
-npm run repair:geography:dry    # verify: "would update" must be 0
+npm run repair:geography:dry                                 # report only, writes nothing
+npm run repair:geography:dry -- --drift-audit                # …plus what a re-projection would also change
+npm run repair:geography:dry -- --json <path>                # …and write the durable ledger where you want it
+npm run repair:geography -- --apply --confirm --expect <n>   # APPLY — all three flags, typed
+npm run repair:geography:dry                                 # verify: "would update" must be 0
+npm run repair:geography:rollback -- <ledger.json> --apply --confirm --expect <n>
+npm run repair:geography -- --help                           # the contract, at the terminal
 ```
+
+**This command is not finished business.** The C5.2A run completed, and then
+P2B7Q.2 corrected the derivation itself — clause scope, negation, exclusions,
+declared lists that continue past their own sentence, and "Washington DC" read
+as the District rather than the state. The stored corpus is therefore behind
+the contract again, and the repair exists to close that gap under explicit
+founder authorization. It is idempotent: once applied, the dry run reports
+`would update: 0` and re-running writes nothing.
+
+### The three acknowledgments (P2B7Q.2)
+
+An apply is unreachable without all of `--apply`, `--confirm` and
+`--expect <n>`, where `n` is the correction count from the dry run the operator
+actually read. `--expect` is matched exactly; a missing, fractional, negative
+or malformed count is refused, and `--dry-run` alongside `--apply` is a
+contradiction rather than a preference. The whole corpus is **planned before
+the first write is constructed**, which is what makes the count mean something:
+a corpus that has drifted since the review aborts the run having written
+nothing, rather than writing a prefix of it.
+
+**All three are typed by a person. No package script carries `--apply`** — not
+`repair:geography`, not `repair:geography:rollback`. It used to:
+`repair:geography` was `tsx scripts/repair-geography.ts --apply`, so typing
+only `--confirm --expect <n>` after it wrote to production without anyone
+typing the word "apply", and the command printed in this runbook did not match
+the contract printed beside it. `repair:geography` and
+`repair:geography:dry` are now the same entry point; the difference between a
+report and a write is entirely in what the operator types.
+
+Two thirds of the contract is not two thirds of an authorization:
+`--confirm --expect <n>` **without** `--apply` is a dry run, prints a NOTE
+saying so, and writes nothing. The refusal happens before a database
+connection is opened at all — pinned by
+[`src/server/geography-repair-cli.test.ts`](../src/server/geography-repair-cli.test.ts),
+which also fails if this document and the CLI ever print different commands.
+
+| Typed                                               | Result                                    |
+| --------------------------------------------------- | ----------------------------------------- |
+| `npm run repair:geography:dry`                      | dry run                                   |
+| `… -- --confirm --expect 61`                        | dry run, gated on the count, NOTE printed |
+| `… -- --apply`                                      | exit 1 — "requires … --confirm"           |
+| `… -- --apply --confirm`                            | exit 1 — "requires --expect <n>"          |
+| `… -- --apply --expect 61`                          | exit 1 — "requires … --confirm"           |
+| `… -- --apply --confirm --dry-run --expect 61`      | exit 1 — "contradict each other"          |
+| `… -- --apply --confirm --expect 61.5 / -2 / sixty` | exit 1 — "must be a non-negative integer" |
+| `… -- --apply --confirm --expect` (no value)        | exit 1 — "requires the reviewed count"    |
+| `… -- --apply --confirm --expect <stale n>`         | runs, plans, ABORTS with zero writes      |
+| `… -- --apply --confirm --expect <fresh n>`         | **writes**                                |
+
+Every write is then re-read from live state and confirmed, and the before/after
+geography of each one goes into a durable ledger — `.reports/` by default, or
+`--json <path>`. That ledger is the restore data: `repair:geography:rollback`
+replays it backwards through the same `updateCaseGeography` port, skipping any
+row that no longer holds what the apply wrote.
 
 `projection.geography` is derived by `projectCase` from
 `domain/geography-evidence.ts` (C5.2A), so every new and re-projected case
@@ -1163,9 +1221,15 @@ diff geography, and a widening would fire `expansion_geography` and push a
 Reading evidence an older parser could not is not an agency announcement.
 
 Narrowing is **refused, not applied**. Any state that would disappear turns the
-case into a reported conflict, untouched, except one proven case: a state whose
-name occurs in the notice only inside a longer state's name ("Virginia" read
-out of "West Virginia"). Every removal is printed with its case id.
+case into a reported conflict, untouched, except two proven cases, each printed
+with its reason: a state whose name occurs in the notice only inside a longer
+state's name (`containment-artifact` — "Virginia" read out of "West Virginia",
+"Washington" out of "Washington DC"), and a state the notice itself says is not
+affected (`explicitly-excluded` — "Publix locations in Virgina and North
+Carolina are not impacted by this voluntary recall"). A state the notice both
+affirms and rules out is refused entirely and listed under "Refused — the
+notice affirms and rules out the same place": the source contradicts itself and
+the repair does not choose for it.
 
 The dry run is the verification report. Read it for:
 
@@ -1174,10 +1238,21 @@ The dry run is the verification report. Read it for:
 - `Table fragments NOT interpreted` — `WVA`, `RS` today. These are fragments
   the derivation refused to guess; if a future notice depends on one, it shows
   up here rather than silently going missing.
+- `Refused — the notice affirms and rules out the same place` — 0 today.
 - `Effect on representative profiles` — matches/unknown/excluded per state,
   before and after. Cases moving from `unknown` into a state list that excludes
   a profile is the expected, correct direction: the source's own list is now
-  being read.
+  being read. A profile can also LOSE matches, and that is equally correct —
+  the P2B7Q.2 dry run moves Washington from 319 matches to 311 because
+  "Washington, D.C." had been stored as Washington State on eight active cases.
+- `--drift-audit` — what a NORMAL re-projection of the same cases would also
+  change. This is the evidence for keeping the repair narrow rather than
+  re-projecting: measured 2026-09-20 it would additionally move
+  `sourceIdentifiers` on 60 of 61 cases, `classification` on 20,
+  `retailerNames` and `affectedProducts` on 19 each, `heroImageUrl` on 9 and
+  `productDescription` on 8 — and would raise **53 `expansion_geography`
+  notifications** for notices that have not changed since they were published.
+  This repair raises 0.
 
 Concurrency, lease behaviour and the single retry are identical to the
 retailer backfill — see "Running it alongside scheduled ingestion" above; the
@@ -1187,6 +1262,76 @@ Note the case count: the repair uses `listCases()` and so also visits cases
 merged into a duplicate (1,912 vs the 1,899 a consumer can read). Repairing a
 merged row's geography is harmless and keeps it consistent if it is ever
 unmerged; this matches the retailer backfill's behaviour.
+
+### Ship and apply ordering (P2B7Q.2)
+
+Two things change in this milestone and they change different systems: the
+**code** decides what a case's geography is from now on, and the **repair**
+corrects the rows already stored. Pushing the code makes every future ingest
+correct; it does not touch a single existing row. Recall Detail now reads the
+stored value instead of re-reading the announcement, so between the push and
+the apply, Detail shows the stored (smaller) list on the 54 active cases the
+repair is waiting to fix. That window is a known, bounded regression against
+what Detail used to show — and an improvement against what the card, the
+filter and Affects Me showed, which is where the wrong answers were.
+
+Keep the window short. The order:
+
+1. **Checkpoint** the working tree.
+2. **Push** `master`.
+3. **Verify the deployed code** — confirm the scheduled workflows are running
+   the pushed commit before relying on new ingests being correct
+   (`npm run scheduler:status`, and the workflow run's commit SHA).
+4. **Fresh dry run**: `npm run repair:geography:dry`. Read it. The count it
+   prints is the only count that may be typed into `--expect`; **never reuse a
+   count from an earlier report**, including the 61 in the P2B7Q.2 milestone
+   report. Ingestion runs twice an hour, so the number moves on its own.
+5. **Compare** the fresh count against the previous run. A large jump means
+   something else changed — stop and investigate rather than raising the
+   number to match.
+6. **Apply in a quiet scheduler window** (below), with the fresh count:
+   `npm run repair:geography -- --apply --confirm --expect <fresh-count>`.
+7. **Verify the apply**: writes applied == writes verified, verification
+   failures 0, notification events 0, timeline entries 0, material changes 0,
+   cases created 0. Keep the ledger path it prints.
+8. **Re-run the dry run**: "would update" must now be **0**. That is the
+   idempotence check and the proof the corpus is settled.
+9. **Founder simulator QA** against the searchable cases in the milestone
+   report — card, Detail, Location filter, Affects Me, and Dynamic Type at the
+   largest size on a long state list.
+
+**Does the scheduler need pausing? No.** The repair takes no job lease, makes
+zero agency network requests, and every write is a compare-and-set on
+`last_changed_at`, so an ingest landing mid-run cannot be rolled back — the
+write matches no row, the case is reported under "Changed by ingest mid-run",
+and the next run picks it up. A quiet window is about keeping that number at
+zero, not about safety. Ingestion runs at **:07 and :37 past every hour UTC**
+and daily maintenance at **09:15 UTC**, so the quiet windows are roughly
+**:10–:30** and **:40–:00**, avoiding 09:15. The apply is 61 writes plus 61
+verification reads — a couple of minutes. Pausing or disabling a workflow is a
+separate authorized action and is not part of this procedure.
+
+**Rollback.** The apply's ledger is the restore point:
+
+```
+npm run repair:geography:rollback -- <ledger.json> --apply --confirm --expect <n>
+```
+
+Without `--apply` it previews what it would restore and writes nothing. It
+skips any row that no longer holds the value this apply wrote, so it restores
+this operation's writes and never someone else's. Roll back if any of these is
+true after step 7:
+
+- verification failures > 0, or writes applied ≠ writes verified;
+- notification events, timeline entries, material changes or cases created is
+  anything other than 0;
+- the post-apply dry run does not report "would update: 0";
+- simulator QA shows a state on a card, filter or Affects Me that the notice
+  does not support.
+
+A widening that merely surprises someone is **not** a rollback condition: check
+the case's own notice first — the dry run quotes the sentence that admitted
+every state.
 
 ## Allergen agent: a one-time historical correction (P2d-B)
 

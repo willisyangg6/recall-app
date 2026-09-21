@@ -119,8 +119,8 @@ function auditFda(): QaRecordResult[] {
           statesSurfaced: false,
           unapprovedFieldLabels: 0,
           crossDestinationLeaks: 0,
-          statesInSourceClause: 0,
-          statesRetained: 0,
+          statesAffirmedInSource: 0,
+          statesBehindCanonical: 0,
           citiesAsRetailers: 0,
           retailerCoverageEntries: 0,
           listDetected: false,
@@ -241,7 +241,8 @@ function report(title: string, results: QaRecordResult[]): number {
 
   console.log('\nDistribution entity roles:');
   console.log(
-    `  clause states:       ${m.statesRetainedFromClauses}/${m.statesInSourceClauses} retained · ` +
+    `  states affirmed by the notice: ${m.statesAffirmedInSource} · ` +
+      `behind the stored geography: ${m.statesBehindCanonical} (repair backlog) · ` +
       `cities as retailers: ${m.citiesAsRetailers} (must be 0)`,
   );
   console.log(

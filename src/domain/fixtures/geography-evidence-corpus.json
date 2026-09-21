@@ -1,0 +1,616 @@
+{
+  "_comment": [
+    "P2B7Q.2 geography evidence corpus — RECORDED FROM LIVE PRODUCTION, read-only.",
+    "One recorded notice per evidence shape the canonical derivation must decide,",
+    "plus every active case on which the feed card and Recall Detail disagreed",
+    "about location when the milestone opened.",
+    "storedScope/storedStates are historical evidence of the defect, never an",
+    "input to the assertions: the test derives fresh from the recorded prose.",
+    "Never hand-edit: re-record with scripts/record-geography-corpus.ts."
+  ],
+  "recordedAt": "2026-09-21",
+  "count": 26,
+  "disagreementCount": 19,
+  "shapesWithNoLiveExample": [],
+  "cases": [
+    {
+      "recallCaseId": "066b7bd6-8148-4de2-b92e-c5d69d93acec",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Mondelēz Global LLC Conducts U.S. Voluntary Recall of Four Carton Sizes of RITZ Peanut Butter Cracker Sandwiches Due to Labeling Error",
+      "shape": "explicitly-unaffected-state",
+      "shapes": [
+        "explicitly-unaffected-state",
+        "nationwide",
+        "genuine-absence-of-distribution-evidence"
+      ],
+      "note": "The notice names a place and says it is NOT affected.",
+      "storedScope": "nationwide",
+      "storedStates": [],
+      "expectedScope": "nationwide",
+      "expectedStates": [],
+      "mustNotInclude": [],
+      "admittedSentences": [],
+      "summaryText": "Company Announcement\nEAST HANOVER, N.J., July 8, 2025 – Mondelēz Global LLC announced today a voluntary recall of four carton sizes of RITZ Peanut Butter Cracker Sandwiches (8-pack, 20-pack, and 40pack cartons of RITZ Peanut Butter Cracker Sandwiches , as well as the 20-pack RITZ Filled Cracker Sandwich Variety Pack carton ) manufactured in the United States and sold nationwide. The affected cartons include individually wrapped packs that may be incorrectly labeled as Cheese variety even though the product may be a Peanut Butter variety. People who have an allergy or severe sensitivity to peanuts may risk serious or life-threatening allergic reactions by consuming this product.\nAll outer cartons affected are labeled correctly and provide an allergen advisory statement indicating that the product “contains peanuts.”\nThis recall is exclusively for the 8-pack, 20-pack, and 40-pack RITZ Peanut Butter Cracker Sandwich cartons and the 20-pack RITZ Filled Cracker Sandwich Variety Pack carton , with Best When Used By Dates listed in the grid below, available at retail stores nationwide. No other RITZ products or Mondelēz Global LLC products are included in, or affected by, this recall.\nProduct Description\nRetail UPC\nBest When Used By Dates\nProduct Images\n11.4 oz. RITZ Peanut Butter Cracker Sandwiches\n- 8 Count (8 x 1.38-oz. 6-pack carton)\n0 44000 88210 5\n1 NOV 25 - 9 NOV 25\n“AE” Plant Code Only\n(located on top of package)\nSee Image Below\n27.6 oz. RITZ Peanut Butter Cracker Sandwiches\n- 20 Count (20 x 1.38-oz. 6-pack carton)\n0 44000 07584 2\n1 NOV 25 - 9 NOV 25\n2 JAN 26 - 22 JAN 26\n“AE” Plant Code Only\n(located on top of package)\nSee Image Below\n55.2 oz. RITZ Peanut Butter Cracker Sandwiches\n– 40 Count (40 x 1.38-oz. 6-pack carton)\n0 44000 07819 5\n1 NOV 25 - 9 NOV 25\n2 JAN 26 - 22 JAN 26\n“AM” Plant Code Only\n(located on top of package)\nSee Image Below\n27.3 oz. RITZ Filled Cracker Sandwich\n20-Count Variety Pack\n(20 packs of 10 Cheese 1.38-oz. packs\nand 10 Peanut Butter 1.38-oz. packs)\n0 44000 08095 2\n2 NOV 25 – 9 NOV 25\n“RJ” Plant Code Only\n(located on top of package)\nSee Image Below\nThe individually wrapped package incorrectly labeled as Cheese variety inside the cartons identified in the grid above may look like this:\nProduct Description\nRetail UPC\nBest When Used By Dates\nProduct Images\nRITZ Cheese Cracker Sandwiches (1.38oz. pack)\n0 44000 00211 4\n1 NOV 25 – 9 NOV 25\n2 JAN 26 – 22 JAN 26\n“AE” Plant Code Only\n(located on side of package)\nSee Image Below\nCartons containing only RITZ Cheese Cracker Sandwiches are not affected by this recall. In addition, cartons containing either RITZ Peanut Butter Cracker Sandwiches or RITZ Filled Cracker Sandwich Variety Pack with different Best When Used By Dates and Plant Codes than those listed in the above grid are also not affected by this recall.\nThere have been no reports of injury or illness reported to Mondelēz Global LLC to date related to this product, and we are issuing this recall as a precaution.\nThe recall was initiated after Mondelēz Global LLC discovered that film packaging rolls used to package individually wrapped products containing peanut butter may contain defects due to a supplier error. Corrective actions are being taken to help ensure this issue does not recur.\nConsumers who have a peanut allergy should not eat these products and should discard any product identified in the grid above. Consumers can contact the company at 1-844-366-1171, 24 hours a day, 7 days per week to get more information about the recall. Consumer Relations specialists are also available Monday–Friday, 9 am to 6 pm ET.\nThis recall is being conducted with the knowledge of the U.S. Food and Drug Administration.\nAbout Mondelēz International\nMondelēz International, Inc. (Nasdaq: MDLZ ) empowers people to snack right in over 150 countries around the world. With 2024 net revenues of approximately $36.4 billion, MDLZ is leading the future of snacking with iconic global and local brands such as OREO, RITZ, LU, CLIF BAR and TATE’S BAKE SHOP biscuits and baked snacks, as well as CADBURY DAIRY MILK , MILKA and TOBLERONE chocolate. Mondelēz International is a proud member of the Standard and Poor’s 500, Nasdaq 100 and Dow Jones Sustainability Index. Visit www.mondelezinternational.com or follow the company on X at www.x.com/MDLZ .\nCompany Contact Information\nConsumers:\nConsumer Relations\n1-844-366-1171\nMedia:\nJane Corcoran\n847-943-5678\nnews@mdlz.com\nProduct Photos\nContent current as of:\n07/08/2025\nRegulated Product(s)\nFood & Beverages\nTopic(s)\nAllergens\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "14825b36-4122-442e-a960-e0b10c72bd9e",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Murray Int’l Trading Inc is Voluntary Recalling Angelicae Sinensis Due to Elevated Levels of Lead and Cadmium",
+      "shape": "card-detail-disagreement",
+      "shapes": [
+        "declared-list-continues-past-its-sentence",
+        "firm-or-manufacturer-address",
+        "territories-and-district-of-columbia"
+      ],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "states",
+      "expectedStates": [
+        "Connecticut",
+        "Delaware",
+        "District of Columbia",
+        "Florida",
+        "Georgia",
+        "Illinois",
+        "Michigan",
+        "New Jersey",
+        "New York",
+        "Ohio",
+        "Pennsylvania",
+        "Rhode Island",
+        "Texas",
+        "Virginia"
+      ],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "New York, New Jersey, Pennsylvania, Massachutes, Connecticut, Washington DC, Virginia, Delaware, Rhode Island, Florida, Georgia, Michigan, Illinois, Ohio, and Texas through retail stores.",
+        "New York, New Jersey, Pennsylvania, Massachutes, Connecticut, Washington DC, Virginia, Delaware, Rhode Island, Florida, Georgia, Michigan, Illinois, Ohio, and Texas through retail stores."
+      ],
+      "summaryText": "Company Announcement\nMurray Int’l Trading of Brooklyn, NY is recalling Angelicae Sinensis because it may contain elevated levels of lead and cadmium. The Angelicae Sinensis is used to make a soup.\nLead and cadmium are toxic substances present in our environment in small amounts and everyone is exposed to some of these heavy metals from daily actions such as inhaling dust, eating food, or drinking water. In general, the small exposure to lead within the U.S. population does not pose a significant public health concern.\nHowever, exposure to larger amounts of lead and cadmium can cause poisoning. While these heavy metals can affect nearly every bodily system, its effects depend upon the amount and duration of lead exposure and age. Symptoms can include abdominal pain, vomiting, lethargy, irritability, weakness, behavior or mood changes, delirium, seizures, and coma. However, infants, young children and the developing fetus can be affected by chronic exposure to amounts of heavy metals that may not result in obvious symptoms of lead poisoning. A child with heavy metal poisoning may not look or act sick. Heavy metal poisoning in children can cause: learning disabilities, developmental delays, and lower IQ scores.\nAngelicae Sinensis was distributed in the following states. New York, New Jersey, Pennsylvania, Massachutes, Connecticut, Washington DC, Virginia, Delaware, Rhode Island, Florida, Georgia, Michigan, Illinois, Ohio, and Texas through retail stores.\nThe Herbal Doctor Brand Angelicae Sinensis is packed in a green plastic bag weighing 16oz (454g). It has a series of barcode numbers.\n767533-91001\n767533-91005\n767533-91011\n767533-91018\n767533-91019\n767533-91020\n767533-91049\n767533-91050\n767533-91057\n767533-91060\n767533-91062\n767533-91068\n767533-91070\n767533-91071\nThe Herbal Doctor Brand Angelicae Sinensis is also packed in a clear plastic box weighing 12oz (340g). It has a barcode number 767533-20097.\nThe Angelicae Sinensis 16oz (454g) packaged bag barcodes are located on the back of the plastic bag on the bottom right corner. The Angelicae Sinensis 12oz (340g) packaged box barcode is located on the back of the box. Please see enclosed picture for location of where the barcode will be.\nNo illnesses have been reported to date.\nThe recall was initiated after FDA routine sampling revealed elevated levels of lead and cadmium in the product. Subsequent investigation is underway.\nConsumers who have purchased Herbal Doctor Brand Angelicae Sinensis are urged to return it to the place of purchase for a full refund. Consumers with questions may contact the company at 1-718-230-7888. The Call Center will be open from Monday to Friday 9:00am to 5:00pm EST.\nCompany Contact Information\nConsumers:\nMurray Int’l Trading\n1-718-230-7888\nProduct Photos\nContent current as of:\n11/02/2021\nRegulated Product(s)\nFood & Beverages\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "17aeabbd-0d55-4c44-bf4f-042640c62e27",
+      "sourceAgency": "FSIS",
+      "lifecycle": "closed",
+      "title": "Michigan Firm Recalls Ground Beef Products Due To Possible E. Coli O157:H7",
+      "shape": "distribution-centres-then-retail-states",
+      "shapes": [
+        "distribution-centres-then-retail-states",
+        "multiple-affirmative-distribution-sentences",
+        "nationwide",
+        "genuine-absence-of-distribution-evidence"
+      ],
+      "note": "One sentence names distribution centres, the next names the retail states.",
+      "storedScope": "nationwide",
+      "storedStates": [],
+      "expectedScope": "nationwide",
+      "expectedStates": [],
+      "mustNotInclude": [],
+      "admittedSentences": [],
+      "summaryText": "EDITOR'S NOTE added on May 19, 2014: Upon further investigation, FSIS now believes the product was sent to distribution centers nationwide.\nEDITOR'S NOTE added on May 21, 2014: The illness onset date has been corrected to May 8, 2014.\nEDITOR'S NOTE added on May 23, 2014: FSIS was notified of the first illness on May 8, 2014. This date was corrected from May 12, 2014 in the initial release.\nWASHINGTON, May, 19, 2014 Wolverine Packing Company, a Detroit, Mich. establishment, is recalling approximately 1.8 million pounds of ground beef products that may be contaminated with E. coli O157:H7, the U.S. Department of Agriculture's Food Safety and Inspection Service (FSIS) announced today.\nThe ground beef products were produced between March 31, 2014 and April 18, 2014. For a full list of products that were recalled please see the attached document.\nThe products subject to recall bear the establishment number iEST. 2574B” and will have a production date code in the format iPacking Nos: MM DD 14” between i03 31 14” and i04 18 14.” These products were shipped to distributors for restaurant and retail use nationwide. There was no distribution of the products to the Department of Defense, the National School Lunch Program or catalog/internet sales.\nFactors that can contribute to the size of the recall include potential contamination of additional products due to a lack of microbiological independence between lots in a production day, as well as a deficiency in supportive record-keeping by distributors.\nFSIS was notified of E. coli O157:H7 illnesses on May 8, 2014. Working in conjunction with public health partners from the Centers for Disease Control and Prevention (CDC), FSIS determined through a traceback investigation that there is a link between the ground beef products from Wolverine Packing Company and this illness cluster. Based on epidemiological and traceback investigations, 11 case-patients have been identified in 4 states with illness onset dates ranging from April 22, 2014 to May 2, 2014. Additional information may be found on the Centers for Disease Control and Prevention website, http://www.cdc.gov/ecoli/2014/O157H7-05-14/index.html . FSIS continues to work with our state and federal public health partners on this investigation and provide updated information as it becomes available.\nE. coli O157:H7 is a potentially deadly bacterium that can cause dehydration, bloody diarrhea and abdominal cramps 28 days (34 days, on average) after exposure the organism. While most people recover within a week, some develop a type of kidney failure called hemolytic uremic syndrome (HUS). This condition can occur among persons of any age but is most common in children under 5-years old and older adults. It is marked by easy bruising, pallor, and decreased urine output. Persons who experience these symptoms should seek emergency medical care immediately.\nFSIS routinely conducts recall effectiveness checks to verify recalling firms notify their customers of the recall and that steps are taken to make certain that the product is no longer available to consumers. When available, the retail distribution list will be posted on the FSIS website at www.fsis.usda.gov/recalls .\nFSIS advises all consumers to safely prepare their raw meat products, including fresh and frozen, and only consume ground beef that has been cooked to a temperature of 160° F. The only way to confirm that ground beef is cooked to a temperature high enough to kill harmful bacteria is to use a food thermometer that measures internal temperature, http://1.usa.gov/1cDxcDQ .\nMedia with questions regarding the recall can contact Chuck Sanger, Spokesperson, Wolverine Packing Company, at (262) 563-5118 and consumers can call (800) 521-1390.Consumers with food safety questions can \"Ask Karen,\" the FSIS virtual representative available 24 hours a day at AskKaren.gov or via smartphone at m.askkaren.gov .The toll-free USDA Meat and Poultry Hotline 1-888-MPHotline (1-888-674-6854) is available in English and Spanish and can be reached from 10 a.m. to 4 p.m. (Eastern Time) Monday through Friday. Recorded food safety messages are available 24 hours a day. The online Electronic Consumer Complaint Monitoring System can be accessed 24 hours a day at: http://www.fsis.usda.gov/reportproblem .\nPREPARING PRODUCT FOR SAFE CONSUMPTION\nUSDA Meat and Poultry Hotline\n1-888-MPHOTLINE or visit\nwww.fsis.usda.gov\nWash hands with warm, soapy water for at least 20 seconds before and after handling raw meat and poultry. Wash cutting boards, dishes and utensils with hot, soapy water. Immediately clean spills.\nKeep raw meat, fish and poultry away from other food that will not be cooked. Use separate cutting boards for raw meat, poultry and egg products and cooked foods.\nColor is NOT a reliable indicator that meat has been cooked to a temperature high enough to kill harmful bacteria.\nThe only way to be sure the meat or poultry is cooked to a high enough temperature to kill harmful bacteria is to use a thermometer to measure the internal temperature.\nFish: 145°F\nBeef, pork, lamb chops/steaks/roasts: 145°F with a three minute rest time\nGround meat: 160°F\nPoultry: 165°F\nHot dogs: 160°F or steaming hot\nRefrigerate raw meat and poultry within two hours after purchase or one hour if temperatures exceed 90º F. Refrigerate cooked meat and poultry within two hours after cooking."
+    },
+    {
+      "recallCaseId": "2fbab1df-d204-43e8-bd69-a1fa54aab2e8",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Food To Live Voluntarily Recalls Organic Moringa Products Because of Possible Health Risk",
+      "shape": "dateline-or-firm-address-inside-a-distribution-sentence",
+      "shapes": [
+        "multiple-affirmative-distribution-sentences",
+        "nationwide",
+        "dateline-or-firm-address-inside-a-distribution-sentence",
+        "firm-or-manufacturer-address",
+        "illness-or-case-patient-location",
+        "genuine-absence-of-distribution-evidence"
+      ],
+      "note": "One sentence carries the firm's own place AND the destination states.",
+      "storedScope": "nationwide",
+      "storedStates": [],
+      "expectedScope": "nationwide",
+      "expectedStates": [],
+      "mustNotInclude": [],
+      "admittedSentences": [],
+      "summaryText": "Company Announcement\nBrooklyn, NY – Food To Live, of Brooklyn, NY, is recalling its packaged Organic Moringa Leaf Powder (dried Moringa oleifera) and its Organic Supergreens Powder Mix distributed under the Food To Live brand that are in the following sizes:\nORGANIC MORINGA LEAF POWDER, in 8 ounce, 1 pound, 2 pound, 4 pound, 8 pound, 16 pound, and 44 pound bags.\nORGANIC SUPERGREENS POWDER MIX in 8 ounce, 1 pound, 1.5 pound, 3 pound, 6 pound, and 12 pound bags.\nThese products have the potential to be contaminated with Salmonella . Salmonella is an organism which can cause serious and sometimes fatal infections in young children, frail or elderly people, and others with weakened immune systems. Healthy persons infected with Salmonella often experience fever, diarrhea (which may be bloody), nausea, vomiting, and abdominal pain. In rare circumstances, infection with Salmonella can result in the organism entering the bloodstream and producing more severe illnesses such as arterial infections, endocarditis, and arthritis.\nThe recalled Organic Moringa Powder was distributed nationwide through both retail and wholesale channels. It was sold directly from Food To Live’s website and shipped to customers across the United States. The product was also available on third-party e-commerce platforms, including Amazon.com, Walmart.com, Target, Etsy, and eBay. In addition, bulk quantities from the affected lot were sold to food manufacturers and other businesses through Food To Live’s wholesale division.\n“Organic Moringa Leaf Powder” and “Organic Supergreens Powder Mix” are packaged in plastic stand-up pouches of various sizes (ranging from 8 ounces to 44 pounds). Only packages with lot codes starting with “SO-69006” and ending with “SO-72558” (printed directly onto the back of the bag) are affected. No other Food To Live products and lots are involved in this recall.\nThis recall was initiated after the FDA notified Food To Live that a specific supplier lot of organic moringa powder tested positive for Salmonella and has been linked to an outbreak of salmonellosis . Multiple illnesses have been reported in connection with this contaminated lot across several states (FDA and CDC are investigating these cases). Food To Live has immediately ceased distribution of this product.\nWe have suspended production and distribution of Organic Moringa Leaf Powder while we and the FDA continue to investigate the source and extent of the problem. Food To Live is working closely with the FDA to ensure all potentially unsafe product is removed from commerce.\nConsumers who have purchased Food To Live Organic Moringa Powder or Food To Live Organic Supergreens Powder Mix with the lot codes mentioned above should not consume it. If you have the product, we urge you to dispose of it immediately or return it to the place of purchase for a full refund. For online purchases, you may contact Food To Live directly for a refund or replacement. Consumers with questions can call Food To Live at (718) 717-1029 during business hours (8:00 AM EST to 5:00 PM EST, Monday through Friday, or email recall@foodtolive.com for assistance. Media inquiries or requests for more information should be directed to the contact person listed above.\nFood To Live takes food safety extremely seriously. We apologize for the inconvenience and concern this recall may cause our customers. Our company is committed to ensuring the quality of our products and the well-being of our consumers.\nFDA Outbreak Advisory\nCompany Contact Information\nConsumers:\nFood To Live\n(718) 717-1029\nrecall@foodtolive.com\nMedia:\nrecall@foodtolive.com\nProduct Photos\nContent current as of:\n11/13/2025\nRegulated Product(s)\nFood & Beverages\nTopic(s)\nFoodborne Illness\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "3327484b-3646-4846-be08-829880e574c3",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Feve Artisan Chocolatier and Dandelion Chocolate Issue Allergy Alert on Undeclared Hazelnuts in Chocolate-Covered Cocoa Nibs",
+      "shape": "card-detail-disagreement",
+      "shapes": ["genuine-absence-of-distribution-evidence"],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "unknown",
+      "expectedStates": [],
+      "mustNotInclude": [],
+      "admittedSentences": [],
+      "summaryText": "Company Announcement\n6/24/2024, San Francisco, CA - Feve Artisan Chocolatier and Dandelion Chocolate are voluntarily recalling a single lot code of Feve Artisan Chocolatier x Dandelion Chocolate Chocolate-Covered Cocoa Nibs because the product may contain undeclared hazelnuts. People who have an allergy or severe sensitivity to hazelnuts run the risk of serious or life-threatening allergic reaction if they consume this product.\nThis product is a collaboration between the two companies, produced by Feve Artisan Chocolatier using Dandelion Chocolate. It was sold by Dandelion at their retail stores (in San Francisco and Las Vegas) and via the Dandelion Chocolate website ( dandelionchocolate.com ).\nThis recalled product is identified in the images below, which include the following information:\nLabel: Feve Artisan Chocolatier x Dandelion Chocolate Chocolate-Covered Cocoa Nibs\nPackage Size: 4 oz.\nBatch Code: FNDHI4C4\nExpiration Date: 3/14/2025\n(identified by a small, white rectangular sticker on the bottom of the box)\nThe recall was initiated after it was discovered that product containing hazelnuts was distributed in Chocolate-Covered Cocoa Nibs packaging that did not reveal the presence of this allergen. This issue was isolated to a single lot. No other lot codes, Feve Artisan Chocolatier, or Dandelion Chocolate products are included in this action. No illnesses have been reported.\nCustomers with a hazelnut allergy should dispose of any recalled products. Customers may call the contact number or email listed below with any questions.\nContact:\nDandelion Chocolate:\n(415) 349-0942\ninfo@dandelionchocolate.com\nMedia contact:\nJennifer Roy\nJennifer@dandelionchocolate.com\nCompany Contact Information\nConsumers:\nDandelion Chocolate\n415-349-0942\ninfo@dandelionchocolate.com\nMedia:\nJennifer Roy\nJennifer@dandelionchocolate.com\nProduct Photos\nContent current as of:\n06/25/2024\nRegulated Product(s)\nFood & Beverages\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "3c694daf-7fc5-4884-bfde-0e952c6dfadb",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Wawona Frozen Foods Voluntarily Recalls Organic Daybreak Blend Processed and Sold in 2022 Due to Possible Health Risk",
+      "shape": "dateline-or-firm-address-inside-a-distribution-sentence",
+      "shapes": [
+        "multiple-affirmative-distribution-sentences",
+        "dateline-or-firm-address-inside-a-distribution-sentence",
+        "illness-or-case-patient-location"
+      ],
+      "note": "One sentence carries the firm's own place AND the destination states.",
+      "storedScope": "states",
+      "storedStates": ["Arizona", "California", "Colorado", "Utah", "Washington"],
+      "expectedScope": "states",
+      "expectedStates": ["Arizona", "California", "Colorado", "Utah", "Washington"],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "(Clovis, California) Wawona Frozen Foods is voluntarily recalling year-old packages of its Organic DayBreak Blend distributed to Costco Wholesale stores in Arizona, California, Colorado, Utah and Washington from April 15, 2022 to June 26, 2022 because the DayBreak Blend includes organic frozen strawberries grown in Mexico which may have the potential to be contaminated with Hepatitis A."
+      ],
+      "summaryText": "Company Announcement\n(Clovis, California) Wawona Frozen Foods is voluntarily recalling year-old packages of its Organic DayBreak Blend distributed to Costco Wholesale stores in Arizona, California, Colorado, Utah and Washington from April 15, 2022 to June 26, 2022 because the DayBreak Blend includes organic frozen strawberries grown in Mexico which may have the potential to be contaminated with Hepatitis A.\nWawona Frozen Foods is issuing this voluntary recall for the year-old Organic DayBreak Blend out of an abundance of caution. There have been no illnesses associated with this voluntary and precautionary recall.\nWhile the Organic DayBreak Blend was distributed to Costco stores last year, they have “Use By” dates of 09/23/2023, 09/29/2023, 09/30/2023 and 10/18/2023 therefore consumers are urged to check their freezers for the recalled blend, not to consume it and either discard the product or return it to the store for a refund.\nThe year-old recalled Organic DayBreak Blend product is no longer available for purchase at Costco. Organic DayBreak Blend products on store shelves currently or that have different lot codes or purchase dates are not subject to this recall.\nThe recalled year-old Organic DayBreak Blend includes these lot codes:\nBEST IF USED BY\n09/23/2023\nBEST IF USED BY\n09/29/2023\nBEST IF USED BY\n09/30/2023\nBEST IF USED BY\n10/18/2023\nAffected Lot Codes:\nAffected Lot Codes:\nAffected Lot Codes:\nAffected Lot Codes:\n20082D04\n20088D04\n20089D09\n20108D04\n20082D05\n20088D05\n20089D10\n20108D05\n20082D06\n20088D06\n20089D11\n20108D06\n20082D07\n20088D07\n20089D12\n20108D07\n20082D08\n20088D08\n20108D08\n20088D09\n20088D10\n20088D11\n20088D12\nThe recalled year-old DayBreak Blend packaging: 4 LB (1.81 KG) (see images below)\nWawona Frozen Foods is fully cooperating with federal health officials as well as Costco to ensure consumers are alerted about the recalled Organic DayBreak Blend distributed by Wawona Frozen Foods last year.\nConsumers with further questions may contact Wawona Frozen Foods at www.wawona.com or call 1-866-534-9986 8am – 5pm Pacific, Monday through Friday.\nHepatitis A is a contagious virus that can cause liver disease. A Hepatitis A virus (HAV) infection can range in severity from a mild illness lasting a few weeks to a severe illness lasting several months. In rare cases, particularly consumers who have a pre-existing severe illness or are immune compromised, Hepatitis A infections can progress to liver failure. Illness usually occurs within 15 to 50 days after eating or drinking contaminated food or water. Symptoms of Hepatitis A infection include fever, headache, fatigue, loss of appetite, nausea, vomiting, diarrhea, abdominal pain, jaundice, dark urine or pale stool. In some instances, particularly in children under the age of six, Hepatitis A infection may be asymptomatic. Persons who may have consumed affected product should consult their health care provider or local health department to determine if a vaccination is appropriate and consumers with symptoms of Hepatitis A should contact their health providers or the local health department immediately. For more information about Hepatitis A visit www.fda.gov .\nLink to Outbreak Advisory\nCompany Contact Information\nConsumers:\nWawona Frozen Foods\n1-866-534-9986\nwww.wawona.com\nProduct Photos\nContent current as of:\n06/09/2023\nRegulated Product(s)\nFood & Beverages\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "3e88a169-3c5a-4649-884f-fce284d5fdb4",
+      "sourceAgency": "FSIS",
+      "lifecycle": "closed",
+      "title": "MIH Marketing and Sales Recalls Meat and Poultry Products Due To Insanitary Conditions",
+      "shape": "store-address-list-under-a-sold-at-lead-in",
+      "shapes": [
+        "multiple-affirmative-distribution-sentences",
+        "store-address-list-under-a-sold-at-lead-in"
+      ],
+      "note": "Street addresses that ARE the distribution statement.",
+      "storedScope": "states",
+      "storedStates": ["Arkansas"],
+      "expectedScope": "states",
+      "expectedStates": ["Arkansas"],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "The raw chicken breast fillet, chicken thigh, chicken drum, chicken wing, and chicken tender items were produced by various federal establishments and sold at 17 retail stores located in Arkansas between April 10, 2016 and September 10, 2016.",
+        "Edwards Food Giant #19 Forrest City, AR;",
+        "Edwards Cash Saver #3473 Little Rock, AR;",
+        "Edwards Food Giant #37 Marianna, AR;"
+      ],
+      "summaryText": "WASHINGTON, Sept. 10, 2016 MIH Marketing and Sales, a Beebe, AR. establishment, is recalling approximately 662,049 pounds of various meat and poultry products that were stored under insanitary conditions, the U.S. Department of Agricultures Food Safety and Inspection Service (FSIS) announced today.\nThe raw chicken breast fillet, chicken thigh, chicken drum, chicken wing, and chicken tender items were produced by various federal establishments and sold at 17 retail stores located in Arkansas between April 10, 2016 and September 10, 2016. These products were in clear packages weighting approximately 5 pounds each.\nProducts were sold at the following locations:\nEdwards Food Giant #19 Forrest City, AR;\nEdwards Cash Saver #3473 Little Rock, AR;\nEdwards Food Giant #37 Marianna, AR;\nEdwards Good Giant #3474 Little Rock, AR;\nEdwards Food Giant #1710 Harrisburg, AR;\nEdwards Food Giant #3475 Little Rock, AR;\nEdwards Food Giant #3444 Bryant, AR;\nEdwards Cash Saver #3476; Edwards Cash Saver #3442 and Edwards Food Giant #3477;\nKnights Super Foods, Beebe AR;\nKnights Super Foods, Babot, AR.\nIn addition, various retail meat and poultry products sold at Chicken City Retail stores are being recalled. These products are in clear retail bags with a sales sticker that include the Sell-By Date between October 30, 2016 and March 19, 2017. The Chicken City Retail Stores that are recalling all meat and poultry products are located in Whitehall, AR; Jonesboro, AR; Conway, AR; Searcy, AR Marion, AR; North Little Rock, AR and Brinkley, AR.\nThe problem was discovered while the FSIS Office of Investigation, Enforcement and Audits (OIEA) was conducting routine food defense surveillance activities. The FSIS OIEA investigator discovered that the product was being stored under insanitary conditions, including rodent activity, in the storage areas of the property. FSIS and the establishment detained the remaining product. The items subsequently tested positive for alkaline phosphatase, demonstrating evidence of possible fecal matter.\nThere have been no confirmed reports of adverse reactions due to consumption of these products. FSIS has received no additional reports of injury or illness from consumption of these products. Anyone concerned about an injury or illness should contact a healthcare provider.\nConsumers who have purchased these products are urged not to consume them. These products should be thrown away or returned to the place of purchase.\nFSIS routinely conducts recall effectiveness checks to verify recalling firms notify their customers of the recall and that steps are taken to make certain that the product is no longer available to consumers. When available, the retail distribution list(s) will be posted on the FSIS website at www.fsis.usda.gov/recalls .\nConsumers and media with questions about the recall can contact John Hilger, Owner of MIH Marketing and Sales, at (501) -278-7041.\nConsumers with food safety questions can \"Ask Karen,\" the FSIS virtual representative available 24 hours a day at AskKaren.gov or via smartphone at m.askkaren.gov . The toll-free USDA Meat and Poultry Hotline 1-888-MPHotline (1-888-674-6854) is available in English and Spanish and can be reached from 10 a.m. to 4 p.m. (Eastern Time) Monday through Friday. Recorded food safety messages are available 24 hours a day. The online Electronic Consumer Complaint Monitoring System can be accessed 24 hours a day at: http://www.fsis.usda.gov/reportproblem ."
+    },
+    {
+      "recallCaseId": "459233e2-4f39-4a39-a078-0b34b9e22149",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Fayus Inc., dba Yusol International Foods Expands Recall of OLA-OLA POUNDED YAM Due to Undeclared Milk Allergen",
+      "shape": "card-detail-disagreement",
+      "shapes": ["declared-list-continues-past-its-sentence"],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "states",
+      "expectedStates": ["California", "Georgia", "Illinois", "New Jersey", "New York", "Texas"],
+      "mustNotInclude": [],
+      "admittedSentences": ["California", "Georgia", "Illinois", "New Jersey"],
+      "summaryText": "Company Announcement\nFayus Inc., doing business as Yusol International Foods (Sacramento, CA) is expanding its recall of OLA-OLA POUNDED YAM to include product sizes 2lbs, 4lbs, 5lbs, and 10lbs due to product labeling omission of an undeclared milk allergen for sodium caseinate, a milk derivative. People who have an allergy, or severe milk sensitivity to milk, run the risk of a serious or life-threatening allergic reaction if they consume this product. No illness or injuries have been reported in connection with this issue.\nThe recall was initiated, and later expanded, as a result of an internal investigation discovering that some packaged OLA-OLA POUNDED YAM had been distributed in packaging that did not disclose the presence of sodium caseinate – derived from milk, a milk allergen, due to a temporary breakdown in the company’s production and packaging processes. In addition, The Canadian Food Inspection Agency (CFIA) sampled the 4lb product and confirmed the omission of the milk allergen from the product label. A subsequent investigation, and CFIA sampling of the 10lb product, revealed that additional packaging sizes may be affected.\nThis recall includes the following product packaging sizes with the expiration dates between November 2028 through May 2029: 2lbs (0.907kg), 4lbs (1.815kg), 5lbs (2.267kg), and 10lbs (4.53kg). OLA-OLA POUNDED YAM was distributed through distribution outlets in the African and Caribbean markets between December 2025 – May 2026 in Canada, Australia and the following United States:\nCalifornia\nGeorgia\nIllinois\nNew Jersey\nNew York\nTexas\nThe recalled products are packaged in a clear plastic bag. This recall does not apply to packaging that declares the milk allergen. See example packaging below for correct and incorrect packaging. Consumers should check expiration dates on the front of the packaging, as well as the allergen declaration labeling, to determine if they have the affected product.\nQuestions or Exchange Requests:\nDistribution outlets may exchange the affected product for correctly packaged and labeled product, or for a relabeled/reconditioned package of the product. Consumers with a milk allergy, or severe sensitivity to milk, should not consume the affected product. Fayus Inc. apologizes for any inconvenience and remains committed to the safety and quality of its products. Consumers who have purchased the products and have questions may contact the company at info@yusolfood.com or call 916-383-1124 Monday - Friday 11am – 3pm PST.\nLink to Initial Press Release\nCompany Contact Information\nConsumers:\n916-383-1124\ninfo@yusolfood.com\nProduct Photos\nContent current as of:\n07/17/2026\nRegulated Product(s)\nFood & Beverages\nTopic(s)\nAllergens\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "4c7d29d6-606f-44e8-a516-27dafdfa6059",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Publix Rich & Creamy Vanilla Ice Cream Voluntarily Recalled in Select Areas",
+      "shape": "card-detail-disagreement",
+      "shapes": [
+        "explicitly-unaffected-state",
+        "exception-clause-inside-an-affirmative-sentence",
+        "retailer-footprint-as-corporate-boilerplate"
+      ],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "states",
+      "storedStates": ["Alabama", "Florida", "Georgia", "Kentucky", "South Carolina", "Tennessee"],
+      "expectedScope": "states",
+      "expectedStates": [
+        "Alabama",
+        "Florida",
+        "Georgia",
+        "Kentucky",
+        "South Carolina",
+        "Tennessee"
+      ],
+      "mustNotInclude": ["North Carolina"],
+      "admittedSentences": [
+        "The product was distributed to stores located in Alabama, Georgia, Kentucky, South Carolina, Tennessee and Florida, except for stores in Jacksonville, Tallahassee, Tampa and Sarasota."
+      ],
+      "summaryText": "Company Announcement\nLAKELAND, Fla., Oct. 15, 2025 - Publix has initiated a voluntary recall on one lot of Publix Rich & Creamy Vanilla Ice Cream, UPC 41415 03043, that may contain an undeclared egg allergen. The product was distributed to stores located in Alabama, Georgia, Kentucky, South Carolina, Tennessee and Florida, except for stores in Jacksonville, Tallahassee, Tampa and Sarasota. Publix locations in Virgina and North Carolina are not impacted by this voluntary recall.\nThe Publix Rich & Creamy Vanilla Ice Cream half gallon container with a sell by date of “June 19, 2026 A” may contain Publix Rich & Creamy French Vanilla Ice Cream with a mismatch French Vanilla container lid. People who have an allergy or severe sensitivity to eggs may run the risk of serious or life-threatening allergic reactions if they consume this product.\n“As part of our commitment to food safety, potentially impacted product has been removed from all store shelves,” said Publix Director of Communications Maria Brous. “To date, there have been no reported cases of illness. Consumers who have purchased the product in question may return the product to their local store for a full refund. Publix customers with additional questions may call our customer care department toll-free at 1-800-242-1227 or visit our website at publix.com .”\nPublix, the largest employee-owned company in the U.S. with more than 260,000 associates, currently operates 1,421 stores in Florida, Georgia, Alabama, Tennessee, South Carolina, North Carolina, Virginia and Kentucky. For 28 consecutive years, the company has been recognized by Fortune as a great place to work. In addition, Publix’s dedication to superior quality and customer service is recognized among the top in the grocery business. For more information, visit the company’s newsroom at corporate.publix.com/newsroom .\nCompany Contact Information\nConsumers:\nCustomer Care Dept\n1-800-242-1227\nProduct Photos\nContent current as of:\n10/17/2025\nRegulated Product(s)\nFood & Beverages\nTopic(s)\nAllergens\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "4d198630-f427-4943-a5e2-83f0bcf783c0",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Publix Voluntarily Recalls GreenWise Pear, Kiwi, Spinach & Pea Baby Food Pouches Due to Lead",
+      "shape": "retailer-footprint-as-corporate-boilerplate",
+      "shapes": [
+        "retailer-footprint-as-corporate-boilerplate",
+        "news-dateline",
+        "genuine-absence-of-distribution-evidence"
+      ],
+      "note": "\"…currently operates 1,421 stores in …\" at the foot of a release.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "unknown",
+      "expectedStates": [],
+      "mustNotInclude": [],
+      "admittedSentences": [],
+      "summaryText": "Company Announcement\nLAKELAND, Fla, May 9, 2025 – Publix Super Markets, Inc. has initiated a voluntary recall of GreenWise Pear, Kiwi, Spinach & Pea Baby Food, produced by Bowman Andros LLC and distributed to Publix grocery stores in the company’s eight-state operating area. The product is sold in 4-ounce plastic pouches and has the potential to be contaminated with elevated levels of lead.\nProduct Name\nGTIN\nBest If Used By\nGreenWise Pear, Kiwi, Spinach & Pea Baby Food, 4 oz\n41415 – 00901\n11/01/2025/td>\nThis recall is being initiated as a result of routine sampling and is being made with the knowledge of the U.S. Food and Drug Administration.\n“As part of our commitment to food safety, potentially impacted products have been removed from all store shelves,” said Publix Director of Communications Maria Brous. “To date, there have been no reported cases of illness. Consumers who have purchased the product in question may return the product to their local store for a full refund. Publix customers with additional questions may call our customer care department toll-free at 1-800-242-1227 or visit our website at publix.com .”\nPublix, the largest employee-owned company in the U.S. with more than 260,000 associates, currently operates 1,404 stores in Florida, Georgia, Alabama, Tennessee, South Carolina, North Carolina, Virginia and Kentucky. For 28 consecutive years, the company has been recognized by Fortune as a great place to work. In addition, Publix’s dedication to superior quality and customer service is recognized among the top in the grocery business. For more information, visit the company’s newsroom at corporate.publix.com/newsroom .\nCompany Contact Information\nConsumers:\nCustomer Care Department\n1-800-242-1227\nContent current as of:\n05/22/2025\nRegulated Product(s)\nDietary Supplements\nFood & Beverages\nTopic(s)\nContaminants\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "7c4fe09d-c1d6-44be-af79-b137ec9f030f",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Fayus Inc., dba Yusol International Foods Expands Recall of OLA-OLA POUNDED YAM Due to Undeclared Milk Allergen",
+      "shape": "card-detail-disagreement",
+      "shapes": ["declared-list-continues-past-its-sentence"],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "states",
+      "expectedStates": ["California", "Georgia", "Illinois", "New Jersey", "New York", "Texas"],
+      "mustNotInclude": [],
+      "admittedSentences": ["California", "Georgia", "Illinois", "New Jersey"],
+      "summaryText": "Company Announcement\nFayus Inc., doing business as Yusol International Foods (Sacramento, CA) is expanding its recall of OLA-OLA POUNDED YAM to include product sizes 2lbs, 4lbs, 5lbs, and 10lbs due to product labeling omission of an undeclared milk allergen for sodium caseinate, a milk derivative. People who have an allergy, or severe milk sensitivity to milk, run the risk of a serious or life-threatening allergic reaction if they consume this product. No illness or injuries have been reported in connection with this issue.\nThe recall was initiated, and later expanded, as a result of an internal investigation discovering that some packaged OLA-OLA POUNDED YAM had been distributed in packaging that did not disclose the presence of sodium caseinate – derived from milk, a milk allergen, due to a temporary breakdown in the company’s production and packaging processes. In addition, The Canadian Food Inspection Agency (CFIA) sampled the 4lb product and confirmed the omission of the milk allergen from the product label. A subsequent investigation, and CFIA sampling of the 10lb product, revealed that additional packaging sizes may be affected.\nThis recall includes the following product packaging sizes with the expiration dates between November 2028 through May 2029: 2lbs (0.907kg), 4lbs (1.815kg), 5lbs (2.267kg), and 10lbs (4.53kg). OLA-OLA POUNDED YAM was distributed through distribution outlets in the African and Caribbean markets between December 2025 – May 2026 in Canada, Australia and the following United States:\nCalifornia\nGeorgia\nIllinois\nNew Jersey\nNew York\nTexas\nThe recalled products are packaged in a clear plastic bag. This recall does not apply to packaging that declares the milk allergen. See example packaging below for correct and incorrect packaging. Consumers should check expiration dates on the front of the packaging, as well as the allergen declaration labeling, to determine if they have the affected product.\nQuestions or Exchange Requests:\nDistribution outlets may exchange the affected product for correctly packaged and labeled product, or for a relabeled/reconditioned package of the product. Consumers with a milk allergy, or severe sensitivity to milk, should not consume the affected product. Fayus Inc. apologizes for any inconvenience and remains committed to the safety and quality of its products. Consumers who have purchased the products and have questions may contact the company at info@yusolfood.com or call 916-383-1124 Monday - Friday 11am – 3pm PST.\nLink to Initial Press Release\nCompany Contact Information\nConsumers:\n916-383-1124\ninfo@yusolfood.com\nProduct Photos\nContent current as of:\n07/17/2026\nRegulated Product(s)\nFood & Beverages\nTopic(s)\nAllergens\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "85303552-858d-4aa6-85b8-056e9bb111b4",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Sofia Produce, LLC DBA Trufresh Recalls Fresh Cantaloupe Because of Possible Health Risk Due to Salmonella",
+      "shape": "card-detail-disagreement",
+      "shapes": ["declared-list-continues-past-its-sentence", "illness-or-case-patient-location"],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "states",
+      "storedStates": ["Arizona", "California"],
+      "expectedScope": "states",
+      "expectedStates": [
+        "Arizona",
+        "California",
+        "Florida",
+        "Illinois",
+        "Maryland",
+        "Michigan",
+        "New Jersey",
+        "Tennessee",
+        "Texas",
+        "Wisconsin"
+      ],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "The Cantaloupes were distributed directly to the following States in the United States: Arizona, California.",
+        "Maryland, New Jersey, Tennessee, Illinois, Michigan, Wisconsin, Texas, Florida and Canada.",
+        "Maryland, New Jersey, Tennessee, Illinois, Michigan, Wisconsin, Texas, Florida and Canada."
+      ],
+      "summaryText": "Company Announcement\nSOFIA PRODUCE, LLC, of Nogales, Arizona which does business under the name “Trufresh” (“Trufresh”) is recalling all sizes of fresh cantaloupes packaged in cardboard containers labeled with the “Malichita” label, sold under the following sales order numbers between October 16, 2023 and October 23, 2023 because they have the potential to be contaminated with Salmonella :\nSalmonella is an organism which can cause serious and sometimes fatal infections in young children, frail or elderly people, and others with weakened immune systems. Healthy persons infected with Salmonella often experience fever, diarrhea (which may be bloody), nausea, vomiting and abdominal pain. In rare circumstances, infection with Salmonella can result in the organism getting into the bloodstream and producing more severe illnesses such as arterial infections (i.e., infected aneurysms), endocarditis and arthritis.\nThe Cantaloupes were distributed directly to the following States in the United States: Arizona, California. Maryland, New Jersey, Tennessee, Illinois, Michigan, Wisconsin, Texas, Florida and Canada. The Cantaloupes would have reached consumers through retail produce markets which may be located in states other than those listed above.\nThe Cantaloupes are packaged in cardboard containers bearing the “Malichita” Label (picture attached). The cantaloupes also have an individual PLU sticker placed upon each cantaloupe in the form of the attached picture. As shown in the picture, the PLU sticker has a top half which is white which has the word “Malichita” written in script in black letters. The bottom of the PLU sticker is black and has the number “4050” prominently displayed in white letters together with the words “Product of Mexico/produit du Mexique”. This label will identify individual Malichita cantaloupes purchased by consumers.\nThere have been no reported illnesses associated with the subject cantaloupes, to date.\nTrufresh is performing this recall after the Canadian Food Inspection Agency announced a similar recall of cantaloupes packaged with the same Malichita label and bearing the same PLU due to possible salmonella contamination for cantaloupes sold to Fruits et Légumes Gaétan Bono. The Canadian Food inspection Agency Announcement can be found here: https://recalls-rappels.canada.ca/en/alert-recall/malichita-brand-cantaloupes-recalled-due-salmonella . Trufresh’s investigation has revealed that the above-listed order numbers may have been associated with the cantaloupes sold to Fruits et Légumes Gaétan Bono.\nConsumers should take the following actions:\nCheck to see if you have recalled products\nDo not consume, serve, use, sell, or distribute recalled products\nRecalled products should be thrown out or returned to the location where they were purchased\nConsumers who are unsure if they have purchased the recalled product are advised to contact their retailer.\nIf you think you became sick from consuming a recalled product, contact your healthcare provider\nInformation for Buyers:\nTrufresh is contacting each of the individual buyers under the foregoing orders to advise them of the recall. If the buyers associated with the above sales order numbers have not already been contacted by Trufresh, they should contact Trufresh at the number below.\nBuyers associated with the above sales order numbers should remove any remaining product from their sales inventory.\nThe Buyers should then dispose of the product and retain their records of disposal.\nOrder Numbers: 0128556, 0128624, 0128630, 0128632, 0128640, 0128643, 0128644, 0128646, 0128648, 0128651, -0128656, 0128669, 0128680, 0128682, 0128683, 0128700, 0225200, 0225201, 0225206, 0225214, 0225219, 0225222, 0225226, 0225227, 0225228, 0419611, 0419629, 0419630, 0419636, 0419671, 0419688, 0419693, 0419696, 0419697, 0419704, 0419710, 0419718, 0419772, 0516255, 0516268, 0516271, 0516279, 0516301, 0612143, 0612144, 0612148, 0612154, 0612156, 0612158, 0612171, 0612190, 0612191, 0612197, 0612198, 0612209, 0612225\nConsumers who have purchased the recalled products may obtain additional information by contacting Rafael Roiz, Tru Fresh’s representative Monday through Friday between the hours of 8:00 a.m. and 5:00 p.m. Mountain Standard Time at (520) 394-7370.\nLink to Expanded Recall\nExpanded Press Release 2\nCompany Contact Information\nConsumers:\nRafael Roiz, Tru Fresh’s representative\n520-394-7370\nProduct Photos\nContent current as of:\n11/09/2023\nRegulated Product(s)\nFood & Beverages\nTopic(s)\nFoodborne Illness\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "88560875-1069-4412-9027-b0601c58d548",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Healthwest Minerals Inc. DBA Mt Capra Products Recalls Goat Milk Formula Recipe Kit and Warns Consumers Against the Use of Product as Infant Formula",
+      "shape": "card-detail-disagreement",
+      "shapes": ["firm-or-manufacturer-address"],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "states",
+      "expectedStates": ["Washington"],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "The Goat Milk Formula Recipe Kit 10 lb 8 oz was sold through Mt. Capra’s web store ( mtcapra.com ) or one retail store in Chehalis, Washington, from 05/01/23 to 05/01/24."
+      ],
+      "summaryText": "Company Announcement\nMay 10, 2024 – Healthwest Minerals, Inc. d/b/a Mt. Capra Products of Chehalis, Washington, is recalling 1,506 boxes of Goat Milk Formula Recipe Kit on the recommendation of the Food and Drug Administration (FDA) and advises consumers to immediately discontinue use of the product as infant formula. The FDA is concerned that the formula does not meet all FDA requirements for infant formula, does not provide sufficient nutrition when used as an infant formula, and the storage instructions may be insufficient for the product. Infants consuming the recalled product without additional iron supplementation can develop iron deficiency anemia and feeding intolerance.\nThe Goat Milk Formula Recipe Kit 10 lb 8 oz was sold through Mt. Capra’s web store ( mtcapra.com ) or one retail store in Chehalis, Washington, from 05/01/23 to 05/01/24.\nThe product’s case has one of the following affected lot codes, which is affixed to the case as seen in the below image: 13150423, 13150723, 13151223, 13151323, 13151623, 13151823, 13151923, 13152123, 13152423, 13152523, 13152623, 13152823, 13153023, 13153123, 13153423, 13153523, 13153723, 13153923, 13154123, 13154423, 13154523, 13154723, 13154923, 13155023, 13155223, 13150124, 13150424, 13150624, 13150924, 13151024, 13151124, 13151224, 13151424, 13151624, 13151724, 13151824.\nFDA notified Mt. Capra of an adverse event report of anemia in one infant. FDA determined that while the caregivers were using the Goat Milk Formula Recipe Kit and recipe, the caregivers substituted some ingredients with a different brand of multivitamin, which created a product deficient in vitamin B12 as well as folate and ultimately resulted in the development of anemia.\nThe firm does not recommend using this product for infants from 0-12 months of age. If you have prepared and fed your infant Mt. Capra formula from their Goat Milk Formula Recipe Kit, we recommend you contact a healthcare provider to discuss if testing for nutritional deficiencies is recommended.\nThe safety of our customers and products is Mt. Capra’s primary concern. This recall is being made with the knowledge of the U.S. Food and Drug Administration.\nCustomers are advised to destroy or return product. If you have any questions, call Joe Stout at 360-748-4224, Monday-Friday, 8am-4pm PT, or send an email to orders@mtcapra.com .\nCompany Contact Information\nConsumers:\nJoe Stout\n360-748-4224\norders@mtcapra.com\nProduct Photos\nContent current as of:\n05/10/2024\nRegulated Product(s)\nFood & Beverages\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "9212e679-61c6-4e59-a6d9-9c32942ad3b1",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "DSD Merchandisers, LLC Announces Voluntary Recall of Deluxe Roasted & Salted Mixed Nuts Due to Undeclared Peanut",
+      "shape": "card-detail-disagreement",
+      "shapes": ["multiple-affirmative-distribution-sentences"],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "states",
+      "expectedStates": ["California", "Idaho", "Nevada", "Oregon", "Washington"],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "Farm Fresh to You subscribers are located in California & Nevada.",
+        "Full Circle subscribers are located in Washington, Oregon, Idaho, and Alaksa."
+      ],
+      "summaryText": "Company Announcement\nDSD Merchandisers, LLC is voluntarily recalling UPC 6-51433-99651-6 Deluxe Roasted & Salted Mixed Nuts, Sell by: 10/09/24, due to the presence of undeclared peanut. People who have an allergy or severe sensitivity to specific type of allergen peanuts run the risk of serious or life-threatening allergic reaction if they consume these products.\nThis product is sold to Farm Fresh to You who then distributes through E-commerce through Farm Fresh to You or Full and/or Full Circle subscribers. Farm Fresh to You subscribers are located in California & Nevada. Full Circle subscribers are located in Washington, Oregon, Idaho, and Alaksa. These consumers would have received their product through mail. Product is packaged in clear plastic tubs that contain 5oz product. Product label is located at the top of the 5oz tub. The product inside of the tub is a mix of various tree nuts including Cashews, Almonds, Hazelnuts, Pecan Halves, Macadamia and the undeclared ingredient (Peanut). The product label does not contain a name brand only product name (Deluxe Roasted and Salted Mixed Nuts). Sell By printed on the label is 10-09-2024.\nThe recall was initiated after a consumer contacted DSD merchandisers, LLC through our website to report they purchased product and upon consuming noticed that the product contained peanut which they then noted the label did not note Peanut on the Ingredient Statement nor the Allergen Statement portion of the label the label just contained a packed on same equipment as product containing peanut statement. Subsequent investigation indicates the problem was caused by a temporary breakdown in the company's formulation change processes and packaging label change process.\nFor more information or assistance regarding this recall, consumers can contact DSD Merchandisers, LLC at 1-925-449-2044 (Monday to Friday, 9:30 a.m. to 5 p.m. EST).\nThis voluntary recall is being conducted in cooperation with the Food and Drug Administration (FDA). We appreciate your cooperation and apologize for any inconvenience caused.\nCompany Contact Information\nConsumers:\nDSD Merchandisers, LLC\n1-925-449-2044\nProduct Photos\nContent current as of:\n06/24/2024\nRegulated Product(s)\nFood & Beverages\nNuts & Nut Products\nTopic(s)\nAllergens\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "9887a06d-6786-4be7-b5f5-baf45b60e69b",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "World Variety Produce, Inc. Recalls Kimchi Hot Because of Possible Health Risk",
+      "shape": "card-detail-disagreement",
+      "shapes": ["firm-or-manufacturer-address"],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "states",
+      "expectedStates": ["California", "Florida", "Texas"],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "This recall extends only to Sun International stores in Florida,, Brookshire Brothers stores in Texas, OK Produce - Grocery Outlet in California."
+      ],
+      "summaryText": "Company Announcement\n‘A previous version of this press release was issued on 12/22/2023. This press release was updated to include the number of cases included in the recall and identify the Best By Date being recalled.’.\nFOR IMMEDIATE RELEASE - December 22, 2023 - World Variety Produce, Inc. of Los Angeles, CA is recalling Melissa's Kimchi Hot 14 oz, because of mislabeling of allergen ingredient \"Fish\" was not listed in the ingredient panel within the allergen information panel. Food allergic reactions vary in severity from mild symptoms involving hives and lip swelling to severe, life-threatening symptoms, often called anaphylaxis, that may involve fatal respiratory problems and shock.\nNo illnesses have been reported to date.\nThe affected Kimchi Hot 14 oz were isolated to 124 cases from Best By Date 03-15-2024 product of USA.\nThis recall extends only to Sun International stores in Florida,, Brookshire Brothers stores in Texas, OK Produce - Grocery Outlet in California. The affected Melissa's Kimchi Hot 14oz were sold from bulk displays between the dates of December 15, 2023 through December 21, 2023.\nThe recall was as the result of an internal finding of an product artwork review by Melissa's Design/Artwork department which revealed that the printed artwork was mislabeled and did not have an allergen listing of \"Fish\". World Variety Produce, Inc. has ceased the production and distribution of the product as FDA, World Variety Produce, Inc. continues their investigation as to what caused the issue.\nConsumers who have purchased the affected Kimchi Hot 14 oz listed above are asked to return them to the place of purchase for a full refund. Consumers with questions may contact World Variety Produce, Inc. at 1-800-588-0151 Monday through Friday between 6:00 am and 5:00 pm Pacific Standard Time.\nCompany Contact Information\nConsumers:\n1-800-588-0151\nMedia:\nRobert Schueller\n1-888-588-0151 ext.259\nProduct Photos\nContent current as of:\n12/26/2023\nRegulated Product(s)\nFood & Beverages\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "a3ae8e2d-4d0f-4406-aff0-e0cfaf83d3b2",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Blue Oven Bakery, Inc. Issues a Voluntary Recall Due to Undeclared Milk Allergens in Their English Muffin",
+      "shape": "card-detail-disagreement",
+      "shapes": ["store-address-list-under-a-sold-at-lead-in", "news-dateline"],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "states",
+      "expectedStates": ["Indiana", "Kentucky", "Ohio"],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "Harvest Market- 308 Main St. Milford, OH 45150",
+        "Country Fresh Market- 8315 Beechmont Ave. #15 Cincinnati, OH 45255",
+        "Kremers Market- 755 Buttermilk Pike Crescent Springs, KY 41017",
+        "Back Ally Mercantile- 221 Walnut St. #102 Lawrenceburg, IN 47025"
+      ],
+      "summaryText": "GOVERNMENT AGENCY PARTNER ANNOUNCEMENT\nBlue Oven Bakery, Inc. Issues a Voluntary Recall Due to Undeclared Milk Allergens in Their English Muffin\nWhen a Government Agency Partner announces a company’s recall, market withdrawal, or safety alert, the FDA posts the Government Agency Partner’s announcement as a public service. FDA does not endorse either the product or the company.\nRead Announcement\nMore Recalls, Market\nWithdrawals, &\nSafety Alerts\nRecalls, Market Withdrawals, & Safety Alerts\nRecall Resources\nEnforcement Reports\nIndustry Guidance For Recalls\nMajor Product Recalls\nSummary\nCompany Announcement Date:\nOctober 31, 2025\nFDA Publish Date:\nNovember 06, 2025\nProduct Type:\nFood & Beverages\nReason for Announcement:\nRecall Reason Description\nUndeclared milk\nCompany Name:\nBlue Oven Bakery, Inc.\nBrand Name:\nBrand Name(s)\nBlue Oven Bakery, Inc.\nProduct Description:\nProduct Description\nEnglish muffin\nGovernment Agency Partner Announcement\nCincinnati, Ohio (October 31, 2025) Blue Oven Bakery, Inc. is issuing a voluntary recall on their english muffin for misbranding due to the milk allergen not being declared on the label. The english muffin was sold fresh as a baked product in a 13.04 oz sealed plastic bag.\nThese products have been produced since 04/24/25 with the last production date of 10/24/2025, and were sold at the following locations:\nHarvest Market- 308 Main St. Milford, OH 45150\nCountry Fresh Market- 8315 Beechmont Ave. #15 Cincinnati, OH 45255\nKremers Market- 755 Buttermilk Pike Crescent Springs, KY 41017\nBack Ally Mercantile- 221 Walnut St. #102 Lawrenceburg, IN 47025\nEuropean Cafe- 9450 Montgomery Rd. Cincinnati, OH 45242\nNo reports of illnesses involving this product have been reported. Individuals exhibiting signs or symptoms of a foodborne illness, or an allergic reaction should contact a physician immediately. If you would like to return these products for a full refund, please do so at 1719 Elm Street Cincinnati, OH 45202 on 11/4/25 or 11/5/25.\nIf you have any questions, please contact Blue Oven Bakery at 513.706.0901 or blueovencustomerservice@gmail.com .\nGovernment Agency Partner Contact Information\nConsumers:\n(513) 706-0901\nblueovencustomerservice@gmail.com\nContent current as of:\n11/06/2025\nRegulated Product(s)\nFood & Beverages\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "b47ccca5-c316-4b22-a4cd-a819c6d74aac",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Lidl Voluntarily Recalls Deluxe Branded Macarons Party Edition Due to Undeclared Allergens",
+      "shape": "card-detail-disagreement",
+      "shapes": [
+        "multiple-affirmative-distribution-sentences",
+        "retailer-footprint-tied-to-the-product"
+      ],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "states",
+      "expectedStates": [
+        "Delaware",
+        "District of Columbia",
+        "Georgia",
+        "Maryland",
+        "New Jersey",
+        "New York",
+        "North Carolina",
+        "Pennsylvania",
+        "South Carolina",
+        "Virginia"
+      ],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "Lidl US has store locations in Delaware, District of Columbia, Georgia, Maryland, New Jersey, New York, North Carolina, Pennsylvania, South Carolina, and Virginia."
+      ],
+      "summaryText": "Company Announcement\nARLINGTON, VA – Lidl US has announced a voluntary recall of Deluxe branded Macarons Party Edition due to undeclared allergens. The recall was issued due to undeclared wheat, soy, egg, milk, and tree nuts (almonds, pistachios, and coconut) in the products as a result of non-English ingredient labeling. People who have allergies to any of these run the risk of serious or life-threatening allergic reactions if they consume these products. Lidl US has received no reports or complaints of illness related to this product to date.\nThis recall includes units with the brand, “Deluxe,” printed at the top of the front panel, and “Party Edition” at the bottom of the front panel (back panel of package will not have English labeling or ingredients). All units have a barcode/UPC of 4056489365365.\nAffected products contain the following undeclared allergens:\nWheat, Soy, Egg, Milk, Tree Nuts (Almonds, Pistachios, Coconut)\nThe product was distributed to all Lidl US store locations. Lidl US has store locations in Delaware, District of Columbia, Georgia, Maryland, New Jersey, New York, North Carolina, Pennsylvania, South Carolina, and Virginia.\nThe issue was internally discovered after delivery to our stores. If customers have purchased this product, they should not consume it, and immediately return it to their nearest Lidl store for a full refund (a receipt is not required for return). Customers who have questions about this voluntary recall should call the Lidl US Customer Care Hotline at (844)-747-5435 (8 am-8 pm ET, Monday-Saturday).\nThe health and safety of our customers is our top priority. Lidl US regrets any inconvenience related to this voluntary recall. Our Quality Assurance Department is constantly working to ensure that all products on our shelves meet the high-quality standards that we would expect when feeding our own families. We are grateful for all our Lidl US customers who choose to shop with us every day.\nCompany Contact Information\nConsumers:\nLidl US Customer Care Hotline\n(844)-747-5435\nMedia:\nLidl\nmedia@lidl.us\nProduct Photos\nContent current as of:\n04/01/2024\nRegulated Product(s)\nFood & Beverages\nTopic(s)\nAllergens\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "b5c4ce00-3e64-4fe3-aa93-09f5375ba447",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Sofia Produce, LLC dba Trufresh Expands Recall to Include Additional Order Numbers of Fresh Cantaloupe Because of Possible Health Risk Due to Salmonella",
+      "shape": "card-detail-disagreement",
+      "shapes": ["declared-list-continues-past-its-sentence", "illness-or-case-patient-location"],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "states",
+      "storedStates": ["Arizona", "California"],
+      "expectedScope": "states",
+      "expectedStates": [
+        "Arizona",
+        "California",
+        "Florida",
+        "Illinois",
+        "Maryland",
+        "Michigan",
+        "New Jersey",
+        "Tennessee",
+        "Texas",
+        "Wisconsin"
+      ],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "The Cantaloupes were distributed directly to the following States in the United States: Arizona, California.",
+        "Maryland, New Jersey, Tennessee, Illinois, Michigan, Wisconsin, Texas, Florida and Canada.",
+        "Maryland, New Jersey, Tennessee, Illinois, Michigan, Wisconsin, Texas, Florida and Canada."
+      ],
+      "summaryText": "Company Announcement\nFor Immediate Release, November 15, 2023 SOFIA PRODUCE, LLC, of Nogales, Arizona which does business under the name “Trufresh” (“Trufresh”) has expanded its recall of all sizes of fresh cantaloupes packaged in cardboard containers labeled with the “Malichita” label, to include the following additional sales order numbers distributed between October 16, 2023 and October 23, 2023 because they have the potential to be contaminated with Salmonella . The additional sales order numbers are: 128663, 128712, 128713, 128662, 128680, 225252, 225231, 419719, 419721, 419828, 419803, 612235, 612273 .\nSalmonella is an organism which can cause serious and sometimes fatal infections in young children, frail or elderly people, and others with weakened immune systems. Healthy persons infected with Salmonella often experience fever, diarrhea (which may be bloody), nausea, vomiting and abdominal pain. In rare circumstances, infection with Salmonella can result in the organism getting into the bloodstream and producing more severe illnesses such as arterial infections (i.e., infected aneurysms), endocarditis and arthritis.\nThe Cantaloupes were distributed directly to the following States in the United States: Arizona, California. Maryland, New Jersey, Tennessee, Illinois, Michigan, Wisconsin, Texas, Florida and Canada. The Cantaloupes would have reached consumers through retail produce markets which may be located in states other than those listed above.\nThe Cantaloupes are packaged in cardboard containers bearing the “Malichita” Label (picture attached). The cantaloupes also have an individual PLU sticker placed upon each cantaloupe in the form of the attached picture. As shown in the picture, the PLU sticker has a top half which is white which has the word “Malichita” written in script in black letters. The bottom of the PLU sticker is black and has the number “4050” prominently displayed in white letters together with the words “Product of Mexico/produit du Mexique”. This label will identify individual Malichita cantaloupes purchased by consumers.\nThere have been no reported illnesses associated with the subject cantaloupes, to date.\nTrufresh is performing this recall after the Canadian Food Inspection Agency has determined that additional cantaloupes have possible Salmonella contamination. The Canadian Food Inspection Agency’s original recall of cantaloupes packaged with the same Malichita label and bearing the same PLU due to possible Salmonella contamination for cantaloupes sold to Fruits et Légumes Gaétan Bono. The updated Canadian Food inspection Agency Announcement can be found here: https://recalls-rappels.canada.ca/en/alert-recall/malichita-brand-cantaloupes-recalled-due-salmonella Trufresh’s investigation has revealed that the above-listed order numbers may have been associated with the cantaloupes sold to Fruits et Légumes Gaétan Bono.\nConsumers should take the following actions:\nCheck to see if you have recalled products\nDo not consume, serve, use, sell, or distribute recalled products\nRecalled products should be thrown out or returned to the location where they were purchased\nConsumers who are unsure if they have purchased the recalled product are advised to contact their retailer\nIf you think you became sick from consuming a recalled product, contact your healthcare provider\nInformation for Buyers:\nTrufresh is contacting each of the individual buyers under the foregoing orders to advise them of the recall. If the buyers associated with the above sales order numbers have not already been contacted by Trufresh, they should contact Trufresh at the number below.\nBuyers associated with the above sales order numbers should remove any remaining product from their sales inventory.\nAdditional Order Numbers: 128663, 128712, 128713, 128662, 128680, 225252, 225231, 419719, 419721, 419828, 419803, 612235, 612273\nOrder Numbers Already Subject to Recall: 0128556, 0128624, 0128630, 0128632, 0128640, 0128643, 0128644, 0128646, 0128648, 0128651, -0128656, 0128669, 0128680, 0128682, 0128683, 0128700, 0225200, 0225201, 0225206, 0225214, 0225219, 0225222, 0225226, 0225227, 0225228, 0419611, 0419629, 0419630, 0419636, 0419671, 0419688, 0419693, 0419696, 0419697, 0419704, 0419710, 0419718, 0419772, 0516255, 0516268, 0516271, 0516279, 0516301, 0612143, 0612144, 0612148, 0612154, 0612156, 0612158, 0612171, 0612190, 0612191, 0612197, 0612198, 0612209, 0612225\nThe Buyers should then dispose of the product and retain their records of disposal.\nConsumers who have purchased the recalled products may obtain additional information by contacting Rafael Roiz Tru Fresh’s representative Monday through Friday between the hours of 8:00 a.m. and 5:00 p.m. Mountain Standard Time at (520) 394-7370.\nLink to Initial Press Release\nLink to CORE\nLink to CDC\nExpanded Press Release 2\nCompany Contact Information\nConsumers:\nRafael Roiz, Representative of Trufresh\n(520) 394-7370\nProduct Photos\nContent current as of:\n11/16/2023\nRegulated Product(s)\nFood & Beverages\nTopic(s)\nFoodborne Illness\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "beaf2ecb-3c2e-4ce3-aac8-29ad0c4fe86f",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Foppen Seafood Issues a Recall of Smoked Norwegian Salmon Slices 8.1oz Toast Sized Sold at Kroger and Payless Supermarket Stores Due to Listeria Contamination",
+      "shape": "card-detail-disagreement",
+      "shapes": ["multiple-affirmative-distribution-sentences"],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "states",
+      "expectedStates": [
+        "Alabama",
+        "Arkansas",
+        "Georgia",
+        "Illinois",
+        "Indiana",
+        "Kentucky",
+        "Louisiana",
+        "Michigan",
+        "Mississippi",
+        "Missouri",
+        "Ohio",
+        "South Carolina",
+        "Tennessee",
+        "Texas",
+        "West Virginia"
+      ],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "The states involved are AL, AR, GA, IL, IN, KY, LA, MI, MO, MS, OH, SC, TN, TX and WV."
+      ],
+      "summaryText": "Company Announcement\nReason for Recall\nRoutine testing has revealed the presence of Listeria monocytogenes in the specified lot 412. Listeria monocytogenes is a type of bacteria that can cause listeriosis. Symptoms vary depending on the severity of the illness, symptoms may last from days to several weeks. Mild symptoms may include a fever, muscle aches, nausea, vomiting, and diarrhea. If the more severe form of listeriosis develops, symptoms may include headache, stiff neck, confusion, loss of balance, and convulsions. Some people are more vulnerable to listeria infections, including older people, pregnant women and their unborn babies, babies less than one month old and people with weakened immune systems.\nHarderwijk, The Netherlands, June 22, 2024* — Foppen Seafood is recalling Smoked Norwegian Salmon Slices – Toast sized, 8.1 oz, identified by lot number 412 , sold in Kroger and Payless Supermarkets across 15 states in the USA. This action is being taken due to the contamination with Listeria monocytogenes .\nProduct Details\nProduct Name: Foppen Smoked Norwegian Salmon Slices – Toast sized\nUPC code: 8 40137 10000 2\nPackage Size: 8.1 oz\nLOT 412 – to be found in the clear plastic window cut out on the front of the package.\nDistribution: Kroger and Payless Supermarkets. The states involved are AL, AR, GA, IL, IN, KY, LA, MI, MO, MS, OH, SC, TN, TX and WV.\nConsumer Actions\nConsumers should discard product or return for refund. Customers who have purchased the affected Smoked Norwegian Salmon Slices with lot number 412 are advised not to consume the product. They should return it to the place of purchase for a full refund or replacement. For any questions or concerns, consumers may contact Foppen Seafood office USA at US PHONE NUMBER of 844-646-0928 (24/7) or mail supportQ1087@foppenseafood.com .\nCompany Statement\n“At Foppen Seafood, we operate to the highest standards of health, safety and quality control. We have taken immediate steps to address this isolated incident and we are collaborating closely with Kroger and the U.S. Food and Drug Administration (FDA) to ensure a swift resolution.”\nHealth Information\nConsumers who have consumed the affected product and are experiencing symptoms such as fever, muscle aches, and gastrointestinal issues should seek medical attention. For more information about Listeria monocytogenes , consumers can visit the Centers for Disease Control and Prevention (CDC) website.\nFor media requests mail supportQ1087@foppenseafood.com .\nFor updates on this recall and other important information, please visit Foppen Seafood’s official website at https://www.foppenseafood.com .\nCompany Contact Information\nConsumers:\nFoppen Seafood Office USA\n844-646-0928\nsupportQ1087@foppenseafood.com\nMedia:\nsupportQ1087@foppenseafood.com\nProduct Photos\nContent current as of:\n06/25/2024\nRegulated Product(s)\nFood & Beverages\nFish\nTopic(s)\nFoodborne Illness\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "d81be694-f665-40ba-9350-af2899e46ae7",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Roland Foods, LLC Recalls Roland® Tahini (100% Ground Sesame Seeds) 16 oz. Because of Possible Health Risk",
+      "shape": "card-detail-disagreement",
+      "shapes": [
+        "multiple-affirmative-distribution-sentences",
+        "laboratory-or-regulator-location",
+        "illness-or-case-patient-location",
+        "genuine-absence-of-distribution-evidence"
+      ],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "unknown",
+      "expectedStates": [],
+      "mustNotInclude": [],
+      "admittedSentences": [],
+      "summaryText": "Company Announcement\nRoland Foods, LLC (“Roland Foods”) of New York, New York is recalling a specific production code of Roland® Tahini (100% Ground Sesame Seeds) 16 oz. because it has the potential to be contaminated with Salmonella , an organism which can cause serious and sometimes fatal infections in young children, frail or elderly people, and others with weakened immune systems. Healthy persons infected with Salmonella often experience fever, diarrhea (which may be bloody), nausea, vomiting and abdominal pain. In rare circumstances, infection with Salmonella can result in the organism getting into the bloodstream and producing more severe illnesses such as arterial infections (i.e., infected aneurysms), endocarditis and arthritis.\nRoland® Tahini (100% Ground Sesame Seeds) 16 oz. was distributed to many states through retail stores and foodservice outlets. The product was distributed by Roland Foods from September 2023 through January 2024.\nThis recall ONLY APPLIES to Roland® Tahini (100% Ground Sesame Seeds) 16 oz. with a Best By Date of October 19, 2024. The product can be identified by the Best Buy Date printed in black ink on the label near the top of the bottle. Please note: this is not an expansion of the recall, just a clarification to support identification of the product by consumers.\nTo date, Roland Foods has received no reports of illness related to the recalled product.\nThe recall was as the result of a routine sampling program by the Michigan Department of Agriculture and Rural Development, which revealed that the product tested positive for Salmonella . The company has ceased distribution of the product and has initiated an investigation in partnership with the manufacturer as to the root cause of the problem.\nConsumers who have purchased Roland® Tahini (100% Ground Sesame Seeds) 16 oz. are urged to discard any affected product. Consumers with questions may contact the company’s Recall Hotline at 800-622-1823. The Recall Hotline will be monitored from 9:00 a.m. EST – 5:00 p.m. EST.\nCompany Contact Information\nConsumers:\nRecall Hotline\n800-622-1823\nProduct Photos\nContent current as of:\n02/28/2024\nRegulated Product(s)\nFood & Beverages\nTopic(s)\nFoodborne Illness\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "dcd7279f-8d6c-4548-b1c1-3ae10ee5527d",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Urgent Food Recall of Full Circle Market Coconutmilk Chocolate Almond Crunch Non-Dairy Frozen Dessert Due to Undeclared Cashew",
+      "shape": "card-detail-disagreement",
+      "shapes": [
+        "declared-list-continues-past-its-sentence",
+        "distribution-centres-then-retail-states"
+      ],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "states",
+      "storedStates": ["Georgia", "Massachusetts", "New York"],
+      "expectedScope": "states",
+      "expectedStates": [
+        "Connecticut",
+        "Georgia",
+        "Maine",
+        "Massachusetts",
+        "New Hampshire",
+        "New Jersey",
+        "New York",
+        "Rhode Island",
+        "Vermont"
+      ],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "Product was distributed to distribution centers carrying the Full Circle Market brand within the following states: Georgia, Massachusetts, and New York.",
+        "Product was sent to retail stores located in New York, Massachusetts, Maine, New Hampshire, Vermont, New Jersey, Connecticut, Rhode Island.",
+        "Product was sent to retail stores located in New York, Massachusetts, Maine, New Hampshire, Vermont, New Jersey, Connecticut, Rhode Island."
+      ],
+      "summaryText": "Company Announcement\nAUGUST 06, 2024, Fort Walton Beach, FL - G.S. Gelato & Desserts, Inc. is recalling a limited amount of Full Circle Market Coconutmilk Chocolate Almond Crunch Non-Dairy Frozen Dessert 1 Pint/16 fl.oz. paper cartons, Lot 041624L2 BBD 10/15/2025, UPC 0 36800 46964 8, because it contains undeclared cashew. Lid displays “Nature’s Promise” brand Cashewmilk Chocolate Almond Crunch Non-Dairy Frozen Dessert. Carton displays “Full Circle Market” brand Coconutmilk Chocolate Almond Crunch Frozen Dessert. The ingredient list does not include cashew. People who have an allergy or severe sensitivity to cashew run the risk of serious or life-threatening allergic reactions if they consume the affected products.\nPlease see the attached product photos for ease of identifying the product.\nProduct was distributed to distribution centers carrying the Full Circle Market brand within the following states: Georgia, Massachusetts, and New York. Product was sent to retail stores located in New York, Massachusetts, Maine, New Hampshire, Vermont, New Jersey, Connecticut, Rhode Island. The product was shipped between April 18, 2024. – July 11, 2024\nNo adverse reactions have been reported to date.\nG.S. Gelato was notified by one of the retail stores that the product carton and lid stated two different products. The firm conducted an investigation which determined that a single lot of pints of cashewmilk product was dispensed into the Full Circle Market brand Coconutmilk pints during the manufacturing process.\nIf this product is in your possession, do not consume it if you have a cashew allergy or sensitivity. Consumers may contact Ginger Moss for disposition of the product at (850) 243-5455 Monday – Friday, 8:00am – 5:00pm CST, or via email at gmoss@gsgelato.com .\nThis recall is being made with the knowledge of the Food and Drug Administration.\n###\nCompany Contact Information\nConsumers:\nGinger Moss\n850-243-5455\ngmoss@gsgelato.com\nProduct Photos\nContent current as of:\n08/06/2024\nRegulated Product(s)\nFood & Beverages\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "e6bfc7e1-0f23-4530-832e-3290e8dae53c",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "IHA Beverage Issues a Voluntary Recall of Super Cinnamon Powder 4oz Because of Lead Contamination",
+      "shape": "card-detail-disagreement",
+      "shapes": ["firm-or-manufacturer-address", "laboratory-or-regulator-location"],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "states",
+      "storedStates": ["California"],
+      "expectedScope": "states",
+      "expectedStates": ["California"],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "Product was distributed mostly through California retail stores and a few stores across the US."
+      ],
+      "summaryText": "Company Announcement\nIHA Beverage of Commerce, CA is recalling Super Cinnamon Powder 4oz, because it has the potential to be contaminated with elevated levels of lead. Short term exposures to very low levels of lead may not elicit any symptoms. It is possible that increased blood lead levels may be the only apparent sign of lead exposure. Additional signs and symptoms of lead exposure are more likely with acute exposure to higher levels of lead or chronic exposure to lead. While lead can affect nearly every bodily system, its effects depend upon the amount and duration of lead exposure and age/ body weight. If a child is exposed to enough lead for a protracted period of time (e.g., weeks to months) permanent damage to the central nervous system may occur. This can result in learning disorders, developmental defects, and other long-term health problems. For adults, chronic lead exposure is associated with kidney dysfunction, hypertension, and neurocognitive effects.\nProduct was distributed mostly through California retail stores and a few stores across the US.\nProduct was NOT sold online.\nThe recalled product is packaged in a 4oz plastic bag, and labeled as Super Dried Cinnamon Powder 4oz with UPC#610232012476. Specifically, products showing Vitamin A & C on the nutrition facts label.\nNo illnesses have been reported as of 11/18/2024.\nThis recall is being initiated as a result of routine sampling by the Arkansas Department of Health which revealed that the finished products contained elevated levels of lead. The company has ceased the distribution of the product as they continue their investigation as to what caused the problem.\nThis recall is being made with the knowledge of the U.S. Food and Drug Administration.\nConsumers who have purchased Super Cinnamon Powder 4oz are urged to discard in the trash or return it to the place of purchase for a full refund. Consumers with questions may contact the company at 323-724-8551 Monday to Friday 10AM – 4PM PST.\n####\nCompany Contact Information\nConsumers:\nIHA Beverage\n323-724-8551\nProduct Photos\nContent current as of:\n11/18/2024\nRegulated Product(s)\nFood & Beverages\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "f0b46199-716d-40d7-8cd5-32736d52f98a",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "IF Copack LLC dba Initiative Foods Recalls “Tippy Toes” Brand Apple Pear Banana Because of Possible Health Risk",
+      "shape": "all-states-except",
+      "shapes": ["all-states-except", "nationwide", "territories-and-district-of-columbia"],
+      "note": "\"…in all U.S. states other than Alaska.\"",
+      "storedScope": "nationwide",
+      "storedStates": [],
+      "expectedScope": "nationwide",
+      "expectedStates": [],
+      "mustNotInclude": ["Alaska"],
+      "admittedSentences": [
+        "The Product may have been distributed in the U.S. territories of Guam and Puerto Rico."
+      ],
+      "summaryText": "Company Announcement\nSanger, CA – February 13, 2026 – IF Copack LLC d.b.a. Initiative Foods (“Initiative Foods”) is recalling one lot of the “Tippy Toes” brand Apple Pear Banana Fruit puree (“Product”) due to elevated levels of patulin. Patulin is a naturally occurring substance (called a mycotoxin) which is produced by molds that may grow in various fruits, including apples. Long-term exposure resulting from ingestion of patulin can lead to various adverse health consequences, including a potential for immune suppression, nerve damage, headache, fever, and nausea. No illnesses or injuries have been reported to date.\nThe Product was distributed nationwide in retail grocery stores in all U.S. states other than Alaska. The Product may have been distributed in the U.S. territories of Guam and Puerto Rico.\nProduct Information\nProduct Name\nPackaging Format\nUPC(s)\nLot Number(s) / Expiration Date\nPackage Code Identifier\nTippy Toes Apple Pear Banana\n2-pack plastic tubs, with product information sleeve\n036800\n265783\nLot # 07174\nBest By Date:\n“BB 07/17/2026”\nINIA0120\nThe “Best By” (expiration) date is found on the bottom of each plastic tub. The recalled Product will have a date stamped as “BB 07/17/2026.” The package is also marked with the package code “INIA0120” as shown below:\nThe recalled Product was sampled under the Total Diet Study by the U.S. Food and Drug Administration (“FDA”), which found elevated patulin levels higher than is common for these products. Initiative Foods worked with FDA to identify the single lot to recall due to possible health concerns identified in this notice.\nThis recall is being conducted based on FDA’s recommendation.\nAction for Consumer\nConsumers with the Product matching the “Best By” (expiration) date of July 17, 2026 should:\nDiscontinue use of the Product and dispose of it immediately or return to their place of purchase for a refund.\nContact their healthcare provider if concerns arise regarding health after consumption of the Product.\nAction for Retailers\nRetailers should check inventory and shelves, and immediately remove the affected lot from sale or distribution and catalogue the recalled product.\nCompany Statement\n“At Initiative Foods, the safety of our consumers and their families is our highest priority. We are cooperating with the FDA to ensure strict review and enhanced safety measures across all our products. We thank our retail partners and customers for their understanding and prompt action on this matter,” said Don Ephgrave, Initiative Foods’ CEO and President.\nMore Information\nFor further recall information and updates, consumers and retailers can call a dedicated toll-free number: 1-855-215-5730 , Monday through Friday, 8 a.m. to 5 p.m. Eastern Standard Time.\nThis recall is being conducted with the full knowledge of the U.S. Food and Drug Administration.\nCompany Contact Information\nConsumers:\n1-855-215-5730\nProduct Photos\nContent current as of:\n02/13/2026\nRegulated Product(s)\nFood & Beverages\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "f4f2b8c6-47f2-46a0-aaf8-6d03dc5656a4",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Voluntary Recall of Howling Cow Butter Almond Ice Cream Due to Undeclared Soy and Wheat",
+      "shape": "card-detail-disagreement",
+      "shapes": ["place-inside-a-company-name"],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "states",
+      "storedStates": ["South Carolina"],
+      "expectedScope": "states",
+      "expectedStates": ["North Carolina", "South Carolina"],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "The pints were sold in North and South Carolina Harris Teeter stores."
+      ],
+      "summaryText": "Company Announcement\nRESTON, Va. – December 11, 2021 – Maryland & Virginia Milk Producers Cooperative Association (MDVA) announces the immediate recall of one lot of Howling Cow Butter Almond Ice Cream Pints due to undeclared soy and wheat. People who have an allergy or severe sensitivity to soy or wheat run the risk of serious or life-threatening allergic reactions if they consume the Howling Cow Butter Almond Pints.\nThe recalled pints of Howling Cow Butter Almond Ice Cream are stamped with the SELL BY date of September 15, 2022, which can be found on the bottom of the container, and UPC 0 74336 65079 6.\nThe issue was discovered when MVDA was notified by consumers that containers of the Howling Cow Butter Almond Ice Cream contained Cookie Dough Ice Cream. The Cookie Dough Ice Cream contains soy and wheat which are not listed on the Butter Almond label. No illnesses have been reported to date.\nMDVA produced 8,040 pints of the Howling Cow Butter Almond Ice Cream on September 15, 2021 and began distributing product on September 24, 2021. The pints were sold in North and South Carolina Harris Teeter stores.\nRetailers should cease distribution and sale of remaining Howling Cow Butter Almond Pints immediately. Where possible, consumers who have purchased the Howling Cow Butter Almond Pints should be notified of this recall.\nConsumers are encouraged to dispose of the Howling Cow Butter Almond Pints or return it to the point of purchase for a full refund. Consumers with questions can contact 1-800-552-1976 on Monday-Friday from 09AM-4:30PM EST.\n###\nMaryland & Virginia Milk Producers Cooperative is a community of nine hundred dairy farm families in 13 states passionate about cultivating dairy goodness and bottling fresh Maola brand milk and dairy products. Our farmer-owned cooperative owns five dairy processing plants that process more than three billion pounds of milk annually. Our diverse portfolio of dairy products are then distributed to consumers in the United States and ingredients customers worldwide. Our cooperative is a leader in sustainability, partnering across the supply chain to deliver sustainable solutions to our member farms. We take pride in supporting the educational and nutritional needs of the communities in our milkshed through our MDVA Fund. For more information about Maryland & Virginia, visit: www.mdvamilk.com .\nCompany Contact Information\nConsumers:\n1-800-552-1976\nProduct Photos\nContent current as of:\n12/13/2021\nRegulated Product(s)\nFood & Beverages\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "f713b2e3-a6c3-4ae7-ab15-b55fecbbc522",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Midwest Poultry Services. L.P. Recalls Shell Eggs Due to Possible Salmonella Enteritidis Contamination",
+      "shape": "card-detail-disagreement",
+      "shapes": [
+        "multiple-affirmative-distribution-sentences",
+        "shipping-origin",
+        "illness-or-case-patient-location"
+      ],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "states",
+      "storedStates": ["Louisiana", "Oklahoma", "Texas"],
+      "expectedScope": "states",
+      "expectedStates": ["Arkansas", "Louisiana", "Mississippi", "New Mexico", "Oklahoma", "Texas"],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "The eggs were shipped to foodservice and retail customers in Texas, Oklahoma and Louisiana.",
+        "They were available to consumers at Kroger stores in Texas and Louisiana, Brookshire Grocery stores in Texas, Oklahoma, Arkansas, Louisiana, New Mexico, and Mississippi, and other smaller retail outlets.",
+        "Midwest Poultry Services is not distributing fresh eggs produced on its Texas farms at this time."
+      ],
+      "summaryText": "Company Announcement\nMidwest Poultry Services, L.P. is voluntarily recalling 1,589,577 dozen white shell eggs and brown cage free shell eggs produced in Texas because they have the potential to be contaminated with Salmonella Enteritidis . Salmonella is an organism which can cause serious and sometimes fatal infections in young children, frail or elderly people, and others with weakened immune systems. Healthy persons infected with Salmonella often experience fever, diarrhea (which may be bloody), nausea, vomiting and abdominal pain. In rare circumstances, infection with Salmonella can result in the organism getting into the bloodstream and producing more severe illnesses such as arterial infections (i.e., infected aneurysms), endocarditis and arthritis.\nThe eggs were produced and distributed from farms in Texas between June 6, 2026 and July 3, 2026, with sell by or best by dates between July 20, 2026 and August 17, 2026. The eggs were shipped to foodservice and retail customers in Texas, Oklahoma and Louisiana. They were available to consumers at Kroger stores in Texas and Louisiana, Brookshire Grocery stores in Texas, Oklahoma, Arkansas, Louisiana, New Mexico, and Mississippi, and other smaller retail outlets. No other Midwest Poultry Services, L.P. products are part of this recall.\nMidwest Poultry Services L.P. is not aware of any specific illnesses linked to its products.\nThe recalled eggs will have an identifying code number printed on the left or right sides of the carton in date-coding ink only . Only codes P-1950 or 0840962 with a Julian Date between 157 and 184 printed on the side of the carton are recalled. Examples of this identifying plant and date information on retail cartons are included below.\nItem Description\nIdentifying Code\nUPC\nJulian Date\nRange\nBest By / Sell By Date\nBetween:\nKroger Large 12 eggs\nP-1950 or 840962\n011110609038\n157 to 184\nJuly 20 – August 17, 2026\nKroger Large 18 eggs\nP-1950 or 840962\n011110609335\n157 to 184\nJuly 20 – August 17, 2026\nKroger Large 60 eggs\nP-1950\n011110609144\n157 to 184\nJuly 20 – August 17, 2026\nKroger Extra Large 12 eggs\nP-1950 or 840962\n011110609045\n157 to 184\nJuly 20 – August 17, 2026\nKroger Medium 12 eggs\nP-1950 or 840962\n011110609021\n157 to 184\nJuly 20 – August 17, 2026\nKroger Medium 30 eggs\nP-1950\n011110609809\n157 to 184\nJuly 20 – August 17, 2026\nKroger Jumbo 12 eggs\nP-1950 or 840962\n011110609052\n157 to 184\nJuly 20 – August 17, 2026\nSimple Truth Cage Free Medium\nBrown 12 eggs\nP-1950\n011110870230\n157 to 184\nJuly 20 – August 17, 2026\nSimple Truth Cage Free Large\nBrown 12 eggs\nP-1950\n011110797704\n157 to 184\nJuly 20 – August 17, 2026\nSimple Truth Cage Free Large\nBrown 18 eggs\nP-1950\n011110893109\n157 to 184\nJuly 20 – August 17, 2026\nSimple Truth Cage Free Large\nBrown 24 eggs\nP-1950\n011110150974\n157 to 184\nJuly 20 – August 17, 2026\nBrookshire's Large 12 Eggs\nP-1950\n092825095552\n157 to 184\nJuly 20 – August 17, 2026\nBrookshire's Large 18 Eggs\nP-1950\n092825095569\n157 to 184\nJuly 20 – August 17, 2026\nBrookshire's Large 36 eggs\nP-1950\n092825109808\n157 to 184\nJuly 20 – August 17, 2026\nBrookshire's Large 60 eggs\nP-1950\n092825095637\n157 to 184\nJuly 20 – August 17, 2026\nBrookshire's Large 6 eggs\nP-1950\n092825095644\n157 to 184\nJuly 20 – August 17, 2026\nBrookshires Extra Large 18 Eggs\nP-1950\n092825095606\n157 to 184\nJuly 20 – August 17, 2026\nBrookshire's Jumbo 12 Eggs\nP-1950\n092825095583\n157 to 184\nJuly 20 – August 17, 2026\nCountry Morning Large 12 Eggs\nP-1950\n078566200004\n157 to 184\nJuly 20 – August 17, 2026\nCountry Morning Large 18 Eggs\nP-1950\n078566005036\n157 to 184\nJuly 20 – August 17, 2026\nCountry Morning Large 2 ½\nDozen\nP-1950\n079307005162\n157 to 184\nJuly 20 – August 17, 2026\nCountry Morning Extra Large 12\nEggs\nP-1950\n078566001021\n157 to 184\nJuly 20 – August 17, 2026\nCountry Morning Medium 12\nEggs\nP-1950\n078566001045\n157 to 184\nJuly 20 – August 17, 2026\nCountry Morning Jumbo 12 Eggs\nP-1950\n078566001014\n157 to 184\nJuly 20 – August 17, 2026\nSunups Medium 2 1/2 Dozen\nP-1950\n028621304987\n157 to 184\nJuly 20 – August 17, 2026\nGrade AA Large Bulk X 30\nDOZEN\nP-1950\nN/A\n157 to 184\nJuly 20 – August 17, 2026\nGrade A Large Bulk X 15 DOZEN\nP-1950\nN/A\n157 to 184\nJuly 20 – August 17, 2026\nGrade A Large Bulk - TICTAC\nP-1950\nN/A\n157 to 184\nJuly 20 – August 17, 2026\nGrade A Large Bulk - BROWN -\nTICTAC\nP-1950\nN/A\n157 to 184\nJuly 20 – August 17, 2026\nGrade A Medium Bulk X 30\nDOZEN\nP-1950\nN/A\n157 to 184\nJuly 20 – August 17, 2026\nGrade A Medium Bulk X 15\nDOZEN\nP-1950\nN/A\n157 to 184\nJuly 20 – August 17, 2026\nGrade A Extra Large Bulk X 15\nDOZEN\nP-1950\nN/A\n157 to 184\nJuly 20 – August 17, 2026\nGrade A Jumbo Bulk 20 eggs\nP-1950\nN/A\n157 to 184\nJuly 20 – August 17, 2026\nMidwest Poultry Services identified the issue on its two Texas farms through proactive environmental monitoring practices and root cause analysis. Midwest Poultry Services is not distributing fresh eggs produced on its Texas farms at this time.\nConsumers who purchased products associated with this recall are urged to avoid consumption and return the product to its original place of purchase for a full refund. Any questions can be directed to the company by calling 574.405.9531 during normal business hours which are Monday through Friday 8:00 AM – 4:30 PM Eastern time.\nMEDIA CONTACT : info@mpseggs.com\nCONSUMER CONTACT : recallassistance@mpseggs.com\nCompany Contact Information\nConsumers:\n574.405.9531\nrecallassistance@mpseggs.com\nMedia:\ninfo@mpseggs.com\nProduct Photos\nContent current as of:\n07/22/2026\nRegulated Product(s)\nFood & Beverages\nTopic(s)\nFoodborne Illness\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    },
+    {
+      "recallCaseId": "fab432cd-6f94-4559-bb26-3b1be6895f0c",
+      "sourceAgency": "FDA",
+      "lifecycle": "active",
+      "title": "Frankie's Organic Issues Allergy Alert on Undeclared Milk in Frankie’s Organic Plant-Based Vegan Cheddar Puffs",
+      "shape": "card-detail-disagreement",
+      "shapes": [],
+      "note": "The feed card and Recall Detail named different states before P2B7Q.2.",
+      "storedScope": "unknown",
+      "storedStates": [],
+      "expectedScope": "states",
+      "expectedStates": ["Florida", "South Carolina", "Washington"],
+      "mustNotInclude": [],
+      "admittedSentences": [
+        "The product can be found at PCC Markets in Washington State and Earth Fare Stores in Florida & South Carolina, as well as select independent retailers in the regions."
+      ],
+      "summaryText": "Company Announcement\nLaval, Quebec Frankie's Organic is recalling 94 cases of Frankie’s Organic Plant-Based Vegan Cheddar Puffs because it may contain undeclared milk. People who have an allergy or severe sensitivity to milk run the risk of serious or life-threatening allergic reaction if they consume these products.\nThis recall only involves Organic Plant-Based Vegan Cheddar Puffs containing the following “Best Is Used By” date, UPC and Lot Code:\nProduct Name\nBest If\nUsed By\nUPC\nLot Code\nTerritory\nSize\nRetail\npackaging\nFrankie’s\nOrganic Plant\nBased Vegan\nCheddar Puffs\nMay 16,\n2027\n816929000089\n05 16 2027\nWashington,\nFlorida,\nSouth\nCarolina\n4 oz.\n(113 g)\nBag\nThe recall was initiated following two complaints of allergic reactions to related products sold in Canada.\nThe product can be found at PCC Markets in Washington State and Earth Fare Stores in Florida & South Carolina, as well as select independent retailers in the regions. Frankie's Organic is working with 3 distribution centers that any remaining inventory is removed from distribution. No other Frankie's Organic products are impacted.\nConsumers should check their pantry for the Organic Plant-Based Vegan Cheddar Puffs with Best If Used by: 05 16 2027 and should not consume them. Please discard or return the affected product to the place of purchase for a full refund.\nAt Frankie's Organic, the safety of consumers is the top priority. Frankie's Organic follows the highest possible food safety and quality control standards to ensure the safety and full enjoyment of its snacks. The root cause has been found to be an ingredient at the supplier level of seasoning that contains the allergen. Frankie's Organic is committed to implementing corrective actions following from the investigation of this event.\nConsumers may contact Frankie's Organic team with any questions at 1-800-363-8209. Representatives are available Monday-Friday from 9am to 4pm Eastern Standard Time.\nCompany Contact Information\nConsumers:\nFrankie's Organic Team\n1-800-363-8209\nProduct Photos\nContent current as of:\n08/12/2026\nRegulated Product(s)\nFood & Beverages\nTopic(s)\nAllergens\nFollow FDA\nFollow @US_FDA on X\nFollow FDA on Facebook\nFollow @FDArecalls on X\nRecent Recalled Product Photos on FDA's Flickr Photostream"
+    }
+  ]
+}
