@@ -886,15 +886,22 @@ test('the corrected notices change no canonical, search, push, or materiality be
     const parsed = parseSearchQuery(projection.title.split(/\s+/)[0]);
     if (parsed) assert.ok(matchesSearch(entry, parsed), `${id}: title search miss`);
   }
-  // Push copy is built from reasonLine (lib/recall-display), which renders
-  // the source reason verbatim — the P3E clause transform never reaches it.
-  const { projection } = caseOf('nutramigen-hypoallergenic-infant');
+  // Push copy is built from the SAME `conciseReasonLine` the Feed and Saved
+  // card render (P2B7Q), so the P3E clause transform — which belongs to
+  // Detail's "because …" clause alone — still never reaches it.
+  const { home, projection } = modelsOf('nutramigen-hypoallergenic-infant');
   assert.deepEqual(initialPushOf(projection), {
     // P2B7G: the one approved unit-spacing delta ("19.8oz" → "19.8 oz") —
     // see APPROVED_UNIT_SPACING_DELTAS above. P2B7M: the lowercase tail under
     // the capitalized "Nutramigen Powder" head is now corrected too, and push
     // gets the correction at the same instant Feed, Saved and Detail do.
     title: 'Recall alert: Nutramigen Powder Infant Formula in 12.6 and 19.8 oz Cans',
-    body: 'Possible contamination. Check your package.',
+    body: 'Potential Cronobacter sakazakii contamination. Check your package.',
   });
+  // …and it is the card's sentence, character for character. Push used to
+  // build its own from the retired `recall-display.reasonLine`, which said
+  // "Possible contamination" where the card said "Potential Cronobacter
+  // sakazakii contamination" — a notification naming a vaguer hazard than
+  // the screen it opens.
+  assert.equal(initialPushOf(projection).body, `${home.reasonLine}. Check your package.`);
 });

@@ -174,7 +174,9 @@ test('editor-note normalization: classes, housekeeping omission, and unclassifia
     normalizedUpdate(
       'Editor’s Note : Whole genome sequencing results show that a liverwurst sample tested positive for the outbreak strain of Listeria monocytogenes.',
     ),
-    'Update: laboratory testing linked product samples to the outbreak strain.',
+    // "samples", never "product samples": one recorded note's sequenced sample
+    // was the upstream ingredient at its own manufacturer (P2B7Q).
+    'Update: laboratory testing linked samples to the outbreak strain.',
   );
   // Contact-info housekeeping is omitted, not surfaced.
   assert.equal(

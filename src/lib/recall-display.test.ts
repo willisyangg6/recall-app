@@ -1,13 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { CaseProjection } from '@/domain/recall-types';
 import {
   consumerActionDisplay,
-  geographyDetail,
-  geographyLabel,
   healthRiskSummary,
-  illnessDisplay,
   reasonLine,
   selectHazardGuidance,
 } from './recall-display';
@@ -130,27 +126,6 @@ test('health risk is a concise deterministic template, never source prose (found
   assert.equal(healthRiskSummary('microbial_contamination', null, null), null);
 });
 
-test('illness display maps the three states to standardized consumer wording', () => {
-  assert.deepEqual(
-    illnessDisplay({ status: 'none_reported', statements: ['There have been no…'] }),
-    {
-      headline: 'No illnesses have been reported.',
-      detail: null,
-    },
-  );
-  const reported = illnessDisplay({
-    status: 'reported',
-    statements: ['As of July 25, 2024, 34 sick people have been identified in 13 states.'],
-  });
-  assert.equal(reported.headline, 'Illnesses have been reported.');
-  assert.match(reported.detail ?? '', /34 sick people/);
-  // Silence stays unknown — never "0".
-  assert.deepEqual(illnessDisplay({ status: 'unknown', statements: [] }), {
-    headline: 'No illness count is provided in this notice.',
-    detail: null,
-  });
-});
-
 test('equivalent consumer actions standardize; special actions survive', () => {
   // The dominant FSIS instruction (verbatim from real records).
   const standard = consumerActionDisplay(
@@ -183,36 +158,11 @@ test('equivalent consumer actions standardize; special actions survive', () => {
   assert.equal(consumerActionDisplay(null), null);
 });
 
-test('geography stays honest in both compact and detail forms', () => {
-  const states = (list: string[]): CaseProjection['geography'] => ({
-    scope: 'states',
-    states: list,
-    confidence: 'stated',
-    sourceText: null,
-  });
-  assert.equal(geographyLabel(states(['California'])), 'California');
-  assert.equal(
-    geographyLabel(states(['California', 'Nevada', 'Oregon'])),
-    'California, Nevada, Oregon',
-  );
-  // Large sets compact on the card, full list in detail.
-  const many = states(['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID']);
-  assert.equal(geographyLabel(many), '12 states');
-  assert.equal(geographyDetail(many), many.states.join(', '));
-  assert.equal(
-    geographyLabel({ scope: 'nationwide', states: [], confidence: 'stated', sourceText: null }),
-    'Nationwide',
-  );
-  // Unknown is never converted to nationwide.
-  const unknown: CaseProjection['geography'] = {
-    scope: 'unknown',
-    states: [],
-    confidence: 'stated',
-    sourceText: null,
-  };
-  assert.equal(geographyLabel(unknown), 'Distribution not specified');
-  assert.ok(geographyDetail(unknown).startsWith('Distribution not specified'));
-});
+// Illness wording and location wording are NOT tested here any more, because
+// this file no longer states either (P2B7Q). `illnessDisplay`, `geographyLabel`
+// and `geographyDetail` were dormant second wordings that contradicted the
+// live contracts; the goldens live with their one owner —
+// `src/domain/illness-status.test.ts` and `src/lib/recall-presentation.test.ts`.
 
 // ── P1B: standardized hazard-guide selection ────────────────────────────────
 

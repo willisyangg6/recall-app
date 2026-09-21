@@ -83,9 +83,58 @@ Detail and the opposite way in the notification ledger. §3.5 measures how often
 `illnessLine`, its count patterns and its second negation guard are gone from
 `recall-presentation.ts`. (2) delegates to the contract and reads the same
 `summaryText` the screen reads, so the ledger and Detail are structurally
-incapable of disagreeing. (4) is unchanged and still unreachable from any
-screen. `src/domain/illness-status-wiring.test.ts` fails if a second reader
-reappears anywhere under `src/`.
+incapable of disagreeing. (4) was **deleted in P2B7Q**: it never had a caller,
+and a dormant second wording of the three states is exactly what this audit
+exists to remove. `src/domain/illness-status-wiring.test.ts` fails if a second
+reader reappears anywhere under `src/`.
+
+### 1.2 Hospitalizations and deaths reach no shopper surface — open, founder decision
+
+Measured during the P2B7Q copy audit, over the whole 1,931-case table and the
+898 active consumer-visible cases.
+
+The compact notice is **illnesses-only by founder decision** (P2B7K). That was
+adopted alongside a stated safety property: a source sentence carrying a
+hospitalization, a death, an injury or an adverse reaction would survive in
+**What Happened**, duplicated, so no severe outcome could leave the app. The
+mechanism is `narrativeWithoutIllness`, clause (3) (§6).
+
+**That property does not hold, and never did.** `narrativeWithoutIllness` can
+only PRESERVE a sentence the narrative already contains, and the narrative
+contains none: `buildWhatHappened` composes What Happened from structured
+slots — company, product, reason family, pathogen — and never from
+announcement sentences. Measured: over all 1,931 cases the function changes
+the narrative **zero** times, and **zero** narratives contain an illness
+backing statement at all.
+
+The consequence, over the 898 active consumer-visible cases: **8** have a
+notice that affirms a hospitalization or a death, and **0** show that fact on
+any surface — not on the card, not in What Happened, not in the notice, not in
+Health Risk, not in the spoken label.
+
+| Case       | The notice says                                                                | The app says            |
+| ---------- | ------------------------------------------------------------------------------ | ----------------------- |
+| `fca62f93` | "38 illnesses … including 11 deaths"                                           | `38 illnesses reported` |
+| `f59ed265` | "39 illnesses and one death have been associated with an E. coli…"             | `39 illnesses reported` |
+| `f8a2c8ab` | "Twelve illnesses and one death have been reported to date."                   | `12 illnesses reported` |
+| `10ebfa06` | "9 illnesses, 8 hospitalizations and 1 death…"                                 | `9 illnesses reported`  |
+| `2c491bc9` | "One hospitalization due to Listeria monocytogenes has been reported to date." | _nothing_               |
+| `4c2f1bf1` | "One hospitalization due to Listeria monocytogenes has been reported…"         | _nothing_               |
+| `5a521509` | "7 illnesses resulting in 3 hospitalizations…"                                 | _nothing_               |
+| `1fd40405` | "Death has been reported in cases of severe overdose."                         | _nothing_               |
+
+The last four render nothing because the notice states no illness COUNT, so
+illness status stays `unknown` and the compact notice does not appear —
+correct under §3, and the reason a reported hospitalization can be completely
+silent.
+
+P2B7Q deliberately did **not** change this. What a shopper is shown about
+severe outcomes is an information-hierarchy decision, and the illnesses-only
+notice is the founder's. The audit's obligation was to establish that the
+assumed protection is absent and to stop the documentation asserting it.
+`src/lib/consumer-copy-evidence.test.ts` pins the current behaviour so it
+cannot be mistaken for an accident, and so the day it changes, it changes
+deliberately.
 
 ---
 

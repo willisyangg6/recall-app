@@ -2528,10 +2528,19 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     affectsYouBanner: 'Warning: This recall affects you.',
     whatHappened: {
       // The illness sentence is removed from the narrative only when the
-      // notice completely represents it (P2B7K). A sentence that also carries
-      // a hospitalization, a death, an injury, an adverse reaction or a
-      // qualification the notice cannot show stays here, duplicated, because
-      // dropping it would take a fact out of the app.
+      // notice completely represents it (P2B7K).
+      //
+      // MEASURED (P2B7Q): over the whole 1,931-case table this step changes
+      // NOTHING, because the narrative below is built from structured slots
+      // and never contains a source sentence to begin with. The guard is kept
+      // — it is the correct rule the moment any source prose reaches this
+      // paragraph — but it must not be read as evidence that a
+      // hospitalization, death, injury or adverse reaction survives here.
+      // None does: the compact notice is illnesses-only by founder decision,
+      // and those facts currently reach no shopper surface. The gap is
+      // recorded, with its 8 live cases, in docs/recall-illness-status.md
+      // §1.2 and pinned by `lib/consumer-copy-evidence.test.ts`; closing it
+      // is a founder decision about what Detail shows, not a display fix.
       text: narrativeWithoutIllness(
         detailNarrative(
           happened.text,

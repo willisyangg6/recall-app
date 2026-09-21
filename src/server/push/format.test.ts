@@ -96,7 +96,9 @@ test('new recall with microbial hazard names the pathogen', () => {
     ),
   );
   assert.equal(content.title, 'Recall alert: Frozen Cooked Shrimp');
-  assert.equal(content.body, 'Possible Salmonella contamination. Check your package.');
+  // The SAME sentence the Feed and Saved card render (P2B7Q): "Potential",
+  // the word `conciseReasonLine` uses, not the retired formatter's "Possible".
+  assert.equal(content.body, 'Potential Salmonella contamination. Check your package.');
 });
 
 test('FSIS public health alert leads with Safety alert', () => {

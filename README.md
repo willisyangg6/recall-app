@@ -518,24 +518,38 @@ review. Nothing here is a launch blocker — those live in
   [docs/recall-feed-usability.md](docs/recall-feed-usability.md); read-only
   audit: `npm run qa:search`.
 
-- **P2B7Q — Lotly-authored copy audit.** Every shopper-facing sentence Lotly
-  CONSTRUCTS rather than reproduces verbatim from an agency source needs one
-  audit, because the failure mode is shared: a template that reads as an
-  official statement while asserting something the source never said. In
-  scope are the What Happened templates, update and timeline summaries (the
-  SK Food Group PHA's `Updated Feb 9, 2024: additional affected products were
-added.` is the worked example — correct today, and exactly the shape that
-  needs checking), illness notices, hazard summaries, health-risk
-  explanations, distribution fallbacks, no-image and failure text,
-  older-active-notice explanations, search-match explanations, retailer copy,
-  push notifications, accessibility labels, and empty and error states. For
-  each: classify it as agency text, deterministic transformation, or
-  Lotly-authored template; state its input evidence; check grammar,
-  pluralization and date behaviour; check the edge cases; confirm absence is
-  represented honestly and that the wording cannot overstate certainty;
-  confirm it reads consistently across Feed, Saved, Detail, push, share and
-  accessibility; and record its test and corpus coverage. Recorded during
-  P2B7N.1; the Feb 9 note is not currently considered a defect.
+- **P2B7Q — Lotly-authored copy audit. IMPLEMENTED 2026-09-20.** Every
+  shopper-facing sentence Lotly CONSTRUCTS rather than reproduces verbatim was
+  inventoried, classified and audited against the whole 1,931-case table
+  (898 active consumer-visible). The taxonomy, the evidence rule, the one
+  owner per family, the unknown/null rules and the cross-surface rules are now
+  a document: [docs/recall-copy-contract.md](docs/recall-copy-contract.md).
+  Five objective defects were corrected at their shared source, all
+  display-time so every future ingest inherits them with no backfill:
+  the update note's date was taken from the first date-shaped string anywhere
+  in an Editor's Note, which on 21 of 58 dated notes was the date of the
+  notice being EXPANDED — 20 rendered an "Updated" identical to the recall's
+  own announcement date and one rendered an update ten days before the recall
+  existed; `expan` matched distribution and poundage expansions and rendered
+  them as "additional affected products were added"; a note saying "the recall
+  is not expanded" rendered as an expansion; "additional products **may be**
+  recalled" rendered as a completed addition; and the outbreak clause said
+  "product samples" where the sequenced sample was the upstream ingredient at
+  its own manufacturer. Separately, push copy built its own reason line from
+  the retired `recall-display.reasonLine` and disagreed with the card it opens
+  on 534 of 898 active cases — including the certainty word ("Possible" vs
+  "Potential") — and now reads the same `conciseReasonLine` the card does;
+  four dormant duplicate copy generators (`illnessDisplay`, `geographyLabel`,
+  `geographyDetail`, `timingLine`) that contradicted the live contracts were
+  deleted. The worked example (`Updated Feb 9, 2024: additional affected
+products were added.`) is **kept, verbatim** — the source states the
+  completed change and dates it. Ten mutation checks are recorded in the
+  milestone report; all are caught. Two findings were deliberately left for a
+  founder decision rather than changed: hospitalizations and deaths reach no
+  shopper surface (8 active cases —
+  [docs/recall-illness-status.md](docs/recall-illness-status.md) §1.2), and
+  the card and Detail contradict each other about location on 11 active cases.
+  No production, migration, backfill or repair action was taken.
 
 - **Illness-repair ledger checkpointing (operational hardening).** The illness
   repair CLI (`npm run repair:illness-flags`) writes its durable apply ledger

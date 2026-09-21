@@ -2,6 +2,34 @@
  * Display formatting for recall data. One rule dominates: unknown data is
  * communicated honestly ("Not specified"), never rendered as an empty value or
  * a guessed default.
+ *
+ * ## What is deliberately NOT here any more (P2B7Q)
+ *
+ * This file used to carry a second, dormant wording of four facts the shipped
+ * app already states elsewhere — and each dormant copy contradicted the live
+ * one:
+ *
+ *  - `illnessDisplay` — a fourth reader of illness prose ("No illnesses have
+ *    been reported.", and an invented sentence for the unknown state). The one
+ *    illness contract is `domain/illness-status.ts`, whose notice says "No
+ *    illnesses reported" and renders NOTHING when the source established no
+ *    status (P2B7K). It was the last of that audit's four readers.
+ *  - `geographyLabel` / `geographyDetail` — a second location wording that
+ *    said "13 states" as a bare count (`whereSoldModel` renders the complete
+ *    list instead, P2a) and referred the reader out to the government page
+ *    ("Check the official notice for more information"), which is a standing
+ *    critical QA violation.
+ *  - `timingLine` — "Announced X · Updated Y", both labels at once, where
+ *    `activityDisplay` states exactly one and earns "Updated" only from the
+ *    material-change ledger.
+ *  - `hazardLabel` and `formatDate` — unreferenced by anything.
+ *
+ * None of them had a caller. They are gone rather than left dormant because a
+ * dormant second wording is exactly what the copy audit exists to prevent: it
+ * costs nothing until a screen imports it, and then the app says two different
+ * things about one recall. The live owners are `domain/illness-status.ts`,
+ * `lib/recall-presentation.ts`, and this file's surviving reason/hazard/action
+ * helpers.
  */
 
 import {
@@ -12,9 +40,7 @@ import {
   type HazardGuideKey,
   type HazardGuideSource,
 } from '@/content/hazard-guides';
-import type { IllnessReport } from '@/domain/illness';
-import type { CaseProjection } from '@/domain/recall-types';
-import { cleanDisplayText, joinSentences } from '@/domain/text';
+import { cleanDisplayText } from '@/domain/text';
 import type { TypedReason } from './recall-reason';
 
 export function noticeTypeLabel(noticeType: 'recall' | 'public_health_alert'): string {
@@ -399,70 +425,6 @@ export function stateLabel(state: 'active' | 'closed' | 'retracted'): string {
   }
 }
 
-export function hazardLabel(hazardCategory: string): string | null {
-  switch (hazardCategory) {
-    case 'allergen':
-      return 'Undeclared allergen';
-    case 'microbial_contamination':
-      return 'Possible contamination';
-    case 'foreign_material':
-      return 'Foreign material';
-    case 'chemical_contamination':
-      return 'Chemical contamination';
-    case 'product_integrity':
-      return 'Product integrity';
-    case 'other_regulatory':
-      return 'Regulatory issue';
-    default:
-      return null;
-  }
-}
-
-/** Compact geography for cards; the full state list lives in the detail view. */
-export function geographyLabel(geography: CaseProjection['geography']): string {
-  switch (geography.scope) {
-    case 'nationwide':
-      return 'Nationwide';
-    case 'states':
-      return geography.states.length > 3
-        ? `${geography.states.length} states`
-        : geography.states.join(', ');
-    case 'unknown':
-      // Unknown is never rendered as nationwide or as "none".
-      return 'Distribution not specified';
-  }
-}
-
-/** Full geography for the detail view (complete state list, honest unknowns). */
-export function geographyDetail(geography: CaseProjection['geography']): string {
-  switch (geography.scope) {
-    case 'nationwide':
-      return 'Nationwide';
-    case 'states':
-      return geography.states.join(', ');
-    case 'unknown':
-      return 'Distribution not specified. Check the official notice for more information.';
-  }
-}
-
-/**
- * Standardized illness-report presentation (three-way semantics, Part 4).
- * Source silence is presented as "not provided" — NEVER as zero.
- */
-export function illnessDisplay(report: IllnessReport): { headline: string; detail: string | null } {
-  switch (report.status) {
-    case 'none_reported':
-      return { headline: 'No illnesses have been reported.', detail: null };
-    case 'reported':
-      return {
-        headline: 'Illnesses have been reported.',
-        detail: cleanDisplayText(joinSentences(report.statements)),
-      };
-    case 'unknown':
-      return { headline: 'No illness count is provided in this notice.', detail: null };
-  }
-}
-
 export interface ActionDisplay {
   /** The consumer instruction, standardized when functionally equivalent. */
   primary: string;
@@ -513,21 +475,4 @@ export function consumerActionDisplay(sourceText: string | null): ActionDisplay 
     secondary: retailer ? 'Restaurants and retailers should not sell or serve it.' : null,
     standardized,
   };
-}
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** "Aug 17, 2026" from an ISO date, without timezone surprises. */
-export function formatDate(isoDate: string): string {
-  const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!match) return isoDate;
-  const [, year, month, day] = match;
-  return `${MONTHS[Number(month) - 1]} ${Number(day)}, ${year}`;
-}
-
-export function timingLine(publishedAt: string, lastPublicActivityAt: string): string {
-  const published = `Announced ${formatDate(publishedAt)}`;
-  return lastPublicActivityAt > publishedAt
-    ? `${published} · Updated ${formatDate(lastPublicActivityAt)}`
-    : published;
 }

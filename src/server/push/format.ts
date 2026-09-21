@@ -1,8 +1,10 @@
 /**
  * Deterministic push copy — one source-grounded formatter for every
  * notification the delivery worker sends. No LLM, no raw agency headlines:
- * the same display helpers the app's cards use build the product identity and
- * reason, so a push and the screen it opens can never disagree.
+ * the product identity and the reason sentence come from the SAME shared
+ * contracts the app's cards build from (`consumer-summary` for the title,
+ * `conciseReasonLine` + `cardSummaryText` for the reason), so a push and the
+ * card it opens can never disagree.
  *
  * Titles carry no regulatory jargon; consumer risk speaks the ConsumerRiskTier
  * language (Critical/Very High/High/Moderate/Low), read from the one label
@@ -16,7 +18,7 @@
  */
 
 import { displayProductTitle, productDisplayName } from '../../lib/consumer-summary';
-import { reasonLine } from '../../lib/recall-display';
+import { cardSummaryText, conciseReasonLine } from '../../lib/recall-presentation';
 import { agencyLabel, riskTierWord } from '../../lib/risk-display';
 import { consumerRiskTier, classificationStatus } from '../../domain/risk-tier';
 import type { DeliverableEvent, PushMessage } from './types';
@@ -57,10 +59,22 @@ export function formatPushContent(event: DeliverableEvent): PushContent {
       projection.noticeType === 'public_health_alert'
         ? `Safety alert: ${product}`
         : `Recall alert: ${product}`;
-    const reason = reasonLine(
-      projection.reasonText,
-      projection.hazardCategory,
-      projection.pathogenOrAllergen,
+    // THE shared reason sentence — the one `buildHomeCardModel` puts on the
+    // Feed and Saved card, composed once in the presentation contract and
+    // stripped of its trailing stop the same way (P2B7Q). Push used to build
+    // its own from `recall-display.reasonLine`, which is on the project's
+    // retired-formatter list: over the live active feed the two wordings
+    // disagreed on 534 of 898 cases, including the certainty word — the card
+    // said "Potential Listeria contamination" while the push said "Possible
+    // Listeria monocytogenes contamination". A notification and the card it
+    // opens now read the same words by construction.
+    const reason = cardSummaryText(
+      conciseReasonLine({
+        reasonText: projection.reasonText,
+        hazardCategory: projection.hazardCategory,
+        pathogenOrAllergen: projection.pathogenOrAllergen,
+        title: projection.title,
+      }),
     );
     return {
       title,

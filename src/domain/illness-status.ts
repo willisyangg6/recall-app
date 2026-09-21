@@ -874,6 +874,15 @@ function undisplayedFactsIn(sentence: string): string[] {
  * hospitalization, death, injury and adverse-event information is never
  * deleted.
  *
+ * WHAT THIS DOES NOT ESTABLISH (measured, P2B7Q). Clause (3) can only PRESERVE
+ * a sentence the narrative already contains, and over the whole 1,931-case
+ * table the narrative contains none: `buildWhatHappened` composes it from
+ * structured slots, so this function is a no-op on every recorded case. It is
+ * therefore not the reason a hospitalization or a death is safe — nothing is,
+ * today. Of the 898 active consumer-visible cases, 8 have a notice that
+ * affirms a hospitalization or a death and not one of them shows it anywhere.
+ * See docs/recall-illness-status.md §1.2.
+ *
  * Sentences that are not backing statements — why the recall happened, where
  * the product went, how much was recalled — are never candidates. If removal
  * would empty the narrative it is kept whole: the notice states a status, it
