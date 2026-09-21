@@ -113,9 +113,8 @@ test('golden: Grand Central Bakery Potato Sourdough is a designed checker, not a
   assert.ok(!consumer.packageCheck.fields.some((f) => f.key === 'upc'));
   // "No Packaging" and "None" are dropped rather than shown as identifiers.
   assert.ok(!allFactValues(consumer).some((v) => /^(No Packaging|None)$/i.test(v)));
-  // Photos are in-app, and the action never refers the user to FDA.
+  // Photos are in-app.
   assert.ok(consumer.photos.length >= 1);
-  assert.doesNotMatch(consumer.action.text, /notice|fda\.gov/i);
   assert.equal(audit.violations.length, 0, JSON.stringify(audit.violations));
 });
 
@@ -322,14 +321,11 @@ test('golden: GreenWise/Publix keeps company, brand, and retailer distinct', () 
   );
 });
 
-test('golden: Bakr keeps its lot in the checker and out of the action', () => {
+test('golden: Bakr keeps its lot in the checker and out of the prose', () => {
   const { consumer } = consumerCaseFor(
     'bear-stewart-llc-issues-allergy-alert-undeclared-soy-bakr-brown-butter-chocolate-chunk-ready-bake',
   );
   assert.ok(allFactValues(consumer).includes('2606022'));
-  assert.doesNotMatch(consumer.action.text, /2606022/);
-  // Undeclared soy → the action addresses people with that sensitivity.
-  assert.match(consumer.action.text, /^If you are allergic or sensitive to soy, /);
   assert.equal(
     consumer.packageCheck.codeLocation?.text,
     'On the bottom-left of the back of the pouch.',
@@ -354,7 +350,6 @@ test('golden: Rooted in RARE aquafaba keeps both barcodes and both best-by dates
   assert.equal(consumer.quantityText, '3,860 units');
   assert.equal(projection.quantityText, '3,860 units');
   assert.ok(!allFactValues(consumer).some((v) => /3,?860/.test(v)));
-  assert.match(consumer.action.text, /^If you are allergic or sensitive to egg, /);
 });
 
 test('golden: every consumer surface is free of external-notice instructions', () => {
@@ -372,7 +367,6 @@ test('golden: every consumer surface is free of external-notice instructions', (
     const product = productDisplayName(projection.productDescription, projection.title);
     const copy = [
       distributionCopy(consumer),
-      consumer.action.text,
       consumer.packageCheck.scopeStatement,
       product,
       consumer.packageCheck.codeLocation?.text ?? '',
@@ -388,8 +382,7 @@ test('golden: every consumer surface is free of external-notice instructions', (
       );
       assert.doesNotMatch(text, /see image below/i, `${slug}: ${text}`);
     }
-    // Every case has a usable action and an honest package statement.
-    assert.ok(consumer.action.text.length > 10, slug);
+    // Every case has an honest package statement.
     assert.match(consumer.packageCheck.scopeStatement, /[.!?]$/, slug);
   }
 });

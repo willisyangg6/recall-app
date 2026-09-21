@@ -25,17 +25,19 @@
  */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { deriveIllnessStatus, illnessNoticeCopy } from '@/domain/illness-status';
-import type { CaseProjection } from '@/domain/recall-types';
+import type { CaseProjection, TimelineEntry } from '@/domain/recall-types';
 import { displayableRetailerNames } from '@/domain/retailer-display';
 import { formatPushContent } from '@/server/push/format';
 import type { DeliverableEvent } from '@/server/push/types';
 import { buildSearchEntry, matchesSearch, parseSearchQuery } from './feed-search';
 import type { CaseDetail, FeedItem } from './recall-feed';
 import { buildDetailModel, buildHomeCardModel } from './recall-presentation';
-import { normalizedUpdate } from './what-happened';
+import { buildWhatHappened } from './what-happened';
 
 const TODAY = '2026-09-20';
 
@@ -130,192 +132,66 @@ function initialPushOf(source: CaseProjection) {
 
 /** An Editor's Note as FSIS publishes one, on its own line in the summary. */
 function noteOf(text: string): string {
-  return `Some announcement prose.\nEditor’s Note: ${text}\nMore prose.`;
+  return `Some announcement prose.\nEditor\u2019s Note: ${text}\nMore prose.`;
 }
 
-// ── The update note: what changed, and when ─────────────────────────────────
+// ── The update note: removed, generator and all (P2B7Q.1) ───────────────────
 
-test('the worked example survives verbatim: the SK Food Group Feb 9 note', () => {
-  // The exact recorded note behind the milestone's worked example. It states a
-  // completed change, it dates itself, and it is therefore kept.
-  assert.equal(
-    normalizedUpdate(
-      noteOf(
-        'Feb. 9, 2024 – Details of this public health alert were updated to reflect ' +
-          'additional products affected by the dairy products that have been recalled due to ' +
-          'possible Listeria Monocytogenes contamination. Check back frequently to see if ' +
-          'additional products have been added.',
-      ),
-    ),
-    'Updated Feb 9, 2024: additional affected products were added.',
+/**
+ * P2B7Q hardened `normalizedUpdate` until every clause it rendered was earned
+ * by the source, and its tests are gone with it — the founder then removed the
+ * treatment entirely. THAT a recall changed is already told honestly, by its
+ * resurfacing in Recent Activity and by the "Updated" date the material-change
+ * ledger earns. WHAT changed was a paraphrase of an Editor's Note, which is
+ * editorial prose the app has no business writing.
+ *
+ * These are the tests that keep it gone. They are deliberately about ABSENCE:
+ * no field, no generator, and no Editor's Note text reaching a shopper by any
+ * other route.
+ */
+test('no update note reaches the model, from the richest Editor\u2019s Note in the corpus', () => {
+  const summary = noteOf(
+    'Feb. 9, 2024 \u2013 Details of this public health alert were updated to reflect ' +
+      'additional products affected by the dairy products that have been recalled due to ' +
+      'possible Listeria Monocytogenes contamination.',
   );
-});
-
-test('a referenced date is never presented as the date of the update', () => {
-  // Recorded shape, 21 of 58 dated notes: the only date in the note belongs to
-  // the notice BEING expanded, so the update itself is undated and says so.
-  assert.equal(
-    normalizedUpdate(
-      noteOf(
-        'This release is being reissued as an expansion of the May 16, 2017 public health ' +
-          'alert to include additional products and production dates.',
-      ),
-    ),
-    'Update: additional affected products were added.',
-  );
-  // …while a date the note states as ITS OWN is kept, in both the shapes FSIS
-  // writes: a leading dateline, and the direct object of an update verb.
-  assert.equal(
-    normalizedUpdate(noteOf('(May 5, 2017): This release is being updated to correct the label.')),
-    'Updated May 5, 2017: affected product and label details were corrected.',
-  );
-  assert.equal(
-    normalizedUpdate(
-      noteOf('Details of this recall were updated April 27, 2022, to correct the lot codes.'),
-    ),
-    'Updated Apr 27, 2022: affected product and label details were corrected.',
-  );
-  // A later "updated on <date>" beats an earlier referenced date in the same
-  // note — the recorded Sept. 30 / Oct. 13 shape.
-  assert.equal(
-    normalizedUpdate(
-      noteOf(
-        'This release is being reissued as an expansion of the Sept. 30, 2016, release to ' +
-          'include additional products. This press release was updated on Oct. 13, 2016 to ' +
-          'include more information about the sandwich steak products.',
-      ),
-    ),
-    'Updated Oct 13, 2016: additional affected products were added.',
-  );
-});
-
-test('one month is spelled one way, however the notice spells it', () => {
-  const short = normalizedUpdate(noteOf('Sept. 1, 2022 — The product labels have been updated.'));
-  const long = normalizedUpdate(
-    noteOf('September 1, 2022 — The product labels have been updated.'),
-  );
-  assert.equal(short, 'Updated Sep 1, 2022: affected product and label details were corrected.');
-  assert.equal(short, long);
-});
-
-test('a date-shaped string that is not a date never renders as one', () => {
-  // "Lot 5, 2024" has a date's shape and no month in it. The old rule rendered
-  // the unmatched word verbatim ("Updated Lot 5, 2024"); the gate drops it.
-  const note = normalizedUpdate(noteOf('Lot 5, 2024 codes were corrected on the product labels.'));
-  assert.equal(note, 'Update: affected product and label details were corrected.');
-});
-
-test('a possibility never becomes a completed change', () => {
-  // Recorded: the only additive statement in the note is about what MIGHT
-  // happen. Nothing was added, so nothing is claimed.
-  assert.equal(
-    normalizedUpdate(
-      noteOf(
-        'FSIS is continuing to investigate illnesses associated with this widespread outbreak, ' +
-          'and additional product from other companies may also be recalled.',
-      ),
-    ),
-    null,
-  );
-  assert.equal(
-    normalizedUpdate(
-      noteOf(
-        'Consumers are advised to check this recall release often as there may be additional ' +
-          'products included in this recall in the near future.',
-      ),
-    ),
-    null,
-  );
-  // The hedge is on the ADDITION, never on the hazard: a completed expansion
-  // whose products "may be contaminated" keeps its clause.
-  assert.equal(
-    normalizedUpdate(
-      noteOf(
-        'Dec. 11, 2021: This product recall has been expanded, with an expanded list of fully ' +
-          'cooked ham products that may be contaminated with Listeria monocytogenes.',
-      ),
-    ),
-    'Updated Dec 11, 2021: additional affected products were added.',
-  );
-});
-
-test('a negated expansion is never rendered as an expansion', () => {
-  // Recorded: the note says in so many words that the recall was NOT expanded.
-  assert.equal(
-    normalizedUpdate(
-      noteOf(
-        'This release was updated July 12 to further clarify and correct “Use or Freeze by” and ' +
-          '“Best by” date ranges, as well as to provide an updated product list. The product ' +
-          'list remains the same and the recall is not expanded.',
-      ),
-    ),
-    'Update: affected product and label details were corrected.',
-  );
-});
-
-test('an expansion of something other than products claims nothing about products', () => {
-  // Distribution, poundage and a school list are all expansions. None of them
-  // adds a product, and the template that says products were added is silent.
-  for (const note of [
-    'October 4, 2023 – Details of this recall were updated to expand the distribution of the ' +
-      'product to retailers in Alabama and Florida.',
-    'Details of this recall were updated April 27, 2022, to expand the April 16, 2022, recall ' +
-      'poundage from 709 pounds to 3,819 pounds.',
-    'The scope of this recall expansion now includes an additional 5,156,076 pounds of raw beef ' +
-      'products, which were produced and packed from July 26, 2018 to Sept. 7, 2018.',
-    'October 17, 2024 – A preliminary list of schools that received products that include ' +
-      'BrucePac recalled ready-to-eat (RTE) meat and poultry have been added.',
-  ]) {
-    const rendered = normalizedUpdate(noteOf(note));
-    assert.ok(
-      rendered === null || !rendered.includes('additional affected products were added'),
-      `claimed products were added from: ${note}`,
-    );
+  const model = detailOf({ summaryText: summary });
+  assert.ok(!('update' in model.whatHappened), 'the DetailModel still carries an update field');
+  assert.deepEqual(Object.keys(model.whatHappened), ['text']);
+  const rendered = JSON.stringify(model);
+  for (const fragment of ['Editor', 'additional affected products', 'Updated Feb 9']) {
+    assert.ok(!rendered.includes(fragment), `the model still carries "${fragment}"`);
   }
-  // …and a note that really does add a product still says so.
-  assert.equal(
-    normalizedUpdate(
-      noteOf('Details of this recall were updated on Jan. 30, 2015 to reflect additional product.'),
-    ),
-    'Updated Jan 30, 2015: additional affected products were added.',
-  );
 });
 
-test('an upstream supplier’s test is never attributed to this product', () => {
-  // Recorded: the sequenced sample was the INGREDIENT, at its own
-  // manufacturer. The clause states what was tested, never whose product.
-  const upstream = normalizedUpdate(
-    noteOf(
-      'September 30, 2025: Whole genome sequencing confirmed a sample of pasta from the same ' +
-        'FDA-regulated pasta manufacturer as the ingredient used in these meals is genetically ' +
-        'related to the Listeria Outbreak Linked to Prepared Meals.',
-    ),
-  );
-  assert.equal(
-    upstream,
-    'Updated Sep 30, 2025: laboratory testing linked samples to the outbreak strain.',
-  );
-  assert.ok(!/product samples/.test(upstream ?? ''));
+test('buildWhatHappened returns text and provenance only \u2014 the generator is deleted', () => {
+  const happened = buildWhatHappened({
+    title: 'Acme Foods Recalls Chicken Products',
+    noticeType: 'recall',
+    reasonText: 'Product Contamination',
+    hazardCategory: 'microbial_contamination',
+    pathogenOrAllergen: 'Salmonella',
+    firmDisplayName: 'Acme Foods',
+    summaryText: noteOf('Details of this recall were updated to reflect additional product.'),
+    productDescription: null,
+    consumerBrand: null,
+  });
+  assert.deepEqual(Object.keys(happened).sort(), ['source', 'text']);
+  assert.ok(!/additional|Editor|Updated/i.test(happened.text));
 });
 
-test('an unclassifiable or housekeeping note renders nothing at all', () => {
-  assert.equal(normalizedUpdate(noteOf('This release was reissued.')), null);
-  assert.equal(
-    normalizedUpdate(
-      noteOf('Details of this recall release were updated to reflect updated contact information.'),
-    ),
-    null,
-  );
-  assert.equal(normalizedUpdate('No note here at all.'), null);
-  assert.equal(normalizedUpdate(null), null);
-});
-
-test('the update note never invents a date the notice did not state', () => {
-  const dated = normalizedUpdate(
-    noteOf('This release is being reissued to include additional product.'),
-  );
-  assert.equal(dated, 'Update: additional affected products were added.');
-  assert.ok(!/\d{4}/.test(dated ?? ''), 'an undated note must carry no year');
+test('the Detail screen renders no update line, and imports no generator', () => {
+  const screen = readFileSync(join(__dirname, '..', 'app', 'recall', '[id].tsx'), 'utf8');
+  const code = screen
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+  assert.ok(!code.includes('whatHappened.update'), 'Detail still renders an update line');
+  assert.ok(!code.includes('normalizedUpdate'), 'Detail still reaches for the generator');
+  // …and the generator is not exported from anywhere under src/.
+  const owner = readFileSync(join(__dirname, 'what-happened.ts'), 'utf8');
+  assert.ok(!owner.includes('export function normalizedUpdate'), 'the generator is back');
 });
 
 // ── Illness: absence, denial and count are three different things ───────────
@@ -329,52 +205,43 @@ test('silence, denial and a count are three distinct illness answers', () => {
     summaryText:
       'There have been no confirmed reports of illness due to consumption of these products.',
   }).illnessNotice;
-  assert.equal(denied?.text, 'No illnesses reported');
+  assert.deepEqual(denied?.lines, ['No illnesses reported']);
 
   const counted = detailOf({
     summaryText: 'There have been 3 reported illnesses associated with these products.',
   }).illnessNotice;
-  assert.equal(counted?.text, '3 illnesses reported');
+  assert.deepEqual(counted?.lines, ['3 illnesses reported']);
 
   // Nothing in the app converts the unknown state into either of the others.
-  assert.notEqual(denied?.text, null);
-  assert.ok(!/\b0\b|none/i.test(denied?.text ?? ''));
+  assert.ok(!/\b0\b|none/i.test(denied?.lines.join(' ') ?? ''));
 });
 
 test('the illness count agrees with its number and its grammar', () => {
-  assert.equal(
+  assert.deepEqual(
     detailOf({ summaryText: 'One illness has been reported in connection with this recall.' })
-      .illnessNotice?.text,
-    '1 illness reported',
+      .illnessNotice?.lines,
+    ['1 illness reported'],
   );
-  assert.equal(
+  assert.deepEqual(
     detailOf({ summaryText: 'Two illnesses have been reported in connection with this recall.' })
-      .illnessNotice?.text,
-    '2 illnesses reported',
+      .illnessNotice?.lines,
+    ['2 illnesses reported'],
   );
 });
 
+// ── Hospitalizations and deaths (P2B7Q.1) ──────────────────────────────────
+
 /**
- * MEASURED, NOT ASSUMED: what the app does with a hospitalization or a death.
+ * The gap P2B7Q measured and P2B7Q.1 closes.
  *
- * P2B7K's de-duplication was written to keep a sentence carrying a
- * hospitalization, a death, an injury or an adverse reaction in What Happened,
- * "duplicated", because the compact notice shows only the illness count.
- *
- * That safety property does not exist, and this test is what says so. What
- * Happened is built from structured slots — it never contains a source
- * sentence in the first place — so `narrativeWithoutIllness` has nothing to
- * keep. Measured over the whole 1,931-case table it changes nothing, and over
- * the 898 active consumer-visible cases the 8 whose notice affirms a
- * hospitalization or a death show that fact on no surface at all.
- *
- * This is pinned rather than fixed because showing a death count is an
- * information-hierarchy decision the founder owns, and P2B7K's notice is
- * illnesses-only by founder decision. The test exists so the gap cannot be
- * mistaken for an accident, and so the day it is closed, it is closed
- * deliberately. See docs/recall-illness-status.md §1.2 (P2B7Q).
+ * P2B7K's compact notice was illnesses-only, on the understanding that a
+ * hospitalization or a death survived in `What Happened`. It did not: the
+ * narrative is built from structured slots and never carries a source
+ * sentence, so 8 of 898 active cases affirmed one of those facts and not one
+ * of them showed it anywhere. These are the recorded sentences behind that
+ * measurement, each now stated on its own line.
  */
-test('a severe-outcome fact reaches only the illness count today — measured, not assumed', () => {
+test('a hospitalization and a death are stated, one fact per line, in fixed order', () => {
   const model = detailOf({
     title: 'Acme Foods Recalls Soft Cheese Products',
     reasonText: 'Product Contamination',
@@ -383,28 +250,123 @@ test('a severe-outcome fact reaches only the illness count today — measured, n
     summaryText:
       'To date, there have been 9 illnesses, 8 hospitalizations, and 1 death linked to the soft cheese products.',
   });
-  // The count is stated…
-  assert.equal(model.illnessNotice?.text, '9 illnesses reported');
-  // …and What Happened is the structured narrative, carrying no source prose,
-  // so the hospitalizations and the death appear on no surface.
+  assert.deepEqual(model.illnessNotice?.lines, [
+    '9 illnesses reported',
+    '8 hospitalizations reported',
+    '1 death reported',
+  ]);
+  assert.equal(model.illnessNotice?.tone, 'reported');
+  // One utterance, one stop per fact.
+  assert.equal(
+    model.illnessNotice?.spoken,
+    '9 illnesses reported. 8 hospitalizations reported. 1 death reported.',
+  );
+  // …and the narrative is untouched: it never carried the sentence.
   assert.match(
     model.whatHappened.text,
     /^Acme Foods recalled .* may be contaminated with Listeria monocytogenes\.$/,
   );
-  const everything = [
-    model.whatHappened.text,
-    model.whatHappened.update ?? '',
-    model.illnessNotice?.text ?? '',
-    model.illnessNotice?.spoken ?? '',
-    model.sections.healthRisk?.risk ?? '',
-  ].join(' ');
-  assert.ok(!/hospitali|death/i.test(everything));
-  // A notice that states a hospitalization and NO illness count renders
-  // nothing at all, because illness status stays unknown.
-  const hospitalizationOnly = detailOf({
+});
+
+test('a hospitalization with no illness count still renders — the notice is no longer silent', () => {
+  // Recorded (`2c491bc9`, `4c2f1bf1`): the notice states a hospitalization and
+  // no illness count at all. Illness status stays honestly unknown, so no
+  // illness line renders — and the fact the notice DID establish is stated.
+  const model = detailOf({
     summaryText: 'One hospitalization due to Listeria monocytogenes has been reported to date.',
   });
-  assert.equal(hospitalizationOnly.illnessNotice, null);
+  assert.deepEqual(model.illnessNotice?.lines, ['1 hospitalization reported']);
+  assert.equal(model.illnessNotice?.tone, 'reported');
+});
+
+test('a harm the hazard MIGHT cause is never reported as one that happened', () => {
+  // The single largest hazard in the corpus: FDA and FSIS carry standing
+  // education verbatim on hundreds of notices. Each of these states what the
+  // organism can do, and none of them reports anything.
+  for (const education of [
+    'In some persons, however, the diarrhea may be so severe that the patient needs to be hospitalized.',
+    'The condition can lead to serious kidney damage and even death.',
+    'HUS can lead to death.',
+    'Complications from Cronobacter infection in infants can include brain abscess, developmental delays, motor impairments, and death.',
+    'Death has been reported in cases of severe overdose.',
+  ]) {
+    const status = deriveIllnessStatus(education);
+    assert.equal(status.hospitalizations.kind, 'unknown', education);
+    assert.equal(status.deaths.kind, 'unknown', education);
+    const copy = illnessNoticeCopy(status);
+    assert.ok(
+      copy === null || !/hospitali|death/i.test(copy.lines.join(' ')),
+      `education became a report: ${education}`,
+    );
+  }
+});
+
+test('a denied harm renders no line, and never a reassuring one', () => {
+  // Affirmation and denial in one sentence: each mention is judged on its own.
+  const mixed = deriveIllnessStatus(
+    'There have been 20 reported cases with 5 hospitalization and no deaths.',
+  );
+  assert.equal(mixed.hospitalizations.count, 5);
+  assert.equal(mixed.deaths.kind, 'unknown');
+  const lines = illnessNoticeCopy(mixed)?.lines ?? [];
+  assert.ok(lines.includes('5 hospitalizations reported'));
+  assert.ok(!lines.some((line) => /death/i.test(line)), 'a death line was rendered from a denial');
+
+  // A whole-notice denial of both renders the illness line alone.
+  assert.deepEqual(
+    illnessNoticeCopy(deriveIllnessStatus('No illnesses or deaths have been reported to date.'))
+      ?.lines,
+    ['No illnesses reported'],
+  );
+});
+
+test('a neighbouring figure is never read as a harm count', () => {
+  // "9 illnesses, 8 hospitalizations, and 1 death" must yield 8 and 1 — the
+  // comma between a figure and the next noun disowns it.
+  const status = deriveIllnessStatus(
+    'To date, there have been 9 illnesses, 8 hospitalizations, and 1 death linked to the products.',
+  );
+  assert.equal(status.illnesses, 9);
+  assert.equal(status.hospitalizations.count, 8);
+  assert.equal(status.deaths.count, 1);
+});
+
+test('an affirmation with no trustworthy figure says so without inventing one', () => {
+  // Recorded (`f84e2407`): "Approximately half of affected case-patients have
+  // been hospitalized" states a hospitalization and no number at all.
+  const status = deriveIllnessStatus(
+    'Approximately half of affected case-patients have been hospitalized due to illness.',
+  );
+  assert.equal(status.hospitalizations.kind, 'reported_unspecified');
+  assert.equal(status.hospitalizations.count, null);
+  assert.ok(illnessNoticeCopy(status)!.lines.includes('Hospitalizations reported'));
+});
+
+test('a harm inherits the illness contract’s attribution, never its own', () => {
+  // Recorded (`5a521509`): the notice states "7 illnesses resulting in 3
+  // hospitalizations across the United States … 3 of which MAY be linked to a
+  // single product". The source does not tie those figures to this recall, so
+  // the illness status is unknown — and the hospitalization is too. The harms
+  // are read from the SAME own-attributed sentences, so they cannot claim an
+  // outbreak the illness line already declined to claim.
+  const status = deriveIllnessStatus(
+    'No other Ambrosia Brands products are impacted by this recall. ' +
+      'To date, there have been 7 illnesses resulting in 3 hospitalizations across the ' +
+      'United States due to Salmonella contamination, 3 of which may be linked to a single product.',
+  );
+  assert.equal(status.kind, 'unknown');
+  assert.equal(status.hospitalizations.kind, 'unknown');
+  assert.equal(illnessNoticeCopy(status), null);
+});
+
+test('a reported death overrides the calm treatment of an illness denial', () => {
+  const copy = illnessNoticeCopy(
+    deriveIllnessStatus(
+      'No illnesses have been reported. Two deaths have been reported in connection with this recall.',
+    ),
+  )!;
+  assert.ok(copy.lines.includes('2 deaths reported'));
+  assert.equal(copy.tone, 'reported', 'a reported death still read as the calm state');
 });
 
 // ── Certainty, negation and subject ─────────────────────────────────────────
@@ -544,18 +506,42 @@ test('retailers stay a Detail-only fact, and searching for one still finds it (P
   assert.ok(parsed !== null && matchesSearch(buildSearchEntry(feedItemOf(source)), parsed));
 });
 
-// ── Fallbacks look like fallbacks ───────────────────────────────────────────
+// ── Retired concepts stay retired ───────────────────────────────────────────
 
-test('an app recommendation is marked as ours, and a source instruction as the notice’s', () => {
-  const ours = detailOf().action;
-  assert.equal(ours.origin, 'app');
-  assert.match(ours.text, /^We recommend that you do not eat this product\./);
-  const theirs = detailOf({
+/**
+ * The "What should I do?" instruction is gone, generator and all (P2B7Q.1).
+ *
+ * It was built, tested and rendered nowhere — P2B7Q measured that — and it was
+ * the app's only piece of copy that gave a shopper an INSTRUCTION in Lotly's
+ * own voice ("We recommend that you do not eat this product."). The founder
+ * retired the concept rather than the wiring, so no dormant generator is left
+ * for a future screen to pick up.
+ */
+test('the consumer-action concept is gone from the model and from the source', () => {
+  const model = detailOf({
     consumerAction:
       'Consumers should throw the product away or return it to the place of purchase.',
-  }).action;
-  assert.equal(theirs.origin, 'source');
-  assert.ok(!/We recommend/.test(theirs.text));
+  });
+  assert.ok(!('action' in model), 'the DetailModel still carries an action');
+  const rendered = JSON.stringify(model);
+  assert.ok(!rendered.includes('We recommend'), 'an app instruction is still composed');
+  assert.ok(
+    !rendered.includes('throw the product away'),
+    'a source instruction still reaches a model',
+  );
+  for (const [name, path] of [
+    ['projection', join(__dirname, 'consumer-projection.ts')],
+    ['display', join(__dirname, 'recall-display.ts')],
+  ] as const) {
+    const code = readFileSync(path, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//'))
+      .join('\n');
+    for (const gone of ['buildConsumerAction', 'consumerActionDisplay', 'We recommend that you']) {
+      assert.ok(!code.includes(gone), `${name} still carries ${gone}`);
+    }
+  }
 });
 
 test('the raw projection is never mutated by rendering it', () => {
@@ -576,15 +562,58 @@ test('the raw projection is never mutated by rendering it', () => {
   assert.equal(JSON.stringify(source), before, 'rendering mutated the stored projection');
 });
 
-test('the update note is display-time, so a corrected ingest needs no rewrite', () => {
-  // Same stored summary, rendered twice: the note is derived on every read,
-  // never stored, so every future ingest inherits the corrected classifier.
-  const summary = noteOf(
-    'Details of this recall were updated on Jan. 30, 2015 to reflect additional product.',
+test('a corrected narrative is display-time, so a future ingest needs no rewrite', () => {
+  // Same stored summary, rendered twice: the narrative is derived on every
+  // read and nothing about it is stored, so every future ingest inherits the
+  // current contract without a backfill.
+  const summary = 'Acme Foods is recalling chicken products.';
+  const first = detailOf({ summaryText: summary }).whatHappened.text;
+  const second = detailOf({ summaryText: summary }).whatHappened.text;
+  assert.equal(first, second);
+});
+
+// ── P2B7Q.1: what an update still tells a shopper ───────────────────────────
+
+/**
+ * The founder removed the generated update NOTE and kept update RESURFACING.
+ * `feed-relevance.test.ts` pins the resurfacing; this pins the other half —
+ * the "Updated" date, and the identity it is attached to.
+ */
+test('an update changes the date on the SAME recall, never the recall', () => {
+  const source = projection({ publishedAt: '2024-01-05T00:00:00.000Z' });
+  const timeline: TimelineEntry[] = [
+    {
+      occurredAt: '2026-08-13T00:00:00.000Z',
+      kind: 'expanded',
+      summary: 'the recall was expanded',
+      causedBySnapshotIds: [],
+      material: true,
+      ruleId: 'expansion_products',
+    },
+  ];
+
+  const before = buildDetailModel(
+    { id: 'case-1', projection: source, timeline: [], affectedProducts: [], visuals: [] },
+    { today: TODAY, affectsYou: false },
   );
-  assert.equal(normalizedUpdate(summary), normalizedUpdate(summary));
-  assert.equal(
-    detailOf({ summaryText: summary }).whatHappened.update,
-    'Updated Jan 30, 2015: additional affected products were added.',
+  const after = buildDetailModel(
+    { id: 'case-1', projection: source, timeline, affectedProducts: [], visuals: [] },
+    { today: TODAY, affectsYou: false },
   );
+
+  // One identity across the update — an update is not a new recall.
+  assert.equal(before.id, after.id);
+  // The date is the ONLY thing the shopper is told changed, and "Updated" is
+  // earned from the material-change ledger rather than from any prose.
+  assert.equal(before.activity.kind, 'announced');
+  assert.equal(after.activity.kind, 'updated');
+  assert.match(after.activity.text, /^Updated /);
+  // …and the card says exactly the same thing, from the same ledger.
+  const card = buildHomeCardModel(
+    { ...feedItemOf(source), timeline },
+    { today: TODAY, prefs: null },
+  );
+  assert.equal(card.activity.text, after.activity.text);
+  // Nothing anywhere paraphrases WHAT changed.
+  assert.ok(!/additional|expansion|expanded|products were added/i.test(JSON.stringify(after)));
 });

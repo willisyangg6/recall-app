@@ -1,4 +1,4 @@
-# Illness status: semantics, the compact illness notice, and the audit behind them
+# Reported-harm status: illnesses, hospitalizations, deaths — and the audit behind them
 
 _Audit written 2026-09-18 (P2B7J); shipped 2026-09-18 (P2B7K) under the
 founder's corrected scope — **illnesses only**. Recall Detail now renders a
@@ -11,6 +11,14 @@ _Corrected 2026-09-18 (P2B7L.1): a disease NAME is no longer treated as
 education, and supplier-chain and hedged prose are held back on their
 semantics rather than on a word (§4.4). Eight cases reclassify and the prepared
 repair moves from 77 to 79 (§5.3). Still read-only: nothing was written._
+
+_Amended 2026-09-21 (P2B7Q.1, founder decision): the notice is no longer
+illnesses-only. It carries **hospitalizations and deaths too, one fact per
+line**, because P2B7Q measured that the "they stay in What Happened" property
+this scope depended on never existed (§1.2). Everything else below — the four
+illness states, the attribution rules, the education guard, the one-reader
+structure — is unchanged and now governs three harms instead of one. Still
+read-only: no database write, no backfill, no job, and push remains inactive._
 
 _Completed 2026-09-19 (P2B7L.2): `botulism` joins the other disease names and
 the infant-formula population is resolved on its semantics (§4.5); attribution
@@ -26,14 +34,20 @@ reported illnesses. Part 4 of
 authoritative home for the canonical `illness` **field**; this document owns
 its derivation and its shopper-facing presentation.
 
-## 0. Scope: illnesses, and nothing else
+## 0. Scope: three harms, and nothing else
 
-The notice answers one question — **did the official notice report
-illnesses?** — and it is the only question it can answer. Injuries, adverse
-reactions, adverse events, hospitalizations and deaths get no status, no count
-and no badge. They remain in the source's own words in the projection, and the
-de-duplication rule in §6 is written so they cannot be removed to make room for
-an illness count.
+The notice answers what the official notice **reported about people**:
+illnesses, hospitalizations, and deaths. Each is derived on its own evidence
+and rendered on its own line; none is inferred from another.
+
+Injuries, adverse reactions and adverse events still get no status, no count
+and no badge. They remain in the source's own words in the projection.
+
+> **This section said "illnesses, and nothing else" until P2B7Q.1.** The
+> original scope rested on a property that turned out not to exist — that a
+> hospitalization or a death survived in What Happened. §1.2 has the
+> measurement and the founder's decision. The rule that injuries and adverse
+> reactions carry no status is unchanged.
 
 Injury and adverse-reaction language is still recognised inside
 `domain/illness-status.ts`, but only defensively: a notice that denies injuries
@@ -88,53 +102,76 @@ and a dormant second wording of the three states is exactly what this audit
 exists to remove. `src/domain/illness-status-wiring.test.ts` fails if a second
 reader reappears anywhere under `src/`.
 
-### 1.2 Hospitalizations and deaths reach no shopper surface — open, founder decision
+### 1.2 Hospitalizations and deaths — stated, one fact per line (P2B7Q.1)
 
-Measured during the P2B7Q copy audit, over the whole 1,931-case table and the
-898 active consumer-visible cases.
+**Found by P2B7Q, closed by founder decision in P2B7Q.1.**
 
-The compact notice is **illnesses-only by founder decision** (P2B7K). That was
-adopted alongside a stated safety property: a source sentence carrying a
-hospitalization, a death, an injury or an adverse reaction would survive in
-**What Happened**, duplicated, so no severe outcome could leave the app. The
-mechanism is `narrativeWithoutIllness`, clause (3) (§6).
+The compact notice was **illnesses-only** (P2B7K). That was adopted alongside a
+stated safety property: a source sentence carrying a hospitalization, a death,
+an injury or an adverse reaction would survive in **What Happened**,
+duplicated, so no severe outcome could leave the app. The mechanism is
+`narrativeWithoutIllness`, clause (3) (§6).
 
-**That property does not hold, and never did.** `narrativeWithoutIllness` can
+**That property did not hold, and never had.** `narrativeWithoutIllness` can
 only PRESERVE a sentence the narrative already contains, and the narrative
 contains none: `buildWhatHappened` composes What Happened from structured
 slots — company, product, reason family, pathogen — and never from
-announcement sentences. Measured: over all 1,931 cases the function changes
-the narrative **zero** times, and **zero** narratives contain an illness
-backing statement at all.
+announcement sentences. Measured over all 1,931 cases the function changed the
+narrative **zero** times, and **zero** narratives contained an illness backing
+statement at all. The consequence, over the 898 active consumer-visible cases:
+**8** had a notice affirming a hospitalization or a death, and **0** showed it
+on any surface.
 
-The consequence, over the 898 active consumer-visible cases: **8** have a
-notice that affirms a hospitalization or a death, and **0** show that fact on
-any surface — not on the card, not in What Happened, not in the notice, not in
-Health Risk, not in the spoken label.
+**What ships now.** The contract derives three harms independently —
+illnesses, hospitalizations, deaths — and the notice renders each on its own
+line, in that fixed order. Measured over the same corpus, 11 active cases gain
+a line and 3 of them previously rendered no notice at all:
 
-| Case       | The notice says                                                                | The app says            |
-| ---------- | ------------------------------------------------------------------------------ | ----------------------- |
-| `fca62f93` | "38 illnesses … including 11 deaths"                                           | `38 illnesses reported` |
-| `f59ed265` | "39 illnesses and one death have been associated with an E. coli…"             | `39 illnesses reported` |
-| `f8a2c8ab` | "Twelve illnesses and one death have been reported to date."                   | `12 illnesses reported` |
-| `10ebfa06` | "9 illnesses, 8 hospitalizations and 1 death…"                                 | `9 illnesses reported`  |
-| `2c491bc9` | "One hospitalization due to Listeria monocytogenes has been reported to date." | _nothing_               |
-| `4c2f1bf1` | "One hospitalization due to Listeria monocytogenes has been reported…"         | _nothing_               |
-| `5a521509` | "7 illnesses resulting in 3 hospitalizations…"                                 | _nothing_               |
-| `1fd40405` | "Death has been reported in cases of severe overdose."                         | _nothing_               |
+| Case       | The notice says                                                       | Lotly says now                                                              |
+| ---------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `10ebfa06` | "9 illnesses, 8 hospitalizations, and 1 death…"                       | `9 illnesses reported` / `8 hospitalizations reported` / `1 death reported` |
+| `fca62f93` | "38 illnesses … including 11 deaths"                                  | `38 illnesses reported` / `11 deaths reported`                              |
+| `f59ed265` | "39 illnesses and one death…"                                         | `39 illnesses reported` / `1 death reported`                                |
+| `f8a2c8ab` | "Twelve illnesses and one death…"                                     | `12 illnesses reported` / `1 death reported`                                |
+| `55ee81ad` | "All 31 infants were hospitalized."                                   | `Illnesses reported` / `31 hospitalizations reported`                       |
+| `decd41aa` | "The 3 infants were hospitalized…"                                    | `3 illnesses reported` / `3 hospitalizations reported`                      |
+| `c4f8c9e4` | "Both individuals were hospitalized…"                                 | `2 illnesses reported` / `Hospitalizations reported`                        |
+| `f84e2407` | "Approximately half of affected case-patients have been hospitalized" | `17 illnesses reported` / `Hospitalizations reported`                       |
+| `2c491bc9` | "One hospitalization due to Listeria monocytogenes…"                  | `1 hospitalization reported` _(was: nothing)_                               |
+| `4c2f1bf1` | "One hospitalization … associated with the Sophelise cheese."         | `1 hospitalization reported` _(was: nothing)_                               |
+| `a9437a1c` | "…with 5 hospitalization and no deaths."                              | `5 hospitalizations reported` _(was: nothing)_                              |
 
-The last four render nothing because the notice states no illness COUNT, so
-illness status stays `unknown` and the compact notice does not appear —
-correct under §3, and the reason a reported hospitalization can be completely
-silent.
+**The rules that keep it honest.**
 
-P2B7Q deliberately did **not** change this. What a shopper is shown about
-severe outcomes is an information-hierarchy decision, and the illnesses-only
-notice is the founder's. The audit's obligation was to establish that the
-assumed protection is absent and to stop the documentation asserting it.
-`src/lib/consumer-copy-evidence.test.ts` pins the current behaviour so it
-cannot be mistaken for an accident, and so the day it changes, it changes
-deliberately.
+- **A harm is read from the SAME own-attributed sentences the illness status
+  is read from.** It can never claim an outbreak the illness line declined to
+  claim. Recorded: `5a521509` states "7 illnesses resulting in 3
+  hospitalizations across the United States … 3 of which **may** be linked to
+  a single product" — the source does not tie the figures to this recall, so
+  illness status and hospitalization are both `unknown` and the notice renders
+  nothing.
+- **Capability is not a report.** FDA and FSIS carry standing education
+  verbatim on hundreds of notices — "the diarrhea may be so severe that the
+  patient needs to be hospitalized", "HUS can lead to death", "Complications …
+  can include … death", "Death has been reported in cases of severe overdose".
+  A modal that governs the harm word, or a generic "in cases of" frame, vetoes
+  it. This is the single largest hazard in the corpus: without the veto, a dozen
+  recalls would report hospitalizations that never happened.
+- **Each mention is judged on its own.** One sentence routinely affirms one
+  harm and denies the other ("…with 5 hospitalization and no deaths").
+- **A neighbouring figure is never borrowed.** "9 illnesses, 8
+  hospitalizations, and 1 death" yields 8 and 1, because a comma or a second
+  number between a figure and its noun disowns it.
+- **Only affirmations render.** Illnesses keep their `No illnesses reported`
+  denial line (a founder-approved reassurance); hospitalizations and deaths
+  have no `explicit_none` at all, because "No deaths reported" on every
+  Listeria recall would bury the one positive line that matters.
+- **A reported harm always takes the `reported` treatment**, whatever the
+  illness line says — a calm "no illnesses" badge over a reported death would
+  be the app reassuring a shopper against its own evidence.
+
+`src/lib/consumer-copy-evidence.test.ts` and `src/domain/illness-status.test.ts`
+pin all of it, and the corpus sentences above are the fixtures.
 
 ---
 

@@ -3,13 +3,19 @@
  * illnesses, shown in Recall Detail's identity area, below the brand and
  * above the official FDA/FSIS report link.
  *
- * ## It is about illnesses, and nothing else
+ * ## Three harms, one fact per line (P2B7Q.1)
  *
- * It is not a general harm badge. Injuries, adverse reactions, hospitalizations
- * and deaths never appear here: they stay in `What Happened`, in the source's
- * own words (founder decision, P2B7K). The contract that decides what this
- * renders — `domain/illness-status.ts` — cannot express them, so the
- * restriction is structural rather than a rule this file has to remember.
+ * It renders what the notice REPORTED about people — illnesses,
+ * hospitalizations, deaths — each on its own line, in that fixed order.
+ *
+ * P2B7K shipped illnesses only, on the understanding that a hospitalization or
+ * a death survived in `What Happened`. P2B7Q measured that and found the
+ * narrative never carries a source sentence at all, so those facts reached no
+ * surface: 8 of 898 active cases affirmed one and not one of them showed it.
+ *
+ * Injuries and adverse reactions are still NOT here. The contract that decides
+ * what this renders — `domain/illness-status.ts` — cannot express them, so the
+ * restriction stays structural rather than a rule this file has to remember.
  *
  * ## Three things it must never be confused with
  *
@@ -28,11 +34,13 @@
  * The two states differ in their words ("12 illnesses reported" / "No
  * illnesses reported"), in their glyph (`warning` / `info`), and in their
  * surface. Any one of the three carries the distinction alone, so the notice
- * survives greyscale, colour-vision deficiency, and a screen reader.
+ * survives greyscale, colour-vision deficiency, and a screen reader. A
+ * reported hospitalization or death always takes the `reported` treatment,
+ * whatever the illness line says.
  *
- * `unknown` has no copy at all (`illnessNoticeCopy` returns null), so a recall
- * whose notice never established illness status renders nothing here: no row,
- * no placeholder, no spacer, no spoken element.
+ * A notice that established none of the three has no copy at all
+ * (`illnessNoticeCopy` returns null), so it renders nothing here: no row, no
+ * placeholder, no spacer, no spoken element.
  */
 
 import { StyleSheet, View } from 'react-native';
@@ -62,9 +70,18 @@ export function IllnessNotice({ copy }: { copy: IllnessNoticeCopy }) {
       <View style={styles.glyph}>
         <Icon name={GLYPH[copy.tone]} size={12} color="icon/primary" />
       </View>
-      <Text variant="caption" style={[styles.text, { color: palette.foreground }]}>
-        {copy.text}
-      </Text>
+      {/* One Text per fact. They stack because the notice is a row whose
+          second child is a column: the glyph stays on the first line and each
+          fact keeps its own line at every reader type size. The parent is the
+          single accessible element, so a reader hears one utterance and the
+          lines are never announced as separate items. */}
+      <View style={styles.facts}>
+        {copy.lines.map((line) => (
+          <Text key={line} variant="caption" style={[styles.text, { color: palette.foreground }]}>
+            {line}
+          </Text>
+        ))}
+      </View>
     </View>
   );
 }
@@ -88,6 +105,12 @@ const styles = StyleSheet.create({
   glyph: {
     height: typography.caption.lineHeight,
     justifyContent: 'center',
+  },
+  // The facts column. No gap: consecutive caption lines already read as a
+  // list at their own line height, and a gap would make two facts look like
+  // two notices.
+  facts: {
+    flexShrink: 1,
   },
   text: {
     flexShrink: 1,

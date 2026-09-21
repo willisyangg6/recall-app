@@ -24,6 +24,11 @@
  *    material-change ledger.
  *  - `hazardLabel` and `formatDate` — unreferenced by anything.
  *
+ * P2B7Q.1 removed one more: `consumerActionDisplay`, the standardizer behind
+ * the "What should I do?" instruction. That whole concept is gone — the
+ * screen never rendered it, and the founder retired the idea rather than the
+ * code alone, so there is no dormant generator waiting to be wired up.
+ *
  * None of them had a caller. They are gone rather than left dormant because a
  * dormant second wording is exactly what the copy audit exists to prevent: it
  * costs nothing until a screen imports it, and then the app says two different
@@ -40,7 +45,6 @@ import {
   type HazardGuideKey,
   type HazardGuideSource,
 } from '@/content/hazard-guides';
-import { cleanDisplayText } from '@/domain/text';
 import type { TypedReason } from './recall-reason';
 
 export function noticeTypeLabel(noticeType: 'recall' | 'public_health_alert'): string {
@@ -423,56 +427,4 @@ export function stateLabel(state: 'active' | 'closed' | 'retracted'): string {
     case 'retracted':
       return 'Retracted';
   }
-}
-
-export interface ActionDisplay {
-  /** The consumer instruction, standardized when functionally equivalent. */
-  primary: string;
-  /** Retailer/institution guidance, secondary to the consumer action. */
-  secondary: string | null;
-  /** True when primary is our standardized wording (source preserved in data). */
-  standardized: boolean;
-}
-
-/**
- * Standardize functionally-equivalent consumer instructions ("thrown away or
- * returned to the place of purchase" appears in ~75% of FSIS notices) while
- * preserving genuinely different instructions verbatim.
- */
-export function consumerActionDisplay(sourceText: string | null): ActionDisplay | null {
-  if (!sourceText) return null;
-  const throwAway = /thrown away|throw (it|them|the product) away|discard|dispose of/i.test(
-    sourceText,
-  );
-  // FSIS boilerplate says "returned to the place of purchase"; FDA press
-  // releases say "return it to the/their place of purchase" — same action.
-  // "to the original place of purchase", "to their place of purchase", "to the
-  // store where it was purchased" — one action, written a dozen ways. The
-  // adjective slot is what an exact-phrase match kept missing.
-  const returnable =
-    /return(ed|ing)?\s+(?:it|them|these|the\s+(?:affected\s+)?(?:product|item)s?|any\s+(?:remaining\s+)?product)?\s*to\s+(?:the|their|your)\s+(?:\w+\s+){0,2}(?:place of purchase|point of purchase|store of purchase|retailer|store where)|return\s+(?:the\s+)?(?:product|item)s?\s+[^.]{0,60}place of purchase|returned to (?:the|their|your)\s+(?:\w+\s+){0,2}place of purchase/i.test(
-      sourceText,
-    );
-  const refund = /for a (full )?refund/i.test(sourceText);
-  const destroy = /destroy/i.test(sourceText);
-  const retailer = /(do not|should not|urged not to) (sell|serve|use or serve)\b/i.test(sourceText);
-
-  let primary: string | null = null;
-  if (throwAway && returnable) {
-    primary = `Do not eat this product. Throw it away or return it to the place of purchase${refund ? ' for a refund' : ''}.`;
-  } else if (destroy && returnable) {
-    primary = `Do not eat this product. Destroy it or return it to the place of purchase${refund ? ' for a refund' : ''}.`;
-  } else if (destroy) {
-    primary = 'Do not eat this product. Destroy it.';
-  } else if (throwAway) {
-    primary = 'Do not eat this product. Throw it away.';
-  } else if (returnable) {
-    primary = `Do not eat this product. Return it to the place of purchase${refund ? ' for a refund' : ''}.`;
-  }
-  const standardized = primary !== null;
-  return {
-    primary: primary ?? cleanDisplayText(sourceText),
-    secondary: retailer ? 'Restaurants and retailers should not sell or serve it.' : null,
-    standardized,
-  };
 }

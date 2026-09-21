@@ -26,7 +26,7 @@ import {
   productDisplayName,
 } from '../../lib/consumer-summary';
 import { buildPackageCheck, type PackageCheckModel } from '../../lib/package-check';
-import { consumerActionDisplay, healthRiskSummary, reasonLine } from '../../lib/recall-display';
+import { healthRiskSummary, reasonLine } from '../../lib/recall-display';
 import { riskView } from '../../lib/risk-display';
 import { buildWhatHappened, type WhatHappened } from '../../lib/what-happened';
 import { loadDetailPage, loadListingItems } from './fixtures';
@@ -408,14 +408,6 @@ test('benchmark: Bakr cookie dough — lot only in the package checker, action s
     /bottom left corner on the rear side of the pouch/,
   );
   assert.equal(row.packageCheck.packageText, '8-ounce blue package');
-  // …and never clutters the always-visible consumer action.
-  const action = consumerActionDisplay(row.projection.consumerAction);
-  assert.equal(action?.standardized, true);
-  assert.equal(
-    action?.primary,
-    'Do not eat this product. Return it to the place of purchase for a refund.',
-  );
-  assert.doesNotMatch(action?.primary ?? '', /2606022|lot/i);
   // …and stays out of the What-happened explanation.
   assert.doesNotMatch(row.happened.text, /2606022/);
 });

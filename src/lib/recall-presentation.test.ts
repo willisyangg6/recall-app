@@ -490,7 +490,7 @@ test('the Detail model carries a notice, not an illness sentence', () => {
   const copy = illnessNoticeCopy(
     deriveIllnessStatus('One illness has been reported to date in connection with this product.'),
   );
-  assert.equal(copy?.text, '1 illness reported');
+  assert.deepEqual(copy?.lines, ['1 illness reported']);
   assert.equal(copy?.tone, 'reported');
 });
 
@@ -500,7 +500,7 @@ test('an explicit denial reads as the informational state', () => {
       'No customer illnesses have been reported to date in connection with this problem.',
     ),
   );
-  assert.equal(copy?.text, 'No illnesses reported');
+  assert.deepEqual(copy?.lines, ['No illnesses reported']);
   assert.equal(copy?.tone, 'none');
 });
 
@@ -512,13 +512,17 @@ test('source silence yields NO notice — never an inferred zero', () => {
   );
 });
 
-test('the notice never carries a harm other than illness', () => {
+test('the notice carries deaths on their own line, and still no injury or adverse reaction', () => {
   const copy = illnessNoticeCopy(
     deriveIllnessStatus(
       'Illnesses have been reported, and three deaths have been reported in connection with the outbreak.',
     ),
   )!;
-  assert.doesNotMatch(`${copy.text} ${copy.spoken}`, /death|hospitali|injur|adverse/i);
+  // P2B7Q.1: a reported death is stated, on its own line, after the illness
+  // line. Injuries and adverse reactions still have no status at all.
+  assert.deepEqual(copy.lines, ['Illnesses reported', '3 deaths reported']);
+  assert.doesNotMatch(`${copy.lines.join(' ')} ${copy.spoken}`, /injur|adverse/i);
+  assert.equal(copy.tone, 'reported');
 });
 
 // ── 18: quantity ────────────────────────────────────────────────────────────

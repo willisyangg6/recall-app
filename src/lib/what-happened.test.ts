@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { buildWhatHappened, normalizedUpdate, type WhatHappenedInput } from './what-happened';
+import { buildWhatHappened, type WhatHappenedInput } from './what-happened';
 
 // Inputs use verbatim titles/summary fragments from the recorded real FSIS
 // fixtures (src/lib tests stay free of src/server imports; the same records
@@ -61,10 +61,9 @@ test('regression B — City Foods: pathogen template + Editor’s Note becomes a
   // The raw editorial paragraph never becomes the explanation.
   assert.doesNotMatch(result.text, /editor/i);
   assert.doesNotMatch(result.text, /has been revised/i);
-  assert.equal(
-    result.update,
-    'Updated Aug 13, 2026: affected product and label details were corrected.',
-  );
+  // There is no update note any more: the Editor's Note paragraph informs
+  // NOTHING the shopper reads (P2B7Q.1).
+  assert.ok(!('update' in result));
 });
 
 test('regression C — Corte Argentino: import template with source-stated origin, no boilerplate', () => {
@@ -155,39 +154,6 @@ test('companyless PHA uses the neutral frame — no company is forced or invente
     }),
   );
   assert.match(result.text, /^A public health alert was issued for Ground Beef because /);
-});
-
-test('editor-note normalization: classes, housekeeping omission, and unclassifiable omission', () => {
-  assert.equal(
-    normalizedUpdate(
-      'Editor’s Note: Mar. 9, 2026 – The product list in this release has been updated to reflect that products with the listed lot numbers, regardless of best-by date, are subject to the recall.',
-    ),
-    'Updated Mar 9, 2026: affected product and label details were corrected.',
-  );
-  assert.equal(
-    normalizedUpdate(
-      'Editor’s Note: Feb. 9, 2024 – Details of this public health alert were updated to reflect additional products affected by the dairy products that have been recalled.',
-    ),
-    'Updated Feb 9, 2024: additional affected products were added.',
-  );
-  assert.equal(
-    normalizedUpdate(
-      'Editor’s Note : Whole genome sequencing results show that a liverwurst sample tested positive for the outbreak strain of Listeria monocytogenes.',
-    ),
-    // "samples", never "product samples": one recorded note's sequenced sample
-    // was the upstream ingredient at its own manufacturer (P2B7Q).
-    'Update: laboratory testing linked samples to the outbreak strain.',
-  );
-  // Contact-info housekeeping is omitted, not surfaced.
-  assert.equal(
-    normalizedUpdate(
-      "EDITOR'S NOTE: Feb. 24, 2025 - Details of this recall release were updated to reflect updated contact information for consumers.",
-    ),
-    null,
-  );
-  // Unclassifiable notes are omitted rather than guessed at.
-  assert.equal(normalizedUpdate('Editor’s Note: This release was reissued.'), null);
-  assert.equal(normalizedUpdate('No note here at all.'), null);
 });
 
 test('unknown reason falls back to a generic product frame, then to the cleaned title', () => {

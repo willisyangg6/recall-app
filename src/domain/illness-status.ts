@@ -1,20 +1,25 @@
 /**
  * THE illness-status contract (P2B7K).
  *
- * ## Illnesses only
+ * ## Three harms, three separate answers (P2B7Q.1)
  *
- * This module answers exactly one shopper question: **did this recall's
- * official notice report illnesses?** It answers nothing else. Injuries,
- * adverse reactions, adverse events, hospitalizations and deaths get no
- * status of their own and no notice — they stay in `What Happened`, in the
- * source's own words, and `narrativeWithoutIllness` is written so they cannot
- * be removed from it (founder decision, P2B7K).
+ * This module answers what the official notice REPORTED about people:
+ * illnesses, hospitalizations, and deaths. Each is derived on its own
+ * evidence and rendered on its own line; none is ever inferred from another.
  *
- * Injury and adverse-reaction language is still recognised here, but only
- * defensively: a notice that denies injuries has NOT denied illnesses, and a
- * notice reporting one allergic reaction has NOT reported an illness. Without
- * that recognition both would be misread as illness facts, which is exactly
- * the defect the audit found in production.
+ * P2B7K shipped illnesses only, on the understanding that a hospitalization
+ * or a death survived in `What Happened` in the source's own words. P2B7Q
+ * measured that and found it false: `What Happened` is built from structured
+ * slots and never contains a source sentence, so `narrativeWithoutIllness`
+ * had nothing to preserve and those facts reached no shopper surface at all —
+ * 8 of 898 active cases affirmed one, and not one of them showed it. The
+ * founder's answer is this: state them, explicitly, one fact per line.
+ *
+ * Injuries and adverse reactions are still NOT given a status. They remain
+ * recognised only defensively — a notice that denies injuries has not denied
+ * illnesses, and one reporting an allergic reaction has not reported an
+ * illness — because without that recognition both would be misread as illness
+ * facts, which is exactly the defect the audit found in production.
  *
  * ## The four states
  *
@@ -22,14 +27,27 @@
  *                           approximate ("Approximately 12 illnesses reported")
  *   `reported_unspecified`  illness is confirmed, no trustworthy count
  *   `explicit_none`         the source explicitly denies ILLNESSES
- *   `unknown`               everything else — and it renders nothing at all
+ *   `unknown`               everything else — and it renders no illness line
+ *
+ * Hospitalizations and deaths take a narrower three-state answer of their own
+ * (`HarmFact`): a trustworthy count, an affirmation without one, or nothing.
+ * They have no `explicit_none` on purpose. "No illnesses reported" is a
+ * founder-approved reassurance; "No deaths reported" on every Listeria recall
+ * is not, and three negative lines would bury the one positive line that
+ * matters.
  *
  * `unknown` is the safety net, and it is deliberately large. Silence,
- * ambiguity, an injury-only statement, an adverse-reaction-only statement, a
- * hospitalization with no illness stated, and a count that cannot be
- * separated from another harm all land here, because each of them is a case
- * where the app does not know. `illnessNoticeCopy` returns `null` for it, so
- * no caller can render a row, a placeholder, or a zero.
+ * ambiguity, an injury-only statement, an adverse-reaction-only statement,
+ * and a count that cannot be separated from another harm all land here,
+ * because each of them is a case where the app does not know.
+ *
+ * A hospitalization stated with no illness count no longer lands there as
+ * nothing: illness status stays `unknown` and the hospitalization takes its
+ * own line. That is the whole point of separating the three — measured, it is
+ * the difference between four live notices saying nothing and four saying the
+ * one fact they actually established. `illnessNoticeCopy` returns `null` only
+ * when all three are unestablished, so no caller can render a row, a
+ * placeholder, or a zero.
  *
  * ## Why the audit forced this
  *
@@ -47,6 +65,23 @@ import { DISEASE_NAME, isNonReportProse } from './illness';
 export type IllnessStatusKind =
   'reported_count' | 'reported_unspecified' | 'explicit_none' | 'unknown';
 
+/**
+ * What the notice established about ONE further harm — a hospitalization or a
+ * death. Deliberately narrower than `IllnessStatus`: there is no
+ * `explicit_none`, because a denial renders no line (see the header).
+ */
+export interface HarmFact {
+  kind: 'reported_count' | 'reported_unspecified' | 'unknown';
+  /** Non-null if and only if kind is `reported_count`. */
+  count: number | null;
+  /** The source qualified its own figure. Never true without a count. */
+  approximate: boolean;
+  /** The verbatim source sentences backing it. Never rendered. */
+  statements: string[];
+}
+
+const NO_HARM: HarmFact = { kind: 'unknown', count: null, approximate: false, statements: [] };
+
 export interface IllnessStatus {
   kind: IllnessStatusKind;
   /** The illness count. Non-null if and only if kind is `reported_count`. */
@@ -58,6 +93,10 @@ export interface IllnessStatus {
    * `What Happened` may drop; never rendered as the status itself.
    */
   statements: string[];
+  /** People this recall's notice says were hospitalized (P2B7Q.1). */
+  hospitalizations: HarmFact;
+  /** People this recall's notice says died (P2B7Q.1). */
+  deaths: HarmFact;
 }
 
 const UNKNOWN: IllnessStatus = {
@@ -65,6 +104,8 @@ const UNKNOWN: IllnessStatus = {
   illnesses: null,
   approximate: false,
   statements: [],
+  hospitalizations: NO_HARM,
+  deaths: NO_HARM,
 };
 
 // ── Reading numbers ─────────────────────────────────────────────────────────
@@ -645,6 +686,100 @@ const MENTIONS_HARM = new RegExp(
   'i',
 );
 
+// ── Hospitalizations and deaths (P2B7Q.1) ──────────────────────────────────
+//
+// Derived from the SAME eligible, own-attributed sentences the illness status
+// is derived from, so a harm can never be read off a sentence the illness
+// contract already decided belongs to somebody else's product.
+
+/**
+ * A capability frame: what the hazard CAN do, not what this recall DID.
+ *
+ * This is the single largest hazard in the corpus. FDA and FSIS notices carry
+ * standing education verbatim on hundreds of recalls —
+ *
+ *   "In some persons, however, the diarrhea may be so severe that the patient
+ *    needs to be hospitalized."
+ *   "The condition can lead to serious kidney damage and even death."
+ *   "Complications from Cronobacter infection in infants can include brain
+ *    abscess, developmental delays, motor impairments, and death."
+ *
+ * — and a naive keyword read turns every one of them into "Hospitalizations
+ * reported" or "Deaths reported". That is possibility rendered as certainty,
+ * which is the failure the copy audit exists to prevent.
+ *
+ * Applied to the text BEFORE the harm word, anchored to its tail and barred
+ * from crossing a sentence stop, so the modal has to govern THIS harm rather
+ * than merely appear in the same sentence. "…7 illnesses resulting in 3
+ * hospitalizations … 3 of which may be linked to a single product" keeps its
+ * 3: the hedge is on the linkage of the illnesses, not on the hospitalizations.
+ */
+const CAPABILITY_FRAME =
+  /\b(?:can|could|may|might|would)\s+(?:\w+\s+){0,4}?(?:lead\s+to|result\s+in|cause|causes|include|includes|be)\b[^.;]{0,90}$/i;
+
+/** Hazard education framed as what happens generally, with no modal at all. */
+const GENERIC_HARM_FRAME = /\bin\s+cases?\s+of\b|\bin\s+severe\s+cases\b|\bin\s+rare\s+cases\b/i;
+
+/** The harm word is denied rather than reported ("and no deaths"). */
+const LOCAL_DENIAL = /\b(?:no|not|never|neither|nor|without)\b[^.;]{0,40}$/i;
+
+/**
+ * Words that must NOT sit between a figure and its harm noun for the figure to
+ * be counting that harm. A comma or a second number means the figure belongs
+ * to a neighbouring fact: "9 illnesses, 8 hospitalizations, and 1 death" has
+ * to yield 8 and 1, never 9 for all three.
+ */
+const HARM_GAP = String.raw`(?:[a-z-]+\s+){0,2}?`;
+
+const HOSPITALIZATION_COUNT: RegExp[] = [
+  new RegExp(String.raw`\b${NUM}\s+${HARM_GAP}hospitali[sz]ations?\b`, 'gi'),
+  new RegExp(
+    String.raw`\b${NUM}\s+${HARM_GAP}(?:was|were|has\s+been|have\s+been)\s+hospitali[sz]ed\b`,
+    'gi',
+  ),
+];
+
+const DEATH_COUNT: RegExp[] = [
+  new RegExp(String.raw`\b${NUM}\s+${HARM_GAP}(?:deaths?|fatalit(?:y|ies))\b`, 'gi'),
+  new RegExp(String.raw`\b${NUM}\s+${HARM_GAP}(?:has|have)\s+died\b`, 'gi'),
+];
+
+const HOSPITALIZATION_WORD = /\bhospitali[sz](?:ation|ations|ed)\b/i;
+const DEATH_WORD = /\b(?:deaths?|died|fatalit(?:y|ies))\b/i;
+
+/**
+ * Is this sentence's mention of `word` a REPORT of that harm in this recall?
+ *
+ * Every mention is tested on its own: one sentence routinely affirms one harm
+ * and denies the other ("…with 5 hospitalization and no deaths"), so a
+ * sentence-level verdict would lose one of the two facts.
+ */
+function affirmsHarm(sentence: string, word: RegExp): boolean {
+  if (GENERIC_HARM_FRAME.test(sentence)) return false;
+  const pattern = new RegExp(word.source, 'gi');
+  for (const match of sentence.matchAll(pattern)) {
+    const before = sentence.slice(0, match.index);
+    if (CAPABILITY_FRAME.test(before)) continue;
+    if (LOCAL_DENIAL.test(before)) continue;
+    return true;
+  }
+  return false;
+}
+
+/** The harm fact this recall's own sentences establish, or nothing. */
+function harmFrom(sentences: readonly string[], word: RegExp, counts: RegExp[]): HarmFact {
+  const affirming = sentences.filter((sentence) => affirmsHarm(sentence, word));
+  if (affirming.length === 0) return NO_HARM;
+  const text = affirming.join(' ');
+  const count = countIn(text, counts);
+  return {
+    kind: count === null ? 'reported_unspecified' : 'reported_count',
+    count,
+    approximate: count !== null && isApproximate(text),
+    statements: affirming.slice(0, 2),
+  };
+}
+
 // ── Derivation ──────────────────────────────────────────────────────────────
 
 /**
@@ -684,6 +819,15 @@ export function deriveIllnessStatus(summaryText: string | null): IllnessStatus {
   // the evidence.
   const noticeDeniesLinkage = sentences.some((sentence) => LINKAGE_DENIAL.test(sentence));
 
+  // Own-attributed evidence, decided once and reused for all three harms: a
+  // hospitalization can never be read off a sentence the illness contract
+  // already assigned to somebody else's product.
+  const own = eligible
+    .filter(({ sentence, frame }) => provenanceOf(sentence, frame, noticeDeniesLinkage) === 'own')
+    .map(({ sentence }) => sentence);
+  const hospitalizations = harmFrom(own, HOSPITALIZATION_WORD, HOSPITALIZATION_COUNT);
+  const deaths = harmFrom(own, DEATH_WORD, DEATH_COUNT);
+
   const asserted = eligible
     .filter(({ sentence }) => assertsIllness(sentence))
     .filter(({ sentence, frame }) => provenanceOf(sentence, frame, noticeDeniesLinkage) === 'own')
@@ -699,6 +843,8 @@ export function deriveIllnessStatus(summaryText: string | null): IllnessStatus {
       illnesses: count,
       approximate: count !== null && isApproximate(text),
       statements: asserted.slice(0, 3),
+      hospitalizations,
+      deaths,
     };
   }
 
@@ -715,14 +861,21 @@ export function deriveIllnessStatus(summaryText: string | null): IllnessStatus {
       illnesses: null,
       approximate: false,
       statements: denials.slice(0, 2),
+      hospitalizations,
+      deaths,
     };
   }
 
-  // Everything else is unknown, including a sentence that denies or reports
-  // only injuries, adverse reactions, hospitalizations or deaths. Those are
-  // real facts and they stay in the narrative; they are simply not an illness
-  // status, and inventing one from them is the defect this returns to avoid.
-  return UNKNOWN;
+  // Everything else leaves ILLNESS status unknown — including a sentence that
+  // denies or reports only injuries or adverse reactions. Inventing an illness
+  // status from them is the defect this returns to avoid.
+  //
+  // A hospitalization or a death established above survives this return
+  // (P2B7Q.1). "One hospitalization due to Listeria monocytogenes has been
+  // reported to date" states no illness count and no illness, so the illness
+  // line stays absent — and the hospitalization line appears, which is the
+  // whole fact the notice actually carried.
+  return { ...UNKNOWN, hospitalizations, deaths };
 }
 
 /**
@@ -744,20 +897,31 @@ export function deriveIllnessStatus(summaryText: string | null): IllnessStatus {
  * grow, and the newest notice is the authority on the number.
  */
 export function resolveIllnessStatus(newestFirst: readonly IllnessStatus[]): IllnessStatus {
+  // Hospitalizations and deaths resolve on the same principle and separately
+  // from the illness status: the newest notice that ESTABLISHES the harm
+  // wins, and silence never un-says one. They are resolved first so they
+  // survive every illness outcome below, including `unknown` (P2B7Q.1).
+  const harms = {
+    hospitalizations:
+      newestFirst.find((s) => s.hospitalizations.kind !== 'unknown')?.hospitalizations ?? NO_HARM,
+    deaths: newestFirst.find((s) => s.deaths.kind !== 'unknown')?.deaths ?? NO_HARM,
+  };
+
   const establishing = newestFirst.filter((status) => status.kind !== 'unknown');
-  if (establishing.length === 0) return UNKNOWN;
+  if (establishing.length === 0) return { ...UNKNOWN, ...harms };
 
   const [newest, ...older] = establishing;
-  if (newest.kind !== 'explicit_none') return newest;
+  if (newest.kind !== 'explicit_none') return { ...newest, ...harms };
 
   const contradicted = older.find((status) => status.kind !== 'explicit_none');
-  if (!contradicted) return newest;
+  if (!contradicted) return { ...newest, ...harms };
 
   return {
     kind: 'reported_unspecified',
     illnesses: null,
     approximate: false,
     statements: [...contradicted.statements, ...newest.statements].slice(0, 3),
+    ...harms,
   };
 }
 
@@ -780,49 +944,103 @@ export function statusReportsIllness(status: IllnessStatus): boolean {
 // ── Shopper copy ────────────────────────────────────────────────────────────
 
 export interface IllnessNoticeCopy {
-  /** The visible sentence. */
-  text: string;
+  /**
+   * The visible lines, ONE FACT PER LINE, in fixed order: illnesses, then
+   * hospitalizations, then deaths (P2B7Q.1). Never empty — a notice with
+   * nothing to say is `null`, not a notice with no lines.
+   *
+   * Fixed order matters more than it looks: a reader who has seen one recall
+   * knows where to find the death count on the next one, and severity always
+   * reads downward. It is never sorted by which fact happens to be larger.
+   */
+  lines: string[];
   /** What a screen reader speaks for the whole notice, as one utterance. */
   spoken: string;
   /** Which glyph and treatment the notice takes. */
   tone: 'reported' | 'none';
 }
 
+/** "8 hospitalizations", "1 death" — the figure with its noun agreeing. */
+function harmPhrase(fact: HarmFact, singular: string, plural: string): string | null {
+  if (fact.kind === 'unknown') return null;
+  if (fact.kind === 'reported_unspecified') {
+    return `${plural.charAt(0).toUpperCase()}${plural.slice(1)} reported`;
+  }
+  const count = fact.count!;
+  const noun = count === 1 ? singular : plural;
+  return fact.approximate ? `Approximately ${count} ${noun} reported` : `${count} ${noun} reported`;
+}
+
 /**
- * THE copy for the compact illness notice, or null when nothing may be shown.
+ * THE copy for the compact notice, or null when nothing may be shown.
  *
- * Null is returned for `unknown`, and only for `unknown`. There is no unknown
- * sentence, no placeholder, no em dash: the source did not establish illness
- * status, so the notice does not render. A caller that wants a row for every
- * recall cannot get one from here.
+ * Null is returned only when the notice established NONE of the three harms.
+ * There is no unknown sentence, no placeholder, no em dash: the source did not
+ * establish the fact, so no line renders for it. A caller that wants a row for
+ * every recall cannot get one from here.
  *
  * The word "yet" appears nowhere. "No illnesses reported yet" predicts
  * illnesses the source never predicted (founder decision).
  */
 export function illnessNoticeCopy(status: IllnessStatus): IllnessNoticeCopy | null {
+  const lines: string[] = [];
+  let spokenIllness: string | null = null;
+
   switch (status.kind) {
     case 'unknown':
-      return null;
-
+      break;
     case 'explicit_none':
-      return { text: 'No illnesses reported', spoken: 'No illnesses reported.', tone: 'none' };
-
+      lines.push('No illnesses reported');
+      break;
     case 'reported_unspecified':
-      return {
-        text: 'Illnesses reported',
-        spoken: 'Illnesses reported. The notice does not give a count.',
-        tone: 'reported',
-      };
-
+      lines.push('Illnesses reported');
+      // The only line whose spoken form differs from its text: "Illnesses
+      // reported" alone invites the question the notice cannot answer.
+      spokenIllness = 'Illnesses reported. The notice does not give a count.';
+      break;
     case 'reported_count': {
       const count = status.illnesses!;
       const noun = count === 1 ? 'illness' : 'illnesses';
-      const text = status.approximate
-        ? `Approximately ${count} ${noun} reported`
-        : `${count} ${noun} reported`;
-      return { text, spoken: `${text}.`, tone: 'reported' };
+      lines.push(
+        status.approximate
+          ? `Approximately ${count} ${noun} reported`
+          : `${count} ${noun} reported`,
+      );
+      break;
     }
   }
+
+  const hospitalizations = harmPhrase(
+    status.hospitalizations,
+    'hospitalization',
+    'hospitalizations',
+  );
+  if (hospitalizations !== null) lines.push(hospitalizations);
+  const deaths = harmPhrase(status.deaths, 'death', 'deaths');
+  if (deaths !== null) lines.push(deaths);
+
+  if (lines.length === 0) return null;
+
+  // Tone follows the worst thing the notice established. An explicit denial of
+  // illnesses is the ONLY way to reach the calm treatment, and a
+  // hospitalization or a death beside it takes the notice back to `reported`
+  // — a lime "no illnesses" badge over a reported death would be the app
+  // reassuring a shopper against its own evidence.
+  const reported =
+    status.kind === 'reported_count' ||
+    status.kind === 'reported_unspecified' ||
+    status.hospitalizations.kind !== 'unknown' ||
+    status.deaths.kind !== 'unknown';
+
+  const spokenLines = [...lines];
+  if (spokenIllness !== null) spokenLines[0] = spokenIllness.replace(/\.$/, '');
+  return {
+    lines,
+    // One utterance, one stop per fact, so a reader hears three facts rather
+    // than one run-on sentence.
+    spoken: `${spokenLines.join('. ')}.`,
+    tone: reported ? 'reported' : 'none',
+  };
 }
 
 // ── What Happened de-duplication ────────────────────────────────────────────

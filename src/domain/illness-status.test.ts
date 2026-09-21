@@ -23,11 +23,22 @@ import {
   narrativeWithoutIllness,
   resolveIllnessStatus,
   statusReportsIllness,
+  type HarmFact,
   type IllnessStatus,
 } from './illness-status';
 
 const copyOf = (text: string | null) => illnessNoticeCopy(deriveIllnessStatus(text));
-const textOf = (text: string | null) => copyOf(text)?.text ?? null;
+/**
+ * THE illness line of the notice, or null. Since P2B7Q.1 a notice may carry
+ * hospitalization and death lines beside it, so this names which line it
+ * means rather than assuming the notice has only one.
+ */
+const textOf = (text: string | null) => {
+  const first = copyOf(text)?.lines[0];
+  return first !== undefined && /illness/i.test(first) ? first : null;
+};
+/** The same, for a status built by hand. */
+const lineOf = (status: IllnessStatus) => illnessNoticeCopy(status)!.lines[0];
 
 // ── The four states ─────────────────────────────────────────────────────────
 
@@ -136,11 +147,15 @@ test('a positive INJURY is never shown as an illness', () => {
 
 test('a HOSPITALIZATION with no illness stated is not an illness report', () => {
   // Live cases 2c491bc9, 4c2f1bf1. A hospitalization implies illness; the
-  // source did not state one, and the app does not infer it.
-  assert.equal(
-    copyOf('One hospitalization due to Listeria monocytogenes has been reported to date.'),
-    null,
-  );
+  // source did not state one, and the app still does not infer it — there is
+  // no illness line. P2B7Q.1 states the fact the notice DID establish, on its
+  // own line, where before the whole notice stayed silent.
+  const sentence = 'One hospitalization due to Listeria monocytogenes has been reported to date.';
+  const status = deriveIllnessStatus(sentence);
+  assert.equal(status.kind, 'unknown');
+  assert.equal(status.illnesses, null);
+  assert.equal(textOf(sentence), null, 'an illness line was inferred from a hospitalization');
+  assert.deepEqual(copyOf(sentence)!.lines, ['1 hospitalization reported']);
 });
 
 test('a denial naming illnesses AND another harm still speaks about illnesses', () => {
@@ -235,7 +250,7 @@ test('an uncountable report stays uncounted rather than inventing a number', () 
   );
   assert.equal(status.kind, 'reported_unspecified');
   assert.equal(status.illnesses, null);
-  assert.equal(illnessNoticeCopy(status)!.text, 'Illnesses reported');
+  assert.equal(lineOf(status), 'Illnesses reported');
 });
 
 test('two different illness numbers collapse to the uncounted form', () => {
@@ -265,17 +280,18 @@ test('a year and a hospitalization count are never read as the illness count', (
   assert.notEqual(status.illnesses, 5, 'a hospitalization count is never an illness count');
 });
 
-test('hospitalization and death counts never reach the notice', () => {
-  // Live case 10ebfa06: the notice shows the 9 and nothing else; the 8 and the
-  // 1 stay in What Happened (see the de-duplication tests below).
+test('hospitalization and death counts reach the notice, each on its own line', () => {
+  // Live case 10ebfa06. P2B7K showed the 9 alone, believing the 8 and the 1
+  // survived in What Happened; P2B7Q measured that they reached no surface at
+  // all. P2B7Q.1 states all three.
   const status = deriveIllnessStatus(
     'To date, there have been 9 illnesses, 8 hospitalizations, and 1 death linked to the soft cheese products.',
   );
   assert.equal(status.illnesses, 9);
   const copy = illnessNoticeCopy(status)!;
-  assert.equal(copy.text, '9 illnesses reported');
-  assert.doesNotMatch(copy.text, /hospitali|death/i);
-  assert.doesNotMatch(copy.spoken, /hospitali|death/i);
+  assert.equal(copy.lines[0], '9 illnesses reported');
+  assert.deepEqual(copy.lines.slice(1), ['8 hospitalizations reported', '1 death reported']);
+  assert.equal(copy.spoken, '9 illnesses reported. 8 hospitalizations reported. 1 death reported.');
 });
 
 // ── "No other illnesses": a qualified none establishes nothing (P2B7L) ──────
@@ -342,7 +358,7 @@ test('an established illness count SURVIVES a legitimate no-additional-illness s
   );
   assert.equal(status.kind, 'reported_count');
   assert.equal(status.illnesses, 9);
-  assert.equal(illnessNoticeCopy(status)!.text, '9 illnesses reported');
+  assert.equal(lineOf(status), '9 illnesses reported');
 });
 
 test('a count stated INSIDE the qualifier sentence is quoted, never manufactured', () => {
@@ -364,7 +380,7 @@ test('a positive illness statement without a count is still reported-unspecified
   );
   assert.equal(status.kind, 'reported_unspecified');
   assert.equal(statusReportsIllness(status), true);
-  assert.equal(illnessNoticeCopy(status)!.text, 'Illnesses reported');
+  assert.equal(lineOf(status), 'Illnesses reported');
 });
 
 test('the correction suppresses nothing that is independently supported', () => {
@@ -389,7 +405,7 @@ test('an explicit illness denial beside the boilerplate still denies', () => {
       FSIS_CLOSURE_BOILERPLATE,
   );
   assert.equal(status.kind, 'explicit_none');
-  assert.equal(illnessNoticeCopy(status)!.text, 'No illnesses reported');
+  assert.equal(lineOf(status), 'No illnesses reported');
 });
 
 test('the boilerplate is never removed from What Happened — it backs no status', () => {
@@ -418,7 +434,7 @@ test('the word "yet" appears in no copy for any state', () => {
   ]) {
     const copy = copyOf(sample);
     assert.ok(copy, sample);
-    assert.doesNotMatch(`${copy.text} ${copy.spoken}`, /\byet\b/i, sample);
+    assert.doesNotMatch(`${copy.lines.join(' ')} ${copy.spoken}`, /\byet\b/i, sample);
   }
 });
 
@@ -437,7 +453,7 @@ test('the copy never speaks a risk vocabulary word', () => {
   ]) {
     const copy = copyOf(sample)!;
     assert.doesNotMatch(
-      `${copy.text} ${copy.spoken}`,
+      `${copy.lines.join(' ')} ${copy.spoken}`,
       /\b(critical|high|moderate|low|class [I]+)\b/i,
       sample,
     );
@@ -457,11 +473,14 @@ test('the spoken label states the count and explains an absent one', () => {
 
 // ── Supersession and contradiction ──────────────────────────────────────────
 
+const NO_HARM: HarmFact = { kind: 'unknown', count: null, approximate: false, statements: [] };
 const status = (kind: IllnessStatus['kind'], over: Partial<IllnessStatus> = {}): IllnessStatus => ({
   kind,
   illnesses: null,
   approximate: false,
   statements: kind === 'unknown' ? [] : ['a source sentence'],
+  hospitalizations: NO_HARM,
+  deaths: NO_HARM,
   ...over,
 });
 
@@ -546,7 +565,7 @@ test('a hospitalization or a death is NEVER deleted to avoid a duplicate', () =>
   assert.match(deduped, /8 hospitalizations, and 1 death/);
   assert.equal(narrativeKeepsIllnessSentence(narrative, derived), true);
   // …and the notice still renders the illness count beside it.
-  assert.equal(illnessNoticeCopy(derived)!.text, '9 illnesses reported');
+  assert.equal(lineOf(derived), '9 illnesses reported');
 });
 
 test('an injury or adverse-reaction sentence is never removed', () => {
@@ -596,12 +615,14 @@ test('removal never empties the narrative', () => {
 
 // ── The contract carries no harm but illness ────────────────────────────────
 
-test('the status shape has no field for any harm but illness', () => {
+test('the status shape carries exactly three harms, and nothing that is not one', () => {
   const derived = deriveIllnessStatus(
     'To date, there have been 9 illnesses, 8 hospitalizations, and 1 death linked to the soft cheese products.',
   );
   const keys = Object.keys(derived).map((key) => key.toLowerCase());
-  for (const forbidden of ['hospitaliz', 'death', 'injur', 'adverse', 'harm', 'denied']) {
+  assert.ok(keys.includes('hospitalizations'));
+  assert.ok(keys.includes('deaths'));
+  for (const forbidden of ['injur', 'adverse', 'denied']) {
     assert.ok(
       !keys.some((key) => key.includes(forbidden)),
       `the illness contract must not carry ${forbidden}`,
@@ -646,7 +667,7 @@ test('a disease name with a count is the count the source stated', () => {
   );
   assert.equal(status.kind, 'reported_count');
   assert.equal(status.illnesses, 4);
-  assert.equal(illnessNoticeCopy(status)!.text, '4 illnesses reported');
+  assert.equal(lineOf(status), '4 illnesses reported');
 });
 
 test('a disease-named outbreak linked to the recalled product reports it', () => {
@@ -772,7 +793,7 @@ test("a firm's own denial survives the supplier prose above it", () => {
     'The FDA and CDC are investigating illnesses in a multistate outbreak of Salmonella infections linked to fresh jalapeños supplied by Coast Citrus Distributors. To date, Taylor Fresh Foods is not aware of any reported illnesses linked to its products containing jalapeños.',
   );
   assert.equal(status.kind, 'explicit_none');
-  assert.equal(illnessNoticeCopy(status)!.text, 'No illnesses reported');
+  assert.equal(lineOf(status), 'No illnesses reported');
 });
 
 test('MUTATION: the education/report distinction is load-bearing in both directions', () => {

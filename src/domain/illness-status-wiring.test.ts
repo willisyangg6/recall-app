@@ -114,13 +114,18 @@ test('the material-change rule and push copy still read the canonical flag', () 
 
 // ── 2. Illnesses only ───────────────────────────────────────────────────────
 
-test('the contract exposes no injury, adverse-reaction, hospitalization or death fact', () => {
+test('the contract carries hospitalizations and deaths, and still no injury or adverse reaction', () => {
   const exported = CONTRACT.slice(CONTRACT.indexOf('export interface IllnessStatus'));
   const shape = exported.slice(0, exported.indexOf('}'));
-  for (const forbidden of ['hospitali', 'death', 'injur', 'adverse', 'harm']) {
+  // P2B7Q.1 added exactly two harms, each as its own field.
+  assert.match(shape, /hospitalizations: HarmFact;/);
+  assert.match(shape, /deaths: HarmFact;/);
+  // Injuries and adverse reactions still get no status: they are recognised
+  // only defensively, inside the classifier, and can never reach a shopper.
+  for (const forbidden of ['injur', 'adverse']) {
     assert.ok(
       !shape.toLowerCase().includes(forbidden),
-      `IllnessStatus must not carry ${forbidden} — the notice is about illnesses alone`,
+      `IllnessStatus must not carry ${forbidden} — it is not a general harm badge`,
     );
   }
 });
@@ -129,7 +134,10 @@ test('the notice component can render only what the contract gives it', () => {
   // Its only data input is IllnessNoticeCopy. It reads no projection, no
   // statement, no count — so it cannot acquire a second subject.
   assert.match(NOTICE, /copy: IllnessNoticeCopy/);
-  for (const forbidden of ['hospitali', 'death', 'injur', 'adverse', 'summaryText', 'statements']) {
+  // The words "hospitalization" and "death" are composed by the CONTRACT, not
+  // by this component: it renders `copy.lines` and knows nothing about what a
+  // line says (P2B7Q.1).
+  for (const forbidden of ['injur', 'adverse', 'summaryText', 'statements']) {
     assert.ok(
       !NOTICE.toLowerCase().includes(forbidden.toLowerCase()),
       `the notice must not mention ${forbidden}`,

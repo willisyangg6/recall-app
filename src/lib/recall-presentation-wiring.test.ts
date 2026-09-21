@@ -155,17 +155,28 @@ test('the recall quantity is narrative the model composed, never screen styling 
     'Detail de-duplicates the narrative itself',
   );
   assert.ok(!DETAIL.includes('deriveIllnessStatus('), 'Detail classifies illness prose itself');
-  // And nothing in What Happened is muted secondary text except the Update
-  // line the P1 contract put there.
+  // And What Happened is now exactly ONE line of body text: the narrative.
+  // The muted Update line the P1 contract put beside it is gone with its
+  // generator (P2B7Q.1), so the section has no secondary text at all.
   const section = DETAIL.slice(
     DETAIL.indexOf('<Section title="What Happened">'),
     DETAIL.indexOf('{/* Where it was sold'),
   );
   assert.equal(
     section.match(/color="text\/secondary"/g)?.length ?? 0,
-    1,
-    'What happened carries a second muted line',
+    0,
+    'What happened carries a muted line again',
   );
+  assert.equal(
+    section.match(/<Text /g)?.length ?? 0,
+    1,
+    'What happened renders more than one line',
+  );
+  // Comments stripped: the screen documents in prose exactly what it no
+  // longer does, and must be allowed to say so.
+  const detailCode = codeOnly(DETAIL);
+  assert.ok(!detailCode.includes('normalizedUpdate'), 'Detail reaches for the update generator');
+  assert.ok(!detailCode.includes('whatHappened.update'), 'Detail renders an update line again');
 });
 
 test('Detail introduces none of the disallowed dead controls', () => {

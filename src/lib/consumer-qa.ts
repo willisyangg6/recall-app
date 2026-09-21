@@ -112,7 +112,6 @@ export interface QaRecordResult {
     retailersFound: number;
     areasFound: number;
     packageCoverage: string;
-    actionOrigin: 'source' | 'app';
     sourceHasDateKeyword: boolean;
     sourceHasUpcKeyword: boolean;
     sourceHasRetailerStatement: boolean;
@@ -150,7 +149,6 @@ export interface QaRecordResult {
     /** Must always be zero: a label outside the allowlist, or a leaked fact. */
     unapprovedFieldLabels: number;
     crossDestinationLeaks: number;
-    actionIsFragment: boolean;
     /** Distribution entity roles. */
     statesInSourceClause: number;
     statesRetained: number;
@@ -630,11 +628,8 @@ export function auditConsumerCase(
   ].join(' ');
   const consumerCopy = [
     distributionCopy,
-    consumer.action.text,
-    consumer.action.secondary ?? '',
     consumer.packageCheck.scopeStatement,
     happened.text,
-    happened.update ?? '',
     healthRisk ?? '',
     reason ?? '',
     consumer.packageCheck.codeLocation?.text ?? '',
@@ -694,16 +689,12 @@ export function auditConsumerCase(
       `${inlineLots.values.length} codes rendered inline`,
     );
   }
-  if (PACKAGE_CODE_IN_PROSE.test(consumer.action.text)) {
-    push(violations, 'package-codes-in-action', 'major', consumer.action.text);
-  }
   if (PACKAGE_CODE_IN_PROSE.test(happened.text)) {
     push(violations, 'package-codes-in-what-happened', 'major', happened.text);
   }
   // ── Sentence quality ──
   for (const [name, text] of [
     ['distribution', consumer.distribution.areaText],
-    ['action', consumer.action.text],
     ['scope', consumer.packageCheck.scopeStatement],
   ] as const) {
     if (text === '') continue;
@@ -765,10 +756,6 @@ export function auditConsumerCase(
   // ── Health risk ──
   if (healthRisk && healthRisk.split(/\s+/).length > 50) {
     push(violations, 'health-risk-too-long', 'major', healthRisk);
-  }
-  // ── Action always present ──
-  if (consumer.action.text.trim() === '') {
-    push(violations, 'missing-consumer-action', 'critical', '(empty)');
   }
   // ── Photos ──
   const sourcePhotoCount = [...html.matchAll(/<img[^>]*src="\/files\//g)].length;
@@ -1447,8 +1434,6 @@ export function auditConsumerCase(
       statesSurfaced: consumer.distribution.states.length > 0,
       unapprovedFieldLabels: renderedLabels.filter((label) => !APPROVED_LABELS.has(label)).length,
       crossDestinationLeaks,
-      actionIsFragment:
-        consumer.action.origin === 'source' && consumer.action.text.split(/\s+/).length < 6,
       statesInSourceClause: clauseStates.length,
       statesRetained: statesRetained.length,
       citiesAsRetailers: citiesAsRetailers.length,
@@ -1492,7 +1477,6 @@ export function auditConsumerCase(
       retailersFound: consumer.distribution.retailers.length,
       areasFound: consumer.distribution.areas.length,
       packageCoverage: consumer.packageCheck.coverage,
-      actionOrigin: consumer.action.origin,
       sourceHasDateKeyword,
       sourceHasUpcKeyword,
       // Honest denominator: a retailer the ingest-time parser already
@@ -1625,9 +1609,6 @@ export function summarizeQa(results: QaRecordResult[]): QaSummary {
     quantityInSource: count((r) => r.signals.quantityInSource),
     quantitySurfaced: count((r) => r.signals.quantitySurfaced),
     quantityMissed: count((r) => r.signals.quantityInSource && !r.signals.quantitySurfaced),
-    actionFromSource: count((r) => r.signals.actionOrigin === 'source'),
-    actionAppFallback: count((r) => r.signals.actionOrigin === 'app'),
-    actionFragments: count((r) => r.signals.actionIsFragment),
     // Closed schema.
     uniquePackageFieldLabels: new Set(results.flatMap((r) => r.signals.packageFieldLabels)).size,
     unapprovedFieldLabels: sum((r) => r.signals.unapprovedFieldLabels),

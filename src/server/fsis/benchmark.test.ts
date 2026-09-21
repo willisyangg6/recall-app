@@ -206,11 +206,9 @@ test('benchmark: What-happened structural quality across every record', () => {
       assert.match(text, /import/i, `${id}: import context lost`);
     }
 
-    // Updates, when present, are normalized — never raw editorial text.
-    if (row.happened.update) {
-      assert.match(row.happened.update, /^(Updated [A-Z][a-z]{2} \d{1,2}, \d{4}:|Update:) /, id);
-      assert.doesNotMatch(row.happened.update, /editor|revised to reflect|reissued/i, id);
-    }
+    // Editorial prose never reaches the narrative — and there is no update
+    // note left for it to reach either (P2B7Q.1).
+    assert.doesNotMatch(text, /editor|revised to reflect|reissued/i, id);
   }
 
   // Fallback telemetry + floor: templates must dominate (66/66 at recording).

@@ -1,12 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import {
-  consumerActionDisplay,
-  healthRiskSummary,
-  reasonLine,
-  selectHazardGuidance,
-} from './recall-display';
+import { healthRiskSummary, reasonLine, selectHazardGuidance } from './recall-display';
 
 // Risk wording moved to risk-display.ts (consumer tier vs official
 // classification are two layers now); its goldens live in risk-display.test.ts.
@@ -126,43 +121,13 @@ test('health risk is a concise deterministic template, never source prose (found
   assert.equal(healthRiskSummary('microbial_contamination', null, null), null);
 });
 
-test('equivalent consumer actions standardize; special actions survive', () => {
-  // The dominant FSIS instruction (verbatim from real records).
-  const standard = consumerActionDisplay(
-    'Consumers who have purchased these products are urged not to consume them. These products should be thrown away or returned to the place of purchase.',
-  );
-  assert.equal(
-    standard?.primary,
-    'Do not eat this product. Throw it away or return it to the place of purchase.',
-  );
-  assert.equal(standard?.standardized, true);
-
-  // Destroy-only instruction keeps its distinct meaning.
-  const destroy = consumerActionDisplay(
-    'Consumers are urged to destroy the product. Do not open the package.',
-  );
-  assert.equal(destroy?.primary, 'Do not eat this product. Destroy it.');
-
-  // Retailer guidance is secondary, never the primary consumer action.
-  const withRetail = consumerActionDisplay(
-    'Consumers are urged not to consume these products and retailers are urged not to sell them. These products should be thrown away or returned to the place of purchase.',
-  );
-  assert.match(withRetail?.secondary ?? '', /should not sell or serve/);
-
-  // Unrecognized instructions pass through verbatim (cleaned), not dropped.
-  const special = consumerActionDisplay(
-    'Consumers with weakened immune systems should consult a physician before handling this product.',
-  );
-  assert.equal(special?.standardized, false);
-  assert.match(special?.primary ?? '', /consult a physician/);
-  assert.equal(consumerActionDisplay(null), null);
-});
-
-// Illness wording and location wording are NOT tested here any more, because
-// this file no longer states either (P2B7Q). `illnessDisplay`, `geographyLabel`
-// and `geographyDetail` were dormant second wordings that contradicted the
-// live contracts; the goldens live with their one owner —
-// `src/domain/illness-status.test.ts` and `src/lib/recall-presentation.test.ts`.
+// Illness wording, location wording and the consumer action are NOT tested
+// here any more, because this file no longer states any of them.
+// `illnessDisplay`, `geographyLabel` and `geographyDetail` were dormant second
+// wordings that contradicted the live contracts (P2B7Q); `consumerActionDisplay`
+// went with the whole "What should I do?" concept (P2B7Q.1). The surviving
+// goldens live with their one owner — `src/domain/illness-status.test.ts` and
+// `src/lib/recall-presentation.test.ts`.
 
 // ── P1B: standardized hazard-guide selection ────────────────────────────────
 

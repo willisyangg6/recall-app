@@ -122,7 +122,7 @@ test('MUTATION: adding an explicit illness denial makes each case deny again', (
       `${c.summaryText} There have been no reports of illness associated with this product.`,
     );
     assert.equal(status.kind, 'explicit_none', label(c));
-    assert.equal(illnessNoticeCopy(status)!.text, 'No illnesses reported', label(c));
+    assert.equal(illnessNoticeCopy(status)!.lines[0], 'No illnesses reported', label(c));
   }
 });
 

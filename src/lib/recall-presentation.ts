@@ -40,7 +40,6 @@ import { STATE_TO_POSTAL } from '@/domain/us-geography';
 import {
   buildConsumerCase,
   type AffectedVariant,
-  type ConsumerAction,
   type ConsumerDistribution,
   type ConsumerPackageCheck,
   type LotCodeSet,
@@ -2347,9 +2346,10 @@ export interface DetailModel {
    * The complete What Happened narrative (P3C-1): the reason sentence plus,
    * when the source states one the reason did not already carry, the recall
    * quantity — one paragraph, one voice. There is deliberately no separate
-   * quantity field for a screen to style on its own.
+   * quantity field for a screen to style on its own, and no `update` field:
+   * the generated update note was removed with its generator (P2B7Q.1).
    */
-  whatHappened: { text: string; update: string | null };
+  whatHappened: { text: string };
   /**
    * The compact illness notice (P2B7K), or null when the official notice never
    * established illness status — in which case Detail renders nothing at all
@@ -2370,8 +2370,6 @@ export interface DetailModel {
    * means the heading, its container, and its spacing all stay absent.
    */
   sections: DetailSections;
-  /** Existing source-supported content preserved below the standardized sections. */
-  action: ConsumerAction;
   /**
    * The approved standardized risk sentence for this hazard, or null — the
    * EVIDENCE field, kept for traceability and for the Health Risk section's
@@ -2536,11 +2534,14 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
       // — it is the correct rule the moment any source prose reaches this
       // paragraph — but it must not be read as evidence that a
       // hospitalization, death, injury or adverse reaction survives here.
-      // None does: the compact notice is illnesses-only by founder decision,
-      // and those facts currently reach no shopper surface. The gap is
-      // recorded, with its 8 live cases, in docs/recall-illness-status.md
-      // §1.2 and pinned by `lib/consumer-copy-evidence.test.ts`; closing it
-      // is a founder decision about what Detail shows, not a display fix.
+      // None does.
+      //
+      // That gap is why P2B7Q.1 gave hospitalizations and deaths their own
+      // lines on the compact notice (`illnessNotice` below): they are stated
+      // there, from the illness contract's own derivation, rather than left
+      // to a narrative that was never going to carry them. Injuries and
+      // adverse reactions still have no status anywhere — see
+      // docs/recall-illness-status.md §1.2.
       text: narrativeWithoutIllness(
         detailNarrative(
           happened.text,
@@ -2548,7 +2549,6 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
         ),
         illnessStatus,
       ),
-      update: happened.update,
     },
     illnessNotice: illnessNoticeCopy(illnessStatus),
     whereSold: sold,
@@ -2561,7 +2561,6 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
       }),
       affectedProducts: productsSection,
     },
-    action: consumer.action,
     healthRisk: standardizedRisk,
     attachments: extractAttachmentLinks(projection.summaryHtml),
     images,

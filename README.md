@@ -549,7 +549,67 @@ products were added.`) is **kept, verbatim** — the source states the
   shopper surface (8 active cases —
   [docs/recall-illness-status.md](docs/recall-illness-status.md) §1.2), and
   the card and Detail contradict each other about location on 11 active cases.
-  No production, migration, backfill or repair action was taken.
+  No production, migration, backfill or repair action was taken. **One of
+  those findings was closed by founder decision in P2B7Q.1 below; the
+  card/Detail location disagreement was NOT, and is tracked as its own
+  milestone.**
+
+- **P2B7Q.1 — the founder's decisions on the P2B7Q audit. IMPLEMENTED
+  2026-09-21.** All display-time; no production action.
+  **Removed:** the generated update note is gone from Recall Detail and
+  `normalizedUpdate` is deleted rather than left dormant — THAT a recall
+  changed is already told by its resurfacing in Recent activity and by the
+  "Updated" date the material-change ledger earns, while WHAT changed was
+  editorial prose the app should not write; and the unused
+  "What should I do?" consumer-action generator is deleted with its concept.
+  **Added:** the Detail illness notice now states hospitalizations and deaths
+  on their own lines, closing the gap P2B7Q measured — 11 active cases gain a
+  line and 3 of them previously rendered nothing at all, including two
+  notices whose only fact was "One hospitalization due to Listeria
+  monocytogenes has been reported to date". The extraction inherits the
+  illness contract's own attribution and vetoes hazard education ("the
+  diarrhea may be so severe that the patient needs to be hospitalized" is not
+  a report), which is the largest shape in the corpus.
+  **Preserved and pinned:** update resurfacing, recall identity (one case, one
+  card), push/card copy parity, safe subject attribution, and the date
+  handling still in use.
+  **Attempted and REVERTED:** a geography consolidation that made the four
+  surfaces agree by making Detail read the canonical projection. It was
+  rejected by founder decision: the surfaces agreed, but on an answer the
+  audit itself proves is incomplete on ~18 active cases, which ships real
+  filter and Affects Me misses. Location behaviour is byte-for-byte its
+  pre-P2B7Q.1 self, and the repair is tracked as the milestone below.
+  Contracts: [docs/recall-copy-contract.md](docs/recall-copy-contract.md),
+  [docs/recall-illness-status.md](docs/recall-illness-status.md) §1.2.
+
+- **P2B7Q.2 — repair the canonical geography derivation, then re-project.**
+  The one location value the Feed card, the Location filter and Affects Me all
+  read (`projection.geography`) is **incomplete**, and Recall Detail's separate
+  consumer-distribution derivation is incomplete in the opposite direction.
+  Measured read-only over the 898 active consumer-visible cases, they disagree
+  on **18**:
+
+  - 11 where the canonical scope is `unknown` while the announcement body
+    names states — `14825b36`: "Angelicae Sinensis was distributed in the
+    following states." followed by a list of 14, none of which the derivation
+    kept;
+  - 7 where both say `states` but name different ones — `dcd7279f` keeps the
+    3 distribution-centre states from one sentence and drops the 6 retail
+    states in the next; `85303552` keeps 2 of 10.
+
+  Neither existing derivation may simply win. The canonical one is the only
+  one that applies the exclusions — `4c7d29d6`: "Publix locations in Virginia
+  and **North Carolina are not impacted**", which the body re-read adds anyway
+  — so adopting the body read would ship false positives into Affects Me,
+  while adopting the canonical read (attempted in P2B7Q.1) ships the misses
+  above. The repair is to read the body **with** the exclusion hardening, and
+  it cannot be done at display time: the resolved states have to reach the
+  Feed row for the filter to use them, and the feed row carries no
+  `summaryText` by the egress contract. So this needs an ingest-side
+  derivation change plus a governed re-projection of the affected cases —
+  its own authority, dry run first, founder approval before apply. Until then
+  Detail keeps its own richer-but-unhardened list and the card, filter and
+  Affects Me keep the hardened one, exactly as they did before P2B7Q.1.
 
 - **Illness-repair ledger checkpointing (operational hardening).** The illness
   repair CLI (`npm run repair:illness-flags`) writes its durable apply ledger

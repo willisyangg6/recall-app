@@ -6,7 +6,6 @@ import { test } from 'node:test';
 import type { CaseProjection } from '@/domain/recall-types';
 import {
   aggregateFacts,
-  buildConsumerAction,
   buildConsumerCase,
   buildDistribution,
   extractRetailerListBlock,
@@ -263,59 +262,6 @@ test('unknown distribution stops at the honest statement — never an external r
   assert.equal(unknown.areaText, 'Distribution not specified.');
   assert.equal(unknown.unspecified, true);
   assert.doesNotMatch(unknown.areaText, /notice|fda\.gov|check/i);
-});
-
-test('consumer action always exists, and an app recommendation is labeled as ours', () => {
-  // No source instruction → our cautious recommendation, in our voice.
-  const fallback = buildConsumerAction(projection({ hazardCategory: 'microbial_contamination' }));
-  assert.equal(fallback.origin, 'app');
-  assert.equal(
-    fallback.text,
-    'We recommend that you do not eat this product. If your package matches the recall, throw it away.',
-  );
-  assert.doesNotMatch(fallback.text, /notice|FDA/i);
-
-  // Source instruction wins and keeps its meaning.
-  const sourced = buildConsumerAction(
-    projection({
-      consumerAction:
-        'Consumers should not consume the product and should return it to the place of purchase for a full refund.',
-    }),
-  );
-  assert.equal(sourced.origin, 'source');
-  assert.match(sourced.text, /Return it to the place of purchase for a refund\./);
-});
-
-test('undeclared-allergen actions address the people actually at risk', () => {
-  const allergen = buildConsumerAction(
-    projection({ hazardCategory: 'allergen', pathogenOrAllergen: 'undeclared milk and sesame' }),
-  );
-  assert.equal(
-    allergen.text,
-    'If you are allergic or sensitive to milk or sesame, do not eat this product. If your package matches the recall, throw it away.',
-  );
-  // A source instruction is scoped to the at-risk group rather than replaced.
-  const sourced = buildConsumerAction(
-    projection({
-      hazardCategory: 'allergen',
-      pathogenOrAllergen: 'undeclared soybean',
-      consumerAction:
-        'Consumers are urged to return it to the place of purchase for a full refund.',
-    }),
-  );
-  assert.match(sourced.text, /^If you are allergic or sensitive to soy, /);
-  assert.match(sourced.text, /place of purchase/);
-});
-
-test('lot specifics never clutter the always-visible action', () => {
-  const action = buildConsumerAction(
-    projection({
-      consumerAction:
-        'Consumers who have purchased Bakr Brown Butter Chocolate Chunk Cookie Dough with lot number 2606022 are urged to return it to the place of purchase for a full refund.',
-    }),
-  );
-  assert.doesNotMatch(action.text, /2606022/);
-  assert.match(action.text, /place of purchase/);
 });
 
 test('a value one version owns is not restated as a recall-wide identifier', () => {

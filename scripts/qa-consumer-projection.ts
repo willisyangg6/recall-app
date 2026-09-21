@@ -87,7 +87,6 @@ function auditFda(): QaRecordResult[] {
           retailersFound: 0,
           areasFound: 0,
           packageCoverage: 'source_silent',
-          actionOrigin: 'app',
           sourceHasDateKeyword: false,
           sourceHasUpcKeyword: false,
           sourceHasRetailerStatement: false,
@@ -120,7 +119,6 @@ function auditFda(): QaRecordResult[] {
           statesSurfaced: false,
           unapprovedFieldLabels: 0,
           crossDestinationLeaks: 0,
-          actionIsFragment: false,
           statesInSourceClause: 0,
           statesRetained: 0,
           citiesAsRetailers: 0,
@@ -198,9 +196,7 @@ function report(title: string, results: QaRecordResult[]): number {
     `  package coverage:    structured ${m.packageStructured} | partial ${m.packagePartial} | ` +
       `source-silent ${m.packageSourceSilent} | parser-missed ${m.packageParserMissed}`,
   );
-  console.log(
-    `  consumer action:     ${m.actionFromSource} from source, ${m.actionAppFallback} app recommendation`,
-  );
+  console.log();
 
   console.log('\nSemantic relationships:');
   console.log(
@@ -242,7 +238,6 @@ function report(title: string, results: QaRecordResult[]): number {
     `  facts held back:     ${m.rejectedUnsupported} no approved field · ${m.rejectedWrongDestination} wrong destination · ` +
       `${m.rejectedInvalidType} wrong type · ${m.rejectedIntentionallySuppressed} layout/low-value`,
   );
-  console.log(`  action fragments:    ${m.actionFragments}`);
 
   console.log('\nDistribution entity roles:');
   console.log(

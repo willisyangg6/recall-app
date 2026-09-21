@@ -15,7 +15,6 @@
  * normal task.
  */
 
-import { normalizedAllergenTokens } from '@/domain/hazard';
 import type { AffectedProduct, CaseProjection } from '@/domain/recall-types';
 import {
   extractRetailerNames,
@@ -72,7 +71,6 @@ import {
   type ProductPhoto,
 } from './product-photos';
 import { extractProseIdentifiers, extractProseVariantLines } from './prose-identifiers';
-import { consumerActionDisplay } from './recall-display';
 import {
   extractAffectedProductLists,
   extractDistributionListStates,
@@ -286,14 +284,6 @@ export interface ConsumerPackageCheck {
 
 export type PackageCoverage = 'structured' | 'partial' | 'source_silent' | 'parser_missed';
 
-export interface ConsumerAction {
-  text: string;
-  /** 'source' = the notice's own instruction; 'app' = our recommendation. */
-  origin: 'source' | 'app';
-  /** Retailer/food-service guidance, secondary to the consumer action. */
-  secondary: string | null;
-}
-
 export interface ConsumerCase {
   photos: ProductPhoto[];
   /** The COMPLETE extracted official photo set — recognition images and
@@ -306,7 +296,6 @@ export interface ConsumerCase {
   packageCheck: ConsumerPackageCheck;
   /** Affected version names, for a compact "Affected versions" line. */
   variantNames: string[];
-  action: ConsumerAction;
   /** How much product the notice says was recalled; null when it never says. */
   quantityText: string | null;
 }
@@ -2215,132 +2204,6 @@ function buildLotCodes(
   return { count: codes.length, codes, pairs, label };
 }
 
-// ── Consumer action ─────────────────────────────────────────────────────────
-
-/**
- * The always-visible instruction. Source instructions win when the notice
- * gives one; otherwise we state a cautious recommendation in OUR voice rather
- * than claiming the agency said it — and never refer the user elsewhere.
- * Undeclared-allergen recalls are scoped to the people actually at risk: the
- * food is not unsafe for everyone, and saying so would be false.
- */
-export function buildConsumerAction(projection: CaseProjection): ConsumerAction {
-  const fromSource = stripEmphasis(consumerActionDisplay(projection.consumerAction));
-  const allergens = normalizedAllergenTokens(projection.pathogenOrAllergen);
-  const isAllergen = projection.hazardCategory === 'allergen';
-
-  if (fromSource?.standardized) {
-    // Standardized source instruction; scope it to the at-risk group when the
-    // hazard is an undeclared allergen.
-    if (isAllergen && allergens.length > 0) {
-      const list = joinValues(allergens).replace(/ and /g, ' or ').replace(/, /g, ', ');
-      return {
-        text: `If you are allergic or sensitive to ${list}, ${fromSource.primary.charAt(0).toLowerCase()}${fromSource.primary.slice(1)}`,
-        origin: 'source',
-        secondary: fromSource.secondary,
-      };
-    }
-    return { text: fromSource.primary, origin: 'source', secondary: fromSource.secondary };
-  }
-
-  if (fromSource) {
-    // Unrecognized but real source instruction: keep the source's meaning,
-    // minus package-specific detail, which belongs in the package checker.
-    const cleaned = stripPackageSpecifics(fromSource.primary);
-    if (cleaned && isCompleteInstruction(cleaned)) {
-      return { text: cleaned, origin: 'source', secondary: fromSource.secondary };
-    }
-  }
-
-  if (isAllergen && allergens.length > 0) {
-    const list = joinValues(allergens).replace(/ and /g, ' or ');
-    return {
-      text: `If you are allergic or sensitive to ${list}, do not eat this product. If your package matches the recall, throw it away.`,
-      origin: 'app',
-      secondary: null,
-    };
-  }
-  if (isAllergen) {
-    return {
-      text: 'If you have a food allergy or sensitivity, do not eat this product. If your package matches the recall, throw it away.',
-      origin: 'app',
-      secondary: null,
-    };
-  }
-  return {
-    text: 'We recommend that you do not eat this product. If your package matches the recall, throw it away.',
-    origin: 'app',
-    secondary: null,
-  };
-}
-
-/**
- * Some notices shout their instruction in markdown ("**DO NOT CONSUME THIS
- * PRODUCT**"). The emphasis is the source's formatting, not its words, and
- * rendering the asterisks makes our own copy look broken.
- */
-function stripEmphasis<T extends { primary: string; secondary: string | null }>(
-  action: T | null,
-): T | null {
-  if (!action) return null;
-  const clean = (text: string) =>
-    text
-      .replace(/\*{1,3}|_{2,}/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  return {
-    ...action,
-    primary: clean(action.primary),
-    secondary: action.secondary === null ? null : clean(action.secondary),
-  };
-}
-
-/**
- * Remove lot/UPC/date specifics from an action sentence (they live in the
- * checker).
- *
- * The clause is bounded to the identifier itself. An unbounded strip is what
- * turned "Consumers who have purchased Sura Tanmen with lot code 1226183 are
- * urged not to consume the product and to return it to the original place of
- * purchase for a full refund." into "Consumers who have purchased Sura
- * Tanmen." — it swallowed the entire instruction because no comma or period
- * happened to follow the lot number.
- */
-function stripPackageSpecifics(text: string): string | null {
-  const cleaned = cleanDisplayText(
-    text
-      .replace(
-        /\s*(?:with|bearing|having)\s+(?:the\s+)?(?:lot|batch|UPC|best[- ]by|use[- ]by)\s*(?:codes?|numbers?|dates?|#)?\s*[:#]?\s*[A-Z0-9][A-Z0-9/-]*(?:\s*(?:,|and)\s*[A-Z0-9][A-Z0-9/-]*)*/gi,
-        '',
-      )
-      .replace(/\s*\((?:lot|batch|UPC)[^)]*\)/gi, ''),
-  );
-  return cleaned.length >= 12 ? cleaned : null;
-}
-
-/**
- * Verbs that make a sentence an instruction to a consumer. Every approved
- * action either tells someone what to do or tells them what not to do.
- */
-const INSTRUCTION_VERB =
-  /\b(?:do not|don't|should not|not to|stop|discard|dispose|destroy|throw|return|check|avoid|refrain|contact|dispose of|urged|advised|asked|encouraged|may return|can return)\b/i;
-
-/**
- * True when a sentence actually instructs the reader.
- *
- * "Consumers who have purchased Sura Tanmen." is a grammatical sentence and
- * says nothing. Rendering a fragment under "What you should do" is worse than
- * rendering our own clear recommendation, because the reader believes they have
- * been told something.
- */
-function isCompleteInstruction(text: string): boolean {
-  const trimmed = text.trim();
-  if (trimmed.split(/\s+/).length < 6) return false;
-  if (!INSTRUCTION_VERB.test(trimmed)) return false;
-  // A trailing subordinator means the sentence was cut off mid-clause.
-  return !/\b(?:with|and|or|to|the|of|that|who|which|for|from|in|at|by)\s*[.]?$/i.test(trimmed);
-}
-
 // ── Package check ───────────────────────────────────────────────────────────
 
 const IDENTIFIER_KEYWORDS =
@@ -3031,7 +2894,6 @@ export function buildConsumerCase(
     // across them, so it is deduplicated — a comma-separated list of 651
     // entries is not a summary of anything.
     variantNames: summarizeVariantNames(variants),
-    action: buildConsumerAction(projection),
     quantityText: recallQuantity(projection, [...tableFacts, ...proseFacts]),
   };
 }

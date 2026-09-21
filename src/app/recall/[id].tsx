@@ -499,19 +499,24 @@ export default function RecallDetailScreen() {
             (P3C-1): the reason sentence and, where the source states one the
             reason did not already carry, the recall quantity arrive as ONE
             body paragraph. The screen composes and styles nothing — there is
-            no separate quantity slot. The illness status is no longer a line
-            here: it renders as the compact notice in the identity area above
-            (P2B7K), and this narrative has had the sentence backing it removed
-            — but only when that notice completely represents it, so a
-            hospitalization, death, injury or adverse reaction is never dropped
-            to avoid a duplicate. Only the Update line is muted. */}
+            no separate quantity slot.
+
+            Two things deliberately do NOT render here:
+
+            · the illness status, which is the compact notice in the identity
+              area above — and which now carries hospitalizations and deaths
+              on their own lines too (P2B7Q.1);
+            · a generated update note. `normalizedUpdate` used to paraphrase
+              the newest Editor's Note into "Updated Feb 9, 2024: additional
+              affected products were added." P2B7Q proved that family could be
+              made truthful, and the founder then removed it anyway: a shopper
+              is told THAT a recall changed by its resurfacing in Recent
+              Activity and by its "Updated" date, which are earned from the
+              material-change ledger, and a paraphrase of WHAT changed is
+              editorial prose the app has no business writing. The generator
+              is deleted, not disabled. */}
         <Section title="What Happened">
           <Text variant="body-small">{model.whatHappened.text}</Text>
-          {model.whatHappened.update ? (
-            <Text variant="body-small" color="text/secondary">
-              {model.whatHappened.update}
-            </Text>
-          ) : null}
         </Section>
 
         {/* Where it was sold: only the full state representation (P2a founder

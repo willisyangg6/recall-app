@@ -72,3 +72,39 @@ test('sections separate tiers; older items ordered by announcement date', () => 
     ['2022-08-24', '2014-06-01'],
   );
 });
+
+// ── P2B7Q.1: resurfacing and identity survive the update-note removal ───────
+
+/**
+ * The founder removed the generated update NOTE from Recall Detail, and kept
+ * update RESURFACING. These pin the difference, because the two are easy to
+ * confuse and only one of them was ever the shopper's signal that something
+ * changed.
+ *
+ * What a shopper is told about an update, after P2B7Q.1:
+ *
+ *   · the recall returns to Recent activity (this file);
+ *   · its card and its Detail header read "Updated <date>", earned from the
+ *     material-change ledger (`activityDisplay`);
+ *   · and nothing paraphrases what changed.
+ *
+ * None of that ever came from `normalizedUpdate`, which only ever read the
+ * announcement's Editor's Note prose. Deleting it cannot reach any of this —
+ * these tests are what says so out loud.
+ */
+test('P2B7Q.1: an update resurfaces a years-old recall into Recent activity', () => {
+  // The recorded shape: announced 2017, materially updated last week. It is
+  // old news by announcement date and current news by activity, and the feed
+  // tier is decided by activity alone.
+  const resurfaced = item({ publishedAt: '2017-05-16', lastPublicActivityAt: '2026-08-13' });
+  const dormant = item({ publishedAt: '2017-05-16', lastPublicActivityAt: '2017-05-16' });
+  assert.equal(feedTier(resurfaced, NOW), 'recent');
+  assert.equal(feedTier(dormant, NOW), 'older_active');
+
+  const { recent, olderActive } = buildFeedSections([dormant, resurfaced], NOW);
+  assert.deepEqual(
+    recent.map((i) => i.lastPublicActivityAt),
+    ['2026-08-13'],
+  );
+  assert.equal(olderActive.length, 1);
+});

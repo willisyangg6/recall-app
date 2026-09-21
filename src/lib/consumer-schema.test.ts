@@ -11,12 +11,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { CaseProjection } from '@/domain/recall-types';
-import {
-  aggregateFacts,
-  buildConsumerAction,
-  buildConsumerCase,
-  toPackageFields,
-} from './consumer-projection';
+import { aggregateFacts, buildConsumerCase, toPackageFields } from './consumer-projection';
 import { PACKAGE_FIELD_LABEL, PACKAGE_FIELD_ORDER } from './consumer-schema';
 import type { SemanticFact } from './source-tables';
 
@@ -266,30 +261,6 @@ test('named stores in a sentence are retailers, not "Distribution not specified.
     consumer.distribution.retailers.includes('Earth Fare Stores'),
     consumer.distribution.retailers.join(' | '),
   );
-});
-
-test('an incomplete source instruction never reaches "What you should do"', () => {
-  // The exact Sun Noodle fragment: stripping the lot clause used to swallow
-  // the instruction, leaving a sentence that tells the reader nothing.
-  const fragment = buildConsumerAction(
-    projection({ consumerAction: 'Consumers who have purchased Sura Tanmen' }),
-  );
-  assert.equal(fragment.origin, 'app');
-  assert.equal(
-    fragment.text,
-    'We recommend that you do not eat this product. If your package matches the recall, throw it away.',
-  );
-
-  // The same sentence, complete, keeps the source's meaning — including the
-  // "original place of purchase" wording an exact-phrase match used to miss.
-  const whole = buildConsumerAction(
-    projection({
-      consumerAction:
-        'Consumers who have purchased Sura Tanmen with lot code 1226183 are urged not to consume the product and to return it to the original place of purchase for a full refund.',
-    }),
-  );
-  assert.equal(whole.origin, 'source');
-  assert.match(whole.text, /Return it to the place of purchase for a refund\./);
 });
 
 test('every fact has one destination, and the schema is what enforces it', () => {

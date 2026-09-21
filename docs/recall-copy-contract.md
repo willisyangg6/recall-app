@@ -2,7 +2,8 @@
 
 **Status: established by P2B7Q (2026-09-20), the one systematic audit of every
 sentence Lotly _constructs_ about a recall rather than reproducing from its
-source.** This is the authoritative home for the copy taxonomy, the evidence
+source, and amended by the founder decisions in P2B7Q.1 — which removed two
+copy families outright and added hospitalizations and deaths to a third.** This is the authoritative home for the copy taxonomy, the evidence
 rule each family must satisfy, who owns each family, and the cross-surface
 rules. Voice and vocabulary — em dashes, "store" not "retailer", "Lotly" not
 "Recall" — live in [`src/lib/consumer-copy.test.ts`](../src/lib/consumer-copy.test.ts)
@@ -68,9 +69,14 @@ Specifically forbidden, each with a test in
 | Feed / Detail states     | `lib/feed-copy`, `lib/detail-copy`                          | interface copy            | Feed, Saved, Detail              |
 
 **Built but rendered nowhere today** (measured P2B7Q — stated so nobody assumes
-a shopper reads them): the consumer action, the share message, the affected-
-products scope statement and coverage note, the tier note, and the official
-classification block. Each is a live contract with tests; none reaches a screen.
+a shopper reads them): the share message, the affected-products scope statement
+and coverage note, the tier note, and the official classification block. Each is
+a live contract with tests; none reaches a screen.
+
+The consumer action was on that list and is **gone** (P2B7Q.1): the founder
+retired the "What should I do?" concept rather than the wiring, so
+`buildConsumerAction` and `consumerActionDisplay` are deleted and no dormant
+generator is left for a future screen to pick up.
 
 ## 4. Paraphrase versus quote
 
@@ -85,23 +91,31 @@ rather than being glued on.
 The raw projection is never mutated by rendering: `buildDetailModel`,
 `buildHomeCardModel` and `formatPushContent` are pure over it, pinned by test.
 
-## 5. The update note (the "Feb 9" family)
+## 5. The update note: removed, generator and all (P2B7Q.1)
 
-The note is derived **at display time** from the newest Editor's Note in
-`summaryText` — never stored — so every future ingest inherits the current
-rules with no backfill.
+There is no generated update note. `normalizedUpdate` paraphrased the newest
+Editor's Note into a sentence of the app's own —
+`Updated Feb 9, 2024: additional affected products were added.` — and P2B7Q
+hardened it until every clause was earned by the source and every date was one
+the notice stated about itself.
 
-A clause is rendered only when a sentence of the note _states_ the thing the
-clause claims, is not negated, and is not a future possibility. Three clauses
-exist and no others; an unclassifiable note renders nothing.
+The founder then removed the treatment entirely, and the generator with it.
+The reasoning is worth keeping, because the copy was not wrong by then:
 
-A date is accepted only when the note states it as **its own**: a leading
-dateline (`Feb. 9, 2024 – …`, `, Oct. 25, 2019: …`, `(May 5, 2017): …`) or the
-direct object of an update verb (`…were updated April 27, 2022, to …`). Any
-other date in a note belongs to something else — most often the notice being
-expanded — and the note renders undated as `Update: …`. The month word is
-validated against the month table, so a date-shaped string that is not a date
-never renders as one.
+- **THAT a recall changed is already told, honestly.** The recall returns to
+  **Recent activity** (`feedTier`, keyed on `lastPublicActivityAt`) and its
+  card and Detail header read `Updated <date>` — a label earned from the
+  material-change ledger, which an agency wording edit or a maintenance write
+  cannot produce.
+- **WHAT changed was editorial prose the app has no business writing.** Every
+  clause was a classification of somebody else's paragraph into one of three
+  buckets. Even when accurate it read as an official statement Lotly had
+  authored.
+- **Identity is untouched.** An update is the same case: one id, one row, one
+  card. Nothing about resurfacing or identity ever came from this generator.
+
+It is deleted rather than disabled, per the standing rule in §3: a dormant copy
+generator is exactly what this audit exists to remove.
 
 ## 6. Unknown and null
 
@@ -117,13 +131,19 @@ never renders as one.
 An explicit source denial is a different answer from silence, and the two are
 worded differently everywhere.
 
+Illnesses are the only harm with an `explicit_none` line
+(`No illnesses reported`). Hospitalizations and deaths render a line **only
+when the notice affirms them** (P2B7Q.1): "No deaths reported" on every
+Listeria recall is noise, and three negative lines would bury the one positive
+line that matters.
+
 ## 7. Cross-surface rules
 
 **Must agree.** The Feed card, Saved and Detail read one presentation contract,
 so the activity line, the risk label, the category tag and the location verdict
-are the same string by construction. Push reads the **same** reason sentence as
-the card (P2B7Q): before that it built its own, and the two disagreed on 534 of
-898 active cases, including the certainty word.
+are the same string by construction. Push reads the **same** reason sentence as the card (P2B7Q):
+before that it built its own, and the two disagreed on 534 of 898 active cases,
+including the certainty word.
 
 **Intentionally different.** Detail states more than a card, because it has
 room: the complete jurisdiction list against the card's `CT, IL +4`; the full
@@ -136,22 +156,49 @@ retailer content at all, while search still matches on retailer names silently.
 - **`Retailers:`** — the one place consumer copy says "retailer" rather than
   "store", scoped to that exact string (P2B7O).
 - **Search matches are never explained** — matching is silent (P2B7O).
-- **The illness notice is illnesses-only** (P2B7K); see §9.
+- **The illness notice carries illnesses, hospitalizations and deaths**, one
+  fact per line (P2B7Q.1, superseding P2B7K's illnesses-only decision). A
+  denial renders a line for illnesses only.
+- **There is no generated update note and no "What should I do?"** — both
+  concepts were retired with their generators (P2B7Q.1); see §5 and §3.
 - **Freshness is never shown to shoppers** — no "last checked", no stale state.
 - **Coverage/helper prose under Affected Products is not rendered** (P2a).
 
-## 9. Open founder decisions (P2B7Q found, deliberately did not change)
+## 9. Open items
 
-1. **Hospitalizations and deaths reach no shopper surface.** 8 of 898 active
-   cases have a notice affirming one; none shows it. Full evidence and the
-   table of cases: [recall-illness-status.md §1.2](recall-illness-status.md).
-2. **The card and Detail contradict each other about location on 11 of 898
-   active cases** — the card says `Distribution not specified` while Detail
-   lists specific states. Two geography derivations, not a copy defect; the
-   fix is upstream and has filtering and personalization consequences.
-3. **A stored `productDescription` clipped at 255 characters enters the What
+One of P2B7Q's four was closed by founder decision in P2B7Q.1; one was moot;
+two remain, and one of those is larger than P2B7Q measured.
+
+**Closed.**
+
+1. ~~Hospitalizations and deaths reach no shopper surface.~~ Closed: they are
+   stated on the Detail notice, one fact per line
+   ([recall-illness-status.md §1.2](recall-illness-status.md)). 11 active cases
+   gained a line; 3 of them previously rendered no notice at all.
+2. ~~`Update:` versus `Updated <date>:`~~ Moot: the update note is gone (§5).
+
+**Still open.**
+
+1. **The card and Detail disagree about location on 18 of 898 active cases** —
+   more than the 11 P2B7Q first reported. On 11 the card says
+   `Distribution not specified` while Detail names up to 14 states; on 7 both
+   name states but different ones. Two geography derivations, each incomplete
+   in a different direction: the canonical one misses states stated later in
+   the announcement body (`dcd7279f`), while the consumer distribution ignores
+   the exclusions the canonical derivation applies (`4c7d29d6` — "Publix
+   locations in Virginia and North Carolina are **not** impacted"). Because
+   the Location filter and Affects Me read the canonical value, its
+   incompleteness is a **personalization and filtering miss**, not a display
+   blemish.
+
+   **This is not fixable at display time.** Making the surfaces agree by
+   picking either derivation ships a knowingly incomplete answer — P2B7Q.1
+   tried exactly that and it was rejected. The repair is upstream: read the
+   body with the exclusion hardening applied, and re-project the affected
+   cases. Tracked as its own milestone in [README.md](../README.md).
+
+2. **A stored `productDescription` clipped at 255 characters enters the What
    Happened sentence mid-word** on 1 active case ("… Flavored Chee because the
-   products may be contaminated…").
-4. **`Update:` versus `Updated <date>:`** — 35 of 82 notes are now honestly
-   undated. Whether an undated note earns its place on Detail is a wording
-   decision, not a truth one.
+   products may be contaminated…"), and 3 cases end the product slot on a
+   dangling adverb ("… Ineligible Meat and Poultry Products Illegally
+   because…"). Both are title/description parsing, adjacent to P3D/P2B7M.
