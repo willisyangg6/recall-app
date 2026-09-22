@@ -144,11 +144,11 @@ test('Home takes its category options from the launch allowlist, never a local l
   for (const forbidden of [
     'prepared_foods',
     'supplements',
-    'Prepared foods',
+    'Prepared Foods',
     'Supplements',
-    'Fruits & vegetables',
-    'Meat & poultry',
-    'Baby food & formula',
+    'Fruits & Vegetables',
+    'Meat & Poultry',
+    'Baby Food & Formula',
   ]) {
     for (const quote of ["'", '"', '`']) {
       assert.ok(

@@ -49,7 +49,7 @@ test('the two refined labels describe what the derivation actually does', () => 
   // Grain staples derive `pantry_condiments`, so the bakery label must not
   // promise grains and the pantry label must say staples.
   assert.equal(foodCategoryLabel('bakery_grains'), 'Bakery');
-  assert.equal(foodCategoryLabel('pantry_condiments'), 'Pantry & staples');
+  assert.equal(foodCategoryLabel('pantry_condiments'), 'Pantry & Staples');
 });
 
 test('ids are unique and labels are unique', () => {
@@ -66,8 +66,8 @@ test('every category carries a non-empty label and definition', () => {
 });
 
 test('labels are separable from ids — a lookup, never a formatted id', () => {
-  assert.equal(foodCategoryLabel('meat_poultry'), 'Meat & poultry');
-  assert.equal(foodCategoryLabel('baby_food_formula'), 'Baby food & formula');
+  assert.equal(foodCategoryLabel('meat_poultry'), 'Meat & Poultry');
+  assert.equal(foodCategoryLabel('baby_food_formula'), 'Baby Food & Formula');
   assert.equal(foodCategory('seafood')?.definition.startsWith('Fish'), true);
 });
 

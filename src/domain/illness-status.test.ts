@@ -20,6 +20,7 @@ import {
   deriveIllnessStatus,
   illnessNoticeCopy,
   narrativeKeepsIllnessSentence,
+  noticeTexts,
   narrativeWithoutIllness,
   resolveIllnessStatus,
   statusReportsIllness,
@@ -34,11 +35,11 @@ const copyOf = (text: string | null) => illnessNoticeCopy(deriveIllnessStatus(te
  * means rather than assuming the notice has only one.
  */
 const textOf = (text: string | null) => {
-  const first = copyOf(text)?.lines[0];
+  const first = copyOf(text)?.notices[0].text;
   return first !== undefined && /illness/i.test(first) ? first : null;
 };
 /** The same, for a status built by hand. */
-const lineOf = (status: IllnessStatus) => illnessNoticeCopy(status)!.lines[0];
+const lineOf = (status: IllnessStatus) => illnessNoticeCopy(status)!.notices[0].text;
 
 // ── The four states ─────────────────────────────────────────────────────────
 
@@ -155,7 +156,7 @@ test('a HOSPITALIZATION with no illness stated is not an illness report', () => 
   assert.equal(status.kind, 'unknown');
   assert.equal(status.illnesses, null);
   assert.equal(textOf(sentence), null, 'an illness line was inferred from a hospitalization');
-  assert.deepEqual(copyOf(sentence)!.lines, ['1 hospitalization reported']);
+  assert.deepEqual(noticeTexts(copyOf(sentence)!), ['1 hospitalization reported']);
 });
 
 test('a denial naming illnesses AND another harm still speaks about illnesses', () => {
@@ -289,9 +290,148 @@ test('hospitalization and death counts reach the notice, each on its own line', 
   );
   assert.equal(status.illnesses, 9);
   const copy = illnessNoticeCopy(status)!;
-  assert.equal(copy.lines[0], '9 illnesses reported');
-  assert.deepEqual(copy.lines.slice(1), ['8 hospitalizations reported', '1 death reported']);
+  assert.equal(copy.notices[0].text, '9 illnesses reported');
+  assert.deepEqual(
+    copy.notices.slice(1).map((n) => n.text),
+    ['8 hospitalizations reported', '1 death reported'],
+  );
   assert.equal(copy.spoken, '9 illnesses reported. 8 hospitalizations reported. 1 death reported.');
+});
+
+test('P2B7V: every harm combination the live corpus contains renders as its own boxes', () => {
+  // Measured over the 898 consumer-visible active cases (2026-09-21). Each
+  // row below is a shape that EXISTS, with the case it was taken from, so a
+  // regression in any one of them fails here rather than on a screen. The
+  // order is always illnesses → hospitalizations → deaths, and it does not
+  // change when one of the three is absent.
+  const cases: {
+    label: string;
+    summary: string;
+    expected: [text: string, tone: string][];
+  }[] = [
+    {
+      label: 'illnesses only, plural (23 live cases)',
+      summary: 'Three illnesses have been reported to date.',
+      expected: [['3 illnesses reported', 'illnesses']],
+    },
+    {
+      label: 'illnesses only, SINGULAR (3 live cases)',
+      summary: 'One illness has been reported to date.',
+      expected: [['1 illness reported', 'illnesses']],
+    },
+    {
+      label: 'positive illness with no trustworthy count (11 live cases)',
+      summary: 'Illnesses have been reported in connection with this recall.',
+      expected: [['Illnesses reported', 'illnesses']],
+    },
+    {
+      label: 'illnesses + hospitalizations, both counted (decd41aa)',
+      summary: 'Three illnesses and three hospitalizations have been reported.',
+      expected: [
+        ['3 illnesses reported', 'illnesses'],
+        ['3 hospitalizations reported', 'hospitalizations'],
+      ],
+    },
+    {
+      label: 'illnesses + hospitalizations without a count (c4f8c9e4, f84e2407)',
+      summary: 'Two illnesses have been reported. Hospitalizations have been reported.',
+      expected: [
+        ['2 illnesses reported', 'illnesses'],
+        ['Hospitalizations reported', 'hospitalizations'],
+      ],
+    },
+    {
+      label: 'illnesses + deaths, singular death (f8a2c8ab — Soft Ricotta / La Colonia)',
+      summary: 'There have been 12 illnesses and 1 death linked to these products.',
+      expected: [
+        ['12 illnesses reported', 'illnesses'],
+        ['1 death reported', 'deaths'],
+      ],
+    },
+    {
+      label: 'illnesses + deaths, plural deaths (fca62f93)',
+      summary: 'There have been 38 illnesses and 11 deaths linked to these products.',
+      expected: [
+        ['38 illnesses reported', 'illnesses'],
+        ['11 deaths reported', 'deaths'],
+      ],
+    },
+    {
+      label: 'ALL THREE (10ebfa06)',
+      summary:
+        'To date, there have been 9 illnesses, 8 hospitalizations, and 1 death linked to the soft cheese products.',
+      expected: [
+        ['9 illnesses reported', 'illnesses'],
+        ['8 hospitalizations reported', 'hospitalizations'],
+        ['1 death reported', 'deaths'],
+      ],
+    },
+    {
+      label: 'hospitalization ALONE — no illness line at all (2c491bc9, 4c2f1bf1)',
+      summary: 'One hospitalization due to Listeria monocytogenes has been reported to date.',
+      expected: [['1 hospitalization reported', 'hospitalizations']],
+    },
+    {
+      label: 'unspecified illnesses + counted hospitalizations (55ee81ad)',
+      summary: 'Illnesses have been reported. 31 hospitalizations have been reported to date.',
+      expected: [
+        ['Illnesses reported', 'illnesses'],
+        ['31 hospitalizations reported', 'hospitalizations'],
+      ],
+    },
+    {
+      label: 'explicit denial — the calm box, and the only route to it (557 live cases)',
+      summary: 'No illnesses have been reported to date.',
+      expected: [['No illnesses reported', 'none']],
+    },
+  ];
+
+  for (const { label, summary, expected } of cases) {
+    const copy = illnessNoticeCopy(deriveIllnessStatus(summary));
+    assert.ok(copy !== null, label);
+    assert.deepEqual(
+      copy.notices.map((n) => [n.text, n.tone]),
+      expected,
+      label,
+    );
+    // Whatever the combination, every box is a complete utterance of its own
+    // and the group reads as one sentence per fact.
+    assert.equal(copy.spoken, `${copy.notices.map((n) => n.spoken).join('. ')}.`, label);
+  }
+
+  // The eleventh shape: silence. 296 live cases establish nothing, and they
+  // render NO box — not an empty stack, not a zero (P2B7K).
+  assert.equal(copyOf('The product was distributed to retail stores in Ohio.'), null);
+  assert.equal(copyOf(null), null);
+});
+
+test('P2B7V: a harm keeps its own treatment wherever it lands in the stack', () => {
+  // Severity belongs to the FACT, never to the position. A death is the
+  // critical treatment whether it is the first box or the third, and a
+  // hospitalization is never promoted to the illness treatment for being the
+  // only box — which is exactly what a positional colour rule would do.
+  const alone = illnessNoticeCopy(
+    deriveIllnessStatus('One hospitalization has been reported to date.'),
+  )!;
+  assert.deepEqual(
+    alone.notices.map((n) => n.tone),
+    ['hospitalizations'],
+  );
+
+  const third = illnessNoticeCopy(
+    deriveIllnessStatus(
+      'To date, there have been 9 illnesses, 8 hospitalizations, and 1 death linked to the products.',
+    ),
+  )!;
+  assert.equal(third.notices[2].tone, 'deaths');
+
+  const second = illnessNoticeCopy(
+    deriveIllnessStatus('No illnesses have been reported. Two deaths have been reported.'),
+  )!;
+  assert.deepEqual(
+    second.notices.map((n) => n.tone),
+    ['none', 'deaths'],
+  );
 });
 
 // ── "No other illnesses": a qualified none establishes nothing (P2B7L) ──────
@@ -434,14 +574,20 @@ test('the word "yet" appears in no copy for any state', () => {
   ]) {
     const copy = copyOf(sample);
     assert.ok(copy, sample);
-    assert.doesNotMatch(`${copy.lines.join(' ')} ${copy.spoken}`, /\byet\b/i, sample);
+    assert.doesNotMatch(`${noticeTexts(copy).join(' ')} ${copy.spoken}`, /\byet\b/i, sample);
   }
 });
 
 test('tone separates a report from a denial, and unknown has neither', () => {
-  assert.equal(copyOf('Four (4) illnesses have been reported to date.')!.tone, 'reported');
-  assert.equal(copyOf('Illnesses have been reported to date.')!.tone, 'reported');
-  assert.equal(copyOf('No illnesses have been reported to date.')!.tone, 'none');
+  // P2B7V: tone is per BOX, and it names the harm the box states — which is
+  // what the treatment is looked up by. An illness report and an illness
+  // denial are different boxes, never the same box recoloured.
+  assert.equal(
+    copyOf('Four (4) illnesses have been reported to date.')!.notices[0].tone,
+    'illnesses',
+  );
+  assert.equal(copyOf('Illnesses have been reported to date.')!.notices[0].tone, 'illnesses');
+  assert.equal(copyOf('No illnesses have been reported to date.')!.notices[0].tone, 'none');
   assert.equal(copyOf('The product was distributed in Ohio.'), null);
 });
 
@@ -453,7 +599,7 @@ test('the copy never speaks a risk vocabulary word', () => {
   ]) {
     const copy = copyOf(sample)!;
     assert.doesNotMatch(
-      `${copy.lines.join(' ')} ${copy.spoken}`,
+      `${noticeTexts(copy).join(' ')} ${copy.spoken}`,
       /\b(critical|high|moderate|low|class [I]+)\b/i,
       sample,
     );
@@ -508,7 +654,7 @@ test('a later denial never un-reports an earlier illness — it fails safe', () 
   ]);
   assert.equal(resolved.kind, 'reported_unspecified', 'must never resolve to a zero');
   assert.equal(resolved.illnesses, null, 'a contradicted count is dropped, not guessed');
-  assert.equal(illnessNoticeCopy(resolved)!.tone, 'reported');
+  assert.equal(illnessNoticeCopy(resolved)!.notices[0].tone, 'illnesses');
 });
 
 test('all-silent notices resolve to unknown, not to zero', () => {

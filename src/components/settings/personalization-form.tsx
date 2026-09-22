@@ -13,8 +13,22 @@
  * first two chosen names and `+N`, or `No states selected`; `Add states` /
  * `Edit states`). It opens the state selector: a page sheet titled `Choose
  * your states` with the shared search field (focused as it appears), a count
- * line in words, `Clear selection` while anything is checked, and the 52
- * jurisdictions as Check Rows in canonical order.
+ * line in words, `Clear selection`, and the 52 jurisdictions as Check Rows in
+ * canonical order.
+ *
+ * ## `Clear selection` is permanently allocated (P2B7V)
+ *
+ * It renders in the same place on every visit, whether or not anything is
+ * checked. It used to appear only once a state was chosen, which meant
+ * checking the FIRST state inserted a 44pt pill above the list and clearing
+ * the LAST one removed it — so all 52 rows jumped down and back up under the
+ * shopper's finger at exactly the moment they were aiming at one.
+ *
+ * With nothing checked the control is inert: pressing it changes no state,
+ * saves nothing, dismisses nothing, dirties nothing, and announces nothing.
+ * The no-op is enforced twice on purpose — the control is `disabled`, and the
+ * handler itself returns the same draft reference when there is nothing to
+ * clear — so removing either guard alone cannot make an empty clear mutate.
  *
  * This sheet is the one place in the app that edits a DRAFT. Opening it
  * copies the saved selection; every tap changes the copy and nothing else,
@@ -78,6 +92,7 @@ import {
 import { ALLERGEN_SECTION_HELPER, ALLERGEN_SECTION_LABEL } from '@/lib/personalization-copy';
 import {
   chosenStores,
+  clearStateDraft,
   DONE_HINT,
   DONE_LABEL,
   FAILED_STATE,
@@ -87,6 +102,7 @@ import {
   stateActionLabel,
   stateChoices,
   stateCountLabel,
+  STATE_CLEAR_HINT,
   STATE_CLEAR_LABEL,
   STATE_DONE_HINT,
   STATE_PLACEHOLDER,
@@ -300,7 +316,19 @@ export function StateSelectorContent({
   // halves of what Done does (the save and the dismissal) and a guard that
   // stopped only one of them would be no guard at all.
   const onDone = useCallback(() => onCommit([...draft]), [draft, onCommit]);
+  // Empties the DRAFT and nothing else. With an empty draft it is a TRUE
+  // no-op — the guard is here as well as on the disabled control, so the
+  // behaviour survives someone later removing `disabled` (P2B7V).
+  const onClear = useCallback(() => setDraft(clearStateDraft), []);
 
+  // The controls slot is a FIXED two-element column: the search field, then
+  // `Clear selection`. Neither is conditional and neither may become
+  // conditional — that is the whole point (P2B7V). Rendering the clear action
+  // only while something was checked made choosing the first state and
+  // clearing the last one each insert or remove a 44pt pill above the list,
+  // which shifted all 52 rows under the shopper's finger. The control is
+  // therefore permanently allocated and merely INERT when there is nothing to
+  // clear, so the list never moves for either reason.
   const controls = (
     <>
       <SearchBar
@@ -314,11 +342,13 @@ export function StateSelectorContent({
         returnKeyType="search"
         autoFocus={autoFocus}
       />
-      {draft.length > 0 ? (
-        // Empties the DRAFT and stays open: nothing is saved until Done, so
-        // a clear pressed by mistake is undone by leaving the sheet.
-        <Button variant="secondary" label={STATE_CLEAR_LABEL} onPress={() => setDraft([])} />
-      ) : null}
+      <Button
+        variant="secondary"
+        label={STATE_CLEAR_LABEL}
+        accessibilityHint={STATE_CLEAR_HINT}
+        disabled={draft.length === 0}
+        onPress={onClear}
+      />
     </>
   );
 

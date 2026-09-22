@@ -93,12 +93,18 @@ const rule = (title: string) => `\n── ${title} ${'─'.repeat(Math.max(0, 58
  * assertion that reads the same array it is checking cannot fail. This is the
  * founder-approved list, and a change to it must show up as a QA failure that
  * a human then either accepts (by editing this line, with a reason) or fixes.
+ *
+ * ACCEPTED, P2B7V (2026-09-21): the nine visible ids and the three hidden ones
+ * are unchanged; seven LABELS were re-cased to Title Case by founder decision
+ * ("Snacks & Sweets", "Pantry & Staples", and the five others below). The gate
+ * caught it, which is what it is for — this line is the human acceptance.
+ * Membership, ordering, filtering and persistence did not move.
  */
 const APPROVED_LAUNCH_LIST =
-  'produce=Fruits & vegetables | meat_poultry=Meat & poultry | seafood=Seafood | ' +
-  'dairy_eggs=Dairy & eggs | bakery_grains=Bakery | snacks_sweets=Snacks & sweets | ' +
-  'beverages=Beverages | pantry_condiments=Pantry & staples | ' +
-  'baby_food_formula=Baby food & formula';
+  'produce=Fruits & Vegetables | meat_poultry=Meat & Poultry | seafood=Seafood | ' +
+  'dairy_eggs=Dairy & Eggs | bakery_grains=Bakery | snacks_sweets=Snacks & Sweets | ' +
+  'beverages=Beverages | pantry_condiments=Pantry & Staples | ' +
+  'baby_food_formula=Baby Food & Formula';
 
 const APPROVED_HIDDEN_LIST = 'prepared_foods | supplements | other';
 

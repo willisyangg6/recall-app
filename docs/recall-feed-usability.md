@@ -1813,12 +1813,52 @@ affordance.
 and Saved carry none: the card model has no retailer field at all, so neither
 screen can render one.
 
-The block sits under the geography line, never instead of it, shaped like
-Health Risk's "Common symptoms" — a quiet caption heading over the names in
-body type:
+The row sits under the geography line, never instead of it.
 
-> **Retailers:**
-> Walmart, Target
+**One icon-led sentence row (P2B7V).** It shipped in P2B7O as a caption
+heading stacked over a second line of names, indented to the geography text.
+That indented the names under nothing, split one statement into two
+announcements, and left the row without a mark of its own. It is now a single
+row in the **same shape as the geography line above it**:
+
+> 🏠 Retailers: ALDI, Costco, and BJ's
+
+- the glyph is the Feed tab's own `house`, from the shared icon system — never
+  an image asset, and never an unrelated storefront glyph — at the same 12px
+  as the location pin and in the same leading column, one `body-small` line
+  tall so it stays centred on the first line at any reader type size;
+- `Retailers:` and the names are ONE text flow **in one colour** —
+  `text/primary` across the whole sentence (P2B7V) — so the list wraps as one,
+  reads as one statement rather than a label plus a value, and a screen reader
+  hears `Retailers: ALDI and BJ's` as a single utterance rather than a heading
+  followed by an orphaned list. The label was muted while it was a caption
+  heading over a separate line; it is not a heading any more;
+- the text column takes the remaining width, so a long list wraps inside it
+  and every continuation line stays clear of the glyph (exercised natively on
+  the 15-store Kroger case at the default and the maximum Dynamic Type sizes);
+- the separation from the geography line is a `spacing/8` top margin, and
+  neither line is indented relative to the other.
+
+### List punctuation, and why entries are never split
+
+The names are joined by the **same `joinNames`** the jurisdiction list uses, so
+one rule serves both:
+
+| stores | rendered                            |
+| ------ | ----------------------------------- |
+| one    | `Retailers: ALDI`                   |
+| two    | `Retailers: ALDI and BJ's`          |
+| three+ | `Retailers: ALDI, Costco, and BJ's` |
+
+Each stored entry is preserved **verbatim** and is never split on its own
+conjunction. Measured: 19 of the 170 retailer-bearing cases store a run the
+extractor kept whole as the source wrote it, and "Stop and Shop",
+"Smart & Final" and "Lunds & Byerlys" are single store NAMES — splitting them
+to tidy the punctuation would invent retailers, which is the one thing this
+surface may not do. The consequence is visible on 3 cases whose FINAL stored
+entry is itself a run, which read "…, Ralphs, and Smith's and QFC". That is
+the source's own wording inside a correctly punctuated list, and it is
+accepted over any heuristic that cannot tell a conjunction from a name.
 
 ### Why the label says "Retailers", against the app-wide rule
 
@@ -1843,8 +1883,10 @@ purchase, no completed sale and no exclusivity. Every nameable retailer is
 listed, with no "+N more": a truncated list would hide retailers with no way to
 reveal them.
 
-Nothing renders when no trustworthy retailer exists: no heading, no empty row,
-no spacing left behind.
+Nothing renders when no trustworthy retailer exists: no row, no icon, no
+label, no spacer, no empty wrapper, and no spacing left behind. Measured:
+170 of 898 consumer-visible active cases (18.9%) show a retailer row; 728
+(81.1%) show none.
 
 ### Which retailer list, and why it is not the other one
 

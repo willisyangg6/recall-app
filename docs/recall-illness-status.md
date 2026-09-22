@@ -1030,39 +1030,100 @@ for those facts) and would be a narrative change, not a notice change.
 
 ---
 
-## 7. The compact illness notice
+## 7. The harm notices — one fact, one box (P2B7V)
 
 `src/components/ui/illness-notice.tsx`, rendered by
 `src/app/recall/[id].tsx` in the identity area: **below the brand, above the
 official FDA/FSIS report link.**
 
-|          | reported                                        | explicit none                    |
-| -------- | ----------------------------------------------- | -------------------------------- |
-| Glyph    | `warning`, 12px                                 | `info`, 12px                     |
-| Surface  | `illness-notice/reported/background`            | `illness-notice/none/background` |
-| Border   | `illness-notice/reported/border`                | same as its surface              |
-| Type     | `caption`, sentence case                        | `caption`, sentence case         |
-| Geometry | `radius/4`, 8×4 padding, auto-width, shrinkable | same                             |
+Each fact the notice established renders in **its own compact box**. The boxes
+stack vertically, every one aligned to the same left edge and sized to its own
+sentence, in the fixed order **illnesses → hospitalizations → deaths**. The
+order does not change when one of the three is absent, and a fact renders
+independently of the others: a hospitalization shows whether or not an illness
+count exists.
 
-### 7.1 Its own treatment, and why
+|          | illnesses                   | hospitalizations | deaths          | explicit none       |
+| -------- | --------------------------- | ---------------- | --------------- | ------------------- |
+| Glyph    | `warning`, 12px             | `warning`, 12px  | `warning`, 12px | `info`, 12px        |
+| Surface  | `risk/high`                 | `risk/very-high` | `risk/critical` | `harm-notice/none`  |
+| Border   | that treatment's own border | same             | same            | same as its surface |
+| Type     | `caption`, sentence case    | same             | same            | same                |
+| Geometry | `radius/4`, 8×4, auto-width | same             | same            | same                |
 
-`illnessNoticePalette` is a dedicated semantic treatment in
-`design-tokens.ts` and `DESIGN.md`. **The Risk Label remains the only consumer
-of `riskPalette`** — `design-foundation.test.ts` still asserts that exactly,
-and a second test asserts the notice palette is read only by the notice.
+### 7.0 Why separate boxes
 
-Every value in it is an existing foundation colour re-expressed under a
-semantic name, so the notice introduces no hex and cannot become a second
-Critical. A pinned test proves it holds no severity colour and no lime.
+P2B7Q.1 put the three facts on their own LINES inside one outlined container
+under one glyph. Two things were wrong with that, and both are visual rather
+than semantic:
 
-**Open design question.** The founder asked for a "compact soft-danger
-treatment" for the positive state. The system has no soft-danger tint: the only
-reds are `risk/*`, and reusing those is precisely what the one-treatment rule
-forbids. A genuinely soft red would be a **new approved hex**, which is a design
-decision rather than an implementation one. Until it exists, the reported state
-carries urgency the way the rest of Lotly does — the word, the `warning` glyph,
-and a stronger border. Swapping in an approved tint is a one-line change to
-`illnessNoticePalette` and `DESIGN.md`, and nothing else.
+- the second and third lines sat indented under a glyph that was not theirs,
+  reading as a continuation of the first fact rather than as separate facts;
+- one treatment had to carry three different severities at once.
+
+### 7.1 Severity is the treatment (founder decision, P2B7V)
+
+P2B7K gave the notice a treatment of its own, built only from foundation
+colours, so that illness status could never borrow Critical's red — on the
+reasoning that illness status is not a risk LEVEL. That reasoning still holds
+for a _status_. What P2B7Q.1 established is that these are not one status:
+a reported illness, a reported hospitalization and a reported death are three
+different harms, and they are ordered by how bad they are. The founder's
+decision is that the ordering should be **visible**, using the severity
+vocabulary the app already has rather than a fourth one invented for it.
+
+`harmNoticePalette` holds **references** to the risk palette's own entries —
+`riskPalette.high`, `riskPalette.very_high`, `riskPalette.critical` — never
+copies of their values. There is exactly one definition of Critical's red in
+the contract, and changing it moves the death box with it.
+`design-tokens.test.ts` asserts reference identity, distinctness, and
+ascending severity order, so swapping two harms' colours fails there rather
+than only on a screen.
+
+**The rule this replaces.** P2B7K's "the Risk Label is the only consumer of
+`riskPalette`" is deliberately narrowed, not abandoned: severity is now
+reached only through a **named semantic map**, and no screen and no component
+may index the risk palette directly — the Risk Label remains the only
+component that does. `design-foundation.test.ts` asserts both halves, and the
+retired `illnessNoticePalette` is gone rather than left dormant beside the new
+one.
+
+These boxes still cannot be confused with the Risk Label, because colour was
+never what distinguished them: the Risk Label is uppercase IBM Plex Mono at a
+24pt minimum height stating a TIER; a harm notice is sentence-case Public Sans
+at its own line height stating a COUNTED FACT. Colour is the redundant channel
+in both, and every treatment clears WCAG AA with its glyph tinted to the same
+foreground as its words (`design-foundation.test.ts`).
+
+`none` is unchanged. "No illnesses reported" is a founder-approved
+reassurance, not a harm, and it keeps the calm blue informational treatment it
+has always had — an existing foundation colour, never a severity fill. An
+explicit denial is still the ONLY route to it, and a hospitalization or a
+death beside it is a separate, severe box rather than a recolouring of it.
+
+### 7.1a What this milestone did NOT change
+
+The semantic classifier, the stored `reportsIllness` flag, the prepared
+repair, source attribution and every count derivation are untouched: P2B7V
+moved boxes, not facts. No Feed or Saved badge was added.
+
+### 7.1b Combinations the live corpus contains
+
+Measured over the 898 consumer-visible active cases (2026-09-21). Every shape
+below is pinned in `illness-status.test.ts`.
+
+| combination                              | cases | example                                               |
+| ---------------------------------------- | ----- | ----------------------------------------------------- |
+| explicit denial only                     | 557   | —                                                     |
+| nothing established (no box at all)      | 296   | —                                                     |
+| illnesses only, counted                  | 23    | 3 of them singular ("1 illness reported")             |
+| illnesses only, no trustworthy count     | 11    | "Illnesses reported"                                  |
+| illnesses + deaths                       | 3     | `f8a2c8ab` Soft Ricotta — 12 illnesses, 1 death       |
+| hospitalizations only (no illness box)   | 3     | `2c491bc9` Sophelise — "1 hospitalization reported"   |
+| illnesses + hospitalizations, uncounted  | 2     | `c4f8c9e4`, `f84e2407`                                |
+| illnesses + hospitalizations, counted    | 1     | `decd41aa` — 3 and 3                                  |
+| illnesses (uncounted) + hospitalizations | 1     | `55ee81ad` — 31 hospitalizations                      |
+| **all three**                            | 1     | `10ebfa06` — 9 illnesses, 8 hospitalizations, 1 death |
 
 ### 7.2 Observed on device (iPhone 17 Pro, iOS 26.3)
 

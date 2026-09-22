@@ -285,6 +285,48 @@ test('the classifier files still hash to the values frozen BEFORE final selectio
   }
 });
 
+test('the frozen classifier is label-independent, so a display reword cannot tune it', () => {
+  // P2B7V re-cased seven consumer labels in `food-category.ts`, which is a
+  // FROZEN classifier file, so its hash was amended (manifest:
+  // `displayOnlyAmendments`). This is what makes that amendment safe rather
+  // than a loophole: the derivation cannot read a label at all, so no edit to
+  // one can move a prediction. Rewording is display; re-deciding is not, and
+  // a change to the ids, their order or the cap still fails the hash with
+  // nothing here to excuse it.
+  const amendments = (manifest.displayOnlyAmendments ?? []) as { file: string }[];
+  for (const amendment of amendments) {
+    assert.ok(
+      (manifest.classifierFiles as Record<string, string>)[amendment.file] !== undefined,
+      `${amendment.file} is not a frozen classifier file`,
+    );
+  }
+  // No classifier path CALLS the display mapping. `food-category.ts` is where
+  // it is defined, so it is excluded — what matters is that nothing which
+  // decides a category ever reaches for a word.
+  const deciding = Object.keys(manifest.classifierFiles as Record<string, string>)
+    .filter((file) => file !== 'src/domain/food-category.ts')
+    .concat(['src/domain/projection.ts', 'src/domain/category-evaluation.ts']);
+  for (const file of deciding) {
+    const source = readFileSync(path.join(__dirname, '..', '..', file), 'utf8');
+    assert.ok(!source.includes('foodCategoryLabel'), `${file} renders a category label`);
+  }
+  // …and in the vocabulary itself the mapping is DEFINED once and called by
+  // nothing: a derivation that grew a label read would show up as a third
+  // occurrence here.
+  const vocabulary = readFileSync(
+    path.join(__dirname, '..', '..', 'src/domain/food-category.ts'),
+    'utf8',
+  );
+  assert.equal((vocabulary.match(/foodCategoryLabel/g) ?? []).length, 2);
+  assert.match(vocabulary, /export function foodCategoryLabel\(id: FoodCategoryId\): string \{/);
+
+  // And the derivation is provably blind to labels: every prediction is a set
+  // of IDS from the frozen vocabulary, which no reword can touch.
+  for (const row of goldSet.rows) {
+    assert.ok(predict(row).every((id) => FOOD_CATEGORY_IDS.includes(id)));
+  }
+});
+
 test('the EVALUATION HARNESS still hashes to the value frozen before selection', () => {
   // C10A.1's headline number moved three points because of a harness defect,
   // not a classifier one, so the harness is frozen the same way. This is also

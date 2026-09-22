@@ -321,7 +321,20 @@ test('Detail uses the hardened field, never the wider evidence list', () => {
     const named = model.sections.whereSold.retailersNamed;
     if (named === null) continue;
     const hardened = displayableRetailerNames(item.retailerNames);
-    assert.deepEqual(named.split(', '), hardened, `${item.id}: rendered names left the field`);
+    // P2B7V punctuates the list with `joinNames`, so the rendered string is
+    // read back through the same rule rather than split on a bare comma.
+    const expected =
+      hardened.length <= 1
+        ? hardened.join('')
+        : hardened.length === 2
+          ? `${hardened[0]} and ${hardened[1]}`
+          : `${hardened.slice(0, -1).join(', ')}, and ${hardened[hardened.length - 1]}`;
+    assert.equal(named, expected, `${item.id}: rendered names left the field`);
+    // Every stored entry survives VERBATIM: the join never splits a name that
+    // contains its own conjunction ("Stop and Shop", "Smart & Final").
+    for (const entry of hardened) {
+      assert.ok(named.includes(entry), `${item.id}: "${entry}" was rewritten by the join`);
+    }
   }
 });
 

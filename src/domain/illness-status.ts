@@ -943,21 +943,56 @@ export function statusReportsIllness(status: IllnessStatus): boolean {
 
 // ── Shopper copy ────────────────────────────────────────────────────────────
 
+/**
+ * Which harm a notice box states, and therefore which treatment it takes
+ * (P2B7V). One value per box, never a severity tier: `deaths` means "this box
+ * reports deaths", and the palette decides what that looks like.
+ */
+export type HarmNoticeTone = 'none' | 'illnesses' | 'hospitalizations' | 'deaths';
+
+/** ONE stated fact, in its own box. */
+export interface HarmNotice {
+  /** The visible sentence: "12 illnesses reported". */
+  text: string;
+  /**
+   * What a screen reader speaks for this box. Identical to `text` except
+   * where the text alone invites a question the notice cannot answer.
+   */
+  spoken: string;
+  /** Which harm this box states — and so which treatment it wears. */
+  tone: HarmNoticeTone;
+}
+
 export interface IllnessNoticeCopy {
   /**
-   * The visible lines, ONE FACT PER LINE, in fixed order: illnesses, then
+   * ONE BOX PER ESTABLISHED FACT, in fixed order: illnesses, then
    * hospitalizations, then deaths (P2B7Q.1). Never empty — a notice with
-   * nothing to say is `null`, not a notice with no lines.
+   * nothing to say is `null`, not a notice with no boxes.
    *
    * Fixed order matters more than it looks: a reader who has seen one recall
    * knows where to find the death count on the next one, and severity always
-   * reads downward. It is never sorted by which fact happens to be larger.
+   * reads downward. It is never sorted by which fact happens to be larger,
+   * and the order does not change when one of the three is absent.
+   *
+   * P2B7V made each fact its OWN box rather than another line inside one
+   * box. Sharing a box left the second and third facts indented under a
+   * single glyph, reading as a continuation of the first rather than as the
+   * separate things they are — and it made one treatment carry three
+   * different severities.
    */
-  lines: string[];
-  /** What a screen reader speaks for the whole notice, as one utterance. */
+  notices: HarmNotice[];
+  /** What a screen reader speaks for the whole group, as one utterance. */
   spoken: string;
-  /** Which glyph and treatment the notice takes. */
-  tone: 'reported' | 'none';
+}
+
+/**
+ * The visible sentences of a notice group, in their fixed order — the boxes as
+ * a reader sees them, top to bottom. Exposed so callers and tests can reason
+ * about what is SHOWN without reaching into each box, and so "what does this
+ * notice say?" has one answer rather than a re-implementation per caller.
+ */
+export function noticeTexts(copy: IllnessNoticeCopy): string[] {
+  return copy.notices.map((notice) => notice.text);
 }
 
 /** "8 hospitalizations", "1 death" — the figure with its noun agreeing. */
@@ -972,40 +1007,54 @@ function harmPhrase(fact: HarmFact, singular: string, plural: string): string | 
 }
 
 /**
- * THE copy for the compact notice, or null when nothing may be shown.
+ * THE copy for the compact notices, or null when nothing may be shown.
  *
  * Null is returned only when the notice established NONE of the three harms.
  * There is no unknown sentence, no placeholder, no em dash: the source did not
- * establish the fact, so no line renders for it. A caller that wants a row for
+ * establish the fact, so no box renders for it. A caller that wants a box for
  * every recall cannot get one from here.
+ *
+ * Each established fact becomes its OWN box, carrying its own sentence, its
+ * own spoken form and its own treatment (P2B7V). The three are independent:
+ * a hospitalization renders whether or not an illness count exists, and the
+ * order never changes when one is absent.
  *
  * The word "yet" appears nowhere. "No illnesses reported yet" predicts
  * illnesses the source never predicted (founder decision).
  */
 export function illnessNoticeCopy(status: IllnessStatus): IllnessNoticeCopy | null {
-  const lines: string[] = [];
-  let spokenIllness: string | null = null;
+  const notices: HarmNotice[] = [];
 
   switch (status.kind) {
     case 'unknown':
       break;
     case 'explicit_none':
-      lines.push('No illnesses reported');
+      // The one calm box, and the only route to it: an explicit denial of
+      // ILLNESSES. It keeps the blue informational treatment it has always
+      // had, and a hospitalization or a death beside it is a separate box
+      // with its own severity — never a recolouring of this one.
+      notices.push({
+        text: 'No illnesses reported',
+        spoken: 'No illnesses reported',
+        tone: 'none',
+      });
       break;
     case 'reported_unspecified':
-      lines.push('Illnesses reported');
-      // The only line whose spoken form differs from its text: "Illnesses
-      // reported" alone invites the question the notice cannot answer.
-      spokenIllness = 'Illnesses reported. The notice does not give a count.';
+      notices.push({
+        text: 'Illnesses reported',
+        // The only box whose spoken form differs from its text: "Illnesses
+        // reported" alone invites the question the notice cannot answer.
+        spoken: 'Illnesses reported. The notice does not give a count',
+        tone: 'illnesses',
+      });
       break;
     case 'reported_count': {
       const count = status.illnesses!;
       const noun = count === 1 ? 'illness' : 'illnesses';
-      lines.push(
-        status.approximate
-          ? `Approximately ${count} ${noun} reported`
-          : `${count} ${noun} reported`,
-      );
+      const text = status.approximate
+        ? `Approximately ${count} ${noun} reported`
+        : `${count} ${noun} reported`;
+      notices.push({ text, spoken: text, tone: 'illnesses' });
       break;
     }
   }
@@ -1015,31 +1064,25 @@ export function illnessNoticeCopy(status: IllnessStatus): IllnessNoticeCopy | nu
     'hospitalization',
     'hospitalizations',
   );
-  if (hospitalizations !== null) lines.push(hospitalizations);
+  if (hospitalizations !== null) {
+    notices.push({
+      text: hospitalizations,
+      spoken: hospitalizations,
+      tone: 'hospitalizations',
+    });
+  }
   const deaths = harmPhrase(status.deaths, 'death', 'deaths');
-  if (deaths !== null) lines.push(deaths);
+  if (deaths !== null) {
+    notices.push({ text: deaths, spoken: deaths, tone: 'deaths' });
+  }
 
-  if (lines.length === 0) return null;
+  if (notices.length === 0) return null;
 
-  // Tone follows the worst thing the notice established. An explicit denial of
-  // illnesses is the ONLY way to reach the calm treatment, and a
-  // hospitalization or a death beside it takes the notice back to `reported`
-  // — a lime "no illnesses" badge over a reported death would be the app
-  // reassuring a shopper against its own evidence.
-  const reported =
-    status.kind === 'reported_count' ||
-    status.kind === 'reported_unspecified' ||
-    status.hospitalizations.kind !== 'unknown' ||
-    status.deaths.kind !== 'unknown';
-
-  const spokenLines = [...lines];
-  if (spokenIllness !== null) spokenLines[0] = spokenIllness.replace(/\.$/, '');
   return {
-    lines,
+    notices,
     // One utterance, one stop per fact, so a reader hears three facts rather
     // than one run-on sentence.
-    spoken: `${spokenLines.join('. ')}.`,
-    tone: reported ? 'reported' : 'none',
+    spoken: `${notices.map((notice) => notice.spoken).join('. ')}.`,
   };
 }
 

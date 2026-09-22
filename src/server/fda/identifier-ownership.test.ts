@@ -133,16 +133,23 @@ for (const notice of FIXTURE.excerpts) {
     }
   });
 
-  test(`${notice.key}: the recall quantity is one sentence of the narrative`, () => {
+  test(`${notice.key}: the recall quantity is the scope paragraph, never the cause`, () => {
     const stated = recallQuantity(excerptProjection(notice.excerpt));
     assert.equal(stated, notice.expect.quantity.statedInExcerpt);
     const reason = 'A recall was issued.';
-    const narrative = detailNarrative(reason, recallQuantitySentence('FDA', stated, reason));
-    assert.equal(narrative, `${reason} ${notice.expect.quantity.narrativeSentence}`);
+    // P2B7V: the quantity is its own paragraph. The cause paragraph is
+    // returned untouched, and the sentence appears in `scope` and nowhere
+    // else — it is never glued onto the reason sentence again.
+    const narrative = detailNarrative(reason, null, recallQuantitySentence('FDA', stated, reason));
+    assert.equal(narrative.text, reason);
+    assert.equal(narrative.scope, notice.expect.quantity.narrativeSentence);
+    assert.ok(!narrative.text.includes(notice.expect.quantity.narrativeSentence));
     // And exactly once: a reason that already states the figure suppresses it,
-    // so the paragraph can never say the same number twice.
+    // so the two paragraphs can never say the same number twice.
     const already = `A recall was issued covering ${stated}.`;
-    assert.equal(detailNarrative(already, recallQuantitySentence('FDA', stated, already)), already);
+    const deduped = detailNarrative(already, null, recallQuantitySentence('FDA', stated, already));
+    assert.equal(deduped.text, already);
+    assert.equal(deduped.scope, null);
   });
 }
 

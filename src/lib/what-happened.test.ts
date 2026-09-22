@@ -32,10 +32,14 @@ test('regression A — Gangothri: inspection template, no broken source lead-in'
         'WASHINGTON, Aug. 17, 2026 – Indus Foods, LLC, doing business as Gangothri Foods, an Austin, Tex. firm, is recalling approximately 1,626 pounds of ready-to-eat (RTE) pickled goat and chicken products that were produced without the benefit of inspection, the U.S. Department of Agriculture’s Food Safety and Inspection Service (FSIS) announced today.',
     }),
   );
+  // P2B7V: the cause paragraph states the cause and stops. The recall's
+  // extent is its own paragraph, in `scope`, and must not be glued back on.
   assert.equal(
     result.text,
-    'Gangothri Foods recalled Ready-To-Eat Pickled Goat and Chicken products because the products were produced without required USDA inspection. The recall covers approximately 1,626 pounds of product.',
+    'Gangothri Foods recalled Ready-To-Eat Pickled Goat and Chicken products because the products were produced without required USDA inspection.',
   );
+  assert.equal(result.scope, 'The recall covers approximately 1,626 pounds of product.');
+  assert.ok(!result.text.includes('The recall covers'));
   assert.equal(result.source, 'template');
   assert.doesNotMatch(result.text, /firm, is recalling/);
   assert.doesNotMatch(result.text, /announced today|Food Safety and Inspection Service/);

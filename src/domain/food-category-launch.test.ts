@@ -59,15 +59,15 @@ test('the sheet options are pinned, labels and order', () => {
   assert.deepEqual(
     LAUNCH_CATEGORY_OPTIONS.map((option) => [option.value, option.label]),
     [
-      ['produce', 'Fruits & vegetables'],
-      ['meat_poultry', 'Meat & poultry'],
+      ['produce', 'Fruits & Vegetables'],
+      ['meat_poultry', 'Meat & Poultry'],
       ['seafood', 'Seafood'],
-      ['dairy_eggs', 'Dairy & eggs'],
+      ['dairy_eggs', 'Dairy & Eggs'],
       ['bakery_grains', 'Bakery'],
-      ['snacks_sweets', 'Snacks & sweets'],
+      ['snacks_sweets', 'Snacks & Sweets'],
       ['beverages', 'Beverages'],
-      ['pantry_condiments', 'Pantry & staples'],
-      ['baby_food_formula', 'Baby food & formula'],
+      ['pantry_condiments', 'Pantry & Staples'],
+      ['baby_food_formula', 'Baby Food & Formula'],
     ],
   );
 });

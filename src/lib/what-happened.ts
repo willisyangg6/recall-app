@@ -5,9 +5,34 @@
  * sentences. Every clause is grounded in a structured source field or a
  * verified source-text pattern; nothing is invented.
  *
- * Output shape: one sentence normally, plus an optional second context
- * sentence (import origin / ineligible-country / recall quantity). The raw
- * source text is never mutated and remains fully preserved in the projection.
+ * Output shape: TWO fields, because they answer two different questions and
+ * P2B7V gave them two paragraphs on Recall Detail.
+ *
+ *   `text`   the CAUSE paragraph — who recalled what and why, plus the
+ *            context sentence that finishes the cause when the source states
+ *            one (import origin, ineligible country).
+ *   `scope`  the optional RECALL-SCOPE sentence — how much was recalled
+ *            ("The recall covers 13,619 pounds of product."), or null.
+ *
+ * ## Why scope is its own field (P2B7V)
+ *
+ * Before this milestone the two shared ONE slot: `second = context ?? quantity`,
+ * glued onto the cause sentence with a space. Two consequences, both measured
+ * on the live corpus and both fixed by the split:
+ *
+ *   · a shopper read "…not declared on the label. The recall covers 13,619
+ *     pounds of product." as one run-on paragraph, where the extent of the
+ *     recall is a different fact from its cause;
+ *   · 6 of 898 consumer-visible active cases derived a scope sentence that
+ *     never reached the screen at all, because an import-context sentence had
+ *     taken the single slot.
+ *
+ * The split is a PRESENTATION boundary only. No quantity is invented,
+ * inferred, rounded or reworded here: `scope` is exactly the sentence this
+ * file already built, moved out of the paragraph it was glued to.
+ *
+ * The raw source text is never mutated and remains fully preserved in the
+ * projection.
  *
  * There is deliberately NO update note here any more (P2B7Q.1).
  * `normalizedUpdate` paraphrased the newest Editor's Note into a sentence of
@@ -50,8 +75,15 @@ export interface WhatHappenedInput {
 }
 
 export interface WhatHappened {
-  /** 1–2 concise sentences. Never empty. */
+  /** The cause paragraph: 1–2 concise sentences. Never empty. */
   text: string;
+  /**
+   * The recall-scope/extent sentence, as its own paragraph, or null when the
+   * source states no quantity this file can read deterministically. Never
+   * duplicated into `text`, and never rendered as a badge, tag or heading —
+   * it is an ordinary sentence in the same body type as the cause.
+   */
+  scope: string | null;
   /** Which fallback tier produced the text (benchmark telemetry). */
   source: 'template' | 'generic' | 'title';
 }
@@ -230,6 +262,11 @@ function reasonClause(input: WhatHappenedInput, product: string): ReasonClause |
  * "The recall covers approximately 1,626 pounds of product." /
  * "The recall covers 120 cases." — only from a direct "recalling <N> <unit>"
  * source statement; package sizes and unrelated numbers never qualify.
+ *
+ * This is the whole of the app's scope derivation from source prose. It reads
+ * one stated figure and one stated unit and rounds, scales and rewords
+ * nothing: a notice that does not state its own quantity in this exact shape
+ * produces null, and null renders no paragraph at all.
  */
 function quantitySentence(input: WhatHappenedInput): string | null {
   if (input.noticeType !== 'recall') return null;
@@ -270,6 +307,11 @@ function wordCount(text: string): number {
 
 export function buildWhatHappened(input: WhatHappenedInput): WhatHappened {
   const product = productPhrase(input.title, input.productDescription);
+  // Derived once, for every branch below, and never competing with the cause
+  // paragraph's own context sentence: how much was recalled is a fact about
+  // the recall's extent, not about why it happened (P2B7V).
+  const rawScope = quantitySentence(input);
+  const scope = rawScope === null ? null : cleanDisplayText(rawScope);
 
   // Retraction notices explain the retraction, not the original event.
   if (/\bretracts?\b/i.test(input.title)) {
@@ -284,26 +326,33 @@ export function buildWhatHappened(input: WhatHappenedInput): WhatHappened {
     const base = product
       ? `The public health alert for ${product} was retracted`
       : 'This notice was retracted by the agency';
-    return { text: `${base}${tail ? ` because of ${tail}` : ''}.`, source: 'template' };
+    return { text: `${base}${tail ? ` because of ${tail}` : ''}.`, scope, source: 'template' };
   }
 
   if (product) {
     const reason = reasonClause(input, product);
     if (reason) {
       let text = `${frame(input, product)} ${reason.clause}.`;
-      const second = reason.context ?? quantitySentence(input);
-      if (second && wordCount(text) + wordCount(second) <= MAX_WORDS) {
-        text = `${text} ${second}`;
+      // The word budget guards the CAUSE paragraph alone. It never decides
+      // whether the scope sentence renders: that sentence is no longer
+      // competing for room inside this paragraph, so a long import clause
+      // can no longer silently delete the recall's extent (P2B7V).
+      if (reason.context && wordCount(text) + wordCount(reason.context) <= MAX_WORDS) {
+        text = `${text} ${reason.context}`;
       }
-      return { text: cleanDisplayText(text), source: reason.generic ? 'generic' : 'template' };
+      return {
+        text: cleanDisplayText(text),
+        scope,
+        source: reason.generic ? 'generic' : 'template',
+      };
     }
     // No renderable reason (unknown family, or a free-text reason the grammar
     // gate rejected): the event is still stateable, and stating it without a
     // reason beats gluing an ungrammatical clause on. The full source reason
     // stays preserved in the projection.
-    return { text: cleanDisplayText(`${frame(input, product)}.`), source: 'generic' };
+    return { text: cleanDisplayText(`${frame(input, product)}.`), scope, source: 'generic' };
   }
 
   // Last resort: the authoritative headline, cleaned — never an empty section.
-  return { text: cleanDisplayText(input.title), source: 'title' };
+  return { text: cleanDisplayText(input.title), scope, source: 'title' };
 }

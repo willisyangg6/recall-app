@@ -16,7 +16,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { color, type ColorToken } from '@/constants/design-tokens';
+import { color, harmNoticePalette, type ColorToken } from '@/constants/design-tokens';
 
 const SRC = join(__dirname, '..', '..');
 const read = (relative: string) => readFileSync(join(SRC, relative), 'utf8');
@@ -42,6 +42,8 @@ const UI_FILES = [
   'ui/check-row.tsx',
   // P2B7C
   'ui/official-image-set.tsx',
+  // P2B7K, three separate boxes from P2B7V
+  'ui/illness-notice.tsx',
 ];
 const UI = Object.fromEntries(UI_FILES.map((f) => [f, read(join('components', f))]));
 const TEXT = UI['ui/text.tsx'];
@@ -49,6 +51,7 @@ const SURFACE = UI['ui/surface.tsx'];
 const DISCLOSURE = UI['ui/disclosure-control.tsx'];
 const BUTTON = UI['ui/button.tsx'];
 const RISK_LABEL = UI['ui/risk-label.tsx'];
+const NOTICE_SOURCE = UI['ui/illness-notice.tsx'];
 const CARD = read('components/recall-card.tsx');
 const DETAIL = read('app/recall/[id].tsx');
 const PREVIEW = read('app/design-preview/index.tsx');
@@ -146,14 +149,23 @@ test('the feed card and Recall Detail render risk through the one Risk Label, at
   }
 });
 
-test('Critical has exactly one treatment: the palette is read only by the Risk Label', () => {
+test('Critical has exactly one treatment: the palette is read only through named semantics', () => {
   // A READ of the palette (`riskPalette[` / `riskPalette.`), not a mention:
   // theme.ts re-exports it and comments may name it.
   //
-  // P2B7K keeps this absolute. The compact illness notice needed a treatment
-  // of its own and got one — `illnessNoticePalette`, built entirely from
-  // foundation colours — precisely so that illness status could never borrow
-  // Critical's red and become a second Critical. Illness is not severity.
+  // P2B7K made this absolute — the Risk Label and nothing else — so that the
+  // compact illness notice could not borrow Critical's red and become a
+  // second Critical. P2B7V is the founder's deliberate reversal for ONE case,
+  // and it is narrower than it looks: a reported death IS the app's most
+  // severe consumer fact, and giving it a treatment of its own invented hue
+  // would have been the second vocabulary this rule exists to prevent.
+  //
+  // What the rule becomes is therefore not "one reader" but "one definition,
+  // reached only through a NAMED semantic map". `harmNoticePalette` in the
+  // contract is that map, and it holds references rather than values (pinned
+  // in `constants/design-tokens.test.ts`). No screen and no component may
+  // index the risk palette directly; the Risk Label remains the only
+  // component that does.
   const readers = clientSources()
     .filter(({ source }) => /riskPalette[[.]/.test(source))
     .map(({ path }) => path)
@@ -162,12 +174,21 @@ test('Critical has exactly one treatment: the palette is read only by the Risk L
     'components/ui/design-foundation.test.ts',
     'components/ui/risk-label.tsx',
     'constants/design-tokens.test.ts',
+    'constants/design-tokens.ts',
   ]);
+  // Components and screens reach severity only through the named maps.
+  const components = clientSources().filter(
+    ({ path }) => !path.endsWith('.test.ts') && !path.startsWith('constants/'),
+  );
+  for (const { path, source } of components) {
+    if (path === 'components/ui/risk-label.tsx') continue;
+    assert.ok(!/riskPalette[[.]/.test(source), `${path} indexes the risk palette directly`);
+  }
 });
 
-test('the illness notice is its own treatment, read only by its own component', () => {
+test('the harm notices are one treatment map, read only by their own component', () => {
   const readers = clientSources()
-    .filter(({ source }) => /illnessNoticePalette[[.]/.test(source))
+    .filter(({ source }) => /harmNoticePalette[[.]/.test(source))
     .map(({ path }) => path)
     .sort();
   assert.deepEqual(readers, [
@@ -175,6 +196,17 @@ test('the illness notice is its own treatment, read only by its own component', 
     'components/ui/illness-notice.tsx',
     'constants/design-tokens.test.ts',
   ]);
+  // The retired single-treatment palette is gone, not left dormant beside the
+  // new one: no definition of it, and no read of it. Comments may still name
+  // it — the contract explains what it replaced.
+  for (const { path, source } of clientSources()) {
+    if (path.endsWith('.test.ts')) continue;
+    assert.ok(
+      !source.includes('const illnessNoticePalette'),
+      `${path} still defines the retired palette`,
+    );
+    assert.ok(!/illnessNoticePalette[[.]/.test(source), `${path} still reads the retired palette`);
+  }
 });
 
 test('the provisional risk palette and every retired red are gone from the client', () => {
@@ -364,6 +396,25 @@ function contrast(text: ColorToken, surface: ColorToken): number {
   const [light, dark] = [luminance(color[text]), luminance(color[surface])].sort((a, b) => b - a);
   return (light + 0.05) / (dark + 0.05);
 }
+
+test('every harm notice clears WCAG AA on its own severity fill, icon included', () => {
+  // P2B7V puts sentence-case `caption` (12/500) and a 12pt glyph on the risk
+  // palette's own fills. Neither is large text, so both answer to the 4.5:1
+  // AA floor — and the glyph is tinted with the SAME foreground as the words,
+  // so proving the text legible proves the icon legible too.
+  const AA = 4.5;
+  for (const [tone, palette] of Object.entries(harmNoticePalette)) {
+    const [light, dark] = [luminance(palette.foreground), luminance(palette.background)].sort(
+      (a, b) => b - a,
+    );
+    const ratio = (light + 0.05) / (dark + 0.05);
+    assert.ok(ratio >= AA, `harm-notice/${tone} is ${ratio.toFixed(2)}:1, under the ${AA}:1 floor`);
+  }
+  // The component tints the glyph with the box's own foreground rather than a
+  // semantic icon colour, which is what keeps the two in step.
+  assert.ok(NOTICE_SOURCE.includes('tint={palette.foreground}'));
+  assert.ok(!NOTICE_SOURCE.includes('color="icon/'), 'the glyph left the box’s own palette');
+});
 
 test('every Button label clears WCAG AA on its own surface — the disabled ones included', () => {
   // The shared Button is the only filled action in the system, so the pairs

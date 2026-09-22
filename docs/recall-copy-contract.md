@@ -52,9 +52,9 @@ Specifically forbidden, each with a test in
 | Family                   | Owner                                                       | Kind                      | Surfaces                         |
 | ------------------------ | ----------------------------------------------------------- | ------------------------- | -------------------------------- |
 | Card reason line         | `recall-presentation.conciseReasonLine` + `cardSummaryText` | paraphrase                | Feed, Saved, **push**            |
-| What Happened narrative  | `what-happened.buildWhatHappened` + `detailNarrative`       | paraphrase                | Detail                           |
+| What Happened cause      | `what-happened.buildWhatHappened.text` + `detailNarrative`  | paraphrase                | Detail (first paragraph)         |
 | Update / history note    | `what-happened.normalizedUpdate`                            | paraphrase (see §5)       | Detail                           |
-| Recall quantity sentence | `recall-presentation.recallQuantitySentence`                | paraphrase                | Detail (inside What Happened)    |
+| Recall-scope paragraph   | `buildWhatHappened.scope` / `recallQuantitySentence`        | paraphrase                | Detail (second paragraph, §3.1)  |
 | Illness notice           | `domain/illness-status.illnessNoticeCopy`                   | derived status            | Detail                           |
 | Health Risk              | `content/hazard-guides` via `healthRiskSection`             | general education         | Detail                           |
 | Where it was sold        | `recall-presentation.whereSoldModel`                        | derived status            | Detail                           |
@@ -77,6 +77,71 @@ The consumer action was on that list and is **gone** (P2B7Q.1): the founder
 retired the "What should I do?" concept rather than the wiring, so
 `buildConsumerAction` and `consumerActionDisplay` are deleted and no dormant
 generator is left for a future screen to pick up.
+
+### 3.1 The recall-scope paragraph (P2B7V)
+
+How much a recall covers is a different fact from why it happened, and until
+P2B7V the two were glued into one paragraph:
+
+> George J. Howe Co. recalled Sunflower Seeds because the products may contain
+> tree nuts, an allergen that is not declared on the label. The recall covers
+> 13,619 pounds of product.
+
+The scope sentence is now an **optional second paragraph** under the cause,
+one normal paragraph gap apart. It stays ordinary body prose in the same type
+as the cause — never a badge, tag, heading, card or section — and it is never
+duplicated into the cause. The boundary is a `scope` field on the shared model
+(`WhatHappened.scope`, `DetailModel.whatHappened.scope`), so the screen
+composes nothing and `null` renders **nothing at all**: no paragraph, no gap,
+no empty element.
+
+**No quantity is invented.** `scope` is exactly the sentence the contract
+already derived, moved out of the paragraph it was glued to. Nothing is
+inferred, rounded, or reworded, and a notice that does not state its own
+quantity in a shape the deterministic projection can read produces `null`.
+
+**One sentence, never two.** Two derivations can produce a scope sentence —
+the prose reader (`buildWhatHappened.scope`, from a "recalling N unit"
+statement in the summary) and the FDA projection's structured `quantityText`
+(`recallQuantitySentence`). The slot holds one, and the **structured field
+wins**: it is the field the agency filled in, it carries the thousands
+separator, and it names the product the count is of. The existing figure
+de-duplication is unchanged — it is still handed the combined cause-plus-scope
+text — so a quantity the cause sentence itself states is still suppressed.
+
+**Measured (898 consumer-visible active cases, 2026-09-21).**
+
+|                                              | cases | %     |
+| -------------------------------------------- | ----- | ----- |
+| carry a scope paragraph                      | 111   | 12.4% |
+| carry none                                   | 787   | 87.6% |
+| cause paragraphs still containing a quantity | 0     | —     |
+
+Two defects the split closed on the way:
+
+- **5 cases printed the same quantity twice** in one paragraph, because the
+  two derivations formatted the separator differently and the figure
+  comparison could not see them as one fact — e.g. `c5465671`: "The recall
+  covers 1271 cases. The recall covers 1,271 cases of Green Onions."
+- **5 cases derived a scope sentence that never reached the screen**, because
+  an import-context sentence had taken the single shared slot (e.g.
+  `35976771`, whose notice states 4,300 pounds and whose Detail said nothing
+  about how much was recalled).
+
+Sentence shapes in the live corpus: `cases` (45), `units` (19), `pounds` (15),
+`bags` (8), `boxes` (7), `packages` (6), `bottles` (4), `lbs` (2), `packs` (2),
+`cartons`, `cans`, `containers` (1 each); with and without an
+`approximately` / `a total of` qualifier, and with the FDA field's longer
+tails ("The recall covers 11,830 cases of ALDI - Bakeshop Chocolate Chip
+Muffin 4 count."). Pinned in `recall-presentation.test.ts`,
+`what-happened.test.ts` and the FDA benchmark.
+
+**The update note stays removed.** This milestone creates a second paragraph
+slot, which is exactly where a generated "Updated [date]: …" could come back.
+It does not: `scope` is built from a stated quantity alone and cannot carry
+Editor's Note prose, the model's `whatHappened` keys are pinned to exactly
+`['scope', 'text']`, and the Detail section is pinned to exactly two body
+paragraphs.
 
 ## 4. Paraphrase versus quote
 

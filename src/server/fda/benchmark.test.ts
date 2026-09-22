@@ -113,6 +113,8 @@ const EXPECTED: Record<
     states: string[];
     quantity: string | null;
     explanation: string | RegExp;
+    /** The recall-scope paragraph (P2B7V) — null asserts there is none. */
+    scope: string | RegExp | null;
   }>
 > = {
   // Multi-allergen with product table and regional (unknown-scope) prose.
@@ -170,7 +172,9 @@ const EXPECTED: Record<
     quantity: '120 cases of Enoki Mushroom 150g',
     geographyScope: 'states',
     states: ['Florida', 'Texas'],
-    explanation: /The recall covers 120 cases\./,
+    // P2B7V: the extent is its own paragraph, and the cause paragraph never
+    // carries it.
+    scope: 'The recall covers 120 cases.',
   },
   // Postal-code-only store list (", TX") still yields the state.
   'hardies-fresh-foods-recalls-jalapenos-because-possible-health-risk': {
@@ -212,6 +216,14 @@ test('benchmark: hand-verified expectations for the difficult records', () => {
       } else {
         assert.equal(row.happened.text, expected.explanation, nativeId);
       }
+      // The cause paragraph never carries the recall's extent (P2B7V).
+      assert.ok(!row.happened.text.includes('The recall covers'), nativeId);
+    }
+    if (expected.scope !== undefined) {
+      if (expected.scope === null) assert.equal(row.happened.scope, null, nativeId);
+      else if (expected.scope instanceof RegExp) {
+        assert.match(row.happened.scope ?? '', expected.scope, nativeId);
+      } else assert.equal(row.happened.scope, expected.scope, nativeId);
     }
   }
 });
@@ -424,7 +436,9 @@ test('benchmark: Rooted in RARE aquafaba — roles, quantity, and illness semant
   );
   // Founder decision: authoritative quantity stays visible.
   assert.equal(row.projection.quantityText, '3,860 units');
-  assert.match(row.happened.text, /The recall covers 3,860 units\.$/);
+  // P2B7V: visible, and as the recall-scope paragraph of its own.
+  assert.equal(row.happened.scope, 'The recall covers 3,860 units.');
+  assert.ok(!row.happened.text.includes('The recall covers'));
   // A consumer-reported allergic reaction is a report — never explicit zero.
   assert.equal(row.illness, 'reported');
   // Usable package checker: both UPCs and both best-by dates.

@@ -127,33 +127,48 @@ export const relevancePalette = {
 } as const satisfies Record<string, LabelPalette>;
 
 /**
- * The compact illness notice (P2B7K) — whether the official notice reported
- * illnesses, shown in Recall Detail's identity area.
+ * The harm notices (P2B7K as `illnessNoticePalette`; re-founded in P2B7V) —
+ * the treatments for what the OFFICIAL notice reported about people, shown as
+ * separate compact boxes in Recall Detail's identity area.
  *
- * NOT a risk level and NOT personal relevance. It answers a third, independent
- * question, so it gets a third, independent treatment and its own object: it
- * cannot be indexed by a risk tier, and the Risk Label remains the only
- * consumer of `riskPalette` (founder decision, P2B7K).
+ * ## Severity is the treatment (founder decision, P2B7V)
  *
- * ## Why these values and no new colour
+ * P2B7K gave the notice a treatment of its own, deliberately built only from
+ * foundation colours, so that illness status could never borrow Critical's
+ * red. The reasoning was that illness status is not a risk LEVEL — and it is
+ * not. What P2B7Q.1 then established is that these three facts are not one
+ * status at all: a reported illness, a reported hospitalization and a reported
+ * death are three different harms, and they are ordered by how bad they are.
+ * The founder's decision is that the ordering should be visible, using the
+ * severity vocabulary the app already has rather than a fourth one invented
+ * here:
  *
- * Every value below is an existing foundation token, re-expressed under a
- * semantic name:
+ *   illnesses          the `high` risk treatment
+ *   hospitalizations   the `very_high` risk treatment
+ *   deaths             the `critical` risk treatment
  *
- *   reported  `background/surface` + `border/strong` + `text/primary`
- *   none      `background/subtle`  + `background/subtle` + `text/primary`
+ * Every one of those is a REFERENCE to the risk palette's own entry, not a
+ * copy of its values: there is exactly one definition of Critical's red in
+ * this file, and changing it changes the death box with it. A second
+ * vocabulary of hand-copied hexes is the thing this shape exists to prevent.
  *
- * The design system has no soft-danger tint — the only reds are `risk/*`, and
- * reusing those would give Critical a second treatment, which is exactly what
- * the one-treatment rule forbids. A genuinely soft red would be a new approved
- * hex, which is a design decision, not an implementation one. Until that hex
- * exists, the reported state carries its urgency the way the rest of Lotly
- * does: the word, the `warning` glyph, and the stronger border. Swapping in an
- * approved tint later is a one-line change here and nowhere else.
+ * These boxes still cannot be confused with the Risk Label, because colour
+ * was never what distinguished them: the Risk Label is uppercase IBM Plex
+ * Mono at a 24pt minimum height and says a TIER ("CRITICAL"); a harm notice
+ * is sentence-case Public Sans at its own line height and says a COUNTED
+ * FACT ("1 death reported"). Colour is the redundant channel in both.
+ *
+ * ## `none` is unchanged
+ *
+ * "No illnesses reported" is a founder-approved reassurance, not a harm, and
+ * it keeps the calm blue informational treatment it has always had — an
+ * existing foundation colour (`background/subtle`), never a severity fill.
  */
-export const illnessNoticePalette = {
-  reported: { background: '#FFFFFF', foreground: '#001F3E', border: '#89969B' },
+export const harmNoticePalette = {
   none: { background: '#C0D6EB', foreground: '#001F3E', border: '#C0D6EB' },
+  illnesses: riskPalette.high,
+  hospitalizations: riskPalette.very_high,
+  deaths: riskPalette.critical,
 } as const satisfies Record<string, LabelPalette>;
 
 // ── Spacing, radius, size ───────────────────────────────────────────────────

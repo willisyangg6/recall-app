@@ -122,7 +122,7 @@ test('MUTATION: adding an explicit illness denial makes each case deny again', (
       `${c.summaryText} There have been no reports of illness associated with this product.`,
     );
     assert.equal(status.kind, 'explicit_none', label(c));
-    assert.equal(illnessNoticeCopy(status)!.lines[0], 'No illnesses reported', label(c));
+    assert.equal(illnessNoticeCopy(status)!.notices[0].text, 'No illnesses reported', label(c));
   }
 });
 
@@ -160,7 +160,7 @@ test('PARITY: Detail, the projection flag and the repair plan read the same answ
   // keeps it removed.
   for (const c of CORPUS.cases) {
     const status = deriveIllnessStatus(c.summaryText);
-    const detailShowsIllness = illnessNoticeCopy(status)?.tone === 'reported';
+    const detailShowsIllness = illnessNoticeCopy(status)?.notices[0].tone === 'illnesses';
     const projectionFlag = statementReportsIllness(c.summaryText);
     const repairPlanValue = statusReportsIllness(status);
 

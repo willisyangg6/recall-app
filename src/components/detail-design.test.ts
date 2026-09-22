@@ -29,6 +29,7 @@ import {
   DETAIL_ERROR_TITLE,
   DETAIL_LOADING,
   DETAIL_MISSING,
+  DETAIL_TITLE_LINES,
   retractedNotice,
 } from '@/lib/detail-copy';
 import {
@@ -191,8 +192,11 @@ test('Detail draws every word from the type scale and every colour from the toke
   assert.match(code, /<Text\s+variant="heading-2"\s+accessibilityRole="header"/);
   // The header stacks only when the rendered name actually broke a word
   // beside the hero — decided from the text layout, latched, never from a
-  // reported font scale the runtime may not deliver.
-  assert.ok(code.includes('splitsAWord(event.nativeEvent.lines)'));
+  // reported font scale the runtime may not deliver. From P2B7V that layout
+  // is the title PROBE's, which measures the unclamped name, so a four-line
+  // clamp cannot hide the break that decides the header's shape.
+  assert.ok(code.includes('splitsAWord(lines)'));
+  assert.ok(code.includes('const { lines } = event.nativeEvent;'));
   assert.ok(code.includes('const [stackedHeader, setStackedHeader] = useState(false);'));
   assert.ok(!code.includes('fontScale'));
   assert.ok(
@@ -223,17 +227,27 @@ test('Detail geometry comes from the layout tokens, fixes no height, and truncat
   assert.ok(DETAIL.includes('size={layout.rowMediaSize}'));
   assert.ok(DETAIL.includes('width: layout.tableColumnWidth'));
   assert.ok(DETAIL.includes('maxWidth: layout.maxContentWidth'));
-  // The only fixed height is the glyph box that centres the pin on the
-  // first line of the jurisdiction text; every other height is content's.
+  // The only fixed heights are the two glyph boxes that centre a leading
+  // icon on the first line of its own sentence — the location pin, and (from
+  // P2B7V) the house on the retailer row beneath it. Both are one body-small
+  // LINE tall, which is why they stay centred at any reader type size; every
+  // other height on the screen is content's.
   const heights = codeOnly(DETAIL).match(/\bheight: [^,]+/g) ?? [];
-  assert.deepEqual(heights, ["height: typography['body-small'].lineHeight"]);
+  assert.deepEqual(heights, [
+    "height: typography['body-small'].lineHeight",
+    "height: typography['body-small'].lineHeight",
+  ]);
   assert.ok(typography['body-small'].lineHeight > 0);
   assert.ok(!DETAIL.includes('maxFontSizeMultiplier'));
   assert.ok(!DETAIL.includes('ellipsizeMode'));
-  // Safety-critical text wraps; the ONE single-line cap is the paired line
-  // the contract requires so the code and date columns stay level.
-  assert.equal((DETAIL.match(/numberOfLines=/g) ?? []).length, 1);
+  // Safety-critical text wraps. TWO clamps exist, and both are deliberate:
+  // the paired table line the contract requires so the code and date columns
+  // stay level, and the Detail title's four-line disclosure (P2B7V), which is
+  // reversible in place and never hides the name from search, speech, share,
+  // push or identity.
+  assert.equal((DETAIL.match(/numberOfLines=/g) ?? []).length, 2);
   assert.ok(DETAIL.includes('numberOfLines={1}'));
+  assert.ok(DETAIL.includes('numberOfLines={titleExpanded ? undefined : DETAIL_TITLE_LINES}'));
   // Safe area: the content adds the bottom inset to its own padding.
   assert.ok(DETAIL.includes('paddingBottom: spacing[24] + insets.bottom'));
 });
@@ -384,9 +398,10 @@ test('no share, bell, retailer, or helper-callout control was copied from Figma'
     assert.ok(!ICON.includes(`'${glyph}'`), `the icon set gained an unused ${glyph} glyph`);
     assert.ok(!ICON.includes(`${glyph}:`), `the icon set gained an unused ${glyph} glyph`);
   }
-  // The only pressables the screen adds are its two external links; every
-  // other control is a shared primitive with real behaviour.
-  assert.equal((code.match(/<Pressable\b/g) ?? []).length, 2);
+  // The pressables the screen adds are its two external links and the title's
+  // four-line disclosure (P2B7V); every other control is a shared primitive
+  // with real behaviour.
+  assert.equal((code.match(/<Pressable\b/g) ?? []).length, 3);
   assert.equal((code.match(/accessibilityRole="link"/g) ?? []).length, 2);
   assert.equal((code.match(/Linking\.openURL\(/g) ?? []).length, 2);
   assert.equal((code.match(/accessibilityHint=\{EXTERNAL_LINK_HINT\}/g) ?? []).length, 2);
@@ -803,6 +818,131 @@ test('the preview offers every required Detail scenario, on real recalls, simula
   assert.ok(read('app', '(tabs)', 'profile.tsx').includes('{__DEV__ ? ('));
 });
 
+test('P2B7V: the retailer and symptom labels are body text, never the muted grey', () => {
+  // Both labels used to be muted `text/secondary` captions sitting OVER the
+  // content they introduced. Both now OPEN that content — "Retailers: ALDI
+  // and BJ's" is one sentence, and "Common symptoms:" runs straight into its
+  // bullets — so muting either would split one statement into two visual
+  // registers. Neither may take the secondary token again.
+  const retailerRow = DETAIL.slice(
+    DETAIL.indexOf('{whereSold.retailersNamed ?'),
+    DETAIL.indexOf('{/* Community shopper reports'),
+  );
+  assert.ok(retailerRow.length > 0, 'the retailer row moved');
+  assert.ok(!retailerRow.includes('text/secondary'), 'the Retailers: label is muted again');
+  // The label keeps a nested Text with NO props of its own, so it inherits the
+  // sentence's colour — and so the consumer-copy contract can still see the
+  // approved label as JSX text (lib/consumer-copy.test.ts, rule 4).
+  assert.match(retailerRow, /<Text variant="body-small">Retailers:<\/Text>/);
+  assert.equal(
+    (retailerRow.match(/variant="body-small"/g) ?? []).length,
+    2,
+    'the retailer sentence is no longer one body-small flow',
+  );
+
+  const symptoms = DETAIL.slice(
+    DETAIL.indexOf('{healthRisk.symptoms ?'),
+    DETAIL.indexOf('accessibilityRole="list"'),
+  );
+  assert.ok(symptoms.length > 0, 'the symptom label moved');
+  assert.ok(!symptoms.includes('text/secondary'), 'the Common symptoms: label is muted again');
+  // Its caption TREATMENT is unchanged — only the colour and the colon moved.
+  assert.match(symptoms, /<Text variant="caption" accessibilityRole="header">/);
+  assert.ok(symptoms.includes('Common symptoms:'));
+
+  // Both therefore inherit the primitive's default, which is the same token
+  // the body copy beside them renders in.
+  const text = read('components', 'ui', 'text.tsx');
+  assert.match(text, /color: colorToken = 'text\/primary'/);
+
+  // And no new hex was introduced anywhere on the screen to achieve it.
+  assert.ok(!/#[0-9A-Fa-f]{6}/.test(codeOnly(DETAIL)), 'Detail spells a raw colour');
+});
+
+// ── The Detail title's four-line disclosure (P2B7V) ─────────────────────────
+
+test('the title clamp is four lines, measured, and reversible — and only the title', () => {
+  const block = DETAIL.slice(
+    DETAIL.indexOf('<View style={styles.titleBlock}>'),
+    DETAIL.indexOf('{/* The compact illness notice'),
+  );
+  assert.ok(block.length > 0, 'the title block moved');
+
+  // Four lines, from the shared contract — never a number spelled here.
+  assert.ok(block.includes('numberOfLines={titleExpanded ? undefined : DETAIL_TITLE_LINES}'));
+  assert.equal(DETAIL_TITLE_LINES, 4);
+  assert.ok(!/numberOfLines=\{4\}/.test(DETAIL), 'the clamp count was inlined');
+  // Expanding removes the clamp entirely, so the complete name renders. A
+  // larger clamp would still truncate a long enough title.
+  assert.ok(
+    !/titleExpanded \? \d+/.test(block),
+    'expansion raises the clamp instead of removing it',
+  );
+
+  // OVERFLOW IS MEASURED, never guessed from the string. A character-count
+  // heuristic is wrong at accessibility text sizes and wrong beside the hero
+  // tile, which are exactly the cases the control exists for.
+  assert.ok(block.includes('lines.length > DETAIL_TITLE_LINES'));
+  assert.ok(!/productName\.length/.test(DETAIL), 'the control is decided by a character count');
+  assert.ok(!/\.length\s*>\s*\d{2,}/.test(block), 'the control is decided by a character count');
+  // …from a probe that renders the same string in the same type, unclamped,
+  // at the same width, and contributes no layout of its own.
+  const probe = DETAIL.slice(DETAIL.indexOf('titleProbe: {'), DETAIL.indexOf('titleControl: {'));
+  assert.match(probe, /position: 'absolute'/);
+  assert.match(probe, /opacity: 0/);
+  for (const forbidden of ['height:', 'minHeight:', 'maxHeight:']) {
+    assert.ok(!probe.includes(forbidden), `the title probe fixes ${forbidden}`);
+  }
+  // The probe is never read aloud, and never clamped (a clamped probe would
+  // report four lines for every title and the control would never appear).
+  assert.ok(block.includes('accessibilityElementsHidden'));
+  assert.ok(block.includes('importantForAccessibility="no"'));
+  const probeElement = block.slice(
+    block.indexOf('style={styles.titleProbe}'),
+    block.indexOf('{titleOverflows ?'),
+  );
+  assert.ok(!probeElement.includes('numberOfLines'), 'the measuring copy is itself clamped');
+
+  // The control exists ONLY when the title overflows.
+  assert.match(block, /\{titleOverflows \? \([\s\S]*?\) : null\}/);
+  assert.ok(block.includes('DETAIL_TITLE_EXPAND_LABEL'));
+  assert.ok(block.includes('DETAIL_TITLE_COLLAPSE_LABEL'));
+  assert.ok(block.includes('accessibilityState={{ expanded: titleExpanded }}'));
+  // Quiet: caption type in the secondary action colour, not a Button pill.
+  assert.ok(!block.includes('<Button'), 'the title control became a primary action');
+  assert.match(block, /variant="caption"\s+color="action\/secondary"/);
+
+  // The FULL name is what is spoken, whatever the clamp shows.
+  assert.ok(block.includes('accessibilityLabel={model.productName}'));
+
+  // Feed and Saved clamps are untouched — this is a Detail-only change.
+  const card = read('components', 'recall-card.tsx');
+  assert.ok(!card.includes('DETAIL_TITLE_LINES'));
+  assert.ok(!card.includes('titleExpanded'));
+});
+
+test('every per-recall disclosure resets when the route points at another recall', () => {
+  const code = codeOnly(DETAIL);
+  // Reset during RENDER, not in an effect: an effect would paint one frame of
+  // the previous recall's expanded title before correcting itself.
+  assert.match(code, /if \(shownId !== id\) \{/);
+  for (const reset of [
+    'setShownId(id);',
+    'setTitleExpanded(false);',
+    'setTitleOverflows(false);',
+    'setStatesExpanded(false);',
+    'setTableExpanded(false);',
+  ]) {
+    assert.ok(code.includes(reset), `navigating to another recall does not reset: ${reset}`);
+  }
+  // The title state is the screen's alone and never reaches the model, so no
+  // projection, search entry or share string can see a shortened name.
+  const presentation = read('lib', 'recall-presentation.ts');
+  for (const leaked of ['titleExpanded', 'titleOverflows', 'DETAIL_TITLE_LINES']) {
+    assert.ok(!presentation.includes(leaked), `the shared contract learned about ${leaked}`);
+  }
+});
+
 // ── Retailer visibility in Where It Was Sold (P2B7O) ────────────────────────
 
 test('the retailers a notice named render under the geography, never instead of it', () => {
@@ -817,18 +957,34 @@ test('the retailers a notice named render under the geography, never instead of 
     'the retailers were placed above the geography they narrow',
   );
   assert.match(section, /name="map-pin"/);
-  // A labelled block: the heading is the screen's (as Health Risk's "Common
-  // symptoms" is), the NAMES are the model's finished string. The screen
-  // joins nothing, counts nothing, and reads neither the wider evidence list
-  // nor the retailer count.
+  // P2B7V — ONE icon-led sentence row, in the same shape as the geography row
+  // above it. The glyph is the Feed tab's own house, from the shared icon
+  // system, at the same 12pt as the pin and in the same leading column.
+  assert.match(section, /name="home" size=\{12\}/);
+  assert.equal(
+    (section.match(/name="home"/g) ?? []).length,
+    1,
+    'the retailer glyph multiplied or was removed',
+  );
+  assert.ok(
+    !/name="(store|shopping|building|storefront|map-pin)"/.test(
+      section.slice(section.indexOf('whereSold.retailersNamed')),
+    ),
+    'the retailer row took a glyph other than the Feed tab’s house',
+  );
+  assert.ok(!section.includes('require('), 'the retailer row introduced an image asset');
   // The label is exactly "Retailers:" — a founder override of the app-wide
   // "store, never retailer" vocabulary, granted for this one label because
   // personalization already calls them Retailers. `consumer-copy.test.ts`
   // holds the exemption to this exact string; here we pin the string itself
   // so a well-meaning rewrite to "Stores" fails in both places.
   const rendered = section.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
-  assert.match(rendered, />\s*Retailers:\s*</);
+  assert.ok(rendered.includes('Retailers:'), 'the approved label moved');
   assert.ok(!/Stores named in the notice/.test(rendered), 'the approved label was rewritten');
+  assert.ok(!/>\s*Stores:\s*</.test(rendered), 'the approved label was rewritten');
+  // The NAMES are the model's finished, punctuated string. The screen joins
+  // nothing, counts nothing, and reads neither the wider evidence list nor
+  // the retailer count.
   assert.match(section, /\{whereSold\.retailersNamed\}/);
   for (const forbidden of ['.join(', '.slice(', 'retailerCount', 'whereSold.retailers)']) {
     assert.ok(!section.includes(forbidden), `Detail builds its own retailer list: ${forbidden}`);
@@ -840,12 +996,12 @@ test('the retailers a notice named render under the geography, never instead of 
   }
 });
 
-test('the retailer block is quiet metadata: no chips, no scroller, no control', () => {
+test('the retailer row is quiet metadata: no chips, no scroller, no control', () => {
   const block = DETAIL.slice(
     DETAIL.indexOf('{whereSold.retailersNamed ?'),
     DETAIL.indexOf('{/* Community shopper reports'),
   );
-  assert.ok(block.length > 0, 'the retailer block moved');
+  assert.ok(block.length > 0, 'the retailer row moved');
   for (const forbidden of [
     'Chip',
     'CategoryTag',
@@ -858,37 +1014,51 @@ test('the retailer block is quiet metadata: no chips, no scroller, no control', 
     'DisclosureControl',
     'Link',
   ]) {
-    assert.ok(!block.includes(forbidden), `the retailer block introduced ${forbidden}`);
+    assert.ok(!block.includes(forbidden), `the retailer row introduced ${forbidden}`);
   }
-  // Announced once each, in reading order: the label is a header, the names
-  // are the text under it. Exactly one header, no relabelling, and no second
-  // accessible element wrapping the pair — so a screen-reader user hears
-  // "Retailers:" then the stores, once, and never twice.
-  assert.equal((block.match(/accessibilityRole="header"/g) ?? []).length, 1);
-  assert.match(block, /accessibilityRole="header">\s*Retailers:/);
-  assert.ok(!block.includes('accessibilityLabel'), 'the retailer block relabels itself');
-  assert.ok(!/\baccessible\b/.test(block), 'the retailer block groups itself into one element');
+  // P2B7V — one sentence, announced once. The label is no longer a HEADER
+  // over a separate line: it is the opening of the same text flow as the
+  // names, so a screen-reader user hears "Retailers: ALDI and BJ's" as one
+  // utterance rather than a heading followed by an orphaned list. The glyph
+  // stays decorative (the shared Icon hides itself), so it is never spoken.
+  assert.equal((block.match(/accessibilityRole="header"/g) ?? []).length, 0);
+  assert.ok(!block.includes('accessibilityLabel'), 'the retailer row relabels itself');
+  assert.ok(!/\baccessible\b/.test(block), 'the retailer row groups itself into one element');
 });
 
-test('the retailer names wrap and fix no height', () => {
+test('the retailer names wrap inline and fix no height', () => {
   const styles = DETAIL.slice(DETAIL.indexOf('retailers: {'), DETAIL.indexOf('// The Health Risk'));
   assert.ok(styles.length > 0, 'the retailer styles moved');
-  for (const forbidden of ['height:', 'maxHeight:', 'overflow:', 'flexDirection']) {
-    assert.ok(!styles.includes(forbidden), `the retailer block fixes ${forbidden}`);
-  }
   const block = DETAIL.slice(
     DETAIL.indexOf('{whereSold.retailersNamed ?'),
     DETAIL.indexOf('{/* Community shopper reports'),
   );
   assert.ok(!block.includes('numberOfLines'), 'the retailer names are clamped');
   assert.ok(!block.includes('ellipsizeMode'), 'the retailer names truncate');
-  // The layout the founder approved, pinned so a copy change cannot move it:
-  // indented from the geography glyph, spaced below the geography line, and
-  // the names on their own line under the label (a gapped COLUMN, never a row).
-  assert.match(styles, /marginLeft: iconSize\[12\] \+ spacing\[4\]/);
+
+  // P2B7V — the founder-approved layout, pinned so a copy change cannot move
+  // it: a ROW, glyph first, in the same shape as the geography row above,
+  // with the separation between them kept as a top margin.
+  assert.match(styles, /flexDirection: 'row'/);
+  assert.match(styles, /alignItems: 'flex-start'/);
   assert.match(styles, /marginTop: spacing\[8\]/);
   assert.match(styles, /gap: spacing\[4\]/);
-  const label = block.indexOf('Retailers:');
-  const names = block.indexOf('{whereSold.retailersNamed}');
-  assert.ok(label !== -1 && names > label, 'the names no longer follow the label');
+  // Nothing is indented any more: the old block was pushed in by the width of
+  // the geography glyph, which is exactly what the icon now occupies.
+  assert.ok(!styles.includes('marginLeft'), 'the retailer row is indented again');
+  assert.ok(!styles.includes('paddingLeft'));
+  // The row itself fixes no height and never clips. The ONE height here is
+  // the glyph box, one body-small line tall, which is what keeps the house
+  // centred on the first line and off the wrapped ones.
+  const rowStyles = DETAIL.slice(
+    DETAIL.indexOf('retailers: {'),
+    DETAIL.indexOf('retailerGlyph: {'),
+  );
+  for (const forbidden of ['height:', 'maxHeight:', 'overflow:']) {
+    assert.ok(!rowStyles.includes(forbidden), `the retailer row fixes ${forbidden}`);
+  }
+  assert.match(styles, /retailerGlyph: \{\s*height: typography\['body-small'\]\.lineHeight/);
+  // …and the text takes the remaining width, so a long list wraps INSIDE the
+  // text column instead of running back under the icon.
+  assert.match(styles, /retailerText: \{\s*flex: 1,/);
 });

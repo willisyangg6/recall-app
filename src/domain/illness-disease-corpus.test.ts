@@ -228,7 +228,7 @@ test('MUTATION: a genuine report is heard over every notice in the corpus', () =
     const status = deriveIllnessStatus(`${c.summaryText} ${A_REAL_REPORT}`);
     assert.ok(status.kind.startsWith('reported'), `${label(c)} + a real report`);
     assert.equal(statusReportsIllness(status), true, label(c));
-    assert.equal(illnessNoticeCopy(status)!.tone, 'reported', label(c));
+    assert.equal(illnessNoticeCopy(status)!.notices[0].tone, 'illnesses', label(c));
   }
 });
 
@@ -275,7 +275,7 @@ test('the source sentence always survives in What Happened', () => {
 test('PARITY: Detail, the projection flag and push eligibility read one answer', () => {
   for (const c of CORPUS.cases) {
     const status = deriveIllnessStatus(c.summaryText);
-    const detailShowsIllness = illnessNoticeCopy(status)?.tone === 'reported';
+    const detailShowsIllness = illnessNoticeCopy(status)?.notices[0].tone === 'illnesses';
     const projectionFlag = statementReportsIllness(c.summaryText);
     const flag = statusReportsIllness(status);
 

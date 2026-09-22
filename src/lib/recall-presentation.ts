@@ -719,8 +719,17 @@ export function whereSoldModel(distribution: ConsumerDistribution): WhereSoldMod
   const leadCollapsed = hiddenStates ? states.slice(0, WHERE_SOLD_INITIAL_STATES).join(', ') : lead;
   // Nameable stores only, and from the hardened field alone (P2B7O). The
   // full `retailers` evidence stays on the model untouched for traceability.
+  //
+  // P2B7V joins them the way the jurisdictions above are joined — the SAME
+  // `joinNames`, so one list-punctuation rule serves both: "ALDI", "ALDI and
+  // BJ's", "ALDI, Costco, and BJ's". Each stored entry is preserved exactly
+  // as the source wrote it and is never split on its own conjunction: 19 of
+  // the 170 retailer-bearing cases store a run the extractor kept whole, and
+  // "Stop and Shop", "Smart & Final" and "Lunds & Byerlys" are store NAMES,
+  // not two stores each. Splitting them to make a tidier list would invent
+  // retailers, which is the one thing this surface may not do.
   const nameable = displayableRetailerNames(distribution.statedRetailers);
-  const retailersNamed = nameable.length === 0 ? null : nameable.join(', ');
+  const retailersNamed = nameable.length === 0 ? null : joinNames(nameable);
   return {
     locationState,
     lead,
@@ -2091,16 +2100,41 @@ export function recallQuantitySentence(
 }
 
 /**
- * The What Happened narrative, assembled once by the model.
+ * The What Happened narrative, assembled once by the model (P2B7V).
  *
- * The reason sentence leads; a source-supported quantity the reason did not
- * already state follows it, in the same paragraph. The illness-status sentence
- * renders after this narrative, so the order a reader gets is always: what
- * happened, how much, who got sick. The screen renders the finished text and
- * composes nothing.
+ * TWO paragraphs, decided here and nowhere else:
+ *
+ *   `text`   the cause — who recalled what and why.
+ *   `scope`  how much was recalled, or null.
+ *
+ * ## One scope sentence, never two
+ *
+ * Two independent derivations can produce a scope sentence, and 5 of 898
+ * consumer-visible active cases produce both:
+ *
+ *   · `buildWhatHappened().scope` reads a "recalling <N> <unit>" statement
+ *     out of the notice's own summary prose;
+ *   · `recallQuantitySentence` renders the FDA projection's STRUCTURED
+ *     `quantityText` field.
+ *
+ * Measured, every one of those 5 states the SAME quantity twice, differing
+ * only in the thousands separator the prose regex could not read — "The
+ * recall covers 1271 cases. The recall covers 1,271 cases of green onions."
+ * was the shipped Detail copy. The scope paragraph therefore holds exactly
+ * one sentence, and the structured field wins when both exist: it is the
+ * field the agency filled in, it carries the separator, and it names the
+ * product the count is of. Neither sentence is reworded to get there.
+ *
+ * The de-duplication `recallQuantitySentence` already performs is unchanged:
+ * it is still handed the COMBINED cause-plus-scope text, so a quantity the
+ * cause sentence itself already states is still suppressed exactly as before.
  */
-export function detailNarrative(reasonText: string, quantitySentence: string | null): string {
-  return quantitySentence ? `${reasonText} ${quantitySentence}` : reasonText;
+export function detailNarrative(
+  reasonText: string,
+  narrativeScope: string | null,
+  structuredScope: string | null,
+): { text: string; scope: string | null } {
+  return { text: reasonText, scope: structuredScope ?? narrativeScope };
 }
 
 // ── Product category tag (P2B7D) ────────────────────────────────────────────
@@ -2343,13 +2377,22 @@ export interface DetailModel {
   /** The generic approved banner text, shown iff `affectsYou`. */
   affectsYouBanner: string;
   /**
-   * The complete What Happened narrative (P3C-1): the reason sentence plus,
-   * when the source states one the reason did not already carry, the recall
-   * quantity — one paragraph, one voice. There is deliberately no separate
-   * quantity field for a screen to style on its own, and no `update` field:
-   * the generated update note was removed with its generator (P2B7Q.1).
+   * The complete What Happened narrative, as TWO paragraphs (P3C-1, split in
+   * P2B7V):
+   *
+   *   `text`   the cause — who recalled what and why, plus the source's own
+   *            import-origin context sentence when it states one.
+   *   `scope`  how much the recall covers, when the source states a quantity
+   *            deterministically; null otherwise, and null renders NOTHING —
+   *            no paragraph, no gap, no empty element.
+   *
+   * `scope` is still ordinary prose in the same body type as `text`: it is
+   * not a badge, a tag, a heading, a card or a section, and it is never
+   * duplicated into `text`. There is still no `update` field: the generated
+   * update note was removed with its generator (P2B7Q.1) and this milestone
+   * does not resurrect it.
    */
-  whatHappened: { text: string };
+  whatHappened: { text: string; scope: string | null };
   /**
    * The compact illness notice (P2B7K), or null when the official notice never
    * established illness status — in which case Detail renders nothing at all
@@ -2505,6 +2548,20 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
   // read the same verdict rather than recomputing it.
   const whereSoldDecision = whereSoldSection(sold);
 
+  // The two What Happened paragraphs (P2B7V). `recallQuantitySentence` is
+  // handed the COMBINED cause-plus-scope text — the exact string it received
+  // before the split — so its figure de-duplication keeps behaving as it
+  // always has, and no case gains a quantity sentence merely because the
+  // paragraphs were separated.
+  const combinedNarrative = [happened.text, happened.scope]
+    .filter((part) => part !== null)
+    .join(' ');
+  const narrative = detailNarrative(
+    happened.text,
+    happened.scope,
+    recallQuantitySentence(projection.sourceAgency, consumer.quantityText, combinedNarrative),
+  );
+
   return {
     id: detail.id,
     noticeTypeLabel:
@@ -2525,8 +2582,11 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     affectsYou: context.affectsYou,
     affectsYouBanner: 'Warning: This recall affects you.',
     whatHappened: {
-      // The illness sentence is removed from the narrative only when the
-      // notice completely represents it (P2B7K).
+      ...narrative,
+      // The illness sentence is removed from the CAUSE paragraph only when
+      // the notice completely represents it (P2B7K). The scope paragraph is
+      // never a candidate: it is one derived sentence about how much was
+      // recalled and can never be an illness statement.
       //
       // MEASURED (P2B7Q): over the whole 1,931-case table this step changes
       // NOTHING, because the narrative below is built from structured slots
@@ -2542,13 +2602,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
       // to a narrative that was never going to carry them. Injuries and
       // adverse reactions still have no status anywhere — see
       // docs/recall-illness-status.md §1.2.
-      text: narrativeWithoutIllness(
-        detailNarrative(
-          happened.text,
-          recallQuantitySentence(projection.sourceAgency, consumer.quantityText, happened.text),
-        ),
-        illnessStatus,
-      ),
+      text: narrativeWithoutIllness(narrative.text, illnessStatus),
     },
     illnessNotice: illnessNoticeCopy(illnessStatus),
     whereSold: sold,

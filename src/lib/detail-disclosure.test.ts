@@ -249,7 +249,9 @@ test('retailer presentation is not touched by the jurisdiction disclosure', () =
     }),
   );
   assert.equal(sold.retailerCount, 4);
-  assert.equal(sold.retailersNamed, 'Costco Wholesale, Kroger, Publix, Safeway');
+  // P2B7V: the shared list punctuation — the same `joinNames` the
+  // jurisdiction list uses, so both read as a sentence.
+  assert.equal(sold.retailersNamed, 'Costco Wholesale, Kroger, Publix, and Safeway');
   assert.deepEqual(sold.retailers, ['Costco Wholesale', 'Kroger', 'Publix', 'Safeway']);
 });
 

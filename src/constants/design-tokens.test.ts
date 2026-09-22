@@ -29,7 +29,7 @@ import {
   iconSize,
   layout,
   radius,
-  illnessNoticePalette,
+  harmNoticePalette,
   relevancePalette,
   REQUIRED_FONT_FACES,
   RISK_TOKEN_NAME,
@@ -139,9 +139,9 @@ test('the contract names no colour the code lacks, and vice versa', () => {
       ['background', 'foreground', 'border'].map((part) => `${RISK_TOKEN_NAME[tier]}/${part}`),
     ),
     ...['background', 'foreground', 'border'].map((part) => `relevance/affects-you/${part}`),
-    ...['reported', 'none'].flatMap((state) =>
-      ['background', 'foreground', 'border'].map((part) => `illness-notice/${state}/${part}`),
-    ),
+    // P2B7V: the three reported harms are references to `risk/*` and define no
+    // colour of their own, so only the denial names one here.
+    ...['background', 'foreground', 'border'].map((part) => `harm-notice/none/${part}`),
   ].sort();
   assert.deepEqual(inCode, approved);
 });
@@ -151,53 +151,67 @@ test('every colour is an uppercase six-digit hex — the form the contract write
     ...Object.values(color),
     ...Object.values(riskPalette).flatMap((p) => [p.background, p.foreground, p.border]),
     ...Object.values(relevancePalette).flatMap((p) => [p.background, p.foreground, p.border]),
-    ...Object.values(illnessNoticePalette).flatMap((p) => [p.background, p.foreground, p.border]),
+    ...Object.values(harmNoticePalette).flatMap((p) => [p.background, p.foreground, p.border]),
     elevation.card.shadowColor,
   ];
   for (const value of all) assert.match(value, HEX);
 });
 
-test('the illness notice introduces no colour the foundation lacks, and no risk colour', () => {
-  // Every value is an existing foundation token re-expressed under a semantic
-  // name, so the notice cannot become a second Critical and cannot smuggle in
-  // an unapproved tint. Swapping in an approved soft-danger hex later is a
-  // deliberate edit here, not an accident.
+test('the harm notices introduce no colour of their own — every treatment is a reference', () => {
+  // P2B7V (founder decision): a reported harm wears the SEVERITY treatment
+  // that matches it — illnesses `high`, hospitalizations `very_high`, deaths
+  // `critical`. What this test protects is that they are REFERENCES to the
+  // risk palette's own entries, never copies of its values: there is one
+  // definition of Critical's red in the contract, and the death box must move
+  // with it. A hand-copied hex here would be a second vocabulary.
+  assert.equal(harmNoticePalette.illnesses, riskPalette.high);
+  assert.equal(harmNoticePalette.hospitalizations, riskPalette.very_high);
+  assert.equal(harmNoticePalette.deaths, riskPalette.critical);
+
+  // Severity order is the point: the three treatments are distinct, and they
+  // are the risk palette's own three in ascending order. Swapping any two
+  // fails here rather than only on a screen.
+  const severities = [
+    harmNoticePalette.illnesses.background,
+    harmNoticePalette.hospitalizations.background,
+    harmNoticePalette.deaths.background,
+  ];
+  assert.equal(new Set(severities).size, 3, 'two harms share a treatment');
+  assert.deepEqual(severities, [
+    riskPalette.high.background,
+    riskPalette.very_high.background,
+    riskPalette.critical.background,
+  ]);
+
+  // The denial is NOT a harm and keeps its calm blue, which is an existing
+  // foundation colour and never a severity fill.
   const foundation = new Set<string>(Object.values(color));
-  for (const [state, palette] of Object.entries(illnessNoticePalette)) {
-    for (const part of ['background', 'foreground', 'border'] as const) {
-      assert.ok(
-        foundation.has(palette[part]),
-        `illness-notice/${state}/${part} must be an existing foundation colour`,
-      );
-    }
+  for (const part of ['background', 'foreground', 'border'] as const) {
+    assert.ok(
+      foundation.has(harmNoticePalette.none[part]),
+      `harm-notice/none/${part} must be an existing foundation colour`,
+    );
   }
-  // Illness status is not a severity level, so no colour from the severity
-  // spectrum may appear here. `pending` and `unknown` are excluded because
-  // they are not severity: they ARE foundation colours (`background/subtle`,
-  // `background/media-placeholder`) that the risk palette reuses to say
-  // "classification state, not danger", and the notice may reuse them for the
-  // same reason.
   const severityColours = new Set(
     (['critical', 'very_high', 'high', 'moderate', 'low'] as const).flatMap((tier) => [
       riskPalette[tier].background,
       riskPalette[tier].border,
     ]),
   );
-  for (const palette of Object.values(illnessNoticePalette)) {
-    assert.ok(!severityColours.has(palette.background), 'the notice must not wear a severity fill');
-    assert.ok(!severityColours.has(palette.border), 'the notice must not wear a severity border');
-  }
+  assert.ok(!severityColours.has(harmNoticePalette.none.background));
+  assert.ok(!severityColours.has(harmNoticePalette.none.border));
   // Nor personal relevance: lime belongs to Affects You alone.
-  for (const palette of Object.values(illnessNoticePalette)) {
+  for (const palette of Object.values(harmNoticePalette)) {
     assert.notEqual(palette.background, relevancePalette['affects-you'].background);
   }
 });
 
-test('the reported and none states are visually distinguishable from each other', () => {
-  assert.notEqual(
-    illnessNoticePalette.reported.background,
-    illnessNoticePalette.none.background,
-    'the two states must not share a surface — colour is a redundant channel, not the only one',
+test('every harm treatment is visually distinguishable from every other', () => {
+  const backgrounds = Object.values(harmNoticePalette).map((p) => p.background);
+  assert.equal(
+    new Set(backgrounds).size,
+    backgrounds.length,
+    'two harm notices share a surface — colour is a redundant channel, not the only one',
   );
 });
 

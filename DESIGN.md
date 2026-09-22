@@ -62,13 +62,13 @@ colors:
   relevance/affects-you/foreground: '#001F3E'
   relevance/affects-you/border: '#ADB600'
 
-  illness-notice/reported/background: '#FFFFFF'
-  illness-notice/reported/foreground: '#001F3E'
-  illness-notice/reported/border: '#89969B'
-
-  illness-notice/none/background: '#C0D6EB'
-  illness-notice/none/foreground: '#001F3E'
-  illness-notice/none/border: '#C0D6EB'
+  # Harm notices (P2B7V). illnesses -> risk/high, hospitalizations ->
+  # risk/very-high, deaths -> risk/critical: REFERENCES to the risk palette's
+  # own entries, never copies of its values, so they define no colour here and
+  # the death box moves with Critical. Only the denial has a value of its own.
+  harm-notice/none/background: '#C0D6EB'
+  harm-notice/none/foreground: '#001F3E'
+  harm-notice/none/border: '#C0D6EB'
 
 typography:
   display:
@@ -1122,7 +1122,9 @@ as written** — the difference is treatment, never casing (P2B7H).
    `text/secondary`, a header to assistive technology. It labels a group of
    rows that lead somewhere: Profile's `Privacy & Data`, `About & Safety`,
    `Legal`, `App` and `Development builds only` (`ProfileSection`). Recall
-   Detail's eyebrow labels (`Common symptoms`) are the same pattern.
+   Detail's `Common symptoms:` keeps this caption SIZE and weight but not its
+   colour (P2B7V): it opens the list beneath it rather than labelling a group
+   from above, so it renders in `text/primary` like the bullets it introduces.
 2. **Content section heading** — `heading-3` (Public Sans semibold, 19/26),
    `text/primary` navy, a header to assistive technology. It heads a section
    the shopper reads and acts in: Personalization's `Your state`, `Allergens
@@ -1297,35 +1299,49 @@ relevance:
 - **Not an Affects You callout.** That is a full-width lime Callout about
   _this shopper_. The notice is compact and about the recall.
 
-Two states, and a third that renders nothing:
+**One fact, one box (P2B7V).** Each harm the notice established renders in its
+own compact box. The boxes stack vertically, every one aligned to the same
+left edge and sized to its own sentence, in the fixed order **illnesses →
+hospitalizations → deaths**. No box is indented under another, none has a
+leading inset of its own, and none has a fixed height — each is its own
+caption line box plus padding, so it grows with Dynamic Type instead of
+clipping. The order does not change when one of the three is absent.
 
-**Reported** — `illness-notice/reported` (white surface, `border/strong`
-border, navy text), the 12px `warning` glyph, and the count copy:
-`1 illness reported`, `12 illnesses reported`, `Approximately 12 illnesses
-reported`, or `Illnesses reported` when the notice gives no trustworthy count.
+**Severity is the treatment** (founder decision, P2B7V):
 
-**Explicit none** — `illness-notice/none` (`background/subtle`, no contrasting
-border), the 12px `info` glyph, and `No illnesses reported`.
+| box              | treatment          | glyph     | copy                                                                                                                                    |
+| ---------------- | ------------------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| illnesses        | `risk/high`        | `warning` | `1 illness reported`, `12 illnesses reported`, `Approximately 12 illnesses reported`, or `Illnesses reported` when no trustworthy count |
+| hospitalizations | `risk/very-high`   | `warning` | `1 hospitalization reported` / `12 hospitalizations reported`                                                                           |
+| deaths           | `risk/critical`    | `warning` | `1 death reported` / `12 deaths reported`                                                                                               |
+| explicit none    | `harm-notice/none` | `info`    | `No illnesses reported`                                                                                                                 |
 
-**Unknown** — nothing renders. No row, no placeholder, no spacer, no spoken
-element. Absence of an illness statement is never displayed as a zero.
+**Unknown** — nothing renders. No box, no placeholder, no spacer, no spoken
+element. Absence of a statement is never displayed as a zero.
 
-It carries **illnesses only**. Injuries, adverse reactions, hospitalizations
-and deaths never appear in it and never produce one; those facts stay in the
-source's own words. Never add a harm-family variant to this component.
+`harmNoticePalette` holds **references** to `riskPalette`'s entries, never
+copies of their values, so this introduces no hex and cannot become a second
+definition of Critical. P2B7K's "the Risk Label is the only consumer of
+`riskPalette`" is deliberately narrowed rather than abandoned: severity is
+reached only through a **named semantic map**, and no screen and no component
+may index the risk palette directly — the Risk Label remains the only
+component that does.
 
-`illnessNoticePalette` exists so the notice never borrows Critical's red:
-**the Risk Label remains the only consumer of `riskPalette`.** Every value in
-it is an existing foundation colour under a semantic name, so the notice
-introduces no new hex. A softer danger tint for the reported state would be a
-new approved colour and a deliberate design decision; until then urgency is
-carried by the word, the glyph and the border.
+These still never read as Risk Labels, because colour was never the
+distinction: a Risk Label is uppercase IBM Plex Mono at a 24px minimum height
+stating a TIER; a harm notice is sentence-case `caption` at its own line
+height stating a COUNTED FACT. Each glyph is tinted with its own box's
+foreground — the same navy the Risk Label's text uses on the same fills — so
+every treatment clears WCAG AA for both the words and the icon.
+
+Injuries and adverse reactions still never appear and never produce a box; the
+contract that feeds this component cannot express them.
 
 Implemented as `src/components/ui/illness-notice.tsx`. Its only input is the
 finished copy from the presentation contract, so it can neither classify prose
 nor acquire a second subject. It is informational: no press target, no button
-role, no hint. To assistive technology it is one element speaking one sentence,
-with the glyph decorative. Semantics and copy live in
+role, no hint. To assistive technology each box is one element speaking one
+sentence, with the glyph decorative. Semantics and copy live in
 [docs/recall-illness-status.md](docs/recall-illness-status.md).
 
 ### Category Tag
@@ -1661,7 +1677,28 @@ screen, and a section is never fabricated to hold one. At accessibility text siz
 word can be wider than the column beside the tile, the header stacks — the
 identity at full width, the tile beneath it — decided from the name's own
 text layout (a line that ended mid-word) and latched, so a product name
-never stays broken inside a word. A retracted notice renders the information callout in
+never stays broken inside a word.
+
+**The title collapses to four lines (P2B7V).** Detail only — Feed and Saved
+clamps are untouched. A title that fits within four lines carries **no control
+at all**; one that overflows carries a quiet `caption` text action in
+`action/secondary` sitting with the title block: `Show full title` collapsed,
+`Show less` expanded. It is deliberately not a Button — this reveals the rest
+of a name and must never read as the screen's primary action — and its 44pt
+target comes from `hitSlop` so the visible mark stays one caption line.
+
+Overflow is **measured, never guessed**. An off-layout probe renders the same
+string in the same type at the same width with no clamp; its line count
+decides whether the control exists, and it also feeds the stacked-header
+decision above. A character-count heuristic would be wrong at accessibility
+text sizes and wrong beside the 152px hero tile, which are exactly the cases
+the control exists for. The probe is absolutely positioned at zero opacity, so
+it contributes no layout and no height, and is hidden from assistive
+technology. Expansion removes the clamp entirely rather than raising it, the
+title block has no fixed height, and every per-recall disclosure resets when
+the route points at a different recall. The **full** title is always what a
+screen reader hears, what search matches, and what share, push, identity and
+de-duplication use. A retracted notice renders the information callout in
 the header; the affects-you verdict renders the warning callout beneath it.
 
 Sections follow in `heading-3` (`What Happened`, `Where It Was Sold`,
@@ -1673,11 +1710,24 @@ heading row: the jurisdiction `See all (N)` opposite `Where It Was Sold`
 `Affected Products`. Section bodies are `body-small` in `text/primary` —
 Figma's `text/secondary` body copy is not used for the narrative, because
 the shipped rule mutes only the `Update` line (conflict 21). The jurisdiction
-line carries the 12px pin; the community block follows it `spacing/12`
+line carries the 12px pin, and the **retailer row** follows it `spacing/8`
+below in the same shape — the 12px `house` glyph (the Feed tab's own, from the
+shared icon set, never an image asset) in the same leading column the pin
+occupies, then `Retailers:` and the names in ONE text flow, in ONE colour
+(`text/primary` throughout), so the list wraps as one and is announced once
+(P2B7V). The names are punctuated by the shared
+`joinNames`: `Retailers: ALDI` / `Retailers: ALDI and BJ's` /
+`Retailers: ALDI, Costco, and BJ's`. The text column takes the remaining
+width, so a long list wraps inside it and every continuation line stays clear
+of the glyph. No trusted store: **no row at all** — no icon, no label, no
+spacer, no empty wrapper. Detail only; Feed and Saved carry no retailer
+content. The community block follows `spacing/12`
 below, in the same body type with its add/edit action as a `caption` text
-action in `action/secondary`. Health Risk keeps its `COMMON SYMPTOMS` group
-label (a `caption` in `text/secondary`, the contract's pinned words) over
-bulleted `body-small` lines and the `Learn more from …` external link.
+action in `action/secondary`. Health Risk keeps its `Common symptoms:` label
+(a `caption` in `text/primary` since P2B7V — same size, same weight, same
+position, and a colon, because it opens the list rather than sitting muted
+over it) above bulleted `body-small` lines and the `Learn more from …`
+external link.
 Loading, not-found and load-failure states are the shared `StateMessage`
 with the copy in `src/lib/detail-copy.ts`.
 

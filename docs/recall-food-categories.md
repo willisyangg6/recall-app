@@ -47,23 +47,66 @@ changed nothing here.
 
 | #   | Id                  | Label               | Definition                                                                                                    |
 | --- | ------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------- |
-| 1   | `produce`           | Fruits & vegetables | Fresh, frozen, or dried fruits, vegetables, mushrooms, sprouts, and salad components.                         |
-| 2   | `meat_poultry`      | Meat & poultry      | Beef, pork, chicken, turkey, lamb, deli meats, and jerky sold as meat products.                               |
+| 1   | `produce`           | Fruits & Vegetables | Fresh, frozen, or dried fruits, vegetables, mushrooms, sprouts, and salad components.                         |
+| 2   | `meat_poultry`      | Meat & Poultry      | Beef, pork, chicken, turkey, lamb, deli meats, and jerky sold as meat products.                               |
 | 3   | `seafood`           | Seafood             | Fish, shrimp, shellfish, and other seafood products.                                                          |
-| 4   | `dairy_eggs`        | Dairy & eggs        | Milk, cheese, yogurt, butter, ice cream, and eggs.                                                            |
-| 5   | `prepared_foods`    | Prepared foods      | Entrées, pizzas, sandwiches, soups, prepared salads, tamales, and other ready-to-eat or ready-to-heat dishes. |
+| 4   | `dairy_eggs`        | Dairy & Eggs        | Milk, cheese, yogurt, butter, ice cream, and eggs.                                                            |
+| 5   | `prepared_foods`    | Prepared Foods      | Entrées, pizzas, sandwiches, soups, prepared salads, tamales, and other ready-to-eat or ready-to-heat dishes. |
 | 6   | `bakery_grains`     | Bakery              | Bread, tortillas, cakes, cookies, pastries, and dough.                                                        |
-| 7   | `snacks_sweets`     | Snacks & sweets     | Chips, popcorn, chocolate, candy, snack bars, and similar snack products.                                     |
+| 7   | `snacks_sweets`     | Snacks & Sweets     | Chips, popcorn, chocolate, candy, snack bars, and similar snack products.                                     |
 | 8   | `beverages`         | Beverages           | Juice, soda, coffee, tea, drink mixes, and other beverages.                                                   |
-| 9   | `pantry_condiments` | Pantry & staples    | Flour, grains, pasta, rice, cereal, sauces, spices, oils, nuts, seeds, and similar pantry products.           |
-| 10  | `baby_food_formula` | Baby food & formula | Infant formula, baby food, and products explicitly sold as infant/baby feeding products.                      |
+| 9   | `pantry_condiments` | Pantry & Staples    | Flour, grains, pasta, rice, cereal, sauces, spices, oils, nuts, seeds, and similar pantry products.           |
+| 10  | `baby_food_formula` | Baby Food & Formula | Infant formula, baby food, and products explicitly sold as infant/baby feeding products.                      |
 | 11  | `supplements`       | Supplements         | Vitamins, capsules, powders, herbal supplements, and supplement products.                                     |
 | 12  | `other`             | Other               | A recalled product this app cannot honestly place in an aisle.                                                |
+
+### Display capitalization is Title Case (founder decision, P2B7V)
+
+Every visible category label is Title Case — "Snacks & Sweets", "Pantry &
+Staples". Seven of the twelve changed; five were already Title Case
+(Seafood, Bakery, Beverages, Supplements, Other).
+
+| Id                  | Before              | After                   |
+| ------------------- | ------------------- | ----------------------- |
+| `produce`           | Fruits & vegetables | Fruits & Vegetables     |
+| `meat_poultry`      | Meat & poultry      | Meat & Poultry          |
+| `seafood`           | Seafood             | Seafood (unchanged)     |
+| `dairy_eggs`        | Dairy & eggs        | Dairy & Eggs            |
+| `prepared_foods`    | Prepared foods      | Prepared Foods          |
+| `bakery_grains`     | Bakery              | Bakery (unchanged)      |
+| `snacks_sweets`     | Snacks & sweets     | Snacks & Sweets         |
+| `beverages`         | Beverages           | Beverages (unchanged)   |
+| `pantry_condiments` | Pantry & staples    | Pantry & Staples        |
+| `baby_food_formula` | Baby food & formula | Baby Food & Formula     |
+| `supplements`       | Supplements         | Supplements (unchanged) |
+| `other`             | Other               | Other (unchanged)       |
+
+**One shared mapping, so nothing can drift.** `foodCategoryLabel` is the only
+display mapping, and every surface reads it: the card tag (via
+`cardCategoryLabel`), the Category filter's options (via
+`LAUNCH_CATEGORY_OPTIONS`), the selected-filter copy, the card's
+accessibility label, and the design previews. `category-tag.test.ts` asserts
+Title Case across the whole vocabulary AND that the card, the chip and the
+spoken label are the identical string for every id, so a card can never spell
+an aisle differently from the chip that filters for it.
+
+**This is presentation only.** No identifier, membership, ordering, filtering,
+search membership, ranking, persistence or projection moved, and every id
+stays `lower_snake_case`.
+
+**The freeze.** `src/domain/food-category.ts` is a frozen classifier file, so
+its hash was amended with a recorded `displayOnlyAmendments` entry in
+`category-freeze-manifest.json` naming the milestone, the exact label changes
+and what did not change. `category-evaluation.test.ts` proves the amendment is
+safe rather than a loophole: the derivation cannot read a label at all — no
+deciding module calls `foodCategoryLabel`, the vocabulary defines it and calls
+it nowhere, and every prediction is a set of ids. A change to the ids, their
+order or the cap still fails the hash with nothing to excuse it.
 
 ### Two labels deliberately do not match their ids
 
 `bakery_grains` reads **"Bakery"** and `pantry_condiments` reads **"Pantry &
-staples"**. The derivation files flour, rice, pasta and cereal under
+Staples"**. The derivation files flour, rice, pasta and cereal under
 `pantry_condiments`; a label promising grains under Bakery would send a shopper
 looking for a flour recall to the wrong chip. The ids keep their spelling —
 this is a label clarification, not a taxonomy migration.

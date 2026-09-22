@@ -138,10 +138,11 @@ test('Detail renders from the presentation model, not its own formatting', () =>
 
 test('the recall quantity is narrative the model composed, never screen styling (P3C-1)', () => {
   // The quantity sentence belongs to What Happened, in the same body type as
-  // the reason it follows. The screen has no quantity slot at all: it cannot
-  // compose one, cannot mute one, and cannot order it after the illness
-  // status. `recall-presentation.test.ts` pins the model side — that the
-  // narrative ends with the quantity sentence when the source states one.
+  // the cause it follows — from P2B7V as its own PARAGRAPH rather than glued
+  // onto the cause sentence. The screen still has no quantity slot at all: it
+  // cannot compose one, cannot mute one, and cannot order it after the
+  // illness status. `recall-presentation.test.ts` pins the model side — that
+  // `scope` carries the sentence and `text` never does.
   assert.ok(!DETAIL.includes('quantityLine'), 'Detail styles a standalone quantity line');
   assert.ok(!DETAIL.includes('The recall covers'), 'Detail composes quantity copy of its own');
   assert.ok(!DETAIL.includes('quantityText'), 'Detail reads the raw quantity fact');
@@ -155,9 +156,11 @@ test('the recall quantity is narrative the model composed, never screen styling 
     'Detail de-duplicates the narrative itself',
   );
   assert.ok(!DETAIL.includes('deriveIllnessStatus('), 'Detail classifies illness prose itself');
-  // And What Happened is now exactly ONE line of body text: the narrative.
-  // The muted Update line the P1 contract put beside it is gone with its
-  // generator (P2B7Q.1), so the section has no secondary text at all.
+  // What Happened is exactly TWO body paragraphs and no more: the cause, and
+  // the optional recall-scope sentence (P2B7V). Both are `body-small` and
+  // neither is muted — the muted Update line the P1 contract put beside them
+  // is gone with its generator (P2B7Q.1), so the section still has no
+  // secondary text at all and no third slot for one to come back into.
   const section = DETAIL.slice(
     DETAIL.indexOf('<Section title="What Happened">'),
     DETAIL.indexOf('{/* Where it was sold'),
@@ -169,9 +172,22 @@ test('the recall quantity is narrative the model composed, never screen styling 
   );
   assert.equal(
     section.match(/<Text /g)?.length ?? 0,
-    1,
-    'What happened renders more than one line',
+    2,
+    'What happened renders something other than the cause and the scope paragraph',
   );
+  // The second paragraph is the model's `scope` and nothing else, rendered in
+  // the SAME body type as the cause: it is prose, never a badge or a heading.
+  assert.match(section, /model\.whatHappened\.scope/);
+  assert.equal(
+    section.match(/variant="body-small"/g)?.length ?? 0,
+    2,
+    'the scope paragraph is not the cause paragraph’s body type',
+  );
+  // Absent scope renders NOTHING — no paragraph, no gap, no empty wrapper.
+  assert.match(section, /model\.whatHappened\.scope \? \([\s\S]*?\) : null/);
+  // The screen never re-derives which paragraph a sentence belongs to.
+  assert.ok(!section.includes('recallQuantitySentence'), 'Detail derives the scope sentence');
+  assert.ok(!section.includes('.split('), 'Detail splits the narrative into paragraphs itself');
   // Comments stripped: the screen documents in prose exactly what it no
   // longer does, and must be allowed to say so.
   const detailCode = codeOnly(DETAIL);
@@ -466,7 +482,7 @@ test('P1B: Health Risk renders the model-decided standardized section', () => {
   // The symptom list is a labelled bulleted group with list semantics, and
   // each symptom is one accessible node labelled with the symptom alone, so
   // the bullet glyph is never announced.
-  assert.match(DETAIL, /Common symptoms/);
+  assert.match(DETAIL, /Common symptoms:/);
   assert.match(DETAIL, /accessibilityRole="list"/);
   assert.match(DETAIL, /accessibilityLabel=\{symptom\}/);
   // The official source link is an accessible link whose LABEL comes from the

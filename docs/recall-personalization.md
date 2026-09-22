@@ -535,8 +535,32 @@ The states selector is the one place in the app that edits a draft.
 - The rows come from the search query alone, so a jurisdiction checked before
   a search was typed stays checked while the search hides it, and is still
   there when the search is cleared.
-- `Clear selection` empties the draft and keeps the sheet open. Nothing is
-  saved, so a clear pressed by mistake is undone by leaving.
+- **`Clear selection` is permanently allocated (P2B7V).** It renders in the
+  same place on every visit, whether or not anything is checked, and it
+  empties the draft and keeps the sheet open. Nothing is saved, so a clear
+  pressed by mistake is undone by leaving.
+
+  It used to render only while something was checked. That meant checking the
+  FIRST jurisdiction inserted a 44pt pill above the list and clearing the LAST
+  one removed it, so all 52 rows jumped down and back up under the shopper's
+  finger at exactly the moment they were aiming at one. Allocating the control
+  permanently is what makes the list stand still.
+
+  With an empty draft the control is **inert, not absent**: pressing it
+  changes no state, saves nothing, dismisses nothing, dirties nothing and
+  announces nothing. The no-op is enforced in two independent places so that
+  removing either alone cannot reintroduce a mutation —
+
+  - the control is `disabled`, which also gives the state a spoken channel;
+  - `clearStateDraft` (lib/personalization-screen.ts) returns **the same draft
+    reference** it was handed when the draft is already empty, so React's
+    setter bails out, no render happens, and there is no dirty state for a
+    dismissal to have to discard.
+
+  The sheet's controls slot is pinned structurally: `settings-design.test.ts`
+  fails if any conditional appears inside it, so future conditional rendering
+  cannot bring the list movement back.
+
 - **`Done` writes the whole draft once and closes** — once however many times
   it is pressed, latched by the section that owns both halves of what Done
   does, and released only by the next opening.

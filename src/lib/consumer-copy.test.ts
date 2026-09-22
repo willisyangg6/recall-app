@@ -521,8 +521,9 @@ test('frozen and protected copy is still present, word for word', () => {
     codeOnly(read('lib', 'recall-presentation.ts')).includes("'Warning: This recall affects you.'"),
   );
   assert.ok(SCREENS.detail.includes('title="What Happened"'));
-  // P2B7H: the eyebrow keeps its caption treatment, cased as written.
-  assert.ok(SCREENS.detail.includes('Common symptoms'));
+  // P2B7H: the label keeps its caption treatment, cased as written. P2B7V
+  // added the colon and moved it to body colour.
+  assert.ok(SCREENS.detail.includes('Common symptoms:'));
   assert.ok(!SCREENS.detail.includes('COMMON SYMPTOMS'));
   // The approved P2B6C sentences themselves.
   assert.equal(DECLINED_TITLE, 'Thanks. Nothing was submitted.');

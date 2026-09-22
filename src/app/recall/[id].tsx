@@ -60,19 +60,17 @@ import { OfficialImageSet } from '@/components/ui/official-image-set';
 import { RiskLabel } from '@/components/ui/risk-label';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
-import {
-  color,
-  hitSlopToMinimum,
-  iconSize,
-  layout,
-  spacing,
-  typography,
-} from '@/constants/design-tokens';
+import { color, hitSlopToMinimum, layout, spacing, typography } from '@/constants/design-tokens';
 import {
   DETAIL_ERROR_FALLBACK,
   DETAIL_ERROR_TITLE,
   DETAIL_LOADING,
   DETAIL_MISSING,
+  DETAIL_TITLE_COLLAPSE_HINT,
+  DETAIL_TITLE_COLLAPSE_LABEL,
+  DETAIL_TITLE_EXPAND_HINT,
+  DETAIL_TITLE_EXPAND_LABEL,
+  DETAIL_TITLE_LINES,
   EXTERNAL_LINK_HINT,
   retractedNotice,
 } from '@/lib/detail-copy';
@@ -97,6 +95,15 @@ type LoadState =
 
 /** A link's visible footprint is one caption line; hitSlop makes it 44pt. */
 const LINK_HIT_SLOP = hitSlopToMinimum(typography['caption'].lineHeight);
+
+/**
+ * The title disclosure's footprint is one caption line too, and it stays that
+ * small on purpose — a 44pt pill under the product name would read as the
+ * screen's primary action. `hitSlop` grows the TARGET to the minimum without
+ * growing the mark, so the control is comfortably tappable while staying
+ * visually quiet.
+ */
+const TITLE_CONTROL_HIT_SLOP = hitSlopToMinimum(typography['caption'].lineHeight);
 
 /**
  * Whether the rendered product name had to break a single word across two
@@ -339,6 +346,12 @@ export default function RecallDetailScreen() {
   //                    rows can drop the state of rows that disappear.
   const [statesExpanded, setStatesExpanded] = useState(false);
   const [tableExpanded, setTableExpanded] = useState(false);
+  // The Detail title's four-line disclosure (P2B7V). `titleOverflows` is
+  // MEASURED — see the probe in the header — so a title that fits within four
+  // lines never gets a control, and `titleExpanded` is the reader's answer to
+  // the one it does get.
+  const [titleExpanded, setTitleExpanded] = useState(false);
+  const [titleOverflows, setTitleOverflows] = useState(false);
   const [openCells, setOpenCells] = useState<ReadonlySet<string>>(() => new Set());
   const prefs = usePreferences();
   // Latched once the name's own layout shows a word broken beside the hero:
@@ -346,6 +359,25 @@ export default function RecallDetailScreen() {
   // stacked, so the layout can never oscillate between the two shapes.
   const [stackedHeader, setStackedHeader] = useState(false);
   const insets = useSafeAreaInsets();
+
+  // Every per-recall disclosure resets when the route points at a DIFFERENT
+  // recall, so a title left expanded, a jurisdiction list left open or a
+  // table left grown can never carry over to the next one (P2B7V).
+  //
+  // Done DURING RENDER — React's documented way to adjust state when a prop
+  // changes — rather than in an effect. An effect would let one frame of the
+  // previous recall's expanded title paint before correcting itself, which is
+  // exactly the flicker this disclosure is supposed to avoid.
+  const [shownId, setShownId] = useState(id);
+  if (shownId !== id) {
+    setShownId(id);
+    setTitleExpanded(false);
+    setTitleOverflows(false);
+    setStatesExpanded(false);
+    setTableExpanded(false);
+    setOpenCells(new Set());
+    setStackedHeader(false);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -447,16 +479,77 @@ export default function RecallDetailScreen() {
           <View style={[styles.identityRow, stackedHeader && styles.identityStacked]}>
             <View style={styles.identity}>
               <View style={styles.titleBlock}>
+                {/* The visible title, clamped to four lines until the reader
+                    asks for the rest (P2B7V). It carries the FULL name as its
+                    accessibility label, so a clamp a sighted reader sees is
+                    never a clamp a screen reader hears — and every other
+                    consumer of the name (search, share, push, identity) reads
+                    the model, which this never shortens. */}
                 <Text
                   variant="heading-2"
                   accessibilityRole="header"
+                  accessibilityLabel={model.productName}
+                  numberOfLines={titleExpanded ? undefined : DETAIL_TITLE_LINES}>
+                  {model.productName}
+                </Text>
+                {/* The measuring copy. It renders the same string, in the same
+                    type, at the same width, with no clamp — but absolutely
+                    positioned, so it occupies no space and changes no layout,
+                    and hidden from assistive technology so it is never read.
+                    Its layout is where BOTH of the header's measured decisions
+                    come from:
+
+                      · whether the name overflows four lines, which is what
+                        decides whether the disclosure exists at all;
+                      · whether a single word had to break across lines, which
+                        stacks the header away from the hero tile.
+
+                    Measuring rather than counting characters is the point: a
+                    reader at an accessibility text size overflows at a title
+                    length a character heuristic would call short, and the same
+                    title beside a hero tile wraps in a 194pt column where it
+                    would not in a 358pt one. It stays mounted, so a Dynamic
+                    Type change or a rotation re-measures rather than leaving
+                    a stale answer. */}
+                <Text
+                  variant="heading-2"
+                  style={styles.titleProbe}
+                  accessible={false}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
                   onTextLayout={(event) => {
-                    if (!stackedHeader && splitsAWord(event.nativeEvent.lines)) {
-                      setStackedHeader(true);
-                    }
+                    const { lines } = event.nativeEvent;
+                    if (!stackedHeader && splitsAWord(lines)) setStackedHeader(true);
+                    const overflows = lines.length > DETAIL_TITLE_LINES;
+                    setTitleOverflows((prior) => (prior === overflows ? prior : overflows));
                   }}>
                   {model.productName}
                 </Text>
+                {/* Shown only when the name ACTUALLY overflows, so an ordinary
+                    short title carries no control at all. Quiet caption type
+                    in the secondary action colour, sitting with the title
+                    block: it reveals the rest of a name and must not read as
+                    the screen's primary action. */}
+                {titleOverflows ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: titleExpanded }}
+                    accessibilityHint={
+                      titleExpanded ? DETAIL_TITLE_COLLAPSE_HINT : DETAIL_TITLE_EXPAND_HINT
+                    }
+                    hitSlop={TITLE_CONTROL_HIT_SLOP}
+                    style={styles.titleControl}
+                    onPress={() => setTitleExpanded((prior) => !prior)}>
+                    {({ pressed }) => (
+                      <Text
+                        variant="caption"
+                        color="action/secondary"
+                        style={pressed && styles.pressedControl}>
+                        {titleExpanded ? DETAIL_TITLE_COLLAPSE_LABEL : DETAIL_TITLE_EXPAND_LABEL}
+                      </Text>
+                    )}
+                  </Pressable>
+                ) : null}
                 <Text variant="body-small" color="text/secondary">
                   {model.brand.text}
                 </Text>
@@ -496,10 +589,17 @@ export default function RecallDetailScreen() {
         {model.affectsYou ? <Callout tone="warning">{model.affectsYouBanner}</Callout> : null}
 
         {/* The narrative is assembled by the shared presentation contract
-            (P3C-1): the reason sentence and, where the source states one the
-            reason did not already carry, the recall quantity arrive as ONE
-            body paragraph. The screen composes and styles nothing — there is
-            no separate quantity slot.
+            (P3C-1, split in P2B7V): the cause paragraph, and — when the
+            source states a quantity the contract can read deterministically —
+            the recall's extent as an ORDINARY SECOND PARAGRAPH beneath it,
+            one normal paragraph gap apart.
+
+            The screen composes no sentence and decides no wording: it renders
+            `scope` when the model gives it one and renders nothing at all
+            otherwise — no paragraph, no gap, no empty element. The scope
+            sentence is body copy in the same type as the cause, never a
+            badge, tag, heading, card or section, and the model guarantees it
+            is never also inside `text`.
 
             Two things deliberately do NOT render here:
 
@@ -517,6 +617,9 @@ export default function RecallDetailScreen() {
               is deleted, not disabled. */}
         <Section title="What Happened">
           <Text variant="body-small">{model.whatHappened.text}</Text>
+          {model.whatHappened.scope ? (
+            <Text variant="body-small">{model.whatHappened.scope}</Text>
+          ) : null}
         </Section>
 
         {/* Where it was sold: only the full state representation (P2a founder
@@ -553,37 +656,64 @@ export default function RecallDetailScreen() {
               {statesExpanded ? whereSold.lead : whereSold.leadCollapsed}
             </Text>
           </View>
-          {/* The retailers the notice named (P2B7O) — the milestone P2a
-              deferred when it removed the retailer summary from this section,
-              and the ONLY surface in the app that shows retailers: Feed and
-              Saved carry none.
+          {/* The retailers the notice named (P2B7O; one inline row from
+              P2B7V) — the milestone P2a deferred when it removed the retailer
+              summary from this section, and the ONLY surface in the app that
+              shows retailers: Feed and Saved carry none.
 
               It sits UNDER the geography, never instead of it: where the
               product went is the answer this section owes every reader, and a
-              store list is a narrowing detail only some notices state. A
-              labelled block in the same shape as Health Risk's "Common
-              symptoms" — a quiet caption heading over the names in body type
-              — so the label and the names are each announced exactly once and
-              neither is a control. The model decides which names may appear
-              at all and hands over the finished list; the screen adds only
-              the heading. Null renders nothing: no heading, no empty row, no
-              spacing left behind.
+              store list is a narrowing detail only some notices state.
 
-              The heading says RETAILER, which is a deliberate founder
-              override of the app-wide shopper vocabulary that otherwise says
-              "store" and never "retailer" (lib/consumer-copy.test.ts, rule 4,
-              where this one label is the single carved-out exception).
-              Retailer is the right consumer concept HERE because it is the
-              word personalization already uses: a shopper picks the stores
-              they shop at under "Retailers" in their preferences, and this
-              block answers the same question on a specific recall. The rest
-              of the app still says "store". */}
+              ONE SENTENCE-STYLE ROW, in the same shape as the geography row
+              above it: the house glyph in the same leading column the
+              location pin occupies, then "Retailers:" and the names in ONE
+              text flow, so the label and the list read as a sentence and wrap
+              as one. It replaces a caption heading stacked over a second line
+              of names, which indented the names under nothing and split one
+              statement across two announcements.
+
+              The glyph is the Feed tab's own `home` — the house a shopper
+              already reads as "where you shop" in this app — and it comes
+              from the shared icon system, never an image asset of its own.
+
+              The model decides which names may appear at all and hands over
+              the finished, punctuated list; the screen adds only the label.
+              Null renders nothing: no row, no icon, no spacer, no wrapper.
+
+              The label says RETAILER, which is a deliberate founder override
+              of the app-wide shopper vocabulary that otherwise says "store"
+              and never "retailer" (lib/consumer-copy.test.ts, rule 4, where
+              this one label is the single carved-out exception). Retailer is
+              the right consumer concept HERE because it is the word
+              personalization already uses: a shopper picks the stores they
+              shop at under "Retailers" in their preferences, and this row
+              answers the same question on a specific recall. The rest of the
+              app still says "store". */}
           {whereSold.retailersNamed ? (
             <View style={styles.retailers}>
-              <Text variant="caption" color="text/secondary" accessibilityRole="header">
-                Retailers:
+              <View style={styles.retailerGlyph}>
+                <Icon name="home" size={12} color="icon/primary" />
+              </View>
+              {/* One Text, so "Retailers:" and the names are one flow: the
+                  list wraps under itself and every continuation line stays
+                  inside the text column, clear of the glyph beside it.
+
+                  ONE COLOUR for the whole sentence: the label is body text in
+                  `text/primary`, exactly like the names beside it. It was
+                  muted while it was a caption HEADING over a separate line;
+                  now that it opens the same sentence, muting it would split
+                  one statement into two visual registers.
+
+                  The label keeps a nested Text of its own — with no props of
+                  its own any more — because the consumer-copy contract's
+                  retailer exemption is an exact JSX-text match on this one
+                  string (lib/consumer-copy.test.ts, rule 4). Inlining it into
+                  the surrounding flow would hide the approved label from the
+                  check that scopes the override to exactly one screen. */}
+              <Text variant="body-small" style={styles.retailerText}>
+                <Text variant="body-small">Retailers:</Text> {whereSold.retailersNamed}
               </Text>
-              <Text variant="body-small">{whereSold.retailersNamed}</Text>
             </View>
           ) : null}
           {/* Community shopper reports (P1D) sit UNDER the official
@@ -615,8 +745,12 @@ export default function RecallDetailScreen() {
               ) : null}
               {healthRisk.symptoms ? (
                 <View style={styles.symptoms}>
-                  <Text variant="caption" color="text/secondary" accessibilityRole="header">
-                    Common symptoms
+                  {/* Body-text colour, like the symptoms beneath it, and a
+                      colon so it reads as the opening of the list rather than
+                      a muted eyebrow over it. Its `caption` size, weight,
+                      position and spacing are unchanged. */}
+                  <Text variant="caption" accessibilityRole="header">
+                    Common symptoms:
                   </Text>
                   <View accessibilityRole="list" style={styles.symptomList}>
                     {healthRisk.symptoms.map((symptom) => (
@@ -770,6 +904,25 @@ const styles = StyleSheet.create({
   titleBlock: {
     gap: spacing[4],
   },
+  // The measuring copy of the title (P2B7V). Absolutely positioned and
+  // transparent: it spans the identity column's real width, so it wraps
+  // exactly as the visible title does, while contributing no height of its
+  // own and catching no touches. It is never a fixed-height container — it
+  // has no height at all as far as the layout is concerned.
+  titleProbe: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    opacity: 0,
+    zIndex: -1,
+  },
+  titleControl: {
+    alignSelf: 'flex-start',
+  },
+  pressedControl: {
+    opacity: 0.6,
+  },
   linkPressable: {
     alignSelf: 'flex-start',
   },
@@ -814,14 +967,29 @@ const styles = StyleSheet.create({
   geographyText: {
     flex: 1,
   },
-  // Indented to the geography TEXT, not the glyph, so the retailers read as
-  // a detail of the location statement above them rather than a second
-  // top-level fact. A gapped column with no height of its own: the names
-  // wrap at any Dynamic Type setting instead of clipping.
+  // The retailer row: the SAME shape as the geography row above it — glyph in
+  // the leading column, text taking the rest — so the house sits exactly
+  // where the location pin sits and the two read as one pair of facts. The
+  // top margin is the separation between them, and it is the only thing
+  // keeping them apart: neither is indented relative to the other.
+  //
+  // No height of its own, and the text takes the remaining width (`flex: 1`),
+  // so a long list wraps inside the text column at any Dynamic Type setting
+  // rather than clipping or running back under the glyph.
   retailers: {
     marginTop: spacing[8],
-    marginLeft: iconSize[12] + spacing[4],
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: spacing[4],
+  },
+  // One body-small line tall, so the glyph stays centred on the FIRST line of
+  // the sentence at any reader type size — the same rule the pin follows.
+  retailerGlyph: {
+    height: typography['body-small'].lineHeight,
+    justifyContent: 'center',
+  },
+  retailerText: {
+    flex: 1,
   },
   // The Health Risk symptom list: a labelled group of bulleted lines in the
   // section's body type — no card, no icon, no alert treatment.

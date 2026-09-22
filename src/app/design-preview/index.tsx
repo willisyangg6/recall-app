@@ -2039,9 +2039,15 @@ function DetailTitleGallery({ items }: { items: FeedItem[] }) {
  * about 194pt wide, which is why the notice is auto-width and shrinkable
  * rather than a full-width band.
  *
- * The founder's rule is visible in the last four rows: an injury, an adverse
- * reaction, a hospitalization and a mixed figure each produce NO notice, and
- * each sentence stays in the narrative exactly as the source wrote it.
+ * The founder's rule is visible in the injury, adverse-reaction and
+ * mixed-figure rows: each produces NO notice, and each sentence stays in the
+ * narrative exactly as the source wrote it.
+ *
+ * P2B7V: each established harm is its OWN box, stacked on one left edge in a
+ * fixed order — illnesses, hospitalizations, deaths — wearing the risk
+ * treatment that matches it (high, very high, critical). The rows below cover
+ * every combination the live corpus contains, so the severity ordering and
+ * the singular/plural grammar are both visible at a glance.
  */
 const ILLNESS_STATES: readonly { caption: string; source: string }[] = [
   { caption: '1 illness', source: 'One consumer illness has been reported to date.' },
@@ -2077,9 +2083,29 @@ const ILLNESS_STATES: readonly { caption: string; source: string }[] = [
       'There have been no confirmed reports of adverse reactions due to consumption of these products.',
   },
   {
-    caption: 'hospitalization and death — retained in What Happened, never in the notice',
+    caption: 'illnesses + hospitalizations + deaths — three boxes, three treatments (10ebfa06)',
     source:
       'To date, there have been 9 illnesses, 8 hospitalizations, and 1 death linked to the soft cheese products.',
+  },
+  {
+    caption: 'illnesses + 1 death — the Soft Ricotta / La Colonia case (f8a2c8ab)',
+    source: 'There have been 12 illnesses and 1 death linked to these products.',
+  },
+  {
+    caption: 'illnesses + plural deaths (fca62f93)',
+    source: 'There have been 38 illnesses and 11 deaths linked to these products.',
+  },
+  {
+    caption: 'illnesses + hospitalizations, no death (decd41aa)',
+    source: 'Three illnesses and three hospitalizations have been reported.',
+  },
+  {
+    caption: 'hospitalization ALONE — no illness box at all (2c491bc9)',
+    source: 'One hospitalization due to Listeria monocytogenes has been reported to date.',
+  },
+  {
+    caption: 'hospitalizations without a count (c4f8c9e4)',
+    source: 'Two illnesses have been reported. Hospitalizations have been reported.',
   },
   {
     caption: 'mixed figure — no fabricated illness count; the statement is retained',

@@ -168,9 +168,39 @@ test('the state selector: a multi-select sheet that stays open, drafts every cha
   assert.ok(!content.includes('onDone()'), 'nothing but the action completes the selection');
 
   // Clear empties the draft and stays open — no commit, no dismissal.
-  assert.ok(content.includes('onPress={() => setDraft([])}'));
-  assert.ok(content.includes('{draft.length > 0 ? ('), 'Clear selection only while something is');
+  assert.ok(content.includes('onPress={onClear}'));
   assert.ok(content.includes('label={STATE_CLEAR_LABEL}'));
+
+  // P2B7V — `Clear selection` is PERMANENTLY allocated. The controls slot is
+  // a fixed two-element column, so choosing the first state or clearing the
+  // last one can never insert or remove a pill above the list and shift all
+  // 52 rows. This is the structural pin: no conditional may appear inside the
+  // controls slot at all, which is what stops a later change from quietly
+  // reintroducing the jump.
+  const controls = content.slice(
+    content.indexOf('const controls = ('),
+    content.indexOf('const list ='),
+  );
+  assert.ok(controls.includes('<Button'), 'the clear control left the controls slot');
+  assert.ok(!controls.includes('draft.length > 0 ?'), 'Clear selection is conditional again');
+  assert.ok(!/\?\s*\(/.test(controls), 'a conditional reached the pinned controls slot');
+  assert.ok(!controls.includes('&&'), 'a conditional reached the pinned controls slot');
+  // With nothing checked it is inert rather than absent, and the handler is
+  // guarded too: removing either guard alone cannot make an empty clear
+  // mutate, dismiss, or dirty the draft.
+  assert.ok(controls.includes('disabled={draft.length === 0}'));
+  // The no-op itself is the shared model's, not a rule this component keeps:
+  // `clearStateDraft` is unit-tested on its behaviour in
+  // `lib/personalization-screen.test.ts`.
+  assert.ok(content.includes('const onClear = useCallback(() => setDraft(clearStateDraft), []);'));
+  // The no-op reaches nothing else: no commit, no dismissal, no save.
+  const clear = content.slice(
+    content.indexOf('const onClear'),
+    content.indexOf('// The controls slot'),
+  );
+  for (const forbidden of ['onCommit', 'onRequestClose', 'setOpen', 'onDone']) {
+    assert.ok(!clear.includes(forbidden), `Clear selection reaches ${forbidden}`);
+  }
 
   // The draft is seeded from the SAVED selection and is the component's own.
   assert.ok(content.includes('const [draft, setDraft] = useState<readonly string[]>(selected);'));

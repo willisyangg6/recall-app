@@ -13,7 +13,7 @@
  * pathogen, foreign material). This says WHAT was recalled. They are
  * independent, and conflating them is the single most damaging error this
  * module exists to prevent: undeclared milk in a potato chip is a
- * Snacks & sweets recall, never a Dairy & eggs one. The derivation's input
+ * Snacks & Sweets recall, never a Dairy & Eggs one. The derivation's input
  * type (`CategoryCaseInput`) structurally cannot accept a hazard, an
  * allergen, a pathogen, a recalling firm, a brand, or a retailer.
  *
@@ -22,6 +22,16 @@
  * 1. IDs are stable and separate from labels. The id is persisted and
  *    filtered on; the label is a display string that may be reworded without
  *    a data migration. Nothing outside this file may hard-code a label.
+ *
+ *    That separation is what made P2B7V a one-line change per category: the
+ *    founder asked for Title Case on every visible category label ("Snacks &
+ *    Sweets", "Pantry & Staples"), and because `foodCategoryLabel` here is
+ *    the ONE display mapping — read by the card tag, by the Category filter's
+ *    options, by the selected-filter copy, by the card's accessibility label
+ *    and by the design previews alike — the words could not drift between a
+ *    card and the chip that filters for it. No identifier, no membership, no
+ *    ranking, no persistence and no projection moved: this is presentation
+ *    capitalization, not a taxonomy change.
  *
  * 2. `other` is a real member of the vocabulary, and the derivation is TOTAL:
  *    every case carries at least one category. C5.3B-2 deliberately emitted
@@ -74,13 +84,13 @@ export interface FoodCategory {
 export const FOOD_CATEGORIES: readonly FoodCategory[] = [
   {
     id: 'produce',
-    label: 'Fruits & vegetables',
+    label: 'Fruits & Vegetables',
     definition:
       'Fresh, frozen, or dried fruits, vegetables, mushrooms, sprouts, and salad components.',
   },
   {
     id: 'meat_poultry',
-    label: 'Meat & poultry',
+    label: 'Meat & Poultry',
     definition: 'Beef, pork, chicken, turkey, lamb, deli meats, and jerky sold as meat products.',
   },
   {
@@ -90,12 +100,12 @@ export const FOOD_CATEGORIES: readonly FoodCategory[] = [
   },
   {
     id: 'dairy_eggs',
-    label: 'Dairy & eggs',
+    label: 'Dairy & Eggs',
     definition: 'Milk, cheese, yogurt, butter, ice cream, and eggs.',
   },
   {
     id: 'prepared_foods',
-    label: 'Prepared foods',
+    label: 'Prepared Foods',
     definition:
       'Entrées, pizzas, sandwiches, soups, prepared salads, tamales, and other ready-to-eat or ready-to-heat dishes.',
   },
@@ -113,7 +123,7 @@ export const FOOD_CATEGORIES: readonly FoodCategory[] = [
   },
   {
     id: 'snacks_sweets',
-    label: 'Snacks & sweets',
+    label: 'Snacks & Sweets',
     definition: 'Chips, popcorn, chocolate, candy, snack bars, and similar snack products.',
   },
   {
@@ -124,13 +134,13 @@ export const FOOD_CATEGORIES: readonly FoodCategory[] = [
   {
     id: 'pantry_condiments',
     /** See `bakery_grains`: grain staples live here, so the label says staples. */
-    label: 'Pantry & staples',
+    label: 'Pantry & Staples',
     definition:
       'Flour, grains, pasta, rice, cereal, sauces, spices, oils, nuts, seeds, and similar pantry products.',
   },
   {
     id: 'baby_food_formula',
-    label: 'Baby food & formula',
+    label: 'Baby Food & Formula',
     definition:
       'Infant formula, baby food, and products explicitly sold as infant/baby feeding products.',
   },
@@ -182,7 +192,14 @@ export function foodCategory(id: FoodCategoryId): FoodCategory | undefined {
   return BY_ID.get(id);
 }
 
-/** Consumer label for an id; the raw id if it is somehow unknown. */
+/**
+ * THE consumer label for an id — the single shared display mapping every
+ * surface reads; the raw id if it is somehow unknown.
+ *
+ * Title Case, by founder decision (P2B7V). There is no second formatter and
+ * no per-surface casing rule: a card and the chip that filters for it spell
+ * the identical string because they call this same function.
+ */
 export function foodCategoryLabel(id: FoodCategoryId): string {
   return BY_ID.get(id)?.label ?? id;
 }

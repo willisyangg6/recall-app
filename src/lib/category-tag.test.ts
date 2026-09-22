@@ -26,7 +26,11 @@ import {
   foodCategoryLabel,
   type FoodCategoryId,
 } from '@/domain/food-category';
-import { HIDDEN_LAUNCH_CATEGORY_IDS, LAUNCH_CATEGORY_IDS } from '@/domain/food-category-launch';
+import {
+  HIDDEN_LAUNCH_CATEGORY_IDS,
+  LAUNCH_CATEGORY_IDS,
+  LAUNCH_CATEGORY_OPTIONS,
+} from '@/domain/food-category-launch';
 import type { FeedItem } from '@/lib/recall-feed';
 import { buildHomeCardModel, cardCategoryLabel } from '@/lib/recall-presentation';
 
@@ -77,7 +81,7 @@ const labelOf = (categories: FoodCategoryId[] | undefined): string | null =>
 test('the stored category — and only the stored category — reaches the card model', () => {
   // The projection's own ids, read off the feed row, become the card's word.
   assert.equal(labelOf(['bakery_grains']), 'Bakery');
-  assert.equal(labelOf(['produce']), 'Fruits & vegetables');
+  assert.equal(labelOf(['produce']), 'Fruits & Vegetables');
   // The model field exists on every card, and is null rather than absent, so
   // no screen has to distinguish "no category" from "field not built".
   const model = buildHomeCardModel(item(), { today: TODAY, prefs: null });
@@ -93,21 +97,74 @@ test('every launch-visible id maps to its exact frozen label, and nothing else s
   assert.deepEqual(
     LAUNCH_CATEGORY_IDS.map((id) => [id, cardCategoryLabel([id])]),
     [
-      ['produce', 'Fruits & vegetables'],
-      ['meat_poultry', 'Meat & poultry'],
+      ['produce', 'Fruits & Vegetables'],
+      ['meat_poultry', 'Meat & Poultry'],
       ['seafood', 'Seafood'],
-      ['dairy_eggs', 'Dairy & eggs'],
+      ['dairy_eggs', 'Dairy & Eggs'],
       ['bakery_grains', 'Bakery'],
-      ['snacks_sweets', 'Snacks & sweets'],
+      ['snacks_sweets', 'Snacks & Sweets'],
       ['beverages', 'Beverages'],
-      ['pantry_condiments', 'Pantry & staples'],
-      ['baby_food_formula', 'Baby food & formula'],
+      ['pantry_condiments', 'Pantry & Staples'],
+      ['baby_food_formula', 'Baby Food & Formula'],
     ],
   );
   // The word is the vocabulary's, never a copy: the tag and the Category
   // filter chip cannot disagree about how an aisle is spelled.
   for (const id of LAUNCH_CATEGORY_IDS) {
     assert.equal(cardCategoryLabel([id]), foodCategoryLabel(id));
+  }
+});
+
+test('P2B7V: every visible category label is Title Case, on every surface at once', () => {
+  // The founder's rule, applied to the WHOLE vocabulary rather than to the
+  // two labels that prompted it: every significant word of a visible category
+  // label is capitalized. "&" joins two capitalized words and is not one.
+  for (const id of FOOD_CATEGORY_IDS) {
+    const label = foodCategoryLabel(id);
+    for (const word of label.split(/\s+/)) {
+      if (word === '&') continue;
+      assert.match(word, /^[A-Z]/, `"${label}" (${id}) is not Title Case`);
+    }
+  }
+  // The two the founder named, exactly.
+  assert.equal(foodCategoryLabel('snacks_sweets'), 'Snacks & Sweets');
+  assert.equal(foodCategoryLabel('pantry_condiments'), 'Pantry & Staples');
+
+  // ONE mapping, so a card and the chip that filters for it cannot drift:
+  // the card model, the filter's options and the card's spoken label are all
+  // the same string, derived from the same function, for every id.
+  for (const option of LAUNCH_CATEGORY_OPTIONS) {
+    const id = option.value as FoodCategoryId;
+    assert.equal(option.label, foodCategoryLabel(id), `filter chip drifted for ${id}`);
+    assert.equal(cardCategoryLabel([id]), option.label, `card drifted for ${id}`);
+    // The spoken label is the same string, named once: the component builds
+    // it as `Category: <label>` from whatever the card was given, so it can
+    // only drift if the card does. (Asserted from source because this suite
+    // cannot import a React Native component.)
+  }
+
+  assert.match(
+    readFileSync(join(__dirname, '..', 'components', 'ui', 'category-tag.tsx'), 'utf8'),
+    /return `Category: \$\{label\}`;/,
+  );
+
+  // Presentation only: re-casing moved no identifier and no membership.
+  assert.deepEqual(FOOD_CATEGORY_IDS.slice(), [
+    'produce',
+    'meat_poultry',
+    'seafood',
+    'dairy_eggs',
+    'prepared_foods',
+    'bakery_grains',
+    'snacks_sweets',
+    'beverages',
+    'pantry_condiments',
+    'baby_food_formula',
+    'supplements',
+    'other',
+  ]);
+  for (const id of FOOD_CATEGORY_IDS) {
+    assert.match(id, /^[a-z_]+$/, 'an identifier took display casing');
   }
 });
 
@@ -158,15 +215,15 @@ test('the displayable set is exactly the filter’s offered set — one list, no
 
 test('a multi-category case shows exactly one label, deterministically, in canonical order', () => {
   // Real shapes from the live corpus (npm run qa:product-categories).
-  assert.equal(cardCategoryLabel(['meat_poultry', 'bakery_grains']), 'Meat & poultry');
-  assert.equal(cardCategoryLabel(['dairy_eggs', 'pantry_condiments']), 'Dairy & eggs');
-  assert.equal(cardCategoryLabel(['meat_poultry', 'seafood']), 'Meat & poultry');
+  assert.equal(cardCategoryLabel(['meat_poultry', 'bakery_grains']), 'Meat & Poultry');
+  assert.equal(cardCategoryLabel(['dairy_eggs', 'pantry_condiments']), 'Dairy & Eggs');
+  assert.equal(cardCategoryLabel(['meat_poultry', 'seafood']), 'Meat & Poultry');
   // The canonical DISPLAY order decides, not the stored array's order, so a
   // list that reached the client out of order still reads the same.
-  assert.equal(cardCategoryLabel(['bakery_grains', 'meat_poultry']), 'Meat & poultry');
-  assert.equal(cardCategoryLabel(['pantry_condiments', 'dairy_eggs']), 'Dairy & eggs');
+  assert.equal(cardCategoryLabel(['bakery_grains', 'meat_poultry']), 'Meat & Poultry');
+  assert.equal(cardCategoryLabel(['pantry_condiments', 'dairy_eggs']), 'Dairy & Eggs');
   // A hidden id never suppresses the visible one beside it, and never wins.
-  assert.equal(cardCategoryLabel(['prepared_foods', 'pantry_condiments']), 'Pantry & staples');
+  assert.equal(cardCategoryLabel(['prepared_foods', 'pantry_condiments']), 'Pantry & Staples');
   assert.equal(cardCategoryLabel(['prepared_foods', 'bakery_grains']), 'Bakery');
   // Every hidden id, and nothing else, means no tag at all.
   assert.equal(cardCategoryLabel(['prepared_foods', 'supplements']), null);

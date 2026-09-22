@@ -611,8 +611,10 @@ test('recorded regression: Bacillus cereus casing survives (Little Remedies, a2)
   const a2 = modelsOf('a2-platinum-usa-label');
   assert.equal(
     a2.detail.whatHappened.text,
-    'a2 recalled a2 Platinum Premium Infant Formula 0-12 months USA label because of presence of cereulide toxin produced by some strains of the bacterium Bacillus cereus. The recall covers 16,428 units.',
+    'a2 recalled a2 Platinum Premium Infant Formula 0-12 months USA label because of presence of cereulide toxin produced by some strains of the bacterium Bacillus cereus.',
   );
+  // P2B7V: the extent is its own paragraph; the corrected casing is unchanged.
+  assert.equal(a2.detail.whatHappened.scope, 'The recall covers 16,428 units.');
 });
 
 test('recorded regression: the Talaromyces genus casing survives (Comforts baby water)', () => {
@@ -627,13 +629,15 @@ test('recorded regression: vitamin designations keep their letter uppercase (Nor
   const nordic = modelsOf('nordic-naturals');
   assert.equal(
     nordic.detail.whatHappened.text,
-    'Nordic Naturals recalled Baby’s Vitamin D3 Liquid because of elevated level of vitamin D3 dosage. The recall covers 3,800 units.',
+    'Nordic Naturals recalled Baby’s Vitamin D3 Liquid because of elevated level of vitamin D3 dosage.',
   );
+  assert.equal(nordic.detail.whatHappened.scope, 'The recall covers 3,800 units.');
   const perrigo = modelsOf('perrigo-issues-voluntary-recall');
   assert.equal(
     perrigo.detail.whatHappened.text,
-    'Perrigo Company recalled Premium Infant Formula with Iron Milk-Based Powder because the products contain levels of vitamin D above the maximum level permitted. The recall covers 16,500 cans.',
+    'Perrigo Company recalled Premium Infant Formula with Iron Milk-Based Powder because the products contain levels of vitamin D above the maximum level permitted.',
   );
+  assert.equal(perrigo.detail.whatHappened.scope, 'The recall covers 16,500 cans.');
 });
 
 test('recorded preservation: generic source title casing still flattens to natural prose', () => {

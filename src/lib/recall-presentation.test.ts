@@ -13,7 +13,7 @@ import { test } from 'node:test';
 
 import { HAZARD_GUIDES } from '@/content/hazard-guides';
 import { deriveGeography } from '@/domain/geography-evidence';
-import { deriveIllnessStatus, illnessNoticeCopy } from '@/domain/illness-status';
+import { deriveIllnessStatus, illnessNoticeCopy, noticeTexts } from '@/domain/illness-status';
 import type { CaseProjection, Geography, TimelineEntry } from '@/domain/recall-types';
 import type { CaseDetail, CaseVisual, FeedItem } from './recall-feed';
 import type { RecallImage } from './recall-images';
@@ -491,8 +491,11 @@ test('the Detail model carries a notice, not an illness sentence', () => {
   const copy = illnessNoticeCopy(
     deriveIllnessStatus('One illness has been reported to date in connection with this product.'),
   );
-  assert.deepEqual(copy?.lines, ['1 illness reported']);
-  assert.equal(copy?.tone, 'reported');
+  assert.deepEqual(copy && noticeTexts(copy), ['1 illness reported']);
+  assert.deepEqual(
+    copy?.notices.map((n) => n.tone),
+    ['illnesses'],
+  );
 });
 
 test('an explicit denial reads as the informational state', () => {
@@ -501,8 +504,11 @@ test('an explicit denial reads as the informational state', () => {
       'No customer illnesses have been reported to date in connection with this problem.',
     ),
   );
-  assert.deepEqual(copy?.lines, ['No illnesses reported']);
-  assert.equal(copy?.tone, 'none');
+  assert.deepEqual(copy && noticeTexts(copy), ['No illnesses reported']);
+  assert.deepEqual(
+    copy?.notices.map((n) => n.tone),
+    ['none'],
+  );
 });
 
 test('source silence yields NO notice — never an inferred zero', () => {
@@ -521,9 +527,12 @@ test('the notice carries deaths on their own line, and still no injury or advers
   )!;
   // P2B7Q.1: a reported death is stated, on its own line, after the illness
   // line. Injuries and adverse reactions still have no status at all.
-  assert.deepEqual(copy.lines, ['Illnesses reported', '3 deaths reported']);
-  assert.doesNotMatch(`${copy.lines.join(' ')} ${copy.spoken}`, /injur|adverse/i);
-  assert.equal(copy.tone, 'reported');
+  assert.deepEqual(noticeTexts(copy), ['Illnesses reported', '3 deaths reported']);
+  assert.doesNotMatch(`${noticeTexts(copy).join(' ')} ${copy.spoken}`, /injur|adverse/i);
+  assert.deepEqual(
+    copy.notices.map((n) => n.tone),
+    ['illnesses', 'deaths'],
+  );
 });
 
 // ── 18: quantity ────────────────────────────────────────────────────────────
@@ -537,13 +546,11 @@ test('the complete authoritative quantity is preserved, untruncated', () => {
     }),
     { today: TODAY, affectsYou: false },
   );
-  // P3C-1: the quantity is a sentence of the What Happened narrative, not a
-  // field of its own — it reads in the same paragraph and the same body type
-  // as the reason sentence it follows.
-  assert.ok(
-    model.whatHappened.text.endsWith('The recall covers 120 cases of Enoki Mushroom 150g.'),
-    model.whatHappened.text,
-  );
+  // P3C-1, as split by P2B7V: the quantity is still narrative prose the model
+  // composed, in the same body type as the cause — but it is its OWN
+  // paragraph, so it lands in `scope` and never inside `text`.
+  assert.equal(model.whatHappened.scope, 'The recall covers 120 cases of Enoki Mushroom 150g.');
+  assert.ok(!model.whatHappened.text.includes('The recall covers'), model.whatHappened.text);
   // A stored span carrying a clipped reason tail keeps its complete quantity
   // (amount, unit, product) and drops only the non-quantity clause — the
   // mid-word artifact ("…of the Fo.") can never render.
@@ -553,12 +560,44 @@ test('the complete authoritative quantity is preserved, untruncated', () => {
     }),
     { today: TODAY, affectsYou: false },
   );
-  assert.ok(
-    clipped.whatHappened.text.endsWith(
-      'The recall covers 1,506 boxes of Goat Milk Formula Recipe Kit.',
-    ),
-    clipped.whatHappened.text,
+  assert.equal(
+    clipped.whatHappened.scope,
+    'The recall covers 1,506 boxes of Goat Milk Formula Recipe Kit.',
   );
+  assert.ok(!clipped.whatHappened.text.includes('The recall covers'));
+});
+
+test('a recall stating no quantity gets no scope paragraph at all (P2B7V)', () => {
+  // Null, not an empty string and not a placeholder sentence: the screen's
+  // only way to render nothing is for the model to give it nothing.
+  const model = buildDetailModel(
+    detail({ title: 'Acme Recalls Enoki Mushroom', productDescription: 'Enoki Mushroom' }),
+    { today: TODAY, affectsYou: false },
+  );
+  assert.equal(model.whatHappened.scope, null);
+  assert.ok(model.whatHappened.text.length > 0);
+});
+
+test('one scope sentence, never two, when both derivations fire (P2B7V)', () => {
+  // The live shape this rule exists for (case c5465671, measured): the
+  // summary prose writes the figure WITHOUT a thousands separator, so the
+  // prose derivation yields "The recall covers 1271 cases.", while the FDA
+  // projection stores "1,271 cases of Green Onions". The figures differ as
+  // strings, so the existing de-duplication cannot see them as one fact and
+  // Detail printed BOTH sentences in a single paragraph. The structured field
+  // wins, and the scope paragraph states the quantity exactly once.
+  const model = buildDetailModel(
+    detail({
+      title: 'Church Brothers Recalls Green Onions',
+      productDescription: 'Green Onions',
+      summaryText: 'Church Brothers is recalling 1271 cases of green onions.',
+      quantityText: '1,271 cases of green onions',
+    }),
+    { today: TODAY, affectsYou: false },
+  );
+  assert.equal(model.whatHappened.scope, 'The recall covers 1,271 cases of green onions.');
+  const whole = `${model.whatHappened.text} ${model.whatHappened.scope}`;
+  assert.equal(whole.match(/The recall covers/g)?.length, 1, whole);
 });
 
 // ── 19: geography ───────────────────────────────────────────────────────────
@@ -645,12 +684,80 @@ test('the Where It Was Sold model has no separate consumer AREAS field but keeps
   const sold = whereSoldModel(consumer.distribution);
   assert.equal(sold.retailerCount, 5);
   assert.equal(sold.retailers.length, 5);
-  // P2B7O: the NAMES only — Detail supplies the "Retailers named in the
-  // notice" heading. Every nameable store is listed: a "+N more" would hide
-  // stores with no way to reveal them, and the heading already scopes the
-  // claim to what the announcement said.
-  assert.equal(sold.retailersNamed, 'Kroger, Safeway, Albertsons, Aldi, Wegmans');
+  // P2B7O: the NAMES only — Detail supplies the "Retailers:" label. Every
+  // nameable store is listed: a "+N more" would hide stores with no way to
+  // reveal them, and the label already scopes the claim to what the
+  // announcement said.
+  //
+  // P2B7V punctuates them with the shared `joinNames`, so one, two and three
+  // or more stores read as a sentence rather than a comma run.
+  assert.equal(sold.retailersNamed, 'Kroger, Safeway, Albertsons, Aldi, and Wegmans');
   assert.ok(!('areas' in sold));
+});
+
+test('P2B7V: the retailer list is punctuated as a sentence — one, two, three or more', () => {
+  const named = (statedRetailers: string[]) =>
+    whereSoldModel({
+      scopeType: 'unspecified',
+      areaText: '',
+      states: [],
+      areas: [],
+      coverage: [],
+      retailers: statedRetailers,
+      statedRetailers,
+      retailersShown: statedRetailers,
+      retailersHidden: 0,
+      retailLocations: [],
+      onlinePlatforms: [],
+      channels: [],
+      unspecified: false,
+    }).retailersNamed;
+
+  // The three founder-approved shapes.
+  assert.equal(named(['ALDI']), 'ALDI');
+  assert.equal(named(['ALDI', 'BJ’s']), 'ALDI and BJ’s');
+  assert.equal(named(['ALDI', 'Costco', 'BJ’s']), 'ALDI, Costco, and BJ’s');
+  assert.equal(
+    named(['Jay C', 'Kroger Marketplace', 'Owen’s', 'Ruler']),
+    'Jay C, Kroger Marketplace, Owen’s, and Ruler',
+  );
+
+  // No stores: NOTHING. Null is what lets Detail render no row, no icon and
+  // no spacer rather than an empty wrapper.
+  assert.equal(named([]), null);
+  // A gate-rejected place leaves no row either — suppression is not an empty
+  // list with punctuation around it.
+  assert.equal(named(['Roseville and Sacr']), null);
+
+  // A stored entry that carries its OWN conjunction is a store NAME and is
+  // never split: 19 live cases store one, and "Stop and Shop", "Smart &
+  // Final" and "Lunds & Byerlys" are single stores. Splitting them to tidy
+  // the punctuation would invent retailers.
+  assert.equal(named(['Stop and Shop']), 'Stop and Shop');
+  assert.equal(named(['Smart & Final']), 'Smart & Final');
+  assert.equal(named(['ALDI and BJ’s']), 'ALDI and BJ’s');
+  assert.equal(
+    named(['Big Y', 'Stop and Shop', 'Highland Park Markets']),
+    'Big Y, Stop and Shop, and Highland Park Markets',
+  );
+
+  // The same rule the jurisdictions use, so the two lists cannot diverge.
+  const states = whereSoldModel({
+    scopeType: 'states',
+    areaText: '',
+    states: ['California', 'Oregon', 'Texas'],
+    areas: [],
+    coverage: [],
+    retailers: [],
+    statedRetailers: [],
+    retailersShown: [],
+    retailersHidden: 0,
+    retailLocations: [],
+    onlinePlatforms: [],
+    channels: [],
+    unspecified: false,
+  });
+  assert.equal(states.lead, 'California, Oregon, and Texas');
 });
 
 test('the rendered retailer names come from the HARDENED field, never the wider evidence', () => {

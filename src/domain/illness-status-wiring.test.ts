@@ -198,9 +198,47 @@ test('the notice is informational — never a control', () => {
   assert.ok(!NOTICE.includes('accessibilityRole="button"'));
   assert.ok(!NOTICE.includes('accessibilityHint'), 'nothing to hint at — it does nothing');
   assert.match(NOTICE, /accessibilityRole="text"/);
-  // One accessible element speaking the contract's own sentence.
-  assert.match(NOTICE, /accessibilityLabel=\{copy\.spoken\}/);
+  // ONE accessible element PER BOX, each speaking that box's own contract
+  // sentence (P2B7V). The glyph stays decorative, so a reader hears "12
+  // illnesses reported" and never "warning, image".
+  assert.match(NOTICE, /accessibilityLabel=\{notice\.spoken\}/);
   assert.match(NOTICE, /accessible\b/);
+  assert.ok(!NOTICE.includes('accessibilityLabel={copy.'), 'the group speaks over its boxes');
+});
+
+test('one fact is one box: the boxes are never recombined into a shared container', () => {
+  // P2B7V. The defect this replaces is precise: three facts shared one
+  // outlined container under one glyph, so the second and third sat indented
+  // with no icon of their own and one treatment had to carry three
+  // severities. The component therefore maps the contract's boxes and renders
+  // each COMPLETE — its own border, its own glyph, its own treatment, its own
+  // accessible element.
+  assert.match(NOTICE, /copy\.notices\.map\(/);
+  // Exactly one bordered box definition, used per notice — not one wrapper
+  // border with lines inside it.
+  assert.equal((NOTICE.match(/borderWidth: 1/g) ?? []).length, 1);
+  // The glyph is rendered inside the per-notice box, keyed off that box's own
+  // tone: a single shared glyph above a list of lines cannot come back.
+  assert.match(NOTICE, /GLYPH\[notice\.tone\]/);
+  assert.match(NOTICE, /harmNoticePalette\[notice\.tone\]/);
+  // No stacked lines inside one box: nothing maps over a list of sentences.
+  assert.ok(!/\.lines\.map\(/.test(NOTICE), 'the boxes were recombined into stacked lines');
+  // And no notice is indented relative to another — the stack aligns them all
+  // to one left edge, and no box carries a leading inset of its own.
+  assert.match(NOTICE, /alignItems: 'flex-start'/);
+  assert.ok(!/marginLeft|paddingLeft/.test(NOTICE), 'a box carries unexplained left whitespace');
+});
+
+test('no harm box has a fixed height — every one grows with Dynamic Type', () => {
+  // The only `height` in the file is the glyph box, which is deliberately one
+  // caption LINE tall so the icon stays centred on the first line of text at
+  // any reader type size. A height on the box itself, or a minHeight, would
+  // clip a wrapped sentence at accessibility sizes.
+  const heights = NOTICE.match(/\bheight: [^,\n]+/g) ?? [];
+  assert.deepEqual(heights, ['height: typography.caption.lineHeight']);
+  assert.ok(!NOTICE.includes('minHeight'), 'a harm box has a minimum height');
+  assert.ok(!NOTICE.includes('maxHeight'));
+  assert.ok(!NOTICE.includes('numberOfLines'), 'a harm sentence can be truncated');
 });
 
 test('the notice is visually distinct from the Risk Label and the Affects You callout', () => {
@@ -232,9 +270,23 @@ test('the preview covers every production-relevant state, including the no-notic
     'unknown — no notice renders',
     'injury statement',
     'adverse-reaction statement',
-    'hospitalization and death',
     'mixed figure',
+    // P2B7V — every harm COMBINATION the live corpus contains, so the box
+    // ordering, the three treatments and the singular/plural grammar are all
+    // visible in the gallery rather than only in a test.
+    'illnesses + hospitalizations + deaths',
+    'illnesses + 1 death',
+    'illnesses + plural deaths',
+    'illnesses + hospitalizations, no death',
+    'hospitalization ALONE',
+    'hospitalizations without a count',
   ]) {
     assert.ok(PREVIEW.includes(state), `the preview covers: ${state}`);
   }
+  // The retired claim must not come back: hospitalizations and deaths are
+  // SHOWN here, not "retained in What Happened".
+  assert.ok(
+    !PREVIEW.includes('never in the notice'),
+    'the preview still claims a harm is kept out of the notice',
+  );
 });

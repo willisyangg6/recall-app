@@ -78,6 +78,16 @@ export const EDIT_STATES_LABEL = 'Edit states';
 export const STATE_TRIGGER_HINT = 'Opens the list of states.';
 export const STATE_SELECTOR_TITLE = 'Choose your states';
 export const STATE_CLEAR_LABEL = 'Clear selection';
+/**
+ * What pressing `Clear selection` does — and what it does NOT do (P2B7V).
+ *
+ * The control is PERMANENTLY allocated: it renders in the same place whether
+ * or not anything is checked, so choosing and clearing states never moves the
+ * 52-row list under the shopper's finger. With nothing checked it is inert,
+ * and the hint says the one thing a shopper needs to know either way — that
+ * clearing is still a draft edit and `Done` is what saves.
+ */
+export const STATE_CLEAR_HINT = 'Unchecks every state. Nothing is saved until you press Done.';
 /** The same words the questionnaire's searchable state list uses. */
 export const STATE_SEARCH_LABEL = 'Search states';
 export const STATE_SEARCH_PLACEHOLDER = 'Search states';
@@ -252,6 +262,21 @@ export function toggleStateCode(selected: readonly string[], code: string): stri
   return selected.includes(code)
     ? selected.filter((c) => c !== code)
     : orderStateCodes([...selected, code]);
+}
+
+/**
+ * What `Clear selection` does to a DRAFT list (P2B7V).
+ *
+ * The control is permanently allocated on the state sheet, so it is pressable
+ * — or at least present — when there is nothing to clear. Clearing nothing is
+ * a TRUE no-op, and this function is where that is guaranteed: given an empty
+ * draft it returns THE SAME REFERENCE it was handed, so React sees no new
+ * value, no re-render is caused, and no dirty-state transition exists for a
+ * dismissal to have to discard. It never saves, never commits, and never
+ * closes anything — it only answers what the draft becomes.
+ */
+export function clearStateDraft(draft: readonly string[]): readonly string[] {
+  return draft.length === 0 ? draft : [];
 }
 
 /** Adds the token at the end of the list, or removes it — the same shape the store saves. */

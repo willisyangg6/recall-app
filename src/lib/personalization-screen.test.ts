@@ -65,6 +65,7 @@ import {
   storeTriggerLabel,
   toggleAllergen,
   toggleRetailer,
+  clearStateDraft,
   toggleStateCode,
   UNSUPPORTED_STATE,
   withStates,
@@ -220,6 +221,37 @@ test('toggles add at the end and remove by filtering — the same shape the stor
 });
 
 // ── The jurisdiction draft ──────────────────────────────────────────────────
+
+test('Clear selection empties a draft, and clearing nothing is a true no-op (P2B7V)', () => {
+  // With something checked it empties the draft and nothing else.
+  assert.deepEqual(clearStateDraft(['CA', 'NY']), []);
+  assert.deepEqual(clearStateDraft(['CA']), []);
+
+  // With NOTHING checked it is a no-op in the strongest sense available: the
+  // SAME REFERENCE comes back, so React's state setter bails out, no render
+  // happens, and no dirty-state transition exists for a dismissal to discard.
+  // `deepEqual` would pass for a fresh `[]` too, which is exactly the
+  // regression this asserts against — hence identity.
+  const empty: readonly string[] = [];
+  assert.equal(clearStateDraft(empty), empty);
+  const frozen = Object.freeze(['CA', 'NY']) as readonly string[];
+  assert.notEqual(clearStateDraft(frozen), frozen);
+
+  // It never mutates the draft it was handed, cleared or not.
+  const draft = ['CA', 'NY'];
+  clearStateDraft(draft);
+  assert.deepEqual(draft, ['CA', 'NY']);
+
+  // Idempotent: clearing twice reaches the same answer as clearing once, and
+  // the second clear is itself the no-op.
+  const once = clearStateDraft(['CA', 'NY']);
+  assert.equal(clearStateDraft(once), once);
+
+  // Clearing is a DRAFT edit only: the function's whole signature is draft in,
+  // draft out. It cannot reach preferences, a store, or a dismissal, because
+  // it is handed none of them.
+  assert.equal(clearStateDraft.length, 1);
+});
 
 test('toggling a jurisdiction adds and removes it, in canonical order, never by tap order', () => {
   assert.deepEqual(toggleStateCode([], 'NY'), ['NY']);

@@ -627,10 +627,116 @@ review. Nothing here is a launch blocker — those live in
   Until then `state_code` stays, unread by application logic and maintained
   only as a projection.
 
-- **Final UI polish. RECORDED, NOT IMPLEMENTED.** Long Recall Detail title
-  expansion, and the final visual QA of the illness / hospitalization / death
-  / update treatments. Still the last presentation milestone; nothing in
-  P2B7U touched it.
+- **P2B7V — final UI polish. IMPLEMENTED 2026-09-21.** The last presentation
+  milestone: five shipped defects, each fixed as a general shared rule rather
+  than a case-specific patch. Nothing about ingestion, identity, search,
+  ranking, projections or material-change detection moved, and no production
+  data was written.
+
+  **1. `Clear selection` is permanently allocated.** It rendered only once a
+  state was checked, so checking the FIRST state inserted a 44pt pill above
+  the 52-row list and clearing the LAST one removed it — the whole list jumped
+  down and back up under the shopper's finger at the moment they were aiming
+  at a row. The control now renders in the same place on every visit and is
+  merely INERT when there is nothing to clear: pressing it then changes no
+  state, saves nothing, dismisses nothing, dirties nothing and announces
+  nothing. The no-op is enforced twice — `disabled` on the control, and
+  `clearStateDraft` returning the SAME draft reference — so removing either
+  guard alone cannot make an empty clear mutate. The sheet's controls slot is
+  structurally pinned: a test fails if any conditional reappears inside it.
+  Multi-state selection, search, `Done`, dismissal semantics and the P2B7U
+  additive server contract are unchanged.
+
+  **2. `What Happened` is two paragraphs.** The recall's EXTENT is a different
+  fact from its cause, and it read as a run-on: "…not declared on the label.
+  The recall covers 13,619 pounds of product." The scope sentence is now an
+  optional second paragraph under the cause, one normal paragraph gap apart —
+  ordinary body prose, never a badge, tag, heading, card or section. The split
+  is a `scope` field on the shared model (`buildWhatHappened`, `DetailModel`),
+  so the screen composes nothing and null renders nothing at all. **Measured
+  over the 898 consumer-visible active cases: 111 (12.4%) carry a scope
+  paragraph, 787 (87.6%) carry none, and 0 cause paragraphs still contain a
+  quantity.** Two things the split fixed on the way: 5 cases printed the SAME
+  quantity twice in one paragraph ("The recall covers 1271 cases. The recall
+  covers 1,271 cases of green onions.") because the two derivations formatted
+  the thousands separator differently — the scope slot now holds exactly one
+  sentence, and the agency's structured field wins; and 5 more derived a scope
+  sentence that never reached the screen at all, because an import-context
+  sentence had taken the single shared slot. No quantity is invented,
+  inferred, rounded or reworded, and the removed update note stays removed.
+
+  **3. Illnesses, hospitalizations and deaths are three separate boxes.**
+  P2B7Q.1 gave them their own lines inside ONE outlined container under ONE
+  glyph, which left the second and third indented with no icon of their own,
+  reading as a continuation of the first — and forced one treatment to carry
+  three different severities. Each established fact now gets its own compact
+  box, stacked vertically on one left edge, in the fixed order illnesses →
+  hospitalizations → deaths, each with the same warning glyph and the same
+  counted-sentence grammar. **Severity is the treatment, by founder decision:**
+  illnesses take `risk/high`, hospitalizations `risk/very-high`, deaths
+  `risk/critical`, and an explicit denial keeps the calm blue it has always
+  had. `harmNoticePalette` holds REFERENCES to the risk palette's own entries,
+  never copies of its values, so there is still exactly one definition of
+  Critical's red. This deliberately reverses P2B7K's "the Risk Label is the
+  only reader of `riskPalette`" rule for this one case; the narrower rule that
+  replaces it — severity is reached only through a named semantic map, and no
+  screen or component indexes the palette directly — is pinned in
+  `design-foundation.test.ts`. Every treatment clears WCAG AA with its glyph
+  tinted to match its text. The classifier, the stored flags, the repair plan,
+  source attribution and count derivation are untouched, and no Feed or Saved
+  badge was added.
+
+  **4. Category labels are Title Case.** "Snacks & Sweets", "Pantry &
+  Staples". Applied at `foodCategoryLabel`, which is already THE one display
+  mapping every surface reads — the card tag, the Category filter's options,
+  the selected-filter copy, the card's accessibility label and the design
+  previews — so a card and the chip that filters for it cannot drift. Seven of
+  the twelve labels changed; five were already Title Case. **No identifier,
+  membership, ordering, filtering, ranking, persistence or projection moved.**
+  `food-category.ts` is a frozen classifier file, so its hash was amended with
+  a recorded `displayOnlyAmendments` entry, and a new test proves the
+  amendment is safe: the derivation cannot read a label at all.
+
+  **5. Retailers are one inline row.** A caption heading stacked over a second
+  line of names became a single sentence-style row under the geography:
+  `[house] Retailers: ALDI, Costco, and BJ's`. The glyph is the Feed tab's own
+  `house`, from the shared icon system, in the same leading column the
+  location pin occupies above it; label and names share one text flow, so the
+  list wraps as one and is announced once. The list is punctuated by the SAME
+  `joinNames` the jurisdiction list uses — one, two, three-or-more — and each
+  stored entry is preserved verbatim: 19 of the 170 retailer-bearing cases
+  store a run the source wrote whole, and "Stop and Shop", "Smart & Final" and
+  "Lunds & Byerlys" are store NAMES, not two stores each. Detail only; Feed
+  and Saved carry none. No trusted-field filtering, display gate, search
+  membership or "Matched…" provenance changed.
+
+  **6. The Detail title collapses to four lines.** Only Detail; Feed and Saved
+  clamps are untouched. Overflow is MEASURED, not guessed: an off-layout probe
+  renders the same string in the same type at the same width with no clamp,
+  and its line count decides whether the control exists — a character
+  heuristic is wrong at accessibility text sizes and wrong beside the hero
+  tile, which are exactly the cases the control is for. A title that fits gets
+  no control at all; one that overflows gets a quiet caption-type
+  `Show full title` / `Show less` sitting with the title block. Expansion
+  removes the clamp entirely rather than raising it, and every per-recall
+  disclosure resets when the route points at a different recall — during
+  render, so no frame of the previous recall's expanded title can paint. The
+  FULL title remains what search matches, what a screen reader hears, and what
+  share, push, identity and de-duplication use. Nothing has a fixed height.
+
+  **Explicitly NOT in this milestone:** no new Feed or Saved badges, no change
+  to the illness classifier or stored flags, no change to the prepared
+  `repair:geography`, no resurrection of the update note or of
+  "What should I do?", no PHA/Affects-You redesign, no new design vocabulary,
+  no general long-geography audit, and no broad re-run of the P2B7Q consumer
+  copy audit.
+
+  Contracts: [DESIGN.md](DESIGN.md),
+  [docs/recall-personalization.md](docs/recall-personalization.md),
+  [docs/recall-copy-contract.md](docs/recall-copy-contract.md),
+  [docs/recall-illness-status.md](docs/recall-illness-status.md),
+  [docs/recall-food-categories.md](docs/recall-food-categories.md),
+  [docs/recall-feed-usability.md](docs/recall-feed-usability.md).
 
 - **P2B7Q — Lotly-authored copy audit. IMPLEMENTED 2026-09-20.** Every
   shopper-facing sentence Lotly CONSTRUCTS rather than reproduces verbatim was

@@ -29,7 +29,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { deriveIllnessStatus, illnessNoticeCopy } from '@/domain/illness-status';
+import { deriveIllnessStatus, illnessNoticeCopy, noticeTexts } from '@/domain/illness-status';
 import type { CaseProjection, TimelineEntry } from '@/domain/recall-types';
 import { displayableRetailerNames } from '@/domain/retailer-display';
 import { formatPushContent } from '@/server/push/format';
@@ -157,7 +157,10 @@ test('no update note reaches the model, from the richest Editor\u2019s Note in t
   );
   const model = detailOf({ summaryText: summary });
   assert.ok(!('update' in model.whatHappened), 'the DetailModel still carries an update field');
-  assert.deepEqual(Object.keys(model.whatHappened), ['text']);
+  // The cause paragraph and the optional recall-scope paragraph, and nothing
+  // else (P2B7V). A third slot is exactly where an update note would come
+  // back, so the field list is pinned rather than merely checked for 'update'.
+  assert.deepEqual(Object.keys(model.whatHappened).sort(), ['scope', 'text']);
   const rendered = JSON.stringify(model);
   for (const fragment of ['Editor', 'additional affected products', 'Updated Feb 9']) {
     assert.ok(!rendered.includes(fragment), `the model still carries "${fragment}"`);
@@ -176,8 +179,11 @@ test('buildWhatHappened returns text and provenance only \u2014 the generator is
     productDescription: null,
     consumerBrand: null,
   });
-  assert.deepEqual(Object.keys(happened).sort(), ['source', 'text']);
+  // `scope` is the recall's EXTENT, never an update note: it is built from a
+  // stated quantity alone and cannot carry Editor's Note prose (P2B7V).
+  assert.deepEqual(Object.keys(happened).sort(), ['scope', 'source', 'text']);
   assert.ok(!/additional|Editor|Updated/i.test(happened.text));
+  assert.ok(!/additional|Editor|Updated/i.test(happened.scope ?? ''));
 });
 
 test('the Detail screen renders no update line, and imports no generator', () => {
@@ -205,26 +211,28 @@ test('silence, denial and a count are three distinct illness answers', () => {
     summaryText:
       'There have been no confirmed reports of illness due to consumption of these products.',
   }).illnessNotice;
-  assert.deepEqual(denied?.lines, ['No illnesses reported']);
+  assert.deepEqual(denied && noticeTexts(denied), ['No illnesses reported']);
 
   const counted = detailOf({
     summaryText: 'There have been 3 reported illnesses associated with these products.',
   }).illnessNotice;
-  assert.deepEqual(counted?.lines, ['3 illnesses reported']);
+  assert.deepEqual(counted && noticeTexts(counted), ['3 illnesses reported']);
 
   // Nothing in the app converts the unknown state into either of the others.
-  assert.ok(!/\b0\b|none/i.test(denied?.lines.join(' ') ?? ''));
+  assert.ok(!/\b0\b|none/i.test(denied === null ? '' : (noticeTexts(denied).join(' ') ?? '')));
 });
 
 test('the illness count agrees with its number and its grammar', () => {
   assert.deepEqual(
-    detailOf({ summaryText: 'One illness has been reported in connection with this recall.' })
-      .illnessNotice?.lines,
+    detailOf({
+      summaryText: 'One illness has been reported in connection with this recall.',
+    }).illnessNotice?.notices.map((n) => n.text),
     ['1 illness reported'],
   );
   assert.deepEqual(
-    detailOf({ summaryText: 'Two illnesses have been reported in connection with this recall.' })
-      .illnessNotice?.lines,
+    detailOf({
+      summaryText: 'Two illnesses have been reported in connection with this recall.',
+    }).illnessNotice?.notices.map((n) => n.text),
     ['2 illnesses reported'],
   );
 });
@@ -250,12 +258,15 @@ test('a hospitalization and a death are stated, one fact per line, in fixed orde
     summaryText:
       'To date, there have been 9 illnesses, 8 hospitalizations, and 1 death linked to the soft cheese products.',
   });
-  assert.deepEqual(model.illnessNotice?.lines, [
-    '9 illnesses reported',
-    '8 hospitalizations reported',
-    '1 death reported',
-  ]);
-  assert.equal(model.illnessNotice?.tone, 'reported');
+  assert.deepEqual(
+    model.illnessNotice?.notices.map((n) => n.text),
+    ['9 illnesses reported', '8 hospitalizations reported', '1 death reported'],
+  );
+  // P2B7V: three facts, three boxes, three treatments — in severity order.
+  assert.deepEqual(
+    model.illnessNotice?.notices.map((n) => n.tone),
+    ['illnesses', 'hospitalizations', 'deaths'],
+  );
   // One utterance, one stop per fact.
   assert.equal(
     model.illnessNotice?.spoken,
@@ -275,8 +286,16 @@ test('a hospitalization with no illness count still renders — the notice is no
   const model = detailOf({
     summaryText: 'One hospitalization due to Listeria monocytogenes has been reported to date.',
   });
-  assert.deepEqual(model.illnessNotice?.lines, ['1 hospitalization reported']);
-  assert.equal(model.illnessNotice?.tone, 'reported');
+  assert.deepEqual(
+    model.illnessNotice?.notices.map((n) => n.text),
+    ['1 hospitalization reported'],
+  );
+  // The hospitalization keeps its OWN treatment even as the only box: it is
+  // never demoted to the illness treatment for being first (P2B7V).
+  assert.deepEqual(
+    model.illnessNotice?.notices.map((n) => n.tone),
+    ['hospitalizations'],
+  );
 });
 
 test('a harm the hazard MIGHT cause is never reported as one that happened', () => {
@@ -295,7 +314,7 @@ test('a harm the hazard MIGHT cause is never reported as one that happened', () 
     assert.equal(status.deaths.kind, 'unknown', education);
     const copy = illnessNoticeCopy(status);
     assert.ok(
-      copy === null || !/hospitali|death/i.test(copy.lines.join(' ')),
+      copy === null || !/hospitali|death/i.test(noticeTexts(copy).join(' ')),
       `education became a report: ${education}`,
     );
   }
@@ -308,14 +327,15 @@ test('a denied harm renders no line, and never a reassuring one', () => {
   );
   assert.equal(mixed.hospitalizations.count, 5);
   assert.equal(mixed.deaths.kind, 'unknown');
-  const lines = illnessNoticeCopy(mixed)?.lines ?? [];
+  const lines = illnessNoticeCopy(mixed) === null ? [] : noticeTexts(illnessNoticeCopy(mixed)!);
   assert.ok(lines.includes('5 hospitalizations reported'));
   assert.ok(!lines.some((line) => /death/i.test(line)), 'a death line was rendered from a denial');
 
   // A whole-notice denial of both renders the illness line alone.
   assert.deepEqual(
-    illnessNoticeCopy(deriveIllnessStatus('No illnesses or deaths have been reported to date.'))
-      ?.lines,
+    illnessNoticeCopy(
+      deriveIllnessStatus('No illnesses or deaths have been reported to date.'),
+    )?.notices.map((n) => n.text),
     ['No illnesses reported'],
   );
 });
@@ -339,7 +359,7 @@ test('an affirmation with no trustworthy figure says so without inventing one', 
   );
   assert.equal(status.hospitalizations.kind, 'reported_unspecified');
   assert.equal(status.hospitalizations.count, null);
-  assert.ok(illnessNoticeCopy(status)!.lines.includes('Hospitalizations reported'));
+  assert.ok(noticeTexts(illnessNoticeCopy(status)!).includes('Hospitalizations reported'));
 });
 
 test('a harm inherits the illness contract’s attribution, never its own', () => {
@@ -365,8 +385,14 @@ test('a reported death overrides the calm treatment of an illness denial', () =>
       'No illnesses have been reported. Two deaths have been reported in connection with this recall.',
     ),
   )!;
-  assert.ok(copy.lines.includes('2 deaths reported'));
-  assert.equal(copy.tone, 'reported', 'a reported death still read as the calm state');
+  assert.ok(noticeTexts(copy).includes('2 deaths reported'));
+  // The denial keeps its calm box and the death gets its own severe one, so
+  // the app never reassures a shopper against its own evidence — and the
+  // death is never recoloured calm to match the box above it (P2B7V).
+  assert.deepEqual(
+    copy.notices.map((n) => n.tone),
+    ['none', 'deaths'],
+  );
 });
 
 // ── Certainty, negation and subject ─────────────────────────────────────────
@@ -404,11 +430,16 @@ test('a quantity sentence is rendered only from a source-stated recall quantity'
     quantityText: 'approximately 2,060 cases',
     officialUrl: 'https://www.fda.gov/x',
   });
-  assert.match(withQuantity.whatHappened.text, /The recall covers approximately 2,060 cases\./);
+  // P2B7V: the quantity is the SCOPE paragraph, and the cause paragraph never
+  // carries it.
+  assert.equal(withQuantity.whatHappened.scope, 'The recall covers approximately 2,060 cases.');
+  assert.ok(!/The recall covers/.test(withQuantity.whatHappened.text));
   // FSIS's quantity field is the amount RECOVERED — a different fact, never shown.
   const fsis = detailOf({ quantityText: 'approximately 2,060 cases' });
+  assert.equal(fsis.whatHappened.scope, null);
   assert.ok(!/The recall covers/.test(fsis.whatHappened.text));
-  assert.ok(!/The recall covers/.test(detailOf({ sourceAgency: 'FDA' }).whatHappened.text));
+  // No stated quantity at all: no scope paragraph, not an empty one.
+  assert.equal(detailOf({ sourceAgency: 'FDA' }).whatHappened.scope, null);
 });
 
 test('one quantity is stated once — the figure is never repeated in the paragraph', () => {
@@ -426,13 +457,12 @@ test('one quantity is stated once — the figure is never repeated in the paragr
     summaryText: 'Acme Foods is recalling approximately 1,626 pounds of chicken products.',
     quantityText: 'approximately 1,626 pounds of chicken products',
   });
-  const occurrences = model.whatHappened.text.split('1,626').length - 1;
-  assert.equal(
-    occurrences,
-    1,
-    `the quantity figure appears ${occurrences} times: ${model.whatHappened.text}`,
-  );
-  assert.equal(model.whatHappened.text.split('The recall covers').length - 1, 1);
+  // Measured across BOTH paragraphs: separating them must not turn one
+  // suppressed duplicate into two visible sentences (P2B7V).
+  const whole = `${model.whatHappened.text} ${model.whatHappened.scope ?? ''}`;
+  const occurrences = whole.split('1,626').length - 1;
+  assert.equal(occurrences, 1, `the quantity figure appears ${occurrences} times: ${whole}`);
+  assert.equal(whole.split('The recall covers').length - 1, 1);
 });
 
 // ── Unknowns are stated, never filled in ────────────────────────────────────
