@@ -23,12 +23,12 @@ function item(overrides: Partial<RelevanceInput> = {}): RelevanceInput {
 }
 
 function prefs(overrides: Partial<UserRecallPreferences> = {}): UserRecallPreferences {
-  return { state: null, allergens: [], retailers: [], ...overrides };
+  return { states: [], allergens: [], retailers: [], ...overrides };
 }
 
 /** The §35 example user: California; Sesame + Peanuts; Costco + Trader Joe's. */
 const CALIFORNIAN = prefs({
-  state: 'CA',
+  states: ['CA'],
   allergens: ['sesame', 'peanut'],
   retailers: ['costco', 'trader-joes'],
 });
@@ -96,7 +96,7 @@ test('exact major allergen match (undeclared sesame → Sesame preference)', () 
 test('a specific tree nut matches a Tree nuts preference', () => {
   const r = evaluatePersonalRelevance(
     item({ pathogenOrAllergen: 'undeclared cashews' }),
-    prefs({ state: 'CA', allergens: ['tree nuts'] }),
+    prefs({ states: ['CA'], allergens: ['tree nuts'] }),
   );
   assert.deepEqual(r.matchedAllergens, ['tree nuts']);
 });
@@ -104,12 +104,12 @@ test('a specific tree nut matches a Tree nuts preference', () => {
 test('specific fish and crustacean shellfish map to their groups', () => {
   const fish = evaluatePersonalRelevance(
     item({ pathogenOrAllergen: 'undeclared fish' }),
-    prefs({ state: 'CA', allergens: ['fish'] }),
+    prefs({ states: ['CA'], allergens: ['fish'] }),
   );
   assert.deepEqual(fish.matchedAllergens, ['fish']);
   const shellfish = evaluatePersonalRelevance(
     item({ pathogenOrAllergen: 'undeclared crustacean shellfish' }),
-    prefs({ state: 'CA', allergens: ['shellfish'] }),
+    prefs({ states: ['CA'], allergens: ['shellfish'] }),
   );
   assert.deepEqual(shellfish.matchedAllergens, ['shellfish']);
 });
@@ -158,7 +158,7 @@ test('an unrelated retailer does not match, and unknown retailers match nothing'
 test('an ambiguous alias stays unmatched (bare "Giant")', () => {
   const r = evaluatePersonalRelevance(
     item({ retailerNames: ['Giant'] }),
-    prefs({ state: 'CA', retailers: ['giant-food', 'giant-company'] }),
+    prefs({ states: ['CA'], retailers: ['giant-food', 'giant-company'] }),
   );
   assert.deepEqual(r.matchedRetailers, []);
 });
@@ -259,7 +259,7 @@ test('no preferences at all: nothing affects me, nothing matches', () => {
 });
 
 test('state only: geography drives everything', () => {
-  const only = prefs({ state: 'TX' });
+  const only = prefs({ states: ['TX'] });
   assert.equal(
     evaluatePersonalRelevance(item({ geography: geo('states', ['Texas']) }), only).affectsMe,
     true,
@@ -311,7 +311,7 @@ test('changing the state recalculates relevance against the same facts', () => {
   const texasOnly = item({ geography: geo('states', ['Texas']) });
   assert.equal(evaluatePersonalRelevance(texasOnly, CALIFORNIAN).affectsMe, false);
   assert.equal(
-    evaluatePersonalRelevance(texasOnly, { ...CALIFORNIAN, state: 'TX' }).affectsMe,
+    evaluatePersonalRelevance(texasOnly, { ...CALIFORNIAN, states: ['TX'] }).affectsMe,
     true,
   );
 });
@@ -378,9 +378,9 @@ function allergenOnly(agent: string, overrides: Partial<RelevanceInput> = {}): R
 }
 
 /** California + Milk — the household case: someone shops for a milk allergy. */
-const MILK_USER = prefs({ state: 'CA', allergens: ['milk'] });
+const MILK_USER = prefs({ states: ['CA'], allergens: ['milk'] });
 /** California + Peanut, so every milk recall below is a known mismatch. */
-const PEANUT_USER = prefs({ state: 'CA', allergens: ['peanut'] });
+const PEANUT_USER = prefs({ states: ['CA'], allergens: ['peanut'] });
 
 test('C5.2B truth table: matching allergen-only recalls stay in, whatever the geography', () => {
   for (const [label, geography] of [
@@ -425,7 +425,7 @@ test('C5.2B: a retailer match cannot resurrect a known allergen mismatch', () =>
       geography: geo('states', ['California']),
       retailerNames: ['Costco'],
     }),
-    prefs({ state: 'CA', allergens: ['peanut'], retailers: ['costco'] }),
+    prefs({ states: ['CA'], allergens: ['peanut'], retailers: ['costco'] }),
   );
   assert.equal(r.affectsMe, false);
   assert.deepEqual(r.reasons, []);
@@ -434,7 +434,7 @@ test('C5.2B: a retailer match cannot resurrect a known allergen mismatch', () =>
 });
 
 test('C5.2B: with no allergens selected, allergen-only recalls are not this user’s news', () => {
-  const stateOnly = prefs({ state: 'CA' });
+  const stateOnly = prefs({ states: ['CA'] });
   assert.equal(
     evaluatePersonalRelevance(
       allergenOnly('undeclared milk', { geography: geo('states', ['California']) }),
@@ -457,7 +457,7 @@ test('C5.2B: with no allergens selected, allergen-only recalls are not this user
 });
 
 test('C5.2B: multiple household allergens need only one match', () => {
-  const household = prefs({ state: 'CA', allergens: ['milk', 'peanut', 'sesame'] });
+  const household = prefs({ states: ['CA'], allergens: ['milk', 'peanut', 'sesame'] });
   const oneMatch = evaluatePersonalRelevance(
     allergenOnly('undeclared soy and sesame', { geography: geo('nationwide') }),
     household,
@@ -574,7 +574,7 @@ test('C5.2B: unknown geography still needs a real signal, and a match still coun
       pathogenOrAllergen: 'Salmonella',
       retailerNames: ['Costco'],
     }),
-    prefs({ state: 'CA', allergens: ['peanut'], retailers: ['costco'] }),
+    prefs({ states: ['CA'], allergens: ['peanut'], retailers: ['costco'] }),
   );
   assert.equal(retailerMatch.affectsMe, true);
   assert.ok(retailerMatch.reasons.some((r) => r.label === 'Location not specified'));
@@ -603,6 +603,224 @@ test('C5.2B: Home and push reach the same verdict for every case in the table', 
         pushEligible(input, user),
         evaluatePersonalRelevance(input, user).affectsMe,
         `${label} · ${input.pathogenOrAllergen} · ${input.geography.scope}`,
+      );
+    }
+  }
+});
+
+// ── Multi-jurisdiction geography (P2B7U) ────────────────────────────────────
+
+/** District of Columbia, Montana and New York — the founder's QA profile. */
+const THREE = prefs({ states: ['DC', 'MT', 'NY'] });
+
+test('a notice naming ANY selected jurisdiction matches; one in common is enough', () => {
+  for (const state of ['District of Columbia', 'Montana', 'New York']) {
+    const r = evaluatePersonalRelevance(item({ geography: geo('states', [state]) }), THREE);
+    assert.equal(r.geographic, 'matches', state);
+    assert.equal(r.affectsMe, true, state);
+    assert.deepEqual(
+      r.reasons.map((reason) => reason.label),
+      [`Affects ${state}`],
+      state,
+    );
+  }
+  // A notice naming one chosen jurisdiction among many unchosen ones still
+  // matches: the intersection is non-empty.
+  const wide = evaluatePersonalRelevance(
+    item({ geography: geo('states', ['Texas', 'Florida', 'Montana', 'Ohio']) }),
+    THREE,
+  );
+  assert.equal(wide.geographic, 'matches');
+  assert.deepEqual(
+    wide.reasons.map((reason) => reason.label),
+    ['Affects Montana'],
+  );
+  // Several in common are named in canonical order, one reason each — the
+  // same shape the allergen and retailer reasons already have.
+  const several = evaluatePersonalRelevance(
+    item({ geography: geo('states', ['New York', 'District of Columbia']) }),
+    THREE,
+  );
+  assert.deepEqual(
+    several.reasons.map((reason) => reason.label),
+    ['Affects District of Columbia', 'Affects New York'],
+  );
+});
+
+test('an exclusion requires the source to name NONE of the selected jurisdictions', () => {
+  const r = evaluatePersonalRelevance(
+    item({ geography: geo('states', ['Texas', 'Florida']) }),
+    THREE,
+  );
+  assert.equal(r.geographic, 'does_not_match');
+  assert.equal(r.affectsMe, false);
+  assert.deepEqual(r.reasons, []);
+});
+
+test('removing one jurisdiction removes only what relied on it', () => {
+  const dcOnly = item({ geography: geo('states', ['District of Columbia']) });
+  const nyOnly = item({ geography: geo('states', ['New York']) });
+  const mtOnly = item({ geography: geo('states', ['Montana']) });
+  const everywhere = item({ geography: geo('nationwide') });
+  const silent = item({ geography: geo('unknown') });
+
+  for (const input of [dcOnly, nyOnly, mtOnly, everywhere]) {
+    assert.equal(evaluatePersonalRelevance(input, THREE).affectsMe, true);
+  }
+  assert.equal(evaluatePersonalRelevance(silent, THREE).affectsMe, false);
+
+  // Drop District of Columbia. Only the DC-only notice changes answer; it
+  // becomes an authoritative exclusion, not an "unknown".
+  const withoutDC = prefs({ states: ['MT', 'NY'] });
+  const dropped = evaluatePersonalRelevance(dcOnly, withoutDC);
+  assert.equal(dropped.affectsMe, false);
+  assert.equal(dropped.geographic, 'does_not_match');
+  for (const input of [nyOnly, mtOnly, everywhere]) {
+    assert.equal(evaluatePersonalRelevance(input, withoutDC).affectsMe, true);
+  }
+  assert.equal(evaluatePersonalRelevance(silent, withoutDC).affectsMe, false);
+
+  // Adding a jurisdiction is likewise purely additive for location: nothing
+  // that matched before stops matching.
+  const plusCA = prefs({ states: ['CA', 'DC', 'MT', 'NY'] });
+  for (const input of [dcOnly, nyOnly, mtOnly, everywhere]) {
+    assert.equal(evaluatePersonalRelevance(input, plusCA).affectsMe, true);
+  }
+  assert.equal(
+    evaluatePersonalRelevance(item({ geography: geo('states', ['California']) }), plusCA).affectsMe,
+    true,
+  );
+});
+
+test('a single-jurisdiction profile answers exactly what it answered before P2B7U', () => {
+  // The one-state contract, restated over the plural field: match, exclusion,
+  // nationwide, unknown. These are the same four answers the singular
+  // evaluator gave, byte for byte in the reasons.
+  const one = prefs({ states: ['CA'] });
+  const match = evaluatePersonalRelevance(item({ geography: geo('states', ['California']) }), one);
+  assert.equal(match.geographic, 'matches');
+  assert.deepEqual(match.reasons, [{ kind: 'state', label: 'Affects California' }]);
+  assert.equal(
+    evaluatePersonalRelevance(item({ geography: geo('states', ['Maine']) }), one).geographic,
+    'does_not_match',
+  );
+  assert.equal(
+    evaluatePersonalRelevance(item({ geography: geo('nationwide') }), one).geographic,
+    'matches',
+  );
+  assert.equal(
+    evaluatePersonalRelevance(item({ geography: geo('unknown') }), one).geographic,
+    'unknown',
+  );
+});
+
+test('unknown geography is still unknown, however many jurisdictions are chosen', () => {
+  // Multi-select changes nothing about what "the source did not say" means.
+  for (const user of [prefs(), prefs({ states: ['CA'] }), THREE, prefs({ states: [] })]) {
+    const r = evaluatePersonalRelevance(item({ geography: geo('unknown') }), user);
+    assert.equal(r.geographic, 'unknown');
+    assert.equal(r.affectsMe, false, 'unknown alone never qualifies');
+  }
+  // It becomes eligible only on a personal signal, exactly as before — and
+  // the signal, not the jurisdiction count, is what does it.
+  const withSignal = evaluatePersonalRelevance(
+    item({ geography: geo('unknown'), retailerNames: ['Costco'] }),
+    prefs({ states: ['DC', 'MT', 'NY'], retailers: ['costco'] }),
+  );
+  assert.equal(withSignal.geographic, 'unknown');
+  assert.equal(withSignal.affectsMe, true);
+  assert.ok(withSignal.reasons.some((r) => r.label === 'Location not specified'));
+});
+
+test('an empty jurisdiction list is the old "no state chosen": location is not assessed', () => {
+  const none = prefs();
+  // Geography cannot be personal, so a state list is `unknown`, not an
+  // exclusion — and nationwide alone is not a personal signal.
+  assert.equal(
+    evaluatePersonalRelevance(item({ geography: geo('states', ['Maine']) }), none).geographic,
+    'unknown',
+  );
+  assert.equal(
+    evaluatePersonalRelevance(item({ geography: geo('nationwide') }), none).affectsMe,
+    false,
+  );
+  // Only personal signals qualify.
+  assert.equal(
+    evaluatePersonalRelevance(
+      item({ geography: geo('states', ['Maine']), retailerNames: ['Costco'] }),
+      prefs({ retailers: ['costco'] }),
+    ).affectsMe,
+    true,
+  );
+  // Push is not narrowed at all until a jurisdiction is chosen.
+  assert.equal(pushEligible(item({ geography: geo('states', ['Maine']) }), none), true);
+  assert.equal(pushEligible(item({ geography: geo('states', ['Maine']) }), null), true);
+  assert.equal(pushEligible(item({ geography: geo('states', ['Maine']) }), THREE), false);
+});
+
+test('allergen and retailer matching is untouched by how many jurisdictions are chosen', () => {
+  // The same case, the same allergen and retailer selections, evaluated
+  // against one jurisdiction and against four: the matched sets and the
+  // non-geographic reasons are identical. Only geography may differ.
+  const facts = item({
+    geography: geo('unknown'),
+    pathogenOrAllergen: 'undeclared sesame',
+    retailerNames: ['Costco', "Trader Joe's", 'Walmart'],
+  });
+  const base = { allergens: ['sesame', 'peanut'], retailers: ['costco', 'trader-joes'] };
+  const one = evaluatePersonalRelevance(facts, prefs({ ...base, states: ['CA'] }));
+  const many = evaluatePersonalRelevance(
+    facts,
+    prefs({ ...base, states: ['CA', 'DC', 'MT', 'NY'] }),
+  );
+  const noneChosen = evaluatePersonalRelevance(facts, prefs(base));
+  for (const r of [many, noneChosen]) {
+    assert.deepEqual(r.matchedAllergens, one.matchedAllergens);
+    assert.deepEqual(r.matchedRetailers, one.matchedRetailers);
+    assert.deepEqual(
+      r.reasons.filter((reason) => reason.kind === 'allergen' || reason.kind === 'retailer'),
+      one.reasons.filter((reason) => reason.kind === 'allergen' || reason.kind === 'retailer'),
+    );
+  }
+  assert.deepEqual(one.matchedAllergens, ['sesame']);
+  assert.deepEqual(one.matchedRetailers, ['costco', 'trader-joes']);
+  // The C5.2B allergen-only exclusion is likewise indifferent to the count.
+  const milkOnly = item({
+    geography: geo('states', ['New York']),
+    hazardCategory: 'allergen',
+    pathogenOrAllergen: 'undeclared milk',
+  });
+  for (const user of [
+    prefs({ states: ['NY'], allergens: ['peanut'] }),
+    prefs({ states: ['DC', 'MT', 'NY'], allergens: ['peanut'] }),
+  ]) {
+    const r = evaluatePersonalRelevance(milkOnly, user);
+    assert.equal(r.affectsMe, false, 'a known allergen-only mismatch still wins');
+    assert.deepEqual(r.reasons, []);
+  }
+});
+
+test('push and the app agree for every multi-jurisdiction case', () => {
+  const inputs: RelevanceInput[] = [
+    item({ geography: geo('states', ['Montana']) }),
+    item({ geography: geo('states', ['New York', 'Texas']) }),
+    item({ geography: geo('states', ['Texas']) }),
+    item({ geography: geo('nationwide') }),
+    item({ geography: geo('unknown') }),
+    item({ geography: geo('unknown'), retailerNames: ['Costco'] }),
+    item({ geography: geo('states', ['Texas']), retailerNames: ['Costco'] }),
+  ];
+  const users = [
+    THREE,
+    prefs({ states: ['DC', 'MT', 'NY'], retailers: ['costco'] }),
+    prefs({ states: ['CA', 'NY'] }),
+  ];
+  for (const user of users) {
+    for (const input of inputs) {
+      assert.equal(
+        pushEligible(input, user),
+        evaluatePersonalRelevance(input, user).affectsMe,
+        `${user.states.join('+')} · ${input.geography.states.join('/') || input.geography.scope}`,
       );
     }
   }

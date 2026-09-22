@@ -98,6 +98,6 @@ export const OLDER_NOTICES_EXPLANATION =
  */
 export const PERSONALIZE_CTA = {
   title: 'Set up personalization',
-  body: 'Choose your state, allergens, and stores to see matching recalls in Affects me.',
-  compactBody: 'Choose your state to see which recalls affect your area.',
+  body: 'Choose your states, allergens, and stores to see matching recalls in Affects me.',
+  compactBody: 'Choose your states to see which recalls affect your area.',
 } as const;

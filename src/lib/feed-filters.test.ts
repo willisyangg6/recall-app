@@ -469,7 +469,7 @@ test('the location comparator reuses the ONE canonical risk sequence', () => {
 // ── Affects Me boundaries ────────────────────────────────────────────────────
 
 test('search within Affects me narrows the eligible ranked set and cannot surface an ineligible notice', () => {
-  const prefs = { state: 'CA', allergens: [], retailers: [] };
+  const prefs = { states: ['CA'], allergens: [], retailers: [] };
   const eligible = item({ geography: geo('states', ['California']), title: 'Peanut Crunch Bars' });
   const ineligible = item({ geography: geo('states', ['Maine']), title: 'Peanut Snack Mix' });
   const corpus = [eligible, ineligible];
@@ -512,4 +512,64 @@ test('filtering and searching never touch preferences or personalization state',
       assert.ok(!source.includes(forbidden), `${file} references ${forbidden}`);
     }
   }
+});
+
+const count = (source: string, needle: string): number => source.split(needle).length - 1;
+
+test('the Feed Location filter is untouched by multi-state personalization (P2B7U)', () => {
+  // The Location filter and saved personalization are two different
+  // questions — "show me only these states while I browse" and "which
+  // recalls concern me" — and they stay two. Multi-select personalization
+  // changed neither the filter's matching nor its independence.
+  //
+  // 1. Its matcher takes the SESSION's chosen codes and nothing else: there
+  //    is no preferences argument it could read.
+  assert.equal(matchesLocationFilter.length, 2);
+  assert.equal(locationMatchTier.length, 2);
+  const ca = geo('states', ['California']);
+  const me = geo('states', ['Maine']);
+  const national = geo('nationwide');
+  const silent = geo('unknown');
+  assert.equal(matchesLocationFilter(ca, ['CA']), true);
+  assert.equal(matchesLocationFilter(me, ['CA']), false);
+  assert.equal(matchesLocationFilter(national, ['CA']), true);
+  assert.equal(matchesLocationFilter(silent, ['CA']), false);
+  // No selection is no filter — every notice passes, unknown included.
+  for (const geography of [ca, me, national, silent]) {
+    assert.equal(matchesLocationFilter(geography, []), true);
+  }
+  // It was already a multi-value filter, and its OR semantics are unchanged.
+  assert.equal(matchesLocationFilter(me, ['CA', 'ME']), true);
+  // Explicit beats nationwide in the tiering, as before.
+  assert.equal(locationMatchTier(ca, ['CA']), 0);
+  assert.equal(locationMatchTier(national, ['CA']), 1);
+  assert.equal(locationMatchTier(me, ['CA']), null);
+
+  // 2. A saved personalization profile cannot reach it. The filter state has
+  //    its own field, seeded empty, and the module imports nothing that can
+  //    read preferences.
+  assert.deepEqual(EMPTY_FEED_FILTERS.stateCodes, []);
+  const source = readFileSync(join(__dirname, 'feed-filters.ts'), 'utf8');
+  for (const forbidden of [
+    'UserRecallPreferences',
+    'preferences-store',
+    'loadPreferences',
+    'savePreferences',
+    'evaluatePersonalRelevance',
+    'affectsYouVerdict',
+    'SecureStore',
+  ]) {
+    assert.ok(!source.includes(forbidden), `the Location filter reaches ${forbidden}`);
+  }
+  // It does share ONE thing with the preference domain — the postal-code to
+  // name lookup, which is the country's vocabulary, not this user's answer.
+  assert.ok(source.includes("import { stateNameForCode } from '@/domain/preferences';"));
+  assert.equal(count(source, "from '@/domain/preferences'"), 1);
+
+  // 3. The Feed screen feeds it session state, never the saved profile.
+  const home = readFileSync(join(__dirname, '..', 'app', '(tabs)', 'index.tsx'), 'utf8');
+  assert.ok(home.includes('orderByLocationTiers(sectioned.recent, filters.stateCodes)'));
+  assert.ok(!home.includes('prefs.states)'), 'the filter is fed from the saved profile');
+  assert.ok(!/applyFeedFilters\([^)]*prefs/.test(home));
+  assert.ok(!/stateCodes:\s*prefs\./.test(home));
 });

@@ -271,7 +271,7 @@ async function main(): Promise<void> {
           hazardCategory: row.projection.hazardCategory,
           reasonText: row.projection.reasonText,
         },
-        { state, allergens: [], retailers: [] },
+        { states: [state], allergens: [], retailers: [] },
       );
       if (relevance.geographic === 'matches') matches += 1;
       else if (relevance.geographic === 'unknown') unknown += 1;
@@ -298,7 +298,7 @@ async function main(): Promise<void> {
         hazardCategory: row.projection.hazardCategory,
         reasonText: row.projection.reasonText,
       },
-      { state: 'CA', allergens: ['sesame', 'peanut'], retailers: ['costco', 'trader-joes'] },
+      { states: ['CA'], allergens: ['sesame', 'peanut'], retailers: ['costco', 'trader-joes'] },
     );
     if (relevance.affectsMe) {
       affects += 1;
@@ -318,7 +318,7 @@ async function main(): Promise<void> {
   console.log('  profile: California · Sesame + Peanuts · Costco + Trader Joe’s');
 
   const PROFILE = {
-    state: 'CA',
+    states: ['CA'],
     allergens: ['sesame', 'peanut'],
     retailers: ['costco', 'trader-joes'],
   };

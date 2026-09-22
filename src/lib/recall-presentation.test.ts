@@ -715,7 +715,7 @@ test('the Affects-you state is DERIVED on the Home card model, in any feed mode'
   });
   const flagged = buildHomeCardModel(nationwide, {
     today: TODAY,
-    prefs: { state: 'CA', allergens: [], retailers: [] },
+    prefs: { states: ['CA'], allergens: [], retailers: [] },
   });
   assert.equal(flagged.affectsYou, true);
   // Preferences not read yet, and a profile with nothing chosen, are both
@@ -724,7 +724,7 @@ test('the Affects-you state is DERIVED on the Home card model, in any feed mode'
   assert.equal(
     buildHomeCardModel(nationwide, {
       today: TODAY,
-      prefs: { state: null, allergens: [], retailers: [] },
+      prefs: { states: [], allergens: [], retailers: [] },
     }).affectsYou,
     false,
   );

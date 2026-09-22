@@ -65,7 +65,7 @@ import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/s
 
 /** The profile used across personalization QA, so results stay comparable. */
 const PROFILE: UserRecallPreferences = {
-  state: 'CA',
+  states: ['CA'],
   allergens: ['sesame', 'peanut'],
   retailers: ['costco', 'trader-joes'],
 };

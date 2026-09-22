@@ -52,7 +52,7 @@ export async function loadPreferences(): Promise<UserRecallPreferences> {
 async function syncToServer(prefs: UserRecallPreferences): Promise<void> {
   await setInstallationPreferences({
     installationId: await getOrCreateInstallationId(),
-    stateCode: prefs.state,
+    stateCodes: prefs.states,
     allergens: prefs.allergens,
     retailerIds: prefs.retailers,
   });

@@ -2,8 +2,9 @@
 
 Personalization turns "here are all recalls" into "here are the recalls most
 relevant to me, and here is why" — without ever hiding the full truth. Three
-dimensions only: **home state**, **allergens**, **retailers**. No accounts, no
-location tracking, no purchase inference, no analytics.
+dimensions only: **the jurisdictions you shop in**, **allergens**,
+**retailers**. No accounts, no location tracking, no purchase inference, no
+analytics.
 
 The core product principle, everywhere in this design:
 
@@ -14,10 +15,14 @@ The core product principle, everywhere in this design:
 
 ## The three vocabularies (all closed)
 
-- **State** — one of the 52 jurisdictions the geography layer already
-  normalizes to (50 states + DC + Puerto Rico), stored as a postal code.
+- **Jurisdictions** — any number of the 52 the geography layer already
+  normalizes to (50 states + DC + Puerto Rico), stored as postal codes.
   Chosen explicitly by the user in Settings; never inferred from GPS/IP, no
-  location permission exists in the app.
+  location permission exists in the app. Several, not one, since P2B7U:
+  people live near a border, shop across one, and keep a second home, and
+  a single answer forced them to under-report where a recall could reach
+  them. An **empty list is a real answer** — no location preference — and it
+  behaves exactly as "no state chosen" always did.
 - **Allergens** — the nine major US food allergens (peanut, tree nuts, milk,
   egg, wheat, soy, sesame, fish, crustacean shellfish), expressed as the
   canonical tokens `normalizedAllergenTokens` (src/domain/hazard.ts) already
@@ -46,9 +51,20 @@ deterministic core shared by the Home "Affects me" feed, the detail screen's
 
 - `geographic`: `matches` | `does_not_match` | `unknown` — tri-state, because
   a wrong "doesn't affect you" is dangerous. Nationwide ⇒ matches (always).
-  Authoritative state list containing the home state ⇒ matches; a known list
-  without it ⇒ does_not_match; source silent ⇒ unknown. Nothing is ever
-  inferred from company or retailer headquarters.
+  An authoritative state list is compared to the chosen jurisdictions as a
+  **set intersection** (P2B7U): one state in common ⇒ matches; a known list
+  naming **none** of them ⇒ does_not_match; source silent ⇒ unknown; no
+  jurisdiction chosen ⇒ unknown, because geography cannot be personal without
+  one. Nothing is ever inferred from company or retailer headquarters.
+
+  One in common is enough because a person who shops in two states is reached
+  by a recall in either of them, and an exclusion is correspondingly harder to
+  earn: the source has to rule out every jurisdiction they chose. Adding a
+  jurisdiction can therefore only ADD location matches, and removing one only
+  removes the matches that rested on it — nothing else moves. That is the
+  whole of what multi-select changed in this function; the tri-state
+  semantics, the finality of an exclusion, the allergen-only rule and every
+  positive signal are untouched.
 
   The state list is `projection.geography.states` and nothing else — the same
   value the feed card prints and the Location filter matches on (P2B7Q.2).
@@ -68,18 +84,22 @@ deterministic core shared by the Home "Affects me" feed, the detail screen's
 
 - `matchedAllergens` / `matchedRetailers`: the deterministic intersections of
   the user's selections with the case's authoritative facts.
-- `affectsMe`: with a state chosen — geography matches, OR geography unknown
-  with at least one allergen/retailer signal. **Authoritative geographic
-  exclusion is final**: a Maine-only sesame recall is not "affects me" for a
-  Californian sesame allergy (the match stays available internally, but
-  never overrides the agency's own distribution statement). With no state
-  chosen — only personal signals qualify, and the UI asks for a state
-  instead of pretending to know geography. And since C5.2B one further
-  exclusion applies after geography: a **known allergen-only mismatch**.
+- `affectsMe`: with at least one jurisdiction chosen — geography matches, OR
+  geography unknown with at least one allergen/retailer signal.
+  **Authoritative geographic exclusion is final**: a Maine-only sesame recall
+  is not "affects me" for a Californian sesame allergy (the match stays
+  available internally, but never overrides the agency's own distribution
+  statement). With no jurisdiction chosen — only personal signals qualify,
+  and the UI asks for one instead of pretending to know geography. And since
+  C5.2B one further exclusion applies after geography: a **known
+  allergen-only mismatch**.
 - `reasons`: priority-ordered (allergen, retailer, geography): "Your
   allergen · Sesame", "Sold at Costco", "Affects California", "Nationwide
-  recall", "Location not specified". Empty when there is nothing personal to
-  say. Since P2a these labels are model-level facts only — Home cards render
+  recall", "Location not specified". A geographic match names **each**
+  jurisdiction the source itself lists, one reason apiece in canonical order,
+  the same shape the allergen and retailer reasons already had — so a
+  single-jurisdiction profile reads exactly as it did before P2B7U. Empty
+  when there is nothing personal to say. Since P2a these labels are model-level facts only — Home cards render
   ONE generic "Affects you" flag, never the per-reason chips
   ([docs/recall-feed-usability.md](recall-feed-usability.md)); the reasons
   stay available for ranking, QA, and future surfaces.
@@ -134,7 +154,9 @@ Two views: **Affects me** and **All recalls** — All recalls is always one tap
 away and personalization never deletes or permanently hides anything. The
 default is Affects me once any personalization exists, otherwise All recalls
 with a compact `Set up personalization` CTA (which never requests notification
-permission; P2B6C wording). Within Affects me:
+permission; P2B6C wording). The same CTA appears in its compact form when
+other preferences exist but **no jurisdiction** does — the profile that cannot
+have location assessed for it. Within Affects me:
 
 - AFFECTS ME — recent items where `affectsMe` holds, each carrying the one
   generic "Affects you" flag (risk tier stays in its own badge, visually
@@ -179,11 +201,19 @@ looks active because it matches a preference.
 | CA + Peanut                | unknown-location Salmonella, no retailer signal |         No |
 | CA + Peanut + Costco       | unknown-location Salmonella sold at Costco      |    **Yes** |
 | any                        | explicit state list excluding the user's state  |         No |
+| DC + MT + NY               | DC-only recall                                  |    **Yes** |
+| DC + MT + NY               | recall listing TX, FL, MT, OH                   |    **Yes** |
+| DC + MT + NY               | recall listing TX and FL only                   |         No |
+| MT + NY (DC removed)       | the same DC-only recall                         |         No |
 
 Read as an ordered rule: **geographic exclusion is final first**, then a known
 allergen-only mismatch, then the positive signals. A retailer or state match
 can never resurrect a recall the source proves does not involve the user's
 allergens.
+
+The last four rows are the P2B7U set semantics: any one jurisdiction in common
+qualifies, an exclusion needs the source to name none of them, and dropping a
+jurisdiction removes only the recalls that rested on it.
 
 ### Known allergen-only mismatch
 
@@ -376,12 +406,13 @@ identity (`src/lib/installation-id.ts`); no second device identity exists.
 
 - **Local (source of truth)**: SecureStore JSON on the device
   (src/lib/preferences-store.ts) — works offline, before any migration is
-  applied, and before push exists. Settings autosaves on every change.
+  applied, and before push exists. Settings autosaves on every change, except
+  the jurisdiction list, which commits once on `Done` (below).
 - **Server (mirror for delivery)**: `installation_preferences` (migration
   `20260830000000_installation_preferences.sql`), written only through the
   SECURITY DEFINER RPC `set_installation_preferences` — same bearer-capability
   model as C2 registration: RLS with no policies and no anon grants, shape
-  validation of every field (state against the closed 52-code set, allergens
+  validation of every field (states against the closed 52-code set, allergens
   against the closed 9-token set, retailer ids by shape and count; ids
   outside the code catalog are inert — the matcher can never match them).
   A client can set its own row and nothing else: no enumeration, no reads of
@@ -392,13 +423,152 @@ identity (`src/lib/installation-id.ts`); no second device identity exists.
   matters below.
 - **Readers**: the Feed (Affects Me, re-read on focus), the Personalization
   screen (the only writer — restyled in P2B6A onto the design tokens with
-  its controls, autosave and this store untouched; see
+  its controls and this store untouched, and its jurisdiction list moved to a
+  draft committed on `Done` in P2B7U; see
   [../DESIGN.md](../DESIGN.md) "Personalization and Notifications"), and — from P2B5 — the Profile hub's featured
-  card, which reads on every focus and never writes: it shows the state
-  name, allergens in catalog order and stores in chosen order under the
-  compact rules in `src/lib/profile-hub.ts`, holds no second copy, and shows
+  card, which reads on every focus and never writes: it shows the chosen
+  jurisdictions in canonical order, allergens in catalog order and stores in
+  chosen order under the compact rules in `src/lib/profile-hub.ts` (all three
+  abbreviated by the same rule since P2B7U), holds no second copy, and shows
   `Loading…` until the read resolves and `Unavailable` if it fails (never an
   empty selection it has not actually read).
+
+### The stored jurisdiction list, and the one client migration (P2B7U)
+
+One canonical field: `states`, an array of supported postal codes,
+de-duplicated and in **canonical order — by full jurisdiction name**, so
+District of Columbia sits between Delaware and Florida rather than after
+Wyoming (where the postal map's own key order leaves it). Not tap order: the
+same three jurisdictions must render one summary however they were chosen, and
+the Settings row must not reshuffle under the shopper after an edit. Allergens
+and stores keep their chosen order, because those lists are short and
+composed; a 52-row list is picked from, not composed.
+
+`STATE_CODES_IN_ORDER` in `domain/preferences.ts` is the single definition,
+consumed by the selector's rows, the stored array and the Settings summary, so
+the "first two names" the summary shows are the first two the list shows.
+
+**The migration lives in `sanitizePreferences`** — the one function every read
+already passes through — rather than in a versioned upgrade step, because a
+sanitizer is by definition the thing that reads shapes it did not write. It
+reads the plural `states` and the legacy singular `state` and takes their
+**union**, so nothing a stored blob asserts is discarded; it drops codes
+outside the closed set one by one, so an invalid entry cannot corrupt the
+valid ones; and its output carries `states` and no `state` at all. That makes
+the migration idempotent by construction and leaves no singular field for a
+second authority to grow out of. A legacy profile with no state becomes the
+empty list, which is the same answer it always gave.
+
+### The server mirror: expand now, contract later
+
+`installation_preferences` is deployed, and the code reading it is deployed
+too, so the mirror changes in **two** migrations and this milestone ships only
+the first.
+
+`supabase/migrations/20260921000000_installation_preference_states_expand.sql`
+is **additive** and **prepared, not applied**. It:
+
+1. adds `state_codes text[] not null default '{}'` — the canonical field;
+2. backfills every non-null `state_code` into a one-element array, leaving a
+   null one as the empty array that means "no location preference";
+3. **keeps** `state_code`, now a compatibility projection maintained as
+   `state_codes[1]` or null;
+4. **keeps** the singular RPC signature, re-created so its body maintains both
+   representations in one statement;
+5. **adds** the plural RPC as an overload — PostgREST dispatches on argument
+   names, and `p_state_codes` differs from `p_state_code`, so both resolve.
+
+Both entry points delegate to one internal `apply_installation_preferences`,
+which is not granted to `anon`, so the validation and the write can never
+differ between them.
+
+**Why two migrations and not one.** The first draft of this file's subject
+added `state_codes` and, in the same transaction, dropped `state_code` and the
+singular signature. That is a contract phase wearing an expand phase's name.
+Between applying it and the new bundle reaching devices, the deployed app
+would have called an RPC signature that no longer existed and the delivery
+worker would have selected a column that no longer existed. Expand, deploy,
+then contract — and
+[`src/server/push/preference-states-migration.test.ts`](../src/server/push/preference-states-migration.test.ts)
+now fails the build if the expand phase ever regrows a `DROP`, a `RENAME`, a
+destructive `ALTER`, or loses the singular signature.
+
+The backfill deliberately does not touch `updated_at`: that column is the
+delivery-safety horizon, and reshaping our own storage is not the shopper
+changing their mind. Moving it would re-open that window for every
+installation at once.
+
+**`state_code` is a projection, never an authority.** No new application code
+reads it; the delivery worker reads `state_codes`. It exists only so that code
+already in production keeps working, and it goes away in the contract phase.
+
+Behaviour is proven against a real Postgres through real PostgREST on the
+local disposable stack
+([`preference-states-live.test.ts`](../src/server/push/preference-states-live.test.ts),
+`supabase start`): both signatures dispatch, zero/one/many jurisdictions round
+trip, the projection always equals the array's first element, a legacy
+singular write maintains the canonical array, duplicates collapse, invalid
+codes are refused without half-writing the row, DC and PR survive both paths,
+all 52 are accepted at once, an identical write moves nothing, and the
+deployed worker's exact column list still resolves. Those tests skip loudly
+when the stack is not running, so `npm run check` stays green offline.
+
+**Deployment order is not optional**: apply the expand migration FIRST, verify
+it, then ship the bundle. The new client calls the plural RPC and the new
+worker selects `state_codes`; neither exists until the migration runs. The
+rollout commands live in
+[recall-operations.md](recall-operations.md) "P2B7U preference-states expand".
+`npm run preflight:preference-states` is the read-only census that says what
+the backfill will touch.
+
+**The contract phase is deferred**, recorded in
+[../README.md](../README.md) as its own milestone: it drops `state_code` and
+the singular signature, and may run only once no deployed client can still
+call the singular path.
+
+### The jurisdiction editor: a draft, and one Done (P2B7U)
+
+The states selector is the one place in the app that edits a draft.
+
+- Opening it copies the saved selection. A tap toggles the copy and nothing
+  else; the sheet stays open however many are tapped.
+- The rows come from the search query alone, so a jurisdiction checked before
+  a search was typed stays checked while the search hides it, and is still
+  there when the search is cleared.
+- `Clear selection` empties the draft and keeps the sheet open. Nothing is
+  saved, so a clear pressed by mistake is undone by leaving.
+- **`Done` writes the whole draft once and closes** — once however many times
+  it is pressed, latched by the section that owns both halves of what Done
+  does, and released only by the next opening.
+- **Any other exit discards the draft**: the swipe down and Android's back are
+  dismissals, never commits, and the next opening re-seeds from what is saved.
+
+Why a draft here and not for stores: a store list is composed one chain at a
+time and each check is independently meaningful, so autosave suits it. A
+jurisdiction list is picked from 52 rows in one sitting, usually as a
+replacement of the previous answer, and each intermediate state of that edit
+is a DIFFERENT set of recalls in Affects me. Saving each tap would mean the
+shopper's feed briefly answered for a selection they were still assembling,
+and a half-finished edit would have been synced as the delivery-safety
+horizon.
+
+Accessibility: the rows are Check Rows announcing as checkboxes with their
+checked state, never radios — no `radiogroup` or radio role survives on this
+screen. The count line is words in a polite live region. `Done` says that it
+saves and what leaving without it does. The trigger row speaks every chosen
+jurisdiction in full even while it shows two and a count. See
+[../DESIGN.md](../DESIGN.md) "Personalization and Notifications" for the
+visual contract, including the top-right placement and the text-scale
+stacking.
+
+### What the Settings row and the Profile card show
+
+Both abbreviate the same way, through the one `compactList` rule: nothing
+chosen keeps each surface's existing empty words (`No states selected` on the
+Settings trigger, `Not chosen` on the Profile card); one or two names show in
+full; beyond two, the first two in canonical order and `+N` for the rest —
+`California, New York +1`. The spoken form never abbreviates. A 52-item list
+can be chosen, so neither surface ever prints an unbounded one.
 
 ### Deletion and reset (C7.1)
 
@@ -442,18 +612,27 @@ All per-subscription delivery decisions happen in
 `eligibleSubscriptions` seam, now preference-aware, calling the SAME
 `pushEligible`/`evaluatePersonalRelevance` the app renders. Policy:
 
-- No preference row, or no state chosen → pre-C3 behavior: every deliverable
-  event qualifies (allergen/retailer selections alone never become exclusion
-  filters — recalls are safety information).
-- State chosen → deliver when geography **matches** (nationwide always), or
-  geography is **unknown** with a matching allergen/retailer. An
+- No preference row, or no jurisdiction chosen → pre-C3 behavior: every
+  deliverable event qualifies (allergen/retailer selections alone never become
+  exclusion filters — recalls are safety information).
+- Any jurisdiction chosen → deliver when geography **matches** (nationwide
+  always, and one chosen jurisdiction in the source's own state list is
+  enough), or geography is **unknown** with a matching allergen/retailer. An
   authoritative geographic exclusion never delivers.
+
+The worker reads the same `pushEligible`/`evaluatePersonalRelevance` the app
+renders, over `installation_preferences.state_codes` mapped straight into the
+same `UserRecallPreferences` shape — so there is no second multi-state
+matcher, and delivery cannot answer differently from the card.
 
 **No retroactive blast**: `installation_preferences.updated_at` joins the C2
 horizons — eligibility requires
 `event.created_at ≥ max(push_enabled_at, subscription.enabled_at, preferences.updated_at)`.
-Adding "Peanuts" today cannot enqueue last month's peanut recalls; moving
-California → Texas cannot backfill old Texas-only events. Proof shape: an old
+Adding "Peanuts" today cannot enqueue last month's peanut recalls; adding
+Texas cannot backfill old Texas-only events. The P2B7U migration's backfill
+leaves `updated_at` alone for exactly this reason: reshaping storage is not a
+preference change, and moving it would re-open that horizon for every
+installation at once. Proof shape: an old
 event either already has its (event, subscription) delivery row (unchanged —
 the unique pair blocks re-enqueue) or it didn't qualify before the change and
 is now behind the preference horizon. The known trade-off: an event created
@@ -725,7 +904,18 @@ gates on them.
 
 The deterministic relevance matrix (nationwide / state match / state exclusion
 / unknown+signal / unknown+none, §-C3 cases A–H) lives in
-`src/lib/relevance.test.ts`; the ranking hierarchy and its invariants in
-`src/lib/affects-me-ranking.test.ts` and `src/domain/material-activity.test.ts`;
-delivery safety (no-backfill, horizons, idempotency) in
-`src/server/push/worker.test.ts`.
+`src/lib/relevance.test.ts`, which since P2B7U also carries the set semantics:
+any jurisdiction in common matches, an exclusion names none of them, dropping
+one removes only what rested on it, a single-jurisdiction profile answers
+exactly what it answered before, and allergen/retailer matching is indifferent
+to how many are chosen. The stored contract and its migration are in
+`src/domain/preferences.test.ts`; the draft/Done/dismissal behaviour and the
+absence of radio semantics in `src/components/settings-design.test.ts`; the
+list rules, the compact summary and the copy in
+`src/lib/personalization-screen.test.ts`; the Location filter's independence
+from saved preferences in `src/lib/feed-filters.test.ts`; and one verdict
+across Feed, Saved, Detail and push for a multi-jurisdiction profile, over
+recorded real notices, in `src/server/feed-saved-parity.test.ts`. The ranking
+hierarchy and its invariants are in `src/lib/affects-me-ranking.test.ts` and
+`src/domain/material-activity.test.ts`; delivery safety (no-backfill,
+horizons, idempotency) in `src/server/push/worker.test.ts`.

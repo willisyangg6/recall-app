@@ -58,7 +58,7 @@ import { buildFeedSections } from '@/lib/feed-relevance';
 import { buildSearchEntry, filterBySearch } from '@/lib/feed-search';
 import type { FeedItem } from '@/lib/recall-feed';
 import { buildHomeCardModel, type HomeCardModel } from '@/lib/recall-presentation';
-import { evaluatePersonalRelevance } from '@/lib/relevance';
+import { affectsYouVerdict, evaluatePersonalRelevance, pushEligible } from '@/lib/relevance';
 import { isSavedId, saveControlState, selectSavedItems, toggleSavedId } from '@/lib/saved-recalls';
 import { parseFdaAnnouncement, slugFromPath, type FdaListingItem } from './fda/parse';
 import { parseFsisRecord, type FsisRawRecord } from './fsis/parse';
@@ -207,13 +207,19 @@ const CORPUS: FeedItem[] = [
 
 // ── Preference profiles ─────────────────────────────────────────────────────
 
-const NO_PREFERENCES: UserRecallPreferences = { state: null, allergens: [], retailers: [] };
-const CALIFORNIA: UserRecallPreferences = { state: 'CA', allergens: [], retailers: [] };
-const TEXAS: UserRecallPreferences = { state: 'TX', allergens: [], retailers: [] };
+const NO_PREFERENCES: UserRecallPreferences = { states: [], allergens: [], retailers: [] };
+const CALIFORNIA: UserRecallPreferences = { states: ['CA'], allergens: [], retailers: [] };
+const TEXAS: UserRecallPreferences = { states: ['TX'], allergens: [], retailers: [] };
 const TEXAS_PLUS_STORE: UserRecallPreferences = {
-  state: 'TX',
+  states: ['TX'],
   allergens: [],
   retailers: ['lunds-byerlys'],
+};
+/** P2B7U: several jurisdictions at once, over the same real corpus. */
+const CALIFORNIA_AND_TEXAS: UserRecallPreferences = {
+  states: ['CA', 'TX'],
+  allergens: [],
+  retailers: [],
 };
 
 // ── The two screen adapters, as the screens actually run them ───────────────
@@ -735,4 +741,80 @@ test('mutation — a new unaudited card field is caught by the coverage assertio
   const model = buildHomeCardModel(SK_PHA, { today: TODAY, prefs: CALIFORNIA });
   const withNewField = { ...model, searchMatchReason: 'brand' };
   assert.notDeepEqual(Object.keys(withNewField).sort(), Object.keys(AUDITED_FIELDS).sort());
+});
+
+// ── Multi-jurisdiction parity across all four surfaces (P2B7U) ──────────────
+
+test('a multi-jurisdiction profile gets one verdict from Feed, Saved, Detail and push', () => {
+  // Every surface's REAL path, over the recorded corpus: the Feed's All list
+  // and its Affects me list through the ranking, Saved through its own
+  // adapter, Detail through the function the detail screen calls, and push
+  // through the delivery gate. One answer per recall or the assertion fails.
+  const context: SurfaceContext = { today: TODAY, prefs: CALIFORNIA_AND_TEXAS };
+  const feed = feedCards(CORPUS, context);
+  const affectsMe = affectsMeCards(CORPUS, context);
+  const saved = savedCards(CORPUS.map((item) => item.id).reverse(), CORPUS, context);
+
+  for (const item of CORPUS) {
+    const a = feed.get(item.id);
+    const b = saved.get(item.id);
+    assert.ok(a && b, `${item.id} is not listed by both surfaces`);
+    assert.deepEqual(parityReport(a!, b!), [], `${item.id} diverges between Feed and Saved`);
+    assert.deepEqual(a, b);
+
+    // Detail asks the same question directly, and gets the same answer.
+    const detail = affectsYouVerdict(item, CALIFORNIA_AND_TEXAS);
+    assert.equal(detail, a!.affectsYou, `${item.id}: Detail disagrees with the card`);
+
+    // Affects me membership is the same verdict, not a second opinion: a
+    // card claiming AFFECTS YOU is listed, and one that does not is not.
+    assert.equal(affectsMe.has(item.id), a!.affectsYou, `${item.id}: membership vs label`);
+    if (affectsMe.has(item.id)) {
+      assert.deepEqual(affectsMe.get(item.id), a, `${item.id}: Affects me card differs`);
+    }
+
+    // Push delivery reads the same evaluation.
+    assert.equal(
+      pushEligible(item, CALIFORNIA_AND_TEXAS),
+      evaluatePersonalRelevance(item, CALIFORNIA_AND_TEXAS).affectsMe,
+      `${item.id}: push disagrees`,
+    );
+  }
+
+  // The profile is doing real work: the California-only notice qualifies on
+  // CA, and it is a notice the Texas-only profile is excluded from — so the
+  // union genuinely covers more than either member alone.
+  assert.equal(feed.get(CRITICAL_CALIFORNIA.id)!.affectsYou, true);
+  assert.equal(
+    buildHomeCardModel(CRITICAL_CALIFORNIA, { today: TODAY, prefs: TEXAS }).affectsYou,
+    false,
+  );
+  assert.equal(
+    buildHomeCardModel(CRITICAL_CALIFORNIA, { today: TODAY, prefs: CALIFORNIA }).affectsYou,
+    true,
+  );
+});
+
+test('dropping one jurisdiction changes only the cards that relied on it, on every surface', () => {
+  const both: SurfaceContext = { today: TODAY, prefs: CALIFORNIA_AND_TEXAS };
+  const texasOnly: SurfaceContext = { today: TODAY, prefs: TEXAS };
+  const feedBoth = feedCards(CORPUS, both);
+  const feedAfter = feedCards(CORPUS, texasOnly);
+  const savedIds = CORPUS.map((item) => item.id);
+  const savedBoth = savedCards(savedIds, CORPUS, both);
+  const savedAfter = savedCards(savedIds, CORPUS, texasOnly);
+
+  const changed: string[] = [];
+  for (const item of CORPUS) {
+    const before = feedBoth.get(item.id)!.affectsYou;
+    const after = feedAfter.get(item.id)!.affectsYou;
+    if (before !== after) changed.push(item.id);
+    // Saved and Detail move with the Feed, never independently of it.
+    assert.equal(savedBoth.get(item.id)!.affectsYou, before, `${item.id} before`);
+    assert.equal(savedAfter.get(item.id)!.affectsYou, after, `${item.id} after`);
+    assert.equal(affectsYouVerdict(item, TEXAS), after, `${item.id} detail after`);
+  }
+  // Exactly the California-only recall lost its verdict. The nationwide
+  // recall, the PHA and the retailer/unknown cases are untouched.
+  assert.deepEqual(changed, [CRITICAL_CALIFORNIA.id]);
 });

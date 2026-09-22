@@ -163,6 +163,18 @@ npm run repair:illness-flags:dry         # P2B7L, PREPARED — 76 rows measured,
 # A dry run with nothing to do prints "No apply needed" and offers no command.
 ```
 
+One schema migration is also prepared and unapplied:
+`supabase/migrations/20260921000000_installation_preference_states_expand.sql`
+(P2B7U) adds a `state_codes` array beside the mirror's existing `state_code`
+and adds a plural write RPC beside the existing one, dropping nothing — the
+additive half of an expand-and-contract rollout, so it can be applied while
+the currently deployed code is still running. It is a `supabase db push`, not
+a repair command, and needs its own authorization. Preview it with
+`supabase db push --linked --dry-run` and census it with
+`npm run preflight:preference-states` (both read-only); the ordered rollout is
+in [docs/recall-operations.md](docs/recall-operations.md). Push must stay off
+until it is applied.
+
 ### Push notifications (Phase C2)
 
 Deliverable NotificationEvents become real device pushes via the Expo Push
@@ -527,6 +539,98 @@ review. Nothing here is a launch blocker — those live in
   Feed and Saved carry no retailer content. Contract and measurements:
   [docs/recall-feed-usability.md](docs/recall-feed-usability.md); read-only
   audit: `npm run qa:search`.
+
+- **P2B7U — multi-state personalization with an explicit Done. IMPLEMENTED
+  2026-09-21; the server-mirror migration is PREPARED AND NOT APPLIED.**
+
+  A shopper can now hold **several jurisdictions**, not one. People live near
+  a border, shop across one, and keep a second home; a single answer forced
+  them to under-report where a recall could reach them.
+
+  **The editor.** The state selector was a radio list that closed on the first
+  tap. It is now a multi-select sheet that stays open: Check Rows in canonical
+  order (by full name, so District of Columbia sits between Delaware and
+  Florida), a count line in words, `Clear selection`, and **`Done` at the
+  top-right**, where it stays reachable while the list scrolls and the
+  keyboard is open. It is the one place in the app that edits a **draft**:
+  opening copies the saved selection, every tap changes the copy, `Done`
+  writes the whole draft once and closes, and any other exit — the swipe down,
+  Android's back — discards it. No radio role or `radiogroup` survives on the
+  screen. Stores deliberately keep autosave: a store list is composed one
+  chain at a time, while a jurisdiction list is picked from 52 rows in one
+  sitting and each half-finished state of that edit is a different Affects me.
+
+  **The contract.** One canonical `states` array, de-duplicated and in
+  canonical order rather than tap order. The legacy singular `state` migrates
+  inside `sanitizePreferences` — the function every read already passes
+  through — by taking the **union** of both keys and emitting only the plural
+  one, so the migration is lossless, idempotent by construction, and leaves no
+  singular field for a second authority to grow out of. An empty list is a
+  real answer: no location preference, exactly as "no state chosen" always
+  behaved.
+
+  **The matching.** One `includes` became a set intersection in
+  `evaluatePersonalRelevance`, and nothing else moved: one jurisdiction in
+  common matches, an exclusion needs the source to name none of them, unknown
+  geography is still unknown, nationwide still matches everyone, and the
+  C5.2B allergen-only rule is untouched. Feed, Saved, Detail and push read
+  that one function, proven together over recorded real notices.
+
+  **The Settings row** shows the first two full names in canonical order then
+  `+N` (`District of Columbia, Montana +1`) — never an unbounded list — and
+  above a text scale of 1.5 it stacks instead of squeezing the value into a
+  few characters' width. Contract:
+  [docs/recall-personalization.md](docs/recall-personalization.md),
+  [DESIGN.md](DESIGN.md) "Personalization and Notifications".
+
+  **The server mirror changes in two migrations, and only the first is
+  written.** `installation_preferences` and the code reading it are both
+  deployed, so
+  `supabase/migrations/20260921000000_installation_preference_states_expand.sql`
+  is a strictly **additive expand phase**: it adds `state_codes text[]`,
+  backfills each non-null `state_code` into a one-element array, and KEEPS
+  both the singular column (now a maintained projection of `state_codes[1]`)
+  and the singular RPC signature, adding the plural RPC as a PostgREST
+  overload. Both entry points delegate to one internal implementation, so a
+  write through either maintains both representations in a single statement
+  and the deployed app keeps working against the expanded database. The
+  backfill leaves `updated_at` — the delivery horizon — alone.
+
+  A first draft dropped `state_code` and the singular signature in the same
+  transaction. That is a contract phase wearing an expand phase's name: it
+  would have broken the deployed app and the deployed delivery worker for the
+  whole window before the new bundle shipped. `preference-states-migration.test.ts`
+  now fails the build if the expand phase contains a `DROP`, a `RENAME`, a
+  destructive `ALTER`, or loses the singular signature, and
+  `preference-states-live.test.ts` proves the behaviour against real Postgres
+  and real PostgREST on the local disposable stack.
+
+  **Prepared, not applied.** Rollout order is migrate → verify → ship, and the
+  exact commands are in
+  [docs/recall-operations.md](docs/recall-operations.md) "P2B7U
+  preference-states expand". `npm run preflight:preference-states` is the
+  read-only census (measured 2026-09-21: 3 rows, 2 to backfill, 0 invalid).
+  Push is not activated and must not be activated before the migration runs.
+
+- **P2B7U contract phase — remove `state_code` and the singular RPC. RECORDED,
+  NOT IMPLEMENTED.** The second half of the expand-and-contract rollout: drop
+  `installation_preferences.state_code` and the
+  `set_installation_preferences(text, text, text[], text[])` signature, and
+  delete the compatibility branch from the shared implementation. It needs its
+  own migration and its own authorization, and it may run only once **all** of
+  these hold: the expand migration is applied and verified; the P2B7U bundle
+  is the only build any device can be running (pre-launch this means the
+  simulator/TestFlight builds have been replaced, and post-launch it means the
+  oldest supported release already speaks the plural RPC); a read-only check
+  shows no write has arrived through the singular signature for a full
+  retention window; and the delivery worker reads `state_codes` in production.
+  Until then `state_code` stays, unread by application logic and maintained
+  only as a projection.
+
+- **Final UI polish. RECORDED, NOT IMPLEMENTED.** Long Recall Detail title
+  expansion, and the final visual QA of the illness / hospitalization / death
+  / update treatments. Still the last presentation milestone; nothing in
+  P2B7U touched it.
 
 - **P2B7Q — Lotly-authored copy audit. IMPLEMENTED 2026-09-20.** Every
   shopper-facing sentence Lotly CONSTRUCTS rather than reproduces verbatim was

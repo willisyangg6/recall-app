@@ -3,15 +3,15 @@
  * the route so they are one tested contract rather than strings and slices
  * inside a component.
  *
- * What is here is what the screen does: the 52 jurisdictions sorted by name
- * and filtered by a case-insensitive substring; the store catalog in its
- * canonical (alphabetical) order, filtered by the catalog's own search and
- * never reordered by a selection; the toggles that add a choice at the end
- * of its list and remove it by filtering; the words the main screen uses to
- * summarize the chosen stores and the selector uses to count them; the
- * autosave status words; and the three answers a read can give besides a
- * real one (loading, failed, and a platform without preferences), which the
- * screen must never render as an empty selection.
+ * What is here is what the screen does: the 52 jurisdictions in the domain's
+ * canonical order, filtered by a case-insensitive substring; the store
+ * catalog in its canonical (alphabetical) order, filtered by the catalog's
+ * own search and never reordered by a selection; the toggles that edit a
+ * selection; the words the main screen uses to summarize the chosen states
+ * and stores and the selectors use to count them; the autosave status words;
+ * and the three answers a read can give besides a real one (loading, failed,
+ * and a platform without preferences), which the screen must never render as
+ * an empty selection.
  *
  * Consumer copy here follows DESIGN.md "Consumer copy": short sentences, one
  * job each, no em dashes.
@@ -21,11 +21,18 @@
  */
 
 import {
+  orderStateCodes,
+  STATE_CODES_IN_ORDER,
   stateNameForCode,
-  SUPPORTED_STATE_CODES,
+  stateNamesForCodes,
   type UserRecallPreferences,
 } from '@/domain/preferences';
 import { retailerById, searchRetailers, type CanonicalRetailer } from '@/domain/retailer-catalog';
+// The compact "two names, then +N" rule, imported rather than restated: the
+// Settings row and the Profile hub's summary must abbreviate the same list
+// the same way, or the two screens would disagree about which two names come
+// first (P2B7U).
+import { compactList } from './profile-hub';
 
 // ── What the screen can be showing ──────────────────────────────────────────
 
@@ -60,21 +67,21 @@ export const UNSUPPORTED_STATE = {
 export const PERSONALIZATION_INTRO =
   'Choose what Lotly should watch for. These preferences shape Affects me and your recall alerts. You can still browse every recall.';
 
-export const STATE_SECTION_LABEL = 'Your state';
+export const STATE_SECTION_LABEL = 'States you shop in';
 export const STATE_SECTION_HELPER =
-  'Choose the state you want Lotly to watch. Nationwide recalls are always included.';
-/** The trigger row's words when no state is chosen. */
-export const STATE_PLACEHOLDER = 'Choose your state';
-export const STATE_SELECT_LABEL = 'Select';
-export const STATE_CHANGE_LABEL = 'Change';
+  'Choose the states you want Lotly to watch. You can choose more than one. Nationwide recalls are always included.';
+/** The trigger row's words when nothing is chosen. */
+export const STATE_PLACEHOLDER = 'No states selected';
+export const ADD_STATES_LABEL = 'Add states';
+export const EDIT_STATES_LABEL = 'Edit states';
 /** Spoken after the trigger's name: what pressing it does. */
 export const STATE_TRIGGER_HINT = 'Opens the list of states.';
-export const STATE_SELECTOR_TITLE = 'Choose your state';
+export const STATE_SELECTOR_TITLE = 'Choose your states';
 export const STATE_CLEAR_LABEL = 'Clear selection';
 /** The same words the questionnaire's searchable state list uses. */
 export const STATE_SEARCH_LABEL = 'Search states';
 export const STATE_SEARCH_PLACEHOLDER = 'Search states';
-export const STATE_SEARCH_HINT = 'Filters the list of states below. Choose a state from the list.';
+export const STATE_SEARCH_HINT = 'Filters the list of states below. Check a state to choose it.';
 export const STATE_SEARCH_NO_MATCH = 'No state matches that search.';
 
 export const STORE_SECTION_LABEL = 'Stores you shop at';
@@ -91,11 +98,20 @@ export const STORE_SEARCH_PLACEHOLDER = 'Search stores';
 export const STORE_SEARCH_HINT = 'Filters the list of stores below. Check a store to choose it.';
 export const STORE_SEARCH_NO_MATCH = 'No store matches that search.';
 
-/** The selector sheets' dismiss actions. */
+/** The selector sheets' trailing action. */
 export const DONE_LABEL = 'Done';
+/**
+ * The store sheet's Done: every check has already autosaved, so the word
+ * only closes.
+ */
 export const DONE_HINT = 'Closes the list. Your choices are already saved.';
-export const CLOSE_LABEL = 'Close';
-export const CLOSE_HINT = 'Closes the list without changing your choice.';
+/**
+ * The state sheet's Done (P2B7U): here the word IS the save. The states
+ * sheet edits a draft, so it says so — and says what leaving without it
+ * does, because that is the one place a shopper can lose work.
+ */
+export const STATE_DONE_HINT =
+  'Saves the states you checked and closes the list. Leaving without Done keeps your saved states.';
 
 /** "A", "A and B", "A, B and C": the spoken form of a list of names. */
 export function listNames(names: readonly string[]): string {
@@ -103,9 +119,9 @@ export function listNames(names: readonly string[]): string {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
-/** The trigger row's spoken name: the section and the current choice. */
-export function stateTriggerLabel(stateName: string | null): string {
-  return `State: ${stateName ?? 'not chosen'}`;
+/** The trigger row's spoken name: the section and every chosen state. */
+export function stateTriggerLabel(names: readonly string[]): string {
+  return `States: ${names.length === 0 ? 'none selected' : listNames(names)}`;
 }
 
 /** The store row's spoken name: the section and every chosen store. */
@@ -120,19 +136,56 @@ export interface StateChoice {
   name: string;
 }
 
-/** Every supported jurisdiction, by name. */
+/**
+ * Every supported jurisdiction, in the domain's canonical order — the same
+ * order the stored array and the Settings summary use, so the first two names
+ * the summary shows are the first two the list would show.
+ */
 export function stateChoices(): StateChoice[] {
-  return SUPPORTED_STATE_CODES.map((code) => ({
+  return STATE_CODES_IN_ORDER.map((code) => ({
     code,
     name: stateNameForCode(code) as string,
-  })).sort((a, b) => a.name.localeCompare(b.name));
+  }));
 }
 
-/** The choices whose name contains the query, case-insensitively; all of them for a blank query. */
+/**
+ * The choices whose name contains the query, case-insensitively; all of them
+ * for a blank query.
+ *
+ * The SELECTION is not an input: filtering narrows what is on screen and
+ * knows nothing about what is checked, so a state checked before the search
+ * was typed stays checked while it is hidden and is still there when the
+ * search is cleared.
+ */
 export function filterStateChoices(choices: readonly StateChoice[], query: string): StateChoice[] {
   const needle = query.trim().toLowerCase();
   if (needle === '') return [...choices];
   return choices.filter((choice) => choice.name.toLowerCase().includes(needle));
+}
+
+/**
+ * The Settings row's summary of the chosen states: the first two full names
+ * in canonical order, then `+N` for the rest — never the long list.
+ *
+ * Fifty-two jurisdictions can be chosen; a row that printed them all would
+ * push the rest of the screen off it. The spoken form still names every one,
+ * so abbreviating never hides a choice (`compactList`, shared with the
+ * Profile hub's card).
+ */
+export function stateSummary(selected: readonly string[]): string {
+  if (selected.length === 0) return STATE_PLACEHOLDER;
+  return compactList(stateNamesForCodes(selected)).visible;
+}
+
+/** The main screen's one action for the state section. */
+export function stateActionLabel(selected: readonly string[]): string {
+  return selected.length === 0 ? ADD_STATES_LABEL : EDIT_STATES_LABEL;
+}
+
+/** The selector's count line: words, not colour, carry how many are chosen. */
+export function stateCountLabel(count: number): string {
+  if (count === 0) return STATE_PLACEHOLDER;
+  return count === 1 ? '1 state selected' : `${count} states selected`;
 }
 
 // ── The store list ──────────────────────────────────────────────────────────
@@ -178,11 +231,27 @@ export function storeCountLabel(count: number): string {
 
 // ── The edits ───────────────────────────────────────────────────────────────
 
-export function withState(
+/**
+ * Replace the whole jurisdiction selection — what `Done` commits. The codes
+ * are re-ordered canonically and de-duplicated on the way in, so the stored
+ * array is in the one order whatever order the draft accumulated.
+ */
+export function withStates(
   prefs: UserRecallPreferences,
-  state: string | null,
+  states: readonly string[],
 ): UserRecallPreferences {
-  return { ...prefs, state };
+  return { ...prefs, states: orderStateCodes(states) };
+}
+
+/**
+ * Add or remove one jurisdiction from a DRAFT list (never from saved
+ * preferences — the state selector commits on Done, not on tap). Canonical
+ * order, so the checked rows and the count never depend on tap order.
+ */
+export function toggleStateCode(selected: readonly string[], code: string): string[] {
+  return selected.includes(code)
+    ? selected.filter((c) => c !== code)
+    : orderStateCodes([...selected, code]);
 }
 
 /** Adds the token at the end of the list, or removes it — the same shape the store saves. */

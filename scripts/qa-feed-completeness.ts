@@ -43,7 +43,7 @@ import { createSupabaseServerClient } from '../src/server/store/supabase-store';
 
 /** The profile used across personalization QA, so results stay comparable. */
 const PROFILE: UserRecallPreferences = {
-  state: 'CA',
+  states: ['CA'],
   allergens: ['sesame', 'peanut'],
   retailers: ['costco', 'trader-joes'],
 };
@@ -190,7 +190,7 @@ async function main(): Promise<void> {
   const placedIds = new Set(placed.map((i) => i.id));
 
   console.log(
-    `\nAFFECTS ME — representative profile (${PROFILE.state} · ` +
+    `\nAFFECTS ME — representative profile (${PROFILE.states.join(', ')} · ` +
       `${PROFILE.allergens.join(', ')} · ${PROFILE.retailers.join(', ')})`,
   );
   console.log(`  qualifying (eligibility):       ${qualifying.length}`);

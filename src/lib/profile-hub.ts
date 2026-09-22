@@ -9,10 +9,12 @@
  * says, so the rules can be proven under Node against the closed
  * vocabularies (`domain/preferences`, `domain/retailer-catalog`).
  *
- * The summary is compact by contract. Allergens and stores show at most two
- * names, then `+N` — the same shape the Feed card gives a multi-state
- * distribution — while the spoken description always carries every name,
- * so an abbreviated value never hides a choice from a screen reader.
+ * The summary is compact by contract. States, allergens and stores each show
+ * at most two names, then `+N` — the same shape the Feed card gives a
+ * multi-state distribution — while the spoken description always carries
+ * every name, so an abbreviated value never hides a choice from a screen
+ * reader. Since P2B7U states are a list like the other two, and `compactList`
+ * is the one rule all three (and the Settings row) abbreviate by.
  *
  * Three answers exist and none may pass for another: a read that has not
  * resolved (loading), a read that failed or a platform with no preferences
@@ -23,7 +25,7 @@
 
 import {
   CONSUMER_ALLERGENS,
-  stateNameForCode,
+  stateNamesForCodes,
   type UserRecallPreferences,
 } from '@/domain/preferences';
 import { retailerById } from '@/domain/retailer-catalog';
@@ -32,8 +34,8 @@ import { retailerById } from '@/domain/retailer-catalog';
 
 /** This device's personalization as display names. */
 export interface PersonalizationSummary {
-  /** The chosen state's full name, or null when none is chosen. */
-  state: string | null;
+  /** The chosen jurisdictions' full names, in canonical order. */
+  states: readonly string[];
   /** Allergen labels in the canonical (display) order, never a raw token. */
   allergens: readonly string[];
   /** Canonical retailer names in the order they were chosen, never a raw id. */
@@ -48,7 +50,7 @@ export interface PersonalizationSummary {
 export function summarizePreferences(prefs: UserRecallPreferences): PersonalizationSummary {
   const chosen = new Set(prefs.allergens);
   return {
-    state: stateNameForCode(prefs.state),
+    states: stateNamesForCodes(prefs.states),
     allergens: CONSUMER_ALLERGENS.filter((option) => chosen.has(option.token)).map(
       (option) => option.label,
     ),
@@ -68,14 +70,14 @@ export type PreferenceSummaryState =
   | { status: 'ready'; summary: PersonalizationSummary };
 
 export const SUMMARY_LABELS = {
-  state: 'State',
+  states: 'States',
   allergens: 'Allergens',
   retailers: 'Stores',
 } as const;
 
 export type SummaryKey = keyof typeof SUMMARY_LABELS;
 
-/** No state chosen — a real answer. */
+/** No jurisdiction chosen — a real answer. */
 export const NOT_CHOSEN = 'Not chosen';
 /** No allergen or store chosen — a real answer. */
 export const NONE_SELECTED = 'None selected';
@@ -142,13 +144,20 @@ export function summaryLines(state: PreferenceSummaryState): SummaryLine[] {
   const { summary } = state;
   const allergens = compactList(summary.allergens);
   const retailers = compactList(summary.retailers);
+  // Nothing chosen keeps this line's own word — `Not chosen`, which is what
+  // an unanswered question reads as — rather than `compactList`'s
+  // `None selected`, which is how a list of options reads when none is
+  // ticked. The abbreviation above zero is the shared rule.
+  const states =
+    summary.states.length === 0
+      ? { visible: NOT_CHOSEN, accessible: NOT_CHOSEN }
+      : compactList(summary.states);
   return [
     {
-      key: 'state',
-      label: SUMMARY_LABELS.state,
-      visible: summary.state ?? NOT_CHOSEN,
-      accessible: summary.state ?? NOT_CHOSEN,
-      kind: summary.state === null ? 'empty' : 'value',
+      key: 'states',
+      label: SUMMARY_LABELS.states,
+      ...states,
+      kind: summary.states.length === 0 ? 'empty' : 'value',
     },
     {
       key: 'allergens',
@@ -185,7 +194,7 @@ export function summaryAccessibilityLabel(label: string, state: PreferenceSummar
 
 /** The visible affordance on the featured card. The card itself is the target. */
 export const EDIT_LABEL = 'Edit';
-export const PERSONALIZATION_HINT = 'Opens your state, allergens to watch, and stores.';
+export const PERSONALIZATION_HINT = 'Opens your states, allergens to watch, and stores.';
 export const NOTIFICATIONS_SUMMARY = 'Recall alerts for this device.';
 export const NOTIFICATIONS_HINT = 'Opens recall alert settings for this device.';
 export const DOCUMENT_HINT = 'Opens the document.';

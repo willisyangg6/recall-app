@@ -1,12 +1,12 @@
 /**
- * The Personalization screen's list rules and copy (P2B6A), driven against
- * the real module: the complete state catalog and its filter, the store
- * catalog in a stable canonical order that a selection never disturbs, the
- * main screen's store summary and the selector's count in words, the
- * toggles that produce exactly the shape the store saves and the Profile
- * summary reads, the autosave words, the three not-ready answers that may
- * never pass for an empty selection, and the approved copy without an em
- * dash in it.
+ * The Personalization screen's list rules and copy (P2B6A; multi-state in
+ * P2B7U), driven against the real module: the complete state catalog and its
+ * filter, the store catalog in a stable canonical order that a selection
+ * never disturbs, the main screen's compact state summary and full store
+ * summary, both selectors' counts in words, the toggles that produce exactly
+ * the shape the store saves and the Profile summary reads, the autosave
+ * words, the three not-ready answers that may never pass for an empty
+ * selection, and the approved copy without an em dash in it.
  */
 
 import assert from 'node:assert/strict';
@@ -16,6 +16,7 @@ import {
   CONSUMER_ALLERGENS,
   EMPTY_PREFERENCES,
   sanitizePreferences,
+  STATE_CODES_IN_ORDER,
   SUPPORTED_STATE_CODES,
 } from '@/domain/preferences';
 import { RETAILER_CATALOG, searchRetailers } from '@/domain/retailer-catalog';
@@ -29,8 +30,10 @@ import {
 } from '@/lib/shopper-report-presentation';
 import * as screen from './personalization-screen';
 import {
+  ADD_STATES_LABEL,
   ADD_STORES_LABEL,
   chosenStores,
+  EDIT_STATES_LABEL,
   EDIT_STORES_LABEL,
   FAILED_STATE,
   filterStateChoices,
@@ -41,13 +44,16 @@ import {
   SAVE_STATUS,
   saveStatusText,
   STATE_PLACEHOLDER,
+  stateActionLabel,
   stateChoices,
+  stateCountLabel,
   STATE_SEARCH_HINT,
   STATE_SEARCH_LABEL,
   STATE_SEARCH_NO_MATCH,
   STATE_SEARCH_PLACEHOLDER,
   STATE_SECTION_HELPER,
   STATE_SECTION_LABEL,
+  stateSummary,
   stateTriggerLabel,
   storeActionLabel,
   storeCountLabel,
@@ -59,13 +65,14 @@ import {
   storeTriggerLabel,
   toggleAllergen,
   toggleRetailer,
+  toggleStateCode,
   UNSUPPORTED_STATE,
-  withState,
+  withStates,
 } from './personalization-screen';
 
 // ── The state list ──────────────────────────────────────────────────────────
 
-test('every supported jurisdiction is offered, by name, in alphabetical order', () => {
+test('every supported jurisdiction is offered, by name, in the one canonical order', () => {
   const choices = stateChoices();
   assert.equal(choices.length, SUPPORTED_STATE_CODES.length);
   assert.equal(choices.length, 52);
@@ -77,6 +84,17 @@ test('every supported jurisdiction is offered, by name, in alphabetical order', 
   assert.ok(choices.every((c) => c.name.length > 0));
   assert.ok(choices.some((c) => c.code === 'DC'));
   assert.ok(choices.some((c) => c.code === 'PR'));
+  // The list's order IS the domain's, not a sort of this module's own — so
+  // the first two names the Settings row shows are the first two here.
+  assert.deepEqual(
+    choices.map((c) => c.code),
+    STATE_CODES_IN_ORDER,
+  );
+  // DC sorts by NAME, between Delaware and Florida — not last, where the
+  // postal map's own key order leaves it.
+  const codes = choices.map((c) => c.code);
+  assert.equal(codes.indexOf('DE') + 1, codes.indexOf('DC'));
+  assert.equal(codes.indexOf('DC') + 1, codes.indexOf('FL'));
 });
 
 test('the state filter is a case-insensitive substring on the name; blank shows all', () => {
@@ -167,8 +185,12 @@ test('the selector counts in words: none, one, many', () => {
 });
 
 test('the triggers speak their section and every current choice', () => {
-  assert.equal(stateTriggerLabel('California'), 'State: California');
-  assert.equal(stateTriggerLabel(null), 'State: not chosen');
+  assert.equal(stateTriggerLabel([]), 'States: none selected');
+  assert.equal(stateTriggerLabel(['California']), 'States: California');
+  assert.equal(
+    stateTriggerLabel(['California', 'Montana', 'New York']),
+    'States: California, Montana and New York',
+  );
   assert.equal(storeTriggerLabel([]), 'Stores: none selected');
   assert.equal(storeTriggerLabel(['Costco']), 'Stores: Costco');
   assert.equal(storeTriggerLabel(['Costco', 'Walmart']), 'Stores: Costco and Walmart');
@@ -180,7 +202,7 @@ test('the triggers speak their section and every current choice', () => {
 
 test('toggles add at the end and remove by filtering — the same shape the store saves', () => {
   const peanut = toggleAllergen(EMPTY_PREFERENCES, 'peanut');
-  assert.deepEqual(peanut, { state: null, allergens: ['peanut'], retailers: [] });
+  assert.deepEqual(peanut, { states: [], allergens: ['peanut'], retailers: [] });
   const both = toggleAllergen(peanut, 'milk');
   assert.deepEqual(both.allergens, ['peanut', 'milk']);
   assert.deepEqual(toggleAllergen(both, 'peanut').allergens, ['milk']);
@@ -191,21 +213,108 @@ test('toggles add at the end and remove by filtering — the same shape the stor
     'walmart',
   ]);
 
-  assert.equal(withState(EMPTY_PREFERENCES, 'CA').state, 'CA');
-  assert.equal(withState(withState(EMPTY_PREFERENCES, 'CA'), null).state, null);
+  assert.deepEqual(withStates(EMPTY_PREFERENCES, ['CA']).states, ['CA']);
+  assert.deepEqual(withStates(withStates(EMPTY_PREFERENCES, ['CA']), []).states, []);
   // Inputs are never mutated.
-  assert.deepEqual(EMPTY_PREFERENCES, { state: null, allergens: [], retailers: [] });
+  assert.deepEqual(EMPTY_PREFERENCES, { states: [], allergens: [], retailers: [] });
+});
+
+// ── The jurisdiction draft ──────────────────────────────────────────────────
+
+test('toggling a jurisdiction adds and removes it, in canonical order, never by tap order', () => {
+  assert.deepEqual(toggleStateCode([], 'NY'), ['NY']);
+  // Tapped New York, then California: stored California first, because the
+  // order is the list's, not the finger's.
+  assert.deepEqual(toggleStateCode(['NY'], 'CA'), ['CA', 'NY']);
+  assert.deepEqual(toggleStateCode(['CA', 'NY'], 'MT'), ['CA', 'MT', 'NY']);
+  // Removing one leaves the others exactly as they were.
+  assert.deepEqual(toggleStateCode(['CA', 'MT', 'NY'], 'MT'), ['CA', 'NY']);
+  assert.deepEqual(toggleStateCode(['CA'], 'CA'), []);
+  // Tapping the same rows in either order reaches the same stored answer.
+  const oneWay = ['DC', 'NY', 'MT'].reduce(toggleStateCode, [] as string[]);
+  const other = ['MT', 'DC', 'NY'].reduce(toggleStateCode, [] as string[]);
+  assert.deepEqual(oneWay, other);
+  assert.deepEqual(oneWay, ['DC', 'MT', 'NY']);
+  // A draft is never mutated in place.
+  const draft = ['CA'];
+  toggleStateCode(draft, 'NY');
+  assert.deepEqual(draft, ['CA']);
+});
+
+test('committing a draft stores it de-duplicated, in canonical order, dropping unknown codes', () => {
+  assert.deepEqual(withStates(EMPTY_PREFERENCES, ['NY', 'CA', 'NY']).states, ['CA', 'NY']);
+  assert.deepEqual(withStates(EMPTY_PREFERENCES, ['ZZ', 'CA']).states, ['CA']);
+  // Committing touches nothing else.
+  const prefs = { states: ['TX'], allergens: ['milk'], retailers: ['costco'] };
+  const next = withStates(prefs, ['CA', 'DC']);
+  assert.deepEqual(next, { states: ['CA', 'DC'], allergens: ['milk'], retailers: ['costco'] });
+  assert.deepEqual(prefs.states, ['TX'], 'the input is not mutated');
+});
+
+test('searching narrows what is shown and knows nothing about what is checked', () => {
+  const choices = stateChoices();
+  // Three checked; a search that hides two of them.
+  const draft = ['CA', 'MT', 'NY'];
+  const shown = filterStateChoices(choices, 'new');
+  assert.deepEqual(
+    shown.map((c) => c.code),
+    ['NH', 'NJ', 'NM', 'NY'],
+  );
+  assert.ok(!shown.some((c) => c.code === 'CA'));
+  // Checking one more while the search is on touches only the draft.
+  const next = toggleStateCode(draft, 'NJ');
+  assert.deepEqual(next, ['CA', 'MT', 'NJ', 'NY']);
+  // Clearing the search brings the list back with every selection intact.
+  const all = filterStateChoices(choices, '');
+  assert.equal(all.length, 52);
+  for (const code of next) assert.ok(all.some((c) => c.code === code));
+  // The filter is a pure function of (choices, query): the selection is not
+  // an argument it could remove something from.
+  assert.equal(filterStateChoices.length, 2);
+});
+
+// ── The main screen's compact state summary ─────────────────────────────────
+
+test('the Settings row names zero, one and two states in full, then counts the rest', () => {
+  assert.equal(stateSummary([]), STATE_PLACEHOLDER);
+  assert.equal(STATE_PLACEHOLDER, 'No states selected');
+  assert.equal(stateSummary(['CA']), 'California');
+  assert.equal(stateSummary(['CA', 'NY']), 'California, New York');
+  // The founder's example: three chosen reads as two names and a count.
+  assert.equal(stateSummary(['CA', 'NY', 'TX']), 'California, New York +1');
+  assert.equal(stateSummary(['CA', 'NY', 'TX', 'MT']), 'California, Montana +2');
+  // Canonical order, not the order the codes were handed over.
+  assert.equal(stateSummary(['TX', 'NY', 'CA']), 'California, New York +1');
+  // Never an unbounded list, however many are chosen.
+  const everywhere = stateSummary(STATE_CODES_IN_ORDER);
+  assert.equal(everywhere, 'Alabama, Alaska +50');
+  assert.equal(everywhere.split(', ').length, 2);
+  assert.equal(stateActionLabel([]), ADD_STATES_LABEL);
+  assert.equal(stateActionLabel(['CA']), EDIT_STATES_LABEL);
+  assert.equal(ADD_STATES_LABEL, 'Add states');
+  assert.equal(EDIT_STATES_LABEL, 'Edit states');
+});
+
+test('the state selector counts in words: none, one, many', () => {
+  assert.equal(stateCountLabel(0), 'No states selected');
+  assert.equal(stateCountLabel(1), '1 state selected');
+  assert.equal(stateCountLabel(3), '3 states selected');
+  assert.equal(stateCountLabel(52), '52 states selected');
 });
 
 test('edited preferences survive the store’s own sanitizer unchanged and read on Profile', () => {
-  let prefs = withState(EMPTY_PREFERENCES, 'CA');
+  let prefs = withStates(EMPTY_PREFERENCES, ['CA', 'NY', 'DC']);
   for (const option of CONSUMER_ALLERGENS.slice(0, 3)) prefs = toggleAllergen(prefs, option.token);
   prefs = toggleRetailer(toggleRetailer(prefs, 'costco'), 'trader-joes');
-  assert.deepEqual(sanitizePreferences(prefs), prefs);
-  assert.deepEqual(Object.keys(prefs).sort(), ['allergens', 'retailers', 'state']);
+  // Serialize and reload exactly as the store does: several jurisdictions
+  // come back, in the same canonical order, with nothing added or lost.
+  const reloaded = sanitizePreferences(JSON.parse(JSON.stringify(prefs)));
+  assert.deepEqual(reloaded, prefs);
+  assert.deepEqual(reloaded.states, ['CA', 'DC', 'NY']);
+  assert.deepEqual(Object.keys(prefs).sort(), ['allergens', 'retailers', 'states']);
   // The Profile card's summary reads exactly these values.
   const summary = summarizePreferences(prefs);
-  assert.equal(summary.state, 'California');
+  assert.deepEqual(summary.states, ['California', 'District of Columbia', 'New York']);
   assert.deepEqual(summary.allergens, ['Peanuts', 'Tree nuts', 'Milk']);
   assert.deepEqual(summary.retailers, ['Costco', "Trader Joe's"]);
 });
@@ -230,10 +339,10 @@ test('the approved Personalization copy appears exactly', () => {
     PERSONALIZATION_INTRO,
     'Choose what Lotly should watch for. These preferences shape Affects me and your recall alerts. You can still browse every recall.',
   );
-  assert.equal(STATE_SECTION_LABEL, 'Your state');
+  assert.equal(STATE_SECTION_LABEL, 'States you shop in');
   assert.equal(
     STATE_SECTION_HELPER,
-    'Choose the state you want Lotly to watch. Nationwide recalls are always included.',
+    'Choose the states you want Lotly to watch. You can choose more than one. Nationwide recalls are always included.',
   );
   assert.equal(ALLERGEN_SECTION_LABEL, 'Allergens to watch');
   assert.equal(
@@ -264,12 +373,22 @@ test('no authored Personalization sentence carries an em dash', () => {
   assert.ok(!ALLERGEN_SECTION_LABEL.includes('—'));
 });
 
-test('the state search speaks the same words as the questionnaire’s searchable list', () => {
+test('the state search shares the questionnaire’s words, except the one that says what a row does', () => {
   assert.equal(STATE_SEARCH_LABEL, QUESTIONNAIRE_STATE_SEARCH_LABEL);
   assert.equal(STATE_SEARCH_PLACEHOLDER, QUESTIONNAIRE_STATE_SEARCH_PLACEHOLDER);
-  assert.equal(STATE_SEARCH_HINT, QUESTIONNAIRE_STATE_SEARCH_HINT);
   assert.equal(STATE_SEARCH_NO_MATCH, QUESTIONNAIRE_STATE_SEARCH_NO_MATCH);
   assert.equal(STATE_SEARCH_LABEL, 'Search states');
+  // The HINT deliberately differs since P2B7U, because the two lists no
+  // longer behave alike: personalization is a checkbox list of any number of
+  // jurisdictions, while a shopper report asks for the ONE state a product
+  // was found in and stays a radio list. Telling a screen-reader user to
+  // "choose a state from the list" on a multi-select would misdescribe it.
+  assert.equal(STATE_SEARCH_HINT, 'Filters the list of states below. Check a state to choose it.');
+  assert.equal(
+    QUESTIONNAIRE_STATE_SEARCH_HINT,
+    'Filters the list of states below. Choose a state from the list.',
+  );
+  assert.notEqual(STATE_SEARCH_HINT, QUESTIONNAIRE_STATE_SEARCH_HINT);
 });
 
 test('loading, failure and the web each have their own words — never an empty selection’s', () => {

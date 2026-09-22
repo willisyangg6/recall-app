@@ -91,15 +91,16 @@ export class MemoryPushStore implements PushStore {
    */
   setPreferences(
     installationId: string,
-    prefs: { stateCode: string | null; allergens: string[]; retailerIds: string[] },
+    prefs: { stateCodes: string[]; allergens: string[]; retailerIds: string[] },
     nowIso: string,
   ): void {
+    const stateCodes = [...new Set(prefs.stateCodes)].sort();
     const allergens = [...new Set(prefs.allergens)].sort();
     const retailerIds = [...new Set(prefs.retailerIds)].sort();
     const existing = this.preferences.get(installationId);
     if (
       existing &&
-      existing.stateCode === prefs.stateCode &&
+      existing.stateCodes.join('|') === stateCodes.join('|') &&
       existing.allergens.join('|') === allergens.join('|') &&
       existing.retailerIds.join('|') === retailerIds.join('|')
     ) {
@@ -107,7 +108,7 @@ export class MemoryPushStore implements PushStore {
     }
     this.preferences.set(installationId, {
       installationId,
-      stateCode: prefs.stateCode,
+      stateCodes,
       allergens,
       retailerIds,
       updatedAt: nowIso,

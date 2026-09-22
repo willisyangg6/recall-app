@@ -54,13 +54,14 @@ export async function disablePushSubscription(installationId: string): Promise<v
  */
 export async function setInstallationPreferences(input: {
   installationId: string;
-  stateCode: string | null;
+  /** Every chosen jurisdiction; empty = no location preference (P2B7U). */
+  stateCodes: readonly string[];
   allergens: string[];
   retailerIds: string[];
 }): Promise<void> {
   await rpcPost('set_installation_preferences', {
     p_installation_id: input.installationId,
-    p_state_code: input.stateCode,
+    p_state_codes: [...input.stateCodes],
     p_allergens: input.allergens,
     p_retailer_ids: input.retailerIds,
   });

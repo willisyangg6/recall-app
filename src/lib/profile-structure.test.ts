@@ -94,7 +94,7 @@ test('the settings routes and the recall detail route survive; Profile is a tab'
 });
 
 test('no household or profile identity fields exist — preferences keep their three dimensions', () => {
-  assert.deepEqual(Object.keys(EMPTY_PREFERENCES).sort(), ['allergens', 'retailers', 'state']);
+  assert.deepEqual(Object.keys(EMPTY_PREFERENCES).sort(), ['allergens', 'retailers', 'states']);
   const profile = read('(tabs)', 'profile.tsx');
   for (const forbidden of ['avatar', 'household', 'displayName', 'account']) {
     assert.ok(!profile.toLowerCase().includes(forbidden.toLowerCase()));

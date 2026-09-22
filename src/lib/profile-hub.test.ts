@@ -68,12 +68,13 @@ test('beyond two, the first two are shown with +N — and every name is still sp
 
 test('the summary shows names, never tokens or ids, in the canonical allergen order', () => {
   const summary = summarizePreferences({
-    state: 'CA',
+    // Chosen out of canonical order: the summary reorders states by name.
+    states: ['NY', 'CA'],
     // Chosen out of display order: the summary reorders to the catalog's.
     allergens: ['milk', 'peanut'],
     retailers: ['trader-joes', 'costco'],
   });
-  assert.equal(summary.state, 'California');
+  assert.deepEqual(summary.states, ['California', 'New York']);
   assert.deepEqual(summary.allergens, ['Peanuts', 'Milk']);
   // Stores keep the order they were chosen in — the order the Personalization
   // screen shows them — under their canonical names.
@@ -87,8 +88,8 @@ test('the summary shows names, never tokens or ids, in the canonical allergen or
 
 test('an unknown token or id is dropped, not shown raw', () => {
   assert.deepEqual(
-    summarizePreferences({ state: 'ZZ', allergens: ['not-an-allergen'], retailers: ['nope'] }),
-    { state: null, allergens: [], retailers: [] },
+    summarizePreferences({ states: ['ZZ'], allergens: ['not-an-allergen'], retailers: ['nope'] }),
+    { states: [], allergens: [], retailers: [] },
   );
 });
 
@@ -97,17 +98,17 @@ test('empty preferences are a real answer: "Not chosen" and "None selected"', ()
   assert.deepEqual(
     lines.map((line) => [line.label, line.visible, line.kind]),
     [
-      [SUMMARY_LABELS.state, NOT_CHOSEN, 'empty'],
+      [SUMMARY_LABELS.states, NOT_CHOSEN, 'empty'],
       [SUMMARY_LABELS.allergens, NONE_SELECTED, 'empty'],
       [SUMMARY_LABELS.retailers, NONE_SELECTED, 'empty'],
     ],
   );
   assert.equal(NOT_CHOSEN, 'Not chosen');
-  assert.deepEqual(Object.values(SUMMARY_LABELS), ['State', 'Allergens', 'Stores']);
+  assert.deepEqual(Object.values(SUMMARY_LABELS), ['States', 'Allergens', 'Stores']);
 });
 
 test('a populated answer marks real choices as values and the rest as empty', () => {
-  const lines = summaryLines(ready({ state: 'DC', allergens: [], retailers: ['walmart'] }));
+  const lines = summaryLines(ready({ states: ['DC'], allergens: [], retailers: ['walmart'] }));
   assert.deepEqual(
     lines.map((line) => [line.visible, line.kind]),
     [
@@ -148,21 +149,22 @@ test('the card speaks its name and every choice in full, abbreviated or not', ()
   const label = summaryAccessibilityLabel(
     'Personalization',
     ready({
-      state: 'CA',
+      states: ['CA', 'NY', 'MT'],
       allergens: ['peanut', 'tree nuts', 'milk', 'egg'],
       retailers: ['costco', 'trader-joes', 'walmart'],
     }),
   );
   assert.equal(
     label,
-    'Personalization. State: California. Allergens: Peanuts, Tree nuts, Milk and Egg. ' +
+    'Personalization. States: California, Montana and New York. ' +
+      'Allergens: Peanuts, Tree nuts, Milk and Egg. ' +
       "Stores: Costco, Trader Joe's and Walmart.",
   );
   assert.ok(!label.includes('+'));
   // The empty answer is spoken as the same real answer it shows.
   assert.equal(
     summaryAccessibilityLabel('Personalization', ready(EMPTY_PREFERENCES)),
-    'Personalization. State: Not chosen. Allergens: None selected. Stores: None selected.',
+    'Personalization. States: Not chosen. Allergens: None selected. Stores: None selected.',
   );
 });
 

@@ -122,10 +122,10 @@ async function seededStore(): Promise<{ store: MemoryPushStore; transport: FakeT
   store.register(INSTALL_B, 'ExpoPushToken[BBBB]', 'android', iso(0));
   store.setPreferences(
     INSTALL_A,
-    { stateCode: 'CA', allergens: ['peanut'], retailerIds: ['costco'] },
+    { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: ['costco'] },
     iso(0),
   );
-  store.setPreferences(INSTALL_B, { stateCode: 'TX', allergens: [], retailerIds: [] }, iso(0));
+  store.setPreferences(INSTALL_B, { stateCodes: ['TX'], allergens: [], retailerIds: [] }, iso(0));
   addEvent(store, 1 * HOUR);
   // Sent + ticketed for both installations.
   await runPushDelivery(store, { transport, dryRun: false, now: () => new Date(T0 + 2 * HOUR) });

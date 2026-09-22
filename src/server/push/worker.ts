@@ -95,7 +95,7 @@ function relevanceInput(event: Pick<DeliverableEvent, 'projection'>): RelevanceI
 }
 
 function toUserPreferences(prefs: InstallationPreferences): UserRecallPreferences {
-  return { state: prefs.stateCode, allergens: prefs.allergens, retailers: prefs.retailerIds };
+  return { states: prefs.stateCodes, allergens: prefs.allergens, retailers: prefs.retailerIds };
 }
 
 export interface EventEligibility {
@@ -124,10 +124,12 @@ export interface EventEligibility {
  *    events older than the change were already decided under the previous
  *    preferences (or never qualified), and never become newly deliverable.
  * 2. Preference matching (src/lib/relevance `pushEligible` — the same
- *    evaluation the app renders): with a chosen state, deliver on geographic
- *    match (nationwide always matches) or unknown geography with an
+ *    evaluation the app renders): with any jurisdiction chosen, deliver on
+ *    geographic match (nationwide always matches, and one chosen jurisdiction
+ *    in the source's own state list is enough) or unknown geography with an
  *    allergen/retailer signal; an authoritative geographic exclusion never
- *    delivers. Without a chosen state, pre-C3 deliver-all behavior stands.
+ *    delivers. With no jurisdiction chosen, pre-C3 deliver-all behavior
+ *    stands.
  */
 export function classifySubscriptionsForEvent(
   event: Pick<DeliverableEvent, 'createdAt' | 'projection'>,
@@ -220,7 +222,7 @@ export async function runPushDelivery(
     activation: pushEnabledAt,
     subscriptionsActive: subscriptions.length,
     preferencesStored: preferences.length,
-    preferencesWithState: preferences.filter((p) => p.stateCode !== null).length,
+    preferencesWithState: preferences.filter((p) => p.stateCodes.length > 0).length,
     eventsExamined: 0,
     skippedPreActivation: 0,
     suppressedSkipped: 0,

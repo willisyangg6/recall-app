@@ -1471,12 +1471,16 @@ function ProfileGallery() {
     ],
     [
       'Populated — simulated: California, Peanuts and Milk, Costco and Trader Joe’s',
-      ready({ state: 'CA', allergens: ['peanut', 'milk'], retailers: ['costco', 'trader-joes'] }),
+      ready({
+        states: ['CA'],
+        allergens: ['peanut', 'milk'],
+        retailers: ['costco', 'trader-joes'],
+      }),
     ],
     [
-      'Long — simulated: District of Columbia, four allergens and three stores, summarized to two names and +N',
+      'Long — simulated: four states, four allergens and three stores, each summarized to two names and +N',
       ready({
-        state: 'DC',
+        states: ['DC', 'CA', 'NY', 'MT'],
         allergens: ['peanut', 'tree nuts', 'milk', 'egg'],
         retailers: ['walmart', 'target', 'costco'],
       }),
@@ -2449,30 +2453,26 @@ function LivePreferences({ initial }: { initial: UserRecallPreferences }) {
   );
 }
 
-/** The state row alone, its choice held here; the trigger opens the real sheet. */
-function LiveState({ initial }: { initial: string | null }) {
-  const [value, setValue] = useState<string | null>(initial);
-  return <StateSection value={value} onChange={setValue} />;
+/** The states row alone, its choice held here; the trigger opens the real sheet. */
+function LiveState({ initial }: { initial: string[] }) {
+  const [selected, setSelected] = useState<string[]>(initial);
+  return <StateSection selected={selected} onCommit={setSelected} />;
 }
 
-/** The state selector's contents inline: the sheet's search, Clear and radio rows. */
+/**
+ * The state selector's contents inline: the sheet's count, search, Clear and
+ * checkbox rows. The draft is the component's own; this gallery never sees a
+ * commit, because a sample has nothing to save to.
+ */
 function LiveStateContent({
   initial,
   initialQuery = '',
 }: {
-  initial: string | null;
+  initial: string[];
   initialQuery?: string;
 }) {
-  const [value, setValue] = useState<string | null>(initial);
   const noop = () => {};
-  return (
-    <StateSelectorContent
-      value={value}
-      onChange={setValue}
-      onDone={noop}
-      initialQuery={initialQuery}
-    />
-  );
+  return <StateSelectorContent selected={initial} onCommit={noop} initialQuery={initialQuery} />;
 }
 
 /** The store row alone, its list held here; the trigger opens the real sheet. */
@@ -2512,7 +2512,7 @@ function LiveStoreContent({
  */
 function PersonalizationGallery() {
   const populated: UserRecallPreferences = {
-    state: 'CA',
+    states: ['CA', 'NY', 'TX'],
     allergens: ['peanut', 'milk'],
     retailers: ['costco', 'trader-joes'],
   };
@@ -2534,27 +2534,33 @@ function PersonalizationGallery() {
       <GallerySample caption="Empty selections — simulated: the store answered with nothing chosen">
         <LivePreferences initial={EMPTY_PREFERENCES} />
       </GallerySample>
-      <GallerySample caption="Populated — simulated: California, Peanuts and Milk, Costco and Trader Joe’s">
+      <GallerySample caption="Populated — simulated: California, New York and Texas, Peanuts and Milk, Costco and Trader Joe’s">
         <LivePreferences initial={populated} />
       </GallerySample>
       <GallerySample caption="Read failure — simulated: the store could not be read">
         <PreferencesNotReady status="failed" />
       </GallerySample>
 
-      <GallerySample caption="State row, no selection — simulated: nothing chosen; the row opens the real sheet">
-        <LiveState initial={null} />
+      <GallerySample caption="States row, no selection — simulated: nothing chosen; the row opens the real sheet">
+        <LiveState initial={[]} />
       </GallerySample>
-      <GallerySample caption="State row, existing selection — simulated: California">
-        <LiveState initial="CA" />
+      <GallerySample caption="States row, one selected — simulated: California, with Edit states">
+        <LiveState initial={['CA']} />
       </GallerySample>
-      <GallerySample caption="State selector, search — simulated: “new” typed, four rows match">
-        <LiveStateContent initial={null} initialQuery="new" />
+      <GallerySample caption="States row, more than two selected — simulated: the first two names in canonical order, then +N">
+        <LiveState initial={['CA', 'NY', 'MT', 'DC']} />
       </GallerySample>
-      <GallerySample caption="State selector, clear while open — simulated: California checked; Clear selection empties it and the list stays">
-        <LiveStateContent initial="CA" />
+      <GallerySample caption="States selector, search — simulated: “new” typed, four rows match; selections outside the search are untouched">
+        <LiveStateContent initial={['CA']} initialQuery="new" />
       </GallerySample>
-      <GallerySample caption="State selector, replace — simulated: Nevada checked; choosing another row replaces it (on the sheet, that also closes it)">
-        <LiveStateContent initial="NV" />
+      <GallerySample caption="States selector, several checked — simulated: District of Columbia, Montana and New York; checking another never closes the sheet">
+        <LiveStateContent initial={['DC', 'MT', 'NY']} />
+      </GallerySample>
+      <GallerySample caption="States selector, nothing checked — simulated: no count, and no Clear selection until something is">
+        <LiveStateContent initial={[]} />
+      </GallerySample>
+      <GallerySample caption="States selector, no results — simulated: a search no state matches">
+        <LiveStateContent initial={['CA']} initialQuery="zzzz" />
       </GallerySample>
 
       <GallerySample caption="Store row, none selected — simulated: the row reads No stores selected and offers Add stores">

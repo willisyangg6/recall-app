@@ -289,7 +289,7 @@ test('Recall is never the product; the product is Lotly', () => {
   assert.equal(PERSONALIZE_CTA.title, 'Set up personalization');
   assert.equal(
     PERSONALIZE_CTA.body,
-    'Choose your state, allergens, and stores to see matching recalls in Affects me.',
+    'Choose your states, allergens, and stores to see matching recalls in Affects me.',
   );
   assert.equal(SAVED_UNAVAILABLE.title, 'Available in the app');
   assert.match(SAVED_UNAVAILABLE.body, /Open Lotly on your phone/);

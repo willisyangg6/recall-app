@@ -31,12 +31,19 @@ const MIGRATION = readFileSync(join(MIGRATIONS_DIR, MIGRATION_FILE), 'utf8');
 /** Statements only — comments stripped, so a commented-out line can never satisfy a pin. */
 const SQL = MIGRATION.replace(/^\s*--.*$/gm, '');
 
-test('the migration is forward-only: last in the chain, standard name shape', () => {
+test('the migration is forward-only: appended to the chain, standard name shape', () => {
   const files = readdirSync(MIGRATIONS_DIR)
     .filter((name) => name.endsWith('.sql'))
     .sort();
-  assert.equal(files[files.length - 1], MIGRATION_FILE);
+  assert.ok(files.includes(MIGRATION_FILE));
   assert.match(MIGRATION_FILE, /^\d{14}_[a-z_]+\.sql$/);
+  // What must never happen is a migration being INSERTED before this one: a
+  // back-dated file is silently skipped on a database already past it.
+  // Later milestones appending after it is normal and expected — P2B7U's
+  // preference-states migration was the first to do so — so the pin is on
+  // what precedes this file, which is fixed forever, not on what follows.
+  const before = files.slice(0, files.indexOf(MIGRATION_FILE));
+  assert.equal(before[before.length - 1], '20260907000000_applied_version_contract.sql');
 });
 
 test('both tables enable RLS and the migration creates NO policy', () => {

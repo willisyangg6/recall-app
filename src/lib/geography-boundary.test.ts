@@ -134,7 +134,7 @@ test('new ingest: source → parse → projectCase → egress → card, Detail, 
         hazardCategory: projection.hazardCategory,
         reasonText: projection.reasonText,
       },
-      { state: 'TX', allergens: [], retailers: [] },
+      { states: ['TX'], allergens: [], retailers: [] },
     ).geographic,
     'matches',
   );
@@ -347,7 +347,7 @@ test('a city the source never ties to a state is stated, but is not a state', ()
         hazardCategory: 'allergen',
         reasonText: null,
       },
-      { state: 'CA', allergens: [], retailers: [] },
+      { states: ['CA'], allergens: [], retailers: [] },
     ).geographic,
     'unknown',
   );

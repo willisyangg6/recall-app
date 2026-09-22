@@ -221,9 +221,9 @@ test('no account, avatar, paywall, subscription, support or legal surface exists
   assert.deepEqual(
     summaryLines({
       status: 'ready',
-      summary: summarizePreferences({ state: null, allergens: [], retailers: [] }),
+      summary: summarizePreferences({ states: [], allergens: [], retailers: [] }),
     }).map((line) => line.key),
-    ['state', 'allergens', 'retailers'],
+    ['states', 'allergens', 'retailers'],
   );
 });
 
@@ -340,7 +340,7 @@ test('a visibly abbreviated summary keeps its complete accessible label', () => 
   const state = {
     status: 'ready' as const,
     summary: summarizePreferences({
-      state: 'CA',
+      states: ['CA'],
       allergens: ['peanut', 'tree nuts', 'milk', 'egg'],
       retailers: ['costco', 'trader-joes', 'walmart'],
     }),

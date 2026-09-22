@@ -310,7 +310,7 @@ test('search runs after filtering and narrows only what the filter admitted', ()
 // ── Byte-identical All Recalls and Affects Me over the real builders ────────
 
 const NOW = new Date('2026-08-30T00:00:00.000Z');
-const PROFILE = { state: 'CA', allergens: ['sesame', 'peanut'], retailers: ['costco'] };
+const PROFILE = { states: ['CA'], allergens: ['sesame', 'peanut'], retailers: ['costco'] };
 const joined = (list: readonly { id: string }[]) => list.map((i) => i.id).join(',');
 
 /**

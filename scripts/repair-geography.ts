@@ -478,7 +478,7 @@ async function main(): Promise<void> {
             hazardCategory: entry.projection.hazardCategory,
             reasonText: entry.projection.reasonText,
           },
-          { state: code, allergens: [], retailers: [] },
+          { states: [code], allergens: [], retailers: [] },
         );
         if (relevance.geographic === 'matches') matches += 1;
         else if (relevance.geographic === 'unknown') unknown += 1;

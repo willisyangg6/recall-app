@@ -32,8 +32,8 @@ export interface PushSubscription {
  */
 export interface InstallationPreferences {
   installationId: string;
-  /** Two-letter code ('CA'); null = no home state chosen. */
-  stateCode: string | null;
+  /** Two-letter codes (['CA','NY']); empty = no location preference. */
+  stateCodes: string[];
   /** Canonical allergen tokens. */
   allergens: string[];
   /** Canonical retailer catalog ids. */

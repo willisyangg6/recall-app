@@ -66,6 +66,10 @@ const DELIBERATELY_UNGATED: Record<string, string> = {
     'the watchdog probe. It never writes a row; --dispatch starts one ingest ' +
     'workflow, its package script injects nothing, and the default is a dry probe.',
   'ops-health.ts': 'read-only health report.',
+  'preflight-preference-states.ts':
+    'read-only census for the P2B7U expand migration. It only SELECTs, and ' +
+    'the migration it describes is applied with `supabase db push`, which the ' +
+    'three-flag contract does not and should not govern.',
   'ops-heartbeat.ts': 'read-only: two SELECTs and one outbound monitor ping.',
   'push-test.ts': 'read-only push diagnostics.',
   'scheduler-status.ts': 'read-only scheduler report.',

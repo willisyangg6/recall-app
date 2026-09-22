@@ -35,7 +35,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'What stays on your device',
       blocks: [
         bullets([
-          'Your personalization choices (state, allergens to watch, and stores), saved in the device’s secure storage. They work offline and are read locally to build Affects me.',
+          'Your personalization choices (the states you shop in, allergens to watch, and stores), saved in the device’s secure storage. They work offline and are read locally to build Affects me.',
           'A random installation identifier, created on this device the first time it is needed. It contains nothing about you or your device. It is a random number the server uses to tell installations apart.',
           'Whether you turned recall alerts on.',
           'The recalls you saved, kept as a list of recall identifiers on this device only. Saving is a private bookmark: it is never sent to Lotly’s server, is not part of your personalization, and changes nothing about which recalls you are alerted to.',
@@ -48,7 +48,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'What Lotly’s server stores',
       blocks: [
         bullets([
-          'A mirror of your personalization choices (state, allergens, stores), keyed by the random installation identifier, synced so alert delivery can apply the same relevance rules the app shows you.',
+          'A mirror of your personalization choices (states, allergens, stores), keyed by the random installation identifier, synced so alert delivery can apply the same relevance rules the app shows you.',
           'When you enable alerts: a push registration holding the delivery token issued for this installation, the platform (iOS or Android), the app version, and timestamps for when alerts were enabled and last refreshed.',
           'Per-alert delivery records: which alert was sent to which registration and whether the delivery service accepted it.',
           'When community shopper reports are available for a recall, any report you choose to submit, keyed by the same random installation identifier. “Community shopper reports” below lists what one contains.',
@@ -85,7 +85,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       blocks: [
         bullets([
           'No account, name, email address, phone number, contacts, or photos.',
-          'No device location: Lotly never uses location services. Your state is a manual choice.',
+          'No device location: Lotly never uses location services. The states you shop in are a manual choice.',
           'No advertising identifier, no advertising, and no tracking across apps or websites.',
           'No analytics, advertising, or crash-reporting SDKs are included in the app.',
           'No record of what you search for, which recalls you read, or what you share. None of that is stored by the app or tied to your installation identifier.',

@@ -36,7 +36,7 @@ export const HOW_AFFECTS_ME_WORKS: TrustDocument = {
       title: 'What you can choose',
       blocks: [
         bullets([
-          'Your state: one U.S. state, DC, or Puerto Rico.',
+          'States you shop in: any number of U.S. states, DC, and Puerto Rico.',
           `Allergens to watch: any of the nine major food allergens (${ALLERGEN_LABELS.join(', ')}). Select any that are relevant to you or anyone you shop or cook for.`,
           'Stores you shop at: chosen from a catalog of named stores.',
         ]),
@@ -50,11 +50,12 @@ export const HOW_AFFECTS_ME_WORKS: TrustDocument = {
       title: 'How location matching works',
       blocks: [
         bullets([
-          'A notice that states distribution to your state is included.',
-          'A nationwide notice affects every state, so it is included once you have chosen a state.',
-          'A notice that explicitly states distribution only to other states is excluded. This explicit geographic exclusion is final: a store or allergen match never overrides what the notice itself says about where the product went.',
+          'A notice that states distribution to any state you chose is included. One is enough, so a notice that names only one of your states still counts.',
+          'A nationwide notice affects every state, so it is included once you have chosen at least one state.',
+          'A notice that explicitly states distribution only to states you did not choose is excluded. This explicit geographic exclusion is final: a store or allergen match never overrides what the notice itself says about where the product went.',
           'A notice that does not say where the product was sold is never treated as “not you.” Unknown is unknown: it is included when one of your allergens or stores also matches, because a wrong “doesn’t affect you” is the dangerous mistake.',
-          'If you have not chosen a state, Lotly cannot assess location for you, so only allergen and store matches appear in Affects me. Nationwide notices stay in All recalls.',
+          'Choosing more states can only include more notices, never fewer. Removing one leaves every notice the others still cover.',
+          'If you have not chosen any state, Lotly cannot assess location for you, so only allergen and store matches appear in Affects me. Nationwide notices stay in All recalls.',
         ]),
       ],
     },

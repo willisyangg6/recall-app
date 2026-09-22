@@ -55,7 +55,7 @@ function generalHazard(geo: RelevanceInput['geography']): RelevanceInput {
 }
 
 const CA_PREFS: UserRecallPreferences = {
-  state: 'CA',
+  states: ['CA'],
   allergens: ['peanut'],
   retailers: canonicalRetailerIds(['Costco']),
 };
@@ -80,11 +80,11 @@ test('nationwide behavior is documented correctly for both with- and without-sta
   const nationwide = generalHazard(geography('nationwide'));
   assert.equal(evaluatePersonalRelevance(nationwide, CA_PREFS).affectsMe, true);
   // Without a chosen state, nationwide alone is not a personal signal.
-  const noState: UserRecallPreferences = { state: null, allergens: [], retailers: [] };
+  const noState: UserRecallPreferences = { states: [], allergens: [], retailers: [] };
   assert.equal(evaluatePersonalRelevance(nationwide, noState).affectsMe, false);
 
   assert.match(affectsMeText, /nationwide notice affects every state/i);
-  assert.match(affectsMeText, /once you have chosen a state/i);
+  assert.match(affectsMeText, /once you have chosen at least one state/i);
   assert.match(affectsMeText, /only allergen and store matches appear/i);
 });
 
@@ -184,7 +184,7 @@ test('push delivery uses the same relevance result, including the no-state defau
     );
   }
   // No state chosen → delivery is not narrowed at all.
-  assert.equal(pushEligible(excluded, { state: null, allergens: ['peanut'], retailers: [] }), true);
+  assert.equal(pushEligible(excluded, { states: [], allergens: ['peanut'], retailers: [] }), true);
 
   assert.match(affectsMeText, /same relevance evaluation/i);
   assert.match(affectsMeText, /Until you choose a state, alerts are not narrowed/i);

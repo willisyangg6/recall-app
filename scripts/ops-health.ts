@@ -351,14 +351,20 @@ async function main(): Promise<void> {
         '  preferences:         not installed (installation_preferences migration pending)',
       );
     } else {
+      // P2B7U: a jurisdiction LIST, so "has a location preference" is a
+      // non-empty array rather than a non-null code. An error here means the
+      // column migration is pending; that is reported, never printed as a
+      // zero, because "0 with a state" and "we could not ask" are different
+      // facts about production.
       const prefsWithState = await client
         .from('installation_preferences')
         .select('installation_id', { count: 'exact' })
-        .not('state_code', 'is', null)
+        .neq('state_codes', '{}')
         .limit(0);
-      console.log(
-        `  preferences:         ${prefsTotal.count ?? 0} installation(s), ${prefsWithState.count ?? 0} with a state`,
-      );
+      const located = prefsWithState.error
+        ? 'state count unavailable (state_codes migration pending)'
+        : `${prefsWithState.count ?? 0} with a location preference`;
+      console.log(`  preferences:         ${prefsTotal.count ?? 0} installation(s), ${located}`);
     }
     for (const note of pushNotes) console.log(`    · ${note}`);
     console.log('');

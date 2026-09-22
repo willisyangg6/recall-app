@@ -286,7 +286,7 @@ Affected Products table; the questionnaire's steps, review, disclosure,
 endings and paused state; Saved's page, list rhythm, whole-screen states and
 notices; and Profile's featured Personalization card, boxed Notifications
 row, grouped document sections, version row and development entry; and
-Personalization's single-choice state, multi-choice allergens and stores
+Personalization's multi-choice states, allergens and stores
 and autosave line, and Notifications' status callout and one action; and the trust documents'
 reading page, section hierarchy, notes, label rows, links and the one reset
 control — render from the tokens with every shipped behaviour intact. The pushed screens'
@@ -802,30 +802,56 @@ secondary intro line, then three groups `spacing/24` apart, each a
 — see "Section headings and group labels"), a `body-small` helper line, and
 the controls.
 
-- **Your state** is one compact trigger row on the main screen
-  (`SelectorTrigger`: a white `radius/12` surface with `border/default`, the
-  `map-pin` glyph at 20, the chosen state's name in `body` or `Choose your
-state` in `text/secondary`, and `Select` / `Change` in `caption`
-  `action/secondary`; a 44pt button spoken as `State: California` /
-  `State: not chosen`). It opens the **state selector**, a page sheet
-  titled `Choose your state`: the shared Search Bar pinned under the title
-  (focused as it appears, the questionnaire's `Search states` words),
-  `Clear selection` as a secondary Button while a state is chosen, and the
-  52 jurisdictions as the questionnaire's `ChoiceRow`s in a `ChoiceGroup`
-  — radio rows, the current state checked — filtered by the query, with
-  `No state matches that search.` when nothing matches. **Choosing a row
-  replaces the state and closes the sheet. `Clear selection` sets the state
-  to null and keeps the sheet open**, so another state can be chosen at
-  once. `Close` (or a swipe down) exits without changing anything. The
-  bar's `Clear` empties the search; `Clear selection` empties the choice;
-  they are separate controls. Every visit starts from a blank search.
+- **States you shop in** (multi-select since P2B7U) is one compact trigger
+  row on the main screen (`SelectorTrigger`: a white `radius/12` surface with
+  `border/default`, the `map-pin` glyph at 20, the chosen jurisdictions in
+  `body` or `No states selected` in `text/secondary`, and `Add states` /
+  `Edit states` in `caption` `action/secondary`; a 44pt button spoken as
+  `States: California, Montana and New York` / `States: none selected`). The
+  row shows the **first two full names in canonical order, then `+N`** —
+  `District of Columbia, Montana +1` — because 52 can be chosen and a row
+  that printed them all would push the screen off itself; the spoken name
+  still carries every one. Above a text scale of 1.5 the row becomes a
+  column, the value on its line and the action beneath it, rather than
+  squeezing the value into a few characters' width.
+
+  It opens the **states selector**, a page sheet titled `Choose your states`:
+  a count line in words under the title (`No states selected`, `1 state
+selected`, `N states selected`; a polite live region), the shared Search Bar
+  pinned beneath (focused as it appears, the questionnaire's `Search states`
+  words), `Clear selection` as a secondary Button while anything is checked,
+  and the 52 jurisdictions as `CheckRow`s **in canonical order — by full
+  name, so District of Columbia sits between Delaware and Florida** —
+  filtered by the query, with `No state matches that search.` when nothing
+  matches. No radio row or `radiogroup` survives on this screen.
+
+  **This sheet edits a draft, and it is the only one that does.** Opening it
+  copies the saved selection; a tap changes the copy and nothing else, and
+  the sheet stays open however many are tapped. `Clear selection` empties the
+  draft and keeps the sheet open. **`Done` — the trailing action — writes the
+  whole draft once and closes, however many times it is pressed. Any other
+  exit (the swipe down, Android's back) discards the draft** and leaves the
+  saved jurisdictions exactly as they were. The bar's `Clear` empties the
+  search; `Clear selection` empties the draft; they are separate controls.
+  Every visit starts from a blank search and a fresh draft.
+
+  Why the top-right action and not a bottom one: the list is long and
+  searchable, and `Done` has to stay reachable while the list scrolls and
+  while the keyboard is open. It also stays clear of the home indicator,
+  reuses the sheet's existing structure, and takes no list space.
+
 - **Allergens to watch** is the nine allergens as `CheckRow`s in catalog
   order on the main screen, under the household-aware helper (C5.2B,
   reworded by the founder in the follow-up).
-- **Stores you shop at** is the same trigger-and-sheet shape as the state,
-  because the catalog is long. The main screen's trigger row shows **every
-  chosen store by name**, wrapping naturally, in the order chosen (or `No
-stores selected` in `text/secondary`), with one action word: `Add stores`
+- **Stores you shop at** is the same trigger-and-sheet shape as the states,
+  because the catalog is long — but it **autosaves on every check** rather
+  than editing a draft. The two differ on purpose: a store list is composed
+  one chain at a time and each check is independently meaningful, while a
+  jurisdiction list is picked from 52 rows in one sitting, usually replacing
+  the previous answer, and each intermediate state of that edit is a
+  different set of recalls in Affects me. The main screen's trigger row shows
+  **every chosen store by name**, wrapping naturally, in the order chosen (or
+  `No stores selected` in `text/secondary`), with one action word: `Add stores`
   when none is chosen, `Edit stores` otherwise. The full catalog never
   renders on the main screen, and nothing scrolls sideways. The **store
   selector** is a page sheet titled `Choose stores`: a count line in words
@@ -846,13 +872,22 @@ device. It will sync when you are back online.`) is `body-small` secondary
 **The selector sheet** (`src/components/settings/selector-sheet.tsx`) is
 React Native's own `Modal` as a native page sheet (`presentationStyle:
 pageSheet`, swipe-to-dismiss routed through `onRequestClose`) on the warm
-page: the title in `heading-3` as a header, the one dismiss word (`Done` /
-`Close`) in `body-small-bold` `action/secondary` at the trailing edge on a
-44pt target with a hint that says the choices are already saved, the
-optional count line, the pinned controls, and the scrolling list, which
+page: the title in `heading-3` as a header, the `Done` word in
+`body-small-bold` `action/secondary` at the trailing edge on a 44pt target,
+the optional count line, the pinned controls, and the scrolling list, which
 keeps taps working while the keyboard is up, dismisses the keyboard on a
 drag, and grows its inset beneath it. When a sheet closes, focus returns to
-the trigger row that opened it. A page sheet rather than the Feed's bottom
+the trigger row that opened it.
+
+The sheet keeps its two ways out apart. The swipe down and Android's back
+always mean dismissal; the trailing action means dismissal too **unless** the
+caller gives it something to do (`onAction`), and then that is the only thing
+it calls. The stores sheet gives it nothing, so its `Done` just closes and
+its hint says the choices are already saved; the states sheet gives it the
+commit, so its `Done` saves and its hint says so, and says that leaving
+without it keeps the saved states. At the accessibility text sizes the title
+wraps onto as many lines as it needs while the action refuses to shrink, so
+the one word that saves is never squeezed or cut. A page sheet rather than the Feed's bottom
 sheet because these lists are long (52 and the whole catalog) and need the
 full height, the pinned search and the system's own dismissal; no
 dependency was added.

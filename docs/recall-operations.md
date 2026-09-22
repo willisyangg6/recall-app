@@ -1848,6 +1848,151 @@ rollback data.
 test pins that the data is sufficient. Nothing else moved, so there is nothing
 else to restore.
 
+## P2B7U preference-states expand: a PREPARED schema migration
+
+**Status: prepared and previewed, NOT applied.** No production write, DDL or
+data change has been made. Applying it needs its own explicit founder
+authorization.
+
+This is a **schema migration** (`supabase db push`), not a repair command, so
+none of the `--apply --confirm --expect` machinery on this page governs it.
+That machinery guards the repair CLIs; a migration is guarded by review, by the
+dry run, and by being additive.
+
+### What it does, and why it is additive
+
+`installation_preferences` stores one `state_code`; P2B7U's app holds a list.
+The migration
+`supabase/migrations/20260921000000_installation_preference_states_expand.sql`
+is the **expand** half of an expand-and-contract rollout:
+
+|           |                                                                      |
+| --------- | -------------------------------------------------------------------- |
+| adds      | `state_codes text[] not null default '{}'` — the canonical field     |
+| backfills | every non-null `state_code` → a one-element array; a null → `{}`     |
+| keeps     | `state_code`, maintained as a projection of `state_codes[1]` or null |
+| keeps     | the singular RPC signature, re-bodied to maintain both columns       |
+| adds      | the plural RPC as an overload (`p_state_codes text[]`)               |
+| drops     | **nothing**                                                          |
+
+An earlier draft dropped `state_code` and the singular signature in the same
+transaction. That would have broken the CURRENTLY DEPLOYED app and the deployed
+delivery worker for the whole window between the migration and the new bundle
+reaching devices. `preference-states-migration.test.ts` now fails the build if
+the expand phase contains a `DROP`, a `RENAME`, a destructive `ALTER`, or loses
+the singular signature.
+
+### Read-only preflight
+
+```bash
+npm run preflight:preference-states
+```
+
+Reports whether the migration is already applied, the row census, the legacy
+code distribution, any code outside the closed 52-set, and the exact number of
+rows the backfill will touch. Counts only — no installation id is printed.
+Measured 2026-09-21: **3 rows, 2 with a state_code (both `CA`), 1 null, 0
+invalid — the backfill will touch exactly 2 rows.**
+
+### Deployment order is not optional
+
+Apply the migration FIRST, verify it, and only then ship the bundle. The new
+client calls the plural RPC and the new worker selects `state_codes`; neither
+exists until the migration runs. Because the expand phase is additive, the
+reverse order is safe for the DEPLOYED code but not for the new code:
+
+| Code     | Database | Result                                                                                                        |
+| -------- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| deployed | current  | works (unchanged)                                                                                             |
+| deployed | expanded | works — singular RPC and `state_code` both still there, and a singular write now also maintains `state_codes` |
+| new      | expanded | works — plural RPC, `state_codes`                                                                             |
+| new      | current  | **preference sync fails** into the offline retry path; every screen still works from the local copy           |
+
+While the last row holds, saves report `Saved on this device. It will sync the
+next time you open Lotly online.` and the dirty flag retries at the next launch
+or save. Harmless, and self-healing the moment the migration lands — but it is
+why the migration goes first.
+
+### Founder rollout
+
+Prerequisites, verified 2026-09-21: the Supabase CLI is installed
+(`supabase --version` → 2.114.0, Homebrew) and the project **is already
+linked** (`supabase/.temp/project-ref` exists and is gitignored), so neither
+`supabase login` nor `supabase link` is needed again. `[db.vault]` in
+`supabase/config.toml` is entirely commented out, so `db push` has no vault
+secret to update.
+
+```bash
+# 1. Final local checks (offline; the live SQL suite needs Docker).
+npm run check
+supabase start                 # Docker; only needed for the live SQL suite
+npx tsx --test "src/server/push/preference-states-*.test.ts"
+npm run preflight:preference-states     # read-only; expect "state_codes ABSENT", 2 to backfill
+
+# 2. Local checkpoint commit (no push).
+git add -A && git commit -m "add multi-state personalization"
+
+# 3. Preview the migration. Read-only: prints what WOULD be applied.
+supabase db push --linked --dry-run
+#    expect exactly: 20260921000000_installation_preference_states_expand.sql
+
+# 4. APPLY — the one production write in this milestone.
+supabase db push --linked
+
+# 5. Verify.
+npm run preflight:preference-states     # expect "state_codes EXISTS", 0 left to backfill
+npm run ops:health                      # expect "N installation(s), M with a location preference"
+
+# 6. Push the code, only after step 5 passes.
+git push
+
+# 7. Next scheduled ingest: confirm the run is healthy and nothing regressed.
+npm run ops:health
+```
+
+Step 5's SQL-level verification, if you want it directly rather than through
+the preflight (Dashboard → SQL editor, read-only):
+
+```sql
+select count(*)                                              as rows,
+       count(*) filter (where state_code is not null)        as legacy_codes,
+       count(*) filter (where cardinality(state_codes) > 0)  as canonical_lists,
+       count(*) filter (where state_code is distinct from state_codes[1]) as projection_violations
+  from public.installation_preferences;
+
+select p.proname, pg_get_function_identity_arguments(p.oid) as args
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname = 'set_installation_preferences';
+-- expect BOTH signatures: (…, p_state_code text, …) and (…, p_state_codes text[], …)
+```
+
+`projection_violations` must be `0`, and `legacy_codes` must equal
+`canonical_lists`.
+
+### Simulator verification after the apply
+
+With the new bundle running against the expanded database, open Profile →
+Personalization → Edit states, select two or more jurisdictions and press
+`Done`. The autosave line must read **`Saved.`** and not `Saved on this
+device…` — that is the dirty flag clearing, which is the only user-visible
+signal that the mirror accepted the whole list. Confirm the row server-side
+with the preflight, or with `select state_codes from installation_preferences`
+in the SQL editor.
+
+### Push stays inactive
+
+This migration does not activate push and must not be taken as authorization
+to. `npm run push:activate` remains a separate founder action, and it should
+not run until the expand migration is applied — before that, the mirror cannot
+hold more than one jurisdiction and a multi-state shopper would be delivered
+against one of them.
+
+### The contract phase is deferred
+
+A second, separately authorized migration drops `state_code` and the singular
+RPC signature. Its preconditions are in [../README.md](../README.md) under the
+deferred contract-phase milestone.
+
 ## Enforcement: weekly-gated
 
 The daily job reads the one-request openFDA bulk manifest and compares its

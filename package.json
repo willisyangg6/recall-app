@@ -64,6 +64,7 @@
     "scheduler:probe": "tsx scripts/scheduler-probe.ts",
     "check": "npm run typecheck && npm run lint && npm run test",
     "qa:fda": "tsx scripts/qa-consumer-projection.ts",
+    "preflight:preference-states": "tsx scripts/preflight-preference-states.ts",
     "qa:personalization": "tsx scripts/qa-personalization.ts",
     "qa:feed": "tsx scripts/qa-feed-completeness.ts",
     "qa:egress": "tsx scripts/qa-egress.ts",

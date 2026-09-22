@@ -514,8 +514,8 @@ test('personalized: a state-matching event delivers to the matching state only',
   const tx = 'b'.repeat(32);
   store.register(ca, 'ExponentPushToken[ca]', 'ios', iso(HOUR));
   store.register(tx, 'ExponentPushToken[tx]', 'ios', iso(HOUR));
-  store.setPreferences(ca, { stateCode: 'CA', allergens: [], retailerIds: [] }, iso(HOUR));
-  store.setPreferences(tx, { stateCode: 'TX', allergens: [], retailerIds: [] }, iso(HOUR));
+  store.setPreferences(ca, { stateCodes: ['CA'], allergens: [], retailerIds: [] }, iso(HOUR));
+  store.setPreferences(tx, { stateCodes: ['TX'], allergens: [], retailerIds: [] }, iso(HOUR));
   addEvent(store, 2 * HOUR, { geography: { scope: 'states', states: ['California'] } });
 
   // Dry run first: exactly one candidate, zero writes, zero traffic.
@@ -540,8 +540,8 @@ test('personalized: two matching users get one delivery candidate each', async (
   const two = 'b'.repeat(32);
   store.register(one, 'ExponentPushToken[a]', 'ios', iso(HOUR));
   store.register(two, 'ExponentPushToken[b]', 'android', iso(HOUR));
-  store.setPreferences(one, { stateCode: 'CA', allergens: [], retailerIds: [] }, iso(HOUR));
-  store.setPreferences(two, { stateCode: 'CA', allergens: [], retailerIds: [] }, iso(HOUR));
+  store.setPreferences(one, { stateCodes: ['CA'], allergens: [], retailerIds: [] }, iso(HOUR));
+  store.setPreferences(two, { stateCodes: ['CA'], allergens: [], retailerIds: [] }, iso(HOUR));
   addEvent(store, 2 * HOUR, { geography: { scope: 'nationwide', states: [] } });
   const result = await runAt(3 * HOUR);
   assert.equal(result.metrics.deliveriesCreated, 2);
@@ -568,13 +568,17 @@ test('personalized: unknown geography delivers only with an allergen/retailer si
   }
   store.setPreferences(
     withRetailer,
-    { stateCode: 'CA', allergens: [], retailerIds: ['costco'] },
+    { stateCodes: ['CA'], allergens: [], retailerIds: ['costco'] },
     iso(HOUR),
   );
-  store.setPreferences(stateOnly, { stateCode: 'CA', allergens: [], retailerIds: [] }, iso(HOUR));
+  store.setPreferences(
+    stateOnly,
+    { stateCodes: ['CA'], allergens: [], retailerIds: [] },
+    iso(HOUR),
+  );
   store.setPreferences(
     withAllergen,
-    { stateCode: 'CA', allergens: ['peanut'], retailerIds: [] },
+    { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: [] },
     iso(HOUR),
   );
   // A PEANUT-only recall, sold at Costco, with no stated distribution.
@@ -601,10 +605,14 @@ test('personalized: a GENERAL hazard with no location still reaches the retailer
   store.register(stateOnly, 'ExponentPushToken[s]', 'ios', iso(HOUR));
   store.setPreferences(
     withRetailer,
-    { stateCode: 'CA', allergens: ['peanut'], retailerIds: ['costco'] },
+    { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: ['costco'] },
     iso(HOUR),
   );
-  store.setPreferences(stateOnly, { stateCode: 'CA', allergens: [], retailerIds: [] }, iso(HOUR));
+  store.setPreferences(
+    stateOnly,
+    { stateCodes: ['CA'], allergens: [], retailerIds: [] },
+    iso(HOUR),
+  );
   // Salmonella, not an allergen: the allergen-only rule must not touch it.
   addEvent(store, 2 * HOUR, {
     geography: { scope: 'unknown', states: [] },
@@ -626,7 +634,7 @@ test('no state chosen: allergen/retailer-only preferences keep deliver-all behav
   store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
   store.setPreferences(
     installation,
-    { stateCode: null, allergens: ['sesame'], retailerIds: [] },
+    { stateCodes: [], allergens: ['sesame'], retailerIds: [] },
     iso(HOUR),
   );
   // A Salmonella event with no allergen match still delivers: preferences
@@ -643,7 +651,7 @@ test('changing state never backfills: old events stay behind the preference hori
   store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
   store.setPreferences(
     installation,
-    { stateCode: 'CA', allergens: [], retailerIds: [] },
+    { stateCodes: ['CA'], allergens: [], retailerIds: [] },
     iso(HOUR),
   );
   addEvent(store, 2 * HOUR, { geography: { scope: 'states', states: ['Texas'] } });
@@ -656,7 +664,7 @@ test('changing state never backfills: old events stay behind the preference hori
   // never become newly deliverable.
   store.setPreferences(
     installation,
-    { stateCode: 'TX', allergens: [], retailerIds: [] },
+    { stateCodes: ['TX'], allergens: [], retailerIds: [] },
     iso(4 * HOUR),
   );
   const after = await runAt(5 * HOUR);
@@ -677,7 +685,7 @@ test('adding an allergen never backfills; future matching events deliver', async
   store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
   store.setPreferences(
     installation,
-    { stateCode: 'CA', allergens: [], retailerIds: [] },
+    { stateCodes: ['CA'], allergens: [], retailerIds: [] },
     iso(HOUR),
   );
   addEvent(store, 2 * HOUR, {
@@ -689,7 +697,7 @@ test('adding an allergen never backfills; future matching events deliver', async
 
   store.setPreferences(
     installation,
-    { stateCode: 'CA', allergens: ['peanut'], retailerIds: [] },
+    { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: [] },
     iso(4 * HOUR),
   );
   const after = await runAt(5 * HOUR);
@@ -710,7 +718,7 @@ test('removing a retailer stops the positive signal for future events', async ()
   store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
   store.setPreferences(
     installation,
-    { stateCode: 'CA', allergens: [], retailerIds: ['costco'] },
+    { stateCodes: ['CA'], allergens: [], retailerIds: ['costco'] },
     iso(HOUR),
   );
   addEvent(store, 2 * HOUR, {
@@ -722,7 +730,7 @@ test('removing a retailer stops the positive signal for future events', async ()
 
   store.setPreferences(
     installation,
-    { stateCode: 'CA', allergens: [], retailerIds: [] },
+    { stateCodes: ['CA'], allergens: [], retailerIds: [] },
     iso(4 * HOUR),
   );
   addEvent(store, 5 * HOUR, {
@@ -740,14 +748,14 @@ test('re-syncing identical preferences keeps the horizon: pending eligibility un
   store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
   store.setPreferences(
     installation,
-    { stateCode: 'CA', allergens: [], retailerIds: [] },
+    { stateCodes: ['CA'], allergens: [], retailerIds: [] },
     iso(HOUR),
   );
   addEvent(store, 2 * HOUR, { geography: { scope: 'states', states: ['California'] } });
   // App-launch re-sync writes identical values AFTER the event was created.
   store.setPreferences(
     installation,
-    { stateCode: 'CA', allergens: [], retailerIds: [] },
+    { stateCodes: ['CA'], allergens: [], retailerIds: [] },
     iso(2 * HOUR + 30 * MINUTE),
   );
   const result = await runAt(3 * HOUR);
@@ -761,7 +769,7 @@ test('personalization respects the untouched C2 safety rails', async () => {
   // Preferences existed long before activation and before enabling alerts.
   store.setPreferences(
     installation,
-    { stateCode: 'CA', allergens: [], retailerIds: [] },
+    { stateCodes: ['CA'], allergens: [], retailerIds: [] },
     iso(-HOUR),
   );
   store.register(installation, 'ExponentPushToken[a]', 'ios', iso(4 * HOUR));

@@ -28,7 +28,7 @@ import { formatPushContent } from '../server/push/format';
 import type { DeliverableEvent } from '../server/push/types';
 
 const PROFILE: UserRecallPreferences = {
-  state: 'CA',
+  states: ['CA'],
   allergens: ['sesame', 'peanut'],
   retailers: ['costco', 'trader-joes'],
 };

@@ -32,7 +32,7 @@ import { evaluatePersonalRelevance, type PersonalRelevance } from './relevance';
 
 const NOW = new Date('2026-08-28T12:00:00Z');
 const PROFILE: UserRecallPreferences = {
-  state: 'CA',
+  states: ['CA'],
   allergens: ['sesame', 'peanut'],
   retailers: ['costco', 'trader-joes'],
 };

@@ -32,7 +32,7 @@ const OLD_DAY = '2026-01-15';
 
 /** California; Sesame + Peanuts; Costco + Trader Joe's — the §35 example user. */
 const CALIFORNIAN: UserRecallPreferences = {
-  state: 'CA',
+  states: ['CA'],
   allergens: ['sesame', 'peanut'],
   retailers: ['costco', 'trader-joes'],
 };
@@ -531,7 +531,7 @@ test('unknown geography with no personal signal appears in NO Affects Me section
 });
 
 test('an unknown-location notice with a real match ranks in the main flow', () => {
-  const prefs: UserRecallPreferences = { state: null, allergens: ['sesame'], retailers: [] };
+  const prefs: UserRecallPreferences = { states: [], allergens: ['sesame'], retailers: [] };
   const silent = item({ geography: geo('unknown') });
   const matching = item({ geography: geo('unknown'), pathogenOrAllergen: 'Undeclared sesame' });
   const sections = rank([silent, matching], prefs);
@@ -607,8 +607,8 @@ test('C5.2B: All Recalls is byte-identical — personalization cannot touch it',
 
   for (const prefs of [
     CALIFORNIAN,
-    { state: 'CA', allergens: [], retailers: [] } as UserRecallPreferences,
-    { state: null, allergens: ['milk'], retailers: [] } as UserRecallPreferences,
+    { states: ['CA'], allergens: [], retailers: [] } as UserRecallPreferences,
+    { states: [], allergens: ['milk'], retailers: [] } as UserRecallPreferences,
   ]) {
     // Ranking the same corpus for a profile must not disturb All Recalls.
     rank(corpus, prefs);

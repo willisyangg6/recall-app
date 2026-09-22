@@ -651,7 +651,7 @@ export default function HomeScreen() {
             {tab === 'affects_me' && prefs !== null ? (
               !hasAnyPreference(prefs) ? (
                 <PersonalizeCta />
-              ) : prefs.state === null ? (
+              ) : prefs.states.length === 0 ? (
                 <PersonalizeCta compact />
               ) : null
             ) : null}

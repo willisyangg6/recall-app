@@ -308,7 +308,7 @@ test('All Recalls sections account for every case in the complete corpus', async
 // ── 8, 13. Affects Me over the complete corpus ───────────────────────────────
 
 const CA_PROFILE: UserRecallPreferences = {
-  state: 'CA',
+  states: ['CA'],
   allergens: ['peanuts'],
   retailers: ['costco'],
 };

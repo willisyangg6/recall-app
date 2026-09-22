@@ -13,6 +13,9 @@
  * - Authoritative geographic exclusion wins over personal signals: a recall
  *   stated to be sold only in Maine is not "affects me" for a California
  *   user, undeclared peanuts or not.
+ * - Geography is a SET on both sides (P2B7U): the source's stated states,
+ *   and the jurisdictions the shopper chose. One state in common is a match;
+ *   an exclusion requires the source to name none of them.
  * - THE ONE EXCLUSION (C5.2B): a recall the source proves is allergen-only,
  *   with its allergens named, and none of them selected. A milk-only recall
  *   is not information a peanut-allergic shopper needs, however close to home
@@ -30,7 +33,7 @@ import {
   allergenLabelForToken,
   CONSUMER_ALLERGENS,
   hasAnyPreference,
-  stateNameForCode,
+  stateNamesForCodes,
   type UserRecallPreferences,
 } from '@/domain/preferences';
 import type { Geography } from '@/domain/recall-types';
@@ -81,25 +84,41 @@ export interface RelevanceInput extends HazardFacts {
 
 const ALLERGEN_ORDER = new Map(CONSUMER_ALLERGENS.map((a, index) => [a.token, index]));
 
-function geographicRelevance(geography: Geography, stateName: string | null): GeographicRelevance {
+/**
+ * The geographic comparison, over a SET of chosen jurisdictions (P2B7U).
+ *
+ * The only thing multi-select changed here is the comparison itself: one
+ * `includes` became an intersection. Every surrounding rule is the one it
+ * always was —
+ *
+ * - nationwide matches whatever the shopper chose (and whether they chose);
+ * - unknown stays unknown, never "does not affect you";
+ * - no jurisdiction chosen is not an answer about geography, so it is
+ *   `unknown` — the same answer the empty profile got before;
+ * - a known state list is an exclusion only when it names NONE of the
+ *   chosen jurisdictions. One is enough to match, because a person who
+ *   shops in two states is reached by a recall in either of them.
+ */
+function geographicRelevance(geography: Geography, stateNames: string[]): GeographicRelevance {
   // Nationwide affects every state — true whether or not one is selected.
   if (geography.scope === 'nationwide') return 'matches';
   if (geography.scope === 'unknown') return 'unknown';
-  // A known state list can only be assessed against a chosen state.
-  if (stateName === null) return 'unknown';
-  return geography.states.includes(stateName) ? 'matches' : 'does_not_match';
+  // A known state list can only be assessed against a chosen jurisdiction.
+  if (stateNames.length === 0) return 'unknown';
+  return stateNames.some((name) => geography.states.includes(name)) ? 'matches' : 'does_not_match';
 }
 
 /**
  * Evaluate one case against one set of preferences. Pure and deterministic.
  *
  * "Affects me" semantics:
- * - state chosen:   geography matches, OR geography unknown with at least one
- *   allergen/retailer signal. An authoritative exclusion is final — personal
- *   signals never override it (the match data stays available internally).
- * - no state chosen: geographic relevance cannot be personal, so only
+ * - any jurisdiction chosen: geography matches, OR geography unknown with at
+ *   least one allergen/retailer signal. An authoritative exclusion is final —
+ *   personal signals never override it (the match data stays available
+ *   internally).
+ * - no jurisdiction chosen: geographic relevance cannot be personal, so only
  *   allergen/retailer signals qualify (nationwide items remain in All
- *   Recalls, and the UI asks for a state instead of pretending).
+ *   Recalls, and the UI asks for a jurisdiction instead of pretending).
  * - known allergen mismatch: withheld regardless of geography or retailer.
  *   Order matters — this is applied AFTER geographic exclusion and BEFORE the
  *   positive signals, so a retailer match can never resurrect a recall the
@@ -109,8 +128,8 @@ export function evaluatePersonalRelevance(
   input: RelevanceInput,
   prefs: UserRecallPreferences,
 ): PersonalRelevance {
-  const stateName = stateNameForCode(prefs.state);
-  const geographic = geographicRelevance(input.geography, stateName);
+  const stateNames = stateNamesForCodes(prefs.states);
+  const geographic = geographicRelevance(input.geography, stateNames);
 
   const caseAllergens = normalizedAllergenTokens(input.pathogenOrAllergen);
   const matchedAllergens = caseAllergens
@@ -130,7 +149,7 @@ export function evaluatePersonalRelevance(
       ? false
       : knownAllergenMismatch
         ? false
-        : stateName !== null && geographic === 'matches'
+        : stateNames.length > 0 && geographic === 'matches'
           ? true
           : hasSignal;
 
@@ -147,8 +166,15 @@ export function evaluatePersonalRelevance(
     }
     if (input.geography.scope === 'nationwide') {
       reasons.push({ kind: 'nationwide', label: 'Nationwide recall' });
-    } else if (geographic === 'matches' && stateName !== null) {
-      reasons.push({ kind: 'state', label: `Affects ${stateName}` });
+    } else if (geographic === 'matches') {
+      // One reason per jurisdiction the source itself names, in the canonical
+      // order — the same shape the allergen and retailer reasons have, so a
+      // single-jurisdiction profile reads exactly as it did before P2B7U.
+      for (const name of stateNames) {
+        if (input.geography.states.includes(name)) {
+          reasons.push({ kind: 'state', label: `Affects ${name}` });
+        }
+      }
     } else if (geographic === 'unknown' && hasSignal) {
       // Context for the signals above — never a reason on its own.
       reasons.push({ kind: 'unknown_geography', label: 'Location not specified' });
@@ -203,11 +229,13 @@ export function affectsYouVerdict(
 
 /**
  * Push delivery policy (C3 §24): personalization gates delivery only once a
- * state is chosen. Until then the pre-C3 behavior stands — every deliverable
- * event qualifies — because allergen/retailer preferences alone are positive
- * signals, not exclusion filters, and recalls are safety information.
+ * jurisdiction is chosen. Until then the pre-C3 behavior stands — every
+ * deliverable event qualifies — because allergen/retailer preferences alone
+ * are positive signals, not exclusion filters, and recalls are safety
+ * information. An empty jurisdiction list is exactly the old `null` state:
+ * no location preference, so delivery is not narrowed.
  */
 export function pushEligible(input: RelevanceInput, prefs: UserRecallPreferences | null): boolean {
-  if (prefs === null || prefs.state === null) return true;
+  if (prefs === null || prefs.states.length === 0) return true;
   return evaluatePersonalRelevance(input, prefs).affectsMe;
 }

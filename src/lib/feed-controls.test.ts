@@ -163,7 +163,7 @@ function item(overrides: Partial<FeedItem> = {}): FeedItem {
   };
 }
 
-const PREFS = { state: 'CA', allergens: [], retailers: [] };
+const PREFS = { states: ['CA'], allergens: [], retailers: [] };
 const NOW = new Date('2026-08-28T12:00:00Z');
 
 function affectsMe(corpus: FeedItem[]) {

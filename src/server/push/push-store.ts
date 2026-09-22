@@ -55,9 +55,15 @@ export class SupabasePushStore implements PushStore {
 
   private migrationPending(operation: string, message: string): boolean {
     if (!MIGRATION_PENDING.test(message)) return false;
-    const migration = /installation_preferences/.test(message)
-      ? '20260830000000_installation_preferences.sql'
-      : '20260828000000_push_delivery.sql';
+    // Name the migration the operator actually has to apply. A missing
+    // `state_codes` COLUMN means the P2B7U expand phase has not run, which is
+    // a different fix from a missing table — and this warning is the only
+    // place a scheduled run says so.
+    const migration = /state_codes/.test(message)
+      ? '20260921000000_installation_preference_states_expand.sql'
+      : /installation_preferences/.test(message)
+        ? '20260830000000_installation_preferences.sql'
+        : '20260828000000_push_delivery.sql';
     console.warn(
       `  ${operation}: migration pending — treating as empty (apply supabase/migrations/${migration}).`,
     );
@@ -102,7 +108,7 @@ export class SupabasePushStore implements PushStore {
   async listPreferences(): Promise<InstallationPreferences[]> {
     const { data, error } = await this.client
       .from('installation_preferences')
-      .select('installation_id, state_code, allergens, retailer_ids, updated_at');
+      .select('installation_id, state_codes, allergens, retailer_ids, updated_at');
     if (error || !data) {
       // The C3 migration may not be applied yet — degrade to "no preferences"
       // (pre-C3 delivery behavior) with a warning, exactly like the C2 reads.
@@ -111,7 +117,7 @@ export class SupabasePushStore implements PushStore {
     }
     return data.map((row) => ({
       installationId: row.installation_id as string,
-      stateCode: (row.state_code as string | null) ?? null,
+      stateCodes: (row.state_codes as string[] | null) ?? [],
       allergens: (row.allergens as string[] | null) ?? [],
       retailerIds: (row.retailer_ids as string[] | null) ?? [],
       updatedAt: row.updated_at as string,
