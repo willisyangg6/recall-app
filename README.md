@@ -1421,11 +1421,12 @@ personalization`, `Open Lotly on your phone`); prose says `Affects me`,
   pre-existing lint warnings), but **no iOS binary can be built, because no
   Apple Developer Program membership exists** — the same block
   [docs/recall-release-readiness.md](docs/recall-release-readiness.md) §6
-  records, re-confirmed today. The one non-Apple blocker is that **no EAS
-  environment variable is set in any environment** (`eas env:list` returns
-  empty for `development`, `preview` and `production`), so a build made today
-  would ship with no backend and show "Recalls are unavailable" on every
-  screen. Push is verifiably inactive in production (`push_delivery_config`
+  records, re-confirmed today. The one non-Apple blocker it found was that
+  **no EAS environment variable was set in any environment** (`eas env:list`
+  returned empty for `development`, `preview` and `production`), so a build
+  made that day would have shipped with no backend and shown "Recalls are
+  unavailable" on every screen. **That blocker is now closed** — see P2B7W.1
+  below. Push is verifiably inactive in production (`push_delivery_config`
   holds no row, `notification_deliveries` is empty, 1 enabled subscription,
   75 deliverable ledger events that activation would permanently exclude).
   Corrections this audit made to stale documentation, each from a read-only
@@ -1433,6 +1434,24 @@ personalization`, `Open Lotly on your phone`); prose says `Affects me`,
   geography repair **is no longer needed** (0 rows), and the illness repair
   **is no longer needed** (0 stale of 1,931). Build and release detail:
   [docs/recall-release-readiness.md](docs/recall-release-readiness.md) §9.
+- **P2B7W.1 — Expo patch alignment, completed 2026-09-22. No build, no Apple
+  authentication, no push activation, no production write, nothing committed.**
+  Closed the one Expo Doctor failure P2B7W recorded by bringing four SDK 57
+  packages to their Expo-recommended patch versions with
+  `npx expo install --fix`: `expo` 57.0.23 → 57.0.24,
+  `expo-constants` 57.0.18 → 57.0.19,
+  `expo-notifications` 57.0.19 → 57.0.20, `expo-router` 57.0.21 → 57.0.22. The
+  lockfile kept all 913 entries with 8 patch-level version changes and nothing
+  added or removed; React and React Native did not move. `npx expo-doctor` is
+  **21/21**, `npx expo install --check` reports no mismatch, `npm run check` is
+  green (2,996 tests, 0 failures), the iOS export still produces a clean
+  3.6 MB bundle with no server secret in it, and the `expo-notifications`
+  config plugin and full API surface are intact with push still inactive.
+  Separately confirmed read-only: the **`production` EAS environment now holds
+  both required `EXPO_PUBLIC_` variable names**, closing P2B7W's one non-Apple
+  blocker, while `preview` and `development` stay unconfigured on purpose. No
+  TestFlight build exists yet; Apple enrollment remains the blocker. Detail:
+  [docs/recall-release-readiness.md](docs/recall-release-readiness.md) §10.
 - Push delivery remains deliberately inactive and was outside O2's scope.
 
 ## Ingest-pipeline atomicity and historical repair (O3)

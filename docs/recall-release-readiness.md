@@ -98,12 +98,21 @@ npx eas-cli env:set --name EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY \
   --value "<publishable key>" --environment production --visibility plaintext
 ```
 
-Repeat for `preview` and `development`. **Not yet done, and confirmed not
-done:** `npx eas-cli config --platform ios --profile production` reports "No
-environment variables with visibility 'Plain text' and 'Sensitive' found for
-the 'production' environment on EAS" for all three environments. A build run
-today would therefore produce an app whose Feed shows the "Recalls are
-unavailable" state. See §6.
+**`production` is configured** (P2B7W.1, 2026-09-22). Both variable names
+exist in that environment, and `npx eas-cli config --platform ios --profile
+production` now reports them loaded by name: "Environment variables with
+visibility 'Plain text' and 'Sensitive' loaded from the 'production'
+environment on EAS: EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+EXPO_PUBLIC_SUPABASE_URL." Their **values are deliberately not recorded in
+this repository** — `.env` is gitignored, and EAS is the only place the build
+reads them from.
+
+`preview` and `development` are **deliberately left unconfigured**: both still
+report "No variables found for this environment." Only the `production`
+profile is on the TestFlight path, so neither is needed yet. A build on either
+profile would produce an app whose Feed shows the "Recalls are unavailable"
+state; the commands above close that gap whenever one of them is next used.
+See §6.
 
 The server-only values (`SUPABASE_SECRET_KEY`, `WATCHDOG_SHARED_SECRET`, and
 the Edge Function's GitHub token) must never be created in any EAS
@@ -435,6 +444,7 @@ What changed since §5 is listed first, because §5 is otherwise still accurate.
   `npx expo install --check` resolves them without a range edit. Take them
   before the first TestFlight build rather than after: `expo-notifications`
   is on the path this release is meant to exercise.
+  **Closed by §10** — all four are aligned and Doctor is back to 21/21.
 - `npm run check` is green: 2,996 tests, 0 failures, 14 skipped; lint 0
   errors and the same 3 pre-existing `no-unused-vars` warnings in
   `src/server` test files.
@@ -449,6 +459,9 @@ What changed since §5 is listed first, because §5 is otherwise still accurate.
   `preview` and `production`, and `build:version:get` prints the same
   "No environment variables …" notice. This remains the one blocker that is
   not Apple-gated, and §2 has the two commands that close it.
+  **Closed for `production` as of 2026-09-22** — the founder set both names
+  there, so the one non-Apple blocker is gone. `preview` and `development`
+  stay empty on purpose. §2 and §10 carry the current state.
 - Remote iOS `buildNumber` is **1**, and the only three builds this project
   has ever produced are the three P3C1.5 `simulator` builds from commit
   `86675cb`. Nothing has been built for a device or a store.
@@ -490,3 +503,91 @@ plural `p_state_codes` argument), `repair:geography:dry` would update 0 of
 1,931 cases, and `repair:illness-flags:dry` finds 0 stale flags of 1,931.
 The corresponding README and [recall-personalization.md](recall-personalization.md)
 claims were corrected in the same change.
+
+## 10. P2B7W.1 — Expo patch alignment (2026-09-22)
+
+Run at `7316209` on clean, pushed `master`. The single purpose was to close the
+one Expo Doctor failure §9 recorded, so the first TestFlight build is made on a
+dependency baseline Expo itself calls current. No build, no Apple
+authentication, no push activation, no production write, nothing staged or
+committed.
+
+**What moved.** Four packages, each a patch bump inside SDK 57:
+
+| Package              | Before  | After   |
+| -------------------- | ------- | ------- |
+| `expo`               | 57.0.23 | 57.0.24 |
+| `expo-constants`     | 57.0.18 | 57.0.19 |
+| `expo-notifications` | 57.0.19 | 57.0.20 |
+| `expo-router`        | 57.0.21 | 57.0.22 |
+
+Applied with `npx expo install --fix`, Expo's own alignment mechanism, which
+resolved the set under the updated `expo` version and installed with npm
+against the existing `package-lock.json`. No `--force`, no
+`--legacy-peer-deps`, no `npm audit fix`, no package-manager change.
+
+**Scope of the diff.** `package.json` moved three declared ranges — `expo`
+`~57.0.23 → ~57.0.24`, `expo-notifications` `~57.0.19 → ~57.0.20`,
+`expo-router` `~57.0.21 → ~57.0.22`. `expo-constants` stays declared at
+`~57.0.14`, which already admits 57.0.19; the lockfile pins the new patch, so
+`npm ci` is deterministic either way.
+
+`package-lock.json` holds the same **913 entries** before and after: zero
+added, zero removed, and exactly **eight** version changes. The four above,
+plus four transitive dependencies of those four — `@expo/cli` 57.0.25 →
+57.0.26 and `expo-asset` 57.0.17 → 57.0.18 (both dependencies of `expo`), and
+`@expo/metro-runtime` 57.0.15 → 57.0.16 and `@expo/ui` 57.0.18 → 57.0.19 (both
+dependencies of `expo-router`). Every remaining changed line in the lockfile is
+a dependency-range string naming one of those same eight packages. React
+19.2.3 and React Native 0.86.3 did not move, and neither did any non-Expo
+dependency.
+
+**`expo-notifications` regression check.** Its changelog records 57.0.18,
+57.0.19 and 57.0.20 as "does not introduce any user-facing changes" — the last
+substantive entry is the 57.0.17 iOS `NotificationCenterManager` data-race fix,
+which was already installed. The config plugin is present and intact
+(`app.plugin.js` → `plugin/build/withNotifications`, a `createRunOncePlugin`
+wrapping the Android and iOS mods), and `expo-notifications` still resolves in
+the plugin list of `npx expo config --type prebuild`. Every API the app uses
+still resolves under `tsc`: `setNotificationHandler` with the four
+`shouldShowBanner` / `shouldShowList` / `shouldPlaySound` / `shouldSetBadge`
+flags, `useLastNotificationResponse`, `addPushTokenListener`,
+`setNotificationChannelAsync`, `AndroidImportance`, `getPermissionsAsync`,
+`requestPermissionsAsync` and `getExpoPushTokenAsync`. Permission UX,
+tap-routing and the push worker contract were not touched; push remains
+inactive.
+
+**Verification.**
+
+- `npx expo install --check` — "Dependencies are up to date."
+- `npx expo-doctor` — **21/21 checks passed. No issues detected.**
+- `npm run check` — typecheck clean, lint 0 errors and the same 3 pre-existing
+  `no-unused-vars` warnings in `src/server` test files, and **2,996 tests,
+  0 failures, 14 skipped** — identical to the §9 baseline.
+- `npx expo export --platform ios` — succeeds; 93 files, a 3.6 MB Hermes
+  bundle, the same shape §9 measured.
+- Byte-level scan of all 93 exported files: **no server secret value**, and
+  none of `SUPABASE_SECRET_KEY`, `WATCHDOG_SHARED_SECRET`, `EXPO_ACCESS_TOKEN`,
+  `service_role`, `sb_secret_`, `ghp_`, `github_pat_`, the server-only table
+  and RPC names, or any tracking domain. Both `EXPO_PUBLIC_` values are inlined,
+  as intended. The one substring hit, `segment`, is Expo Router's own routing
+  vocabulary (`useSegments`, `parseRouteSegments`, `stripGroupSegmentsFromPath`)
+  — `segment.com`, `segment.io` and `analytics.js` are all zero.
+- `npx prettier --check` on the changed files, and `git diff --check`, both clean.
+
+**EAS configuration, read-only.** `production` holds both required variable
+names and the `production` build profile is bound to it (`eas.json` →
+`build.production.environment: "production"`), which
+`npx eas-cli config --platform ios --profile production` confirms by printing
+exactly those two names as loaded and nothing else. No server-only secret is
+referenced by the mobile build: none of `SUPABASE_SECRET_KEY`,
+`WATCHDOG_SHARED_SECRET` or `EXPO_ACCESS_TOKEN` appears in `eas.json` or
+`app.json`, and the client reads only `EXPO_PUBLIC_SUPABASE_URL` and
+`EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (`src/lib/recall-feed.ts`,
+`src/lib/report-api.ts`), so a production build would talk to the configured
+Supabase backend. No EAS variable was created, updated or deleted.
+
+**Still true after this change.** **No TestFlight build has been created** —
+no signed archive exists, remote iOS `buildNumber` is still 1, and §6's Apple
+Developer Program enrollment remains the blocker. The placeholder
+`assets/expo.icon` (§7) is untouched and is still an App Store blocker.
