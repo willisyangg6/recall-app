@@ -466,7 +466,12 @@ too, so the mirror changes in **two** migrations and this milestone ships only
 the first.
 
 `supabase/migrations/20260921000000_installation_preference_states_expand.sql`
-is **additive** and **prepared, not applied**. It:
+is **additive** and is **applied in production** — verified read-only on
+2026-09-22 (P2B7W) by `npm run preflight:preference-states`, which reports
+`state_codes EXISTS` and a re-run backfill of 0 rows, and by the Data API,
+which exposes `set_installation_preferences` with the plural `p_state_codes`
+argument. The **contract** phase below is still unapplied and unwritten. The
+expand migration:
 
 1. adds `state_codes text[] not null default '{}'` — the canonical field;
 2. backfills every non-null `state_code` into a one-element array, leaving a

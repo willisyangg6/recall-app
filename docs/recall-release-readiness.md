@@ -1,12 +1,12 @@
 # Release readiness — build identity, EAS configuration, and what is still blocked (P3C1)
 
 Status: **the repository side of an iOS release is configured and verified
-(2026-09-16). Nothing has been built, signed, submitted, or registered with
-Apple.** No Apple Developer account exists yet, so every step from "produce an
-installable binary" onward is blocked on an input this repository cannot
-supply. This document records what is decided, what each command does, and
-what is genuinely still missing — separately, so neither is mistaken for the
-other.
+(2026-09-16; re-verified 2026-09-22 — see §9). Nothing has been built, signed,
+submitted, or registered with Apple.** No Apple Developer account exists yet,
+so every step from "produce an installable binary" onward is blocked on an
+input this repository cannot supply. This document records what is decided,
+what each command does, and what is genuinely still missing — separately, so
+neither is mistaken for the other.
 
 Companion documents: [recall-app-store-readiness.md](recall-app-store-readiness.md)
 (App Privacy answers and the Apple questionnaire) and
@@ -418,3 +418,75 @@ Verified by a throwaway probe running the same assertions three ways: the real
 clock fails, the frozen clock passes, and a frozen `2027-01-01` fails again
 because the change genuinely is backfill by then. That last case is the
 evidence that suppression semantics were left intact rather than loosened.
+
+## 9. P2B7W re-verification (2026-09-22)
+
+Re-run at `ea3da46` on clean, pushed `master`. Read-only throughout: no build,
+no submission, no Apple authentication, no credential command, no EAS write.
+What changed since §5 is listed first, because §5 is otherwise still accurate.
+
+**Changed since §5.**
+
+- `npx expo-doctor` is now **20/21**, not 21/21. The one failure is four
+  patch-version drifts inside SDK 57 that upstream released after §5 was
+  written: `expo` 57.0.23 → 57.0.24, `expo-constants` 57.0.18 → 57.0.19,
+  `expo-notifications` 57.0.19 → 57.0.20, `expo-router` 57.0.21 → 57.0.22.
+  All four are inside the `~` ranges `package.json` already declares, so
+  `npx expo install --check` resolves them without a range edit. Take them
+  before the first TestFlight build rather than after: `expo-notifications`
+  is on the path this release is meant to exercise.
+- `npm run check` is green: 2,996 tests, 0 failures, 14 skipped; lint 0
+  errors and the same 3 pre-existing `no-unused-vars` warnings in
+  `src/server` test files.
+
+**Re-confirmed unchanged.**
+
+- Identity (§1) and the four build profiles (§2) are byte-for-byte as
+  recorded. `/ios` and `/android` are generated and gitignored; neither is
+  committed.
+- **No EAS environment variable exists in any environment.**
+  `npx eas-cli env:list` returns "No variables found" for `development`,
+  `preview` and `production`, and `build:version:get` prints the same
+  "No environment variables …" notice. This remains the one blocker that is
+  not Apple-gated, and §2 has the two commands that close it.
+- Remote iOS `buildNumber` is **1**, and the only three builds this project
+  has ever produced are the three P3C1.5 `simulator` builds from commit
+  `86675cb`. Nothing has been built for a device or a store.
+- The bundle boundary still holds. `npx expo export --platform ios` produces
+  a 3.6 MB Hermes bundle; a byte-level scan of all 93 exported files finds
+  neither server secret's value and none of the strings
+  `SUPABASE_SECRET_KEY`, `WATCHDOG_SHARED_SECRET`, `EXPO_ACCESS_TOKEN`,
+  `service_role` or `sb_secret_`, while both `EXPO_PUBLIC_` values are
+  inlined as intended. This is the re-run that
+  [recall-launch-blockers.md](recall-launch-blockers.md) §5 asked for at
+  submission prep.
+- `assets/expo.icon` is still the Expo template — its layers are literally
+  `expo-symbol 2.svg` and `grid.png`. Shipping it to review would put
+  another party's mark on the icon; §7 already lists final artwork as a
+  design deliverable, and it is an App Store blocker rather than a
+  TestFlight one.
+
+**One nuance worth stating precisely.** Design Preview's _executable_ harness
+does not run in a release build — §5.1 saw the inert page natively, and the
+screen returns `null` behind a bare `__DEV__`. Its _string literals_ are
+nevertheless present in the exported Hermes string table (for example
+"Eligible recall naming at least one retailer"). Nothing shopper-facing
+renders them and no secret is among them, so this is a bundle-size and
+tidiness observation, not a leak — but "Metro eliminates it outright" is true
+of the Profile entry row, not of every literal in the route module.
+
+**Over-the-air updates.** There is no `expo-updates` dependency, no
+`updates` block, and no runtime-version policy. That is a coherent choice,
+but it has one consequence worth writing down before the first TestFlight
+build: **there is no client-side rollback.** Every client fix — including a
+crash — needs a new binary and a new review. The kill switches that do exist
+(`push:activate --deactivate --confirm`, the `shopper_report_config` gate)
+are all server-side.
+
+**No unapplied database work remains.** All three items §5-era documents
+carried as pending are closed, each re-measured read-only today: the P2B7U
+expand migration is applied (`state_codes` exists; the Data API exposes the
+plural `p_state_codes` argument), `repair:geography:dry` would update 0 of
+1,931 cases, and `repair:illness-flags:dry` finds 0 stale flags of 1,931.
+The corresponding README and [recall-personalization.md](recall-personalization.md)
+claims were corrected in the same change.

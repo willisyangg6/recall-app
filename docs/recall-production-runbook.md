@@ -613,8 +613,9 @@ Nothing about this milestone requires a database change.
 5. Update [recall-data-flow-audit.md](recall-data-flow-audit.md) §4, which
    predates the shopper-report and installation-deletion RPCs and so
    understates the anon RPC surface by five functions.
-6. **P2B7O** (search and retailer work) and **P2B7Q** (generated-copy audit)
-   remain **recorded and unimplemented**. Neither was touched by P2B7S.
+6. ~~**P2B7O** (search and retailer work) and **P2B7Q** (generated-copy
+   audit) remain recorded and unimplemented.~~ **BOTH IMPLEMENTED
+   2026-09-20**, after P2B7S was written. See the README's milestone list.
 
 ## 12. Recommended SLOs
 

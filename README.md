@@ -151,11 +151,11 @@ operational record — see [docs/recall-operations.md](docs/recall-operations.md
 for each one's exact status and semantics.
 
 ```bash
-npm run repair:geography:dry             # P2B7Q.2, PREPARED — 61 cases measured, NOT applied
+npm run repair:geography:dry             # P2B7Q.2 — re-measured 2026-09-22: 0 rows, no apply needed
 npm run repair:allergens:dry             # applied 2026-09-02 (completed)
 npm run repair:hazards:dry               # P2e-B, applied 2026-09-03 (completed)
 npm run repair:fda-contaminants:dry      # P3B, applied 2026-09-04 (completed)
-npm run repair:illness-flags:dry         # P2B7L, PREPARED — 76 rows measured, not applied
+npm run repair:illness-flags:dry         # P2B7L — re-measured 2026-09-22: 0 stale, no apply needed
 
 # Every apply is typed in full; --help prints the contract at the terminal:
 #   npm run repair:geography -- --apply --confirm --expect <fresh count>
@@ -163,17 +163,18 @@ npm run repair:illness-flags:dry         # P2B7L, PREPARED — 76 rows measured,
 # A dry run with nothing to do prints "No apply needed" and offers no command.
 ```
 
-One schema migration is also prepared and unapplied:
-`supabase/migrations/20260921000000_installation_preference_states_expand.sql`
-(P2B7U) adds a `state_codes` array beside the mirror's existing `state_code`
-and adds a plural write RPC beside the existing one, dropping nothing — the
-additive half of an expand-and-contract rollout, so it can be applied while
-the currently deployed code is still running. It is a `supabase db push`, not
-a repair command, and needs its own authorization. Preview it with
-`supabase db push --linked --dry-run` and census it with
-`npm run preflight:preference-states` (both read-only); the ordered rollout is
-in [docs/recall-operations.md](docs/recall-operations.md). Push must stay off
-until it is applied.
+The P2B7U expand migration
+(`supabase/migrations/20260921000000_installation_preference_states_expand.sql`)
+is **applied in production**, verified read-only on 2026-09-22 two ways:
+`npm run preflight:preference-states` reports `state_codes EXISTS` (3 rows, a
+re-run backfills 0), and the Data API exposes `set_installation_preferences`
+with the plural `p_state_codes` argument the shipped client calls. It added a
+`state_codes` array beside the mirror's existing `state_code` and a plural
+write RPC beside the existing one, dropping nothing — the additive half of an
+expand-and-contract rollout. The precondition it placed on push activation is
+therefore satisfied. The separately authorized **contract** phase (dropping
+`state_code` and the singular signature) is still unwritten and is not a
+launch blocker.
 
 ### Push notifications (Phase C2)
 
@@ -605,12 +606,15 @@ review. Nothing here is a launch blocker — those live in
   `preference-states-live.test.ts` proves the behaviour against real Postgres
   and real PostgREST on the local disposable stack.
 
-  **Prepared, not applied.** Rollout order is migrate → verify → ship, and the
-  exact commands are in
+  **Applied in production** (P2B7W, verified read-only 2026-09-22). Rollout
+  order was migrate → verify → ship, and the exact commands are in
   [docs/recall-operations.md](docs/recall-operations.md) "P2B7U
   preference-states expand". `npm run preflight:preference-states` is the
-  read-only census (measured 2026-09-21: 3 rows, 2 to backfill, 0 invalid).
-  Push is not activated and must not be activated before the migration runs.
+  read-only census: measured 2026-09-21 it read 3 rows, 2 to backfill, 0
+  invalid; re-run 2026-09-22 it reads `state_codes EXISTS` and a backfill that
+  would touch 0 rows. The Data API independently confirms the plural
+  `p_state_codes` argument the shipped client calls. The precondition this
+  placed on push activation is met; push itself is still not activated.
 
 - **P2B7U contract phase — remove `state_code` and the singular RPC. RECORDED,
   NOT IMPLEMENTED.** The second half of the expand-and-contract rollout: drop
@@ -803,7 +807,15 @@ products were added.`) is **kept, verbatim** — the source states the
   [docs/recall-illness-status.md](docs/recall-illness-status.md) §1.2.
 
 - **P2B7Q.2 — the canonical geography repair. IMPLEMENTED 2026-09-20; the
-  production correction is PREPARED AND NOT APPLIED.**
+  production correction is NO LONGER NEEDED.** Re-measured read-only on
+  2026-09-22 (P2B7W): `npm run repair:geography:dry` examines all 1,931 cases
+  and would update **0** — the stored corpus already matches the contract,
+  because the fix landed upstream in the derivation and every case has since
+  been re-projected through it. Geography before and after are identical
+  (nationwide 444, states 1,342, unknown 145), with 0 conflicts and 0
+  refusals. No apply is pending, and nothing below is a launch blocker; the
+  account of the defect is kept because the contract it established still
+  governs the derivation.
 
   One location value now answers for the Feed card, Saved, Recall Detail, the
   Location filter, Affects Me and anything push ever reads —
@@ -1402,6 +1414,25 @@ personalization`, `Open Lotly on your phone`); prose says `Affects me`,
   dated operational measurements are in
   [docs/recall-operations.md](docs/recall-operations.md) ("Production
   verification (P2B7R, 2026-09-19)"). No production action was taken.
+- **P2B7W — TestFlight, push and App Store launch-readiness audit, completed
+  2026-09-22. Read-only; no production, external, or repository mutation
+  beyond the documentation corrections it made.** Verdict: the product is
+  feature-complete and `npm run check` is green (2,996 tests, 0 failures, 3
+  pre-existing lint warnings), but **no iOS binary can be built, because no
+  Apple Developer Program membership exists** — the same block
+  [docs/recall-release-readiness.md](docs/recall-release-readiness.md) §6
+  records, re-confirmed today. The one non-Apple blocker is that **no EAS
+  environment variable is set in any environment** (`eas env:list` returns
+  empty for `development`, `preview` and `production`), so a build made today
+  would ship with no backend and show "Recalls are unavailable" on every
+  screen. Push is verifiably inactive in production (`push_delivery_config`
+  holds no row, `notification_deliveries` is empty, 1 enabled subscription,
+  75 deliverable ledger events that activation would permanently exclude).
+  Corrections this audit made to stale documentation, each from a read-only
+  production measurement: the P2B7U expand migration **is applied**, the
+  geography repair **is no longer needed** (0 rows), and the illness repair
+  **is no longer needed** (0 stale of 1,931). Build and release detail:
+  [docs/recall-release-readiness.md](docs/recall-release-readiness.md) §9.
 - Push delivery remains deliberately inactive and was outside O2's scope.
 
 ## Ingest-pipeline atomicity and historical repair (O3)
