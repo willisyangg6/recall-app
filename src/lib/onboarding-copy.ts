@@ -15,15 +15,11 @@
 
 // ── Screen 1: Welcome ───────────────────────────────────────────────────────
 
-export const WORDMARK = 'Lotly';
-export const WELCOME_HEADLINE = 'Food recalls, filtered for you.';
+/** The name beside the mascot, lowercase as the brand sets it; spoken as `Lotly`. */
+export const WORDMARK = 'lotly';
+export const WELCOME_HEADLINE = 'Food recalls, made personal.';
 export const WELCOME_BODY =
-  'Lotly turns FDA and USDA recall notices into clear alerts based on where you shop and what you avoid.';
-export const WELCOME_BENEFITS: readonly string[] = [
-  'Personalized to your household',
-  'Clear product photos and details',
-  'Alerts when a recall matches',
-];
+  'Tell us where you shop and what your household avoids. Lotly shows you the recalls that matter.';
 export const WELCOME_TRUST_NOTE = 'Built from FDA and USDA recall notices.';
 export const WELCOME_CTA = 'Get started';
 /** Above the illustrative card on Welcome. */

@@ -13,7 +13,8 @@
  * education screen's primary action alone, never on mount and never from
  * `Not now`; the example card is the shared surface over static content;
  * everything is drawn from the tokens with no capped type and no fixed
- * height around text; and the Welcome shows no invented brand mark.
+ * height around text; and the Welcome shows the approved mascot, invents no
+ * mark, and plays its one entrance only when Reduce Motion is off.
  */
 
 import assert from 'node:assert/strict';
@@ -48,14 +49,23 @@ import {
   STATES_BODY,
   STATES_HEADLINE,
   STATES_REQUIRED_NOTE,
-  WELCOME_BENEFITS,
   WELCOME_BODY,
   WELCOME_CTA,
+  WELCOME_EXAMPLE_LABEL,
   WELCOME_HEADLINE,
   WELCOME_TRUST_NOTE,
   WORDMARK,
 } from '@/lib/onboarding-copy';
+import * as ONBOARDING_COPY from '@/lib/onboarding-copy';
 import { SAMPLE_RECALL_MODEL } from '@/lib/onboarding-sample';
+import {
+  entranceEndMs,
+  MASCOT_MAX,
+  MASCOT_MIN,
+  mascotSize,
+  WELCOME_ENTRANCE,
+  welcomeEntrance,
+} from '@/lib/welcome-presentation';
 
 const SRC = join(__dirname, '..');
 const read = (...parts: string[]): string => readFileSync(join(SRC, ...parts), 'utf8');
@@ -232,17 +242,13 @@ test('every step reads and saves through the one preference store, progressively
 // ── Copy, verbatim ──────────────────────────────────────────────────────────
 
 test('the founder’s onboarding copy, verbatim, rendered from the copy module', () => {
-  assert.equal(WORDMARK, 'Lotly');
-  assert.equal(WELCOME_HEADLINE, 'Food recalls, filtered for you.');
+  assert.equal(WORDMARK, 'lotly');
+  assert.equal(WELCOME_HEADLINE, 'Food recalls, made personal.');
   assert.equal(
     WELCOME_BODY,
-    'Lotly turns FDA and USDA recall notices into clear alerts based on where you shop and what you avoid.',
+    'Tell us where you shop and what your household avoids. Lotly shows you the recalls that matter.',
   );
-  assert.deepEqual(WELCOME_BENEFITS, [
-    'Personalized to your household',
-    'Clear product photos and details',
-    'Alerts when a recall matches',
-  ]);
+  assert.equal(WELCOME_EXAMPLE_LABEL, 'Example');
   assert.equal(WELCOME_TRUST_NOTE, 'Built from FDA and USDA recall notices.');
   assert.equal(WELCOME_CTA, 'Get started');
   assert.equal(STATES_HEADLINE, 'Which states matter to you?');
@@ -292,7 +298,7 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
       [
         'WELCOME_HEADLINE',
         'WELCOME_BODY',
-        'WELCOME_BENEFITS',
+        'WELCOME_EXAMPLE_LABEL',
         'WELCOME_TRUST_NOTE',
         'WELCOME_CTA',
         'WORDMARK',
@@ -498,12 +504,128 @@ test('every onboarding screen draws from the tokens: no raw hex, no capped type,
   }
 });
 
-test('the Welcome invents no brand mark: the wordmark is the product name in the display type', () => {
+// ── Welcome (onboarding brand pass 1) ───────────────────────────────────────
+
+test('Welcome shows the approved mascot, whole, beside the name in the type system, and invents no mark', () => {
   const code = codeOnly(WELCOME);
-  assert.ok(code.includes('lead={<Text variant="display">{WORDMARK}</Text>}'));
+  // The approved production asset, and no other picture.
+  assert.ok(
+    code.includes("require('@/assets/brand/production/lotly-mascot-transparent.png')"),
+    'Welcome does not draw the approved mascot',
+  );
+  assert.equal((code.match(/require\(/g) ?? []).length, 1, 'Welcome bundles a second picture');
+  assert.equal((code.match(/<Image\b/g) ?? []).length, 1);
+  // Drawn whole: contain, never cover or stretch, and never on a dark surface.
+  assert.ok(code.includes('resizeMode="contain"'));
+  assert.ok(!code.includes("'cover'") && !code.includes('"cover"'), 'the mascot can be cropped');
+  assert.ok(!code.includes('background/brand'), 'the mascot sits on a dark surface');
+  // Sized between the bounds, never at the asset's intrinsic 1024pt.
+  assert.ok(code.includes('const size = mascotSize(height);'));
+  assert.ok(code.includes('style={{ width: size, height: size, marginVertical: -tuck }}'));
+  // Decorative: VoiceOver reads the name, not the drawing.
+  assert.ok(code.includes('accessibilityElementsHidden'));
+  assert.ok(code.includes('importantForAccessibility="no-hide-descendants"'));
+  // The name is set in the type system, lowercase, from the copy module.
+  assert.ok(
+    code.includes('<Text variant="heading-2" color="text/primary" style={styles.wordmark}>'),
+  );
   assert.ok(code.includes('{WORDMARK}'));
-  for (const forbidden of ['logo.png', 'wordmark.png', 'shield', 'siren', 'cart', 'Image']) {
+  // Nothing invented: no traced wordmark, logo file, or alarm imagery.
+  for (const forbidden of [
+    'logo.png',
+    'wordmark.png',
+    'shield',
+    'siren',
+    'cart',
+    'LinearGradient',
+  ]) {
     assert.ok(!code.includes(forbidden), `Welcome renders ${forbidden}`);
+  }
+});
+
+test('the mascot scales with the window between its bounds, on the 4pt grid', () => {
+  assert.equal(mascotSize(667), MASCOT_MIN, 'iPhone SE keeps room for the example');
+  assert.equal(mascotSize(874), 208, 'iPhone 17 / 17 Pro');
+  assert.equal(mascotSize(956), MASCOT_MAX, 'the largest phones stop at the ceiling');
+  assert.equal(mascotSize(0), MASCOT_MIN);
+  assert.ok(MASCOT_MIN >= 170 && MASCOT_MAX <= 220);
+  for (const height of [568, 667, 736, 812, 844, 874, 926, 956, 1366]) {
+    const size = mascotSize(height);
+    assert.equal(size % 4, 0, `${height}pt window gives an off-grid ${size}`);
+    assert.ok(size >= MASCOT_MIN && size <= MASCOT_MAX);
+  }
+});
+
+test('Welcome is one promise, one example and one action: the three-bullet marketing block is gone', () => {
+  // The benefit copy no longer exists, and Welcome renders no list of claims.
+  assert.ok(!('WELCOME_BENEFITS' in ONBOARDING_COPY), 'the Welcome benefits came back');
+  const welcome = codeOnly(componentBody(WELCOME, 'WelcomeContent'));
+  assert.ok(!welcome.includes('BenefitList'), 'Welcome renders the benefit rows again');
+  assert.ok(!welcome.includes('accessibilityRole="list"'));
+  // One example (the shared card surface), one source note, one action.
+  assert.equal((welcome.match(/<SampleRecallCard /g) ?? []).length, 1);
+  assert.equal((welcome.match(/<Button /g) ?? []).length, 1);
+  assert.ok(welcome.includes('{WELCOME_TRUST_NOTE}'));
+  // The paywall still owns its benefit list, unchanged.
+  assert.ok(PANEL.includes('<BenefitList items={PAYWALL_BENEFITS} />'));
+});
+
+test('Get started still advances through the existing onboarding action', () => {
+  // The component hands the press to its caller, from the sticky footer.
+  const welcome = codeOnly(componentBody(WELCOME, 'WelcomeContent'));
+  assert.ok(welcome.includes('footer={<Button label={WELCOME_CTA} onPress={onGetStarted} />}'));
+  // The route is unchanged: record Welcome as the resume point, push States.
+  const route = codeOnly(ROUTES.welcome);
+  assert.ok(route.includes("void access.recordShownStep('welcome');"));
+  assert.ok(
+    route.includes(
+      "return <WelcomeContent onGetStarted={() => router.push(onboardingRoute('states'))} />;",
+    ),
+  );
+});
+
+test('the entrance plays once in under a second, loops nothing, and is skipped under Reduce Motion', () => {
+  // The timeline: mascot first, then the heading, then the card; done by ~900ms.
+  assert.ok(entranceEndMs() >= 700 && entranceEndMs() <= 900, `ends at ${entranceEndMs()}ms`);
+  assert.ok(WELCOME_ENTRANCE.heading.delay > WELCOME_ENTRANCE.mascotFade.delay);
+  assert.ok(WELCOME_ENTRANCE.card.delay > WELCOME_ENTRANCE.heading.delay);
+  // Reduce Motion means the final state at once.
+  assert.equal(welcomeEntrance(true), 'show');
+  assert.equal(welcomeEntrance(false), 'animate');
+
+  const code = codeOnly(WELCOME);
+  // The setting is read, an unreadable setting counts as on, and "show" sets
+  // every value to its end state with no animation.
+  assert.ok(code.includes('AccessibilityInfo.isReduceMotionEnabled()'));
+  assert.ok(code.includes('.catch(() => true)'));
+  assert.ok(code.includes("if (welcomeEntrance(reduceMotion) === 'show') {"));
+  assert.ok(code.includes('for (const value of values) value.setValue(1);'));
+  // React Native's own Animated, on the native driver; nothing repeats.
+  assert.ok(code.includes('useNativeDriver: true'));
+  for (const forbidden of [
+    'Animated.loop',
+    'iterations',
+    'setInterval',
+    'requestAnimationFrame',
+    'react-native-reanimated',
+    "from 'moti'",
+    'lottie',
+  ]) {
+    assert.ok(!code.includes(forbidden), `the entrance uses ${forbidden}`);
+  }
+  // The action never animates: the footer is outside every animated view.
+  const welcome = componentBody(WELCOME, 'WelcomeContent');
+  assert.ok(welcome.indexOf('footer={') > welcome.indexOf('</Animated.View>'));
+  // Only Welcome passes a heading motion to the shared frame.
+  for (const [name, source] of [
+    ['states', STATES],
+    ['allergens', ALLERGENS],
+    ['retailers', RETAILERS],
+    ['preview', PREVIEW],
+    ['education', EDUCATION],
+    ['panel', PANEL],
+  ] as const) {
+    assert.ok(!source.includes('headingMotion'), `${name} animates its heading`);
   }
 });
 

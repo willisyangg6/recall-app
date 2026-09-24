@@ -271,6 +271,14 @@ The copy is the founder's, verbatim, in `src/lib/onboarding-copy.ts` and
 | 6 Hard paywall           | `PaywallPanel`                              | `/paywall`                  |
 | 7 Notification education | `NotificationEducation`                     | `/onboarding/notifications` |
 
+**Welcome.** The name `lotly` above the approved mascot
+(`assets/brand/production/lotly-mascot-transparent.png`), the headline and
+body, the example card, the source note, and `Get started`. It is the one
+screen with an entrance of its own (`src/lib/welcome-presentation.ts`): the
+mascot, then the heading, then the card, done within 900 ms, played once and
+skipped entirely under Reduce Motion. Composition in
+[../DESIGN.md](../DESIGN.md) "Onboarding and paywall".
+
 **The example card.** Welcome and the Preview show one illustrative recall —
 Critical, Gummy Products, an undeclared peanut allergen, Nationwide, Affects
 You — rendered through the Feed card's own `RecallCardSurface` over a static

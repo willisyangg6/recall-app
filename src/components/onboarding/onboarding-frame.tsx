@@ -30,12 +30,15 @@
 
 import type { ReactNode } from 'react';
 import {
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -56,6 +59,7 @@ export function OnboardingFrame({
   scrollRef,
   keyboard = false,
   headlineAccessibilityLabel,
+  headingMotion,
 }: {
   headline: string;
   body: string;
@@ -72,6 +76,8 @@ export function OnboardingFrame({
   /** The screen holds a text field: lift the footer over the keyboard. */
   keyboard?: boolean;
   headlineAccessibilityLabel?: string;
+  /** Welcome's entrance: an animated opacity/offset for the headline block. */
+  headingMotion?: Animated.WithAnimatedValue<StyleProp<ViewStyle>>;
 }) {
   const insets = useSafeAreaInsets();
   const content = (
@@ -105,7 +111,7 @@ export function OnboardingFrame({
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={keyboard ? 'on-drag' : 'none'}>
         {lead}
-        <View style={styles.heading}>
+        <Animated.View style={[styles.heading, headingMotion]}>
           <Text
             variant="heading-1"
             accessibilityRole="header"
@@ -115,7 +121,7 @@ export function OnboardingFrame({
           <Text variant="body" color="text/secondary">
             {body}
           </Text>
-        </View>
+        </Animated.View>
         {children}
       </ScrollView>
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[12] }]}>{footer}</View>

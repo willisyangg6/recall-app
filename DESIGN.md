@@ -349,10 +349,14 @@ Primary Figma references (file `WN8RP0xZGYdj4CSztvQ7Km`):
 
 ### Branding status
 
-The product name is **Lotly**. The final logo/brand mark is not yet locked. Do
-not invent a new logo, mascot, shield, siren, warning triangle, grocery cart,
-or food icon in implementation work unless a later approved brand asset
-explicitly provides one.
+The product name is **Lotly**. The approved mascot is
+`assets/brand/production/lotly-mascot-transparent.png` (1024×1024,
+transparent, sRGB). It is drawn whole with `contain`, never cropped,
+recoloured or placed on a dark surface, and today appears on Welcome only.
+The final logo and wordmark are not yet locked: the name is set in the type
+system, and no logo, traced wordmark, shield, siren, warning triangle,
+grocery cart, or food icon is invented in implementation work unless a later
+approved brand asset explicitly provides one.
 
 The brand should not resemble a government emergency-alert product.
 Seriousness comes from hierarchy, typography, information quality, and
@@ -973,11 +977,16 @@ secondary for the lesser one); on iOS it lifts with the keyboard. No fixed
 height around text, no `maxFontSizeMultiplier`, no gradient, no marketing
 carousel.
 
-**Welcome.** The wordmark is the product name in `display` — no logo or brand
-mark is invented ("Branding status"). Three benefit rows: an 8pt
-`icon/brand` dot beside `body` text. Then the one illustrative example card
-under a `caption` label `Example`, the `caption` trust note, and `Get
-started`.
+**Welcome.** One promise, one short explanation, one example, one action.
+The name `lotly`, lowercase in `heading-2` `text/primary`, centred above the
+approved mascot ("Branding status"), which is sized to a quarter of the
+window's height between 172 and 220pt (`mascotSize`). Then the frame's
+headline and body, the one illustrative example card under a `caption` label
+`Example`, the `caption` source note, and `Get started` in the sticky footer.
+No benefit rows. The screen plays the app's one entrance on first
+appearance: the mascot fades in and settles from 90%, then the heading and
+the card rise 14pt as they fade in, done by 860ms; nothing loops, and the
+footer never moves ("Reduced motion").
 
 **The example card.** The Feed card's own `RecallCardSurface` over a static
 model — CRITICAL, `Example` in the date slot, AFFECTS YOU, a bundled flat
@@ -1013,7 +1022,8 @@ its row. Then the example card under `Example match`, the independence note
 in `caption`, and the footer's `View plans` over `Edit preferences`.
 
 **The hard paywall.** The frame without progress; its back control is the one
-way back (to the Preview). Benefits as on Welcome; then the two plans as a
+way back (to the Preview). Three benefit rows, an 8pt `icon/brand` dot
+beside `body` text; then the two plans as a
 real radio group: each a white `radius/12` surface with a `border/default`
 border that turns `action/primary` when selected, the Choice Row's ring and
 dot, the plan title in `body-small-bold`, the store's price with its period
@@ -2260,9 +2270,10 @@ chance.
   scaling title would each reintroduce the clipping.
 - **Reduced motion.** The system has no essential motion: disclosures grow in
   place, tabs switch without animation, and the only motion is the platform's
-  own navigation transition, which respects the Reduce Motion setting. Any
-  future animation must be skipped when
-  `AccessibilityInfo.isReduceMotionEnabled` reports true.
+  own navigation transition, which respects the Reduce Motion setting, and
+  Welcome's one-time entrance. That entrance, and any future animation, is
+  skipped when `AccessibilityInfo.isReduceMotionEnabled` reports true (or
+  cannot be read): everything is shown in its final state at once.
 - **Color is never the only channel.** Risk carries its word, relevance its
   word and flag, selection its check or label change.
 - **Contrast.** Maintain WCAG AA for normal text: `text/primary` and
