@@ -133,6 +133,8 @@ function LiveStates({ initial, initialQuery = '' }: { initial: string[]; initial
       onContinue={noop}
       onBack={noop}
       initialQuery={initialQuery}
+      // A typed search lives in List mode; every other sample opens on the map.
+      initialMode={initialQuery === '' ? 'map' : 'list'}
     />
   );
 }

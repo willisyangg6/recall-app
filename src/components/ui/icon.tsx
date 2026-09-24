@@ -65,6 +65,14 @@ const GLYPHS = {
   'allergen-sesame': require('@/assets/icons/allergen-sesame.png') as ImageSourcePropType,
   'allergen-fish': require('@/assets/icons/allergen-fish.png') as ImageSourcePropType,
   'allergen-shellfish': require('@/assets/icons/allergen-shellfish.png') as ImageSourcePropType,
+  // The States step's interface glyphs: the same vendored Lucide family,
+  // box and stroke. Provenance in src/lib/state-map.ts.
+  map: require('@/assets/icons/map.png') as ImageSourcePropType,
+  list: require('@/assets/icons/list.png') as ImageSourcePropType,
+  x: require('@/assets/icons/x.png') as ImageSourcePropType,
+  check: require('@/assets/icons/check.png') as ImageSourcePropType,
+  'zoom-in': require('@/assets/icons/zoom-in.png') as ImageSourcePropType,
+  'zoom-out': require('@/assets/icons/zoom-out.png') as ImageSourcePropType,
 } as const;
 
 export type IconName = keyof typeof GLYPHS;

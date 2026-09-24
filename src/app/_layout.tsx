@@ -15,6 +15,7 @@ import { AppErrorBoundary } from '@/components/app-error-boundary';
 import { color, textStyle } from '@/constants/design-tokens';
 import { AccessProvider, useAccess } from '@/hooks/use-access';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
+import { useReduceMotion } from '@/hooks/use-reduce-motion';
 import { onboardingDeclarationOrder, pushNavigationAllowed } from '@/lib/access-gate';
 import { flushPreferencesSync } from '@/lib/preferences-store';
 
@@ -116,6 +117,11 @@ function RootNavigator({ fontsSettled }: { fontsSettled: boolean }) {
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
   }, [ready]);
+  // Under Reduce Motion every push and pop dissolves instead of sliding
+  // (react-native-screens' own `fade`; the platform does not do this for a
+  // native stack by itself). The interactive swipe back still follows the
+  // finger. Until the setting is read the platform default stands.
+  const reduceMotion = useReduceMotion();
 
   // Nothing renders under the splash until the fonts and the gate have settled.
   if (!ready) return null;
@@ -140,6 +146,7 @@ function RootNavigator({ fontsSettled }: { fontsSettled: boolean }) {
           headerTitleStyle: { fontFamily, fontSize, fontWeight, color: color['text/primary'] },
           headerBackButtonDisplayMode: 'minimal',
           headerBackTitle: BACK_LABEL,
+          animation: reduceMotion === true ? 'fade' : 'default',
         }}>
         {/* 1. The hard paywall: no header (its own back control returns to
             the Preview through the gate), no swipe (there is nothing beneath

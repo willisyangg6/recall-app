@@ -14,6 +14,11 @@ RevenueCat SDK, no App Store products, no purchase has ever been made, and
 push delivery stays globally inactive. Connecting the real store is
 **P2B7X.2** (§10)._
 
+_P2B7Y (2026-09-24, uncommitted): the four-step progress bar and the
+map-first States step (§6.1). Allergens, Retailers, the Preview, the paywall
+and the notification education keep their P2B7X.1 content; their redesigns
+are later milestones._
+
 ## 1. The sequence
 
 ```
@@ -26,9 +31,15 @@ Welcome → States (1 of 4) → Allergens (2 of 4) → Retailers (3 of 4)
 The rules, each pinned by a test named in §11:
 
 - Welcome is not counted; the four counted steps read `1 of 4` … `4 of 4`.
+- States opens on a map of the states and offers the searchable list beside
+  it; both edit one draft (§6.1). No location permission is asked and no
+  state is inferred.
 - States requires at least one selection. Continue is disabled with none, and
   the reason is written beneath it (`Choose at least one state to continue.`)
-  in a permanently allocated line.
+  in a permanently allocated slot: the sentence is always laid out, and while
+  a state is chosen it is invisible and hidden from assistive technology, so
+  the footer and Continue keep one height and position at every text size
+  when the last state is cleared (measured on device, §6.1).
 - Allergens and retailers are optional. An empty selection is a complete
   answer and never blocks Continue.
 - `Clear selection` is always in the layout on every selector step. With
@@ -261,15 +272,15 @@ The copy is the founder's, verbatim, in `src/lib/onboarding-copy.ts` and
 `src/lib/paywall-screen.ts`; `onboarding-design.test.ts` and
 `paywall-screen.test.ts` pin every string.
 
-| Screen                   | Component                                   | Route                       |
-| ------------------------ | ------------------------------------------- | --------------------------- |
-| 1 Welcome                | `WelcomeContent`                            | `/onboarding/welcome`       |
-| 2 States, 1 of 4         | `StatesStep` over `StateSelectorContent`    | `/onboarding/states`        |
-| 3 Allergens, 2 of 4      | `AllergensStep`                             | `/onboarding/allergens`     |
-| 4 Retailers, 3 of 4      | `RetailersStep` over `StoreSelectorContent` | `/onboarding/retailers`     |
-| 5 Personalized Preview   | `PreviewStep`                               | `/onboarding/preview`       |
-| 6 Hard paywall           | `PaywallPanel`                              | `/paywall`                  |
-| 7 Notification education | `NotificationEducation`                     | `/onboarding/notifications` |
+| Screen                   | Component                                          | Route                       |
+| ------------------------ | -------------------------------------------------- | --------------------------- |
+| 1 Welcome                | `WelcomeContent`                                   | `/onboarding/welcome`       |
+| 2 States, 1 of 4         | `StatesStep`: `StateMap` or `StateSelectorContent` | `/onboarding/states`        |
+| 3 Allergens, 2 of 4      | `AllergensStep`                                    | `/onboarding/allergens`     |
+| 4 Retailers, 3 of 4      | `RetailersStep` over `StoreSelectorContent`        | `/onboarding/retailers`     |
+| 5 Personalized Preview   | `PreviewStep`                                      | `/onboarding/preview`       |
+| 6 Hard paywall           | `PaywallPanel`                                     | `/paywall`                  |
+| 7 Notification education | `NotificationEducation`                            | `/onboarding/notifications` |
 
 **Welcome.** The name `lotly`, the headline and body, the M01 mascot
 (`assets/brand/production/lotly-mascot-welcome-peek-1024.png`) peeking over
@@ -281,6 +292,16 @@ entrance of its own (`src/lib/welcome-presentation.ts`): the heading, then the
 mascot rising from behind the card, then the card following, done within
 900 ms, played once and skipped entirely under Reduce Motion. Composition in
 [../DESIGN.md](../DESIGN.md) "Onboarding and paywall".
+
+**Progress (P2B7Y).** The four counted steps show `OnboardingProgress` in
+the frame's top bar: four segments over the visible `1 of 4` line. Completed
+and current segments fill the `onboarding/progress` token; the steps ahead
+keep the quiet `background/subtle` track. It is one accessibility element
+spoken `Step 1 of 4: States` (then `Allergens`, `Stores`, `Preview`). The
+current segment fills once, briefly, after the screen's push settles, and
+only when Reduce Motion is known to be off; otherwise it is drawn full.
+Welcome, the paywall and the notification education pass no progress and
+draw none.
 
 **The example card.** Welcome and the Preview show one illustrative recall —
 Critical, Gummy Products, an undeclared peanut allergen, Nationwide, Affects
@@ -323,6 +344,115 @@ Notifications screen uses, which prompts only when iOS can still ask, and
 once. `Not now` calls nothing but the completion. Both choices complete the
 education, the gate opens the app, and the Feed shows `Your preferences are
 set.` once, in that session, until it loses focus.
+
+### 6.1 The States step: Map and List (P2B7Y)
+
+**Why both.** Most shoppers find where they live faster on a map than in a
+52-row list, so Map is the default. A map is also the hardest control for a
+screen-reader user and for the smallest jurisdictions, so the searchable
+list stays a first-class mode rather than a fallback. A `Map` / `List`
+control switches between them.
+
+**One draft.** `StatesStep` holds the draft, seeded from the saved
+selection. The map toggles it with `toggleStateCode` and clears it with
+`clearStateDraft`, the shared selector's own rules; List is the unchanged
+shared `StateSelectorContent`, mounted over the current draft and reporting
+every change back into the same commit. Every change saves progressively
+through the route, exactly as before. Switching modes keeps every choice in
+its canonical order; the list search starts blank on each List visit and
+never unchecks anything.
+
+**Map mode.** The contiguous states and the District of Columbia in one
+panel; Alaska, Hawaii and Puerto Rico each in a dashed inset box beneath it,
+the whole box its target. A tap is converted into the map's own units and
+`stateAtPoint` (`src/lib/state-map.ts`) names the shape under the finger, or
+the nearest shape within 10pt for a tap on water. `Zoom in on the Northeast`
+enlarges Maine to Maryland about four times in a square framed view, where
+Rhode Island and Delaware become real targets and the District, still a few
+points across, is drawn as a round marker that takes taps within 12pt;
+`Show the whole map` returns. Below the map: the count line, `Clear
+selection`, and every chosen jurisdiction by name as a chip with a removal
+control (`Remove California`). A chosen shape fills `action/primary` with a
+white edge and carries a check at its interior point where the check fits
+(always in the enlarged view, where the smallest need it); a chosen inset
+gets a solid border and a checked badge; the chip list names every choice,
+so colour is never the only channel. The map never animates.
+
+**Clear selection** is always rendered in both modes, disabled with nothing
+chosen, and an empty clear returns the same draft reference, so nothing is
+set or saved (the P2B7V rule). In both modes its hint is onboarding's own
+`Unchecks every state.`: the shared selector's default hint says nothing is
+saved until Done, which is true in the Profile sheet and false here, so the
+step passes `clearHint` and the sheet keeps its words. Continue, Back and the
+resume point are unchanged.
+
+**The required-state note** occupies the same slot whether or not it shows:
+`STATES_REQUIRED_NOTE` is always laid out, at `opacity: 0` and hidden from
+assistive technology while a state is chosen. A `' '` placeholder was one
+line where the sentence wraps to three at the accessibility sizes, so
+clearing the last state used to lift Continue. Measured through the iOS
+accessibility tree on 2026-09-24, Continue's frame is identical before and
+after clearing the last state, at the default size (iPhone 17) and at
+AX-XXXL (iPhone SE 3rd generation), and the sentence is not clipped.
+
+**Geometry.** The US Census Bureau's 2017 cartographic boundary files
+(`cb_2017_us_state_*`, public domain as a US government work), via
+**us-atlas 3.0.1** (ISC, © Michael Bostock; npm tarball sha1
+`367d64e4b31d3f945827710f1a43813c38e17d6b`), vendored with its licence in
+`assets/geography-sources/us-atlas/`. `states-albers-10m.json` supplies the
+50 states and DC already projected with d3's `geoAlbersUsa`, including its
+Alaska and Hawaii insets; Puerto Rico, which that projection omits, comes
+from the unprojected `states-10m.json`, projected with the conic equal-area
+parameters d3-composite-projections uses for its Puerto Rico inset.
+`scripts/build-state-map.ts` generates `src/lib/state-map-geometry.ts`
+offline (coordinates rounded to 0.1 projected unit, nothing else
+simplified); nothing is traced or drawn by hand, and nothing is fetched at
+runtime. All 52 vocabulary entries are on the map, each exactly once, so no
+entry is List-only today; any future vocabulary entry without geometry
+would still be in List, which is built from the vocabulary alone.
+
+**Rendering.** `react-native-svg` 15.15.4, installed with `npx expo
+install` (the Expo SDK 57 version). No mapping SDK, MapKit, Google Maps,
+WebView or web content; the reference mock-up image is documentation in
+`assets/brand/reference/` and is not bundled.
+
+**Accessibility.** The drawing is hidden from assistive technology. Each
+jurisdiction on the panel is an invisible checkbox element at its interior
+point, named in full, reporting checked, and activated by VoiceOver's
+double-tap (`onAccessibilityTap`) without intercepting finger touches; iOS
+orders these by position, so VoiceOver reads the map north to south, and
+List is the alphabetical path. Each inset is a named checkbox. `Map` and
+`List` are buttons reporting `selected`, and the active word turns bold.
+The Northeast control reports `expanded`. Removal controls name their state.
+Every control is at least 44pt. At the accessibility text sizes the mascot
+yields its room (text scale 1.5, the app's shared threshold), the
+Map / List control takes the full width, the Northeast control wraps, and
+the page scrolls; nothing is capped or clipped and Continue stays reachable.
+
+**Mascot.** M02, `assets/brand/production/lotly-mascot-helper-1024.png`,
+72pt beside the Map / List control: decorative, hidden from VoiceOver,
+`pointerEvents="none"`, never over the map. It fades in with an 8pt settle
+once, after the push settles, only when Reduce Motion is known to be off.
+
+**Motion.** Two small entrances — the progress segment's fill and the
+mascot's fade — each played once and skipped outright under Reduce Motion
+(or while the setting is still unknown). `useReduceMotion` reads the setting
+once per process, so later screens know it on their first frame. Nothing
+loops.
+
+**Route transitions.** A native stack does not honour Reduce Motion by
+itself: onboarding's pushes still slid with the setting on. The root stack
+(`src/app/_layout.tsx`) now sets react-native-screens' own `animation:
+'fade'` whenever the setting is on, for every route in every phase, and the
+platform default otherwise. Recorded on device: with Reduce Motion on,
+Welcome → States and Back are cross-dissolves with no lateral movement; with
+it off, the normal slide is unchanged; the interactive swipe back still
+follows the finger. Until the setting has been read (it is read when the
+app starts, well before the first navigation) the default applies.
+
+**Deferred.** Allergens, Retailers, the Preview ("Ready"), the paywall and
+the notification education keep their P2B7X.1 content; only the shared
+progress bar reached them. Their redesigns are later milestones.
 
 ## 7. Local data on reset and on expiry
 
@@ -428,20 +558,24 @@ What P2B7X.2 does, and what it does not touch:
 
 ## 11. Tests
 
-| Concern                                                                                                        | Test                                          |
-| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| Record transitions, sticky completion, empty optional ≠ incomplete, sanitizing                                 | `src/lib/onboarding-state.test.ts`            |
-| Phase matrix, route matrix, layout order and guards, push-tap guard, no cross-phase navigation                 | `src/lib/access-gate.test.ts`                 |
-| Fail-closed, cached access, grace, launch timeout                                                              | `src/lib/entitlement.test.ts`                 |
-| Unconfigured provider, adapter scenarios and containment, savings math, no USD in product code                 | `src/lib/purchases/purchase-provider.test.ts` |
-| Paywall copy, prices, cards, state matrix, no close/free/trial/lifetime                                        | `src/lib/paywall-screen.test.ts`              |
-| Release destinations and the readiness failure                                                                 | `src/lib/release-destinations.test.ts`        |
-| Allergen icons: coverage, one family, provenance, assets                                                       | `src/lib/allergen-icons.test.ts`              |
-| Retailer logos: manifest parity, local-only, containment, fallback, a11y name                                  | `src/lib/retailer-logos.test.ts`              |
-| Clear selection allocation, count lines, States gate, one store, copy, permission timing, example card, tokens | `src/components/onboarding-design.test.ts`    |
-| Reset clears the record in order                                                                               | `src/lib/installation-reset.test.ts`          |
-| Route inventory and the release bundle boundary                                                                | `src/lib/release-exposure.test.ts`            |
-| The two `retailers` copy exceptions                                                                            | `src/lib/consumer-copy.test.ts`               |
+| Concern                                                                                                                                     | Test                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Record transitions, sticky completion, empty optional ≠ incomplete, sanitizing                                                              | `src/lib/onboarding-state.test.ts`            |
+| Phase matrix, route matrix, layout order and guards, push-tap guard, no cross-phase navigation                                              | `src/lib/access-gate.test.ts`                 |
+| Fail-closed, cached access, grace, launch timeout                                                                                           | `src/lib/entitlement.test.ts`                 |
+| Unconfigured provider, adapter scenarios and containment, savings math, no USD in product code                                              | `src/lib/purchases/purchase-provider.test.ts` |
+| Paywall copy, prices, cards, state matrix, no close/free/trial/lifetime                                                                     | `src/lib/paywall-screen.test.ts`              |
+| Release destinations and the readiness failure                                                                                              | `src/lib/release-destinations.test.ts`        |
+| Allergen icons: coverage, one family, provenance, assets                                                                                    | `src/lib/allergen-icons.test.ts`              |
+| Retailer logos: manifest parity, local-only, containment, fallback, a11y name                                                               | `src/lib/retailer-logos.test.ts`              |
+| Clear selection allocation, count lines, States gate, one store, copy, permission timing, example card, tokens                              | `src/components/onboarding-design.test.ts`    |
+| Reset clears the record in order                                                                                                            | `src/lib/installation-reset.test.ts`          |
+| Route inventory and the release bundle boundary                                                                                             | `src/lib/release-exposure.test.ts`            |
+| States map: vocabulary coverage, hit testing in both views and the insets, one draft, empty clear, no network                               | `src/lib/state-map.test.ts`                   |
+| Progress names and fills, motion gates, Map/List draft wiring, count and Clear, chips, a11y, M02, palettes, routes                          | `src/components/onboarding-design.test.ts`    |
+| M02 on States only; M03–M05 unreferenced                                                                                                    | `src/lib/mascot-assets.test.ts`               |
+| Onboarding Clear hint vs the sheet's, the always-laid-out required note, the root fade under Reduce Motion, the reference mock-up unbundled | `src/components/onboarding-design.test.ts`    |
+| The two `retailers` copy exceptions                                                                                                         | `src/lib/consumer-copy.test.ts`               |
 
 The Design Preview hub renders every screen and every paywall state from the
 production components and offers gate scenarios that restart the real flow

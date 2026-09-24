@@ -307,6 +307,7 @@ export function StateSelectorContent({
   onDraftChange,
   autoFocus = false,
   initialQuery = '',
+  clearHint = STATE_CLEAR_HINT,
   frame = inlineStates,
 }: {
   selected: readonly string[];
@@ -321,6 +322,13 @@ export function StateSelectorContent({
   autoFocus?: boolean;
   /** A search already typed — for galleries and tests; the sheet starts blank. */
   initialQuery?: string;
+  /**
+   * What `Clear selection` says it does. The sheet's own words (the default)
+   * say nothing is saved until Done, which is true there and false in
+   * onboarding, where every change saves at once — so onboarding passes its
+   * own (P2B7Y).
+   */
+  clearHint?: string;
   frame?: (parts: {
     controls: React.ReactNode;
     list: React.ReactNode;
@@ -376,7 +384,7 @@ export function StateSelectorContent({
       <Button
         variant="secondary"
         label={STATE_CLEAR_LABEL}
-        accessibilityHint={STATE_CLEAR_HINT}
+        accessibilityHint={clearHint}
         disabled={draft.length === 0}
         onPress={onClear}
       />

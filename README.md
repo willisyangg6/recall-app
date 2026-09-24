@@ -42,7 +42,7 @@ Design documents:
 - [docs/recall-source-contract.md](docs/recall-source-contract.md) — verified behavior of the official FDA/FSIS data sources
 - [docs/recall-domain-architecture.md](docs/recall-domain-architecture.md) — the canonical domain model and ingestion architecture
 - [DESIGN.md](DESIGN.md) — the Lotly design contract: tokens, semantic meaning, Figma ↔ code mapping, and the product rules the visual system must carry
-- [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md) — the first-launch flow, the access gate, the hard paywall, the purchase boundary and its development adapter, retailer logos, allergen icons (P2B7X.1; the store connection is P2B7X.2)
+- [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md) — the first-launch flow, the access gate, the hard paywall, the purchase boundary and its development adapter, retailer logos, allergen icons (P2B7X.1; the store connection is P2B7X.2), and the map-first States step and onboarding progress (P2B7Y)
 
 Trust & App Store preparation (C7): the in-app trust center renders the
 structured documents in `src/content/` (sources & methodology, Affects-Me

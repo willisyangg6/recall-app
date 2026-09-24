@@ -19,7 +19,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -27,6 +27,8 @@ import {
   ALLERGENS_BODY,
   ALLERGENS_HEADLINE,
   allergenCountLabel,
+  CLEAR_SELECTION_LABEL,
+  CLEAR_STATES_HINT,
   CONTINUE_CTA,
   EDUCATION_BODY,
   EDUCATION_CTA,
@@ -59,6 +61,14 @@ import {
 } from '@/lib/onboarding-copy';
 import * as ONBOARDING_COPY from '@/lib/onboarding-copy';
 import { SAMPLE_RECALL_MODEL } from '@/lib/onboarding-sample';
+import { STATE_CLEAR_HINT } from '@/lib/personalization-screen';
+import {
+  COUNTED_STEPS,
+  filledSegments,
+  motionAllowed,
+  progressAccessibilityLabel,
+  stepProgress,
+} from '@/lib/onboarding-state';
 import {
   CARD_PADDING,
   entranceEndMs,
@@ -99,6 +109,9 @@ const ROUTES = {
   paywall: read('app', 'paywall.tsx'),
 };
 const HOOK = read('hooks', 'use-onboarding-preferences.ts');
+const STATE_MAP = read('components', 'onboarding', 'state-map.tsx');
+const PROGRESS = read('components', 'onboarding', 'onboarding-progress.tsx');
+const REDUCE_MOTION = read('hooks', 'use-reduce-motion.ts');
 const FEED = read('app', '(tabs)', 'index.tsx');
 
 function codeOnly(source: string): string {
@@ -198,10 +211,32 @@ test('States alone can refuse Continue, and says why in a permanently allocated 
   const states = codeOnly(STATES);
   assert.ok(states.includes('const canContinue = canContinueFromStates(draft);'));
   assert.ok(states.includes('disabled={!canContinue}'));
-  assert.ok(
-    states.includes("{canContinue ? ' ' : STATES_REQUIRED_NOTE}"),
-    'the reason line is not permanently allocated',
+  // P2B7Y closeout: the sentence itself is ALWAYS laid out, so the footer's
+  // height cannot depend on whether it is showing — a ' ' placeholder was one
+  // line tall while the sentence wraps to three at the accessibility sizes,
+  // which moved Continue when the last state was cleared. Inactive, it is
+  // invisible and hidden from assistive technology.
+  const note = states.slice(
+    states.indexOf('<Text\n            variant="caption"'),
+    states.indexOf('</Text>', states.indexOf('<Text\n            variant="caption"')),
   );
+  assert.ok(note.includes('{STATES_REQUIRED_NOTE}'), 'the reason line is not always laid out');
+  // The words never swap for a placeholder: the child is the sentence alone.
+  assert.equal(note.slice(note.lastIndexOf('>') + 1).trim(), '{STATES_REQUIRED_NOTE}');
+  assert.ok(note.includes('style={[styles.note, canContinue && styles.noteInactive]}'));
+  assert.ok(note.includes('accessibilityElementsHidden={canContinue}'));
+  assert.ok(
+    note.includes("importantForAccessibility={canContinue ? 'no-hide-descendants' : 'auto'}"),
+  );
+  assert.ok(states.includes('noteInactive: {\n    opacity: 0,\n  },'));
+  // Hidden by opacity, never by removal or a zero size: the slot keeps its height.
+  const inactive = states.slice(
+    states.indexOf('noteInactive: {'),
+    states.indexOf('},', states.indexOf('noteInactive: {')),
+  );
+  for (const forbidden of ['display', 'height', 'maxHeight', 'position']) {
+    assert.ok(!inactive.includes(forbidden), `the inactive note uses ${forbidden}`);
+  }
   assert.ok(states.includes('accessibilityHint={canContinue ? undefined : STATES_REQUIRED_NOTE}'));
   assert.equal(STATES_REQUIRED_NOTE, 'Choose at least one state to continue.');
   // Allergens and retailers: Continue is never disabled.
@@ -482,6 +517,8 @@ test('every onboarding screen draws from the tokens: no raw hex, no capped type,
     ['education', EDUCATION],
     ['sample', SAMPLE],
     ['panel', PANEL],
+    ['state map', STATE_MAP],
+    ['progress', PROGRESS],
   ] as const) {
     const code = codeOnly(source);
     assert.doesNotMatch(code, /#[0-9A-Fa-f]{6}\b/, `${name} carries a raw colour`);
@@ -709,4 +746,250 @@ test('at the accessibility text sizes the paywall’s disclosure and actions lea
     panel.indexOf('{children}') < panel.indexOf("{placement === 'inline'"),
     'inline, the block is the last thing in the content, directly above the sticky action',
   );
+});
+
+// ── P2B7Y: the four-step progress ───────────────────────────────────────────
+
+test('the progress speaks its step by name, fills every step up to the current one, and appears on the four counted steps only', () => {
+  assert.deepEqual(
+    COUNTED_STEPS.map((step) => progressAccessibilityLabel(stepProgress(step)!)),
+    [
+      'Step 1 of 4: States',
+      'Step 2 of 4: Allergens',
+      'Step 3 of 4: Stores',
+      'Step 4 of 4: Preview',
+    ],
+  );
+  assert.deepEqual(filledSegments({ index: 1, total: 4 }), [true, false, false, false]);
+  assert.deepEqual(filledSegments({ index: 3, total: 4 }), [true, true, true, false]);
+  // One element, spoken once; the `1 of 4` words stay visible.
+  const progress = codeOnly(componentBody(PROGRESS, 'OnboardingProgress'));
+  assert.ok(progress.includes('accessibilityLabel={progressAccessibilityLabel(progress)}'));
+  assert.ok(progress.includes('{progressLabel(progress)}'));
+  // Its own named token for the filled segments; the quiet track for the rest.
+  const code = codeOnly(PROGRESS);
+  assert.ok(code.includes("backgroundColor: color['onboarding/progress']"));
+  assert.ok(code.includes("backgroundColor: color['background/subtle']"));
+  // The frame draws it only when a step passes progress, and exactly the
+  // four counted steps (and their pending state) do; Welcome, the paywall and
+  // the education pass none.
+  assert.ok(codeOnly(FRAME).includes('<OnboardingProgress progress={progress} />'));
+  assert.ok(codeOnly(FRAME).includes('{progress ? ('));
+  for (const [name, source] of [
+    ['states', STATES],
+    ['allergens', ALLERGENS],
+    ['retailers', RETAILERS],
+    ['preview', PREVIEW],
+  ] as const) {
+    assert.ok(source.includes('progress={stepProgress('), `${name} has no progress`);
+  }
+  for (const [name, source] of [
+    ['welcome', WELCOME],
+    ['panel', PANEL],
+    ['education', EDUCATION],
+  ] as const) {
+    assert.ok(!codeOnly(source).includes('progress='), `${name} shows progress`);
+  }
+});
+
+test('onboarding motion plays only when Reduce Motion is known off, once, and never loops', () => {
+  assert.equal(motionAllowed(false), true);
+  assert.equal(motionAllowed(true), false);
+  assert.equal(motionAllowed(null), false, 'an unknown setting counts as on');
+  const hook = codeOnly(REDUCE_MOTION);
+  assert.ok(hook.includes('.catch(() => true)'), 'an unreadable setting counts as on');
+  assert.ok(hook.includes("addEventListener('reduceMotionChanged'"));
+  for (const [name, source] of [
+    ['progress', PROGRESS],
+    ['states', STATES],
+  ] as const) {
+    const code = codeOnly(source);
+    // Decided on the first render; the final state is drawn at once otherwise.
+    assert.ok(code.includes('const [animate] = useState(() => motionAllowed(reduceMotion));'));
+    assert.ok(code.includes('new Animated.Value(animate ? 0 : 1)'), `${name} starts hidden`);
+    assert.ok(code.includes('if (!animate) return;'));
+    assert.ok(code.includes('useNativeDriver: true'));
+    for (const forbidden of ['Animated.loop', 'iterations', 'setInterval', 'Animated.spring']) {
+      assert.ok(!code.includes(forbidden), `${name} uses ${forbidden}`);
+    }
+  }
+  assert.ok(!codeOnly(STATE_MAP).includes('Animated'), 'the map animates');
+});
+
+// ── P2B7Y: the States step, Map and List ────────────────────────────────────
+
+test('Map and List read and change ONE draft, through the shared selector rules', () => {
+  const step = codeOnly(componentBody(STATES, 'StatesStep'));
+  assert.equal((step.match(/useState<readonly string\[\]>/g) ?? []).length, 1, 'a second draft');
+  assert.ok(step.includes('const [draft, setDraft] = useState<readonly string[]>(selected);'));
+  // Map mode toggles and clears the draft through the shared rules…
+  assert.ok(
+    step.includes('const toggle = (code: string) => commit(toggleStateCode(draft, code));'),
+  );
+  assert.ok(step.includes('<StateMap selected={draft} onToggle={toggle} />'));
+  // …and List mode is the shared selector, seeded from the draft, reporting
+  // into the same commit, which is the one path to the route's save.
+  assert.ok(step.includes('selected={draft}'));
+  assert.ok(step.includes('onDraftChange={commit}'));
+  assert.ok(step.includes('setDraft(codes);') && step.includes('onChange(codes);'));
+  // Map is the default, and the mode is the only thing a switch changes.
+  assert.ok(STATES.includes('initialMode = DEFAULT_SELECTION_MODE'));
+  assert.ok(step.includes("{mode === 'map' ? ("));
+  // No location permission and no inferred state.
+  for (const forbidden of ['expo-location', 'Location', 'geolocation', 'getCurrentPosition']) {
+    assert.ok(!codeOnly(STATES).includes(forbidden), `the step reaches ${forbidden}`);
+    assert.ok(!codeOnly(STATE_MAP).includes(forbidden), `the map reaches ${forbidden}`);
+  }
+});
+
+test('on the map, the count line and Clear selection are always allocated, and an empty clear changes nothing', () => {
+  const step = codeOnly(componentBody(STATES, 'StatesStep'));
+  const row = step.slice(
+    step.indexOf('<View style={styles.countRow}>'),
+    step.indexOf('<View style={styles.chosen}>'),
+  );
+  assert.ok(row.includes('<SelectionCount text={stateCountLabel(draft.length)} />'));
+  assert.ok(row.includes('label={CLEAR_SELECTION_LABEL}'));
+  assert.ok(row.includes('disabled={draft.length === 0}'));
+  assert.ok(!/\?\s*\(/.test(row) && !row.includes('&&'), 'the count row is conditional');
+  // The handler's own guard: clearStateDraft hands back the same reference
+  // for an empty draft, and then nothing is committed or saved.
+  assert.ok(step.includes('const next = clearStateDraft(draft);'));
+  assert.ok(step.includes('if (next !== draft) commit(next);'));
+});
+
+test('every chosen state is listed by name with a removal control that names it', () => {
+  const chosen = codeOnly(componentBody(STATES, 'ChosenState'));
+  assert.ok(chosen.includes('accessibilityRole="button"'));
+  assert.ok(chosen.includes('accessibilityLabel={removeStateLabel(code)}'));
+  assert.ok(chosen.includes('{stateSpokenName(code)}'));
+  assert.ok(
+    chosen.includes('minHeight: hitTarget.minimum') ||
+      STATES.includes('minHeight: hitTarget.minimum'),
+  );
+  assert.ok(codeOnly(STATES).includes('{draft.map((code) => ('));
+});
+
+test('the Map / List control reports its mode, and every map target is a named checkbox', () => {
+  const modes = codeOnly(componentBody(STATES, 'ModeSwitch'));
+  assert.ok(modes.includes('accessibilityRole="button"'));
+  assert.ok(modes.includes('accessibilityState={{ selected: active }}'));
+  assert.ok(modes.includes('accessibilityLabel={label}'));
+  // Not colour alone: the active word turns bold too.
+  assert.ok(modes.includes("variant={active ? 'body-small-bold' : 'body-small'}"));
+  const map = codeOnly(STATE_MAP);
+  // The drawing is hidden and touches nothing; each jurisdiction is a
+  // checkbox element named in full, activated without a finger touch.
+  assert.equal((map.match(/importantForAccessibility="no-hide-descendants"/g) ?? []).length, 2);
+  assert.ok(map.includes('accessibilityRole="checkbox"'));
+  assert.ok(map.includes('accessibilityLabel={stateSpokenName(mark.code)}'));
+  assert.ok(map.includes('accessibilityState={{ checked }}'));
+  assert.ok(map.includes('onAccessibilityTap={() => onToggle(mark.code)}'));
+  assert.ok(map.includes('accessibilityLabel={stateSpokenName(inset.code)}'));
+  // The whole panel is one press target that asks the shared hit test.
+  assert.ok(map.includes('stateAtPoint('));
+  assert.ok(map.includes('accessibilityState={{ expanded: enlarged }}'));
+  // Chosen shapes are more than a fill: a check, a marker or a badge.
+  assert.ok(map.includes('<Icon name="check"'));
+});
+
+test('M02 sits beside the Map / List control: decorative, hidden, touching nothing, never over the map', () => {
+  const mascot = codeOnly(componentBody(STATES, 'HelperMascot'));
+  assert.ok(mascot.includes("require('@/assets/brand/production/lotly-mascot-helper-1024.png')"));
+  assert.ok(mascot.includes('pointerEvents="none"'));
+  assert.ok(mascot.includes('accessible={false}'));
+  assert.ok(mascot.includes('accessibilityElementsHidden'));
+  assert.ok(mascot.includes('importantForAccessibility="no-hide-descendants"'));
+  assert.ok(mascot.includes('resizeMode="contain"'));
+  assert.ok(mascot.includes('style={{ width: HELPER_MASCOT_SIZE, height: HELPER_MASCOT_SIZE }}'));
+  assert.ok(!mascot.includes("position: 'absolute'"), 'the mascot floats over something');
+  // In the control's row, not the map's; yielding its room at large text.
+  const step = codeOnly(componentBody(STATES, 'StatesStep'));
+  const row = step.slice(
+    step.indexOf('<View style={styles.modeRow}>'),
+    step.indexOf("{mode === 'map'"),
+  );
+  assert.ok(row.includes('<HelperMascot />'));
+  assert.ok(row.includes('fontScale < HIDE_MASCOT_AT_SCALE'));
+});
+
+test('the States screen borrows no severity, relevance or harm palette', () => {
+  for (const [name, source] of [
+    ['states', STATES],
+    ['state map', STATE_MAP],
+    ['progress', PROGRESS],
+  ] as const) {
+    const code = codeOnly(source);
+    for (const forbidden of [
+      'riskPalette',
+      'relevancePalette',
+      'harmNoticePalette',
+      "'risk/",
+      "'relevance/",
+      'background/accent',
+      'action/accent',
+    ]) {
+      assert.ok(!code.includes(forbidden), `${name} uses ${forbidden}`);
+    }
+  }
+});
+
+test('Back, Continue and the resume point are exactly as before', () => {
+  const route = codeOnly(ROUTES.states);
+  assert.ok(route.includes("void access.recordShownStep('states');"));
+  assert.ok(route.includes('onChange={(codes) => update(withStates(prefs, codes))}'));
+  assert.ok(route.includes("onContinue={() => router.push(onboardingRoute('allergens'))}"));
+  assert.ok(route.includes("onBack={() => goBackFrom('states', router)}"));
+  const step = codeOnly(componentBody(STATES, 'StatesStep'));
+  assert.ok(step.includes('back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}'));
+  assert.ok(step.includes('onPress={onContinue}'));
+});
+
+// ── P2B7Y closeout ──────────────────────────────────────────────────────────
+
+test('onboarding’s Clear selection says what it does there; the settings sheet keeps its Done wording', () => {
+  // The onboarding step saves every change at once, so its Clear hint must
+  // not promise a Done that does not exist — in either mode.
+  assert.equal(CLEAR_SELECTION_LABEL, 'Clear selection');
+  assert.equal(CLEAR_STATES_HINT, 'Unchecks every state.');
+  const step = codeOnly(componentBody(STATES, 'StatesStep'));
+  assert.ok(step.includes('clearHint={CLEAR_STATES_HINT}'), 'List mode inherits the sheet hint');
+  assert.ok(step.includes('accessibilityHint={CLEAR_STATES_HINT}'), 'Map mode lost its hint');
+  assert.ok(!codeOnly(STATES).includes('STATE_CLEAR_HINT'));
+  // The shared selector keeps the sheet's own words as its default, so the
+  // settings sheet (which passes nothing) is unchanged.
+  const content = codeOnly(componentBody(FORM, 'StateSelectorContent'));
+  assert.ok(content.includes('clearHint = STATE_CLEAR_HINT,'));
+  assert.ok(content.includes('accessibilityHint={clearHint}'));
+  assert.equal(STATE_CLEAR_HINT, 'Unchecks every state. Nothing is saved until you press Done.');
+  const sheet = codeOnly(componentBody(FORM, 'StateSelector'));
+  assert.ok(!sheet.includes('clearHint'), 'the settings sheet overrides its own hint');
+});
+
+test('under Reduce Motion every route dissolves instead of sliding, set once for the whole stack', () => {
+  const layout = codeOnly(read('app', '_layout.tsx'));
+  assert.ok(layout.includes('const reduceMotion = useReduceMotion();'));
+  assert.ok(layout.includes("animation: reduceMotion === true ? 'fade' : 'default',"));
+  // One central option, no per-screen timing or navigation workaround.
+  assert.equal((layout.match(/animation:/g) ?? []).length, 1);
+  for (const [name, source] of Object.entries(ROUTES)) {
+    assert.ok(!codeOnly(source).includes('animation'), `${name} sets its own animation`);
+  }
+});
+
+test('the approved States mock-up is a design reference only: nothing bundles it', () => {
+  const reference = 'lotly-onboarding-states-map-target.png';
+  const hits: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (/\.(ts|tsx|js|jsx|json)$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
+        if (readFileSync(path, 'utf8').includes(reference)) hits.push(path);
+      }
+    }
+  };
+  walk(SRC);
+  assert.deepEqual(hits, []);
+  assert.ok(!readFileSync(join(SRC, '..', 'app.json'), 'utf8').includes('brand/reference'));
 });

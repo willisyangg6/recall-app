@@ -14,6 +14,9 @@
  *   3. The Welcome / Preview example product illustration — a flat, clearly
  *      illustrative drawing of gummy candy for the ONE static example card.
  *      Not a product photograph, not from any notice, never on a live card.
+ *   5. The States step's six interface glyphs (map, list, x, check, zoom-in,
+ *      zoom-out) — the same vendored Lucide family, the same box and stroke
+ *      (provenance in src/lib/state-map.ts).
  *   4. Two Design Preview logo FIXTURES (a wide and a tall neutral shape,
  *      labelled FIXTURE) that exercise the retailer-logo container's aspect
  *      handling. They are not retailer marks and are keyed to no retailer.
@@ -56,12 +59,22 @@ const ALLERGEN_GLYPHS = {
   'allergen-shellfish': 'shrimp',
 };
 
+/** The States step's glyphs (icon name → vendored Lucide source). Mirrors src/lib/state-map.ts. */
+const STATES_GLYPHS = {
+  map: 'map',
+  list: 'list',
+  x: 'x',
+  check: 'check',
+  'zoom-in': 'zoom-in',
+  'zoom-out': 'zoom-out',
+};
+
 function write(path, canvas) {
   writeFileSync(path, canvas.toBuffer('image/png'));
 }
 
-async function renderAllergenGlyphs() {
-  for (const [icon, lucideName] of Object.entries(ALLERGEN_GLYPHS)) {
+async function renderLucideGlyphs(glyphs) {
+  for (const [icon, lucideName] of Object.entries(glyphs)) {
     const svg = readFileSync(join(LUCIDE, `${lucideName}.svg`), 'utf8')
       .replace(/currentColor/g, '#000000')
       .replace(/stroke-width="2"/, `stroke-width="${ICON_STROKE}"`);
@@ -176,13 +189,14 @@ function renderLogoFixture(name, width, height) {
 async function main() {
   mkdirSync(ONBOARDING, { recursive: true });
   mkdirSync(PREVIEW, { recursive: true });
-  await renderAllergenGlyphs();
+  await renderLucideGlyphs(ALLERGEN_GLYPHS);
+  await renderLucideGlyphs(STATES_GLYPHS);
   await renderChevronLeft();
   renderSampleIllustration();
   renderLogoFixture('logo-fixture-wide', 160, 24);
   renderLogoFixture('logo-fixture-tall', 24, 120);
   console.log(
-    'Rendered allergen glyphs, chevron-left, the sample illustration and two logo fixtures.',
+    'Rendered allergen glyphs, the States glyphs, chevron-left, the sample illustration and two logo fixtures.',
   );
 }
 

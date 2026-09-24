@@ -6,7 +6,8 @@
  *
  * The warm page, safe-area correct. A top bar with the back control (the
  * `chevron-left` glyph, a full 44pt target, absent on Welcome) and, for a
- * counted step, the `1 of 4` progress in the mono `label` type. Then the
+ * counted step, the four-segment progress over its `1 of 4` line in the mono
+ * `label` type (`OnboardingProgress`; P2B7Y). Then the
  * scrolling content: the headline in `heading-1`, the body in `body`
  * secondary, and whatever the screen adds — at the page margin, capped at
  * the content width, with the bottom padding the sticky footer needs so the
@@ -42,11 +43,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { OnboardingProgress } from '@/components/onboarding/onboarding-progress';
 import { Icon } from '@/components/ui/icon';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
 import { color, hitTarget, layout, spacing } from '@/constants/design-tokens';
-import { progressLabel, type StepProgress } from '@/lib/onboarding-state';
+import type { StepProgress } from '@/lib/onboarding-state';
 
 export function OnboardingFrame({
   headline,
@@ -96,12 +98,9 @@ export function OnboardingFrame({
           ) : null}
         </View>
         {progress ? (
-          <Text
-            variant="label"
-            color="text/secondary"
-            accessibilityLabel={`Step ${progressLabel(progress)}`}>
-            {progressLabel(progress)}
-          </Text>
+          <View style={styles.progress}>
+            <OnboardingProgress progress={progress} />
+          </View>
         ) : null}
       </View>
       <ScrollView
@@ -172,6 +171,10 @@ const styles = StyleSheet.create({
     minWidth: hitTarget.minimum,
     minHeight: hitTarget.minimum,
     justifyContent: 'center',
+  },
+  // The bar's own padding plus this lands the progress on the page margin.
+  progress: {
+    paddingRight: layout.pageMargin - spacing[8],
   },
   back: {
     minWidth: hitTarget.minimum,

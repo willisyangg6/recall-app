@@ -18,6 +18,7 @@ import {
   allergenIconName,
   allergenIconRows,
 } from './allergen-icons';
+import { STATES_ICON_SOURCES } from './state-map';
 
 const ROOT = join(__dirname, '..', '..');
 const ICONS = join(ROOT, 'assets', 'icons');
@@ -70,11 +71,20 @@ test('one family, with license, repository, commit and retrieval date recorded',
     assert.match(svg, /stroke="currentColor"/, `${source.lucideName} is not an outline glyph`);
     assert.match(svg, /stroke-width="2"/, `${source.lucideName} has a foreign stroke weight`);
   }
-  // No source outside the nine (a stray glyph would be a second decision).
+  // No source outside the nine and the States step's six (P2B7Y,
+  // lib/state-map.ts): a stray glyph would be a second decision.
   const vendored = readdirSync(SOURCES)
     .filter((f) => f.endsWith('.svg'))
     .sort();
-  assert.deepEqual(vendored, ALLERGEN_ICON_SOURCES.map((s) => `${s.lucideName}.svg`).sort());
+  assert.deepEqual(
+    vendored,
+    [...ALLERGEN_ICON_SOURCES, ...STATES_ICON_SOURCES].map((s) => `${s.lucideName}.svg`).sort(),
+  );
+  for (const source of STATES_ICON_SOURCES) {
+    const svg = readFileSync(join(SOURCES, `${source.lucideName}.svg`), 'utf8');
+    assert.match(svg, /viewBox="0 0 24 24"/, `${source.lucideName} is not on the 24 grid`);
+    assert.match(svg, /stroke-width="2"/, `${source.lucideName} has a foreign stroke weight`);
+  }
 });
 
 test('every raster exists at 1x, 2x and 3x on the set’s 24pt box — one visual box for all nine', () => {

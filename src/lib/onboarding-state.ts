@@ -69,6 +69,36 @@ export function progressLabel(progress: StepProgress): string {
   return `${progress.index} of ${progress.total}`;
 }
 
+/**
+ * Each counted step's name, as the progress bar speaks it. `Stores`, not
+ * `Retailers`: the app-wide shopper word (consumer-copy.test.ts).
+ */
+export const COUNTED_STEP_NAMES: Record<Exclude<OnboardingStep, 'welcome'>, string> = {
+  states: 'States',
+  allergens: 'Allergens',
+  retailers: 'Stores',
+  preview: 'Preview',
+};
+
+/** The progress bar's one spoken sentence: "Step 1 of 4: States". */
+export function progressAccessibilityLabel(progress: StepProgress): string {
+  const step = COUNTED_STEPS[progress.index - 1] as Exclude<OnboardingStep, 'welcome'>;
+  return `Step ${progressLabel(progress)}: ${COUNTED_STEP_NAMES[step]}`;
+}
+
+/**
+ * Onboarding motion plays only when Reduce Motion is KNOWN to be off; on, or
+ * not yet known, means the final state at once (DESIGN.md, "Reduced motion").
+ */
+export function motionAllowed(reduceMotion: boolean | null): boolean {
+  return reduceMotion === false;
+}
+
+/** How many of the bar's segments are filled: every completed step and the current one. */
+export function filledSegments(progress: StepProgress): boolean[] {
+  return Array.from({ length: progress.total }, (_, i) => i < progress.index);
+}
+
 export function nextStep(step: OnboardingStep): OnboardingStep | null {
   const at = ONBOARDING_STEPS.indexOf(step);
   return ONBOARDING_STEPS[at + 1] ?? null;

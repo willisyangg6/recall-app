@@ -69,6 +69,13 @@ export const color = {
   'icon/secondary': '#66747A',
   'icon/inverse': '#FFFFFF',
   'icon/brand': '#3560A9',
+
+  // The onboarding progress bar's completed and current segments. Its own
+  // name so the lime it shares with `background/accent` is a recorded
+  // decision for this one mark, not a borrowed personalization signal; the
+  // `1 of 4` text beside it carries the step, so colour is never the only
+  // channel (DESIGN.md, "Onboarding and paywall").
+  'onboarding/progress': '#E2EE57',
 } as const satisfies Record<string, HexColor>;
 
 export type ColorToken = keyof typeof color;

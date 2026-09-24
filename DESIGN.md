@@ -30,6 +30,8 @@ colors:
   icon/inverse: '#FFFFFF'
   icon/brand: '#3560A9'
 
+  onboarding/progress: '#E2EE57'
+
   risk/critical/background: '#EF4E47'
   risk/critical/foreground: '#001F3E'
   risk/critical/border: '#C82728'
@@ -356,8 +358,9 @@ The product name is **Lotly**. The approved mascot set is five poses in
 `lotly-mascot-notifications-1024.png`, each tagged sRGB and carrying the
 mechanical alpha repair: a fully opaque drawing with only its antialiased
 edge translucent (`src/lib/mascot-assets.test.ts` pins the set). The set's
-contact sheet is brand documentation, in `assets/brand/reference`. Only M01
-is in the app, on Welcome; M02–M05 wait for their own screens. A mascot is drawn whole with `contain`, never cropped, recoloured or
+contact sheet is brand documentation, in `assets/brand/reference`. M01 is on
+Welcome and M02 beside the States step's Map / List control (P2B7Y);
+M03–M05 wait for their own screens. A mascot is drawn whole with `contain`, never cropped, recoloured or
 placed on a dark surface, and is decorative: hidden from VoiceOver and never
 in the way of a touch. The earlier standalone mascot
 (`lotly-mascot-transparent.png`) is no longer drawn. The final logo and
@@ -413,6 +416,12 @@ accent.
   callouts.
 - **Lime (`background/accent` / `action/accent`, `#E2EE57`)** is reserved for
   personalization/relevance and rare branded emphasis.
+- **Onboarding progress (`onboarding/progress`, `#E2EE57`)** fills the
+  completed and current segments of the onboarding progress bar (P2B7Y). It
+  carries lime under its own name so this one mark is a recorded decision,
+  not a borrowed relevance signal; the steps ahead use `background/subtle`,
+  and the visible `1 of 4` text is the channel that does not depend on
+  colour. It is never a surface, a fill for text, or a severity.
 
 Use semantic colors rather than reaching directly for palette primitives.
 Components should conceptually resolve as:
@@ -975,7 +984,11 @@ no image-generation artifact was cloned.
 **The frame.** The warm page, safe-area correct. A top bar at least 44pt tall
 holding the `chevron-left` back control (a 44pt target; the slot keeps its
 size when Welcome renders no control) and, for a counted step, the mono
-`label` progress line `1 of 4` … `4 of 4` in `text/secondary`. The
+`label` progress line `1 of 4` … `4 of 4` in `text/secondary`, beneath
+four 24 × 6pt `radius/full` segments (P2B7Y: `onboarding/progress` for the
+completed and current steps, `background/subtle` for the rest; one element
+spoken `Step 1 of 4: States`; on the four counted steps only, never on
+Welcome, the paywall or the education). The
 scrolling content column at the 16pt margin, capped at `max-content-width`:
 the headline in `heading-1`, the body in `body` `text/secondary`, then the
 screen's own content, `spacing/16` apart. A sticky footer on the page colour
@@ -1014,7 +1027,33 @@ live card. This is a deliberate, founder-directed exception to "Don't
 replace product data with decorative content": it is labelled an example
 three ways and is not product data.
 
-**States, Allergens, Retailers.** The shared selectors in the frame: the
+**States (P2B7Y): Map first, List beside it.** Under the heading, a
+`Map` / `List` control — a `radius/12` white surface with a
+`border/default` border holding two 44pt segments, each a Lucide glyph and a
+`body-small` word; the active one fills `background/subtle` with an
+`action/primary` border and its word turns `body-small-bold` — and M02
+(`lotly-mascot-helper-1024.png`) at 72pt beside it, drawn whole, decorative,
+never over the map, and omitted from a text scale of 1.5 so the control can
+take the width. Map mode, top to bottom: the `Zoom in on the Northeast` /
+`Show the whole map` control (`zoom-in` / `zoom-out` at 20 in `icon/brand`,
+`body-small-bold` `action/secondary`, trailing, 44pt); the contiguous map at
+the content width in d3's Albers USA projection (open shapes
+`background/surface` with a 0.75pt `border/strong` edge; chosen shapes
+`action/primary` with a 1pt `background/surface` edge, and a `check` in
+`icon/inverse` at the shape's interior point where it fits); the enlarged
+Northeast view is square and framed (`radius/12`, `border/default`), with
+the District as a 20pt round marker (`action/primary` ring on white, filled
+with a check when chosen); then Alaska, Hawaii and Puerto Rico as dashed
+`border/strong` `radius/12` inset boxes of one row height, a chosen box
+turning solid `action/primary` with a checked badge in its corner; then the
+count line and `Clear selection` (secondary Button) in one wrapping row;
+then every chosen state as a 44pt `background/subtle` `radius/12` chip, its
+name in `body-small` and an `x` glyph, spoken `Remove California`. List mode
+is the shared selector below, unchanged. The map uses no severity,
+relevance or harm colour and never animates. Composition rationale and
+geometry provenance: `docs/recall-onboarding-and-paywall.md` §6.1.
+
+**States (List), Allergens, Retailers.** The shared selectors in the frame: the
 count line (`body-small` secondary, always rendered), then a fixed controls
 column — the search field where the list is long, and `Clear selection` as
 the secondary Button, present on every visit and disabled with nothing
@@ -1025,7 +1064,9 @@ carries its glyph in the row's leading slot: a 20pt Lucide outline in
 ("Iconography"). Every store row carries its mark contained in a 40×24pt box
 or the `home` glyph centred in the same box, so rows are one height. On
 States, Continue is disabled with nothing chosen and the reason
-(`caption`, centred, permanently allocated) reads beneath it. On the optional
+(`caption`, centred) reads beneath it in a slot that is always laid out —
+invisible and hidden from assistive technology while a state is chosen — so
+Continue never moves as the count crosses zero, at any text size. On the optional
 steps Continue is never disabled.
 
 **Personalized Preview.** A white `radius/16` card with the `card` lift
@@ -1046,7 +1087,8 @@ saving in `caption` `text/secondary`, and on Annual the `BEST VALUE` mark —
 the compact-label geometry on `background/accent` with an `action/accent`
 border, IBM Plex Mono `label`. Lime is the value surface here and the
 success surface on the education screen and on the restore-success notice;
-nowhere else in the flow. The footer: the last outcome's notice (calm on the
+the only other lime in the flow is the progress bar's own
+`onboarding/progress` token. The footer: the last outcome's notice (calm on the
 information callout, errors on the `border/strong` alert surface, success on
 lime), the primary action naming the selected commitment (`Subscribe for
 $29.99/year`), the renewal disclosure in `caption`, and the four footer
@@ -1918,22 +1960,25 @@ and 3x on a 24pt box (black on transparent) and tinted at render time by
 `src/components/ui/icon.tsx`. Nothing was drawn by hand: every export is the
 Lucide-style outline the design uses, unchanged in shape.
 
-| Icon              | Figma export (node)                        | Lucide name         | Used by                                         |
-| ----------------- | ------------------------------------------ | ------------------- | ----------------------------------------------- |
-| `home`            | `icon/home` in `nav bar` (`81:816`)        | `house`             | Feed tab                                        |
-| `bookmark`        | `icon` in `nav bar` (`81:817`)             | `bookmark`          | Saved tab; the save control, unsaved            |
-| `bookmark-filled` | the same path with its interior filled     | `bookmark` (filled) | the save control, saved                         |
-| `user`            | `icon/user` in `nav bar` (`81:818`)        | `user-round`        | Profile tab                                     |
-| `search`          | `Search-Bar` glyph (`30:404`)              | `search`            | the search bar                                  |
-| `map-pin`         | `Nav-Chip` glyph (`33:458`)                | `map-pin`           | the card's location line                        |
-| `flag`            | `Relevance Label` glyph (`42:866`)         | `flag`              | the relevance label                             |
-| `chevron-down`    | `Nav Chip/icon` (`42:809`)                 | `chevron-down`      | the Location / Risk / Category chips            |
-| `chevron-right`   | the `chevron-down` export, a quarter turn  | `chevron-right`     | Profile's navigation rows (P2B5)                |
-| `external-link`   | `external-link` in Detail (`81:837`)       | `external-link`     | the official-source and Learn more links (P2B2) |
-| `warning`         | `icon/warning` in `Information` (`78:223`) | `triangle-alert`    | the warning callout (P2B2)                      |
-| `info`            | `lucide/info` in `Information` (`81:687`)  | `info`              | the information callout (P2B2)                  |
-| `chevron-left`    | the `chevron-down` export, a quarter turn  | `chevron-left`      | the onboarding screens' back control (P2B7X.1)  |
-| `allergen-*`      | Lucide repository, vendored SVG sources    | see below           | the nine allergen rows (P2B7X.1)                |
+| Icon              | Figma export (node)                        | Lucide name          | Used by                                           |
+| ----------------- | ------------------------------------------ | -------------------- | ------------------------------------------------- |
+| `home`            | `icon/home` in `nav bar` (`81:816`)        | `house`              | Feed tab                                          |
+| `bookmark`        | `icon` in `nav bar` (`81:817`)             | `bookmark`           | Saved tab; the save control, unsaved              |
+| `bookmark-filled` | the same path with its interior filled     | `bookmark` (filled)  | the save control, saved                           |
+| `user`            | `icon/user` in `nav bar` (`81:818`)        | `user-round`         | Profile tab                                       |
+| `search`          | `Search-Bar` glyph (`30:404`)              | `search`             | the search bar                                    |
+| `map-pin`         | `Nav-Chip` glyph (`33:458`)                | `map-pin`            | the card's location line                          |
+| `flag`            | `Relevance Label` glyph (`42:866`)         | `flag`               | the relevance label                               |
+| `chevron-down`    | `Nav Chip/icon` (`42:809`)                 | `chevron-down`       | the Location / Risk / Category chips              |
+| `chevron-right`   | the `chevron-down` export, a quarter turn  | `chevron-right`      | Profile's navigation rows (P2B5)                  |
+| `external-link`   | `external-link` in Detail (`81:837`)       | `external-link`      | the official-source and Learn more links (P2B2)   |
+| `warning`         | `icon/warning` in `Information` (`78:223`) | `triangle-alert`     | the warning callout (P2B2)                        |
+| `info`            | `lucide/info` in `Information` (`81:687`)  | `info`               | the information callout (P2B2)                    |
+| `chevron-left`    | the `chevron-down` export, a quarter turn  | `chevron-left`       | the onboarding screens' back control (P2B7X.1)    |
+| `allergen-*`      | Lucide repository, vendored SVG sources    | see below            | the nine allergen rows (P2B7X.1)                  |
+| `map`, `list`     | Lucide repository, vendored SVG sources    | `map`, `list`        | the States step's Map / List control (P2B7Y)      |
+| `zoom-in`/`-out`  | Lucide repository, vendored SVG sources    | `zoom-in`/`zoom-out` | the States map's Northeast control (P2B7Y)        |
+| `check`, `x`      | Lucide repository, vendored SVG sources    | `check`, `x`         | chosen map shapes; the chosen-state chips (P2B7Y) |
 
 Figma exports each glyph cropped to its path bounds at some scale; each was
 drawn at `export size × S / (24 × k)` centred in an `S`-point box, where `k`
@@ -2284,10 +2329,19 @@ chance.
   scaling title would each reintroduce the clipping.
 - **Reduced motion.** The system has no essential motion: disclosures grow in
   place, tabs switch without animation, and the only motion is the platform's
-  own navigation transition, which respects the Reduce Motion setting, and
-  Welcome's one-time entrance. That entrance, and any future animation, is
-  skipped when `AccessibilityInfo.isReduceMotionEnabled` reports true (or
-  cannot be read): everything is shown in its final state at once.
+  own navigation transition — which the root stack turns into a
+  cross-dissolve (`animation: 'fade'`) while Reduce Motion is on, because a
+  native stack keeps sliding otherwise; content motion and route motion are
+  separate, and both are covered —
+  Welcome's one-time entrance, and (P2B7Y) the onboarding progress segment's
+  one fill and the States mascot's one fade-and-settle, each starting after
+  the screen's push settles; the States map itself never animates. That
+  entrance, and any future animation, is skipped when
+  `AccessibilityInfo.isReduceMotionEnabled` reports true (or cannot be
+  read): everything is shown in its final state at once. The P2B7Y motions
+  are stricter still: they play only when the setting is already KNOWN to be
+  off (`useReduceMotion`, read once per process), so a screen never draws a
+  frame it would have to correct.
 - **Color is never the only channel.** Risk carries its word, relevance its
   word and flag, selection its check or label change.
 - **Contrast.** Maintain WCAG AA for normal text: `text/primary` and
