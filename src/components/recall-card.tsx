@@ -73,8 +73,20 @@
  * leaving the card. The visible control stays for everyone else — and since
  * P2B7H it is the bookmark glyph alone, with no visible word, on the card
  * exactly as on Detail.
+ *
+ * ## The surface and the card (P2B7X.1)
+ *
+ * The card's APPEARANCE — the status row, the media-beside-identity row and
+ * the location footer — is `RecallCardSurface`, drawn once and handed its
+ * media and its trailing footer element. `RecallCard` wraps it in the Link,
+ * the save control and the accessibility action a live recall needs; the
+ * onboarding's one static example card (components/onboarding) wraps the
+ * SAME surface with a bundled illustration and no control, so the example a
+ * first launch shows is the card the Feed draws, not a copy that could
+ * drift from it.
  */
 
+import type { ReactNode } from 'react';
 import { Link } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -123,24 +135,56 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
           if (event.nativeEvent.actionName === SAVE_ACTION) void savedRecalls.toggle(model.id);
         }}
         style={({ pressed }) => pressed && styles.pressed}>
-        <Surface radius={16} border="border/subtle" elevation="card" style={styles.card}>
-          <View style={styles.statusRow}>
-            <View style={styles.statusGroup}>
-              {/* Consumer risk first — it is the primary risk language. Feed
+        <RecallCardSurface
+          model={model}
+          media={
+            <MediaTile
+              uri={model.heroImageUrl}
+              alt={model.productName}
+              size={layout.cardMediaSize}
+            />
+          }
+          trailing={<SaveRecallButton caseId={model.id} />}
+        />
+      </Pressable>
+    </Link>
+  );
+}
+
+/**
+ * The card's appearance for one model: every rule below is the card's own,
+ * unchanged. `media` is the tile the caller resolved (the live tile for a
+ * recall, the bundled illustration for the onboarding example); `trailing`
+ * sits at the footer's trailing edge (the save control, or nothing).
+ */
+export function RecallCardSurface({
+  model,
+  media,
+  trailing,
+}: {
+  model: HomeCardModel;
+  media: ReactNode;
+  trailing: ReactNode;
+}) {
+  return (
+    <Surface radius={16} border="border/subtle" elevation="card" style={styles.card}>
+      <View style={styles.statusRow}>
+        <View style={styles.statusGroup}>
+          {/* Consumer risk first — it is the primary risk language. Feed
                   and Detail render the same risk state from the shared model
                   (P2a): rated tiers label their tier, an unclassified FDA
                   recall reads "PENDING", a PHA's absent class reads
                   "UNKNOWN" — the two screens can never disagree. */}
-              {model.risk.badgeLabel ? (
-                <RiskLabel
-                  tier={model.risk.tier}
-                  label={model.risk.badgeLabel}
-                  accessibilityLabel={model.risk.accessibilityLabel}
-                />
-              ) : null}
-              {/* Public Health Alerts are always explicitly labeled. */}
-              {model.noticeLabel ? <NoticeLabel label={model.noticeLabel} /> : null}
-              {/* The activity date is READ, not glanced at: "Updated Aug 21"
+          {model.risk.badgeLabel ? (
+            <RiskLabel
+              tier={model.risk.tier}
+              label={model.risk.badgeLabel}
+              accessibilityLabel={model.risk.accessibilityLabel}
+            />
+          ) : null}
+          {/* Public Health Alerts are always explicitly labeled. */}
+          {model.noticeLabel ? <NoticeLabel label={model.noticeLabel} /> : null}
+          {/* The activity date is READ, not glanced at: "Updated Aug 21"
                   is how someone decides whether they have already seen this
                   recall, so it takes the readable `caption` (12pt) — the
                   same token Detail's status row uses, so Feed, Saved and
@@ -151,75 +195,69 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
                   labels; a date the product asks the reader to act on is
                   not one. No height is fixed here, so Dynamic Type grows the
                   row rather than clipping it. */}
-              <Text variant="caption" color="text/secondary">
-                {model.activity.text}
-              </Text>
-            </View>
-            {/* Available in every feed mode whenever saved preferences
+          <Text variant="caption" color="text/secondary">
+            {model.activity.text}
+          </Text>
+        </View>
+        {/* Available in every feed mode whenever saved preferences
                 establish a match — not restricted to the Affects me view.
                 Exactly ONE relevance label (P2a); the matching logic is
                 unchanged, only its rendering. */}
-            {model.affectsYou ? <RelevanceLabel /> : null}
-          </View>
+        {model.affectsYou ? <RelevanceLabel /> : null}
+      </View>
 
-          {/* Product identity stays dominant; the media is a recognition aid
+      {/* Product identity stays dominant; the media is a recognition aid
               beside it. The tile renders NOTHING for an absent or failed
               image (P2B7I), and this row is a gapped flex row, so the text
               column then starts at the card's edge and takes its full width
               — no empty gap, no reserved footprint. */}
-          <View style={styles.content}>
-            <MediaTile
-              uri={model.heroImageUrl}
-              alt={model.productName}
-              size={layout.cardMediaSize}
-            />
-            <View style={styles.identity}>
-              <View>
-                {/* At most three lines, ellipsized at the tail (the RN
+      <View style={styles.content}>
+        {media}
+        <View style={styles.identity}>
+          <View>
+            {/* At most three lines, ellipsized at the tail (the RN
                     default), in both card shapes. The line clamp bounds the
                     VISUAL box only: the node's content stays the complete
                     name, which is what the card's grouped accessibility
                     element announces — so a screen-reader user hears the
                     whole title exactly once, with no second element and no
                     truncation. */}
-                <Text variant="heading-3" numberOfLines={3}>
-                  {model.productName}
-                </Text>
-                <Text variant="caption" color="text/secondary">
-                  {model.brand.text}
-                </Text>
-              </View>
-              {/* The product category, when the case carries a launch-visible
+            <Text variant="heading-3" numberOfLines={3}>
+              {model.productName}
+            </Text>
+            <Text variant="caption" color="text/secondary">
+              {model.brand.text}
+            </Text>
+          </View>
+          {/* The product category, when the case carries a launch-visible
                   one. Placed under the identity it describes rather than in
                   the status row above, which belongs to risk and relevance;
                   it is quiet metadata and must never read as a third status.
                   A case with none renders NOTHING here — the identity column
                   is a gapped flex column, so an omitted child leaves no gap,
                   no spacer and no accessibility element behind it. */}
-              {model.categoryLabel ? <CategoryTag label={model.categoryLabel} /> : null}
-              {model.reasonLine ? (
-                <Text variant="body-small" color="text/secondary">
-                  {model.reasonLine}
-                </Text>
-              ) : null}
-            </View>
-          </View>
+          {model.categoryLabel ? <CategoryTag label={model.categoryLabel} /> : null}
+          {model.reasonLine ? (
+            <Text variant="body-small" color="text/secondary">
+              {model.reasonLine}
+            </Text>
+          ) : null}
+        </View>
+      </View>
 
-          {/* The location keeps the row's width; the save control sits at its
+      {/* The location keeps the row's width; the save control sits at its
               trailing edge so it is reachable without competing with the
               product identity above it. */}
-          <View style={styles.footerRow}>
-            <View style={styles.location}>
-              <Icon name="map-pin" size={12} color="icon/primary" />
-              <Text variant="caption" style={styles.locationText}>
-                {model.locationSummary}
-              </Text>
-            </View>
-            <SaveRecallButton caseId={model.id} />
-          </View>
-        </Surface>
-      </Pressable>
-    </Link>
+      <View style={styles.footerRow}>
+        <View style={styles.location}>
+          <Icon name="map-pin" size={12} color="icon/primary" />
+          <Text variant="caption" style={styles.locationText}>
+            {model.locationSummary}
+          </Text>
+        </View>
+        {trailing}
+      </View>
+    </Surface>
   );
 }
 

@@ -17,7 +17,15 @@ operations-only** — shoppers never see "last checked" times or stale-state
 messaging, and a refresh that fails over recalls already on screen is
 silent; the founder is alerted instead by a dead-man heartbeat, which is
 built and wired but **not yet live** (the Healthchecks check is paused
-pending a push). No migration is involved. See
+pending a push). No migration is involved. **Onboarding and the hard paywall
+are built (P2B7X.1)**: a first launch walks Welcome → States → Allergens →
+Retailers → Preview, then a paywall with no way past it but a verified
+purchase or restore, then a one-time notification education; every product
+route is a protected route the navigator does not have outside its phase. The
+store itself is NOT connected — no RevenueCat, no App Store products, and a
+release build runs a fail-closed provider — so no purchase can occur until
+P2B7X.2 (see
+[docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md)). See
 [docs/recall-production-runbook.md](docs/recall-production-runbook.md) §16
 and §18. Push delivery machinery — registration, the
 notification-event ledger, the delivery job, and copy formatting — is
@@ -34,6 +42,7 @@ Design documents:
 - [docs/recall-source-contract.md](docs/recall-source-contract.md) — verified behavior of the official FDA/FSIS data sources
 - [docs/recall-domain-architecture.md](docs/recall-domain-architecture.md) — the canonical domain model and ingestion architecture
 - [DESIGN.md](DESIGN.md) — the Lotly design contract: tokens, semantic meaning, Figma ↔ code mapping, and the product rules the visual system must carry
+- [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md) — the first-launch flow, the access gate, the hard paywall, the purchase boundary and its development adapter, retailer logos, allergen icons (P2B7X.1; the store connection is P2B7X.2)
 
 Trust & App Store preparation (C7): the in-app trust center renders the
 structured documents in `src/content/` (sources & methodology, Affects-Me
@@ -59,8 +68,11 @@ identity, EAS profiles, and what Apple enrollment still blocks).
 
 ```
 src/
-  app/          # Expo Router routes; (tabs)/ holds Feed, Saved and Profile
-  components/   # reusable UI components; ui/ holds the design-system primitives
+  app/          # Expo Router routes; (tabs)/ holds Feed, Saved and Profile;
+                # onboarding/ and paywall.tsx are the gated first-launch flow
+  components/   # reusable UI components; ui/ holds the design-system primitives;
+                # onboarding/ and paywall/ the first-launch screens;
+                # development/ the Design Preview's galleries
   constants/    # design tokens (design-tokens.ts, pinned to DESIGN.md) + legacy provisional theme
   domain/       # canonical model: types, projection, material-change rules
   lib/          # client-safe read path + display formatting
@@ -102,6 +114,10 @@ npm run qa:search    # search-correctness QA: an offline boundary gate (the
                      # plus a read-only measurement of the field inventory
                      # and stored retailer-evidence quality. `-- --report`
                      # also writes a durable artifact under .reports/
+npm run qa:launch-readiness  # offline: exits non-zero while the paywall's
+                             # Terms / Privacy / Support destinations are
+                             # absent or not real HTTPS URLs (all three are
+                             # absent today, by design)
 ```
 
 The test suite never touches the network: it runs against real FSIS API
@@ -509,9 +525,11 @@ via manual input, not location permissions. See
 
 ## Intentionally not implemented yet
 
-Accounts/auth, onboarding flow, quiet hours and other notification
-preferences, ingest-time retailer enrichment of stored projections, pet-food
-scope, Spanish records, CPSC/NHTSA, analytics, final visual design. Native
+Accounts/auth, the store connection behind the paywall (RevenueCat and the
+App Store subscription products — P2B7X.2; the paywall, gate and boundary
+exist), quiet hours and other notification preferences, ingest-time retailer
+enrichment of stored projections, pet-food scope, Spanish records, CPSC/NHTSA,
+analytics, final visual design. Native
 sharing is deferred on purpose — its founder contract (an HTTPS Lotly
 Universal Link, blocked on the final domain) is in
 [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md) §6.
@@ -1452,6 +1470,37 @@ personalization`, `Open Lotly on your phone`); prose says `Affects me`,
   blocker, while `preview` and `development` stay unconfigured on purpose. No
   TestFlight build exists yet; Apple enrollment remains the blocker. Detail:
   [docs/recall-release-readiness.md](docs/recall-release-readiness.md) §10.
+- **P2B7X.1 — onboarding and paywall foundation, implemented 2026-09-23
+  (uncommitted). No RevenueCat, no App Store products, no purchase, no push
+  activation, no build, no production write.** A first launch now walks
+  Welcome → States (1 of 4, at least one required) → Allergens (2 of 4) →
+  Retailers (3 of 4) → Personalized Preview (4 of 4) → a hard paywall with
+  no close, skip, free, trial or dismiss route → purchase or restore success
+  → a one-time notification education (only its primary action can raise
+  Apple's prompt; `Not now` asks nothing) → Feed, with `Your preferences are
+set.` shown once. Preferences save progressively through the existing
+  store; a versioned onboarding record — never the preference values —
+  decides completion, so an empty optional answer is complete; killing the
+  app resumes the exact screen; once complete, an unsubscribed relaunch opens
+  on the paywall, never Welcome. Access is ONE gate over `Stack.Protected`
+  groups in the root layout: every product route is removed from the
+  navigator outside its phase, so tabs, deep links, notification taps,
+  gestures and relaunches have nothing to reach, and a phase change moves
+  the app by itself. Entitlement fails closed (a never-verified device is
+  inactive when the store is unreachable) and honours a cached verification
+  through an outage for a bounded grace. The typed purchase boundary is
+  ready for the RevenueCat adapter; a release build runs a fail-closed
+  provider, and the development adapter (ten scenarios for the Simulator and
+  Design Preview) is folded out of the release bundle by `__DEV__`, verified
+  by an export scan. Also: Lucide allergen glyphs on every allergen row (one
+  family, ISC, provenance recorded), a retailer-logo pipeline with a
+  provenance manifest that holds **zero** marks today (all 77 retailers fall
+  back to the house glyph; sourcing official marks is a founder decision),
+  typed Terms/Privacy/Support destinations with `npm run
+qa:launch-readiness` failing while they are absent, and Design Preview
+  galleries for every screen and paywall state plus gate scenarios that
+  restart the real flow. Contract and state machine:
+  [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md).
 - Push delivery remains deliberately inactive and was outside O2's scope.
 
 ## Ingest-pipeline atomicity and historical repair (O3)

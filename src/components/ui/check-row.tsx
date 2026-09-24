@@ -16,8 +16,18 @@
  * checking does, are the screen's; this component holds no state and
  * invents no words. Nothing animates, which is also the reduced-motion
  * behaviour.
+ *
+ * ## The leading slot (P2B7X.1)
+ *
+ * An optional element between the indicator and the label — an allergen's
+ * glyph, a store's mark or its fallback — handed in by the caller, already
+ * sized. It is decorative: the row's spoken name is still the label alone,
+ * so a screen reader hears "Peanuts, checkbox, checked" and never an image.
+ * Rows with and without a leading element keep the same height, because
+ * the row's minimum is the 44pt target and the slot is never taller.
  */
 
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Surface } from '@/components/ui/surface';
@@ -29,12 +39,15 @@ export function CheckRow({
   checked,
   onPress,
   accessibilityHint,
+  leading,
 }: {
   /** The option, in the shopper's own words. */
   label: string;
   checked: boolean;
   onPress: () => void;
   accessibilityHint?: string;
+  /** A decorative element before the label, sized by the caller. */
+  leading?: ReactNode;
 }) {
   return (
     <Pressable
@@ -53,6 +66,11 @@ export function CheckRow({
           <View style={[styles.box, checked && styles.boxChecked]}>
             {checked ? <View style={styles.mark} /> : null}
           </View>
+          {leading !== undefined ? (
+            <View accessible={false} importantForAccessibility="no-hide-descendants">
+              {leading}
+            </View>
+          ) : null}
           <Text variant="body" style={styles.label}>
             {label}
           </Text>

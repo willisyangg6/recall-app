@@ -331,8 +331,18 @@ Build's image carries a newer Swift and compiles it.
   exempt (OS/HTTPS) encryption, so `ios.config.usesNonExemptEncryption: false`
   is the expected answer. It is **not** set: it is a compliance assertion, and
   it belongs to submission prep with the rest of the questionnaire.
-- **Onboarding** and the **subscription paywall** — separate milestones, not
-  started. No purchase surface exists, so none of guideline 3.1.x applies yet.
+- **Onboarding and the hard paywall — built (P2B7X.1, 2026-09-23); the
+  store is not connected.** The first-launch flow, the access gate, the
+  paywall and the typed purchase boundary exist; a release build runs the
+  fail-closed `unconfigured` provider, so no purchase can occur and nothing
+  grants access until P2B7X.2 adds RevenueCat and the App Store products
+  ([recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md) §10).
+  Guideline 3.1.x applies from that milestone on.
+- **Terms, Privacy and Support destinations.** The paywall's footer reads
+  them from `src/lib/release-destinations.ts`, where all three are `null`.
+  `npm run qa:launch-readiness` is the offline gate: it exits non-zero while
+  any is absent or not a valid HTTPS URL on a real host, and it fails today
+  with three blockers by design.
 - **Push activation** — built, deliberately inactive, and activated only by
   `npm run push:activate` when the founder decides.
 - **Shopper reports** — the server gate stays off.

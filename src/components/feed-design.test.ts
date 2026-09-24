@@ -531,12 +531,24 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
   // The icon set is exactly what a shipped control uses.
   const glyphs = [...ICON.matchAll(/^\s+'?([a-z-]+)'?: require\(/gm)].map((m) => m[1]).sort();
   // P2B2 added the Detail frame's external-link, warning and info glyphs,
-  // P2B5 the chevron-right that Profile's navigation rows carry; there is
-  // still no bell, share, sliders or chevron-left glyph.
+  // P2B5 the chevron-right that Profile's navigation rows carry, P2B7X.1 the
+  // chevron-left of the onboarding back control and the nine allergen glyphs
+  // (one Lucide family; lib/allergen-icons.ts). There is still no bell, share
+  // or sliders glyph.
   assert.deepEqual(glyphs, [
+    'allergen-egg',
+    'allergen-fish',
+    'allergen-milk',
+    'allergen-peanut',
+    'allergen-sesame',
+    'allergen-shellfish',
+    'allergen-soy',
+    'allergen-tree-nut',
+    'allergen-wheat',
     'bookmark',
     'bookmark-filled',
     'chevron-down',
+    'chevron-left',
     'chevron-right',
     'external-link',
     'flag',

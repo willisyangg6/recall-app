@@ -28,6 +28,11 @@ import { Stack, router, useFocusEffect } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+  GateScenarios,
+  OnboardingGallery,
+  PaywallGallery,
+} from '@/components/development/onboarding-gallery';
 import { DocumentBlockView } from '@/components/document/document-blocks';
 import { DocumentSectionView, DocumentView } from '@/components/document/document-view';
 import { ResetPanel } from '@/components/installation-reset-section';
@@ -914,6 +919,25 @@ export default function DesignPreviewScreen() {
           NOTIFICATION STATES
         </ThemedText>
         <NotificationsGallery />
+
+        {/* P2B7X.1: the first-launch screens, the hard paywall in every state,
+            and the notification education — imported from production — with
+            each sample's state held in the gallery's memory; then the gate
+            scenarios, which restart the REAL flow from a chosen state. */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          ONBOARDING SCREENS
+        </ThemedText>
+        <OnboardingGallery />
+
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          PAYWALL STATES
+        </ThemedText>
+        <PaywallGallery />
+
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          GATE SCENARIOS
+        </ThemedText>
+        <GateScenarios />
 
         {/* P2B6B: the trust documents' shared renderer and content blocks —
             imported from production, never copied — over the registry's own

@@ -482,6 +482,49 @@ screen by screen. `src/components/ui/design-foundation.test.ts` pins the same
 mapping offline (every declared name resolves to a real, non-empty 1x/2x/3x
 asset), so a broken icon fails the suite before it reaches a screenshot.
 
+### Onboarding screens, paywall states and gate scenarios (P2B7X.1)
+
+Three sections at the end of the hub, drawn by the production components in
+`src/components/onboarding/` and `src/components/paywall/`, imported and
+never copied (`src/components/development/onboarding-gallery.tsx`):
+
+- **Onboarding screens** — Welcome; States empty, selected and searched;
+  Allergens empty and with several selected; Retailers empty, selected and
+  searched; the retailer rows with the fallback for the longest catalog name
+  and two neutral FIXTURE shapes at extreme ratios (not marks of anything)
+  standing where a wide or tall mark would; the Preview with selections and
+  with no optional selections; notification education idle and enabling;
+  and a 568 pt viewport so the sticky footer is seen at its tightest. Each
+  sample's selection lives in the gallery's memory: nothing reads or writes
+  preferences or the onboarding record, and Continue, Back and both education
+  actions are wired to nothing. Dynamic Type is the simulator's setting.
+- **Paywall states** — Annual and Monthly selected, offering loading,
+  purchase in progress, user cancelled, recoverable error, restore in
+  progress, restore success, restore finds nothing, provider unavailable,
+  unavailable with no verified entitlement, a long localized price pair, and
+  the small viewport. The offering is the development adapter's fixture (the
+  expected US prices) or a deliberately long pair; Subscribe, Restore, Terms,
+  Privacy, Support and Back are wired to nothing. A cached active entitlement
+  is a gate state, not a paywall state — with a verified cache the paywall is
+  never shown — so it is demonstrated by a gate scenario instead.
+- **Gate scenarios** — the one part of the hub that acts: each control writes
+  this device's onboarding record and the simulated store account, pops to
+  the root and reloads the gate, so the REAL app moves to the state named
+  exactly as a relaunch would: offline first launch, resumed incomplete
+  onboarding (Retailers), completed onboarding with an inactive entitlement
+  (the paywall), active entitlement with education pending, active
+  entitlement (the Feed), and cached active entitlement through an outage.
+  Preferences and saved recalls are never touched.
+
+The paywall route itself carries development controls beneath the plans in a
+development build only — the ten store scenarios, a simulated subscription
+grant, a clear, an onboarding reset, and a link to this hub — reached through
+a `__DEV__` `require`, so a release bundle folds them and the fake store away
+(`src/lib/release-exposure.test.ts`, and the export scan recorded in
+[recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md) §5.1).
+In a development build the hub route is mounted in every phase, so it can be
+opened from the paywall's controls without an entitlement.
+
 A further gallery, **Detail states and callouts**, renders Recall Detail's
 loading, not-found and load-failure messages with their real copy from
 `src/lib/detail-copy.ts`, and the Information Callout in both tones on
@@ -602,7 +645,14 @@ It is deliberately self-contained. To remove it completely:
    the four guard blocks at the top of `submitReport`, `withdrawReport`,
    `loadMyReport` and `loadReportSummary`, and the
    "## The one development-only diversion" section of the file header.
-4. Delete this document and its rows in [../AGENTS.md](../AGENTS.md) and
+4. Delete `src/components/development/onboarding-gallery.tsx` (P2B7X.1) and
+   its three sections in the hub; delete
+   `src/components/paywall/paywall-development-controls.tsx` and the
+   `__DEV__` block that requires it in `src/app/paywall.tsx`; the development
+   purchase adapter (`src/lib/purchases/development-*.ts`) may stay for the
+   Simulator or go with them — `resolvePurchaseProvider` then needs only its
+   release path.
+5. Delete this document and its rows in [../AGENTS.md](../AGENTS.md) and
    [../README.md](../README.md).
 
 No other file references it, no migration or configuration was involved, and

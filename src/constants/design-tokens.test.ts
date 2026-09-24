@@ -477,11 +477,14 @@ test('the root layout loads exactly the six required faces before the first scre
     (m) => m[0],
   );
   assert.deepEqual([...new Set(imported)].sort(), [...REQUIRED_FONT_FACES].sort());
-  // The splash stays up until the fonts settle, and a failure never leaves
-  // the app blank.
+  // The splash stays up until the fonts settle — and, since P2B7X.1, until
+  // the access gate has read which phase the launch is in — and a font
+  // failure never leaves the app blank: a failed load counts as settled.
   assert.match(layout, /^void SplashScreen\.preventAutoHideAsync\(\);$/m);
-  assert.match(layout, /if \(fontsLoaded \|\| fontError\) void SplashScreen\.hideAsync\(\);/);
-  assert.match(layout, /if \(!fontsLoaded && !fontError\) return null;/);
+  assert.match(layout, /fontsSettled=\{fontsLoaded \|\| fontError !== null\}/);
+  assert.match(layout, /const ready = fontsSettled && access\.ready;/);
+  assert.match(layout, /if \(ready\) void SplashScreen\.hideAsync\(\);/);
+  assert.match(layout, /if \(!ready\) return null;/);
 });
 
 test('CUSTOM_FONTS_INSTALLED tells the truth about package.json', () => {

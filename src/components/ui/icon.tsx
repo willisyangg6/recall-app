@@ -47,6 +47,24 @@ const GLYPHS = {
   'external-link': require('@/assets/icons/external-link.png') as ImageSourcePropType,
   warning: require('@/assets/icons/warning.png') as ImageSourcePropType,
   info: require('@/assets/icons/info.png') as ImageSourcePropType,
+  // P2B7X.1: the `chevron-down` rasters turned a quarter turn clockwise —
+  // the same lossless rotation `chevron-right` is — for the onboarding
+  // screens' back control.
+  'chevron-left': require('@/assets/icons/chevron-left.png') as ImageSourcePropType,
+  // P2B7X.1: the nine allergen glyphs, one Lucide family (ISC), rasterised
+  // from the vendored sources in assets/icon-sources/lucide/ onto the same box at
+  // the same stroke weight as the rest of the set. Which glyph stands for
+  // which allergen, and why three are concept stand-ins, is recorded in
+  // src/lib/allergen-icons.ts.
+  'allergen-peanut': require('@/assets/icons/allergen-peanut.png') as ImageSourcePropType,
+  'allergen-tree-nut': require('@/assets/icons/allergen-tree-nut.png') as ImageSourcePropType,
+  'allergen-milk': require('@/assets/icons/allergen-milk.png') as ImageSourcePropType,
+  'allergen-egg': require('@/assets/icons/allergen-egg.png') as ImageSourcePropType,
+  'allergen-wheat': require('@/assets/icons/allergen-wheat.png') as ImageSourcePropType,
+  'allergen-soy': require('@/assets/icons/allergen-soy.png') as ImageSourcePropType,
+  'allergen-sesame': require('@/assets/icons/allergen-sesame.png') as ImageSourcePropType,
+  'allergen-fish': require('@/assets/icons/allergen-fish.png') as ImageSourcePropType,
+  'allergen-shellfish': require('@/assets/icons/allergen-shellfish.png') as ImageSourcePropType,
 } as const;
 
 export type IconName = keyof typeof GLYPHS;

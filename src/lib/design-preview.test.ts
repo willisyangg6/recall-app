@@ -899,11 +899,16 @@ test('the Profile row is behind the bare __DEV__ identifier, so release bundles 
 });
 
 test('nothing but Profile’s development branch links to the harness', () => {
+  // The root layout is checked separately: since P2B7X.1 it DECLARES the
+  // route (inside a protected group, so the gate covers it) but links to it
+  // nowhere. `access-gate.test.ts` pins that declaration.
+  const layout = codeOnly(readApp('_layout.tsx'));
+  assert.ok(!layout.includes('href='), 'the root layout links to nothing');
+  assert.ok(!layout.includes('Design Preview'), 'the root layout names Design Preview');
   for (const file of [
     ['(tabs)', 'index.tsx'],
     ['(tabs)', 'saved.tsx'],
     ['(tabs)', '_layout.tsx'],
-    ['_layout.tsx'],
     ['recall', '[id].tsx'],
     ['report', '[id].tsx'],
     ['document', '[slug].tsx'],

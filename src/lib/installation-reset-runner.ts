@@ -13,6 +13,7 @@ import {
 } from './installation-id';
 import { enqueueInstallationMutation } from './installation-lifecycle';
 import { resetInstallationData, type InstallationResetResult } from './installation-reset';
+import { deleteLocalOnboardingState } from './onboarding-store';
 import { deleteLocalPreferenceState } from './preferences-store';
 import { deleteInstallationData } from './push-api';
 import { clearLocalAlertState } from './push-registration';
@@ -31,6 +32,7 @@ export function runInstallationReset(): Promise<InstallationResetResult> {
     clearLocalPreferences: deleteLocalPreferenceState,
     clearLocalAlertState,
     clearLocalSavedRecalls: deleteLocalSavedRecalls,
+    clearLocalOnboardingState: deleteLocalOnboardingState,
     clearInstallationId,
     createFreshInstallationId: getOrCreateInstallationId,
   });

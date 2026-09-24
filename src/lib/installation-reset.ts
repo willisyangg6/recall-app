@@ -12,7 +12,7 @@
  *      server keyed to this installation),
  *   2. delete the server data for that id (one atomic, idempotent RPC),
  *   3. only then clear the local state (preferences, dirty flag, alerts
- *      flag, saved recalls, installation id),
+ *      flag, saved recalls, onboarding progress, installation id),
  *   4. mint the fresh installation id through the one canonical path.
  *
  * A failure in step 2 aborts BEFORE any local mutation: the old id — the
@@ -51,6 +51,15 @@ export interface InstallationResetDeps {
   clearLocalSavedRecalls(): Promise<void>;
   /** Remove the locally persisted alerts-enabled flag. */
   clearLocalAlertState(): Promise<void>;
+  /**
+   * Remove the onboarding record (P2B7X.1), so the next launch starts from
+   * Welcome: the confirmation promises the app returns to its default state,
+   * and a device with no personalization has no completed onboarding to
+   * stand on. The verified-entitlement cache is deliberately NOT cleared —
+   * a purchase belongs to the shopper's app store identity, not to this
+   * installation.
+   */
+  clearLocalOnboardingState(): Promise<void>;
   /** Discard the old installation id. */
   clearInstallationId(): Promise<void>;
   /** Mint the fresh id through the canonical getOrCreate path. */
@@ -83,6 +92,7 @@ export function resetInstallationData(
     await deps.clearLocalPreferences();
     await deps.clearLocalAlertState();
     await deps.clearLocalSavedRecalls();
+    await deps.clearLocalOnboardingState();
     await deps.clearInstallationId();
     await deps.createFreshInstallationId();
     return { status: 'deleted' };

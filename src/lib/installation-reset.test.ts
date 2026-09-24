@@ -54,6 +54,9 @@ function fakeWorld(options: { failServerDeletes?: number; ambiguousDeletes?: num
       dirty: false,
       alertsEnabled: false,
       savedRecalls: [] as string[],
+      // P2B7X.1: the onboarding record, cleared with the rest so the next
+      // launch starts from Welcome.
+      onboarded: true,
       installationId: null as string | null,
     },
     log: [] as string[],
@@ -91,6 +94,10 @@ function fakeWorld(options: { failServerDeletes?: number; ambiguousDeletes?: num
     clearLocalSavedRecalls: async () => {
       world.local.savedRecalls = [];
       world.log.push('clear-saved');
+    },
+    clearLocalOnboardingState: async () => {
+      world.local.onboarded = false;
+      world.log.push('clear-onboarding');
     },
     clearInstallationId: async () => {
       world.local.installationId = null;
@@ -162,6 +169,7 @@ test('success clears local state, deletes only this installation server-side, an
     'clear-prefs',
     'clear-alerts',
     'clear-saved',
+    'clear-onboarding',
     'clear-id',
     'fresh-id:fresh-1',
   ]);
@@ -170,6 +178,7 @@ test('success clears local state, deletes only this installation server-side, an
     dirty: false,
     alertsEnabled: false,
     savedRecalls: [],
+    onboarded: false,
     installationId: 'fresh-1', // canonical path minted it (test 17)
   });
   // The other installation's rows are untouched.
@@ -188,6 +197,7 @@ test('a failed server deletion mutates NOTHING local — credential and preferen
     dirty: false,
     alertsEnabled: true,
     savedRecalls: ['case-a', 'case-b'],
+    onboarded: true,
     installationId: 'seed-installation-0001',
   });
   assert.deepEqual(world.log, ['server-delete-failed:seed-installation-0001']);
@@ -272,6 +282,7 @@ test('push registration cannot race the reset and recreate the old subscription'
     'clear-prefs',
     'clear-alerts',
     'clear-saved',
+    'clear-onboarding',
     'clear-id',
     'fresh-id:fresh-1',
     'refresh:noop', // push stays OFF after reset until explicitly re-enabled

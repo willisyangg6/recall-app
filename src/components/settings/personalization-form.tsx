@@ -64,9 +64,20 @@
  *
  * When a sheet closes, focus returns to the trigger row that opened it, so
  * a screen-reader user lands where they left. No height is fixed anywhere.
+ *
+ * ## Shared with onboarding (P2B7X.1)
+ *
+ * The States and Retailers onboarding steps render `StateSelectorContent`
+ * and `StoreSelectorContent` in their own frames, so a selector edited on
+ * first launch and one edited later under Profile are the same rows, the
+ * same search and the same `Clear selection`. Two things came with that
+ * sharing and therefore reach this screen too: every allergen row carries
+ * its glyph (`AllergenGlyph`, one Lucide family — lib/allergen-icons.ts),
+ * and every store row carries its mark or the `home` fallback
+ * (`RetailerLogo`). Recall cards and Detail are untouched by either.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   findNodeHandle,
@@ -81,9 +92,12 @@ import { SettingsSection } from '@/components/settings/settings-section';
 import { StateMessage } from '@/components/state-message';
 import { Button } from '@/components/ui/button';
 import { CheckRow } from '@/components/ui/check-row';
+import { Icon } from '@/components/ui/icon';
+import { RetailerLogo } from '@/components/ui/retailer-logo';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Text } from '@/components/ui/text';
 import { spacing } from '@/constants/design-tokens';
+import { allergenIconName } from '@/lib/allergen-icons';
 import {
   CONSUMER_ALLERGENS,
   stateNamesForCodes,
@@ -290,6 +304,7 @@ export function StateSelector({
 export function StateSelectorContent({
   selected,
   onCommit,
+  onDraftChange,
   autoFocus = false,
   initialQuery = '',
   frame = inlineStates,
@@ -297,6 +312,12 @@ export function StateSelectorContent({
   selected: readonly string[];
   /** Called once, with the complete draft, when the selection is committed. */
   onCommit: (codes: string[]) => void;
+  /**
+   * Called with the draft after EVERY change (a row, or Clear selection) —
+   * for the onboarding step (P2B7X.1), which saves progressively and has no
+   * Done. The sheet passes nothing here and keeps its draft private.
+   */
+  onDraftChange?: (codes: readonly string[]) => void;
   autoFocus?: boolean;
   /** A search already typed — for galleries and tests; the sheet starts blank. */
   initialQuery?: string;
@@ -316,6 +337,16 @@ export function StateSelectorContent({
   // halves of what Done does (the save and the dismissal) and a guard that
   // stopped only one of them would be no guard at all.
   const onDone = useCallback(() => onCommit([...draft]), [draft, onCommit]);
+  // The draft's every change, reported once per change to a caller that
+  // asked. Reported from an effect rather than from each setter so the
+  // report always carries the settled value, and never for the initial
+  // seed (a mount is not an edit).
+  const reported = useRef<readonly string[]>(draft);
+  useEffect(() => {
+    if (reported.current === draft) return;
+    reported.current = draft;
+    onDraftChange?.(draft);
+  }, [draft, onDraftChange]);
   // Empties the DRAFT and nothing else. With an empty draft it is a TRUE
   // no-op — the guard is here as well as on the disabled control, so the
   // behaviour survives someone later removing `disabled` (P2B7V).
@@ -389,11 +420,26 @@ export function AllergenSection({
             label={option.label}
             checked={selected.includes(option.token)}
             onPress={() => onToggle(option.token)}
+            leading={
+              <AllergenGlyph token={option.token} checked={selected.includes(option.token)} />
+            }
           />
         ))}
       </View>
     </SettingsSection>
   );
+}
+
+/**
+ * One allergen's glyph (P2B7X.1): the family's icon for the token, in the
+ * same 20pt box on every row, `icon/primary` when the row is checked and
+ * `icon/secondary` otherwise — one treatment for all nine, with the
+ * checkbox still carrying the state. Decorative: the row speaks its label.
+ */
+export function AllergenGlyph({ token, checked }: { token: string; checked: boolean }) {
+  const name = allergenIconName(token);
+  if (name === null) return null;
+  return <Icon name={name} size={20} color={checked ? 'icon/primary' : 'icon/secondary'} />;
 }
 
 // ── Stores ──────────────────────────────────────────────────────────────────
@@ -517,6 +563,7 @@ export function StoreSelectorContent({
           label={retailer.name}
           checked={selected.includes(retailer.id)}
           onPress={() => onToggle(retailer.id)}
+          leading={<RetailerLogo retailerId={retailer.id} name={retailer.name} />}
         />
       ))
     );

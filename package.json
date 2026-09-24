@@ -75,6 +75,7 @@
     "qa:imagery": "tsx scripts/qa-imagery.ts",
     "qa:titles": "tsx scripts/qa-title-casing.ts",
     "qa:search": "tsx scripts/qa-search.ts",
+    "qa:launch-readiness": "tsx scripts/qa-launch-readiness.ts",
     "qa:product-categories": "tsx scripts/qa-product-categories.ts",
     "reconcile:fda-enforcement": "tsx scripts/reconcile-fda-enforcement.ts",
     "qa:fda-enforcement": "tsx scripts/qa-fda-enforcement.ts",

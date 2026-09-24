@@ -147,8 +147,12 @@ maintenance run delivers enforcement-driven risk updates same-cycle.
 ## Client
 
 - Explicit opt-in only: Profile → **Notifications** → "Enable recall alerts"
-  is the single place the system permission prompt can fire (never on launch,
-  and never merely by opening the screen — that only reads the status);
+  and, since P2B7X.1, the one-time notification-education screen's "Turn on
+  notifications" — shown only after a verified purchase or restore — are the
+  two explicit presses that reach `enableRecallAlerts`, and therefore the
+  system permission prompt (never on launch, never merely by opening a
+  screen, never from "Not now"; see
+  [recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md) §6);
   denial routes to system settings, no re-prompting. P2A split the former
   combined "Alerts" screen into Personalization and Notifications; the
   controls and their behavior are unchanged. P2B6A restyled Notifications

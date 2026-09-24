@@ -105,10 +105,12 @@ test('the pushed-screen back control is the platform chevron, named Back — nev
     ROOT_LAYOUT.includes('<Stack.Screen name="(tabs)" options={{ headerShown: false }} />'),
   );
   assert.ok(!/title: '\(tabs\)'/.test(ROOT_LAYOUT));
-  // No custom back button replaced the platform's: no headerLeft, no
-  // chevron-left glyph in the icon set, no router.back on Detail.
+  // No custom back button replaced the platform's on a pushed screen: no
+  // headerLeft, no router.back on Detail. (P2B7X.1 added a `chevron-left`
+  // glyph for the headerless onboarding screens' own back control; Detail
+  // and every other pushed screen still use the platform chevron.)
   assert.ok(!ROOT_LAYOUT.includes('headerLeft'));
-  assert.ok(!ICON.includes('chevron-left'));
+  assert.ok(!DETAIL.includes('chevron-left'));
   assert.ok(!DETAIL.includes('router.back'));
   assert.ok(!DETAIL.includes('headerLeft'));
   // Every pushed route is still registered exactly as before.
@@ -394,7 +396,10 @@ test('no share, bell, retailer, or helper-callout control was copied from Figma'
   ]) {
     assert.ok(!code.includes(inert), `an inert Figma control reached Detail: ${inert}`);
   }
-  for (const glyph of ['share', 'bell', 'sliders', 'chevron-left']) {
+  // P2B7X.1 added `chevron-left` for the onboarding screens' back control
+  // (a rotation of `chevron-down`, like `chevron-right`); it is no longer an
+  // unused Figma glyph. Share, bell and sliders still have no behaviour.
+  for (const glyph of ['share', 'bell', 'sliders']) {
     assert.ok(!ICON.includes(`'${glyph}'`), `the icon set gained an unused ${glyph} glyph`);
     assert.ok(!ICON.includes(`${glyph}:`), `the icon set gained an unused ${glyph} glyph`);
   }

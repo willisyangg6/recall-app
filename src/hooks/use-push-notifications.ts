@@ -11,6 +11,15 @@
  *   screen's built-in "not found" state, never a crash.
  * - Silent registration upkeep on launch and on Expo token rotation
  *   (idempotent server-side; no permission prompt is ever triggered here).
+ *
+ * ## The gate (P2B7X.1)
+ *
+ * A tap navigates only when `canNavigate()` says the app phase is open.
+ * Before onboarding is complete, or while the paywall stands, the tap is
+ * consumed and goes nowhere: Recall Details is a protected route in those
+ * phases and the navigator would refuse it anyway, but the hook does not
+ * rely on that — it asks first, so a notification can never be the door
+ * around the paywall.
  */
 
 import { useEffect, useRef } from 'react';
@@ -29,7 +38,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export function usePushNotifications(): void {
+export function usePushNotifications(canNavigate: () => boolean): void {
   const router = useRouter();
   const handledResponseId = useRef<string | null>(null);
   const response = Notifications.useLastNotificationResponse();
@@ -49,6 +58,7 @@ export function usePushNotifications(): void {
     handledResponseId.current = identifier;
     const payload = parseRecallPushPayload(response.notification.request.content.data);
     if (!payload) return; // Unknown/test/malformed payloads never navigate.
+    if (!canNavigate()) return; // The paywall and onboarding are never bypassed.
     router.push({ pathname: '/recall/[id]', params: { id: payload.recallCaseId } });
-  }, [response, router]);
+  }, [response, router, canNavigate]);
 }

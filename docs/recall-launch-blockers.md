@@ -15,11 +15,19 @@ Identity & destinations (currently none of these exist — none were invented):
       highly regulated fields should be submitted by a legal entity).
 - [ ] Privacy contact email (real, monitored).
 - [ ] Support email / support destination (unlocks the App Store support
-      URL, the Profile "Support" row, and the Corrections Policy's
-      report-a-problem path).
+      URL, the Profile "Support" row, the Corrections Policy's
+      report-a-problem path, and — since P2B7X.1 — the paywall's `Support`
+      footer action, which reads `RELEASE_DESTINATIONS.support` in
+      `src/lib/release-destinations.ts`).
 - [ ] Public domain/URL to host the Privacy Policy (and later the trust
       documents' web versions). **This is also what blocks native sharing**
-      — the shared URL must be a Lotly Universal Link on that domain (§6).
+      — the shared URL must be a Lotly Universal Link on that domain (§6) —
+      and, since P2B7X.1, the paywall's `Privacy` and `Terms` footer actions
+      (`RELEASE_DESTINATIONS.privacy` / `.terms`). All three destinations are
+      `null` in the repository; `npm run qa:launch-readiness` exits non-zero
+      until each is a real HTTPS URL, and the paywall shows its
+      unconfigured-link sentence for each in the meantime. Nothing was
+      invented.
 - [ ] Privacy Policy effective date (set at publication).
 
 Product decisions with policy consequences:
@@ -189,20 +197,34 @@ Everything in §3, plus (tracked in `recall-app-store-readiness.md`):
    push delivery itself remains not activated).
 6. Final review that the shipped build's behavior still matches the label
    (the C7 tests keep the no-tracking and no-analytics claims pinned).
-7. Expo display name: **applied by P3C1 (2026-09-16)** — `app.json` now
+7. **Subscription launch (P2B7X.2, not started).** P2B7X.1 built the hard
+   paywall, the access gate and the typed purchase boundary with a
+   development-only adapter
+   ([recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md)).
+   Still needed before any purchase can occur: Apple enrollment (§6 of the
+   release-readiness doc), the App Store subscription group with the annual
+   and monthly products (expected US prices $29.99/year and $4.99/month),
+   RevenueCat configured with one entitlement and one offering, the
+   RevenueCat adapter behind `PurchaseProvider`, the SDK's public key as a
+   recorded third `EXPO_PUBLIC_` variable, the Terms/Privacy/Support
+   destinations above, subscription language in the EULA decision, and the
+   App Privacy "Purchases" answer. Production without a configured provider
+   fails closed: the paywall shows the could-not-confirm state and nothing
+   grants access.
+8. Expo display name: **applied by P3C1 (2026-09-16)** — `app.json` now
    names the app `Lotly`, with scheme `lotly` and bundle identifier
    `com.willisyang.lotly` (iPhone-only). What remains is the native release
    verification itself: the name under the icon, the
    notification-permission dialog, and `lotly://` deep links have not been
    seen on a device, because no signed build exists. See
    [recall-release-readiness.md](recall-release-readiness.md).
-8. Shopper-report launch-state compliance: while `reports_enabled` is false
+9. Shopper-report launch-state compliance: while `reports_enabled` is false
    the in-app explanations are phrased conditionally ("When community
    shopper reports are available for a recall…", P2B6C). Enabling the gate
    needs the counsel review and App Privacy answers in §1–2 and a re-check
    of that copy.
-9. Legal review of the health (allergen), attribution (public-domain) and
-   privacy claims the in-app documents make (§2).
+10. Legal review of the health (allergen), attribution (public-domain) and
+    privacy claims the in-app documents make (§2).
 
 ## 5. Explicitly not blockers
 

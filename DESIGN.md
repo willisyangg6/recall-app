@@ -950,6 +950,103 @@ console). The web sentence reads `Recall alerts are available in the Lotly
 mobile app.` (P2B6C: `recall alerts` is the feature's name); the other two
 product-name sentences from P2B6A stand.
 
+### Onboarding and paywall (P2B7X.1)
+
+The first-launch flow, the hard paywall and the one-time notification
+education — seven screens in one frame
+(`src/components/onboarding/onboarding-frame.tsx`), each mounted only in its
+own access phase (`docs/recall-onboarding-and-paywall.md` §3). The visual
+contract is directionally approved, not pixel-final: it is built from the
+tokens and the shared primitives so it can be refined after native QA, and
+no image-generation artifact was cloned.
+
+**The frame.** The warm page, safe-area correct. A top bar at least 44pt tall
+holding the `chevron-left` back control (a 44pt target; the slot keeps its
+size when Welcome renders no control) and, for a counted step, the mono
+`label` progress line `1 of 4` … `4 of 4` in `text/secondary`. The
+scrolling content column at the 16pt margin, capped at `max-content-width`:
+the headline in `heading-1`, the body in `body` `text/secondary`, then the
+screen's own content, `spacing/16` apart. A sticky footer on the page colour
+above a `border/subtle` hairline, padded by the bottom inset, holding the
+screen's actions as the shared `Button` (primary for the one forward action,
+secondary for the lesser one); on iOS it lifts with the keyboard. No fixed
+height around text, no `maxFontSizeMultiplier`, no gradient, no marketing
+carousel.
+
+**Welcome.** The wordmark is the product name in `display` — no logo or brand
+mark is invented ("Branding status"). Three benefit rows: an 8pt
+`icon/brand` dot beside `body` text. Then the one illustrative example card
+under a `caption` label `Example`, the `caption` trust note, and `Get
+started`.
+
+**The example card.** The Feed card's own `RecallCardSurface` over a static
+model — CRITICAL, `Example` in the date slot, AFFECTS YOU, a bundled flat
+illustration of gummy candy in the media slot, `Gummy Products`, `Example,
+not a live recall` in the brand slot, `Undeclared peanut allergen`,
+`Nationwide` — with no save control and no press. It is the ONE surface that
+shows a picture that is not an official image, which is why it draws its own
+tile of the card's geometry rather than the shared `MediaTile`, whose
+"official URL or nothing" rule (P2B7I) is unchanged. It never appears on a
+live card. This is a deliberate, founder-directed exception to "Don't
+replace product data with decorative content": it is labelled an example
+three ways and is not product data.
+
+**States, Allergens, Retailers.** The shared selectors in the frame: the
+count line (`body-small` secondary, always rendered), then a fixed controls
+column — the search field where the list is long, and `Clear selection` as
+the secondary Button, present on every visit and disabled with nothing
+selected — then the Check Rows. Nothing above the list is conditional, so
+choosing or clearing never moves a row (the P2B7V rule). Every allergen row
+carries its glyph in the row's leading slot: a 20pt Lucide outline in
+`icon/secondary`, `icon/primary` when checked, one treatment for all nine
+("Iconography"). Every store row carries its mark contained in a 40×24pt box
+or the `home` glyph centred in the same box, so rows are one height. On
+States, Continue is disabled with nothing chosen and the reason
+(`caption`, centred, permanently allocated) reads beneath it. On the optional
+steps Continue is never disabled.
+
+**Personalized Preview.** A white `radius/16` card with the `card` lift
+holding three `body-small` rows — `States`, `Allergens`, `Retailers` — label
+in `text/secondary` at the leading edge, value taking the rest and wrapping
+beneath; an empty optional group reads `None` in `text/secondary` and keeps
+its row. Then the example card under `Example match`, the independence note
+in `caption`, and the footer's `View plans` over `Edit preferences`.
+
+**The hard paywall.** The frame without progress; its back control is the one
+way back (to the Preview). Benefits as on Welcome; then the two plans as a
+real radio group: each a white `radius/12` surface with a `border/default`
+border that turns `action/primary` when selected, the Choice Row's ring and
+dot, the plan title in `body-small-bold`, the store's price with its period
+in `heading-3` (`$29.99/year`), the store-derived monthly equivalent and the
+saving in `caption` `text/secondary`, and on Annual the `BEST VALUE` mark —
+the compact-label geometry on `background/accent` with an `action/accent`
+border, IBM Plex Mono `label`. Lime is the value surface here and the
+success surface on the education screen and on the restore-success notice;
+nowhere else in the flow. The footer: the last outcome's notice (calm on the
+information callout, errors on the `border/strong` alert surface, success on
+lime), the primary action naming the selected commitment (`Subscribe for
+$29.99/year`), the renewal disclosure in `caption`, and the four footer
+actions — Restore Purchases, Terms, Privacy, Support — as `caption`
+`action/secondary` text buttons grown to 44pt by hitSlop in one wrapping
+toolbar. From the accessibility text sizes (a text scale of 1.5, the
+threshold the settings selector row stacks at) the disclosure and the four
+actions leave the sticky footer for the end of the scrolling content,
+directly above the primary action — pinned, they would take the whole
+screen and leave the plans unreachable; the notice and the primary action
+stay sticky at every size. No close, skip, dismiss, free, trial, lifetime,
+countdown, crossed-out price or scarcity.
+
+**Notification education.** `Subscription active` as a compact
+`body-small-bold` mark on `background/accent` (rendered as written, not
+uppercased); the headline and body; a `caption` label `Notification preview`
+over a white `radius/16` card with the `card` lift — a 16pt `background/brand`
+square standing for the not-yet-final app icon beside `Lotly` in `caption`,
+the title in `body-small-bold`, the body in `body-small`; the footer's `Turn
+on notifications` over `Not now` and the reassurance in `caption`.
+
+**After either choice** the Feed shows `Your preferences are set.` once, as
+the information callout above the list, until the screen loses focus.
+
 ### Trust documents
 
 The seven documents under Profile's Privacy & Data, About & Safety and Legal
@@ -1811,6 +1908,8 @@ Lucide-style outline the design uses, unchanged in shape.
 | `external-link`   | `external-link` in Detail (`81:837`)       | `external-link`     | the official-source and Learn more links (P2B2) |
 | `warning`         | `icon/warning` in `Information` (`78:223`) | `triangle-alert`    | the warning callout (P2B2)                      |
 | `info`            | `lucide/info` in `Information` (`81:687`)  | `info`              | the information callout (P2B2)                  |
+| `chevron-left`    | the `chevron-down` export, a quarter turn  | `chevron-left`      | the onboarding screens' back control (P2B7X.1)  |
+| `allergen-*`      | Lucide repository, vendored SVG sources    | see below           | the nine allergen rows (P2B7X.1)                |
 
 Figma exports each glyph cropped to its path bounds at some scale; each was
 drawn at `export size × S / (24 × k)` centred in an `S`-point box, where `k`
@@ -1825,6 +1924,40 @@ quarter turn anticlockwise, which on the Lucide 24-unit grid is exactly
 centre), so the stroke weight and optical size are the set's own; a
 lossless raster rotation, nothing redrawn. When Figma gains a Profile frame
 with its own chevron export, that export replaces these files.
+`chevron-left` (P2B7X.1) is the same rotation the other way.
+
+**The allergen glyphs (P2B7X.1).** The nine allergen rows need nine glyphs
+and the Figma file has none, so they come from the Lucide repository itself —
+the family the set already is — under the ISC license: `lucide-icons/lucide`
+at commit `f06ac67e33d645c40b8ce19a0419c85c5d7dd751` (release 1.47.0),
+retrieved 2026-09-23, the SVG sources vendored with the license under
+`assets/icon-sources/lucide/` and rasterised offline by
+`scripts/render-onboarding-assets.mjs` onto the same 24pt box at 1x, 2x and
+3x at the set's 2.4-unit stroke, black on transparent, tinted at render time.
+The mapping and its provenance are the tested contract in
+`src/lib/allergen-icons.ts`:
+
+| Allergen             | Icon                 | Lucide           | Depiction |
+| -------------------- | -------------------- | ---------------- | --------- |
+| Peanuts              | `allergen-peanut`    | `nut`            | concept   |
+| Tree nuts            | `allergen-tree-nut`  | `tree-deciduous` | concept   |
+| Milk                 | `allergen-milk`      | `milk`           | literal   |
+| Egg                  | `allergen-egg`       | `egg`            | literal   |
+| Wheat                | `allergen-wheat`     | `wheat`          | literal   |
+| Soy                  | `allergen-soy`       | `bean`           | literal   |
+| Sesame               | `allergen-sesame`    | `sprout`         | concept   |
+| Fish                 | `allergen-fish`      | `fish`           | literal   |
+| Crustacean shellfish | `allergen-shellfish` | `shrimp`         | literal   |
+
+No permissively licensed outline family publishes a peanut, a tree-nut or a
+sesame glyph (Lucide, Lucide Lab, Phosphor, Tabler, Iconoir and Font Awesome
+were checked), so those three rows use the family's nearest honest concept
+and the label carries the meaning. Every glyph is decorative and hidden from
+assistive technology; every row uses one treatment (20pt, `icon/secondary`
+unchecked, `icon/primary` checked). No emoji, no second family, no food
+symbol drawn by hand. The "Branding status" rule against inventing food
+icons is unchanged: nothing here is invented, and the founder directed the
+set.
 
 ## Product contracts the design must carry
 
@@ -2029,6 +2162,14 @@ yet` / `Pull down to refresh.`
   no longer promises a formal policy and the Corrections Policy no longer
   promises a support contact. Both destinations stay open blockers in
   `docs/recall-launch-blockers.md`, and nothing was invented in their place.
+- **Two onboarding exceptions (P2B7X.1).** The founder's final first-launch
+  copy says `retailers` in the Retailers step's body (`Choose the retailers
+you want Lotly to watch for in recall notices. This is optional.`) and in
+  the Preview summary's row label (`Retailers`). Both are exempt by exact
+  string in `consumer-copy.test.ts`, as Detail's `Retailers:` is; every other
+  onboarding string keeps `store`. The onboarding, paywall and education copy
+  otherwise follows every rule above and lives in `src/lib/onboarding-copy.ts`
+  and `src/lib/paywall-screen.ts`.
 
 ## Interaction states
 
@@ -2290,7 +2431,14 @@ each kind (bullets, a document link, an external link, a note, the
 risk-label rows), the warning callout for comparison — and the reset panel
 idle, confirming (the dialog's words as text), busy, succeeded and failed,
 its press wired to nothing, so no sample can open the confirmation or start
-a deletion. Only the values each caption names are simulated.
+a deletion; and from P2B7X.1 every first-launch screen and every paywall
+state — Welcome, the three selector steps empty, selected and searched, the
+retailer rows with the fallback and two neutral fixtures at extreme ratios,
+the Preview with and without optional selections, the education idle and
+enabling, the paywall in twelve views including a long localized price
+pair, and a 568pt viewport — each sample's state held in the gallery's
+memory, plus gate scenarios that restart the REAL flow from a chosen state.
+Only the values each caption names are simulated.
 It is not a product surface.
 
 ## Known Figma/code conflicts
@@ -2555,6 +2703,11 @@ Changes to make in Figma itself. Nothing here changes product behavior.
   implementing from Figma.
 - **Do** maintain WCAG AA contrast for normal text.
 - **Do** give every interactive element a 44pt target and a spoken label.
+- **Do** keep every product route inside its access phase's protected group
+  in the root layout (P2B7X.1): a screen the navigator does not have is the
+  only kind a deep link, a tab or a notification cannot reach.
+- **Do** render prices exactly as the store supplies them, and derive the
+  saving and the monthly equivalent from the store's amounts.
 
 - **Don't** interpret lime as low risk, safety, success, or resolution.
 - **Don't** use green as part of the recall-severity scale.
@@ -2579,3 +2732,10 @@ Changes to make in Figma itself. Nothing here changes product behavior.
 - **Don't** invent the final Lotly logo or brand mark until an approved asset
   exists.
 - **Don't** replace product data with decorative or speculative content.
+  The one exception is the onboarding's example card, labelled an example
+  three ways and never rendered on a live card.
+- **Don't** give the paywall a close, skip, dismiss, free, trial or lifetime
+  route, a countdown, a crossed-out price or scarcity copy.
+- **Don't** hotlink, scrape or approximate a retailer mark: a mark renders
+  only from the provenance manifest, contained in the shared box, or the
+  `home` glyph renders in its place.

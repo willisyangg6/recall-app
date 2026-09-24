@@ -8,11 +8,12 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StateMessage } from '@/components/state-message';
 import { RecallCard } from '@/components/recall-card';
+import { Callout } from '@/components/ui/callout';
 import { Chip } from '@/components/ui/chip';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Surface } from '@/components/ui/surface';
@@ -34,6 +35,7 @@ import {
   SUPPORTED_STATE_CODES,
   type UserRecallPreferences,
 } from '@/domain/preferences';
+import { useAccess } from '@/hooks/use-access';
 import { useFeed } from '@/hooks/use-feed';
 import { usePreferences } from '@/hooks/use-preferences';
 import { buildAffectsMeSections } from '@/lib/affects-me-ranking';
@@ -49,6 +51,7 @@ import {
   OLDER_NOTICES_EXPLANATION,
   PERSONALIZE_CTA,
 } from '@/lib/feed-copy';
+import { PREFERENCES_SET_CONFIRMATION } from '@/lib/onboarding-copy';
 import {
   activeFilterCount,
   applyFeedFilters,
@@ -253,6 +256,18 @@ export default function HomeScreen() {
       // Default to the personalized view only when personalization exists.
       if (hasAnyPreference(loaded)) setTab('affects_me');
     }, []),
+  );
+  // P2B7X.1: the one-time confirmation after notification education. Taken
+  // from the gate exactly once, in the session the education completed, and
+  // shown until this screen loses focus — a lightweight acknowledgement, not
+  // a persistent banner.
+  const access = useAccess();
+  const [preferencesSet, setPreferencesSet] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (access.consumePreferencesSetNotice()) setPreferencesSet(true);
+      return () => setPreferencesSet(false);
+    }, [access]),
   );
 
   // Search index: built once per loaded corpus, matched per keystroke.
@@ -648,6 +663,11 @@ export default function HomeScreen() {
         // operational dead-man heartbeat, not by the app.
         ListHeaderComponent={
           <>
+            {preferencesSet ? (
+              <View style={styles.preferencesSet}>
+                <Callout tone="information">{PREFERENCES_SET_CONFIRMATION}</Callout>
+              </View>
+            ) : null}
             {tab === 'affects_me' && prefs !== null ? (
               !hasAnyPreference(prefs) ? (
                 <PersonalizeCta />
@@ -681,6 +701,10 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  // The one-time confirmation sits above the list at the list's own margin.
+  preferencesSet: {
+    paddingBottom: spacing[16],
+  },
   // No alignItems here: a centered cross-axis lets children size to intrinsic
   // content width, which broke wrapping/clipping; centering is done by each
   // block's own maxWidth + alignSelf.

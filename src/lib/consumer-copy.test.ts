@@ -125,6 +125,10 @@ const COPY_MODULES: Record<string, string> = {
   'document-model': read('content', 'document-model.ts'),
   'hazard-guides': read('content', 'hazard-guides.ts'),
   'push-format': read('server', 'push', 'format.ts'),
+  // P2B7X.1: the first-launch flow and the paywall.
+  'onboarding-copy': read('lib', 'onboarding-copy.ts'),
+  'paywall-screen': read('lib', 'paywall-screen.ts'),
+  'onboarding-sample': read('lib', 'onboarding-sample.ts'),
 };
 
 const DOCUMENT_SOURCES: Record<string, string> = Object.fromEntries(
@@ -156,6 +160,19 @@ const SCREENS: Record<string, string> = {
   'selector sheet': read('components', 'settings', 'selector-sheet.tsx'),
   'search bar': read('components', 'ui', 'search-bar.tsx'),
   'relevance label': read('components', 'ui', 'relevance-label.tsx'),
+  // P2B7X.1
+  'onboarding frame': read('components', 'onboarding', 'onboarding-frame.tsx'),
+  welcome: read('components', 'onboarding', 'welcome-content.tsx'),
+  'states step': read('components', 'onboarding', 'states-step.tsx'),
+  'allergens step': read('components', 'onboarding', 'allergens-step.tsx'),
+  'retailers step': read('components', 'onboarding', 'retailers-step.tsx'),
+  'preview step': read('components', 'onboarding', 'preview-step.tsx'),
+  'notification education': read('components', 'onboarding', 'notification-education.tsx'),
+  'sample card': read('components', 'onboarding', 'sample-recall-card.tsx'),
+  'paywall panel': read('components', 'paywall', 'paywall-panel.tsx'),
+  paywall: read('app', 'paywall.tsx'),
+  'education route': read('app', 'onboarding', 'notifications.tsx'),
+  'retailer logo': read('components', 'ui', 'retailer-logo.tsx'),
 };
 
 const USE_FEED = read('hooks', 'use-feed.ts');
@@ -239,11 +256,25 @@ const isProse = (literal: string) => /\s/.test(literal.slice(1, -1));
  */
 const APPROVED_RETAILER_LABEL = 'Retailers:';
 
+/**
+ * The founder's FINAL onboarding copy (P2B7X.1, 2026-09-23) says `retailers`
+ * in exactly two places: the Retailers step's body and the Preview summary's
+ * row label. Both are exempt by exact string, as the Detail label is; the
+ * rest of onboarding keeps `store` (`Search stores`, `N stores selected`).
+ * Flagged in the milestone report for the founder to confirm or reword.
+ */
+const APPROVED_ONBOARDING_RETAILER_COPY = [
+  "'Choose the retailers you want Lotly to watch for in recall notices. This is optional.'",
+  "'Retailers'",
+];
+
 test('consumer copy says state and store, never jurisdiction or retailer', () => {
   const sources = { ...COPY_MODULES, ...DOCUMENT_SOURCES, ...SCREENS };
   for (const [name, source] of Object.entries(sources)) {
     for (const literal of literals(source).filter(isProse)) {
       assert.doesNotMatch(literal, /\bjurisdictions?\b/i, `${name}: ${literal}`);
+      if (name === 'onboarding-copy' && APPROVED_ONBOARDING_RETAILER_COPY.includes(literal))
+        continue;
       assert.doesNotMatch(literal, /\bretailers?\b/i, `${name}: ${literal}`);
     }
     for (const text of jsxText(source)) {
