@@ -276,11 +276,13 @@ npx eas-cli build --profile production  --platform ios   # App Store archive
 npx eas-cli submit --profile production --platform ios
 ```
 
-The `simulator` profile is the only one that needs no Apple Developer
-account, and today it is the only iOS build this project can produce at all:
-a local `xcodebuild` fails in `expo-modules-jsi` under the Swift shipped with
-Xcode 26.3 (the error, and why it cannot be worked around here, is in the
-release-readiness document). Install a finished build with:
+The `simulator` profile is the only EAS profile that needs no Apple Developer
+account. A local simulator build (`npx expo run:ios`) also works as of
+2026-09-23. It depends on `package.json` building `expo-modules-core` from
+source, because Expo's precompiled Core binary crashes the app in dyld at
+launch. EAS builds use the same Podfile template and are expected to need it
+too. Keep that setting; its removal criteria are in §11 of the
+release-readiness document. Install a finished EAS build with:
 
 ```bash
 xcrun simctl install booted <path to Lotly.app>

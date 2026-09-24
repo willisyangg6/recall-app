@@ -8,7 +8,7 @@
     "scheme": "lotly",
     "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/brand/production/lotly-icon-ios-1024.png",
       "bundleIdentifier": "com.willisyang.lotly",
       "supportsTablet": false
     },

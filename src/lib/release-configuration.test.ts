@@ -25,7 +25,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -38,7 +38,12 @@ const APP = read('app.json').expo as {
   version: string;
   scheme: string;
   owner: string;
-  ios: { bundleIdentifier: string; supportsTablet?: boolean; buildNumber?: string };
+  ios: {
+    bundleIdentifier: string;
+    supportsTablet?: boolean;
+    buildNumber?: string;
+    icon?: string;
+  };
   android: Record<string, unknown>;
   extra: { eas: { projectId: string } };
 };
@@ -97,6 +102,86 @@ test('the app is portrait, light-only and carries no hand-set iOS build number',
   // `buildNumber` here would be ignored at best and misleading at worst.
   assert.equal(APP.ios.buildNumber, undefined);
   assert.match(APP.version, /^\d+\.\d+\.\d+$/);
+});
+
+// ── The iOS icon ────────────────────────────────────────────────────────────
+
+const IOS_ICON = './assets/brand/production/lotly-icon-ios-1024.png';
+
+/** The IHDR fields and chunk types of a PNG, read from its bytes directly. */
+function readPng(path: string) {
+  const bytes = readFileSync(path);
+  assert.ok(
+    bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+    `${path} is not a PNG`,
+  );
+  const chunks: string[] = [];
+  for (let offset = 8; offset < bytes.length;) {
+    const length = bytes.readUInt32BE(offset);
+    chunks.push(bytes.toString('latin1', offset + 4, offset + 8));
+    offset += 12 + length;
+  }
+  // IHDR is always first: width, height, bit depth, colour type (PNG spec §11.2.2).
+  assert.equal(chunks[0], 'IHDR');
+  return {
+    width: bytes.readUInt32BE(16),
+    height: bytes.readUInt32BE(20),
+    bitDepth: bytes[24],
+    colorType: bytes[25],
+    chunks,
+  };
+}
+
+test('iOS uses the approved Lotly icon, not the Expo template', () => {
+  assert.equal(APP.ios.icon, IOS_ICON);
+});
+
+test('the iOS icon is a 1024×1024 opaque RGB PNG, as App Store Connect requires', () => {
+  const path = join(ROOT, IOS_ICON);
+  assert.ok(existsSync(path), `${IOS_ICON} is missing`);
+  const png = readPng(path);
+  assert.equal(png.width, 1024);
+  assert.equal(png.height, 1024);
+  // Colour type 2 is truecolour with no alpha channel (4 and 6 carry alpha).
+  // App Store Connect rejects an icon with transparency.
+  assert.equal(png.colorType, 2);
+  assert.equal(png.bitDepth, 8);
+  // A tRNS chunk would make an RGB image transparent without an alpha channel.
+  assert.ok(!png.chunks.includes('tRNS'), 'the icon declares a transparent colour');
+});
+
+// ── The native build ────────────────────────────────────────────────────────
+
+test('expo-modules-core is built from source on iOS, and nothing else is exempted', () => {
+  // Expo's precompiled ExpoModulesCore binary was compiled against a different
+  // ExpoModulesJSI ABI than the installed expo-modules-jsi, and an app linking
+  // it dies in dyld before main(). Building this one package from source is
+  // the fix; precompiled modules stay on for everything else. Removal
+  // criteria are in docs/recall-release-readiness.md §11.
+  const PKG = read('package.json') as {
+    expo?: { autolinking?: { ios?: { buildFromSource?: unknown } } };
+  };
+  assert.deepEqual(PKG.expo?.autolinking?.ios?.buildFromSource, ['expo-modules-core']);
+});
+
+test('precompiled modules are not switched off by an environment workaround', () => {
+  // The fix lives in package.json so that local and EAS builds share it. An
+  // EXPO_USE_PRECOMPILED_MODULES override would be a second, broader switch
+  // that one environment could carry and another could not.
+  const workflows = join(ROOT, '.github', 'workflows');
+  const files = [
+    'app.json',
+    'eas.json',
+    ...readdirSync(workflows).map((name) => join('.github', 'workflows', name)),
+  ];
+  for (const file of files) {
+    const source = readFileSync(join(ROOT, file), 'utf8');
+    assert.ok(!source.includes('EXPO_USE_PRECOMPILED_MODULES'), `${file} sets it`);
+  }
+  const scripts = (read('package.json') as { scripts: Record<string, string> }).scripts;
+  for (const [name, command] of Object.entries(scripts)) {
+    assert.ok(!command.includes('EXPO_USE_PRECOMPILED_MODULES'), `script ${name} sets it`);
+  }
 });
 
 // ── The EAS profiles ────────────────────────────────────────────────────────

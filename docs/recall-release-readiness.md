@@ -315,12 +315,20 @@ no prebuilt download path), so there is no project-level flag that avoids
 compiling the header, and the only local fixes would edit `node_modules`. EAS
 Build's image carries a newer Swift and compiles it.
 
+**Superseded for simulator builds by §11.** On 2026-09-23 a local Debug
+simulator build (`npx expo run:ios`) succeeded on this same Xcode 26.3 / Swift
+6.2.4. Its `ExpoModulesJSI` xcframework phase reused a simulator slice that the
+script's source-hash cache had kept since 2026-09-17 22:54, so a from-scratch
+compile of that header under Swift 6.2.4 was not re-proven. A local device
+build still needs signing, and so still waits on enrollment.
+
 ## 7. Still pending, not blocked by Apple
 
-- **App icon and splash artwork.** `assets/expo.icon` and
-  `assets/images/splash-icon.png` are the Expo template placeholders. They are
-  deliberately unchanged: no AI-generated or temporary branding was
-  substituted. Final artwork is a design deliverable.
+- **Remaining brand artwork.** The approved Lotly iOS icon is installed and
+  verified natively (§11). Still deferred, and still the Expo template or
+  earlier assets: the Android adaptive icon (`assets/images/android-icon-*`),
+  the splash artwork (`assets/images/splash-icon.png`) and the web favicon
+  (`assets/images/favicon.png`). None blocks an iOS TestFlight build.
 - **Support URL and Privacy Policy URL.** Both are App Store Connect
   requirements with no real destination yet
   (`recall-launch-blockers.md` §1). Nothing was invented.
@@ -488,6 +496,7 @@ What changed since §5 is listed first, because §5 is otherwise still accurate.
   another party's mark on the icon; §7 already lists final artwork as a
   design deliverable, and it is an App Store blocker rather than a
   TestFlight one.
+  **Closed by §11** — iOS now uses the approved Lotly icon.
 
 **One nuance worth stating precisely.** Design Preview's _executable_ harness
 does not run in a release build — §5.1 saw the inert page natively, and the
@@ -601,3 +610,78 @@ Supabase backend. No EAS variable was created, updated or deleted.
 no signed archive exists, remote iOS `buildNumber` is still 1, and §6's Apple
 Developer Program enrollment remains the blocker. The placeholder
 `assets/expo.icon` (§7) is untouched and is still an App Store blocker.
+**Closed by §11** — iOS now uses the approved Lotly icon.
+
+## 11. iOS icon and the ExpoModulesCore source build (2026-09-23)
+
+Run on `master` at `b031a15`. No EAS build, no Apple authentication, no
+production write, nothing staged or committed.
+
+**The icon.** `app.json` → `ios.icon` is
+`./assets/brand/production/lotly-icon-ios-1024.png`, replacing the Expo
+template `assets/expo.icon`. It is the approved reference
+(`assets/brand/reference/lotly-icon-approved.png`, 1254×1254) scaled uniformly
+to 1024×1024. It was not cropped or recoloured, keeps the full-bleed
+near-white background, and has no rounded corners, because iOS applies its own
+mask. It is an opaque 8-bit RGB PNG tagged sRGB, with no alpha channel. Only
+`ios.icon` moved: the top-level `icon`, the Android adaptive icon, the splash
+and the favicon are unchanged and remain deferred (§7).
+
+**Verified natively.** After a clean `npx expo prebuild --platform ios` and a
+local `npx expo run:ios`, the Lotly icon shows on the iPhone 17 Pro simulator's
+Home Screen (iOS 26.3), and the app launched twice: once on install, and once
+from a tap on the Home Screen icon after a terminate. Both times it reached the
+normal Feed with live recall data, and no crash report was written.
+A clean prebuild is needed to adopt the icon: it switches the native project
+off the Icon Composer `expo.icon`, which an incremental prebuild does not undo.
+
+**Why `expo-modules-core` is built from source.** The first launch after that
+clean prebuild died in dyld, before `main()` and before React Native:
+
+```
+Symbol not found: _$s14ExpoModulesJSI15JavaScriptActorC11runIsolatedyxxyYbACYcXERi_zlFZ
+  Referenced from: Lotly.app/Frameworks/ExpoModulesCore.framework/ExpoModulesCore
+  Expected in:     Lotly.app/Frameworks/ExpoModulesJSI.framework/ExpoModulesJSI
+```
+
+The regenerated Podfile, from the `expo@57.0.24` template, defaults
+`EXPO_USE_PRECOMPILED_MODULES` to on. That links the prebuilt
+`ExpoModulesCore` shipped inside `expo-modules-core@57.0.18`, which was
+compiled against a different `ExpoModulesJSI` from the one this project builds
+from `expo-modules-jsi@57.1.0`. The prebuilt binary imports
+`JavaScriptActor.runIsolated` taking an `@Sendable` closure. The installed JSI
+exports it without `@Sendable`. The two packages' declared versions agree
+(`expo-modules-core` requires `expo-modules-jsi ~57.1.0`), so this is a
+mismatch inside Expo's published binaries, not a resolution error here.
+
+The fix is Expo's per-package opt-out, in `package.json`:
+
+```json
+"expo": { "autolinking": { "ios": { "buildFromSource": ["expo-modules-core"] } } }
+```
+
+`pod install` reports `ExpoModulesCore (57.0.18) (configured by
+buildFromSource)`. Core, and `ExpoModulesWorklets`, which depends on it,
+compile from source. Precompiled modules stay enabled for every other pod. No
+environment-variable override is used anywhere.
+
+**The setting must stay** for local builds and for EAS/TestFlight builds. EAS
+Build runs the same Podfile template, so a TestFlight binary made without it
+would be expected to crash at launch in the same way. It stays until an Expo
+release is proven to ship compatible `ExpoModulesCore` and `ExpoModulesJSI`
+binaries. Removing it requires all three of:
+
+1. a clean native build (`npx expo prebuild --platform ios --clean`, then
+   `npx expo run:ios`) with the setting removed;
+2. two successful launches of that build, one of them from the Home Screen;
+3. no dyld missing-symbol crash on either launch. Check
+   `~/Library/Logs/DiagnosticReports` for a new `Lotly-*.ips`.
+
+**Pinned by tests.** `src/lib/release-configuration.test.ts` asserts:
+
+- `ios.icon` is the exact production path;
+- that PNG exists, is 1024×1024, is 8-bit colour type 2 (RGB, no alpha) and
+  carries no `tRNS` chunk;
+- `expo.autolinking.ios.buildFromSource` is exactly `["expo-modules-core"]`;
+- `EXPO_USE_PRECOMPILED_MODULES` appears in none of `app.json`, `eas.json`, the
+  `package.json` scripts or `.github/workflows/`.

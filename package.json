@@ -104,5 +104,14 @@
     "labels:fsis:dry": "tsx scripts/render-fsis-labels.ts",
     "labels:fsis": "tsx scripts/render-fsis-labels.ts"
   },
+  "expo": {
+    "autolinking": {
+      "ios": {
+        "buildFromSource": [
+          "expo-modules-core"
+        ]
+      }
+    }
+  },
   "private": true
 }
