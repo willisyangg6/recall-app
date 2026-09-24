@@ -271,12 +271,15 @@ The copy is the founder's, verbatim, in `src/lib/onboarding-copy.ts` and
 | 6 Hard paywall           | `PaywallPanel`                              | `/paywall`                  |
 | 7 Notification education | `NotificationEducation`                     | `/onboarding/notifications` |
 
-**Welcome.** The name `lotly` above the approved mascot
-(`assets/brand/production/lotly-mascot-transparent.png`), the headline and
-body, the example card, the source note, and `Get started`. It is the one
-screen with an entrance of its own (`src/lib/welcome-presentation.ts`): the
-mascot, then the heading, then the card, done within 900 ms, played once and
-skipped entirely under Reduce Motion. Composition in
+**Welcome.** The name `lotly`, the headline and body, the M01 mascot
+(`assets/brand/production/lotly-mascot-welcome-peek-1024.png`) peeking over
+the example card with its paws on the card's top edge, the source note, and
+`Get started`. The mascot is the card's decorative sibling
+(`SampleRecallCard`'s `peek`): hidden from VoiceOver, `pointerEvents="none"`,
+never part of the card's accessibility element. It is the one screen with an
+entrance of its own (`src/lib/welcome-presentation.ts`): the heading, then the
+mascot rising from behind the card, then the card following, done within
+900 ms, played once and skipped entirely under Reduce Motion. Composition in
 [../DESIGN.md](../DESIGN.md) "Onboarding and paywall".
 
 **The example card.** Welcome and the Preview show one illustrative recall —

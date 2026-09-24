@@ -22,7 +22,16 @@
  * and the shared tile stays exactly as strict as it is.
  */
 
-import { Image, StyleSheet, View, type ImageSourcePropType } from 'react-native';
+import type { ReactNode } from 'react';
+import {
+  Animated,
+  Image,
+  StyleSheet,
+  View,
+  type ImageSourcePropType,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
 import { RecallCardSurface } from '@/components/recall-card';
 import { Surface } from '@/components/ui/surface';
@@ -34,18 +43,41 @@ import { SAMPLE_RECALL_MODEL } from '@/lib/onboarding-sample';
 const SAMPLE_ILLUSTRATION =
   require('@/assets/onboarding/sample-gummy-products.png') as ImageSourcePropType;
 
-export function SampleRecallCard({ label }: { label: string }) {
+/**
+ * `peek` (Welcome's mascot) is drawn over the card, anchored to the card's
+ * own top edge: a sibling of the card rather than a child, so it is never
+ * part of the card's accessibility element and never inherits the card's
+ * entrance. `motion` is the label's and the card's entrance. The Preview
+ * passes neither.
+ */
+export function SampleRecallCard({
+  label,
+  peek = null,
+  motion,
+}: {
+  label: string;
+  peek?: ReactNode;
+  motion?: Animated.WithAnimatedValue<StyleProp<ViewStyle>>;
+}) {
   return (
     <View style={styles.block}>
-      <Text variant="caption" color="text/secondary" accessibilityRole="header">
-        {label}
-      </Text>
-      <View accessible accessibilityLabel={`${label}. ${SAMPLE_ACCESSIBILITY}`}>
-        <RecallCardSurface
-          model={SAMPLE_RECALL_MODEL}
-          media={<SampleMediaTile alt={SAMPLE_RECALL_MODEL.productName} />}
-          trailing={null}
-        />
+      <Animated.View style={motion}>
+        <Text variant="caption" color="text/secondary" accessibilityRole="header">
+          {label}
+        </Text>
+      </Animated.View>
+      <View>
+        <Animated.View
+          style={motion}
+          accessible
+          accessibilityLabel={`${label}. ${SAMPLE_ACCESSIBILITY}`}>
+          <RecallCardSurface
+            model={SAMPLE_RECALL_MODEL}
+            media={<SampleMediaTile alt={SAMPLE_RECALL_MODEL.productName} />}
+            trailing={null}
+          />
+        </Animated.View>
+        {peek}
       </View>
     </View>
   );

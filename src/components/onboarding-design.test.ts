@@ -13,8 +13,9 @@
  * education screen's primary action alone, never on mount and never from
  * `Not now`; the example card is the shared surface over static content;
  * everything is drawn from the tokens with no capped type and no fixed
- * height around text; and the Welcome shows the approved mascot, invents no
- * mark, and plays its one entrance only when Reduce Motion is off.
+ * height around text; and the Welcome seats the approved M01 mascot on the
+ * real example card, invents no mark, and plays its one entrance only when
+ * Reduce Motion is off.
  */
 
 import assert from 'node:assert/strict';
@@ -59,10 +60,18 @@ import {
 import * as ONBOARDING_COPY from '@/lib/onboarding-copy';
 import { SAMPLE_RECALL_MODEL } from '@/lib/onboarding-sample';
 import {
+  CARD_PADDING,
   entranceEndMs,
+  LABEL_ALLOWANCE,
+  MASCOT_ART_TOP,
+  MASCOT_EDGE,
   MASCOT_MAX,
   MASCOT_MIN,
+  mascotLift,
+  mascotOffset,
   mascotSize,
+  PAW_DEPTH,
+  peekReserve,
   WELCOME_ENTRANCE,
   welcomeEntrance,
 } from '@/lib/welcome-presentation';
@@ -454,8 +463,10 @@ test('the example card is the shared card surface over static content, marked as
   assert.equal(SAMPLE_RECALL_MODEL.heroImageUrl, null, 'the sample fetches no image');
   assert.equal(SAMPLE_RECALL_MODEL.id, 'onboarding-sample');
   // Both screens label it above the card.
-  assert.ok(WELCOME.includes('<SampleRecallCard label={WELCOME_EXAMPLE_LABEL} />'));
+  assert.ok(WELCOME.includes('label={WELCOME_EXAMPLE_LABEL}'));
   assert.ok(PREVIEW.includes('<SampleRecallCard label={PREVIEW_EXAMPLE_LABEL} />'));
+  // The optional peek and entrance are Welcome's alone; the Preview's card is as it was.
+  assert.ok(!PREVIEW.includes('peek=') && !PREVIEW.includes('motion='));
 });
 
 // ── Drawn from the system ───────────────────────────────────────────────────
@@ -504,31 +515,47 @@ test('every onboarding screen draws from the tokens: no raw hex, no capped type,
   }
 });
 
-// ── Welcome (onboarding brand pass 1) ───────────────────────────────────────
+// ── Welcome: M01 peeking over the real example card ─────────────────────────
 
-test('Welcome shows the approved mascot, whole, beside the name in the type system, and invents no mark', () => {
+test('Welcome draws M01 whole, seated on the real example card, decorative and out of the way', () => {
   const code = codeOnly(WELCOME);
-  // The approved production asset, and no other picture.
+  // M01, the approved welcome-peek asset, and no other picture: the old
+  // standalone mascot is gone.
   assert.ok(
-    code.includes("require('@/assets/brand/production/lotly-mascot-transparent.png')"),
-    'Welcome does not draw the approved mascot',
+    code.includes("require('@/assets/brand/production/lotly-mascot-welcome-peek-1024.png')"),
+    'Welcome does not draw M01',
   );
+  assert.ok(!code.includes('lotly-mascot-transparent.png'), 'the standalone mascot came back');
   assert.equal((code.match(/require\(/g) ?? []).length, 1, 'Welcome bundles a second picture');
   assert.equal((code.match(/<Image\b/g) ?? []).length, 1);
   // Drawn whole: contain, never cover or stretch, and never on a dark surface.
   assert.ok(code.includes('resizeMode="contain"'));
   assert.ok(!code.includes("'cover'") && !code.includes('"cover"'), 'the mascot can be cropped');
   assert.ok(!code.includes('background/brand'), 'the mascot sits on a dark surface');
-  // Sized between the bounds, never at the asset's intrinsic 1024pt.
-  assert.ok(code.includes('const size = mascotSize(height);'));
-  assert.ok(code.includes('style={{ width: size, height: size, marginVertical: -tuck }}'));
-  // Decorative: VoiceOver reads the name, not the drawing.
-  assert.ok(code.includes('accessibilityElementsHidden'));
-  assert.ok(code.includes('importantForAccessibility="no-hide-descendants"'));
+  // Given a width and a height (aspectRatio alone drew it at 1024pt on device).
+  assert.ok(code.includes('style={{ width: size, height: size }}'));
+  // The real card, not a picture of one: the mascot is the card's `peek`,
+  // seated so its flat cut lands on the card's top border.
+  const welcome = codeOnly(componentBody(WELCOME, 'WelcomeContent'));
+  assert.ok(welcome.includes('<SampleRecallCard'));
+  assert.ok(welcome.includes('peek={'));
+  assert.ok(welcome.includes('top: -mascotOffset(size)'));
+  assert.ok(code.includes("position: 'absolute'") && code.includes('right: 0,'));
+  // Decorative, and never in the way: no touches, not in the accessibility tree.
+  const peek = welcome.slice(welcome.indexOf('peek={'), welcome.indexOf('<Image'));
+  assert.ok(peek.includes('pointerEvents="none"'));
+  assert.ok(peek.includes('accessible={false}'));
+  assert.ok(peek.includes('accessibilityElementsHidden'));
+  assert.ok(peek.includes('importantForAccessibility="no-hide-descendants"'));
+  // In the card component the peek is the card's SIBLING, after it: drawn over
+  // the card, outside the card's accessibility element and its entrance.
+  const sample = codeOnly(SAMPLE);
+  const card = sample.indexOf('accessibilityLabel={`${label}. ${SAMPLE_ACCESSIBILITY}`}');
+  const cardEnd = sample.indexOf('</Animated.View>', card);
+  assert.ok(card > 0 && cardEnd > card);
+  assert.ok(sample.indexOf('{peek}') > cardEnd, 'the peek is inside the card element');
   // The name is set in the type system, lowercase, from the copy module.
-  assert.ok(
-    code.includes('<Text variant="heading-2" color="text/primary" style={styles.wordmark}>'),
-  );
+  assert.ok(code.includes('<Text variant="heading-2" color="text/primary">'));
   assert.ok(code.includes('{WORDMARK}'));
   // Nothing invented: no traced wordmark, logo file, or alarm imagery.
   for (const forbidden of [
@@ -543,17 +570,30 @@ test('Welcome shows the approved mascot, whole, beside the name in the type syst
   }
 });
 
-test('the mascot scales with the window between its bounds, on the 4pt grid', () => {
-  assert.equal(mascotSize(667), MASCOT_MIN, 'iPhone SE keeps room for the example');
-  assert.equal(mascotSize(874), 208, 'iPhone 17 / 17 Pro');
+test('M01 scales between its bounds, its paws stay inside the card padding, and it never reaches the text above', () => {
+  assert.equal(mascotSize(667), MASCOT_MIN, 'iPhone SE');
+  assert.equal(mascotSize(874), MASCOT_MAX, 'iPhone 17 / 17 Pro');
   assert.equal(mascotSize(956), MASCOT_MAX, 'the largest phones stop at the ceiling');
   assert.equal(mascotSize(0), MASCOT_MIN);
-  assert.ok(MASCOT_MIN >= 170 && MASCOT_MAX <= 220);
   for (const height of [568, 667, 736, 812, 844, 874, 926, 956, 1366]) {
     const size = mascotSize(height);
     assert.equal(size % 4, 0, `${height}pt window gives an off-grid ${size}`);
     assert.ok(size >= MASCOT_MIN && size <= MASCOT_MAX);
   }
+  // The card's padding is the one the paws must stay inside.
+  assert.ok(read('components', 'recall-card.tsx').includes('padding: spacing[12],'));
+  assert.equal(CARD_PADDING, 12);
+  for (const size of [MASCOT_MIN, MASCOT_MAX]) {
+    // The flat cut is seated on the border; the paws end above the first row.
+    assert.equal(mascotOffset(size), Math.round(size * MASCOT_EDGE));
+    assert.ok(size * PAW_DEPTH < CARD_PADDING - 1, `${size}pt paws reach the card's badges`);
+    // The block reserves the standing height beside the label, so the drawing
+    // never overlaps the body text above it.
+    assert.equal(mascotLift(size), Math.ceil(size * (MASCOT_EDGE - MASCOT_ART_TOP)));
+    assert.equal(peekReserve(size) + LABEL_ALLOWANCE, mascotLift(size));
+  }
+  const welcome = codeOnly(componentBody(WELCOME, 'WelcomeContent'));
+  assert.ok(welcome.includes('paddingTop: peekReserve(size)'));
 });
 
 test('Welcome is one promise, one example and one action: the three-bullet marketing block is gone', () => {
@@ -563,7 +603,7 @@ test('Welcome is one promise, one example and one action: the three-bullet marke
   assert.ok(!welcome.includes('BenefitList'), 'Welcome renders the benefit rows again');
   assert.ok(!welcome.includes('accessibilityRole="list"'));
   // One example (the shared card surface), one source note, one action.
-  assert.equal((welcome.match(/<SampleRecallCard /g) ?? []).length, 1);
+  assert.equal((welcome.match(/<SampleRecallCard\b/g) ?? []).length, 1);
   assert.equal((welcome.match(/<Button /g) ?? []).length, 1);
   assert.ok(welcome.includes('{WELCOME_TRUST_NOTE}'));
   // The paywall still owns its benefit list, unchanged.
@@ -585,10 +625,17 @@ test('Get started still advances through the existing onboarding action', () => 
 });
 
 test('the entrance plays once in under a second, loops nothing, and is skipped under Reduce Motion', () => {
-  // The timeline: mascot first, then the heading, then the card; done by ~900ms.
-  assert.ok(entranceEndMs() >= 700 && entranceEndMs() <= 900, `ends at ${entranceEndMs()}ms`);
-  assert.ok(WELCOME_ENTRANCE.heading.delay > WELCOME_ENTRANCE.mascotFade.delay);
-  assert.ok(WELCOME_ENTRANCE.card.delay > WELCOME_ENTRANCE.heading.delay);
+  // The timeline: the heading, then the mascot rising from behind the card,
+  // then the card following it as one moment; done within 900ms.
+  assert.ok(entranceEndMs() >= 600 && entranceEndMs() <= 900, `ends at ${entranceEndMs()}ms`);
+  assert.ok(WELCOME_ENTRANCE.mascotFade.delay > WELCOME_ENTRANCE.heading.delay);
+  assert.equal(WELCOME_ENTRANCE.mascotRise.delay, WELCOME_ENTRANCE.mascotFade.delay);
+  assert.ok(WELCOME_ENTRANCE.card.delay > WELCOME_ENTRANCE.mascotFade.delay, 'the card leads');
+  // The card follows while the mascot is still arriving: one moment, not two.
+  assert.ok(
+    WELCOME_ENTRANCE.card.delay <
+      WELCOME_ENTRANCE.mascotRise.delay + WELCOME_ENTRANCE.mascotRise.duration,
+  );
   // Reduce Motion means the final state at once.
   assert.equal(welcomeEntrance(true), 'show');
   assert.equal(welcomeEntrance(false), 'animate');
@@ -613,9 +660,12 @@ test('the entrance plays once in under a second, loops nothing, and is skipped u
   ]) {
     assert.ok(!code.includes(forbidden), `the entrance uses ${forbidden}`);
   }
-  // The action never animates: the footer is outside every animated view.
-  const welcome = componentBody(WELCOME, 'WelcomeContent');
-  assert.ok(welcome.indexOf('footer={') > welcome.indexOf('</Animated.View>'));
+  // The action never animates: the footer is the plain shared Button.
+  const welcome = codeOnly(componentBody(WELCOME, 'WelcomeContent'));
+  assert.ok(welcome.includes('footer={<Button label={WELCOME_CTA} onPress={onGetStarted} />}'));
+  // The mascot, the card and the source note each carry their own entrance.
+  assert.ok(welcome.includes('motion.mascot'));
+  assert.equal((welcome.match(/motion\.card/g) ?? []).length, 2, 'the card and the source note');
   // Only Welcome passes a heading motion to the shared frame.
   for (const [name, source] of [
     ['states', STATES],

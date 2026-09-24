@@ -349,14 +349,22 @@ Primary Figma references (file `WN8RP0xZGYdj4CSztvQ7Km`):
 
 ### Branding status
 
-The product name is **Lotly**. The approved mascot is
-`assets/brand/production/lotly-mascot-transparent.png` (1024×1024,
-transparent, sRGB). It is drawn whole with `contain`, never cropped,
-recoloured or placed on a dark surface, and today appears on Welcome only.
-The final logo and wordmark are not yet locked: the name is set in the type
-system, and no logo, traced wordmark, shield, siren, warning triangle,
-grocery cart, or food icon is invented in implementation work unless a later
-approved brand asset explicitly provides one.
+The product name is **Lotly**. The approved mascot set is five poses in
+`assets/brand/production`, each a 1024×1024 transparent RGBA PNG: M01
+`lotly-mascot-welcome-peek-1024.png`, M02 `lotly-mascot-helper-1024.png`, M03
+`lotly-mascot-ready-1024.png`, M04 `lotly-mascot-watchful-1024.png` and M05
+`lotly-mascot-notifications-1024.png`, each tagged sRGB and carrying the
+mechanical alpha repair: a fully opaque drawing with only its antialiased
+edge translucent (`src/lib/mascot-assets.test.ts` pins the set). The set's
+contact sheet is brand documentation, in `assets/brand/reference`. Only M01
+is in the app, on Welcome; M02–M05 wait for their own screens. A mascot is drawn whole with `contain`, never cropped, recoloured or
+placed on a dark surface, and is decorative: hidden from VoiceOver and never
+in the way of a touch. The earlier standalone mascot
+(`lotly-mascot-transparent.png`) is no longer drawn. The final logo and
+wordmark are not yet locked: the name is set in the type system, and no logo,
+traced wordmark, shield, siren, warning triangle, grocery cart, or food icon
+is invented in implementation work unless a later approved brand asset
+explicitly provides one.
 
 The brand should not resemble a government emergency-alert product.
 Seriousness comes from hierarchy, typography, information quality, and
@@ -978,15 +986,21 @@ height around text, no `maxFontSizeMultiplier`, no gradient, no marketing
 carousel.
 
 **Welcome.** One promise, one short explanation, one example, one action.
-The name `lotly`, lowercase in `heading-2` `text/primary`, centred above the
-approved mascot ("Branding status"), which is sized to a quarter of the
-window's height between 172 and 220pt (`mascotSize`). Then the frame's
-headline and body, the one illustrative example card under a `caption` label
-`Example`, the `caption` source note, and `Get started` in the sticky footer.
-No benefit rows. The screen plays the app's one entrance on first
-appearance: the mascot fades in and settles from 90%, then the heading and
-the card rise 14pt as they fade in, done by 860ms; nothing loops, and the
-footer never moves ("Reduced motion").
+The name `lotly`, lowercase in `heading-2` `text/primary`, then the frame's
+headline and body. Then M01 ("Branding status") peeking over the one
+illustrative example card: its flat bottom cut sits on the card's top
+border, right-aligned, and its paws rest on the card inside the card's 12pt
+padding, clear of the first row. It is sized to a quarter of the window's
+height between 176 and 208pt (`mascotSize`; 208 keeps the paws above the
+badges), and the block reserves the height it stands above the card, so it
+never reaches the body text. The card keeps its `caption` label `Example`;
+then the `caption` source note, and `Get started` in the sticky footer. On a
+tall phone the example block is centred in the height the heading leaves, so
+spare room is shared above and below it rather than pooled by the footer. No
+benefit rows. The screen plays the app's one entrance on first appearance:
+the heading rises in, then the mascot rises 24pt from behind the card as it
+fades in, and the card, its label and the note follow with an 8pt rise, done
+by 720ms; nothing loops, and the footer never moves ("Reduced motion").
 
 **The example card.** The Feed card's own `RecallCardSurface` over a static
 model — CRITICAL, `Example` in the date slot, AFFECTS YOU, a bundled flat

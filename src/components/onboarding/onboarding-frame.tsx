@@ -191,6 +191,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing[8],
     paddingBottom: spacing[24],
     gap: spacing[16],
+    // At least the scroll view's height, so a screen can place a block in the
+    // leftover space (Welcome centres its example there); children still stack
+    // from the top, so a screen that does not ask looks exactly as before.
+    flexGrow: 1,
   },
   heading: {
     gap: spacing[8],
