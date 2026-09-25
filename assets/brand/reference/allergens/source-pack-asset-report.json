@@ -1,0 +1,227 @@
+[
+  {
+    "file": "allergen-peanuts-1024.png",
+    "dimensions": [
+      1024,
+      1024
+    ],
+    "bbox": [
+      152,
+      182,
+      872,
+      842
+    ],
+    "padding": [
+      152,
+      182,
+      152,
+      182
+    ],
+    "sha256": "0e18dea9b8f1522247b5e894ae1199bebe3da8dec8746e348a0180813a9cee9d",
+    "bytes": 281341,
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "file": "allergen-tree-nuts-1024.png",
+    "dimensions": [
+      1024,
+      1024
+    ],
+    "bbox": [
+      152,
+      191,
+      872,
+      833
+    ],
+    "padding": [
+      152,
+      191,
+      152,
+      191
+    ],
+    "sha256": "5bae49e30c6320418c401509ddd89f169b47efbac1de0560220f03ec01a56970",
+    "bytes": 325640,
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "file": "allergen-milk-1024.png",
+    "dimensions": [
+      1024,
+      1024
+    ],
+    "bbox": [
+      206,
+      152,
+      817,
+      872
+    ],
+    "padding": [
+      206,
+      152,
+      207,
+      152
+    ],
+    "sha256": "5d1452c4ca989393656eb1964240fd97083c8f0e5069500b89a8bee90d854fac",
+    "bytes": 233159,
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "file": "allergen-egg-1024.png",
+    "dimensions": [
+      1024,
+      1024
+    ],
+    "bbox": [
+      198,
+      152,
+      826,
+      872
+    ],
+    "padding": [
+      198,
+      152,
+      198,
+      152
+    ],
+    "sha256": "d7761859ad9518087d8867c1c50d1dfa715ec9e38e4b23affe8f3b76c25d011f",
+    "bytes": 287752,
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "file": "allergen-wheat-1024.png",
+    "dimensions": [
+      1024,
+      1024
+    ],
+    "bbox": [
+      229,
+      152,
+      795,
+      872
+    ],
+    "padding": [
+      229,
+      152,
+      229,
+      152
+    ],
+    "sha256": "8e3403603b5cbc7a7a25d775c17a43bb79716ce36078fa6137041b809c53b4b0",
+    "bytes": 189599,
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "file": "allergen-soy-1024.png",
+    "dimensions": [
+      1024,
+      1024
+    ],
+    "bbox": [
+      152,
+      162,
+      872,
+      861
+    ],
+    "padding": [
+      152,
+      162,
+      152,
+      163
+    ],
+    "sha256": "a2d06102d17a96e03c528658522d9e735339fb3974a92dc9b9f7b2f8bdd54601",
+    "bytes": 248400,
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "file": "allergen-sesame-1024.png",
+    "dimensions": [
+      1024,
+      1024
+    ],
+    "bbox": [
+      178,
+      152,
+      845,
+      872
+    ],
+    "padding": [
+      178,
+      152,
+      179,
+      152
+    ],
+    "sha256": "72c5cc09904edd1b7f4eb3b97829824514ae87a4dee3886c6875c2fa3e3acd90",
+    "bytes": 241667,
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "file": "allergen-fish-1024.png",
+    "dimensions": [
+      1024,
+      1024
+    ],
+    "bbox": [
+      152,
+      195,
+      872,
+      829
+    ],
+    "padding": [
+      152,
+      195,
+      152,
+      195
+    ],
+    "sha256": "845904923e4ec78c39c712f47cd73890d44f5e350720ba4e35adeedcd1b8cfbd",
+    "bytes": 235806,
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "file": "allergen-crustacean-shellfish-1024.png",
+    "dimensions": [
+      1024,
+      1024
+    ],
+    "bbox": [
+      159,
+      152,
+      865,
+      834
+    ],
+    "padding": [
+      159,
+      152,
+      159,
+      190
+    ],
+    "sha256": "e5fd2ec4fb675fa2a6e55eb0b90b84d7323fed6d525087da47ee4ec191ea000d",
+    "bytes": 239300,
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  }
+]

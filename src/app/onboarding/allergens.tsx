@@ -10,6 +10,7 @@ import { AllergensStep } from '@/components/onboarding/allergens-step';
 import { StepPending } from '@/components/onboarding/step-pending';
 import { useAccess } from '@/hooks/use-access';
 import { useOnboardingPreferences } from '@/hooks/use-onboarding-preferences';
+import { clearAllergens } from '@/lib/allergen-grid';
 import { goBackFrom } from '@/lib/onboarding-navigation';
 import { onboardingRoute } from '@/lib/onboarding-routes';
 import { toggleAllergen } from '@/lib/personalization-screen';
@@ -29,7 +30,10 @@ export default function OnboardingAllergensScreen() {
     <AllergensStep
       selected={prefs.allergens}
       onToggle={(token) => update(toggleAllergen(prefs, token))}
-      onClear={() => update({ ...prefs, allergens: [] })}
+      onClear={() => {
+        const next = clearAllergens(prefs);
+        if (next !== prefs) update(next);
+      }}
       onContinue={() => router.push(onboardingRoute('retailers'))}
       onBack={() => goBackFrom('allergens', router)}
     />

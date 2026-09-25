@@ -28,7 +28,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
@@ -63,9 +63,7 @@ export function CheckRow({
           style={[styles.row, checked && styles.rowChecked, pressed && styles.pressed]}>
           {/* Centred on the row like the Choice Row's ring, so it sits level
               with a one-line option at any type size. */}
-          <View style={[styles.box, checked && styles.boxChecked]}>
-            {checked ? <View style={styles.mark} /> : null}
-          </View>
+          <CheckIndicator checked={checked} />
           {leading !== undefined ? (
             <View accessible={false} importantForAccessibility="no-hide-descendants">
               {leading}
@@ -79,6 +77,25 @@ export function CheckRow({
     </Pressable>
   );
 }
+
+/**
+ * The square indicator itself (P2B7Z): the open box, and over it the filled
+ * box with its check mark. Shared so the Allergens tile draws the very same
+ * checkbox as this row. The filled layer is shown by `checked`, or — for a
+ * caller that fades its selection — by the `fill` value it drives from 0 to
+ * 1. Either way the box's size never changes, so nothing moves.
+ */
+export function CheckIndicator({ checked, fill }: { checked: boolean; fill?: Animated.Value }) {
+  return (
+    <View style={styles.box}>
+      <Animated.View style={[styles.boxChecked, { opacity: fill ?? (checked ? 1 : 0) }]}>
+        <View style={styles.mark} />
+      </Animated.View>
+    </View>
+  );
+}
+
+const BOX_BORDER = 2;
 
 const styles = StyleSheet.create({
   row: {
@@ -96,14 +113,20 @@ const styles = StyleSheet.create({
     width: iconSize[20],
     height: iconSize[20],
     borderRadius: radius[4],
-    borderWidth: 2,
+    borderWidth: BOX_BORDER,
     borderColor: color['border/strong'],
+  },
+  // Laid exactly over the open box, border included.
+  boxChecked: {
+    position: 'absolute',
+    top: -BOX_BORDER,
+    left: -BOX_BORDER,
+    right: -BOX_BORDER,
+    bottom: -BOX_BORDER,
+    borderRadius: radius[4],
+    backgroundColor: color['action/primary'],
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  boxChecked: {
-    borderColor: color['action/primary'],
-    backgroundColor: color['action/primary'],
   },
   // The check mark: the corner of a small rectangle, turned a half right
   // angle, in the inverse colour — the same construction as the Choice

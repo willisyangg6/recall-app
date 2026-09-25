@@ -926,7 +926,11 @@ sibling for any-of-these lists: the same white `radius/12` surface with
 glyph, like the Choice Row's dot) when checked, the row border turning
 `action/primary` with it; the `checkbox` role and `accessibilityState.checked`.
 The round-versus-square indicator is what tells single- from multi-select
-before a word is read, and the mark is the non-colour channel.
+before a word is read, and the mark is the non-colour channel. The indicator
+is exported as `CheckIndicator` (P2B7Z) — the open box with the filled box
+and its mark laid over it — so the onboarding Allergens tile draws the very
+same checkbox; a caller may drive the filled layer's opacity for a fade, and
+the Check Row itself still never animates.
 
 **Notifications** (`src/app/settings/notifications.tsx`;
 `src/components/settings/notifications-panel.tsx`). The `body-small` intro,
@@ -1053,21 +1057,90 @@ is the shared selector below, unchanged. The map uses no severity,
 relevance or harm colour and never animates. Composition rationale and
 geometry provenance: `docs/recall-onboarding-and-paywall.md` §6.1.
 
-**States (List), Allergens, Retailers.** The shared selectors in the frame: the
+**Allergens (P2B7Z): a two-column grid of tiles.** Under the heading, one
+row: the count line (`body-small` secondary, always rendered, with singular
+and plural words — `No allergens selected`, `1 allergen selected`, `2
+allergens selected`) at the leading edge and `Clear selection` at the
+trailing edge as a compact text action — `body-small-bold`, never
+underlined, in the interactive `action/secondary` while it can act and
+`text/secondary`, reported disabled, when nothing is chosen; not a bordered
+or filled button — in a full 44pt target that is always laid out, so the grid never moves as the
+count crosses zero. Then the nine allergens in catalog order as tiles, read
+left to right then down, `spacing/8` apart, a short last row keeping its
+tile at column width. A tile is one `radius/12` surface: padding 8
+across and 16 down, `spacing/4` between its parts, the allergen's approved
+Lotly pictogram, the full canonical name in `body` (never shortened — `Crustacean shellfish`, not the
+mock-up's `Shellfish`), and the Check Row's own 20pt square indicator at the
+trailing edge. Open, the tile is `background/surface` with a
+`border/default` edge; chosen, it is the soft blue `background/subtle` with
+an `action/primary` navy edge AND a filled indicator with its check mark, so
+colour is never the only channel. The chosen surface and the filled
+indicator are layers over the open ones: choosing changes opacity and
+colour only, never a size. No mascot, no halo or background circle behind
+the pictogram, no shadow, no gradient, no raw colour. `Continue` is sticky
+and never disabled.
+
+The pictogram is the approved Lotly allergen pictogram family, not an icon
+glyph: nine production pictogram assets whose runtime masters live directly
+in `assets/icons/` as `allergen-<name>-1024.png` — normalized 1024×1024
+transparent RGBA PNGs tagged sRGB, carrying the mascots' mechanical alpha
+repair, mapped to the canonical
+tokens by static `require` in `src/lib/allergen-assets.ts`. Each is drawn
+whole (`contain`), never tinted, in a fixed 44pt box where the visible art
+is about 31pt, so every label starts at the same x; the same picture chosen
+or not, never dimmed or animated. It is decorative: hidden from
+accessibility and untouchable. The box's transparent sides overhang the
+tile's padding and the gap beside it by 4pt (under the art's 6.5pt
+transparent margin), which keeps the tile's row chrome at the 80pt the
+column rule measures against. The Lucide allergen glyphs ("Iconography")
+were not replaced globally — Profile's rows still draw them. Tree nuts
+also carries a founder-approved fill of one keyed-out pinhole in its outline.
+The pack's contact sheet, its source-pack asset report and the production
+asset report of the final files (`assets/brand/reference/allergens/`) are
+reference only and bundled by nothing.
+
+The column count is `allergenGridColumns` (`src/lib/allergen-grid.ts`), a
+function of the window width and text scale alone: two columns while the
+widest label word (`Crustacean`, 85.2pt in `body` at 1×, measured from the
+bundled Public Sans) still fits a half-width tile's label line at the
+reader's size, one full-width column otherwise and always from the
+accessibility sizes (text scale 1.5, the app's shared threshold). In
+practice: two columns at the standard sizes on every supported phone (the
+375pt iPhone SE included, with about 2pt to spare), one column from xLarge on
+the SE and from xxLarge on a 402pt iPhone 17. At the very largest sizes on a
+narrow phone (AX4 and AX5 on the SE, AX5 on an iPhone 17), even a
+full-width label line is narrower than that word, so the tile stacks: pictogram
+and indicator on its top line, the label beneath at the tile's full width
+(`allergenTileStacked`). Labels wrap between words and are never truncated;
+at one column the count and `Clear selection` stack too.
+
+Each tile is ONE accessibility element: the checkbox role, the full name,
+checked or unchecked, the whole tile its target. The pictogram and the drawn
+indicator are hidden, so VoiceOver reads `Peanuts, checkbox, checked` and
+nothing else inside a tile. The count line is its own element in a 44pt box
+level with `Clear selection`, so VoiceOver reads the count, then Clear
+(`Unchecks every allergen.`), then the tiles.
+
+Motion: the chosen surface and the filled indicator fade in or out together
+over 150ms (ease-out, opacity only, native driver) — no scale, bounce,
+movement or loop. Under Reduce Motion, or while the setting is unknown, the
+final state is drawn at once ("Reduced motion").
+
+**States (List), Retailers.** The shared selectors in the frame: the
 count line (`body-small` secondary, always rendered), then a fixed controls
 column — the search field where the list is long, and `Clear selection` as
 the secondary Button, present on every visit and disabled with nothing
 selected — then the Check Rows. Nothing above the list is conditional, so
-choosing or clearing never moves a row (the P2B7V rule). Every allergen row
-carries its glyph in the row's leading slot: a 20pt Lucide outline in
-`icon/secondary`, `icon/primary` when checked, one treatment for all nine
-("Iconography"). Every store row carries its mark contained in a 40×24pt box
-or the `home` glyph centred in the same box, so rows are one height. On
-States, Continue is disabled with nothing chosen and the reason
-(`caption`, centred) reads beneath it in a slot that is always laid out —
-invisible and hidden from assistive technology while a state is chosen — so
-Continue never moves as the count crosses zero, at any text size. On the optional
-steps Continue is never disabled.
+choosing or clearing never moves a row (the P2B7V rule). Every store row
+carries its mark contained in a 40×24pt box or the `home` glyph centred in
+the same box, so rows are one height. Retailers keeps this P2B7X.1 list;
+its redesign, and those of the Preview, the paywall and the notification
+education, are later milestones. On States, Continue is disabled with
+nothing chosen and the reason (`caption`, centred) reads beneath it in a
+slot that is always laid out — invisible and hidden from assistive
+technology while a state is chosen — so Continue never moves as the count
+crosses zero, at any text size. On the optional steps Continue is never
+disabled.
 
 **Personalized Preview.** A white `radius/16` card with the `card` lift
 holding three `body-small` rows — `States`, `Allergens`, `Retailers` — label
@@ -2022,8 +2095,10 @@ No permissively licensed outline family publishes a peanut, a tree-nut or a
 sesame glyph (Lucide, Lucide Lab, Phosphor, Tabler, Iconoir and Font Awesome
 were checked), so those three rows use the family's nearest honest concept
 and the label carries the meaning. Every glyph is decorative and hidden from
-assistive technology; every row uses one treatment (20pt, `icon/secondary`
-unchecked, `icon/primary` checked). No emoji, no second family, no food
+assistive technology; every one of Profile's allergen rows uses one treatment
+(20pt, `icon/secondary` unchecked, `icon/primary` checked). The onboarding
+Allergens grid draws the Lotly pictograms instead ("Onboarding and
+paywall"); this set is unchanged and still serves Profile. No emoji, no second family, no food
 symbol drawn by hand. The "Branding status" rule against inventing food
 icons is unchanged: nothing here is invented, and the founder directed the
 set.
@@ -2335,7 +2410,9 @@ chance.
   separate, and both are covered —
   Welcome's one-time entrance, and (P2B7Y) the onboarding progress segment's
   one fill and the States mascot's one fade-and-settle, each starting after
-  the screen's push settles; the States map itself never animates. That
+  the screen's push settles; the States map itself never animates; and
+  (P2B7Z) an Allergens tile's 150ms opacity fade as it is chosen or cleared,
+  which moves nothing and is drawn final at once under Reduce Motion. That
   entrance, and any future animation, is skipped when
   `AccessibilityInfo.isReduceMotionEnabled` reports true (or cannot be
   read): everything is shown in its final state at once. The P2B7Y motions

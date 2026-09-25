@@ -23,6 +23,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { TILE } from '@/lib/allergen-grid';
 import {
   ALLERGENS_BODY,
   ALLERGENS_HEADLINE,
@@ -149,18 +150,23 @@ test('Clear selection is permanently allocated on every selector step and inert 
   );
   assert.ok(controls.includes('disabled={draft.length === 0}'));
 
-  // Allergens: its own fixed one-element controls slot.
+  // Allergens: its own fixed one-element controls slot — the compact
+  // ClearAction (P2B7Z), always rendered.
   const allergens = componentBody(ALLERGENS, 'AllergensStep');
   const allergenControls = allergens.slice(
-    allergens.indexOf('const controls = ('),
+    allergens.indexOf('const controls = '),
     allergens.indexOf('return ('),
   );
-  assert.ok(allergenControls.includes('label={CLEAR_SELECTION_LABEL}'));
+  assert.ok(allergenControls.includes('<ClearAction'));
   assert.ok(
     !/\?\s*\(/.test(allergenControls) && !allergenControls.includes('&&'),
     'Clear selection is conditional on Allergens',
   );
   assert.ok(allergenControls.includes('disabled={selected.length === 0}'));
+  const clearAction = codeOnly(componentBody(ALLERGENS, 'ClearAction'));
+  assert.ok(clearAction.includes('accessibilityLabel={CLEAR_SELECTION_LABEL}'));
+  assert.ok(clearAction.includes('{CLEAR_SELECTION_LABEL}'));
+  assert.ok(clearAction.includes('disabled={disabled}'));
   assert.ok(
     allergens.includes('if (selected.length === 0) return;'),
     'an empty clear must be a true no-op',
@@ -274,11 +280,13 @@ test('every step reads and saves through the one preference store, progressively
   // The edits are the shared rules — the same functions Profile's editor uses.
   assert.ok(ROUTES.states.includes('update(withStates(prefs, codes))'));
   assert.ok(ROUTES.allergens.includes('update(toggleAllergen(prefs, token))'));
+  assert.ok(ROUTES.allergens.includes('const next = clearAllergens(prefs);'));
+  assert.ok(ROUTES.allergens.includes('if (next !== prefs) update(next);'));
   assert.ok(ROUTES.retailers.includes('update(toggleRetailer(prefs, id))'));
   // The selectors ARE the shared selectors.
   assert.ok(STATES.includes('<StateSelectorContent'));
   assert.ok(RETAILERS.includes('<StoreSelectorContent'));
-  assert.ok(ALLERGENS.includes('CONSUMER_ALLERGENS.map((option) =>'));
+  assert.ok(ALLERGENS.includes('allergenGridRows(CONSUMER_ALLERGENS, columns).map((row) =>'));
   // The Preview summary reads the Profile card's own summary rule.
   assert.ok(PREVIEW.includes('summarizePreferences(prefs)'));
 });
@@ -992,4 +1000,213 @@ test('the approved States mock-up is a design reference only: nothing bundles it
   walk(SRC);
   assert.deepEqual(hits, []);
   assert.ok(!readFileSync(join(SRC, '..', 'app.json'), 'utf8').includes('brand/reference'));
+});
+
+// ── P2B7Z: the Allergens grid ───────────────────────────────────────────────
+
+test('each allergen tile is ONE checkbox element: its full name, its state, the whole tile its target', () => {
+  const tile = codeOnly(componentBody(ALLERGENS, 'AllergenTile'));
+  assert.equal((tile.match(/accessibilityRole=/g) ?? []).length, 1, 'a second element in a tile');
+  assert.ok(tile.includes('accessibilityRole="checkbox"'));
+  assert.ok(tile.includes('accessibilityLabel={option.label}'));
+  assert.ok(tile.includes('accessibilityState={{ checked }}'));
+  assert.ok(tile.includes('onPress={onPress}'));
+  // Only the outer Pressable presses: nothing inside is its own target.
+  assert.equal((tile.match(/<Pressable/g) ?? []).length, 1);
+  assert.equal((tile.match(/onPress=/g) ?? []).length, 1);
+  // The label is the full canonical name — no short form (the mock-up's
+  // `Shellfish`) and no truncation.
+  assert.ok(tile.includes('{option.label}'));
+  assert.ok(!ALLERGENS.includes("'Shellfish'"));
+});
+
+test('the pictogram and the drawn check inside a tile are hidden from assistive technology', () => {
+  const tile = codeOnly(componentBody(ALLERGENS, 'AllergenTile'));
+  const hidden =
+    /<View\s+accessible=\{false\}\s+accessibilityElementsHidden\s+importantForAccessibility="no-hide-descendants"[^>]*>\s*(<[A-Za-z]+)/g;
+  const wrapped = [...tile.matchAll(hidden)].map((m) => m[1]);
+  assert.deepEqual(wrapped, ['<Image', '<CheckIndicator']);
+  // The surfaces are plain views with no role or label of their own.
+  const layers = tile.slice(tile.indexOf('styles.layerOpen'), tile.indexOf('{stacked ? ('));
+  assert.ok(layers.length > 0);
+  assert.ok(!layers.includes('accessib'));
+});
+
+test('selecting changes colour and opacity only: the tile keeps its size, and colour is never alone', () => {
+  const tile = codeOnly(componentBody(ALLERGENS, 'AllergenTile'));
+  // No style of the tile or its content depends on the state …
+  assert.ok(
+    tile.includes(
+      '<View style={[styles.tile, stacked && styles.tileStacked, pressed && styles.pressed]}>',
+    ),
+  );
+  assert.ok(!tile.includes('checked &&'), 'a checked-only style reached the tile');
+  // … the chosen surface is a layer over the open one, shown by opacity …
+  assert.ok(tile.includes('<View style={[styles.layer, styles.layerOpen]} />'));
+  assert.ok(
+    tile.includes(
+      '<Animated.View style={[styles.layer, styles.layerChosen, { opacity: fill }]} />',
+    ),
+  );
+  const code = codeOnly(ALLERGENS);
+  assert.ok(code.includes("position: 'absolute',"));
+  // … in the existing soft blue and navy, over the existing page surfaces …
+  assert.ok(code.includes("backgroundColor: color['background/subtle'],"));
+  assert.ok(code.includes("borderColor: color['action/primary'],"));
+  assert.ok(code.includes("backgroundColor: color['background/surface'],"));
+  // … and the shared checkbox draws the check, a channel besides colour.
+  assert.ok(tile.includes('<CheckIndicator checked={checked} fill={fill} />'));
+  const indicator = codeOnly(
+    componentBody(read('components', 'ui', 'check-row.tsx'), 'CheckIndicator'),
+  );
+  assert.ok(indicator.includes('<View style={styles.mark} />'));
+  assert.ok(indicator.includes('opacity: fill ?? (checked ? 1 : 0)'));
+  // No decoration beyond the system: no shadow, gradient, blur or mascot.
+  for (const forbidden of [
+    'shadow',
+    'elevation',
+    'LinearGradient',
+    'BlurView',
+    'lotly-mascot',
+    'riskPalette',
+    'relevancePalette',
+    "'risk/",
+  ]) {
+    assert.ok(!code.includes(forbidden), `the allergen step uses ${forbidden}`);
+  }
+  // One picture per tile, from the pictogram map: no Icon, no other image,
+  // no asset path of the step's own.
+  assert.ok(!code.includes('<Icon '));
+  assert.equal((code.match(/<Image/g) ?? []).length, 1);
+  assert.ok(!code.includes('require('));
+});
+
+test('the grid takes its column count from the shared rule, and pads a short last row', () => {
+  const step = codeOnly(componentBody(ALLERGENS, 'AllergensStep'));
+  assert.ok(step.includes('const { width, fontScale } = useWindowDimensions();'));
+  assert.ok(step.includes('const columns = allergenGridColumns(width, fontScale);'));
+  assert.ok(step.includes('const stacked = allergenTileStacked(width, fontScale);'));
+  // A stacked tile keeps every part — the glyph and check above, the label beneath.
+  const tile = codeOnly(componentBody(ALLERGENS, 'AllergenTile'));
+  assert.ok(
+    tile.includes(
+      '{pictogram}\n                {check}\n              </View>\n              {label}',
+    ),
+  );
+  assert.ok(tile.includes('{pictogram}\n              {label}\n              {check}'));
+  assert.ok(step.includes('{row.length < columns ? <View style={styles.gridSpacer} /> : null}'));
+  // The count sits beside Clear, stacking only in the one-column layout.
+  assert.ok(step.includes('style={[styles.countRow, columns === 1 && styles.countRowStacked]}'));
+  // The tile draws from the geometry the rule measured against.
+  const code = codeOnly(ALLERGENS);
+  for (const key of ['gap', 'minHeight', 'paddingHorizontal', 'paddingVertical']) {
+    assert.ok(code.includes(`${key}: TILE.${key},`), `the tile's ${key} left the shared geometry`);
+  }
+});
+
+test('each tile draws its allergen’s Lotly pictogram whole, untinted and inert, in a fixed 44pt box', () => {
+  const tile = codeOnly(componentBody(ALLERGENS, 'AllergenTile'));
+  const start = tile.indexOf('const pictogram = (');
+  const pictogram = tile.slice(start, tile.indexOf('const check = (', start));
+  assert.ok(start >= 0 && pictogram.length > 0);
+  // The production map, keyed by the canonical token (allergen-assets.test.ts
+  // pins the nine pairs) — the same source whether or not the tile is chosen.
+  assert.ok(pictogram.includes('source={allergenPictogram(option.token) ?? undefined}'));
+  assert.ok(!pictogram.includes('checked'), 'the pictogram depends on the selection');
+  assert.ok(ALLERGENS.includes("import { allergenPictogram } from '@/lib/allergen-assets';"));
+  assert.ok(!ALLERGENS.includes('AllergenGlyph'), 'the Lucide glyph is still requested');
+  // Drawn whole, never tinted, dimmed or animated; decorative and untouchable,
+  // so the tile stays one checkbox element and one target.
+  assert.ok(pictogram.includes('resizeMode="contain"'));
+  assert.ok(pictogram.includes('accessible={false}\n        style={styles.pictogramImage}'));
+  assert.ok(pictogram.includes('pointerEvents="none"'));
+  for (const forbidden of ['tintColor', 'opacity', 'Animated', 'fill']) {
+    assert.ok(!pictogram.includes(forbidden), `the pictogram uses ${forbidden}`);
+  }
+  // A fixed 44pt box at every size, so every label starts at one x; only its
+  // transparent sides overhang the padding and gap (allergen-grid.ts).
+  const code = codeOnly(ALLERGENS);
+  const box = code.slice(code.indexOf('  pictogram: {'), code.indexOf('  label: {'));
+  assert.ok(box.includes('width: TILE.pictogram,\n    height: TILE.pictogram,'));
+  assert.ok(box.includes('marginHorizontal: -TILE.pictogramOverhang,'));
+  assert.ok(!box.includes('tint') && !box.includes('background') && !box.includes('border'));
+  assert.equal(TILE.pictogram, 44);
+});
+
+test('Clear on Allergens is a compact action that says what it does here', () => {
+  const clear = codeOnly(componentBody(ALLERGENS, 'ClearAction'));
+  assert.ok(clear.includes('accessibilityRole="button"'));
+  assert.ok(clear.includes('accessibilityHint={CLEAR_ALLERGENS_HINT}'));
+  assert.ok(clear.includes('accessibilityState={{ disabled }}'));
+  assert.ok(clear.includes('variant="body-small-bold"'));
+  assert.equal(ONBOARDING_COPY.CLEAR_ALLERGENS_HINT, 'Unchecks every allergen.');
+  // The interactive colour while it can act, the secondary text when it cannot.
+  assert.ok(clear.includes("color={disabled ? 'text/secondary' : 'action/secondary'}"));
+  // A plain text action: never underlined, and no border or fill of its own.
+  const code = codeOnly(ALLERGENS);
+  assert.ok(!code.includes('textDecoration'), 'Clear selection is underlined');
+  const clearStyle = code.slice(
+    code.indexOf('  clear: {'),
+    code.indexOf('},', code.indexOf('  clear: {')),
+  );
+  for (const forbidden of ['border', 'backgroundColor']) {
+    assert.ok(!clearStyle.includes(forbidden), `Clear selection has a ${forbidden}`);
+  }
+  // Not the full-width Button any more, and still a full target.
+  assert.ok(!clear.includes('<Button'));
+  assert.ok(codeOnly(ALLERGENS).includes('minHeight: hitTarget.minimum,'));
+});
+
+test('a selection fades briefly, moves nothing, and is immediate under Reduce Motion', () => {
+  const tile = codeOnly(componentBody(ALLERGENS, 'AllergenTile'));
+  assert.ok(
+    tile.includes('if (!motionAllowed(reduceMotion)) {\n      fill.setValue(to);\n      return;'),
+  );
+  assert.ok(tile.includes('duration: SELECTION_FADE_MS,'));
+  assert.ok(tile.includes('useNativeDriver: true'));
+  assert.ok(codeOnly(ALLERGENS).includes('export const SELECTION_FADE_MS = 150;'));
+  // The only animated property is opacity.
+  const code = codeOnly(ALLERGENS);
+  for (const forbidden of [
+    'Animated.loop',
+    'Animated.spring',
+    'Animated.sequence',
+    'iterations',
+    'transform',
+    'scale',
+    'translate',
+  ]) {
+    assert.ok(!code.includes(forbidden), `the allergen step uses ${forbidden}`);
+  }
+  assert.ok(codeOnly(ALLERGENS).includes('const reduceMotion = useReduceMotion();'));
+});
+
+test('Allergens: Continue is always enabled, and Back, Continue and the resume point are as before', () => {
+  const route = codeOnly(ROUTES.allergens);
+  assert.ok(route.includes("void access.recordShownStep('allergens');"));
+  assert.ok(route.includes('onToggle={(token) => update(toggleAllergen(prefs, token))}'));
+  assert.ok(route.includes("onContinue={() => router.push(onboardingRoute('retailers'))}"));
+  assert.ok(route.includes("onBack={() => goBackFrom('allergens', router)}"));
+  const step = codeOnly(componentBody(ALLERGENS, 'AllergensStep'));
+  assert.ok(step.includes('footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}'));
+  assert.ok(step.includes('back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}'));
+  assert.ok(step.includes("progress={stepProgress('allergens')}"));
+  assert.equal(progressAccessibilityLabel(stepProgress('allergens')!), 'Step 2 of 4: Allergens');
+});
+
+test('the approved Allergens mock-up is a design reference only: nothing bundles it', () => {
+  const reference = 'lotly-onboarding-allergens-grid-target.png';
+  const hits: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (/\.(ts|tsx|js|jsx|json)$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
+        if (readFileSync(path, 'utf8').includes(reference)) hits.push(path);
+      }
+    }
+  };
+  walk(SRC);
+  assert.deepEqual(hits, []);
+  assert.ok(!codeOnly(ALLERGENS).includes('brand/reference'));
 });

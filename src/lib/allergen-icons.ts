@@ -1,6 +1,7 @@
 /**
  * The allergen icons (P2B7X.1): one glyph per consumer allergen, all from
- * ONE family, so the nine rows of the allergen step read as a set.
+ * ONE family, so Profile's nine allergen rows read as a set. The onboarding
+ * Allergens grid draws the Lotly pictograms instead (lib/allergen-assets.ts).
  *
  * ## The family: Lucide (ISC)
  *

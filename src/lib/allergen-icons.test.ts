@@ -101,18 +101,23 @@ test('every raster exists at 1x, 2x and 3x on the set’s 24pt box — one visua
   }
 });
 
-test('the allergen rows render the family through the one icon primitive — no emoji, no second family, no inline drawing', () => {
+test('Profile’s allergen rows render the family through the one icon primitive — no emoji, no second family, no inline drawing', () => {
   const form = codeOnly(
     readFileSync(join(ROOT, 'src', 'components', 'settings', 'personalization-form.tsx'), 'utf8'),
   );
   const step = codeOnly(
     readFileSync(join(ROOT, 'src', 'components', 'onboarding', 'allergens-step.tsx'), 'utf8'),
   );
+  // The onboarding grid draws the Lotly pictograms instead
+  // (lib/allergen-assets.ts); this family stays Profile's.
+  assert.ok(form.includes('AllergenGlyph'), 'Profile does not render the glyph');
+  assert.ok(!step.includes('AllergenGlyph'), 'the onboarding grid still draws the Lucide glyph');
+  assert.ok(!/allergen-(peanut|tree-nut|shellfish)['.]/.test(step), 'a Lucide raster in the step');
+  assert.ok(step.includes('allergenPictogram(option.token)'));
   for (const [name, source] of [
     ['form', form],
     ['step', step],
   ]) {
-    assert.ok(source.includes('AllergenGlyph'), `${name} does not render the glyph`);
     assert.ok(!/[\u{1F300}-\u{1FAFF}]/u.test(source), `${name} uses an emoji`);
     for (const foreign of [
       '@expo/vector-icons',
@@ -133,5 +138,4 @@ test('the allergen rows render the family through the one icon primitive — no 
     ),
   );
   assert.equal((form.match(/<AllergenGlyph /g) ?? []).length, 1);
-  assert.equal((step.match(/<AllergenGlyph /g) ?? []).length, 1);
 });

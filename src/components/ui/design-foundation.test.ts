@@ -324,8 +324,18 @@ test('every declared icon name resolves to a real, non-empty asset at 1x, 2x and
     }
   }
   // Every asset in the directory belongs to a declared name: an orphan file
-  // is either a glyph nothing renders or a name the primitive forgot.
+  // is either a glyph nothing renders or a name the primitive forgot. The one
+  // other declarer is the onboarding Allergens pictograms — full-colour
+  // masters, never tinted, so not the primitive's — required statically by
+  // lib/allergen-assets.ts (pinned in allergen-assets.test.ts).
+  const PICTOGRAMS = [
+    ...read('lib/allergen-assets.ts').matchAll(
+      /require\('@\/assets\/icons\/([a-z-]+-1024\.png)'\)/g,
+    ),
+  ].map((m) => m[1]);
+  assert.equal(PICTOGRAMS.length, 9);
   for (const entry of readdirSync(ICONS)) {
+    if (PICTOGRAMS.includes(entry)) continue;
     const name = entry.replace(/(@[23]x)?\.png$/, '');
     assert.ok(ICON_NAMES.includes(name), `${entry} is not declared by the icon primitive`);
   }

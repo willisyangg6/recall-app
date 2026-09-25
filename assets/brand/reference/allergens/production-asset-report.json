@@ -1,0 +1,416 @@
+{
+  "description": "The final, repaired production allergen pictograms as they are in the repository (assets/icons/). This describes the runtime files after correction, not the source pack; the source pack as delivered is described by source-pack-asset-report.json.",
+  "reportDate": "2026-09-24",
+  "repairs": {
+    "alpha repair (all nine, the Lotly mascot repair)": "alpha 0: RGB set to 0; alpha 240-254: alpha set to 255, RGB unchanged; alpha 255: unchanged; alpha 1-239: alpha kept, RGB unmatted against white as (c - 255*(1 - a)) / a, rounded and clamped to 0-255; the embedded sRGB ICC profile replaced by an explicit sRGB chunk (with gAMA and cHRM); no bKGD or tIME.",
+    "pinhole fill (tree nuts only, founder-approved)": "the one enclosed non-opaque component where the almond, cashew and walnut outlines meet (166 pixels: 36 at alpha 0, 130 translucent) set to (1, 37, 71, 255), the dominant colour of the surrounding solid outline; no other pixel changed."
+  },
+  "files": [
+    {
+      "file": "allergen-peanuts-1024.png",
+      "path": "assets/icons/allergen-peanuts-1024.png",
+      "sha256": "c2ee7cbc834ffda66265411977b321e4003cc518cd1ac286a451e168a6e92815",
+      "bytes": 269636,
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "png": {
+        "bitDepth": 8,
+        "colorType": "RGBA",
+        "interlaced": false
+      },
+      "srgb": {
+        "chunk": "sRGB",
+        "renderingIntent": "perceptual",
+        "embeddedIccProfile": false
+      },
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "gAMA",
+        "cHRM",
+        "IDAT",
+        "IEND"
+      ],
+      "alphaCounts": {
+        "clear": 824779,
+        "edge1to239": 4574,
+        "nearOpaque240to254": 0,
+        "opaque": 219223
+      },
+      "artworkBounds": {
+        "left": 152,
+        "top": 182,
+        "right": 871,
+        "bottom": 841
+      },
+      "enclosedHolePixels": 0,
+      "sourcePackSha256": "0e18dea9b8f1522247b5e894ae1199bebe3da8dec8746e348a0180813a9cee9d",
+      "corrections": [
+        "alpha repair"
+      ]
+    },
+    {
+      "file": "allergen-tree-nuts-1024.png",
+      "path": "assets/icons/allergen-tree-nuts-1024.png",
+      "sha256": "6be63bbbad0e09b9be9536a7b47a44c1ef18f9acea8f368f9faf488df0521b1b",
+      "bytes": 315992,
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "png": {
+        "bitDepth": 8,
+        "colorType": "RGBA",
+        "interlaced": false
+      },
+      "srgb": {
+        "chunk": "sRGB",
+        "renderingIntent": "perceptual",
+        "embeddedIccProfile": false
+      },
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "gAMA",
+        "cHRM",
+        "IDAT",
+        "IEND"
+      ],
+      "alphaCounts": {
+        "clear": 811119,
+        "edge1to239": 5016,
+        "nearOpaque240to254": 0,
+        "opaque": 232441
+      },
+      "artworkBounds": {
+        "left": 152,
+        "top": 191,
+        "right": 871,
+        "bottom": 832
+      },
+      "enclosedHolePixels": 0,
+      "sourcePackSha256": "5bae49e30c6320418c401509ddd89f169b47efbac1de0560220f03ec01a56970",
+      "corrections": [
+        "alpha repair",
+        "pinhole fill: 166 enclosed pixels at x 497-513, y 456-473 set to outline navy (1, 37, 71, 255)"
+      ]
+    },
+    {
+      "file": "allergen-milk-1024.png",
+      "path": "assets/icons/allergen-milk-1024.png",
+      "sha256": "071cdfda44280afa3b202c4913d9c7f9333b5cac8d69e4372a5b99eba7cc18c5",
+      "bytes": 218481,
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "png": {
+        "bitDepth": 8,
+        "colorType": "RGBA",
+        "interlaced": false
+      },
+      "srgb": {
+        "chunk": "sRGB",
+        "renderingIntent": "perceptual",
+        "embeddedIccProfile": false
+      },
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "gAMA",
+        "cHRM",
+        "IDAT",
+        "IEND"
+      ],
+      "alphaCounts": {
+        "clear": 814207,
+        "edge1to239": 5044,
+        "nearOpaque240to254": 0,
+        "opaque": 229325
+      },
+      "artworkBounds": {
+        "left": 206,
+        "top": 152,
+        "right": 816,
+        "bottom": 871
+      },
+      "enclosedHolePixels": 0,
+      "sourcePackSha256": "5d1452c4ca989393656eb1964240fd97083c8f0e5069500b89a8bee90d854fac",
+      "corrections": [
+        "alpha repair"
+      ]
+    },
+    {
+      "file": "allergen-egg-1024.png",
+      "path": "assets/icons/allergen-egg-1024.png",
+      "sha256": "1e3b80b4d407a3867ca4f9913119c093a2d88377c516b8d9445c6f9763b09955",
+      "bytes": 270629,
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "png": {
+        "bitDepth": 8,
+        "colorType": "RGBA",
+        "interlaced": false
+      },
+      "srgb": {
+        "chunk": "sRGB",
+        "renderingIntent": "perceptual",
+        "embeddedIccProfile": false
+      },
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "gAMA",
+        "cHRM",
+        "IDAT",
+        "IEND"
+      ],
+      "alphaCounts": {
+        "clear": 790474,
+        "edge1to239": 4919,
+        "nearOpaque240to254": 0,
+        "opaque": 253183
+      },
+      "artworkBounds": {
+        "left": 198,
+        "top": 152,
+        "right": 825,
+        "bottom": 871
+      },
+      "enclosedHolePixels": 0,
+      "sourcePackSha256": "d7761859ad9518087d8867c1c50d1dfa715ec9e38e4b23affe8f3b76c25d011f",
+      "corrections": [
+        "alpha repair"
+      ]
+    },
+    {
+      "file": "allergen-wheat-1024.png",
+      "path": "assets/icons/allergen-wheat-1024.png",
+      "sha256": "e74c91fd6ff01c4fb70ff4540966544f154c3eb6fc52de0c7b4767c16aa3d4a2",
+      "bytes": 184796,
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "png": {
+        "bitDepth": 8,
+        "colorType": "RGBA",
+        "interlaced": false
+      },
+      "srgb": {
+        "chunk": "sRGB",
+        "renderingIntent": "perceptual",
+        "embeddedIccProfile": false
+      },
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "gAMA",
+        "cHRM",
+        "IDAT",
+        "IEND"
+      ],
+      "alphaCounts": {
+        "clear": 916661,
+        "edge1to239": 4445,
+        "nearOpaque240to254": 0,
+        "opaque": 127470
+      },
+      "artworkBounds": {
+        "left": 229,
+        "top": 152,
+        "right": 794,
+        "bottom": 871
+      },
+      "enclosedHolePixels": 0,
+      "sourcePackSha256": "8e3403603b5cbc7a7a25d775c17a43bb79716ce36078fa6137041b809c53b4b0",
+      "corrections": [
+        "alpha repair"
+      ]
+    },
+    {
+      "file": "allergen-soy-1024.png",
+      "path": "assets/icons/allergen-soy-1024.png",
+      "sha256": "0699c7bbd8b075f6e9e132dba67f28050e953d808230fcaa1f709d3c3cad9ef2",
+      "bytes": 239368,
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "png": {
+        "bitDepth": 8,
+        "colorType": "RGBA",
+        "interlaced": false
+      },
+      "srgb": {
+        "chunk": "sRGB",
+        "renderingIntent": "perceptual",
+        "embeddedIccProfile": false
+      },
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "gAMA",
+        "cHRM",
+        "IDAT",
+        "IEND"
+      ],
+      "alphaCounts": {
+        "clear": 865210,
+        "edge1to239": 4719,
+        "nearOpaque240to254": 0,
+        "opaque": 178647
+      },
+      "artworkBounds": {
+        "left": 152,
+        "top": 162,
+        "right": 871,
+        "bottom": 860
+      },
+      "enclosedHolePixels": 0,
+      "sourcePackSha256": "a2d06102d17a96e03c528658522d9e735339fb3974a92dc9b9f7b2f8bdd54601",
+      "corrections": [
+        "alpha repair"
+      ]
+    },
+    {
+      "file": "allergen-sesame-1024.png",
+      "path": "assets/icons/allergen-sesame-1024.png",
+      "sha256": "d4dfd26c235f5051d81aebfb2c8bbf43dc79470cedc2b954fcb9149015c0fe0f",
+      "bytes": 231966,
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "png": {
+        "bitDepth": 8,
+        "colorType": "RGBA",
+        "interlaced": false
+      },
+      "srgb": {
+        "chunk": "sRGB",
+        "renderingIntent": "perceptual",
+        "embeddedIccProfile": false
+      },
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "gAMA",
+        "cHRM",
+        "IDAT",
+        "IEND"
+      ],
+      "alphaCounts": {
+        "clear": 886034,
+        "edge1to239": 5309,
+        "nearOpaque240to254": 0,
+        "opaque": 157233
+      },
+      "artworkBounds": {
+        "left": 178,
+        "top": 152,
+        "right": 844,
+        "bottom": 871
+      },
+      "enclosedHolePixels": 0,
+      "sourcePackSha256": "72c5cc09904edd1b7f4eb3b97829824514ae87a4dee3886c6875c2fa3e3acd90",
+      "corrections": [
+        "alpha repair"
+      ]
+    },
+    {
+      "file": "allergen-fish-1024.png",
+      "path": "assets/icons/allergen-fish-1024.png",
+      "sha256": "e1e04ffb3b46e7c80573958443e16ae972fba678be4f596de7b132a67acf0be3",
+      "bytes": 217706,
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "png": {
+        "bitDepth": 8,
+        "colorType": "RGBA",
+        "interlaced": false
+      },
+      "srgb": {
+        "chunk": "sRGB",
+        "renderingIntent": "perceptual",
+        "embeddedIccProfile": false
+      },
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "gAMA",
+        "cHRM",
+        "IDAT",
+        "IEND"
+      ],
+      "alphaCounts": {
+        "clear": 850758,
+        "edge1to239": 5128,
+        "nearOpaque240to254": 0,
+        "opaque": 192690
+      },
+      "artworkBounds": {
+        "left": 152,
+        "top": 195,
+        "right": 871,
+        "bottom": 828
+      },
+      "enclosedHolePixels": 0,
+      "sourcePackSha256": "845904923e4ec78c39c712f47cd73890d44f5e350720ba4e35adeedcd1b8cfbd",
+      "corrections": [
+        "alpha repair"
+      ]
+    },
+    {
+      "file": "allergen-crustacean-shellfish-1024.png",
+      "path": "assets/icons/allergen-crustacean-shellfish-1024.png",
+      "sha256": "bdd098a01f46a607b9bf595b180fdceffdb641d185c0f11732bebb900ad7a1e3",
+      "bytes": 226263,
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "png": {
+        "bitDepth": 8,
+        "colorType": "RGBA",
+        "interlaced": false
+      },
+      "srgb": {
+        "chunk": "sRGB",
+        "renderingIntent": "perceptual",
+        "embeddedIccProfile": false
+      },
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "gAMA",
+        "cHRM",
+        "IDAT",
+        "IEND"
+      ],
+      "alphaCounts": {
+        "clear": 876408,
+        "edge1to239": 7779,
+        "nearOpaque240to254": 0,
+        "opaque": 164389
+      },
+      "artworkBounds": {
+        "left": 159,
+        "top": 152,
+        "right": 864,
+        "bottom": 833
+      },
+      "enclosedHolePixels": 0,
+      "sourcePackSha256": "e5fd2ec4fb675fa2a6e55eb0b90b84d7323fed6d525087da47ee4ec191ea000d",
+      "corrections": [
+        "alpha repair"
+      ]
+    }
+  ]
+}

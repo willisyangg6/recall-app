@@ -14,10 +14,13 @@ RevenueCat SDK, no App Store products, no purchase has ever been made, and
 push delivery stays globally inactive. Connecting the real store is
 **P2B7X.2** (§10)._
 
-_P2B7Y (2026-09-24, uncommitted): the four-step progress bar and the
-map-first States step (§6.1). Allergens, Retailers, the Preview, the paywall
-and the notification education keep their P2B7X.1 content; their redesigns
-are later milestones._
+_P2B7Y (2026-09-24): the four-step progress bar and the map-first States
+step (§6.1)._
+
+_P2B7Z (2026-09-24, uncommitted): the Allergens step as a two-column grid of
+tiles (§6.2). Retailers, the Preview, the paywall and the notification
+education keep their P2B7X.1 content; their redesigns are later
+milestones._
 
 ## 1. The sequence
 
@@ -276,7 +279,7 @@ The copy is the founder's, verbatim, in `src/lib/onboarding-copy.ts` and
 | ------------------------ | -------------------------------------------------- | --------------------------- |
 | 1 Welcome                | `WelcomeContent`                                   | `/onboarding/welcome`       |
 | 2 States, 1 of 4         | `StatesStep`: `StateMap` or `StateSelectorContent` | `/onboarding/states`        |
-| 3 Allergens, 2 of 4      | `AllergensStep`                                    | `/onboarding/allergens`     |
+| 3 Allergens, 2 of 4      | `AllergensStep`: `AllergenTile` grid               | `/onboarding/allergens`     |
 | 4 Retailers, 3 of 4      | `RetailersStep` over `StoreSelectorContent`        | `/onboarding/retailers`     |
 | 5 Personalized Preview   | `PreviewStep`                                      | `/onboarding/preview`       |
 | 6 Hard paywall           | `PaywallPanel`                                     | `/paywall`                  |
@@ -450,9 +453,140 @@ it off, the normal slide is unchanged; the interactive swipe back still
 follows the finger. Until the setting has been read (it is read when the
 app starts, well before the first navigation) the default applies.
 
-**Deferred.** Allergens, Retailers, the Preview ("Ready"), the paywall and
-the notification education keep their P2B7X.1 content; only the shared
-progress bar reached them. Their redesigns are later milestones.
+### 6.2 The Allergens step: a two-column grid (P2B7Z)
+
+**What it is.** The heading, body, `2 of 4` progress and copy are
+unchanged. Beneath them, the count line and a compact `Clear selection` in
+one row, then the nine consumer allergens (`CONSUMER_ALLERGENS`, in their
+catalog order: Peanuts, Tree nuts, Milk, Egg, Wheat, Soy, Sesame, Fish,
+Crustacean shellfish) as tiles — each the allergen's Lotly pictogram, its
+full name and an explicit checkbox. No mascot. Composition and tokens are in
+[../DESIGN.md](../DESIGN.md) "Onboarding and paywall".
+
+**Optional, and still one store.** An empty selection is a complete answer:
+Continue is always enabled, with zero or with every allergen. Tapping
+anywhere on a tile toggles it through the shared `toggleAllergen`, so
+several can be chosen together, a chosen tile deselects, and the saved value
+is exactly as before — the canonical tokens, appended in the order chosen —
+saved progressively on every change. `Clear selection` is always laid out;
+with nothing chosen it is disabled, its handler returns at once, and
+`clearAllergens` (`src/lib/allergen-grid.ts`) hands back the same
+preferences object for an empty list, so an empty clear sets and saves
+nothing (the P2B7V rule). Back, Continue and the resume point are
+unchanged.
+
+**The grid adapts deterministically.** `allergenGridColumns(width,
+fontScale)` answers two columns only while the widest label word
+(`Crustacean`, measured from the bundled Public Sans at 85.2pt in `body`;
+`allergen-grid.test.ts` re-measures every label word from the font file)
+fits a half-width tile's label line at the reader's text size, and one
+column otherwise — always one from the accessibility sizes (text scale 1.5).
+Where even a full-width tile's line is narrower than that word (AX4 and AX5
+on the 375pt iPhone SE, AX5 on an iPhone 17), `allergenTileStacked` puts the
+pictogram and checkbox on the tile's top line and the label beneath at full
+width, so the word wraps between words instead of breaking mid-word. The
+answer depends on the window alone, so the first frame is final. Text size
+is never capped and labels are never truncated; every tile, Clear and
+Continue stay reachable by scrolling, and the sticky footer (Continue alone)
+never changes height.
+
+**Accessibility.** Each tile is one checkbox element — the full name, the
+role, checked or unchecked, one target. The pictogram and the drawn check
+are hidden (`accessible={false}`, hidden from the accessibility tree,
+`pointerEvents="none"`), so neither is its own element or target. `Clear selection` is a button with the onboarding hint `Unchecks
+every allergen.` and a disabled state. The count is one element level with
+Clear, so VoiceOver reads the count first. The progress still speaks `Step
+2 of 4: Allergens`.
+
+**Motion.** A tile's chosen surface and filled checkbox fade over 150ms,
+opacity only — no layout change, no bounce, nothing loops. With Reduce
+Motion on, or unknown, the final state is drawn at once. The route
+transition is the root stack's, unchanged.
+
+**Pictograms.** The tiles draw the approved Lotly allergen pictogram
+family: nine production pictogram assets, the runtime masters directly in
+`assets/icons/` as `allergen-<name>-1024.png` (`peanuts`, `tree-nuts`,
+`milk`, `egg`, `wheat`, `soy`, `sesame`, `fish`,
+`crustacean-shellfish`) — 1024×1024 8-bit RGBA on a transparent canvas,
+normalized to one 720px optical bound, tagged sRGB.
+`src/lib/allergen-assets.ts` maps each canonical token to its file by
+static `require`. Each is drawn whole (`contain`), untinted, in a fixed
+44pt box where the art is about 31pt, so every label starts at one x; the
+same picture chosen or not, never dimmed or animated — the surface and
+checkbox carry the state. No halo, background circle or shadow behind it.
+The Lucide allergen glyphs (§9) were not replaced globally: Profile's
+allergen rows still draw them, and their sources and rasters are unchanged.
+
+To fit the 44pt box without moving a breakpoint, the box's sides overhang
+the tile's padding and the gap beside it by 4pt — less than the 6.5pt of
+transparent margin every file has at that size (measured from the files
+by `allergen-assets.test.ts`), so only transparent pixels overhang and the
+box never overlaps the label. The tile's padding went from 12 to 8 across
+and its gaps from 8 to 4, so the row's chrome is still exactly 80pt and
+every column and stacking threshold above is unchanged.
+
+**Alpha repair (2026-09-24).** As delivered, the drawings' bodies sat at
+alpha 250–254 rather than 255, the same flaw the mascots had. All nine
+carry the mascots' mechanical repair: clear pixels hold no colour, alpha
+240–254 is lifted to 255 with RGB untouched, the soft edge (1–239) keeps its
+alpha and is unmatted against white, and the embedded `sRGB built-in` ICC
+profile is replaced by an explicit `sRGB` chunk. Dimensions, clear-pixel
+positions, the drawing's bounds and the RGB of every pixel that was at 240
+or above are unchanged; `allergen-assets.test.ts` pins each against digests
+of the originals (whose SHA-256s are in `source-pack-asset-report.json`).
+
+**Tree-nuts pinhole fill (2026-09-24, founder-approved).** Where the tree
+nuts' almond, cashew and walnut outlines meet, the pack had keyed a small
+triangle out as background: one enclosed non-opaque component of 166
+pixels (36 clear, 130 translucent; x 497–513, y 456–473; about 0.7pt in the
+tile). Exactly those pixels — not their bounding box — were set to
+`(1, 37, 71, 255)`, the dominant colour of the solid outline around them
+(the first ring distance with a single most common colour, and still the most common further out);
+every other pixel is byte-identical. The test pins the component as an
+exact mask, so the fill cannot grow, move or reopen, and all nine
+pictograms must have no enclosed transparent or translucent hole.
+`assets/brand/reference/allergens/production-asset-report.json` records
+the final repository files (SHA-256, dimensions, PNG type, sRGB, alpha
+counts, bounds, enclosed holes), and the test checks it against them;
+`source-pack-asset-report.json` is the pack's own report of the unrepaired
+files it delivered, kept byte-for-byte under that name.
+
+**Pictograms verified on device (2026-09-24).** iPhone 17 at the default
+size: two columns, every tile its own pictogram, sharp and untinted on the
+open and the chosen surface; choosing Peanuts and Tree nuts, then a mixed
+seven, and `Clear selection` leave every tile's frame and Continue's frame
+identical; Clear disables when empty; Continue advances with none and with
+two; Back and a killed-app relaunch return with the choices; each tile is
+still one element (`Peanuts, checkbox, checked`) with nothing inside it in
+the accessibility tree. iPhone SE (3rd generation): two columns at the
+default size with `Crustacean` whole, one column at xLarge, stacked tiles
+at AX-XXXL, Continue reachable in all three. VoiceOver speech itself was not
+listened to; the tree was read directly.
+
+**Grid verified on device (2026-09-24, before the pictograms).** Through
+the iOS accessibility tree:
+iPhone 17 at the default size is two columns; choosing Peanuts, then Tree
+nuts, deselecting one, `Clear selection` and an empty clear leave every
+tile's frame and Continue's frame identical to the point; Continue with
+none and with two advances to Stores, Back returns with the choices intact,
+and a killed app resumes on Allergens with them. iPhone SE (3rd generation):
+two columns at the default size with `Crustacean` whole; one column at
+xLarge; one column of stacked tiles at AX-XXXL, where the count box keeps
+its height across 2, 1 and 0 choices, so the grid does not move. A recorded
+selection fades through intermediate frames with Reduce Motion off and
+lands at once with it on.
+
+**Reference.** The approved mock-up
+(`assets/brand/reference/lotly-onboarding-allergens-grid-target.png`) and
+the pictogram pack's review artifacts
+(`assets/brand/reference/allergens/production-contact-sheet.png`,
+`source-pack-asset-report.json` and `production-asset-report.json`) are
+documentation only; nothing imports them and the
+iOS export does not contain them.
+
+**Deferred.** Retailers, the Preview ("Ready"), the paywall and the
+notification education keep their P2B7X.1 content; only the shared progress
+bar reached them. Their redesigns are later milestones.
 
 ## 7. Local data on reset and on expiry
 
@@ -497,7 +631,8 @@ substituted.
 
 ## 9. Allergen icons
 
-One family for all nine rows: **Lucide** (ISC), the outline language the
+One family for all nine of Profile's allergen rows — the onboarding
+Allergens tiles draw the Lotly pictograms instead (§6.2): **Lucide** (ISC), the outline language the
 app's icon set already uses. The nine SVG sources are vendored under
 `assets/icon-sources/lucide/` beside the license, from
 `lucide-icons/lucide` at commit `f06ac67e33d645c40b8ce19a0419c85c5d7dd751`
@@ -558,24 +693,27 @@ What P2B7X.2 does, and what it does not touch:
 
 ## 11. Tests
 
-| Concern                                                                                                                                     | Test                                          |
-| ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| Record transitions, sticky completion, empty optional ≠ incomplete, sanitizing                                                              | `src/lib/onboarding-state.test.ts`            |
-| Phase matrix, route matrix, layout order and guards, push-tap guard, no cross-phase navigation                                              | `src/lib/access-gate.test.ts`                 |
-| Fail-closed, cached access, grace, launch timeout                                                                                           | `src/lib/entitlement.test.ts`                 |
-| Unconfigured provider, adapter scenarios and containment, savings math, no USD in product code                                              | `src/lib/purchases/purchase-provider.test.ts` |
-| Paywall copy, prices, cards, state matrix, no close/free/trial/lifetime                                                                     | `src/lib/paywall-screen.test.ts`              |
-| Release destinations and the readiness failure                                                                                              | `src/lib/release-destinations.test.ts`        |
-| Allergen icons: coverage, one family, provenance, assets                                                                                    | `src/lib/allergen-icons.test.ts`              |
-| Retailer logos: manifest parity, local-only, containment, fallback, a11y name                                                               | `src/lib/retailer-logos.test.ts`              |
-| Clear selection allocation, count lines, States gate, one store, copy, permission timing, example card, tokens                              | `src/components/onboarding-design.test.ts`    |
-| Reset clears the record in order                                                                                                            | `src/lib/installation-reset.test.ts`          |
-| Route inventory and the release bundle boundary                                                                                             | `src/lib/release-exposure.test.ts`            |
-| States map: vocabulary coverage, hit testing in both views and the insets, one draft, empty clear, no network                               | `src/lib/state-map.test.ts`                   |
-| Progress names and fills, motion gates, Map/List draft wiring, count and Clear, chips, a11y, M02, palettes, routes                          | `src/components/onboarding-design.test.ts`    |
-| M02 on States only; M03–M05 unreferenced                                                                                                    | `src/lib/mascot-assets.test.ts`               |
-| Onboarding Clear hint vs the sheet's, the always-laid-out required note, the root fade under Reduce Motion, the reference mock-up unbundled | `src/components/onboarding-design.test.ts`    |
-| The two `retailers` copy exceptions                                                                                                         | `src/lib/consumer-copy.test.ts`               |
+| Concern                                                                                                                                                                | Test                                          |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Record transitions, sticky completion, empty optional ≠ incomplete, sanitizing                                                                                         | `src/lib/onboarding-state.test.ts`            |
+| Phase matrix, route matrix, layout order and guards, push-tap guard, no cross-phase navigation                                                                         | `src/lib/access-gate.test.ts`                 |
+| Fail-closed, cached access, grace, launch timeout                                                                                                                      | `src/lib/entitlement.test.ts`                 |
+| Unconfigured provider, adapter scenarios and containment, savings math, no USD in product code                                                                         | `src/lib/purchases/purchase-provider.test.ts` |
+| Paywall copy, prices, cards, state matrix, no close/free/trial/lifetime                                                                                                | `src/lib/paywall-screen.test.ts`              |
+| Release destinations and the readiness failure                                                                                                                         | `src/lib/release-destinations.test.ts`        |
+| Allergen icons: coverage, one family, provenance, assets                                                                                                               | `src/lib/allergen-icons.test.ts`              |
+| Retailer logos: manifest parity, local-only, containment, fallback, a11y name                                                                                          | `src/lib/retailer-logos.test.ts`              |
+| Clear selection allocation, count lines, States gate, one store, copy, permission timing, example card, tokens                                                         | `src/components/onboarding-design.test.ts`    |
+| Reset clears the record in order                                                                                                                                       | `src/lib/installation-reset.test.ts`          |
+| Route inventory and the release bundle boundary                                                                                                                        | `src/lib/release-exposure.test.ts`            |
+| States map: vocabulary coverage, hit testing in both views and the insets, one draft, empty clear, no network                                                          | `src/lib/state-map.test.ts`                   |
+| Progress names and fills, motion gates, Map/List draft wiring, count and Clear, chips, a11y, M02, palettes, routes                                                     | `src/components/onboarding-design.test.ts`    |
+| M02 on States only; M03–M05 unreferenced                                                                                                                               | `src/lib/mascot-assets.test.ts`               |
+| Onboarding Clear hint vs the sheet's, the always-laid-out required note, the root fade under Reduce Motion, the reference mock-up unbundled                            | `src/components/onboarding-design.test.ts`    |
+| The two `retailers` copy exceptions                                                                                                                                    | `src/lib/consumer-copy.test.ts`               |
+| Allergens grid: canonical order, icons, two columns, one-column and stacked reflow, measured word widths, select/deselect/clear, count words                           | `src/lib/allergen-grid.test.ts`               |
+| Allergen pictograms: nine semantic pairs by static require, 1024² RGBA sRGB files, alpha repair pinned to the originals, 44pt box geometry, review artifacts unbundled | `src/lib/allergen-assets.test.ts`             |
+| Allergen tiles: one checkbox element, hidden pictogram and check, no layout change, compact Clear, motion gate, Back/Continue, mock-up unbundled                       | `src/components/onboarding-design.test.ts`    |
 
 The Design Preview hub renders every screen and every paywall state from the
 production components and offers gate scenarios that restart the real flow
