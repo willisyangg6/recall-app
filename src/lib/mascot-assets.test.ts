@@ -12,9 +12,11 @@
  * translucent. So no pixel may sit at 240–254, the drawing has no enclosed
  * translucent hole, and there is no background hint or timestamp chunk.
  *
- * M01 is on Welcome and M02 (the helper pose) beside the States step's
- * Map / List control (P2B7Y); M03–M05 are approved but not yet integrated,
- * and nothing may reference them until their own milestone.
+ * M01 is on Welcome, M02 (the helper pose) beside the States step's
+ * Map / List control (P2B7Y), and M03 (the ready pose with the grocery bag)
+ * beside the Retailers step's heading (Popular stores, 2026-09-24); M04 and
+ * M05 are approved but not yet integrated, and nothing may reference them
+ * until their own milestone.
  *
  * M01's placement on the Welcome card is computed from measurements of its
  * artwork (lib/welcome-presentation.ts), so those measurements are checked
@@ -254,7 +256,7 @@ test('M01’s card-overlap geometry is unchanged at both size bounds', () => {
   assert.equal(MASCOT_MAX * PAW_DEPTH, 10.5625);
 });
 
-test('M01 is on Welcome and M02 on States, each once; M03–M05 are referenced nowhere yet', () => {
+test('M01 is on Welcome, M02 on States and M03 on Retailers, each once; M04–M05 are referenced nowhere yet', () => {
   const welcome = readFileSync(
     join(ROOT, 'src', 'components', 'onboarding', 'welcome-content.tsx'),
     'utf8',
@@ -265,6 +267,11 @@ test('M01 is on Welcome and M02 on States, each once; M03–M05 are referenced n
     'utf8',
   );
   assert.ok(states.includes(`require('@/assets/brand/production/${APPROVED.M02}')`));
+  const retailers = readFileSync(
+    join(ROOT, 'src', 'components', 'onboarding', 'retailers-step.tsx'),
+    'utf8',
+  );
+  assert.ok(retailers.includes(`require('@/assets/brand/production/${APPROVED.M03}')`));
   const sources: string[] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -276,7 +283,7 @@ test('M01 is on Welcome and M02 on States, each once; M03–M05 are referenced n
     }
   };
   walk(join(ROOT, 'src'));
-  for (const id of ['M03', 'M04', 'M05'] as const) {
+  for (const id of ['M04', 'M05'] as const) {
     const name = APPROVED[id];
     assert.ok(!sources.some((source) => source.includes(name)), `${id} (${name}) is integrated`);
   }
@@ -289,5 +296,10 @@ test('M01 is on Welcome and M02 on States, each once; M03–M05 are referenced n
     sources.filter((source) => source.includes(APPROVED.M02)).length,
     1,
     'M02 is drawn somewhere other than States',
+  );
+  assert.equal(
+    sources.filter((source) => source.includes(APPROVED.M03)).length,
+    1,
+    'M03 is drawn somewhere other than Retailers',
   );
 });

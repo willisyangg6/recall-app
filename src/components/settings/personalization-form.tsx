@@ -75,6 +75,11 @@
  * its glyph (`AllergenGlyph`, one Lucide family — lib/allergen-icons.ts),
  * and every store row carries its mark or the `home` fallback
  * (`RetailerLogo`). Recall cards and Detail are untouched by either.
+ *
+ * Since 2026-09-24 the Retailers step no longer mounts `StoreSelectorContent`:
+ * it draws its own popular tiles and a search sheet over the same catalog
+ * (components/onboarding/retailers-step.tsx). The store selector here is
+ * Profile's alone, unchanged.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';

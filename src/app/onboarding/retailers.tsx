@@ -1,6 +1,8 @@
 /**
  * `/onboarding/retailers` (P2B7X.1) — Screen 4, `3 of 4`. Optional: an
- * empty selection continues. Every check autosaves through the one store.
+ * empty selection continues. Every check, chip removal and Clear autosaves
+ * through the one store, whether it came from a popular tile or the search;
+ * an empty Clear saves nothing.
  * Continue returns to the Preview when this edit began there, else pushes
  * a new Preview.
  */
@@ -14,6 +16,7 @@ import { useAccess } from '@/hooks/use-access';
 import { useOnboardingPreferences } from '@/hooks/use-onboarding-preferences';
 import { continueToPreview, goBackFrom } from '@/lib/onboarding-navigation';
 import { toggleRetailer } from '@/lib/personalization-screen';
+import { clearRetailers } from '@/lib/retailer-grid';
 
 export default function OnboardingRetailersScreen() {
   const access = useAccess();
@@ -33,7 +36,10 @@ export default function OnboardingRetailersScreen() {
     <RetailersStep
       selected={prefs.retailers}
       onToggle={(id) => update(toggleRetailer(prefs, id))}
-      onClear={() => update({ ...prefs, retailers: [] })}
+      onClear={() => {
+        const next = clearRetailers(prefs);
+        if (next !== prefs) update(next);
+      }}
       onContinue={() => continueToPreview(previewBeneath(), router)}
       onBack={() => goBackFrom('retailers', router)}
     />

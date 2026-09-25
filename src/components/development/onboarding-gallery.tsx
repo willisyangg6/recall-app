@@ -68,6 +68,7 @@ import { saveOnboardingRecord } from '@/lib/onboarding-store';
 import { initialPaywallView, type PaywallView } from '@/lib/paywall-screen';
 import { toggleAllergen, toggleRetailer, withStates } from '@/lib/personalization-screen';
 import type { Offering } from '@/lib/purchases/purchase-provider';
+import { clearRetailers } from '@/lib/retailer-grid';
 import { retailerLogoCoverage } from '@/lib/retailer-logos';
 
 type DevelopmentProvider = typeof import('@/lib/purchases/development-provider');
@@ -155,13 +156,7 @@ function LiveAllergens({ initial }: { initial: string[] }) {
   );
 }
 
-function LiveRetailers({
-  initial,
-  initialQuery = '',
-}: {
-  initial: string[];
-  initialQuery?: string;
-}) {
+function LiveRetailers({ initial }: { initial: string[] }) {
   const [prefs, setPrefs] = useState<UserRecallPreferences>({
     ...EMPTY_PREFERENCES,
     retailers: initial,
@@ -170,10 +165,9 @@ function LiveRetailers({
     <RetailersStep
       selected={prefs.retailers}
       onToggle={(id) => setPrefs(toggleRetailer(prefs, id))}
-      onClear={() => setPrefs({ ...prefs, retailers: [] })}
+      onClear={() => setPrefs(clearRetailers(prefs))}
       onContinue={noop}
       onBack={noop}
-      initialQuery={initialQuery}
     />
   );
 }
@@ -255,19 +249,14 @@ export function OnboardingGallery() {
           <LiveAllergens initial={['peanut', 'milk', 'sesame']} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Retailers, empty — simulated: nothing chosen; every row shows the house fallback because no official mark is bundled">
+      <GallerySample caption="Retailers, empty — simulated: nothing chosen; no summary, the heading flows into Popular stores">
         <Screen>
           <LiveRetailers initial={[]} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Retailers, selected — simulated: Costco and Trader Joe’s checked; a checked row never moves">
+      <GallerySample caption="Retailers, selected — simulated: Costco and Trader Joe’s checked; their tiles and chips">
         <Screen>
           <LiveRetailers initial={['costco', 'trader-joes']} />
-        </Screen>
-      </GallerySample>
-      <GallerySample caption="Retailers, search — simulated: “co” typed">
-        <Screen>
-          <LiveRetailers initial={[]} initialQuery="co" />
         </Screen>
       </GallerySample>
       <GallerySample

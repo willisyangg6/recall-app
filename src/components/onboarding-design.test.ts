@@ -19,7 +19,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -62,6 +62,8 @@ import {
 } from '@/lib/onboarding-copy';
 import * as ONBOARDING_COPY from '@/lib/onboarding-copy';
 import { SAMPLE_RECALL_MODEL } from '@/lib/onboarding-sample';
+import { POPULAR_RETAILERS, READY_MASCOT_SIZE } from '@/lib/retailer-grid';
+import { retailerLogoCoverage } from '@/lib/retailer-logos';
 import { STATE_CLEAR_HINT } from '@/lib/personalization-screen';
 import {
   COUNTED_STEPS,
@@ -95,6 +97,7 @@ const WELCOME = read('components', 'onboarding', 'welcome-content.tsx');
 const STATES = read('components', 'onboarding', 'states-step.tsx');
 const ALLERGENS = read('components', 'onboarding', 'allergens-step.tsx');
 const RETAILERS = read('components', 'onboarding', 'retailers-step.tsx');
+const SEARCH_SHEET = read('components', 'onboarding', 'retailer-search-sheet.tsx');
 const PREVIEW = read('components', 'onboarding', 'preview-step.tsx');
 const EDUCATION = read('components', 'onboarding', 'notification-education.tsx');
 const SAMPLE = read('components', 'onboarding', 'sample-recall-card.tsx');
@@ -173,19 +176,10 @@ test('Clear selection is permanently allocated on every selector step and inert 
   );
   assert.ok(allergens.includes('<View style={styles.controls}>{controls}</View>'));
 
-  // Retailers: the search, then Clear — a fixed two-element column.
-  const retailers = componentBody(RETAILERS, 'RetailersStep');
-  const retailerControls = retailers.slice(
-    retailers.indexOf('<View style={styles.controls}>'),
-    retailers.indexOf('<View style={styles.rows}>'),
-  );
-  assert.ok(retailerControls.includes('{controls}'));
-  assert.ok(retailerControls.includes('label={CLEAR_SELECTION_LABEL}'));
-  assert.ok(
-    !/\?\s*\(/.test(retailerControls) && !retailerControls.includes('&&'),
-    'Clear selection is conditional on Retailers',
-  );
-  assert.ok(retailerControls.includes('disabled={selected.length === 0}'));
+  // Retailers is the exception by design: its summary, and the Clear inside
+  // it, exist only while something is chosen (pinned in the Retailers tests
+  // below). The handler still refuses an empty clear.
+  const retailers = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
   assert.ok(retailers.includes('if (selected.length === 0) return;'));
 });
 
@@ -193,7 +187,6 @@ test('the count line above every list is unconditional, so a selection change ne
   for (const [name, source, label] of [
     ['states', STATES, 'stateCountLabel(draft.length)'],
     ['allergens', ALLERGENS, 'allergenCountLabel(selected.length)'],
-    ['retailers', RETAILERS, 'storeCountLabel(selected.length)'],
   ] as const) {
     const code = codeOnly(source);
     assert.ok(code.includes(`<SelectionCount text={${label}} />`), `${name} count line missing`);
@@ -285,7 +278,8 @@ test('every step reads and saves through the one preference store, progressively
   assert.ok(ROUTES.retailers.includes('update(toggleRetailer(prefs, id))'));
   // The selectors ARE the shared selectors.
   assert.ok(STATES.includes('<StateSelectorContent'));
-  assert.ok(RETAILERS.includes('<StoreSelectorContent'));
+  // Retailers draws its own tiles and search; the shared store selector
+  // stays Profile's (pinned below).
   assert.ok(ALLERGENS.includes('allergenGridRows(CONSUMER_ALLERGENS, columns).map((row) =>'));
   // The Preview summary reads the Profile card's own summary rule.
   assert.ok(PREVIEW.includes('summarizePreferences(prefs)'));
@@ -315,6 +309,26 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
     RETAILERS_BODY,
     'Choose the retailers you want Lotly to watch for in recall notices. This is optional.',
   );
+  assert.equal(ONBOARDING_COPY.POPULAR_STORES_LABEL, 'Popular stores');
+  assert.ok(!('NO_STORES_YET' in ONBOARDING_COPY), 'the empty summary came back');
+  assert.equal(ONBOARDING_COPY.CLEAR_STORES_LABEL, 'Clear');
+  assert.equal(ONBOARDING_COPY.SEARCH_ALL_STORES_PLACEHOLDER, 'Not listed? Search all stores');
+  assert.equal(ONBOARDING_COPY.SEARCH_ALL_STORES_LABEL, 'Search all stores');
+  assert.match(ONBOARDING_COPY.SEARCH_ALL_STORES_HINT, /complete store list/);
+  assert.equal(ONBOARDING_COPY.SEARCH_STORES_LABEL, 'Search stores');
+  assert.equal(ONBOARDING_COPY.SEARCH_INSTRUCTION, 'Search the complete store list.');
+  assert.equal(ONBOARDING_COPY.NO_STORES_FOUND, 'No stores found.');
+  assert.equal(ONBOARDING_COPY.SEARCH_CLOSE_LABEL, 'Close');
+  assert.equal(ONBOARDING_COPY.SEARCH_DONE_LABEL, 'Done');
+  assert.ok(!('SEARCH_RESULTS_LABEL' in ONBOARDING_COPY), 'the upward panel’s header came back');
+  assert.equal(ONBOARDING_COPY.searchResultsAnnouncement(0), 'No stores found.');
+  assert.equal(ONBOARDING_COPY.searchResultsAnnouncement(1), '1 store found.');
+  assert.equal(ONBOARDING_COPY.searchResultsAnnouncement(7), '7 stores found.');
+  assert.equal(ONBOARDING_COPY.yourStoresTitle(3), 'Your stores\u00a0·\u00a03');
+  assert.equal(ONBOARDING_COPY.yourStoresSpoken(1), 'Your stores: 1 selected');
+  assert.equal(ONBOARDING_COPY.yourStoresSpoken(4), 'Your stores: 4 selected');
+  assert.ok(!('BACK_TO_POPULAR_LABEL' in ONBOARDING_COPY), 'the All stores mode came back');
+  assert.equal(ONBOARDING_COPY.removeStoreLabel('Walmart'), 'Remove Walmart');
   assert.equal(CONTINUE_CTA, 'Continue');
   assert.equal(PREVIEW_HEADLINE, 'Your recall watch is ready.');
   assert.equal(PREVIEW_BODY, 'Lotly will flag notices that match your profile with Affects You.');
@@ -365,7 +379,27 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
     [
       'retailers',
       RETAILERS,
-      ['RETAILERS_HEADLINE', 'RETAILERS_BODY', 'CONTINUE_CTA', 'CLEAR_SELECTION_LABEL'],
+      [
+        'RETAILERS_HEADLINE',
+        'RETAILERS_BODY',
+        'CONTINUE_CTA',
+        'CLEAR_STORES_LABEL',
+        'POPULAR_STORES_LABEL',
+        'SEARCH_ALL_STORES_PLACEHOLDER',
+        'SEARCH_ALL_STORES_LABEL',
+      ],
+    ],
+    [
+      'retailer search sheet',
+      SEARCH_SHEET,
+      [
+        'SEARCH_ALL_STORES_LABEL',
+        'SEARCH_STORES_LABEL',
+        'SEARCH_INSTRUCTION',
+        'NO_STORES_FOUND',
+        'SEARCH_CLOSE_LABEL',
+        'SEARCH_DONE_LABEL',
+      ],
     ],
     [
       'preview',
@@ -1209,4 +1243,578 @@ test('the approved Allergens mock-up is a design reference only: nothing bundles
   walk(SRC);
   assert.deepEqual(hits, []);
   assert.ok(!codeOnly(ALLERGENS).includes('brand/reference'));
+});
+
+// ── Retailers: Popular stores (2026-09-24) ──────────────────────────────────
+
+test('Retailers is one screen: the ten tiles from the curated list in the shared column rule, with no second mode', () => {
+  const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
+  // No mode, no way to another presentation, no full-catalog directory.
+  for (const gone of [
+    'mode',
+    'setMode',
+    'RetailersMode',
+    'initialMode',
+    'StoreSelectorContent',
+    'Back to popular',
+    'BACK_TO_POPULAR',
+    'chevron-right',
+    'CheckRow',
+  ]) {
+    assert.ok(!codeOnly(RETAILERS).includes(gone), `the step still has ${gone}`);
+  }
+  assert.ok(!ROUTES.retailers.includes('initialMode'));
+  // Every curated store, as a tile, from the one typed list and nothing else.
+  assert.ok(step.includes('<RetailerGrid\n          retailers={POPULAR_RETAILERS}'));
+  const grid = codeOnly(componentBody(RETAILERS, 'RetailerGrid'));
+  assert.ok(grid.includes('retailerGridRows(retailers, columns).map((row) =>'));
+  assert.ok(grid.includes('<RetailerTile\n'));
+  assert.ok(grid.includes('checked={selected.includes(retailer.id)}'));
+  assert.ok(grid.includes('onPress={() => onToggle(retailer.id)}'));
+  assert.ok(grid.includes('{row.length < columns ? <View style={styles.gridSpacer} /> : null}'));
+  assert.ok(step.includes('const { width, fontScale } = useWindowDimensions();'));
+  assert.ok(step.includes('const columns = retailerGridColumns(width, fontScale);'));
+  assert.equal(POPULAR_RETAILERS.length, 10);
+  // The section is `Popular stores`, a header; no rank, number or size claim.
+  assert.ok(step.includes('<Text variant="heading-3" accessibilityRole="header">'));
+  for (const forbidden of ['largest', 'biggest', 'top 10', 'ranked', 'near']) {
+    assert.ok(!RETAILERS.toLowerCase().includes(`'${forbidden}`), `the step claims ${forbidden}`);
+  }
+  // The tile draws from the geometry the rule measured against.
+  const code = codeOnly(RETAILERS);
+  for (const key of ['gap', 'minHeight', 'paddingHorizontal', 'paddingVertical']) {
+    assert.ok(code.includes(`${key}: TILE.${key},`), `the tile's ${key} left the shared geometry`);
+  }
+});
+
+test('each popular tile is ONE checkbox element: the canonical name, its state, the whole tile its target', () => {
+  const tile = codeOnly(componentBody(RETAILERS, 'RetailerTile'));
+  assert.equal((tile.match(/accessibilityRole=/g) ?? []).length, 1, 'a second element in a tile');
+  assert.ok(tile.includes('accessibilityRole="checkbox"'));
+  assert.ok(tile.includes('accessibilityLabel={retailer.name}'));
+  assert.ok(tile.includes('accessibilityState={{ checked }}'));
+  assert.equal((tile.match(/<Pressable/g) ?? []).length, 1);
+  assert.equal((tile.match(/onPress=/g) ?? []).length, 1);
+  // The name is the catalog's own, in full: no short form, no truncation.
+  assert.ok(tile.includes('{retailer.name}'));
+  // The shared checkbox, hidden, so only the tile speaks; colour is never alone.
+  assert.ok(
+    tile.includes(
+      '<View\n            accessible={false}\n            accessibilityElementsHidden\n            importantForAccessibility="no-hide-descendants">\n            <CheckIndicator checked={checked} fill={fill} />',
+    ),
+  );
+  assert.ok(tile.includes('<View style={[styles.tile, pressed && styles.pressed]}>'));
+  assert.ok(!tile.includes('checked &&'), 'a checked-only style reached the tile');
+  assert.ok(tile.includes('<View style={[styles.layer, styles.layerOpen]} />'));
+  assert.ok(
+    tile.includes(
+      '<Animated.View style={[styles.layer, styles.layerChosen, { opacity: fill }]} />',
+    ),
+  );
+  const code = codeOnly(RETAILERS);
+  assert.ok(code.includes("backgroundColor: color['background/subtle'],"));
+  assert.ok(code.includes("borderColor: color['action/primary'],"));
+  assert.ok(code.includes("borderColor: color['border/default'],"));
+  // Motion: opacity only, and immediate under Reduce Motion.
+  assert.ok(
+    tile.includes('if (!motionAllowed(reduceMotion)) {\n      fill.setValue(to);\n      return;'),
+  );
+  assert.ok(code.includes('export const SELECTION_FADE_MS = 150;'));
+  for (const forbidden of ['Animated.loop', 'Animated.spring', 'iterations', 'scale:']) {
+    assert.ok(!code.includes(forbidden), `the retailers step uses ${forbidden}`);
+  }
+});
+
+test('popular tiles carry no retailer mark, monogram, glyph or brand colour, and no logo mechanism was added', () => {
+  const tile = codeOnly(componentBody(RETAILERS, 'RetailerTile'));
+  for (const forbidden of [
+    '<Image',
+    '<Icon',
+    'RetailerLogo',
+    'require(',
+    'uri',
+    "'home'",
+    'charAt',
+  ]) {
+    assert.ok(!tile.includes(forbidden), `a popular tile draws ${forbidden}`);
+  }
+  const code = codeOnly(RETAILERS);
+  assert.ok(!code.includes('retailer-logo'), 'the step reaches the logo pipeline');
+  assert.ok(!code.includes('uri:') && !code.includes('http'), 'the step fetches an image');
+  for (const forbidden of ['shadow', 'LinearGradient', 'BlurView', 'riskPalette', 'Modal']) {
+    assert.ok(!code.includes(forbidden), `the retailers step uses ${forbidden}`);
+  }
+  // One restrained existing lift, the Search Bar's, on the trigger alone.
+  assert.equal((code.match(/elevation/g) ?? []).length, 1);
+  assert.ok(codeOnly(componentBody(RETAILERS, 'SearchTrigger')).includes('elevation="card"'));
+  // The pipeline is untouched: nothing in the manifest, no bundled marks.
+  assert.deepEqual(retailerLogoCoverage().withLogo, []);
+  assert.ok(!existsSync(join(SRC, '..', 'assets', 'retailer-logos')), 'retailer marks were added');
+  const logo = codeOnly(read('components', 'ui', 'retailer-logo.tsx'));
+  assert.ok(logo.includes('const MARKS: Readonly<Record<string, ImageSourcePropType>> = {};'));
+});
+
+test('the summary exists only while something is chosen: nothing at all at zero, no count, Clear or empty words', () => {
+  const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
+  // Rendered only with a selection, and nothing laid out in its place.
+  assert.ok(step.includes('{selected.length > 0 ? (\n        <SelectedStores'));
+  assert.ok(step.indexOf('<SelectedStores') < step.indexOf('<RetailerGrid'));
+  const summary = codeOnly(componentBody(RETAILERS, 'SelectedStores'));
+  assert.ok(!summary.includes('stores.length === 0'), 'the summary draws an empty state');
+  assert.ok(!codeOnly(RETAILERS).includes('NO_STORES_YET'));
+  assert.ok(!codeOnly(RETAILERS).includes('chipSlot'), 'an empty slot is reserved');
+  // Clear lives only inside the summary, so it is never shown disabled.
+  const clear = codeOnly(componentBody(RETAILERS, 'ClearAction'));
+  assert.ok(!clear.includes('disabled'));
+  assert.equal((codeOnly(RETAILERS).match(/<ClearAction\b/g) ?? []).length, 1);
+  assert.ok(summary.includes('<ClearAction onPress={onClear} />'));
+  // With a selection: the title, the chips on one sideways row, Clear.
+  assert.ok(summary.includes('{yourStoresTitle(stores.length)}'));
+  assert.ok(summary.includes('accessibilityLabel={yourStoresSpoken(stores.length)}'));
+  assert.ok(summary.includes('accessibilityRole="header"'));
+  assert.ok(summary.includes('horizontal'));
+  assert.ok(!/\+\s*\$?\{?\s*stores\.length/.test(summary), 'choices are summarised as +N');
+  assert.ok(summary.includes('accessibilityLabel={removeStoreLabel(store.name)}'));
+  assert.ok(summary.includes('onPress={() => onRemove(store.id)}'));
+  assert.ok(step.includes('onRemove={onToggle}'));
+  assert.ok(clear.includes('accessibilityLabel={CLEAR_STORES_LABEL}'));
+  assert.ok(clear.includes('accessibilityHint={CLEAR_STORES_HINT}'));
+  assert.ok(clear.includes('hitSlop={CLEAR_HIT_SLOP}'));
+  assert.ok(clear.includes('color="action/secondary"'));
+  assert.ok(!clear.includes('<Button'));
+  assert.ok(!codeOnly(RETAILERS).includes('textDecoration'));
+  // No motion is added for its arrival.
+  assert.ok(!summary.includes('Animated'));
+});
+
+test('the search trigger sits beneath the ten: drawn as the Search Bar, a button without a chevron or a field', () => {
+  const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
+  const section = step.slice(step.indexOf('<View style={styles.section}>'));
+  assert.ok(
+    section.indexOf('retailers={POPULAR_RETAILERS}') < section.indexOf('<SearchTrigger'),
+    'the trigger is not below the popular stores',
+  );
+  assert.ok(
+    section.indexOf('<SearchTrigger') < section.indexOf('</View>'),
+    'the trigger left the section',
+  );
+  assert.ok(step.includes('<SearchTrigger ref={trigger} onPress={() => setSearchOpen(true)} />'));
+  const trigger = codeOnly(componentBody(RETAILERS, 'SearchTrigger'));
+  assert.ok(trigger.includes('accessibilityRole="button"'));
+  assert.ok(trigger.includes('accessibilityLabel={SEARCH_ALL_STORES_LABEL}'));
+  assert.ok(trigger.includes('accessibilityHint={SEARCH_ALL_STORES_HINT}'));
+  assert.ok(trigger.includes('{SEARCH_ALL_STORES_PLACEHOLDER}'));
+  assert.ok(trigger.includes('<Icon name="search" size={20} color="icon/secondary" />'));
+  assert.ok(trigger.includes('<Surface radius={12} elevation="card"'));
+  // A button, never a second editable field, and never a way to another screen.
+  const code = codeOnly(RETAILERS);
+  for (const forbidden of ['<TextInput', '<SearchBar', 'chevron', 'router', 'Link']) {
+    assert.ok(!code.includes(forbidden), `the step has ${forbidden}`);
+  }
+  assert.ok(
+    code.includes('minHeight: layout.searchBarHeight,'),
+    'the trigger is not the bar’s height',
+  );
+});
+
+test('the search is ONE sheet over the step, which stays mounted: a transparent Modal, no dependency, no second sheet', () => {
+  const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
+  // Mounted alongside the step, never instead of it: nothing is swapped out.
+  assert.ok(step.includes('<RetailerSearchSheet\n        visible={searchOpen}'));
+  assert.ok(
+    !/searchOpen \?|searchOpen &&/.test(step),
+    'the step renders differently while searching',
+  );
+  assert.ok(step.includes('onClose={() => setSearchOpen(false)}'));
+  assert.ok(step.includes('onClosed={focusTrigger}'));
+  // Focus goes back to the trigger once the sheet has gone.
+  assert.ok(step.includes('AccessibilityInfo.setAccessibilityFocus(tag)'));
+  // A React Native Modal: the step behind takes no touch and is hidden from
+  // assistive technology for as long as it is presented.
+  const sheet = codeOnly(SEARCH_SHEET);
+  assert.ok(
+    sheet.includes('<Modal\n      visible={shown}\n      transparent\n      animationType="none"'),
+  );
+  assert.ok(sheet.includes('accessibilityViewIsModal'));
+  assert.ok(sheet.includes("from 'react-native';"));
+  for (const forbidden of [
+    '@gorhom',
+    'react-native-reanimated',
+    'react-native-modal',
+    '@expo/ui',
+  ]) {
+    assert.ok(!sheet.includes(forbidden), `the sheet uses ${forbidden}`);
+  }
+  const pkg = JSON.parse(read('..', 'package.json')) as { dependencies: Record<string, string> };
+  for (const name of ['@gorhom/bottom-sheet', 'react-native-modal', 'react-native-reanimated']) {
+    assert.ok(!(name in pkg.dependencies), `${name} was added`);
+  }
+  // One sheet: the Retailers search is its only user, and nothing else
+  // in onboarding presents a Modal of its own.
+  for (const [name, source] of [
+    ['welcome', WELCOME],
+    ['states', STATES],
+    ['allergens', ALLERGENS],
+    ['retailers', RETAILERS],
+    ['preview', PREVIEW],
+  ] as const) {
+    assert.ok(!codeOnly(source).includes('<Modal'), `${name} presents a Modal`);
+  }
+});
+
+test('the sheet’s frame is fixed by the window and text size: backdrop, rounded opaque surface, handle, and a pinned Done', () => {
+  const sheet = codeOnly(SEARCH_SHEET);
+  const main = codeOnly(componentBody(SEARCH_SHEET, 'RetailerSearchSheet'));
+  assert.ok(main.includes('const top = searchSheetTop(height, insets.top, fontScale);'));
+  // The top edge is its only size input, and the sheet runs to the bottom.
+  const block = (name: string) =>
+    sheet.slice(sheet.indexOf(`  ${name}: {`), sheet.indexOf('},', sheet.indexOf(`  ${name}: {`)));
+  const frame = block('sheet');
+  assert.ok(frame.includes("position: 'absolute',"));
+  assert.ok(frame.includes('bottom: 0,'));
+  assert.ok(!/height|maxHeight|minHeight/.test(frame), 'the sheet sizes itself');
+  assert.ok(frame.includes("backgroundColor: color['background/page'],"));
+  assert.ok(frame.includes('borderTopLeftRadius: radius[16],'));
+  assert.ok(frame.includes('borderTopRightRadius: radius[16],'));
+  // The one region that changes fills what the fixed parts leave.
+  assert.ok(block('results').includes('flex: 1,'));
+  // A neutral dim over the whole step, from the palette, and no glass.
+  const backdrop = block('backdrop');
+  assert.ok(backdrop.includes("backgroundColor: color['text/primary'],"));
+  assert.ok(main.includes('outputRange: [0, SHEET_BACKDROP_OPACITY]'));
+  for (const forbidden of ['LinearGradient', 'BlurView', 'shadow', 'rgba(', '#']) {
+    assert.ok(!sheet.includes(forbidden), `the sheet uses ${forbidden}`);
+  }
+  // The hierarchy, in order: handle, heading and Close, field, results, Done.
+  const contents = codeOnly(componentBody(SEARCH_SHEET, 'SheetContents'));
+  const order = [
+    'style={styles.handle}',
+    'accessibilityRole="header"',
+    'accessibilityLabel={SEARCH_CLOSE_LABEL}',
+    '<SearchBar',
+    'style={styles.results}',
+    'label={SEARCH_DONE_LABEL}',
+  ].map((marker) => contents.indexOf(marker));
+  assert.ok(
+    order.every((index) => index >= 0),
+    `a part is missing: ${order.join(', ')}`,
+  );
+  assert.deepEqual(
+    order,
+    [...order].sort((a, b) => a - b),
+    'the sheet’s parts are out of order',
+  );
+  // The drag indicator is decoration only.
+  const handle = contents.slice(contents.indexOf('<View\n        style={styles.handle}'));
+  assert.ok(handle.slice(0, 200).includes('importantForAccessibility="no-hide-descendants"'));
+  // Done sits over the bottom inset.
+  assert.ok(contents.includes('paddingBottom: bottomInset + spacing[12]'));
+});
+
+test('the field autofocuses, the empty sheet instructs, a query finds single-column rows, and no match is one line', () => {
+  const contents = codeOnly(componentBody(SEARCH_SHEET, 'SheetContents'));
+  const field = contents.slice(
+    contents.indexOf('<SearchBar'),
+    contents.indexOf('/>', contents.indexOf('<SearchBar')),
+  );
+  assert.ok(field.includes('placeholder={SEARCH_STORES_LABEL}'));
+  assert.ok(field.includes('accessibilityLabel={SEARCH_STORES_LABEL}'));
+  assert.ok(field.includes('autoFocus'));
+  // The shared Search Bar, whose `Clear` exists only while there is text.
+  assert.ok(codeOnly(read('components', 'ui', 'search-bar.tsx')).includes("{value !== '' ? ("));
+  // Matched by the catalog rule, never the whole catalog before a query.
+  assert.ok(contents.includes('const results = retailerSearchResults(query);'));
+  assert.ok(
+    contents.includes(
+      '{results === null ? (\n          <Text variant="body-small" color="text/secondary">\n            {SEARCH_INSTRUCTION}',
+    ),
+  );
+  assert.ok(
+    contents.includes(
+      ') : results.length === 0 ? (\n          <Text variant="body-small" color="text/secondary">\n            {NO_STORES_FOUND}',
+    ),
+  );
+  assert.ok(
+    !codeOnly(SEARCH_SHEET).includes('RETAILER_CATALOG'),
+    'the sheet lists the catalog itself',
+  );
+  // Results are rows, one per line, scrolling inside the fixed region.
+  assert.ok(contents.includes('results.map((retailer) => (\n            <RetailerResultRow'));
+  const scroll = contents.slice(
+    contents.indexOf('<ScrollView'),
+    contents.indexOf('>', contents.indexOf('keyboardDismissMode')),
+  );
+  assert.ok(scroll.includes('keyboardShouldPersistTaps="handled"'));
+  assert.ok(scroll.includes('automaticallyAdjustKeyboardInsets'));
+  assert.ok(!contents.includes('horizontal'));
+  // What was found is announced once per change, never on a re-render.
+  assert.ok(contents.includes('const found = results === null ? null : results.length;'));
+  assert.ok(
+    contents.includes(
+      'AccessibilityInfo.announceForAccessibility(searchResultsAnnouncement(found))',
+    ),
+  );
+  assert.ok(contents.includes('}, [found]);'));
+  // The heading and both ways out say what they are.
+  assert.ok(contents.includes('<Text variant="heading-3">{SEARCH_ALL_STORES_LABEL}</Text>'));
+  assert.ok(contents.includes('accessibilityHint={SEARCH_DISMISS_HINT}'));
+});
+
+test('a result row is one full-width checkbox element, distinct from a popular tile, with no mark or colour of its own', () => {
+  const row = codeOnly(componentBody(SEARCH_SHEET, 'RetailerResultRow'));
+  assert.equal((row.match(/accessibilityRole=/g) ?? []).length, 1, 'a second element in a row');
+  assert.ok(row.includes('accessibilityRole="checkbox"'));
+  assert.ok(row.includes('accessibilityLabel={retailer.name}'));
+  assert.ok(row.includes('accessibilityState={{ checked }}'));
+  assert.equal((row.match(/<Pressable/g) ?? []).length, 1);
+  assert.equal((row.match(/onPress=/g) ?? []).length, 1);
+  assert.ok(row.includes('{retailer.name}'));
+  // The drawn checkbox at the trailing edge, hidden so only the row speaks.
+  assert.ok(row.indexOf('{retailer.name}') < row.indexOf('<CheckIndicator checked={checked} />'));
+  assert.ok(
+    row.includes(
+      'accessible={false}\n        accessibilityElementsHidden\n        importantForAccessibility="no-hide-descendants">\n        <CheckIndicator checked={checked} />',
+    ),
+  );
+  // Chosen: the soft blue and the navy edge, and the filled checkbox.
+  assert.ok(row.includes('checked ? styles.rowChosen : styles.rowOpen'));
+  const sheet = codeOnly(SEARCH_SHEET);
+  const chosen = sheet.slice(
+    sheet.indexOf('  rowChosen: {'),
+    sheet.indexOf('},', sheet.indexOf('  rowChosen: {')),
+  );
+  assert.ok(chosen.includes("backgroundColor: color['background/subtle'],"));
+  assert.ok(chosen.includes("borderColor: color['action/primary'],"));
+  // Not a popular tile: no tile, no grid, no columns.
+  for (const forbidden of [
+    'RetailerTile',
+    'RetailerGrid',
+    'retailerGridColumns',
+    'TILE',
+    'columns',
+  ]) {
+    assert.ok(!sheet.includes(forbidden), `the sheet uses ${forbidden}`);
+  }
+  // No logo, house glyph, monogram, retailer colour or legacy Profile row.
+  for (const forbidden of [
+    '<Image',
+    'RetailerLogo',
+    'retailer-logo',
+    "'home'",
+    'charAt',
+    'require(',
+    'uri',
+    'CheckRow',
+    'StoreSelectorContent',
+    'storeRows',
+  ]) {
+    assert.ok(!sheet.includes(forbidden), `the sheet draws ${forbidden}`);
+  }
+  // The only glyphs are the Close `x` (the field's `search` is the Search Bar's).
+  assert.deepEqual(sheet.match(/<Icon name="[^"]+"/g), ['<Icon name="x"']);
+});
+
+test('the sheet and the step share the one saved selection; choosing never closes it, and every way out keeps choices', () => {
+  // No copy of the selection in either component.
+  for (const source of [RETAILERS, SEARCH_SHEET]) {
+    assert.ok(!/useState<readonly string\[\]>/.test(source), 'a draft selection');
+  }
+  const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
+  const sheetUse = step.slice(step.indexOf('<RetailerSearchSheet'));
+  assert.ok(sheetUse.includes('selected={selected}'));
+  assert.ok(sheetUse.includes('onToggle={onToggle}'));
+  // The grid, the summary and the sheet: one selection, one toggle.
+  assert.equal((step.match(/selected=\{selected\}/g) ?? []).length, 3);
+  assert.equal((step.match(/onToggle=\{onToggle\}/g) ?? []).length, 2);
+  assert.ok(step.includes('onRemove={onToggle}'));
+  const contents = codeOnly(componentBody(SEARCH_SHEET, 'SheetContents'));
+  assert.ok(contents.includes('checked={selected.includes(retailer.id)}'));
+  assert.ok(contents.includes('onPress={() => onToggle(retailer.id)}'));
+  // Choosing does not close: the row's press is the toggle alone.
+  const row = codeOnly(componentBody(SEARCH_SHEET, 'RetailerResultRow'));
+  assert.ok(row.includes('onPress={onPress}'));
+  assert.ok(!contents.slice(contents.indexOf('<RetailerResultRow')).includes('onClose()'));
+  // Close, Done, the backdrop and Android's back all run the one close,
+  // which only puts the keyboard away and closes: no commit, no clearing.
+  const main = codeOnly(componentBody(SEARCH_SHEET, 'RetailerSearchSheet'));
+  assert.ok(main.includes('const close = () => {\n    Keyboard.dismiss();\n    onClose();\n  };'));
+  assert.ok(main.includes('onRequestClose={close}'));
+  assert.ok(
+    main.includes(
+      '<Pressable\n          style={StyleSheet.absoluteFill}\n          onPress={close}',
+    ),
+  );
+  assert.ok(main.includes('onClose={close}'));
+  assert.equal((contents.match(/onPress=\{onClose\}/g) ?? []).length, 2, 'Close and Done');
+  assert.ok(!SEARCH_SHEET.includes('onClear'), 'the sheet can clear the selection');
+});
+
+test('the query lives in the sheet’s contents alone: blank on every opening, never saved or handed out', () => {
+  const sheet = codeOnly(SEARCH_SHEET);
+  const uses = sheet
+    .split('\n')
+    .filter((line) => /\bquery\b/.test(line))
+    .map((line) => line.trim());
+  assert.deepEqual(uses, [
+    "const [query, setQuery] = useState('');",
+    'const results = retailerSearchResults(query);',
+    'value={query}',
+  ]);
+  // The contents mount with the sheet and go with it, so the query does too.
+  const main = codeOnly(componentBody(SEARCH_SHEET, 'RetailerSearchSheet'));
+  assert.ok(main.includes('{shown ? (\n            <SheetContents'));
+  // Neither the step nor the route ever sees it.
+  assert.ok(!/\bquery\b/i.test(codeOnly(RETAILERS)), 'the step holds a query');
+  assert.ok(!/\bquery\b|searchKey/i.test(codeOnly(ROUTES.retailers)), 'the route holds a query');
+  for (const forbidden of ['AsyncStorage', 'SecureStore', 'saveOnboarding', 'update(']) {
+    assert.ok(!sheet.includes(forbidden), `the sheet saves through ${forbidden}`);
+  }
+});
+
+test('the sheet slides and fades only where motion is allowed; under Reduce Motion it is simply there and gone', () => {
+  const main = codeOnly(componentBody(SEARCH_SHEET, 'RetailerSearchSheet'));
+  assert.ok(main.includes('if (!visible && motionAllowed(reduceMotion)) setClosing(true);'));
+  assert.ok(
+    main.includes(
+      'if (!motionAllowed(reduceMotion)) {\n      progress.setValue(to);\n      return;\n    }',
+    ),
+  );
+  assert.ok(main.includes('duration: visible ? SHEET_MOTION.in : SHEET_MOTION.out,'));
+  assert.ok(main.includes('useNativeDriver: true,'));
+  // Once gone it rests off the screen, whichever way it closed.
+  assert.ok(
+    main.includes('if (!visible && !closing) {\n      progress.setValue(0);\n      return;\n    }'),
+  );
+  // Opacity and a vertical slide only: no spring, bounce, scale or loop.
+  for (const forbidden of ['Animated.spring', 'Animated.loop', 'bounce', 'scale:', 'iterations']) {
+    assert.ok(!SEARCH_SHEET.includes(forbidden), `the sheet uses ${forbidden}`);
+  }
+  // The platform's own slide is off: the sheet draws its own, or none.
+  assert.ok(main.includes('animationType="none"'));
+});
+
+test('the abandoned inline and upward-overlay searches are gone', () => {
+  const step = codeOnly(RETAILERS);
+  for (const gone of [
+    'SearchResults',
+    'searchPanelMaxHeight',
+    'retailerSearchPlaceholder',
+    'PANEL_',
+    'SEARCH_RESULTS_LABEL',
+    'searchKey',
+    'initialQuery',
+    'initialSearchOpen',
+    'scrollToEnd({ animated: motionAllowed(reduceMotion) });\n    }\n  }, [',
+    "pointerEvents={open ? 'none' : 'auto'}",
+    'keyboardDidShow',
+  ]) {
+    assert.ok(!step.includes(gone), `the step still has ${gone}`);
+  }
+  assert.ok(!codeOnly(FRAME).includes('onScroll'), 'the frame kept the overlay’s scroll hook');
+  assert.ok(!codeOnly(ROUTES.retailers).includes('setSearchKey'));
+});
+
+test('Profile keeps the shared store selector exactly as it was', () => {
+  const content = codeOnly(componentBody(FORM, 'StoreSelectorContent'));
+  assert.ok(content.includes('const rows = storeRows(query);'));
+  assert.ok(content.includes('onChangeText={setQuery}'));
+  assert.ok(content.includes('checked={selected.includes(retailer.id)}'));
+  assert.ok(
+    content.includes('leading={<RetailerLogo retailerId={retailer.id} name={retailer.name} />}'),
+  );
+  assert.ok(content.includes('placeholder={STORE_SEARCH_PLACEHOLDER}'));
+  assert.ok(codeOnly(componentBody(FORM, 'StoreSelector')).includes('<StoreSelectorContent'));
+  // Onboarding no longer mounts it anywhere.
+  for (const [name, source] of [
+    ['retailers step', RETAILERS],
+    ['retailers route', ROUTES.retailers],
+  ] as const) {
+    assert.ok(!source.includes('StoreSelectorContent'), `${name} mounts the directory`);
+  }
+});
+
+test('Retailers: Continue is always enabled, and Back, Continue, saving and the resume point are as before', () => {
+  const route = codeOnly(ROUTES.retailers);
+  assert.ok(route.includes("void access.recordShownStep('retailers');"));
+  assert.ok(route.includes('onToggle={(id) => update(toggleRetailer(prefs, id))}'));
+  assert.ok(route.includes('const next = clearRetailers(prefs);'));
+  assert.ok(route.includes('if (next !== prefs) update(next);'));
+  assert.ok(route.includes('onContinue={() => continueToPreview(previewBeneath(), router)}'));
+  assert.ok(route.includes("onBack={() => goBackFrom('retailers', router)}"));
+  const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
+  assert.ok(step.includes('footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}'));
+  assert.ok(step.includes("progress={stepProgress('retailers')}"));
+  assert.equal(progressAccessibilityLabel(stepProgress('retailers')!), 'Step 3 of 4: Stores');
+});
+
+test('M03 stands beside the heading, whole, decorative and untouchable, and settles once only without Reduce Motion', () => {
+  const code = codeOnly(RETAILERS);
+  assert.ok(
+    code.includes("require('@/assets/brand/production/lotly-mascot-ready-1024.png')"),
+    'Retailers does not draw M03',
+  );
+  assert.equal((code.match(/require\(/g) ?? []).length, 1, 'Retailers bundles a second picture');
+  assert.equal((code.match(/<Image\b/g) ?? []).length, 1);
+  const mascot = codeOnly(componentBody(RETAILERS, 'ReadyMascot'));
+  assert.ok(mascot.includes('resizeMode="contain"'));
+  assert.ok(mascot.includes('style={{ width: READY_MASCOT_SIZE, height: READY_MASCOT_SIZE }}'));
+  for (const hidden of [
+    'pointerEvents="none"',
+    'accessible={false}',
+    'accessibilityElementsHidden',
+    'importantForAccessibility="no-hide-descendants"',
+  ]) {
+    assert.ok(mascot.includes(hidden), `the mascot lacks ${hidden}`);
+  }
+  for (const forbidden of ['tintColor', "'cover'", '"cover"', 'Animated.loop', 'iterations']) {
+    assert.ok(!mascot.includes(forbidden), `the mascot uses ${forbidden}`);
+  }
+  // The helper mascot's entrance, decided once, skipped unless Reduce Motion is known off.
+  assert.ok(mascot.includes('const [animate] = useState(() => motionAllowed(reduceMotion));'));
+  assert.ok(mascot.includes('new Animated.Value(animate ? 0 : 1)'));
+  assert.ok(mascot.includes('if (!animate) return;'));
+  assert.ok(mascot.includes('delay: MASCOT_ENTRANCE.delay,'));
+  // Beside the heading through the frame's aside, and yielding at AX sizes.
+  const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
+  assert.ok(step.includes('aside={showReadyMascot(fontScale) ? <ReadyMascot /> : null}'));
+  assert.equal(READY_MASCOT_SIZE, 120);
+  const frame = codeOnly(FRAME);
+  assert.ok(frame.includes('{aside ? ('));
+  assert.ok(frame.includes('{heading}\n            {aside}'));
+  // The frame gives the aside its own width and the text the rest.
+  assert.ok(frame.includes('headingBeside: {\n    flex: 1,\n  },'));
+  for (const [name, source] of [
+    ['welcome', WELCOME],
+    ['states', STATES],
+    ['allergens', ALLERGENS],
+    ['preview', PREVIEW],
+    ['education', EDUCATION],
+    ['panel', PANEL],
+  ] as const) {
+    assert.ok(!codeOnly(source).includes('aside='), `${name} gained an aside`);
+  }
+});
+
+test('the approved Retailers mock-up is a design reference only: no source or config file references it', () => {
+  const reference = 'lotly-onboarding-retailers-popular-grid-target.png';
+  assert.ok(existsSync(join(SRC, '..', 'assets', 'brand', 'reference', reference)));
+  const hits: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (/\.(ts|tsx|js|jsx|json)$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
+        if (readFileSync(path, 'utf8').includes(reference)) hits.push(path);
+      }
+    }
+  };
+  walk(SRC);
+  const root = join(SRC, '..');
+  for (const name of readdirSync(root)) {
+    if (/\.(js|cjs|mjs|ts|json)$/.test(name) && name !== 'package-lock.json') {
+      if (readFileSync(join(root, name), 'utf8').includes(reference)) hits.push(name);
+    }
+  }
+  assert.deepEqual(hits, []);
+  assert.ok(!codeOnly(RETAILERS).includes('brand/reference'));
 });

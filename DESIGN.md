@@ -359,8 +359,9 @@ The product name is **Lotly**. The approved mascot set is five poses in
 mechanical alpha repair: a fully opaque drawing with only its antialiased
 edge translucent (`src/lib/mascot-assets.test.ts` pins the set). The set's
 contact sheet is brand documentation, in `assets/brand/reference`. M01 is on
-Welcome and M02 beside the States step's Map / List control (P2B7Y);
-M03–M05 wait for their own screens. A mascot is drawn whole with `contain`, never cropped, recoloured or
+Welcome, M02 beside the States step's Map / List control (P2B7Y), and M03
+beside the Retailers step's heading (Popular stores, 2026-09-24); M04 and M05
+wait for their own screens. A mascot is drawn whole with `contain`, never cropped, recoloured or
 placed on a dark surface, and is decorative: hidden from VoiceOver and never
 in the way of a touch. The earlier standalone mascot
 (`lotly-mascot-transparent.png`) is no longer drawn. The final logo and
@@ -994,8 +995,10 @@ completed and current steps, `background/subtle` for the rest; one element
 spoken `Step 1 of 4: States`; on the four counted steps only, never on
 Welcome, the paywall or the education). The
 scrolling content column at the 16pt margin, capped at `max-content-width`:
-the headline in `heading-1`, the body in `body` `text/secondary`, then the
-screen's own content, `spacing/16` apart. A sticky footer on the page colour
+the headline in `heading-1`, the body in `body` `text/secondary` (with an
+optional decorative `aside` beside them at the trailing edge, which the text
+never overlaps: the Retailers mascot), then the screen's own content,
+`spacing/16` apart. A sticky footer on the page colour
 above a `border/subtle` hairline, padded by the bottom inset, holding the
 screen's actions as the shared `Button` (primary for the one forward action,
 secondary for the lesser one); on iOS it lifts with the keyboard. No fixed
@@ -1126,16 +1129,77 @@ over 150ms (ease-out, opacity only, native driver) — no scale, bounce,
 movement or loop. Under Reduce Motion, or while the setting is unknown, the
 final state is drawn at once ("Reduced motion").
 
-**States (List), Retailers.** The shared selectors in the frame: the
-count line (`body-small` secondary, always rendered), then a fixed controls
-column — the search field where the list is long, and `Clear selection` as
-the secondary Button, present on every visit and disabled with nothing
-selected — then the Check Rows. Nothing above the list is conditional, so
-choosing or clearing never moves a row (the P2B7V rule). Every store row
-carries its mark contained in a 40×24pt box or the `home` glyph centred in
-the same box, so rows are one height. Retailers keeps this P2B7X.1 list;
-its redesign, and those of the Preview, the paywall and the notification
-education, are later milestones. On States, Continue is disabled with
+**Retailers (2026-09-24): Popular stores first.** Beside the heading and
+body, M03 (`lotly-mascot-ready-1024.png`, the grocery-bag pose) at 120pt
+through the frame's `aside`, drawn whole, decorative, and omitted from a
+text scale of 1.5 so the heading can take the width. Then, only once a
+store is chosen, the selected-store summary: a `background/subtle`
+`radius/16` surface, padded 16 across, holding `Your stores · N` in
+`body-small-bold` `text/primary` at the leading edge and `Clear` at the
+trailing edge as a compact text action (`body-small-bold`, never underlined,
+`action/secondary`; a 44pt target through hitSlop), then one row: every
+chosen store as a `background/surface` `radius/12` chip (`body-small` name
+and a 16pt `x` glyph in `icon/primary`, spoken `Remove Walmart`), in the
+order chosen, on a single horizontally scrolling row that runs to the
+surface's edges. The surface never grows with the count and never hides a
+store behind `+N`. With nothing chosen there is no summary and no space for
+one: the heading flows into `Popular stores` at the frame's `spacing/16`.
+
+Then `Popular stores` in `heading-3` and ten tiles, `spacing/8` apart, in
+the curated order (Walmart, Costco, Kroger, Aldi, Target, Trader Joe's,
+Sam's Club, Safeway, Publix, Ralphs; `src/lib/retailer-grid.ts`), deliberately
+not alphabetical. A tile is the Allergens tile without a picture: one
+`radius/12` surface padded 16 each way, the catalog's full name in `body`
+and the Check Row's 20pt indicator at the trailing edge, `spacing/12` apart;
+open, `background/surface` with a `border/default` edge; chosen, the soft
+blue `background/subtle` with an `action/primary` edge AND a filled
+indicator, the chosen surface a layer that fades in over 150ms (opacity
+only; at once under Reduce Motion). No retailer logo, wordmark, brand
+colour, monogram, generated art or `home` glyph, by decision
+(`docs/retailer-logo-source-audit.md`). Two columns at every standard text
+size on every supported phone and one full-width column from text scale 1.5
+(`retailerGridColumns`, measured like the Allergens rule; names wrap between
+words, never inside one, and never stack). Beneath the grid, `spacing/12`
+below it, the search trigger: drawn as the shared Search Bar ("Search Bar")
+— its surface, `card` lift, `search` glyph and `caption` text reading
+`Not listed? Search all stores` — but a button, spoken `Search all stores`,
+with no chevron and no field of its own.
+
+**Retailers search sheet.** The trigger opens a contextual sheet over the
+step (`src/components/onboarding/retailer-search-sheet.tsx`; React Native's
+transparent `Modal`, no dependency). The step stays mounted and exactly where
+it was, dimmed by a full-screen backdrop of `text/primary` at 40%, and takes
+no touch and no assistive focus while the sheet is up. The sheet is the
+opaque `background/page` surface with `radius/16` top corners, its top edge
+fixed by the window and text size alone (a fifth of the window, never less
+than 72pt under the safe area; just under the status bar from text scale
+1.5), so neither the query, the results nor the keyboard resizes it. In
+order: a restrained 36×5pt `border/default` drag indicator; `Search all
+stores` in `heading-3` with a 44pt `x` Close at the trailing edge; the Search
+Bar (placeholder `Search stores`, autofocused, its `Clear` only while there
+is text); the results region, the one part that changes, scrolling inside
+itself; and `Done`, the primary Button, pinned over the bottom inset above a
+`border/subtle` hairline. Before a query the region holds one line, `Search
+the complete store list.`; with no match, only `No stores found.`, both
+`body-small` `text/secondary`. Matches are single-column rows, `spacing/8`
+apart, deliberately unlike the popular tiles: one `radius/12` row, padded 16
+across and 12 down, the catalog name in `body` and the 20pt Check Row
+indicator at the trailing edge; open, `background/surface` with a
+`border/default` edge; chosen, the soft blue `background/subtle` with an
+`action/primary` edge AND a filled indicator. No logo, `home` glyph,
+monogram or retailer colour. The backdrop fades and the sheet slides up over
+280ms (ease-out) and back over 200ms (ease-in); under Reduce Motion both are
+simply there and simply gone. No gradient, blur or new shadow. No alphabet
+index, section headers, location or ranking. Behaviour and verification:
+`docs/recall-onboarding-and-paywall.md` §6.3.
+
+**States (List).** The shared selector in the frame: the count line
+(`body-small` secondary, always rendered), then a fixed controls column —
+the search field and `Clear selection` as the secondary Button, present on
+every visit and disabled with nothing selected — then the Check Rows.
+Nothing above the list is conditional, so choosing or clearing never moves a
+row (the P2B7V rule). The redesigns of the Preview, the paywall and the
+notification education are later milestones. On States, Continue is disabled with
 nothing chosen and the reason (`caption`, centred) reads beneath it in a
 slot that is always laid out — invisible and hidden from assistive
 technology while a state is chosen — so Continue never moves as the count

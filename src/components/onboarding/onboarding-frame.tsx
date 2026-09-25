@@ -9,7 +9,9 @@
  * counted step, the four-segment progress over its `1 of 4` line in the mono
  * `label` type (`OnboardingProgress`; P2B7Y). Then the
  * scrolling content: the headline in `heading-1`, the body in `body`
- * secondary, and whatever the screen adds — at the page margin, capped at
+ * secondary (beside an optional decorative `aside` — the Retailers mascot —
+ * which takes its own width and leaves the text the rest), and whatever the
+ * screen adds — at the page margin, capped at
  * the content width, with the bottom padding the sticky footer needs so the
  * last row is never hidden under it. The footer holds the screen's actions
  * on the page colour above a hairline, pinned to the bottom over the bottom
@@ -62,6 +64,7 @@ export function OnboardingFrame({
   keyboard = false,
   headlineAccessibilityLabel,
   headingMotion,
+  aside,
 }: {
   headline: string;
   body: string;
@@ -80,8 +83,27 @@ export function OnboardingFrame({
   headlineAccessibilityLabel?: string;
   /** Welcome's entrance: an animated opacity/offset for the headline block. */
   headingMotion?: Animated.WithAnimatedValue<StyleProp<ViewStyle>>;
+  /**
+   * A decorative element beside the headline and body, at the trailing edge
+   * (the Retailers mascot). The caller hides it from assistive technology and
+   * sizes it; the text takes the rest of the width, so the two never overlap.
+   */
+  aside?: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const heading = (
+    <Animated.View style={[styles.heading, aside ? styles.headingBeside : null, headingMotion]}>
+      <Text
+        variant="heading-1"
+        accessibilityRole="header"
+        accessibilityLabel={headlineAccessibilityLabel}>
+        {headline}
+      </Text>
+      <Text variant="body" color="text/secondary">
+        {body}
+      </Text>
+    </Animated.View>
+  );
   const content = (
     <>
       <View style={[styles.topBar, { paddingTop: insets.top + spacing[8] }]}>
@@ -110,17 +132,14 @@ export function OnboardingFrame({
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={keyboard ? 'on-drag' : 'none'}>
         {lead}
-        <Animated.View style={[styles.heading, headingMotion]}>
-          <Text
-            variant="heading-1"
-            accessibilityRole="header"
-            accessibilityLabel={headlineAccessibilityLabel}>
-            {headline}
-          </Text>
-          <Text variant="body" color="text/secondary">
-            {body}
-          </Text>
-        </Animated.View>
+        {aside ? (
+          <View style={styles.headingRow}>
+            {heading}
+            {aside}
+          </View>
+        ) : (
+          heading
+        )}
         {children}
       </ScrollView>
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[12] }]}>{footer}</View>
@@ -201,6 +220,15 @@ const styles = StyleSheet.create({
   },
   heading: {
     gap: spacing[8],
+  },
+  // The headline and body beside an aside: they take what it leaves.
+  headingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[8],
+  },
+  headingBeside: {
+    flex: 1,
   },
   footer: {
     width: '100%',

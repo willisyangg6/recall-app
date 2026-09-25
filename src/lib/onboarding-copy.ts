@@ -43,6 +43,52 @@ export const ALLERGENS_BODY =
 export const RETAILERS_HEADLINE = 'Where do you shop?';
 export const RETAILERS_BODY =
   'Choose the retailers you want Lotly to watch for in recall notices. This is optional.';
+/** The curated ten's section label: popular, never ranked or "largest". */
+export const POPULAR_STORES_LABEL = 'Popular stores';
+/** The summary's compact clear action. */
+export const CLEAR_STORES_LABEL = 'Clear';
+/** The search trigger beneath the popular stores: what it says. */
+export const SEARCH_ALL_STORES_PLACEHOLDER = 'Not listed? Search all stores';
+/** The trigger, spoken, and the search sheet's title. */
+export const SEARCH_ALL_STORES_LABEL = 'Search all stores';
+export const SEARCH_ALL_STORES_HINT = 'Opens a search of the complete store list.';
+/** The sheet's field: its placeholder and its spoken name. */
+export const SEARCH_STORES_LABEL = 'Search stores';
+export const SEARCH_STORES_HINT = 'Matching stores appear below. Check one to choose it.';
+/** The sheet before anything is typed: an instruction, never the whole list. */
+export const SEARCH_INSTRUCTION = 'Search the complete store list.';
+/** The sheet when a search matches nothing. */
+export const NO_STORES_FOUND = 'No stores found.';
+/** The sheet's two ways out, which do the same thing. */
+export const SEARCH_CLOSE_LABEL = 'Close';
+export const SEARCH_DONE_LABEL = 'Done';
+export const SEARCH_DISMISS_HINT = 'Closes the search. Your choices are kept.';
+
+/** What a search found, said as it changes: `No stores found.`, `1 store found.`, `7 stores found.` */
+export function searchResultsAnnouncement(count: number): string {
+  if (count === 0) return NO_STORES_FOUND;
+  return count === 1 ? '1 store found.' : `${count} stores found.`;
+}
+
+/**
+ * The selected-store summary's title: `Your stores · 2`. No-break spaces hold
+ * `stores · 2` together, so at the largest text sizes the title wraps after
+ * `Your` rather than leaving the count alone on a line.
+ */
+export function yourStoresTitle(count: number): string {
+  return `Your stores\u00a0·\u00a0${count}`;
+}
+
+/** The same title as VoiceOver says it, with words rather than a middle dot. */
+export function yourStoresSpoken(count: number): string {
+  if (count === 0) return 'Your stores: none selected';
+  return count === 1 ? 'Your stores: 1 selected' : `Your stores: ${count} selected`;
+}
+
+/** A selected store's chip, spoken: `Remove Walmart`. */
+export function removeStoreLabel(name: string): string {
+  return `Remove ${name}`;
+}
 
 // ── Shared step controls ────────────────────────────────────────────────────
 
