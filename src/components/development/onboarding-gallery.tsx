@@ -282,12 +282,43 @@ export function OnboardingGallery() {
           />
         </View>
       </GallerySample>
-      <GallerySample caption="Preview with selections — simulated: California, New York and Texas; Peanuts and Milk; Costco and Trader Joe’s; then the example match">
+      <GallerySample caption="Preview with selections — simulated: California, New York and Texas; Peanuts and Milk (two overlapping pictograms); Costco and Trader Joe’s; then the example match">
         <Screen>
           <PreviewStep prefs={populated} onViewPlans={noop} onEdit={noop} onBack={noop} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Preview with no optional selections — simulated: one state and nothing else; Allergens and Retailers keep their rows and read None">
+      <GallerySample caption="Preview, one allergen — simulated: California; Sesame alone, its pictogram at 28pt; Aldi">
+        <Screen>
+          <PreviewStep
+            prefs={{ states: codesFor('California'), allergens: ['sesame'], retailers: ['aldi'] }}
+            onViewPlans={noop}
+            onEdit={noop}
+            onBack={noop}
+          />
+        </Screen>
+      </GallerySample>
+      <GallerySample caption="Preview, three or more and a long store list — simulated: four allergens chosen out of order (the first two canonical pictograms and +2, every name in the text); six stores that wrap">
+        <Screen>
+          <PreviewStep
+            prefs={{
+              states: codesFor('Massachusetts', 'New Hampshire'),
+              allergens: ['shellfish', 'sesame', 'tree nuts', 'peanut'],
+              retailers: [
+                'bjs-wholesale-club',
+                'whole-foods',
+                'stop-and-shop',
+                'trader-joes',
+                'sams-club',
+                'wegmans',
+              ],
+            }}
+            onViewPlans={noop}
+            onEdit={noop}
+            onBack={noop}
+          />
+        </Screen>
+      </GallerySample>
+      <GallerySample caption="Preview with no optional selections — simulated: one state and nothing else; Allergens (a neutral dash, no pictogram) and Stores keep their rows and read None">
         <Screen>
           <PreviewStep
             prefs={{ ...EMPTY_PREFERENCES, states: codesFor('Oregon') }}

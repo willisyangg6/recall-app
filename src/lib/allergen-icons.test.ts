@@ -6,6 +6,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -18,6 +19,7 @@ import {
   allergenIconName,
   allergenIconRows,
 } from './allergen-icons';
+import { READY_ICON_SOURCES } from './ready-presentation';
 import { STATES_ICON_SOURCES } from './state-map';
 
 const ROOT = join(__dirname, '..', '..');
@@ -71,20 +73,45 @@ test('one family, with license, repository, commit and retrieval date recorded',
     assert.match(svg, /stroke="currentColor"/, `${source.lucideName} is not an outline glyph`);
     assert.match(svg, /stroke-width="2"/, `${source.lucideName} has a foreign stroke weight`);
   }
-  // No source outside the nine and the States step's six (P2B7Y,
-  // lib/state-map.ts): a stray glyph would be a second decision.
+  // No source outside the nine, the States step's six (P2B7Y,
+  // lib/state-map.ts) and the Ready step's cart (lib/ready-presentation.ts):
+  // a stray glyph would be a second decision.
   const vendored = readdirSync(SOURCES)
     .filter((f) => f.endsWith('.svg'))
     .sort();
   assert.deepEqual(
     vendored,
-    [...ALLERGEN_ICON_SOURCES, ...STATES_ICON_SOURCES].map((s) => `${s.lucideName}.svg`).sort(),
+    [...ALLERGEN_ICON_SOURCES, ...STATES_ICON_SOURCES, ...READY_ICON_SOURCES]
+      .map((s) => `${s.lucideName}.svg`)
+      .sort(),
   );
-  for (const source of STATES_ICON_SOURCES) {
+  for (const source of [...STATES_ICON_SOURCES, ...READY_ICON_SOURCES]) {
     const svg = readFileSync(join(SOURCES, `${source.lucideName}.svg`), 'utf8');
     assert.match(svg, /viewBox="0 0 24 24"/, `${source.lucideName} is not on the 24 grid`);
     assert.match(svg, /stroke-width="2"/, `${source.lucideName} has a foreign stroke weight`);
   }
+});
+
+test('the Ready cart is Lucide’s own shopping-cart at the pinned commit, rasterised natively at every scale', () => {
+  // Byte-identical to lucide-icons/lucide@f06ac67e…/icons/shopping-cart.svg,
+  // verified against the pinned commit on 2026-09-26, as every vendored source is.
+  const sha = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
+  assert.equal(
+    sha(join(SOURCES, 'shopping-cart.svg')),
+    '7cdc07053044af9e5fd24fff5e089ce97b2a39ea978933a160c4bbfebf8a167c',
+  );
+  // The three files are true 24, 48 and 72px rasterisations of that source
+  // (scripts/render-onboarding-assets.mjs, `native`), not one 24px bitmap
+  // stretched; the renderer is deterministic, so the verified bytes are pinned.
+  const ICONS = join(SOURCES, '..', '..', 'icons');
+  assert.deepEqual(
+    ['', '@2x', '@3x'].map((suffix) => sha(join(ICONS, `shopping-cart${suffix}.png`))),
+    [
+      'e84f0db572f9d6daee6faf5a2bdbdd8ccb1cc711cc0f476bb433cc4a1ac96928',
+      'cc774d083446101bce37ad91eba07d8b4b790a15850221705a4f3676d967eb44',
+      '54d204d496204a38e40de2f20b725cba01497785580a755f6947dce0482892d5',
+    ],
+  );
 });
 
 test('every raster exists at 1x, 2x and 3x on the set’s 24pt box — one visual box for all nine', () => {

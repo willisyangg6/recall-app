@@ -17,6 +17,9 @@
  *   5. The States step's six interface glyphs (map, list, x, check, zoom-in,
  *      zoom-out) — the same vendored Lucide family, the same box and stroke
  *      (provenance in src/lib/state-map.ts).
+ *   6. The Ready step's `shopping-cart` glyph for its Stores row — the same
+ *      vendored Lucide family, box and stroke (provenance in
+ *      src/lib/ready-presentation.ts).
  *   4. Two Design Preview logo FIXTURES (a wide and a tall neutral shape,
  *      labelled FIXTURE) that exercise the retailer-logo container's aspect
  *      handling. They are not retailer marks and are keyed to no retailer.
@@ -69,18 +72,39 @@ const STATES_GLYPHS = {
   'zoom-out': 'zoom-out',
 };
 
+/** The Ready step's glyph (icon name → vendored Lucide source). Mirrors src/lib/ready-presentation.ts. */
+const READY_GLYPHS = {
+  'shopping-cart': 'shopping-cart',
+};
+
 function write(path, canvas) {
   writeFileSync(path, canvas.toBuffer('image/png'));
 }
 
-async function renderLucideGlyphs(glyphs) {
+/**
+ * `loadImage` rasterises an SVG at its own `width`/`height` (24px), so drawing
+ * that image into a 48 or 72px canvas stretches a 24px bitmap: the 2x and 3x
+ * files come out soft. With `native`, each scale re-sizes the SVG itself to
+ * the target side first, so every file is a true rasterisation at its own
+ * resolution. The allergen and States glyphs predate the fix and keep the
+ * stretched path so re-running this script leaves them byte-identical;
+ * regenerating them natively is a separate, visible change.
+ */
+async function renderLucideGlyphs(glyphs, { native = false } = {}) {
   for (const [icon, lucideName] of Object.entries(glyphs)) {
     const svg = readFileSync(join(LUCIDE, `${lucideName}.svg`), 'utf8')
       .replace(/currentColor/g, '#000000')
       .replace(/stroke-width="2"/, `stroke-width="${ICON_STROKE}"`);
-    const image = await loadImage(Buffer.from(svg));
+    const stretched = native ? null : await loadImage(Buffer.from(svg));
     for (const { suffix, factor } of SCALES) {
       const side = ICON_BOX * factor;
+      const image =
+        stretched ??
+        (await loadImage(
+          Buffer.from(
+            svg.replace(/width="24"/, `width="${side}"`).replace(/height="24"/, `height="${side}"`),
+          ),
+        ));
       const canvas = createCanvas(side, side);
       const ctx = canvas.getContext('2d');
       ctx.drawImage(image, 0, 0, side, side);
@@ -191,12 +215,13 @@ async function main() {
   mkdirSync(PREVIEW, { recursive: true });
   await renderLucideGlyphs(ALLERGEN_GLYPHS);
   await renderLucideGlyphs(STATES_GLYPHS);
+  await renderLucideGlyphs(READY_GLYPHS, { native: true });
   await renderChevronLeft();
   renderSampleIllustration();
   renderLogoFixture('logo-fixture-wide', 160, 24);
   renderLogoFixture('logo-fixture-tall', 24, 120);
   console.log(
-    'Rendered allergen glyphs, the States glyphs, chevron-left, the sample illustration and two logo fixtures.',
+    'Rendered allergen glyphs, the States and Ready glyphs, chevron-left, the sample illustration and two logo fixtures.',
   );
 }
 

@@ -258,14 +258,14 @@ const APPROVED_RETAILER_LABEL = 'Retailers:';
 
 /**
  * The founder's FINAL onboarding copy (P2B7X.1, 2026-09-23) says `retailers`
- * in exactly two places: the Retailers step's body and the Preview summary's
- * row label. Both are exempt by exact string, as the Detail label is; the
- * rest of onboarding keeps `store` (`Search stores`, `N stores selected`).
- * Flagged in the milestone report for the founder to confirm or reword.
+ * in one place: the Retailers step's body. It is exempt by exact string, as
+ * the Detail label is; the rest of onboarding keeps `store` (`Search stores`,
+ * `N stores selected`). The Preview summary's row label, the second
+ * exemption until 2026-09-26, now reads `Stores` (the Ready step's Option 2),
+ * so its exemption is gone.
  */
 const APPROVED_ONBOARDING_RETAILER_COPY = [
   "'Choose the retailers you want Lotly to watch for in recall notices. This is optional.'",
-  "'Retailers'",
 ];
 
 test('consumer copy says state and store, never jurisdiction or retailer', () => {

@@ -351,17 +351,28 @@ Primary Figma references (file `WN8RP0xZGYdj4CSztvQ7Km`):
 
 ### Branding status
 
-The product name is **Lotly**. The approved mascot set is five poses in
+The product name is **Lotly**. The approved mascot set is six poses in
 `assets/brand/production`, each a 1024×1024 transparent RGBA PNG: M01
 `lotly-mascot-welcome-peek-1024.png`, M02 `lotly-mascot-helper-1024.png`, M03
-`lotly-mascot-ready-1024.png`, M04 `lotly-mascot-watchful-1024.png` and M05
-`lotly-mascot-notifications-1024.png`, each tagged sRGB and carrying the
+`lotly-mascot-ready-1024.png`, M04 `lotly-mascot-watchful-1024.png`, M05
+`lotly-mascot-notifications-1024.png` and M06
+`lotly-mascot-ready-trust-peek-1024.png`, each tagged sRGB and carrying the
 mechanical alpha repair: a fully opaque drawing with only its antialiased
 edge translucent (`src/lib/mascot-assets.test.ts` pins the set). The set's
 contact sheet is brand documentation, in `assets/brand/reference`. M01 is on
 Welcome, M02 beside the States step's Map / List control (P2B7Y), and M03
-beside the Retailers step's heading (Popular stores, 2026-09-24); M04 and M05
-wait for their own screens. A mascot is drawn whole with `contain`, never cropped, recoloured or
+beside the Retailers step's heading (Popular stores, 2026-09-24), and M06
+hanging over the Ready step's summary card (2026-09-26); M04 and M05 wait for
+their own screens. The two "ready" poses are different characters in
+different roles: M03 (the grocery-bag pose) stays on Retailers, and M06 (the
+trust-peek pose: the arrow body cut flat to stand behind a ledge, a shield in
+its right paw) exists only for the Ready card's edge. M04, the standing
+watchful pose, is the paywall's approved pose, but the paywall draws no
+mascot yet and nothing references M04. M06 is a transparent raster
+production asset, not SVG, and is never redrawn in code. The file as
+supplied was a 1254px export carrying the alpha 240–254 flaw; it was given
+the same mechanical repair at its own size and scaled uniformly to 1024,
+never cropped or shifted. A mascot is drawn whole with `contain`, never cropped, recoloured or
 placed on a dark surface, and is decorative: hidden from VoiceOver and never
 in the way of a touch. The earlier standalone mascot
 (`lotly-mascot-transparent.png`) is no longer drawn. The final logo and
@@ -1198,20 +1209,81 @@ index, section headers, location or ranking. Behaviour and verification:
 the search field and `Clear selection` as the secondary Button, present on
 every visit and disabled with nothing selected — then the Check Rows.
 Nothing above the list is conditional, so choosing or clearing never moves a
-row (the P2B7V rule). The redesigns of the Preview, the paywall and the
-notification education are later milestones. On States, Continue is disabled with
+row (the P2B7V rule). The redesigns of the paywall and the
+notification education are later milestones; the Preview's is below. On States, Continue is disabled with
 nothing chosen and the reason (`caption`, centred) reads beneath it in a
 slot that is always laid out — invisible and hidden from assistive
 technology while a state is chosen — so Continue never moves as the count
 crosses zero, at any text size. On the optional steps Continue is never
 disabled.
 
-**Personalized Preview.** A white `radius/16` card with the `card` lift
-holding three `body-small` rows — `States`, `Allergens`, `Retailers` — label
-in `text/secondary` at the leading edge, value taking the rest and wrapping
-beneath; an empty optional group reads `None` in `text/secondary` and keeps
-its row. Then the example card under `Example match`, the independence note
-in `caption`, and the footer's `View plans` over `Edit preferences`.
+**Personalized Preview (the Ready step, Option 2, 2026-09-26).** Under the
+frame's heading and body, one `background/subtle` `radius/16` card with no
+lift, no border and no card nested inside it, headed `Your preferences are
+set` in `heading-3`. M06 hangs over its top edge at the trailing side
+(`src/lib/ready-presentation.ts`). Its flat-cut arrow body stands above the
+card as if behind it, the left paw rests just over the edge, and the shield
+and right paw hang in front, the shield's trailing edge on the card's padding
+above the column of checks. The mascot is sized at 0.195 of the window
+height, from 140pt (iPhone SE) to 180pt (172pt on an iPhone 17), and is
+always 140pt from the accessibility sizes. Its drawing is 0.84 of that box
+wide and 0.82 tall. The 2026-09-26 polish pass raised the bounds from
+120–152pt, about 17–19% more visible drawing. Its full height is reserved above the card, so it never
+reaches the body text. The heading keeps clear of the shield, and the first
+row starts below it.
+
+Three rows follow — `States`, `Allergens`, `Stores` (Profile's own names) —
+each in three parts:
+
+- **Leading:** the category artwork in a 40pt white `background/surface`
+  `radius/12` well. All three rows share the well; this was the founder's
+  decision, so the full-colour pictograms sit as deliberately as the glyphs.
+  States shows the navy `map-pin` glyph and Stores the navy `shopping-cart`
+  glyph.
+- **Middle:** the category in `caption` (Public Sans 500, 12pt) over its
+  values in `body` (Public Sans 400, 16pt), both `text/primary`. Grey
+  `text/secondary` on the soft blue is 3.2:1, below AA for small text, so
+  size and weight, not colour or a second family, set the label apart. It
+  is never the mono metadata `label` type.
+- **Trailing:** a 20pt `check` in `icon/primary`, the map pin's and cart's
+  navy, in a 24pt pale circle. The circle is `background/surface` at 55%
+  over the soft blue. At 16pt the check's stroke was 1.6pt against the pin's
+  2.4pt and read as grey.
+
+The Allergens well draws the approved pictograms through
+`src/lib/allergen-assets.ts`, **untinted**. Tinted navy, tree nuts turns into
+a blob and egg into two merged ovals; the founder reviewed that evidence and
+kept full colour. The pictograms are drawn in canonical order, whatever order
+they were tapped in:
+
+- **None chosen:** a 14pt neutral navy dash. There is no generic allergen
+  glyph, and a specific pictogram would claim a choice that wasn't made.
+- **One:** its pictogram in a 32pt box. Measured, the widest drawing fills
+  715/1024 of its canvas, so this is at most 22.3pt of drawing, against the
+  map pin's 22.7pt.
+- **Two:** both in 28pt boxes (at most 19.6pt of drawing each) on the
+  well's diagonal. The second is 12pt right of and below the first, so the
+  pair fills the 40pt well exactly and the drawings meet only at one corner
+  (7.6pt at most), each independently readable.
+- **Three or more:** the first two, plus a `+N` in `micro-caption`
+  `text/inverse` on a `background/brand` pill over the well's top trailing
+  corner, which the diagonal leaves empty.
+
+Values wrap between words and are never truncated. An empty optional group
+reads `None` and keeps its row. Each row is one accessibility element spoken
+as `Allergens: Peanuts and Tree nuts, completed`. The artwork, the `+N` and
+the check are hidden decoration, and so is the mascot, which is also
+`pointerEvents="none"`.
+
+From the accessibility sizes, each row stacks: artwork (with the `+N`
+beside it) and check share a top line, and the text takes the card's full
+width beneath. The heading drops below the shield at full width. This way no
+value breaks inside a word, which it did at AX5 between a well and a check.
+
+The mascot's one entrance is the other onboarding mascots' short fade and
+settle, played once and skipped under Reduce Motion. After the card come the
+example card under `Example match`, the independence note in `caption`, and
+the footer's `View plans` over `Edit preferences`.
 
 **The hard paywall.** The frame without progress; its back control is the one
 way back (to the Preview). Three benefit rows, an 8pt `icon/brand` dot
@@ -2116,6 +2188,7 @@ Lucide-style outline the design uses, unchanged in shape.
 | `map`, `list`     | Lucide repository, vendored SVG sources    | `map`, `list`        | the States step's Map / List control (P2B7Y)      |
 | `zoom-in`/`-out`  | Lucide repository, vendored SVG sources    | `zoom-in`/`zoom-out` | the States map's Northeast control (P2B7Y)        |
 | `check`, `x`      | Lucide repository, vendored SVG sources    | `check`, `x`         | chosen map shapes; the chosen-state chips (P2B7Y) |
+| `shopping-cart`   | Lucide, vendored SVG source (native scale) | `shopping-cart`      | the Ready summary's Stores row (2026-09-26)       |
 
 Figma exports each glyph cropped to its path bounds at some scale; each was
 drawn at `export size × S / (24 × k)` centred in an `S`-point box, where `k`
@@ -2370,12 +2443,13 @@ yet` / `Pull down to refresh.`
   no longer promises a formal policy and the Corrections Policy no longer
   promises a support contact. Both destinations stay open blockers in
   `docs/recall-launch-blockers.md`, and nothing was invented in their place.
-- **Two onboarding exceptions (P2B7X.1).** The founder's final first-launch
+- **One onboarding exception (P2B7X.1).** The founder's final first-launch
   copy says `retailers` in the Retailers step's body (`Choose the retailers
-you want Lotly to watch for in recall notices. This is optional.`) and in
-  the Preview summary's row label (`Retailers`). Both are exempt by exact
-  string in `consumer-copy.test.ts`, as Detail's `Retailers:` is; every other
-  onboarding string keeps `store`. The onboarding, paywall and education copy
+you want Lotly to watch for in recall notices. This is optional.`). It is
+  exempt by exact string in `consumer-copy.test.ts`, as Detail's
+  `Retailers:` is; every other onboarding string keeps `store`. The Preview
+  summary's row label, the second exception until 2026-09-26, now reads
+  `Stores`. The onboarding, paywall and education copy
   otherwise follows every rule above and lives in `src/lib/onboarding-copy.ts`
   and `src/lib/paywall-screen.ts`.
 
@@ -2476,7 +2550,9 @@ chance.
   one fill and the States mascot's one fade-and-settle, each starting after
   the screen's push settles; the States map itself never animates; and
   (P2B7Z) an Allergens tile's 150ms opacity fade as it is chosen or cleared,
-  which moves nothing and is drawn final at once under Reduce Motion. That
+  which moves nothing and is drawn final at once under Reduce Motion; and
+  (2026-09-26) the Ready mascot's one fade-and-settle, the States mascot's
+  own. That
   entrance, and any future animation, is skipped when
   `AccessibilityInfo.isReduceMotionEnabled` reports true (or cannot be
   read): everything is shown in its final state at once. The P2B7Y motions
@@ -2654,7 +2730,8 @@ its press wired to nothing, so no sample can open the confirmation or start
 a deletion; and from P2B7X.1 every first-launch screen and every paywall
 state — Welcome, the three selector steps empty, selected and searched, the
 retailer rows with the fallback and two neutral fixtures at extreme ratios,
-the Preview with and without optional selections, the education idle and
+the Preview with two allergens, one allergen, four allergens and a long store
+list, and no optional selections, the education idle and
 enabling, the paywall in twelve views including a long localized price
 pair, and a 568pt viewport — each sample's state held in the gallery's
 memory, plus gate scenarios that restart the REAL flow from a chosen state.

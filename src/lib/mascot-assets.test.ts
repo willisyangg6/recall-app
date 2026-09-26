@@ -1,7 +1,7 @@
 /**
- * The approved Lotly mascot set (M01–M05), pinned as files.
+ * The approved Lotly mascot set (M01–M06), pinned as files.
  *
- * Five production poses live in assets/brand/production under their exact
+ * Six production poses live in assets/brand/production under their exact
  * approved names. Each must stay a 1024×1024 8-bit RGBA PNG, tagged sRGB, with
  * a genuinely transparent canvas around a fully opaque drawing, because every
  * screen that uses one draws it whole with `contain` on the page colour.
@@ -14,16 +14,19 @@
  *
  * M01 is on Welcome, M02 (the helper pose) beside the States step's
  * Map / List control (P2B7Y), and M03 (the ready pose with the grocery bag)
- * beside the Retailers step's heading (Popular stores, 2026-09-24); M04 and
- * M05 are approved but not yet integrated, and nothing may reference them
- * until their own milestone.
+ * beside the Retailers step's heading (Popular stores, 2026-09-24), and M06
+ * (the trust-peek pose with the shield, 2026-09-26) hanging over the Ready
+ * step's summary card; M04 and M05 are approved but not yet integrated, and
+ * nothing may reference them until their own milestone.
  *
- * M01's placement on the Welcome card is computed from measurements of its
- * artwork (lib/welcome-presentation.ts), so those measurements are checked
- * against the file itself: replacing the art without re-measuring fails here.
+ * M01's placement on the Welcome card and M06's on the Ready summary card are
+ * computed from measurements of their artwork (lib/welcome-presentation.ts,
+ * lib/ready-presentation.ts), so those measurements are checked against the
+ * files themselves: replacing the art without re-measuring fails here.
  */
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -39,6 +42,14 @@ import {
   mascotOffset,
   PAW_DEPTH,
 } from '@/lib/welcome-presentation';
+import {
+  TRUST_PEEK_ART_RIGHT,
+  TRUST_PEEK_ART_TOP,
+  TRUST_PEEK_EDGE,
+  TRUST_PEEK_PAW_BOTTOM,
+  TRUST_PEEK_SHIELD_BOTTOM,
+  TRUST_PEEK_SHIELD_LEFT,
+} from '@/lib/ready-presentation';
 
 const ROOT = join(__dirname, '..', '..');
 const DIR = join(ROOT, 'assets', 'brand', 'production');
@@ -50,6 +61,7 @@ const APPROVED = {
   M03: 'lotly-mascot-ready-1024.png',
   M04: 'lotly-mascot-watchful-1024.png',
   M05: 'lotly-mascot-notifications-1024.png',
+  M06: 'lotly-mascot-ready-trust-peek-1024.png',
 } as const;
 
 interface DecodedPng {
@@ -130,7 +142,7 @@ const DECODED = Object.fromEntries(
   Object.entries(APPROVED).map(([id, name]) => [id, decodeRgba(join(DIR, name))]),
 ) as Record<keyof typeof APPROVED, DecodedPng>;
 
-test('the production mascot set is exactly the five approved files, by name', () => {
+test('the production mascot set is exactly the six approved files, by name', () => {
   const present = readdirSync(DIR)
     .filter((name) => /^lotly-mascot-.+-1024\.png$/.test(name))
     .sort();
@@ -256,7 +268,62 @@ test('M01’s card-overlap geometry is unchanged at both size bounds', () => {
   assert.equal(MASCOT_MAX * PAW_DEPTH, 10.5625);
 });
 
-test('M01 is on Welcome, M02 on States and M03 on Retailers, each once; M04–M05 are referenced nowhere yet', () => {
+test('M06’s seat on the Ready summary card matches its artwork', () => {
+  const { alpha, width } = DECODED.M06;
+  const solid = (x: number, y: number) => alpha[y * width + x] >= 128;
+  const lowest = (xs: number[]) => {
+    let found = -1;
+    for (let y = 0; y < width; y++) if (xs.some((x) => solid(x, y))) found = y;
+    return found;
+  };
+  const span = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i);
+  // The flat cut: the last row solid across the body's middle.
+  let cut = 0;
+  for (let y = 0; y < width; y++) if ([400, 448, 512].every((x) => solid(x, y))) cut = y;
+  // The paw, left of the shield; the shield; the drawing's top and trailing edge.
+  const paw = lowest(span(0, 280));
+  const shield = lowest(span(280, width));
+  let top = width;
+  let right = 0;
+  let shieldLeft = width;
+  for (let y = 0; y < width; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!solid(x, y)) continue;
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      if (y > cut + 6 && x >= 280) shieldLeft = Math.min(shieldLeft, x);
+    }
+  }
+  // The artwork's own coordinates…
+  assert.equal(cut, 703, 'the flat cut moved');
+  assert.equal(paw, 742, 'the paw moved');
+  assert.equal(shield, 972, 'the shield moved');
+  assert.equal(top, 129, 'the top of the art moved');
+  assert.equal(right, 968, 'the trailing edge moved');
+  assert.equal(shieldLeft, 580, 'the shield’s leading edge moved');
+  // …and the seat the screen computes from them (each the first clear row or column).
+  assert.equal(TRUST_PEEK_EDGE * 1024, cut + 1);
+  assert.equal(TRUST_PEEK_PAW_BOTTOM * 1024, paw + 1);
+  assert.equal(TRUST_PEEK_SHIELD_BOTTOM * 1024, shield + 1);
+  assert.equal(TRUST_PEEK_ART_TOP * 1024, top);
+  assert.equal(TRUST_PEEK_ART_RIGHT * 1024, right + 1);
+  assert.equal(TRUST_PEEK_SHIELD_LEFT * 1024, shieldLeft);
+});
+
+test('M06 carries the mechanical repair of the supplied 1254px export, uniformly scaled to 1024', () => {
+  // The supplied file (sha256 1b27932a…) was 1254×1254 with 625,268 pixels at
+  // alpha 240–254 and a caBX chunk. It was repaired at its own size, scaled
+  // uniformly to 1024 (never cropped or shifted), and re-normalized; the
+  // drawing's proportions on the canvas are the original's.
+  const bytes = readFileSync(join(DIR, APPROVED.M06));
+  assert.equal(
+    createHash('sha256').update(bytes).digest('hex'),
+    'dd279dc1a805ff113c1e07b246244ced1d006be36a07198a10cf5bb4780a71d7',
+  );
+  assert.ok(!DECODED.M06.chunks.includes('caBX'), 'the export metadata came back');
+});
+
+test('M01 is on Welcome, M02 on States, M03 on Retailers and M06 on Ready, each once; M04–M05 are referenced nowhere yet', () => {
   const welcome = readFileSync(
     join(ROOT, 'src', 'components', 'onboarding', 'welcome-content.tsx'),
     'utf8',
@@ -272,6 +339,12 @@ test('M01 is on Welcome, M02 on States and M03 on Retailers, each once; M04–M0
     'utf8',
   );
   assert.ok(retailers.includes(`require('@/assets/brand/production/${APPROVED.M03}')`));
+  const ready = readFileSync(
+    join(ROOT, 'src', 'components', 'onboarding', 'preview-step.tsx'),
+    'utf8',
+  );
+  assert.ok(ready.includes(`require('@/assets/brand/production/${APPROVED.M06}')`));
+  assert.ok(!ready.includes(APPROVED.M03), 'Ready draws the grocery-bag pose');
   const sources: string[] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -301,5 +374,10 @@ test('M01 is on Welcome, M02 on States and M03 on Retailers, each once; M04–M0
     sources.filter((source) => source.includes(APPROVED.M03)).length,
     1,
     'M03 is drawn somewhere other than Retailers',
+  );
+  assert.equal(
+    sources.filter((source) => source.includes(`/${APPROVED.M06}')`)).length,
+    1,
+    'M06 is drawn somewhere other than Ready',
   );
 });

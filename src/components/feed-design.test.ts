@@ -534,8 +534,9 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
   // P2B5 the chevron-right that Profile's navigation rows carry, P2B7X.1 the
   // chevron-left of the onboarding back control and the nine allergen glyphs
   // (one Lucide family; lib/allergen-icons.ts), P2B7Y the States step's six
-  // (map, list, x, check, zoom-in, zoom-out; lib/state-map.ts). There is still
-  // no bell, share or sliders glyph.
+  // (map, list, x, check, zoom-in, zoom-out; lib/state-map.ts), and the Ready
+  // step its Stores row's shopping-cart (lib/ready-presentation.ts). There is
+  // still no bell, share or sliders glyph.
   assert.deepEqual(glyphs, [
     'allergen-egg',
     'allergen-fish',
@@ -560,6 +561,7 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'map',
     'map-pin',
     'search',
+    'shopping-cart',
     'user',
     'warning',
     'x',

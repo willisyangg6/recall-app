@@ -110,13 +110,18 @@ export function allergenCountLabel(count: number): string {
 
 export const PREVIEW_HEADLINE = 'Your recall watch is ready.';
 export const PREVIEW_BODY = 'Lotly will flag notices that match your profile with Affects You.';
+/** The summary card's heading (Option 2, 2026-09-26). */
+export const PREVIEW_SUMMARY_TITLE = 'Your preferences are set';
+/** Profile's own row names (lib/profile-hub.ts `SUMMARY_LABELS`): the app says store. */
 export const PREVIEW_SUMMARY_LABELS = {
   states: 'States',
   allergens: 'Allergens',
-  retailers: 'Retailers',
+  retailers: 'Stores',
 } as const;
 /** An optional group with nothing chosen keeps its row and says so. */
 export const PREVIEW_NONE = 'None';
+/** Spoken after each summary row: the drawn check, in words. */
+export const PREVIEW_ROW_COMPLETED = 'completed';
 export const PREVIEW_EXAMPLE_LABEL = 'Example match';
 export const PREVIEW_CTA = 'View plans';
 export const PREVIEW_EDIT = 'Edit preferences';

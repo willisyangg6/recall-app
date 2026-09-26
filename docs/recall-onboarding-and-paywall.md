@@ -325,13 +325,13 @@ It opens nothing, cannot be saved, and needs no network. The shared
 `MediaTile` keeps its "official URL or nothing" contract; the example draws
 its own tile of the same geometry.
 
-**Two copy exceptions.** The Retailers step's body (`Choose the retailers you
-want Lotly to watch for in recall notices. This is optional.`) and the
-Preview summary's row label (`Retailers`) say `retailers`, which the app-wide
-copy rule otherwise forbids in favour of `store`. They are the founder's
-final copy for this flow and are exempted by exact string in
-`consumer-copy.test.ts`; everything else in onboarding keeps `Search stores`
-and `N stores selected`. Flagged for confirmation in the milestone report.
+**One copy exception.** The Retailers step's body (`Choose the retailers you
+want Lotly to watch for in recall notices. This is optional.`) says
+`retailers`, which the app-wide copy rule otherwise forbids in favour of
+`store`. It is the founder's final copy for this flow and is exempted by exact
+string in `consumer-copy.test.ts`; everything else in onboarding keeps `Search
+stores` and `N stores selected`. The Preview summary's row label was the
+second exception until the Ready redesign (§6.4), which renamed it `Stores`.
 
 **The paywall's states**, mapped by `paywallPresentation`: offering loading,
 unavailable or errored; Annual or Monthly selected; purchasing; restoring;
@@ -592,10 +592,10 @@ the pictogram pack's review artifacts
 documentation only; nothing imports them and the
 iOS export does not contain them.
 
-**Deferred.** The Preview ("Ready"), the paywall and the notification
-education keep their P2B7X.1 content; only the shared progress bar reached
-them. Their redesigns are later milestones. Retailers was redesigned next
-(§6.3).
+**Deferred.** The paywall and the notification education keep their
+P2B7X.1 content; only the shared progress bar reached them. Their redesigns
+are later milestones. Retailers was redesigned next (§6.3), then the Preview
+(§6.4).
 
 ### 6.3 The Retailers step: Popular stores (2026-09-24)
 
@@ -678,8 +678,8 @@ progressively through the one preference store exactly as before
 for an empty list, so an empty clear saves nothing). A store chosen as a
 popular tile or in the sheet is checked in both places and named in the
 summary at once — behind the sheet too, while it is open.
-Continue is always enabled; Back, Continue, the Preview's `Retailers` row
-and the resume point are unchanged. No schema, storage shape or backend
+Continue is always enabled; Back, Continue, the Preview's store row (then
+`Retailers`, `Stores` since §6.4) and the resume point are unchanged. No schema, storage shape or backend
 changed.
 
 **The summary.** Only while at least one store is chosen: `Your stores · N`
@@ -801,6 +801,109 @@ are in code, not heard.
 is documentation only: no source or config file references it
 (`onboarding-design.test.ts`), and the production iOS export does not
 contain it (checked by content hash, 2026-09-24).
+
+### 6.4 The Ready step: Option 2 (2026-09-26)
+
+The Personalized Preview, `4 of 4`, now celebrates the plan the shopper just
+set up. Back, the four filled segments, the heading `Your recall watch is
+ready.`, the body, the example card, the independence note, `View plans` and
+`Edit preferences` are unchanged. So are saving, the resume point, the gate
+and the purchase boundary. The step reads the saved preferences and never
+writes them. Composition and tokens are in [../DESIGN.md](../DESIGN.md)
+"Onboarding and paywall"; the rules are in `src/lib/ready-presentation.ts`.
+
+**The summary card.** One soft-blue `background/subtle` card headed `Your
+preferences are set`, with three rows: `States`, `Allergens`, `Stores`. The
+last was `Retailers`; it now uses Profile's own row name, so the second copy
+exception is gone. Each row is the category's artwork in a 40pt white
+rounded-square well at the leading edge, the label over the values in the
+middle, and a completed check in a pale-blue circle at the trailing edge.
+Every row shares the white well; this was the founder's 2026-09-26 decision,
+made after seeing the tint evidence below. States carries the navy `map-pin`
+glyph and Stores the navy `shopping-cart` glyph. The cart is new to the icon
+set: Lucide's `shopping-cart` (ISC), byte-identical to the file at the
+allergen family's pinned commit (`f06ac67e…`, release 1.47.0), vendored in
+`assets/icon-sources/lucide/`. `scripts/render-onboarding-assets.mjs`
+rasterises it at the set's box and stroke natively at each scale (24, 48 and
+72px). The older Lucide glyphs were rasterised once at 24px and stretched,
+which is why the cart's first rasters looked soft beside the Figma-exported
+map pin. `allergen-icons.test.ts` pins the source and the three files by
+hash. Both lines of text are `text/primary`, because grey `text/secondary`
+on the soft blue is 3.2:1, below AA. The label is Public Sans `caption`
+(medium, 12pt) over the values' `body` (regular, 16pt), and the check is a
+20pt `icon/primary` glyph, the pin's navy, in the pale circle.
+
+**The allergen artwork.** The approved pictograms, through the one map in
+`src/lib/allergen-assets.ts`, **untinted**. The brief asked for navy
+tinting, but tinted navy, tree nuts turns into a blob and egg into two
+merged ovals, so the founder kept full colour. The order is always
+`CONSUMER_ALLERGENS`', never tap order:
+
+- **None:** a neutral navy dash (the project has no generic allergen glyph),
+  and the value reads `None`.
+- **One:** its pictogram in a 32pt box, at most 22.3pt of drawing, the map
+  pin's size.
+- **Two:** both in 28pt boxes on the well's diagonal, meeting only at one
+  corner; the pair fills the 40pt well exactly.
+- **Three or more:** the first two and a `+N` in the well's empty top
+  trailing corner; the text still names every allergen.
+
+**The mascot.** M06, `assets/brand/production/lotly-mascot-ready-trust-peek-1024.png`,
+is a transparent raster (not SVG) drawn whole with `contain` as the card's
+sibling after it. It is seated from measurements of its own artwork: the flat
+cut is on the card's top border, the left paw rests about 7pt over it, and
+the shield and right paw hang in front at the trailing edge, above the checks.
+
+- **Size:** 0.195 of the window height, 140–180pt (172pt on an iPhone 17),
+  and 140pt from the accessibility sizes. The 2026-09-26 polish pass raised
+  it from 120–152pt, about 17–19% more visible drawing; the card sits that
+  much lower to keep the reserved clearance above it.
+- **Space:** its full height is reserved above the card, so it never reaches
+  the body text. The card heading keeps clear of the shield, and the first
+  row starts below it.
+- **Decorative:** hidden from VoiceOver and `pointerEvents="none"`.
+
+The file as supplied was 1254×1254 with 625,268 pixels at alpha 240–254 and
+a `caBX` metadata chunk. It was repaired with the mascots' mechanical rule
+at its own size, then uniformly resampled to 1024. It was not cropped,
+shifted or recoloured, and has zero enclosed holes. It replaces nothing:
+M03, the grocery-bag "ready" pose, stays on Retailers. The paywall draws no
+mascot; its approved watchful pose M04 is still unreferenced.
+
+**Accessibility.** Each row is one element spoken with its complete
+selection: `States: California, completed`, `Allergens: Peanuts and Tree
+nuts, completed`, `Stores: Aldi and BJ's Wholesale Club, completed`, and
+`Allergens: None, completed` when nothing is chosen. The artwork, `+N`,
+check and mascot are never heard. The card heading is a header. From the
+accessibility sizes (text scale 1.5) each row stacks, with the artwork and
+check on a top line and the text full-width beneath, and the heading drops
+below the shield at full width. Values then wrap only between words. At AX5
+the heading's `preferences` is wider than the card's whole line and still
+breaks, which only a capped type size could prevent.
+
+**Motion.** The mascot's one entrance is the States and Retailers mascots'
+fade with an 8pt settle, played once after the push. Under Reduce Motion, or
+before the setting is known, it is simply there. The root route transition
+is unchanged.
+
+**Native verification (2026-09-26, iPhone 17 and iPhone SE 3rd gen,
+iOS 26.3).** Checked through the real flow:
+
+- Two allergens (Peanuts + Tree nuts) with Aldi and BJ's Wholesale Club.
+- Four allergens chosen out of canonical order, which drew Peanuts, Tree
+  nuts and `+2`.
+- One allergen (Sesame), and none (the dash).
+- Six stores, which wrap between words.
+- Default text and AX5.
+- Reduce Motion off (the mascot fades in after the slide) and on (drawn in
+  place through the cross-dissolve).
+- Back to Stores and Continue back to Ready.
+- Edit preferences to States with every choice kept.
+- A kill and relaunch that resumed on Ready.
+- View plans to the paywall, whose Back returned to Ready.
+
+The accessibility tree, read through the Simulator's bridge, showed the row
+labels above and no mascot, pictogram or check.
 
 ## 7. Local data on reset and on expiry
 
@@ -924,13 +1027,15 @@ What P2B7X.2 does, and what it does not touch:
 | States map: vocabulary coverage, hit testing in both views and the insets, one draft, empty clear, no network                                                                                                                                                                                                                                                                                                                                        | `src/lib/state-map.test.ts`                   |
 | Progress names and fills, motion gates, Map/List draft wiring, count and Clear, chips, a11y, M02, palettes, routes                                                                                                                                                                                                                                                                                                                                   | `src/components/onboarding-design.test.ts`    |
 | Onboarding Clear hint vs the sheet's, the always-laid-out required note, the root fade under Reduce Motion, the reference mock-up unbundled                                                                                                                                                                                                                                                                                                          | `src/components/onboarding-design.test.ts`    |
-| The two `retailers` copy exceptions                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/lib/consumer-copy.test.ts`               |
+| The one `retailers` copy exception                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/lib/consumer-copy.test.ts`               |
 | Allergens grid: canonical order, icons, two columns, one-column and stacked reflow, measured word widths, select/deselect/clear, count words                                                                                                                                                                                                                                                                                                         | `src/lib/allergen-grid.test.ts`               |
 | Allergen pictograms: nine semantic pairs by static require, 1024² RGBA sRGB files, alpha repair pinned to the originals, 44pt box geometry, review artifacts unbundled                                                                                                                                                                                                                                                                               | `src/lib/allergen-assets.test.ts`             |
 | Allergen tiles: one checkbox element, hidden pictogram and check, no layout change, compact Clear, motion gate, Back/Continue, mock-up unbundled                                                                                                                                                                                                                                                                                                     | `src/components/onboarding-design.test.ts`    |
 | Popular stores and search: the ten ids and order, one catalog record each, catalog unchanged at 77, case/punctuation/alias search, empty and no-match queries, the sheet's fixed top edge, toggle/chip/clear/empty clear, columns, measured word widths                                                                                                                                                                                              | `src/lib/retailer-grid.test.ts`               |
 | Retailers step and search sheet: no second mode, no summary at zero, trigger below the ten without a chevron, one Modal sheet with a fixed frame and pinned Done, autofocus, instruction and no-match lines, single-column checkbox rows without marks, one shared selection, choosing keeps the sheet, every exit keeps choices, query never saved, Reduce Motion, overlay gone, Profile unchanged, Back/Continue/resume, M03, mock-up unreferenced | `src/components/onboarding-design.test.ts`    |
-| M01 on Welcome, M02 on States, M03 on Retailers, each once; M04–M05 unreferenced                                                                                                                                                                                                                                                                                                                                                                     | `src/lib/mascot-assets.test.ts`               |
+| M01 on Welcome, M02 on States, M03 on Retailers, M06 on Ready, each once; M04–M05 unreferenced; M06's measured seat and repaired bytes                                                                                                                                                                                                                                                                                                               | `src/lib/mascot-assets.test.ts`               |
+| Ready: allergen artwork for 0, 1, 2 and 3+ in canonical order, row labels, the mascot's seat at both size bounds, heading and rows clear of the shield, the accessibility-size stacking                                                                                                                                                                                                                                                              | `src/lib/ready-presentation.test.ts`          |
+| Ready: rows and order, artwork left and check right, one spoken element per row, untinted pictograms through the one map, the decorative mascot and its once-only entrance, Back/View plans/Edit/resume unchanged                                                                                                                                                                                                                                    | `src/components/onboarding-design.test.ts`    |
 
 The Design Preview hub renders every screen and every paywall state from the
 production components and offers gate scenarios that restart the real flow
