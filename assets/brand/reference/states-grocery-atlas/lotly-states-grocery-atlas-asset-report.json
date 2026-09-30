@@ -1,0 +1,252 @@
+{
+ "description": "States grocery-atlas hero: one static composite (backdrop, seated mascot with red thumbtack, atlas, tabletop, avocado dish, vegetable crate, lemons, cloth, tomatoes) cut from the founder-approved reference by deterministic crop + alpha. Prepared for review; NOT imported by the app. Nothing was regenerated, resampled, recoloured, sharpened or repaired; no pixel was synthesised.",
+ "reportDate": "2026-09-29",
+ "status": "Founder visual approval received 2026-09-30. Imported by the States step only (src/components/onboarding/states-step.tsx); the production bytes are unchanged from the export.",
+ "reference": {
+  "path": "assets/brand/reference/lotly-onboarding-states-grocery-atlas-target.png",
+  "sha256": "affbcf5fe16ce0a92dd1b70e5dbe77a09dce92681772c82bb4ff7cddecfea2c4",
+  "bytes": 1499079,
+  "dimensions": [
+   853,
+   1844
+  ],
+  "chunks": [
+   "IHDR",
+   "caBX",
+   "IDAT",
+   "IEND"
+  ],
+  "manifest": "assets/brand/reference/lotly-onboarding-states-grocery-atlas-source-manifest.json",
+  "manifestSha256Match": true,
+  "manifestDimensionsMatch": true,
+  "unchanged": true,
+  "colorProfile": "none (untagged RGB); caBX export chunk"
+ },
+ "measuredPage": {
+  "referenceCream": [
+   254,
+   253,
+   250
+  ],
+  "referenceCreamNoise": "Rows 545-599 (between the body copy and the backdrop), full width: mode (254,253,250); max-channel |C - cream| <= 5, mostly <= 3.",
+  "appBackgroundPage": "#FDFCF6 (253,252,246) from src/constants/design-tokens.ts (background/page)",
+  "note": "The exterior is keyed to transparent, so on screen the page token itself shows through; edges are unmatted against the MEASURED reference cream (the colour the art was actually blended with), not the token. The token is 1-4 units darker than the reference cream."
+ },
+ "resolution": "Native reference pixels (853px-wide mock). No upscaling; the export carries no more detail than the approved screenshot.",
+ "cropDecisions": {
+  "crop_xyxy_exclusive": [
+   0,
+   597,
+   853,
+   1328
+  ],
+  "suggested_xyxy_exclusive": [
+   0,
+   605,
+   853,
+   1326
+  ],
+  "top": "Backdrop solid top (max-channel deviation from cream > 24) is row 605 at x~650-700; its antialiasing starts at row 602. Top 597 = 605 - 8 (the Welcome convention), clear of the body copy (ends ~505). The manifest's 605 would have clipped the edge antialiasing at the backdrop's highest point.",
+  "bottom": "The native search border's line is rows 1329-1330 (x 58-794) with its antialiasing already in row 1328 (mean blue-minus-red +6.5 vs -6.1 in row 1327 over x 300-499). Row 1327 is the last border-free row, so the crop ends at 1328 (exclusive), 2 rows below the suggestion. The border's rounded corners (x 44-61 and 792-809) lie entirely at rows >= 1329.",
+  "sides": "Full width 0-852: backdrop, avocado dish, crate/vegetables, atlas, lemons, cloth and tomatoes run off both edges in the approved frame and keep those crops; no content invented beyond the frame.",
+  "lowestObjects": "Tomatoes (red-dominant) end at row 1280; lemons (yellow) at 1202; the cloth hem shadow reaches the left page edge by row 1315. Mascot feet, atlas and crate end well above."
+ },
+ "operations": {
+  "sourceExport": "Rectangular crop of the reference; RGB samples copied unchanged (verified 0 differing samples); re-encoded losslessly as 8-bit RGB with explicit sRGB/gAMA/cHRM; the caBX export chunk dropped; no ICC, bKGD, tIME or text chunks.",
+  "exteriorKey": "Welcome export's key, unchanged: flood from the crop's top row through every pixel that is not solid art (max-channel deviation from the measured cream > 24), never below reference row 700. Flooded pixels within 3 of the cream: alpha 0. Flooded pixels above that and solid pixels within 3px of the exterior: alpha = projection of (C - cream) onto (F - cream), F = the nearest interior art pixel within 6px; RGB unmatted as cream + (C - cream) / alpha. A flooded pixel with no coloured art within 6px is cleared (all such pixels were page noise, deviation <= 5).",
+  "exteriorFloodResult": {
+   "floodedPixels": 21546,
+   "lowestFloodedRowReference": 679,
+   "note": "The flood stops at the backdrop's edge; it meets the left page edge at row ~681 and never reaches the mascot, atlas or any object."
+  },
+  "keyCounts": {
+   "exteriorPagePixelsCleared": 15596,
+   "exteriorFarNoiseCleared": 3162,
+   "solidEdgeKeptOpaque": 0,
+   "softEdgeMatted": 5884,
+   "exteriorFlooded": 21546,
+   "lowestFloodedRowReference": 679
+  },
+  "nearOpaqueLift": "Existing contract: alpha 240-254 set to 255 with the SOURCE RGB (not unmatted).",
+  "clearRgb": "Existing contract: alpha 0 has RGB 0.",
+  "lowerFade": "Rows 1316-1327 (reference): alpha multiplied by a smoothstep from 1 to 0 over 12 rows; RGB left ORIGINAL (a compositing ramp, not a matte). These rows are counter-to-page vignette only: across x 60-799 they are within ~40 units (mean ~5-15) of the cream; no object reaches them.",
+  "alphaHistory": {
+   "clear": 19453,
+   "edge1to239": 13018,
+   "lifted240to254": 1948,
+   "opaque": 591072,
+   "rgbIdenticalToSource": 591072,
+   "rgbUnmatted": 3635,
+   "rgbZeroed": 19453,
+   "rgbOriginalUnderFade": 9383
+  },
+  "tooling": "Pure Node (zlib PNG decode/encode, no canvas colour management) for pixels; @napi-rs/canvas (already a devDependency) only to lay out the comparison sheet. No dependency added. Scripts lived in the session scratchpad, as for Welcome.",
+  "textRemoval": "None needed: no baked text crosses rows 597-1327."
+ },
+ "files": [
+  {
+   "role": "source, EXACT crop (reference/review, not runtime)",
+   "path": "assets/brand/reference/states-grocery-atlas/source/lotly-states-grocery-atlas-scene-source.png",
+   "sha256": "47779e4c8387373f608e6f042100474805bc7eb2556b4ca79bfc14580bacb3d1",
+   "bytes": 742719,
+   "dimensions": [
+    853,
+    731
+   ],
+   "crop_xyxy_exclusive": [
+    0,
+    597,
+    853,
+    1328
+   ],
+   "mode": "8-bit RGB, opaque",
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "rgbSamplesDifferingFromReferenceCrop": 0
+  },
+  {
+   "role": "production (imported by the States step)",
+   "path": "assets/brand/production/lotly-states-grocery-atlas-scene.png",
+   "sha256": "a1216e8d6ddd6649fb1ccf9704f2e6cb0c65d998e037b32a4ca5c36b0b84d52a",
+   "bytes": 834969,
+   "dimensions": [
+    853,
+    731
+   ],
+   "crop_xyxy_exclusive": [
+    0,
+    597,
+    853,
+    1328
+   ],
+   "mode": "8-bit RGBA, non-interlaced",
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "alphaRange": [
+    0,
+    255
+   ],
+   "alphaCounts": {
+    "clear": 19453,
+    "edge1to239": 13018,
+    "nearOpaque240to254": 0,
+    "opaque": 591072
+   },
+   "visibleBounds_xyxy_inclusive": [
+    0,
+    5,
+    852,
+    730
+   ],
+   "opaquePixelsWithRgbChangedVsSource": 0,
+   "clearPixelsWithNonZeroRgb": 0,
+   "lowestNonOpaqueRowAboveFade_reference": 681,
+   "protectedBand": {
+    "rows_reference": [
+     682,
+     1315
+    ],
+    "pixels": 540802,
+    "nonOpaque": 0,
+    "opaqueRgbDifferingFromSource": 0
+   },
+   "compositeVsSource": {
+    "aboveFade_onReferenceCream": {
+     "maxChannelDelta": 5,
+     "pixelsOver3": 5466,
+     "pixels": 613307
+    },
+    "aboveFade_onBackgroundPage": {
+     "maxChannelDelta": 9,
+     "pixelsOver3": 20912,
+     "pixels": 613307
+    },
+    "fadeRows_onReferenceCream": {
+     "maxChannelDelta": 35,
+     "pixelsOver3": 6098,
+     "pixels": 10236
+    },
+    "fadeRows_onBackgroundPage": {
+     "maxChannelDelta": 32,
+     "pixelsOver3": 5375,
+     "pixels": 10236
+    },
+    "fadeRows_byRegion_onReferenceCream": {
+     "x0to59": {
+      "maxChannelDelta": 35,
+      "pixelsOver3": 640,
+      "pixels": 720
+     },
+     "x60to799": {
+      "maxChannelDelta": 27,
+      "pixelsOver3": 4965,
+      "pixels": 8880
+     },
+     "x800to852": {
+      "maxChannelDelta": 13,
+      "pixelsOver3": 493,
+      "pixels": 636
+     }
+    }
+   }
+  },
+  {
+   "role": "review sheet: A exact crop / B on background/page / C on dark #1E2433 / D alpha / E reference / F full-screen reconstruction / G lower edge 2x",
+   "path": "assets/brand/reference/states-grocery-atlas/lotly-states-grocery-atlas-asset-comparison.png",
+   "sha256": "c1b308e3f4f321ef06c442d0c784afde3f3a856fe9cd2cfd156c054c2944d333",
+   "bytes": 3387028,
+   "dimensions": [
+    1778,
+    4025
+   ],
+   "mode": "8-bit RGB"
+  }
+ ],
+ "protectedPixelFidelity": "Every alpha-255 pixel (591072) is RGB byte-identical to the exact crop. Rows 682-1315 (mascot, thumbtack, rays, atlas, avocado dish, crate, vegetables, lemons, cloth, tomatoes, table) are 100% alpha 255. Non-opaque pixels exist only in the exterior above the backdrop edge (lowest row 681, where the backdrop meets the left page edge) and in the fade rows 1316-1327.",
+ "limitations": [
+  "Left-corner fade: at x < 60 the table vignette is ~30 units from cream at row 1327 and, in the reference, finishes fading beside the search field by ~row 1338. Those rows cannot be included without the search border, so the export completes that fade within rows 1316-1327; composited on the reference cream the corner is up to 35 units lighter than the reference in those 12 rows (x 60-799: up to 27; x 800-852: up to 13). Above row 1316 nothing differs by more than the page noise.",
+  "The lower band is the original counter-to-page gradient, which is cream by design: on a non-cream surface (sheet panel C) it shows as a light band before the alpha reaches 0. The asset is intended for background/page.",
+  "Backdrop edge pixels with very low alpha (1-15) carry unmatted RGB that drifts toward saturated cyan (e.g. 127/255/255 at alpha 2); their weight is <= 6%, so no halo is visible on cream or dark (inspected at 4-5x on #1E2433).",
+  "The mock is 853px wide. The export is a native-resolution crop; it cannot be sharper than the approved screenshot."
+ ],
+ "artContract": {
+  "atlas": "Static, generic, uniformly blue; no California marker, no selected-state fill, no location layer added.",
+  "thumbtack": "Red thumbtack stays in the mascot's hand, original pixels.",
+  "mascot": "Exact approved pixels; not split out."
+ },
+ "excluded": [
+  "back chevron",
+  "progress bar",
+  "headline",
+  "body",
+  "search field, icon and border",
+  "California chip",
+  "helper",
+  "Continue"
+ ],
+ "runtime": "Only the production scene is imported, by src/components/onboarding/states-step.tsx. The reference, source, report and comparison files must never be bundled.",
+ "revisions": [
+  {
+   "date": "2026-09-29",
+   "change": "Initial export: crop 0,597 to 853,1328, fade 1316-1327."
+  },
+  {
+   "date": "2026-09-30",
+   "change": "Founder approved the export; imported by the States step. No pixel changed."
+  }
+ ]
+}

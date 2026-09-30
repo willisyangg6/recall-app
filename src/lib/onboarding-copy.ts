@@ -75,10 +75,25 @@ export const PROBLEM_SOURCE_NOTE = 'Source: CDC';
 
 // ── Screen 2: States ────────────────────────────────────────────────────────
 
-export const STATES_HEADLINE = 'Which states matter to you?';
+// The grocery-atlas States (2026-09-30), founder-approved.
+export const STATES_HEADLINE = 'Make it local.';
 export const STATES_BODY = 'Choose every state where you or your household buys food.';
+/** The one search entry on the step: what it shows, and its spoken name. */
+export const STATES_SEARCH_PLACEHOLDER = 'Search states';
+export const STATES_SEARCH_HINT = 'Opens the list of states. Check every state you choose.';
+/** Beneath the chosen states, always shown. */
+export const STATES_HELPER = 'Choose one or more states.';
 /** Why Continue is unavailable with nothing chosen: said, not only greyed. */
 export const STATES_REQUIRED_NOTE = 'Choose at least one state to continue.';
+/** The chooser's title and its field's hint. */
+export const STATES_CHOOSER_TITLE = 'Choose states';
+export const STATES_FIELD_HINT = 'Filters the states below by name or abbreviation.';
+/** What a search found, said as it changes. */
+export const NO_STATES_FOUND = 'No state matches that search.';
+export function statesFoundAnnouncement(count: number): string {
+  if (count === 0) return NO_STATES_FOUND;
+  return count === 1 ? '1 state found.' : `${count} states found.`;
+}
 
 // ── Screen 3: Allergens ─────────────────────────────────────────────────────
 
@@ -134,7 +149,6 @@ export const BACK_LABEL = 'Back';
 export const BACK_HINT = 'Returns to the previous step.';
 export const CLEAR_SELECTION_LABEL = 'Clear selection';
 export const CLEAR_ALLERGENS_HINT = 'Unchecks every allergen.';
-export const CLEAR_STATES_HINT = 'Unchecks every state.';
 export const CLEAR_STORES_HINT = 'Unchecks every store.';
 
 /** The count line for the allergen step: words, not colour, carry the count. */

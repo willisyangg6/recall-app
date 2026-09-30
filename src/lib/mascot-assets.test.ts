@@ -273,12 +273,7 @@ test('M06 carries the mechanical repair of the supplied 1254px export, uniformly
   assert.ok(!DECODED.M06.chunks.includes('caBX'), 'the export metadata came back');
 });
 
-test('M02 on States, M03 on Retailers, M04 on the building interstitial and the paywall, M06 on Ready; M01 and M05 are referenced nowhere', () => {
-  const states = readFileSync(
-    join(ROOT, 'src', 'components', 'onboarding', 'states-step.tsx'),
-    'utf8',
-  );
-  assert.ok(states.includes(`require('@/assets/brand/production/${APPROVED.M02}')`));
+test('M03 on Retailers, M04 on the building interstitial and the paywall, M06 on Ready; M01, M02 and M05 are referenced nowhere', () => {
   const retailers = readFileSync(
     join(ROOT, 'src', 'components', 'onboarding', 'retailers-step.tsx'),
     'utf8',
@@ -306,8 +301,10 @@ test('M02 on States, M03 on Retailers, M04 on the building interstitial and the 
     }
   };
   walk(join(ROOT, 'src'));
-  // M01 left Welcome with the receipt composition (2026-09-29); M05 awaits its milestone.
-  for (const id of ['M01', 'M05'] as const) {
+  // M01 left Welcome with the receipt composition (2026-09-29); M02 left
+  // States with the grocery-atlas composition (2026-09-30), whose seated
+  // mascot is part of the approved scene; M05 awaits its milestone.
+  for (const id of ['M01', 'M02', 'M05'] as const) {
     const name = APPROVED[id];
     assert.ok(!sources.some((source) => source.includes(name)), `${id} (${name}) is integrated`);
   }
@@ -323,11 +320,6 @@ test('M02 on States, M03 on Retailers, M04 on the building interstitial and the 
     'utf8',
   );
   assert.ok(panel.includes(`require('@/assets/brand/production/${APPROVED.M04}')`));
-  assert.equal(
-    sources.filter((source) => source.includes(APPROVED.M02)).length,
-    1,
-    'M02 is drawn somewhere other than States',
-  );
   assert.equal(
     sources.filter((source) => source.includes(APPROVED.M03)).length,
     1,

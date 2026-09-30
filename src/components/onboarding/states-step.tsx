@@ -1,89 +1,115 @@
 /**
- * Screen 2, States (P2B7X.1; map-first since P2B7Y), `1 of 4`: a Map / List
- * control beside the helper mascot, then either the map (lib/state-map.ts)
- * with the count line, `Clear selection` and every chosen state by name, or
- * the shared searchable state list — in the onboarding frame, with
- * `Continue` sticky in the footer.
+ * Screen 2, States (the grocery-atlas States, 2026-09-30), `3 of 5`.
  *
- * ## One draft, two ways to edit it
+ * The founder-approved composition
+ * (assets/brand/reference/lotly-onboarding-states-grocery-atlas-target.png),
+ * rebuilt from its one approved production image and native UI. From the
+ * top: the back control and progress bar every counted step has; the
+ * headline and body, left aligned; the grocery-atlas scene across the full
+ * width; one search entry; the chosen states as removable chips; the helper;
+ * and `Continue` pinned above the bottom inset. It replaces the P2B7Y map,
+ * Map / List control, Northeast enlargement and insets, and the M02 aside;
+ * the map's code stays in the tree, unreferenced here.
  *
- * The draft lives HERE, seeded from the saved selection. The map toggles it
- * through `toggleStateCode` and clears it through `clearStateDraft` — the
- * shared selector's own rules. The list is the shared `StateSelectorContent`,
- * unchanged: it is mounted when List is chosen, seeded from this draft, and
- * reports every change back through `onDraftChange`, which lands in the same
- * `commit` the map uses. So switching modes never loses, reorders or
- * duplicates a choice, and both modes save through the one route callback.
+ * ## Its own page, the frame's chrome
+ *
+ * The scene bleeds to both screen edges, so States draws its own page as
+ * Welcome does, keeping the frame's top bar itself (`OnboardingTopBar`) so
+ * back and progress are exactly every other step's. The footer is the
+ * frame's: the page colour over the real bottom inset, with its hairline
+ * drawn only while content actually runs beneath it (the target has none).
+ *
+ * ## The scene
+ *
+ * One image, drawn whole with `contain` at its own aspect ratio and scaled by
+ * the page width: never cropped, tinted, faded or boxed, and approved for
+ * this cream page only. It is decorative: hidden from assistive technology,
+ * touching nothing. It is static and the same for every household; its
+ * atlas shows no state, and nothing about the selection is drawn on it.
+ *
+ * ## One draft, one search entry
+ *
+ * The draft lives HERE, seeded from the saved selection, and every change is
+ * reported to the route through `onChange`, which saves progressively: there
+ * is no save step and nothing to lose on a kill. The search entry opens the
+ * chooser (state-search-sheet.tsx), whose rows toggle this same draft
+ * through `toggleStateCode`, the shared selector's rule; a chip removes its
+ * state through the same rule. The jurisdictions are listed only in the
+ * chooser. When the chooser has gone, focus returns to the search entry.
  *
  * ## The rules this step carries
  *
- * - At least one state is required. Continue is disabled with none, and
- *   the reason is SAID beneath it (`Choose at least one state to
- *   continue.`), not only greyed; the note is permanently allocated so the
- *   footer never changes height as the count crosses zero.
- * - In each mode, the count line and `Clear selection` are always rendered,
- *   and `Clear selection` is inert with nothing chosen: clearing an empty
- *   draft returns the same reference, so nothing is saved or re-rendered
- *   (P2B7V).
- * - Every change is reported to the route through `onChange`, which saves
- *   progressively; there is no Done and nothing to lose on a kill.
- * - No location permission and no inferred state: the shopper chooses.
+ * - At least one state is required: `Continue` is disabled with none, with
+ *   the shared Button's disabled semantics and the reason as its hint; the
+ *   helper beneath the chips says it in words.
+ * - No location permission, no inferred state, no default: the chips are
+ *   the saved selection and nothing else.
+ * - Type (STATES_TYPE) and the 51pt `Continue` are States-local sizes; the
+ *   shared type scale and Button are unchanged. Nothing caps Dynamic Type:
+ *   the page scrolls above the footer and every chip stays reachable. At
+ *   the accessibility sizes the headline takes the `display` base (still
+ *   scaled) and each chosen state becomes a full-width row with its own
+ *   remove button (lib/states-presentation.ts). On a compact-height screen
+ *   the vertical gaps tighten so the search entry is above the footer.
  *
- * Presentational: the route owns saving and navigation.
+ * Static: no entrance, no loop. Presentational: the route owns saving and
+ * navigation.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
-  Animated,
-  Easing,
+  AccessibilityInfo,
+  findNodeHandle,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   useWindowDimensions,
   View,
+  type ImageSourcePropType,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { OnboardingFrame, SelectionCount } from '@/components/onboarding/onboarding-frame';
-import { StateMap } from '@/components/onboarding/state-map';
-import { StateSelectorContent } from '@/components/settings/personalization-form';
-import { Button } from '@/components/ui/button';
-import { Icon, type IconName } from '@/components/ui/icon';
+import { OnboardingTopBar } from '@/components/onboarding/onboarding-frame';
+import { StateSearchSheet } from '@/components/onboarding/state-search-sheet';
+import { Icon } from '@/components/ui/icon';
+import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
-import { color, hitTarget, radius, spacing } from '@/constants/design-tokens';
-import { useReduceMotion } from '@/hooks/use-reduce-motion';
+import { color, hitTarget, layout, radius, spacing } from '@/constants/design-tokens';
 import {
   BACK_HINT,
   BACK_LABEL,
-  CLEAR_SELECTION_LABEL,
-  CLEAR_STATES_HINT,
   CONTINUE_CTA,
   STATES_BODY,
   STATES_HEADLINE,
+  STATES_HELPER,
   STATES_REQUIRED_NOTE,
+  STATES_SEARCH_HINT,
+  STATES_SEARCH_PLACEHOLDER,
 } from '@/lib/onboarding-copy';
-import { canContinueFromStates, motionAllowed, stepProgress } from '@/lib/onboarding-state';
-import { clearStateDraft, stateCountLabel, toggleStateCode } from '@/lib/personalization-screen';
+import { canContinueFromStates, stepProgress } from '@/lib/onboarding-state';
+import { toggleStateCode } from '@/lib/personalization-screen';
+import { removeStateLabel, stateSpokenName } from '@/lib/state-map';
 import {
-  DEFAULT_SELECTION_MODE,
-  HELPER_MASCOT_SIZE,
-  HIDE_MASCOT_AT_SCALE,
-  LIST_MODE_HINT,
-  LIST_MODE_LABEL,
-  MAP_MODE_HINT,
-  MAP_MODE_LABEL,
-  MASCOT_ENTRANCE,
-  removeStateLabel,
-  stateSpokenName,
-  type StatesSelectionMode,
-} from '@/lib/state-map';
+  bodyMeasure,
+  CHIP,
+  chipLayout,
+  CONTROL_MIN_HEIGHT,
+  headlineType,
+  SCENE_PX,
+  STATES_TYPE,
+  verticalGaps,
+} from '@/lib/states-presentation';
+
+/** The approved scene, 853×731 RGBA, cut from the target at its own pixels. */
+const SCENE =
+  require('@/assets/brand/production/lotly-states-grocery-atlas-scene.png') as ImageSourcePropType;
 
 export function StatesStep({
   selected,
   onChange,
   onContinue,
   onBack,
-  initialQuery = '',
-  initialMode = DEFAULT_SELECTION_MODE,
 }: {
   /** The saved selection this step opens with. */
   selected: readonly string[];
@@ -91,14 +117,14 @@ export function StatesStep({
   onChange: (codes: readonly string[]) => void;
   onContinue: () => void;
   onBack: () => void;
-  /** A search already typed — for the gallery; the step starts blank. */
-  initialQuery?: string;
-  /** The mode to open in — for the gallery; the step opens on the map. */
-  initialMode?: StatesSelectionMode;
 }) {
-  // The one draft both modes edit; the saved value seeds it.
+  const insets = useSafeAreaInsets();
+  const { fontScale, height } = useWindowDimensions();
+  const gaps = verticalGaps(height);
+  const chips = chipLayout(fontScale);
+
+  // The one draft the chooser and the chips edit; the saved value seeds it.
   const [draft, setDraft] = useState<readonly string[]>(selected);
-  const [mode, setMode] = useState<StatesSelectionMode>(initialMode);
   const commit = useCallback(
     (codes: readonly string[]) => {
       setDraft(codes);
@@ -107,148 +133,124 @@ export function StatesStep({
     [onChange],
   );
   const toggle = (code: string) => commit(toggleStateCode(draft, code));
-  // An empty clear is a TRUE no-op: the same reference comes back, and
-  // nothing is set or saved (P2B7V), besides the control being disabled.
-  const clear = () => {
-    const next = clearStateDraft(draft);
-    if (next !== draft) commit(next);
-  };
   const canContinue = canContinueFromStates(draft);
-  const { fontScale } = useWindowDimensions();
+
+  // The chooser, and the search entry focus returns to once it has gone.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const entry = useRef<View>(null);
+  const focusEntry = useCallback(() => {
+    const tag = findNodeHandle(entry.current);
+    if (tag !== null) AccessibilityInfo.setAccessibilityFocus(tag);
+  }, []);
+
+  // The footer's hairline shows only while content runs beneath it.
+  const [viewport, setViewport] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
+  const overflowing = viewport > 0 && contentHeight > viewport + 1;
 
   return (
-    <OnboardingFrame
-      headline={STATES_HEADLINE}
-      body={STATES_BODY}
-      progress={stepProgress('states')}
-      back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}
-      aside={fontScale < HIDE_MASCOT_AT_SCALE ? <HelperMascot /> : null}
-      keyboard
-      footer={
-        <>
-          <Button
-            label={CONTINUE_CTA}
-            disabled={!canContinue}
-            onPress={onContinue}
-            accessibilityHint={canContinue ? undefined : STATES_REQUIRED_NOTE}
-          />
-          {/* Permanently allocated: the sentence is always laid out, so the
-              footer is the same height at every text size whether or not it
-              shows; with a state chosen it is invisible and hidden from
-              assistive technology. */}
-          <Text
-            variant="caption"
-            color="text/secondary"
-            style={[styles.note, canContinue && styles.noteInactive]}
-            accessibilityElementsHidden={canContinue}
-            importantForAccessibility={canContinue ? 'no-hide-descendants' : 'auto'}
-            accessibilityLiveRegion="polite">
-            {STATES_REQUIRED_NOTE}
+    <Surface background="background/page" style={styles.page}>
+      <OnboardingTopBar
+        back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}
+        progress={stepProgress('states')}
+      />
+      <ScrollView
+        style={styles.page}
+        contentContainerStyle={[styles.content, { paddingTop: gaps.top }]}
+        onLayout={(event) => setViewport(event.nativeEvent.layout.height)}
+        onContentSizeChange={(_, height) => setContentHeight(height)}>
+        <View style={[styles.heading, { gap: gaps.heading }]}>
+          <Text variant="display" accessibilityRole="header" style={headlineType(fontScale)}>
+            {STATES_HEADLINE}
           </Text>
-        </>
-      }>
-      {/* The whole content width: the mascot moved beside the heading (the
-          frame's aside, the Stores step's system), so the control is no
-          longer squeezed beside a drawing. */}
-      <ModeSwitch mode={mode} onChange={setMode} />
-      {mode === 'map' ? (
-        <View style={styles.selector}>
-          <StateMap selected={draft} onToggle={toggle} />
-          <View style={styles.countRow}>
-            <View style={styles.count}>
-              <SelectionCount text={stateCountLabel(draft.length)} />
-            </View>
-            <Button
-              variant="secondary"
-              label={CLEAR_SELECTION_LABEL}
-              accessibilityHint={CLEAR_STATES_HINT}
-              disabled={draft.length === 0}
-              onPress={clear}
-            />
-          </View>
-          <View style={styles.chosen}>
-            {draft.map((code) => (
-              <ChosenState key={code} code={code} onRemove={toggle} />
-            ))}
-          </View>
+          <Text
+            variant="body"
+            color="text/secondary"
+            style={[styles.body, { maxWidth: bodyMeasure(fontScale) }]}>
+            {STATES_BODY}
+          </Text>
         </View>
-      ) : (
-        <StateSelectorContent
-          selected={draft}
-          onCommit={() => {}}
-          onDraftChange={commit}
-          initialQuery={initialQuery}
-          clearHint={CLEAR_STATES_HINT}
-          frame={({ controls, list }) => (
-            <View style={styles.selector}>
-              <SelectionCount text={stateCountLabel(draft.length)} />
-              <View style={styles.controls}>{controls}</View>
-              <View style={styles.rows}>{list}</View>
+        <View
+          accessible={false}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={[styles.scene, { marginTop: gaps.scene }]}>
+          <Image source={SCENE} resizeMode="contain" style={styles.fill} />
+        </View>
+        <View style={styles.controls}>
+          <SearchEntry ref={entry} onPress={() => setSearchOpen(true)} />
+          {draft.length > 0 ? (
+            <View style={chips === 'pill' ? styles.chips : styles.chipRows}>
+              {draft.map((code) =>
+                chips === 'pill' ? (
+                  <ChosenState key={code} code={code} onRemove={toggle} />
+                ) : (
+                  <ChosenStateRow key={code} code={code} onRemove={toggle} />
+                ),
+              )}
             </View>
-          )}
-        />
-      )}
-    </OnboardingFrame>
+          ) : null}
+          <Text variant="body-small" color="text/secondary" style={styles.helper}>
+            {STATES_HELPER}
+          </Text>
+        </View>
+      </ScrollView>
+      <View
+        style={[
+          styles.footer,
+          overflowing && styles.footerRule,
+          { paddingBottom: insets.bottom + spacing[12] },
+        ]}>
+        <ContinueButton disabled={!canContinue} onPress={onContinue} />
+      </View>
+      <StateSearchSheet
+        visible={searchOpen}
+        selected={draft}
+        onToggle={toggle}
+        onClose={() => setSearchOpen(false)}
+        onClosed={focusEntry}
+      />
+    </Surface>
   );
 }
 
 /**
- * Map / List: two segments, each a button that reports whether it is the
- * mode showing, with a glyph and a word. The selected segment is told by its
- * fill and border AND by its word turning bold, and it reports `selected`,
- * so the mode is never carried by colour alone.
+ * The one search entry: drawn as the target's outlined field, but a button,
+ * not a field, so there is only ever one text field: the chooser's. It is
+ * named by its words, `Search states`, and says what it opens.
  */
-function ModeSwitch({
-  mode,
-  onChange,
-}: {
-  mode: StatesSelectionMode;
-  onChange: (mode: StatesSelectionMode) => void;
-}) {
-  const segments: { key: StatesSelectionMode; label: string; hint: string; icon: IconName }[] = [
-    { key: 'map', label: MAP_MODE_LABEL, hint: MAP_MODE_HINT, icon: 'map' },
-    { key: 'list', label: LIST_MODE_LABEL, hint: LIST_MODE_HINT, icon: 'list' },
-  ];
+function SearchEntry({ ref, onPress }: { ref: React.Ref<View>; onPress: () => void }) {
   return (
-    <View style={styles.switch}>
-      {segments.map(({ key, label, hint, icon }) => {
-        const active = mode === key;
-        return (
-          <Pressable
-            key={key}
-            accessibilityRole="button"
-            accessibilityLabel={label}
-            accessibilityHint={hint}
-            accessibilityState={{ selected: active }}
-            onPress={() => onChange(key)}
-            style={({ pressed }) => [
-              styles.segment,
-              active && styles.segmentActive,
-              pressed && styles.pressed,
-            ]}>
-            <Icon name={icon} size={20} color="icon/primary" />
-            <Text
-              variant={active ? 'body-small-bold' : 'body-small'}
-              color="text/primary"
-              style={styles.segmentText}>
-              {label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
+    <Pressable
+      ref={ref}
+      accessibilityRole="button"
+      accessibilityLabel={STATES_SEARCH_PLACEHOLDER}
+      accessibilityHint={STATES_SEARCH_HINT}
+      onPress={onPress}
+      style={({ pressed }) => [styles.entry, pressed && styles.pressed]}>
+      <Icon name="search" size={24} color="icon/primary" />
+      <Text variant="body" color="text/secondary" style={styles.placeholder}>
+        {STATES_SEARCH_PLACEHOLDER}
+      </Text>
+    </Pressable>
   );
 }
 
-/** A chosen state, by name, with its own removal control. */
+/**
+ * A chosen state as a soft blue pill, by full name, the whole pill its own
+ * removal control named for the state. The pill is 34pt; hitSlop takes the
+ * target to 44pt without overlapping a neighbouring row's.
+ */
 function ChosenState({ code, onRemove }: { code: string; onRemove: (code: string) => void }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={removeStateLabel(code)}
+      hitSlop={{ top: CHIP.hitSlop, bottom: CHIP.hitSlop }}
       onPress={() => onRemove(code)}
       style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
-      <Text variant="body-small" color="text/primary" style={styles.chipText}>
+      <Text variant="body-small-bold" color="text/primary" style={styles.chipText}>
         {stateSpokenName(code)}
       </Text>
       <Icon name="x" size={16} color="icon/primary" />
@@ -257,130 +259,175 @@ function ChosenState({ code, onRemove }: { code: string; onRemove: (code: string
 }
 
 /**
- * M02, the helper pose, beside the heading and body — the frame's aside,
- * the same seat and size the Stores mascot keeps, so the two selectors
- * read as one system (polish pass; it sat squeezed beside the Map / List
- * control before). Decorative, hidden from assistive technology, touching
- * nothing, never over the map, and gone from the accessibility text sizes,
- * where the words need the full width. It fades in with an 8pt settle
- * once, only when Reduce Motion is known to be off; otherwise it is simply
- * there.
+ * A chosen state at the accessibility text sizes: a full-width row, its name
+ * wrapping in all the width the remove button leaves, and the remove button
+ * its own 44pt control named for the state, so a long name never squeezes
+ * the target and the target never squeezes the name.
  */
-function HelperMascot() {
-  const reduceMotion = useReduceMotion();
-  const [animate] = useState(() => motionAllowed(reduceMotion));
-  const [entrance] = useState(() => new Animated.Value(animate ? 0 : 1));
-  useEffect(() => {
-    if (!animate) return;
-    const run = Animated.timing(entrance, {
-      toValue: 1,
-      delay: MASCOT_ENTRANCE.delay,
-      duration: MASCOT_ENTRANCE.duration,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    });
-    run.start();
-    return () => run.stop();
-  }, [animate, entrance]);
+function ChosenStateRow({ code, onRemove }: { code: string; onRemove: (code: string) => void }) {
   return (
-    <Animated.View
-      pointerEvents="none"
-      accessible={false}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={{
-        opacity: entrance,
-        transform: [
-          {
-            translateY: entrance.interpolate({
-              inputRange: [0, 1],
-              outputRange: [MASCOT_ENTRANCE.rise, 0],
-            }),
-          },
-        ],
-      }}>
-      <Image
-        source={require('@/assets/brand/production/lotly-mascot-helper-1024.png')}
-        style={{ width: HELPER_MASCOT_SIZE, height: HELPER_MASCOT_SIZE }}
-        resizeMode="contain"
-      />
-    </Animated.View>
+    <View style={styles.chipRow}>
+      <Text variant="body-small-bold" color="text/primary" style={styles.chipRowText}>
+        {stateSpokenName(code)}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={removeStateLabel(code)}
+        onPress={() => onRemove(code)}
+        style={({ pressed }) => [styles.remove, pressed && styles.pressed]}>
+        <Icon name="x" size={24} color="icon/primary" />
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * The shared Button's primary treatment at the target's size: the same
+ * pill, fill, disabled fill and label colours, face, pressed opacity, role
+ * and state, only 51pt tall with an 18pt label. With nothing chosen it is
+ * disabled and its hint says why.
+ */
+function ContinueButton({ disabled, onPress }: { disabled: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityHint={disabled ? STATES_REQUIRED_NOTE : undefined}
+      accessibilityState={{ disabled, busy: false }}
+      disabled={disabled}
+      onPress={onPress}>
+      {({ pressed }) => (
+        <View style={[styles.cta, disabled && styles.ctaInert, pressed && styles.pressed]}>
+          <Text
+            variant="body-small-bold"
+            color={disabled ? 'text/primary' : 'text/inverse'}
+            style={styles.ctaLabel}>
+            {CONTINUE_CTA}
+          </Text>
+        </View>
+      )}
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  switch: {
+  page: {
     flex: 1,
-    flexDirection: 'row',
-    padding: spacing[4],
-    gap: spacing[4],
-    borderRadius: radius[12],
-    borderWidth: 1,
-    borderColor: color['border/default'],
-    backgroundColor: color['background/surface'],
   },
-  segment: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[8],
-    minHeight: hitTarget.minimum,
-    paddingHorizontal: spacing[8],
-    borderRadius: radius[8],
-    borderWidth: 1,
-    borderColor: color['background/surface'],
+  // The top padding and the heading and scene gaps come from verticalGaps.
+  content: {
+    maxWidth: layout.maxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+    paddingBottom: spacing[16],
   },
-  segmentActive: {
-    backgroundColor: color['background/subtle'],
-    borderColor: color['action/primary'],
+  heading: {
+    paddingHorizontal: layout.pageMargin,
   },
-  segmentText: {
-    flexShrink: 1,
+  body: STATES_TYPE.body,
+  // The whole page width, at the image's own aspect ratio.
+  scene: {
+    width: '100%',
+    aspectRatio: SCENE_PX.width / SCENE_PX.height,
   },
-  selector: {
+  fill: {
+    width: '100%',
+    height: '100%',
+  },
+  // The field meets the scene's faded counter, as in the target.
+  controls: {
+    paddingHorizontal: layout.pageMargin,
     gap: spacing[12],
   },
-  countRow: {
+  entry: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing[8],
+    gap: spacing[16],
+    minHeight: CONTROL_MIN_HEIGHT,
+    paddingHorizontal: spacing[16],
+    paddingVertical: spacing[8],
+    borderRadius: radius[12],
+    borderWidth: 1,
+    borderColor: color['action/primary'],
+    backgroundColor: color['background/surface'],
   },
-  count: {
-    flexGrow: 1,
+  placeholder: {
+    ...STATES_TYPE.placeholder,
     flexShrink: 1,
   },
-  chosen: {
+  chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing[8],
+    columnGap: spacing[8],
+    rowGap: CHIP.rowGap,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[8],
-    minHeight: hitTarget.minimum,
+    gap: spacing[12],
+    minHeight: CHIP.minHeight,
     maxWidth: '100%',
-    paddingHorizontal: spacing[12],
-    borderRadius: radius[12],
+    paddingLeft: spacing[16],
+    paddingRight: spacing[12],
+    paddingVertical: spacing[4],
+    borderRadius: radius.full,
     backgroundColor: color['background/subtle'],
   },
   chipText: {
+    ...STATES_TYPE.chip,
     flexShrink: 1,
   },
-  controls: {
-    gap: spacing[12],
-  },
-  rows: {
+  chipRows: {
     gap: spacing[8],
   },
-  note: {
-    textAlign: 'center',
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[4],
+    minHeight: hitTarget.minimum,
+    paddingLeft: spacing[16],
+    paddingVertical: spacing[4],
+    borderRadius: radius[12],
+    backgroundColor: color['background/subtle'],
   },
-  noteInactive: {
-    opacity: 0,
+  chipRowText: {
+    ...STATES_TYPE.chip,
+    flex: 1,
+  },
+  remove: {
+    minWidth: hitTarget.minimum,
+    minHeight: hitTarget.minimum,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  helper: STATES_TYPE.helper,
+  // The frame's footer: the page colour, pinned over the bottom inset.
+  footer: {
+    width: '100%',
+    paddingHorizontal: layout.pageMargin,
+    paddingTop: spacing[12],
+    borderTopWidth: 1,
+    borderTopColor: 'transparent',
+    backgroundColor: color['background/page'],
+  },
+  footerRule: {
+    borderTopColor: color['border/subtle'],
+  },
+  // The shared Button's primary pill (components/ui/button.tsx), 51pt tall.
+  cta: {
+    minHeight: CONTROL_MIN_HEIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing[16],
+    paddingVertical: spacing[8],
+    borderRadius: radius.full,
+    backgroundColor: color['action/primary'],
+  },
+  ctaInert: {
+    backgroundColor: color['action/disabled'],
+  },
+  ctaLabel: {
+    ...STATES_TYPE.cta,
+    textAlign: 'center',
   },
   pressed: {
     opacity: 0.6,

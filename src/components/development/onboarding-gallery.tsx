@@ -130,7 +130,7 @@ function Screen({ height = 720, children }: { height?: number; children: React.R
 
 // ── Steps with live local state ─────────────────────────────────────────────
 
-function LiveStates({ initial, initialQuery = '' }: { initial: string[]; initialQuery?: string }) {
+function LiveStates({ initial }: { initial: string[] }) {
   const [prefs, setPrefs] = useState<UserRecallPreferences>({
     ...EMPTY_PREFERENCES,
     states: initial,
@@ -141,9 +141,6 @@ function LiveStates({ initial, initialQuery = '' }: { initial: string[]; initial
       onChange={(codes) => setPrefs(withStates(prefs, codes))}
       onContinue={noop}
       onBack={noop}
-      initialQuery={initialQuery}
-      // A typed search lives in List mode; every other sample opens on the map.
-      initialMode={initialQuery === '' ? 'map' : 'list'}
     />
   );
 }
@@ -282,19 +279,14 @@ export function OnboardingGallery() {
           <WelcomeContent onGetStarted={noop} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="States, empty — simulated: nothing chosen; Continue is disabled and the reason reads beneath it; Clear selection is present and inert">
+      <GallerySample caption="States, empty — simulated: nothing chosen; no chips, and Continue is disabled with its reason as the hint">
         <Screen>
           <LiveStates initial={[]} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="States, selected — simulated: California and New York; the count reads 2 states selected and Continue is enabled">
+      <GallerySample caption="States, selected — simulated: California and New York as removable chips; Continue is enabled">
         <Screen>
           <LiveStates initial={codesFor('California', 'New York')} />
-        </Screen>
-      </GallerySample>
-      <GallerySample caption="States, search — simulated: “new” typed with California chosen; the hidden selection stays chosen">
-        <Screen>
-          <LiveStates initial={codesFor('California')} initialQuery="new" />
         </Screen>
       </GallerySample>
       <GallerySample caption="Allergens, empty — simulated: nothing chosen; Continue stays enabled (optional), Clear selection inert">

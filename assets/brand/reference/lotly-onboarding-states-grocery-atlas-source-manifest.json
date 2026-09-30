@@ -1,0 +1,36 @@
+{
+  "screen": "Lotly onboarding States",
+  "approval": "Founder selected the second displayed fresh-food background variant: market vegetables, lemons and tomatoes.",
+  "target_path": "assets/brand/reference/lotly-onboarding-states-grocery-atlas-target.png",
+  "target_dimensions": [
+    853,
+    1844
+  ],
+  "target_sha256": "affbcf5fe16ce0a92dd1b70e5dbe77a09dce92681772c82bb4ff7cddecfea2c4",
+  "production_asset_path": "assets/brand/production/lotly-states-grocery-atlas-scene.png",
+  "suggested_crop_end_exclusive": [
+    0,
+    605,
+    853,
+    1326
+  ],
+  "crop_status": "Suggestion only; inspect exact pixels before export. Do not include native search-border pixels or crop foreground food.",
+  "art_contract": {
+    "mascot": "Seated exact Lotly character holding a red physical thumbtack",
+    "scene": "Wood table, avocado plate left, vegetable crate right, lemons left foreground, tomatoes right foreground",
+    "map": "Static generic decorative atlas, uniformly blue, no selected state or location marker",
+    "dynamic_selection": "Native chips only; California is a mock selection, never a default"
+  },
+  "native_copy": {
+    "headline": "Make it local.",
+    "body": "Choose every state where you or your household buys food.",
+    "search_placeholder": "Search states",
+    "helper": "Choose one or more states.",
+    "cta": "Continue"
+  },
+  "workflow": [
+    "Fix and verify the pending onboarding checkpoint, then commit before States screen implementation.",
+    "Export the hero deterministically and return asset previews for founder review.",
+    "After asset approval, run IMPLEMENTATION_PROMPT.md."
+  ]
+}

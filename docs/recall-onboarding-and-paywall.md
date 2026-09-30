@@ -17,6 +17,10 @@ push delivery stays globally inactive. Connecting the real store is
 _P2B7Y (2026-09-24): the four-step progress bar and the map-first States
 step (§6.1)._
 
+_Grocery-atlas States (2026-09-30, uncommitted): the founder-approved
+States composition replaces the map-first step — one static scene, one
+search entry opening a chooser, removable chips (§6.1)._
+
 _P2B7Z (2026-09-24, uncommitted): the Allergens step as a two-column grid of
 tiles (§6.2)._
 
@@ -77,25 +81,25 @@ The rules, each pinned by a test named in §11:
   returning from Ready or the paywall, not on a relaunch after it
   completed, and a kill during the play finishes the one play. It replaces
   itself with Ready, so it never joins the back chain.
-- States opens on a map of the states and offers the searchable list beside
-  it; both edit one draft (§6.1). No location permission is asked and no
-  state is inferred.
-- States requires at least one selection. Continue is disabled with none, and
-  the reason is written beneath it (`Choose at least one state to continue.`)
-  in a permanently allocated slot: the sentence is always laid out, and while
-  a state is chosen it is invisible and hidden from assistive technology, so
-  the footer and Continue keep one height and position at every text size
-  when the last state is cleared (measured on device, §6.1).
+- States shows one search entry; the jurisdictions are listed only in the
+  chooser it opens, and the chooser and the chips edit one draft (§6.1). No
+  location permission is asked, no state is inferred, and none is chosen by
+  default.
+- States requires at least one selection. Continue is disabled with none,
+  its reason (`Choose at least one state to continue.`) spoken as its hint,
+  and the helper beneath the chips always says `Choose one or more states.`
 - Allergens and retailers are optional. An empty selection is a complete
   answer and never blocks Continue.
-- `Clear selection` is always in the layout on States and Allergens. With
+- `Clear selection` is always in the layout on Allergens. With
   nothing selected it is disabled and its handler is a true no-op, so choosing
   or clearing never moves the rows (the P2B7V rule). Retailers is the
   deliberate exception: its summary, with its count and compact `Clear`,
   exists only while a store is chosen, and the grid moves down once when the
   first is (§6.3).
-- The count above the States and Allergens lists is unconditional (`No
-states selected`, `2 allergens selected`).
+- The count above the Allergens grid is unconditional (`2 allergens
+selected`). States has no list on the step, so no count: its chips sit
+  below the one search entry, and a chip added or removed moves nothing a
+  finger is on.
 - Preferences save progressively through the existing store on every change.
   There is no Done and nothing to lose on a kill.
 - Killing and reopening resumes the exact incomplete screen, forwards or
@@ -378,7 +382,7 @@ The copy is the founder's, verbatim, in `src/lib/onboarding-copy.ts` and
 | 1 Welcome                 | `WelcomeContent`                                               | `/onboarding/welcome`       |
 | 2 Problem: scale, 1 of 5  | `ProblemScaleStep`                                             | `/onboarding/problem-scale` |
 | 3 Problem: stakes, 2 of 5 | `ProblemRiskStep`                                              | `/onboarding/problem-risk`  |
-| 4 States, 3 of 5          | `StatesStep`: `StateMap` or `StateSelectorContent`             | `/onboarding/states`        |
+| 4 States, 3 of 5          | `StatesStep` and `StateSearchSheet`                            | `/onboarding/states`        |
 | 5 Allergens, 4 of 5       | `AllergensStep`: `AllergenTile` grid                           | `/onboarding/allergens`     |
 | 6 Retailers, 5 of 5       | `RetailersStep`: `RetailerTile` grid and `RetailerSearchSheet` | `/onboarding/retailers`     |
 | 7 Building your watch     | `BuildingStep` (once; outside the frame)                       | `/onboarding/building`      |
@@ -503,55 +507,108 @@ once. `Not now` calls nothing but the completion. Both choices complete the
 education, the gate opens the app, and the Feed shows `Your preferences are
 set.` once, in that session, until it loses focus.
 
-### 6.1 The States step: Map and List (P2B7Y)
+### 6.1 The States step: the grocery atlas (2026-09-30)
 
-**Why both.** Most shoppers find where they live faster on a map than in a
-52-row list, so Map is the default. A map is also the hardest control for a
-screen-reader user and for the smallest jurisdictions, so the searchable
-list stays a first-class mode rather than a fallback. A `Map` / `List`
-control switches between them.
+**What it is.** The founder-approved composition
+(`assets/brand/reference/lotly-onboarding-states-grocery-atlas-target.png`,
+853×1844, pinned by its manifest's SHA-256) built natively from ONE
+production image and native UI: back and progress (the frame's own
+`OnboardingTopBar`), `Make it local.`, `Choose every state where you or your
+household buys food.`, the grocery-atlas scene across the full width, one
+`Search states` entry, the chosen states as removable chips, `Choose one or
+more states.`, and `Continue`. It replaces the P2B7Y map-first step (below),
+its Map / List control, Northeast enlargement and insets, the count line,
+`Clear selection` and the M02 aside. Composition and measured deviations:
+[../DESIGN.md](../DESIGN.md) "States (the grocery atlas)".
+
+**The scene.** `assets/brand/production/lotly-states-grocery-atlas-scene.png`
+(853×731, sha256 `a1216e8d…`), a deterministic crop + alpha of the target
+(rows 597–1327; exterior cream keyed, edge unmatted, a 12-row counter fade,
+every opaque pixel byte-identical to the crop), founder-approved 2026-09-30
+and pinned by `src/lib/states-grocery-atlas-assets.test.ts`. Crop,
+operations, hashes and the one limitation (the far-left corner's fade is
+completed within 12 rows) are in
+`assets/brand/reference/states-grocery-atlas/lotly-states-grocery-atlas-asset-report.json`,
+with the review sheet beside it; none of it is bundled. The scene is static
+and identical for every household: its atlas shows no state or marker, and
+nothing about the selection is ever drawn on it. It is decorative — hidden
+from assistive technology, touching nothing — and drawn whole with
+`contain` at its own aspect ratio, never cropped, tinted or shrunk to fit.
 
 **One draft.** `StatesStep` holds the draft, seeded from the saved
-selection. The map toggles it with `toggleStateCode` and clears it with
-`clearStateDraft`, the shared selector's own rules; List is the unchanged
-shared `StateSelectorContent`, mounted over the current draft and reporting
-every change back into the same commit. Every change saves progressively
-through the route, exactly as before. Switching modes keeps every choice in
-its canonical order; the list search starts blank on each List visit and
-never unchecks anything.
+selection; the chooser's rows and the chips toggle it with
+`toggleStateCode`, the shared selector's rule, and every change saves
+progressively through the route exactly as before. Back, Continue →
+Allergens and the resume point are unchanged.
 
-**Map mode.** The contiguous states and the District of Columbia in one
-panel; Alaska, Hawaii and Puerto Rico each in a dashed inset box beneath it,
-the whole box its target. A tap is converted into the map's own units and
-`stateAtPoint` (`src/lib/state-map.ts`) names the shape under the finger, or
-the nearest shape within 10pt for a tap on water. `Zoom in on the Northeast`
-enlarges Maine to Maryland about four times in a square framed view, where
-Rhode Island and Delaware become real targets and the District, still a few
-points across, is drawn as a round marker that takes taps within 12pt;
-`Show the whole map` returns. Below the map: the count line, `Clear
-selection`, and every chosen jurisdiction by name as a chip with a removal
-control (`Remove California`). A chosen shape fills `action/primary` with a
-white edge and carries a check at its interior point where the check fits
-(always in the enlarged view, where the smallest need it); a chosen inset
-gets a solid border and a checked badge; the chip list names every choice,
-so colour is never the only channel. The map never animates.
+**The chooser** (`StateSearchSheet`) is the Stores search's pattern
+(§6.3): React Native's own transparent `Modal` over the dimmed step, the
+same backdrop and slide, simply there under Reduce Motion. Its top edge sits
+just under the status bar (`chooserTop`), so it owns the viewport while the
+shopper searches. It holds `Choose states` with `Close`, the `Search states`
+field (focused on opening; named apart from its placeholder), the shared
+Check Rows for all 52 jurisdictions alphabetically by full name, and
+`Done`. A query matches full names (the shared filter), postal codes
+(`NY`, `DC`, `PR`) and `Washington DC` (`searchStateChoices`,
+`src/lib/states-presentation.ts`); no match reads `No state matches that
+search.`, and what was found is announced as the query changes. Checking a
+row never closes the sheet; `Close`, `Done`, the backdrop and Android's
+back only close, keeping every choice; the query is forgotten; focus
+returns to the search entry.
 
-**Clear selection** is always rendered in both modes, disabled with nothing
-chosen, and an empty clear returns the same draft reference, so nothing is
-set or saved (the P2B7V rule). In both modes its hint is onboarding's own
-`Unchecks every state.`: the shared selector's default hint says nothing is
-saved until Done, which is true in the Profile sheet and false here, so the
-step passes `clearHint` and the sheet keeps its words. Continue, Back and the
-resume point are unchanged.
+**Sizes.** States-local and measured against the target with the app's
+Public Sans files (`STATES_TYPE`): the headline 50/56 Bold (the target's
+308pt of ink in one line; fits an SE's 343pt column), the body 18/23 in a
+290pt measure × text scale (the target's break after `or`), the placeholder
+16, chips 16 SemiBold, the helper 14/19, and `Continue` 51pt with an 18pt
+label, drawn locally with the shared Button's primary and disabled
+semantics. The shared type scale and Button are unchanged. Nothing is
+capped: no `maxFontSizeMultiplier`, `numberOfLines` or scaling rule; the
+page scrolls above the footer and every chip stays reachable.
 
-**The required-state note** occupies the same slot whether or not it shows:
-`STATES_REQUIRED_NOTE` is always laid out, at `opacity: 0` and hidden from
-assistive technology while a state is chosen. A `' '` placeholder was one
-line where the sentence wraps to three at the accessibility sizes, so
-clearing the last state used to lift Continue. Measured through the iOS
-accessibility tree on 2026-09-24, Continue's frame is identical before and
-after clearing the last state, at the default size (iPhone 17) and at
-AX-XXXL (iPhone SE 3rd generation), and the sentence is not clipped.
+**Usability pass (founder decisions, 2026-09-30).** At the accessibility
+text sizes (text scale 1.5 and up, the app's shared threshold) the headline
+uses the standard `display` base, 33pt, still fully scaled by Dynamic Type
+(`headlineType`): at 50pt × AX5 its words outgrew the column and broke
+inside themselves; at 33pt the longest word fits at every size. There each
+chosen state is a full-width row (`chipLayout`), its name wrapping in the
+width left beside a separate 44pt `Remove <state>` button; below that
+threshold the chips stay the approved pills. On a screen under 700pt tall
+(`COMPACT_HEIGHT`, an SE) the vertical gaps tighten (`verticalGaps`) so the
+whole search entry is above the footer on arrival at the default size; the
+scene keeps its full width and aspect ratio and no default text size
+changes. Intrinsic word wrapping that remains: a single word wider than the
+whole row still breaks — `Massachusetts` from AX4, `Pennsylvania` at AX5,
+and on an SE at AX5 also `Connecticut` and `Washington` (Public Sans
+SemiBold 16 × scale against the row's text width, 306pt on iPhone 17 and
+279pt on an SE); no name is clipped or truncated.
+
+**Verified on device (2026-09-30, iPhone 17 and iPhone SE 3rd generation
+simulators, offline dev bundle).** The accessibility tree reads Back,
+`Onboarding progress, step 3 of 5`, the headline (header), the body,
+`Search states` (button, with its hint), each `Remove <state>`, the helper
+and `Continue`; the scene is absent. The chooser lists all 52 with checked
+state; `ny`, `Rhode`, `Conn`, `dc`, `Washington DC` and `pr` each find
+their jurisdiction and `zz` shows the empty text; six choices made there
+appear as six chips; removing the last chip disables `Continue` (hint
+spoken, press inert); a kill and relaunch resumes States with the saved
+choices; `Continue` reaches Allergens and Back returns with them kept. With
+Reduce Motion on, the chooser appears without its slide and the push into
+States is a cross-dissolve; the scene is present on the first frame with no
+layout shift. At AX5 everything wraps and scrolls. Before the usability pass the
+50pt headline broke inside words at AX5 (and AX4 on an SE) and the search
+entry's lowest ~7pt started under the footer on an SE; after it, the AX5
+headline wraps only between words on both devices and the SE's search
+entry ends 15pt above the footer's hairline at the default size (measured
+from screenshots), with the chips and helper a scroll away. VoiceOver listening was not performed (Simulator); the order and
+labels above are from the accessibility tree.
+
+**The P2B7Y map (retired from the step).** What follows records the map
+that States drew from 2026-09-24 to 2026-09-30. Its code
+(`src/components/onboarding/state-map.tsx`, `src/lib/state-map.ts`, the
+generated geometry) stays in the tree, unreferenced by the step, and is
+still pinned by `src/lib/state-map.test.ts`; removing it is a separate
+milestone.
 
 **Geometry.** The US Census Bureau's 2017 cartographic boundary files
 (`cb_2017_us_state_*`, public domain as a US government work), via
@@ -573,35 +630,6 @@ would still be in List, which is built from the vocabulary alone.
 install` (the Expo SDK 57 version). No mapping SDK, MapKit, Google Maps,
 WebView or web content; the reference mock-up image is documentation in
 `assets/brand/reference/` and is not bundled.
-
-**Accessibility.** The drawing is hidden from assistive technology. Each
-jurisdiction on the panel is an invisible checkbox element at its interior
-point, named in full, reporting checked, and activated by VoiceOver's
-double-tap (`onAccessibilityTap`) without intercepting finger touches; iOS
-orders these by position, so VoiceOver reads the map north to south, and
-List is the alphabetical path. Each inset is a named checkbox. `Map` and
-`List` are buttons reporting `selected`, and the active word turns bold.
-The Northeast control reports `expanded`. Removal controls name their state.
-Every control is at least 44pt. At the accessibility text sizes the mascot
-yields its room (text scale 1.5, the app's shared threshold), the
-Map / List control takes the full width, the Northeast control wraps, and
-the page scrolls; nothing is capped or clipped and Continue stays reachable.
-
-**Mascot.** M02, `assets/brand/production/lotly-mascot-helper-1024.png`,
-beside the heading and body through the frame's `aside` — the Stores
-mascot's seat, at the same 120pt (polish pass; it was a 72pt miniature
-beside the Map / List control, which read as accidental). The Map / List
-control now takes the full content width beneath the introduction.
-Decorative, hidden from VoiceOver, `pointerEvents="none"`, never over the
-map, and gone from the accessibility text sizes (scale 1.5), where the
-words need the full width. It fades in with an 8pt settle once, after the
-push settles, only when Reduce Motion is known to be off.
-
-**Motion.** Two small entrances — the progress segment's fill and the
-mascot's fade — each played once and skipped outright under Reduce Motion
-(or while the setting is still unknown). `useReduceMotion` reads the setting
-once per process, so later screens know it on their first frame. Nothing
-loops.
 
 **Route transitions.** A native stack does not honour Reduce Motion by
 itself: onboarding's pushes still slid with the setting on. The root stack
@@ -1646,7 +1674,7 @@ What P2B7X.2 does, and what it does not touch:
 | Reset clears the record in order                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/lib/installation-reset.test.ts`                                                                               |
 | Route inventory and the release bundle boundary                                                                                                                                                                                                                                                                                                                                                                                                      | `src/lib/release-exposure.test.ts`                                                                                 |
 | States map: vocabulary coverage, hit testing in both views and the insets, one draft, empty clear, no network                                                                                                                                                                                                                                                                                                                                        | `src/lib/state-map.test.ts`                                                                                        |
-| Progress names and fills, motion gates, Map/List draft wiring, count and Clear, chips, a11y, M02, palettes, routes                                                                                                                                                                                                                                                                                                                                   | `src/components/onboarding-design.test.ts`                                                                         |
+| Progress names and fills, motion gates, palettes, routes; the grocery-atlas States: one draft, composition, local type, chips, chooser                                                                                                                                                                                                                                                                                                               | `src/components/onboarding-design.test.ts`                                                                         |
 | Onboarding Clear hint vs the sheet's, the always-laid-out required note, the root fade under Reduce Motion, the reference mock-up unbundled                                                                                                                                                                                                                                                                                                          | `src/components/onboarding-design.test.ts`                                                                         |
 | The one `retailers` copy exception                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/lib/consumer-copy.test.ts`                                                                                    |
 | Allergens grid: canonical order, icons, two columns, one-column and stacked reflow, measured word widths, select/deselect/clear, count words                                                                                                                                                                                                                                                                                                         | `src/lib/allergen-grid.test.ts`                                                                                    |
@@ -1654,8 +1682,10 @@ What P2B7X.2 does, and what it does not touch:
 | Allergen tiles: one checkbox element, hidden pictogram and check, no layout change, compact Clear, motion gate, Back/Continue, mock-up unbundled                                                                                                                                                                                                                                                                                                     | `src/components/onboarding-design.test.ts`                                                                         |
 | Popular stores and search: the ten ids and order, one catalog record each, catalog unchanged at 77, case/punctuation/alias search, empty and no-match queries, the sheet's fixed top edge, toggle/chip/clear/empty clear, columns, measured word widths                                                                                                                                                                                              | `src/lib/retailer-grid.test.ts`                                                                                    |
 | Retailers step and search sheet: no second mode, no summary at zero, trigger below the ten without a chevron, one Modal sheet with a fixed frame and pinned Done, autofocus, instruction and no-match lines, single-column checkbox rows without marks, one shared selection, choosing keeps the sheet, every exit keeps choices, query never saved, Reduce Motion, overlay gone, Profile unchanged, Back/Continue/resume, M03, mock-up unreferenced | `src/components/onboarding-design.test.ts`                                                                         |
-| M02 on States, M03 on Retailers, M04 on the interstitial and paywall, M06 on Ready; M01 and M05 unreferenced; M06's measured seat and repaired bytes                                                                                                                                                                                                                                                                                                 | `src/lib/mascot-assets.test.ts`                                                                                    |
+| M03 on Retailers, M04 on the interstitial and paywall, M06 on Ready; M01, M02 and M05 unreferenced; M06's measured seat and repaired bytes                                                                                                                                                                                                                                                                                                           | `src/lib/mascot-assets.test.ts`                                                                                    |
 | The receipt Welcome's two images: approved bytes, RGBA sRGB at the measured sizes, the report's accuracy and superseded hero, drawn only by Welcome, no reference or source material imported                                                                                                                                                                                                                                                        | `src/lib/welcome-receipt-assets.test.ts`                                                                           |
+| The grocery-atlas States' scene: approved bytes, RGBA sRGB at the measured size, the report's accuracy, drawn only by States, no reference or source material imported                                                                                                                                                                                                                                                                               | `src/lib/states-grocery-atlas-assets.test.ts`                                                                      |
+| The States chooser's search (names, postal codes, Washington DC, no match, no duplicates) and the measured geometry                                                                                                                                                                                                                                                                                                                                  | `src/lib/states-presentation.test.ts`                                                                              |
 | Ready: allergen artwork for 0, 1, 2 and 3+ in canonical order, row labels, the mascot's seat at both size bounds, heading and rows clear of the shield, the accessibility-size stacking                                                                                                                                                                                                                                                              | `src/lib/ready-presentation.test.ts`                                                                               |
 | Ready: rows and order, artwork left and check right, one spoken element per row, untinted pictograms through the one map, the decorative mascot and its once-only entrance, Back/Edit/See my plan, the approved order (card → Edit → heading → pill → deck → locked strip → CTA), no purchase UI, honest empty/checking/unavailable states                                                                                                           | `src/components/onboarding-design.test.ts`                                                                         |
 | The carousel: horizontal snap and peek geometry, the real shared card surface and media tile, one spoken element per card with its position, no arrows/instruction copy/auto-advance/loop, truthful dots, the sentinel exposing nothing                                                                                                                                                                                                              | `src/components/onboarding-design.test.ts`, `src/lib/ready-presentation.test.ts`                                   |
@@ -1671,7 +1701,7 @@ What P2B7X.2 does, and what it does not touch:
 | The merged machinery is gone: no overlay footer, no scroll CTA rule, no merged copy in product source                                                                                                                                                                                                                                                                                                                                                | `src/components/onboarding-design.test.ts`                                                                         |
 | Polish pass — the image-led deck: ranked matches narrowed to image-bearing ones in rank order, three readable, the real fourth locked, no locked card without one, the strip counting every unshown match, deterministic                                                                                                                                                                                                                             | `src/lib/ready-preview.test.ts`                                                                                    |
 | Polish pass — uniform cards (reserved slots from the type scale, off from the accessibility sizes), the measured status row, restrained depth; the variant opt-in with no Feed or Saved caller                                                                                                                                                                                                                                                       | `src/lib/ready-presentation.test.ts`, `src/components/feed-design.test.ts`, `src/server/feed-saved-parity.test.ts` |
-| Polish pass — the deck's frosted real final card (one button, nothing exposed), Stores' quiet count row with no summary or chips, States' aside mascot, the story screens, the paywall's M04, check rows and corner badge                                                                                                                                                                                                                            | `src/components/onboarding-design.test.ts`                                                                         |
+| Polish pass — the deck's frosted real final card (one button, nothing exposed), Stores' quiet count row with no summary or chips, the story screens, the paywall's M04, check rows and corner badge                                                                                                                                                                                                                                                  | `src/components/onboarding-design.test.ts`                                                                         |
 | Polish pass — the progress fill only forward-by-one; Stores' Continue and the reset restoring the interstitial                                                                                                                                                                                                                                                                                                                                       | `src/lib/onboarding-state.test.ts`, `src/lib/onboarding-navigation.test.ts`                                        |
 | Store summary: three in full, then two and `+N more`, every store still spoken                                                                                                                                                                                                                                                                                                                                                                       | `src/lib/ready-presentation.test.ts`                                                                               |
 

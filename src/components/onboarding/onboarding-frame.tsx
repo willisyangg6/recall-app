@@ -116,25 +116,7 @@ export function OnboardingFrame({
   );
   const content = (
     <>
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing[8] }]}>
-        <View style={styles.backSlot}>
-          {back ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={back.label}
-              accessibilityHint={back.hint}
-              onPress={back.onPress}
-              style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
-              <Icon name="chevron-left" size={24} color="icon/primary" />
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
-      {progress ? (
-        <View style={styles.progressRow}>
-          <OnboardingProgress progress={progress} />
-        </View>
-      ) : null}
+      <OnboardingTopBar back={back} progress={progress} />
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
@@ -166,6 +148,45 @@ export function OnboardingFrame({
         content
       )}
     </Surface>
+  );
+}
+
+/**
+ * The frame's top: the back control's bar under the status bar, then the
+ * progress bar's own row on a counted step. Exported for the States step,
+ * which draws its own page (its scene bleeds to both edges) but keeps this
+ * chrome exactly as every other step has it.
+ */
+export function OnboardingTopBar({
+  back,
+  progress,
+}: {
+  back: { label: string; hint: string; onPress: () => void } | null;
+  progress: StepProgress | null;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <>
+      <View style={[styles.topBar, { paddingTop: insets.top + spacing[8] }]}>
+        <View style={styles.backSlot}>
+          {back ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={back.label}
+              accessibilityHint={back.hint}
+              onPress={back.onPress}
+              style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
+              <Icon name="chevron-left" size={24} color="icon/primary" />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+      {progress ? (
+        <View style={styles.progressRow}>
+          <OnboardingProgress progress={progress} />
+        </View>
+      ) : null}
+    </>
   );
 }
 

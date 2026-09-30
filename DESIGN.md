@@ -367,8 +367,9 @@ The product name is **Lotly**. The approved mascot set is six poses in
 mechanical alpha repair: a fully opaque drawing with only its antialiased
 edge translucent (`src/lib/mascot-assets.test.ts` pins the set). The set's
 contact sheet is brand documentation, in `assets/brand/reference`. M01 left
-Welcome with the receipt composition (2026-09-29) and, like M05, is drawn
-nowhere; M02 is beside the States step's Map / List control (P2B7Y), M03
+Welcome with the receipt composition (2026-09-29) and M02 left States with
+the grocery-atlas composition (2026-09-30); like M05, both are drawn
+nowhere. M03 is
 beside the Retailers step's heading (Popular stores, 2026-09-24), M04 on
 the building interstitial (2026-09-28), and M06 hanging over the Ready
 step's summary card (2026-09-26); M05 waits for its own screen. The two
@@ -401,6 +402,17 @@ Welcome only, and only on the cream page: their counter and notch
 transitions are cream, so they never sit on a dark or coloured surface. The
 exception does not extend to any other screen, and it does not lock the
 logo; everywhere else the name stays set in the type system.
+
+**The States exception (2026-09-30).** The founder approved the States
+step's own scene: the seated mascot holding a red thumbtack, a neutral
+folded atlas, an avocado dish, a vegetable crate, lemons, a cloth and
+tomatoes on a wooden table under a blue backdrop
+(`lotly-states-grocery-atlas-scene.png`, 853×731), cut at its own pixels
+from the approved full-screen target and pinned by
+`src/lib/states-grocery-atlas-assets.test.ts`. It supersedes the mascot
+rules above on States only, and only on the cream page (its lower edge is
+the original counter-to-page fade). The atlas is static and generic: it
+shows no state, marker or selection, and nothing is ever drawn on it.
 
 The brand should not resemble a government emergency-alert product.
 Seriousness comes from hierarchy, typography, information quality, and
@@ -1107,33 +1119,43 @@ replace product data with decorative content": it is labelled an example
 three ways and is not product data. Since the receipt Welcome (2026-09-29)
 no screen draws it; the component stays for a later decision.
 
-**States (P2B7Y): Map first, List beside it.** Under the heading, a
-`Map` / `List` control — a `radius/12` white surface with a
-`border/default` border holding two 44pt segments, each a Lucide glyph and a
-`body-small` word; the active one fills `background/subtle` with an
-`action/primary` border and its word turns `body-small-bold` — across the
-full content width. M02 (`lotly-mascot-helper-1024.png`) sits beside the
-heading and body in the frame's `aside` at 120pt (polish pass; the Stores
-mascot's seat and size — it was a 72pt miniature beside the control),
-drawn whole, decorative, never over the map, and omitted from a text scale
-of 1.5 so the heading can take the width. Map mode, top to bottom: the `Zoom in on the Northeast` /
-`Show the whole map` control (`zoom-in` / `zoom-out` at 20 in `icon/brand`,
-`body-small-bold` `action/secondary`, trailing, 44pt); the contiguous map at
-the content width in d3's Albers USA projection (open shapes
-`background/surface` with a 0.75pt `border/strong` edge; chosen shapes
-`action/primary` with a 1pt `background/surface` edge, and a `check` in
-`icon/inverse` at the shape's interior point where it fits); the enlarged
-Northeast view is square and framed (`radius/12`, `border/default`), with
-the District as a 20pt round marker (`action/primary` ring on white, filled
-with a check when chosen); then Alaska, Hawaii and Puerto Rico as dashed
-`border/strong` `radius/12` inset boxes of one row height, a chosen box
-turning solid `action/primary` with a checked badge in its corner; then the
-count line and `Clear selection` (secondary Button) in one wrapping row;
-then every chosen state as a 44pt `background/subtle` `radius/12` chip, its
-name in `body-small` and an `x` glyph, spoken `Remove California`. List mode
-is the shared selector below, unchanged. The map uses no severity,
-relevance or harm colour and never animates. Composition rationale and
-geometry provenance: `docs/recall-onboarding-and-paywall.md` §6.1.
+**States (the grocery atlas, 2026-09-30).** The founder-approved target
+(`assets/brand/reference/lotly-onboarding-states-grocery-atlas-target.png`,
+853×1844) built natively, on its own page (the scene bleeds to both edges)
+under the frame's own top bar: back and the five-segment progress; the
+headline `Make it local.` in Public Sans Bold 50/56 and the body in 18/23
+`text/secondary` in a 290pt measure (× text scale) that keeps the target's
+break after `or`; the scene across the full width at its own aspect ratio,
+`contain`, decorative; one search entry — a button drawn as an outlined
+field, 51pt, `radius/12`, a 1pt `action/primary` border on
+`background/surface`, a 24pt navy `search` glyph and `Search states` at
+16pt in `text/secondary` — meeting the scene's faded counter; the chosen
+states as `background/subtle` pills (34pt, the name in Public Sans
+SemiBold 16 and an `x` glyph, the whole pill one `Remove California`
+control, hitSlop to 44pt, 8pt across and 10pt between rows); the helper
+`Choose one or more states.` at 14/19 in `text/secondary`; and `Continue`,
+a 51pt primary pill with an 18pt label, pinned above the bottom inset, its
+hairline drawn only while content runs beneath it. The sizes are States'
+alone: the shared type scale and Button are unchanged. At the accessibility
+text sizes (scale 1.5 and up; founder decision 2026-09-30) the headline
+takes the standard `display` base, 33pt, still multiplied by the reader's
+setting — an adaptive base, not a cap — and each chosen state becomes a
+full-width `background/subtle` `radius/12` row: its name wrapping in all the
+width beside a separate 44pt remove button (`x` at 24). On a screen under
+700pt tall (an SE) the vertical gaps tighten (4 / 8 / 4 instead of 8 / 12 / 16) so the whole search entry is above the footer on arrival at the default
+size; the scene and type keep their sizes. The jurisdictions
+are listed only in the chooser: a sheet over the step (the Stores search's
+pattern) holding `Choose states`, `Close`, a focused `Search states`
+field, the shared Check Rows for all 52 alphabetically, and `Done`. No
+severity, relevance or harm colour; no entrance. Measured against the
+target at matched width (iPhone 17): the art, field, chip, helper and
+`Continue` land on it; the target's headline face is heavier and tighter
+than Public Sans Bold (same width, ~12% shorter glyphs), and its body,
+helper and placeholder are a slate blue where the app keeps the semantic
+`text/secondary`. The P2B7Y map, Map / List control, Northeast view and
+insets, the count line and `Clear selection` are retired from the step
+(their code stays in the tree, unreferenced). Behaviour and verification:
+`docs/recall-onboarding-and-paywall.md` §6.1.
 
 **Allergens (P2B7Z): a two-column grid of tiles.** Under the heading, one
 row: the count line (`body-small` secondary, always rendered, with singular
@@ -1265,18 +1287,10 @@ simply there and simply gone. No gradient, blur or new shadow. No alphabet
 index, section headers, location or ranking. Behaviour and verification:
 `docs/recall-onboarding-and-paywall.md` §6.3.
 
-**States (List).** The shared selector in the frame: the count line
-(`body-small` secondary, always rendered), then a fixed controls column —
-the search field and `Clear selection` as the secondary Button, present on
-every visit and disabled with nothing selected — then the Check Rows.
-Nothing above the list is conditional, so choosing or clearing never moves a
-row (the P2B7V rule). The redesigns of the paywall and the
-notification education are later milestones; the Preview's is below. On States, Continue is disabled with
-nothing chosen and the reason (`caption`, centred) reads beneath it in a
-slot that is always laid out — invisible and hidden from assistive
-technology while a state is chosen — so Continue never moves as the count
-crosses zero, at any text size. On the optional steps Continue is never
-disabled.
+The redesigns of the paywall and the notification education are later
+milestones; the Preview's is below. On States, Continue is disabled with
+nothing chosen, its reason spoken as its hint and the requirement written in
+the helper (above). On the optional steps Continue is never disabled.
 
 **Personalized Preview (the Ready step, Option 2, 2026-09-26).** Under the
 frame's heading and body, one `background/subtle` `radius/16` card with no
@@ -2347,26 +2361,26 @@ and 3x on a 24pt box (black on transparent) and tinted at render time by
 `src/components/ui/icon.tsx`. Nothing was drawn by hand: every export is the
 Lucide-style outline the design uses, unchanged in shape.
 
-| Icon              | Figma export (node)                        | Lucide name          | Used by                                           |
-| ----------------- | ------------------------------------------ | -------------------- | ------------------------------------------------- |
-| `home`            | `icon/home` in `nav bar` (`81:816`)        | `house`              | Feed tab                                          |
-| `bookmark`        | `icon` in `nav bar` (`81:817`)             | `bookmark`           | Saved tab; the save control, unsaved              |
-| `bookmark-filled` | the same path with its interior filled     | `bookmark` (filled)  | the save control, saved                           |
-| `user`            | `icon/user` in `nav bar` (`81:818`)        | `user-round`         | Profile tab                                       |
-| `search`          | `Search-Bar` glyph (`30:404`)              | `search`             | the search bar                                    |
-| `map-pin`         | `Nav-Chip` glyph (`33:458`)                | `map-pin`            | the card's location line                          |
-| `flag`            | `Relevance Label` glyph (`42:866`)         | `flag`               | the relevance label                               |
-| `chevron-down`    | `Nav Chip/icon` (`42:809`)                 | `chevron-down`       | the Location / Risk / Category chips              |
-| `chevron-right`   | the `chevron-down` export, a quarter turn  | `chevron-right`      | Profile's navigation rows (P2B5)                  |
-| `external-link`   | `external-link` in Detail (`81:837`)       | `external-link`      | the official-source and Learn more links (P2B2)   |
-| `warning`         | `icon/warning` in `Information` (`78:223`) | `triangle-alert`     | the warning callout (P2B2)                        |
-| `info`            | `lucide/info` in `Information` (`81:687`)  | `info`               | the information callout (P2B2)                    |
-| `chevron-left`    | the `chevron-down` export, a quarter turn  | `chevron-left`       | the onboarding screens' back control (P2B7X.1)    |
-| `allergen-*`      | Lucide repository, vendored SVG sources    | see below            | the nine allergen rows (P2B7X.1)                  |
-| `map`, `list`     | Lucide repository, vendored SVG sources    | `map`, `list`        | the States step's Map / List control (P2B7Y)      |
-| `zoom-in`/`-out`  | Lucide repository, vendored SVG sources    | `zoom-in`/`zoom-out` | the States map's Northeast control (P2B7Y)        |
-| `check`, `x`      | Lucide repository, vendored SVG sources    | `check`, `x`         | chosen map shapes; the chosen-state chips (P2B7Y) |
-| `shopping-cart`   | Lucide, vendored SVG source (native scale) | `shopping-cart`      | the Ready summary's Stores row (2026-09-26)       |
+| Icon              | Figma export (node)                        | Lucide name          | Used by                                          |
+| ----------------- | ------------------------------------------ | -------------------- | ------------------------------------------------ |
+| `home`            | `icon/home` in `nav bar` (`81:816`)        | `house`              | Feed tab                                         |
+| `bookmark`        | `icon` in `nav bar` (`81:817`)             | `bookmark`           | Saved tab; the save control, unsaved             |
+| `bookmark-filled` | the same path with its interior filled     | `bookmark` (filled)  | the save control, saved                          |
+| `user`            | `icon/user` in `nav bar` (`81:818`)        | `user-round`         | Profile tab                                      |
+| `search`          | `Search-Bar` glyph (`30:404`)              | `search`             | the search bar                                   |
+| `map-pin`         | `Nav-Chip` glyph (`33:458`)                | `map-pin`            | the card's location line                         |
+| `flag`            | `Relevance Label` glyph (`42:866`)         | `flag`               | the relevance label                              |
+| `chevron-down`    | `Nav Chip/icon` (`42:809`)                 | `chevron-down`       | the Location / Risk / Category chips             |
+| `chevron-right`   | the `chevron-down` export, a quarter turn  | `chevron-right`      | Profile's navigation rows (P2B5)                 |
+| `external-link`   | `external-link` in Detail (`81:837`)       | `external-link`      | the official-source and Learn more links (P2B2)  |
+| `warning`         | `icon/warning` in `Information` (`78:223`) | `triangle-alert`     | the warning callout (P2B2)                       |
+| `info`            | `lucide/info` in `Information` (`81:687`)  | `info`               | the information callout (P2B2)                   |
+| `chevron-left`    | the `chevron-down` export, a quarter turn  | `chevron-left`       | the onboarding screens' back control (P2B7X.1)   |
+| `allergen-*`      | Lucide repository, vendored SVG sources    | see below            | the nine allergen rows (P2B7X.1)                 |
+| `map`, `list`     | Lucide repository, vendored SVG sources    | `map`, `list`        | the P2B7Y Map / List control (now unreferenced)  |
+| `zoom-in`/`-out`  | Lucide repository, vendored SVG sources    | `zoom-in`/`zoom-out` | the P2B7Y Northeast control (now unreferenced)   |
+| `check`, `x`      | Lucide repository, vendored SVG sources    | `check`, `x`         | the chosen-state chips; sheet Close (2026-09-30) |
+| `shopping-cart`   | Lucide, vendored SVG source (native scale) | `shopping-cart`      | the Ready summary's Stores row (2026-09-26)      |
 
 Figma exports each glyph cropped to its path bounds at some scale; each was
 drawn at `export size × S / (24 × k)` centred in an `S`-point box, where `k`
@@ -2725,8 +2739,9 @@ chance.
   native stack keeps sliding otherwise; content motion and route motion are
   separate, and both are covered —
   (P2B7Y) the onboarding progress segment's
-  one fill and the States mascot's one fade-and-settle, each starting after
-  the screen's push settles; the States map itself never animates; and
+  one fill, starting after the screen's push settles (the States mascot's
+  fade-and-settle left with M02, 2026-09-30; the grocery-atlas States is
+  static but for its chooser's slide, the Stores sheet's own); and
   (P2B7Z) an Allergens tile's 150ms opacity fade as it is chosen or cleared,
   which moves nothing and is drawn final at once under Reduce Motion; and
   (2026-09-26) the Ready mascot's one fade-and-settle, the States mascot's

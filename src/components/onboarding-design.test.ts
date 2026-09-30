@@ -29,7 +29,6 @@ import {
   ALLERGENS_HEADLINE,
   allergenCountLabel,
   CLEAR_SELECTION_LABEL,
-  CLEAR_STATES_HINT,
   CONTINUE_CTA,
   EDUCATION_BODY,
   EDUCATION_CTA,
@@ -55,7 +54,14 @@ import {
   RETAILERS_HEADLINE,
   STATES_BODY,
   STATES_HEADLINE,
+  STATES_CHOOSER_TITLE,
+  STATES_FIELD_HINT,
+  STATES_HELPER,
   STATES_REQUIRED_NOTE,
+  STATES_SEARCH_HINT,
+  STATES_SEARCH_PLACEHOLDER,
+  NO_STATES_FOUND,
+  statesFoundAnnouncement,
   WELCOME_BODY,
   WELCOME_CTA,
   WELCOME_EXAMPLE_CAPTION,
@@ -67,7 +73,7 @@ import {
 import * as ONBOARDING_COPY from '@/lib/onboarding-copy';
 import { SAMPLE_RECALL_MODEL } from '@/lib/onboarding-sample';
 import { POPULAR_RETAILERS, READY_MASCOT_SIZE } from '@/lib/retailer-grid';
-import { HELPER_MASCOT_SIZE, HIDE_MASCOT_AT_SCALE } from '@/lib/state-map';
+import { CHIP, CONTROL_MIN_HEIGHT, SCENE_PX, STATES_TYPE } from '@/lib/states-presentation';
 import { retailerLogoCoverage } from '@/lib/retailer-logos';
 import { STATE_CLEAR_HINT } from '@/lib/personalization-screen';
 import {
@@ -102,6 +108,7 @@ const STATES = read('components', 'onboarding', 'states-step.tsx');
 const ALLERGENS = read('components', 'onboarding', 'allergens-step.tsx');
 const RETAILERS = read('components', 'onboarding', 'retailers-step.tsx');
 const SEARCH_SHEET = read('components', 'onboarding', 'retailer-search-sheet.tsx');
+const STATE_SHEET = read('components', 'onboarding', 'state-search-sheet.tsx');
 const PROBLEM = read('components', 'onboarding', 'problem-steps.tsx');
 const BUILDING = read('components', 'onboarding', 'building-step.tsx');
 const PREVIEW = read('components', 'onboarding', 'preview-step.tsx');
@@ -195,8 +202,11 @@ test('Clear selection is permanently allocated on every selector step and inert 
 });
 
 test('the count line above every list is unconditional, so a selection change never moves the rows', () => {
+  // States left this rule with the grocery-atlas composition (2026-09-30):
+  // it has no list on the step, only chips BELOW the one search entry, so a
+  // chip added or removed moves nothing a finger is on (pinned in its own
+  // section below).
   for (const [name, source, label] of [
-    ['states', STATES, 'stateCountLabel(draft.length)'],
     ['allergens', ALLERGENS, 'allergenCountLabel(selected.length)'],
   ] as const) {
     const code = codeOnly(source);
@@ -217,38 +227,24 @@ test('the count line above every list is unconditional, so a selection change ne
 
 // ── Required and optional steps ─────────────────────────────────────────────
 
-test('States alone can refuse Continue, and says why in a permanently allocated line', () => {
+test('States alone can refuse Continue, with the shared disabled semantics and the reason said', () => {
   const states = codeOnly(STATES);
   assert.ok(states.includes('const canContinue = canContinueFromStates(draft);'));
-  assert.ok(states.includes('disabled={!canContinue}'));
-  // P2B7Y closeout: the sentence itself is ALWAYS laid out, so the footer's
-  // height cannot depend on whether it is showing — a ' ' placeholder was one
-  // line tall while the sentence wraps to three at the accessibility sizes,
-  // which moved Continue when the last state was cleared. Inactive, it is
-  // invisible and hidden from assistive technology.
-  const note = states.slice(
-    states.indexOf('<Text\n            variant="caption"'),
-    states.indexOf('</Text>', states.indexOf('<Text\n            variant="caption"')),
-  );
-  assert.ok(note.includes('{STATES_REQUIRED_NOTE}'), 'the reason line is not always laid out');
-  // The words never swap for a placeholder: the child is the sentence alone.
-  assert.equal(note.slice(note.lastIndexOf('>') + 1).trim(), '{STATES_REQUIRED_NOTE}');
-  assert.ok(note.includes('style={[styles.note, canContinue && styles.noteInactive]}'));
-  assert.ok(note.includes('accessibilityElementsHidden={canContinue}'));
-  assert.ok(
-    note.includes("importantForAccessibility={canContinue ? 'no-hide-descendants' : 'auto'}"),
-  );
-  assert.ok(states.includes('noteInactive: {\n    opacity: 0,\n  },'));
-  // Hidden by opacity, never by removal or a zero size: the slot keeps its height.
-  const inactive = states.slice(
-    states.indexOf('noteInactive: {'),
-    states.indexOf('},', states.indexOf('noteInactive: {')),
-  );
-  for (const forbidden of ['display', 'height', 'maxHeight', 'position']) {
-    assert.ok(!inactive.includes(forbidden), `the inactive note uses ${forbidden}`);
-  }
-  assert.ok(states.includes('accessibilityHint={canContinue ? undefined : STATES_REQUIRED_NOTE}'));
+  assert.ok(states.includes('<ContinueButton disabled={!canContinue} onPress={onContinue} />'));
+  // The local 51pt pill keeps the shared Button's disabled semantics: inert,
+  // announced disabled, the disabled fill and label, and the reason as its hint.
+  const cta = codeOnly(componentBody(STATES, 'ContinueButton'));
+  assert.ok(cta.includes('disabled={disabled}'));
+  assert.ok(cta.includes('accessibilityState={{ disabled, busy: false }}'));
+  assert.ok(cta.includes('accessibilityHint={disabled ? STATES_REQUIRED_NOTE : undefined}'));
+  assert.ok(cta.includes("color={disabled ? 'text/primary' : 'text/inverse'}"));
+  assert.ok(states.includes("backgroundColor: color['action/disabled'],"));
   assert.equal(STATES_REQUIRED_NOTE, 'Choose at least one state to continue.');
+  // The grocery-atlas composition says the requirement in words beneath the
+  // chips, always; the P2B7Y footer note (an invisible, allocated line under
+  // Continue) is gone with the composition it balanced.
+  assert.ok(states.includes('{STATES_HELPER}'));
+  assert.ok(!states.includes('noteInactive'), 'the old allocated footer note came back');
   // Allergens and retailers: Continue is never disabled.
   for (const [name, source] of [
     ['allergens', ALLERGENS],
@@ -287,8 +283,11 @@ test('every step reads and saves through the one preference store, progressively
   assert.ok(ROUTES.allergens.includes('const next = clearAllergens(prefs);'));
   assert.ok(ROUTES.allergens.includes('if (next !== prefs) update(next);'));
   assert.ok(ROUTES.retailers.includes('update(toggleRetailer(prefs, id))'));
-  // The selectors ARE the shared selectors.
-  assert.ok(STATES.includes('<StateSelectorContent'));
+  // The selectors are the shared rules: States toggles through the state
+  // selector's own `toggleStateCode`, and its chooser rows are the shared
+  // `CheckRow` over the shared catalog.
+  assert.ok(codeOnly(STATES).includes('commit(toggleStateCode(draft, code))'));
+  assert.ok(codeOnly(STATE_SHEET).includes('<CheckRow'));
   // Retailers draws its own tiles and search; the shared store selector
   // stays Profile's (pinned below).
   assert.ok(ALLERGENS.includes('allergenGridRows(CONSUMER_ALLERGENS, columns).map((row) =>'));
@@ -310,8 +309,11 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
   );
   assert.equal(WELCOME_TRUST_NOTE, 'Built from FDA and USDA recall notices.');
   assert.equal(WELCOME_CTA, 'Get started');
-  assert.equal(STATES_HEADLINE, 'Which states matter to you?');
+  // The grocery-atlas States (2026-09-30).
+  assert.equal(STATES_HEADLINE, 'Make it local.');
   assert.equal(STATES_BODY, 'Choose every state where you or your household buys food.');
+  assert.equal(STATES_SEARCH_PLACEHOLDER, 'Search states');
+  assert.equal(STATES_HELPER, 'Choose one or more states.');
   assert.equal(ALLERGENS_HEADLINE, 'Any allergens to watch?');
   assert.equal(
     ALLERGENS_BODY,
@@ -456,7 +458,17 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
         'WORDMARK_LABEL',
       ],
     ],
-    ['states', STATES, ['STATES_HEADLINE', 'STATES_BODY', 'CONTINUE_CTA']],
+    [
+      'states',
+      STATES,
+      [
+        'STATES_HEADLINE',
+        'STATES_BODY',
+        'STATES_SEARCH_PLACEHOLDER',
+        'STATES_HELPER',
+        'CONTINUE_CTA',
+      ],
+    ],
     [
       'allergens',
       ALLERGENS,
@@ -872,6 +884,7 @@ test('every onboarding screen draws from the tokens: no raw hex, no capped type,
     ['frame', FRAME],
     ['welcome', WELCOME],
     ['states', STATES],
+    ['states chooser', STATE_SHEET],
     ['allergens', ALLERGENS],
     ['retailers', RETAILERS],
     ['preview', PREVIEW],
@@ -1647,9 +1660,10 @@ test('onboarding motion plays only when Reduce Motion is known off, once, and ne
   const hook = codeOnly(REDUCE_MOTION);
   assert.ok(hook.includes('.catch(() => true)'), 'an unreadable setting counts as on');
   assert.ok(hook.includes("addEventListener('reduceMotionChanged'"));
+  // The grocery-atlas States is static (its M02 entrance left with M02).
+  assert.ok(!codeOnly(STATES).includes('Animated'), 'the States step animates');
   for (const [name, source] of [
     ['progress', PROGRESS],
-    ['states', STATES],
     ['preview', PREVIEW],
   ] as const) {
     const code = codeOnly(source);
@@ -1673,107 +1687,187 @@ test('onboarding motion plays only when Reduce Motion is known off, once, and ne
   assert.ok(!codeOnly(STATE_MAP).includes('Animated'), 'the map animates');
 });
 
-// ── P2B7Y: the States step, Map and List ────────────────────────────────────
+// ── The grocery-atlas States (2026-09-30) ───────────────────────────────────
 
-test('Map and List read and change ONE draft, through the shared selector rules', () => {
+test('the chooser and the chips read and change ONE draft, through the shared selector rule, with no inferred state', () => {
   const step = codeOnly(componentBody(STATES, 'StatesStep'));
   assert.equal((step.match(/useState<readonly string\[\]>/g) ?? []).length, 1, 'a second draft');
   assert.ok(step.includes('const [draft, setDraft] = useState<readonly string[]>(selected);'));
-  // Map mode toggles and clears the draft through the shared rules…
   assert.ok(
     step.includes('const toggle = (code: string) => commit(toggleStateCode(draft, code));'),
   );
-  assert.ok(step.includes('<StateMap selected={draft} onToggle={toggle} />'));
-  // …and List mode is the shared selector, seeded from the draft, reporting
-  // into the same commit, which is the one path to the route's save.
-  assert.ok(step.includes('selected={draft}'));
-  assert.ok(step.includes('onDraftChange={commit}'));
   assert.ok(step.includes('setDraft(codes);') && step.includes('onChange(codes);'));
-  // Map is the default, and the mode is the only thing a switch changes.
-  assert.ok(STATES.includes('initialMode = DEFAULT_SELECTION_MODE'));
-  assert.ok(step.includes("{mode === 'map' ? ("));
-  // No location permission and no inferred state.
-  for (const forbidden of ['expo-location', 'Location', 'geolocation', 'getCurrentPosition']) {
-    assert.ok(!codeOnly(STATES).includes(forbidden), `the step reaches ${forbidden}`);
-    assert.ok(!codeOnly(STATE_MAP).includes(forbidden), `the map reaches ${forbidden}`);
+  // The chooser shows and toggles the same draft; a chip removes through it too.
+  assert.ok(step.includes('selected={draft}'));
+  assert.ok(step.includes('onToggle={toggle}'));
+  assert.ok(step.includes('<ChosenState key={code} code={code} onRemove={toggle} />'));
+  // The chooser keeps no selection of its own: only its query.
+  const sheet = codeOnly(STATE_SHEET);
+  assert.equal((sheet.match(/useState<readonly string\[\]>/g) ?? []).length, 0);
+  // No location permission, no inferred state, no default.
+  for (const source of [STATES, STATE_SHEET, ROUTES.states]) {
+    for (const forbidden of [
+      'expo-location',
+      'Location',
+      'geolocation',
+      'getCurrentPosition',
+      "'CA'",
+    ]) {
+      assert.ok(!codeOnly(source).includes(forbidden), `States reaches ${forbidden}`);
+    }
   }
 });
 
-test('on the map, the count line and Clear selection are always allocated, and an empty clear changes nothing', () => {
-  const step = codeOnly(componentBody(STATES, 'StatesStep'));
-  const row = step.slice(
-    step.indexOf('<View style={styles.countRow}>'),
-    step.indexOf('<View style={styles.chosen}>'),
+test('the composition: one static scene, one search entry, chips, helper and Continue, and none of the P2B7Y controls', () => {
+  const code = codeOnly(STATES);
+  // Back and progress are the frame's own chrome.
+  assert.ok(code.includes('<OnboardingTopBar'));
+  assert.ok(code.includes("progress={stepProgress('states')}"));
+  assert.ok(codeOnly(FRAME).includes('<OnboardingTopBar back={back} progress={progress} />'));
+  // The one production image, whole, at its own aspect ratio, decorative.
+  assert.ok(
+    code.includes("require('@/assets/brand/production/lotly-states-grocery-atlas-scene.png')"),
   );
-  assert.ok(row.includes('<SelectionCount text={stateCountLabel(draft.length)} />'));
-  assert.ok(row.includes('label={CLEAR_SELECTION_LABEL}'));
-  assert.ok(row.includes('disabled={draft.length === 0}'));
-  assert.ok(!/\?\s*\(/.test(row) && !row.includes('&&'), 'the count row is conditional');
-  // The handler's own guard: clearStateDraft hands back the same reference
-  // for an empty draft, and then nothing is committed or saved.
-  assert.ok(step.includes('const next = clearStateDraft(draft);'));
-  assert.ok(step.includes('if (next !== draft) commit(next);'));
+  assert.ok(code.includes('<Image source={SCENE} resizeMode="contain" style={styles.fill} />'));
+  assert.ok(code.includes('aspectRatio: SCENE_PX.width / SCENE_PX.height,'));
+  assert.deepEqual(SCENE_PX, { width: 853, height: 731 });
+  const scene = code.slice(
+    code.indexOf('<View\n          accessible={false}'),
+    code.indexOf('</View>', code.indexOf('<Image source={SCENE}')),
+  );
+  assert.ok(scene.includes('accessibilityElementsHidden'));
+  assert.ok(scene.includes('importantForAccessibility="no-hide-descendants"'));
+  assert.ok(scene.includes('pointerEvents="none"'));
+  // Nothing is drawn over it: the scene's box holds the image alone.
+  assert.equal((scene.match(/</g) ?? []).length, 2, 'something is drawn on the scene');
+  for (const forbidden of ['tintColor', 'blurRadius', 'resizeMode="cover"']) {
+    assert.ok(!code.includes(forbidden), `the scene uses ${forbidden}`);
+  }
+  // Available options are listed only in the chooser.
+  for (const gone of [
+    'StateMap',
+    'StateSelectorContent',
+    'ModeSwitch',
+    'HelperMascot',
+    'lotly-mascot-helper',
+    'zoom',
+    'SelectionCount',
+    'stateChoices',
+  ]) {
+    assert.ok(!code.includes(gone), `the step keeps ${gone}`);
+  }
+  // Static: no entrance, and no keyboard on the step (the chooser owns the field).
+  assert.ok(!code.includes('Animated'));
+  assert.ok(!code.includes('TextInput') && !code.includes('<SearchBar'));
 });
 
-test('every chosen state is listed by name with a removal control that names it', () => {
+test('the States type and controls are local, measured and uncapped; the shared scale and Button are unchanged', () => {
+  assert.deepEqual(STATES_TYPE.headline, { fontSize: 50, lineHeight: 56 });
+  assert.deepEqual(STATES_TYPE.body, { fontSize: 18, lineHeight: 23 });
+  assert.deepEqual(STATES_TYPE.cta, { fontSize: 18, lineHeight: 25 });
+  assert.equal(CONTROL_MIN_HEIGHT, 51);
+  const code = codeOnly(STATES);
+  assert.ok(code.includes('style={[styles.body, { maxWidth: bodyMeasure(fontScale) }]}'));
+  assert.ok(code.includes('minHeight: CONTROL_MIN_HEIGHT,'));
+  // The search entry is a button drawn as the target's outlined field.
+  const entry = codeOnly(componentBody(STATES, 'SearchEntry'));
+  assert.ok(entry.includes('accessibilityRole="button"'));
+  assert.ok(entry.includes('accessibilityLabel={STATES_SEARCH_PLACEHOLDER}'));
+  assert.ok(entry.includes('accessibilityHint={STATES_SEARCH_HINT}'));
+  assert.ok(code.includes("borderColor: color['action/primary'],"));
+  // No width, line or scale cap anywhere on the step or its chooser.
+  for (const source of [STATES, STATE_SHEET]) {
+    for (const forbidden of ['maxFontSizeMultiplier', 'numberOfLines', 'adjustsFontSizeToFit']) {
+      assert.ok(!codeOnly(source).includes(forbidden), `States uses ${forbidden}`);
+    }
+  }
+});
+
+test('at the accessibility sizes a chosen state is a full-width row with its own named 44pt remove button', () => {
+  const step = codeOnly(componentBody(STATES, 'StatesStep'));
+  assert.ok(step.includes('const chips = chipLayout(fontScale);'));
+  assert.ok(step.includes('<ChosenStateRow key={code} code={code} onRemove={toggle} />'));
+  const row = codeOnly(componentBody(STATES, 'ChosenStateRow'));
+  // The name is text; the remove button is a separate control named for the state.
+  assert.ok(row.includes('{stateSpokenName(code)}'));
+  assert.ok(row.includes('accessibilityRole="button"'));
+  assert.ok(row.includes('accessibilityLabel={removeStateLabel(code)}'));
+  const code = codeOnly(STATES);
+  const remove = code.slice(
+    code.indexOf('remove: {'),
+    code.indexOf('},', code.indexOf('remove: {')),
+  );
+  assert.ok(remove.includes('minWidth: hitTarget.minimum'));
+  assert.ok(remove.includes('minHeight: hitTarget.minimum'));
+  // The name takes all the width the button leaves: no width cap.
+  const text = code.slice(
+    code.indexOf('chipRowText: {'),
+    code.indexOf('},', code.indexOf('chipRowText: {')),
+  );
+  assert.ok(text.includes('flex: 1'));
+  assert.ok(!text.includes('maxWidth') && !text.includes('width:'));
+  // The headline's base follows the text size; the gaps follow the window height.
+  assert.ok(step.includes('style={headlineType(fontScale)}'));
+  assert.ok(step.includes('const gaps = verticalGaps(height);'));
+});
+
+test('every chosen state is a named removal control reaching 44pt without overlapping its neighbours', () => {
   const chosen = codeOnly(componentBody(STATES, 'ChosenState'));
   assert.ok(chosen.includes('accessibilityRole="button"'));
   assert.ok(chosen.includes('accessibilityLabel={removeStateLabel(code)}'));
   assert.ok(chosen.includes('{stateSpokenName(code)}'));
-  assert.ok(
-    chosen.includes('minHeight: hitTarget.minimum') ||
-      STATES.includes('minHeight: hitTarget.minimum'),
-  );
-  assert.ok(codeOnly(STATES).includes('{draft.map((code) => ('));
+  assert.ok(chosen.includes('hitSlop={{ top: CHIP.hitSlop, bottom: CHIP.hitSlop }}'));
+  assert.ok(CHIP.minHeight + 2 * CHIP.hitSlop >= 44, 'a chip target is under 44pt');
+  assert.ok(CHIP.rowGap >= 2 * CHIP.hitSlop, 'neighbouring chip targets overlap');
+  assert.ok(codeOnly(STATES).includes('rowGap: CHIP.rowGap,'));
+  // Every chip is laid out (wrapping, in the scrolling content): all reachable.
+  assert.ok(codeOnly(STATES).includes('{draft.map((code) =>'));
+  assert.ok(codeOnly(STATES).includes("flexWrap: 'wrap',"));
 });
 
-test('the Map / List control reports its mode, and every map target is a named checkbox', () => {
-  const modes = codeOnly(componentBody(STATES, 'ModeSwitch'));
-  assert.ok(modes.includes('accessibilityRole="button"'));
-  assert.ok(modes.includes('accessibilityState={{ selected: active }}'));
-  assert.ok(modes.includes('accessibilityLabel={label}'));
-  // Not colour alone: the active word turns bold too.
-  assert.ok(modes.includes("variant={active ? 'body-small-bold' : 'body-small'}"));
-  const map = codeOnly(STATE_MAP);
-  // The drawing is hidden and touches nothing; each jurisdiction is a
-  // checkbox element named in full, activated without a finger touch.
-  assert.equal((map.match(/importantForAccessibility="no-hide-descendants"/g) ?? []).length, 2);
-  assert.ok(map.includes('accessibilityRole="checkbox"'));
-  assert.ok(map.includes('accessibilityLabel={stateSpokenName(mark.code)}'));
-  assert.ok(map.includes('accessibilityState={{ checked }}'));
-  assert.ok(map.includes('onAccessibilityTap={() => onToggle(mark.code)}'));
-  assert.ok(map.includes('accessibilityLabel={stateSpokenName(inset.code)}'));
-  // The whole panel is one press target that asks the shared hit test.
-  assert.ok(map.includes('stateAtPoint('));
-  assert.ok(map.includes('accessibilityState={{ expanded: enlarged }}'));
-  // Chosen shapes are more than a fill: a check, a marker or a badge.
-  assert.ok(map.includes('<Icon name="check"'));
-});
-
-test('M02 sits beside the heading in the frame’s aside, at the aside standard: decorative, hidden, touching nothing, gone at accessibility sizes', () => {
-  const mascot = codeOnly(componentBody(STATES, 'HelperMascot'));
-  assert.ok(mascot.includes("require('@/assets/brand/production/lotly-mascot-helper-1024.png')"));
-  assert.ok(mascot.includes('pointerEvents="none"'));
-  assert.ok(mascot.includes('accessible={false}'));
-  assert.ok(mascot.includes('accessibilityElementsHidden'));
-  assert.ok(mascot.includes('importantForAccessibility="no-hide-descendants"'));
-  assert.ok(mascot.includes('resizeMode="contain"'));
-  assert.ok(mascot.includes('style={{ width: HELPER_MASCOT_SIZE, height: HELPER_MASCOT_SIZE }}'));
-  assert.ok(!mascot.includes("position: 'absolute'"), 'the mascot floats over something');
-  // Polish pass: the frame's heading aside — the Stores mascot's system — at
-  // the same 120pt, yielding its room from the accessibility sizes; the
-  // Map / List control takes the full content width beneath.
+test('the chooser: the Retailers sheet pattern, a focused and named field, the shared rows, and every way out keeps the choices', () => {
+  const sheet = codeOnly(STATE_SHEET);
+  assert.ok(sheet.includes('<Modal'));
+  assert.ok(sheet.includes('accessibilityViewIsModal'));
+  assert.ok(sheet.includes('onRequestClose={close}'));
+  assert.ok(sheet.includes('onDismiss={onClosed}'));
+  // The same backdrop and motion as the Stores search, off under Reduce Motion.
+  assert.ok(sheet.includes("from '@/lib/retailer-grid'"));
+  assert.ok(sheet.includes('SHEET_BACKDROP_OPACITY'));
+  assert.ok(sheet.includes('if (!motionAllowed(reduceMotion)) {'));
+  // The field: focused, named apart from its placeholder, with a hint.
+  assert.ok(sheet.includes('autoFocus'));
+  assert.ok(sheet.includes('accessibilityLabel={STATES_SEARCH_PLACEHOLDER}'));
+  assert.ok(sheet.includes('accessibilityHint={STATES_FIELD_HINT}'));
+  // The results: the shared rows over the shared catalog, and an empty result said.
+  assert.ok(sheet.includes('const results = searchStateChoices(query);'));
+  assert.ok(sheet.includes('<CheckRow'));
+  assert.ok(sheet.includes('checked={selected.includes(choice.code)}'));
+  assert.ok(sheet.includes('{NO_STATES_FOUND}'));
+  assert.ok(sheet.includes('automaticallyAdjustKeyboardInsets'));
+  assert.ok(sheet.includes('keyboardDismissMode="on-drag"'));
+  // Close and Done both only close.
+  assert.ok(sheet.includes('label={SEARCH_DONE_LABEL}'));
+  assert.ok(sheet.includes('accessibilityLabel={SEARCH_CLOSE_LABEL}'));
+  assert.equal((sheet.match(/onPress=\{onClose\}/g) ?? []).length, 2);
+  // Focus returns to the search entry once the sheet has gone.
   const step = codeOnly(componentBody(STATES, 'StatesStep'));
-  assert.ok(step.includes('aside={fontScale < HIDE_MASCOT_AT_SCALE ? <HelperMascot /> : null}'));
-  assert.equal(HELPER_MASCOT_SIZE, READY_MASCOT_SIZE, 'the two selector mascots differ in size');
-  assert.equal(HIDE_MASCOT_AT_SCALE, 1.5);
-  assert.ok(!step.includes('styles.modeRow'), 'the control shares its row with the mascot again');
-  assert.equal((step.match(/<HelperMascot \/>/g) ?? []).length, 1);
+  assert.ok(step.includes('onClosed={focusEntry}'));
+  assert.ok(step.includes('AccessibilityInfo.setAccessibilityFocus(tag)'));
+  // Its words.
+  assert.equal(STATES_CHOOSER_TITLE, 'Choose states');
+  assert.equal(STATES_FIELD_HINT, 'Filters the states below by name or abbreviation.');
+  assert.equal(STATES_SEARCH_HINT, 'Opens the list of states. Check every state you choose.');
+  assert.equal(NO_STATES_FOUND, 'No state matches that search.');
+  assert.equal(statesFoundAnnouncement(0), 'No state matches that search.');
+  assert.equal(statesFoundAnnouncement(1), '1 state found.');
+  assert.equal(statesFoundAnnouncement(3), '3 states found.');
 });
 
 test('the States screen borrows no severity, relevance or harm palette', () => {
   for (const [name, source] of [
     ['states', STATES],
+    ['states chooser', STATE_SHEET],
     ['state map', STATE_MAP],
     ['progress', PROGRESS],
   ] as const) {
@@ -1805,15 +1899,13 @@ test('Back, Continue and the resume point are exactly as before', () => {
 
 // ── P2B7Y closeout ──────────────────────────────────────────────────────────
 
-test('onboarding’s Clear selection says what it does there; the settings sheet keeps its Done wording', () => {
-  // The onboarding step saves every change at once, so its Clear hint must
-  // not promise a Done that does not exist — in either mode.
+test('the settings sheet keeps its Done wording for Clear selection', () => {
+  // The grocery-atlas States has no Clear selection (chips remove one state
+  // each), so the onboarding-only hint went with it (2026-09-30); the sheet's
+  // own wording, true there, is unchanged.
   assert.equal(CLEAR_SELECTION_LABEL, 'Clear selection');
-  assert.equal(CLEAR_STATES_HINT, 'Unchecks every state.');
-  const step = codeOnly(componentBody(STATES, 'StatesStep'));
-  assert.ok(step.includes('clearHint={CLEAR_STATES_HINT}'), 'List mode inherits the sheet hint');
-  assert.ok(step.includes('accessibilityHint={CLEAR_STATES_HINT}'), 'Map mode lost its hint');
   assert.ok(!codeOnly(STATES).includes('STATE_CLEAR_HINT'));
+  assert.ok(!codeOnly(STATES).includes('CLEAR_SELECTION_LABEL'));
   // The shared selector keeps the sheet's own words as its default, so the
   // settings sheet (which passes nothing) is unchanged.
   const content = codeOnly(componentBody(FORM, 'StateSelectorContent'));
@@ -2614,18 +2706,16 @@ test('M03 stands beside the heading, whole, decorative and untouchable, and sett
   assert.ok(frame.includes('headingBeside: {\n    flex: 1,\n  },'));
   for (const [name, source] of [
     ['welcome', WELCOME],
+    ['states', STATES],
     ['allergens', ALLERGENS],
     ['preview', PREVIEW],
     ['education', EDUCATION],
   ] as const) {
     assert.ok(!codeOnly(source).includes('aside='), `${name} gained an aside`);
   }
-  // The polish pass gave States (M02) and the paywall (M04) the same aside
-  // system; no other screen has one.
-  for (const [name, source] of [
-    ['states', STATES],
-    ['panel', PANEL],
-  ] as const) {
+  // The polish pass gave the paywall (M04) the same aside system (States'
+  // M02 aside left with the grocery-atlas composition); no other screen has one.
+  for (const [name, source] of [['panel', PANEL]] as const) {
     assert.ok(
       codeOnly(source).includes('aside={fontScale < HIDE_MASCOT_AT_SCALE ?'),
       `${name} lost its aside`,
