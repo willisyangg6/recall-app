@@ -23,9 +23,17 @@
  * the card's inner padding, so the shield hangs above the rows' completion
  * checks and never over a value. The card's heading keeps clear of the
  * shield (`shieldReach`), and the first row starts below it
- * (`summaryHeaderMinHeight`). The block reserves the drawing's full height
- * above the card (`readyMascotLift`), so the arrow never reaches the body
- * paragraph above it.
+ * (`summaryHeaderMinHeight`).
+ *
+ * The block reserves LESS than the drawing's full height above the card
+ * (`readyMascotReserve`, the 2026-09-27 polish): at ordinary text sizes the
+ * mascot's crest rises `READY_MASCOT_OVERLAP` (48pt) into the body
+ * paragraph's vertical band, which is safe because the mascot is
+ * right-aligned and the paragraph's lines end well left of it at those
+ * sizes. From text scale 1.2 the paragraph wraps far enough right that the
+ * two could meet, so the overlap is 0 and the full lift is reserved. The
+ * seat itself never changes: the flat cut stays exactly on the card's top
+ * border, the paw on its edge and the shield in front.
  *
  * ## Size
  *
@@ -54,6 +62,15 @@
  * never tap order. The artwork is decoration: each row speaks its complete
  * selection (`summaryRowLabel`).
  *
+ * ## The carousel (2026-09-28)
+ *
+ * The personalized preview is a HORIZONTAL deck: one active card, a visible
+ * slice of the next (`CAROUSEL_PEEK`), snapping one card at a time. The
+ * geometry is here so the component and its tests agree: a card takes the
+ * usable content width less the peek, the snap interval is the card plus
+ * its gap, and the layered look comes from the peek alone — no arrows, no
+ * instruction copy, no auto-advance, no loop.
+ *
  * ## Glyph provenance
  *
  * `shopping-cart` is Lucide's `shopping-cart` (ISC), byte-identical to the
@@ -66,13 +83,22 @@
  * pins the source and the three files by hash.
  */
 
+import { typography } from '@/constants/design-tokens';
 import { CONSUMER_ALLERGENS } from '@/domain/preferences';
+import { moreStoresLabel } from '@/lib/onboarding-copy';
 import { listNames } from '@/lib/personalization-screen';
 
 // ── The glyph this step adds to the icon set ────────────────────────────────
 
-/** The Stores row's glyph, and its vendored Lucide source (see the header). */
-export const READY_ICON_SOURCES = [{ icon: 'shopping-cart', lucideName: 'shopping-cart' }] as const;
+/**
+ * The Ready step's glyphs and their vendored Lucide sources (see the
+ * header): `shopping-cart` for the Stores row (2026-09-26), and `lock` for
+ * the locked-matches strip and sentinel (2026-09-28).
+ */
+export const READY_ICON_SOURCES = [
+  { icon: 'shopping-cart', lucideName: 'shopping-cart' },
+  { icon: 'lock', lucideName: 'lock' },
+] as const;
 export const READY_ICONS_VENDORED_ON = '2026-09-26';
 
 // ── The mascot's seat ───────────────────────────────────────────────────────
@@ -114,9 +140,43 @@ export function readyMascotOffset(size: number): number {
   return Math.round(size * TRUST_PEEK_EDGE);
 }
 
-/** How much of the drawing stands above the card: the room the block reserves. */
+/** How much of the drawing stands above the card. */
 export function readyMascotLift(size: number): number {
   return Math.ceil(size * (TRUST_PEEK_EDGE - TRUST_PEEK_ART_TOP));
+}
+
+/**
+ * How far the mascot's crest may rise into the body paragraph's vertical
+ * band (see the header): the mascot is right-aligned, and at ordinary sizes
+ * the paragraph's lines end well left of it.
+ */
+export const READY_MASCOT_OVERLAP = 48;
+/** From this text scale the paragraph can reach the mascot, so no overlap. */
+export const OVERLAP_UNTIL_SCALE = 1.2;
+
+export function readyMascotOverlap(fontScale: number): number {
+  return fontScale < OVERLAP_UNTIL_SCALE ? READY_MASCOT_OVERLAP : 0;
+}
+
+/** The room the block reserves above the card: the lift, less the overlap. */
+export function readyMascotReserve(size: number, fontScale: number): number {
+  return Math.max(0, readyMascotLift(size) - readyMascotOverlap(fontScale));
+}
+
+/**
+ * How much trailing width the heading block gives up so the body wraps into
+ * the approved "cliff" LEFT of the rising crest (the carousel target's
+ * two-line body) instead of running under it. The 2026-09-27 body happened
+ * to wrap clear; the 2026-09-28 body is shorter and needs the constraint
+ * explicit. Only while the crest actually rises — from text scale 1.2 the
+ * full lift is reserved, the mascot sits wholly below the paragraph, and
+ * squeezing large text would cost lines for nothing.
+ */
+export const READY_BODY_ASIDE_FRACTION = 0.82;
+
+export function readyBodyAside(size: number, fontScale: number): number {
+  if (readyMascotOverlap(fontScale) === 0) return 0;
+  return Math.round(size * READY_BODY_ASIDE_FRACTION);
 }
 
 /** The box's distance from the card's trailing edge: the drawing ends on the padding. */
@@ -231,6 +291,141 @@ export function allergenArtwork(selected: readonly string[]): AllergenArtwork {
 /** The decorative count beside the first two pictograms. */
 export function moreLabel(more: number): string {
   return `+${more}`;
+}
+
+/** Up to this many stores, the Stores row shows every name. */
+export const STORE_SUMMARY_LIMIT = 3;
+/** Past the limit, it shows this many names and counts the rest. */
+export const STORE_SUMMARY_SHOWN = 2;
+
+/**
+ * The Stores row's VISIBLE value (2026-09-27), so a long selection cannot
+ * make the summary card dominate the screen now that the plans follow it:
+ * up to three stores in full (`Aldi, Costco, Kroger`); four or more as the
+ * first two and a count (`Aldi, Costco +4 more`). The names keep the
+ * summary's own order — the order they were chosen in, which is the order
+ * Profile shows them in (lib/profile-hub.ts) — so the two never disagree
+ * about which come first. The row's spoken name is not compacted: it names
+ * every store (`summaryRowLabel`). States and allergens are never
+ * compacted.
+ */
+export function storeSummaryText(names: readonly string[]): string {
+  if (names.length <= STORE_SUMMARY_LIMIT) return names.join(', ');
+  const shown = names.slice(0, STORE_SUMMARY_SHOWN).join(', ');
+  return `${shown} ${moreStoresLabel(names.length - STORE_SUMMARY_SHOWN)}`;
+}
+
+// ── The carousel ────────────────────────────────────────────────────────────
+
+/** How much of the NEXT card stays visible beside the active one. */
+export const CAROUSEL_PEEK = 32;
+/** The gap between cards; part of the snap interval. */
+export const CAROUSEL_GAP = 12;
+
+/**
+ * A card's width: the usable content width less the peek, never less than
+ * a readable floor. `usableWidth` is the window (or content cap) minus the
+ * page margins.
+ */
+export function carouselCardWidth(usableWidth: number): number {
+  return Math.max(200, usableWidth - CAROUSEL_PEEK);
+}
+
+/** The paging stride: one card and its gap. */
+export function carouselSnapInterval(usableWidth: number): number {
+  return carouselCardWidth(usableWidth) + CAROUSEL_GAP;
+}
+
+// ── The deck's depth (polish pass) ──────────────────────────────────────────
+//
+// The preview must read as a swipeable DECK, not a flat list: the next card
+// tucks slightly behind the active card's trailing edge at a reduced scale,
+// so depth — not an arrow or a sentence — says more cards follow. The
+// transforms are visual only (they change no layout), the active card's
+// static z-order keeps it on top, and everything animates on the scroll
+// position alone: no loop, no auto-advance, no timer.
+
+/** The next card's scale while it waits behind the active one. */
+export const DECK_NEXT_SCALE = 0.93;
+/** How far the next card tucks toward (behind) the active card, in points. */
+export const DECK_TUCK = 16;
+
+// ── The uniform preview card ────────────────────────────────────────────────
+//
+// Every deck card shares one outer size at a given width and text-size
+// class, so swiping never changes the deck's height and no card looks less
+// finished than its neighbours. The rules: every slot is RESERVED (an empty
+// optional field keeps its space) and the wrapping slots are line-limited
+// (the full text still reaches the accessibility element). From the
+// accessibility text sizes the limits and reservations come off — an
+// accessible responsive card, never capped type.
+
+export const PREVIEW_TITLE_LINES = 2;
+export const PREVIEW_REASON_LINES = 2;
+/** From this text scale the uniform rules yield to unrestricted wrapping. */
+export const PREVIEW_UNIFORM_UNTIL_SCALE = 1.5;
+
+export function previewCardUniform(fontScale: number): boolean {
+  return fontScale < PREVIEW_UNIFORM_UNTIL_SCALE;
+}
+
+/** A compact label chip's height: one `label` line, 4pt paddings, 1px borders. */
+function chipHeight(fontScale: number): number {
+  return Math.round(typography.label.lineHeight * fontScale) + 2 * 4 + 2;
+}
+
+/**
+ * The reserved slot heights, from the type scale at this text size — or
+ * null from the accessibility sizes, where nothing is reserved or limited.
+ */
+export interface PreviewCardLayout {
+  /**
+   * The status row: one chip row reserved by rule; the deck raises it to
+   * the tallest row any of ITS cards measured (a PHA label or a long date
+   * can wrap), so every card's title starts on the same line without an
+   * empty band on decks whose rows all fit on one line.
+   */
+  statusMinHeight: number;
+  /** The deck's measurement hook for the status row; absent means none. */
+  onStatusLayout?: (height: number) => void;
+  /** Exactly the title's line limit, reserved even for short names. */
+  titleMinHeight: number;
+  /** The category chip's row, reserved even when the case has none. */
+  categoryHeight: number;
+  /** The reason's line limit, reserved even when there is no reason line. */
+  reasonMinHeight: number;
+}
+
+export function previewCardLayout(fontScale: number): PreviewCardLayout | null {
+  if (!previewCardUniform(fontScale)) return null;
+  return {
+    statusMinHeight: chipHeight(fontScale),
+    titleMinHeight:
+      Math.round(typography['heading-3'].lineHeight * fontScale) * PREVIEW_TITLE_LINES,
+    categoryHeight: Math.round(typography.caption.lineHeight * fontScale) + 2 * 4 + 2,
+    reasonMinHeight:
+      Math.round(typography['body-small'].lineHeight * fontScale) * PREVIEW_REASON_LINES,
+  };
+}
+
+/**
+ * The deck's shared status-row reservation: the rule's one chip row, or the
+ * tallest row any card measured — monotonic, so a measurement taken WITH
+ * the reservation applied can only confirm it, never oscillate.
+ */
+export function deckStatusHeight(rule: number, measured: readonly number[]): number {
+  return Math.max(rule, ...measured.map((h) => Math.ceil(h)));
+}
+
+/** Which card the deck has settled on, from the scroll offset. */
+export function carouselActiveIndex(
+  offsetX: number,
+  usableWidth: number,
+  itemCount: number,
+): number {
+  const interval = carouselSnapInterval(usableWidth);
+  const index = Math.round(offsetX / interval);
+  return Math.min(Math.max(index, 0), Math.max(itemCount - 1, 0));
 }
 
 /**

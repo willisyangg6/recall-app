@@ -262,10 +262,11 @@ const APPROVED_RETAILER_LABEL = 'Retailers:';
  * the Detail label is; the rest of onboarding keeps `store` (`Search stores`,
  * `N stores selected`). The Preview summary's row label, the second
  * exemption until 2026-09-26, now reads `Stores` (the Ready step's Option 2),
- * so its exemption is gone.
+ * so its exemption is gone. The polish pass (2026-09-28) dropped the body's
+ * `This is optional.`; the exemption follows the sentence that remains.
  */
 const APPROVED_ONBOARDING_RETAILER_COPY = [
-  "'Choose the retailers you want Lotly to watch for in recall notices. This is optional.'",
+  "'Choose the retailers you want Lotly to watch for in recall notices.'",
 ];
 
 test('consumer copy says state and store, never jurisdiction or retailer', () => {

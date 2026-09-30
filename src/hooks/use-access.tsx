@@ -25,10 +25,13 @@
  * the gate reads. The root layout renders `Stack.Protected` groups from the
  * phase; the navigator itself moves the shopper when it changes.
  *
- * `reviewingPreview` is the one in-memory input: the paywall's Back. It
- * re-enters the onboarding phase on the Preview and is forgotten by a
- * relaunch, so a device that completed personalization always relaunches on
- * the paywall.
+ * `reviewingPreview` is the one in-memory input: the standalone paywall's
+ * Back. It re-enters the onboarding phase on the Ready step and is
+ * forgotten by a relaunch, so a device that completed personalization
+ * without an entitlement (a lapsed subscriber) always relaunches on the
+ * paywall. A first-time shopper's personalization is completed by the
+ * purchase or restore made on the onboarding paywall (2026-09-28), in the
+ * same commit as the entitlement.
  *
  * `consumePreferencesSetNotice` hands the Feed its one-time confirmation
  * after either education choice: true exactly once, in the session the
@@ -59,6 +62,7 @@ import { loadCachedEntitlement, saveCachedEntitlement } from '@/lib/entitlement-
 import {
   completeNotificationEducation as completeEducationRecord,
   completePersonalization as completePersonalizationRecord,
+  completeWatchBuild as completeWatchBuildRecord,
   INITIAL_ONBOARDING,
   recordShownStep as recordShownStepRecord,
   type OnboardingRecord,
@@ -82,13 +86,21 @@ export interface AccessSnapshot {
 export interface AccessActions {
   /** A shown onboarding screen records itself as the resume point. */
   recordShownStep: (step: OnboardingStep) => Promise<void>;
-  /** "View plans": personalization is complete; the paywall follows. */
+  /** The building interstitial finished its one play: sticky, never replays. */
+  completeWatchBuild: () => Promise<void>;
+  /**
+   * An entitled shopper's Continue on the onboarding paywall: personalization
+   * is complete, and the gate opens education (or the app).
+   */
   completePersonalization: () => Promise<void>;
   /** The paywall's Back: review the Preview without losing completion. */
   reviewPreview: () => void;
   /** Either education choice: shown once. */
   completeNotificationEducation: () => Promise<void>;
-  /** A verified purchase or restore: cache it and open the gate. */
+  /**
+   * A verified purchase or restore: cache it, complete personalization in the
+   * same commit, and open the gate.
+   */
   applyEntitlement: (entitlement: ActiveEntitlement) => Promise<void>;
   /** Re-read the entitlement through the provider (foreground, development). */
   refreshEntitlement: () => Promise<void>;
@@ -196,6 +208,11 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     [writeOnboarding],
   );
 
+  const completeWatchBuild = useCallback(
+    () => writeOnboarding(completeWatchBuildRecord),
+    [writeOnboarding],
+  );
+
   const completePersonalization = useCallback(async () => {
     setReviewingPreview(false);
     await writeOnboarding(completePersonalizationRecord);
@@ -208,16 +225,26 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     await writeOnboarding(completeEducationRecord);
   }, [writeOnboarding]);
 
+  // A verified purchase or restore is made on the onboarding paywall or the
+  // standalone paywall, and either way the shopper has finished
+  // personalizing. So the
+  // record is completed in the SAME commit as the entitlement: the gate goes
+  // from the Ready step straight to education, never through the paywall
+  // phase in between. On the paywall the record is already complete and
+  // `completePersonalization` hands back the same record.
   const applyEntitlement = useCallback(
     async (entitlement: ActiveEntitlement) => {
       await saveCachedEntitlement(entitlement).catch(() => {});
       setReviewingPreview(false);
       const prior = loadedRef.current;
-      if (prior !== null) {
-        commit({
-          ...prior,
-          entitlement: { kind: 'active', entitlement, confirmation: 'verified' },
-        });
+      if (prior === null) return;
+      const onboarding = completePersonalizationRecord(prior.onboarding);
+      commit({
+        onboarding,
+        entitlement: { kind: 'active', entitlement, confirmation: 'verified' },
+      });
+      if (onboarding !== prior.onboarding) {
+        await saveOnboardingRecord(onboarding).catch(() => {});
       }
     },
     [commit],
@@ -248,6 +275,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       entryStep: onboardingEntryStep(inputs),
       reviewingPreview,
       recordShownStep,
+      completeWatchBuild,
       completePersonalization,
       reviewPreview,
       completeNotificationEducation,
@@ -261,6 +289,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     loaded,
     reviewingPreview,
     recordShownStep,
+    completeWatchBuild,
     completePersonalization,
     reviewPreview,
     completeNotificationEducation,

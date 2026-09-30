@@ -36,10 +36,28 @@ export function goBackFrom(step: OnboardingStep, navigator: StepNavigator): void
 }
 
 /**
- * Continue from the last selector: back to the Preview it came from when
- * one is beneath (Edit preferences), else onward to a new Preview.
+ * Continue from the last selector: back to the Ready step it came from when
+ * one is beneath (Edit preferences); else through the one-time "building
+ * your watch" interstitial when it has not played yet, or straight onward to
+ * a new Ready step when it has. The interstitial REPLACES itself with Ready
+ * (`buildingDone`), so it never sits in the back chain — Back from Ready
+ * pops to Stores.
  */
-export function continueToPreview(previewBeneath: boolean, navigator: StepNavigator): void {
+export function continueToPreview(
+  previewBeneath: boolean,
+  watchBuilt: boolean,
+  navigator: StepNavigator,
+): void {
   if (previewBeneath) navigator.dismissTo(onboardingRoute('preview'));
-  else navigator.push(onboardingRoute('preview'));
+  else if (watchBuilt) navigator.push(onboardingRoute('preview'));
+  else navigator.push(onboardingRoute('building'));
+}
+
+/**
+ * The interstitial finished (or was skipped because its work was already
+ * done): Ready takes its place on the stack, so Back from Ready never
+ * returns to a spent interstitial.
+ */
+export function buildingDone(navigator: StepNavigator): void {
+  navigator.replace(onboardingRoute('preview'));
 }

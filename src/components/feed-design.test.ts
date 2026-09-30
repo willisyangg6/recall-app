@@ -14,7 +14,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -195,9 +195,11 @@ test('IBM Plex Mono is used only for compact status labels, never for words peop
     'the card reintroduced the 10pt micro-caption',
   );
   assert.ok(
-    /<Text variant="heading-3" numberOfLines=\{3\}>\s*\{model\.productName\}\s*<\/Text>/.test(CARD),
+    /<Text\s+variant="heading-3"\s+numberOfLines=\{uniform \? PREVIEW_TITLE_LINES : 3\}[^>]*>\s*\{model\.productName\}\s*<\/Text>/.test(
+      CARD,
+    ),
   );
-  assert.ok(CARD.includes('<Text variant="body-small" color="text/secondary">'));
+  assert.ok(/<Text\s+variant="body-small"\s+color="text\/secondary"/.test(CARD));
 });
 
 // ── 3. Risk and relevance stay separate ─────────────────────────────────────
@@ -382,17 +384,20 @@ test('saving is a nested pressable inside the card link, and the card exposes it
 
 // ── 8. Long content wraps; the title alone is line-bounded (P2B7G) ──────────
 
-test('the product name is the ONE clamped element: three lines, tail ellipsis', () => {
+test('the product name is the ONE clamped element on Feed and Saved: three lines, tail ellipsis', () => {
   // The clamp is a LINE count on the title Text only — it scales with
   // Dynamic Type, unlike a fixed height, and the tail ellipsis is the RN
-  // default (no ellipsizeMode override anywhere on the card).
-  assert.equal((CARD.match(/numberOfLines=/g) ?? []).length, 1);
-  assert.ok(/variant="heading-3" numberOfLines=\{3\}/.test(CARD));
+  // default (no ellipsizeMode override anywhere on the card). The second
+  // line limit is the reason's, and it is `undefined` — no limit — on every
+  // card but the onboarding deck's uniform variant.
+  assert.equal((CARD.match(/numberOfLines=/g) ?? []).length, 2);
+  assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}'));
+  assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_REASON_LINES : undefined}'));
   assert.ok(!CARD.includes('ellipsizeMode'));
   // The clamped node's CONTENT stays the complete product name — no slicing,
   // no substring, no separate visual string — so the card's grouped
   // accessibility element announces the full title and no override hides it.
-  assert.ok(/numberOfLines=\{3\}>\s*\{model\.productName\}/.test(CARD));
+  assert.ok(/PREVIEW_TITLE_LINES : 3\}[^>]*>\s*\{model\.productName\}/.test(CARD));
   assert.ok(!CARD.includes('accessibilityLabel={model.productName'));
   assert.ok(!/\.slice\(|\.substring\(/.test(codeOnly(CARD)));
 });
@@ -405,6 +410,40 @@ test('nothing else on the card truncates or fixes a height around real product t
   assert.deepEqual(heights, []);
   // The text column takes the remaining width and may shrink below its content.
   assert.ok(/identity: \{[^}]*flex: 1[^}]*minWidth: 0/s.test(CARD));
+});
+
+test('the onboarding deck’s uniform variant is opt-in: no Feed or Saved card ever receives it', () => {
+  // The variant defaults to null, which renders the card exactly as before.
+  assert.ok(CARD.includes('uniform = null,'));
+  // Every reservation it makes is gated on it (min heights that grow and
+  // never clip — no fixed heights anywhere, pinned above).
+  for (const reservation of codeOnly(CARD).match(/minHeight: [^,}\]]+/g) ?? []) {
+    assert.match(reservation, /^minHeight: uniform\./, `an ungated reservation: ${reservation}`);
+  }
+  // The only caller that passes it is the onboarding deck; the live card
+  // (Feed and Saved's one component) never does.
+  const callers: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (
+        /\.tsx$/.test(entry.name) &&
+        codeOnly(readFileSync(path, 'utf8')).includes('uniform={')
+      ) {
+        callers.push(path.slice(path.indexOf('src') + 4));
+      }
+    }
+  };
+  walk(join(__dirname, '..'));
+  assert.deepEqual(callers, [join('components', 'onboarding', 'ready-carousel.tsx')]);
+  const live = codeOnly(
+    CARD.slice(
+      CARD.indexOf('export function RecallCard('),
+      CARD.indexOf('export function RecallCardSurface('),
+    ),
+  );
+  assert.ok(!live.includes('uniform'), 'the live Feed card passes the uniform variant');
 });
 
 // ── 9. Geography is unchanged ───────────────────────────────────────────────
@@ -535,8 +574,9 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
   // chevron-left of the onboarding back control and the nine allergen glyphs
   // (one Lucide family; lib/allergen-icons.ts), P2B7Y the States step's six
   // (map, list, x, check, zoom-in, zoom-out; lib/state-map.ts), and the Ready
-  // step its Stores row's shopping-cart (lib/ready-presentation.ts). There is
-  // still no bell, share or sliders glyph.
+  // step its Stores row's shopping-cart and its locked-matches lock
+  // (lib/ready-presentation.ts). There is still no bell, share or sliders
+  // glyph.
   assert.deepEqual(glyphs, [
     'allergen-egg',
     'allergen-fish',
@@ -558,6 +598,7 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'home',
     'info',
     'list',
+    'lock',
     'map',
     'map-pin',
     'search',

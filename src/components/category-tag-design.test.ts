@@ -95,7 +95,9 @@ test('a recall with no displayable category renders no container, spacer or spok
   // and React Native's `gap` does not space an unrendered child, so the card
   // closes up exactly as it did before P2B7D.
   assert.ok(
-    CARD.includes('{model.categoryLabel ? <CategoryTag label={model.categoryLabel} /> : null}'),
+    CARD.includes(
+      'const category = model.categoryLabel ? <CategoryTag label={model.categoryLabel} /> : null;',
+    ),
   );
   // No reserved height anywhere on the path — the identity column and the
   // tag are both sized by their content.
@@ -141,11 +143,12 @@ test('the tag borrows no risk or relevance treatment, and carries no glyph', () 
   // badge: the card's status row is closed before the content row opens.
   const statusRow = CARD.slice(CARD.indexOf('styles.statusRow'), CARD.indexOf('styles.content'));
   assert.ok(!statusRow.includes('CategoryTag'), 'the tag moved into the status row');
+  // The tag is built once (`category`) and placed only in the identity column.
   const identity = CARD.slice(CARD.indexOf('styles.identity'), CARD.indexOf('styles.footerRow'));
-  assert.ok(identity.includes('<CategoryTag'), 'the tag left the identity column');
+  assert.ok(identity.includes('{category}'), 'the tag left the identity column');
   // …and not in the footer either, where the save control's tap target lives.
   const footer = CARD.slice(CARD.indexOf('styles.footerRow'));
-  assert.ok(!footer.includes('<CategoryTag'));
+  assert.ok(!footer.includes('<CategoryTag') && !footer.includes('{category}'));
 });
 
 test('the tag is not a control: no press, no button role, no chip shape', () => {
@@ -246,8 +249,11 @@ test('Dynamic Type is honoured, and long labels wrap instead of clipping', () =>
   for (const forbidden of ['ellipsizeMode', 'maxFontSizeMultiplier']) {
     assert.ok(!CARD.includes(forbidden), `the card caps text with ${forbidden}`);
   }
-  assert.equal((CARD.match(/numberOfLines=/g) ?? []).length, 1);
-  assert.ok(/variant="heading-3" numberOfLines=\{3\}/.test(CARD));
+  // Two line limits: the title's (three on Feed and Saved), and the
+  // reason's, which exists only in the onboarding deck's uniform variant.
+  assert.equal((CARD.match(/numberOfLines=/g) ?? []).length, 2);
+  assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}'));
+  assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_REASON_LINES : undefined}'));
   assert.deepEqual(codeOnly(CARD).match(/\bheight: [^,]+/g) ?? [], []);
 });
 

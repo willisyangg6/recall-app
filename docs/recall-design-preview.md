@@ -488,16 +488,24 @@ Three sections at the end of the hub, drawn by the production components in
 `src/components/onboarding/` and `src/components/paywall/`, imported and
 never copied (`src/components/development/onboarding-gallery.tsx`):
 
-- **Onboarding screens** — Welcome; States empty, selected and searched;
-  Allergens empty and with several selected; Retailers empty, selected and
-  searched; the retailer rows with the fallback for the longest catalog name
-  and two neutral FIXTURE shapes at extreme ratios (not marks of anything)
-  standing where a wide or tall mark would; the Preview with selections and
-  with no optional selections; notification education idle and enabling;
-  and a 568 pt viewport so the sticky footer is seen at its tightest. Each
-  sample's selection lives in the gallery's memory: nothing reads or writes
-  preferences or the onboarding record, and Continue, Back and both education
-  actions are wired to nothing. Dynamic Type is the simulator's setting.
+- **Onboarding screens** — Welcome; the two problem screens; States empty,
+  selected and searched; Allergens empty and with several selected;
+  Retailers empty, selected and searched; the retailer rows with the
+  fallback for the longest catalog name and two neutral FIXTURE shapes at
+  extreme ratios (not marks of anything) standing where a wide or tall mark
+  would; the building interstitial (it plays its one sequence and holds the
+  finished checklist; finishing routes nowhere); the Ready step at its
+  carousel edges — three matches of five with the locked strip and sentinel,
+  two matches with the truthful monitoring line, one match without dots,
+  and zero matches with the honest empty card — each deck built from clones
+  of the approved static example model (marked `Example, not a live recall`
+  on the card itself), never a fabricated recall and never the live corpus;
+  the entitled onboarding paywall panel; notification education idle and
+  enabling; and a 568 pt viewport so the sticky footer is seen at its
+  tightest. Each sample's selection lives in the gallery's memory: nothing
+  reads or writes preferences or the onboarding record, and Continue, Back,
+  See my plan and both education actions are wired to nothing. Dynamic Type
+  is the simulator's setting.
 - **Paywall states** — Annual and Monthly selected, offering loading,
   purchase in progress, user cancelled, recoverable error, restore in
   progress, restore success, restore finds nothing, provider unavailable,
@@ -511,12 +519,21 @@ never copied (`src/components/development/onboarding-gallery.tsx`):
   this device's onboarding record and the simulated store account, pops to
   the root and reloads the gate, so the REAL app moves to the state named
   exactly as a relaunch would: offline first launch, resumed incomplete
-  onboarding (Retailers), completed onboarding with an inactive entitlement
-  (the paywall), active entitlement with education pending, active
-  entitlement (the Feed), and cached active entitlement through an outage.
-  Preferences and saved recalls are never touched.
+  onboarding (Stores), completed onboarding with an inactive entitlement
+  (the standalone paywall, a lapsed subscriber), active entitlement with
+  onboarding unfinished (Ready; its See my plan meets the entitled panel
+  whose Continue opens education), active entitlement with education
+  pending, active entitlement (the Feed), and cached active entitlement
+  through an outage. Preferences and saved recalls are never touched. When
+  the new state lands in the SAME phase (a scenario applied from over an
+  onboarding screen), the gate has nothing to react to, so the hub replaces
+  the popped-to screen with the new entry screen itself (polish pass); the
+  paywall controls' `Reset onboarding to Welcome` restarts the flow the
+  same way, so it genuinely returns a device to Welcome with the building
+  interstitial unplayed.
 
-The paywall route itself carries development controls beneath the plans in a
+The purchase flow (`src/hooks/use-purchase-flow.tsx`) hands both paywall
+routes development controls beneath the plans in a
 development build only — the ten store scenarios, a simulated subscription
 grant, a clear, an onboarding reset, and a link to this hub — reached through
 a `__DEV__` `require`, so a release bundle folds them and the fake store away

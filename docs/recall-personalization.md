@@ -396,6 +396,27 @@ announced today. Cards still show risk state and that one date, plus the
 generic "Affects you" flag when the verdict holds; no numeric score, sort
 key, purchase claim, or safety claim about excluded items is ever exposed.
 
+### Deferred: recency-led Affects You ranking (recorded 2026-09-28)
+
+The onboarding Ready preview (2026-09-28) reuses the ordering above
+deliberately and unchanged. A future milestone — not started, not designed
+beyond this note — should rework the Affects Me ordering to be recency-led:
+
+1. filter to actual preference matches (membership as today);
+2. prioritize new and unseen matches;
+3. make recency the primary ordering signal;
+4. retain severity as an urgent override/tiebreaker, not the leading key;
+5. decay older notices;
+6. place viewed notices below unseen ones;
+7. temporarily pin critical unacknowledged notices;
+8. re-rank meaningfully updated recalls (the material-change ledger is the
+   evidence source).
+
+Items 2, 6 and 7 need a per-device seen/acknowledged record that does not
+exist yet; that storage design is part of the milestone. When it lands, the
+Ready preview inherits it automatically through the shared layer
+(`src/lib/ready-preview.ts`).
+
 ## Preferences: storage and sync
 
 Preferences are **installation-level application state**, deliberately

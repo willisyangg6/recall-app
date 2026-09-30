@@ -74,8 +74,10 @@ test('one family, with license, repository, commit and retrieval date recorded',
     assert.match(svg, /stroke-width="2"/, `${source.lucideName} has a foreign stroke weight`);
   }
   // No source outside the nine, the States step's six (P2B7Y,
-  // lib/state-map.ts) and the Ready step's cart (lib/ready-presentation.ts):
-  // a stray glyph would be a second decision.
+  // lib/state-map.ts) and the Ready step's cart and lock
+  // (lib/ready-presentation.ts): a stray glyph would be a second decision.
+  // (The problem pictograph's user-round was vendored 2026-09-28 and
+  // retired 2026-09-29 with the authored pictograph.)
   const vendored = readdirSync(SOURCES)
     .filter((f) => f.endsWith('.svg'))
     .sort();

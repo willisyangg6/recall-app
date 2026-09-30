@@ -334,13 +334,24 @@ test('nothing imports the development adapter statically except its own native w
     readFileSync(join(SRC, 'components', 'paywall', 'paywall-development-controls.tsx'), 'utf8'),
   );
   assert.ok(controls.includes('if (!__DEV__) return null;'));
-  const paywall = codeOnly(readFileSync(join(SRC, 'app', 'paywall.tsx'), 'utf8'));
-  assert.ok(!/^import .*paywall-development-controls/m.test(paywall));
+  // The one purchase flow (shared by the Ready step and the paywall) is the
+  // only place that reaches them, inside a __DEV__ branch.
+  const flow = codeOnly(readFileSync(join(SRC, 'hooks', 'use-purchase-flow.tsx'), 'utf8'));
+  assert.ok(!/^import .*paywall-development-controls/m.test(flow));
   assert.ok(
-    paywall.includes(
+    flow.includes(
       "? // eslint-disable-next-line @typescript-eslint/no-require-imports\n    (require('@/components/paywall/paywall-development-controls')",
     ),
   );
+  for (const route of [
+    'paywall.tsx',
+    join('onboarding', 'paywall.tsx'),
+    join('onboarding', 'preview.tsx'),
+  ]) {
+    const code = codeOnly(readFileSync(join(SRC, 'app', route), 'utf8'));
+    assert.ok(!code.includes('paywall-development-controls'), `${route} reaches the controls`);
+    assert.ok(!code.includes('development-scenarios'), `${route} reaches the scenarios`);
+  }
   const hub = codeOnly(readFileSync(join(SRC, 'app', 'design-preview', 'index.tsx'), 'utf8'));
   assert.ok(
     !/^import .*purchases\/development-/m.test(hub),

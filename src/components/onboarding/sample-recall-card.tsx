@@ -1,13 +1,13 @@
 /**
- * The one illustrative recall card (P2B7X.1), shown on Welcome and on the
- * Personalized Preview.
+ * The one illustrative recall card (P2B7X.1), shown on Welcome — its only
+ * screen since the Ready step began previewing real matches (2026-09-28).
  *
  * It is the Feed's own `RecallCardSurface` — the same status row, badges,
  * identity column and location footer — over the static example model in
  * lib/onboarding-sample.ts, with a bundled illustration in the media slot
  * and NO trailing control. It is not pressable, opens nothing, cannot be
  * saved, and needs no network: everything it shows ships with the app. The
- * caller labels it (`Example` / `Example match`) above, and the model's own
+ * caller labels it (`Example`) above, and the model's own
  * activity and brand slots say `Example` and `Example, not a live recall`,
  * so the card is distinguishable from live data three ways.
  *

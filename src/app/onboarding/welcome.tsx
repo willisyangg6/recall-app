@@ -1,8 +1,8 @@
 /**
  * `/onboarding/welcome` (P2B7X.1) — Screen 1. Records itself as the resume
  * point while personalization is incomplete and hands `Get started` to the
- * States step. Mounted only in the onboarding phase (the root layout's
- * protected group).
+ * first problem screen (2026-09-28). Mounted only in the onboarding phase
+ * (the root layout's protected group).
  */
 
 import { useCallback } from 'react';
@@ -19,5 +19,5 @@ export default function WelcomeScreen() {
       void access.recordShownStep('welcome');
     }, [access]),
   );
-  return <WelcomeContent onGetStarted={() => router.push(onboardingRoute('states'))} />;
+  return <WelcomeContent onGetStarted={() => router.push(onboardingRoute('problem-scale'))} />;
 }

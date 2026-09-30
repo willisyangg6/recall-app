@@ -101,6 +101,11 @@ import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
 import { layout, spacing } from '@/constants/design-tokens';
 import { useSavedRecalls } from '@/hooks/use-saved-recalls';
+import {
+  PREVIEW_REASON_LINES,
+  PREVIEW_TITLE_LINES,
+  type PreviewCardLayout,
+} from '@/lib/ready-presentation';
 import type { HomeCardModel } from '@/lib/recall-presentation';
 import { isSavedId, saveControlState } from '@/lib/saved-recalls';
 
@@ -161,14 +166,46 @@ export function RecallCardSurface({
   model,
   media,
   trailing,
+  uniform = null,
 }: {
   model: HomeCardModel;
   media: ReactNode;
   trailing: ReactNode;
+  /**
+   * The onboarding deck's uniform variant (lib/ready-presentation
+   * `previewCardLayout`): every slot reserved and the wrapping slots
+   * line-limited, so deck cards share one outer size. Null — every Feed and
+   * Saved card, and the deck from the accessibility text sizes — changes
+   * NOTHING: the card is byte-identical to its pre-variant self.
+   */
+  uniform?: PreviewCardLayout | null;
 }) {
+  // The product-category tag, when the case carries a launch-visible one.
+  // Placed under the identity it describes rather than in the status row
+  // above, which belongs to risk and relevance; it is quiet metadata and
+  // must never read as a third status. A case with none renders NOTHING —
+  // the identity column is a gapped flex column, so an omitted child
+  // leaves no gap, no spacer and no accessibility element behind it.
+  const category = model.categoryLabel ? <CategoryTag label={model.categoryLabel} /> : null;
+  // The reason wraps freely on every Feed and Saved card; only the
+  // onboarding deck's uniform variant bounds it (by LINES, never height).
+  const reason = model.reasonLine ? (
+    <Text
+      variant="body-small"
+      color="text/secondary"
+      numberOfLines={uniform ? PREVIEW_REASON_LINES : undefined}>
+      {model.reasonLine}
+    </Text>
+  ) : null;
   return (
     <Surface radius={16} border="border/subtle" elevation="card" style={styles.card}>
-      <View style={styles.statusRow}>
+      <View
+        style={[styles.statusRow, uniform && { minHeight: uniform.statusMinHeight }]}
+        onLayout={
+          uniform?.onStatusLayout
+            ? (event) => uniform.onStatusLayout?.(event.nativeEvent.layout.height)
+            : undefined
+        }>
         <View style={styles.statusGroup}>
           {/* Consumer risk first — it is the primary risk language. Feed
                   and Detail render the same risk state from the shared model
@@ -222,26 +259,31 @@ export function RecallCardSurface({
                     element announces — so a screen-reader user hears the
                     whole title exactly once, with no second element and no
                     truncation. */}
-            <Text variant="heading-3" numberOfLines={3}>
+            <Text
+              variant="heading-3"
+              numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}
+              style={uniform && { minHeight: uniform.titleMinHeight }}>
               {model.productName}
             </Text>
             <Text variant="caption" color="text/secondary">
               {model.brand.text}
             </Text>
           </View>
-          {/* The product category, when the case carries a launch-visible
-                  one. Placed under the identity it describes rather than in
-                  the status row above, which belongs to risk and relevance;
-                  it is quiet metadata and must never read as a third status.
-                  A case with none renders NOTHING here — the identity column
-                  is a gapped flex column, so an omitted child leaves no gap,
-                  no spacer and no accessibility element behind it. */}
-          {model.categoryLabel ? <CategoryTag label={model.categoryLabel} /> : null}
-          {model.reasonLine ? (
-            <Text variant="body-small" color="text/secondary">
-              {model.reasonLine}
-            </Text>
-          ) : null}
+          {uniform ? (
+            // The uniform variant reserves BOTH optional slots, so an
+            // absent category or reason cannot shorten a deck card.
+            <>
+              <View style={{ minHeight: uniform.categoryHeight, alignSelf: 'flex-start' }}>
+                {category}
+              </View>
+              <View style={{ minHeight: uniform.reasonMinHeight }}>{reason}</View>
+            </>
+          ) : (
+            <>
+              {category}
+              {reason}
+            </>
+          )}
         </View>
       </View>
 

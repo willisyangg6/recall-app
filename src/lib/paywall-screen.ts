@@ -40,7 +40,9 @@ import {
 
 // ── Copy (founder-approved, P2B7X.1) ────────────────────────────────────────
 
-export const PAYWALL_HEADLINE = 'Recall alerts, personalized for you.';
+// Reworded for the Ready/paywall split (2026-09-28): the paywall follows
+// the personalized Ready preview, so it leads with staying ahead.
+export const PAYWALL_HEADLINE = 'Stay ahead of recalls that affect you.';
 export const PAYWALL_BODY = 'Get full access to Lotly’s personalized recall monitoring.';
 
 export const PAYWALL_BENEFITS: readonly string[] = [

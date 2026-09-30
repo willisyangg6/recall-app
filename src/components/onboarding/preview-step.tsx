@@ -1,9 +1,26 @@
 /**
- * Screen 5, Personalized Preview (P2B7X.1) — the Ready step, `4 of 4`, in the
- * approved Option 2 composition (2026-09-26): the soft-blue summary card of
- * what was chosen with the trust-peek mascot hanging over its top edge, the
- * one example match, the independence note, and the two actions — `View
- * plans` (primary, sticky) and `Edit preferences`.
+ * The Ready step (P2B7X.1; carousel composition 2026-09-28), where the
+ * shopper first sees what their watch found. Top to bottom, matching the
+ * approved target (assets/brand/reference/lotly-onboarding-ready-carousel-
+ * target.png, a composition reference that is never bundled): Back; the
+ * heading and body; the soft-blue summary card of the approved Option 2
+ * composition, the trust-peek mascot hanging over its edge, and a quiet
+ * `Edit preferences` inside the card; the `See what affects you today`
+ * heading over the lime count pill; the horizontal recall deck with its
+ * dots (`ReadyCarousel`); the locked strip when more real matches exist, or
+ * the truthful monitoring line when they do not; and the one pinned action,
+ * `See my plan`, which opens the dedicated paywall. No progress bar, no
+ * purchase UI of any kind: the plans, benefits, terms and notices live on
+ * the paywall (2026-09-28 split).
+ *
+ * ## The preview
+ *
+ * `preview` is lib/ready-preview.ts's answer over the REAL feed and the
+ * REAL matching layer: up to three current matches as the Feed's own card
+ * models, the true total, or the honest checking / none / unavailable
+ * state. This screen invents nothing: with no matches there is no deck, no
+ * dots, no locked strip — one quiet card says exactly what is known, and
+ * the body copy drops the claim that something was found.
  *
  * ## The summary card
  *
@@ -39,9 +56,15 @@
  * with a small settle after the push, played once; under Reduce Motion, or
  * before the setting is known, it is drawn in place at once.
  *
- * The example card is the shared surface over the static example model,
- * labelled `Example match`: it illustrates what a match looks like and is
- * explicitly not a live recall.
+ * ## Edit preferences
+ *
+ * A quiet text action INSIDE the summary card, right-aligned on its last
+ * row (the card header's trailing edge belongs to the shield), never a
+ * second large button: it pushes the States step with every choice kept,
+ * and nothing is lost by coming back. Its 44pt target comes from hitSlop;
+ * the chevron carries the affordance, and its navy is `action/primary`,
+ * because `action/secondary` on the soft blue is 4.1:1 — below AA for its
+ * 13pt label.
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
@@ -49,6 +72,7 @@ import {
   Animated,
   Easing,
   Image,
+  Pressable,
   StyleSheet,
   useWindowDimensions,
   View,
@@ -56,29 +80,45 @@ import {
 } from 'react-native';
 
 import { OnboardingFrame } from '@/components/onboarding/onboarding-frame';
-import { SampleRecallCard } from '@/components/onboarding/sample-recall-card';
+import { ReadyCarousel } from '@/components/onboarding/ready-carousel';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
-import { color, radius, spacing } from '@/constants/design-tokens';
+import {
+  color,
+  hitSlopToMinimum,
+  layout,
+  radius,
+  relevancePalette,
+  spacing,
+  typography,
+} from '@/constants/design-tokens';
 import type { UserRecallPreferences } from '@/domain/preferences';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
 import { allergenPictogram } from '@/lib/allergen-assets';
 import {
   BACK_HINT,
   BACK_LABEL,
-  INDEPENDENCE_NOTE,
+  matchCountLabel,
   PREVIEW_BODY,
+  PREVIEW_BODY_EMPTY,
+  PREVIEW_CHECKING_TITLE,
   PREVIEW_CTA,
+  PREVIEW_CTA_HINT,
   PREVIEW_EDIT,
   PREVIEW_EDIT_HINT,
-  PREVIEW_EXAMPLE_LABEL,
+  PREVIEW_EMPTY_TITLE,
   PREVIEW_HEADLINE,
+  PREVIEW_LOCKED_HINT,
+  PREVIEW_LOCKED_STRIP,
+  PREVIEW_MATCH_HEADING,
+  PREVIEW_MONITORING_NOTE,
   PREVIEW_NONE,
   PREVIEW_ROW_COMPLETED,
   PREVIEW_SUMMARY_LABELS,
   PREVIEW_SUMMARY_TITLE,
+  PREVIEW_UNAVAILABLE_TITLE,
 } from '@/lib/onboarding-copy';
 import { motionAllowed, stepProgress } from '@/lib/onboarding-state';
 import { summarizePreferences } from '@/lib/profile-hub';
@@ -86,14 +126,16 @@ import {
   allergenArtwork,
   CHECK_CIRCLE_SIZE,
   moreLabel,
+  readyBodyAside,
   PICTOGRAM_PAIR,
   PICTOGRAM_PAIR_STEP,
   PICTOGRAM_SINGLE,
-  readyMascotLift,
   readyMascotOffset,
+  readyMascotReserve,
   readyMascotRight,
   readyMascotSize,
   ROW_WELL_SIZE,
+  storeSummaryText,
   SUMMARY_PADDING,
   SUMMARY_ROW_GAP,
   summaryHeadingLayout,
@@ -101,6 +143,7 @@ import {
   summaryStacked,
   type AllergenArtwork,
 } from '@/lib/ready-presentation';
+import { hasLockedMatches, type ReadyPreviewState } from '@/lib/ready-preview';
 import { MASCOT_ENTRANCE } from '@/lib/state-map';
 
 /** The approved trust-peek mascot: a 1024×1024 transparent PNG. */
@@ -109,6 +152,9 @@ const MASCOT =
 
 /** The white surface over the soft blue at this strength reads as a pale blue. */
 const CHECK_WASH_OPACITY = 0.55;
+
+/** `Edit preferences` is one `body-small-bold` line; hitSlop makes it 44pt. */
+const EDIT_HIT_SLOP = hitSlopToMinimum(typography['body-small-bold'].lineHeight);
 
 /** The decorative-subtree props: never heard, never touched. */
 const DECORATIVE = {
@@ -120,23 +166,37 @@ const DECORATIVE = {
 
 export function PreviewStep({
   prefs,
-  onViewPlans,
+  preview,
+  onSeePlan,
   onEdit,
   onBack,
 }: {
   prefs: UserRecallPreferences;
-  onViewPlans: () => void;
+  /** What the watch found (lib/ready-preview.ts): real matches or the truth. */
+  preview: ReadyPreviewState;
+  /** The one primary action, and the locked strip and sentinel: the paywall. */
+  onSeePlan: () => void;
   onEdit: () => void;
   onBack: () => void;
 }) {
-  const { height, fontScale } = useWindowDimensions();
+  const { height, width, fontScale } = useWindowDimensions();
   const size = readyMascotSize(height, fontScale);
+  const reserve = readyMascotReserve(size, fontScale);
   const stacked = summaryStacked(fontScale);
   const summary = summarizePreferences(prefs);
   const allergens = allergenArtwork(prefs.allergens);
+  // The deck's width: the content width between the page margins.
+  const usableWidth = Math.min(width, layout.maxContentWidth) - 2 * layout.pageMargin;
+  const found = preview.kind === 'matches';
+  // The approved "cliff": while the crest rises beside the paragraph, the
+  // body alone gives up the mascot's width and wraps LEFT of it; the
+  // headline keeps the full width above.
+  const bodyInset = readyBodyAside(size, fontScale);
   const rows: {
     key: keyof typeof PREVIEW_SUMMARY_LABELS;
     names: readonly string[];
+    /** What the row shows, when it is not every name (the compacted Stores row). */
+    shown?: string;
     artwork: ReactNode;
     more?: number;
   }[] = [
@@ -154,6 +214,7 @@ export function PreviewStep({
     {
       key: 'retailers',
       names: summary.retailers,
+      shown: storeSummaryText(summary.retailers),
       artwork: <Icon name="shopping-cart" size={24} color="icon/primary" />,
     },
   ];
@@ -161,22 +222,17 @@ export function PreviewStep({
   return (
     <OnboardingFrame
       headline={PREVIEW_HEADLINE}
-      body={PREVIEW_BODY}
+      // The claim that something was found stands only when something was.
+      body={found ? PREVIEW_BODY : PREVIEW_BODY_EMPTY}
       progress={stepProgress('preview')}
       back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}
+      bodyInset={bodyInset}
       footer={
-        <>
-          <Button label={PREVIEW_CTA} onPress={onViewPlans} />
-          <Button
-            variant="secondary"
-            label={PREVIEW_EDIT}
-            accessibilityHint={PREVIEW_EDIT_HINT}
-            onPress={onEdit}
-          />
-        </>
+        <Button label={PREVIEW_CTA} accessibilityHint={PREVIEW_CTA_HINT} onPress={onSeePlan} />
       }>
-      {/* The mascot's full height is reserved above the card. */}
-      <View style={{ paddingTop: readyMascotLift(size) }}>
+      {/* The room above the card: the drawing's height, less the crest's
+          allowed rise beside the body paragraph (lib/ready-presentation). */}
+      <View style={{ paddingTop: reserve }}>
         <Surface background="background/subtle" radius={16} style={styles.summary}>
           <View style={summaryHeadingLayout(size, fontScale)}>
             <Text variant="heading-3" accessibilityRole="header">
@@ -188,22 +244,97 @@ export function PreviewStep({
               key={row.key}
               label={PREVIEW_SUMMARY_LABELS[row.key]}
               names={row.names}
+              shown={row.shown}
               artwork={row.artwork}
               more={row.more ?? 0}
               stacked={stacked}
             />
           ))}
+          {/* Inside the card, on its own last row: editing belongs to the
+              summary it edits, and the trailing edge mirrors the checks. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={PREVIEW_EDIT}
+            accessibilityHint={PREVIEW_EDIT_HINT}
+            hitSlop={EDIT_HIT_SLOP}
+            onPress={onEdit}
+            style={styles.edit}>
+            {({ pressed }) => (
+              <View style={[styles.editInner, pressed && styles.pressed]}>
+                <Text variant="body-small-bold" color="action/primary">
+                  {PREVIEW_EDIT}
+                </Text>
+                <Icon name="chevron-right" size={16} color="icon/primary" />
+              </View>
+            )}
+          </Pressable>
         </Surface>
         <TrustPeek
           size={size}
-          top={readyMascotLift(size) - readyMascotOffset(size)}
+          top={reserve - readyMascotOffset(size)}
           right={readyMascotRight(size)}
         />
       </View>
-      <SampleRecallCard label={PREVIEW_EXAMPLE_LABEL} />
-      <Text variant="caption" color="text/secondary">
-        {INDEPENDENCE_NOTE}
-      </Text>
+      {/* The preview: the heading, the lime count pill, then the deck — or
+          the one honest card for checking, none and unavailable. */}
+      <View style={styles.previewSection}>
+        <Text variant="heading-2" accessibilityRole="header">
+          {PREVIEW_MATCH_HEADING}
+        </Text>
+        {found ? (
+          <>
+            <View style={styles.pill}>
+              {/* The deck can only SHOW image-bearing matches; when none of
+                  the real matches carries an image the pill counts them
+                  all, because they exist whether or not they can preview. */}
+              <Text variant="body-small-bold">
+                {matchCountLabel(preview.models.length > 0 ? preview.models.length : preview.total)}
+              </Text>
+            </View>
+            <ReadyCarousel
+              models={preview.models}
+              locked={preview.locked}
+              usableWidth={usableWidth}
+              onLockedPress={onSeePlan}
+            />
+            {hasLockedMatches(preview) ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={PREVIEW_LOCKED_STRIP}
+                accessibilityHint={PREVIEW_LOCKED_HINT}
+                onPress={onSeePlan}
+                style={({ pressed }) => [pressed && styles.pressed]}>
+                <Surface background="background/subtle" radius={12} style={styles.lockedStrip}>
+                  <View {...DECORATIVE}>
+                    <Icon name="lock" size={20} color="icon/primary" />
+                  </View>
+                  <Text variant="body-small-bold" style={styles.lockedText}>
+                    {PREVIEW_LOCKED_STRIP}
+                  </Text>
+                </Surface>
+              </Pressable>
+            ) : (
+              // No more matches are known, so nothing is claimed locked.
+              <Text variant="caption" color="text/secondary">
+                {PREVIEW_MONITORING_NOTE}
+              </Text>
+            )}
+          </>
+        ) : (
+          <Surface background="background/subtle" radius={16} style={styles.emptyCard}>
+            <Text variant="body">
+              {preview.kind === 'checking'
+                ? PREVIEW_CHECKING_TITLE
+                : preview.kind === 'unavailable'
+                  ? PREVIEW_UNAVAILABLE_TITLE
+                  : PREVIEW_EMPTY_TITLE}
+            </Text>
+            <Text variant="body-small" color="text/secondary">
+              {PREVIEW_MONITORING_NOTE}
+            </Text>
+          </Surface>
+        )}
+      </View>
     </OnboardingFrame>
   );
 }
@@ -216,12 +347,16 @@ export function PreviewStep({
 function SummaryRow({
   label,
   names,
+  shown,
   artwork,
   more,
   stacked,
 }: {
   label: string;
+  /** Every name: what the row speaks. */
   names: readonly string[];
+  /** What the row shows instead, when it is compacted; every name otherwise. */
+  shown?: string;
   artwork: ReactNode;
   /** The allergens beyond the two pictograms, drawn as `+N`; 0 for none. */
   more: number;
@@ -251,7 +386,7 @@ function SummaryRow({
   const text = (
     <View style={stacked ? null : styles.rowText}>
       <Text variant="caption">{label}</Text>
-      <Text variant="body">{names.length === 0 ? PREVIEW_NONE : names.join(', ')}</Text>
+      <Text variant="body">{names.length === 0 ? PREVIEW_NONE : (shown ?? names.join(', '))}</Text>
     </View>
   );
   return (
@@ -460,5 +595,45 @@ const styles = StyleSheet.create({
   },
   peek: {
     position: 'absolute',
+  },
+  // The card's own last row, trailing like the checks above it.
+  edit: {
+    alignSelf: 'flex-end',
+  },
+  editInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[4],
+  },
+  pressed: {
+    opacity: 0.6,
+  },
+  previewSection: {
+    gap: spacing[12],
+  },
+  // The lime count pill: the Affects You treatment, a personalization
+  // signal and never a safety claim.
+  pill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing[12],
+    paddingVertical: spacing[4],
+    borderRadius: radius.full,
+    borderWidth: 1,
+    backgroundColor: relevancePalette['affects-you'].background,
+    borderColor: relevancePalette['affects-you'].border,
+  },
+  lockedStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[12],
+    paddingHorizontal: spacing[16],
+    paddingVertical: spacing[12],
+  },
+  lockedText: {
+    flex: 1,
+  },
+  emptyCard: {
+    padding: spacing[16],
+    gap: spacing[8],
   },
 });

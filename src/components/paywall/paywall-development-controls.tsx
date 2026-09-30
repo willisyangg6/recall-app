@@ -15,7 +15,7 @@
  */
 
 import { useState } from 'react';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
 import { spacing } from '@/constants/design-tokens';
 import { useAccess } from '@/hooks/use-access';
+import { entryRoute } from '@/lib/access-gate';
 import { INITIAL_ONBOARDING } from '@/lib/onboarding-state';
 import { saveOnboardingRecord } from '@/lib/onboarding-store';
 import { DEVELOPMENT_HEADING } from '@/lib/profile-hub';
@@ -50,6 +51,20 @@ export function PaywallDevelopmentControls({
   );
   if (!__DEV__) return null;
   const current = DEVELOPMENT_PURCHASE_SCENARIOS.find((s) => s.id === scenario);
+
+  // The fresh record (INITIAL_ONBOARDING: Welcome, the watch unbuilt, so
+  // the building interstitial plays again), then a REAL restart of the
+  // flow. From the standalone paywall the phase changes and the gate moves
+  // the app by itself; from the onboarding paywall the phase stays
+  // `onboarding`, so nothing would move — pop to the stack's root and
+  // replace it with the entry screen, the gallery's gate-scenario restart.
+  const resetOnboarding = async () => {
+    await saveOnboardingRecord(INITIAL_ONBOARDING);
+    if (router.canDismiss()) router.dismissAll();
+    const next = await access.reload();
+    const href = `/${entryRoute(next.phase, next.entryStep)}` as Href;
+    setTimeout(() => router.replace(href), 0);
+  };
 
   const apply = async () => {
     setDevelopmentPurchaseScenario(scenario);
@@ -101,7 +116,7 @@ export function PaywallDevelopmentControls({
           label="Reset onboarding to Welcome"
           variant="secondary"
           onPress={() => {
-            void saveOnboardingRecord(INITIAL_ONBOARDING).then(() => access.reload());
+            void resetOnboarding();
           }}
         />
         <Button

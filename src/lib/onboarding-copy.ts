@@ -15,15 +15,63 @@
 
 // ── Screen 1: Welcome ───────────────────────────────────────────────────────
 
-/** The name beside the mascot, lowercase as the brand sets it; spoken as `Lotly`. */
-export const WORDMARK = 'lotly';
-export const WELCOME_HEADLINE = 'Food recalls, made personal.';
-export const WELCOME_BODY =
-  'Tell us where you shop and what your household avoids. Lotly shows you the recalls that matter.';
+/** The bespoke wordmark is an image; this is its one spoken name. */
+export const WORDMARK_LABEL = 'Lotly';
+export const WELCOME_HEADLINE = 'A closer look at your groceries.';
+export const WELCOME_BODY = 'Food recalls personalized just for you and your household.';
+/**
+ * The receipt illustration's printed notice, spoken as one image. It is the
+ * artwork's own fictional text, word for word, and nothing more: no date,
+ * company or category, and no control (the printed bookmark is drawing).
+ */
+export const WELCOME_ILLUSTRATION_LABEL =
+  'Granola Bites. Critical. Possible Salmonella contamination. Nationwide. Marked Affects You.';
+/** Directly under the illustration, so it is never taken for a live recall. */
+export const WELCOME_EXAMPLE_CAPTION = 'Illustrative example, not a live recall.';
 export const WELCOME_TRUST_NOTE = 'Built from FDA and USDA recall notices.';
 export const WELCOME_CTA = 'Get started';
-/** Above the illustrative card on Welcome. */
-export const WELCOME_EXAMPLE_LABEL = 'Example';
+
+// ── Screens 2–3: the problem (2026-09-28) ───────────────────────────────────
+//
+// Two framing screens between Welcome and the selectors: the scale of
+// foodborne illness, then who faces higher stakes. Both cite the CDC and
+// nothing else; neither implies that every foodborne illness had a recall,
+// or that Lotly could have prevented them.
+//
+//   Scale:  https://www.cdc.gov/food-safety/about/index.html
+//   Stakes: https://www.cdc.gov/food-safety/risk-factors/index.html
+
+/** The one dominant figure, drawn in `display` type. */
+export const PROBLEM_SCALE_STAT = '1 in 6';
+export const PROBLEM_SCALE_HEADLINE = 'Americans get sick from foodborne illness each year.';
+export const PROBLEM_SCALE_BODY = 'That’s about 48 million people.';
+/** The stat and the sentence, spoken as one line. */
+export const PROBLEM_SCALE_SPOKEN = `${PROBLEM_SCALE_STAT} ${PROBLEM_SCALE_HEADLINE}`;
+/**
+ * The six-person pictograph, spoken as ONE element (2026-09-28): the
+ * visualization is one infographic, never six separate figures.
+ */
+export const PROBLEM_SCALE_FIGURES_LABEL = 'One out of six people highlighted.';
+
+export const PROBLEM_RISK_HEADLINE = 'Some households face higher stakes.';
+/**
+ * The polish pass split the CDC sentence in two so the fact is said ONCE:
+ * the four groups became the composition's own tiles, and the body carries
+ * the claim about them. The factual meaning is the approved 2026-09-28
+ * one, unchanged: these members are more likely to become seriously ill.
+ */
+export const PROBLEM_RISK_BODY =
+  'These household members are more likely to become seriously ill from foodborne illness.';
+/** The CDC's four higher-risk groups, one tile each. */
+export const PROBLEM_RISK_GROUPS: readonly string[] = [
+  'Young children',
+  'Pregnant people',
+  'Adults 65 and older',
+  'Weakened immune systems',
+];
+
+/** The quiet source note both problem screens carry. */
+export const PROBLEM_SOURCE_NOTE = 'Source: CDC';
 
 // ── Screen 2: States ────────────────────────────────────────────────────────
 
@@ -41,10 +89,19 @@ export const ALLERGENS_BODY =
 // ── Screen 4: Retailers ─────────────────────────────────────────────────────
 
 export const RETAILERS_HEADLINE = 'Where do you shop?';
-export const RETAILERS_BODY =
-  'Choose the retailers you want Lotly to watch for in recall notices. This is optional.';
+// `This is optional.` came off in the polish pass: the step stays optional
+// (Continue is never disabled), the sentence just no longer says so.
+export const RETAILERS_BODY = 'Choose the retailers you want Lotly to watch for in recall notices.';
 /** The curated ten's section label: popular, never ranked or "largest". */
 export const POPULAR_STORES_LABEL = 'Popular stores';
+/**
+ * The quiet utility row's count (polish pass): it also covers stores chosen
+ * through the search, which the ten visible tiles cannot show.
+ */
+export function storesCountLabel(count: number): string {
+  if (count === 0) return 'No stores selected';
+  return count === 1 ? '1 store selected' : `${count} stores selected`;
+}
 /** The summary's compact clear action. */
 export const CLEAR_STORES_LABEL = 'Clear';
 /** The search trigger beneath the popular stores: what it says. */
@@ -70,26 +127,6 @@ export function searchResultsAnnouncement(count: number): string {
   return count === 1 ? '1 store found.' : `${count} stores found.`;
 }
 
-/**
- * The selected-store summary's title: `Your stores · 2`. No-break spaces hold
- * `stores · 2` together, so at the largest text sizes the title wraps after
- * `Your` rather than leaving the count alone on a line.
- */
-export function yourStoresTitle(count: number): string {
-  return `Your stores\u00a0·\u00a0${count}`;
-}
-
-/** The same title as VoiceOver says it, with words rather than a middle dot. */
-export function yourStoresSpoken(count: number): string {
-  if (count === 0) return 'Your stores: none selected';
-  return count === 1 ? 'Your stores: 1 selected' : `Your stores: ${count} selected`;
-}
-
-/** A selected store's chip, spoken: `Remove Walmart`. */
-export function removeStoreLabel(name: string): string {
-  return `Remove ${name}`;
-}
-
 // ── Shared step controls ────────────────────────────────────────────────────
 
 export const CONTINUE_CTA = 'Continue';
@@ -106,10 +143,35 @@ export function allergenCountLabel(count: number): string {
   return count === 1 ? '1 allergen selected' : `${count} allergens selected`;
 }
 
-// ── Screen 5: Personalized Preview ──────────────────────────────────────────
+// ── The building interstitial (2026-09-28) ──────────────────────────────────
+//
+// The captions the one-time "building your watch" screen steps through.
+// Each names real deterministic work (reading the saved preferences and
+// syncing the recall feed the Ready preview reads); the allergen and store
+// captions tell the truth when nothing was selected, and no caption ever
+// claims a match was found — the Ready step reports matches only once the
+// query has answered.
+
+export function buildingStatesCaption(): string {
+  return 'Checking recalls in your selected states';
+}
+export function buildingAllergensCaption(hasAllergens: boolean): string {
+  return hasAllergens ? 'Matching the allergens you watch' : 'Keeping allergen matching broad';
+}
+export function buildingStoresCaption(hasStores: boolean): string {
+  return hasStores ? 'Watching the stores you chose' : 'Scanning recalls across all stores';
+}
+export const BUILDING_FEED_CAPTION = 'Building your Affects You feed';
+export const BUILDING_DONE_CAPTION = 'Your recall watch is ready';
+/** The screen's one spoken introduction; the captions are not read one by one. */
+export const BUILDING_ACCESSIBILITY_LABEL = 'Building your recall watch';
+
+// ── Screen: Ready (the personalized preview) ────────────────────────────────
 
 export const PREVIEW_HEADLINE = 'Your recall watch is ready.';
-export const PREVIEW_BODY = 'Lotly will flag notices that match your profile with Affects You.';
+export const PREVIEW_BODY = 'Here’s what Lotly found for your household.';
+/** The body when nothing (yet) matches: still true before the query answers. */
+export const PREVIEW_BODY_EMPTY = 'Lotly will keep checking for recalls that match your household.';
 /** The summary card's heading (Option 2, 2026-09-26). */
 export const PREVIEW_SUMMARY_TITLE = 'Your preferences are set';
 /** Profile's own row names (lib/profile-hub.ts `SUMMARY_LABELS`): the app says store. */
@@ -122,8 +184,49 @@ export const PREVIEW_SUMMARY_LABELS = {
 export const PREVIEW_NONE = 'None';
 /** Spoken after each summary row: the drawn check, in words. */
 export const PREVIEW_ROW_COMPLETED = 'completed';
-export const PREVIEW_EXAMPLE_LABEL = 'Example match';
-export const PREVIEW_CTA = 'View plans';
+/**
+ * The Stores row's visible tail once it is compacted (lib/ready-presentation
+ * `storeSummaryText`): `Aldi, Costco +4 more`. The row still speaks every name.
+ */
+export function moreStoresLabel(count: number): string {
+  // A no-break space: `+4 more` wraps as one unit, never `+4` / `more`.
+  return `+${count}\u00A0more`;
+}
+// ── The Ready preview: the carousel (2026-09-28) ────────────────────────────
+
+/** The heading over the personalized recall preview. */
+export const PREVIEW_MATCH_HEADING = 'See what affects you today';
+
+/** The lime count pill: `1 recall for your watch`, `2 recalls for your watch`. */
+export function matchCountLabel(count: number): string {
+  return count === 1 ? '1 recall for your watch' : `${count} recalls for your watch`;
+}
+
+/** The soft-blue locked strip, shown only when more real matches exist. */
+export const PREVIEW_LOCKED_STRIP = 'More matching recalls are locked';
+export const PREVIEW_LOCKED_HINT = 'Opens the plan screen.';
+/** The locked sentinel card past the third match: no recall content at all. */
+export const PREVIEW_LOCKED_CARD_TITLE = 'More matches are locked';
+export const PREVIEW_LOCKED_CARD_BODY = 'See your plan to unlock every matching recall.';
+
+/** The honest empty state: no matches right now, and no pretence otherwise. */
+export const PREVIEW_EMPTY_TITLE = 'Nothing currently matches your watch.';
+/** Also the truthful line under a short preview when no more matches exist. */
+export const PREVIEW_MONITORING_NOTE = 'We’ll keep checking as new recalls are announced.';
+/** When the recall feed could not be read at all: honest, and not an empty claim. */
+export const PREVIEW_UNAVAILABLE_TITLE = 'Lotly couldn’t check for matches right now.';
+/** While the first read is still answering: claims nothing either way. */
+export const PREVIEW_CHECKING_TITLE = 'Checking for recalls that match your watch…';
+
+/** A preview card's spoken position: `Match 1 of 3`. */
+export function matchPositionLabel(index: number, count: number): string {
+  return `Match ${index} of ${count}`;
+}
+
+/** The Ready step's one primary action: it opens the plan screen. */
+export const PREVIEW_CTA = 'See my plan';
+export const PREVIEW_CTA_HINT = 'Opens the plan screen.';
+
 export const PREVIEW_EDIT = 'Edit preferences';
 export const PREVIEW_EDIT_HINT =
   'Returns to your states, allergens and stores. Your choices are kept.';

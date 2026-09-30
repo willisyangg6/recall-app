@@ -402,9 +402,10 @@ test('only the two label styles are monospace, and only they carry tracking', ()
 
 test('the approved sizes are the only sizes', () => {
   const sizes = new Set(Object.values(typography).map((t) => t.fontSize));
+  // 56 is `stat` (polish pass): the problem screens' one big figure.
   assert.deepEqual(
     [...sizes].sort((a, b) => a - b),
-    [10, 12, 13, 16, 19, 23, 28, 33],
+    [10, 12, 13, 16, 19, 23, 28, 33, 56],
   );
 });
 

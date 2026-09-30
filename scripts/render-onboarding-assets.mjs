@@ -72,9 +72,10 @@ const STATES_GLYPHS = {
   'zoom-out': 'zoom-out',
 };
 
-/** The Ready step's glyph (icon name → vendored Lucide source). Mirrors src/lib/ready-presentation.ts. */
+/** The Ready step's glyphs (icon name → vendored Lucide source). Mirrors src/lib/ready-presentation.ts. */
 const READY_GLYPHS = {
   'shopping-cart': 'shopping-cart',
+  lock: 'lock',
 };
 
 function write(path, canvas) {
@@ -90,14 +91,14 @@ function write(path, canvas) {
  * stretched path so re-running this script leaves them byte-identical;
  * regenerating them natively is a separate, visible change.
  */
-async function renderLucideGlyphs(glyphs, { native = false } = {}) {
+async function renderLucideGlyphs(glyphs, { native = false, box = ICON_BOX, dir = ICONS } = {}) {
   for (const [icon, lucideName] of Object.entries(glyphs)) {
     const svg = readFileSync(join(LUCIDE, `${lucideName}.svg`), 'utf8')
       .replace(/currentColor/g, '#000000')
       .replace(/stroke-width="2"/, `stroke-width="${ICON_STROKE}"`);
     const stretched = native ? null : await loadImage(Buffer.from(svg));
     for (const { suffix, factor } of SCALES) {
-      const side = ICON_BOX * factor;
+      const side = box * factor;
       const image =
         stretched ??
         (await loadImage(
@@ -108,7 +109,7 @@ async function renderLucideGlyphs(glyphs, { native = false } = {}) {
       const canvas = createCanvas(side, side);
       const ctx = canvas.getContext('2d');
       ctx.drawImage(image, 0, 0, side, side);
-      write(join(ICONS, `${icon}${suffix}.png`), canvas);
+      write(join(dir, `${icon}${suffix}.png`), canvas);
     }
   }
 }

@@ -184,10 +184,16 @@ const ROUTES = [
   'document/[slug].tsx',
   // P2B7X.1: the first-launch flow, the hard paywall and the one-time
   // notification education. Product screens, each inside a protected group
-  // of the root layout (access-gate.test.ts pins the guards).
+  // of the root layout (access-gate.test.ts pins the guards). 2026-09-28
+  // added the two problem screens, the building interstitial and the
+  // dedicated onboarding paywall.
   'onboarding/allergens.tsx',
+  'onboarding/building.tsx',
   'onboarding/notifications.tsx',
+  'onboarding/paywall.tsx',
   'onboarding/preview.tsx',
+  'onboarding/problem-risk.tsx',
+  'onboarding/problem-scale.tsx',
   'onboarding/retailers.tsx',
   'onboarding/states.tsx',
   'onboarding/welcome.tsx',

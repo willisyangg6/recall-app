@@ -73,9 +73,11 @@ const GLYPHS = {
   check: require('@/assets/icons/check.png') as ImageSourcePropType,
   'zoom-in': require('@/assets/icons/zoom-in.png') as ImageSourcePropType,
   'zoom-out': require('@/assets/icons/zoom-out.png') as ImageSourcePropType,
-  // The Ready step's Stores row: the same vendored Lucide family, box and
-  // stroke. Provenance in src/lib/ready-presentation.ts.
+  // The Ready step's Stores row and its locked-matches strip: the same
+  // vendored Lucide family, box and stroke. Provenance in
+  // src/lib/ready-presentation.ts.
   'shopping-cart': require('@/assets/icons/shopping-cart.png') as ImageSourcePropType,
+  lock: require('@/assets/icons/lock.png') as ImageSourcePropType,
 } as const;
 
 export type IconName = keyof typeof GLYPHS;

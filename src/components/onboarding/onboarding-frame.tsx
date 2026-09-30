@@ -1,22 +1,22 @@
 /**
  * The onboarding frame (P2B7X.1): the page every first-launch screen and
- * the paywall sit in, so the seven screens share one chrome.
+ * the paywall sit in, so the screens share one chrome.
  *
  * ## Composition
  *
  * The warm page, safe-area correct. A top bar with the back control (the
- * `chevron-left` glyph, a full 44pt target, absent on Welcome) and, for a
- * counted step, the four-segment progress over its `1 of 4` line in the mono
- * `label` type (`OnboardingProgress`; P2B7Y). Then the
+ * `chevron-left` glyph, a full 44pt target, absent on Welcome); then, on a
+ * counted step, the full-width segmented progress bar (`OnboardingProgress`;
+ * P2B7Y, full-width 2026-09-28) on its own row at the page margin — a fixed
+ * 6pt mark whose vertical position never changes with progress. Then the
  * scrolling content: the headline in `heading-1`, the body in `body`
  * secondary (beside an optional decorative `aside` — the Retailers mascot —
  * which takes its own width and leaves the text the rest), and whatever the
- * screen adds — at the page margin, capped at
- * the content width, with the bottom padding the sticky footer needs so the
- * last row is never hidden under it. The footer holds the screen's actions
- * on the page colour above a hairline, pinned to the bottom over the bottom
- * inset, and lifts with the keyboard on iOS so a search field never buries
- * the Continue action.
+ * screen adds — at the page margin, capped at the content width, with the
+ * bottom padding the sticky footer needs so the last row is never hidden
+ * under it. The footer holds the screen's actions on the page colour above
+ * a hairline, pinned to the bottom over the bottom inset, and lifts with
+ * the keyboard on iOS so a search field never buries the Continue action.
  *
  * ## What never moves
  *
@@ -65,12 +65,13 @@ export function OnboardingFrame({
   headlineAccessibilityLabel,
   headingMotion,
   aside,
+  bodyInset = 0,
 }: {
   headline: string;
   body: string;
-  /** Rendered above the headline: Welcome's wordmark. */
+  /** Rendered above the headline: Welcome's wordmark, the problem stat. */
   lead?: ReactNode;
-  /** The counted step this is; null for Welcome and the paywall. */
+  /** The counted step this is; null for every screen without the bar. */
   progress?: StepProgress | null;
   /** The back control, or null when there is no way back. */
   back?: { label: string; hint: string; onPress: () => void } | null;
@@ -89,6 +90,12 @@ export function OnboardingFrame({
    * sizes it; the text takes the rest of the width, so the two never overlap.
    */
   aside?: ReactNode;
+  /**
+   * Trailing room the BODY alone gives up, in points, while the headline
+   * keeps the full width (the Ready step's "cliff": the body wraps left of
+   * the mascot rising beside it). 0 changes nothing.
+   */
+  bodyInset?: number;
 }) {
   const insets = useSafeAreaInsets();
   const heading = (
@@ -99,7 +106,10 @@ export function OnboardingFrame({
         accessibilityLabel={headlineAccessibilityLabel}>
         {headline}
       </Text>
-      <Text variant="body" color="text/secondary">
+      <Text
+        variant="body"
+        color="text/secondary"
+        style={bodyInset > 0 ? { paddingRight: bodyInset } : null}>
         {body}
       </Text>
     </Animated.View>
@@ -119,12 +129,12 @@ export function OnboardingFrame({
             </Pressable>
           ) : null}
         </View>
-        {progress ? (
-          <View style={styles.progress}>
-            <OnboardingProgress progress={progress} />
-          </View>
-        ) : null}
       </View>
+      {progress ? (
+        <View style={styles.progressRow}>
+          <OnboardingProgress progress={progress} />
+        </View>
+      ) : null}
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
@@ -179,7 +189,6 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing[8],
     minHeight: hitTarget.minimum,
     maxWidth: layout.maxContentWidth,
@@ -191,9 +200,13 @@ const styles = StyleSheet.create({
     minHeight: hitTarget.minimum,
     justifyContent: 'center',
   },
-  // The bar's own padding plus this lands the progress on the page margin.
-  progress: {
-    paddingRight: layout.pageMargin - spacing[8],
+  // The full-width segmented bar, on its own fixed row under the top bar.
+  progressRow: {
+    maxWidth: layout.maxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+    paddingHorizontal: layout.pageMargin,
+    paddingBottom: spacing[8],
   },
   back: {
     minWidth: hitTarget.minimum,

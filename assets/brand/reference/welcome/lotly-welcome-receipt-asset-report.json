@@ -1,0 +1,513 @@
+{
+ "description": "Welcome (receipt) source exports and their production equivalents, cut from the founder-approved reference by deterministic crop + alpha, plus one DERIVED hero source whose only non-original pixels are the removed native caption's footprint. Prepared for review; NOT imported by the app. Nothing was regenerated, resampled or recoloured.",
+ "reportDate": "2026-09-29",
+ "status": "Awaiting founder visual approval. The Welcome screen is unchanged.",
+ "reference": {
+  "path": "assets/brand/reference/lotly-onboarding-welcome-receipt-target.png",
+  "sha256": "beccec0c66200341e2939867d411677bd0b8772af377c71a0512a9347abdda56",
+  "bytes": 1503865,
+  "dimensions": [
+   852,
+   1846
+  ],
+  "chunks": [
+   "IHDR",
+   "caBX",
+   "IDAT",
+   "IEND"
+  ],
+  "manifest": "assets/brand/reference/lotly-onboarding-welcome-receipt-source-manifest.json",
+  "manifestSha256Match": true,
+  "unchanged": true,
+  "colorProfile": "none (untagged RGB); caBX export chunk"
+ },
+ "measuredPage": {
+  "referenceCream": [
+   254,
+   254,
+   250
+  ],
+  "referenceCreamNoise": "max-channel |C - cream| <= 2 (rare 3)",
+  "appBackgroundPage": "#FDFCF6 (253,252,246) from src/constants/design-tokens.ts",
+  "note": "The reference cream is 1-4 units lighter than the app token; composites on the token therefore differ from the source crop by up to 4 units in the cream field itself, not because of the export."
+ },
+ "resolution": "Both exports are at the reference's native pixels (852px-wide mock). No upscaling; they carry no more detail than the approved screenshot. A higher-density requirement must be evaluated separately.",
+ "operations": {
+  "sourceExport": "Rectangular crop of the reference; RGB samples copied unchanged (verified 0 differing samples); re-encoded losslessly as 8-bit RGB with explicit sRGB/gAMA/cHRM; the caBX export chunk dropped; no ICC, bKGD, tIME or text chunks.",
+  "exteriorKey": "Flood from the canvas edge through every pixel that is not solid art (max-channel deviation from the reference cream > 24 is solid). Flooded pixels within 3 of the cream: alpha 0. Flooded pixels above that (antialiasing, sharpening ring, faint glow) and solid pixels within 3px of the exterior: alpha = projection of (C - cream) onto (F - cream), F = the nearest interior art pixel within 6px; RGB unmatted as cream + (C - cream) / alpha (the existing repair's unmatting, against the measured cream instead of white). A flooded pixel with no coloured art within 6px is cleared; a solid pixel whose nearest interior pixel is white art stays opaque and original.",
+  "nearOpaqueLift": "Existing contract: alpha 240-254 set to 255 with the SOURCE RGB (not unmatted).",
+  "clearRgb": "Existing contract: alpha 0 has RGB 0.",
+  "heroLowerFade": "Rows 1544-1583 (reference): alpha multiplied by a smoothstep from 1 to 0 over 40 rows; RGB left ORIGINAL (a compositing ramp, not a matte). These rows are already within ~23 units of the page cream (max-channel), and the apple (to 1497) and its shadow (to ~1530) lie above them.",
+  "heroExteriorLimit": "Exterior flood seeded from the top row and from the side columns above the milk cap (row 783), and never below row 791, so it cannot enter the milk bottle, counter or receipt.",
+  "wordmarkNotchSeal": {
+   "why": "The o's face (255,255,255) meets the page (254,254,250) through a ~6px channel between the ring's tail and the arrowhead, with no edge between them; an unsealed flood cleared the whole face.",
+   "segment_reference": [
+    [
+     311,
+     187
+    ],
+    [
+     307,
+     193
+    ]
+   ],
+   "thicknessPx": 2,
+   "pixels": 14,
+   "effect": "Face and channel stay opaque original white. On background/page this is indistinguishable from the reference; on any non-cream surface the channel reads as a small white wedge continuous with the face."
+  },
+  "tooling": "Pure Node (zlib PNG decode/encode, no canvas colour management) for pixels; @napi-rs/canvas (already a devDependency) only to lay out the comparison sheet. No dependency added.",
+  "heroCaptionRepair": {
+   "why": "The native caption \"Illustrative example, not a live recall.\" is printed inside the counter-to-page fade (glyphs x 241-612, rows 1476-1499). It stays native text, so it must not be in the art.",
+   "detection": "Search box x 232-621, y 1470-1505 (reference). Background = greyscale closing (max then min, square radius 4) of luminance; glyph = luminance more than 8 below it (3,440 px); dilated by 3px (square) to take the antialiasing and the light sharpening ring.",
+   "footprint": {
+    "pixels": 7822,
+    "bounds_reference_xyxy_inclusive": [
+     238,
+     1473,
+     616,
+     1500
+    ],
+    "pixelsChanged": 7558,
+    "footprintPixelsThatRoundedBackToOriginal": 264,
+    "pixelsChangedOutsideFootprint": 0
+   },
+   "fill": "Harmonic (Laplace) interpolation per channel: each footprint pixel iterated to the mean of its 4 neighbours (Gauss-Seidel, 400 iterations, max change < 0.01) with every non-footprint pixel fixed at its original value; rounded to 8-bit. No pixel outside the footprint was read from anywhere but its own position.",
+   "textureCheck": "Local luminance residual (pixel minus 13x13 mean): repaired band 1474-1500 mean 0.41 / max 4.4; untouched neighbours: below 0.39 / 1.9, beside 0.57 / 3.0. No flat patch and no text ghost at 12x contrast stretch.",
+   "apple": "The apple spans x 0-~170 and never enters the footprint (which starts at x 238): all apple pixels are original."
+  }
+ },
+ "files": [
+  {
+   "role": "source (reference/review, not runtime)",
+   "path": "assets/brand/reference/welcome/source/lotly-wordmark-welcome-receipt-source.png",
+   "sha256": "034985fb47b24461e3f198dddcdfdbbb0cef7e2316f2c9e35f3d08ee642a1cc1",
+   "bytes": 70194,
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "rgbSamplesDifferingFromReferenceCrop": 0,
+   "crop_xyxy_exclusive": [
+    232,
+    113,
+    627,
+    313
+   ],
+   "dimensions": [
+    395,
+    200
+   ],
+   "mode": "8-bit RGB, opaque"
+  },
+  {
+   "role": "production (not yet imported)",
+   "path": "assets/brand/production/lotly-wordmark-welcome-receipt.png",
+   "sha256": "e3ea3163b9973f9e386180f5330d50678c6d3e69791b03f1d94e29692b1eeacd",
+   "bytes": 56425,
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "alphaRange": [
+    0,
+    255
+   ],
+   "alphaCounts": {
+    "clear": 42213,
+    "edge1to239": 5815,
+    "nearOpaque240to254": 0,
+    "opaque": 30972
+   },
+   "visibleBounds_xyxy_inclusive": [
+    10,
+    11,
+    385,
+    189
+   ],
+   "opaquePixelsWithRgbChanged": 0,
+   "clearPixelsWithNonZeroRgb": 0,
+   "translucentPixelsWithRgbChanged": 5815,
+   "faceAndSealedNotchSamples": [
+    {
+     "at": [
+      345,
+      215
+     ],
+     "alpha": 255
+    },
+    {
+     "at": [
+      355,
+      205
+     ],
+     "alpha": 255
+    },
+    {
+     "at": [
+      335,
+      200
+     ],
+     "alpha": 255
+    },
+    {
+     "at": [
+      360,
+      240
+     ],
+     "alpha": 255
+    },
+    {
+     "at": [
+      330,
+      230
+     ],
+     "alpha": 255
+    },
+    {
+     "at": [
+      326,
+      201
+     ],
+     "alpha": 255
+    },
+    {
+     "at": [
+      318,
+      197
+     ],
+     "alpha": 255
+    },
+    {
+     "at": [
+      314,
+      192
+     ],
+     "alpha": 255
+    }
+   ],
+   "compositeVsSource": {
+    "onReferenceCream_254_254_250": {
+     "maxChannelDelta": 11,
+     "pixelsOver3": 2872,
+     "pixels": 79000
+    },
+    "onBackgroundPage_FDFCF6": {
+     "maxChannelDelta": 10,
+     "pixelsOver3": 41397,
+     "pixels": 79000
+    }
+   },
+   "crop_xyxy_exclusive": [
+    232,
+    113,
+    627,
+    313
+   ],
+   "dimensions": [
+    395,
+    200
+   ],
+   "mode": "8-bit RGBA, non-interlaced",
+   "keyCounts": {
+    "exteriorPagePixelsCleared": 40134,
+    "exteriorFarNoiseCleared": 737,
+    "solidEdgeKeptOpaque": 2,
+    "softEdgeMatted": 11971,
+    "notchSealPixels": 14
+   },
+   "alphaHistory": {
+    "clear": 42213,
+    "edge1to239": 5815,
+    "lifted240to254": 2031,
+    "opaque": 30972,
+    "rgbIdenticalToSource": 30972,
+    "rgbUnmatted": 5815,
+    "rgbZeroed": 42213,
+    "rgbOriginalUnderFade": 0
+   }
+  },
+  {
+   "role": "source, EXACT crop (superseded for production, kept unchanged)",
+   "path": "assets/brand/reference/welcome/source/lotly-welcome-receipt-scene-source.png",
+   "sha256": "75b0db7b6efb9bd146a76b010d477edc3c8ad02351cc3e5e2b6408eaedc9ba89",
+   "bytes": 766626,
+   "crop_xyxy_exclusive": [
+    0,
+    664,
+    852,
+    1474
+   ],
+   "dimensions": [
+    852,
+    810
+   ],
+   "mode": "8-bit RGB, opaque",
+   "rgbSamplesDifferingFromReferenceCrop": 0
+  },
+  {
+   "role": "source, DERIVED (bottom-repaired; not an exact crop)",
+   "path": "assets/brand/reference/welcome/source/lotly-welcome-receipt-scene-bottom-repaired-source.png",
+   "sha256": "95ae2f598d20221b0d6722398d6058eb68b5ae487d665acb736d10c35539be99",
+   "bytes": 822032,
+   "dimensions": [
+    852,
+    920
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "pixelsDifferingFromReferenceCrop": 7558,
+   "ofWhichOutsideRepairFootprint": 0,
+   "footprintPixelsThatHappenToEqualOriginal": 264,
+   "repairFootprintPixels": 7822,
+   "crop_xyxy_exclusive": [
+    0,
+    664,
+    852,
+    1584
+   ],
+   "mode": "8-bit RGB, opaque",
+   "derivation": "Exact crop of the reference except the caption footprint (operations.heroCaptionRepair)."
+  },
+  {
+   "role": "production (not yet imported)",
+   "path": "assets/brand/production/lotly-welcome-receipt-scene.png",
+   "sha256": "1b47e790e6c004d5416b4f6a80da46654269067467dd61ec7c48ba01210c6717",
+   "bytes": 917783,
+   "dimensions": [
+    852,
+    920
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "alphaCounts": {
+    "clear": 13734,
+    "edge1to239": 29733,
+    "nearOpaque240to254": 0,
+    "opaque": 740373
+   },
+   "opaquePixelsWithRgbChangedVsRepairedSource": 0,
+   "clearPixelsWithNonZeroRgb": 0,
+   "rows664to1449IdenticalToSupersededExport": true,
+   "rows664to1449ByteDifferences": 0,
+   "band791to1543": {
+    "pixels": 641556,
+    "nonOpaque": 0,
+    "rgbDifferingFromReference": 7558,
+    "ofWhichOutsideRepairFootprint": 0
+   },
+   "compositeVsSource": {
+    "aboveFade_onReferenceCream": {
+     "maxChannelDelta": 5,
+     "pixelsOver3": 274,
+     "pixels": 749760
+    },
+    "aboveFade_onBackgroundPage": {
+     "maxChannelDelta": 9,
+     "pixelsOver3": 11451,
+     "pixels": 749760
+    },
+    "fadeRows1544to1583_onBackgroundPage": {
+     "maxChannelDelta": 7,
+     "pixelsOver3": 7407,
+     "pixels": 34080
+    }
+   },
+   "lowerEdgeVsApprovedReference_onBackgroundPage": {
+    "rows1450to1583_excludingRepairFootprint": {
+     "maxChannelDelta": 7,
+     "pixelsOver3": 7407,
+     "pixels": 106346
+    },
+    "rows1450to1583_excludingRepairFootprint_onReferenceCream": {
+     "maxChannelDelta": 8,
+     "pixelsOver3": 3692,
+     "pixels": 106346
+    }
+   },
+   "crop_xyxy_exclusive": [
+    0,
+    664,
+    852,
+    1584
+   ],
+   "mode": "8-bit RGBA, non-interlaced",
+   "alphaRange": [
+    0,
+    255
+   ],
+   "keyCounts": {
+    "exteriorPagePixelsCleared": 12764,
+    "exteriorFarNoiseCleared": 14,
+    "solidEdgeKeptOpaque": 0,
+    "softEdgeMatted": 4178,
+    "notchSealPixels": 0
+   },
+   "alphaHistory": {
+    "clear": 13734,
+    "edge1to239": 29733,
+    "lifted240to254": 5425,
+    "opaque": 740373,
+    "rgbIdenticalToSource": 740373,
+    "rgbUnmatted": 1617,
+    "rgbZeroed": 13734,
+    "rgbOriginalUnderFade": 28116
+   },
+   "upperInteriorCheck": {
+    "region_reference_xyxy": [
+     40,
+     690,
+     810,
+     791
+    ],
+    "pixels": 77770,
+    "nonOpaque": 0,
+    "covers": "lime rays, mascot head, backplate, greens, milk cap"
+   }
+  },
+  {
+   "role": "review sheet (wordmark + current hero)",
+   "path": "assets/brand/reference/welcome/lotly-welcome-receipt-asset-comparison.png",
+   "sha256": "58f99f3ec0941b342af22e4fd2ec1c244b186e3ef1338084e75dfbc40e128596",
+   "bytes": 2759772,
+   "dimensions": [
+    1780,
+    4397
+   ],
+   "mode": "8-bit RGB"
+  },
+  {
+   "role": "review sheet (hero bottom repair: original / superseded / repaired / footprint / complete hero)",
+   "path": "assets/brand/reference/welcome/lotly-welcome-receipt-bottom-repair-comparison.png",
+   "sha256": "385c17a6c1a1c276104bdd1a5e5059b7500bcf3a95f98a1c984bed640cd5bbe4",
+   "bytes": 1721921,
+   "dimensions": [
+    2132,
+    3810
+   ],
+   "mode": "8-bit RGB"
+  }
+ ],
+ "cropDecisions": {
+  "wordmark": "Ink spans x 242-616, y 123-302 (reference); 10px transparent padding each side. The manifest suggestion (228,112 to 636,312) was within 1px of this and was refined to the measured ink.",
+  "hero": "Top 664 = first scene row 672 (greens) - 8px; the manifest's 675 would have clipped the greens. Full width 0-852: bag/greens and milk bottle run off both edges in the original and keep those crops. Bottom 1584 (exclusive): the native source sentence's glyphs begin at row 1588; rows 1581-1587 are within 8 units of the cream. The receipt's lowest tip is 1448; the apple ends at 1497."
+ },
+ "limitations": [
+  "The hero is a DERIVED asset: 7,822 pixels (x 238-616, rows 1473-1500) under the removed caption are interpolated, not original. Everything else is the approved original.",
+  "The hero's lower band is the original counter-to-page gradient, which is cream: on any non-cream surface it shows as a light band before the alpha fade. On background/page it matches the reference within 7 units.",
+  "Wordmark notch: see operations.wordmarkNotchSeal; visible only on non-cream surfaces.",
+  "Wordmark edges: every letter carries a 1px pure-white sharpening overshoot ring (and a faint ring beyond it) in the original. Both are cleared (737 far-field pixels) or matted; on the reference cream every pixel composites within 11 units of the original (2,872 pixels differ by 4-11, 0 by more).",
+  "The mock is 852px wide. The exports are native-resolution crops; at 3x on a 393pt screen they display at roughly 1:1 of the approved screenshot and cannot be sharper than it."
+ ],
+ "textAccuracy": {
+  "method": "The whole receipt (top edge ~row 880, lowest tip 1448) lies inside rows 791-1543, which are 100% alpha 255 with RGB identical to the reference outside the caption footprint (rows 1473-1500, below the receipt); the printed content is therefore the approved pixels, verified visually on both sheets. Rows 664-1449 of the production file are byte-identical to the superseded export.",
+  "verbatim": [
+   "CRITICAL: red label, navy uppercase text",
+   "AFFECTS YOU: lime label, outlined flag",
+   "Granola Bites (package art and title)",
+   "Possible Salmonella contamination.",
+   "Nationwide with outlined pin",
+   "Outlined bookmark"
+  ],
+  "added": "nothing (no date, company, category, matching explanation or recall record)",
+  "excluded": [
+   "wordmark (separate file)",
+   "headline",
+   "body",
+   "example disclaimer (removed from the fade by the caption repair)",
+   "source sentence",
+   "Get started"
+  ]
+ },
+ "edgeQA": {
+  "compositeOnReferenceCream": {
+   "wordmark": {
+    "maxChannelDelta": 11,
+    "pixelsOver3": 2872,
+    "pixels": 79000
+   },
+   "heroAboveFade": {
+    "maxChannelDelta": 5,
+    "pixelsOver3": 274,
+    "pixels": 749760
+   }
+  },
+  "compositeOnBackgroundPage": {
+   "wordmark": {
+    "maxChannelDelta": 10,
+    "pixelsOver3": 41397,
+    "pixels": 79000
+   },
+   "heroAboveFade": {
+    "maxChannelDelta": 9,
+    "pixelsOver3": 11451,
+    "pixels": 749760
+   },
+   "heroFadeRows": {
+    "maxChannelDelta": 7,
+    "pixelsOver3": 7407,
+    "pixels": 34080
+   }
+  },
+  "contrastSurface": "Inspected on #1E2433 (sheet panels B, B2, C) and on black/magenta at 4-8x during export: no light halo on letters, backplate corners, greens or milk cap. An earlier foreground rule (most-saturated neighbour) left dark specks on the backplate corners and was replaced by nearest-interior; an earlier fallback cleared 2 solid arrowhead pixels and was fixed before the final export.",
+  "heroLowerEdgeVsApprovedReference": {
+   "note": "Rows 1450-1583, excluding the caption footprint, production composited vs the reference's own pixels.",
+   "rows1450to1583_excludingRepairFootprint": {
+    "maxChannelDelta": 7,
+    "pixelsOver3": 7407,
+    "pixels": 106346
+   },
+   "rows1450to1583_excludingRepairFootprint_onReferenceCream": {
+    "maxChannelDelta": 8,
+    "pixelsOver3": 3692,
+    "pixels": 106346
+   }
+  },
+  "heroProtection": {
+   "rows664to1449IdenticalToSupersededExport": true,
+   "band791to1543": {
+    "pixels": 641556,
+    "nonOpaque": 0,
+    "rgbDifferingFromReference": 7558,
+    "ofWhichOutsideRepairFootprint": 0
+   },
+   "opaquePixelsWithRgbChangedVsRepairedSource": 0,
+   "clearPixelsWithNonZeroRgb": 0,
+   "nearOpaque240to254": 0
+  }
+ },
+ "runtime": "No file here is imported by the app. src/ is unchanged; the reference, source and report files must never be bundled.",
+ "revisions": [
+  {
+   "date": "2026-09-29",
+   "change": "Initial export: hero crop 0,664 to 852,1474 with a 24-row fade (production sha256 0d8fd9d48678d3ad280e8a051b2c1e661551022664c1b4084dafe8637a2d83f9). SUPERSEDED: the fade read as a straight cutoff and lost the apple's lowest rows."
+  },
+  {
+   "date": "2026-09-29",
+   "change": "Bottom repair: hero extended to row 1584 from original pixels, caption footprint filled, fade moved to 1544-1583. Wordmark unchanged."
+  }
+ ]
+}

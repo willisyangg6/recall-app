@@ -18,8 +18,11 @@ messaging, and a refresh that fails over recalls already on screen is
 silent; the founder is alerted instead by a dead-man heartbeat, which is
 built and wired but **not yet live** (the Healthchecks check is paused
 pending a push). No migration is involved. **Onboarding and the hard paywall
-are built (P2B7X.1)**: a first launch walks Welcome → States → Allergens →
-Retailers → Preview, then a paywall with no way past it but a verified
+are built (P2B7X.1; restructured 2026-09-28)**: a first launch walks
+Welcome → two CDC problem-framing screens → States → Allergens → Stores →
+a one-time "building your watch" interstitial → Ready (a horizontal
+carousel of up to three REAL matched recalls through the Feed's own
+matching layer) → a dedicated paywall with no way past it but a verified
 purchase or restore, then a one-time notification education; every product
 route is a protected route the navigator does not have outside its phase. The
 store itself is NOT connected — no RevenueCat, no App Store products, and a

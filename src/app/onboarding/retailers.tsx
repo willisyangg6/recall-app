@@ -3,8 +3,9 @@
  * empty selection continues. Every check, chip removal and Clear autosaves
  * through the one store, whether it came from a popular tile or the search;
  * an empty Clear saves nothing.
- * Continue returns to the Preview when this edit began there, else pushes
- * a new Preview.
+ * Continue returns to the Ready step when this edit began there; else it
+ * plays the one-time building interstitial on the way to a new Ready step,
+ * or skips straight there once the interstitial has already played.
  */
 
 import { useCallback } from 'react';
@@ -40,7 +41,7 @@ export default function OnboardingRetailersScreen() {
         const next = clearRetailers(prefs);
         if (next !== prefs) update(next);
       }}
-      onContinue={() => continueToPreview(previewBeneath(), router)}
+      onContinue={() => continueToPreview(previewBeneath(), access.onboarding.watchBuilt, router)}
       onBack={() => goBackFrom('retailers', router)}
     />
   );

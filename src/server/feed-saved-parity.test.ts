@@ -604,18 +604,25 @@ test('the PHA status row still wraps rather than shrinking, clipping or fixing a
   assert.match(CARD_SOURCE, /statusRow: \{[^}]*flexWrap: 'wrap'/s);
   assert.match(CARD_SOURCE, /statusGroup: \{[^}]*flexWrap: 'wrap'/s);
   for (const forbidden of [
-    'height:',
     'maxHeight',
-    'minHeight',
     'adjustsFontSizeToFit',
     'maxFontSizeMultiplier',
     'allowFontScaling={false}',
   ]) {
     assert.ok(!CARD_CODE.includes(forbidden), `the card bounds its own size: ${forbidden}`);
   }
-  // The one bounded element stays the product name, and it is a LINE count.
-  assert.equal((CARD_CODE.match(/numberOfLines=/g) ?? []).length, 1);
-  assert.ok(CARD_SOURCE.includes('numberOfLines={3}'));
+  assert.deepEqual(CARD_CODE.match(/\bheight:/g) ?? [], [], 'the card fixes a height');
+  // The onboarding deck's opt-in uniform variant RESERVES slots (min
+  // heights that grow, never clip); every one is gated on `uniform`, which
+  // no Feed or Saved card receives (feed-design.test.ts pins the callers).
+  for (const reservation of CARD_CODE.match(/minHeight: [^,}\]]+/g) ?? []) {
+    assert.match(reservation, /^minHeight: uniform\./, `an ungated reservation: ${reservation}`);
+  }
+  // On Feed and Saved the one bounded element stays the product name, a LINE
+  // count; the reason's clamp exists only in the uniform variant.
+  assert.equal((CARD_CODE.match(/numberOfLines=/g) ?? []).length, 2);
+  assert.ok(CARD_SOURCE.includes('numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}'));
+  assert.ok(CARD_SOURCE.includes('numberOfLines={uniform ? PREVIEW_REASON_LINES : undefined}'));
   // Neither label is abbreviated on its way to the card.
   assert.equal(
     buildHomeCardModel(SK_PHA, { today: TODAY, prefs: null }).noticeLabel,

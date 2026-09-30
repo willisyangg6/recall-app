@@ -73,6 +73,13 @@ colors:
   harm-notice/none/border: '#C0D6EB'
 
 typography:
+  stat:
+    fontFamily: Public Sans
+    fontSize: 56px
+    fontWeight: 700
+    lineHeight: 1.1
+    letterSpacing: 0em
+
   display:
     fontFamily: Public Sans
     fontSize: 33px
@@ -359,16 +366,18 @@ The product name is **Lotly**. The approved mascot set is six poses in
 `lotly-mascot-ready-trust-peek-1024.png`, each tagged sRGB and carrying the
 mechanical alpha repair: a fully opaque drawing with only its antialiased
 edge translucent (`src/lib/mascot-assets.test.ts` pins the set). The set's
-contact sheet is brand documentation, in `assets/brand/reference`. M01 is on
-Welcome, M02 beside the States step's Map / List control (P2B7Y), and M03
-beside the Retailers step's heading (Popular stores, 2026-09-24), and M06
-hanging over the Ready step's summary card (2026-09-26); M04 and M05 wait for
-their own screens. The two "ready" poses are different characters in
-different roles: M03 (the grocery-bag pose) stays on Retailers, and M06 (the
-trust-peek pose: the arrow body cut flat to stand behind a ledge, a shield in
-its right paw) exists only for the Ready card's edge. M04, the standing
-watchful pose, is the paywall's approved pose, but the paywall draws no
-mascot yet and nothing references M04. M06 is a transparent raster
+contact sheet is brand documentation, in `assets/brand/reference`. M01 left
+Welcome with the receipt composition (2026-09-29) and, like M05, is drawn
+nowhere; M02 is beside the States step's Map / List control (P2B7Y), M03
+beside the Retailers step's heading (Popular stores, 2026-09-24), M04 on
+the building interstitial (2026-09-28), and M06 hanging over the Ready
+step's summary card (2026-09-26); M05 waits for its own screen. The two
+"ready" poses are different characters in different roles: M03 (the
+grocery-bag pose) stays on Retailers, and M06 (the trust-peek pose: the
+arrow body cut flat to stand behind a ledge, a shield in its right paw)
+exists only for the Ready card's edge. M04, the standing watchful pose
+(shield-check and refresh arrow), is the interstitial's: the watch being
+assembled and verified. The paywall draws no mascot. M06 is a transparent raster
 production asset, not SVG, and is never redrawn in code. The file as
 supplied was a 1254px export carrying the alpha 240–254 flaw; it was given
 the same mechanical repair at its own size and scaled uniformly to 1024,
@@ -380,6 +389,18 @@ wordmark are not yet locked: the name is set in the type system, and no logo,
 traced wordmark, shield, siren, warning triangle, grocery cart, or food icon
 is invented in implementation work unless a later approved brand asset
 explicitly provides one.
+
+**The Welcome exception (2026-09-29).** The founder approved one screen's
+own artwork: Welcome's bespoke illustrated-o wordmark
+(`lotly-wordmark-welcome-receipt.png`, 395×200) and its grocery scene with
+the mascot's receipt pose, photographic materials and the fictional
+Granola Bites receipt (`lotly-welcome-receipt-scene.png`, 852×920), both
+cut at their own pixels from the approved full-screen target and pinned by
+`src/lib/welcome-receipt-assets.test.ts`. They supersede the rules above on
+Welcome only, and only on the cream page: their counter and notch
+transitions are cream, so they never sit on a dark or coloured surface. The
+exception does not extend to any other screen, and it does not lock the
+logo; everywhere else the name stays set in the type system.
 
 The brand should not resemble a government emergency-alert product.
 Seriousness comes from hierarchy, typography, information quality, and
@@ -429,11 +450,13 @@ accent.
 - **Lime (`background/accent` / `action/accent`, `#E2EE57`)** is reserved for
   personalization/relevance and rare branded emphasis.
 - **Onboarding progress (`onboarding/progress`, `#E2EE57`)** fills the
-  completed and current segments of the onboarding progress bar (P2B7Y). It
-  carries lime under its own name so this one mark is a recorded decision,
-  not a borrowed relevance signal; the steps ahead use `background/subtle`,
-  and the visible `1 of 4` text is the channel that does not depend on
-  colour. It is never a surface, a fill for text, or a severity.
+  completed and current segments of the onboarding progress bar (P2B7Y;
+  full-width 2026-09-28). It carries lime under its own name so this one
+  mark is a recorded decision, not a borrowed relevance signal; the steps
+  ahead use `background/subtle`, and the bar's spoken label (`Onboarding
+progress, step 3 of 5`) is the channel that does not depend on colour —
+  there is no visible numeric copy. It is never a surface, a fill for
+  text, or a severity.
 
 Use semantic colors rather than reaching directly for palette primitives.
 Components should conceptually resolve as:
@@ -560,6 +583,7 @@ canvas):
 
 | Token             | Figma style       | Family        | Size | Weight | Ratio | Line height | Tracking        |
 | ----------------- | ----------------- | ------------- | ---- | ------ | ----- | ----------- | --------------- |
+| `stat`            | —                 | Public Sans   | 56   | 700    | 1.1   | 62          | 0               |
 | `display`         | —                 | Public Sans   | 33   | 700    | 1.2   | 40          | 0               |
 | `heading-1`       | —                 | Public Sans   | 28   | 700    | 1.2   | 34          | 0               |
 | `heading-2`       | `Heading 2`       | Public Sans   | 23   | 700    | 1.3   | 30          | 0               |
@@ -999,12 +1023,20 @@ no image-generation artifact was cloned.
 
 **The frame.** The warm page, safe-area correct. A top bar at least 44pt tall
 holding the `chevron-left` back control (a 44pt target; the slot keeps its
-size when Welcome renders no control) and, for a counted step, the mono
-`label` progress line `1 of 4` … `4 of 4` in `text/secondary`, beneath
-four 24 × 6pt `radius/full` segments (P2B7Y: `onboarding/progress` for the
-completed and current steps, `background/subtle` for the rest; one element
-spoken `Step 1 of 4: States`; on the four counted steps only, never on
-Welcome, the paywall or the education). The
+size when Welcome renders no control). Beneath it, for a counted step, the
+full-width segmented progress bar on its own fixed row at the page margin
+(P2B7Y; full-width 2026-09-28): five equal `radius/full` segments, 6pt tall
+with 4pt gaps, `onboarding/progress` for the completed and current steps
+and `background/subtle` for the rest. It is ONE accessibility element
+spoken `Onboarding progress, step 3 of 5` — the segments are never separate
+elements — with NO visible numeric copy, and its vertical position never
+changes with progress. It appears on the five counted screens only (the two
+problem screens and the three selectors), never on Welcome, the building
+interstitial, Ready, either paywall or the education. With Reduce Motion
+off the newly current segment fills once after the push settles — only for
+a step reached forward from the one before it; Back, a resumed launch or a
+jump from Edit preferences draws the final state on the first frame; on, it
+is drawn full at once; nothing loops. The
 scrolling content column at the 16pt margin, capped at `max-content-width`:
 the headline in `heading-1`, the body in `body` `text/secondary` (with an
 optional decorative `aside` beside them at the trailing edge, which the text
@@ -1016,22 +1048,51 @@ secondary for the lesser one); on iOS it lifts with the keyboard. No fixed
 height around text, no `maxFontSizeMultiplier`, no gradient, no marketing
 carousel.
 
-**Welcome.** One promise, one short explanation, one example, one action.
-The name `lotly`, lowercase in `heading-2` `text/primary`, then the frame's
-headline and body. Then M01 ("Branding status") peeking over the one
-illustrative example card: its flat bottom cut sits on the card's top
-border, right-aligned, and its paws rest on the card inside the card's 12pt
-padding, clear of the first row. It is sized to a quarter of the window's
-height between 176 and 208pt (`mascotSize`; 208 keeps the paws above the
-badges), and the block reserves the height it stands above the card, so it
-never reaches the body text. The card keeps its `caption` label `Example`;
-then the `caption` source note, and `Get started` in the sticky footer. On a
-tall phone the example block is centred in the height the heading leaves, so
-spare room is shared above and below it rather than pooled by the footer. No
-benefit rows. The screen plays the app's one entrance on first appearance:
-the heading rises in, then the mascot rises 24pt from behind the card as it
-fades in, and the card, its label and the note follow with an 8pt rise, done
-by 720ms; nothing loops, and the footer never moves ("Reduced motion").
+**Welcome (the receipt composition, 2026-09-29).** One promise, one short
+explanation, one example, one action, matched to the founder-approved
+full-screen target (`assets/brand/reference/lotly-onboarding-welcome-receipt-target.png`,
+an iPhone 393×852pt screen at 852px wide, with no system chrome). Welcome
+draws its own page rather than the frame, because its scene bleeds to both
+edges and its wordmark sits directly under the status bar; it keeps the
+frame's page colour, real safe areas, scroll view and sticky footer. From
+the top: the bespoke wordmark ("The Welcome exception"), centred at 395/852
+of the width directly under the status bar; the headline and body in
+Welcome-only sizes, founder-approved to match the target (fidelity pass):
+the headline Public Sans Bold 36pt on 36pt leading (the target's baselines
+are 36.4pt apart), the body Public Sans Regular 18pt on 23pt leading in
+`text/secondary` (the target's 22.6pt), left-aligned at a Welcome-only
+24pt inset (the target's own text inset, wider than the 16pt page margin)
+in a column 270pt wide at the default text size that grows with the text
+scale (it reproduces the target's breaks, `A closer look at` / `your
+groceries.` and `…just` / `for you…`, and is never a line break); at
+accessibility sizes (text scale 1.5 and up) the column takes the page
+margin, so only a word wider than the page itself is ever split; then the scene across
+the full width at its own aspect ratio, taking the spare height of a tall
+phone above it; the example caption `Illustrative example, not a live
+recall.` in `caption`; the source note in `caption` `text/secondary`,
+centred; `Get started` in the footer, the target's taller pill: at least
+51pt with an 18pt label (`body-small-bold`'s face and ratio), drawn by
+Welcome as the shared Button's primary treatment because the Button has no
+size override (same pill, fill, label colour, pressed opacity, role and
+state). The shared type scale and Button are unchanged; these sizes are
+Welcome's alone. The caption is native text over the
+scene's quiet counter, centred on the target's caption row, while one line
+of it fits the counter (at the default size on 375pt-wide phones and up);
+at a larger text size it moves into the flow under the scene and the page
+scrolls. Over the counter `text/secondary` measures 3.5–4.2:1, below AA
+for its size, so the caption is `text/primary`. The footer's hairline is
+always allocated and drawn only while content runs beneath it. The wordmark
+speaks `Lotly`; the scene is one image that speaks its printed notice word
+for word, heard directly before the caption; the groceries and mascot add
+no elements, and the printed flag, pin and bookmark are not controls.
+Static: no entrance and no loop. Measured deviations from the target
+(width-normalized, iPhone 17, default text): elements sit 1.6–5.5pt lower,
+because the real status bar ends below the target's wordmark; the caption
+and source note stay 12pt (the target's ~10–11pt) at their accessible
+contrast. At the largest accessibility size a word wider than the whole
+page (`closer`, `personalized`, `groceries.`) is still split by the
+platform: an intrinsic limit of unrestricted Dynamic Type, not a column
+rule. Rules and measurements: `src/lib/welcome-presentation.ts`.
 
 **The example card.** The Feed card's own `RecallCardSurface` over a static
 model — CRITICAL, `Example` in the date slot, AFFECTS YOU, a bundled flat
@@ -1043,16 +1104,19 @@ tile of the card's geometry rather than the shared `MediaTile`, whose
 "official URL or nothing" rule (P2B7I) is unchanged. It never appears on a
 live card. This is a deliberate, founder-directed exception to "Don't
 replace product data with decorative content": it is labelled an example
-three ways and is not product data.
+three ways and is not product data. Since the receipt Welcome (2026-09-29)
+no screen draws it; the component stays for a later decision.
 
 **States (P2B7Y): Map first, List beside it.** Under the heading, a
 `Map` / `List` control — a `radius/12` white surface with a
 `border/default` border holding two 44pt segments, each a Lucide glyph and a
 `body-small` word; the active one fills `background/subtle` with an
-`action/primary` border and its word turns `body-small-bold` — and M02
-(`lotly-mascot-helper-1024.png`) at 72pt beside it, drawn whole, decorative,
-never over the map, and omitted from a text scale of 1.5 so the control can
-take the width. Map mode, top to bottom: the `Zoom in on the Northeast` /
+`action/primary` border and its word turns `body-small-bold` — across the
+full content width. M02 (`lotly-mascot-helper-1024.png`) sits beside the
+heading and body in the frame's `aside` at 120pt (polish pass; the Stores
+mascot's seat and size — it was a 72pt miniature beside the control),
+drawn whole, decorative, never over the map, and omitted from a text scale
+of 1.5 so the heading can take the width. Map mode, top to bottom: the `Zoom in on the Northeast` /
 `Show the whole map` control (`zoom-in` / `zoom-out` at 20 in `icon/brand`,
 `body-small-bold` `action/secondary`, trailing, 44pt); the contiguous map at
 the content width in d3's Albers USA projection (open shapes
@@ -1143,18 +1207,15 @@ final state is drawn at once ("Reduced motion").
 **Retailers (2026-09-24): Popular stores first.** Beside the heading and
 body, M03 (`lotly-mascot-ready-1024.png`, the grocery-bag pose) at 120pt
 through the frame's `aside`, drawn whole, decorative, and omitted from a
-text scale of 1.5 so the heading can take the width. Then, only once a
-store is chosen, the selected-store summary: a `background/subtle`
-`radius/16` surface, padded 16 across, holding `Your stores · N` in
-`body-small-bold` `text/primary` at the leading edge and `Clear` at the
-trailing edge as a compact text action (`body-small-bold`, never underlined,
-`action/secondary`; a 44pt target through hitSlop), then one row: every
-chosen store as a `background/surface` `radius/12` chip (`body-small` name
-and a 16pt `x` glyph in `icon/primary`, spoken `Remove Walmart`), in the
-order chosen, on a single horizontally scrolling row that runs to the
-surface's edges. The surface never grows with the count and never hides a
-store behind `+N`. With nothing chosen there is no summary and no space for
-one: the heading flows into `Popular stores` at the frame's `spacing/16`.
+text scale of 1.5 so the heading can take the width. Then one quiet
+utility row with no surface (polish pass; the blue summary and its chips
+are retired): `N stores selected` in `body-small` `text/secondary` at the
+leading edge and `Clear` at the trailing edge as a compact text action
+(`body-small-bold`, never underlined, `action/secondary`; a 44pt target
+through hitSlop). The row's slot is always laid out; with nothing chosen it
+is invisible and hidden from assistive technology, so the grid never moves
+and the empty and selected states share one spacing. The count also covers
+stores chosen through the search, which the ten tiles cannot show.
 
 Then `Popular stores` in `heading-3` and ten tiles, `spacing/8` apart, in
 the curated order (Walmart, Costco, Kroger, Aldi, Target, Trader Joe's,
@@ -1228,7 +1289,14 @@ above the column of checks. The mascot is sized at 0.195 of the window
 height, from 140pt (iPhone SE) to 180pt (172pt on an iPhone 17), and is
 always 140pt from the accessibility sizes. Its drawing is 0.84 of that box
 wide and 0.82 tall. The 2026-09-26 polish pass raised the bounds from
-120–152pt, about 17–19% more visible drawing. Its full height is reserved above the card, so it never
+120–152pt, about 17–19% more visible drawing. The room reserved above the
+card is the drawing's height less a 48pt rise (`readyMascotReserve`,
+2026-09-27): at ordinary text sizes the crest climbs beside the body
+paragraph's trailing whitespace — the mascot is right-aligned and the
+paragraph's lines end well left of it — which tightens the composition by
+that 48pt without touching the seat, the paw or the shield. From text scale
+1.2 the paragraph can wrap far enough right to meet it, so the full lift is
+reserved again. The drawing itself never
 reaches the body text. The heading keeps clear of the shield, and the first
 row starts below it.
 
@@ -1281,23 +1349,127 @@ width beneath. The heading drops below the shield at full width. This way no
 value breaks inside a word, which it did at AX5 between a well and a check.
 
 The mascot's one entrance is the other onboarding mascots' short fade and
-settle, played once and skipped under Reduce Motion. After the card come the
-example card under `Example match`, the independence note in `caption`, and
-the footer's `View plans` over `Edit preferences`.
+settle, played once and skipped under Reduce Motion.
 
-**The hard paywall.** The frame without progress; its back control is the one
-way back (to the Preview). Three benefit rows, an 8pt `icon/brand` dot
-beside `body` text; then the two plans as a
-real radio group: each a white `radius/12` surface with a `border/default`
-border that turns `action/primary` when selected, the Choice Row's ring and
+The Ready step (carousel composition, 2026-09-28; the approved target is
+`assets/brand/reference/lotly-onboarding-ready-carousel-target.png`, a
+design reference that is never bundled) shows what the watch found and
+sells nothing:
+
+- **Edit preferences** sits INSIDE the blue card, right-aligned on its own
+  last row (the card header's trailing edge belongs to the shield): a quiet
+  `body-small-bold` text action with the `chevron-right` affordance, 44pt
+  through hitSlop, never a second large button or a nested white card. Its
+  navy is `action/primary` — `action/secondary` on the soft blue is 4.1:1,
+  below AA for 13pt text.
+- **`See what affects you today`** in `heading-2`, a real header, then the
+  lime count pill: `body-small-bold` on `relevancePalette`'s Affects-You
+  treatment (`background/accent` fill, its `#ADB600` border, `radius/full`)
+  reading `N recall(s) for your watch` for the readable matches —
+  personalization lime, never a safety claim.
+- **The deck** (polish pass) is an overlapping deck, not a list: the first
+  three IMAGE-BEARING matches in rank order as the Feed's own
+  `RecallCardSurface` in its opt-in uniform variant — one outer size per
+  width and text-size class: title two lines (both reserved), the category
+  chip and a two-line reason reserved even when absent, the status row
+  reserving the tallest row the deck measured, the 112pt media identical.
+  One card per page, 12pt apart, snapping; the next card waits behind the
+  active card's trailing edge at 0.93 scale, tucked 16pt, under the active
+  card (static z-order; the transforms follow the scroll only). The cards'
+  own `card` elevation is the only depth — no glass, gradient or extra
+  shadow. No arrows, no instruction copy, no auto-advance, no loop. Below
+  it, 8pt pagination dots — `background/brand` active, `background/subtle`
+  rest — one per readable card, none for a single card, decorative (each
+  card speaks `Match 1 of 3. …`). From text scale 1.5 the uniform rules
+  come off and the cards wrap freely.
+- **The locked final card**, only when a real next image-bearing match
+  exists: that recall's own uniform card — the same size — under a real
+  blur (`expo-blur`, intensity 60, light tint, clipped to `radius/16`) with
+  one centered lock in a 48pt white `radius/12` well bordered
+  `border/subtle`, and no text. Under Reduce Transparency: a 96% white
+  frost instead. One button (`More matches are locked`) to the paywall;
+  the recall beneath is hidden from assistive technology.
+- **The locked strip**, whenever more real matches exist than the deck
+  shows: a soft-blue `radius/12` row — the `lock` glyph (Lucide, the set's
+  box and stroke), `body-small-bold` `More matching recalls are locked` —
+  one button to the paywall, unchanged by which card is active. When no
+  more matches exist, the strip's place is the truthful `caption`
+  monitoring line.
+- **The empty, checking and could-not-check states** share one quiet
+  soft-blue card (`body` line over a `body-small` monitoring line), and the
+  body copy drops the found claim (`Lotly will keep checking…`).
+- **The footer** is one primary action: `See my plan`.
+
+The Stores row shows at most three names; four or more read as the first
+two and `+N more`, joined by a no-break space so the count never wraps
+apart, while the row still speaks every store. The example recall card,
+`View plans`, and every trace of the merged 2026-09-27 purchase composition
+(benefit check rows, `Choose your plan`, the overlay footer and its
+scroll-threshold CTA) are gone from this step.
+
+**The two problem screens** (2026-09-28; the approved statistic
+compositions), between Welcome and States: the shared frame, the bar at
+steps 1 and 2 of 5, Back and a pinned Continue, and no mascot. The scale
+screen leads with `1 in 6` in the `stat` type (56pt), the `heading-1`
+sentence and the supporting line in `body` `text/secondary`, then the
+authored one-in-six pictograph — one production image, drawn whole with
+`contain` (320pt canvas on taller phones, 216pt on the SE class). The
+stakes screen (2026-09-29; the approved risk-row target, which supersedes
+the earlier 2×2 grid): the headline, the claim once in the body, then the
+CDC's four groups as four vertical editorial rows — the approved production
+illustration on the left, the exact group name as live `heading-3` text on
+the right, vertically centred, and a `border/subtle` hairline between rows
+(never after the last). Rows are transparent; the illustrations' own
+pale-blue ovals are the only backgrounds — no pill, card, panel, row
+border, shadow, number or icon. The illustration is the largest box that
+keeps every label on one line at default size (105pt on the iPhone 17,
+78pt on the SE), overlapping only its own transparent bands; larger text
+scrolls and wraps between words. Each row is one spoken element. Both
+screens anchor `Source: CDC` in readable `body-small` `text/secondary` to
+the foot of the content; composition rules live in
+[docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md)
+§6.5.
+
+**The building interstitial** (2026-09-28) is the one screen outside the
+frame: the warm page, the M04 watchful mascot in a fixed 160pt box, then a
+checklist that appears one row at a time — a 20pt check slot and `body`
+text, the completion line in `heading-3` — each row fading in once over
+200ms. About 3.2 seconds in all; under Reduce Motion the finished checklist
+is drawn at once and held a readable moment. The checklist is one spoken
+element (`Building your recall watch`); the mascot is hidden and
+untouchable; nothing loops, sweeps or bounces.
+
+**The plan cards** are the shared ones, compacted (2026-09-28): the monthly
+equivalent and the saving share one caption line (`$2.50/month · Save 50%`),
+so Annual measures ~97pt and Monthly ~72pt at the default size, with the
+radios aligned and no dead area on the right; every price stays the store's
+own string, and the line wraps between words at larger sizes. They appear
+only on the paywalls (below).
+
+**The paywall** — one composition, two routes: `/onboarding/paywall`, which
+Ready's `See my plan` opens, and the standalone `/paywall` a lapsed
+subscriber meets; both draw the same shared pieces over the one purchase
+flow. The frame without progress; its back control is the one way back (to
+the Ready step). M04, the watchful pose, beside the heading in the frame's
+`aside` at 120pt (the selectors' seat; omitted from text scale 1.5). The
+headline `Stay ahead of recalls that affect you.`, three benefit rows (a
+decorative 20pt navy `check` in `icon/primary` beside `body` text), then
+the two plans as a real radio group: each a white `radius/12` surface with
+a `border/default` border that turns a 2px `action/primary` when selected
+(the padding gives the pixel back), the Choice Row's ring and
 dot, the plan title in `body-small-bold`, the store's price with its period
 in `heading-3` (`$29.99/year`), the store-derived monthly equivalent and the
 saving in `caption` `text/secondary`, and on Annual the `BEST VALUE` mark —
 the compact-label geometry on `background/accent` with an `action/accent`
-border, IBM Plex Mono `label`. Lime is the value surface here and the
+border, IBM Plex Mono `label` — set as a TAB of the card: flush with its
+top trailing corner, its border on the card's, squared where it meets the
+card radius (`radius/12` on its free corners); from text scale 1.5 it
+returns to the title row. It is drawing; the radio already speaks `Best
+value`. Lime is the value surface here and the
 success surface on the education screen and on the restore-success notice;
-the only other lime in the flow is the progress bar's own
-`onboarding/progress` token. The footer: the last outcome's notice (calm on the
+the only other limes in the flow are the progress bar's own
+`onboarding/progress` token and Ready's Affects-You count pill — always
+personalization or value, never safety. The footer: the last outcome's notice (calm on the
 information callout, errors on the `border/strong` alert surface, success on
 lime), the primary action naming the selected commitment (`Subscribe for
 $29.99/year`), the renewal disclosure in `caption`, and the four footer
@@ -1308,8 +1480,14 @@ threshold the settings selector row stacks at) the disclosure and the four
 actions leave the sticky footer for the end of the scrolling content,
 directly above the primary action — pinned, they would take the whole
 screen and leave the plans unreachable; the notice and the primary action
-stay sticky at every size. No close, skip, dismiss, free, trial, lifetime,
-countdown, crossed-out price or scarcity.
+stay sticky at every size. Between the plans and the footer sit the
+development-store controls (development builds only) and the independence
+note in `caption`. No close, skip, dismiss, free, trial, lifetime,
+countdown, crossed-out price or scarcity — and no preference summary,
+example recall, notification preview or second "ready" message: those are
+Ready's and education's. A shopper already entitled meets the entitled
+panel instead: the `Subscription active` mark on lime, the benefits, and a
+fixed `Continue` footer — never a purchase ask.
 
 **Notification education.** `Subscription active` as a compact
 `body-small-bold` mark on `background/accent` (rendered as written, not
@@ -2546,7 +2724,7 @@ chance.
   cross-dissolve (`animation: 'fade'`) while Reduce Motion is on, because a
   native stack keeps sliding otherwise; content motion and route motion are
   separate, and both are covered —
-  Welcome's one-time entrance, and (P2B7Y) the onboarding progress segment's
+  (P2B7Y) the onboarding progress segment's
   one fill and the States mascot's one fade-and-settle, each starting after
   the screen's push settles; the States map itself never animates; and
   (P2B7Z) an Allergens tile's 150ms opacity fade as it is chosen or cleared,
@@ -2728,13 +2906,16 @@ risk-label rows), the warning callout for comparison — and the reset panel
 idle, confirming (the dialog's words as text), busy, succeeded and failed,
 its press wired to nothing, so no sample can open the confirmation or start
 a deletion; and from P2B7X.1 every first-launch screen and every paywall
-state — Welcome, the three selector steps empty, selected and searched, the
-retailer rows with the fallback and two neutral fixtures at extreme ratios,
-the Preview with two allergens, one allergen, four allergens and a long store
-list, and no optional selections, the education idle and
-enabling, the paywall in twelve views including a long localized price
-pair, and a 568pt viewport — each sample's state held in the gallery's
-memory, plus gate scenarios that restart the REAL flow from a chosen state.
+state — Welcome, the two problem screens, the three selector steps empty,
+selected and searched, the retailer rows with the fallback and two neutral
+fixtures at extreme ratios, the building interstitial holding its finished
+checklist, the Ready step at its carousel edges (three matches of five with
+the locked strip and sentinel, two, one, and none — decks of clones of the
+approved example model, never fabricated recalls), the entitled paywall
+panel, the education idle and enabling, the paywall in twelve views
+including a long localized price pair, and a 568pt viewport — each sample's
+state held in the gallery's memory, plus gate scenarios that restart the
+REAL flow from a chosen state.
 Only the values each caption names are simulated.
 It is not a product surface.
 

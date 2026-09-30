@@ -1,0 +1,621 @@
+{
+ "description": "The final, repaired production statistics household illustrations as they are in the repository (assets/brand/production/). This describes the runtime files after correction and resampling, not the approved 1254×1254 sources, which remain byte-identical under assets/brand/reference/statistics/source/ and are described here per file under \"source\".",
+ "reportDate": "2026-09-28",
+ "process": {
+  "alpha repair at native 1254×1254 (the Lotly mascot repair)": "alpha 0: RGB set to 0; alpha 240-254: alpha set to 255, RGB unchanged; alpha 255: unchanged; alpha 1-239: alpha kept, RGB unmatted against white as (c - 255*(1 - a)) / a, rounded and clamped to 0-255. The sources carry no color profile and a caBX export chunk; the export metadata is dropped and the production file is tagged with an explicit sRGB chunk (with gAMA and cHRM); no ICC profile, bKGD or tIME.",
+  "uniform resample": "the complete repaired 1254×1254 canvas resampled to 1024×1024 with a premultiplied box filter (exact area weights, unpremultiplied on output). Never cropped, shifted, stretched, selectively resized, recolored or repainted; relative artwork placement is preserved, verified by the solid artwork bounds (alpha >= 128, the mascot tests' measurement) landing within 2px per edge of the uniform-scale prediction.",
+  "post-resample normalization": "the resample necessarily produces new edge values: alpha 0 pixels get RGB 0 and alpha 240-254 is lifted to 255 with RGB unchanged, so the production files carry the same alpha contract as the mascots and allergen pictograms.",
+  "stray specks": "each household source holds a few thousand alpha 1-2 stray pixels in the transparent field (export noise, invisible at app sizes). They were NOT edited: the sources are untouched, and whatever the uniform resample leaves of them (alpha rounds to 0 or 1) stays. Raw any-alpha bounds therefore differ from the solid bounds and both are recorded. The one-in-six pictograph source (2026-09-29) is the cleaned export and carries no such specks.",
+  "intended enclosed translucency (one-in-six pictograph only)": "the pictograph carries exactly six enclosed translucent components after repair, 4213 pixels in total, one per figure: the authored between-the-legs gap over each soft shadow (every pixel alpha <= 239). In the source these regions reach the border through the 240-254 shadow; lifting that ceiling to 255 seals them, so they read as enclosed. They are artwork, not defects, and no pixel was filled. The four household illustrations remain at zero enclosed pixels."
+ },
+ "files": [
+  {
+   "file": "statistics-young-children-1024.png",
+   "path": "assets/brand/production/statistics-young-children-1024.png",
+   "sha256": "d414faf0514c0eacad736a87ab6f72d763db998662b2f5d9ff067f3dad6147a9",
+   "bytes": 427852,
+   "dimensions": [
+    1024,
+    1024
+   ],
+   "png": {
+    "bitDepth": 8,
+    "colorType": "RGBA",
+    "interlaced": false
+   },
+   "srgb": {
+    "chunk": "sRGB",
+    "renderingIntent": "perceptual",
+    "embeddedIccProfile": false
+   },
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "alphaCounts": {
+    "clear": 607076,
+    "edge1to239": 9839,
+    "nearOpaque240to254": 0,
+    "opaque": 431661
+   },
+   "artworkBounds": {
+    "left": 91,
+    "top": 43,
+    "right": 984,
+    "bottom": 1023
+   },
+   "solidArtworkBounds": {
+    "left": 95,
+    "top": 202,
+    "right": 933,
+    "bottom": 851
+   },
+   "enclosedHolePixels": 0,
+   "repair": {
+    "atNativeResolution": {
+     "clearedRgb": 245,
+     "liftedCeiling": 646750,
+     "unmattedEdge": 11207
+    },
+    "resample": "uniform premultiplied box filter, complete 1254×1254 canvas to 1024×1024",
+    "afterResample": {
+     "clearedRgb": 1596,
+     "liftedCeiling": 959
+    }
+   },
+   "verification": "pass",
+   "source": {
+    "file": "statistics-young-children-source-1254.png",
+    "path": "assets/brand/reference/statistics/source/statistics-young-children-source-1254.png",
+    "sha256": "42e35c0b7cc42ba68b7dfe104f9b35e89d24ed8d0aaac1d766f87463322d5799",
+    "bytes": 612127,
+    "dimensions": [
+     1254,
+     1254
+    ],
+    "png": {
+     "bitDepth": 8,
+     "colorType": 6,
+     "interlaced": false
+    },
+    "chunkOrder": [
+     "IHDR",
+     "caBX",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IEND"
+    ],
+    "colorProfile": {
+     "sRGB": null,
+     "gAMA": null,
+     "cHRM": null,
+     "iCCP": false
+    },
+    "alphaCounts": {
+     "clear": 913117,
+     "edge1to239": 11207,
+     "nearOpaque240to254": 646750,
+     "opaque": 1442
+    },
+    "hiddenRgbUnderAlpha0": 245,
+    "artworkBounds": {
+     "left": 73,
+     "top": 53,
+     "right": 1205,
+     "bottom": 1253
+    },
+    "solidArtworkBounds": {
+     "left": 116,
+     "top": 247,
+     "right": 1143,
+     "bottom": 1042
+    },
+    "enclosedHolePixels": 0,
+    "cornerAlphas": [
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "file": "statistics-pregnant-people-1024.png",
+   "path": "assets/brand/production/statistics-pregnant-people-1024.png",
+   "sha256": "9890aca6dfed3e24eb4af73775105b02ef222f9ad17745536b1e8c6a9f87d625",
+   "bytes": 458195,
+   "dimensions": [
+    1024,
+    1024
+   ],
+   "png": {
+    "bitDepth": 8,
+    "colorType": "RGBA",
+    "interlaced": false
+   },
+   "srgb": {
+    "chunk": "sRGB",
+    "renderingIntent": "perceptual",
+    "embeddedIccProfile": false
+   },
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "alphaCounts": {
+    "clear": 622127,
+    "edge1to239": 8911,
+    "nearOpaque240to254": 0,
+    "opaque": 417538
+   },
+   "artworkBounds": {
+    "left": 0,
+    "top": 65,
+    "right": 953,
+    "bottom": 943
+   },
+   "solidArtworkBounds": {
+    "left": 119,
+    "top": 193,
+    "right": 903,
+    "bottom": 869
+   },
+   "enclosedHolePixels": 0,
+   "repair": {
+    "atNativeResolution": {
+     "clearedRgb": 223,
+     "liftedCeiling": 625772,
+     "unmattedEdge": 10431
+    },
+    "resample": "uniform premultiplied box filter, complete 1254×1254 canvas to 1024×1024",
+    "afterResample": {
+     "clearedRgb": 1647,
+     "liftedCeiling": 887
+    }
+   },
+   "verification": "pass",
+   "source": {
+    "file": "statistics-pregnant-people-source-1254.png",
+    "path": "assets/brand/reference/statistics/source/statistics-pregnant-people-source-1254.png",
+    "sha256": "c0754fab38fdca9914e04959a1ebec3c254ea4673960bbcea2b749a85934cc27",
+    "bytes": 628198,
+    "dimensions": [
+     1254,
+     1254
+    ],
+    "png": {
+     "bitDepth": 8,
+     "colorType": 6,
+     "interlaced": false
+    },
+    "chunkOrder": [
+     "IHDR",
+     "caBX",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IEND"
+    ],
+    "colorProfile": {
+     "sRGB": null,
+     "gAMA": null,
+     "cHRM": null,
+     "iCCP": false
+    },
+    "alphaCounts": {
+     "clear": 935145,
+     "edge1to239": 10431,
+     "nearOpaque240to254": 625772,
+     "opaque": 1168
+    },
+    "hiddenRgbUnderAlpha0": 223,
+    "artworkBounds": {
+     "left": 0,
+     "top": 80,
+     "right": 1173,
+     "bottom": 1245
+    },
+    "solidArtworkBounds": {
+     "left": 146,
+     "top": 236,
+     "right": 1106,
+     "bottom": 1065
+    },
+    "enclosedHolePixels": 0,
+    "cornerAlphas": [
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "file": "statistics-adults-65-plus-1024.png",
+   "path": "assets/brand/production/statistics-adults-65-plus-1024.png",
+   "sha256": "08ce90e0b666ea45a8836ae15c56c351c3e460b53f7898377c6485bc592e389f",
+   "bytes": 481874,
+   "dimensions": [
+    1024,
+    1024
+   ],
+   "png": {
+    "bitDepth": 8,
+    "colorType": "RGBA",
+    "interlaced": false
+   },
+   "srgb": {
+    "chunk": "sRGB",
+    "renderingIntent": "perceptual",
+    "embeddedIccProfile": false
+   },
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "alphaCounts": {
+    "clear": 570004,
+    "edge1to239": 8860,
+    "nearOpaque240to254": 0,
+    "opaque": 469712
+   },
+   "artworkBounds": {
+    "left": 77,
+    "top": 38,
+    "right": 984,
+    "bottom": 1002
+   },
+   "solidArtworkBounds": {
+    "left": 81,
+    "top": 176,
+    "right": 946,
+    "bottom": 865
+   },
+   "enclosedHolePixels": 0,
+   "repair": {
+    "atNativeResolution": {
+     "clearedRgb": 238,
+     "liftedCeiling": 704195,
+     "unmattedEdge": 10026
+    },
+    "resample": "uniform premultiplied box filter, complete 1254×1254 canvas to 1024×1024",
+    "afterResample": {
+     "clearedRgb": 1598,
+     "liftedCeiling": 922
+    }
+   },
+   "verification": "pass",
+   "source": {
+    "file": "statistics-adults-65-plus-source-1254.png",
+    "path": "assets/brand/reference/statistics/source/statistics-adults-65-plus-source-1254.png",
+    "sha256": "bc4846711d458b93c8243d5d9a8815fae919789f6f1efbb2f00fc764ef7bb791",
+    "bytes": 676748,
+    "dimensions": [
+     1254,
+     1254
+    ],
+    "png": {
+     "bitDepth": 8,
+     "colorType": 6,
+     "interlaced": false
+    },
+    "chunkOrder": [
+     "IHDR",
+     "caBX",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IEND"
+    ],
+    "colorProfile": {
+     "sRGB": null,
+     "gAMA": null,
+     "cHRM": null,
+     "iCCP": false
+    },
+    "alphaCounts": {
+     "clear": 857164,
+     "edge1to239": 10026,
+     "nearOpaque240to254": 704195,
+     "opaque": 1131
+    },
+    "hiddenRgbUnderAlpha0": 238,
+    "artworkBounds": {
+     "left": 0,
+     "top": 43,
+     "right": 1207,
+     "bottom": 1229
+    },
+    "solidArtworkBounds": {
+     "left": 99,
+     "top": 216,
+     "right": 1159,
+     "bottom": 1059
+    },
+    "enclosedHolePixels": 0,
+    "cornerAlphas": [
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "file": "statistics-weakened-immune-systems-1024.png",
+   "path": "assets/brand/production/statistics-weakened-immune-systems-1024.png",
+   "sha256": "85be2c78ddaa2a082f412520d5193c56d7c0ed609423a5199b60fa51b1dee325",
+   "bytes": 448993,
+   "dimensions": [
+    1024,
+    1024
+   ],
+   "png": {
+    "bitDepth": 8,
+    "colorType": "RGBA",
+    "interlaced": false
+   },
+   "srgb": {
+    "chunk": "sRGB",
+    "renderingIntent": "perceptual",
+    "embeddedIccProfile": false
+   },
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "alphaCounts": {
+    "clear": 602382,
+    "edge1to239": 8578,
+    "nearOpaque240to254": 0,
+    "opaque": 437616
+   },
+   "artworkBounds": {
+    "left": 90,
+    "top": 43,
+    "right": 934,
+    "bottom": 855
+   },
+   "solidArtworkBounds": {
+    "left": 93,
+    "top": 197,
+    "right": 930,
+    "bottom": 852
+   },
+   "enclosedHolePixels": 0,
+   "repair": {
+    "atNativeResolution": {
+     "clearedRgb": 190,
+     "liftedCeiling": 655795,
+     "unmattedEdge": 9450
+    },
+    "resample": "uniform premultiplied box filter, complete 1254×1254 canvas to 1024×1024",
+    "afterResample": {
+     "clearedRgb": 1128,
+     "liftedCeiling": 853
+    }
+   },
+   "verification": "pass",
+   "source": {
+    "file": "statistics-weakened-immune-systems-source-1254.png",
+    "path": "assets/brand/reference/statistics/source/statistics-weakened-immune-systems-source-1254.png",
+    "sha256": "0792bc8621b682692e61f8f6ad2c7c8617467e3202d646e38351da9c3b8817e8",
+    "bytes": 633042,
+    "dimensions": [
+     1254,
+     1254
+    ],
+    "png": {
+     "bitDepth": 8,
+     "colorType": 6,
+     "interlaced": false
+    },
+    "chunkOrder": [
+     "IHDR",
+     "caBX",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IEND"
+    ],
+    "colorProfile": {
+     "sRGB": null,
+     "gAMA": null,
+     "cHRM": null,
+     "iCCP": false
+    },
+    "alphaCounts": {
+     "clear": 905949,
+     "edge1to239": 9450,
+     "nearOpaque240to254": 655795,
+     "opaque": 1322
+    },
+    "hiddenRgbUnderAlpha0": 190,
+    "artworkBounds": {
+     "left": 73,
+     "top": 52,
+     "right": 1143,
+     "bottom": 1047
+    },
+    "solidArtworkBounds": {
+     "left": 114,
+     "top": 241,
+     "right": 1140,
+     "bottom": 1044
+    },
+    "enclosedHolePixels": 0,
+    "cornerAlphas": [
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "file": "statistics-one-in-six-figures-1024.png",
+   "path": "assets/brand/production/statistics-one-in-six-figures-1024.png",
+   "sha256": "e0fad461ec8cdd1c89096bb66da041b9f010f8f321239add15b0476f6604dc66",
+   "bytes": 475494,
+   "dimensions": [
+    1024,
+    1024
+   ],
+   "png": {
+    "bitDepth": 8,
+    "colorType": "RGBA",
+    "interlaced": false
+   },
+   "srgb": {
+    "chunk": "sRGB",
+    "renderingIntent": "perceptual",
+    "embeddedIccProfile": false
+   },
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "alphaCounts": {
+    "clear": 744043,
+    "edge1to239": 43421,
+    "nearOpaque240to254": 0,
+    "opaque": 261112
+   },
+   "artworkBounds": {
+    "left": 131,
+    "top": 121,
+    "right": 903,
+    "bottom": 909
+   },
+   "solidArtworkBounds": {
+    "left": 134,
+    "top": 124,
+    "right": 898,
+    "bottom": 906
+   },
+   "enclosedHolePixels": 4213,
+   "repair": {
+    "atNativeResolution": {
+     "clearedRgb": 0,
+     "liftedCeiling": 391328,
+     "unmattedEdge": 54945
+    },
+    "resample": "uniform premultiplied box filter, complete 1254×1254 canvas to 1024×1024",
+    "afterResample": {
+     "clearedRgb": 4822,
+     "liftedCeiling": 3396
+    }
+   },
+   "verification": "pass",
+   "source": {
+    "file": "statistics-one-in-six-figures-source-1254.png",
+    "path": "assets/brand/reference/statistics/source/statistics-one-in-six-figures-source-1254.png",
+    "sha256": "e6280fcf99a51d739d2076c4226627756317f983d925eb52956b37694432011f",
+    "bytes": 579926,
+    "dimensions": [
+     1254,
+     1254
+    ],
+    "png": {
+     "bitDepth": 8,
+     "colorType": 6,
+     "interlaced": false
+    },
+    "chunkOrder": [
+     "IHDR",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IDAT",
+     "IEND"
+    ],
+    "colorProfile": {
+     "sRGB": null,
+     "gAMA": null,
+     "cHRM": null,
+     "iCCP": false
+    },
+    "alphaCounts": {
+     "clear": 1122903,
+     "edge1to239": 54945,
+     "nearOpaque240to254": 391328,
+     "opaque": 3340
+    },
+    "hiddenRgbUnderAlpha0": 0,
+    "artworkBounds": {
+     "left": 161,
+     "top": 148,
+     "right": 1106,
+     "bottom": 1114
+    },
+    "solidArtworkBounds": {
+     "left": 164,
+     "top": 152,
+     "right": 1100,
+     "bottom": 1109
+    },
+    "enclosedHolePixels": 0,
+    "cornerAlphas": [
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ ]
+}

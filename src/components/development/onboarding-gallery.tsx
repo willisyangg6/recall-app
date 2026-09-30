@@ -35,12 +35,18 @@ import { router, type Href } from 'expo-router';
 import { StyleSheet, View, type ImageSourcePropType } from 'react-native';
 
 import { AllergensStep } from '@/components/onboarding/allergens-step';
+import { BuildingStep } from '@/components/onboarding/building-step';
 import { NotificationEducation } from '@/components/onboarding/notification-education';
 import { PreviewStep } from '@/components/onboarding/preview-step';
+import { ProblemRiskStep, ProblemScaleStep } from '@/components/onboarding/problem-steps';
 import { RetailersStep } from '@/components/onboarding/retailers-step';
 import { StatesStep } from '@/components/onboarding/states-step';
 import { WelcomeContent } from '@/components/onboarding/welcome-content';
-import { PaywallPanel } from '@/components/paywall/paywall-panel';
+import {
+  EntitledPaywallPanel,
+  PaywallPanel,
+  type PurchaseProps,
+} from '@/components/paywall/paywall-panel';
 import { Button } from '@/components/ui/button';
 import { CheckRow } from '@/components/ui/check-row';
 import { RetailerLogoFallback, RetailerLogoMark } from '@/components/ui/retailer-logo';
@@ -65,9 +71,11 @@ import {
   type OnboardingRecord,
 } from '@/lib/onboarding-state';
 import { saveOnboardingRecord } from '@/lib/onboarding-store';
+import { SAMPLE_RECALL_MODEL } from '@/lib/onboarding-sample';
 import { initialPaywallView, type PaywallView } from '@/lib/paywall-screen';
 import { toggleAllergen, toggleRetailer, withStates } from '@/lib/personalization-screen';
 import type { Offering } from '@/lib/purchases/purchase-provider';
+import type { ReadyPreviewState } from '@/lib/ready-preview';
 import { clearRetailers } from '@/lib/retailer-grid';
 import { retailerLogoCoverage } from '@/lib/retailer-logos';
 
@@ -172,19 +180,69 @@ function LiveRetailers({ initial }: { initial: string[] }) {
   );
 }
 
-/** The paywall with a view handed in; selecting a plan changes only this sample. */
-function LivePaywall({ view, children }: { view: PaywallView; children?: React.ReactNode }) {
+/**
+ * A simulated purchase: the view held in this sample's memory, so choosing a
+ * plan changes only the sample; subscribing, restoring and the links do
+ * nothing.
+ */
+function useSamplePurchase(view: PaywallView): PurchaseProps {
   const [current, setCurrent] = useState(view);
+  return {
+    view: current,
+    onSelectPlan: (period) => setCurrent((prior) => ({ ...prior, selectedPlan: period })),
+    onSubscribe: noop,
+    onFooterAction: noop,
+    destinationNotice: null,
+  };
+}
+
+/** The standalone paywall with a view handed in. */
+function LivePaywall({ view, children }: { view: PaywallView; children?: React.ReactNode }) {
+  const purchase = useSamplePurchase(view);
   return (
-    <PaywallPanel
-      view={current}
-      onSelectPlan={(period) => setCurrent((prior) => ({ ...prior, selectedPlan: period }))}
-      onSubscribe={noop}
-      onFooterAction={noop}
-      onBack={noop}>
+    <PaywallPanel purchase={purchase} onBack={noop}>
       {children}
     </PaywallPanel>
   );
+}
+
+/**
+ * The Ready step with a preview handed in. The gallery's deck is built from
+ * clones of the approved static example model (clearly marked `Example, not
+ * a live recall` on the card itself), so no sample fabricates a recall and
+ * none depends on the live corpus.
+ */
+function LiveReady({
+  prefs,
+  preview,
+}: {
+  prefs: UserRecallPreferences;
+  preview: ReadyPreviewState;
+}) {
+  return (
+    <PreviewStep prefs={prefs} preview={preview} onSeePlan={noop} onEdit={noop} onBack={noop} />
+  );
+}
+
+/**
+ * A deck of N example cards and the true total the sample claims. A total
+ * past the count also stands a frosted locked clone at the deck's end, as
+ * the real next image-bearing match would. The example model carries no
+ * image (live media never leaves the corpus), so these samples exercise
+ * the deck's text slots, depth and frost, not the media region.
+ */
+function samplePreview(count: number, total: number): ReadyPreviewState {
+  if (count === 0) return { kind: 'none' };
+  return {
+    kind: 'matches',
+    models: Array.from({ length: count }, (_, i) => ({
+      ...SAMPLE_RECALL_MODEL,
+      id: `${SAMPLE_RECALL_MODEL.id}-${i + 1}`,
+    })),
+    locked:
+      total > count ? { ...SAMPLE_RECALL_MODEL, id: `${SAMPLE_RECALL_MODEL.id}-locked` } : null,
+    total,
+  };
 }
 
 function paywallView(
@@ -219,7 +277,7 @@ export function OnboardingGallery() {
         simulator’s: set the text size under Settings › Accessibility and reopen, or use the
         small-height sample at the end.
       </Text>
-      <GallerySample caption="Welcome — real: the wordmark, headline, benefits, the example card and the trust note; simulated: Get started does nothing">
+      <GallerySample caption="Welcome — real: the receipt composition (wordmark, headline, body, the grocery scene, the example caption and the source note); simulated: Get started does nothing">
         <Screen>
           <WelcomeContent onGetStarted={noop} />
         </Screen>
@@ -249,12 +307,12 @@ export function OnboardingGallery() {
           <LiveAllergens initial={['peanut', 'milk', 'sesame']} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Retailers, empty — simulated: nothing chosen; no summary, the heading flows into Popular stores">
+      <GallerySample caption="Retailers, empty — simulated: nothing chosen; the count row keeps its slot invisibly, so the grid sits exactly where it will with stores chosen">
         <Screen>
           <LiveRetailers initial={[]} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Retailers, selected — simulated: Costco and Trader Joe’s checked; their tiles and chips">
+      <GallerySample caption="Retailers, selected — simulated: Costco and Trader Joe’s checked; the quiet 2 stores selected row with Clear, no surface and no chips">
         <Screen>
           <LiveRetailers initial={['costco', 'trader-joes']} />
         </Screen>
@@ -282,24 +340,37 @@ export function OnboardingGallery() {
           />
         </View>
       </GallerySample>
-      <GallerySample caption="Preview with selections — simulated: California, New York and Texas; Peanuts and Milk (two overlapping pictograms); Costco and Trader Joe’s; then the example match">
+      <GallerySample caption="Problem: the scale — real: the 1 in 6 stat, the six-figure pictograph with one in lime, its sentence and the CDC source note; simulated: Continue and Back do nothing">
         <Screen>
-          <PreviewStep prefs={populated} onViewPlans={noop} onEdit={noop} onBack={noop} />
+          <ProblemScaleStep onContinue={noop} onBack={noop} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Preview, one allergen — simulated: California; Sesame alone, its pictogram at 28pt; Aldi">
+      <GallerySample caption="Problem: higher stakes — real: the headline, the claim once, and the CDC's four groups as white tiles; simulated: Continue and Back do nothing">
         <Screen>
-          <PreviewStep
+          <ProblemRiskStep onContinue={noop} onBack={noop} />
+        </Screen>
+      </GallerySample>
+      <GallerySample caption="Building your watch — real: the M04 mascot, the truthful captions for a full selection and the one-time play (it holds its finished state here); simulated: finishing routes nowhere">
+        <Screen>
+          <BuildingStep prefs={populated} onDone={noop} />
+        </Screen>
+      </GallerySample>
+      <GallerySample caption="Ready, three matches of five — simulated: California, New York and Texas; Peanuts and Milk (two pictograms on the well’s diagonal); Costco and Trader Joe’s; a deck of three example cards, the frosted locked clone as the final card, and the locked strip beneath">
+        <Screen>
+          <LiveReady prefs={populated} preview={samplePreview(3, 5)} />
+        </Screen>
+      </GallerySample>
+      <GallerySample caption="Ready, two matches — simulated: two example cards, two dots, the pill reads 2 recalls for your watch, and the truthful monitoring line stands where the locked strip would">
+        <Screen>
+          <LiveReady
             prefs={{ states: codesFor('California'), allergens: ['sesame'], retailers: ['aldi'] }}
-            onViewPlans={noop}
-            onEdit={noop}
-            onBack={noop}
+            preview={samplePreview(2, 2)}
           />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Preview, three or more and a long store list — simulated: four allergens chosen out of order (the first two canonical pictograms and +2, every name in the text); six stores that wrap">
+      <GallerySample caption="Ready, one match and a long store list — simulated: four allergens chosen out of order (the first two canonical pictograms and +2, every name in the text); six stores shown as the first two and +4 more, every store still spoken; one example card and no dots">
         <Screen>
-          <PreviewStep
+          <LiveReady
             prefs={{
               states: codesFor('Massachusetts', 'New Hampshire'),
               allergens: ['shellfish', 'sesame', 'tree nuts', 'peanut'],
@@ -312,20 +383,21 @@ export function OnboardingGallery() {
                 'wegmans',
               ],
             }}
-            onViewPlans={noop}
-            onEdit={noop}
-            onBack={noop}
+            preview={samplePreview(1, 1)}
           />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Preview with no optional selections — simulated: one state and nothing else; Allergens (a neutral dash, no pictogram) and Stores keep their rows and read None">
+      <GallerySample caption="Ready, nothing matches — simulated: one state and nothing else; Allergens and Stores keep their rows and read None; the body drops the found claim and the honest empty card stands where the deck would">
         <Screen>
-          <PreviewStep
+          <LiveReady
             prefs={{ ...EMPTY_PREFERENCES, states: codesFor('Oregon') }}
-            onViewPlans={noop}
-            onEdit={noop}
-            onBack={noop}
+            preview={{ kind: 'none' }}
           />
+        </Screen>
+      </GallerySample>
+      <GallerySample caption="Onboarding paywall, already entitled — real: the entitled panel; simulated: Continue and Back do nothing">
+        <Screen>
+          <EntitledPaywallPanel onBack={noop} onContinue={noop} />
         </Screen>
       </GallerySample>
       <GallerySample caption="Notification education — real: the success mark, the alert preview and both actions; simulated: neither action asks the system for anything">
@@ -445,24 +517,37 @@ const GATE_SCENARIOS: readonly GateScenario[] = __DEV__
       {
         title: 'Offline first launch',
         expectation:
-          'Onboarding from Welcome with the store unreachable. Every screen works; the paywall, when ' +
-          'reached, shows the could-not-confirm state and fails closed.',
+          'Onboarding from Welcome with the store unreachable. Every screen works; the ' +
+          'onboarding paywall shows the could-not-confirm state and fails closed, and Ready ' +
+          'shows its honest could-not-check preview if the feed is unreachable too.',
         record: INITIAL_ONBOARDING,
         subscription: null,
         scenario: 'unavailable_unverified',
       },
       {
         title: 'Resumed incomplete onboarding',
-        expectation: 'The app opens on the Retailers step (3 of 4); Back walks to Allergens.',
+        expectation:
+          'The app opens on the Stores step (segment 5 of 5 filled); Back walks to Allergens.',
         record: recordShownStep(INITIAL_ONBOARDING, 'retailers'),
         subscription: null,
         scenario: 'inactive',
       },
       {
         title: 'Completed onboarding, inactive entitlement',
-        expectation: 'The app opens on the paywall, never Welcome. Back reviews the Preview.',
+        expectation:
+          'A lapsed subscriber: the app opens on the standalone paywall, never Welcome. Back ' +
+          'reviews the Ready step, whose See my plan reaches the same shared plans.',
         record: completePersonalization(INITIAL_ONBOARDING),
         subscription: null,
+        scenario: 'inactive',
+      },
+      {
+        title: 'Active entitlement, onboarding unfinished',
+        expectation:
+          'Subscribed elsewhere, then onboarding again: the app opens on the Ready step; See my ' +
+          'plan meets the entitled panel, whose Continue opens notification education.',
+        record: recordShownStep(INITIAL_ONBOARDING, 'preview'),
+        subscription: 'annual',
         scenario: 'inactive',
       },
       {
@@ -514,12 +599,15 @@ export function GateScenarios() {
       await access.refreshEntitlement();
     }
     scenarios.setDevelopmentPurchaseScenario(scenario.scenario);
+    const priorPhase = access.phase;
     const next = await access.reload();
-    if (!dismissable) {
-      // The hub IS the root here (nothing beneath it), and the development
-      // group stays mounted in every phase, so the gate alone would leave it
-      // showing: replace it with the new phase's entry screen once the
-      // navigator has taken the phase change.
+    if (!dismissable || next.phase === priorPhase) {
+      // Two cases the gate alone cannot move: the hub IS the root (nothing
+      // beneath it, and the development group stays mounted in every
+      // phase), or the phase did not change — a scenario applied from over
+      // an onboarding screen lands in the onboarding phase again, so the
+      // navigator keeps the popped-to screen. Either way, replace it with
+      // the entry screen once the navigator has settled.
       const href = `/${entryRoute(next.phase, next.entryStep)}` as Href;
       setTimeout(() => router.replace(href), 0);
     }

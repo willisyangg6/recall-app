@@ -12,17 +12,20 @@
  * translucent. So no pixel may sit at 240–254, the drawing has no enclosed
  * translucent hole, and there is no background hint or timestamp chunk.
  *
- * M01 is on Welcome, M02 (the helper pose) beside the States step's
+ * M02 (the helper pose) is beside the States step's
  * Map / List control (P2B7Y), and M03 (the ready pose with the grocery bag)
  * beside the Retailers step's heading (Popular stores, 2026-09-24), and M06
  * (the trust-peek pose with the shield, 2026-09-26) hanging over the Ready
- * step's summary card; M04 and M05 are approved but not yet integrated, and
- * nothing may reference them until their own milestone.
+ * step's summary card, and M04 (the watchful pose) on the "building your
+ * watch" interstitial (2026-09-28) and beside the paywall's heading (the
+ * polish pass); M05 is approved but not yet integrated,
+ * and nothing may reference it until its own milestone. M01 (the
+ * welcome-peek pose) left Welcome with the receipt composition (2026-09-29)
+ * and, like M05, is approved but drawn nowhere.
  *
- * M01's placement on the Welcome card and M06's on the Ready summary card are
- * computed from measurements of their artwork (lib/welcome-presentation.ts,
- * lib/ready-presentation.ts), so those measurements are checked against the
- * files themselves: replacing the art without re-measuring fails here.
+ * M06's placement on the Ready summary card is computed from measurements of
+ * its artwork (lib/ready-presentation.ts), so those measurements are checked
+ * against the file itself: replacing the art without re-measuring fails here.
  */
 
 import assert from 'node:assert/strict';
@@ -32,16 +35,6 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { inflateSync } from 'node:zlib';
 
-import {
-  CARD_PADDING,
-  MASCOT_ART_TOP,
-  MASCOT_EDGE,
-  MASCOT_MAX,
-  MASCOT_MIN,
-  mascotLift,
-  mascotOffset,
-  PAW_DEPTH,
-} from '@/lib/welcome-presentation';
 import {
   TRUST_PEEK_ART_RIGHT,
   TRUST_PEEK_ART_TOP,
@@ -225,49 +218,6 @@ test('no mascot has a translucent hole inside the drawing', () => {
   }
 });
 
-test('M01’s seat on the Welcome card matches its artwork', () => {
-  const { alpha, width } = DECODED.M01;
-  const solid = (x: number, y: number) => alpha[y * width + x] >= 128;
-  const rowIsSolidAt = (y: number, xs: number[]) => xs.some((x) => solid(x, y));
-  // The flat cut: the last row where the body is solid across its middle.
-  const middle = [400, 500, 600];
-  let cut = 0;
-  for (let y = 0; y < width; y++) if (middle.every((x) => solid(x, y))) cut = y;
-  // The paws: the last solid row anywhere; the art: the first.
-  const everyX = Array.from({ length: width }, (_, x) => x);
-  let lowest = 0;
-  let highest = width;
-  for (let y = 0; y < width; y++) {
-    if (rowIsSolidAt(y, everyX)) {
-      lowest = y;
-      highest = Math.min(highest, y);
-    }
-  }
-  // The artwork's own coordinates, unchanged by the repair…
-  assert.equal(cut, 807, 'the flat cut moved');
-  assert.equal(lowest, 860, 'the paws moved');
-  assert.equal(highest, 185, 'the top of the art moved');
-  // …and the seat the screen computes from them.
-  assert.equal(MASCOT_EDGE * 1024, 808);
-  assert.equal((MASCOT_EDGE + PAW_DEPTH) * 1024, 860);
-  assert.equal(MASCOT_ART_TOP * 1024, 185);
-});
-
-test('M01’s card-overlap geometry is unchanged at both size bounds', () => {
-  assert.equal(MASCOT_MIN, 176);
-  assert.equal(MASCOT_MAX, 208);
-  // The box starts this far above the card's top border…
-  assert.equal(mascotOffset(MASCOT_MIN), 139);
-  assert.equal(mascotOffset(MASCOT_MAX), 164);
-  // …the drawing stands this tall above it…
-  assert.equal(mascotLift(MASCOT_MIN), 108);
-  assert.equal(mascotLift(MASCOT_MAX), 127);
-  // …and the paws reach this far into the card, inside its 12pt padding.
-  assert.equal(CARD_PADDING, 12);
-  assert.ok(MASCOT_MAX * PAW_DEPTH < CARD_PADDING - 1);
-  assert.equal(MASCOT_MAX * PAW_DEPTH, 10.5625);
-});
-
 test('M06’s seat on the Ready summary card matches its artwork', () => {
   const { alpha, width } = DECODED.M06;
   const solid = (x: number, y: number) => alpha[y * width + x] >= 128;
@@ -323,12 +273,7 @@ test('M06 carries the mechanical repair of the supplied 1254px export, uniformly
   assert.ok(!DECODED.M06.chunks.includes('caBX'), 'the export metadata came back');
 });
 
-test('M01 is on Welcome, M02 on States, M03 on Retailers and M06 on Ready, each once; M04–M05 are referenced nowhere yet', () => {
-  const welcome = readFileSync(
-    join(ROOT, 'src', 'components', 'onboarding', 'welcome-content.tsx'),
-    'utf8',
-  );
-  assert.ok(welcome.includes(`require('@/assets/brand/production/${APPROVED.M01}')`));
+test('M02 on States, M03 on Retailers, M04 on the building interstitial and the paywall, M06 on Ready; M01 and M05 are referenced nowhere', () => {
   const states = readFileSync(
     join(ROOT, 'src', 'components', 'onboarding', 'states-step.tsx'),
     'utf8',
@@ -345,6 +290,11 @@ test('M01 is on Welcome, M02 on States, M03 on Retailers and M06 on Ready, each 
   );
   assert.ok(ready.includes(`require('@/assets/brand/production/${APPROVED.M06}')`));
   assert.ok(!ready.includes(APPROVED.M03), 'Ready draws the grocery-bag pose');
+  const building = readFileSync(
+    join(ROOT, 'src', 'components', 'onboarding', 'building-step.tsx'),
+    'utf8',
+  );
+  assert.ok(building.includes(`require('@/assets/brand/production/${APPROVED.M04}')`));
   const sources: string[] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -356,15 +306,23 @@ test('M01 is on Welcome, M02 on States, M03 on Retailers and M06 on Ready, each 
     }
   };
   walk(join(ROOT, 'src'));
-  for (const id of ['M04', 'M05'] as const) {
+  // M01 left Welcome with the receipt composition (2026-09-29); M05 awaits its milestone.
+  for (const id of ['M01', 'M05'] as const) {
     const name = APPROVED[id];
     assert.ok(!sources.some((source) => source.includes(name)), `${id} (${name}) is integrated`);
   }
+  // M04, the watchful pose, is the interstitial's and (polish pass) the
+  // paywall's heading aside — exactly those two sources.
   assert.equal(
-    sources.filter((source) => source.includes(`/${APPROVED.M01}')`)).length,
-    1,
-    'M01 is drawn somewhere other than Welcome',
+    sources.filter((source) => source.includes(APPROVED.M04)).length,
+    2,
+    'M04 is drawn somewhere other than the interstitial and the paywall',
   );
+  const panel = readFileSync(
+    join(ROOT, 'src', 'components', 'paywall', 'paywall-panel.tsx'),
+    'utf8',
+  );
+  assert.ok(panel.includes(`require('@/assets/brand/production/${APPROVED.M04}')`));
   assert.equal(
     sources.filter((source) => source.includes(APPROVED.M02)).length,
     1,

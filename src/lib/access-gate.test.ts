@@ -210,9 +210,13 @@ test('the landing route of each phase is the first declared screen of its group'
   assert.deepEqual(onboardingDeclarationOrder('allergens'), [
     'onboarding/allergens',
     'onboarding/welcome',
+    'onboarding/problem-scale',
+    'onboarding/problem-risk',
     'onboarding/states',
     'onboarding/retailers',
+    'onboarding/building',
     'onboarding/preview',
+    'onboarding/paywall',
   ]);
   assert.deepEqual(onboardingDeclarationOrder('welcome'), [...ROUTE_GROUPS.onboarding]);
 });
@@ -298,8 +302,66 @@ test('the gate is read once, above the stack, and the splash waits for it', () =
   );
 });
 
+test('a purchase or restore on the Ready step goes straight to education, never through the paywall phase', () => {
+  // On the Ready step personalization is not complete yet.
+  const onReady = recordShownStep(INITIAL_ONBOARDING, 'preview');
+  assert.equal(
+    resolveAccessPhase({ onboarding: onReady, entitled: false, reviewingPreview: false }),
+    'onboarding',
+  );
+  assert.equal(
+    onboardingEntryStep({ onboarding: onReady, entitled: false, reviewingPreview: false }),
+    'preview',
+  );
+  // The verified entitlement and the completed record land in ONE commit.
+  const afterPurchase = completePersonalization(onReady);
+  assert.equal(
+    resolveAccessPhase({ onboarding: afterPurchase, entitled: true, reviewingPreview: false }),
+    'education',
+  );
+  // Had the record been completed first, on its own, the gate would have
+  // shown the paywall in between — which is why the provider does both at once.
+  assert.equal(
+    resolveAccessPhase({ onboarding: afterPurchase, entitled: false, reviewingPreview: false }),
+    'paywall',
+  );
+  const provider = codeOnly(readFileSync(join(APP, '..', 'hooks', 'use-access.tsx'), 'utf8'));
+  const apply = provider.slice(
+    provider.indexOf('const applyEntitlement = useCallback('),
+    provider.indexOf('const reload = useCallback('),
+  );
+  assert.ok(apply.includes('const onboarding = completePersonalizationRecord(prior.onboarding);'));
+  assert.equal(
+    (apply.match(/commit\(/g) ?? []).length,
+    1,
+    'the entitlement and record commit apart',
+  );
+  assert.ok(
+    apply.indexOf('commit(') < apply.indexOf('saveOnboardingRecord(onboarding)'),
+    'the in-memory commit comes first; the write is what a relaunch resumes from',
+  );
+  // An already-entitled shopper finishing onboarding: completion alone opens education.
+  assert.equal(
+    resolveAccessPhase({ onboarding: onReady, entitled: true, reviewingPreview: false }),
+    'onboarding',
+  );
+  assert.equal(
+    resolveAccessPhase({
+      onboarding: completePersonalization(onReady),
+      entitled: true,
+      reviewingPreview: false,
+    }),
+    'education',
+  );
+});
+
 test('no route navigates across a phase: transitions are state changes the gate acts on', () => {
-  const phaseRoutes = ['paywall', 'onboarding/notifications', 'onboarding/preview'];
+  const phaseRoutes = [
+    'paywall',
+    'onboarding/notifications',
+    'onboarding/preview',
+    'onboarding/paywall',
+  ];
   for (const route of phaseRoutes) {
     const code = codeOnly(read(...`${route}.tsx`.split('/')));
     for (const forbidden of [
@@ -313,13 +375,26 @@ test('no route navigates across a phase: transitions are state changes the gate 
       assert.ok(!code.includes(forbidden), `${route} navigates across a phase with ${forbidden}`);
     }
   }
-  // The Preview completes personalization and the paywall applies the
-  // entitlement; neither pushes what follows.
-  assert.ok(
-    codeOnly(read('onboarding', 'preview.tsx')).includes('access.completePersonalization()'),
+  // The two paywall routes share ONE purchase flow, which applies a
+  // verified entitlement (completing personalization in the same commit);
+  // an already-entitled shopper's Continue on the onboarding paywall
+  // completes personalization. None of them pushes what follows, and the
+  // Ready step holds no purchase machinery at all.
+  const ready = codeOnly(read('onboarding', 'preview.tsx'));
+  assert.ok(!ready.includes('usePurchaseFlow'), 'Ready grew purchase machinery back');
+  assert.ok(!ready.includes('applyEntitlement'), 'Ready applies entitlements');
+  const onboardingPaywall = codeOnly(read('onboarding', 'paywall.tsx'));
+  assert.ok(onboardingPaywall.includes('usePurchaseFlow()'));
+  assert.ok(onboardingPaywall.includes('access.completePersonalization()'));
+  const flow = codeOnly(readFileSync(join(APP, '..', 'hooks', 'use-purchase-flow.tsx'), 'utf8'));
+  assert.equal(
+    (flow.match(/await access\.applyEntitlement\(outcome\.entitlement\);/g) ?? []).length,
+    2,
+    'a purchase and a restore apply the entitlement, and only there',
   );
+  assert.ok(!flow.includes('router.'), 'the purchase flow holds no router');
   const paywall = codeOnly(read('paywall.tsx'));
-  assert.ok(paywall.includes('await access.applyEntitlement(outcome.entitlement);'));
+  assert.ok(paywall.includes('usePurchaseFlow()'));
   assert.ok(paywall.includes('onBack={access.reviewPreview}'));
   assert.ok(!paywall.includes('router.'), 'the paywall route holds no router');
   const education = codeOnly(read('onboarding', 'notifications.tsx'));
@@ -330,10 +405,14 @@ test('no route navigates across a phase: transitions are state changes the gate 
 test('every onboarding step records itself as the resume point on focus', () => {
   for (const [step, file] of [
     ['welcome', 'welcome.tsx'],
+    ['problem-scale', 'problem-scale.tsx'],
+    ['problem-risk', 'problem-risk.tsx'],
     ['states', 'states.tsx'],
     ['allergens', 'allergens.tsx'],
     ['retailers', 'retailers.tsx'],
+    ['building', 'building.tsx'],
     ['preview', 'preview.tsx'],
+    ['paywall', 'paywall.tsx'],
   ] as const) {
     const code = codeOnly(read('onboarding', file));
     assert.ok(

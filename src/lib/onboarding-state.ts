@@ -1,6 +1,7 @@
 /**
- * Onboarding state (P2B7X.1): the VERSIONED record of how far a shopper has
- * come through first launch, kept apart from the preferences it collects.
+ * Onboarding state (P2B7X.1; restructured 2026-09-28): the VERSIONED record
+ * of how far a shopper has come through first launch, kept apart from the
+ * preferences it collects.
  *
  * ## Why a record of its own, and not the preferences
  *
@@ -11,11 +12,25 @@
  * those apart, so completion is written as a fact here and never derived
  * from `UserRecallPreferences`.
  *
+ * ## The sequence (2026-09-28)
+ *
+ *   Welcome → the two problem screens (the scale of foodborne illness, then
+ *   who faces higher stakes) → States → Allergens → Stores → the one-time
+ *   "building your watch" interstitial → Ready (the personalized preview)
+ *   → the onboarding paywall → purchase or restore → education
+ *
+ * Five screens carry the segmented progress bar: the two problem screens
+ * and the three selectors. Welcome, the interstitial, Ready and the paywall
+ * do not.
+ *
  * ## What the record holds
  *
  *   step                           the screen to resume on — the last
  *                                  onboarding screen that was shown — while
  *                                  personalization is incomplete
+ *   watchBuilt                     sticky: the "building your watch"
+ *                                  interstitial has played to completion
+ *                                  once; it never replays
  *   personalizationCompleted       sticky: once true it never regresses,
  *                                  however the shopper later moves through
  *                                  the selectors again (editing preferences
@@ -27,29 +42,48 @@
  * machine is provable under Node; the store (onboarding-store.ts) only reads
  * and writes what these functions return. `sanitizeOnboardingRecord` is the
  * one place a stored blob of any version becomes a current record, following
- * `sanitizePreferences`: an unknown or corrupt value degrades to the INITIAL
+ * `sanitizePreferences`: a well-formed version-1 record (the four-step flow
+ * this restructure replaced) migrates to a version-2 record that keeps the
+ * shopper's place, and an unknown or corrupt value degrades to the INITIAL
  * record (onboarding from the start), never to a half-completed one.
  */
 
 // ── The steps ───────────────────────────────────────────────────────────────
 
-export type OnboardingStep = 'welcome' | 'states' | 'allergens' | 'retailers' | 'preview';
+export type OnboardingStep =
+  | 'welcome'
+  | 'problem-scale'
+  | 'problem-risk'
+  | 'states'
+  | 'allergens'
+  | 'retailers'
+  | 'building'
+  | 'preview'
+  | 'paywall';
 
-/** The screens in order. Welcome is a screen but not a counted step. */
+/** The screens in flow order. */
 export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   'welcome',
+  'problem-scale',
+  'problem-risk',
   'states',
   'allergens',
   'retailers',
+  'building',
   'preview',
+  'paywall',
 ];
 
-/** The four counted steps, in order: States 1, Allergens 2, Retailers 3, Preview 4. */
+/**
+ * The five screens the segmented progress bar counts, in order. Welcome, the
+ * building interstitial, Ready and the paywall show no bar.
+ */
 export const COUNTED_STEPS: readonly OnboardingStep[] = [
+  'problem-scale',
+  'problem-risk',
   'states',
   'allergens',
   'retailers',
-  'preview',
 ];
 
 export interface StepProgress {
@@ -58,32 +92,18 @@ export interface StepProgress {
   total: number;
 }
 
-/** "1 of 4" for a counted step; null for Welcome, which is not counted. */
+/** The bar's model for a counted step; null for every screen without a bar. */
 export function stepProgress(step: OnboardingStep): StepProgress | null {
   const index = COUNTED_STEPS.indexOf(step);
   return index === -1 ? null : { index: index + 1, total: COUNTED_STEPS.length };
 }
 
-/** The visible progress line for a counted step: "1 of 4". */
-export function progressLabel(progress: StepProgress): string {
-  return `${progress.index} of ${progress.total}`;
-}
-
 /**
- * Each counted step's name, as the progress bar speaks it. `Stores`, not
- * `Retailers`: the app-wide shopper word (consumer-copy.test.ts).
+ * The progress bar's one spoken sentence. There is no visible numeric
+ * progress copy (2026-09-28); the count exists for assistive technology.
  */
-export const COUNTED_STEP_NAMES: Record<Exclude<OnboardingStep, 'welcome'>, string> = {
-  states: 'States',
-  allergens: 'Allergens',
-  retailers: 'Stores',
-  preview: 'Preview',
-};
-
-/** The progress bar's one spoken sentence: "Step 1 of 4: States". */
 export function progressAccessibilityLabel(progress: StepProgress): string {
-  const step = COUNTED_STEPS[progress.index - 1] as Exclude<OnboardingStep, 'welcome'>;
-  return `Step ${progressLabel(progress)}: ${COUNTED_STEP_NAMES[step]}`;
+  return `Onboarding progress, step ${progress.index} of ${progress.total}`;
 }
 
 /**
@@ -92,6 +112,16 @@ export function progressAccessibilityLabel(progress: StepProgress): string {
  */
 export function motionAllowed(reduceMotion: boolean | null): boolean {
   return reduceMotion === false;
+}
+
+/**
+ * Whether the current segment's one-time fill plays: only when the step was
+ * reached forward from the one directly before it. First shown (a fresh
+ * process, a resumed launch), reached by Back, or re-entered, the bar draws
+ * its final state on the first frame.
+ */
+export function segmentFillAnimates(lastShownIndex: number | null, index: number): boolean {
+  return lastShownIndex !== null && index === lastShownIndex + 1;
 }
 
 /** How many of the bar's segments are filled: every completed step and the current one. */
@@ -104,9 +134,27 @@ export function nextStep(step: OnboardingStep): OnboardingStep | null {
   return ONBOARDING_STEPS[at + 1] ?? null;
 }
 
+/**
+ * The screen Back returns to. NOT the flow's inverse everywhere: the
+ * building interstitial plays between Stores and Ready but never joins the
+ * back chain — Back from Ready goes to Stores, and the interstitial itself
+ * (which has no back control) resolves to Stores if it ever needs a
+ * predecessor on a resumed launch.
+ */
 export function previousStep(step: OnboardingStep): OnboardingStep | null {
-  const at = ONBOARDING_STEPS.indexOf(step);
-  return at <= 0 ? null : (ONBOARDING_STEPS[at - 1] ?? null);
+  switch (step) {
+    case 'welcome':
+      return null;
+    case 'building':
+    case 'preview':
+      return 'retailers';
+    case 'paywall':
+      return 'preview';
+    default: {
+      const at = ONBOARDING_STEPS.indexOf(step);
+      return at <= 0 ? null : (ONBOARDING_STEPS[at - 1] ?? null);
+    }
+  }
 }
 
 export function isOnboardingStep(value: unknown): value is OnboardingStep {
@@ -115,11 +163,12 @@ export function isOnboardingStep(value: unknown): value is OnboardingStep {
 
 // ── The record ──────────────────────────────────────────────────────────────
 
-export const ONBOARDING_RECORD_VERSION = 1;
+export const ONBOARDING_RECORD_VERSION = 2;
 
 export interface OnboardingRecord {
   version: typeof ONBOARDING_RECORD_VERSION;
   step: OnboardingStep;
+  watchBuilt: boolean;
   personalizationCompleted: boolean;
   notificationEducationCompleted: boolean;
 }
@@ -128,33 +177,54 @@ export interface OnboardingRecord {
 export const INITIAL_ONBOARDING: OnboardingRecord = {
   version: ONBOARDING_RECORD_VERSION,
   step: 'welcome',
+  watchBuilt: false,
   personalizationCompleted: false,
   notificationEducationCompleted: false,
 };
 
+/** The version-1 steps (the four-step flow), all of which still exist. */
+const V1_STEPS: readonly string[] = ['welcome', 'states', 'allergens', 'retailers', 'preview'];
+
 /**
- * Validate an untrusted stored value into a current record. Any value that is
- * not a well-formed version-1 record is the INITIAL record — a corrupt or
- * future blob restarts onboarding rather than skipping it, which is the safe
+ * Validate an untrusted stored value into a current record.
+ *
+ * A well-formed version-1 record — the flow before the problem screens, the
+ * interstitial and the onboarding paywall existed — keeps the shopper's
+ * place: its steps all still exist, and `watchBuilt` is derived so a shopper
+ * who had already reached Ready (or finished) is never pulled back through
+ * the interstitial, while one still in the selectors meets it once, when
+ * they get there. Anything else is the INITIAL record — a corrupt or future
+ * blob restarts onboarding rather than skipping it, which is the safe
  * direction for a gate.
  */
 export function sanitizeOnboardingRecord(raw: unknown): OnboardingRecord {
   if (typeof raw !== 'object' || raw === null) return { ...INITIAL_ONBOARDING };
   const value = raw as Record<string, unknown>;
-  if (value.version !== ONBOARDING_RECORD_VERSION) return { ...INITIAL_ONBOARDING };
-  if (!isOnboardingStep(value.step)) return { ...INITIAL_ONBOARDING };
-  if (typeof value.personalizationCompleted !== 'boolean') return { ...INITIAL_ONBOARDING };
-  if (typeof value.notificationEducationCompleted !== 'boolean') {
+  if (
+    !isOnboardingStep(value.step) ||
+    typeof value.personalizationCompleted !== 'boolean' ||
+    typeof value.notificationEducationCompleted !== 'boolean'
+  ) {
     return { ...INITIAL_ONBOARDING };
   }
-  return {
-    version: ONBOARDING_RECORD_VERSION,
+  const base = {
     step: value.step,
     personalizationCompleted: value.personalizationCompleted,
     // Education can only have been completed after personalization was.
     notificationEducationCompleted:
       value.personalizationCompleted && value.notificationEducationCompleted,
   };
+  if (value.version === ONBOARDING_RECORD_VERSION && typeof value.watchBuilt === 'boolean') {
+    return { version: ONBOARDING_RECORD_VERSION, watchBuilt: value.watchBuilt, ...base };
+  }
+  if (value.version === 1 && V1_STEPS.includes(value.step)) {
+    return {
+      version: ONBOARDING_RECORD_VERSION,
+      watchBuilt: value.personalizationCompleted || value.step === 'preview',
+      ...base,
+    };
+  }
+  return { ...INITIAL_ONBOARDING };
 }
 
 // ── Transitions ─────────────────────────────────────────────────────────────
@@ -162,7 +232,7 @@ export function sanitizeOnboardingRecord(raw: unknown): OnboardingRecord {
 /**
  * The shown screen becomes the resume point — ONLY while personalization is
  * incomplete. Once complete, moving through the selectors again (Edit
- * preferences from the Preview, or the paywall's Back) records nothing, so a
+ * preferences from Ready, or the paywall's Back) records nothing, so a
  * relaunch still lands on the paywall. Returns the same reference when
  * nothing changes, so a caller can skip a write.
  */
@@ -171,10 +241,19 @@ export function recordShownStep(record: OnboardingRecord, step: OnboardingStep):
   return { ...record, step };
 }
 
-/** "View plans" on the Preview: personalization is complete, for good. */
+/** The building interstitial finished: sticky, so it never replays. */
+export function completeWatchBuild(record: OnboardingRecord): OnboardingRecord {
+  if (record.watchBuilt) return record;
+  return { ...record, watchBuilt: true };
+}
+
+/**
+ * Personalization is complete, for good: set with the entitlement by a
+ * purchase or restore, or by an already-entitled shopper's Continue.
+ */
 export function completePersonalization(record: OnboardingRecord): OnboardingRecord {
   if (record.personalizationCompleted) return record;
-  return { ...record, step: 'preview', personalizationCompleted: true };
+  return { ...record, step: 'preview', watchBuilt: true, personalizationCompleted: true };
 }
 
 /**
@@ -186,9 +265,16 @@ export function completeNotificationEducation(record: OnboardingRecord): Onboard
   return { ...record, notificationEducationCompleted: true };
 }
 
-/** The screen an incomplete onboarding resumes on after a relaunch. */
+/**
+ * The screen an incomplete onboarding resumes on after a relaunch. A kill
+ * during the interstitial resumes there, so it finishes its one play and
+ * routes to Ready — unless it had already completed, in which case Ready
+ * itself is the resume point.
+ */
 export function resumeStep(record: OnboardingRecord): OnboardingStep {
-  return record.personalizationCompleted ? 'preview' : record.step;
+  if (record.personalizationCompleted) return 'preview';
+  if (record.step === 'building' && record.watchBuilt) return 'preview';
+  return record.step;
 }
 
 // ── Step rules ──────────────────────────────────────────────────────────────

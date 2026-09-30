@@ -1,9 +1,11 @@
 /**
- * Screen 4, Retailers (P2B7X.1; Popular stores and search since 2026-09-24),
- * `3 of 4`: the heading beside M03, the grocery-bag mascot; the
- * selected-store summary, once something is chosen; the ten Popular stores
- * as tiles; then the search trigger, which opens `RetailerSearchSheet` over
- * the step — in the onboarding frame, with `Continue` sticky in the footer.
+ * The Stores step (P2B7X.1; Popular stores and search since 2026-09-24;
+ * summary retired in the polish pass): the heading beside M03, the
+ * grocery-bag mascot; a QUIET count row (`N stores selected` and a compact
+ * `Clear`, no surface, no chips) once something is chosen; the ten Popular
+ * stores as tiles; then the search trigger, which opens
+ * `RetailerSearchSheet` over the step — in the onboarding frame, with
+ * `Continue` sticky in the footer.
  *
  * ## One selection, one screen
  *
@@ -26,11 +28,15 @@
  * ## The rules this step carries
  *
  * - Optional: Continue is never disabled.
- * - The summary exists only while something is chosen: with nothing, no
- *   count, no Clear, no empty sentence and no space held for them.
- * - The chips are one horizontally scrolling row, so the summary never grows
- *   however many stores are chosen through the search, and every chip stays
- *   reachable by swiping or by VoiceOver. No store is hidden behind a count.
+ * - The count row's SLOT is permanently allocated (the P2B7V rule, the
+ *   States note's technique): with nothing chosen its content is invisible
+ *   and hidden from assistive technology, so choosing or clearing the
+ *   first store never moves the grid. The count matters because a searched
+ *   store can be selected without being one of the ten visible tiles.
+ * - There is no selected-store summary surface and no chips: the blue box
+ *   duplicated the tiles' own checked state and made the step read like a
+ *   settings screen (polish pass). A selected search-only store is
+ *   reflected by the count and cleared by `Clear` or the search sheet.
  * - No retailer mark, monogram, glyph or colour on any tile: the name and the
  *   checkbox only (the logo decision is docs/retailer-logo-source-audit.md).
  *
@@ -45,7 +51,6 @@ import {
   findNodeHandle,
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   useWindowDimensions,
   View,
@@ -62,7 +67,6 @@ import { Text } from '@/components/ui/text';
 import {
   color,
   hitSlopToMinimum,
-  hitTarget,
   layout,
   radius,
   spacing,
@@ -77,17 +81,14 @@ import {
   CLEAR_STORES_LABEL,
   CONTINUE_CTA,
   POPULAR_STORES_LABEL,
-  removeStoreLabel,
   RETAILERS_BODY,
   RETAILERS_HEADLINE,
   SEARCH_ALL_STORES_HINT,
   SEARCH_ALL_STORES_LABEL,
   SEARCH_ALL_STORES_PLACEHOLDER,
-  yourStoresSpoken,
-  yourStoresTitle,
+  storesCountLabel,
 } from '@/lib/onboarding-copy';
 import { motionAllowed, stepProgress } from '@/lib/onboarding-state';
-import { chosenStores } from '@/lib/personalization-screen';
 import {
   GRID_GAP,
   POPULAR_RETAILERS,
@@ -149,14 +150,18 @@ export function RetailersStep({
       back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}
       aside={showReadyMascot(fontScale) ? <ReadyMascot /> : null}
       footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}>
-      {selected.length > 0 ? (
-        <SelectedStores
-          selected={selected}
-          onRemove={onToggle}
-          onClear={clear}
-          reduceMotion={reduceMotion}
-        />
-      ) : null}
+      {/* Permanently allocated: one text line whether or not it shows, so
+          the grid never moves when the first store is chosen or the last is
+          cleared. */}
+      <View
+        style={[styles.countRow, selected.length === 0 && styles.countRowIdle]}
+        accessibilityElementsHidden={selected.length === 0}
+        importantForAccessibility={selected.length === 0 ? 'no-hide-descendants' : 'auto'}>
+        <Text variant="body-small" color="text/secondary" accessibilityLiveRegion="polite">
+          {storesCountLabel(selected.length)}
+        </Text>
+        <ClearAction onPress={clear} />
+      </View>
       <View style={styles.section}>
         <Text variant="heading-3" accessibilityRole="header">
           {POPULAR_STORES_LABEL}
@@ -246,80 +251,9 @@ function RetailerGrid({
 }
 
 /**
- * The selected-store summary: `Your stores · N` with a compact `Clear`, then
- * every chosen store as a chip with its own removal control, in the order
- * chosen, on one horizontally scrolling row. Rendered only while something is
- * chosen: with nothing, there is no summary at all.
- */
-function SelectedStores({
-  selected,
-  onRemove,
-  onClear,
-  reduceMotion,
-}: {
-  selected: readonly string[];
-  onRemove: (id: string) => void;
-  onClear: () => void;
-  reduceMotion: boolean | null;
-}) {
-  const stores = chosenStores(selected);
-  // A store just chosen joins the END of the row: when the row grows, bring
-  // its end into view. Removing one never scrolls, and nor does the first
-  // layout, so a returning shopper sees their first choices.
-  const chips = useRef<ScrollView>(null);
-  const chipsWidth = useRef<number | null>(null);
-  const follow = (contentWidth: number) => {
-    if (chipsWidth.current !== null && contentWidth > chipsWidth.current) {
-      chips.current?.scrollToEnd({ animated: motionAllowed(reduceMotion) });
-    }
-    chipsWidth.current = contentWidth;
-  };
-
-  return (
-    <View style={styles.summary}>
-      <View style={styles.summaryHead}>
-        {/* One element, one text line tall like Clear beside it, so their
-            frames start level and VoiceOver reads the title first. */}
-        <View
-          accessible
-          accessibilityRole="header"
-          accessibilityLabel={yourStoresSpoken(stores.length)}
-          style={styles.summaryTitle}>
-          <Text variant="body-small-bold">{yourStoresTitle(stores.length)}</Text>
-        </View>
-        <ClearAction onPress={onClear} />
-      </View>
-      <ScrollView
-        ref={chips}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        onContentSizeChange={follow}
-        style={styles.chipScroll}
-        contentContainerStyle={styles.chipRow}>
-        {stores.map((store) => (
-          <Pressable
-            key={store.id}
-            accessibilityRole="button"
-            accessibilityLabel={removeStoreLabel(store.name)}
-            onPress={() => onRemove(store.id)}
-            style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
-            <Text variant="body-small" color="text/primary">
-              {store.name}
-            </Text>
-            <Icon name="x" size={16} color="icon/primary" />
-          </Pressable>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
-/**
  * `Clear` as a compact text action: `body-small-bold` in the interactive
- * `action/secondary`, never underlined. It exists only inside the summary, so
- * only while there is something to clear; its 44pt target comes from
- * hitSlop, so the summary's head is one text line and the chips sit close
- * beneath it.
+ * `action/secondary`, never underlined, beside the count in the quiet row;
+ * its 44pt target comes from hitSlop, so the row stays one text line tall.
  */
 function ClearAction({ onPress }: { onPress: () => void }) {
   return (
@@ -443,43 +377,16 @@ function ReadyMascot() {
 }
 
 const styles = StyleSheet.create({
-  // The soft-blue summary surface, the selected colour of the tiles below.
-  summary: {
-    gap: spacing[8],
-    paddingHorizontal: spacing[16],
-    paddingTop: spacing[16],
-    paddingBottom: spacing[8],
-    borderRadius: radius[16],
-    backgroundColor: color['background/subtle'],
-  },
-  summaryHead: {
+  // The quiet utility row: the count and Clear on one line, no surface. Its
+  // slot never comes or goes; only its visibility does.
+  countRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
-    columnGap: spacing[12],
+    gap: spacing[12],
   },
-  // One text line, level with Clear beside it: iOS orders elements by their
-  // top edge, so equal tops make VoiceOver read the title first, then Clear.
-  summaryTitle: {
-    flexShrink: 1,
-  },
-  // The row scrolls to the surface's edges; its content keeps the padding.
-  chipScroll: {
-    marginHorizontal: -spacing[16],
-  },
-  chipRow: {
-    gap: spacing[8],
-    paddingHorizontal: spacing[16],
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[8],
-    minHeight: hitTarget.minimum,
-    paddingHorizontal: spacing[12],
-    borderRadius: radius[12],
-    backgroundColor: color['background/surface'],
+  countRowIdle: {
+    opacity: 0,
   },
   section: {
     gap: spacing[12],

@@ -122,8 +122,10 @@ test('P2B7I: an absent image renders no media column — no footprint, no placeh
   assert.match(CARD, /identity: \{\s*flex: 1,\s*minWidth: 0,/);
   // Everything around the content row is untouched: the status row, the
   // three-line title clamp, the footer with the location and the save control.
-  assert.ok(CARD.includes('<Text variant="heading-3" numberOfLines={3}>'));
-  assert.ok(CARD.includes('<View style={styles.statusRow}>'));
+  assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}'));
+  assert.ok(
+    CARD.includes('style={[styles.statusRow, uniform && { minHeight: uniform.statusMinHeight }]}'),
+  );
   assert.ok(CARD.includes('<View style={styles.footerRow}>'));
   assert.ok(CARD.includes('<SaveRecallButton caseId={model.id} />'));
   assert.equal(layout.cardMediaSize, 112);

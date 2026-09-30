@@ -12,10 +12,14 @@ import type { OnboardingStep } from './onboarding-state';
 
 export const ONBOARDING_ROUTES: Record<OnboardingStep, `/onboarding/${OnboardingStep}`> = {
   welcome: '/onboarding/welcome',
+  'problem-scale': '/onboarding/problem-scale',
+  'problem-risk': '/onboarding/problem-risk',
   states: '/onboarding/states',
   allergens: '/onboarding/allergens',
   retailers: '/onboarding/retailers',
+  building: '/onboarding/building',
   preview: '/onboarding/preview',
+  paywall: '/onboarding/paywall',
 };
 
 export function onboardingRoute(step: OnboardingStep): `/onboarding/${OnboardingStep}` {

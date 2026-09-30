@@ -13,9 +13,9 @@
  * education screen's primary action alone, never on mount and never from
  * `Not now`; the example card is the shared surface over static content;
  * everything is drawn from the tokens with no capped type and no fixed
- * height around text; and the Welcome seats the approved M01 mascot on the
- * real example card, invents no mark, and plays its one entrance only when
- * Reduce Motion is off.
+ * height around text; and the Welcome draws the approved receipt
+ * composition from its two production images and native text, invents no
+ * mark, and plays no entrance at all.
  */
 
 import assert from 'node:assert/strict';
@@ -42,10 +42,11 @@ import {
   INDEPENDENCE_NOTE,
   PREFERENCES_SET_CONFIRMATION,
   PREVIEW_BODY,
+  PREVIEW_BODY_EMPTY,
   PREVIEW_CTA,
   PREVIEW_EDIT,
-  PREVIEW_EXAMPLE_LABEL,
   PREVIEW_HEADLINE,
+  PREVIEW_MATCH_HEADING,
   PREVIEW_NONE,
   PREVIEW_ROW_COMPLETED,
   PREVIEW_SUMMARY_LABELS,
@@ -57,14 +58,16 @@ import {
   STATES_REQUIRED_NOTE,
   WELCOME_BODY,
   WELCOME_CTA,
-  WELCOME_EXAMPLE_LABEL,
+  WELCOME_EXAMPLE_CAPTION,
   WELCOME_HEADLINE,
+  WELCOME_ILLUSTRATION_LABEL,
   WELCOME_TRUST_NOTE,
-  WORDMARK,
+  WORDMARK_LABEL,
 } from '@/lib/onboarding-copy';
 import * as ONBOARDING_COPY from '@/lib/onboarding-copy';
 import { SAMPLE_RECALL_MODEL } from '@/lib/onboarding-sample';
 import { POPULAR_RETAILERS, READY_MASCOT_SIZE } from '@/lib/retailer-grid';
+import { HELPER_MASCOT_SIZE, HIDE_MASCOT_AT_SCALE } from '@/lib/state-map';
 import { retailerLogoCoverage } from '@/lib/retailer-logos';
 import { STATE_CLEAR_HINT } from '@/lib/personalization-screen';
 import {
@@ -75,20 +78,19 @@ import {
   stepProgress,
 } from '@/lib/onboarding-state';
 import {
-  CARD_PADDING,
-  entranceEndMs,
-  LABEL_ALLOWANCE,
-  MASCOT_ART_TOP,
-  MASCOT_EDGE,
-  MASCOT_MAX,
-  MASCOT_MIN,
-  mascotLift,
-  mascotOffset,
-  mascotSize,
-  PAW_DEPTH,
-  peekReserve,
-  WELCOME_ENTRANCE,
-  welcomeEntrance,
+  CAPTION_CENTRE_PX,
+  captionBand,
+  captionPlacement,
+  CTA_MIN_HEIGHT,
+  HERO_PX,
+  heroHeight,
+  QUIET_BAND_PX,
+  TEXT_FULL_WIDTH_AT_SCALE,
+  TEXT_MEASURE,
+  textFullWidth,
+  textMeasure,
+  WELCOME_TYPE,
+  WORDMARK_PX,
 } from '@/lib/welcome-presentation';
 
 const SRC = join(__dirname, '..');
@@ -100,18 +102,25 @@ const STATES = read('components', 'onboarding', 'states-step.tsx');
 const ALLERGENS = read('components', 'onboarding', 'allergens-step.tsx');
 const RETAILERS = read('components', 'onboarding', 'retailers-step.tsx');
 const SEARCH_SHEET = read('components', 'onboarding', 'retailer-search-sheet.tsx');
+const PROBLEM = read('components', 'onboarding', 'problem-steps.tsx');
+const BUILDING = read('components', 'onboarding', 'building-step.tsx');
 const PREVIEW = read('components', 'onboarding', 'preview-step.tsx');
+const CAROUSEL = read('components', 'onboarding', 'ready-carousel.tsx');
 const EDUCATION = read('components', 'onboarding', 'notification-education.tsx');
 const SAMPLE = read('components', 'onboarding', 'sample-recall-card.tsx');
 const PANEL = read('components', 'paywall', 'paywall-panel.tsx');
 const FORM = read('components', 'settings', 'personalization-form.tsx');
 const ROUTES = {
   welcome: read('app', 'onboarding', 'welcome.tsx'),
+  problemScale: read('app', 'onboarding', 'problem-scale.tsx'),
+  problemRisk: read('app', 'onboarding', 'problem-risk.tsx'),
   states: read('app', 'onboarding', 'states.tsx'),
   allergens: read('app', 'onboarding', 'allergens.tsx'),
   retailers: read('app', 'onboarding', 'retailers.tsx'),
+  building: read('app', 'onboarding', 'building.tsx'),
   preview: read('app', 'onboarding', 'preview.tsx'),
   education: read('app', 'onboarding', 'notifications.tsx'),
+  onboardingPaywall: read('app', 'onboarding', 'paywall.tsx'),
   paywall: read('app', 'paywall.tsx'),
 };
 const HOOK = read('hooks', 'use-onboarding-preferences.ts');
@@ -290,13 +299,15 @@ test('every step reads and saves through the one preference store, progressively
 // ── Copy, verbatim ──────────────────────────────────────────────────────────
 
 test('the founder’s onboarding copy, verbatim, rendered from the copy module', () => {
-  assert.equal(WORDMARK, 'lotly');
-  assert.equal(WELCOME_HEADLINE, 'Food recalls, made personal.');
+  // The receipt Welcome (2026-09-29).
+  assert.equal(WORDMARK_LABEL, 'Lotly');
+  assert.equal(WELCOME_HEADLINE, 'A closer look at your groceries.');
+  assert.equal(WELCOME_BODY, 'Food recalls personalized just for you and your household.');
+  assert.equal(WELCOME_EXAMPLE_CAPTION, 'Illustrative example, not a live recall.');
   assert.equal(
-    WELCOME_BODY,
-    'Tell us where you shop and what your household avoids. Lotly shows you the recalls that matter.',
+    WELCOME_ILLUSTRATION_LABEL,
+    'Granola Bites. Critical. Possible Salmonella contamination. Nationwide. Marked Affects You.',
   );
-  assert.equal(WELCOME_EXAMPLE_LABEL, 'Example');
   assert.equal(WELCOME_TRUST_NOTE, 'Built from FDA and USDA recall notices.');
   assert.equal(WELCOME_CTA, 'Get started');
   assert.equal(STATES_HEADLINE, 'Which states matter to you?');
@@ -307,10 +318,13 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
     'Select any that matter to you or your household. Leave this blank if none.',
   );
   assert.equal(RETAILERS_HEADLINE, 'Where do you shop?');
+  // The polish pass removed `This is optional.` (the step stays optional:
+  // Continue is never disabled).
   assert.equal(
     RETAILERS_BODY,
-    'Choose the retailers you want Lotly to watch for in recall notices. This is optional.',
+    'Choose the retailers you want Lotly to watch for in recall notices.',
   );
+  assert.ok(!RETAILERS_BODY.includes('optional'));
   assert.equal(ONBOARDING_COPY.POPULAR_STORES_LABEL, 'Popular stores');
   assert.ok(!('NO_STORES_YET' in ONBOARDING_COPY), 'the empty summary came back');
   assert.equal(ONBOARDING_COPY.CLEAR_STORES_LABEL, 'Clear');
@@ -326,14 +340,64 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
   assert.equal(ONBOARDING_COPY.searchResultsAnnouncement(0), 'No stores found.');
   assert.equal(ONBOARDING_COPY.searchResultsAnnouncement(1), '1 store found.');
   assert.equal(ONBOARDING_COPY.searchResultsAnnouncement(7), '7 stores found.');
-  assert.equal(ONBOARDING_COPY.yourStoresTitle(3), 'Your stores\u00a0·\u00a03');
-  assert.equal(ONBOARDING_COPY.yourStoresSpoken(1), 'Your stores: 1 selected');
-  assert.equal(ONBOARDING_COPY.yourStoresSpoken(4), 'Your stores: 4 selected');
+  // The polish pass retired the summary and its chips; the quiet row counts.
+  assert.equal(ONBOARDING_COPY.storesCountLabel(0), 'No stores selected');
+  assert.equal(ONBOARDING_COPY.storesCountLabel(1), '1 store selected');
+  assert.equal(ONBOARDING_COPY.storesCountLabel(4), '4 stores selected');
+  for (const gone of ['yourStoresTitle', 'yourStoresSpoken', 'removeStoreLabel']) {
+    assert.ok(!(gone in ONBOARDING_COPY), `the summary's ${gone} came back`);
+  }
   assert.ok(!('BACK_TO_POPULAR_LABEL' in ONBOARDING_COPY), 'the All stores mode came back');
-  assert.equal(ONBOARDING_COPY.removeStoreLabel('Walmart'), 'Remove Walmart');
   assert.equal(CONTINUE_CTA, 'Continue');
+  // The two problem screens (2026-09-28): the CDC's facts, verbatim, and no
+  // unsupported recall statistic anywhere in the copy module.
+  assert.equal(ONBOARDING_COPY.PROBLEM_SCALE_STAT, '1 in 6');
+  assert.equal(
+    ONBOARDING_COPY.PROBLEM_SCALE_HEADLINE,
+    'Americans get sick from foodborne illness each year.',
+  );
+  assert.equal(ONBOARDING_COPY.PROBLEM_SCALE_BODY, 'That’s about 48 million people.');
+  assert.equal(
+    ONBOARDING_COPY.PROBLEM_SCALE_SPOKEN,
+    '1 in 6 Americans get sick from foodborne illness each year.',
+  );
+  assert.equal(ONBOARDING_COPY.PROBLEM_RISK_HEADLINE, 'Some households face higher stakes.');
+  // Polish pass: the fact said once — the four groups ARE the tiles, and
+  // the body carries the CDC claim about them (meaning unchanged).
+  assert.equal(
+    ONBOARDING_COPY.PROBLEM_RISK_BODY,
+    'These household members are more likely to become seriously ill from foodborne illness.',
+  );
+  assert.deepEqual(ONBOARDING_COPY.PROBLEM_RISK_GROUPS, [
+    'Young children',
+    'Pregnant people',
+    'Adults 65 and older',
+    'Weakened immune systems',
+  ]);
+  assert.equal(ONBOARDING_COPY.PROBLEM_SOURCE_NOTE, 'Source: CDC');
+  // The pictograph's one spoken description (2026-09-28): the approved
+  // composition's visualization, never six separate figures.
+  assert.equal(ONBOARDING_COPY.PROBLEM_SCALE_FIGURES_LABEL, 'One out of six people highlighted.');
+  for (const unsupported of ['6K products', '18 recalls', '25%']) {
+    const module = readFileSync(join(SRC, 'lib', 'onboarding-copy.ts'), 'utf8');
+    assert.ok(!module.includes(unsupported), `the copy claims ${unsupported}`);
+  }
+  // The building interstitial's captions, truthful at both zeros.
+  assert.equal(ONBOARDING_COPY.buildingStatesCaption(), 'Checking recalls in your selected states');
+  assert.equal(ONBOARDING_COPY.buildingAllergensCaption(true), 'Matching the allergens you watch');
+  assert.equal(ONBOARDING_COPY.buildingAllergensCaption(false), 'Keeping allergen matching broad');
+  assert.equal(ONBOARDING_COPY.buildingStoresCaption(true), 'Watching the stores you chose');
+  assert.equal(ONBOARDING_COPY.buildingStoresCaption(false), 'Scanning recalls across all stores');
+  assert.equal(ONBOARDING_COPY.BUILDING_FEED_CAPTION, 'Building your Affects You feed');
+  assert.equal(ONBOARDING_COPY.BUILDING_DONE_CAPTION, 'Your recall watch is ready');
   assert.equal(PREVIEW_HEADLINE, 'Your recall watch is ready.');
-  assert.equal(PREVIEW_BODY, 'Lotly will flag notices that match your profile with Affects You.');
+  // The Ready body (the approved carousel target): the found claim stands
+  // only when something was found.
+  assert.equal(PREVIEW_BODY, 'Here’s what Lotly found for your household.');
+  assert.equal(
+    PREVIEW_BODY_EMPTY,
+    'Lotly will keep checking for recalls that match your household.',
+  );
   assert.equal(PREVIEW_SUMMARY_TITLE, 'Your preferences are set');
   // Option 2 (2026-09-26): Profile's own row names, so the app says store.
   assert.deepEqual(PREVIEW_SUMMARY_LABELS, {
@@ -342,8 +406,24 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
     retailers: 'Stores',
   });
   assert.equal(PREVIEW_ROW_COMPLETED, 'completed');
-  assert.equal(PREVIEW_EXAMPLE_LABEL, 'Example match');
-  assert.equal(PREVIEW_CTA, 'View plans');
+  // The Ready/paywall split (2026-09-28): the carousel's copy, and none of
+  // the merged step's purchase copy.
+  assert.equal(PREVIEW_MATCH_HEADING, 'See what affects you today');
+  assert.equal(ONBOARDING_COPY.matchCountLabel(1), '1 recall for your watch');
+  assert.equal(ONBOARDING_COPY.matchCountLabel(2), '2 recalls for your watch');
+  assert.equal(ONBOARDING_COPY.matchCountLabel(3), '3 recalls for your watch');
+  assert.equal(ONBOARDING_COPY.PREVIEW_LOCKED_STRIP, 'More matching recalls are locked');
+  assert.equal(ONBOARDING_COPY.PREVIEW_EMPTY_TITLE, 'Nothing currently matches your watch.');
+  assert.equal(
+    ONBOARDING_COPY.PREVIEW_MONITORING_NOTE,
+    'We’ll keep checking as new recalls are announced.',
+  );
+  assert.equal(ONBOARDING_COPY.matchPositionLabel(1, 3), 'Match 1 of 3');
+  assert.equal(PREVIEW_CTA, 'See my plan');
+  assert.ok(!('PREVIEW_PLAN_HEADING' in ONBOARDING_COPY), 'the merged plan heading came back');
+  assert.ok(!('PREVIEW_OFFER_HEADLINE' in ONBOARDING_COPY), 'the duplicate headline came back');
+  assert.ok(!('PREVIEW_OFFER_BODY' in ONBOARDING_COPY), 'the duplicate sentence came back');
+  assert.ok(!('PREVIEW_EXAMPLE_LABEL' in ONBOARDING_COPY), 'the example label came back');
   assert.equal(PREVIEW_EDIT, 'Edit preferences');
   assert.equal(
     INDEPENDENCE_NOTE,
@@ -369,10 +449,11 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
       [
         'WELCOME_HEADLINE',
         'WELCOME_BODY',
-        'WELCOME_EXAMPLE_LABEL',
+        'WELCOME_ILLUSTRATION_LABEL',
+        'WELCOME_EXAMPLE_CAPTION',
         'WELCOME_TRUST_NOTE',
         'WELCOME_CTA',
-        'WORDMARK',
+        'WORDMARK_LABEL',
       ],
     ],
     ['states', STATES, ['STATES_HEADLINE', 'STATES_BODY', 'CONTINUE_CTA']],
@@ -407,15 +488,31 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
       ],
     ],
     [
+      'problem screens',
+      PROBLEM,
+      [
+        'PROBLEM_SCALE_STAT',
+        'PROBLEM_SCALE_HEADLINE',
+        'PROBLEM_SCALE_SPOKEN',
+        'PROBLEM_SCALE_BODY',
+        'PROBLEM_SCALE_FIGURES_LABEL',
+        'PROBLEM_RISK_HEADLINE',
+        'PROBLEM_RISK_BODY',
+        'PROBLEM_SOURCE_NOTE',
+        'CONTINUE_CTA',
+      ],
+    ],
+    [
       'preview',
       PREVIEW,
       [
         'PREVIEW_HEADLINE',
         'PREVIEW_BODY',
-        'PREVIEW_CTA',
+        'PREVIEW_BODY_EMPTY',
         'PREVIEW_EDIT',
-        'PREVIEW_EXAMPLE_LABEL',
-        'INDEPENDENCE_NOTE',
+        'PREVIEW_MATCH_HEADING',
+        'matchCountLabel',
+        'PREVIEW_CTA',
         'PREVIEW_NONE',
         'PREVIEW_SUMMARY_TITLE',
         'PREVIEW_SUMMARY_LABELS',
@@ -453,15 +550,22 @@ test('the Ready summary keeps all three rows in order and shows None for an empt
   assert.ok(states > 0 && states < allergens && allergens < stores, 'the rows moved or went');
   assert.ok(!code.includes('rows.filter('), 'an empty row is removed');
   const row = codeOnly(componentBody(PREVIEW, 'SummaryRow'));
-  assert.ok(row.includes("{names.length === 0 ? PREVIEW_NONE : names.join(', ')}"));
+  // A row shows every name unless it is handed a compacted value (the
+  // Stores row, lib/ready-presentation `storeSummaryText`); it SPEAKS every
+  // name either way.
+  assert.ok(row.includes("{names.length === 0 ? PREVIEW_NONE : (shown ?? names.join(', '))}"));
+  assert.ok(code.includes('shown: storeSummaryText(summary.retailers),'));
+  assert.equal((code.match(/shown: /g) ?? []).length, 1, 'a row other than Stores is compacted');
   // One soft-blue card, headed, with no nested white card and no lift.
   assert.ok(
     code.includes('<Surface background="background/subtle" radius={16} style={styles.summary}>'),
   );
   assert.ok(code.includes('<Text variant="heading-3" accessibilityRole="header">'));
   assert.ok(code.includes('{PREVIEW_SUMMARY_TITLE}'));
-  assert.equal((codeOnly(PREVIEW).match(/<Surface\b/g) ?? []).length, 1, 'a nested card');
-  assert.ok(!codeOnly(PREVIEW).includes('elevation='), 'the summary card has a shadow');
+  // Three flat surfaces and no more: the summary card, the locked strip and
+  // the honest empty/checking card. Nothing is nested inside the summary.
+  assert.equal((codeOnly(PREVIEW).match(/<Surface\b/g) ?? []).length, 3, 'a surface came or went');
+  assert.ok(!codeOnly(PREVIEW).includes('elevation='), 'a Ready surface has a shadow');
 });
 
 test('each Ready row is its artwork at the leading edge, the label over its values, and the completed check at the trailing edge', () => {
@@ -591,10 +695,18 @@ test('the trust-peek mascot is drawn whole over the card, decorative and untouch
   // The card's sibling, drawn after it (so over its edge), never inside it,
   // with the drawing's full height reserved above the card.
   const step = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
-  assert.ok(step.includes('<View style={{ paddingTop: readyMascotLift(size) }}>'));
+  // The room above the card is the reserve — the lift less the crest's
+  // allowed rise beside the body paragraph — and the seat is unmoved: the
+  // mascot's top keeps the same distance to the card it always had.
+  assert.ok(step.includes('const reserve = readyMascotReserve(size, fontScale);'));
+  assert.ok(step.includes('<View style={{ paddingTop: reserve }}>'));
   assert.ok(step.indexOf('</Surface>') < step.indexOf('<TrustPeek'), 'the mascot is in the card');
   assert.ok(step.includes('const size = readyMascotSize(height, fontScale);'));
-  assert.ok(step.includes('top={readyMascotLift(size) - readyMascotOffset(size)}'));
+  // The cliff: while the crest rises, the BODY alone gives up the mascot's
+  // width (the headline keeps the full line) and wraps left of the drawing.
+  assert.ok(step.includes('const bodyInset = readyBodyAside(size, fontScale);'));
+  assert.ok(step.includes('bodyInset={bodyInset}'));
+  assert.ok(step.includes('top={reserve - readyMascotOffset(size)}'));
   assert.ok(step.includes('right={readyMascotRight(size)}'));
   // The heading and the first row keep clear of the shield; from the
   // accessibility sizes the rows stack and the heading drops beneath it.
@@ -602,19 +714,52 @@ test('the trust-peek mascot is drawn whole over the card, decorative and untouch
   assert.ok(step.includes('const stacked = summaryStacked(fontScale);'));
 });
 
-test('Ready: Back, View plans, Edit preferences and the resume point are exactly as before', () => {
+test('Ready: Back, Edit preferences, See my plan and the resume point are wired for the split flow', () => {
   const route = codeOnly(ROUTES.preview);
   assert.ok(route.includes("void access.recordShownStep('preview');"));
-  assert.ok(route.includes('onViewPlans={() => void access.completePersonalization()}'));
   assert.ok(route.includes("onEdit={() => router.push(onboardingRoute('states'))}"));
   assert.ok(route.includes("onBack={() => goBackFrom('preview', router)}"));
+  assert.ok(route.includes("onSeePlan={() => router.push(onboardingRoute('paywall'))}"));
   assert.ok(route.includes('prefs={load.prefs}'));
+  // The preview is the REAL feed through the REAL matching layer, built in
+  // lib/ready-preview.ts — no onboarding-only matcher, no fixture data.
+  assert.ok(route.includes('const feed = useFeed();'));
+  assert.ok(route.includes('buildReadyPreview(feedInput, load.prefs, todayIso())'));
+  assert.ok(!route.includes('onViewPlans'), 'the View plans step came back');
+  assert.ok(!route.includes('usePurchaseFlow'), 'Ready grew purchase machinery back');
   const step = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
   assert.ok(step.includes('back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}'));
-  assert.ok(step.includes('<Button label={PREVIEW_CTA} onPress={onViewPlans} />'));
-  assert.ok(step.includes('accessibilityHint={PREVIEW_EDIT_HINT}\n            onPress={onEdit}'));
+  // No progress bar on Ready (stepProgress('preview') is null), and the one
+  // pinned action is See my plan.
   assert.ok(step.includes("progress={stepProgress('preview')}"));
-  assert.ok(step.includes('<SampleRecallCard label={PREVIEW_EXAMPLE_LABEL} />'));
+  assert.ok(
+    step.includes(
+      '<Button label={PREVIEW_CTA} accessibilityHint={PREVIEW_CTA_HINT} onPress={onSeePlan} />',
+    ),
+  );
+  // Edit preferences is a quiet text action, not a second large button.
+  assert.ok(step.includes('accessibilityLabel={PREVIEW_EDIT}'));
+  assert.ok(step.includes('accessibilityHint={PREVIEW_EDIT_HINT}'));
+  assert.ok(step.includes('hitSlop={EDIT_HIT_SLOP}'));
+  assert.ok(step.includes('onPress={onEdit}'));
+  assert.ok(!step.includes('label={PREVIEW_EDIT}'), 'Edit preferences is a Button again');
+  // No example recall, no notification preview, no purchase UI of any kind.
+  for (const gone of [
+    'SampleRecallCard',
+    'PREVIEW_EXAMPLE_LABEL',
+    'EDUCATION_PREVIEW',
+    'notification-education',
+    'usePurchaseFlow',
+    'PurchasePlans',
+    'PurchaseCta',
+    'PurchaseTerms',
+    'PAYWALL_BENEFITS',
+    'paywall-panel',
+    'INDEPENDENCE_NOTE',
+    'footerMode',
+  ]) {
+    assert.ok(!codeOnly(PREVIEW).includes(gone), `Ready draws ${gone}`);
+  }
   // The step reads the saved preferences and never writes them.
   for (const forbidden of ['savePreferences', 'update(', 'useOnboardingPreferences']) {
     assert.ok(!codeOnly(PREVIEW).includes(forbidden), `the step reaches ${forbidden}`);
@@ -714,11 +859,10 @@ test('the example card is the shared card surface over static content, marked as
   assert.equal(SAMPLE_RECALL_MODEL.brand.text, 'Example, not a live recall');
   assert.equal(SAMPLE_RECALL_MODEL.heroImageUrl, null, 'the sample fetches no image');
   assert.equal(SAMPLE_RECALL_MODEL.id, 'onboarding-sample');
-  // Both screens label it above the card.
-  assert.ok(WELCOME.includes('label={WELCOME_EXAMPLE_LABEL}'));
-  assert.ok(PREVIEW.includes('<SampleRecallCard label={PREVIEW_EXAMPLE_LABEL} />'));
-  // The optional peek and entrance are Welcome's alone; the Preview's card is as it was.
-  assert.ok(!PREVIEW.includes('peek=') && !PREVIEW.includes('motion='));
+  // Since the receipt Welcome (2026-09-29) no screen draws it: Welcome's
+  // example is the approved illustration, and Ready never had it back.
+  assert.ok(!codeOnly(WELCOME).includes('SampleRecallCard'));
+  assert.ok(!codeOnly(PREVIEW).includes('SampleRecallCard'));
 });
 
 // ── Drawn from the system ───────────────────────────────────────────────────
@@ -769,159 +913,312 @@ test('every onboarding screen draws from the tokens: no raw hex, no capped type,
   }
 });
 
-// ── Welcome: M01 peeking over the real example card ─────────────────────────
+// ── Welcome: the approved receipt composition (2026-09-29) ─────────────────
 
-test('Welcome draws M01 whole, seated on the real example card, decorative and out of the way', () => {
+test('Welcome draws exactly the two approved receipt images, whole, and bundles no reference material', () => {
   const code = codeOnly(WELCOME);
-  // M01, the approved welcome-peek asset, and no other picture: the old
-  // standalone mascot is gone.
-  assert.ok(
-    code.includes("require('@/assets/brand/production/lotly-mascot-welcome-peek-1024.png')"),
-    'Welcome does not draw M01',
-  );
-  assert.ok(!code.includes('lotly-mascot-transparent.png'), 'the standalone mascot came back');
-  assert.equal((code.match(/require\(/g) ?? []).length, 1, 'Welcome bundles a second picture');
-  assert.equal((code.match(/<Image\b/g) ?? []).length, 1);
-  // Drawn whole: contain, never cover or stretch, and never on a dark surface.
-  assert.ok(code.includes('resizeMode="contain"'));
-  assert.ok(!code.includes("'cover'") && !code.includes('"cover"'), 'the mascot can be cropped');
-  assert.ok(!code.includes('background/brand'), 'the mascot sits on a dark surface');
-  // Given a width and a height (aspectRatio alone drew it at 1024pt on device).
-  assert.ok(code.includes('style={{ width: size, height: size }}'));
-  // The real card, not a picture of one: the mascot is the card's `peek`,
-  // seated so its flat cut lands on the card's top border.
-  const welcome = codeOnly(componentBody(WELCOME, 'WelcomeContent'));
-  assert.ok(welcome.includes('<SampleRecallCard'));
-  assert.ok(welcome.includes('peek={'));
-  assert.ok(welcome.includes('top: -mascotOffset(size)'));
-  assert.ok(code.includes("position: 'absolute'") && code.includes('right: 0,'));
-  // Decorative, and never in the way: no touches, not in the accessibility tree.
-  const peek = welcome.slice(welcome.indexOf('peek={'), welcome.indexOf('<Image'));
-  assert.ok(peek.includes('pointerEvents="none"'));
-  assert.ok(peek.includes('accessible={false}'));
-  assert.ok(peek.includes('accessibilityElementsHidden'));
-  assert.ok(peek.includes('importantForAccessibility="no-hide-descendants"'));
-  // In the card component the peek is the card's SIBLING, after it: drawn over
-  // the card, outside the card's accessibility element and its entrance.
-  const sample = codeOnly(SAMPLE);
-  const card = sample.indexOf('accessibilityLabel={`${label}. ${SAMPLE_ACCESSIBILITY}`}');
-  const cardEnd = sample.indexOf('</Animated.View>', card);
-  assert.ok(card > 0 && cardEnd > card);
-  assert.ok(sample.indexOf('{peek}') > cardEnd, 'the peek is inside the card element');
-  // The name is set in the type system, lowercase, from the copy module.
-  assert.ok(code.includes('<Text variant="heading-2" color="text/primary">'));
-  assert.ok(code.includes('{WORDMARK}'));
-  // Nothing invented: no traced wordmark, logo file, or alarm imagery.
+  const requires = code.match(/require\('[^']+'\)/g) ?? [];
+  assert.deepEqual(requires, [
+    "require('@/assets/brand/production/lotly-wordmark-welcome-receipt.png')",
+    "require('@/assets/brand/production/lotly-welcome-receipt-scene.png')",
+  ]);
+  // The old Welcome art is gone: no M01 peek, no example card.
+  assert.ok(!code.includes('lotly-mascot-welcome-peek-1024.png'), 'M01 came back');
+  assert.ok(!code.includes('SampleRecallCard'), 'the example card came back');
+  // No reference target, source crop, report or comparison sheet at runtime.
   for (const forbidden of [
-    'logo.png',
-    'wordmark.png',
-    'shield',
-    'siren',
-    'cart',
-    'LinearGradient',
+    'brand/reference',
+    'lotly-onboarding-welcome-receipt',
+    '-source.png',
+    'asset-report',
+    'comparison',
   ]) {
-    assert.ok(!code.includes(forbidden), `Welcome renders ${forbidden}`);
+    assert.ok(!code.includes(forbidden), `Welcome imports ${forbidden}`);
   }
+  // Drawn whole at their own aspect ratios: contain, never cover or stretch,
+  // never tinted or faded, each image filling a box given a width and ratio.
+  assert.equal((code.match(/<Image\b/g) ?? []).length, 2);
+  assert.equal((code.match(/resizeMode="contain"/g) ?? []).length, 2);
+  for (const forbidden of ['cover', 'stretch', 'tintColor', 'LinearGradient']) {
+    assert.ok(!code.includes(forbidden), `Welcome uses ${forbidden}`);
+  }
+  // Never faded: the only opacity is the action's pressed state.
+  assert.ok(!codeOnly(componentBody(WELCOME, 'WelcomeContent')).includes('opacity'));
+  assert.equal((code.match(/opacity/g) ?? []).length, 1);
+  assert.ok(code.includes('aspectRatio: WORDMARK_PX.width / WORDMARK_PX.height'));
+  assert.ok(code.includes('aspectRatio: HERO_PX.width / HERO_PX.height'));
+  // Never on a dark or coloured surface: the cream page only.
+  assert.ok(code.includes('<Surface background="background/page"'));
+  assert.ok(!code.includes('background/brand'));
 });
 
-test('M01 scales between its bounds, its paws stay inside the card padding, and it never reaches the text above', () => {
-  assert.equal(mascotSize(667), MASCOT_MIN, 'iPhone SE');
-  assert.equal(mascotSize(874), MASCOT_MAX, 'iPhone 17 / 17 Pro');
-  assert.equal(mascotSize(956), MASCOT_MAX, 'the largest phones stop at the ceiling');
-  assert.equal(mascotSize(0), MASCOT_MIN);
-  for (const height of [568, 667, 736, 812, 844, 874, 926, 956, 1366]) {
-    const size = mascotSize(height);
-    assert.equal(size % 4, 0, `${height}pt window gives an off-grid ${size}`);
-    assert.ok(size >= MASCOT_MIN && size <= MASCOT_MAX);
-  }
-  // The card's padding is the one the paws must stay inside.
-  assert.ok(read('components', 'recall-card.tsx').includes('padding: spacing[12],'));
-  assert.equal(CARD_PADDING, 12);
-  for (const size of [MASCOT_MIN, MASCOT_MAX]) {
-    // The flat cut is seated on the border; the paws end above the first row.
-    assert.equal(mascotOffset(size), Math.round(size * MASCOT_EDGE));
-    assert.ok(size * PAW_DEPTH < CARD_PADDING - 1, `${size}pt paws reach the card's badges`);
-    // The block reserves the standing height beside the label, so the drawing
-    // never overlaps the body text above it.
-    assert.equal(mascotLift(size), Math.ceil(size * (MASCOT_EDGE - MASCOT_ART_TOP)));
-    assert.equal(peekReserve(size) + LABEL_ALLOWANCE, mascotLift(size));
-  }
+test('Welcome speaks the wordmark and the illustration once each, and its printed marks are not controls', () => {
   const welcome = codeOnly(componentBody(WELCOME, 'WelcomeContent'));
-  assert.ok(welcome.includes('paddingTop: peekReserve(size)'));
-});
-
-test('Welcome is one promise, one example and one action: the three-bullet marketing block is gone', () => {
-  // The benefit copy no longer exists, and Welcome renders no list of claims.
+  // Each image is one named element (the box), the pixels themselves hidden.
+  for (const label of ['WORDMARK_LABEL', 'WELCOME_ILLUSTRATION_LABEL']) {
+    const at = welcome.indexOf(`accessibilityLabel={${label}}`);
+    assert.ok(at > 0, `${label} is not spoken`);
+    const box = welcome.slice(welcome.lastIndexOf('<View', at), at);
+    assert.ok(box.includes('accessible') && box.includes('accessibilityRole="image"'));
+  }
+  assert.equal((welcome.match(/<Image \{\.\.\.DRAWING\}/g) ?? []).length, 2);
+  // The caption is the scene's SIBLING, so it is heard right after it and
+  // never folded into the image's name.
+  const scene = welcome.indexOf('accessibilityLabel={WELCOME_ILLUSTRATION_LABEL}');
+  const sceneEnd = welcome.indexOf('</View>', scene);
+  assert.ok(welcome.indexOf('{caption}', sceneEnd) > sceneEnd);
+  // The illustration carries no press handler, link or action of any kind:
+  // the printed flag, pin and bookmark are drawing. The one control is Get started.
+  for (const forbidden of ['Pressable', 'onPress={() =>', 'accessibilityActions', 'Link']) {
+    assert.ok(!welcome.includes(forbidden), `Welcome renders ${forbidden}`);
+  }
+  assert.equal((welcome.match(/<GetStarted /g) ?? []).length, 1);
+  assert.ok(!welcome.includes('<Button '));
+  // One promise, one example, one action: the benefit rows stay gone, and the
+  // paywall owns its benefits.
   assert.ok(!('WELCOME_BENEFITS' in ONBOARDING_COPY), 'the Welcome benefits came back');
-  const welcome = codeOnly(componentBody(WELCOME, 'WelcomeContent'));
-  assert.ok(!welcome.includes('BenefitList'), 'Welcome renders the benefit rows again');
-  assert.ok(!welcome.includes('accessibilityRole="list"'));
-  // One example (the shared card surface), one source note, one action.
-  assert.equal((welcome.match(/<SampleRecallCard\b/g) ?? []).length, 1);
-  assert.equal((welcome.match(/<Button /g) ?? []).length, 1);
+  assert.ok(!welcome.includes('BenefitList') && !welcome.includes('accessibilityRole="list"'));
+  assert.ok(PANEL.includes('<BenefitChecks items={PAYWALL_BENEFITS} />'));
+  // The headline is the screen's header; all copy is native, uncapped text.
+  assert.ok(
+    welcome.includes('<Text variant="display" accessibilityRole="header" style={styles.headline}>'),
+  );
+  assert.ok(welcome.includes('{WELCOME_BODY}'));
   assert.ok(welcome.includes('{WELCOME_TRUST_NOTE}'));
-  // The paywall still owns its benefit list, unchanged.
-  assert.ok(PANEL.includes('<BenefitList items={PAYWALL_BENEFITS} />'));
+  assert.ok(welcome.includes('{WELCOME_EXAMPLE_CAPTION}'));
+});
+
+test('the receipt layout rules: images scale with the width, the column keeps the reference breaks, the caption overlays only where it fits', () => {
+  // Both images are 1:1 crops of the 852px target: at 393pt the hero is 424.4pt.
+  assert.deepEqual(WORDMARK_PX, { width: 395, height: 200 });
+  assert.deepEqual(HERO_PX, { width: 852, height: 920 });
+  assert.ok(Math.abs(heroHeight(393) - 424.37) < 0.01);
+  // Welcome's own type (fidelity pass): the target's sizes and leading.
+  assert.deepEqual(WELCOME_TYPE, {
+    headline: { fontSize: 36, lineHeight: 36 },
+    body: { fontSize: 18, lineHeight: 23 },
+    cta: { fontSize: 18, lineHeight: 25 },
+  });
+  assert.equal(CTA_MIN_HEIGHT, 51);
+  // The column: wider than `A closer look at` at 36pt (263.6pt by the font's
+  // advances) and narrower than `Food recalls personalized just for` at
+  // 18pt (277.3pt); it grows with the text scale.
+  assert.equal(TEXT_MEASURE, 270);
+  assert.equal(textMeasure(1), 270);
+  assert.equal(textMeasure(2), 540);
+  // At accessibility sizes the text takes the page margin, never the inset.
+  assert.equal(TEXT_FULL_WIDTH_AT_SCALE, 1.5);
+  assert.equal(textFullWidth(1), false);
+  assert.equal(textFullWidth(1.353), false, 'XXXL keeps the composition inset');
+  assert.equal(textFullWidth(3.571), true, 'AX5');
+  // The caption band is centred on the target's caption row, inside the
+  // quiet counter below the receipt (its lowest tip is row 784).
+  const band = captionBand();
+  const centre = ((band.top + band.height / 2) / 100) * HERO_PX.height;
+  assert.ok(Math.abs(centre - CAPTION_CENTRE_PX) < 1e-9);
+  assert.ok(QUIET_BAND_PX.top > 784 && QUIET_BAND_PX.bottom < HERO_PX.height);
+  assert.equal(QUIET_BAND_PX.left + QUIET_BAND_PX.right, HERO_PX.width, 'the band is centred');
+  // Overlaid at the default size on the standard phones, in the flow below
+  // at larger sizes and on a narrower screen (the adaptive rule).
+  assert.equal(captionPlacement(402, 1), 'overlay', 'iPhone 17');
+  assert.equal(captionPlacement(393, 1), 'overlay');
+  assert.equal(captionPlacement(375, 1), 'overlay', 'iPhone SE');
+  assert.equal(captionPlacement(402, 1.235), 'below', 'XXL');
+  assert.equal(captionPlacement(375, 1.353), 'below', 'XXXL');
+  assert.equal(captionPlacement(402, 3.571), 'below', 'AX5');
+  assert.equal(captionPlacement(320, 1), 'below', 'display zoom');
+  const code = codeOnly(componentBody(WELCOME, 'WelcomeContent'));
+  assert.ok(code.includes('const placement = captionPlacement(width, fontScale);'));
+  assert.ok(code.includes("{placement === 'overlay' ? ("));
+  assert.ok(
+    code.includes(
+      "{placement === 'below' ? <View style={styles.captionBelow}>{caption}</View> : null}",
+    ),
+  );
+});
+
+test('Welcome keeps the real safe areas and the frame’s sticky footer, and scrolls instead of shrinking', () => {
+  const code = codeOnly(WELCOME);
+  const welcome = codeOnly(componentBody(WELCOME, 'WelcomeContent'));
+  // Nothing under the status bar; the footer sits over the bottom inset.
+  assert.ok(welcome.includes('paddingTop: insets.top'));
+  assert.ok(welcome.includes('paddingBottom: insets.bottom + spacing[12]'));
+  // The content scrolls; the action stays outside it, pinned.
+  const scroll = welcome.indexOf('<ScrollView');
+  const scrollEnd = welcome.indexOf('</ScrollView>');
+  const button = welcome.indexOf('<GetStarted onPress={onGetStarted} />');
+  assert.ok(scroll > 0 && scrollEnd > scroll && button > scrollEnd);
+  // The hairline is allocated always and coloured only when content runs under it.
+  assert.ok(code.includes('borderTopWidth: 1,'));
+  assert.ok(welcome.includes('overflowing && styles.footerRule'));
 });
 
 test('Get started still advances through the existing onboarding action', () => {
   // The component hands the press to its caller, from the sticky footer.
   const welcome = codeOnly(componentBody(WELCOME, 'WelcomeContent'));
-  assert.ok(welcome.includes('footer={<Button label={WELCOME_CTA} onPress={onGetStarted} />}'));
-  // The route is unchanged: record Welcome as the resume point, push States.
+  assert.ok(welcome.includes('<GetStarted onPress={onGetStarted} />'));
+  assert.ok(
+    welcome.includes('<View style={textFullWidth(fontScale) ? styles.pageMargin : styles.inset}>'),
+  );
+  // Welcome's taller action is the shared Button's primary treatment: a
+  // button with its visible label as its name, the same pill, fill, label
+  // colour and face, and pressed opacity.
+  const cta = codeOnly(componentBody(WELCOME, 'GetStarted'));
+  assert.ok(cta.includes('accessibilityRole="button"'));
+  assert.ok(cta.includes('accessibilityState={{ disabled: false, busy: false }}'));
+  assert.ok(cta.includes('onPress={onPress}'));
+  assert.ok(
+    cta.includes('<Text variant="body-small-bold" color="text/inverse" style={styles.ctaLabel}>'),
+  );
+  assert.ok(cta.includes('{WELCOME_CTA}'));
+  assert.ok(!cta.includes('accessibilityLabel'), 'the visible label is not its name');
+  const code = codeOnly(WELCOME);
+  assert.ok(code.includes('minHeight: CTA_MIN_HEIGHT,'));
+  assert.ok(code.includes('borderRadius: radius.full,'));
+  assert.ok(code.includes("backgroundColor: color['action/primary'],"));
+  assert.ok(/ctaPressed: \{\s*opacity: 0\.6,/.test(code));
+  // The shared Button and type scale are untouched: Welcome's sizes are its own.
+  const button = read('components', 'ui', 'button.tsx');
+  assert.ok(button.includes('minHeight: hitTarget.minimum,'));
+  assert.ok(button.includes('variant="body-small-bold"'));
+  assert.ok(button.includes('opacity: 0.6,'));
+  // The route records Welcome as the resume point and pushes the first
+  // problem screen (2026-09-28).
   const route = codeOnly(ROUTES.welcome);
   assert.ok(route.includes("void access.recordShownStep('welcome');"));
   assert.ok(
     route.includes(
-      "return <WelcomeContent onGetStarted={() => router.push(onboardingRoute('states'))} />;",
+      "return <WelcomeContent onGetStarted={() => router.push(onboardingRoute('problem-scale'))} />;",
     ),
   );
 });
 
-test('the entrance plays once in under a second, loops nothing, and is skipped under Reduce Motion', () => {
-  // The timeline: the heading, then the mascot rising from behind the card,
-  // then the card following it as one moment; done within 900ms.
-  assert.ok(entranceEndMs() >= 600 && entranceEndMs() <= 900, `ends at ${entranceEndMs()}ms`);
-  assert.ok(WELCOME_ENTRANCE.mascotFade.delay > WELCOME_ENTRANCE.heading.delay);
-  assert.equal(WELCOME_ENTRANCE.mascotRise.delay, WELCOME_ENTRANCE.mascotFade.delay);
-  assert.ok(WELCOME_ENTRANCE.card.delay > WELCOME_ENTRANCE.mascotFade.delay, 'the card leads');
-  // The card follows while the mascot is still arriving: one moment, not two.
-  assert.ok(
-    WELCOME_ENTRANCE.card.delay <
-      WELCOME_ENTRANCE.mascotRise.delay + WELCOME_ENTRANCE.mascotRise.duration,
-  );
-  // Reduce Motion means the final state at once.
-  assert.equal(welcomeEntrance(true), 'show');
-  assert.equal(welcomeEntrance(false), 'animate');
-
-  const code = codeOnly(WELCOME);
-  // The setting is read, an unreadable setting counts as on, and "show" sets
-  // every value to its end state with no animation.
-  assert.ok(code.includes('AccessibilityInfo.isReduceMotionEnabled()'));
-  assert.ok(code.includes('.catch(() => true)'));
-  assert.ok(code.includes("if (welcomeEntrance(reduceMotion) === 'show') {"));
-  assert.ok(code.includes('for (const value of values) value.setValue(1);'));
-  // React Native's own Animated, on the native driver; nothing repeats.
-  assert.ok(code.includes('useNativeDriver: true'));
+test('the two problem screens: exact frame wiring, the source note, and the visual stories', () => {
+  // Routes: resume point, Continue forward, Back through the shared rule.
+  const scale = codeOnly(ROUTES.problemScale);
+  assert.ok(scale.includes("void access.recordShownStep('problem-scale');"));
+  assert.ok(scale.includes("onContinue={() => router.push(onboardingRoute('problem-risk'))}"));
+  assert.ok(scale.includes("onBack={() => goBackFrom('problem-scale', router)}"));
+  const risk = codeOnly(ROUTES.problemRisk);
+  assert.ok(risk.includes("void access.recordShownStep('problem-risk');"));
+  assert.ok(risk.includes("onContinue={() => router.push(onboardingRoute('states'))}"));
+  assert.ok(risk.includes("onBack={() => goBackFrom('problem-risk', router)}"));
+  // The scale (the authored pictograph, 2026-09-29): the stat in the `stat`
+  // type, spoken once through the headline's label, over ONE authored
+  // production image — six figures, one lime with three rays, five pale
+  // blue, drawn by the artwork itself, whole with `contain` — exposed as
+  // ONE spoken infographic, decorative beneath its label, with no glyph
+  // grid, no per-figure element and no tinting in code.
+  const scaleStep = codeOnly(componentBody(PROBLEM, 'ProblemScaleStep'));
+  assert.ok(scaleStep.includes('<Text variant="stat">{PROBLEM_SCALE_STAT}</Text>'));
+  assert.ok(scaleStep.includes('source={SCALE_PICTOGRAPH}'));
+  assert.ok(scaleStep.includes('resizeMode="contain"'), 'the pictograph could crop');
+  assert.ok(scaleStep.includes('scalePictographSize(contentWidth, height, fontScale)'));
+  assert.equal(scaleStep.split('<Image').length, 2, 'the scale screen draws extra images');
+  assert.ok(!PROBLEM.includes('figure-person'), 'the retired glyph grid is back');
+  assert.ok(!PROBLEM.includes('tintColor'), 'the artwork is recoloured in code');
+  assert.ok(scaleStep.includes('accessibilityLabel={PROBLEM_SCALE_FIGURES_LABEL}'));
+  assert.ok(scaleStep.includes('{...DECORATIVE}'), 'the drawn pictograph is spoken twice');
+  assert.ok(scaleStep.includes('headlineAccessibilityLabel={PROBLEM_SCALE_SPOKEN}'));
+  assert.ok(scaleStep.includes("progress={stepProgress('problem-scale')}"));
+  // The stakes (2026-09-29, the approved risk-row target, superseding the
+  // 2×2 grid): four vertical editorial rows in canonical order — the
+  // production illustration left, its exact label as live heading-3 text
+  // right — each ONE spoken element with its image decorative, hairlines
+  // between rows from `riskRowHasSeparator`, sizes from `riskRowLayout`,
+  // and no pill, band, card, grid column or background of any kind.
+  const riskStep = codeOnly(componentBody(PROBLEM, 'ProblemRiskStep'));
+  assert.ok(riskStep.includes("progress={stepProgress('problem-risk')}"));
+  assert.ok(riskStep.includes('{PROBLEM_RISK_GROUP_ROWS.map(({ id, label }, index) => ('));
+  assert.ok(riskStep.includes('accessibilityLabel={label}'));
+  assert.equal(riskStep.split('accessible\n').length, 2, 'a row splits into several elements');
+  assert.ok(riskStep.includes('source={STATISTIC_ILLUSTRATIONS[id]}'));
+  assert.ok(riskStep.includes('{...DECORATIVE}'), 'an illustration is spoken');
+  assert.ok(riskStep.includes('resizeMode="contain"'), 'an illustration could crop');
+  assert.ok(riskStep.includes('variant={RISK_LABEL_VARIANT}'));
+  assert.ok(riskStep.includes('{label}'), 'the labels are not live text');
+  assert.ok(riskStep.includes('riskRowLayout({'));
+  assert.ok(riskStep.includes('riskRowHasSeparator(index) ? styles.riskSeparator : null'));
+  assert.equal(riskStep.split('<Image').length, 2, 'the rows draw extra images');
+  const riskRow = componentBody(PROBLEM, 'ProblemRiskStep');
+  for (const retired of [
+    'labelSlot',
+    'labelBand',
+    'riskColumnWidth',
+    'riskLabelSeat',
+    'riskColumns',
+    'flexWrap',
+    'columnGap',
+  ]) {
+    assert.ok(!riskRow.includes(retired), `the 2×2 grid's ${retired} is back`);
+  }
+  // Transparent rows: the only colour in the file is the separator's
+  // `border/subtle`; no background, radius, shadow or surface anywhere.
+  assert.deepEqual(codeOnly(PROBLEM).match(/color\['[^']+'\]/g), ["color['border/subtle']"]);
   for (const forbidden of [
+    'backgroundColor',
+    'borderRadius',
+    'radius',
+    'shadow',
+    '<Surface',
+    'background/subtle',
+  ]) {
+    assert.ok(!codeOnly(PROBLEM).includes(forbidden), `the problem screens draw ${forbidden}`);
+  }
+  assert.ok(!PROBLEM.includes('numberOfLines'), 'a label is line-capped');
+  assert.ok(!PROBLEM.includes('minimumFontScale'), 'a label is font-shrunk');
+  assert.ok(!PROBLEM.includes('adjustsFontSizeToFit'), 'a label is font-fitted');
+  assert.ok(!PROBLEM.includes('ellipsizeMode'), 'a label is truncated');
+  assert.ok(!ONBOARDING_COPY.PROBLEM_RISK_BODY.includes('Young children'), 'the fact repeats');
+  // Neither screen has a mascot — no import, no reserved space, no hidden
+  // character element (the approved compositions are the visual).
+  assert.ok(!PROBLEM.includes('lotly-mascot'), 'a mascot is drawn on a problem screen');
+  assert.ok(!PROBLEM.includes('aside'), 'a mascot aside slot is reserved');
+  // Both: the source note, Back and a pinned Continue; readable source text.
+  for (const step of [scaleStep, riskStep]) {
+    assert.ok(step.includes('<SourceNote />'));
+    assert.ok(step.includes('back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}'));
+    assert.ok(step.includes('footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}'));
+  }
+  assert.ok(
+    codeOnly(componentBody(PROBLEM, 'SourceNote')).includes(
+      'variant="body-small" color="text/secondary"',
+    ),
+  );
+  // The pale blue belongs to the artwork alone: neither screen draws it
+  // (the 2×2 label bands that used it are retired, 2026-09-29).
+  assert.ok(!codeOnly(PROBLEM).includes("color['background/subtle']"));
+  // The CDC pages are the documented sources — in comments only, so no URL
+  // is bundled — and the quiet note is never a link.
+  const copyModule = read('lib', 'onboarding-copy.ts');
+  assert.ok(copyModule.includes('cdc.gov/food-safety/about/index.html'));
+  assert.ok(copyModule.includes('cdc.gov/food-safety/risk-factors/index.html'));
+  assert.ok(!codeOnly(copyModule).includes('cdc.gov'), 'a CDC URL is bundled in code');
+  assert.ok(!codeOnly(PROBLEM).includes('cdc.gov'), 'a CDC URL is bundled in code');
+  assert.ok(!codeOnly(PROBLEM).includes('Linking'), 'the source note became a link');
+});
+
+test('Welcome is static: no entrance, no loop, and no screen animates the shared heading', () => {
+  const code = codeOnly(WELCOME);
+  for (const forbidden of [
+    'Animated',
+    'isReduceMotionEnabled',
+    'useReduceMotion',
     'Animated.loop',
-    'iterations',
     'setInterval',
     'requestAnimationFrame',
     'react-native-reanimated',
     "from 'moti'",
     'lottie',
   ]) {
-    assert.ok(!code.includes(forbidden), `the entrance uses ${forbidden}`);
+    assert.ok(!code.includes(forbidden), `Welcome uses ${forbidden}`);
   }
-  // The action never animates: the footer is the plain shared Button.
-  const welcome = codeOnly(componentBody(WELCOME, 'WelcomeContent'));
-  assert.ok(welcome.includes('footer={<Button label={WELCOME_CTA} onPress={onGetStarted} />}'));
-  // The mascot, the card and the source note each carry their own entrance.
-  assert.ok(welcome.includes('motion.mascot'));
-  assert.equal((welcome.match(/motion\.card/g) ?? []).length, 2, 'the card and the source note');
-  // Only Welcome passes a heading motion to the shared frame.
+  // Route transitions, and their Reduce Motion fade, stay the root stack's.
+  assert.ok(
+    read('app', '_layout.tsx').includes("animation: reduceMotion === true ? 'fade' : 'default',"),
+  );
   for (const [name, source] of [
+    ['welcome', WELCOME],
     ['states', STATES],
     ['allergens', ALLERGENS],
     ['retailers', RETAILERS],
@@ -939,69 +1236,403 @@ test('the paywall and education keep the shared frame, and the paywall keeps its
   assert.ok(codeOnly(PANEL).includes('accessibilityRole="toolbar"'));
 });
 
-test('at the accessibility text sizes the paywall’s disclosure and actions leave the sticky footer for the content, read reactively', () => {
-  const panel = codeOnly(PANEL);
+test('the paywall keeps its sticky/inline terms rule, and Ready carries no terms at all', () => {
+  const slots = codeOnly(componentBody(PANEL, 'usePurchaseFooterSlots'));
   // The reader's text scale is an input, read so a change moves the block
   // rather than waiting for a cold launch — the settings selector's technique.
-  assert.ok(panel.includes('const { fontScale } = useWindowDimensions();'));
-  assert.ok(panel.includes('const placement = paywallFooterPlacement(fontScale);'));
-  // One block, drawn once, placed in exactly one of the two slots: the
-  // sticky footer keeps the notice and the primary action at every size.
-  assert.equal(panel.split('accessibilityRole="toolbar"').length, 2, 'the toolbar is drawn once');
-  assert.ok(panel.includes("{placement === 'sticky' ? terms : null}"));
+  assert.ok(slots.includes('const { fontScale } = useWindowDimensions();'));
+  assert.ok(slots.includes('const placement = paywallFooterPlacement(fontScale);'));
+  // One terms block, drawn once (inside PurchaseTerms), in exactly one of
+  // the two slots; the CTA stays sticky at every size.
+  const terms = codeOnly(componentBody(PANEL, 'PurchaseTerms'));
+  assert.equal(terms.split('accessibilityRole="toolbar"').length, 2, 'the toolbar is drawn once');
+  assert.ok(terms.includes('{PAYWALL_DISCLOSURE}'));
+  assert.ok(slots.includes('const terms = <PurchaseTerms purchase={purchase} />;'));
+  assert.ok(slots.includes("{placement === 'sticky' ? terms : null}"));
+  assert.ok(slots.includes("inlineTerms: placement === 'inline' ? terms : null,"));
   assert.ok(
-    panel.includes(
-      "{placement === 'inline' ? <View style={styles.inlineTerms}>{terms}</View> : null}",
-    ),
-  );
-  assert.ok(
-    panel.indexOf('onPress={onSubscribe}') <
-      panel.indexOf("{placement === 'sticky' ? terms : null}"),
+    slots.indexOf('<PurchaseCta purchase={purchase} />') <
+      slots.indexOf("{placement === 'sticky' ? terms : null}"),
     'the primary action stays in the sticky footer',
   );
+  const panel = codeOnly(componentBody(PANEL, 'PaywallPanel'));
+  assert.ok(panel.includes('footer={slots.footer}>'));
+  assert.ok(panel.indexOf('{children}') < panel.indexOf('{slots.inlineTerms}'));
+  // The split (2026-09-28): Ready draws no terms, disclosure or legal links.
+  for (const gone of ['PurchaseTerms', 'PAYWALL_DISCLOSURE', 'usePurchaseFooterSlots']) {
+    assert.ok(!codeOnly(PREVIEW).includes(gone), `Ready draws ${gone}`);
+  }
+});
+
+test('the deck: uniform real cards, depth behind the active card, the frosted real fourth as the final page', () => {
+  const deck = codeOnly(componentBody(CAROUSEL, 'ReadyCarousel'));
+  // Horizontal, snapping one card at a time, by the shared geometry.
+  assert.ok(deck.includes('horizontal'));
+  assert.ok(deck.includes('snapToInterval={stride}'));
+  assert.ok(deck.includes('const stride = carouselSnapInterval(usableWidth);'));
+  assert.ok(deck.includes('decelerationRate="fast"'));
+  assert.ok(deck.includes('disableIntervalMomentum'));
+  // Depth, not a list: the waiting card scaled and tucked behind the active
+  // one, driven ONLY by the scroll position (direct manipulation), under a
+  // descending z-order so the active card covers it.
+  assert.ok(deck.includes('outputRange: [DECK_NEXT_SCALE, 1]'));
+  assert.ok(deck.includes('outputRange: [-DECK_TUCK, 0]'));
+  assert.ok(deck.includes('zIndex: items.length - index'));
+  assert.ok(deck.includes('nativeEvent: { contentOffset: { x: scrollX } }'));
+  // The REAL shared card surface over the REAL feed model, in its uniform
+  // variant, media through the shared tile, no save control.
+  assert.ok(deck.includes('<RecallCardSurface'));
+  assert.ok(deck.includes('model={item.model}'));
+  assert.ok(deck.includes('uniform={uniform}'));
+  assert.ok(deck.includes('const rule = previewCardLayout(fontScale);'));
+  assert.ok(deck.includes('statusMinHeight: deckStatusHeight(rule.statusMinHeight, statusRows),'));
+  assert.ok(deck.includes('<MediaTile'));
+  assert.ok(deck.includes('trailing={null}'));
   assert.ok(
-    panel.indexOf('{children}') < panel.indexOf("{placement === 'inline'"),
-    'inline, the block is the last thing in the content, directly above the sticky action',
+    deck.includes('accessibilityLabel={matchAccessibilityLabel(item.model, index, models.length)}'),
   );
+  // The locked card is the LAST item and only when a real one exists; it is
+  // the real next recall's own uniform card, frosted, with one lock and NO
+  // text of its own; to assistive technology one concise button, the card
+  // beneath hidden entirely.
+  assert.ok(deck.includes("...(locked ? [{ kind: 'locked', model: locked } as DeckItem] : [])"));
+  const locked = codeOnly(componentBody(CAROUSEL, 'LockedCard'));
+  assert.ok(locked.includes('accessibilityRole="button"'));
+  assert.ok(locked.includes('accessibilityLabel={PREVIEW_LOCKED_CARD_TITLE}'));
+  assert.ok(locked.includes('accessibilityElementsHidden'));
+  assert.ok(locked.includes('importantForAccessibility="no-hide-descendants"'));
+  assert.ok(locked.includes('uniform={uniform}'));
+  // A real blur over the whole card; under Reduce Transparency, an opaque
+  // frost — illegible either way.
+  assert.ok(
+    locked.includes('<BlurView intensity={FROST_INTENSITY} tint="light" style={styles.frost} />'),
+  );
+  assert.ok(locked.includes('<View style={[styles.frost, styles.frostOpaque]} />'));
+  assert.ok(locked.includes('reduceTransparency ? ('));
+  assert.ok(locked.includes('<Icon name="lock" size={24} color="icon/primary" />'));
+  assert.ok(!locked.includes('<Text'), 'the locked card explains itself in words');
+  assert.ok(locked.includes('alt=""'), 'the frosted image is named to assistive technology');
+  // No arrows, no instruction copy, no auto-advance, no loop, no glass.
+  for (const forbidden of [
+    'Swipe to view',
+    'chevron-right',
+    'chevron-left',
+    'Animated.loop',
+    'setInterval',
+    'setTimeout',
+    'scrollToIndex',
+    'scrollToOffset',
+    'LinearGradient',
+    'GlassView',
+  ]) {
+    assert.ok(!codeOnly(CAROUSEL).includes(forbidden), `the carousel has ${forbidden}`);
+  }
+  // The dots count only the readable matches and are decorative.
+  assert.ok(deck.includes('const dots = models.length >= 2 ? models.length : 0;'));
+  assert.ok(deck.includes('accessibilityElementsHidden'));
+});
+
+test('the dedicated paywall: M04 beside the heading, check-row benefits, the plans, the note and the shared footer', () => {
+  const panel = codeOnly(componentBody(PANEL, 'PaywallPanel'));
+  const order = [
+    'aside={fontScale < HIDE_MASCOT_AT_SCALE ? <WatchfulMascot /> : null}',
+    '<BenefitChecks items={PAYWALL_BENEFITS} />',
+    '<PurchasePlans purchase={purchase} />',
+    '{children}',
+    '{INDEPENDENCE_NOTE}',
+    '{slots.inlineTerms}',
+  ].map((marker) => {
+    const at = panel.indexOf(marker);
+    assert.ok(at > 0, `the paywall lacks ${marker}`);
+    return at;
+  });
+  assert.deepEqual(
+    order,
+    [...order].sort((a, b) => a - b),
+    'the paywall is out of order',
+  );
+  // The benefits are navy check rows; the check is drawing.
+  const checks = codeOnly(componentBody(PANEL, 'BenefitChecks'));
+  assert.ok(checks.includes('<Icon name="check" size={20} color="icon/primary" />'));
+  // The mascot: M04, decorative and untouchable, the shared one-time entrance.
+  const mascot = codeOnly(componentBody(PANEL, 'WatchfulMascot'));
+  assert.ok(mascot.includes('accessibilityElementsHidden'));
+  assert.ok(mascot.includes('pointerEvents="none"'));
+  assert.ok(mascot.includes('const [animate] = useState(() => motionAllowed(reduceMotion));'));
+  assert.ok(PANEL.includes("require('@/assets/brand/production/lotly-mascot-watchful-1024.png')"));
+  // The Annual card: BEST VALUE on the card's corner (a tab of it), the
+  // chosen plan's 2px primary border; the badge is drawing because the
+  // radio's own label already speaks Best value.
+  const card = codeOnly(componentBody(PANEL, 'PlanCard'));
+  assert.ok(
+    card.includes('<View style={[styles.badge, styles.badgeCorner]} {...BADGE_DECORATIVE}>'),
+  );
+  assert.ok(/planSelected: \{[^}]*borderWidth: 2/s.test(PANEL));
+  // No Ready content on the paywall.
+  for (const gone of [
+    'PREVIEW_SUMMARY_TITLE',
+    'SampleRecallCard',
+    'EDUCATION_PREVIEW',
+    'progress=',
+    'PREVIEW_HEADLINE',
+    'ReadyCarousel',
+  ]) {
+    assert.ok(!codeOnly(PANEL).includes(gone), `the paywall draws ${gone}`);
+  }
+  // The entitled panel: no plans, no store, and a Continue.
+  const entitled = codeOnly(componentBody(PANEL, 'EntitledPaywallPanel'));
+  assert.ok(entitled.includes('{EDUCATION_SUCCESS}'));
+  assert.ok(entitled.includes('<Button label={CONTINUE_CTA} onPress={onContinue} />'));
+  assert.ok(!entitled.includes('PurchasePlans') && !entitled.includes('PurchaseCta'));
+});
+
+test('Edit preferences lives inside the summary card, quiet and 44pt, and still speaks its full scope', () => {
+  const ready = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
+  const surfaceOpen = ready.indexOf('<Surface background="background/subtle"');
+  const surfaceClose = ready.indexOf('</Surface>');
+  const edit = ready.indexOf('accessibilityLabel={PREVIEW_EDIT}');
+  assert.ok(surfaceOpen > 0 && edit > surfaceOpen && edit < surfaceClose, 'Edit left the card');
+  assert.ok(ready.includes('accessibilityHint={PREVIEW_EDIT_HINT}'));
+  assert.ok(ready.includes('hitSlop={EDIT_HIT_SLOP}'));
+  assert.ok(ready.includes('onPress={onEdit}'));
+  // A text action with the chevron affordance, never a second large button,
+  // in action/primary: action/secondary on the soft blue is 4.1:1, below AA.
+  assert.ok(ready.includes('<Text variant="body-small-bold" color="action/primary">'));
+  assert.ok(ready.includes('<Icon name="chevron-right" size={16} color="icon/primary" />'));
+  assert.ok(!ready.includes('label={PREVIEW_EDIT}'), 'Edit preferences is a Button again');
+  assert.ok(!ready.includes('color="action/secondary"'), 'the below-AA blue came back');
+});
+
+test('the Ready step is the approved order: summary card, Edit inside it, the preview heading, pill, deck, locked strip, See my plan', () => {
+  const ready = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
+  const order = [
+    '<Surface background="background/subtle" radius={16} style={styles.summary}>',
+    'onPress={onEdit}',
+    '</Surface>',
+    '{PREVIEW_MATCH_HEADING}',
+    'matchCountLabel(',
+    '<ReadyCarousel',
+    '{PREVIEW_LOCKED_STRIP}',
+  ].map((marker) => {
+    const at = ready.indexOf(marker);
+    assert.ok(at > 0, `Ready lacks ${marker}`);
+    return at;
+  });
+  assert.deepEqual(
+    order,
+    [...order].sort((a, b) => a - b),
+    'the Ready step is out of order',
+  );
+  // The deck is handed the REAL locked recall (or null), never a boolean.
+  assert.ok(ready.includes('locked={preview.locked}'));
+  // The pill is the Affects You treatment: personalization, never safety.
+  assert.ok(PREVIEW.includes("relevancePalette['affects-you'].background"));
+  // The locked strip is unchanged: shown when more real matches exist, the
+  // same words, the same action as the CTA.
+  assert.ok(ready.includes('{hasLockedMatches(preview) ? ('));
+  assert.ok(ready.includes('{PREVIEW_MONITORING_NOTE}'));
+  assert.equal(ONBOARDING_COPY.PREVIEW_LOCKED_STRIP, 'More matching recalls are locked');
+  assert.equal((ready.match(/onSeePlan/g) ?? []).length, 5, 'a locked path bypasses the paywall');
+  // Zero matches: no deck, no dots, no locked strip — one honest card.
+  assert.ok(ready.includes('PREVIEW_EMPTY_TITLE'));
+  assert.ok(ready.includes('PREVIEW_UNAVAILABLE_TITLE'));
+  assert.ok(ready.includes('PREVIEW_CHECKING_TITLE'));
+  assert.ok(ready.includes('body={found ? PREVIEW_BODY : PREVIEW_BODY_EMPTY}'));
+  for (const forbidden of [
+    'useAccess',
+    'loadOfferings',
+    '.purchase(',
+    '.restore(',
+    'applyEntitlement',
+    'Linking',
+    'useState',
+  ]) {
+    assert.ok(!ready.includes(forbidden), `the Ready step holds ${forbidden}`);
+  }
+  assert.equal((codeOnly(PREVIEW).match(/require\(/g) ?? []).length, 1);
+});
+
+// ── The building interstitial and the onboarding paywall (2026-09-28) ───────
+
+test('the interstitial plays once, replaces itself with Ready, prefetches the feed, and never traps', () => {
+  const route = codeOnly(ROUTES.building);
+  assert.ok(route.includes("void access.recordShownStep('building');"));
+  // The prefetch: mounting the shared feed session during the play.
+  assert.ok(route.includes('useFeed();'));
+  assert.ok(route.includes('void access.completeWatchBuild();'));
+  assert.ok(route.includes('buildingDone(router);'));
+  // A failed preference read routes on rather than trapping.
+  assert.ok(route.includes("load.status === 'failed' || load.status === 'unsupported'"));
+  // buildingDone REPLACES, so Back from Ready pops to Stores; Stores'
+  // Continue plays it only once and keeps the edit path direct.
+  const nav = codeOnly(read('lib', 'onboarding-navigation.ts'));
+  assert.ok(nav.includes("navigator.replace(onboardingRoute('preview'));"));
+  assert.ok(nav.includes("else navigator.push(onboardingRoute('building'));"));
+  assert.ok(nav.includes("if (previewBeneath) navigator.dismissTo(onboardingRoute('preview'));"));
+  assert.ok(nav.includes("else if (watchBuilt) navigator.push(onboardingRoute('preview'));"));
+  const step = codeOnly(componentBody(BUILDING, 'BuildingStep'));
+  // One play, ref-guarded; the sequence and timing are lib/building-watch's.
+  assert.ok(step.includes('buildingSequence(prefs)'));
+  assert.ok(step.includes('if (finished.current) return;'));
+  // Reduce Motion: the finished checklist at once and a readable minimum —
+  // no sequential build-up, and nothing loops anywhere.
+  assert.ok(step.includes('motionAllowed(reduceMotion)'));
+  assert.ok(step.includes('animate ? 0 : doneAt'));
+  assert.ok(step.includes('animate ? DONE_MS : REDUCED_MOTION_MS'));
+  for (const forbidden of ['Animated.loop', 'setInterval', 'Animated.spring', 'iterations']) {
+    assert.ok(!codeOnly(BUILDING).includes(forbidden), `the interstitial uses ${forbidden}`);
+  }
+  // The checklist is ONE spoken element; the mascot is decorative; exactly
+  // two announcements — the start and the completion — never per frame.
+  assert.ok(step.includes('accessibilityRole="progressbar"'));
+  assert.ok(step.includes('accessibilityLabel={BUILDING_ACCESSIBILITY_LABEL}'));
+  assert.equal((codeOnly(BUILDING).match(/announceForAccessibility/g) ?? []).length, 2);
+  assert.ok(codeOnly(BUILDING).includes('lotly-mascot-watchful-1024.png'));
+  assert.ok(step.includes('{...DECORATIVE}'));
+});
+
+test('the onboarding paywall route: the shared flow, its resume point, Back to Ready, and the entitled Continue', () => {
+  const route = codeOnly(ROUTES.onboardingPaywall);
+  assert.ok(route.includes("void access.recordShownStep('paywall');"));
+  assert.ok(route.includes("goBackFrom('paywall', router)"));
+  // Already entitled: never asked to purchase again.
+  assert.ok(route.includes('isEntitled(access.entitlement)'));
+  assert.ok(route.includes('<EntitledPaywallPanel'));
+  assert.ok(route.includes('onContinue={() => void access.completePersonalization()}'));
+  // Otherwise: the one shared purchase flow, controls included.
+  assert.ok(route.includes('usePurchaseFlow()'));
+  assert.ok(route.includes('{developmentControls}'));
+});
+
+test('the merged screen’s machinery is gone: no overlay footer, no scroll-driven CTA, no merged copy', () => {
+  // The frame is back to one fixed footer.
+  for (const gone of ['footerMode', 'footerAllowance', 'onScroll', 'scrollEventThrottle']) {
+    assert.ok(!codeOnly(FRAME).includes(gone), `the frame keeps ${gone}`);
+  }
+  // The presentation module keeps no CTA rule.
+  const presentation = read('lib', 'ready-presentation.ts');
+  for (const gone of ['purchaseCtaVisible', 'ctaFooterAllowance', 'CTA_REVEAL']) {
+    assert.ok(!presentation.includes(gone), `ready-presentation keeps ${gone}`);
+  }
+  // The merged copy is gone from the product source (tests and docs may
+  // still name it as history).
+  const sources: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (/\.(ts|tsx)$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
+        sources.push(readFileSync(path, 'utf8'));
+      }
+    }
+  };
+  walk(SRC);
+  for (const gone of [
+    'Keep your recall watch active.',
+    'View plans',
+    'Example match',
+    'Choose your plan',
+  ]) {
+    assert.ok(!sources.some((source) => source.includes(`'${gone}'`)), `the copy keeps ${gone}`);
+  }
+});
+
+test('the purchase handlers exist once: in the purchase flow, and nowhere else', () => {
+  const flow = codeOnly(read('hooks', 'use-purchase-flow.tsx'));
+  assert.ok(flow.includes('await access.provider.purchase(pkg);'));
+  assert.ok(flow.includes('await access.provider.restore();'));
+  assert.ok(flow.includes('await provider.loadOfferings();'));
+  // Each outcome and a failed offering is spoken: iOS does not read
+  // accessibilityLiveRegion, so the notice alone would be silent.
+  assert.ok(
+    flow.includes('AccessibilityInfo.announceForAccessibility(PAYWALL_NOTICES[notice].text);'),
+  );
+  assert.equal((flow.match(/announce\(notice\);/g) ?? []).length, 2, 'purchase and restore');
+  assert.ok(flow.includes("announce('restore_success');"));
+  assert.ok(flow.includes('AccessibilityInfo.announceForAccessibility(OFFERING_UNAVAILABLE);'));
+  assert.ok(flow.includes('AccessibilityInfo.announceForAccessibility(OFFERING_ERROR);'));
+  const sources: [string, string][] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (/\.(ts|tsx)$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
+        sources.push([path.slice(SRC.length + 1), readFileSync(path, 'utf8')]);
+      }
+    }
+  };
+  walk(SRC);
+  for (const call of ['provider.purchase(', 'provider.restore(', 'provider.loadOfferings(']) {
+    const owners = sources
+      .filter(
+        ([path, source]) => !path.startsWith('lib/purchases/') && codeOnly(source).includes(call),
+      )
+      .map(([path]) => path);
+    assert.deepEqual(
+      owners,
+      [join('hooks', 'use-purchase-flow.tsx')],
+      `${call} is called elsewhere`,
+    );
+  }
+  // Both paywall routes take it; neither re-implements it, and Ready does
+  // not touch it at all.
+  for (const route of [ROUTES.onboardingPaywall, ROUTES.paywall]) {
+    assert.ok(codeOnly(route).includes('usePurchaseFlow()'));
+    assert.ok(!codeOnly(route).includes('useState'), 'a route holds purchase state');
+  }
+  assert.ok(!codeOnly(ROUTES.preview).includes('usePurchaseFlow'));
 });
 
 // ── P2B7Y: the four-step progress ───────────────────────────────────────────
 
-test('the progress speaks its step by name, fills every step up to the current one, and appears on the four counted steps only', () => {
+test('the segmented progress: five equal segments, full width, no visible count, one spoken element, on the five counted screens only', () => {
   assert.deepEqual(
     COUNTED_STEPS.map((step) => progressAccessibilityLabel(stepProgress(step)!)),
     [
-      'Step 1 of 4: States',
-      'Step 2 of 4: Allergens',
-      'Step 3 of 4: Stores',
-      'Step 4 of 4: Preview',
+      'Onboarding progress, step 1 of 5',
+      'Onboarding progress, step 2 of 5',
+      'Onboarding progress, step 3 of 5',
+      'Onboarding progress, step 4 of 5',
+      'Onboarding progress, step 5 of 5',
     ],
   );
-  assert.deepEqual(filledSegments({ index: 1, total: 4 }), [true, false, false, false]);
-  assert.deepEqual(filledSegments({ index: 3, total: 4 }), [true, true, true, false]);
-  // One element, spoken once; the `1 of 4` words stay visible.
+  assert.deepEqual(filledSegments({ index: 1, total: 5 }), [true, false, false, false, false]);
+  assert.deepEqual(filledSegments({ index: 3, total: 5 }), [true, true, true, false, false]);
+  assert.deepEqual(filledSegments({ index: 5, total: 5 }), [true, true, true, true, true]);
+  // ONE accessibility element; the segments are its drawing, never five
+  // elements, and there is NO visible numeric copy at all.
   const progress = codeOnly(componentBody(PROGRESS, 'OnboardingProgress'));
+  assert.ok(progress.includes('accessible'));
+  assert.ok(progress.includes('accessibilityRole="progressbar"'));
   assert.ok(progress.includes('accessibilityLabel={progressAccessibilityLabel(progress)}'));
-  assert.ok(progress.includes('{progressLabel(progress)}'));
-  // Its own named token for the filled segments; the quiet track for the rest.
+  assert.ok(!progress.includes('progressLabel'), 'the visible count came back');
+  assert.ok(!codeOnly(PROGRESS).includes('<Text'), 'the bar draws text');
+  // Equal segments share the full row; the 6pt mark never scales or moves.
   const code = codeOnly(PROGRESS);
+  assert.ok(code.includes('flex: 1,'));
+  assert.ok(code.includes('const THICKNESS = 6;'));
+  // Its own named token for the filled segments; the quiet track for the rest.
   assert.ok(code.includes("backgroundColor: color['onboarding/progress']"));
   assert.ok(code.includes("backgroundColor: color['background/subtle']"));
-  // The frame draws it only when a step passes progress, and exactly the
-  // four counted steps (and their pending state) do; Welcome, the paywall and
-  // the education pass none.
+  // The frame draws it on its own full-width row when a step passes
+  // progress; the five counted screens do. Welcome, the interstitial, the
+  // paywall and the education pass none, and Ready's is null by the rule.
   assert.ok(codeOnly(FRAME).includes('<OnboardingProgress progress={progress} />'));
   assert.ok(codeOnly(FRAME).includes('{progress ? ('));
   for (const [name, source] of [
+    ['problem screens', PROBLEM],
     ['states', STATES],
     ['allergens', ALLERGENS],
     ['retailers', RETAILERS],
-    ['preview', PREVIEW],
   ] as const) {
     assert.ok(source.includes('progress={stepProgress('), `${name} has no progress`);
   }
+  assert.equal(stepProgress('preview'), null);
+  assert.equal(stepProgress('building'), null);
+  assert.equal(stepProgress('paywall'), null);
   for (const [name, source] of [
     ['welcome', WELCOME],
+    ['building', BUILDING],
     ['panel', PANEL],
     ['education', EDUCATION],
   ] as const) {
@@ -1023,7 +1654,15 @@ test('onboarding motion plays only when Reduce Motion is known off, once, and ne
   ] as const) {
     const code = codeOnly(source);
     // Decided on the first render; the final state is drawn at once otherwise.
-    assert.ok(code.includes('const [animate] = useState(() => motionAllowed(reduceMotion));'));
+    // The progress bar additionally animates only a step reached forward by
+    // one (`segmentFillAnimates`), so it names both conditions.
+    assert.ok(
+      code.includes('const [animate] = useState(() => motionAllowed(reduceMotion));') ||
+        code.includes(
+          '() => motionAllowed(reduceMotion) && segmentFillAnimates(lastShownIndex, progress.index),',
+        ),
+      `${name} decides its motion somewhere else`,
+    );
     assert.ok(code.includes('new Animated.Value(animate ? 0 : 1)'), `${name} starts hidden`);
     assert.ok(code.includes('if (!animate) return;'));
     assert.ok(code.includes('useNativeDriver: true'));
@@ -1111,7 +1750,7 @@ test('the Map / List control reports its mode, and every map target is a named c
   assert.ok(map.includes('<Icon name="check"'));
 });
 
-test('M02 sits beside the Map / List control: decorative, hidden, touching nothing, never over the map', () => {
+test('M02 sits beside the heading in the frame’s aside, at the aside standard: decorative, hidden, touching nothing, gone at accessibility sizes', () => {
   const mascot = codeOnly(componentBody(STATES, 'HelperMascot'));
   assert.ok(mascot.includes("require('@/assets/brand/production/lotly-mascot-helper-1024.png')"));
   assert.ok(mascot.includes('pointerEvents="none"'));
@@ -1121,14 +1760,15 @@ test('M02 sits beside the Map / List control: decorative, hidden, touching nothi
   assert.ok(mascot.includes('resizeMode="contain"'));
   assert.ok(mascot.includes('style={{ width: HELPER_MASCOT_SIZE, height: HELPER_MASCOT_SIZE }}'));
   assert.ok(!mascot.includes("position: 'absolute'"), 'the mascot floats over something');
-  // In the control's row, not the map's; yielding its room at large text.
+  // Polish pass: the frame's heading aside — the Stores mascot's system — at
+  // the same 120pt, yielding its room from the accessibility sizes; the
+  // Map / List control takes the full content width beneath.
   const step = codeOnly(componentBody(STATES, 'StatesStep'));
-  const row = step.slice(
-    step.indexOf('<View style={styles.modeRow}>'),
-    step.indexOf("{mode === 'map'"),
-  );
-  assert.ok(row.includes('<HelperMascot />'));
-  assert.ok(row.includes('fontScale < HIDE_MASCOT_AT_SCALE'));
+  assert.ok(step.includes('aside={fontScale < HIDE_MASCOT_AT_SCALE ? <HelperMascot /> : null}'));
+  assert.equal(HELPER_MASCOT_SIZE, READY_MASCOT_SIZE, 'the two selector mascots differ in size');
+  assert.equal(HIDE_MASCOT_AT_SCALE, 1.5);
+  assert.ok(!step.includes('styles.modeRow'), 'the control shares its row with the mascot again');
+  assert.equal((step.match(/<HelperMascot \/>/g) ?? []).length, 1);
 });
 
 test('the States screen borrows no severity, relevance or harm palette', () => {
@@ -1401,7 +2041,10 @@ test('Allergens: Continue is always enabled, and Back, Continue and the resume p
   assert.ok(step.includes('footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}'));
   assert.ok(step.includes('back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}'));
   assert.ok(step.includes("progress={stepProgress('allergens')}"));
-  assert.equal(progressAccessibilityLabel(stepProgress('allergens')!), 'Step 2 of 4: Allergens');
+  assert.equal(
+    progressAccessibilityLabel(stepProgress('allergens')!),
+    'Onboarding progress, step 4 of 5',
+  );
 });
 
 test('the approved Allergens mock-up is a design reference only: nothing bundles it', () => {
@@ -1530,37 +2173,34 @@ test('popular tiles carry no retailer mark, monogram, glyph or brand colour, and
   assert.ok(logo.includes('const MARKS: Readonly<Record<string, ImageSourcePropType>> = {};'));
 });
 
-test('the summary exists only while something is chosen: nothing at all at zero, no count, Clear or empty words', () => {
+test('Stores has no blue summary and no chips: one quiet count row whose slot never comes or goes', () => {
   const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
-  // Rendered only with a selection, and nothing laid out in its place.
-  assert.ok(step.includes('{selected.length > 0 ? (\n        <SelectedStores'));
-  assert.ok(step.indexOf('<SelectedStores') < step.indexOf('<RetailerGrid'));
-  const summary = codeOnly(componentBody(RETAILERS, 'SelectedStores'));
-  assert.ok(!summary.includes('stores.length === 0'), 'the summary draws an empty state');
-  assert.ok(!codeOnly(RETAILERS).includes('NO_STORES_YET'));
-  assert.ok(!codeOnly(RETAILERS).includes('chipSlot'), 'an empty slot is reserved');
-  // Clear lives only inside the summary, so it is never shown disabled.
-  const clear = codeOnly(componentBody(RETAILERS, 'ClearAction'));
-  assert.ok(!clear.includes('disabled'));
-  assert.equal((codeOnly(RETAILERS).match(/<ClearAction\b/g) ?? []).length, 1);
-  assert.ok(summary.includes('<ClearAction onPress={onClear} />'));
-  // With a selection: the title, the chips on one sideways row, Clear.
-  assert.ok(summary.includes('{yourStoresTitle(stores.length)}'));
-  assert.ok(summary.includes('accessibilityLabel={yourStoresSpoken(stores.length)}'));
-  assert.ok(summary.includes('accessibilityRole="header"'));
-  assert.ok(summary.includes('horizontal'));
-  assert.ok(!/\+\s*\$?\{?\s*stores\.length/.test(summary), 'choices are summarised as +N');
-  assert.ok(summary.includes('accessibilityLabel={removeStoreLabel(store.name)}'));
-  assert.ok(summary.includes('onPress={() => onRemove(store.id)}'));
-  assert.ok(step.includes('onRemove={onToggle}'));
-  assert.ok(clear.includes('accessibilityLabel={CLEAR_STORES_LABEL}'));
-  assert.ok(clear.includes('accessibilityHint={CLEAR_STORES_HINT}'));
-  assert.ok(clear.includes('hitSlop={CLEAR_HIT_SLOP}'));
-  assert.ok(clear.includes('color="action/secondary"'));
-  assert.ok(!clear.includes('<Button'));
-  assert.ok(!codeOnly(RETAILERS).includes('textDecoration'));
-  // No motion is added for its arrival.
-  assert.ok(!summary.includes('Animated'));
+  // The summary surface, its chips and their copy are gone entirely.
+  for (const gone of ['SelectedStores', 'chipScroll', 'removeStoreLabel', 'yourStoresTitle']) {
+    assert.ok(!codeOnly(RETAILERS).includes(gone), `Retailers still has ${gone}`);
+  }
+  // The one soft blue left is the tiles' own checked state (their approved
+  // selected surface), never a container around the selection.
+  assert.equal(
+    (codeOnly(RETAILERS).match(/color\['background\/subtle'\]/g) ?? []).length,
+    1,
+    'a blue surface came back',
+  );
+  assert.ok(/layerChosen: \{\s*backgroundColor: color\['background\/subtle'\]/.test(RETAILERS));
+  // The quiet row: the count (which also covers search-only choices) and a
+  // compact Clear, no surface. Its SLOT is always laid out and only its
+  // visibility follows the selection, so the grid never moves.
+  assert.ok(step.includes('{storesCountLabel(selected.length)}'));
+  assert.ok(step.includes('<ClearAction onPress={clear} />'));
+  assert.ok(
+    step.includes('style={[styles.countRow, selected.length === 0 && styles.countRowIdle]}'),
+  );
+  assert.ok(step.includes('accessibilityElementsHidden={selected.length === 0}'));
+  assert.ok(!/selected\.length > 0 \? \(/.test(step), 'the row mounts conditionally again');
+  assert.ok(/countRowIdle: \{\s*opacity: 0,\s*\}/.test(RETAILERS));
+  assert.ok(!/countRow: \{[^}]*backgroundColor/s.test(RETAILERS), 'the count row grew a surface');
+  // Clear is still a TRUE no-op with nothing chosen.
+  assert.ok(step.includes('if (selected.length === 0) return;'));
 });
 
 test('the search trigger sits beneath the ten: drawn as the Search Bar, a button without a chevron or a field', () => {
@@ -1799,10 +2439,12 @@ test('the sheet and the step share the one saved selection; choosing never close
   const sheetUse = step.slice(step.indexOf('<RetailerSearchSheet'));
   assert.ok(sheetUse.includes('selected={selected}'));
   assert.ok(sheetUse.includes('onToggle={onToggle}'));
-  // The grid, the summary and the sheet: one selection, one toggle.
-  assert.equal((step.match(/selected=\{selected\}/g) ?? []).length, 3);
+  // The grid and the sheet: one selection, one toggle (the summary and its
+  // chips are gone; the quiet count row reads the same `selected`).
+  assert.equal((step.match(/selected=\{selected\}/g) ?? []).length, 2);
   assert.equal((step.match(/onToggle=\{onToggle\}/g) ?? []).length, 2);
-  assert.ok(step.includes('onRemove={onToggle}'));
+  assert.ok(step.includes('{storesCountLabel(selected.length)}'));
+  assert.ok(!step.includes('onRemove='), 'a chip removal came back');
   const contents = codeOnly(componentBody(SEARCH_SHEET, 'SheetContents'));
   assert.ok(contents.includes('checked={selected.includes(retailer.id)}'));
   assert.ok(contents.includes('onPress={() => onToggle(retailer.id)}'));
@@ -1886,7 +2528,9 @@ test('the abandoned inline and upward-overlay searches are gone', () => {
   ]) {
     assert.ok(!step.includes(gone), `the step still has ${gone}`);
   }
-  assert.ok(!codeOnly(FRAME).includes('onScroll'), 'the frame kept the overlay’s scroll hook');
+  // The frame's onScroll passthrough now belongs to the Ready CTA rule; the
+  // Retailers step itself must still not watch the scroll.
+  assert.ok(!codeOnly(RETAILERS).includes('onScroll'), 'Retailers watches the scroll again');
   assert.ok(!codeOnly(ROUTES.retailers).includes('setSearchKey'));
 });
 
@@ -1915,12 +2559,21 @@ test('Retailers: Continue is always enabled, and Back, Continue, saving and the 
   assert.ok(route.includes('onToggle={(id) => update(toggleRetailer(prefs, id))}'));
   assert.ok(route.includes('const next = clearRetailers(prefs);'));
   assert.ok(route.includes('if (next !== prefs) update(next);'));
-  assert.ok(route.includes('onContinue={() => continueToPreview(previewBeneath(), router)}'));
+  // Continue runs through the one shared rule: back to Ready when editing,
+  // through the one-time interstitial the first time, straight to Ready after.
+  assert.ok(
+    route.includes(
+      'onContinue={() => continueToPreview(previewBeneath(), access.onboarding.watchBuilt, router)}',
+    ),
+  );
   assert.ok(route.includes("onBack={() => goBackFrom('retailers', router)}"));
   const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
   assert.ok(step.includes('footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}'));
   assert.ok(step.includes("progress={stepProgress('retailers')}"));
-  assert.equal(progressAccessibilityLabel(stepProgress('retailers')!), 'Step 3 of 4: Stores');
+  assert.equal(
+    progressAccessibilityLabel(stepProgress('retailers')!),
+    'Onboarding progress, step 5 of 5',
+  );
 });
 
 test('M03 stands beside the heading, whole, decorative and untouchable, and settles once only without Reduce Motion', () => {
@@ -1961,13 +2614,22 @@ test('M03 stands beside the heading, whole, decorative and untouchable, and sett
   assert.ok(frame.includes('headingBeside: {\n    flex: 1,\n  },'));
   for (const [name, source] of [
     ['welcome', WELCOME],
-    ['states', STATES],
     ['allergens', ALLERGENS],
     ['preview', PREVIEW],
     ['education', EDUCATION],
-    ['panel', PANEL],
   ] as const) {
     assert.ok(!codeOnly(source).includes('aside='), `${name} gained an aside`);
+  }
+  // The polish pass gave States (M02) and the paywall (M04) the same aside
+  // system; no other screen has one.
+  for (const [name, source] of [
+    ['states', STATES],
+    ['panel', PANEL],
+  ] as const) {
+    assert.ok(
+      codeOnly(source).includes('aside={fontScale < HIDE_MASCOT_AT_SCALE ?'),
+      `${name} lost its aside`,
+    );
   }
 });
 

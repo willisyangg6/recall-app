@@ -92,10 +92,14 @@ export const ROUTE_GROUPS: Record<RouteGroup, readonly string[]> = {
   ],
   onboarding: [
     'onboarding/welcome',
+    'onboarding/problem-scale',
+    'onboarding/problem-risk',
     'onboarding/states',
     'onboarding/allergens',
     'onboarding/retailers',
+    'onboarding/building',
     'onboarding/preview',
+    'onboarding/paywall',
   ],
   development: ['design-preview/index'],
 };

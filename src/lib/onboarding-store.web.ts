@@ -11,6 +11,7 @@ export async function loadOnboardingRecord(): Promise<OnboardingRecord> {
   return {
     version: ONBOARDING_RECORD_VERSION,
     step: 'preview',
+    watchBuilt: true,
     personalizationCompleted: true,
     notificationEducationCompleted: true,
   };

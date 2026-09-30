@@ -57,7 +57,9 @@ const ready = (overrides: Partial<PaywallView> = {}): PaywallView => ({
 // ── Copy ────────────────────────────────────────────────────────────────────
 
 test('the founder’s paywall copy, verbatim', () => {
-  assert.equal(PAYWALL_HEADLINE, 'Recall alerts, personalized for you.');
+  // Reworded for the Ready/paywall split (2026-09-28): the paywall follows
+  // the personalized preview.
+  assert.equal(PAYWALL_HEADLINE, 'Stay ahead of recalls that affect you.');
   assert.equal(PAYWALL_BODY, 'Get full access to Lotly’s personalized recall monitoring.');
   assert.deepEqual(PAYWALL_BENEFITS, [
     'See which recalls affect you',
@@ -276,7 +278,7 @@ test('the paywall panel has no close, skip or dismiss control and renders all fo
     assert.ok(!panel.includes(forbidden), `the paywall offers ${forbidden}`);
   }
   assert.ok(panel.includes('shown.footer.map((action) =>'));
-  assert.ok(panel.includes('<BenefitList items={PAYWALL_BENEFITS} />'));
+  assert.ok(panel.includes('<BenefitChecks items={PAYWALL_BENEFITS} />'));
   assert.ok(panel.includes('{PAYWALL_DISCLOSURE}'));
   // Back exists, and it is the ONE way back: to the Preview, through the gate.
   assert.ok(
@@ -286,11 +288,13 @@ test('the paywall panel has no close, skip or dismiss control and renders all fo
   );
   const route = codeOnly(read('app', 'paywall.tsx'));
   assert.ok(route.includes('onBack={access.reviewPreview}'));
-  // Terms, Privacy and Support open a configured HTTPS destination or say so.
-  assert.ok(route.includes('destinationAction(key)'));
-  assert.ok(route.includes('setDestinationNotice(DESTINATION_UNCONFIGURED)'));
+  // Terms, Privacy and Support open a configured HTTPS destination or say so,
+  // in the one purchase flow both the paywall and the Ready step use.
+  const flow = codeOnly(read('hooks', 'use-purchase-flow.tsx'));
+  assert.ok(flow.includes('destinationAction(key)'));
+  assert.ok(flow.includes('setDestinationNotice(DESTINATION_UNCONFIGURED)'));
   assert.equal(DESTINATION_UNCONFIGURED, 'This link is not available yet.');
-  assert.ok(!route.includes('example.com'));
+  assert.ok(!flow.includes('example.com'));
 });
 
 test('the paywall draws from the tokens: no raw hex, no capped type, no fixed height around text', () => {

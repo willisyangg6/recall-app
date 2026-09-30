@@ -420,6 +420,10 @@ function type(
  * high on the canvas). No other size, weight, or leading is approved.
  */
 export const typography = {
+  // The statistic treatment (polish pass): the problem screens' one big
+  // figure. A display size for a NUMBER a screen leads with, never body
+  // copy, never a heading with sentence-length content.
+  stat: type('sans-700', 56, 1.1, null),
   display: type('sans-700', 33, 1.2, null),
   'heading-1': type('sans-700', 28, 1.2, null),
   'heading-2': type('sans-700', 23, 1.3, 'Heading 2'),

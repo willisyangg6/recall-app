@@ -434,7 +434,11 @@ export const STATES_ICONS_RETRIEVED_ON = '2026-09-24';
  * the screen's push has settled.
  */
 export const MASCOT_ENTRANCE = { delay: 240, duration: 320, rise: 8 } as const;
-/** Above this text scale the mascot yields its room to the Map/List control. */
+/** Above this text scale the mascot yields its room to the heading's words. */
 export const HIDE_MASCOT_AT_SCALE = 1.5;
-/** The helper mascot's square, in points. */
-export const HELPER_MASCOT_SIZE = 72;
+/**
+ * The helper mascot's square, in points: the aside standard the Stores
+ * mascot set (polish pass; it was a 72pt miniature beside the Map / List
+ * control before, which read as accidental).
+ */
+export const HELPER_MASCOT_SIZE = 120;

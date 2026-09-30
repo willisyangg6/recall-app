@@ -122,6 +122,7 @@ export function StatesStep({
       body={STATES_BODY}
       progress={stepProgress('states')}
       back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}
+      aside={fontScale < HIDE_MASCOT_AT_SCALE ? <HelperMascot /> : null}
       keyboard
       footer={
         <>
@@ -146,10 +147,10 @@ export function StatesStep({
           </Text>
         </>
       }>
-      <View style={styles.modeRow}>
-        <ModeSwitch mode={mode} onChange={setMode} />
-        {fontScale < HIDE_MASCOT_AT_SCALE ? <HelperMascot /> : null}
-      </View>
+      {/* The whole content width: the mascot moved beside the heading (the
+          frame's aside, the Stores step's system), so the control is no
+          longer squeezed beside a drawing. */}
+      <ModeSwitch mode={mode} onChange={setMode} />
       {mode === 'map' ? (
         <View style={styles.selector}>
           <StateMap selected={draft} onToggle={toggle} />
@@ -256,10 +257,14 @@ function ChosenState({ code, onRemove }: { code: string; onRemove: (code: string
 }
 
 /**
- * M02, the helper pose, beside the Map / List control: decorative, hidden
- * from assistive technology, touching nothing, and never over the map. It
- * fades in with an 8pt settle once, only when Reduce Motion is known to be
- * off; otherwise it is simply there.
+ * M02, the helper pose, beside the heading and body — the frame's aside,
+ * the same seat and size the Stores mascot keeps, so the two selectors
+ * read as one system (polish pass; it sat squeezed beside the Map / List
+ * control before). Decorative, hidden from assistive technology, touching
+ * nothing, never over the map, and gone from the accessibility text sizes,
+ * where the words need the full width. It fades in with an 8pt settle
+ * once, only when Reduce Motion is known to be off; otherwise it is simply
+ * there.
  */
 function HelperMascot() {
   const reduceMotion = useReduceMotion();
@@ -304,11 +309,6 @@ function HelperMascot() {
 }
 
 const styles = StyleSheet.create({
-  modeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[12],
-  },
   switch: {
     flex: 1,
     flexDirection: 'row',

@@ -1,0 +1,27 @@
+{
+  "target_path": "assets/brand/reference/lotly-onboarding-welcome-receipt-target.png",
+  "sha256": "beccec0c66200341e2939867d411677bd0b8772af377c71a0512a9347abdda56",
+  "dimensions_px": [
+    852,
+    1846
+  ],
+  "approval": "Founder approved refined receipt Welcome in current chat, 2026-09-29.",
+  "starting_regions_xyxy": {
+    "wordmark": [
+      228,
+      112,
+      636,
+      312
+    ],
+    "hero": [
+      0,
+      675,
+      852,
+      1468
+    ]
+  },
+  "regions_are": "Starting crop suggestions only; visually verify before export. Exclude native UI copy.",
+  "source_policy": "Export original pixels. Generated transparent candidates are not approved production sources.",
+  "logical_reference_width_pt": 393,
+  "ui_policy": "Native text and button; static illustrative hero; preserve onboarding behavior."
+}
