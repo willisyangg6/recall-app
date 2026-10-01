@@ -299,12 +299,12 @@ export function OnboardingGallery() {
           <LiveAllergens initial={['peanut', 'milk', 'sesame']} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Retailers, empty — simulated: nothing chosen; the count row keeps its slot invisibly, so the grid sits exactly where it will with stores chosen">
+      <GallerySample caption="Stores, empty — simulated: nothing chosen; the receipt’s count row keeps its slot invisibly, so the rows sit exactly where they will with stores chosen">
         <Screen>
           <LiveRetailers initial={[]} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Retailers, selected — simulated: Costco and Trader Joe’s checked; the quiet 2 stores selected row with Clear, no surface and no chips">
+      <GallerySample caption="Stores, selected — simulated: Costco and Trader Joe’s checked; the receipt’s quiet 2 selected row with Clear, no surface and no chips">
         <Screen>
           <LiveRetailers initial={['costco', 'trader-joes']} />
         </Screen>

@@ -101,27 +101,29 @@ export const ALLERGENS_HEADLINE = 'Any allergens to watch?';
 export const ALLERGENS_BODY =
   'Select any that matter to you or your household. Leave this blank if none.';
 
-// ── Screen 4: Retailers ─────────────────────────────────────────────────────
+// ── Screen 4: Stores (the receipt, 2026-09-30) ──────────────────────────────
 
-export const RETAILERS_HEADLINE = 'Where do you shop?';
-// `This is optional.` came off in the polish pass: the step stays optional
-// (Continue is never disabled), the sentence just no longer says so.
-export const RETAILERS_BODY = 'Choose the retailers you want Lotly to watch for in recall notices.';
-/** The curated ten's section label: popular, never ranked or "largest". */
+export const RETAILERS_HEADLINE = 'Your regulars.';
+// The step stays optional (Continue is never disabled); the sentence does
+// not say so.
+export const RETAILERS_BODY = 'Choose the stores where your household buys food.';
+/** The receipt's heading over its six quick choices: popular, never ranked or "largest". */
 export const POPULAR_STORES_LABEL = 'Popular stores';
 /**
- * The quiet utility row's count (polish pass): it also covers stores chosen
- * through the search, which the ten visible tiles cannot show.
+ * The count, spoken: it also covers stores chosen through the search, which
+ * the six quick choices cannot show.
  */
 export function storesCountLabel(count: number): string {
   if (count === 0) return 'No stores selected';
   return count === 1 ? '1 store selected' : `${count} stores selected`;
 }
-/** The summary's compact clear action. */
+/** The count as the receipt prints it (`2 selected`); spoken as `storesCountLabel`. */
+export function storesCountShort(count: number): string {
+  return `${count} selected`;
+}
+/** The count row's compact clear action. */
 export const CLEAR_STORES_LABEL = 'Clear';
-/** The search trigger beneath the popular stores: what it says. */
-export const SEARCH_ALL_STORES_PLACEHOLDER = 'Not listed? Search all stores';
-/** The trigger, spoken, and the search sheet's title. */
+/** The receipt's search action, as printed and spoken, and the search sheet's title. */
 export const SEARCH_ALL_STORES_LABEL = 'Search all stores';
 export const SEARCH_ALL_STORES_HINT = 'Opens a search of the complete store list.';
 /** The sheet's field: its placeholder and its spoken name. */

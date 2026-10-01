@@ -257,17 +257,12 @@ const isProse = (literal: string) => /\s/.test(literal.slice(1, -1));
 const APPROVED_RETAILER_LABEL = 'Retailers:';
 
 /**
- * The founder's FINAL onboarding copy (P2B7X.1, 2026-09-23) says `retailers`
- * in one place: the Retailers step's body. It is exempt by exact string, as
- * the Detail label is; the rest of onboarding keeps `store` (`Search stores`,
- * `N stores selected`). The Preview summary's row label, the second
- * exemption until 2026-09-26, now reads `Stores` (the Ready step's Option 2),
- * so its exemption is gone. The polish pass (2026-09-28) dropped the body's
- * `This is optional.`; the exemption follows the sentence that remains.
+ * Onboarding says `store` everywhere. The Retailers step's body was the one
+ * exemption (P2B7X.1) until the receipt Stores (2026-09-30) replaced it with
+ * `Choose the stores where your household buys food.`, so no onboarding
+ * sentence is exempt any more.
  */
-const APPROVED_ONBOARDING_RETAILER_COPY = [
-  "'Choose the retailers you want Lotly to watch for in recall notices.'",
-];
+const APPROVED_ONBOARDING_RETAILER_COPY: readonly string[] = [];
 
 test('consumer copy says state and store, never jurisdiction or retailer', () => {
   const sources = { ...COPY_MODULES, ...DOCUMENT_SOURCES, ...SCREENS };

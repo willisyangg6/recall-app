@@ -12,16 +12,17 @@
  * translucent. So no pixel may sit at 240–254, the drawing has no enclosed
  * translucent hole, and there is no background hint or timestamp chunk.
  *
- * M02 (the helper pose) is beside the States step's
- * Map / List control (P2B7Y), and M03 (the ready pose with the grocery bag)
- * beside the Retailers step's heading (Popular stores, 2026-09-24), and M06
+ * M06
  * (the trust-peek pose with the shield, 2026-09-26) hanging over the Ready
  * step's summary card, and M04 (the watchful pose) on the "building your
  * watch" interstitial (2026-09-28) and beside the paywall's heading (the
  * polish pass); M05 is approved but not yet integrated,
  * and nothing may reference it until its own milestone. M01 (the
- * welcome-peek pose) left Welcome with the receipt composition (2026-09-29)
- * and, like M05, is approved but drawn nowhere.
+ * welcome-peek pose) left Welcome with the receipt composition (2026-09-29),
+ * M02 (the helper pose) left States with the grocery atlas (2026-09-30), and
+ * M03 (the ready pose with the grocery bag) left Stores with the receipt
+ * (2026-09-30), whose mascot is part of its approved scene; like M05, all
+ * three are approved but drawn nowhere.
  *
  * M06's placement on the Ready summary card is computed from measurements of
  * its artwork (lib/ready-presentation.ts), so those measurements are checked
@@ -273,12 +274,7 @@ test('M06 carries the mechanical repair of the supplied 1254px export, uniformly
   assert.ok(!DECODED.M06.chunks.includes('caBX'), 'the export metadata came back');
 });
 
-test('M03 on Retailers, M04 on the building interstitial and the paywall, M06 on Ready; M01, M02 and M05 are referenced nowhere', () => {
-  const retailers = readFileSync(
-    join(ROOT, 'src', 'components', 'onboarding', 'retailers-step.tsx'),
-    'utf8',
-  );
-  assert.ok(retailers.includes(`require('@/assets/brand/production/${APPROVED.M03}')`));
+test('M04 on the building interstitial and the paywall, M06 on Ready; M01, M02, M03 and M05 are referenced nowhere', () => {
   const ready = readFileSync(
     join(ROOT, 'src', 'components', 'onboarding', 'preview-step.tsx'),
     'utf8',
@@ -302,9 +298,10 @@ test('M03 on Retailers, M04 on the building interstitial and the paywall, M06 on
   };
   walk(join(ROOT, 'src'));
   // M01 left Welcome with the receipt composition (2026-09-29); M02 left
-  // States with the grocery-atlas composition (2026-09-30), whose seated
-  // mascot is part of the approved scene; M05 awaits its milestone.
-  for (const id of ['M01', 'M02', 'M05'] as const) {
+  // States with the grocery-atlas composition (2026-09-30), and M03 left
+  // Stores with the receipt (2026-09-30), each for an approved scene with
+  // its own mascot; M05 awaits its milestone.
+  for (const id of ['M01', 'M02', 'M03', 'M05'] as const) {
     const name = APPROVED[id];
     assert.ok(!sources.some((source) => source.includes(name)), `${id} (${name}) is integrated`);
   }
@@ -320,11 +317,6 @@ test('M03 on Retailers, M04 on the building interstitial and the paywall, M06 on
     'utf8',
   );
   assert.ok(panel.includes(`require('@/assets/brand/production/${APPROVED.M04}')`));
-  assert.equal(
-    sources.filter((source) => source.includes(APPROVED.M03)).length,
-    1,
-    'M03 is drawn somewhere other than Retailers',
-  );
   assert.equal(
     sources.filter((source) => source.includes(`/${APPROVED.M06}')`)).length,
     1,

@@ -72,7 +72,8 @@ import {
 } from '@/lib/onboarding-copy';
 import * as ONBOARDING_COPY from '@/lib/onboarding-copy';
 import { SAMPLE_RECALL_MODEL } from '@/lib/onboarding-sample';
-import { POPULAR_RETAILERS, READY_MASCOT_SIZE } from '@/lib/retailer-grid';
+import { POPULAR_RETAILERS } from '@/lib/retailer-grid';
+import { COUNT_GAP, ROW_MIN_HEIGHT, STORES_TYPE } from '@/lib/stores-receipt-presentation';
 import { CHIP, CONTROL_MIN_HEIGHT, SCENE_PX, STATES_TYPE } from '@/lib/states-presentation';
 import { retailerLogoCoverage } from '@/lib/retailer-logos';
 import { STATE_CLEAR_HINT } from '@/lib/personalization-screen';
@@ -194,9 +195,10 @@ test('Clear selection is permanently allocated on every selector step and inert 
   );
   assert.ok(allergens.includes('<View style={styles.controls}>{controls}</View>'));
 
-  // Retailers is the exception by design: its summary, and the Clear inside
-  // it, exist only while something is chosen (pinned in the Retailers tests
-  // below). The handler still refuses an empty clear.
+  // Stores is the exception by design: its count row, and the Clear inside
+  // it, are invisible and out of the accessibility tree while nothing is
+  // chosen (pinned in the Stores tests below). The handler still refuses an
+  // empty clear.
   const retailers = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
   assert.ok(retailers.includes('if (selected.length === 0) return;'));
 });
@@ -245,15 +247,17 @@ test('States alone can refuse Continue, with the shared disabled semantics and t
   // Continue) is gone with the composition it balanced.
   assert.ok(states.includes('{STATES_HELPER}'));
   assert.ok(!states.includes('noteInactive'), 'the old allocated footer note came back');
-  // Allergens and retailers: Continue is never disabled.
-  for (const [name, source] of [
-    ['allergens', ALLERGENS],
-    ['retailers', RETAILERS],
-  ] as const) {
-    const code = codeOnly(source);
-    assert.ok(code.includes('footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}'), name);
-    assert.ok(!code.includes('canContinue'), `${name} gates Continue`);
-  }
+  // Allergens and Stores: Continue is never disabled.
+  const allergens = codeOnly(ALLERGENS);
+  assert.ok(allergens.includes('footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}'));
+  assert.ok(!allergens.includes('canContinue'), 'allergens gates Continue');
+  // Stores draws its own page (the receipt, 2026-09-30) with a local 51pt
+  // pill that has no disabled state at all.
+  const stores = codeOnly(RETAILERS);
+  assert.ok(stores.includes('<ContinueButton onPress={onContinue} />'));
+  assert.ok(stores.includes('accessibilityState={{ disabled: false, busy: false }}'));
+  assert.ok(!stores.includes('canContinue'), 'stores gates Continue');
+  assert.ok(!/disabled=\{(?!false)/.test(stores), 'stores can disable a control');
 });
 
 // ── One preference store, no second copy ────────────────────────────────────
@@ -288,7 +292,7 @@ test('every step reads and saves through the one preference store, progressively
   // `CheckRow` over the shared catalog.
   assert.ok(codeOnly(STATES).includes('commit(toggleStateCode(draft, code))'));
   assert.ok(codeOnly(STATE_SHEET).includes('<CheckRow'));
-  // Retailers draws its own tiles and search; the shared store selector
+  // Stores draws its own receipt rows and search; the shared store selector
   // stays Profile's (pinned below).
   assert.ok(ALLERGENS.includes('allergenGridRows(CONSUMER_ALLERGENS, columns).map((row) =>'));
   // The Preview summary reads the Profile card's own summary rule.
@@ -319,18 +323,18 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
     ALLERGENS_BODY,
     'Select any that matter to you or your household. Leave this blank if none.',
   );
-  assert.equal(RETAILERS_HEADLINE, 'Where do you shop?');
-  // The polish pass removed `This is optional.` (the step stays optional:
-  // Continue is never disabled).
-  assert.equal(
-    RETAILERS_BODY,
-    'Choose the retailers you want Lotly to watch for in recall notices.',
-  );
+  // The receipt Stores (2026-09-30): the approved manifest's copy. The step
+  // stays optional (Continue is never disabled); the sentence does not say so.
+  assert.equal(RETAILERS_HEADLINE, 'Your regulars.');
+  assert.equal(RETAILERS_BODY, 'Choose the stores where your household buys food.');
   assert.ok(!RETAILERS_BODY.includes('optional'));
   assert.equal(ONBOARDING_COPY.POPULAR_STORES_LABEL, 'Popular stores');
   assert.ok(!('NO_STORES_YET' in ONBOARDING_COPY), 'the empty summary came back');
   assert.equal(ONBOARDING_COPY.CLEAR_STORES_LABEL, 'Clear');
-  assert.equal(ONBOARDING_COPY.SEARCH_ALL_STORES_PLACEHOLDER, 'Not listed? Search all stores');
+  assert.ok(
+    !('SEARCH_ALL_STORES_PLACEHOLDER' in ONBOARDING_COPY),
+    'the `Not listed?` search field came back',
+  );
   assert.equal(ONBOARDING_COPY.SEARCH_ALL_STORES_LABEL, 'Search all stores');
   assert.match(ONBOARDING_COPY.SEARCH_ALL_STORES_HINT, /complete store list/);
   assert.equal(ONBOARDING_COPY.SEARCH_STORES_LABEL, 'Search stores');
@@ -346,6 +350,9 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
   assert.equal(ONBOARDING_COPY.storesCountLabel(0), 'No stores selected');
   assert.equal(ONBOARDING_COPY.storesCountLabel(1), '1 store selected');
   assert.equal(ONBOARDING_COPY.storesCountLabel(4), '4 stores selected');
+  // The receipt prints the short form; the spoken form stays the full one.
+  assert.equal(ONBOARDING_COPY.storesCountShort(1), '1 selected');
+  assert.equal(ONBOARDING_COPY.storesCountShort(2), '2 selected');
   for (const gone of ['yourStoresTitle', 'yourStoresSpoken', 'removeStoreLabel']) {
     assert.ok(!(gone in ONBOARDING_COPY), `the summary's ${gone} came back`);
   }
@@ -483,7 +490,6 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
         'CONTINUE_CTA',
         'CLEAR_STORES_LABEL',
         'POPULAR_STORES_LABEL',
-        'SEARCH_ALL_STORES_PLACEHOLDER',
         'SEARCH_ALL_STORES_LABEL',
       ],
     ],
@@ -2156,11 +2162,11 @@ test('the approved Allergens mock-up is a design reference only: nothing bundles
   assert.ok(!codeOnly(ALLERGENS).includes('brand/reference'));
 });
 
-// ── Retailers: Popular stores (2026-09-24) ──────────────────────────────────
+// ── Stores: the receipt (2026-09-30; Popular stores and search 2026-09-24) ──
 
-test('Retailers is one screen: the ten tiles from the curated list in the shared column rule, with no second mode', () => {
-  const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
-  // No mode, no way to another presentation, no full-catalog directory.
+test('Stores is one screen: six quick choices from the curated list on the receipt, with no second mode', () => {
+  // No mode, no way to another presentation, no full-catalog directory, and
+  // none of the retired grid: tiles, columns, the `Not listed?` field, M03.
   for (const gone of [
     'mode',
     'setMode',
@@ -2171,73 +2177,94 @@ test('Retailers is one screen: the ten tiles from the curated list in the shared
     'BACK_TO_POPULAR',
     'chevron-right',
     'CheckRow',
+    'RetailerGrid',
+    'RetailerTile',
+    'retailerGridColumns',
+    'SearchTrigger',
+    'SEARCH_ALL_STORES_PLACEHOLDER',
+    'ReadyMascot',
+    'lotly-mascot-ready-1024',
+    'OnboardingFrame',
+    'aside=',
+    'See more',
+    'Show fewer',
   ]) {
     assert.ok(!codeOnly(RETAILERS).includes(gone), `the step still has ${gone}`);
   }
   assert.ok(!ROUTES.retailers.includes('initialMode'));
-  // Every curated store, as a tile, from the one typed list and nothing else.
-  assert.ok(step.includes('<RetailerGrid\n          retailers={POPULAR_RETAILERS}'));
-  const grid = codeOnly(componentBody(RETAILERS, 'RetailerGrid'));
-  assert.ok(grid.includes('retailerGridRows(retailers, columns).map((row) =>'));
-  assert.ok(grid.includes('<RetailerTile\n'));
-  assert.ok(grid.includes('checked={selected.includes(retailer.id)}'));
-  assert.ok(grid.includes('onPress={() => onToggle(retailer.id)}'));
-  assert.ok(grid.includes('{row.length < columns ? <View style={styles.gridSpacer} /> : null}'));
-  assert.ok(step.includes('const { width, fontScale } = useWindowDimensions();'));
-  assert.ok(step.includes('const columns = retailerGridColumns(width, fontScale);'));
-  assert.equal(POPULAR_RETAILERS.length, 10);
-  // The section is `Popular stores`, a header; no rank, number or size claim.
-  assert.ok(step.includes('<Text variant="heading-3" accessibilityRole="header">'));
-  for (const forbidden of ['largest', 'biggest', 'top 10', 'ranked', 'near']) {
+  // Every quick choice, as a row, from the one typed list and nothing else.
+  const receipt = codeOnly(componentBody(RETAILERS, 'ReceiptContent'));
+  assert.ok(receipt.includes('{POPULAR_RETAILERS.map((retailer) => ('));
+  assert.ok(receipt.includes('<StoreRow\n'));
+  assert.ok(receipt.includes('checked={selected.includes(retailer.id)}'));
+  assert.ok(receipt.includes('onPress={() => onToggle(retailer.id)}'));
+  assert.deepEqual(
+    POPULAR_RETAILERS.map((retailer) => retailer.name),
+    ['Walmart', 'Costco', 'Kroger', 'Aldi', 'Target', "Trader Joe's"],
+  );
+  // The heading is `Popular stores`, a header; no rank, number or size claim.
+  assert.ok(receipt.includes('accessibilityRole="header" style={receiptHeadingType(fontScale)}'));
+  assert.ok(receipt.includes('{POPULAR_STORES_LABEL}'));
+  for (const forbidden of ['largest', 'biggest', 'top 10', 'top 6', 'ranked', 'near']) {
     assert.ok(!RETAILERS.toLowerCase().includes(`'${forbidden}`), `the step claims ${forbidden}`);
   }
-  // The tile draws from the geometry the rule measured against.
-  const code = codeOnly(RETAILERS);
-  for (const key of ['gap', 'minHeight', 'paddingHorizontal', 'paddingVertical']) {
-    assert.ok(code.includes(`${key}: TILE.${key},`), `the tile's ${key} left the shared geometry`);
-  }
+  // Heading, count, a rule, the six each followed by a rule, then the search.
+  const order = [
+    '{POPULAR_STORES_LABEL}',
+    '<ClearAction onPress={onClear} />',
+    '<DottedRule />',
+    '<StoreRow',
+    '<SearchAction ref={searchRef} onPress={onSearch} />',
+  ].map((token) => receipt.indexOf(token));
+  assert.deepEqual(
+    order,
+    [...order].sort((x, y) => x - y),
+    'the receipt is out of order',
+  );
+  assert.ok(order.every((index) => index >= 0));
 });
 
-test('each popular tile is ONE checkbox element: the canonical name, its state, the whole tile its target', () => {
-  const tile = codeOnly(componentBody(RETAILERS, 'RetailerTile'));
-  assert.equal((tile.match(/accessibilityRole=/g) ?? []).length, 1, 'a second element in a tile');
-  assert.ok(tile.includes('accessibilityRole="checkbox"'));
-  assert.ok(tile.includes('accessibilityLabel={retailer.name}'));
-  assert.ok(tile.includes('accessibilityState={{ checked }}'));
-  assert.equal((tile.match(/<Pressable/g) ?? []).length, 1);
-  assert.equal((tile.match(/onPress=/g) ?? []).length, 1);
+test('each quick choice is ONE checkbox row: the canonical name, its state, the whole row its 44pt target', () => {
+  const row = codeOnly(componentBody(RETAILERS, 'StoreRow'));
+  assert.equal((row.match(/accessibilityRole=/g) ?? []).length, 1, 'a second element in a row');
+  assert.ok(row.includes('accessibilityRole="checkbox"'));
+  assert.ok(row.includes('accessibilityLabel={retailer.name}'));
+  assert.ok(row.includes('accessibilityState={{ checked }}'));
+  assert.equal((row.match(/<Pressable/g) ?? []).length, 1);
+  assert.equal((row.match(/onPress=/g) ?? []).length, 1);
   // The name is the catalog's own, in full: no short form, no truncation.
-  assert.ok(tile.includes('{retailer.name}'));
-  // The shared checkbox, hidden, so only the tile speaks; colour is never alone.
+  assert.ok(row.includes('{retailer.name}'));
+  // The shared checkbox (navy and white when chosen, outlined when not),
+  // hidden, so only the row speaks; colour is never alone.
   assert.ok(
-    tile.includes(
-      '<View\n            accessible={false}\n            accessibilityElementsHidden\n            importantForAccessibility="no-hide-descendants">\n            <CheckIndicator checked={checked} fill={fill} />',
+    row.includes(
+      '<View\n        accessible={false}\n        accessibilityElementsHidden\n        importantForAccessibility="no-hide-descendants">\n        <CheckIndicator checked={checked} fill={fill} />',
     ),
   );
-  assert.ok(tile.includes('<View style={[styles.tile, pressed && styles.pressed]}>'));
-  assert.ok(!tile.includes('checked &&'), 'a checked-only style reached the tile');
-  assert.ok(tile.includes('<View style={[styles.layer, styles.layerOpen]} />'));
-  assert.ok(
-    tile.includes(
-      '<Animated.View style={[styles.layer, styles.layerChosen, { opacity: fill }]} />',
-    ),
-  );
+  assert.ok(!row.includes('checked &&'), 'a checked-only style reached the row');
+  // Holding a row changes nothing: no pressed dimming or highlight; only a
+  // completed tap (the one `onPress`) toggles it.
+  assert.ok(row.includes('style={styles.row}>'));
+  assert.ok(!/\bpressed\b/.test(row), 'a quick choice dims or highlights while held');
+  // Every row, and the search action, is at least 44pt; no hitSlop, so the
+  // targets never overlap (the rows sit between 1pt rules).
   const code = codeOnly(RETAILERS);
-  assert.ok(code.includes("backgroundColor: color['background/subtle'],"));
-  assert.ok(code.includes("borderColor: color['action/primary'],"));
-  assert.ok(code.includes("borderColor: color['border/default'],"));
+  assert.ok(code.includes('minHeight: ROW_MIN_HEIGHT,'));
+  assert.equal(ROW_MIN_HEIGHT, 44);
+  assert.ok(!row.includes('hitSlop'));
+  assert.ok(!codeOnly(componentBody(RETAILERS, 'SearchAction')).includes('hitSlop'));
   // Motion: opacity only, and immediate under Reduce Motion.
   assert.ok(
-    tile.includes('if (!motionAllowed(reduceMotion)) {\n      fill.setValue(to);\n      return;'),
+    row.includes('if (!motionAllowed(reduceMotion)) {\n      fill.setValue(to);\n      return;'),
   );
   assert.ok(code.includes('export const SELECTION_FADE_MS = 150;'));
-  for (const forbidden of ['Animated.loop', 'Animated.spring', 'iterations', 'scale:']) {
-    assert.ok(!code.includes(forbidden), `the retailers step uses ${forbidden}`);
+  for (const forbidden of ['Animated.loop', 'Animated.spring', 'iterations', 'transform']) {
+    assert.ok(!code.includes(forbidden), `the stores step uses ${forbidden}`);
   }
 });
 
-test('popular tiles carry no retailer mark, monogram, glyph or brand colour, and no logo mechanism was added', () => {
-  const tile = codeOnly(componentBody(RETAILERS, 'RetailerTile'));
+test('quick choices carry no retailer mark, monogram, glyph or brand colour, and no logo mechanism was added', () => {
+  const row = codeOnly(componentBody(RETAILERS, 'StoreRow'));
   for (const forbidden of [
     '<Image',
     '<Icon',
@@ -2247,17 +2274,22 @@ test('popular tiles carry no retailer mark, monogram, glyph or brand colour, and
     "'home'",
     'charAt',
   ]) {
-    assert.ok(!tile.includes(forbidden), `a popular tile draws ${forbidden}`);
+    assert.ok(!row.includes(forbidden), `a quick choice draws ${forbidden}`);
   }
   const code = codeOnly(RETAILERS);
   assert.ok(!code.includes('retailer-logo'), 'the step reaches the logo pipeline');
   assert.ok(!code.includes('uri:') && !code.includes('http'), 'the step fetches an image');
-  for (const forbidden of ['shadow', 'LinearGradient', 'BlurView', 'riskPalette', 'Modal']) {
-    assert.ok(!code.includes(forbidden), `the retailers step uses ${forbidden}`);
+  for (const forbidden of [
+    'shadow',
+    'elevation',
+    'LinearGradient',
+    'BlurView',
+    'riskPalette',
+    'Modal',
+    "color['background/subtle']",
+  ]) {
+    assert.ok(!code.includes(forbidden), `the stores step uses ${forbidden}`);
   }
-  // One restrained existing lift, the Search Bar's, on the trigger alone.
-  assert.equal((code.match(/elevation/g) ?? []).length, 1);
-  assert.ok(codeOnly(componentBody(RETAILERS, 'SearchTrigger')).includes('elevation="card"'));
   // The pipeline is untouched: nothing in the manifest, no bundled marks.
   assert.deepEqual(retailerLogoCoverage().withLogo, []);
   assert.ok(!existsSync(join(SRC, '..', 'assets', 'retailer-logos')), 'retailer marks were added');
@@ -2265,64 +2297,116 @@ test('popular tiles carry no retailer mark, monogram, glyph or brand colour, and
   assert.ok(logo.includes('const MARKS: Readonly<Record<string, ImageSourcePropType>> = {};'));
 });
 
-test('Stores has no blue summary and no chips: one quiet count row whose slot never comes or goes', () => {
-  const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
-  // The summary surface, its chips and their copy are gone entirely.
+test('the count row on the receipt: quiet, derived from the saved selection, and its slot never comes or goes', () => {
+  const receipt = codeOnly(componentBody(RETAILERS, 'ReceiptContent'));
+  // No summary surface, chips or their copy.
   for (const gone of ['SelectedStores', 'chipScroll', 'removeStoreLabel', 'yourStoresTitle']) {
-    assert.ok(!codeOnly(RETAILERS).includes(gone), `Retailers still has ${gone}`);
+    assert.ok(!codeOnly(RETAILERS).includes(gone), `Stores still has ${gone}`);
   }
-  // The one soft blue left is the tiles' own checked state (their approved
-  // selected surface), never a container around the selection.
-  assert.equal(
-    (codeOnly(RETAILERS).match(/color\['background\/subtle'\]/g) ?? []).length,
-    1,
-    'a blue surface came back',
-  );
-  assert.ok(/layerChosen: \{\s*backgroundColor: color\['background\/subtle'\]/.test(RETAILERS));
-  // The quiet row: the count (which also covers search-only choices) and a
-  // compact Clear, no surface. Its SLOT is always laid out and only its
-  // visibility follows the selection, so the grid never moves.
-  assert.ok(step.includes('{storesCountLabel(selected.length)}'));
-  assert.ok(step.includes('<ClearAction onPress={clear} />'));
-  assert.ok(
-    step.includes('style={[styles.countRow, selected.length === 0 && styles.countRowIdle]}'),
-  );
-  assert.ok(step.includes('accessibilityElementsHidden={selected.length === 0}'));
-  assert.ok(!/selected\.length > 0 \? \(/.test(step), 'the row mounts conditionally again');
+  // Printed as the target prints it, spoken in full; it covers search-only
+  // choices too, because it reads the whole saved selection.
+  assert.ok(receipt.includes('const none = selected.length === 0;'));
+  assert.ok(receipt.includes('{storesCountShort(selected.length)}'));
+  assert.ok(receipt.includes('accessibilityLabel={storesCountLabel(selected.length)}'));
+  assert.ok(receipt.includes('<ClearAction onPress={onClear} />'));
+  // The SLOT is always laid out; only its visibility follows the selection.
+  assert.ok(receipt.includes('style={[styles.countRow, none && styles.countRowIdle]}'));
+  assert.ok(receipt.includes('accessibilityElementsHidden={none}'));
+  assert.ok(!/none \? \(|selected\.length > 0 \? \(/.test(receipt), 'the row mounts conditionally');
   assert.ok(/countRowIdle: \{\s*opacity: 0,\s*\}/.test(RETAILERS));
   assert.ok(!/countRow: \{[^}]*backgroundColor/s.test(RETAILERS), 'the count row grew a surface');
+  // Clear's 44pt target comes from hitSlop, kept clear of the first row's.
+  assert.ok(codeOnly(RETAILERS).includes('marginBottom: COUNT_GAP,'));
+  assert.ok(COUNT_GAP > Math.ceil((44 - STORES_TYPE.count.lineHeight) / 2));
   // Clear is still a TRUE no-op with nothing chosen.
+  const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
   assert.ok(step.includes('if (selected.length === 0) return;'));
+  assert.ok(step.includes('onClear={clear}'));
 });
 
-test('the search trigger sits beneath the ten: drawn as the Search Bar, a button without a chevron or a field', () => {
+test('Search all stores is the receipt’s last row: blue text and a blue magnifier, a button with no box, field or chevron', () => {
+  const action = codeOnly(componentBody(RETAILERS, 'SearchAction'));
+  assert.ok(action.includes('accessibilityRole="button"'));
+  assert.ok(action.includes('accessibilityLabel={SEARCH_ALL_STORES_LABEL}'));
+  assert.ok(action.includes('accessibilityHint={SEARCH_ALL_STORES_HINT}'));
+  assert.ok(action.includes('color="action/secondary"'));
+  assert.ok(action.includes('{SEARCH_ALL_STORES_LABEL}'));
+  assert.ok(action.includes('<Icon name="search" size={ROW_CHROME.check} color="icon/brand" />'));
+  assert.ok(action.indexOf('{SEARCH_ALL_STORES_LABEL}') < action.indexOf('<Icon'));
+  // One row: the label is a flexible text column that wraps within itself,
+  // and the magnifier a fixed column to its right, vertically centred. Nothing
+  // lets the icon wrap beneath the label.
+  assert.ok(action.includes('style={[STORES_TYPE.search, styles.rowText]}'));
+  const stepCode = codeOnly(RETAILERS);
+  const rowStyle = stepCode.slice(
+    stepCode.indexOf('  row: {'),
+    stepCode.indexOf('},', stepCode.indexOf('  row: {')),
+  );
+  assert.ok(rowStyle.includes("flexDirection: 'row',"));
+  assert.ok(rowStyle.includes("alignItems: 'center',"));
+  assert.ok(!rowStyle.includes('flexWrap'), 'the search row can wrap its icon beneath the label');
+  assert.ok(/rowText: \{\s*flex: 1,\s*\}/.test(RETAILERS));
+  for (const forbidden of ['<Surface', 'borderWidth', 'elevation']) {
+    assert.ok(!action.includes(forbidden), `the search action is drawn with ${forbidden}`);
+  }
   const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
-  const section = step.slice(step.indexOf('<View style={styles.section}>'));
-  assert.ok(
-    section.indexOf('retailers={POPULAR_RETAILERS}') < section.indexOf('<SearchTrigger'),
-    'the trigger is not below the popular stores',
-  );
-  assert.ok(
-    section.indexOf('<SearchTrigger') < section.indexOf('</View>'),
-    'the trigger left the section',
-  );
-  assert.ok(step.includes('<SearchTrigger ref={trigger} onPress={() => setSearchOpen(true)} />'));
-  const trigger = codeOnly(componentBody(RETAILERS, 'SearchTrigger'));
-  assert.ok(trigger.includes('accessibilityRole="button"'));
-  assert.ok(trigger.includes('accessibilityLabel={SEARCH_ALL_STORES_LABEL}'));
-  assert.ok(trigger.includes('accessibilityHint={SEARCH_ALL_STORES_HINT}'));
-  assert.ok(trigger.includes('{SEARCH_ALL_STORES_PLACEHOLDER}'));
-  assert.ok(trigger.includes('<Icon name="search" size={20} color="icon/secondary" />'));
-  assert.ok(trigger.includes('<Surface radius={12} elevation="card"'));
+  assert.ok(step.includes('onSearch={() => setSearchOpen(true)}'));
   // A button, never a second editable field, and never a way to another screen.
   const code = codeOnly(RETAILERS);
-  for (const forbidden of ['<TextInput', '<SearchBar', 'chevron', 'router', 'Link']) {
+  for (const forbidden of ['<TextInput', '<SearchBar', 'chevron-right', 'router', 'Link']) {
     assert.ok(!code.includes(forbidden), `the step has ${forbidden}`);
   }
+});
+
+test('the receipt illustration: three approved layers, decorative, the paper growing upward from its anchored foot', () => {
+  const code = codeOnly(RETAILERS);
+  const requires = code.match(/require\('[^']+'\)/g) ?? [];
+  assert.deepEqual(requires, [
+    "require('@/assets/brand/production/lotly-stores-receipt-scene.png')",
+    "require('@/assets/brand/production/lotly-stores-receipt-paper.png')",
+    "require('@/assets/brand/production/lotly-stores-receipt-overlap.png')",
+  ]);
+  // Decorative everywhere: out of the tree and out of the way of touches.
   assert.ok(
-    code.includes('minHeight: layout.searchBarHeight,'),
-    'the trigger is not the bar’s height',
+    code.includes(
+      "const DECORATIVE = {\n  accessible: false,\n  accessibilityElementsHidden: true,\n  importantForAccessibility: 'no-hide-descendants',\n  pointerEvents: 'none',\n} as const;",
+    ),
   );
+  assert.equal(
+    (code.match(/<Image\b/g) ?? []).length,
+    (code.match(/\{\.\.\.DECORATIVE\}/g) ?? []).length - 1,
+    'an image outside a decorative wrapper (the rule is the other one)',
+  );
+  // One scale for all three layers; the scene pinned to the bottom of a box
+  // at least as tall as it; the paper bottom-aligned above its anchor gap,
+  // so it grows UP and the box (and the scene with it) moves down.
+  const art = codeOnly(componentBody(RETAILERS, 'Illustration'));
+  assert.ok(art.includes('const scale = sceneScale(width);'));
+  assert.ok(art.includes('minHeight: SCENE_PX.height * scale,'));
+  assert.ok(art.includes('paddingBottom: PAPER_PX.bottomGap * scale,'));
+  assert.ok(art.includes("justifyContent: 'flex-end',"));
+  assert.ok(art.includes('{ width, height: SCENE_PX.height * scale, left: 0, bottom: 0 }'));
+  assert.ok(art.includes('paddingTop: PAPER_CLEARANCE,'));
+  // The paper: never shorter than exported, torn top and foot 1:1, and only
+  // the slice stretched; the overlap fixed to its bottom, under the contents.
+  const paper = codeOnly(componentBody(RETAILERS, 'ReceiptPaper'));
+  assert.ok(paper.includes('minHeight: paperHeight,'));
+  assert.ok(paper.includes('resizeMode="stretch"'));
+  assert.equal((paper.match(/resizeMode=/g) ?? []).length, 1, 'more than the slice stretches');
+  assert.ok(paper.includes('bottom: OVERLAP_PX.bottom * scale,'));
+  assert.ok(paper.indexOf('<Image source={OVERLAP}') < paper.indexOf('{children}'));
+  // Stacked from the accessibility sizes: the illustration whole (all three
+  // layers, blank), then the paper alone holding the receipt.
+  const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
+  assert.ok(step.includes("const stacked = receiptLayout(fontScale) === 'stacked';"));
+  assert.ok(step.includes('<Illustration width={sceneWidth} />'));
+  assert.ok(step.includes('<Illustration width={sceneWidth}>{receipt}</Illustration>'));
+  assert.ok(step.includes('slice={STACKED_SLICE_PX}>'));
+  assert.equal((code.match(/<Image source=\{SCENE\}/g) ?? []).length, 1, 'the scene drawn twice');
+  // Static: no entrance, and the art is never tinted or cropped to fit.
+  for (const forbidden of ['tintColor', "'cover'", 'MASCOT_ENTRANCE', 'Animated.View']) {
+    assert.ok(!code.includes(forbidden), `the illustration uses ${forbidden}`);
+  }
 });
 
 test('the search is ONE sheet over the step, which stays mounted: a transparent Modal, no dependency, no second sheet', () => {
@@ -2334,8 +2418,8 @@ test('the search is ONE sheet over the step, which stays mounted: a transparent 
     'the step renders differently while searching',
   );
   assert.ok(step.includes('onClose={() => setSearchOpen(false)}'));
-  assert.ok(step.includes('onClosed={focusTrigger}'));
-  // Focus goes back to the trigger once the sheet has gone.
+  assert.ok(step.includes('onClosed={focusSearch}'));
+  // Focus goes back to `Search all stores` once the sheet has gone.
   assert.ok(step.includes('AccessibilityInfo.setAccessibilityFocus(tag)'));
   // A React Native Modal: the step behind takes no touch and is hidden from
   // assistive technology for as long as it is presented.
@@ -2531,11 +2615,15 @@ test('the sheet and the step share the one saved selection; choosing never close
   const sheetUse = step.slice(step.indexOf('<RetailerSearchSheet'));
   assert.ok(sheetUse.includes('selected={selected}'));
   assert.ok(sheetUse.includes('onToggle={onToggle}'));
-  // The grid and the sheet: one selection, one toggle (the summary and its
-  // chips are gone; the quiet count row reads the same `selected`).
+  // The receipt and the sheet: one selection, one toggle (the count row
+  // reads the same `selected`).
   assert.equal((step.match(/selected=\{selected\}/g) ?? []).length, 2);
   assert.equal((step.match(/onToggle=\{onToggle\}/g) ?? []).length, 2);
-  assert.ok(step.includes('{storesCountLabel(selected.length)}'));
+  assert.ok(
+    codeOnly(componentBody(RETAILERS, 'ReceiptContent')).includes(
+      'accessibilityLabel={storesCountLabel(selected.length)}',
+    ),
+  );
   assert.ok(!step.includes('onRemove='), 'a chip removal came back');
   const contents = codeOnly(componentBody(SEARCH_SHEET, 'SheetContents'));
   assert.ok(contents.includes('checked={selected.includes(retailer.id)}'));
@@ -2645,7 +2733,7 @@ test('Profile keeps the shared store selector exactly as it was', () => {
   }
 });
 
-test('Retailers: Continue is always enabled, and Back, Continue, saving and the resume point are as before', () => {
+test('Stores: Continue is always enabled, and Back, Continue, saving and the resume point are as before', () => {
   const route = codeOnly(ROUTES.retailers);
   assert.ok(route.includes("void access.recordShownStep('retailers');"));
   assert.ok(route.includes('onToggle={(id) => update(toggleRetailer(prefs, id))}'));
@@ -2660,61 +2748,26 @@ test('Retailers: Continue is always enabled, and Back, Continue, saving and the 
   );
   assert.ok(route.includes("onBack={() => goBackFrom('retailers', router)}"));
   const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
-  assert.ok(step.includes('footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}'));
+  assert.ok(step.includes('<ContinueButton onPress={onContinue} />'));
   assert.ok(step.includes("progress={stepProgress('retailers')}"));
+  assert.ok(step.includes('back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}'));
   assert.equal(
     progressAccessibilityLabel(stepProgress('retailers')!),
     'Onboarding progress, step 5 of 5',
   );
 });
 
-test('M03 stands beside the heading, whole, decorative and untouchable, and settles once only without Reduce Motion', () => {
-  const code = codeOnly(RETAILERS);
-  assert.ok(
-    code.includes("require('@/assets/brand/production/lotly-mascot-ready-1024.png')"),
-    'Retailers does not draw M03',
-  );
-  assert.equal((code.match(/require\(/g) ?? []).length, 1, 'Retailers bundles a second picture');
-  assert.equal((code.match(/<Image\b/g) ?? []).length, 1);
-  const mascot = codeOnly(componentBody(RETAILERS, 'ReadyMascot'));
-  assert.ok(mascot.includes('resizeMode="contain"'));
-  assert.ok(mascot.includes('style={{ width: READY_MASCOT_SIZE, height: READY_MASCOT_SIZE }}'));
-  for (const hidden of [
-    'pointerEvents="none"',
-    'accessible={false}',
-    'accessibilityElementsHidden',
-    'importantForAccessibility="no-hide-descendants"',
-  ]) {
-    assert.ok(mascot.includes(hidden), `the mascot lacks ${hidden}`);
-  }
-  for (const forbidden of ['tintColor', "'cover'", '"cover"', 'Animated.loop', 'iterations']) {
-    assert.ok(!mascot.includes(forbidden), `the mascot uses ${forbidden}`);
-  }
-  // The helper mascot's entrance, decided once, skipped unless Reduce Motion is known off.
-  assert.ok(mascot.includes('const [animate] = useState(() => motionAllowed(reduceMotion));'));
-  assert.ok(mascot.includes('new Animated.Value(animate ? 0 : 1)'));
-  assert.ok(mascot.includes('if (!animate) return;'));
-  assert.ok(mascot.includes('delay: MASCOT_ENTRANCE.delay,'));
-  // Beside the heading through the frame's aside, and yielding at AX sizes.
-  const step = codeOnly(componentBody(RETAILERS, 'RetailersStep'));
-  assert.ok(step.includes('aside={showReadyMascot(fontScale) ? <ReadyMascot /> : null}'));
-  assert.equal(READY_MASCOT_SIZE, 120);
-  const frame = codeOnly(FRAME);
-  assert.ok(frame.includes('{aside ? ('));
-  assert.ok(frame.includes('{heading}\n            {aside}'));
-  // The frame gives the aside its own width and the text the rest.
-  assert.ok(frame.includes('headingBeside: {\n    flex: 1,\n  },'));
+test('no onboarding step draws an aside but the paywall (M03 left Stores with the receipt)', () => {
   for (const [name, source] of [
     ['welcome', WELCOME],
     ['states', STATES],
     ['allergens', ALLERGENS],
+    ['retailers', RETAILERS],
     ['preview', PREVIEW],
     ['education', EDUCATION],
   ] as const) {
     assert.ok(!codeOnly(source).includes('aside='), `${name} gained an aside`);
   }
-  // The polish pass gave the paywall (M04) the same aside system (States'
-  // M02 aside left with the grocery-atlas composition); no other screen has one.
   for (const [name, source] of [['panel', PANEL]] as const) {
     assert.ok(
       codeOnly(source).includes('aside={fontScale < HIDE_MASCOT_AT_SCALE ?'),
@@ -2723,26 +2776,30 @@ test('M03 stands beside the heading, whole, decorative and untouchable, and sett
   }
 });
 
-test('the approved Retailers mock-up is a design reference only: no source or config file references it', () => {
-  const reference = 'lotly-onboarding-retailers-popular-grid-target.png';
-  assert.ok(existsSync(join(SRC, '..', 'assets', 'brand', 'reference', reference)));
-  const hits: string[] = [];
-  const walk = (dir: string) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) walk(path);
-      else if (/\.(ts|tsx|js|jsx|json)$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
-        if (readFileSync(path, 'utf8').includes(reference)) hits.push(path);
+test('the approved Stores mock-ups are design references only: no source or config file references them', () => {
+  for (const reference of [
+    'lotly-onboarding-retailers-popular-grid-target.png',
+    'lotly-onboarding-stores-receipt-target.png',
+  ]) {
+    assert.ok(existsSync(join(SRC, '..', 'assets', 'brand', 'reference', reference)));
+    const hits: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (/\.(ts|tsx|js|jsx|json)$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
+          if (codeOnly(readFileSync(path, 'utf8')).includes(reference)) hits.push(path);
+        }
+      }
+    };
+    walk(SRC);
+    const root = join(SRC, '..');
+    for (const name of readdirSync(root)) {
+      if (/\.(js|cjs|mjs|ts|json)$/.test(name) && name !== 'package-lock.json') {
+        if (readFileSync(join(root, name), 'utf8').includes(reference)) hits.push(name);
       }
     }
-  };
-  walk(SRC);
-  const root = join(SRC, '..');
-  for (const name of readdirSync(root)) {
-    if (/\.(js|cjs|mjs|ts|json)$/.test(name) && name !== 'package-lock.json') {
-      if (readFileSync(join(root, name), 'utf8').includes(reference)) hits.push(name);
-    }
+    assert.deepEqual(hits, []);
   }
-  assert.deepEqual(hits, []);
   assert.ok(!codeOnly(RETAILERS).includes('brand/reference'));
 });

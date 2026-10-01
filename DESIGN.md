@@ -367,16 +367,14 @@ The product name is **Lotly**. The approved mascot set is six poses in
 mechanical alpha repair: a fully opaque drawing with only its antialiased
 edge translucent (`src/lib/mascot-assets.test.ts` pins the set). The set's
 contact sheet is brand documentation, in `assets/brand/reference`. M01 left
-Welcome with the receipt composition (2026-09-29) and M02 left States with
-the grocery-atlas composition (2026-09-30); like M05, both are drawn
-nowhere. M03 is
-beside the Retailers step's heading (Popular stores, 2026-09-24), M04 on
-the building interstitial (2026-09-28), and M06 hanging over the Ready
-step's summary card (2026-09-26); M05 waits for its own screen. The two
-"ready" poses are different characters in different roles: M03 (the
-grocery-bag pose) stays on Retailers, and M06 (the trust-peek pose: the
-arrow body cut flat to stand behind a ledge, a shield in its right paw)
-exists only for the Ready card's edge. M04, the standing watchful pose
+Welcome with the receipt composition (2026-09-29), M02 left States with
+the grocery-atlas composition (2026-09-30), and M03 (the grocery-bag pose)
+left Stores with the receipt composition (2026-09-30), whose mascot is part
+of its approved scene; like M05, all three are drawn nowhere. M04 is on
+the building interstitial (2026-09-28), and M06 hangs over the Ready
+step's summary card (2026-09-26); M05 waits for its own screen. M06 (the
+trust-peek pose: the arrow body cut flat to stand behind a ledge, a shield
+in its right paw) exists only for the Ready card's edge. M04, the standing watchful pose
 (shield-check and refresh arrow), is the interstitial's: the watch being
 assembled and verified. The paywall draws no mascot. M06 is a transparent raster
 production asset, not SVG, and is never redrawn in code. The file as
@@ -1052,7 +1050,7 @@ is drawn full at once; nothing loops. The
 scrolling content column at the 16pt margin, capped at `max-content-width`:
 the headline in `heading-1`, the body in `body` `text/secondary` (with an
 optional decorative `aside` beside them at the trailing edge, which the text
-never overlaps: the Retailers mascot), then the screen's own content,
+never overlaps: the paywall's mascot), then the screen's own content,
 `spacing/16` apart. A sticky footer on the page colour
 above a `border/subtle` hairline, padded by the bottom inset, holding the
 screen's actions as the shared `Button` (primary for the one forward action,
@@ -1226,40 +1224,48 @@ over 150ms (ease-out, opacity only, native driver) — no scale, bounce,
 movement or loop. Under Reduce Motion, or while the setting is unknown, the
 final state is drawn at once ("Reduced motion").
 
-**Retailers (2026-09-24): Popular stores first.** Beside the heading and
-body, M03 (`lotly-mascot-ready-1024.png`, the grocery-bag pose) at 120pt
-through the frame's `aside`, drawn whole, decorative, and omitted from a
-text scale of 1.5 so the heading can take the width. Then one quiet
-utility row with no surface (polish pass; the blue summary and its chips
-are retired): `N stores selected` in `body-small` `text/secondary` at the
-leading edge and `Clear` at the trailing edge as a compact text action
-(`body-small-bold`, never underlined, `action/secondary`; a 44pt target
-through hitSlop). The row's slot is always laid out; with nothing chosen it
-is invisible and hidden from assistive technology, so the grid never moves
-and the empty and selected states share one spacing. The count also covers
-stores chosen through the search, which the ten tiles cannot show.
+**Stores (2026-09-30): the receipt.** The founder-approved composition
+(`assets/brand/reference/lotly-onboarding-stores-receipt-target.png`) built
+from three production layers and native UI, drawing its own page as Welcome
+and States do (the frame's top bar, back and five-segment progress; a local
+footer). `Your regulars.` in Public Sans Bold 44/50 and `Choose the stores
+where your household buys food.` in 18/23 `text/secondary` in a 290pt
+measure, left aligned at the page margin; then the illustration across the
+full width, `spacing/8` below the body; then `Continue`, a local 51pt
+`action/primary` pill with an 18pt label (the shared Button is unchanged).
+The illustration is the scene (backdrop, mascot, table, produce bag,
+towel), the blank receipt paper and a small overlap (the glove and two lime
+rays, with the shadows they cast on the paper), all at ONE scale, the page
+width over 934, and decorative. The receipt's contents are native, in a
+column inset 92px and 68px from the paper's sides (the target's dotted
+rules): `Popular stores` in Bold 22/27; the count row — `2 selected` in
+Medium 14/19 `text/secondary` (spoken `2 stores selected`) and `Clear` in
+SemiBold 14/19 `action/secondary`, a 44pt target through hitSlop, the slot
+always laid out and invisible with nothing chosen; then seven 1pt dashed
+`border/strong` rules around six quick choices — Walmart, Costco, Kroger,
+Aldi, Target, Trader Joe's (`src/lib/retailer-grid.ts`), each one checkbox
+row, the name in Regular 16/21 and the shared 20pt Check Row indicator
+(navy with a white check when chosen, outlined when not) at the trailing
+edge, fading over 150ms (opacity only; at once under Reduce Motion); and
+`Search all stores` in Medium 16/21 `action/secondary` with the 20pt
+`search` glyph in `icon/brand` at the trailing edge: a button across the
+whole row, no box, field or chevron. Every row is at least 44pt tall and
+no target overlaps another. The target's rows are only 38pt apart at
+402pt, so the paper GROWS: its bottom stays anchored to the scene (the
+teeth, the table shadows and the glove's grip never move) and one slice of
+quiet paper (paper rows 32–356) stretches, lifting the receipt's top above
+the blue backdrop onto the page (founder-approved); the illustration
+reserves that height in the page's flow, so the scene moves down and the
+receipt never meets the headline. No retailer logo, wordmark, brand
+colour, monogram or glyph, by decision
+(`docs/retailer-logo-source-audit.md`). From text scale 1.5 the step
+stacks: the illustration whole with its receipt blank (all three layers),
+then the paper alone at the page's content width holding the receipt, its
+whole quiet body (paper rows 32–830) stretching; the headline takes the
+`heading-2` base (23pt) and the receipt heading `heading-3`, both still
+scaled. Measurements and rules: `src/lib/stores-receipt-presentation.ts`.
 
-Then `Popular stores` in `heading-3` and ten tiles, `spacing/8` apart, in
-the curated order (Walmart, Costco, Kroger, Aldi, Target, Trader Joe's,
-Sam's Club, Safeway, Publix, Ralphs; `src/lib/retailer-grid.ts`), deliberately
-not alphabetical. A tile is the Allergens tile without a picture: one
-`radius/12` surface padded 16 each way, the catalog's full name in `body`
-and the Check Row's 20pt indicator at the trailing edge, `spacing/12` apart;
-open, `background/surface` with a `border/default` edge; chosen, the soft
-blue `background/subtle` with an `action/primary` edge AND a filled
-indicator, the chosen surface a layer that fades in over 150ms (opacity
-only; at once under Reduce Motion). No retailer logo, wordmark, brand
-colour, monogram, generated art or `home` glyph, by decision
-(`docs/retailer-logo-source-audit.md`). Two columns at every standard text
-size on every supported phone and one full-width column from text scale 1.5
-(`retailerGridColumns`, measured like the Allergens rule; names wrap between
-words, never inside one, and never stack). Beneath the grid, `spacing/12`
-below it, the search trigger: drawn as the shared Search Bar ("Search Bar")
-— its surface, `card` lift, `search` glyph and `caption` text reading
-`Not listed? Search all stores` — but a button, spoken `Search all stores`,
-with no chevron and no field of its own.
-
-**Retailers search sheet.** The trigger opens a contextual sheet over the
+**Stores search sheet.** `Search all stores` opens a contextual sheet over the
 step (`src/components/onboarding/retailer-search-sheet.tsx`; React Native's
 transparent `Modal`, no dependency). The step stays mounted and exactly where
 it was, dimmed by a full-screen backdrop of `text/primary` at 40%, and takes
@@ -1276,7 +1282,7 @@ itself; and `Done`, the primary Button, pinned over the bottom inset above a
 `border/subtle` hairline. Before a query the region holds one line, `Search
 the complete store list.`; with no match, only `No stores found.`, both
 `body-small` `text/secondary`. Matches are single-column rows, `spacing/8`
-apart, deliberately unlike the popular tiles: one `radius/12` row, padded 16
+apart: one `radius/12` row, padded 16
 across and 12 down, the catalog name in `body` and the 20pt Check Row
 indicator at the trailing edge; open, `background/surface` with a
 `border/default` edge; chosen, the soft blue `background/subtle` with an
@@ -2635,13 +2641,12 @@ yet` / `Pull down to refresh.`
   no longer promises a formal policy and the Corrections Policy no longer
   promises a support contact. Both destinations stay open blockers in
   `docs/recall-launch-blockers.md`, and nothing was invented in their place.
-- **One onboarding exception (P2B7X.1).** The founder's final first-launch
-  copy says `retailers` in the Retailers step's body (`Choose the retailers
-you want Lotly to watch for in recall notices. This is optional.`). It is
-  exempt by exact string in `consumer-copy.test.ts`, as Detail's
-  `Retailers:` is; every other onboarding string keeps `store`. The Preview
-  summary's row label, the second exception until 2026-09-26, now reads
-  `Stores`. The onboarding, paywall and education copy
+- **No onboarding exception.** Onboarding says `store` everywhere. The
+  Retailers step's old body (`Choose the retailers you want Lotly to watch
+for in recall notices.`) was exempt by exact string in
+  `consumer-copy.test.ts` until the receipt Stores (2026-09-30) replaced it
+  with `Choose the stores where your household buys food.`; Detail's
+  `Retailers:` label is the one exemption left. The onboarding, paywall and education copy
   otherwise follows every rule above and lives in `src/lib/onboarding-copy.ts`
   and `src/lib/paywall-screen.ts`.
 

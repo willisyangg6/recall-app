@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "approvalStatus": "founder-approved visual target; production extraction pending",
+  "approvedOn": "2026-09-30",
+  "reference": {
+    "path": "assets/brand/reference/lotly-onboarding-stores-receipt-target.png",
+    "width": 934,
+    "height": 1684,
+    "mode": "RGB",
+    "sha256": "06dfcfc8b2a8db26b892f462d24f281ef68da47ac1677c945fc2945295dd236b",
+    "containsOSChrome": false
+  },
+  "supersedes": [
+    "old popular-store grid composition",
+    "four-row receipt concept",
+    "six-row receipt with top search and inline expansion"
+  ],
+  "nativeCopy": {
+    "headline": "Your regulars.",
+    "body": "Choose the stores where your household buys food.",
+    "receiptHeading": "Popular stores",
+    "clear": "Clear",
+    "searchAction": "Search all stores",
+    "cta": "Continue"
+  },
+  "quickChoiceOrder": [
+    "Walmart",
+    "Costco",
+    "Kroger",
+    "Aldi",
+    "Target",
+    "Trader Joe's"
+  ],
+  "behavior": {
+    "zeroSelectionsValid": true,
+    "defaultSelections": [],
+    "checkedReferenceRowsAreIllustrative": true,
+    "search": "existing full-catalog multi-select Stores sheet",
+    "inlineExpansion": false,
+    "topSearchField": false,
+    "countIncludesFullCatalogSelections": true,
+    "clearRemovesFullCatalogSelections": true
+  },
+  "artwork": {
+    "mascot": "approved corrected circular blue recall-arrow, short navy limbs, no bib",
+    "sceneIsStatic": true,
+    "requiresBlankReceiptAndNativeOverlay": true,
+    "productionAssetsIncluded": false,
+    "exactProductionHashes": "not yet available; completed export report will be authoritative"
+  },
+  "inspectionHintsNotCertifiedCrops": {
+    "sceneApproxBounds": [
+      0,
+      416,
+      934,
+      1438
+    ],
+    "paperApproxBounds": [
+      268,
+      476,
+      845,
+      1338
+    ]
+  },
+  "accessibility": {
+    "minimumNonOverlappingTargetPt": 44,
+    "sourceRowSpacingTooTightAt393Pt": true,
+    "nativePaperMayGrowToMeetTargetSize": true,
+    "unrestrictedDynamicType": true
+  },
+  "preservedScope": [
+    "Allergens unchanged",
+    "Welcome unchanged",
+    "statistics unchanged",
+    "States unchanged",
+    "existing navigation and progressive save",
+    "full canonical store catalog unchanged",
+    "Building deferred until after Stores"
+  ]
+}

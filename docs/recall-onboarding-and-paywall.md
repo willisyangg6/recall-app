@@ -24,9 +24,11 @@ search entry opening a chooser, removable chips (§6.1)._
 _P2B7Z (2026-09-24, uncommitted): the Allergens step as a two-column grid of
 tiles (§6.2)._
 
-_Popular stores (2026-09-24): the Retailers step opens on ten curated
-stores, a selected-store summary that appears once something is chosen, and
-a search over the full catalog in a sheet over the step (§6.3)._
+_Receipt Stores (2026-09-30, uncommitted): the founder-approved receipt
+composition replaces the ten-tile Popular stores (2026-09-24) — six quick
+choices on an illustrated grocery receipt that grows upward to hold real
+44pt rows, and one `Search all stores` action opening the full-catalog
+search sheet (§6.3)._
 
 _Visual polish pass (2026-09-28, uncommitted): the Ready preview is an
 image-led overlapping deck of uniform real cards ending on the real fourth
@@ -377,19 +379,19 @@ The copy is the founder's, verbatim, in `src/lib/onboarding-copy.ts` and
 `src/lib/paywall-screen.ts`; `onboarding-design.test.ts` and
 `paywall-screen.test.ts` pin every string.
 
-| Screen                    | Component                                                      | Route                       |
-| ------------------------- | -------------------------------------------------------------- | --------------------------- |
-| 1 Welcome                 | `WelcomeContent`                                               | `/onboarding/welcome`       |
-| 2 Problem: scale, 1 of 5  | `ProblemScaleStep`                                             | `/onboarding/problem-scale` |
-| 3 Problem: stakes, 2 of 5 | `ProblemRiskStep`                                              | `/onboarding/problem-risk`  |
-| 4 States, 3 of 5          | `StatesStep` and `StateSearchSheet`                            | `/onboarding/states`        |
-| 5 Allergens, 4 of 5       | `AllergensStep`: `AllergenTile` grid                           | `/onboarding/allergens`     |
-| 6 Retailers, 5 of 5       | `RetailersStep`: `RetailerTile` grid and `RetailerSearchSheet` | `/onboarding/retailers`     |
-| 7 Building your watch     | `BuildingStep` (once; outside the frame)                       | `/onboarding/building`      |
-| 8 Ready (the preview)     | `PreviewStep` with `ReadyCarousel`                             | `/onboarding/preview`       |
-| 9 Onboarding paywall      | `PaywallPanel` / `EntitledPaywallPanel` over the shared flow   | `/onboarding/paywall`       |
-| 10 Hard paywall (lapsed)  | `PaywallPanel` over the same flow                              | `/paywall`                  |
-| 11 Notification education | `NotificationEducation`                                        | `/onboarding/notifications` |
+| Screen                    | Component                                                    | Route                       |
+| ------------------------- | ------------------------------------------------------------ | --------------------------- |
+| 1 Welcome                 | `WelcomeContent`                                             | `/onboarding/welcome`       |
+| 2 Problem: scale, 1 of 5  | `ProblemScaleStep`                                           | `/onboarding/problem-scale` |
+| 3 Problem: stakes, 2 of 5 | `ProblemRiskStep`                                            | `/onboarding/problem-risk`  |
+| 4 States, 3 of 5          | `StatesStep` and `StateSearchSheet`                          | `/onboarding/states`        |
+| 5 Allergens, 4 of 5       | `AllergensStep`: `AllergenTile` grid                         | `/onboarding/allergens`     |
+| 6 Stores, 5 of 5          | `RetailersStep`: the receipt and `RetailerSearchSheet`       | `/onboarding/retailers`     |
+| 7 Building your watch     | `BuildingStep` (once; outside the frame)                     | `/onboarding/building`      |
+| 8 Ready (the preview)     | `PreviewStep` with `ReadyCarousel`                           | `/onboarding/preview`       |
+| 9 Onboarding paywall      | `PaywallPanel` / `EntitledPaywallPanel` over the shared flow | `/onboarding/paywall`       |
+| 10 Hard paywall (lapsed)  | `PaywallPanel` over the same flow                            | `/paywall`                  |
+| 11 Notification education | `NotificationEducation`                                      | `/onboarding/notifications` |
 
 **Welcome (the receipt composition, 2026-09-29).** The founder-approved
 full-screen target
@@ -475,13 +477,12 @@ its own tile of the same geometry. The Ready step showed it too, labelled
 the same card surface (§6.4). Since 2026-09-29 no screen draws it; the
 component stays for a later decision.
 
-**One copy exception.** The Retailers step's body (`Choose the retailers you
-want Lotly to watch for in recall notices. This is optional.`) says
-`retailers`, which the app-wide copy rule otherwise forbids in favour of
-`store`. It is the founder's final copy for this flow and is exempted by exact
-string in `consumer-copy.test.ts`; everything else in onboarding keeps `Search
-stores` and `N stores selected`. The Preview summary's row label was the
-second exception until the Ready redesign (§6.4), which renamed it `Stores`.
+**No copy exception.** Onboarding says `store` everywhere (`Search stores`,
+`N stores selected`). The Retailers step's old body (`Choose the retailers
+you want Lotly to watch for in recall notices.`) was the one exemption until
+the receipt Stores (2026-09-30) replaced it with `Choose the stores where
+your household buys food.`; the Preview summary's row label, the second,
+became `Stores` with the Ready redesign (§6.4).
 
 **The purchase states** (the Ready step's plans and the paywall share them,
 §6.4), mapped by `paywallPresentation`: offering loading,
@@ -777,37 +778,88 @@ P2B7X.1 content; only the shared progress bar reached them. Their redesigns
 are later milestones. Retailers was redesigned next (§6.3), then the Preview
 (§6.4).
 
-### 6.3 The Retailers step: Popular stores (2026-09-24)
+### 6.3 The Stores step: the receipt (2026-09-30)
 
-**What it is.** The heading, body, `3 of 4` progress (spoken `Step 3 of 4:
-Stores`), Back and Continue are unchanged. Beside the heading stands M03,
-the grocery-bag mascot. Beneath it, the quiet count row (visible once a
-store is chosen); the ten **Popular stores**; and a **search trigger**
-that opens a **search sheet** over the whole catalog. It is one screen with
-no modes: nothing navigates, nothing replaces the curated composition, and no
-region on the step is held for results. Composition and tokens are in
-[../DESIGN.md](../DESIGN.md) "Onboarding and paywall".
+**What it is.** The founder-approved composition
+(`assets/brand/reference/lotly-onboarding-stores-receipt-target.png`, 934px
+wide, pinned by its manifest's SHA-256) built natively from THREE production
+layers and native UI: back and progress (the frame's own
+`OnboardingTopBar`, spoken `Step 5 of 5`), `Your regulars.`, `Choose the
+stores where your household buys food.`, the illustration across the full
+width — the mascot holding a grocery receipt, a produce bag, a towel — with
+the receipt's contents native, and `Continue`. It replaces the Popular
+stores step of 2026-09-24: its ten tiles, its `Not listed? Search all stores`
+field and the M03 aside. There is no top search field, no `See more` or
+`Show fewer`, and no inline expansion. Composition, type and colours:
+[../DESIGN.md](../DESIGN.md) "Stores (the receipt)"; measurements and rules:
+`src/lib/stores-receipt-presentation.ts`.
 
-**Popular stores, curated.** Ten tiles, read row by row, left to right, in
-this exact order: Walmart (`walmart`), Costco (`costco`), Kroger (`kroger`),
-Aldi (`aldi`), Target (`target`), Trader Joe's (`trader-joes`), Sam's Club
-(`sams-club`), Safeway (`safeway`), Publix (`publix`), Ralphs (`ralphs`). The
-order is an intentional product curation, not alphabetical and not a
-ranking: the label is `Popular stores` and nothing claims size, sales or
-nearness. The ids live once, in `POPULAR_RETAILER_IDS`
-(`src/lib/retailer-grid.ts`), and resolve through `retailerById` to the
-catalog's own records, so a tile shows the catalog's name (`Aldi`, not the
-mock-up's `ALDI`) and saves the catalog's id. The catalog is unchanged at 77
-entries. The ten are the same for every shopper: not personalized by state
-or location, and no location is read.
+**The layers.** `assets/brand/production/lotly-stores-receipt-scene.png`
+(934×1032: backdrop, mascot, table, bag, towel, transparent where the
+receipt covers it), `…-paper.png` (579×863: the blank receipt, every
+printed label, rule and checkbox removed and its paper restored) and
+`…-overlap.png` (113×483: the glove and two lime rays, with the shadows they
+cast on the paper), founder-approved 2026-09-30 and pinned byte-for-byte by
+`src/lib/stores-receipt-assets.test.ts` against
+`assets/brand/reference/stores-receipt/lotly-stores-receipt-asset-report.json`
+(offsets, slices, hashes, repair footprints, limits; with its review sheets;
+none of it bundled). All three draw at ONE scale, the page width over 934,
+so the mascot and food are never stretched. They are decorative: hidden
+from assistive technology, touching nothing, static.
 
-**The search trigger.** Beneath the ten, where the curated list ends, sits a
-button drawn as the app's Search Bar (`src/components/ui/search-bar.tsx`'s
-surface, lift and `search` glyph) reading `Not listed? Search all stores`,
-spoken `Search all stores` with the hint that it opens a search of the
-complete store list. It has no chevron and is not a text field: the only
-field is the sheet's. Pressing it opens the sheet; the step itself does not
-move.
+**A receipt that grows upward.** The target's rows are 38pt apart at 402pt,
+too close for 44pt targets, so the paper grows instead of the targets
+shrinking. Its contents lay out at their real size — every row at least
+44pt, at the reader's text size — and the paper takes whatever height they
+need: its bottom stays anchored to the scene (the teeth, the table shadows
+and the glove's grip never move) and one slice of quiet paper (paper rows
+32–356) stretches, lifting the torn top. The illustration reserves that
+height in the page's flow, so the scene moves down and the receipt never
+meets the headline; the founder approved the top rising above the blue
+backdrop onto the page. The paper is never shorter than exported: the
+scene is transparent exactly where the receipt covers it, because nothing
+hidden behind the receipt was invented. Growing downward is not supported —
+the receipt flares toward its foot, so it would expose scenery that does not
+exist (asset report). On iPhone 17 at the default size the receipt grows
+about 45pt; on the SE, where the page then scrolls above the footer, about
+67pt.
+
+**The receipt.** Top to bottom: `Popular stores` (a header); the count row;
+seven dashed rules around six quick choices, in this curated order —
+Walmart (`walmart`), Costco (`costco`), Kroger (`kroger`), Aldi (`aldi`),
+Target (`target`), Trader Joe's (`trader-joes`); and `Search all stores`.
+The ids live once, in `POPULAR_RETAILER_IDS` (`src/lib/retailer-grid.ts`),
+and resolve to the catalog's own records. The order is a curation, not a
+ranking: nothing claims size, sales or nearness, and the six are the same
+for every shopper. Fewer quick choices is not less coverage: Sam's Club,
+Safeway, Publix, Ralphs and every other store of the unchanged 77 are one
+search away (`retailer-grid.test.ts` finds each by name). Each quick choice
+is ONE checkbox element — the canonical name, checked or not, the whole
+row its target — with the shared Check Row indicator hidden inside it.
+`Search all stores` is blue text and a blue magnifier across the whole row:
+a button, with no box, field or chevron. No retailer logo, wordmark, brand
+colour, monogram or glyph ([retailer-logo-source-audit.md](retailer-logo-source-audit.md);
+§8).
+
+**The count row.** `2 selected` (spoken `2 stores selected`) and `Clear`,
+with no surface. It reads the whole saved selection, so a store chosen
+through the search is counted though no row shows it, and `Clear` removes
+those too. Its slot is permanently allocated (the P2B7V rule): with nothing
+chosen it is invisible and out of the accessibility tree, so the first
+choice or the last clear never moves the rows. `Clear`'s 44pt target comes
+from hitSlop, and the gap beneath the row keeps it clear of Walmart's.
+
+**Accessibility sizes: stacked.** From text scale 1.5 the receipt's column
+cannot hold a name word, so the step stacks: the illustration drawn whole
+with its receipt blank and unstretched (all three layers — the scene cannot
+render alone), then the paper alone at the page's content width holding the
+receipt, with wider insets. That receipt spreads its growth over its whole
+quiet body (paper rows 32–830), which keeps the paper's grain within about
+2.5× at AX5 where one slice would streak it. The headline takes the
+`heading-2` base (23pt) and the receipt heading `heading-3`, both still
+scaled by the reader's setting. Nothing caps Dynamic Type; names wrap
+between words. Intrinsic limit: on the 375pt SE at AX5 the headline's final
+period wraps alone under `regulars` (352.8pt of word in a 343pt column).
 
 **The search sheet.** `RetailerSearchSheet`
 (`src/components/onboarding/retailer-search-sheet.tsx`) is React Native's
@@ -835,9 +887,8 @@ punctuation- and surrounding-whitespace-insensitive, on name and aliases,
 results in name order — except that an empty, blank or punctuation-only
 query is no search at all: the region shows `Search the complete store
 list.`, never the whole catalog. Matches are single-column rows
-(`RetailerResultRow`), the name and the checkbox at the trailing edge,
-deliberately unlike the two-column popular tiles; with no match, the region
-is one line, `No stores found.` Only the region's content changes as the
+(`RetailerResultRow`), the name and the checkbox at the trailing edge;
+with no match, the region is one line, `No stores found.` Only the region's content changes as the
 shopper types; it scrolls inside itself.
 
 Choosing a result checks it at once and keeps the sheet, keyboard and query
@@ -847,143 +898,68 @@ all do one thing: put the keyboard away and close, keeping every choice —
 lives in the sheet's contents, which mount with each opening and unmount
 with each close, so it starts blank every time and on every launch, and it
 never reaches the step, the route or the preference store. When the sheet
-has gone, VoiceOver focus returns to the trigger. The shared
+has gone, VoiceOver focus returns to `Search all stores`. The shared
 `StoreSelectorContent` is not mounted by onboarding; the Profile store sheet
 uses it unchanged.
 
-**One selection.** The step holds no draft. Every tile, result, chip removal
-and `Clear` goes through the route's `onToggle` / `onClear`, which save
+**One selection.** The step holds no draft. Every row, search result and
+`Clear` goes through the route's `onToggle` / `onClear`, which save
 progressively through the one preference store exactly as before
 (`toggleRetailer`; `clearRetailers` hands back the same preferences object
-for an empty list, so an empty clear saves nothing). A store chosen as a
-popular tile or in the sheet is checked in both places and counted in the
-count row at once — behind the sheet too, while it is open.
-Continue is always enabled; Back, Continue, the Preview's store row (then
-`Retailers`, `Stores` since §6.4) and the resume point are unchanged. No schema, storage shape or backend
-changed.
+for an empty list, so an empty clear saves nothing). A store chosen on the
+receipt or in the sheet is checked in both places and counted at once —
+behind the sheet too, while it is open. When the sheet has gone, focus
+returns to `Search all stores`. Continue is always enabled; Back
+(Allergens), Continue (the one-time building interstitial, then Ready;
+straight to Ready once it has played, or back to Ready when editing from
+it), the route and the resume point are unchanged. No schema, storage shape
+or backend changed.
 
-**The count row (polish pass; the summary is retired).** The blue
-selected-store summary — its surface, its `Your stores · N` title and its
-removable chips — is gone: it duplicated the tiles' own checked state and
-made the step read like a settings screen. In its place is one quiet
-utility row with no surface: `N stores selected` in secondary `body-small`
-and the compact `Clear` at the trailing edge. The count matters because a
-store chosen through the search is selected without being one of the ten
-visible tiles. The row's slot is permanently allocated (the P2B7V rule):
-with nothing chosen it is invisible and hidden from assistive technology,
-so choosing the first store or clearing the last never moves the grid, and
-the empty and selected states share one spacing. A search-only store is
-cleared by `Clear` or unchecked in the sheet. The body copy lost `This is
-optional.` — the step stays optional (Continue is never disabled).
+**Accessibility.** The illustration is not in the tree. `Popular stores`
+is a header; the count reads `N stores selected` before `Clear`, which says
+`Unchecks every store.`; each quick choice is one checkbox element;
+`Search all stores` is a button with the hint that it opens a search of the
+complete store list. The sheet is `accessibilityViewIsModal` inside a
+`Modal`, so the step behind leaves the tree while it is open; there
+`Search all stores` is a header, the field is `Search stores`, `Close` and
+`Done` say `Closes the search. Your choices are kept.`, and what a search
+found is announced once per change (`7 stores found.`, `No stores
+found.`). Every target is at least 44pt and none overlaps another.
 
-**The grid adapts deterministically.** `retailerGridColumns(width,
-fontScale)` is the Allergens rule with this tile's 64pt chrome (16pt padding
-each side, a 12pt gap, the 20pt checkbox): two columns while the widest name
-word (`Safeway`, 63.9pt in `body`, measured from the bundled Public Sans;
-`retailer-grid.test.ts` re-measures every word) fits a half-width tile's
-name line at the reader's size, one column otherwise and always from the
-accessibility sizes (text scale 1.5). In practice: two columns at every
-standard size on every supported phone, with every whole name on one line
-at the default size (the SE's half-width line is 103.5pt; `Trader Joe's` is
-86.7pt); names wrap between words from xxLarge; one full-width column from
-AX1. A full-width tile holds the widest word even at AX5 on the SE, so the
-tile never stacks. Text size is never capped and names are never shortened
-or truncated.
+**Motion.** None of its own: the art is static and has no entrance. A
+row's checkbox fades over 150ms (opacity only); the sheet slides as
+described above; under Reduce Motion, or while that setting is unknown,
+both are simply there.
 
-**Logo-free, deliberately.** Popular tiles carry the name and a checkbox
-only: no retailer logo, wordmark, brand colour, monogram, generated art or
-`home` glyph. Whether Lotly may show retailer marks at all is open
-([retailer-logo-source-audit.md](retailer-logo-source-audit.md); §8), so this
-screen ships without them and needs none. The logo pipeline is untouched:
-the manifest is empty and no asset was added.
+**Verified on device (2026-09-30).** Through the iOS accessibility tree,
+screenshots, pixel comparison and recorded video, on the review simulator
+(iPhone 17, 402pt) and the QA iPhone SE (3rd generation). The tree reads
+Back, `Onboarding progress, step 5 of 5`, the headline, the body, `Popular
+stores`, (the count and `Clear` once something is chosen), the six
+checkboxes, `Search all stores` and `Continue`, with no image in it. Rows
+are 44pt on a 46pt pitch. Walmart and Costco checked read `2 stores
+selected` and moved nothing. `Search all stores` opened the sheet with the
+field focused; `wegm` found Wegmans, `sam` Sam's Club, `zzqq` `No stores
+found.`; choosing Wegmans made `3 stores selected`; a quick toggle after the
+search made 4; reopening showed Wegmans checked and a blank field; `Close`
+and `Done` kept every choice; `Clear` removed all four including Wegmans and
+returned the screen to within 3 units of the untouched one (the development
+tools button and ±1 compositing only). Aldi and Wegmans reached Ready
+(`Stores: Aldi and Wegmans`), came back with Back and survived a kill and
+relaunch; Back from Stores reached Allergens (`step 4 of 5`). From a reset
+record, Continue played the building interstitial (`Watching the stores
+you chose`) and then Ready; with it played, Continue went straight to
+Ready. Video: with Reduce Motion off the checkbox fades over about 170ms;
+with it on it changes between one frame and the next. The SE at the default
+size scrolls the search action above the footer; iPhone 17 and the SE at
+AX5 stack as described, every row reachable. VoiceOver speech was not
+listened to: focus return is in code, not heard.
 
-**Accessibility.** Each tile is one checkbox element: the canonical name,
-checked or unchecked, the whole tile its target, with the drawn checkbox
-hidden inside it. With nothing chosen the count row is hidden from
-assistive technology; with a choice, the count (`2 stores selected`) reads
-before `Clear`, which says `Unchecks every store.`
-`Popular stores` is a header; the search trigger is a button labelled
-`Search all stores` with its hint. The sheet is `accessibilityViewIsModal`
-inside a `Modal`, so while it is open the step behind is out of the
-accessibility tree. In the sheet, `Search all stores` is a header, the
-field is labelled `Search stores`, `Close` and `Done` are labelled buttons
-with the hint `Closes the search. Your choices are kept.`, the clear-query
-control is `Clear search`, and each result is ONE checkbox element — the
-canonical name, checked or unchecked, the drawn checkbox hidden inside it.
-The drag indicator is not in the tree. What a search found is announced as
-it changes (`7 stores found.`, `1 store found.`, `No stores found.`), once
-per change and never on a re-render or a repeated no-match keystroke. React
-Native's explicit `experimental_accessibilityOrder` is behind a native
-feature flag that is off by default, so it is not
-used. Every target is at least 44pt (`Clear` through
-hitSlop). The mascot is not in the accessibility tree.
-
-**Mascot.** M03, `assets/brand/production/lotly-mascot-ready-1024.png`,
-120pt beside the heading and body through the frame's `aside` slot: drawn
-whole with `contain`, never cropped, tinted or recoloured, decorative,
-hidden from VoiceOver and `pointerEvents="none"`. The text takes the width
-the mascot leaves, so the two cannot overlap. From the accessibility sizes
-(text scale 1.5) it is not drawn and the heading takes the full width.
-
-**Motion.** The mascot's one entrance is the States helper's: a fade with an
-8pt settle after the push, once, only when Reduce Motion is known to be off.
-A tile's chosen surface and checkbox fade over 150ms, opacity only, as on
-Allergens. Nothing loops. The sheet slides up over 280ms (ease-out) as the
-backdrop fades in, and back over 200ms (ease-in); under Reduce Motion, or
-while that setting is unknown, both are simply there and simply gone. The
-count row and the sheet's results appear and go without a transition of
-their own. Under Reduce Motion the mascot and tiles are drawn at once.
-
-**Verified on device (2026-09-24).** Through the iOS accessibility tree
-and screenshots, iPhone 17 at the default size: two columns; the chip row
-scrolling to the newest choice as stores are added. A recorded push shows
-the mascot fading in after the slide with Reduce Motion off, and arriving
-with the route's cross-dissolve and no fade of its own with it on.
-
-**Search sheet verified on device (2026-09-24).** Through the iOS
-accessibility tree, screenshots, pixel comparison and recorded video. iPhone
-17 at the default size: with nothing chosen there is no summary in the tree
-or on screen; the trigger is a button `Search all stores` with its hint.
-Opening the sheet removes the step from the accessibility tree entirely,
-leaving the header, `Close`, the `Search stores` field (focused, caret
-showing), the instruction and `Done`. `wegm` found one row, `co` seven, `e`
-a long list that scrolls inside the region, `zzqq` the one line `No stores
-found.`; with the software keyboard up the field, `Clear` and the first
-rows sit above it. Across those states the sheet's header band, its `Done`
-band and the dimmed step above it are pixel-identical, and a screenshot
-before opening and after opening, typing three queries and closing with
-`Close` are pixel-identical over the whole screen. Choosing Wegmans, Costco
-and PCC Community Markets in one visit kept the sheet, query and keyboard
-open each time; a tap on the backdrop closed it with all three in the
-summary and Costco's popular tile checked. Reopening starts blank with
-Wegmans still checked; `Done` kept every choice; removing a chip unchecked
-that store in the sheet; a popular tile chosen behind was checked in the
-sheet; `Clear` removed popular and searched stores together and returned a
-screen pixel-identical to the first, summary-free one. Aldi and Wegmans
-reached the Preview (`Retailers: Aldi and Wegmans.`), came back with Back,
-and survived a kill and relaunch, with the sheet blank on reopening. Video
-frames: with Reduce Motion off the sheet rises from the bottom to 20% of
-the window over about 250ms as the backdrop darkens, and falls in about
-200ms; with it on, both appear and disappear between one frame and the next.
-iPhone SE (3rd generation): at the default size and at xxxLarge the field
-and the first two rows sit above the keyboard, and the step behind returns
-in place after `Done`. At AX5 the heading takes two lines and a result can
-be about 190pt tall (a single long name such as `Albertsons` breaks inside
-the word at that size on a 375pt screen), so with the keyboard up only the
-top of the first result shows above it; its name is readable and it can be
-chosen there, and the keyboard's search key puts the keyboard away to show
-full rows and `Done`, which closed the sheet with the choice kept. The macOS
-bridge sometimes reports an element's role as another element's (a result
-row as `AXButton`, `Clear search` as a generic element); labels and
-`checkbox, checked` values were consistent throughout. VoiceOver speech was
-not listened to: the announcement and the return of focus to the trigger
-are in code, not heard.
-
-**Reference.** The approved mock-up
-(`assets/brand/reference/lotly-onboarding-retailers-popular-grid-target.png`)
-is documentation only: no source or config file references it
-(`onboarding-design.test.ts`), and the production iOS export does not
-contain it (checked by content hash, 2026-09-24).
+**Reference.** The approved mock-ups
+(`assets/brand/reference/lotly-onboarding-stores-receipt-target.png` and the
+earlier `lotly-onboarding-retailers-popular-grid-target.png`) are
+documentation only: no source or config file references them
+(`onboarding-design.test.ts`, `stores-receipt-assets.test.ts`).
 
 ### 6.4 The Ready step: the personalized preview (2026-09-26; carousel 2026-09-28)
 
@@ -1168,7 +1144,8 @@ The file as supplied was 1254×1254 with 625,268 pixels at alpha 240–254 and
 a `caBX` metadata chunk. It was repaired with the mascots' mechanical rule
 at its own size, then uniformly resampled to 1024. It was not cropped,
 shifted or recoloured, and has zero enclosed holes. It replaces nothing:
-M03, the grocery-bag "ready" pose, stays on Retailers. The paywall draws no
+M03, the grocery-bag "ready" pose, is a different character (it left
+Stores with the receipt, 2026-09-30, and is drawn nowhere). The paywall draws no
 mascot; the watchful pose M04 now belongs to the building interstitial
 (§6.6), and M05 stays unreferenced.
 
@@ -1569,8 +1546,8 @@ against the live corpus, with the rebuilt dev client:
 `src/components/ui/retailer-logo.tsx` renders a store's mark beside its name
 in the store sheet's rows under Profile, or the shared `home` glyph when no
 trustworthy mark is bundled. Never on a recall card, never in Detail's
-retailer row, and never on the onboarding Retailers step, whose popular
-tiles and search-result rows are logo-free by decision (§6.3).
+retailer row, and never on the onboarding Stores step, whose quick choices
+and search-result rows are logo-free by decision (§6.3).
 
 - One fixed container, `RETAILER_LOGO_BOX` (40 × 24 pt), for every row. A
   mark is CONTAINED in it: its aspect ratio is preserved, nothing is
@@ -1660,50 +1637,52 @@ What P2B7X.2 does, and what it does not touch:
 
 ## 11. Tests
 
-| Concern                                                                                                                                                                                                                                                                                                                                                                                                                                              | Test                                                                                                               |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Record transitions, sticky completion and `watchBuilt`, empty optional ≠ incomplete, the v1→v2 migration that keeps the shopper's place, foreign blobs restart                                                                                                                                                                                                                                                                                       | `src/lib/onboarding-state.test.ts`                                                                                 |
-| Phase matrix, route matrix, layout order and guards, push-tap guard, no cross-phase navigation                                                                                                                                                                                                                                                                                                                                                       | `src/lib/access-gate.test.ts`                                                                                      |
-| Fail-closed, cached access, grace, launch timeout                                                                                                                                                                                                                                                                                                                                                                                                    | `src/lib/entitlement.test.ts`                                                                                      |
-| Unconfigured provider, adapter scenarios and containment, savings math, no USD in product code                                                                                                                                                                                                                                                                                                                                                       | `src/lib/purchases/purchase-provider.test.ts`                                                                      |
-| Paywall copy, prices, cards, state matrix, no close/free/trial/lifetime                                                                                                                                                                                                                                                                                                                                                                              | `src/lib/paywall-screen.test.ts`                                                                                   |
-| Release destinations and the readiness failure                                                                                                                                                                                                                                                                                                                                                                                                       | `src/lib/release-destinations.test.ts`                                                                             |
-| Allergen icons: coverage, one family, provenance, assets                                                                                                                                                                                                                                                                                                                                                                                             | `src/lib/allergen-icons.test.ts`                                                                                   |
-| Retailer logos: manifest parity, local-only, containment, fallback, a11y name                                                                                                                                                                                                                                                                                                                                                                        | `src/lib/retailer-logos.test.ts`                                                                                   |
-| Clear selection allocation, count lines, States gate, one store, copy, permission timing, example card, tokens                                                                                                                                                                                                                                                                                                                                       | `src/components/onboarding-design.test.ts`                                                                         |
-| Reset clears the record in order                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/lib/installation-reset.test.ts`                                                                               |
-| Route inventory and the release bundle boundary                                                                                                                                                                                                                                                                                                                                                                                                      | `src/lib/release-exposure.test.ts`                                                                                 |
-| States map: vocabulary coverage, hit testing in both views and the insets, one draft, empty clear, no network                                                                                                                                                                                                                                                                                                                                        | `src/lib/state-map.test.ts`                                                                                        |
-| Progress names and fills, motion gates, palettes, routes; the grocery-atlas States: one draft, composition, local type, chips, chooser                                                                                                                                                                                                                                                                                                               | `src/components/onboarding-design.test.ts`                                                                         |
-| Onboarding Clear hint vs the sheet's, the always-laid-out required note, the root fade under Reduce Motion, the reference mock-up unbundled                                                                                                                                                                                                                                                                                                          | `src/components/onboarding-design.test.ts`                                                                         |
-| The one `retailers` copy exception                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/lib/consumer-copy.test.ts`                                                                                    |
-| Allergens grid: canonical order, icons, two columns, one-column and stacked reflow, measured word widths, select/deselect/clear, count words                                                                                                                                                                                                                                                                                                         | `src/lib/allergen-grid.test.ts`                                                                                    |
-| Allergen pictograms: nine semantic pairs by static require, 1024² RGBA sRGB files, alpha repair pinned to the originals, 44pt box geometry, review artifacts unbundled                                                                                                                                                                                                                                                                               | `src/lib/allergen-assets.test.ts`                                                                                  |
-| Allergen tiles: one checkbox element, hidden pictogram and check, no layout change, compact Clear, motion gate, Back/Continue, mock-up unbundled                                                                                                                                                                                                                                                                                                     | `src/components/onboarding-design.test.ts`                                                                         |
-| Popular stores and search: the ten ids and order, one catalog record each, catalog unchanged at 77, case/punctuation/alias search, empty and no-match queries, the sheet's fixed top edge, toggle/chip/clear/empty clear, columns, measured word widths                                                                                                                                                                                              | `src/lib/retailer-grid.test.ts`                                                                                    |
-| Retailers step and search sheet: no second mode, no summary at zero, trigger below the ten without a chevron, one Modal sheet with a fixed frame and pinned Done, autofocus, instruction and no-match lines, single-column checkbox rows without marks, one shared selection, choosing keeps the sheet, every exit keeps choices, query never saved, Reduce Motion, overlay gone, Profile unchanged, Back/Continue/resume, M03, mock-up unreferenced | `src/components/onboarding-design.test.ts`                                                                         |
-| M03 on Retailers, M04 on the interstitial and paywall, M06 on Ready; M01, M02 and M05 unreferenced; M06's measured seat and repaired bytes                                                                                                                                                                                                                                                                                                           | `src/lib/mascot-assets.test.ts`                                                                                    |
-| The receipt Welcome's two images: approved bytes, RGBA sRGB at the measured sizes, the report's accuracy and superseded hero, drawn only by Welcome, no reference or source material imported                                                                                                                                                                                                                                                        | `src/lib/welcome-receipt-assets.test.ts`                                                                           |
-| The grocery-atlas States' scene: approved bytes, RGBA sRGB at the measured size, the report's accuracy, drawn only by States, no reference or source material imported                                                                                                                                                                                                                                                                               | `src/lib/states-grocery-atlas-assets.test.ts`                                                                      |
-| The States chooser's search (names, postal codes, Washington DC, no match, no duplicates) and the measured geometry                                                                                                                                                                                                                                                                                                                                  | `src/lib/states-presentation.test.ts`                                                                              |
-| Ready: allergen artwork for 0, 1, 2 and 3+ in canonical order, row labels, the mascot's seat at both size bounds, heading and rows clear of the shield, the accessibility-size stacking                                                                                                                                                                                                                                                              | `src/lib/ready-presentation.test.ts`                                                                               |
-| Ready: rows and order, artwork left and check right, one spoken element per row, untinted pictograms through the one map, the decorative mascot and its once-only entrance, Back/Edit/See my plan, the approved order (card → Edit → heading → pill → deck → locked strip → CTA), no purchase UI, honest empty/checking/unavailable states                                                                                                           | `src/components/onboarding-design.test.ts`                                                                         |
-| The carousel: horizontal snap and peek geometry, the real shared card surface and media tile, one spoken element per card with its position, no arrows/instruction copy/auto-advance/loop, truthful dots, the sentinel exposing nothing                                                                                                                                                                                                              | `src/components/onboarding-design.test.ts`, `src/lib/ready-presentation.test.ts`                                   |
-| The preview data: the Feed's own matching and ordering, at most three readable, the true total, zero/one/two/three/more-than-three, checking and unavailable, hidden matches absent entirely                                                                                                                                                                                                                                                         | `src/lib/ready-preview.test.ts`                                                                                    |
-| The problem screens: exact CDC copy and sources (comments only, never bundled), the spoken stat, the one-element pictograph, the four risk rows (one element each, decorative illustrations, heading-3 live labels, hairlines only between rows, no pill/card/background/grid), no mascot, no capped or truncated text, no unsupported statistics                                                                                                    | `src/components/onboarding-design.test.ts`                                                                         |
-| The statistic assets: byte-identical sources, production format/alpha/holes, the report's accuracy, the one-to-one mapping, no reference imported by app code                                                                                                                                                                                                                                                                                        | `src/lib/statistics-assets.test.ts`                                                                                |
-| The problem presentation rules: the accessibility threshold, the pictograph canvas, the risk rows' measured label widths, transparent-band trims, default iPhone 17 and SE fit arithmetic, larger-text and accessibility-size arrangements                                                                                                                                                                                                           | `src/lib/problem-presentation.test.ts`                                                                             |
-| The interstitial: truthful captions and both zero variants, ~3.2s timing, plays once and replaces itself, Reduce Motion static path, no loop, two announcements, safe preference-failure exit                                                                                                                                                                                                                                                        | `src/lib/building-watch.test.ts`, `src/components/onboarding-design.test.ts`                                       |
-| The segmented progress: five segments, no visible count, one spoken element, the five counted screens only                                                                                                                                                                                                                                                                                                                                           | `src/components/onboarding-design.test.ts`                                                                         |
-| One purchase flow: purchase, restore and offering loads called only in `use-purchase-flow.tsx`, announced outcomes, both paywall routes composing it, Ready touching none of it                                                                                                                                                                                                                                                                      | `src/components/onboarding-design.test.ts`                                                                         |
-| The paywall order (benefits → plans → controls → independence note → shared footer), no Ready content, the entitled panel without a purchase ask                                                                                                                                                                                                                                                                                                     | `src/components/onboarding-design.test.ts`                                                                         |
-| A paywall purchase completes personalization in the same commit and goes straight to education, never the paywall phase                                                                                                                                                                                                                                                                                                                              | `src/lib/access-gate.test.ts`                                                                                      |
-| The merged machinery is gone: no overlay footer, no scroll CTA rule, no merged copy in product source                                                                                                                                                                                                                                                                                                                                                | `src/components/onboarding-design.test.ts`                                                                         |
-| Polish pass — the image-led deck: ranked matches narrowed to image-bearing ones in rank order, three readable, the real fourth locked, no locked card without one, the strip counting every unshown match, deterministic                                                                                                                                                                                                                             | `src/lib/ready-preview.test.ts`                                                                                    |
-| Polish pass — uniform cards (reserved slots from the type scale, off from the accessibility sizes), the measured status row, restrained depth; the variant opt-in with no Feed or Saved caller                                                                                                                                                                                                                                                       | `src/lib/ready-presentation.test.ts`, `src/components/feed-design.test.ts`, `src/server/feed-saved-parity.test.ts` |
-| Polish pass — the deck's frosted real final card (one button, nothing exposed), Stores' quiet count row with no summary or chips, the story screens, the paywall's M04, check rows and corner badge                                                                                                                                                                                                                                                  | `src/components/onboarding-design.test.ts`                                                                         |
-| Polish pass — the progress fill only forward-by-one; Stores' Continue and the reset restoring the interstitial                                                                                                                                                                                                                                                                                                                                       | `src/lib/onboarding-state.test.ts`, `src/lib/onboarding-navigation.test.ts`                                        |
-| Store summary: three in full, then two and `+N more`, every store still spoken                                                                                                                                                                                                                                                                                                                                                                       | `src/lib/ready-presentation.test.ts`                                                                               |
+| Concern                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Test                                                                                                               |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Record transitions, sticky completion and `watchBuilt`, empty optional ≠ incomplete, the v1→v2 migration that keeps the shopper's place, foreign blobs restart                                                                                                                                                                                                                                                                                                                                                                                       | `src/lib/onboarding-state.test.ts`                                                                                 |
+| Phase matrix, route matrix, layout order and guards, push-tap guard, no cross-phase navigation                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/lib/access-gate.test.ts`                                                                                      |
+| Fail-closed, cached access, grace, launch timeout                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `src/lib/entitlement.test.ts`                                                                                      |
+| Unconfigured provider, adapter scenarios and containment, savings math, no USD in product code                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/lib/purchases/purchase-provider.test.ts`                                                                      |
+| Paywall copy, prices, cards, state matrix, no close/free/trial/lifetime                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `src/lib/paywall-screen.test.ts`                                                                                   |
+| Release destinations and the readiness failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/lib/release-destinations.test.ts`                                                                             |
+| Allergen icons: coverage, one family, provenance, assets                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/lib/allergen-icons.test.ts`                                                                                   |
+| Retailer logos: manifest parity, local-only, containment, fallback, a11y name                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/lib/retailer-logos.test.ts`                                                                                   |
+| Clear selection allocation, count lines, States gate, one store, copy, permission timing, example card, tokens                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/components/onboarding-design.test.ts`                                                                         |
+| Reset clears the record in order                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/lib/installation-reset.test.ts`                                                                               |
+| Route inventory and the release bundle boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `src/lib/release-exposure.test.ts`                                                                                 |
+| States map: vocabulary coverage, hit testing in both views and the insets, one draft, empty clear, no network                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/lib/state-map.test.ts`                                                                                        |
+| Progress names and fills, motion gates, palettes, routes; the grocery-atlas States: one draft, composition, local type, chips, chooser                                                                                                                                                                                                                                                                                                                                                                                                               | `src/components/onboarding-design.test.ts`                                                                         |
+| Onboarding Clear hint vs the sheet's, the always-laid-out required note, the root fade under Reduce Motion, the reference mock-up unbundled                                                                                                                                                                                                                                                                                                                                                                                                          | `src/components/onboarding-design.test.ts`                                                                         |
+| No `retailers` copy exception left in onboarding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/lib/consumer-copy.test.ts`                                                                                    |
+| Allergens grid: canonical order, icons, two columns, one-column and stacked reflow, measured word widths, select/deselect/clear, count words                                                                                                                                                                                                                                                                                                                                                                                                         | `src/lib/allergen-grid.test.ts`                                                                                    |
+| Allergen pictograms: nine semantic pairs by static require, 1024² RGBA sRGB files, alpha repair pinned to the originals, 44pt box geometry, review artifacts unbundled                                                                                                                                                                                                                                                                                                                                                                               | `src/lib/allergen-assets.test.ts`                                                                                  |
+| Allergen tiles: one checkbox element, hidden pictogram and check, no layout change, compact Clear, motion gate, Back/Continue, mock-up unbundled                                                                                                                                                                                                                                                                                                                                                                                                     | `src/components/onboarding-design.test.ts`                                                                         |
+| Stores quick choices and search: the six ids and order, one catalog record each, the other four and every store findable, catalog unchanged at 77, case/punctuation/alias search, empty and no-match queries, the sheet's fixed top edge, toggle/clear/empty clear                                                                                                                                                                                                                                                                                   | `src/lib/retailer-grid.test.ts`                                                                                    |
+| Stores receipt layout: the slice maps to its rows at any height, the paper grows on every phone for 44pt rows, targets never overlap, scene vs stacked by text size, every word fits its column (measured from the font), the SE AX5 headline limit                                                                                                                                                                                                                                                                                                  | `src/lib/stores-receipt-presentation.test.ts`                                                                      |
+| Stores receipt layers: approved bytes and format, the report's offsets and slice, only Stores draws them, no reference imported                                                                                                                                                                                                                                                                                                                                                                                                                      | `src/lib/stores-receipt-assets.test.ts`                                                                            |
+| Stores step and search sheet: no second mode and none of the retired grid, six checkbox rows in order, no marks, the count row's allocated slot, the search action, the three decorative layers growing upward and stacking, one Modal sheet with a fixed frame and pinned Done, autofocus, instruction and no-match lines, single-column checkbox results, one shared selection, choosing keeps the sheet, every exit keeps choices, query never saved, Reduce Motion, overlay gone, Profile unchanged, Back/Continue/resume, mock-ups unreferenced | `src/components/onboarding-design.test.ts`                                                                         |
+| M04 on the interstitial and paywall, M06 on Ready; M01, M02, M03 and M05 unreferenced; M06's measured seat and repaired bytes                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/lib/mascot-assets.test.ts`                                                                                    |
+| The receipt Welcome's two images: approved bytes, RGBA sRGB at the measured sizes, the report's accuracy and superseded hero, drawn only by Welcome, no reference or source material imported                                                                                                                                                                                                                                                                                                                                                        | `src/lib/welcome-receipt-assets.test.ts`                                                                           |
+| The grocery-atlas States' scene: approved bytes, RGBA sRGB at the measured size, the report's accuracy, drawn only by States, no reference or source material imported                                                                                                                                                                                                                                                                                                                                                                               | `src/lib/states-grocery-atlas-assets.test.ts`                                                                      |
+| The States chooser's search (names, postal codes, Washington DC, no match, no duplicates) and the measured geometry                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/lib/states-presentation.test.ts`                                                                              |
+| Ready: allergen artwork for 0, 1, 2 and 3+ in canonical order, row labels, the mascot's seat at both size bounds, heading and rows clear of the shield, the accessibility-size stacking                                                                                                                                                                                                                                                                                                                                                              | `src/lib/ready-presentation.test.ts`                                                                               |
+| Ready: rows and order, artwork left and check right, one spoken element per row, untinted pictograms through the one map, the decorative mascot and its once-only entrance, Back/Edit/See my plan, the approved order (card → Edit → heading → pill → deck → locked strip → CTA), no purchase UI, honest empty/checking/unavailable states                                                                                                                                                                                                           | `src/components/onboarding-design.test.ts`                                                                         |
+| The carousel: horizontal snap and peek geometry, the real shared card surface and media tile, one spoken element per card with its position, no arrows/instruction copy/auto-advance/loop, truthful dots, the sentinel exposing nothing                                                                                                                                                                                                                                                                                                              | `src/components/onboarding-design.test.ts`, `src/lib/ready-presentation.test.ts`                                   |
+| The preview data: the Feed's own matching and ordering, at most three readable, the true total, zero/one/two/three/more-than-three, checking and unavailable, hidden matches absent entirely                                                                                                                                                                                                                                                                                                                                                         | `src/lib/ready-preview.test.ts`                                                                                    |
+| The problem screens: exact CDC copy and sources (comments only, never bundled), the spoken stat, the one-element pictograph, the four risk rows (one element each, decorative illustrations, heading-3 live labels, hairlines only between rows, no pill/card/background/grid), no mascot, no capped or truncated text, no unsupported statistics                                                                                                                                                                                                    | `src/components/onboarding-design.test.ts`                                                                         |
+| The statistic assets: byte-identical sources, production format/alpha/holes, the report's accuracy, the one-to-one mapping, no reference imported by app code                                                                                                                                                                                                                                                                                                                                                                                        | `src/lib/statistics-assets.test.ts`                                                                                |
+| The problem presentation rules: the accessibility threshold, the pictograph canvas, the risk rows' measured label widths, transparent-band trims, default iPhone 17 and SE fit arithmetic, larger-text and accessibility-size arrangements                                                                                                                                                                                                                                                                                                           | `src/lib/problem-presentation.test.ts`                                                                             |
+| The interstitial: truthful captions and both zero variants, ~3.2s timing, plays once and replaces itself, Reduce Motion static path, no loop, two announcements, safe preference-failure exit                                                                                                                                                                                                                                                                                                                                                        | `src/lib/building-watch.test.ts`, `src/components/onboarding-design.test.ts`                                       |
+| The segmented progress: five segments, no visible count, one spoken element, the five counted screens only                                                                                                                                                                                                                                                                                                                                                                                                                                           | `src/components/onboarding-design.test.ts`                                                                         |
+| One purchase flow: purchase, restore and offering loads called only in `use-purchase-flow.tsx`, announced outcomes, both paywall routes composing it, Ready touching none of it                                                                                                                                                                                                                                                                                                                                                                      | `src/components/onboarding-design.test.ts`                                                                         |
+| The paywall order (benefits → plans → controls → independence note → shared footer), no Ready content, the entitled panel without a purchase ask                                                                                                                                                                                                                                                                                                                                                                                                     | `src/components/onboarding-design.test.ts`                                                                         |
+| A paywall purchase completes personalization in the same commit and goes straight to education, never the paywall phase                                                                                                                                                                                                                                                                                                                                                                                                                              | `src/lib/access-gate.test.ts`                                                                                      |
+| The merged machinery is gone: no overlay footer, no scroll CTA rule, no merged copy in product source                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/components/onboarding-design.test.ts`                                                                         |
+| Polish pass — the image-led deck: ranked matches narrowed to image-bearing ones in rank order, three readable, the real fourth locked, no locked card without one, the strip counting every unshown match, deterministic                                                                                                                                                                                                                                                                                                                             | `src/lib/ready-preview.test.ts`                                                                                    |
+| Polish pass — uniform cards (reserved slots from the type scale, off from the accessibility sizes), the measured status row, restrained depth; the variant opt-in with no Feed or Saved caller                                                                                                                                                                                                                                                                                                                                                       | `src/lib/ready-presentation.test.ts`, `src/components/feed-design.test.ts`, `src/server/feed-saved-parity.test.ts` |
+| Polish pass — the deck's frosted real final card (one button, nothing exposed), Stores' quiet count row with no summary or chips, the story screens, the paywall's M04, check rows and corner badge                                                                                                                                                                                                                                                                                                                                                  | `src/components/onboarding-design.test.ts`                                                                         |
+| Polish pass — the progress fill only forward-by-one; Stores' Continue and the reset restoring the interstitial                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/lib/onboarding-state.test.ts`, `src/lib/onboarding-navigation.test.ts`                                        |
+| Store summary: three in full, then two and `+N more`, every store still spoken                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/lib/ready-presentation.test.ts`                                                                               |
 
 The Design Preview hub renders every screen and every paywall state from the
 production components and offers gate scenarios that restart the real flow

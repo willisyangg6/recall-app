@@ -1,0 +1,540 @@
+{
+ "description": "Stores receipt artwork decomposed into three composable layers for native controls: a static scene (backdrop, mascot, tabletop, towel, produce bag) with the receipt footprint removed; a BLANK receipt paper (all printed UI removed, texture restored) that may grow taller through one stretch slice; and a small foreground overlap (glove, two lime rays, and the soft shadows they cast on the paper). Prepared for founder review; NOT imported by the app.",
+ "reportDate": "2026-09-30",
+ "status": "Founder visual approval received 2026-09-30 (layers and the upward-growth demonstration; the paper top may rise above the blue backdrop). Imported by the Stores step only (src/components/onboarding/retailers-step.tsx); the production bytes are unchanged from the export.",
+ "reference": {
+  "path": "assets/brand/reference/lotly-onboarding-stores-receipt-target.png",
+  "manifest": "assets/brand/reference/lotly-onboarding-stores-receipt-source-manifest.json",
+  "sha256": "06dfcfc8b2a8db26b892f462d24f281ef68da47ac1677c945fc2945295dd236b",
+  "manifestSha256Match": true,
+  "dimensions": [
+   934,
+   1684
+  ],
+  "chunks": [
+   "IHDR",
+   "caBX",
+   "IDAT",
+   "IEND"
+  ],
+  "colorProfile": "none (untagged RGB)",
+  "unchanged": true
+ },
+ "measuredPage": {
+  "referenceCream": [
+   254,
+   253,
+   248
+  ],
+  "note": "Mode of rows 395-410 and 1445-1500. The scene exterior is keyed to transparent and its antialiased top/bottom edges unmatted against this measured cream; the app token background/page #FDFCF6 (253,252,246) is 1-2 units darker, so those edge pixels carry at most that difference."
+ },
+ "layers": {
+  "compositeOrder": [
+   "page cream",
+   "scene",
+   "paper",
+   "overlap"
+  ],
+  "coordinateSpace": "Source pixels (934-wide reference). Native: scale every layer by (scene width in pt) / 934 — the same uniform factor for all three.",
+  "scene": {
+   "referenceBox_xyxy_exclusive": [
+    0,
+    407,
+    934,
+    1439
+   ],
+   "offsetInScene": [
+    0,
+    0
+   ]
+  },
+  "paper": {
+   "referenceBox_xyxy_exclusive": [
+    266,
+    474,
+    845,
+    1337
+   ],
+   "offsetInScene": [
+    266,
+    67
+   ],
+   "bottomAnchorSceneRow": 930
+  },
+  "overlap": {
+   "referenceBox_xyxy_exclusive": [
+    294,
+    552,
+    407,
+    1035
+   ],
+   "offsetInScene": [
+    294,
+    145
+   ],
+   "note": "Fixed to the scene (never moves with paper growth)."
+  }
+ },
+ "paperStretch": {
+  "sliceRowsInPaper": [
+   32,
+   356
+  ],
+  "sliceRowsInReference": [
+   506,
+   830
+  ],
+  "topCapRows": 32,
+  "bottomFixedRows": 507,
+  "rule": "Grow UPWARD only: keep the paper bottom at scene row 930 (same x offset), draw the top cap and bottom part 1:1, and stretch only the slice vertically. Never draw the paper shorter than its exported height.",
+  "why": "The receipt flares wider toward its foot (left edge x 305 -> 268, right edge 816 -> 844 over its height). Anchoring the bottom keeps the flare, teeth, table contact shadows and glove contact exactly where the scene expects them; every row above only ever moves onto a region that is narrower or equal, so the scene footprint stays covered. Growing downward slides narrower rows over the wide foot and exposes scenery that does not exist.",
+  "tested": [
+   {
+    "delta": 0,
+    "mode": "up",
+    "holePixels": 0,
+    "holeWeight": 0
+   },
+   {
+    "delta": 30,
+    "mode": "up",
+    "holePixels": 0,
+    "holeWeight": 0
+   },
+   {
+    "delta": 30,
+    "mode": "down",
+    "holePixels": 228,
+    "holeWeight": 93.4
+   },
+   {
+    "delta": 60,
+    "mode": "up",
+    "holePixels": 0,
+    "holeWeight": 0
+   },
+   {
+    "delta": 60,
+    "mode": "down",
+    "holePixels": 1164,
+    "holeWeight": 848.8
+   },
+   {
+    "delta": 120,
+    "mode": "up",
+    "holePixels": 0,
+    "holeWeight": 0
+   },
+   {
+    "delta": 120,
+    "mode": "down",
+    "holePixels": 3416,
+    "holeWeight": 2921.5
+   },
+   {
+    "delta": 200,
+    "mode": "up",
+    "holePixels": 0,
+    "holeWeight": 0
+   },
+   {
+    "delta": 200,
+    "mode": "down",
+    "holePixels": 5958,
+    "holeWeight": 5392.7
+   }
+  ],
+  "backdropBudget": {
+   "sourcePx": 26,
+   "atReferenceColumn": 453,
+   "note": "The paper top can rise this far before any column of it leaves the blue backdrop (~11 pt at 402 pt wide). Beyond that the paper top stands over the page cream (shown at +120 px in the stretch demo). Whether that is acceptable, or the native layout should add height another way, is a founder decision."
+  },
+  "sliceChoice": "Rows 506-830: below the tear shading and the crease at row 504, above the glove (from ~826). The left edge is vertical there (x 304.7-305.5, the <=0.75 px lean is covered by the scene safety ring) and the right edge only widens downward. The rays sit over this slice; they are in the overlap, so the stretched paper simply passes beneath them."
+ },
+ "operations": {
+  "silhouette": "Per-row side edges and per-column top/bottom edges measured from the reference (integral subpixel estimate from local outside/inside colours), gaps where the glove, rays or low-contrast background hide the edge filled by linear interpolation of measured rows. Edge-pixel coverage is data-driven from local refs where visible, geometric where occluded; a side-edge colour check re-derived coverage for 363 pixels where interpolation had reached into the bag or towel.",
+  "printedUiRemoval": "Ink core = paper pixels > 22 units from paper colour in x>=352, rows 530-1312 (459 components); footprint = ink core dilated 5 px (4-connected), where the measured halo ends by 3-4 px. Restored by Poisson (gradient-domain) fill guided by donor texture copied from clean paper strips (<=96 px wide), boundary = surrounding original paper. Removes Popular stores, 2 selected, Clear, six names, checkboxes/checkmarks, dotted rules, Search all stores and the magnifier.",
+  "underArt": "Paper beneath the glove and rays (art + 10 px ring, 6153 px) restored the same way, bounded by the un-shadowed paper around it.",
+  "castShadows": "Within 72 px of the glove/rays, the smooth shadow they cast on the paper (Gaussian 0.8-2.5 px local mean against a harmonic estimate of the unshadowed paper) is separated as minimal-alpha colour and moved to the overlap; the paper under it is the exact un-compositing of that shadow, so its own texture is kept (not replaced). Max shadow alpha 0.42; residual alpha at the zone boundary 0.011.",
+  "overlap": "Solid glove/ray pixels over the paper: original RGB, alpha 255. 10 px ring: exact unmix against the restored paper and shadow (smallest in-gamut alpha). Shadow: alpha + colour from the separation. Only pixels over the paper are included; the rest of the glove and rays stay in the scene.",
+  "sceneKey": "Welcome/States key: flood from the crop top row (limited to rows < 520) and the bottom row 1438 through near-cream pixels; soft edge unmatted against the measured cream. Receipt footprint (paper alpha 255) cleared to alpha 0; paper edge-band pixels hold the background side of the matte; a 2 px opaque safety ring of nearest-background colour lies just inside the footprint (hidden under the paper).",
+  "edgeMatte": "Paper edge pixels: coverage a split so a*paper + (1-a)*scene reproduces the source. a>=0.5: scene = nearest background, paper unmatted; otherwise paper = nearest interior paper, scene solved; background tint pushed to the scene side where that stays exact.",
+  "nearOpaqueLift": "Existing contract: alpha 240-254 set to 255 with the source RGB (not unmatted).",
+  "clearRgb": "Existing contract: alpha 0 has RGB 0.",
+  "colour": "Pure Node zlib decode/encode (no colour management); explicit sRGB + gAMA + cHRM, no ICC/text/time chunks. @napi-rs/canvas (existing devDependency) only lays out the review sheets. No dependency added; scripts lived in the session scratchpad.",
+  "nothingRegenerated": "No pixel of the mascot, face, glove, rays, feet, foods, bag, towel or tabletop was repainted, recoloured, sharpened, resampled or upscaled. Opaque scene pixels outside the receipt are byte-identical to the reference; opaque overlap art is byte-identical."
+ },
+ "repairFootprints": {
+  "paperCoordinates": "masks/lotly-stores-receipt-paper-repair-footprints.png (red = printed UI, green = under glove/rays, blue = cast-shadow separation, white = silhouette edge)",
+  "uiRepairPx": 90207,
+  "underArtPx": 6153,
+  "shadowZonePx": 10971
+ },
+ "layerStats": {
+  "overlap": {
+   "ovArtExact": 3318,
+   "ovRingOpaqueBand": 0,
+   "ovRingUnmixed": 2730,
+   "ovShadow": 10970,
+   "ovLifted": 11
+  },
+  "paper": {
+   "interiorOriginal": 343378,
+   "interiorUiRepaired": 88799,
+   "interiorUnshadowed": 10820,
+   "interiorUnderArtFilled": 5880,
+   "bandUnmattedPaper": 1784,
+   "bandSolvedScene": 2873,
+   "bandUnderArt": 168,
+   "lifted": 470,
+   "bandKeptMixed": 298,
+   "bandTintMovedToScene": 116
+  },
+  "scene": {
+   "exteriorCleared": 28549,
+   "exteriorNoiseCleared": 282,
+   "softEdgeMatted": 1965,
+   "lifted": 1572,
+   "paperFootprintCleared": 443273,
+   "bandOpaque": 5123,
+   "safetyRing": 5604,
+   "opaqueIdentical": 477520
+  },
+  "edgeColourCheck": {
+   "pixels": 363
+  }
+ },
+ "recomposition": {
+  "note": "Page cream + scene + paper + overlap at original geometry vs the reference, max channel error per pixel over the scene rectangle.",
+  "byRegion": {
+   "outside paper": {
+    "px": 509888,
+    "exact": 490192,
+    "le1": 507421,
+    "le2": 508704,
+    "le4": 509738,
+    "max": 7,
+    "mean": 0.047
+   },
+   "paper edge band": {
+    "px": 4850,
+    "exact": 4515,
+    "le1": 4837,
+    "le2": 4838,
+    "le4": 4842,
+    "max": 8,
+    "mean": 0.081
+   },
+   "paper, untouched": {
+    "px": 343378,
+    "exact": 343378,
+    "le1": 343378,
+    "le2": 343378,
+    "le4": 343378,
+    "max": 0,
+    "mean": 0
+   },
+   "printed UI (repaired, expected to differ)": {
+    "px": 90207,
+    "exact": 1184,
+    "le1": 12859,
+    "le2": 24834,
+    "le4": 38509,
+    "max": 255,
+    "mean": 57.612
+   },
+   "cast shadow (overlap)": {
+    "px": 9412,
+    "exact": 9200,
+    "le1": 9369,
+    "le2": 9398,
+    "le4": 9405,
+    "max": 8,
+    "mean": 0.031
+   },
+   "art ring (unmixed)": {
+    "px": 2835,
+    "exact": 2370,
+    "le1": 2835,
+    "le2": 2835,
+    "le4": 2835,
+    "max": 1,
+    "mean": 0.164
+   },
+   "art over paper (opaque overlap)": {
+    "px": 3318,
+    "exact": 3318,
+    "le1": 3318,
+    "le2": 3318,
+    "le4": 3318,
+    "max": 0,
+    "mean": 0
+   }
+  }
+ },
+ "files": [
+  {
+   "role": "source, EXACT crop (review only)",
+   "path": "assets/brand/reference/stores-receipt/source/lotly-stores-receipt-scene-source.png",
+   "sha256": "e453151d202371eedc6d434325fe7d6379b2ecbf284edd57e2dc91445ff12428",
+   "bytes": 1101150,
+   "dimensions": [
+    934,
+    1032
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    0,
+    407,
+    934,
+    1439
+   ],
+   "rgbSamplesDifferingFromReferenceCrop": 0
+  },
+  {
+   "role": "source, EXACT crop (review only)",
+   "path": "assets/brand/reference/stores-receipt/source/lotly-stores-receipt-paper-source.png",
+   "sha256": "653fbc1c6a775df2d977a8dd01fbe27f9fc4c7caf60684daacbc98717f24052c",
+   "bytes": 584406,
+   "dimensions": [
+    579,
+    863
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    266,
+    474,
+    845,
+    1337
+   ],
+   "rgbSamplesDifferingFromReferenceCrop": 0
+  },
+  {
+   "role": "source, EXACT crop (review only)",
+   "path": "assets/brand/reference/stores-receipt/source/lotly-stores-receipt-overlap-source.png",
+   "sha256": "87c629b176a39ae82686c4befa92ee54715710ec8feb260c6f21f5f0cce8dd4e",
+   "bytes": 70345,
+   "dimensions": [
+    113,
+    483
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    294,
+    552,
+    407,
+    1035
+   ],
+   "rgbSamplesDifferingFromReferenceCrop": 0
+  },
+  {
+   "role": "production candidate — DERIVED (receipt footprint removed, edges matted)",
+   "path": "assets/brand/production/lotly-stores-receipt-scene.png",
+   "sha256": "c13672616dd1f510bc5d565d477c0fc65bb0803ea7b4fa113fddbbcd1c47a4d4",
+   "bytes": 694983,
+   "dimensions": [
+    934,
+    1032
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    0,
+    407,
+    934,
+    1439
+   ],
+   "alphaCounts": {
+    "clear": 472104,
+    "edge1to239": 1965,
+    "nearOpaque240to254": 0,
+    "opaque": 489819,
+    "clearWithNonZeroRgb": 0
+   },
+   "opaquePixelsByteIdenticalToReference": 479688,
+   "opaquePixelsDerived": 10131
+  },
+  {
+   "role": "production candidate — DERIVED (blank, restored paper; not an exact crop)",
+   "path": "assets/brand/production/lotly-stores-receipt-paper.png",
+   "sha256": "50561405c89b49a2d69c540cd5e44472e38d6509305b27f845ca4737fbefb9f1",
+   "bytes": 485747,
+   "dimensions": [
+    579,
+    863
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    266,
+    474,
+    845,
+    1337
+   ],
+   "alphaCounts": {
+    "clear": 45705,
+    "edge1to239": 4625,
+    "nearOpaque240to254": 0,
+    "opaque": 449347,
+    "clearWithNonZeroRgb": 0
+   },
+   "opaquePixelsByteIdenticalToReference": 345024,
+   "opaquePixelsDerived": 104323
+  },
+  {
+   "role": "production candidate — DERIVED (exact art pixels + unmixed ring + separated shadow)",
+   "path": "assets/brand/production/lotly-stores-receipt-overlap.png",
+   "sha256": "1ccd1ef188b2e70b05d7cb9e8e0a1e248abb44b1521d40f697d11492d897ad8e",
+   "bytes": 37475,
+   "dimensions": [
+    113,
+    483
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    294,
+    552,
+    407,
+    1035
+   ],
+   "alphaCounts": {
+    "clear": 37562,
+    "edge1to239": 13586,
+    "nearOpaque240to254": 0,
+    "opaque": 3431,
+    "clearWithNonZeroRgb": 0
+   },
+   "opaquePixelsByteIdenticalToReference": 3431,
+   "opaquePixelsDerived": 0
+  },
+  {
+   "role": "repair footprint map (review only), paper coordinates",
+   "path": "assets/brand/reference/stores-receipt/masks/lotly-stores-receipt-paper-repair-footprints.png",
+   "sha256": "1a2c2c371ad3dd29a59b82133e2886faa38f5d98a48789721114756e67567c4c",
+   "bytes": 15346,
+   "dimensions": [
+    579,
+    863
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    266,
+    474,
+    845,
+    1337
+   ]
+  },
+  {
+   "role": "review sheet",
+   "path": "assets/brand/reference/stores-receipt/lotly-stores-receipt-asset-comparison.png",
+   "sha256": "53dd0b9bbd6258a263afa4e3e5f640f34f1d76fa1b7f6a0500436e874d6d3338",
+   "bytes": 2942075,
+   "dimensions": [
+    2400,
+    4080
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sBIT",
+    "sRGB",
+    "IDAT",
+    "IEND"
+   ],
+   "alphaCounts": {
+    "clear": 0,
+    "edge1to239": 0,
+    "nearOpaque240to254": 0,
+    "opaque": 9792000,
+    "clearWithNonZeroRgb": 0
+   }
+  },
+  {
+   "role": "review sheet",
+   "path": "assets/brand/reference/stores-receipt/lotly-stores-receipt-stretch-demo.png",
+   "sha256": "5b7392c9ec8c215447ce1eedb9c051cedce628eab08e3f10c1d19bd9d5d981eb",
+   "bytes": 1757066,
+   "dimensions": [
+    2400,
+    1010
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sBIT",
+    "sRGB",
+    "IDAT",
+    "IEND"
+   ],
+   "alphaCounts": {
+    "clear": 0,
+    "edge1to239": 0,
+    "nearOpaque240to254": 0,
+    "opaque": 2424000,
+    "clearWithNonZeroRgb": 0
+   }
+  }
+ ],
+ "limitations": [
+  "Growing the paper downward is not supported (exposes nonexistent scenery); growth is upward only, with ~26 source px before the paper top leaves the blue backdrop.",
+  "The scene cannot be shown without the paper: the receipt footprint is transparent (nothing hidden behind the receipt was invented). A stacked layout can draw scene + paper + overlap at default geometry as a decorative hero.",
+  "Under the glove the restored paper shows a faint outline at 4x contrast (1-2 units at 1x); it is hidden by the glove whenever the overlap is drawn.",
+  "298 paper edge pixels kept the source mixed colour on both sides of the matte and 22 partial-alpha edge pixels on the right edge still carry a bag/cucumber tint (alpha <= 166). Exact over the scene; faintly visible only if the paper is drawn on its own.",
+  "Scene top edge is matted against the reference cream (254,253,248), 1-2 units lighter than the app token; recomposition error there is <= 7 on a few pixels.",
+  "The torn top edge keeps its warm fibre tint (e.g. 253,220,184) — original paper art, not a halo."
+ ]
+}
