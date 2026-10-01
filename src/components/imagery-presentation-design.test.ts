@@ -126,7 +126,8 @@ test('P2B7I: an absent image renders no media column — no footprint, no placeh
   assert.ok(
     CARD.includes('style={[styles.statusRow, uniform && { minHeight: uniform.statusMinHeight }]}'),
   );
-  assert.ok(CARD.includes('<View style={styles.footerRow}>'));
+  // (The onboarding deck's uniform variant alone tightens the footer.)
+  assert.ok(CARD.includes('<View style={[styles.footerRow, uniform && styles.footerRowCompact]}>'));
   assert.ok(CARD.includes('<SaveRecallButton caseId={model.id} />'));
   assert.equal(layout.cardMediaSize, 112);
 });

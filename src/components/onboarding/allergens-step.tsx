@@ -104,6 +104,34 @@ export function AllergensStep({
   onContinue: () => void;
   onBack: () => void;
 }) {
+  return (
+    <OnboardingFrame
+      headline={ALLERGENS_HEADLINE}
+      body={ALLERGENS_BODY}
+      progress={stepProgress('allergens')}
+      back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}
+      footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}>
+      <AllergenGrid selected={selected} onToggle={onToggle} onClear={onClear} />
+    </OnboardingFrame>
+  );
+}
+
+/**
+ * The selector itself — the permanently allocated count line, `Clear
+ * selection` and the nine tiles — so the one-page Edit preferences shows
+ * exactly this grid in its chooser (2026-09-30). Controlled: it saves
+ * nothing; `onToggle` and `onClear` are the caller's.
+ */
+export function AllergenGrid({
+  selected,
+  onToggle,
+  onClear,
+}: {
+  selected: readonly string[];
+  onToggle: (token: string) => void;
+  /** Empties the selection. Called only while something is selected. */
+  onClear: () => void;
+}) {
   const { width, fontScale } = useWindowDimensions();
   const columns = allergenGridColumns(width, fontScale);
   const stacked = allergenTileStacked(width, fontScale);
@@ -120,43 +148,36 @@ export function AllergensStep({
   const controls = <ClearAction disabled={selected.length === 0} onPress={clear} />;
 
   return (
-    <OnboardingFrame
-      headline={ALLERGENS_HEADLINE}
-      body={ALLERGENS_BODY}
-      progress={stepProgress('allergens')}
-      back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}
-      footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}>
-      <View style={styles.selector}>
-        {/* The count beside Clear; stacked from one column, where the row is
-            the accessibility sizes' and the words need the width. */}
-        <View style={[styles.countRow, columns === 1 && styles.countRowStacked]}>
-          {/* One element in the 44pt box, so its frame starts level with
-              Clear's and VoiceOver reads the count first. */}
-          <View accessible style={styles.count}>
-            <SelectionCount text={allergenCountLabel(selected.length)} />
-          </View>
-          <View style={styles.controls}>{controls}</View>
+    <View style={styles.selector}>
+      {/* The count beside Clear; stacked from one column, where the row is
+          the accessibility sizes' and the words need the width. */}
+      <View style={[styles.countRow, columns === 1 && styles.countRowStacked]}>
+        {/* One element in the 44pt box, so its frame starts level with
+            Clear's and VoiceOver reads the count first. */}
+        <View accessible style={styles.count}>
+          <SelectionCount text={allergenCountLabel(selected.length)} />
         </View>
-        <View style={styles.grid}>
-          {allergenGridRows(CONSUMER_ALLERGENS, columns).map((row) => (
-            <View key={row[0].token} style={styles.gridRow}>
-              {row.map((option) => (
-                <AllergenTile
-                  key={option.token}
-                  option={option}
-                  checked={selected.includes(option.token)}
-                  onPress={() => onToggle(option.token)}
-                  stacked={stacked}
-                  reduceMotion={reduceMotion}
-                />
-              ))}
-              {/* A short last row keeps its tile at column width. */}
-              {row.length < columns ? <View style={styles.gridSpacer} /> : null}
-            </View>
-          ))}
-        </View>
+        <View style={styles.controls}>{controls}</View>
       </View>
-    </OnboardingFrame>
+      <View style={styles.grid}>
+        {allergenGridRows(CONSUMER_ALLERGENS, columns).map((row) => (
+          <View key={row[0].token} style={styles.gridRow}>
+            {row.map((option) => (
+              <AllergenTile
+                key={option.token}
+                option={option}
+                checked={selected.includes(option.token)}
+                onPress={() => onToggle(option.token)}
+                stacked={stacked}
+                reduceMotion={reduceMotion}
+              />
+            ))}
+            {/* A short last row keeps its tile at column width. */}
+            {row.length < columns ? <View style={styles.gridSpacer} /> : null}
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
 

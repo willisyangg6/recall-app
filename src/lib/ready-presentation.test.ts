@@ -1,122 +1,149 @@
 /**
- * The Ready step's presentation rules (lib/ready-presentation.ts): the
- * allergen artwork for every selection size, canonical order whatever the
- * tap order, the rows' spoken names, and the trust-peek mascot's seat at both
- * size bounds. The artwork's measurements are checked against the PNG itself
- * in mascot-assets.test.ts.
+ * The Ready step's presentation rules (lib/ready-presentation.ts, the
+ * preference-board Ready, 2026-09-30): where the board's native rows may go,
+ * how far the board grows before the page switches to its full-width
+ * preferences, what each board row shows and says, the allergen plate for
+ * every selection size, and the deck's geometry. The layer offsets
+ * themselves are checked against the asset report in
+ * ready-board-assets.test.ts.
  */
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { CONSUMER_ALLERGENS } from '@/domain/preferences';
-import { PREVIEW_NONE, PREVIEW_ROW_COMPLETED } from '@/lib/onboarding-copy';
+import { PREVIEW_NONE } from '@/lib/onboarding-copy';
 import {
   allergenArtwork,
-  DECK_NEXT_SCALE,
-  DECK_TUCK,
-  PREVIEW_REASON_LINES,
-  PREVIEW_TITLE_LINES,
-  previewCardLayout,
-  previewCardUniform,
+  atAccessibilitySize,
+  BOARD_GROWTH_MAX_PX,
+  boardCapacity,
+  boardColumnWidth,
+  boardGrowthMax,
+  boardLayout,
+  boardRowLabel,
+  boardValue,
+  DECK_CARD_PADDING,
+  DECK_COMMIT_FRACTION,
+  DECK_FLICK_VELOCITY,
+  DECK_REAR_LAYERS,
+  DECK_REAR_PEEK,
+  DECK_REAR_SCALE,
+  deckCardHeight,
+  deckDotCount,
+  deckDragPosition,
+  deckExitDistance,
+  deckFrontWidth,
+  deckPose,
+  deckPoseRanges,
+  deckReleaseTarget,
   deckStatusHeight,
-  CAROUSEL_GAP,
-  READY_BODY_ASIDE_FRACTION,
-  readyBodyAside,
-  CAROUSEL_PEEK,
-  carouselActiveIndex,
-  carouselCardWidth,
-  carouselSnapInterval,
-  moreLabel,
-  pawDepth,
+  headlineType,
   PICTOGRAM_INK,
   PICTOGRAM_PAIR,
   PICTOGRAM_PAIR_STEP,
   PICTOGRAM_SINGLE,
-  READY_MASCOT_MAX,
-  READY_MASCOT_MIN,
-  readyMascotLift,
-  readyMascotOffset,
-  readyMascotOverlap,
-  readyMascotReserve,
-  readyMascotRight,
-  readyMascotSize,
+  PREVIEW_BRAND_LINES,
+  PREVIEW_REASON_LINES,
+  PREVIEW_TITLE_LINES,
+  previewCardLayout,
+  previewCardUniform,
+  READY_TYPE,
   ROW_WELL_SIZE,
-  shieldDepth,
-  shieldReach,
-  STORE_SUMMARY_LIMIT,
-  storeSummaryText,
-  SUMMARY_PADDING,
-  SUMMARY_ROW_GAP,
-  summaryHeaderMinHeight,
-  summaryHeadingInset,
-  summaryHeadingLayout,
-  summaryRowLabel,
-  summaryStacked,
+  sceneScale,
+  sliceImagePlacement,
+  wholePoints,
 } from '@/lib/ready-presentation';
 
-test('nothing chosen draws no pictogram at all', () => {
+/** The three widths that matter: the target's 393pt, iPhone 17's 402pt and the SE's 375pt. */
+const WIDTHS = [393, 402, 375] as const;
+
+test('the board holds its native rows inside the measured safe rectangle at every QA width', () => {
+  // The report's content-safe rectangle is 361 × 415 target pixels.
+  for (const width of WIDTHS) {
+    const scale = sceneScale(width);
+    assert.ok(Math.abs(boardColumnWidth(scale) - 361 * scale) < 1e-9);
+    assert.ok(Math.abs(boardCapacity(scale) - 415 * scale) < 1e-9);
+  }
+  // At the target's width: a 152pt column and 175pt of rows before growing.
+  assert.equal(Math.round(boardColumnWidth(sceneScale(393))), 152);
+  assert.equal(Math.round(boardCapacity(sceneScale(393))), 175);
+});
+
+test('the board grows by what its rows need, up to the founder’s 80px cap, then the page stacks', () => {
+  const scale = sceneScale(393);
+  const capacity = boardCapacity(scale);
+  assert.equal(BOARD_GROWTH_MAX_PX, 80);
+  assert.ok(Math.abs(boardGrowthMax(scale) - 80 * scale) < 1e-9);
+  // Before the first measurement, and when the rows fit, nothing grows.
+  assert.deepEqual(boardLayout(null, scale, 1), { kind: 'board', growth: 0 });
+  assert.deepEqual(boardLayout(capacity - 10, scale, 1), { kind: 'board', growth: 0 });
+  // A wrapped value grows the board by exactly the overflow.
+  const grown = boardLayout(capacity + 17, scale, 1);
+  assert.equal(grown.kind, 'board');
+  assert.ok(grown.kind === 'board' && Math.abs(grown.growth - 17) < 1e-9);
+  // Right at the cap the board still holds them; one point past it, it stacks.
+  assert.equal(boardLayout(capacity + boardGrowthMax(scale), scale, 1).kind, 'board');
+  assert.deepEqual(boardLayout(capacity + boardGrowthMax(scale) + 1, scale, 1), {
+    kind: 'stacked',
+  });
+});
+
+test('every accessibility text size uses the full-width preferences, whatever was measured', () => {
+  const scale = sceneScale(402);
+  assert.equal(atAccessibilitySize(1.49), false);
+  assert.equal(atAccessibilitySize(1.5), true);
+  assert.deepEqual(boardLayout(null, scale, 1.5), { kind: 'stacked' });
+  assert.deepEqual(boardLayout(10, scale, 3.118), { kind: 'stacked' });
+});
+
+test('a stretched slice is drawn from the whole image, its rows filling the slice’s box', () => {
+  // The paper's slice: rows 97–151 of 458.
+  assert.deepEqual(sliceImagePlacement({ top: 97, bottom: 151 }, 458), {
+    top: `${(-97 / 54) * 100}%`,
+    height: `${(458 / 54) * 100}%`,
+  });
+  // The wall band: rows 57–61 of the 603-row scene.
+  assert.deepEqual(sliceImagePlacement({ top: 57, bottom: 61 }, 603), {
+    top: `${(-57 / 4) * 100}%`,
+    height: `${(603 / 4) * 100}%`,
+  });
+});
+
+test('Ready’s own measured type, and the shared headline base at the accessibility sizes', () => {
+  assert.deepEqual(READY_TYPE.headline, { fontSize: 34, lineHeight: 40 });
+  // The board's rows (the 2026-10-01 refinement): 14pt labels, 15pt values,
+  // no letter spacing.
+  assert.deepEqual(READY_TYPE.label, { fontSize: 14, lineHeight: 17 });
+  assert.deepEqual(READY_TYPE.value, { fontSize: 15, lineHeight: 20 });
+  assert.deepEqual(headlineType(1), READY_TYPE.headline);
+  assert.deepEqual(headlineType(1.5), { fontSize: 23, lineHeight: 30 });
+  // Every line is at least as tall as its type.
+  for (const type of Object.values(READY_TYPE)) assert.ok(type.lineHeight >= type.fontSize);
+});
+
+test('nothing chosen draws no pictogram; a token outside the vocabulary claims nothing', () => {
   assert.deepEqual(allergenArtwork([]), { kind: 'none' });
-  // A token outside the vocabulary has no pictogram and claims nothing.
   assert.deepEqual(allergenArtwork(['gluten']), { kind: 'none' });
 });
 
-test('one allergen draws its own pictogram, alone, as large as the map pin', () => {
+test('one allergen draws its own pictogram alone; two share the plate’s diagonal exactly', () => {
   assert.deepEqual(allergenArtwork(['sesame']), {
     kind: 'pictograms',
     tokens: ['sesame'],
     more: 0,
   });
-  assert.equal(PICTOGRAM_SINGLE, 32);
-  // At most 22.3pt of drawing: the map pin's ink is 22.7pt tall at 24pt.
-  assert.ok(Math.abs(PICTOGRAM_SINGLE * PICTOGRAM_INK - 22.7) < 0.5);
-  assert.ok(PICTOGRAM_SINGLE <= ROW_WELL_SIZE);
-});
-
-test('two allergens draw both on the well’s diagonal, meeting only at one corner', () => {
-  assert.deepEqual(allergenArtwork(['peanut', 'tree nuts']), {
+  assert.deepEqual(allergenArtwork(['peanut', 'milk']), {
     kind: 'pictograms',
-    tokens: ['peanut', 'tree nuts'],
+    tokens: ['peanut', 'milk'],
     more: 0,
   });
-  assert.equal(PICTOGRAM_PAIR, 28);
-  // The pair fills the well exactly on both axes, nothing cropped…
+  // The pair fills the plate; a single pictogram's drawing stays inside it.
   assert.equal(PICTOGRAM_PAIR + PICTOGRAM_PAIR_STEP, ROW_WELL_SIZE);
-  // …each drawing is at most 19.6pt (was 16.8pt at 24pt boxes)…
-  const ink = PICTOGRAM_PAIR * PICTOGRAM_INK;
-  assert.ok(ink > 19.5 && ink < 19.6);
-  // …and, centred in their boxes, they share at most a 7.6pt corner square;
-  // the well's top trailing corner (right of the first, above the second)
-  // stays clear for the +N.
-  const margin = (PICTOGRAM_PAIR - ink) / 2;
-  const cornerOverlap = margin + ink - (PICTOGRAM_PAIR_STEP + margin);
-  assert.ok(cornerOverlap < 7.6, `${cornerOverlap}`);
-  // The +N (20pt+ wide from 8pt past the well's edge, from 4pt above its
-  // top) covers x ≥ 28 and y ≤ 10 of the well: the first drawing ends before
-  // it, and the second starts below it.
-  assert.ok(margin + ink < ROW_WELL_SIZE + 8 - 20, 'the +N covers the first pictogram');
-  assert.ok(PICTOGRAM_PAIR_STEP + margin > 10, 'the +N covers the second pictogram');
+  assert.ok(PICTOGRAM_SINGLE * PICTOGRAM_INK < ROW_WELL_SIZE);
 });
 
-test('three or more draw the first two and count the rest', () => {
-  assert.deepEqual(allergenArtwork(['milk', 'egg', 'wheat']), {
-    kind: 'pictograms',
-    tokens: ['milk', 'egg'],
-    more: 1,
-  });
-  const all = CONSUMER_ALLERGENS.map((option) => option.token);
-  assert.deepEqual(allergenArtwork(all), {
-    kind: 'pictograms',
-    tokens: ['peanut', 'tree nuts'],
-    more: 7,
-  });
-  assert.equal(moreLabel(1), '+1');
-  assert.equal(moreLabel(7), '+7');
-});
-
-test('the order is the canonical vocabulary’s, never the order they were tapped', () => {
-  const tapped = ['shellfish', 'sesame', 'tree nuts', 'peanut'];
-  assert.deepEqual(allergenArtwork(tapped), {
+test('three or more draw the first two in canonical order, never tap order; the rest are counted', () => {
+  assert.deepEqual(allergenArtwork(['shellfish', 'sesame', 'tree nuts', 'peanut']), {
     kind: 'pictograms',
     tokens: ['peanut', 'tree nuts'],
     more: 2,
@@ -124,158 +151,155 @@ test('the order is the canonical vocabulary’s, never the order they were tappe
   assert.deepEqual(allergenArtwork(['fish', 'milk']), allergenArtwork(['milk', 'fish']));
 });
 
-test('each row is spoken with its complete selection and that it is done', () => {
-  const row = (label: string, names: string[]) =>
-    summaryRowLabel(label, names, PREVIEW_NONE, PREVIEW_ROW_COMPLETED);
-  assert.equal(row('States', ['California']), 'States: California, completed');
+test('a board row shows the compact rule and speaks every name', () => {
+  assert.equal(boardValue(['Alabama', 'Arizona'], PREVIEW_NONE), 'Alabama, Arizona');
+  // `+N` is glued to the last name with a no-break space, so it can never
+  // wrap onto a line of its own.
   assert.equal(
-    row('Allergens', ['Peanuts', 'Tree nuts']),
-    'Allergens: Peanuts and Tree nuts, completed',
+    boardValue(['Alabama', 'Arizona', 'California'], PREVIEW_NONE),
+    'Alabama, Arizona\u00A0+1',
   );
   assert.equal(
-    row('Stores', ['Aldi', "BJ's Wholesale Club"]),
-    "Stores: Aldi and BJ's Wholesale Club, completed",
+    boardValue(['Aldi', "Trader Joe's", 'Costco', 'Target'], PREVIEW_NONE),
+    "Aldi, Trader Joe's\u00A0+2",
   );
-  assert.equal(row('Allergens', []), 'Allergens: None, completed');
-  // Three or more: every name is spoken; the +N is decoration only.
+  assert.equal(boardValue([], PREVIEW_NONE), 'None');
   assert.equal(
-    row('Allergens', ['Milk', 'Egg', 'Wheat']),
-    'Allergens: Milk, Egg and Wheat, completed',
+    boardRowLabel('States', ['Alabama', 'Arizona', 'California'], PREVIEW_NONE),
+    'States: Alabama, Arizona and California',
   );
+  assert.equal(boardRowLabel('Allergens', [], PREVIEW_NONE), 'Allergens: None');
+  assert.equal(boardRowLabel('Stores', ['Aldi'], PREVIEW_NONE), 'Stores: Aldi');
 });
 
-test('the mascot takes 0.195 of the window between its bounds, and its smallest size from the accessibility sizes', () => {
-  // Raised from 120–152pt (144 on an iPhone 17) in the 2026-09-26 polish pass.
-  assert.equal(READY_MASCOT_MIN, 140);
-  assert.equal(READY_MASCOT_MAX, 180);
-  assert.equal(readyMascotSize(667, 1), READY_MASCOT_MIN); // iPhone SE: 0.195 is 132
-  assert.equal(readyMascotSize(874, 1), 172); // iPhone 17: +19% over 144
-  assert.equal(readyMascotSize(956, 1), 180); // the largest phones
-  assert.equal(readyMascotSize(874, 1.5), READY_MASCOT_MIN);
-  assert.equal(readyMascotSize(874, 3.1), READY_MASCOT_MIN);
+/** iPhone 17's deck: 402pt less the page margins, and its front card. */
+const DECK = 402 - 32;
+const FRONT = deckFrontWidth(DECK);
+const EXIT = deckExitDistance(FRONT, 16);
+
+test('at rest only genuine next cards sit behind the front one, at most two, progressively smaller', () => {
+  assert.equal(DECK_REAR_LAYERS, 2);
+  assert.ok(DECK_REAR_SCALE[0] < 1 && DECK_REAR_SCALE[1] < DECK_REAR_SCALE[0]);
+  // Depth 0 is the front card, upright and full size.
+  assert.deepEqual(deckPose(0, FRONT, EXIT), { translateX: 0, scale: 1, opacity: 1 });
+  // Depths 1 and 2 show; depth 3 and beyond are unseen.
+  assert.equal(deckPose(1, FRONT, EXIT).opacity, 1);
+  assert.equal(deckPose(2, FRONT, EXIT).opacity, 1);
+  assert.equal(deckPose(3, FRONT, EXIT).opacity, 0);
+  assert.equal(deckPose(7, FRONT, EXIT).opacity, 0);
+  assert.equal(deckPose(1, FRONT, EXIT).scale, DECK_REAR_SCALE[0]);
+  assert.equal(deckPose(2, FRONT, EXIT).scale, DECK_REAR_SCALE[1]);
 });
 
-test('the mascot’s seat on the summary card is unchanged at both size bounds', () => {
-  // The box starts this far above the card's top border…
-  assert.equal(readyMascotOffset(READY_MASCOT_MIN), 96);
-  assert.equal(readyMascotOffset(READY_MASCOT_MAX), 124);
-  // …the drawing stands this tall above it, all of it reserved…
-  assert.equal(readyMascotLift(READY_MASCOT_MIN), 79);
-  assert.equal(readyMascotLift(READY_MASCOT_MAX), 102);
-  // …the drawing's trailing edge lands on the card's padding…
-  for (const size of [READY_MASCOT_MIN, READY_MASCOT_MAX]) {
-    const artRight = readyMascotRight(size) + size * (1 - 969 / 1024);
-    assert.ok(Math.abs(artRight - SUMMARY_PADDING) <= 0.5, `${size}: ${artRight}`);
-  }
-  // …the paw rests just inside the card, above the heading…
-  assert.equal(pawDepth(READY_MASCOT_MAX), 7);
-  assert.ok(pawDepth(READY_MASCOT_MAX) < SUMMARY_PADDING);
-  // …and the shield hangs this far in, reaching this far from the trailing edge.
-  assert.equal(shieldDepth(READY_MASCOT_MIN), 37);
-  assert.equal(shieldDepth(READY_MASCOT_MAX), 48);
-  assert.equal(shieldReach(READY_MASCOT_MIN), 70);
-  assert.equal(shieldReach(READY_MASCOT_MAX), 85);
-});
-
-test('the heading keeps clear of the shield, and the first row starts below it', () => {
-  for (const size of [READY_MASCOT_MIN, 172, READY_MASCOT_MAX]) {
-    // The heading's text ends before the shield begins.
-    const headingEnd = SUMMARY_PADDING + summaryHeadingInset(size);
-    assert.ok(headingEnd > shieldReach(size), `${size}: the heading runs under the shield`);
-    // The first row starts after the heading block and the row gap: below
-    // the shield and its clearance, however short the heading.
-    const firstRow = SUMMARY_PADDING + summaryHeaderMinHeight(size) + SUMMARY_ROW_GAP;
-    assert.ok(firstRow >= shieldDepth(size) + 8, `${size}: a row starts under the shield`);
+test('a rear card shows only a clean strip of its right edge: inside its own padding, top and bottom hidden', () => {
+  let previousRight = FRONT;
+  for (const depth of [1, 2]) {
+    const { translateX, scale } = deckPose(depth, FRONT, EXIT);
+    // Scaled about its centre, then moved: its right edge peeks past the one in front.
+    const right = FRONT / 2 + (FRONT / 2) * scale + translateX;
+    const left = FRONT / 2 - (FRONT / 2) * scale + translateX;
+    assert.ok(Math.abs(right - previousRight - DECK_REAR_PEEK) < 1e-9, `depth ${depth}`);
+    assert.ok(right <= DECK + 1e-9, 'past the deck');
+    assert.ok(left > 0, 'its left edge shows');
+    // Its content ends inside the card in front: only its padding shows.
+    assert.ok(right - DECK_CARD_PADDING * scale <= previousRight, `depth ${depth} leaks content`);
+    previousRight = right;
   }
 });
 
-test('from the accessibility sizes the rows stack and the heading drops beneath the shield at full width', () => {
-  assert.equal(summaryStacked(1), false);
-  assert.equal(summaryStacked(1.35), false);
-  assert.equal(summaryStacked(1.5), true);
-  assert.equal(summaryStacked(3.1), true);
-  // Beside the shield at ordinary sizes…
-  assert.deepEqual(summaryHeadingLayout(144, 1), {
-    paddingTop: 0,
-    paddingRight: summaryHeadingInset(144),
-    minHeight: summaryHeaderMinHeight(144),
-  });
-  // …beneath it, with the card's whole width, from the accessibility sizes.
-  const stacked = summaryHeadingLayout(READY_MASCOT_MIN, 3.1);
-  assert.equal(stacked.paddingRight, 0);
-  assert.ok(SUMMARY_PADDING + stacked.paddingTop > shieldDepth(READY_MASCOT_MIN));
+test('the outgoing card is a rigid rectangle: it only moves left, by the exit distance, never scaled', () => {
+  for (const depth of [0, -0.1, -0.5, -0.9, -1, -3]) {
+    const pose = deckPose(depth, FRONT, EXIT);
+    assert.equal(pose.scale, 1, `scaled at ${depth}`);
+    assert.equal(pose.opacity, 1);
+    assert.ok(pose.translateX <= 0, 'moved right');
+  }
+  assert.equal(deckPose(-1, FRONT, EXIT).translateX, -EXIT);
+  // It leaves the screen entirely: past the page margin and its shadow.
+  assert.ok(EXIT > FRONT + 16);
+  // Monotonic: further forward is always further left.
+  assert.ok(deckPose(-0.6, FRONT, EXIT).translateX < deckPose(-0.3, FRONT, EXIT).translateX);
 });
 
-test('the Stores row shows up to three stores in full, then the first two and a count', () => {
-  assert.equal(STORE_SUMMARY_LIMIT, 3);
-  assert.equal(storeSummaryText([]), '');
-  assert.equal(storeSummaryText(['Aldi']), 'Aldi');
-  assert.equal(storeSummaryText(['Aldi', "BJ's Wholesale Club"]), "Aldi, BJ's Wholesale Club");
-  assert.equal(storeSummaryText(['Costco', 'Aldi', 'Kroger']), 'Costco, Aldi, Kroger');
-  // Four or more: the first two in the summary's own (chosen) order, then a
-  // count that wraps as one unit (a no-break space inside `+N more`).
-  assert.equal(
-    storeSummaryText(['Costco', 'Aldi', 'Kroger', 'Target']),
-    'Costco, Aldi +2\u00A0more',
-  );
-  const six = ['Aldi', "BJ's Wholesale Club", "Trader Joe's", "Sam's Club", 'Safeway', 'Publix'];
-  assert.equal(storeSummaryText(six), "Aldi, BJ's Wholesale Club +4\u00A0more");
-  // Deterministic: the same selection always reads the same.
-  assert.equal(storeSummaryText([...six]), storeSummaryText(six));
-});
-
-test('a compacted Stores row still speaks every store', () => {
-  const six = ['Aldi', "BJ's Wholesale Club", "Trader Joe's", "Sam's Club", 'Safeway', 'Publix'];
-  assert.equal(
-    summaryRowLabel('Stores', six, PREVIEW_NONE, PREVIEW_ROW_COMPLETED),
-    "Stores: Aldi, BJ's Wholesale Club, Trader Joe's, Sam's Club, Safeway and Publix, completed",
+test('the card beneath comes forward from where it sits by one uniform promotion, never from the right', () => {
+  const rest = deckPose(1, FRONT, EXIT);
+  let prior = rest;
+  for (const depth of [0.75, 0.5, 0.25, 0]) {
+    const pose = deckPose(depth, FRONT, EXIT);
+    assert.ok(pose.scale >= prior.scale && pose.translateX <= prior.translateX, `${depth}`);
+    // Never further right than its resting place behind the front card.
+    assert.ok(pose.translateX <= rest.translateX);
+    prior = pose;
+  }
+  // The second rear card rises into the first rear place on the same progress.
+  assert.deepEqual(deckPose(1, FRONT, EXIT), deckPose(2 - 1, FRONT, EXIT));
+  const ranges = deckPoseRanges(FRONT, EXIT);
+  assert.deepEqual(ranges.inputRange, [-1, 0, 1, 2, 3]);
+  assert.ok(
+    ranges.inputRange.every((_, i) => i === 0 || ranges.inputRange[i] > ranges.inputRange[i - 1]),
   );
 });
 
-test('at ordinary sizes the crest rises 48pt beside the body paragraph; from scale 1.2 the full lift is reserved', () => {
-  // The reduction the 2026-09-27 polish asked for: 40–60pt on an iPhone 17.
-  assert.equal(readyMascotOverlap(1), 48);
-  assert.equal(readyMascotOverlap(1.118), 48);
-  // From 1.2 the paragraph can wrap far enough right to reach the mascot.
-  assert.equal(readyMascotOverlap(1.2), 0);
-  assert.equal(readyMascotOverlap(1.353), 0);
-  assert.equal(readyMascotOverlap(3.118), 0);
-  // The reserve on the three sizes, and the seat itself unchanged by it.
-  assert.equal(readyMascotReserve(172, 1), readyMascotLift(172) - 48); // iPhone 17: 97 − 48
-  assert.equal(readyMascotReserve(172, 1), 49);
-  assert.equal(readyMascotReserve(140, 1), 31); // iPhone SE
-  assert.equal(readyMascotReserve(180, 1), 54);
-  assert.equal(readyMascotReserve(140, 3.118), readyMascotLift(140));
-  assert.equal(readyMascotOffset(172), Math.round(172 * (704 / 1024)), 'the seat moved');
+test('a drag moves one card per exit distance and resists past either end', () => {
+  // Forward is a drag to the left.
+  assert.equal(deckDragPosition(0, 4, -EXIT / 2, EXIT), 0.5);
+  assert.equal(deckDragPosition(2, 4, EXIT / 4, EXIT), 1.75);
+  // Past the first card or the last, the deck follows at a fraction.
+  assert.ok(
+    deckDragPosition(0, 4, EXIT / 2, EXIT) > -0.5 && deckDragPosition(0, 4, EXIT / 2, EXIT) < 0,
+  );
+  const pastEnd = deckDragPosition(3, 4, -EXIT / 2, EXIT);
+  assert.ok(pastEnd > 3 && pastEnd < 3.5);
+  // A single card cannot be pulled away.
+  assert.ok(Math.abs(deckDragPosition(0, 1, -EXIT, EXIT)) < 0.5);
 });
 
-test('while the crest rises, the heading gives up the mascot’s width so the body wraps into the cliff', () => {
-  assert.equal(READY_BODY_ASIDE_FRACTION, 0.82);
-  // iPhone 17 (size 172) and SE (140) at the default scale.
-  assert.equal(readyBodyAside(172, 1), 141);
-  assert.equal(readyBodyAside(140, 1), 115);
-  // From scale 1.2 the full lift is reserved (readyMascotOverlap is 0), the
-  // mascot sits wholly below the paragraph, and large text keeps its width.
-  assert.equal(readyBodyAside(172, 1.2), 0);
-  assert.equal(readyBodyAside(140, 3.118), 0);
+test('a release commits one card when it travelled or was flicked; anything less restores the stack', () => {
+  const far = -EXIT * (DECK_COMMIT_FRACTION + 0.01);
+  const short = -EXIT * (DECK_COMMIT_FRACTION - 0.05);
+  const flick = DECK_FLICK_VELOCITY + 0.1;
+  assert.equal(deckReleaseTarget(1, 4, far, 0, EXIT), 2);
+  assert.equal(deckReleaseTarget(1, 4, short, 0, EXIT), 1, 'a cancelled swipe moved');
+  assert.equal(deckReleaseTarget(1, 4, short, -flick, EXIT), 2, 'a forward flick was lost');
+  assert.equal(deckReleaseTarget(1, 4, -far, 0, EXIT), 0);
+  assert.equal(deckReleaseTarget(1, 4, -short, flick, EXIT), 0, 'a back flick was lost');
+  // A flick against the drag does not commit it.
+  assert.equal(deckReleaseTarget(1, 4, short, flick, EXIT), 1);
+  // Never past either end.
+  assert.equal(deckReleaseTarget(3, 4, far, -flick, EXIT), 3);
+  assert.equal(deckReleaseTarget(0, 4, -far, flick, EXIT), 0);
+  assert.equal(deckReleaseTarget(0, 1, far, -flick, EXIT), 0);
 });
 
-test('deck cards share one size: every slot reserved from the type scale, until the accessibility sizes', () => {
+test('one dot per navigable page, the locked page included, and none for a single page', () => {
+  assert.equal(deckDotCount(0), 0);
+  assert.equal(deckDotCount(1), 0);
+  assert.equal(deckDotCount(2), 2);
+  assert.equal(deckDotCount(4), 4);
+});
+
+test('every card in a deck is the tallest one measured, whole points, never shrinking', () => {
+  assert.equal(deckCardHeight([]), 0);
+  assert.equal(deckCardHeight([301.2, 296, 318.4]), 319);
+  assert.equal(deckCardHeight([319, 319]), 319);
+  // Layout's float noise never adds a point: a card raised to 285 that
+  // measures 285.00006 confirms 285 (a plain ceil crept to 1,023pt at XL).
+  assert.equal(wholePoints(285.00006), 285);
+  assert.equal(deckCardHeight([285.00006, 284.99]), 285);
+  assert.equal(wholePoints(285.5), 286);
+  assert.equal(deckStatusHeight(26, [52.00006]), 52);
+});
+
+test('deck cards share one outer size, never padding the content: line limits until the accessibility sizes', () => {
   assert.equal(PREVIEW_TITLE_LINES, 2);
+  assert.equal(PREVIEW_BRAND_LINES, 1);
   assert.equal(PREVIEW_REASON_LINES, 2);
   const normal = previewCardLayout(1)!;
-  // Reserved exactly to the line limits at the default size.
-  assert.equal(normal.titleMinHeight, 26 * 2); // heading-3 line height 26
-  assert.equal(normal.reasonMinHeight, 18 * 2); // body-small line height 18
-  // One status chip row by rule (label line 16, 4pt paddings, borders); the
-  // deck raises it to the tallest row it measured (below).
+  // Only the status row is reserved; the title, brand, category and reason
+  // are grouped as the Feed groups them (the Moringa correction).
+  assert.deepEqual(Object.keys(normal), ['statusMinHeight']);
   assert.equal(normal.statusMinHeight, 16 + 8 + 2);
-  // The reservations grow with the reader's text size: never capped type.
-  const larger = previewCardLayout(1.353)!;
-  assert.ok(larger.titleMinHeight > normal.titleMinHeight);
-  assert.ok(larger.reasonMinHeight > normal.reasonMinHeight);
-  assert.ok(larger.statusMinHeight > normal.statusMinHeight);
-  // From the accessibility sizes nothing is reserved or line-limited.
+  assert.ok(previewCardLayout(1.353)!.statusMinHeight > normal.statusMinHeight);
   assert.equal(previewCardUniform(1.5), false);
   assert.equal(previewCardLayout(1.5), null);
   assert.equal(previewCardLayout(3.118), null);
@@ -283,38 +307,7 @@ test('deck cards share one size: every slot reserved from the type scale, until 
 
 test('the deck reserves the tallest status row it measured, never less than the rule, and never oscillates', () => {
   assert.equal(deckStatusHeight(26, []), 26);
-  // A deck whose rows all fit one line keeps one line: no empty band.
   assert.equal(deckStatusHeight(26, [26, 26, 25.6]), 26);
-  // One wrapping row (a PHA label beside a long date) raises every card.
   assert.equal(deckStatusHeight(26, [26, 60.2, 26]), 61);
-  // Re-measuring with the reservation applied only confirms it.
   assert.equal(deckStatusHeight(26, [26, 61, 61, 61]), 61);
-});
-
-test('the waiting card is smaller and tucked behind the active one: depth, restrained', () => {
-  assert.ok(DECK_NEXT_SCALE < 1 && DECK_NEXT_SCALE >= 0.9, 'depth too loud or absent');
-  assert.ok(DECK_TUCK > 0 && DECK_TUCK <= 24);
-});
-
-test('a carousel card leaves the next card’s peek visible, and the snap stride is one card and its gap', () => {
-  assert.equal(CAROUSEL_PEEK, 32);
-  assert.equal(CAROUSEL_GAP, 12);
-  // The iPhone 17 (402pt window): the content width between the margins.
-  const usable = 402 - 2 * 24;
-  assert.equal(carouselCardWidth(usable), usable - CAROUSEL_PEEK);
-  assert.equal(carouselSnapInterval(usable), usable - CAROUSEL_PEEK + CAROUSEL_GAP);
-  // The card never collapses below a readable floor.
-  assert.equal(carouselCardWidth(100), 200);
-});
-
-test('the active card follows the snapped offset and never leaves the deck', () => {
-  const usable = 402 - 2 * 24;
-  const stride = carouselSnapInterval(usable);
-  assert.equal(carouselActiveIndex(0, usable, 4), 0);
-  assert.equal(carouselActiveIndex(stride, usable, 4), 1);
-  assert.equal(carouselActiveIndex(2 * stride + 4, usable, 4), 2);
-  // A slight over-scroll on either end still resolves to a real card.
-  assert.equal(carouselActiveIndex(-30, usable, 4), 0);
-  assert.equal(carouselActiveIndex(99 * stride, usable, 4), 3);
-  assert.equal(carouselActiveIndex(0, usable, 0), 0);
 });

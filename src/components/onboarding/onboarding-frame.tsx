@@ -65,10 +65,10 @@ export function OnboardingFrame({
   headlineAccessibilityLabel,
   headingMotion,
   aside,
-  bodyInset = 0,
 }: {
   headline: string;
-  body: string;
+  /** The line under the headline; Ready's pending state has none. */
+  body?: string;
   /** Rendered above the headline: Welcome's wordmark, the problem stat. */
   lead?: ReactNode;
   /** The counted step this is; null for every screen without the bar. */
@@ -90,12 +90,6 @@ export function OnboardingFrame({
    * sizes it; the text takes the rest of the width, so the two never overlap.
    */
   aside?: ReactNode;
-  /**
-   * Trailing room the BODY alone gives up, in points, while the headline
-   * keeps the full width (the Ready step's "cliff": the body wraps left of
-   * the mascot rising beside it). 0 changes nothing.
-   */
-  bodyInset?: number;
 }) {
   const insets = useSafeAreaInsets();
   const heading = (
@@ -106,12 +100,11 @@ export function OnboardingFrame({
         accessibilityLabel={headlineAccessibilityLabel}>
         {headline}
       </Text>
-      <Text
-        variant="body"
-        color="text/secondary"
-        style={bodyInset > 0 ? { paddingRight: bodyInset } : null}>
-        {body}
-      </Text>
+      {body ? (
+        <Text variant="body" color="text/secondary">
+          {body}
+        </Text>
+      ) : null}
     </Animated.View>
   );
   const content = (

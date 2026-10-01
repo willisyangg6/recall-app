@@ -32,6 +32,14 @@
  * `RetailerResultRow`s, one column; no match is `No stores found.` What was
  * found is announced once per change.
  *
+ * With `catalog` (the one-page Edit preferences, 2026-10-01) the sheet
+ * shows the WHOLE current catalog before anything is typed — alphabetical,
+ * row by row, two columns where a half-width tile still holds the
+ * catalog's longest word at the reader's text size, one otherwise
+ * (`storeCatalogColumns`) — the field waits unfocused so the catalog is in
+ * view, a query narrows the same list, and clearing it restores the whole
+ * catalog. The Stores step passes nothing and is unchanged.
+ *
  * ## One selection, a query that is forgotten
  *
  * A row toggles the step's own selection through the route, which saves at
@@ -70,7 +78,7 @@ import { Icon } from '@/components/ui/icon';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Text } from '@/components/ui/text';
 import { color, hitTarget, layout, radius, spacing } from '@/constants/design-tokens';
-import type { CanonicalRetailer } from '@/domain/retailer-catalog';
+import { searchRetailers, type CanonicalRetailer } from '@/domain/retailer-catalog';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
 import {
   NO_STORES_FOUND,
@@ -85,8 +93,12 @@ import {
 } from '@/lib/onboarding-copy';
 import { motionAllowed } from '@/lib/onboarding-state';
 import {
+  CATALOG_GAP,
+  CATALOG_TILE,
+  catalogRows,
   retailerSearchResults,
   SHEET_BACKDROP_OPACITY,
+  storeCatalogColumns,
   SHEET_MOTION,
   searchSheetTop,
 } from '@/lib/retailer-grid';
@@ -97,6 +109,7 @@ export function RetailerSearchSheet({
   onToggle,
   onClose,
   onClosed,
+  catalog = false,
 }: {
   visible: boolean;
   selected: readonly string[];
@@ -105,6 +118,8 @@ export function RetailerSearchSheet({
   onClose: () => void;
   /** After the sheet is gone: the step returns focus to its trigger. */
   onClosed?: () => void;
+  /** Show the whole catalog before a query (the editor); the step leaves this off. */
+  catalog?: boolean;
 }) {
   const reduceMotion = useReduceMotion();
   const { height, fontScale } = useWindowDimensions();
@@ -201,6 +216,7 @@ export function RetailerSearchSheet({
               onToggle={onToggle}
               onClose={close}
               bottomInset={insets.bottom}
+              catalog={catalog}
             />
           ) : null}
         </Animated.View>
@@ -218,18 +234,29 @@ function SheetContents({
   onToggle,
   onClose,
   bottomInset,
+  catalog,
 }: {
   selected: readonly string[];
   onToggle: (id: string) => void;
   onClose: () => void;
   bottomInset: number;
+  catalog: boolean;
 }) {
   const [query, setQuery] = useState('');
-  const results = retailerSearchResults(query);
+  const { width, fontScale } = useWindowDimensions();
+  const typed = retailerSearchResults(query);
+  // The editor's catalog: the whole catalog until something is typed.
+  const results = catalog && typed === null ? searchRetailers('') : typed;
+  const columns = catalog
+    ? storeCatalogColumns(
+        Math.min(width, layout.maxContentWidth) - layout.pageMargin * 2,
+        fontScale,
+      )
+    : 1;
 
   // Said once as it changes — `7 stores found.`, `No stores found.` — never
-  // on a re-render.
-  const found = results === null ? null : results.length;
+  // on a re-render, and not for the catalog shown before a query.
+  const found = typed === null ? null : typed.length;
   useEffect(() => {
     if (found !== null)
       AccessibilityInfo.announceForAccessibility(searchResultsAnnouncement(found));
@@ -268,7 +295,7 @@ function SheetContents({
           autoCapitalize="words"
           autoCorrect={false}
           returnKeyType="search"
-          autoFocus
+          autoFocus={!catalog}
         />
       </View>
       {/* The one region that changes: its frame is fixed by the sheet. */}
@@ -286,6 +313,22 @@ function SheetContents({
           <Text variant="body-small" color="text/secondary">
             {NO_STORES_FOUND}
           </Text>
+        ) : catalog ? (
+          catalogRows(results, columns).map((row) => (
+            <View key={row[0].id} style={styles.catalogRow}>
+              {row.map((retailer) => (
+                <RetailerResultRow
+                  key={retailer.id}
+                  retailer={retailer}
+                  checked={selected.includes(retailer.id)}
+                  onPress={() => onToggle(retailer.id)}
+                  tile
+                />
+              ))}
+              {/* A short last row keeps its tile at column width. */}
+              {row.length < columns ? <View style={styles.catalogSpacer} /> : null}
+            </View>
+          ))
         ) : (
           results.map((retailer) => (
             <RetailerResultRow
@@ -321,10 +364,13 @@ export function RetailerResultRow({
   retailer,
   checked,
   onPress,
+  tile = false,
 }: {
   retailer: CanonicalRetailer;
   checked: boolean;
   onPress: () => void;
+  /** A catalog tile: a column's width, with the catalog's tighter chrome. */
+  tile?: boolean;
 }) {
   return (
     <Pressable
@@ -334,6 +380,7 @@ export function RetailerResultRow({
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
+        tile && styles.tile,
         checked ? styles.rowChosen : styles.rowOpen,
         pressed && styles.pressed,
       ]}>
@@ -440,6 +487,19 @@ const styles = StyleSheet.create({
   },
   rowName: {
     flex: 1,
+  },
+  catalogRow: {
+    flexDirection: 'row',
+    gap: CATALOG_GAP,
+  },
+  catalogSpacer: {
+    flex: 1,
+  },
+  // A catalog tile: half the row (or all of it), the catalog's chrome.
+  tile: {
+    flex: 1,
+    gap: CATALOG_TILE.gap,
+    paddingHorizontal: CATALOG_TILE.paddingHorizontal,
   },
   footer: {
     paddingHorizontal: layout.pageMargin,

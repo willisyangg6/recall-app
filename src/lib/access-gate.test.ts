@@ -216,6 +216,7 @@ test('the landing route of each phase is the first declared screen of its group'
     'onboarding/retailers',
     'onboarding/building',
     'onboarding/preview',
+    'onboarding/edit-preferences',
     'onboarding/paywall',
   ]);
   assert.deepEqual(onboardingDeclarationOrder('welcome'), [...ROUTE_GROUPS.onboarding]);

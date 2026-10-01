@@ -31,3 +31,9 @@ export const PAYWALL_ROUTE = '/paywall';
 
 /** The one-time notification education, after entitlement success. */
 export const NOTIFICATION_EDUCATION_ROUTE = '/onboarding/notifications';
+
+/**
+ * The one-page Edit preferences, presented over Ready (2026-09-30). In the
+ * onboarding phase's route group, but not a step: never a resume point.
+ */
+export const EDIT_PREFERENCES_ROUTE = '/onboarding/edit-preferences';

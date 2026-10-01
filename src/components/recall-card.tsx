@@ -102,6 +102,7 @@ import { Text } from '@/components/ui/text';
 import { layout, spacing } from '@/constants/design-tokens';
 import { useSavedRecalls } from '@/hooks/use-saved-recalls';
 import {
+  PREVIEW_BRAND_LINES,
   PREVIEW_REASON_LINES,
   PREVIEW_TITLE_LINES,
   type PreviewCardLayout,
@@ -167,18 +168,26 @@ export function RecallCardSurface({
   media,
   trailing,
   uniform = null,
+  deckHeight,
 }: {
   model: HomeCardModel;
   media: ReactNode;
   trailing: ReactNode;
   /**
    * The onboarding deck's uniform variant (lib/ready-presentation
-   * `previewCardLayout`): every slot reserved and the wrapping slots
-   * line-limited, so deck cards share one outer size. Null — every Feed and
+   * `previewCardLayout`): the status row reserved, the title, brand and
+   * reason line-limited and the card raised to the deck's tallest, so deck cards
+   * share one outer size with the Feed's own content grouping. Null — every Feed and
    * Saved card, and the deck from the accessibility text sizes — changes
    * NOTHING: the card is byte-identical to its pre-variant self.
    */
   uniform?: PreviewCardLayout | null;
+  /**
+   * The onboarding deck's shared card height (its tallest card), at every
+   * text size: the card is raised to it and the spare height goes above the
+   * location. Absent — every Feed and Saved card — changes nothing.
+   */
+  deckHeight?: number;
 }) {
   // The product-category tag, when the case carries a launch-visible one.
   // Placed under the identity it describes rather than in the status row
@@ -198,7 +207,11 @@ export function RecallCardSurface({
     </Text>
   ) : null;
   return (
-    <Surface radius={16} border="border/subtle" elevation="card" style={styles.card}>
+    <Surface
+      radius={16}
+      border="border/subtle"
+      elevation="card"
+      style={[styles.card, deckHeight ? { minHeight: deckHeight } : null]}>
       <View
         style={[styles.statusRow, uniform && { minHeight: uniform.statusMinHeight }]}
         onLayout={
@@ -248,7 +261,11 @@ export function RecallCardSurface({
               image (P2B7I), and this row is a gapped flex row, so the text
               column then starts at the card's edge and takes its full width
               — no empty gap, no reserved footprint. */}
-      <View style={styles.content}>
+      {/* In a deck raised to its tallest card, the extra room goes
+          below the identity column — never between the title, brand,
+          category and reason, which stay grouped exactly as the Feed groups
+          them — so every card's location sits on the same bottom line. */}
+      <View style={[styles.content, deckHeight ? styles.contentGrows : null]}>
         {media}
         <View style={styles.identity}>
           <View>
@@ -259,38 +276,29 @@ export function RecallCardSurface({
                     element announces — so a screen-reader user hears the
                     whole title exactly once, with no second element and no
                     truncation. */}
-            <Text
-              variant="heading-3"
-              numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}
-              style={uniform && { minHeight: uniform.titleMinHeight }}>
+            <Text variant="heading-3" numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}>
               {model.productName}
             </Text>
-            <Text variant="caption" color="text/secondary">
+            <Text
+              variant="caption"
+              color="text/secondary"
+              numberOfLines={uniform ? PREVIEW_BRAND_LINES : undefined}>
               {model.brand.text}
             </Text>
           </View>
-          {uniform ? (
-            // The uniform variant reserves BOTH optional slots, so an
-            // absent category or reason cannot shorten a deck card.
-            <>
-              <View style={{ minHeight: uniform.categoryHeight, alignSelf: 'flex-start' }}>
-                {category}
-              </View>
-              <View style={{ minHeight: uniform.reasonMinHeight }}>{reason}</View>
-            </>
-          ) : (
-            <>
-              {category}
-              {reason}
-            </>
-          )}
+          {category}
+          {reason}
         </View>
       </View>
 
       {/* The location keeps the row's width; the save control sits at its
               trailing edge so it is reachable without competing with the
               product identity above it. */}
-      <View style={styles.footerRow}>
+      {/* In the deck the card's own 8pt gap alone separates the location
+          from the content: the Feed's extra 8pt above it is the deck's
+          only unused band in its tallest card (the 2026-10-01 spacing
+          pass). */}
+      <View style={[styles.footerRow, uniform && styles.footerRowCompact]}>
         <View style={styles.location}>
           <Icon name="map-pin" size={12} color="icon/primary" />
           <Text variant="caption" style={styles.locationText}>
@@ -310,6 +318,9 @@ const styles = StyleSheet.create({
   card: {
     padding: spacing[12],
     gap: spacing[8],
+  },
+  contentGrows: {
+    flexGrow: 1,
   },
   statusRow: {
     flexDirection: 'row',
@@ -343,6 +354,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing[8],
     marginTop: spacing[8],
+  },
+  footerRowCompact: {
+    marginTop: 0,
   },
   location: {
     flex: 1,

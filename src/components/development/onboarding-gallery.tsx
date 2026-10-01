@@ -36,6 +36,7 @@ import { StyleSheet, View, type ImageSourcePropType } from 'react-native';
 
 import { AllergensStep } from '@/components/onboarding/allergens-step';
 import { BuildingStep } from '@/components/onboarding/building-step';
+import { EditPreferencesStep } from '@/components/onboarding/edit-preferences-step';
 import { NotificationEducation } from '@/components/onboarding/notification-education';
 import { PreviewStep } from '@/components/onboarding/preview-step';
 import { ProblemRiskStep, ProblemScaleStep } from '@/components/onboarding/problem-steps';
@@ -73,6 +74,7 @@ import {
 import { saveOnboardingRecord } from '@/lib/onboarding-store';
 import { SAMPLE_RECALL_MODEL } from '@/lib/onboarding-sample';
 import { initialPaywallView, type PaywallView } from '@/lib/paywall-screen';
+import { beginEditing, editorReducer, type EditorAction } from '@/lib/edit-preferences';
 import { toggleAllergen, toggleRetailer, withStates } from '@/lib/personalization-screen';
 import type { Offering } from '@/lib/purchases/purchase-provider';
 import type { ReadyPreviewState } from '@/lib/ready-preview';
@@ -222,6 +224,27 @@ function LiveReady({
 }
 
 /**
+ * The one-page editor over its own draft, as the route would hold it: every
+ * edit changes the gallery's state and nothing else; Save and Cancel do
+ * nothing here.
+ */
+function LiveEditor({ saved }: { saved: UserRecallPreferences }) {
+  const [state, setState] = useState(() => beginEditing(saved));
+  const dispatch = (action: EditorAction) => setState((prior) => editorReducer(prior, action));
+  return (
+    <EditPreferencesStep
+      state={state}
+      onToggleState={(code) => dispatch({ type: 'toggle-state', code })}
+      onToggleAllergen={(token) => dispatch({ type: 'toggle-allergen', token })}
+      onClearAllergens={() => dispatch({ type: 'clear-allergens' })}
+      onToggleStore={(id) => dispatch({ type: 'toggle-store', id })}
+      onSave={noop}
+      onCancel={noop}
+    />
+  );
+}
+
+/**
  * A deck of N example cards and the true total the sample claims. A total
  * past the count also stands a frosted locked clone at the deck's end, as
  * the real next image-bearing match would. The example model carries no
@@ -347,12 +370,12 @@ export function OnboardingGallery() {
           <BuildingStep prefs={populated} onDone={noop} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Ready, three matches of five — simulated: California, New York and Texas; Peanuts and Milk (two pictograms on the well’s diagonal); Costco and Trader Joe’s; a deck of three example cards, the frosted locked clone as the final card, and the locked strip beneath">
+      <GallerySample caption="Ready, three matches of five — simulated: California, New York and Texas on the board (the first two and +1, every state spoken); Peanuts and Milk (both pictograms on the plate); Costco and Trader Joe’s; We found 5 recalls for you; three example cards stacked, the next two peeking as clean white right edges, the frosted locked clone as the final page, four dots (one per page) and the locked strip">
         <Screen>
           <LiveReady prefs={populated} preview={samplePreview(3, 5)} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Ready, two matches — simulated: two example cards, two dots, the pill reads 2 recalls for your watch, and the truthful monitoring line stands where the locked strip would">
+      <GallerySample caption="Ready, two matches — simulated: the second card peeking behind the front one, two dots, We found 2 recalls for you, and the truthful monitoring line where the locked strip would be">
         <Screen>
           <LiveReady
             prefs={{ states: codesFor('California'), allergens: ['sesame'], retailers: ['aldi'] }}
@@ -360,7 +383,7 @@ export function OnboardingGallery() {
           />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Ready, one match and a long store list — simulated: four allergens chosen out of order (the first two canonical pictograms and +2, every name in the text); six stores shown as the first two and +4 more, every store still spoken; one example card and no dots">
+      <GallerySample caption="Ready, one match and a long selection — simulated: four allergens chosen out of order (the first two canonical pictograms; the text names two and +2); six stores as two and +4; We found 1 recall for you; one card, nothing behind it and no dots">
         <Screen>
           <LiveReady
             prefs={{
@@ -379,12 +402,27 @@ export function OnboardingGallery() {
           />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Ready, nothing matches — simulated: one state and nothing else; Allergens and Stores keep their rows and read None; the body drops the found claim and the honest empty card stands where the deck would">
+      <GallerySample caption="Ready, nothing matches — simulated: one state; Allergens (the neutral dash) and Stores read None; no count, no deck, and the honest empty card">
         <Screen>
           <LiveReady
             prefs={{ ...EMPTY_PREFERENCES, states: codesFor('Oregon') }}
             preview={{ kind: 'none' }}
           />
+        </Screen>
+      </GallerySample>
+      <GallerySample caption="Edit preferences — simulated: the one-page editor over a draft of California, New York and Texas; Peanuts and Milk; Costco and Trader Joe’s. Every chooser, chip and Save works on the gallery’s own draft and saves nothing">
+        <Screen>
+          <LiveEditor saved={populated} />
+        </Screen>
+      </GallerySample>
+      <GallerySample caption="Edit preferences, nothing optional chosen — simulated: one state, zero allergens (the neutral dash) and zero stores, all valid">
+        <Screen>
+          <LiveEditor saved={{ ...EMPTY_PREFERENCES, states: codesFor('Oregon') }} />
+        </Screen>
+      </GallerySample>
+      <GallerySample caption="Edit preferences, no state left — simulated: Save changes disabled, its reason spoken; the helper says at least one state is needed">
+        <Screen>
+          <LiveEditor saved={{ ...EMPTY_PREFERENCES, allergens: ['egg'] }} />
         </Screen>
       </GallerySample>
       <GallerySample caption="Onboarding paywall, already entitled — real: the entitled panel; simulated: Continue and Back do nothing">

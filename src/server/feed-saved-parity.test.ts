@@ -616,12 +616,17 @@ test('the PHA status row still wraps rather than shrinking, clipping or fixing a
   // heights that grow, never clip); every one is gated on `uniform`, which
   // no Feed or Saved card receives (feed-design.test.ts pins the callers).
   for (const reservation of CARD_CODE.match(/minHeight: [^,}\]]+/g) ?? []) {
-    assert.match(reservation, /^minHeight: uniform\./, `an ungated reservation: ${reservation}`);
+    assert.match(
+      reservation,
+      /^minHeight: (uniform\.|deckHeight )/,
+      `an ungated reservation: ${reservation}`,
+    );
   }
   // On Feed and Saved the one bounded element stays the product name, a LINE
-  // count; the reason's clamp exists only in the uniform variant.
-  assert.equal((CARD_CODE.match(/numberOfLines=/g) ?? []).length, 2);
+  // count; the brand's and reason's clamps exist only in the uniform variant.
+  assert.equal((CARD_CODE.match(/numberOfLines=/g) ?? []).length, 3);
   assert.ok(CARD_SOURCE.includes('numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}'));
+  assert.ok(CARD_SOURCE.includes('numberOfLines={uniform ? PREVIEW_BRAND_LINES : undefined}'));
   assert.ok(CARD_SOURCE.includes('numberOfLines={uniform ? PREVIEW_REASON_LINES : undefined}'));
   // Neither label is abbreviated on its way to the card.
   assert.equal(

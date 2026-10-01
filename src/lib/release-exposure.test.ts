@@ -186,9 +186,11 @@ const ROUTES = [
   // notification education. Product screens, each inside a protected group
   // of the root layout (access-gate.test.ts pins the guards). 2026-09-28
   // added the two problem screens, the building interstitial and the
-  // dedicated onboarding paywall.
+  // dedicated onboarding paywall; 2026-09-30 the one-page Edit preferences
+  // presented over Ready.
   'onboarding/allergens.tsx',
   'onboarding/building.tsx',
+  'onboarding/edit-preferences.tsx',
   'onboarding/notifications.tsx',
   'onboarding/paywall.tsx',
   'onboarding/preview.tsx',

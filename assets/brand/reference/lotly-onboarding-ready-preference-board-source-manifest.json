@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "approvalStatus": "founder-approved visual targets; production extraction pending",
+  "approvedOn": "2026-09-30",
+  "references": [
+    {
+      "role": "Ready approved combined design",
+      "path": "assets/brand/reference/lotly-onboarding-ready-preference-board-target.png",
+      "width": 934,
+      "height": 1684,
+      "mode": "RGB",
+      "sha256": "b560d581498eb5f141c0e7e07e00524461aed4c8c7ac2c2a10bc97bf6c038486",
+      "containsOSChrome": false
+    },
+    {
+      "role": "One-page editor approved unchanged layout",
+      "path": "assets/brand/reference/lotly-ready-edit-preferences-target.png",
+      "width": 934,
+      "height": 1683,
+      "mode": "RGB",
+      "sha256": "2f626ff6e574178943d4a9810f6e1522ad9080e2182011306d143479bcfa1630",
+      "containsOSChrome": false
+    }
+  ],
+  "nativeCopy": {
+    "readyHeadline": "You're all set.",
+    "readySubheading": null,
+    "boardHeading": "Your preferences",
+    "boardEdit": "Edit preferences",
+    "previewHeading": "Your recall preview",
+    "countPlural": "{count} matching recalls",
+    "countSingular": "1 matching recall",
+    "readyCTA": "See my plan",
+    "editorCancel": "Cancel",
+    "editorHeadline": "Edit your preferences",
+    "editorBody": "Adjust your watch, all in one place.",
+    "stateHelper": "Choose at least one state.",
+    "optionalHelper": "Optional",
+    "editorCategoryAction": "Edit",
+    "editorAddAllergens": "Add allergens",
+    "editorCaption": "Your recall preview updates when you save.",
+    "editorCTA": "Save changes"
+  },
+  "readyPresentation": {
+    "countIsInteractive": false,
+    "countPill": false,
+    "deck": "upright front card with slightly fanned actual subsequent cards behind",
+    "pagination": "dots only",
+    "swipeInstructions": false,
+    "paywallSeparate": true,
+    "matchingUsesExistingFeed": true,
+    "mockValuesAreNotDefaults": true,
+    "exampleCountIsNotHardcoded": true,
+    "fakeLockedCardsForbidden": true
+  },
+  "editorBehavior": {
+    "categoriesVisibleTogether": [
+      "states",
+      "allergens",
+      "stores"
+    ],
+    "replaysOnboarding": false,
+    "workingDraftIsolated": true,
+    "save": "canonical preferences persistence, then return directly to refreshed Ready",
+    "cancel": "discard full working draft",
+    "minimumStates": 1,
+    "zeroAllergensValid": true,
+    "zeroStoresValid": true,
+    "resetWatchBuilt": false,
+    "profileUnchanged": true
+  },
+  "allergenIcons": {
+    "source": "existing canonical Lotly artwork",
+    "dynamic": true,
+    "maximumVisibleIcons": 2,
+    "order": "current canonical allergen order",
+    "zeroSelection": "existing neutral category treatment; no selected food icon",
+    "editorReflects": "working draft",
+    "readyReflects": "saved preferences",
+    "allSelectedNamesRemainAccessible": true
+  },
+  "artwork": {
+    "productionAssetsIncluded": false,
+    "required": "blank board + composable scene/foreground as needed; editor mini mascot",
+    "UIIsNative": true,
+    "recallDataAndPhotos": "real feed, never generated source packaging",
+    "exactProductionHashes": "pending approved extraction report"
+  },
+  "inspectionHintsNotCertifiedCrops": {
+    "readyHeroApprox": [
+      0,
+      190,
+      934,
+      790
+    ],
+    "readyBoardApprox": [
+      125,
+      250,
+      645,
+      705
+    ],
+    "editorMiniMascotApprox": [
+      45,
+      1435,
+      172,
+      1560
+    ]
+  },
+  "accessibility": {
+    "minimumTargetPt": 44,
+    "unrestrictedDynamicType": true,
+    "largeTextPreferences": "full-width native summary outside recomposed decorative scene",
+    "rearCardsHiddenFromAccessibility": true,
+    "deckAccessibleActions": true
+  },
+  "preservedScope": [
+    "Welcome",
+    "two statistics pages",
+    "States",
+    "Allergens onboarding",
+    "Stores",
+    "Building once-only state machine",
+    "canonical catalogs and Feed ranking",
+    "separate paywall",
+    "existing Profile editor"
+  ]
+}

@@ -370,17 +370,12 @@ contact sheet is brand documentation, in `assets/brand/reference`. M01 left
 Welcome with the receipt composition (2026-09-29), M02 left States with
 the grocery-atlas composition (2026-09-30), and M03 (the grocery-bag pose)
 left Stores with the receipt composition (2026-09-30), whose mascot is part
-of its approved scene; like M05, all three are drawn nowhere. M04 is on
-the building interstitial (2026-09-28), and M06 hangs over the Ready
-step's summary card (2026-09-26); M05 waits for its own screen. M06 (the
-trust-peek pose: the arrow body cut flat to stand behind a ledge, a shield
-in its right paw) exists only for the Ready card's edge. M04, the standing watchful pose
+of its approved scene, and M06 (the trust-peek pose) left Ready with the
+preference board (2026-09-30); like M05, all four are drawn nowhere. M04
+is on the building interstitial (2026-09-28); M05 waits for its own
+screen. M04, the standing watchful pose
 (shield-check and refresh arrow), is the interstitial's: the watch being
-assembled and verified. The paywall draws no mascot. M06 is a transparent raster
-production asset, not SVG, and is never redrawn in code. The file as
-supplied was a 1254px export carrying the alpha 240–254 flaw; it was given
-the same mechanical repair at its own size and scaled uniformly to 1024,
-never cropped or shifted. A mascot is drawn whole with `contain`, never cropped, recoloured or
+assembled and verified. A mascot is drawn whole with `contain`, never cropped, recoloured or
 placed on a dark surface, and is decorative: hidden from VoiceOver and never
 in the way of a touch. The earlier standalone mascot
 (`lotly-mascot-transparent.png`) is no longer drawn. The final logo and
@@ -1298,134 +1293,148 @@ milestones; the Preview's is below. On States, Continue is disabled with
 nothing chosen, its reason spoken as its hint and the requirement written in
 the helper (above). On the optional steps Continue is never disabled.
 
-**Personalized Preview (the Ready step, Option 2, 2026-09-26).** Under the
-frame's heading and body, one `background/subtle` `radius/16` card with no
-lift, no border and no card nested inside it, headed `Your preferences are
-set` in `heading-3`. M06 hangs over its top edge at the trailing side
-(`src/lib/ready-presentation.ts`). Its flat-cut arrow body stands above the
-card as if behind it, the left paw rests just over the edge, and the shield
-and right paw hang in front, the shield's trailing edge on the card's padding
-above the column of checks. The mascot is sized at 0.195 of the window
-height, from 140pt (iPhone SE) to 180pt (172pt on an iPhone 17), and is
-always 140pt from the accessibility sizes. Its drawing is 0.84 of that box
-wide and 0.82 tall. The 2026-09-26 polish pass raised the bounds from
-120–152pt, about 17–19% more visible drawing. The room reserved above the
-card is the drawing's height less a 48pt rise (`readyMascotReserve`,
-2026-09-27): at ordinary text sizes the crest climbs beside the body
-paragraph's trailing whitespace — the mascot is right-aligned and the
-paragraph's lines end well left of it — which tightens the composition by
-that 48pt without touching the seat, the paw or the shield. From text scale
-1.2 the paragraph can wrap far enough right to meet it, so the full lift is
-reserved again. The drawing itself never
-reaches the body text. The heading keeps clear of the shield, and the first
-row starts below it.
+**Ready: the preference board (2026-09-30).** The approved target is
+`assets/brand/reference/lotly-onboarding-ready-preference-board-target.png`,
+a design reference that is never bundled. From the top, the page shows:
 
-Three rows follow — `States`, `Allergens`, `Stores` (Profile's own names) —
-each in three parts:
+- Back, with no progress bar.
+- `You’re all set.` in Ready's measured Bold 34pt, with no line beneath it.
+  From the accessibility sizes it uses the `heading-2` base, still scaled.
+- The approved scene across the full width, built from three layers drawn
+  at one scale, the page width over 934. The scene holds the blue wall,
+  pear, raspberry bowl, cloth, tabletop and the seated waving mascot. The
+  physical board stands on it, and the mascot, bowl and cloth are in front.
+- `Your recall preview` in Bold 25pt, with 16pt of page cream above it
+  (about 22pt of clear space below the scene's straight edge), then one
+  `body` sentence in `text/secondary`: `We found 21 recalls for you.`
+  (singular for one). Only the number is emphasised, Bold in primary ink. The count is every real
+  match: never a pill or a button, and never the deck's length.
+- The deck, its dots, and the locked strip or the monitoring line. At the
+  default text size on iPhone 17 the dots arrive above the footer; the
+  locked strip may sit below the fold.
+- `See my plan` pinned in the footer: the Button's primary pill at 46pt,
+  with a 16pt label.
 
-- **Leading:** the category artwork in a 40pt white `background/surface`
-  `radius/12` well. All three rows share the well; this was the founder's
-  decision, so the full-colour pictograms sit as deliberately as the glyphs.
-  States shows the navy `map-pin` glyph and Stores the navy `shopping-cart`
-  glyph.
-- **Middle:** the category in `caption` (Public Sans 500, 12pt) over its
-  values in `body` (Public Sans 400, 16pt), both `text/primary`. Grey
-  `text/secondary` on the soft blue is 3.2:1, below AA for small text, so
-  size and weight, not colour or a second family, set the label apart. It
-  is never the mono metadata `label` type.
-- **Trailing:** a 20pt `check` in `icon/primary`, the map pin's and cart's
-  navy, in a 24pt pale circle. The circle is `background/surface` at 55%
-  over the soft blue. At 16pt the check's stroke was 1.6pt against the pin's
-  2.4pt and read as grey.
+The layers come from `src/lib/ready-presentation.ts`.
 
-The Allergens well draws the approved pictograms through
-`src/lib/allergen-assets.ts`, **untinted**. Tinted navy, tree nuts turns into
-a blob and egg into two merged ovals; the founder reviewed that evidence and
-kept full colour. The pictograms are drawn in canonical order, whatever order
-they were tapped in:
+**The board.** Every word on the board is native, inside the asset report's
+content-safe rectangle, between the board and the foreground layer. The
+board shows:
 
-- **None chosen:** a 14pt neutral navy dash. There is no generic allergen
-  glyph, and a specific pictogram would claim a choice that wasn't made.
-- **One:** its pictogram in a 32pt box. Measured, the widest drawing fills
-  715/1024 of its canvas, so this is at most 22.3pt of drawing, against the
-  map pin's 22.7pt.
-- **Two:** both in 28pt boxes (at most 19.6pt of drawing each) on the
-  well's diagonal. The second is 12pt right of and below the first, so the
-  pair fills the 40pt well exactly and the drawings meet only at one corner
-  (7.6pt at most), each independently readable.
-- **Three or more:** the first two, plus a `+N` in `micro-caption`
-  `text/inverse` on a `background/brand` pill over the well's top trailing
-  corner, which the diagonal leaves empty.
+- `Your preferences` in Bold 17pt.
+- Three rows, each with a 34pt pale plate: the soft blue under a white wash.
+  - The plates hold the `map-pin` and `shopping-cart` glyphs. The Allergens
+    plate shows the first two chosen pictograms, untinted and in canonical
+    order. One choice shows one pictogram, and none shows the neutral dash.
+  - The label is title case (`States`, `Allergens`, `Stores`) in Public
+    Sans SemiBold 14pt, `text/secondary`, with normal letter spacing.
+  - The value is Regular 15pt in Profile's compact form: two names, then
+    `+N`, or `None`. The `+N` is joined to the last name, so it never wraps
+    onto a line alone.
+- Dashed `border/default` rules between the rows, 6pt above and below.
+- `Edit preferences` in `action/secondary` with a `chevron-right`, 44pt
+  through hitSlop.
 
-Values wrap between words and are never truncated. An empty optional group
-reads `None` and keeps its row. Each row is one accessibility element spoken
-as `Allergens: Peanuts and Tree nuts, completed`. The artwork, the `+N` and
-the check are hidden decoration, and so is the mascot, which is also
-`pointerEvents="none"`.
+Each row is one accessibility element that speaks every chosen name. The
+plates and rules are never heard. Text never shrinks to fit the
+board. Instead:
 
-From the accessibility sizes, each row stacks: artwork (with the `+N`
-beside it) and check share a top line, and the text takes the card's full
-width beneath. The heading drops below the shield at full width. This way no
-value breaks inside a word, which it did at AX5 between a well and a check.
+- The board grows upward by what its rows need. Growth comes only from one
+  slice of blank paper and, by the same amount, one thin band of
+  out-of-focus wall. The foot, the painted shadows and the mascot, food and
+  cloth never move or stretch.
+- Growth is capped at 80 source pixels, about 34pt.
+- Past the cap, and at every accessibility size, the scene is drawn whole
+  with a blank board. The rows then follow at full width on a white
+  `radius/16` surface with a `border/subtle` edge.
 
-The mascot's one entrance is the other onboarding mascots' short fade and
-settle, played once and skipped under Reduce Motion.
+The deviations from the target are deliberate:
 
-The Ready step (carousel composition, 2026-09-28; the approved target is
-`assets/brand/reference/lotly-onboarding-ready-carousel-target.png`, a
-design reference that is never bundled) shows what the watch found and
-sells nothing:
+- The labels are 14pt and the values 15pt, where the target has 8pt and
+  13pt. The founder asked for 16pt values, but those do not fit the board
+  within its cap; the measured constraint and the larger-board proposal are
+  in
+  [recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md)
+  §6.4.
+- `action/secondary` is a little deeper than the target's link blue.
+- The Feed's real card is taller than the target's illustration, because
+  of its 112pt media.
 
-- **Edit preferences** sits INSIDE the blue card, right-aligned on its own
-  last row (the card header's trailing edge belongs to the shield): a quiet
-  `body-small-bold` text action with the `chevron-right` affordance, 44pt
-  through hitSlop, never a second large button or a nested white card. Its
-  navy is `action/primary` — `action/secondary` on the soft blue is 4.1:1,
-  below AA for 13pt text.
-- **`See what affects you today`** in `heading-2`, a real header, then the
-  lime count pill: `body-small-bold` on `relevancePalette`'s Affects-You
-  treatment (`background/accent` fill, its `#ADB600` border, `radius/full`)
-  reading `N recall(s) for your watch` for the readable matches —
-  personalization lime, never a safety claim.
-- **The deck** (polish pass) is an overlapping deck, not a list: the first
-  three IMAGE-BEARING matches in rank order as the Feed's own
-  `RecallCardSurface` in its opt-in uniform variant — one outer size per
-  width and text-size class: title two lines (both reserved), the category
-  chip and a two-line reason reserved even when absent, the status row
-  reserving the tallest row the deck measured, the 112pt media identical.
-  One card per page, 12pt apart, snapping; the next card waits behind the
-  active card's trailing edge at 0.93 scale, tucked 16pt, under the active
-  card (static z-order; the transforms follow the scroll only). The cards'
-  own `card` elevation is the only depth — no glass, gradient or extra
-  shadow. No arrows, no instruction copy, no auto-advance, no loop. Below
-  it, 8pt pagination dots — `background/brand` active, `background/subtle`
-  rest — one per readable card, none for a single card, decorative (each
-  card speaks `Match 1 of 3. …`). From text scale 1.5 the uniform rules
-  come off and the cards wrap freely.
-- **The locked final card**, only when a real next image-bearing match
-  exists: that recall's own uniform card — the same size — under a real
-  blur (`expo-blur`, intensity 60, light tint, clipped to `radius/16`) with
-  one centered lock in a 48pt white `radius/12` well bordered
-  `border/subtle`, and no text. Under Reduce Transparency: a 96% white
-  frost instead. One button (`More matches are locked`) to the paywall;
-  the recall beneath is hidden from assistive technology.
-- **The locked strip**, whenever more real matches exist than the deck
-  shows: a soft-blue `radius/12` row — the `lock` glyph (Lucide, the set's
-  box and stroke), `body-small-bold` `More matching recalls are locked` —
-  one button to the paywall, unchanged by which card is active. When no
-  more matches exist, the strip's place is the truthful `caption`
-  monitoring line.
-- **The empty, checking and could-not-check states** share one quiet
-  soft-blue card (`body` line over a `body-small` monitoring line), and the
-  body copy drops the found claim (`Lotly will keep checking…`).
-- **The footer** is one primary action: `See my plan`.
+**The deck** (the physical deck, 2026-10-01). It is a stack of the real
+cards:
 
-The Stores row shows at most three names; four or more read as the first
-two and `+N more`, joined by a no-break space so the count never wraps
-apart, while the row still speaks every store. The example recall card,
-`View plans`, and every trace of the merged 2026-09-27 purchase composition
-(benefit check rows, `Choose your plan`, the overlay footer and its
-scroll-threshold CTA) are gone from this step.
+- The active card is on top, upright and full size.
+- The next genuine cards, at most two, lie directly beneath it. Each is
+  uniformly smaller than the one in front (94% and 88%) and shows only an
+  8pt clean white strip of its right edge, inside its own padding.
+- The locked card wears a plain white face while it is behind the front
+  card, so its blur cannot tint the strip.
+- The last card, and a single match, have nothing behind them.
+
+A forward swipe carries the top card left and off the deck as a rigid
+rectangle. The card beneath, uncovered where it already sits, comes forward
+by one uniform scale-and-move. That promotion is the only scale in the deck;
+nothing rotates, skews or adds perspective. Backward is the exact reverse.
+A short drag settles the stack back as it was. The dot and the spoken value
+change on the release that commits, before the settle. Every card in a deck
+is the height of the tallest one measured.
+
+The deck keeps everything else from the previous Ready deck:
+
+- the Feed's `RecallCardSurface`, grouped exactly as the Feed groups it:
+  - the brand directly under the name;
+  - the category chip only for a launch category (a launch-hidden one such
+    as `prepared_foods` leaves no slot, as in the Feed);
+  - then the reason.
+
+  Only the status row is reserved, the brand is one line, and a short
+  card's spare height sits above the location. The location row sits the
+  card's own 8pt below the content (the Feed adds 8pt more). Every card
+  shares the deck's height at every text size.
+
+- the frosted real fourth card with one lock, under Reduce Transparency an
+  opaque frost.
+
+There is one dot per navigable page, the locked page included.
+
+To VoiceOver the deck is one adjustable element valued with the active
+card's complete content. Swiping up or down moves the card with no visual
+arrows; the move is immediate under Reduce Motion. On the locked card,
+activation opens the plan screen.
+
+**Edit preferences (one page, 2026-09-30).** The approved target is
+`assets/brand/reference/lotly-ready-edit-preferences-target.png`, never
+bundled. It is a full-screen modal over Ready on the page cream, with a 20pt
+margin. From the top:
+
+- `Cancel` in `action/secondary`.
+- `Edit your preferences` in Bold 31pt, using the `heading-2` base from the
+  accessibility sizes.
+- `Adjust your watch, all in one place.` at 17pt, `text/secondary`.
+- Three sections between `border/subtle` rules, all visible at once.
+  - Each section has a 44pt artwork column, decorative. It holds the
+    glyphs, or the draft's first two allergen pictograms, or the dash.
+  - The title is Bold 19pt and the `N selected` count is 14pt. Both are
+    heard as one header.
+  - The helper is 12pt: `Choose at least one state.` or `Optional`.
+  - A blue `Edit ›` sits at the trailing edge, in a 44pt box that shares the
+    header's top edge so VoiceOver reads the header first.
+  - Each chosen value is a removable chip: a 32pt soft-blue pill with a
+    white wash, a semibold 13pt name and an `x`. Vertical hitSlop takes it
+    to 44pt, and a 12pt row gap keeps targets apart.
+  - Allergens adds `Add allergens`, with a drawn circled plus.
+- The approved mini mascot at 51pt beside the 12pt caption, decorative.
+- Stores `Edit` opens the store search over the whole catalog: every store
+  alphabetically, row by row, the draft's checked. It shows two columns of
+  `radius/12` tiles while the widest store word fits a half-width tile,
+  otherwise one. Names wrap, and every tile is at least 44pt. A query
+  narrows it, and clearing restores it.
+- `Save changes` pinned in the footer: the 46pt pill. It is disabled, with
+  its reason spoken, while no state is chosen.
+
+From the accessibility sizes, each section stacks (artwork, heading,
+`Edit`, helper), and each chip becomes a full-width row with its own 44pt
+Remove. Nothing is capped.
 
 **The two problem screens** (2026-09-28; the approved statistic
 compositions), between Welcome and States: the shared frame, the bar at

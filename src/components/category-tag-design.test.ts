@@ -249,10 +249,12 @@ test('Dynamic Type is honoured, and long labels wrap instead of clipping', () =>
   for (const forbidden of ['ellipsizeMode', 'maxFontSizeMultiplier']) {
     assert.ok(!CARD.includes(forbidden), `the card caps text with ${forbidden}`);
   }
-  // Two line limits: the title's (three on Feed and Saved), and the
-  // reason's, which exists only in the onboarding deck's uniform variant.
-  assert.equal((CARD.match(/numberOfLines=/g) ?? []).length, 2);
+  // Three line limits: the title's (three on Feed and Saved), and the
+  // brand's and reason's, which exist only in the onboarding deck's uniform
+  // variant.
+  assert.equal((CARD.match(/numberOfLines=/g) ?? []).length, 3);
   assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}'));
+  assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_BRAND_LINES : undefined}'));
   assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_REASON_LINES : undefined}'));
   assert.deepEqual(codeOnly(CARD).match(/\bheight: [^,]+/g) ?? [], []);
 });

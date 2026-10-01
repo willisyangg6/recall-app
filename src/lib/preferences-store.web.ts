@@ -22,6 +22,17 @@ export async function savePreferences(_prefs: UserRecallPreferences): Promise<Sa
   return { synced: false };
 }
 
+/** Never reached on the web (no preferences); rejects rather than pretend to save. */
+export async function commitPreferences(
+  _prefs: UserRecallPreferences,
+): Promise<UserRecallPreferences> {
+  throw new Error('Preferences are not available on the web.');
+}
+
+export function onPreferencesSaved(_listener: (prefs: UserRecallPreferences) => void): () => void {
+  return () => {};
+}
+
 export async function flushPreferencesSync(): Promise<void> {}
 
 export async function deleteLocalPreferenceState(): Promise<void> {}

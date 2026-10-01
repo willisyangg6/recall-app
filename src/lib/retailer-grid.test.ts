@@ -8,12 +8,18 @@
  */
 
 import assert from 'node:assert/strict';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { EMPTY_PREFERENCES } from '@/domain/preferences';
-import { RETAILER_CATALOG, retailerById } from '@/domain/retailer-catalog';
+import { typography } from '@/constants/design-tokens';
+import { RETAILER_CATALOG, retailerById, searchRetailers } from '@/domain/retailer-catalog';
 import { storeRows, toggleRetailer } from '@/lib/personalization-screen';
 import {
+  CATALOG_GAP,
+  CATALOG_TILE_CHROME,
+  CATALOG_WIDEST_WORD,
+  catalogRows,
   clearRetailers,
   POPULAR_RETAILER_IDS,
   POPULAR_RETAILERS,
@@ -23,6 +29,7 @@ import {
   SHEET_MIN_CONTEXT,
   SHEET_MOTION,
   searchSheetTop,
+  storeCatalogColumns,
 } from '@/lib/retailer-grid';
 
 /** iOS's text-size multipliers, as React Native reports them in `fontScale`. */
@@ -219,4 +226,67 @@ test('the search sheet’s top edge depends only on the window and text size, ne
 test('the backdrop dims the step without hiding it, and the sheet’s motion is short', () => {
   assert.ok(SHEET_BACKDROP_OPACITY > 0 && SHEET_BACKDROP_OPACITY <= 0.5);
   assert.ok(SHEET_MOTION.in <= 300 && SHEET_MOTION.out < SHEET_MOTION.in);
+});
+
+// ── The editor's store catalog (2026-10-01) ─────────────────────────────────
+
+/** The sheet's content width on iPhone 17 (402pt) and the SE (375pt): the window less its margins. */
+const CONTENT = { iPhone17: 402 - 32, se: 375 - 32 } as const;
+
+test('the editor’s catalog is every canonical store, alphabetical, before anything is typed', () => {
+  const all = searchRetailers('');
+  assert.equal(all.length, RETAILER_CATALOG.length);
+  const names = all.map((r) => r.name);
+  assert.deepEqual(
+    names,
+    [...names].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' })),
+  );
+});
+
+test('catalog rows read alphabetically row by row, a short last row keeping its place', () => {
+  assert.deepEqual(catalogRows(['A', 'B', 'C', 'D', 'E'], 2), [['A', 'B'], ['C', 'D'], ['E']]);
+  assert.deepEqual(catalogRows(['A', 'B', 'C'], 1), [['A'], ['B'], ['C']]);
+  assert.deepEqual(catalogRows([], 2), []);
+});
+
+test('two columns at the default text size on iPhone 17 and the SE; one where the widest word no longer fits', () => {
+  for (const width of Object.values(CONTENT)) {
+    assert.equal(storeCatalogColumns(width, TEXT_SIZES.large), 2, `${width} at default`);
+    assert.equal(storeCatalogColumns(width, TEXT_SIZES.xSmall), 2);
+    assert.equal(storeCatalogColumns(width, TEXT_SIZES.xxLarge), 1, `${width} at XXL`);
+  }
+  // iPhone 17 still holds two at XL; the narrower SE does not.
+  assert.equal(storeCatalogColumns(CONTENT.iPhone17, TEXT_SIZES.xLarge), 2);
+  assert.equal(storeCatalogColumns(CONTENT.se, TEXT_SIZES.xLarge), 1);
+  // Every accessibility size is one column, whatever the width.
+  for (const scale of [TEXT_SIZES.ax1, TEXT_SIZES.ax5])
+    assert.equal(storeCatalogColumns(800, scale), 1);
+  // Whenever there are two, a tile's label holds the widest word.
+  for (const width of [320, ...Object.values(CONTENT), 768]) {
+    for (const scale of Object.values(TEXT_SIZES)) {
+      if (storeCatalogColumns(width, scale) !== 2) continue;
+      const label = (width - CATALOG_GAP) / 2 - CATALOG_TILE_CHROME;
+      assert.ok(label >= CATALOG_WIDEST_WORD * scale, `${width} at ${scale}: ${label}`);
+    }
+  }
+});
+
+test('the catalog’s widest word is measured from the bundled font across every store name', async () => {
+  const { GlobalFonts, createCanvas } = await import('@napi-rs/canvas');
+  const font = join(
+    __dirname,
+    '..',
+    '..',
+    'node_modules/@expo-google-fonts/public-sans/400Regular/PublicSans_400Regular.ttf',
+  );
+  assert.ok(GlobalFonts.registerFromPath(font, 'StoreCatalogBody'));
+  const context = createCanvas(8, 8).getContext('2d');
+  const body = typography.body;
+  assert.equal(body.face, 'sans-400');
+  context.font = `${body.fontSize}px StoreCatalogBody`;
+  const words = new Set(RETAILER_CATALOG.flatMap((r) => r.name.split(' ')));
+  const widest = Math.max(
+    ...[...words].map((word) => Math.ceil(context.measureText(word).width * 10) / 10),
+  );
+  assert.equal(CATALOG_WIDEST_WORD, widest, 'a store name’s widest word changed; re-measure');
 });

@@ -40,14 +40,10 @@ import {
   EDUCATION_SUCCESS,
   INDEPENDENCE_NOTE,
   PREFERENCES_SET_CONFIRMATION,
-  PREVIEW_BODY,
-  PREVIEW_BODY_EMPTY,
   PREVIEW_CTA,
   PREVIEW_EDIT,
   PREVIEW_HEADLINE,
   PREVIEW_MATCH_HEADING,
-  PREVIEW_NONE,
-  PREVIEW_ROW_COMPLETED,
   PREVIEW_SUMMARY_LABELS,
   PREVIEW_SUMMARY_TITLE,
   RETAILERS_BODY,
@@ -81,6 +77,7 @@ import {
   COUNTED_STEPS,
   filledSegments,
   motionAllowed,
+  ONBOARDING_STEPS,
   progressAccessibilityLabel,
   stepProgress,
 } from '@/lib/onboarding-state';
@@ -114,6 +111,8 @@ const PROBLEM = read('components', 'onboarding', 'problem-steps.tsx');
 const BUILDING = read('components', 'onboarding', 'building-step.tsx');
 const PREVIEW = read('components', 'onboarding', 'preview-step.tsx');
 const CAROUSEL = read('components', 'onboarding', 'ready-carousel.tsx');
+const EDITOR = read('components', 'onboarding', 'edit-preferences-step.tsx');
+const CHOOSER = read('components', 'onboarding', 'allergen-chooser-sheet.tsx');
 const EDUCATION = read('components', 'onboarding', 'notification-education.tsx');
 const SAMPLE = read('components', 'onboarding', 'sample-recall-card.tsx');
 const PANEL = read('components', 'paywall', 'paywall-panel.tsx');
@@ -127,6 +126,7 @@ const ROUTES = {
   retailers: read('app', 'onboarding', 'retailers.tsx'),
   building: read('app', 'onboarding', 'building.tsx'),
   preview: read('app', 'onboarding', 'preview.tsx'),
+  editPreferences: read('app', 'onboarding', 'edit-preferences.tsx'),
   education: read('app', 'onboarding', 'notifications.tsx'),
   onboardingPaywall: read('app', 'onboarding', 'paywall.tsx'),
   paywall: read('app', 'paywall.tsx'),
@@ -173,8 +173,9 @@ test('Clear selection is permanently allocated on every selector step and inert 
   assert.ok(controls.includes('disabled={draft.length === 0}'));
 
   // Allergens: its own fixed one-element controls slot — the compact
-  // ClearAction (P2B7Z), always rendered.
-  const allergens = componentBody(ALLERGENS, 'AllergensStep');
+  // ClearAction (P2B7Z), always rendered — in the grid the step and the
+  // editor's allergen chooser share (2026-09-30).
+  const allergens = componentBody(ALLERGENS, 'AllergenGrid');
   const allergenControls = allergens.slice(
     allergens.indexOf('const controls = '),
     allergens.indexOf('return ('),
@@ -399,28 +400,31 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
   assert.equal(ONBOARDING_COPY.buildingStoresCaption(false), 'Scanning recalls across all stores');
   assert.equal(ONBOARDING_COPY.BUILDING_FEED_CAPTION, 'Building your Affects You feed');
   assert.equal(ONBOARDING_COPY.BUILDING_DONE_CAPTION, 'Your recall watch is ready');
-  assert.equal(PREVIEW_HEADLINE, 'Your recall watch is ready.');
-  // The Ready body (the approved carousel target): the found claim stands
-  // only when something was found.
-  assert.equal(PREVIEW_BODY, 'Here’s what Lotly found for your household.');
-  assert.equal(
-    PREVIEW_BODY_EMPTY,
-    'Lotly will keep checking for recalls that match your household.',
-  );
-  assert.equal(PREVIEW_SUMMARY_TITLE, 'Your preferences are set');
-  // Option 2 (2026-09-26): Profile's own row names, so the app says store.
+  // The preference-board Ready (2026-09-30): the approved manifest's copy,
+  // with no line under the headline and no merged purchase copy.
+  assert.equal(PREVIEW_HEADLINE, 'You’re all set.');
+  assert.ok(!('PREVIEW_BODY' in ONBOARDING_COPY), 'a line came back under the headline');
+  assert.ok(!('PREVIEW_BODY_EMPTY' in ONBOARDING_COPY), 'a line came back under the headline');
+  assert.equal(PREVIEW_SUMMARY_TITLE, 'Your preferences');
+  // Profile's own row names, so the app says store; drawn in title case,
+  // exactly as spoken (the 2026-10-01 refinement retired the capitals).
   assert.deepEqual(PREVIEW_SUMMARY_LABELS, {
     states: 'States',
     allergens: 'Allergens',
     retailers: 'Stores',
   });
-  assert.equal(PREVIEW_ROW_COMPLETED, 'completed');
-  // The Ready/paywall split (2026-09-28): the carousel's copy, and none of
-  // the merged step's purchase copy.
-  assert.equal(PREVIEW_MATCH_HEADING, 'See what affects you today');
-  assert.equal(ONBOARDING_COPY.matchCountLabel(1), '1 recall for your watch');
-  assert.equal(ONBOARDING_COPY.matchCountLabel(2), '2 recalls for your watch');
-  assert.equal(ONBOARDING_COPY.matchCountLabel(3), '3 recalls for your watch');
+  assert.ok(!('PREVIEW_BOARD_LABELS' in ONBOARDING_COPY), 'the spaced capitals came back');
+  assert.equal(PREVIEW_MATCH_HEADING, 'Your recall preview');
+  // The count line: singular for one, no `today`, the number its own piece.
+  assert.equal(ONBOARDING_COPY.matchCountLabel(1), 'We found 1 recall for you.');
+  assert.equal(ONBOARDING_COPY.matchCountLabel(3), 'We found 3 recalls for you.');
+  assert.equal(ONBOARDING_COPY.matchCountLabel(21), 'We found 21 recalls for you.');
+  assert.deepEqual(ONBOARDING_COPY.matchCountParts(21), {
+    before: 'We found ',
+    number: '21',
+    after: ' recalls for you.',
+  });
+  assert.ok(!/today/i.test(ONBOARDING_COPY.matchCountLabel(2)));
   assert.equal(ONBOARDING_COPY.PREVIEW_LOCKED_STRIP, 'More matching recalls are locked');
   assert.equal(ONBOARDING_COPY.PREVIEW_EMPTY_TITLE, 'Nothing currently matches your watch.');
   assert.equal(
@@ -433,6 +437,18 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
   assert.ok(!('PREVIEW_OFFER_HEADLINE' in ONBOARDING_COPY), 'the duplicate headline came back');
   assert.ok(!('PREVIEW_OFFER_BODY' in ONBOARDING_COPY), 'the duplicate sentence came back');
   assert.ok(!('PREVIEW_EXAMPLE_LABEL' in ONBOARDING_COPY), 'the example label came back');
+  // The one-page editor (2026-09-30): the approved manifest's copy.
+  assert.equal(ONBOARDING_COPY.EDIT_CANCEL, 'Cancel');
+  assert.equal(ONBOARDING_COPY.EDIT_HEADLINE, 'Edit your preferences');
+  assert.equal(ONBOARDING_COPY.EDIT_BODY, 'Adjust your watch, all in one place.');
+  assert.equal(ONBOARDING_COPY.EDIT_STATES_HELPER, 'Choose at least one state.');
+  assert.equal(ONBOARDING_COPY.EDIT_OPTIONAL, 'Optional');
+  assert.equal(ONBOARDING_COPY.EDIT_ACTION, 'Edit');
+  assert.equal(ONBOARDING_COPY.EDIT_ADD_ALLERGENS, 'Add allergens');
+  assert.equal(ONBOARDING_COPY.EDIT_CAPTION, 'Your recall preview updates when you save.');
+  assert.equal(ONBOARDING_COPY.EDIT_SAVE, 'Save changes');
+  assert.equal(ONBOARDING_COPY.editSelectedCount(2), '2 selected');
+  assert.equal(ONBOARDING_COPY.editSelectedCount(1), '1 selected');
   assert.equal(PREVIEW_EDIT, 'Edit preferences');
   assert.equal(
     INDEPENDENCE_NOTE,
@@ -525,16 +541,30 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
       PREVIEW,
       [
         'PREVIEW_HEADLINE',
-        'PREVIEW_BODY',
-        'PREVIEW_BODY_EMPTY',
         'PREVIEW_EDIT',
         'PREVIEW_MATCH_HEADING',
-        'matchCountLabel',
+        'matchCountParts',
         'PREVIEW_CTA',
         'PREVIEW_NONE',
         'PREVIEW_SUMMARY_TITLE',
         'PREVIEW_SUMMARY_LABELS',
-        'PREVIEW_ROW_COMPLETED',
+      ],
+    ],
+    [
+      'editor',
+      EDITOR,
+      [
+        'EDIT_CANCEL',
+        'EDIT_HEADLINE',
+        'EDIT_BODY',
+        'EDIT_SECTION_LABELS',
+        'editSelectedCount',
+        'EDIT_STATES_HELPER',
+        'EDIT_OPTIONAL',
+        'EDIT_ACTION',
+        'EDIT_ADD_ALLERGENS',
+        'EDIT_CAPTION',
+        'EDIT_SAVE',
       ],
     ],
     [
@@ -557,231 +587,320 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
       assert.ok(codeOnly(source).includes(constant), `${name} does not render ${constant}`);
     }
   }
-  assert.equal(PREVIEW_NONE, 'None');
+  assert.equal(ONBOARDING_COPY.PREVIEW_NONE, 'None');
 });
 
-test('the Ready summary keeps all three rows in order and shows None for an empty optional group', () => {
-  const code = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
-  const states = code.indexOf("key: 'states',\n      names: summary.states,");
-  const allergens = code.indexOf("key: 'allergens',\n      names: summary.allergens,");
-  const stores = code.indexOf("key: 'retailers',\n      names: summary.retailers,");
-  assert.ok(states > 0 && states < allergens && allergens < stores, 'the rows moved or went');
-  assert.ok(!code.includes('rows.filter('), 'an empty row is removed');
-  const row = codeOnly(componentBody(PREVIEW, 'SummaryRow'));
-  // A row shows every name unless it is handed a compacted value (the
-  // Stores row, lib/ready-presentation `storeSummaryText`); it SPEAKS every
-  // name either way.
-  assert.ok(row.includes("{names.length === 0 ? PREVIEW_NONE : (shown ?? names.join(', '))}"));
-  assert.ok(code.includes('shown: storeSummaryText(summary.retailers),'));
-  assert.equal((code.match(/shown: /g) ?? []).length, 1, 'a row other than Stores is compacted');
-  // One soft-blue card, headed, with no nested white card and no lift.
+// ── Ready: the preference board (2026-09-30) ────────────────────────────────
+
+test('Ready draws the three approved layers whole, decorative, with the native rows between the board and the foreground', () => {
+  const code = codeOnly(PREVIEW);
+  for (const file of [
+    'lotly-ready-preference-board-scene.png',
+    'lotly-ready-preference-board-paper.png',
+    'lotly-ready-preference-board-overlap.png',
+  ]) {
+    assert.ok(code.includes(`require('@/assets/brand/production/${file}')`), `Ready lost ${file}`);
+  }
+  // The trust-peek card mascot left with the old summary card.
+  assert.ok(!code.includes('trust-peek'), 'the old Ready mascot came back');
+  const hero = codeOnly(componentBody(PREVIEW, 'BoardHero'));
+  // Order: the scene and the board, then the native rows, then the overlap,
+  // so the mascot, bowl and cloth always stand in front of every row.
+  const scene = hero.indexOf('source={SCENE}');
+  const paper = hero.indexOf('source={PAPER}');
+  const rows = hero.indexOf('{children}');
+  const overlap = hero.indexOf('source={OVERLAP}');
   assert.ok(
-    code.includes('<Surface background="background/subtle" radius={16} style={styles.summary}>'),
+    scene > 0 && scene < paper && paper < rows && rows < overlap,
+    'the layer order changed',
   );
-  assert.ok(code.includes('<Text variant="heading-3" accessibilityRole="header">'));
-  assert.ok(code.includes('{PREVIEW_SUMMARY_TITLE}'));
-  // Three flat surfaces and no more: the summary card, the locked strip and
-  // the honest empty/checking card. Nothing is nested inside the summary.
-  assert.equal((codeOnly(PREVIEW).match(/<Surface\b/g) ?? []).length, 3, 'a surface came or went');
-  assert.ok(!codeOnly(PREVIEW).includes('elevation='), 'a Ready surface has a shadow');
+  // Every layer is decorative: never heard, never touched.
+  assert.equal((hero.match(/\{\.\.\.DECORATIVE\}/g) ?? []).length, 2);
+  const decorative = code.slice(code.indexOf('const DECORATIVE = {'), code.indexOf('} as const;'));
+  for (const prop of [
+    'accessible: false',
+    'accessibilityElementsHidden: true',
+    "importantForAccessibility: 'no-hide-descendants'",
+    "pointerEvents: 'none'",
+  ]) {
+    assert.ok(decorative.includes(prop), `the layers lost ${prop}`);
+  }
+  // The rows sit in the report's content-safe rectangle.
+  assert.ok(hero.includes('left: paperLeft + CONTENT_PX.left * scale,'));
+  assert.ok(hero.includes('top: paperTop + CONTENT_PX.top * scale,'));
+  assert.ok(hero.includes('width: boardColumnWidth(scale),'));
 });
 
-test('each Ready row is its artwork at the leading edge, the label over its values, and the completed check at the trailing edge', () => {
+test('the board grows only through its paper slice and the thin wall band; its foot and the foreground move together', () => {
+  const hero = codeOnly(componentBody(PREVIEW, 'BoardHero'));
+  // One growth, applied to the scene's wall band and the board's slice alike.
+  assert.ok(hero.includes('slice={WALL_BAND_PX}'));
+  assert.ok(hero.includes('slice={PAPER_SLICE_PX}'));
+  assert.equal((hero.match(/growth=\{growth\}/g) ?? []).length, 2);
+  // The overlap moves down with everything below the band: it never moves
+  // relative to the board's foot.
+  assert.ok(hero.includes('top: OVERLAP_PX.top * scale + growth,'));
+  assert.ok(hero.includes('height: SCENE_PX.height * scale + growth'));
+  // Three pieces: rows above and below the slice 1:1, the slice stretched.
+  const sliced = codeOnly(componentBody(PREVIEW, 'SlicedImage'));
+  assert.ok(sliced.includes('resizeMode="stretch"'));
+  assert.ok(sliced.includes('sliceImagePlacement(slice, imageRows)'));
+  assert.equal((sliced.match(/<Image/g) ?? []).length, 3);
+});
+
+test('past the growth cap and at every accessibility size, the preferences go full width below the decorative scene', () => {
   const step = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
-  assert.ok(step.includes('artwork: <Icon name="map-pin" size={24} color="icon/primary" />,'));
-  assert.ok(step.includes('artwork: <AllergenArtworkMark artwork={allergens} />,'));
-  assert.ok(
-    step.includes('artwork: <Icon name="shopping-cart" size={24} color="icon/primary" />,'),
-  );
-  assert.ok(step.includes('const allergens = allergenArtwork(prefs.allergens);'));
-  const row = codeOnly(componentBody(PREVIEW, 'SummaryRow'));
-  // Artwork, text, check — and, stacked at the accessibility sizes, artwork
-  // and check on a top line with the text beneath.
-  assert.ok(
-    row.includes('{leading}\n          {text}\n          {check}'),
-    'not artwork, text, check',
-  );
-  assert.ok(row.includes('{leading}\n            {check}\n          </View>\n          {text}'));
-  assert.ok(row.includes('<View style={styles.well}>{artwork}</View>'));
-  assert.equal((row.match(/<Icon name="check"/g) ?? []).length, 1);
-  assert.ok(
-    row.indexOf('<Icon name="check"') > row.indexOf('style={styles.checkSlot}'),
-    'the check is not in its own slot',
-  );
-  // Every row's artwork sits in the same white well; the check in a pale circle.
-  const block = (name: string) => {
-    const code = codeOnly(PREVIEW);
-    const start = code.indexOf(`  ${name}: {`);
-    return code.slice(start, code.indexOf('},', start));
-  };
-  assert.ok(block('well').includes('width: ROW_WELL_SIZE,'));
-  assert.ok(block('well').includes('height: ROW_WELL_SIZE,'));
-  assert.ok(block('well').includes("backgroundColor: color['background/surface'],"));
-  assert.ok(block('checkCircle').includes('borderRadius: radius.full,'));
-  assert.ok(block('checkWash').includes("backgroundColor: color['background/surface'],"));
-  // Neither line is the secondary grey on the soft blue (3.2:1, below AA),
-  // and both are Public Sans: the label is the smaller medium `caption`, the
-  // values `body` — never the mono metadata `label` type.
-  assert.ok(row.includes('<Text variant="caption">{label}</Text>'));
-  assert.ok(!row.includes('variant="label"'), 'a category label is mono');
-  // The check is the map pin's and cart's navy, at the 20pt icon step.
-  assert.ok(row.includes('<Icon name="check" size={20} color="icon/primary" />'));
-  assert.ok(!row.includes('text/secondary'), 'a row line is grey on the soft blue');
+  assert.ok(step.includes('const board = boardLayout(measured, scale, fontScale);'));
+  // The measurement: the same rows at the board's column width, hidden,
+  // untouchable and never heard, so the choice never depends on the layout.
+  assert.ok(step.includes('style={[styles.measure, { width: boardColumnWidth(scale) }]}'));
+  assert.ok(step.includes('onLayout={(event) => setMeasured(event.nativeEvent.layout.height)}'));
+  const measure = step.slice(step.indexOf('styles.measure') - 200, step.indexOf('styles.measure'));
+  assert.ok(measure.includes('{...DECORATIVE}'), 'the measurement can be heard or touched');
+  // Stacked: the scene whole with its board blank, then the rows at full width.
+  assert.ok(step.includes("{board.kind === 'board' ? content(editRef) : null}"));
+  assert.ok(step.includes("{board.kind === 'stacked' ? ("));
+  // The page always scrolls above the pinned action: nothing is capped.
+  assert.ok(step.includes('<ScrollView'));
+  assert.ok(!codeOnly(PREVIEW).includes('maxFontSizeMultiplier'));
+  assert.ok(!codeOnly(PREVIEW).includes('numberOfLines'));
 });
 
-test('each Ready row is heard once with its complete selection; its artwork and check never are', () => {
-  const row = codeOnly(componentBody(PREVIEW, 'SummaryRow'));
+test('the board: three rows in order, each heard once with every chosen name; the plates and rules never are', () => {
+  const step = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
+  const order = ["key: 'states'", "key: 'allergens'", "key: 'retailers'"].map((k) =>
+    step.indexOf(k),
+  );
+  assert.ok(order.every((i) => i > 0) && order[0] < order[1] && order[1] < order[2]);
+  // The rows read the Profile card's own summary, so the two cannot disagree.
+  assert.ok(step.includes('summarizePreferences(prefs)'));
+  const row = codeOnly(componentBody(PREVIEW, 'BoardRow'));
   assert.ok(
     row.includes(
-      'accessible\n      accessibilityLabel={summaryRowLabel(label, names, PREVIEW_NONE, PREVIEW_ROW_COMPLETED)}>',
+      'accessible\n      accessibilityLabel={boardRowLabel(label, names, PREVIEW_NONE)}>',
     ),
   );
-  assert.ok(row.includes('<View {...DECORATIVE} style={stacked ? styles.leadingStacked : null}>'));
-  assert.ok(row.includes('<View {...DECORATIVE} style={styles.checkSlot}>'));
-  const decorative = codeOnly(PREVIEW).slice(
-    codeOnly(PREVIEW).indexOf('const DECORATIVE = {'),
-    codeOnly(PREVIEW).indexOf('} as const;'),
-  );
-  for (const hidden of [
-    'accessible: false,',
-    'accessibilityElementsHidden: true,',
-    "importantForAccessibility: 'no-hide-descendants',",
-    "pointerEvents: 'none',",
-  ]) {
-    assert.ok(decorative.includes(hidden), `the decoration lacks ${hidden}`);
-  }
-  // The pictograms and the +N are inside the hidden leading group, never labelled.
-  const leading = row.slice(row.indexOf('const leading = ('), row.indexOf('const check = ('));
-  assert.ok(leading.includes('{moreLabel(more)}'));
+  assert.ok(row.includes('{boardValue(names, PREVIEW_NONE)}'));
+  // The label: the copy module's title-case name, in Public Sans SemiBold
+  // (`body-small-bold`) at Ready's 14pt, with no letter spacing of its own.
   assert.ok(
-    !codeOnly(componentBody(PREVIEW, 'AllergenArtworkMark')).includes('accessibilityLabel'),
+    row.includes(
+      '<Text variant="body-small-bold" color="text/secondary" style={READY_TYPE.label}>\n          {label}',
+    ),
   );
+  assert.ok(row.includes('<Text variant="body" style={READY_TYPE.value}>'));
+  assert.ok(!codeOnly(PREVIEW).includes('letterSpacing'));
+  assert.ok(row.includes('<View {...DECORATIVE} style={styles.well}>'));
+  assert.ok(codeOnly(componentBody(PREVIEW, 'DashedRule')).includes('{...DECORATIVE}'));
+  const content = codeOnly(componentBody(PREVIEW, 'BoardContent'));
+  assert.ok(content.includes('accessibilityRole="header"'));
+  assert.ok(content.includes('{PREVIEW_SUMMARY_TITLE}'));
+  // Edit preferences: blue words and a chevron, a 44pt target by hitSlop.
+  assert.ok(content.includes('accessibilityLabel={PREVIEW_EDIT}'));
+  assert.ok(content.includes('accessibilityHint={PREVIEW_EDIT_HINT}'));
+  assert.ok(content.includes('hitSlop={EDIT_HIT_SLOP}'));
+  assert.ok(content.includes('<Icon name="chevron-right" size={16} color="icon/brand" />'));
+  assert.ok(codeOnly(PREVIEW).includes('hitSlopToMinimum(READY_TYPE.edit.lineHeight)'));
 });
 
-test('the Allergens well draws the approved pictograms untinted, through the one allergen-assets map', () => {
-  const code = codeOnly(PREVIEW);
-  assert.ok(code.includes("import { allergenPictogram } from '@/lib/allergen-assets';"));
+test('the Allergens plate draws at most two approved pictograms untinted, and the neutral dash for none', () => {
+  const plate = codeOnly(componentBody(PREVIEW, 'AllergenPlate'));
+  assert.ok(plate.includes("if (artwork.kind === 'none') return <View style={styles.dash} />;"));
+  assert.ok(plate.includes('const [first, second] = artwork.tokens;'));
+  assert.ok(!plate.includes('accessibilityLabel'));
   const pictogram = codeOnly(componentBody(PREVIEW, 'Pictogram'));
   assert.ok(pictogram.includes('source={allergenPictogram(token) ?? undefined}'));
-  assert.ok(pictogram.includes('resizeMode="contain"'));
-  assert.ok(pictogram.includes('style={{ width: side, height: side }}'));
-  // Never tinted: tinted navy, tree nuts and egg stop reading (founder, 2026-09-26).
-  assert.ok(!code.includes('tintColor'), 'a pictogram is tinted');
-  const mark = codeOnly(componentBody(PREVIEW, 'AllergenArtworkMark'));
-  assert.ok(mark.includes("if (artwork.kind === 'none') return <View style={styles.dash} />;"));
-  assert.ok(mark.includes('<Pictogram token={first} side={PICTOGRAM_SINGLE} />'));
-  assert.ok(mark.includes('<Pictogram token={second} side={PICTOGRAM_PAIR} />'));
-  const step = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
-  assert.ok(step.includes("more: allergens.kind === 'pictograms' ? allergens.more : 0,"));
-  // No second map: the pictograms are required by lib/allergen-assets.ts alone.
-  const requiring: string[] = [];
-  const walk = (dir: string) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) walk(path);
-      else if (/\.(ts|tsx)$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
-        if (/assets\/icons\/allergen-[a-z-]+-1024\.png/.test(readFileSync(path, 'utf8'))) {
-          requiring.push(path.slice(SRC.length + 1));
-        }
-      }
-    }
-  };
-  walk(SRC);
-  assert.deepEqual(requiring, [join('lib', 'allergen-assets.ts')]);
+  assert.ok(!pictogram.includes('tintColor'), 'the pictograms are tinted');
+  // The step reads the pictograms through the shared selection rule.
+  assert.ok(codeOnly(PREVIEW).includes('allergenArtwork(prefs.allergens)'));
 });
 
-test('the trust-peek mascot is drawn whole over the card, decorative and untouchable, and settles once only without Reduce Motion', () => {
-  const code = codeOnly(PREVIEW);
-  assert.ok(
-    code.includes("require('@/assets/brand/production/lotly-mascot-ready-trust-peek-1024.png')"),
-    'Ready does not draw the trust-peek mascot',
-  );
-  assert.equal((code.match(/require\(/g) ?? []).length, 1, 'Ready bundles a second picture');
-  const mascot = codeOnly(componentBody(PREVIEW, 'TrustPeek'));
-  assert.ok(mascot.includes('source={MASCOT}'));
-  assert.ok(mascot.includes('resizeMode="contain"'));
-  assert.ok(mascot.includes('style={{ width: size, height: size }}'));
-  assert.ok(mascot.includes('{...DECORATIVE}'));
-  for (const forbidden of ['tintColor', "'cover'", '"cover"', 'Animated.loop', 'iterations']) {
-    assert.ok(!mascot.includes(forbidden), `the mascot uses ${forbidden}`);
-  }
-  // The other onboarding mascots' entrance, decided once.
-  assert.ok(mascot.includes('const [animate] = useState(() => motionAllowed(reduceMotion));'));
-  assert.ok(mascot.includes('new Animated.Value(animate ? 0 : 1)'));
-  assert.ok(mascot.includes('if (!animate) return;'));
-  assert.ok(mascot.includes('delay: MASCOT_ENTRANCE.delay,'));
-  // The card's sibling, drawn after it (so over its edge), never inside it,
-  // with the drawing's full height reserved above the card.
-  const step = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
-  // The room above the card is the reserve — the lift less the crest's
-  // allowed rise beside the body paragraph — and the seat is unmoved: the
-  // mascot's top keeps the same distance to the card it always had.
-  assert.ok(step.includes('const reserve = readyMascotReserve(size, fontScale);'));
-  assert.ok(step.includes('<View style={{ paddingTop: reserve }}>'));
-  assert.ok(step.indexOf('</Surface>') < step.indexOf('<TrustPeek'), 'the mascot is in the card');
-  assert.ok(step.includes('const size = readyMascotSize(height, fontScale);'));
-  // The cliff: while the crest rises, the BODY alone gives up the mascot's
-  // width (the headline keeps the full line) and wraps left of the drawing.
-  assert.ok(step.includes('const bodyInset = readyBodyAside(size, fontScale);'));
-  assert.ok(step.includes('bodyInset={bodyInset}'));
-  assert.ok(step.includes('top={reserve - readyMascotOffset(size)}'));
-  assert.ok(step.includes('right={readyMascotRight(size)}'));
-  // The heading and the first row keep clear of the shield; from the
-  // accessibility sizes the rows stack and the heading drops beneath it.
-  assert.ok(step.includes('<View style={summaryHeadingLayout(size, fontScale)}>'));
-  assert.ok(step.includes('const stacked = summaryStacked(fontScale);'));
-});
-
-test('Ready: Back, Edit preferences, See my plan and the resume point are wired for the split flow', () => {
+test('Ready: Back, Edit preferences (the one-page editor), See my plan and the resume point', () => {
   const route = codeOnly(ROUTES.preview);
   assert.ok(route.includes("void access.recordShownStep('preview');"));
-  assert.ok(route.includes("onEdit={() => router.push(onboardingRoute('states'))}"));
+  assert.ok(route.includes('router.push(EDIT_PREFERENCES_ROUTE);'));
+  assert.ok(!route.includes("onboardingRoute('states')"), 'Edit preferences replays States');
   assert.ok(route.includes("onBack={() => goBackFrom('preview', router)}"));
   assert.ok(route.includes("onSeePlan={() => router.push(onboardingRoute('paywall'))}"));
   assert.ok(route.includes('prefs={load.prefs}'));
-  // The preview is the REAL feed through the REAL matching layer, built in
-  // lib/ready-preview.ts — no onboarding-only matcher, no fixture data.
+  // Back from the editor, focus returns to Edit preferences.
+  assert.ok(route.includes('AccessibilityInfo.setAccessibilityFocus(tag)'));
+  assert.ok(route.includes('editRef={editRef}'));
+  // The preview is the REAL feed through the REAL matching layer.
   assert.ok(route.includes('const feed = useFeed();'));
   assert.ok(route.includes('buildReadyPreview(feedInput, load.prefs, todayIso())'));
-  assert.ok(!route.includes('onViewPlans'), 'the View plans step came back');
   assert.ok(!route.includes('usePurchaseFlow'), 'Ready grew purchase machinery back');
   const step = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
+  // Back, and no progress bar.
   assert.ok(step.includes('back={{ label: BACK_LABEL, hint: BACK_HINT, onPress: onBack }}'));
-  // No progress bar on Ready (stepProgress('preview') is null), and the one
-  // pinned action is See my plan.
-  assert.ok(step.includes("progress={stepProgress('preview')}"));
-  assert.ok(
-    step.includes(
-      '<Button label={PREVIEW_CTA} accessibilityHint={PREVIEW_CTA_HINT} onPress={onSeePlan} />',
-    ),
-  );
-  // Edit preferences is a quiet text action, not a second large button.
-  assert.ok(step.includes('accessibilityLabel={PREVIEW_EDIT}'));
-  assert.ok(step.includes('accessibilityHint={PREVIEW_EDIT_HINT}'));
-  assert.ok(step.includes('hitSlop={EDIT_HIT_SLOP}'));
-  assert.ok(step.includes('onPress={onEdit}'));
-  assert.ok(!step.includes('label={PREVIEW_EDIT}'), 'Edit preferences is a Button again');
-  // No example recall, no notification preview, no purchase UI of any kind.
+  assert.ok(step.includes('progress={null}'));
+  // No body line, no purchase UI, no example card, no old summary card.
   for (const gone of [
+    'PREVIEW_BODY',
     'SampleRecallCard',
-    'PREVIEW_EXAMPLE_LABEL',
-    'EDUCATION_PREVIEW',
-    'notification-education',
     'usePurchaseFlow',
     'PurchasePlans',
-    'PurchaseCta',
-    'PurchaseTerms',
     'PAYWALL_BENEFITS',
-    'paywall-panel',
     'INDEPENDENCE_NOTE',
-    'footerMode',
+    'relevancePalette',
+    'TrustPeek',
+    'checkCircle',
   ]) {
     assert.ok(!codeOnly(PREVIEW).includes(gone), `Ready draws ${gone}`);
   }
   // The step reads the saved preferences and never writes them.
-  for (const forbidden of ['savePreferences', 'update(', 'useOnboardingPreferences']) {
+  for (const forbidden of ['savePreferences', 'commitPreferences', 'useOnboardingPreferences']) {
     assert.ok(!codeOnly(PREVIEW).includes(forbidden), `the step reaches ${forbidden}`);
   }
+});
+
+test('the preview: the true count in one muted sentence, the deck, the honest strip or line, and See my plan pinned', () => {
+  const step = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
+  // The count is every real match, in one sentence of plain text, never a
+  // pill or a button; only the number is emphasised.
+  assert.ok(step.includes('const count = previewMatchCount(preview);'));
+  assert.ok(step.includes('{count !== null ? <CountLine count={count} /> : null}'));
+  const line = codeOnly(componentBody(PREVIEW, 'CountLine'));
+  assert.ok(
+    line.includes(
+      '<Text variant="body" color="text/secondary">\n      {parts.before}\n      <Text variant="body" style={styles.countNumber}>\n        {parts.number}\n      </Text>\n      {parts.after}\n    </Text>',
+    ),
+  );
+  assert.ok(!line.includes('Pressable') && !line.includes('Surface'), 'the count became a control');
+  assert.ok(
+    !step.includes('models.length > 0 ? preview.models.length'),
+    'the count is the deck again',
+  );
+  // The deck only for real image-bearing cards; the strip only when more
+  // real matches exist; otherwise the truthful line; the honest card for
+  // checking, unavailable and none.
+  assert.ok(step.includes('{preview.models.length > 0 ? ('));
+  assert.ok(step.includes('{hasLockedMatches(preview) ? ('));
+  assert.ok(step.includes('{PREVIEW_MONITORING_NOTE}'));
+  for (const title of [
+    'PREVIEW_CHECKING_TITLE',
+    'PREVIEW_UNAVAILABLE_TITLE',
+    'PREVIEW_EMPTY_TITLE',
+  ]) {
+    assert.ok(step.includes(title));
+  }
+  // See my plan: the one pinned action, opening the separate paywall.
+  assert.ok(step.includes('<SeeMyPlan onPress={onSeePlan} />'));
+  const cta = codeOnly(componentBody(PREVIEW, 'SeeMyPlan'));
+  assert.ok(cta.includes('{PREVIEW_CTA}'));
+  assert.ok(cta.includes('accessibilityRole="button"'));
+});
+
+// ── Edit preferences: one page (2026-09-30) ─────────────────────────────────
+
+test('the editor edits ONE draft through the existing choosers, which save nothing of their own', () => {
+  const step = codeOnly(componentBody(EDITOR, 'EditPreferencesStep'));
+  // States and Stores: the existing search sheets, handed the draft and its toggles.
+  assert.ok(step.includes('<StateSearchSheet'));
+  assert.ok(step.includes('selected={draft.states}'));
+  assert.ok(step.includes('onToggle={onToggleState}'));
+  assert.ok(step.includes('<RetailerSearchSheet\n        catalog'));
+  assert.ok(step.includes('selected={draft.retailers}'));
+  assert.ok(step.includes('onToggle={onToggleStore}'));
+  // Allergens: the Allergens step's own grid, in its sheet.
+  assert.ok(step.includes('<AllergenChooserSheet'));
+  assert.ok(step.includes('selected={draft.allergens}'));
+  assert.ok(
+    codeOnly(CHOOSER).includes(
+      '<AllergenGrid selected={selected} onToggle={onToggle} onClear={onClear} />',
+    ),
+  );
+  // Both allergen actions open the SAME chooser.
+  assert.equal((step.match(/openChooser\('allergens'/g) ?? []).length, 2);
+  // Nothing on the page, in the chooser or in the sheets it mounts writes the store.
+  for (const source of [EDITOR, CHOOSER, STATE_SHEET, SEARCH_SHEET]) {
+    for (const forbidden of [
+      'savePreferences',
+      'commitPreferences',
+      'useOnboardingPreferences',
+      'preferences-store',
+    ]) {
+      assert.ok(!codeOnly(source).includes(forbidden), `a chooser reaches ${forbidden}`);
+    }
+  }
+});
+
+test('the editor route reads once, commits once through the canonical store, and returns to Ready', () => {
+  const route = codeOnly(ROUTES.editPreferences);
+  assert.ok(route.includes('setState(beginEditing(saved))'));
+  // The one save: the canonical store's local-first commit, latched against a double tap.
+  assert.equal((route.match(/commitPreferences\(/g) ?? []).length, 1);
+  assert.ok(route.includes('if (state === null || saving.current) return;'));
+  assert.ok(route.includes('const request = saveRequest(state);'));
+  assert.ok(route.includes('() => router.back(),'));
+  // A failure releases the latch, keeps the page and says so.
+  assert.ok(route.includes("dispatch({ type: 'save-failed' });"));
+  assert.ok(route.includes('saving.current = false;'));
+  assert.ok(route.includes('AccessibilityInfo.announceForAccessibility(EDIT_SAVE_FAILED);'));
+  // Cancel discards: back to Ready, nothing written.
+  assert.ok(route.includes('onCancel={() => router.back()}'));
+  // Not a step: no resume point, no building interstitial, no other step.
+  for (const forbidden of [
+    'recordShownStep',
+    'onboardingRoute',
+    'watchBuilt',
+    'completePersonalization',
+  ]) {
+    assert.ok(!route.includes(forbidden), `the editor reaches ${forbidden}`);
+  }
+});
+
+test('the editor is a full-screen modal over Ready in the onboarding group, never a step', () => {
+  const layout = codeOnly(read('app', '_layout.tsx'));
+  assert.ok(layout.includes("presentation: 'fullScreenModal', gestureEnabled: false"));
+  assert.ok(layout.includes('name === EDIT_PREFERENCES_SCREEN'));
+  assert.ok(!(ONBOARDING_STEPS as readonly string[]).includes('edit-preferences'));
+});
+
+test('Save changes is disabled with its reason while no state is chosen, and every target is 44pt and distinct', () => {
+  const step = codeOnly(componentBody(EDITOR, 'EditPreferencesStep'));
+  assert.ok(step.includes('<SaveButton disabled={!canSave} busy={saving} onPress={onSave} />'));
+  const save = codeOnly(componentBody(EDITOR, 'SaveButton'));
+  assert.ok(save.includes('accessibilityHint={disabled ? EDIT_SAVE_NEEDS_STATE : EDIT_SAVE_HINT}'));
+  assert.ok(save.includes('accessibilityState={{ disabled, busy }}'));
+  assert.ok(save.includes('disabled={disabled || busy}'));
+  // Chips: 32pt drawn, 44pt by vertical hitSlop, rows further apart than the slops meet.
+  const pill = codeOnly(componentBody(EDITOR, 'ChipPill'));
+  assert.ok(pill.includes('hitSlop={{ top: CHIP_SLOP, bottom: CHIP_SLOP }}'));
+  assert.ok(pill.includes('accessibilityLabel={removeChipLabel(chip.name)}'));
+  assert.ok(codeOnly(EDITOR).includes('const CHIP_SLOP = (hitTarget.minimum - CHIP_HEIGHT) / 2;'));
+  assert.ok(codeOnly(EDITOR).includes('rowGap: CHIP_ROW_GAP,'));
+  // At the accessibility sizes: full-width rows with their own 44pt Remove.
+  const row = codeOnly(componentBody(EDITOR, 'ChipRow'));
+  assert.ok(row.includes('accessibilityLabel={removeChipLabel(chip.name)}'));
+  assert.ok(row.includes('style={({ pressed }) => [styles.remove, pressed && styles.pressed]}'));
+  // Edit, Add allergens and Cancel are 44pt boxes.
+  for (const style of ['edit', 'add', 'cancel']) {
+    const body = codeOnly(EDITOR).slice(codeOnly(EDITOR).indexOf(`  ${style}: {`));
+    assert.ok(
+      body.slice(0, body.indexOf('},')).includes('minHeight: hitTarget.minimum'),
+      `${style} is under 44pt`,
+    );
+  }
+});
+
+test('the editor’s artwork and mini mascot are decorative; focus returns to the opening action', () => {
+  const code = codeOnly(EDITOR);
+  assert.ok(
+    code.includes("require('@/assets/brand/production/lotly-ready-preferences-mini-mascot.png')"),
+  );
+  const section = codeOnly(componentBody(EDITOR, 'Section'));
+  assert.ok(
+    section.includes(
+      '<View {...DECORATIVE} style={rows ? styles.iconStacked : styles.iconColumn}>',
+    ),
+  );
+  assert.ok(section.includes('accessibilityRole="header"'));
+  // The allergen artwork follows the DRAFT.
+  assert.ok(code.includes('<AllergenMark tokens={draft.allergens} />'));
+  const step = codeOnly(componentBody(EDITOR, 'EditPreferencesStep'));
+  assert.ok(step.includes('AccessibilityInfo.setAccessibilityFocus(tag)'));
+  assert.equal((step.match(/onClosed=\{refocus\}/g) ?? []).length, 3);
 });
 
 // ── The permission rule ─────────────────────────────────────────────────────
@@ -1283,72 +1402,125 @@ test('the paywall keeps its sticky/inline terms rule, and Ready carries no terms
   }
 });
 
-test('the deck: uniform real cards, depth behind the active card, the frosted real fourth as the final page', () => {
-  const deck = codeOnly(componentBody(CAROUSEL, 'ReadyCarousel'));
-  // Horizontal, snapping one card at a time, by the shared geometry.
-  assert.ok(deck.includes('horizontal'));
-  assert.ok(deck.includes('snapToInterval={stride}'));
-  assert.ok(deck.includes('const stride = carouselSnapInterval(usableWidth);'));
-  assert.ok(deck.includes('decelerationRate="fast"'));
-  assert.ok(deck.includes('disableIntervalMomentum'));
-  // Depth, not a list: the waiting card scaled and tucked behind the active
-  // one, driven ONLY by the scroll position (direct manipulation), under a
-  // descending z-order so the active card covers it.
-  assert.ok(deck.includes('outputRange: [DECK_NEXT_SCALE, 1]'));
-  assert.ok(deck.includes('outputRange: [-DECK_TUCK, 0]'));
-  assert.ok(deck.includes('zIndex: items.length - index'));
-  assert.ok(deck.includes('nativeEvent: { contentOffset: { x: scrollX } }'));
-  // The REAL shared card surface over the REAL feed model, in its uniform
-  // variant, media through the shared tile, no save control.
-  assert.ok(deck.includes('<RecallCardSurface'));
-  assert.ok(deck.includes('model={item.model}'));
-  assert.ok(deck.includes('uniform={uniform}'));
+test('the deck: a physical stack of the real cards, the top one leaving left, the frosted real fourth as the final page', () => {
+  const deck = codeOnly(componentBody(CAROUSEL, 'ReadyDeck'));
+  // No pager: one continuous position, driven by a horizontal drag.
+  for (const pager of ['FlatList', 'snapToInterval', 'pagingEnabled', 'horizontal']) {
+    assert.ok(!codeOnly(CAROUSEL).includes(pager), `the deck pages with ${pager}`);
+  }
+  assert.ok(deck.includes('const [position] = useState(() => new Animated.Value(0));'));
+  assert.ok(deck.includes('PanResponder.create({'));
+  assert.ok(deck.includes('position.setValue(deckDragPosition(drag.from, count, g.dx, exit));'));
+  assert.ok(deck.includes('settle(deckReleaseTarget(active, count, g.dx, g.vx, exit));'));
+  // An interrupted drag restores the stack.
+  assert.ok(deck.includes('onPanResponderTerminate: () => settle(active),'));
+  // The responder's inputs change only on a commit or a new layout, never
+  // during a drag.
+  assert.ok(deck.includes('}, [active, count, exit, position, settle]);'));
+  // Every card is a REAL card, posed by its depth below the position from
+  // the one shared table — so the next card is mounted beneath the top one.
+  assert.ok(deck.includes('const ranges = deckPoseRanges(frontWidth, exit);'));
+  assert.ok(deck.includes('const depth = Animated.subtract(index, position);'));
+  assert.ok(
+    deck.includes(
+      'transform: [{ translateX: pose(ranges.translateX) }, { scale: pose(ranges.scale) }],',
+    ),
+  );
+  // Painted last-first, so each card lies over the ones after it; only the
+  // front one takes a touch.
+  assert.ok(deck.includes('.reverse()'));
+  assert.ok(deck.includes("pointerEvents={index === active ? 'auto' : 'none'}"));
+  // The one scale is the table's uniform one (the promotion of the card
+  // beneath); nothing turns, skews or adds perspective, and no axis scales
+  // on its own.
+  for (const distortion of ['rotate', 'skew', 'perspective', 'scaleX', 'scaleY']) {
+    assert.ok(!codeOnly(CAROUSEL).includes(distortion), `the deck uses ${distortion}`);
+  }
+  assert.equal((codeOnly(CAROUSEL).match(/scale:/g) ?? []).length, 1);
+  // Geometry comes from measured card heights, never from a drag.
+  assert.ok(deck.includes('onLayout={(event) => onCardLayout(event.nativeEvent.layout.height)}'));
+  assert.ok(
+    deck.includes('cardHeight > 0 && { height: DECK_ROOM.top + cardHeight + DECK_ROOM.bottom }'),
+  );
+  // Measurements are whole points past layout's noise, so raising a card to
+  // its own height can never creep (the XL deck once grew to 1,023pt).
+  assert.equal((deck.match(/wholePoints\(h\) >= wholePoints\(height\)/g) ?? []).length, 2);
+  assert.ok(!codeOnly(CAROUSEL).includes('Math.ceil'));
+  // Every card shares the deck's height at every text size, so a taller
+  // card can never show beneath the front one.
+  assert.ok(deck.includes('const shared = cardHeight > 0 ? cardHeight : undefined;'));
+  assert.ok(codeOnly(componentBody(CAROUSEL, 'DeckCard')).includes('deckHeight={height}'));
+  // One index: committed on release (or an accessibility move), before the
+  // settle, with no timer in between.
+  assert.ok(deck.includes('(target: number) => {\n      setActive(target);'));
+  // The step remounts the deck for new content or a new text size.
+  assert.ok(codeOnly(PREVIEW).includes('key={deckKey(preview.models, preview.locked, fontScale)}'));
+  // The REAL shared card surface over the REAL feed model, uniform, media
+  // through the shared tile, no save control.
+  const card = codeOnly(componentBody(CAROUSEL, 'DeckCard'));
+  assert.ok(card.includes('<RecallCardSurface'));
+  assert.ok(card.includes('model={item.model}'));
+  assert.ok(card.includes('uniform={uniform}'));
+  assert.ok(card.includes('<MediaTile'));
+  assert.ok(card.includes('trailing={null}'));
   assert.ok(deck.includes('const rule = previewCardLayout(fontScale);'));
-  assert.ok(deck.includes('statusMinHeight: deckStatusHeight(rule.statusMinHeight, statusRows),'));
-  assert.ok(deck.includes('<MediaTile'));
-  assert.ok(deck.includes('trailing={null}'));
-  assert.ok(
-    deck.includes('accessibilityLabel={matchAccessibilityLabel(item.model, index, models.length)}'),
-  );
-  // The locked card is the LAST item and only when a real one exists; it is
-  // the real next recall's own uniform card, frosted, with one lock and NO
-  // text of its own; to assistive technology one concise button, the card
-  // beneath hidden entirely.
+  // The locked card: last, only when a real one exists, frosted, one lock,
+  // no words, its recall hidden from assistive technology.
   assert.ok(deck.includes("...(locked ? [{ kind: 'locked', model: locked } as DeckItem] : [])"));
-  const locked = codeOnly(componentBody(CAROUSEL, 'LockedCard'));
-  assert.ok(locked.includes('accessibilityRole="button"'));
-  assert.ok(locked.includes('accessibilityLabel={PREVIEW_LOCKED_CARD_TITLE}'));
-  assert.ok(locked.includes('accessibilityElementsHidden'));
-  assert.ok(locked.includes('importantForAccessibility="no-hide-descendants"'));
-  assert.ok(locked.includes('uniform={uniform}'));
-  // A real blur over the whole card; under Reduce Transparency, an opaque
-  // frost — illegible either way.
   assert.ok(
-    locked.includes('<BlurView intensity={FROST_INTENSITY} tint="light" style={styles.frost} />'),
+    card.includes('<BlurView intensity={FROST_INTENSITY} tint="light" style={styles.frost} />'),
   );
-  assert.ok(locked.includes('<View style={[styles.frost, styles.frostOpaque]} />'));
-  assert.ok(locked.includes('reduceTransparency ? ('));
-  assert.ok(locked.includes('<Icon name="lock" size={24} color="icon/primary" />'));
-  assert.ok(!locked.includes('<Text'), 'the locked card explains itself in words');
-  assert.ok(locked.includes('alt=""'), 'the frosted image is named to assistive technology');
+  assert.ok(card.includes('<View style={[styles.frost, styles.frostOpaque]} />'));
+  assert.ok(card.includes('<Icon name="lock" size={24} color="icon/primary" />'));
+  assert.ok(card.includes('<View {...HIDDEN} pointerEvents="none">'));
+  assert.ok(!card.includes('<Text'), 'the locked card explains itself in words');
+  // Behind the front card the locked card wears a plain white face, so its
+  // blur's colours never reach the visible strip.
+  assert.ok(
+    card.includes('{veil ? <Animated.View style={[styles.veil, { opacity: veil }]} /> : null}'),
+  );
+  assert.ok(
+    deck.includes(
+      "veil: depth.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }),",
+    ),
+  );
   // No arrows, no instruction copy, no auto-advance, no loop, no glass.
   for (const forbidden of [
-    'Swipe to view',
+    'Swipe to',
     'chevron-right',
     'chevron-left',
     'Animated.loop',
     'setInterval',
     'setTimeout',
-    'scrollToIndex',
-    'scrollToOffset',
     'LinearGradient',
     'GlassView',
+    'pagingEnabled',
   ]) {
-    assert.ok(!codeOnly(CAROUSEL).includes(forbidden), `the carousel has ${forbidden}`);
+    assert.ok(!codeOnly(CAROUSEL).includes(forbidden), `the deck has ${forbidden}`);
   }
-  // The dots count only the readable matches and are decorative.
-  assert.ok(deck.includes('const dots = models.length >= 2 ? models.length : 0;'));
-  assert.ok(deck.includes('accessibilityElementsHidden'));
+  // One dot per navigable page, the locked page included; decorative.
+  assert.ok(deck.includes('const dots = deckDotCount(count);'));
+  assert.ok(deck.includes('<View style={styles.dots} {...HIDDEN}>'));
+});
+
+test('the deck is one adjustable element: the active card’s whole content, next and previous without arrows', () => {
+  const deck = codeOnly(componentBody(CAROUSEL, 'ReadyDeck'));
+  assert.ok(deck.includes("count > 1 ? 'adjustable'"));
+  assert.ok(deck.includes('accessibilityValue={count > 1 ? { text: spoken } : undefined}'));
+  assert.ok(deck.includes('matchAccessibilityLabel(current.model, active, models.length)'));
+  assert.ok(deck.includes(': PREVIEW_LOCKED_CARD_TITLE;'));
+  assert.ok(deck.includes("{ name: 'increment' }"));
+  assert.ok(deck.includes("{ name: 'decrement' }"));
+  assert.ok(deck.includes("if (event.nativeEvent.actionName === 'increment') goTo(active + 1);"));
+  assert.ok(
+    deck.includes("else if (event.nativeEvent.actionName === 'decrement') goTo(active - 1);"),
+  );
+  // The locked card activates the plan screen and nothing else.
+  assert.ok(
+    deck.includes("else if (event.nativeEvent.actionName === 'activate') onLockedPress();"),
+  );
+  // A requested move settles the same way a released drag does.
+  assert.ok(deck.includes('if (target !== active) settle(target);'));
 });
 
 test('the dedicated paywall: M04 beside the heading, check-row benefits, the plans, the note and the shared footer', () => {
@@ -1403,72 +1575,6 @@ test('the dedicated paywall: M04 beside the heading, check-row benefits, the pla
   assert.ok(entitled.includes('{EDUCATION_SUCCESS}'));
   assert.ok(entitled.includes('<Button label={CONTINUE_CTA} onPress={onContinue} />'));
   assert.ok(!entitled.includes('PurchasePlans') && !entitled.includes('PurchaseCta'));
-});
-
-test('Edit preferences lives inside the summary card, quiet and 44pt, and still speaks its full scope', () => {
-  const ready = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
-  const surfaceOpen = ready.indexOf('<Surface background="background/subtle"');
-  const surfaceClose = ready.indexOf('</Surface>');
-  const edit = ready.indexOf('accessibilityLabel={PREVIEW_EDIT}');
-  assert.ok(surfaceOpen > 0 && edit > surfaceOpen && edit < surfaceClose, 'Edit left the card');
-  assert.ok(ready.includes('accessibilityHint={PREVIEW_EDIT_HINT}'));
-  assert.ok(ready.includes('hitSlop={EDIT_HIT_SLOP}'));
-  assert.ok(ready.includes('onPress={onEdit}'));
-  // A text action with the chevron affordance, never a second large button,
-  // in action/primary: action/secondary on the soft blue is 4.1:1, below AA.
-  assert.ok(ready.includes('<Text variant="body-small-bold" color="action/primary">'));
-  assert.ok(ready.includes('<Icon name="chevron-right" size={16} color="icon/primary" />'));
-  assert.ok(!ready.includes('label={PREVIEW_EDIT}'), 'Edit preferences is a Button again');
-  assert.ok(!ready.includes('color="action/secondary"'), 'the below-AA blue came back');
-});
-
-test('the Ready step is the approved order: summary card, Edit inside it, the preview heading, pill, deck, locked strip, See my plan', () => {
-  const ready = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
-  const order = [
-    '<Surface background="background/subtle" radius={16} style={styles.summary}>',
-    'onPress={onEdit}',
-    '</Surface>',
-    '{PREVIEW_MATCH_HEADING}',
-    'matchCountLabel(',
-    '<ReadyCarousel',
-    '{PREVIEW_LOCKED_STRIP}',
-  ].map((marker) => {
-    const at = ready.indexOf(marker);
-    assert.ok(at > 0, `Ready lacks ${marker}`);
-    return at;
-  });
-  assert.deepEqual(
-    order,
-    [...order].sort((a, b) => a - b),
-    'the Ready step is out of order',
-  );
-  // The deck is handed the REAL locked recall (or null), never a boolean.
-  assert.ok(ready.includes('locked={preview.locked}'));
-  // The pill is the Affects You treatment: personalization, never safety.
-  assert.ok(PREVIEW.includes("relevancePalette['affects-you'].background"));
-  // The locked strip is unchanged: shown when more real matches exist, the
-  // same words, the same action as the CTA.
-  assert.ok(ready.includes('{hasLockedMatches(preview) ? ('));
-  assert.ok(ready.includes('{PREVIEW_MONITORING_NOTE}'));
-  assert.equal(ONBOARDING_COPY.PREVIEW_LOCKED_STRIP, 'More matching recalls are locked');
-  assert.equal((ready.match(/onSeePlan/g) ?? []).length, 5, 'a locked path bypasses the paywall');
-  // Zero matches: no deck, no dots, no locked strip — one honest card.
-  assert.ok(ready.includes('PREVIEW_EMPTY_TITLE'));
-  assert.ok(ready.includes('PREVIEW_UNAVAILABLE_TITLE'));
-  assert.ok(ready.includes('PREVIEW_CHECKING_TITLE'));
-  assert.ok(ready.includes('body={found ? PREVIEW_BODY : PREVIEW_BODY_EMPTY}'));
-  for (const forbidden of [
-    'useAccess',
-    'loadOfferings',
-    '.purchase(',
-    '.restore(',
-    'applyEntitlement',
-    'Linking',
-    'useState',
-  ]) {
-    assert.ok(!ready.includes(forbidden), `the Ready step holds ${forbidden}`);
-  }
-  assert.equal((codeOnly(PREVIEW).match(/require\(/g) ?? []).length, 1);
 });
 
 // ── The building interstitial and the onboarding paywall (2026-09-28) ───────
@@ -1668,10 +1774,23 @@ test('onboarding motion plays only when Reduce Motion is known off, once, and ne
   assert.ok(hook.includes("addEventListener('reduceMotionChanged'"));
   // The grocery-atlas States is static (its M02 entrance left with M02).
   assert.ok(!codeOnly(STATES).includes('Animated'), 'the States step animates');
-  for (const [name, source] of [
-    ['progress', PROGRESS],
-    ['preview', PREVIEW],
-  ] as const) {
+  // Ready (2026-09-30) has no entrance at all: its scene and board are
+  // simply there, and the deck moves only with the finger or a requested
+  // move (instant under Reduce Motion). The editor is static.
+  assert.ok(!codeOnly(PREVIEW).includes('Animated'), 'Ready animates');
+  assert.ok(!codeOnly(EDITOR).includes('Animated'), 'the editor animates');
+  // The deck's one animation is the settle after a release or a requested
+  // move; under Reduce Motion the cards still follow the finger (direct
+  // manipulation) but the settle is immediate.
+  const deck = codeOnly(CAROUSEL);
+  assert.equal((deck.match(/Animated\.timing\(/g) ?? []).length, 1);
+  assert.ok(!deck.includes('Animated.spring') && !deck.includes('Animated.loop'));
+  assert.ok(
+    deck.includes(
+      'if (!motionAllowed(reduceMotion)) {\n        position.setValue(target);\n        return;\n      }',
+    ),
+  );
+  for (const [name, source] of [['progress', PROGRESS]] as const) {
     const code = codeOnly(source);
     // Decided on the first render; the final state is drawn at once otherwise.
     // The progress bar additionally animates only a step reached forward by
@@ -2030,7 +2149,7 @@ test('selecting changes colour and opacity only: the tile keeps its size, and co
 });
 
 test('the grid takes its column count from the shared rule, and pads a short last row', () => {
-  const step = codeOnly(componentBody(ALLERGENS, 'AllergensStep'));
+  const step = codeOnly(componentBody(ALLERGENS, 'AllergenGrid'));
   assert.ok(step.includes('const { width, fontScale } = useWindowDimensions();'));
   assert.ok(step.includes('const columns = allergenGridColumns(width, fontScale);'));
   assert.ok(step.includes('const stacked = allergenTileStacked(width, fontScale);'));
@@ -2511,11 +2630,16 @@ test('the field autofocuses, the empty sheet instructs, a query finds single-col
   );
   assert.ok(field.includes('placeholder={SEARCH_STORES_LABEL}'));
   assert.ok(field.includes('accessibilityLabel={SEARCH_STORES_LABEL}'));
-  assert.ok(field.includes('autoFocus'));
+  // The Stores step focuses the field; the editor's catalog opens on its list.
+  assert.ok(field.includes('autoFocus={!catalog}'));
   // The shared Search Bar, whose `Clear` exists only while there is text.
   assert.ok(codeOnly(read('components', 'ui', 'search-bar.tsx')).includes("{value !== '' ? ("));
-  // Matched by the catalog rule, never the whole catalog before a query.
-  assert.ok(contents.includes('const results = retailerSearchResults(query);'));
+  // Matched by the catalog rule. On the Stores step nothing is listed before
+  // a query; the editor's catalog lists the whole canonical catalog instead.
+  assert.ok(contents.includes('const typed = retailerSearchResults(query);'));
+  assert.ok(
+    contents.includes("const results = catalog && typed === null ? searchRetailers('') : typed;"),
+  );
   assert.ok(
     contents.includes(
       '{results === null ? (\n          <Text variant="body-small" color="text/secondary">\n            {SEARCH_INSTRUCTION}',
@@ -2530,8 +2654,10 @@ test('the field autofocuses, the empty sheet instructs, a query finds single-col
     !codeOnly(SEARCH_SHEET).includes('RETAILER_CATALOG'),
     'the sheet lists the catalog itself',
   );
-  // Results are rows, one per line, scrolling inside the fixed region.
+  // Results are rows, one per line, scrolling inside the fixed region — or,
+  // in the editor's catalog, rows of the catalog's columns.
   assert.ok(contents.includes('results.map((retailer) => (\n            <RetailerResultRow'));
+  assert.ok(contents.includes('catalogRows(results, columns).map((row) => ('));
   const scroll = contents.slice(
     contents.indexOf('<ScrollView'),
     contents.indexOf('>', contents.indexOf('keyboardDismissMode')),
@@ -2539,8 +2665,9 @@ test('the field autofocuses, the empty sheet instructs, a query finds single-col
   assert.ok(scroll.includes('keyboardShouldPersistTaps="handled"'));
   assert.ok(scroll.includes('automaticallyAdjustKeyboardInsets'));
   assert.ok(!contents.includes('horizontal'));
-  // What was found is announced once per change, never on a re-render.
-  assert.ok(contents.includes('const found = results === null ? null : results.length;'));
+  // What was found is announced once per change, never on a re-render, and
+  // never for the catalog shown before a query.
+  assert.ok(contents.includes('const found = typed === null ? null : typed.length;'));
   assert.ok(
     contents.includes(
       'AccessibilityInfo.announceForAccessibility(searchResultsAnnouncement(found))',
@@ -2577,14 +2704,9 @@ test('a result row is one full-width checkbox element, distinct from a popular t
   );
   assert.ok(chosen.includes("backgroundColor: color['background/subtle'],"));
   assert.ok(chosen.includes("borderColor: color['action/primary'],"));
-  // Not a popular tile: no tile, no grid, no columns.
-  for (const forbidden of [
-    'RetailerTile',
-    'RetailerGrid',
-    'retailerGridColumns',
-    'TILE',
-    'columns',
-  ]) {
+  // Not a popular tile: no popular tile, grid or grid columns (the editor's
+  // catalog has its own measured column rule, storeCatalogColumns).
+  for (const forbidden of ['RetailerTile', 'RetailerGrid', 'retailerGridColumns']) {
     assert.ok(!sheet.includes(forbidden), `the sheet uses ${forbidden}`);
   }
   // No logo, house glyph, monogram, retailer colour or legacy Profile row.
@@ -2655,7 +2777,7 @@ test('the query lives in the sheet’s contents alone: blank on every opening, n
     .map((line) => line.trim());
   assert.deepEqual(uses, [
     "const [query, setQuery] = useState('');",
-    'const results = retailerSearchResults(query);',
+    'const typed = retailerSearchResults(query);',
     'value={query}',
   ]);
   // The contents mount with the sheet and go with it, so the query does too.

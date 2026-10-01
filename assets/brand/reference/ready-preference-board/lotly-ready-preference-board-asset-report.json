@@ -1,0 +1,998 @@
+{
+ "description": "Ready preference board decomposed into composable layers for native UI: a scene (blue wall, pear, raspberry bowl, cloth, tabletop, seated waving mascot) with the board footprint cleared; a BLANK board paper (every printed label, value, icon well, rule and action removed, texture restored) that grows taller through one stretch slice; and a foreground overlap (the mascot, bowl and cloth exactly where they stand in front of the board). Plus the editor mini mascot. Founder-approved and imported by Ready and the editor.",
+ "reportDate": "2026-09-30",
+ "status": "Founder visual approval received 2026-09-30 (the layers, upward growth with the thin wall band, the +80 px cap, the painted shadows kept). Imported by Ready (src/components/onboarding/preview-step.tsx) and the one-page editor (src/components/onboarding/edit-preferences-step.tsx); the production bytes are unchanged from the export.",
+ "references": [
+  {
+   "role": "Ready approved combined design",
+   "path": "assets/brand/reference/lotly-onboarding-ready-preference-board-target.png",
+   "sha256": "b560d581498eb5f141c0e7e07e00524461aed4c8c7ac2c2a10bc97bf6c038486",
+   "dimensions": [
+    934,
+    1684
+   ],
+   "colorProfile": "none (untagged RGB)",
+   "manifestSha256Match": true,
+   "unchanged": true
+  },
+  {
+   "role": "Edit preferences approved layout",
+   "path": "assets/brand/reference/lotly-ready-edit-preferences-target.png",
+   "sha256": "2f626ff6e574178943d4a9810f6e1522ad9080e2182011306d143479bcfa1630",
+   "dimensions": [
+    934,
+    1683
+   ],
+   "colorProfile": "none (untagged RGB)",
+   "manifestSha256Match": true,
+   "unchanged": true
+  }
+ ],
+ "measuredPage": {
+  "readyCream": [
+   254,
+   253,
+   249
+  ],
+  "editorCream": [
+   253,
+   252,
+   247
+  ],
+  "appToken": [
+   253,
+   252,
+   246
+  ],
+  "note": "Modes of the references' page pixels. Soft edges are unmatted against the measured cream, 1-3 units lighter than the token background/page #FDFCF6."
+ },
+ "layers": {
+  "compositeOrder": [
+   "page cream",
+   "scene",
+   "paper",
+   "native board content",
+   "overlap"
+  ],
+  "coordinateSpace": "Source pixels of the 934-wide Ready reference. Native: scale every layer by (scene width in pt) / 934, the same uniform factor for all three.",
+  "scene": {
+   "referenceBox_xyxy_exclusive": [
+    0,
+    187,
+    934,
+    790
+   ],
+   "offsetInScene": [
+    0,
+    0
+   ],
+   "note": "Starts at row 187, below the headline's last ink row (184); ends at 790, below the tabletop's straight bottom edge (785) and above the preview heading (~820)."
+  },
+  "paper": {
+   "referenceBox_xyxy_exclusive": [
+    125,
+    249,
+    644,
+    707
+   ],
+   "offsetInScene": [
+    125,
+    62
+   ],
+   "bottomAnchorSceneRow": 520
+  },
+  "overlap": {
+   "referenceBox_xyxy_exclusive": [
+    128,
+    396,
+    644,
+    707
+   ],
+   "offsetInScene": [
+    128,
+    209
+   ],
+   "note": "Fixed to the scene; never moves with board growth. Always drawn above the paper and any native content."
+  }
+ },
+ "boardSilhouette": {
+  "model": "Rounded quadrilateral from four measured edge lines (subpixel coverage fits; x or y in source pixels), 8x8 supersampled coverage.",
+  "left": {
+   "x": "121.599 + 0.01322*y",
+   "rowsMeasured": 195,
+   "maxResidualPx": 0.58
+  },
+  "right": {
+   "x": "641.446 + 0.00336*y",
+   "rowsMeasured": 84,
+   "maxResidualPx": 0.5
+  },
+  "top": {
+   "y": "251.376 + -0.00339*x",
+   "columnsMeasured": 400,
+   "maxResidualPx": 0.52
+  },
+  "bottom": {
+   "y": "710.863 + -0.02957*x",
+   "columnsMeasured": 279,
+   "maxResidualPx": 0.4,
+   "note": "Edge = half-way to the dark crevice line, which stays in the scene."
+  },
+  "cornerRadiiPx": {
+   "tl": 32,
+   "tr": 28,
+   "bl": 30,
+   "br": 30
+  },
+  "cornerNote": "Top-left 32 and top-right 28 fitted to the visible corners (lime band pixels excluded). Bottom corners are hidden by the cloth and the mascot's foot; 30 px assumed and never visible in the composition.",
+  "hiddenEdges": "The left edge under the bowl/cloth, the right edge under the mascot and the bottom outside x 250-590 follow the fitted lines."
+ },
+ "foreground": {
+  "mascot": "Everything from its left contour (leftmost pixel with B-R > 40 per row) to the board edge, + 4 px; this includes the white face seen through the ring's gap and every highlight.",
+  "bowlPolygon": [
+   [
+    118,
+    543
+   ],
+   [
+    127,
+    544
+   ],
+   [
+    140,
+    551.5
+   ],
+   [
+    151,
+    556.5
+   ],
+   [
+    160,
+    564
+   ],
+   [
+    165.5,
+    576.5
+   ],
+   [
+    166,
+    586
+   ],
+   [
+    165,
+    592
+   ],
+   [
+    161.5,
+    602
+   ],
+   [
+    156.5,
+    612.5
+   ],
+   [
+    151.5,
+    625
+   ],
+   [
+    146.5,
+    635
+   ],
+   [
+    141.5,
+    645.5
+   ],
+   [
+    136,
+    653.5
+   ],
+   [
+    132,
+    661
+   ],
+   [
+    118,
+    663
+   ]
+  ],
+  "clothPolygon": [
+   [
+    118,
+    683
+   ],
+   [
+    140,
+    683
+   ],
+   [
+    160,
+    684
+   ],
+   [
+    178,
+    686
+   ],
+   [
+    200,
+    688
+   ],
+   [
+    220,
+    692
+   ],
+   [
+    240,
+    697
+   ],
+   [
+    256,
+    702
+   ],
+   [
+    262,
+    712
+   ],
+   [
+    118,
+    712
+   ]
+  ],
+  "note": "Bowl and cloth are pale against the pale board, so they were traced generously (~3 px). The overlap cut therefore lies in unmodified board texture and is seamless at source geometry.",
+  "pixels": 22012
+ },
+ "operations": {
+  "printedUiRemoval": "Ink core = board-interior pixels that are cool (B-R > 6) or orange (peanut), components >= 3 px, enclosed holes filled (well drawings, milk bottle, letter counters); footprint = core + 5 px (the measured glyph halo is 1 px). Removes \"Your preferences\", three icon wells and drawings, STATES/ALLERGENS/STORES, the three values, both dashed rules, \"Edit preferences\" and the chevron.",
+  "restoration": "Guided Poisson (gradient-domain) fill with donor texture tiles <= 40x32 px copied from clean, evenly lit mid-board paper (rows 292-600). Boundary = surrounding original paper, with the boundary mismatch smoothed along the boundary (radius 8 px) so per-pixel crackle differences do not seed blotches. UI: 64812 px, 160 iterations; under the foreground: 22012 px, 973 iterations.",
+  "textureCheck": {
+   "midBand_G3minusG14": {
+    "repaired": [
+     0.31,
+     1.26,
+     2.06
+    ],
+    "untouched": [
+     0.25,
+     1.11,
+     2.87
+    ]
+   },
+   "fineBand_G08minusG3": {
+    "repaired": [
+     0.35,
+     1.11,
+     1.59
+    ],
+    "untouched": [
+     0.35,
+     1.1,
+     1.51
+    ]
+   },
+   "n": [
+    49140,
+    44204
+   ],
+   "quantiles": "p50/p95/p99 luminance units"
+  },
+  "castShadows": "The soft shadows the mascot, bowl and cloth cast on the board, and the board's darker base, are KEPT in the paper at their original positions. Growth happens above them, so they never move. They were not separated into the overlap, because the mascot shadow and the board's own base shading cannot be told apart reliably. Drawn alone, the blank board shows them as a darker lower-right and lower-left.",
+  "overlap": "Exact source RGB, alpha 255, for every foreground pixel inside the board footprint (no unmixing needed).",
+  "edgeMatte": "Visible board edge pixels: coverage split so a*paper + (1-a)*scene reproduces the source (paper unmatted when a >= 0.5, otherwise the nearest interior paper with a solved scene colour). Edges hidden under the foreground carry restored paper.",
+  "sceneKey": "Flood from the crop's top row (rows < 246) and bottom row (rows >= 786) through near-cream pixels; the soft wave top and table bottom are unmatted against the measured cream. Board footprint cleared to alpha 0, with a 2 px opaque safety ring of nearest-background colour inside it (hidden under the paper).",
+  "nearOpaqueLift": "Alpha 240-254 set to 255 with the source RGB (no pixel remains in 240-254).",
+  "clearRgb": "Alpha 0 has RGB 0.",
+  "colour": "Pure Node zlib decode/encode (no colour management); explicit sRGB + gAMA + cHRM, no ICC, text or time chunks. @napi-rs/canvas (an existing devDependency) only lays out the review sheets. No dependency added; scripts lived in the session scratchpad.",
+  "nothingRegenerated": "No pixel of the mascot, face, limbs, rays, pear, berries, bowl, cloth or tabletop was repainted, recoloured, sharpened, resampled or upscaled."
+ },
+ "repairFootprints": {
+  "map": "assets/brand/reference/ready-preference-board/masks/lotly-ready-preference-board-paper-repair-footprints.png",
+  "legend": "red = printed UI removed and restored, green = restored beneath the foreground, white = silhouette edge band, blue lines = stretch slice",
+  "uiRepairPx": 64812,
+  "underForegroundPx": 22012,
+  "edgeBandPx": 1737
+ },
+ "layerStats": {
+  "overlap": {
+   "exactForegroundPx": 22012
+  },
+  "paper": {
+   "interiorOriginal": 143553,
+   "interiorUiRepaired": 64812,
+   "interiorUnderForeground": 21477,
+   "bandUnderForeground": 535,
+   "bandUnmattedPaper": 631,
+   "bandSolvedScene": 571,
+   "bandKeptMixed": 0,
+   "bandTintMovedToScene": 38,
+   "lifted": 32
+  },
+  "scene": {
+   "exteriorCleared": 24188,
+   "exteriorNoiseCleared": 552,
+   "softEdgeMatted": 5080,
+   "lifted": 147,
+   "boardFootprintCleared": 226140,
+   "bandOpaque": 1737,
+   "safetyRing": 3702,
+   "opaqueIdentical": 301656
+  }
+ },
+ "recomposition": {
+  "note": "Page cream + scene + paper + overlap at source geometry vs the reference; max-channel error per pixel over the scene rectangle. \"Outside board\" errors above 4 are the headline's own glow below its glyphs (rows 187-190, <= 11 units; native text) and the last row's cream noise.",
+  "byRegion": {
+   "outside board": {
+    "px": 331623,
+    "exact": 312056,
+    "le1": 327973,
+    "le2": 330369,
+    "le4": 331301,
+    "max": 11,
+    "mean": 0.077
+   },
+   "board edge band": {
+    "px": 1202,
+    "exact": 1190,
+    "le1": 1202,
+    "le2": 1202,
+    "le4": 1202,
+    "max": 1,
+    "mean": 0.01
+   },
+   "board paper, untouched": {
+    "px": 143553,
+    "exact": 143553,
+    "le1": 143553,
+    "le2": 143553,
+    "le4": 143553,
+    "max": 0,
+    "mean": 0
+   },
+   "printed UI (repaired, expected to differ)": {
+    "px": 64812,
+    "exact": 444,
+    "le1": 5213,
+    "le2": 10831,
+    "le4": 18243,
+    "max": 252,
+    "mean": 57.857
+   },
+   "foreground over board (overlap, exact)": {
+    "px": 22012,
+    "exact": 22012,
+    "le1": 22012,
+    "le2": 22012,
+    "le4": 22012,
+    "max": 0,
+    "mean": 0
+   }
+  }
+ },
+ "growth": {
+  "direction": "UPWARD only, bottom-anchored. The board's foot, crevice shadow, cast shadows and the bowl, cloth and mascot contacts never move.",
+  "paperSliceRowsInReference": [
+   346,
+   400
+  ],
+  "paperSliceRowsInPaper": [
+   97,
+   151
+  ],
+  "topCapRows": 97,
+  "bottomFixedRows": 307,
+  "sliceChoice": "Rows 346-399: below the lime corner band (lowest lime row 340 at the right edge) and above the mascot's shadow and reflection (from ~400 at x 600-643), the mascot (~424) and the bowl (~544). Both side edges are visible and straight there. Most of the slice's width is restored paper (row 1's well and text) and the rest is original.",
+  "wallBand": {
+   "rowsInReference": [
+    244,
+    248
+   ],
+   "rowsInScene": [
+    57,
+    61
+   ],
+   "rule": "Recommended: stretch this band of out-of-focus blue wall by the same amount, so everything above it (the wavy top) keeps its approved distance above the board. It is between the wave's antialiasing (ends row 243) and the board top (249.2 at its highest corner) across the full width."
+  },
+  "fixedSceneAlternative": {
+   "budgetSourcePx": 23,
+   "atReferenceColumn": 151,
+   "note": "With the scene unchanged, the board top leaves the blue wall after 23 px (~10 pt) and stands over the page cream (shown at +120 px). Founder decision."
+  },
+  "downward": "Not supported: the board would slide over the tabletop, its crevice and the foreground contacts.",
+  "tested": [
+   {
+    "delta": 0,
+    "mode": "wall",
+    "holePixels": 0,
+    "holeWeight": 0,
+    "sliceScale": 1
+   },
+   {
+    "delta": 40,
+    "mode": "wall",
+    "holePixels": 0,
+    "holeWeight": 0,
+    "sliceScale": 1.74
+   },
+   {
+    "delta": 40,
+    "mode": "fixed",
+    "holePixels": 0,
+    "holeWeight": 0,
+    "sliceScale": 1.74
+   },
+   {
+    "delta": 80,
+    "mode": "wall",
+    "holePixels": 0,
+    "holeWeight": 0,
+    "sliceScale": 2.48
+   },
+   {
+    "delta": 80,
+    "mode": "fixed",
+    "holePixels": 0,
+    "holeWeight": 0,
+    "sliceScale": 2.48
+   },
+   {
+    "delta": 120,
+    "mode": "wall",
+    "holePixels": 0,
+    "holeWeight": 0,
+    "sliceScale": 3.22
+   },
+   {
+    "delta": 120,
+    "mode": "fixed",
+    "holePixels": 0,
+    "holeWeight": 0,
+    "sliceScale": 3.22
+   },
+   {
+    "delta": 160,
+    "mode": "wall",
+    "holePixels": 0,
+    "holeWeight": 0,
+    "sliceScale": 3.96
+   },
+   {
+    "delta": 160,
+    "mode": "fixed",
+    "holePixels": 0,
+    "holeWeight": 0,
+    "sliceScale": 3.96
+   }
+  ],
+  "streakLimit": "At 1x the paper reads cleanly to +120 px (3.22x slice). Under 4x contrast the crackle visibly elongates beyond ~2.5x. Recommended cap: +80 px (2.48x), about 34 pt at 393 pt. Content needing more uses the stacked layout.",
+  "nativeSlicing": "Paper: 3 vertical slices (top cap 1:1, slice stretched, bottom 1:1). Scene (wall mode): 3 slices (rows 187-243, band stretched, 248-789). Overlap: 1:1. Same uniform horizontal scale for all."
+ },
+ "nativeLayout": {
+  "contentSafeRect_xyxy_exclusive": [
+   173,
+   264,
+   534,
+   679
+  ],
+  "margins": {
+   "edge": 14,
+   "foreground": 8,
+   "lime": 8
+  },
+  "contentSafeNote": "The largest rectangle on the board that keeps 14 px from the board edges and 8 px from the foreground overlap and lime band at DEFAULT height. It never intersects the mascot, bowl or cloth. With growth, its top rises by the growth (the slice lies inside it). Rows 289-483 are usable wider, to x 581 (wideUpperBand_xyxy_exclusive).",
+  "wideUpperBand_xyxy_exclusive": [
+   141,
+   289,
+   581,
+   483
+  ],
+  "devices": [
+   {
+    "deviceWidthPt": 375,
+    "ptPerSourcePx": 0.4015,
+    "sceneHeightPt": 242.1,
+    "board": {
+     "leftPt": 50.4,
+     "widthPt": 207.6,
+     "topBelowSceneTopPt": 25.3,
+     "heightPt": 180.7
+    },
+    "contentSafeRect": {
+     "leftPt": 69.5,
+     "widthPt": 144.9,
+     "topBelowSceneTopPt": 30.9,
+     "heightPt": 166.6
+    },
+    "wideUpperBand": {
+     "leftPt": 56.6,
+     "widthPt": 176.7,
+     "topBelowSceneTopPt": 41,
+     "heightPt": 77.9
+    },
+    "recommendedMaxGrowthPt": 32.1,
+    "approvedMockRowsBelowBoardTopPt": {
+     "heading": [
+      13.7,
+      29.3
+     ],
+     "row1": [
+      38.1,
+      69.9
+     ],
+     "rule1": 73.5,
+     "row2": [
+      77.1,
+      109.6
+     ],
+     "rule2": 112.8,
+     "row3": [
+      116.8,
+      148.2
+     ],
+     "editPreferences": [
+      157.8,
+      168.2
+     ]
+    }
+   },
+   {
+    "deviceWidthPt": 393,
+    "ptPerSourcePx": 0.42077,
+    "sceneHeightPt": 253.7,
+    "board": {
+     "leftPt": 52.8,
+     "widthPt": 217.5,
+     "topBelowSceneTopPt": 26.5,
+     "heightPt": 189.3
+    },
+    "contentSafeRect": {
+     "leftPt": 72.8,
+     "widthPt": 151.9,
+     "topBelowSceneTopPt": 32.4,
+     "heightPt": 174.6
+    },
+    "wideUpperBand": {
+     "leftPt": 59.3,
+     "widthPt": 185.1,
+     "topBelowSceneTopPt": 42.9,
+     "heightPt": 81.6
+    },
+    "recommendedMaxGrowthPt": 33.7,
+    "approvedMockRowsBelowBoardTopPt": {
+     "heading": [
+      14.3,
+      30.7
+     ],
+     "row1": [
+      40,
+      73.2
+     ],
+     "rule1": 77,
+     "row2": [
+      80.8,
+      114.9
+     ],
+     "rule2": 118.2,
+     "row3": [
+      122.4,
+      155.3
+     ],
+     "editPreferences": [
+      165.4,
+      176.3
+     ]
+    }
+   },
+   {
+    "deviceWidthPt": 402,
+    "ptPerSourcePx": 0.43041,
+    "sceneHeightPt": 259.5,
+    "board": {
+     "leftPt": 54.1,
+     "widthPt": 222.5,
+     "topBelowSceneTopPt": 27.1,
+     "heightPt": 193.7
+    },
+    "contentSafeRect": {
+     "leftPt": 74.5,
+     "widthPt": 155.4,
+     "topBelowSceneTopPt": 33.1,
+     "heightPt": 178.6
+    },
+    "wideUpperBand": {
+     "leftPt": 60.7,
+     "widthPt": 189.4,
+     "topBelowSceneTopPt": 43.9,
+     "heightPt": 83.5
+    },
+    "recommendedMaxGrowthPt": 34.4,
+    "approvedMockRowsBelowBoardTopPt": {
+     "heading": [
+      14.6,
+      31.4
+     ],
+     "row1": [
+      40.9,
+      74.9
+     ],
+     "rule1": 78.8,
+     "row2": [
+      82.6,
+      117.5
+     ],
+     "rule2": 120.9,
+     "row3": [
+      125.2,
+      158.8
+     ],
+     "editPreferences": [
+      169.1,
+      180.3
+     ]
+    }
+   }
+  ],
+  "textPolicy": "All text, rules, category icons, selection summaries and the Edit preferences action are native. The approved mock packs three rows at ~41 pt pitch inside ~190 pt of board. Native rows use the canonical compact helpers (storeSummaryText-style \"+N more\"), never an unlimited list in the photograph. If the measured content needs more than the recommended growth, use the stacked layout. Never cap or shrink text.",
+  "accessibilityFallback": "At accessibility sizes (the app's shared text-scale threshold 1.5) or whenever content exceeds the cap: draw scene + paper + overlap together at default geometry as one decorative hero (blank board, hidden from accessibility), then a full-width native preferences summary below it. Never stretch the mascot or trap enlarged text in the artwork."
+ },
+ "miniMascot": {
+  "sourceInspectionBox_xyxy_exclusive": [
+   40,
+   1428,
+   188,
+   1558
+  ],
+  "exportBox_xyxy_exclusive": [
+   50,
+   1440,
+   171,
+   1555
+  ],
+  "exclusions": "Aldi chip ends row 1424; caption ink starts x 197; Save button antialiasing starts row 1564.",
+  "method": "Exact source pixels. Cream keyed by flood from the inspection box's border through near-cream pixels. A 4 px seal [[70,1484],[70,1485],[71,1485],[72,1485]] closes the mouth of the gap between the arrowhead and the ring, so the white face cannot be keyed. The rim is unmatted against the measured editor cream with the nearest solid pixel as foreground. The neutral contact shadow (rows 1540-1552) is kept with the smallest in-gamut alpha (exact over cream).",
+  "stats": {
+   "solidExact": 6307,
+   "enclosedExact": 1688,
+   "cleared": 9492,
+   "softEdgeMatted": 700,
+   "shadowMinimalAlpha": 167,
+   "haloBrighterCleared": 614,
+   "lifted": 0,
+   "noiseCleared": 137,
+   "lowAlphaNoiseCleared": 135
+  },
+  "recompositionOverEditorCream": {
+   "px": 19240,
+   "exact": 10975,
+   "le1": 17025,
+   "le2": 17726,
+   "le4": 18556,
+   "max": 9,
+   "mean": 0.757
+  },
+  "intendedSize": "121 px of the 934 px editor reference = 50.9 pt wide at 393 pt (153 device px @3x). Decorative: hide from accessibility.",
+  "limits": "The white sharpening halo around the outline (brighter than the cream) was dropped, and faint fringes below row 1552 (halo and the Save button's own glow) are excluded. Over the editor cream the recomposition error is <= 9 (mean 0.76). On a dark surface a faint light rim shows; the app is light-only."
+ },
+ "files": [
+  {
+   "role": "source, EXACT crop (review only)",
+   "path": "assets/brand/reference/ready-preference-board/source/lotly-ready-preference-board-scene-source.png",
+   "sha256": "8130e187c80b47dafc79bddd84cfc2c271d229f02648d3ef009fb643e119eda4",
+   "bytes": 625659,
+   "dimensions": [
+    934,
+    603
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    0,
+    187,
+    934,
+    790
+   ],
+   "rgbSamplesDifferingFromReferenceCrop": 0
+  },
+  {
+   "role": "source, EXACT crop (review only)",
+   "path": "assets/brand/reference/ready-preference-board/source/lotly-ready-preference-board-paper-source.png",
+   "sha256": "fb119b9e76e1286e6fb057866f15ed8ff5cc1d3ab369802b4be260f9a3371e0e",
+   "bytes": 286806,
+   "dimensions": [
+    519,
+    458
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    125,
+    249,
+    644,
+    707
+   ],
+   "rgbSamplesDifferingFromReferenceCrop": 0
+  },
+  {
+   "role": "source, EXACT crop (review only)",
+   "path": "assets/brand/reference/ready-preference-board/source/lotly-ready-preference-board-overlap-source.png",
+   "sha256": "42ca1ba59b9bb6a483e681cb7c3bd6dfe7caf5e155aa61f16aedb91ed15cdf17",
+   "bytes": 196180,
+   "dimensions": [
+    516,
+    311
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    128,
+    396,
+    644,
+    707
+   ],
+   "rgbSamplesDifferingFromReferenceCrop": 0
+  },
+  {
+   "role": "source, EXACT crop of the editor reference (review only)",
+   "path": "assets/brand/reference/ready-preference-board/source/lotly-ready-preferences-mini-mascot-source.png",
+   "sha256": "4710876997fd2c08f2f41522f5c376ec75790ce05715d522f9054180c80c9774",
+   "bytes": 19847,
+   "dimensions": [
+    121,
+    115
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    50,
+    1440,
+    171,
+    1555
+   ],
+   "rgbSamplesDifferingFromReferenceCrop": 0
+  },
+  {
+   "role": "production candidate, DERIVED (board footprint removed, edges matted)",
+   "path": "assets/brand/production/lotly-ready-preference-board-scene.png",
+   "sha256": "a5f4e8ffafb3c02688c30ecbe9986f6b23393c1bd316fa46cf36ed9f6ca3a852",
+   "bytes": 403627,
+   "dimensions": [
+    934,
+    603
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    0,
+    187,
+    934,
+    790
+   ],
+   "alphaCounts": {
+    "clear": 250880,
+    "edge1to239": 5080,
+    "nearOpaque240to254": 0,
+    "opaque": 307242,
+    "clearWithNonZeroRgb": 0
+   },
+   "opaquePixelsByteIdenticalToReference": 301860,
+   "opaquePixelsDerived": 5382
+  },
+  {
+   "role": "production candidate, DERIVED (blank, restored paper; not an exact crop)",
+   "path": "assets/brand/production/lotly-ready-preference-board-paper.png",
+   "sha256": "9d14c4490c42ca491b6ee0e2a892725965ac262276340612451cc302b48ffaeb",
+   "bytes": 240575,
+   "dimensions": [
+    519,
+    458
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    125,
+    249,
+    644,
+    707
+   ],
+   "alphaCounts": {
+    "clear": 6123,
+    "edge1to239": 1705,
+    "nearOpaque240to254": 0,
+    "opaque": 229874,
+    "clearWithNonZeroRgb": 0
+   },
+   "opaquePixelsByteIdenticalToReference": 144047,
+   "opaquePixelsDerived": 85827
+  },
+  {
+   "role": "production candidate, EXACT foreground pixels over the board",
+   "path": "assets/brand/production/lotly-ready-preference-board-overlap.png",
+   "sha256": "2ec9bebdc8fb223a9ffd29f37430020fedf88643eae46f29448767cd02ca2bb4",
+   "bytes": 39069,
+   "dimensions": [
+    516,
+    311
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    128,
+    396,
+    644,
+    707
+   ],
+   "alphaCounts": {
+    "clear": 138464,
+    "edge1to239": 0,
+    "nearOpaque240to254": 0,
+    "opaque": 22012,
+    "clearWithNonZeroRgb": 0
+   },
+   "opaquePixelsByteIdenticalToReference": 22012,
+   "opaquePixelsDerived": 0
+  },
+  {
+   "role": "production candidate, DERIVED (cream keyed, rim unmatted, shadow as alpha)",
+   "path": "assets/brand/production/lotly-ready-preferences-mini-mascot.png",
+   "sha256": "586d6e2113aaaed4db62caad2d5bc6747e59bbe0085232d7f584ed7dbe29ac67",
+   "bytes": 20791,
+   "dimensions": [
+    121,
+    115
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    50,
+    1440,
+    171,
+    1555
+   ],
+   "alphaCounts": {
+    "clear": 5053,
+    "edge1to239": 867,
+    "nearOpaque240to254": 0,
+    "opaque": 7995,
+    "clearWithNonZeroRgb": 0
+   },
+   "opaquePixelsByteIdenticalToReference": 7995,
+   "opaquePixelsDerived": 0
+  },
+  {
+   "role": "repair footprint map (review only), paper coordinates",
+   "path": "assets/brand/reference/ready-preference-board/masks/lotly-ready-preference-board-paper-repair-footprints.png",
+   "sha256": "83d42e9ca7857a2af54da818df501c6b73268a935bd275e17fc747efc6df20e6",
+   "bytes": 6957,
+   "dimensions": [
+    519,
+    458
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    125,
+    249,
+    644,
+    707
+   ]
+  },
+  {
+   "role": "review sheet",
+   "path": "assets/brand/reference/ready-preference-board/lotly-ready-preference-board-asset-comparison.png",
+   "sha256": "7f6bfd40b4ec444c05d89fd91f21eb1ad9d55f8ae3e467383a79572bfc1b1eb0",
+   "bytes": 4032228,
+   "dimensions": [
+    2400,
+    6000
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sBIT",
+    "sRGB",
+    "IDAT",
+    "IEND"
+   ],
+   "alphaCounts": {
+    "clear": 0,
+    "edge1to239": 0,
+    "nearOpaque240to254": 0,
+    "opaque": 14400000,
+    "clearWithNonZeroRgb": 0
+   }
+  },
+  {
+   "role": "review sheet",
+   "path": "assets/brand/reference/ready-preference-board/lotly-ready-preference-board-stretch-demo.png",
+   "sha256": "406dad38326e79ad9a93afae6366390448fb2e2641ec93725bd0da22d94668d2",
+   "bytes": 1084653,
+   "dimensions": [
+    2400,
+    2300
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sBIT",
+    "sRGB",
+    "IDAT",
+    "IEND"
+   ],
+   "alphaCounts": {
+    "clear": 0,
+    "edge1to239": 0,
+    "nearOpaque240to254": 0,
+    "opaque": 5520000,
+    "clearWithNonZeroRgb": 0
+   }
+  }
+ ],
+ "limitations": [
+  "Drawn alone, the blank board shows the soft shadows the mascot, bowl and cloth cast on it, plus its darker base. They are original lighting kept in place, exact in the composition.",
+  "Under 5x contrast the restored areas show faint donor-patch structure and a few copied natural dark specks. Texture statistics match untouched paper; at 1x nothing is visible.",
+  "The paper under the mascot, bowl and cloth is restored texture that is never visible in the composition. Bottom corners use an assumed 30 px radius.",
+  "Growth is upward only, through a 54-row slice. Beyond ~2.5x the crackle elongates; use the stacked layout past +80 px.",
+  "The scene's wave top and table bottom, and the mini mascot's rim, are unmatted against the reference cream (1-3 units lighter than the token). On dark surfaces they show a faint light rim; the app is light-only.",
+  "The headline's faint glow under its glyphs (rows 187-190) is not in the scene; the native headline replaces it."
+ ]
+}

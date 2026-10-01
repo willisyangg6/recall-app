@@ -17,7 +17,11 @@ import { AccessProvider, useAccess } from '@/hooks/use-access';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
 import { onboardingDeclarationOrder, pushNavigationAllowed } from '@/lib/access-gate';
+import { EDIT_PREFERENCES_ROUTE } from '@/lib/onboarding-routes';
 import { flushPreferencesSync } from '@/lib/preferences-store';
+
+/** The navigator's name for the one-page Edit preferences. */
+const EDIT_PREFERENCES_SCREEN = EDIT_PREFERENCES_ROUTE.slice(1);
 
 /**
  * The app-wide error boundary (P3C1). Expo Router looks for this exact export
@@ -201,7 +205,17 @@ function RootNavigator({ fontsSettled }: { fontsSettled: boolean }) {
             navigator's header is off. */}
         <Stack.Protected guard={phase === 'onboarding'}>
           {onboardingDeclarationOrder(access.entryStep).map((name) => (
-            <Stack.Screen key={name} name={name} options={{ headerShown: false }} />
+            <Stack.Screen
+              key={name}
+              name={name}
+              // Edit preferences covers Ready whole and is left only by its own
+              // Cancel or Save changes, so no swipe can discard an edit by accident.
+              options={
+                name === EDIT_PREFERENCES_SCREEN
+                  ? { headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }
+                  : { headerShown: false }
+              }
+            />
           ))}
         </Stack.Protected>
 

@@ -387,11 +387,12 @@ test('saving is a nested pressable inside the card link, and the card exposes it
 test('the product name is the ONE clamped element on Feed and Saved: three lines, tail ellipsis', () => {
   // The clamp is a LINE count on the title Text only — it scales with
   // Dynamic Type, unlike a fixed height, and the tail ellipsis is the RN
-  // default (no ellipsizeMode override anywhere on the card). The second
-  // line limit is the reason's, and it is `undefined` — no limit — on every
-  // card but the onboarding deck's uniform variant.
-  assert.equal((CARD.match(/numberOfLines=/g) ?? []).length, 2);
+  // default (no ellipsizeMode override anywhere on the card). The other two
+  // line limits are the brand's and the reason's, and they are `undefined` —
+  // no limit — on every card but the onboarding deck's uniform variant.
+  assert.equal((CARD.match(/numberOfLines=/g) ?? []).length, 3);
   assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}'));
+  assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_BRAND_LINES : undefined}'));
   assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_REASON_LINES : undefined}'));
   assert.ok(!CARD.includes('ellipsizeMode'));
   // The clamped node's CONTENT stays the complete product name — no slicing,
@@ -415,11 +416,18 @@ test('nothing else on the card truncates or fixes a height around real product t
 test('the onboarding deck’s uniform variant is opt-in: no Feed or Saved card ever receives it', () => {
   // The variant defaults to null, which renders the card exactly as before.
   assert.ok(CARD.includes('uniform = null,'));
-  // Every reservation it makes is gated on it (min heights that grow and
-  // never clip — no fixed heights anywhere, pinned above).
+  // Every reservation it makes is gated on it, or on the deck's own shared
+  // height (min heights that grow and never clip — no fixed heights
+  // anywhere, pinned above); so is the deck's tighter location row.
   for (const reservation of codeOnly(CARD).match(/minHeight: [^,}\]]+/g) ?? []) {
-    assert.match(reservation, /^minHeight: uniform\./, `an ungated reservation: ${reservation}`);
+    assert.match(
+      reservation,
+      /^minHeight: (uniform\.|deckHeight )/,
+      `an ungated reservation: ${reservation}`,
+    );
   }
+  assert.ok(CARD.includes('deckHeight ? { minHeight: deckHeight } : null'));
+  assert.ok(CARD.includes('<View style={[styles.footerRow, uniform && styles.footerRowCompact]}>'));
   // The only caller that passes it is the onboarding deck; the live card
   // (Feed and Saved's one component) never does.
   const callers: string[] = [];
@@ -429,7 +437,7 @@ test('the onboarding deck’s uniform variant is opt-in: no Feed or Saved card e
       if (entry.isDirectory()) walk(path);
       else if (
         /\.tsx$/.test(entry.name) &&
-        codeOnly(readFileSync(path, 'utf8')).includes('uniform={')
+        /uniform=\{|deckHeight=\{/.test(codeOnly(readFileSync(path, 'utf8')))
       ) {
         callers.push(path.slice(path.indexOf('src') + 4));
       }

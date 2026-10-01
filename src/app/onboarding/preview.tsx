@@ -8,7 +8,8 @@
  *
  *   See my plan       pushes the dedicated onboarding paywall — the locked
  *                     strip and the locked sentinel go there too
- *   Edit preferences  pushes the States step; completed choices are kept
+ *   Edit preferences  presents the one-page editor over Ready; on return,
+ *                     focus goes back to Edit preferences
  *   Back              the Stores step, choices kept
  *
  * Personalization is completed by the purchase on the paywall (or an
@@ -17,7 +18,8 @@
  * purchase state and draws no purchase UI.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
+import { AccessibilityInfo, findNodeHandle, type View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
 import { PreviewStep } from '@/components/onboarding/preview-step';
@@ -26,7 +28,7 @@ import { useAccess } from '@/hooks/use-access';
 import { useFeed } from '@/hooks/use-feed';
 import { useOnboardingPreferences } from '@/hooks/use-onboarding-preferences';
 import { goBackFrom } from '@/lib/onboarding-navigation';
-import { onboardingRoute } from '@/lib/onboarding-routes';
+import { EDIT_PREFERENCES_ROUTE, onboardingRoute } from '@/lib/onboarding-routes';
 import { isFeedConfigured } from '@/lib/recall-feed';
 import { todayIso } from '@/lib/recall-presentation';
 import { buildReadyPreview, type ReadyFeedInput } from '@/lib/ready-preview';
@@ -35,9 +37,17 @@ export default function OnboardingPreviewScreen() {
   const access = useAccess();
   const { load } = useOnboardingPreferences();
   const feed = useFeed();
+  // Back from the editor, focus returns to the action that opened it.
+  const editRef = useRef<View>(null);
+  const editing = useRef(false);
   useFocusEffect(
     useCallback(() => {
       void access.recordShownStep('preview');
+      if (editing.current) {
+        editing.current = false;
+        const tag = findNodeHandle(editRef.current);
+        if (tag !== null) AccessibilityInfo.setAccessibilityFocus(tag);
+      }
     }, [access]),
   );
 
@@ -50,7 +60,11 @@ export default function OnboardingPreviewScreen() {
       prefs={load.prefs}
       preview={buildReadyPreview(feedInput, load.prefs, todayIso())}
       onSeePlan={() => router.push(onboardingRoute('paywall'))}
-      onEdit={() => router.push(onboardingRoute('states'))}
+      onEdit={() => {
+        editing.current = true;
+        router.push(EDIT_PREFERENCES_ROUTE);
+      }}
+      editRef={editRef}
       onBack={() => goBackFrom('preview', router)}
     />
   );

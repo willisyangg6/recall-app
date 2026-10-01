@@ -12,21 +12,16 @@
  * translucent. So no pixel may sit at 240–254, the drawing has no enclosed
  * translucent hole, and there is no background hint or timestamp chunk.
  *
- * M06
- * (the trust-peek pose with the shield, 2026-09-26) hanging over the Ready
- * step's summary card, and M04 (the watchful pose) on the "building your
- * watch" interstitial (2026-09-28) and beside the paywall's heading (the
- * polish pass); M05 is approved but not yet integrated,
- * and nothing may reference it until its own milestone. M01 (the
- * welcome-peek pose) left Welcome with the receipt composition (2026-09-29),
- * M02 (the helper pose) left States with the grocery atlas (2026-09-30), and
- * M03 (the ready pose with the grocery bag) left Stores with the receipt
- * (2026-09-30), whose mascot is part of its approved scene; like M05, all
- * three are approved but drawn nowhere.
- *
- * M06's placement on the Ready summary card is computed from measurements of
- * its artwork (lib/ready-presentation.ts), so those measurements are checked
- * against the file itself: replacing the art without re-measuring fails here.
+ * M04 (the watchful pose) is on the "building your watch" interstitial
+ * (2026-09-28) and beside the paywall's heading (the polish pass); M05 is
+ * approved but not yet integrated, and nothing may reference it until its own
+ * milestone. M01 (the welcome-peek pose) left Welcome with the receipt
+ * composition (2026-09-29), M02 (the helper pose) left States with the
+ * grocery atlas (2026-09-30), M03 (the ready pose with the grocery bag) left
+ * Stores with the receipt (2026-09-30), and M06 (the trust-peek pose with
+ * the shield) left Ready with the preference board (2026-09-30); each of
+ * those scenes carries its own approved mascot. Like M05, all four are
+ * approved but drawn nowhere.
  */
 
 import assert from 'node:assert/strict';
@@ -35,15 +30,6 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { inflateSync } from 'node:zlib';
-
-import {
-  TRUST_PEEK_ART_RIGHT,
-  TRUST_PEEK_ART_TOP,
-  TRUST_PEEK_EDGE,
-  TRUST_PEEK_PAW_BOTTOM,
-  TRUST_PEEK_SHIELD_BOTTOM,
-  TRUST_PEEK_SHIELD_LEFT,
-} from '@/lib/ready-presentation';
 
 const ROOT = join(__dirname, '..', '..');
 const DIR = join(ROOT, 'assets', 'brand', 'production');
@@ -219,48 +205,6 @@ test('no mascot has a translucent hole inside the drawing', () => {
   }
 });
 
-test('M06’s seat on the Ready summary card matches its artwork', () => {
-  const { alpha, width } = DECODED.M06;
-  const solid = (x: number, y: number) => alpha[y * width + x] >= 128;
-  const lowest = (xs: number[]) => {
-    let found = -1;
-    for (let y = 0; y < width; y++) if (xs.some((x) => solid(x, y))) found = y;
-    return found;
-  };
-  const span = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i);
-  // The flat cut: the last row solid across the body's middle.
-  let cut = 0;
-  for (let y = 0; y < width; y++) if ([400, 448, 512].every((x) => solid(x, y))) cut = y;
-  // The paw, left of the shield; the shield; the drawing's top and trailing edge.
-  const paw = lowest(span(0, 280));
-  const shield = lowest(span(280, width));
-  let top = width;
-  let right = 0;
-  let shieldLeft = width;
-  for (let y = 0; y < width; y++) {
-    for (let x = 0; x < width; x++) {
-      if (!solid(x, y)) continue;
-      top = Math.min(top, y);
-      right = Math.max(right, x);
-      if (y > cut + 6 && x >= 280) shieldLeft = Math.min(shieldLeft, x);
-    }
-  }
-  // The artwork's own coordinates…
-  assert.equal(cut, 703, 'the flat cut moved');
-  assert.equal(paw, 742, 'the paw moved');
-  assert.equal(shield, 972, 'the shield moved');
-  assert.equal(top, 129, 'the top of the art moved');
-  assert.equal(right, 968, 'the trailing edge moved');
-  assert.equal(shieldLeft, 580, 'the shield’s leading edge moved');
-  // …and the seat the screen computes from them (each the first clear row or column).
-  assert.equal(TRUST_PEEK_EDGE * 1024, cut + 1);
-  assert.equal(TRUST_PEEK_PAW_BOTTOM * 1024, paw + 1);
-  assert.equal(TRUST_PEEK_SHIELD_BOTTOM * 1024, shield + 1);
-  assert.equal(TRUST_PEEK_ART_TOP * 1024, top);
-  assert.equal(TRUST_PEEK_ART_RIGHT * 1024, right + 1);
-  assert.equal(TRUST_PEEK_SHIELD_LEFT * 1024, shieldLeft);
-});
-
 test('M06 carries the mechanical repair of the supplied 1254px export, uniformly scaled to 1024', () => {
   // The supplied file (sha256 1b27932a…) was 1254×1254 with 625,268 pixels at
   // alpha 240–254 and a caBX chunk. It was repaired at its own size, scaled
@@ -274,13 +218,7 @@ test('M06 carries the mechanical repair of the supplied 1254px export, uniformly
   assert.ok(!DECODED.M06.chunks.includes('caBX'), 'the export metadata came back');
 });
 
-test('M04 on the building interstitial and the paywall, M06 on Ready; M01, M02, M03 and M05 are referenced nowhere', () => {
-  const ready = readFileSync(
-    join(ROOT, 'src', 'components', 'onboarding', 'preview-step.tsx'),
-    'utf8',
-  );
-  assert.ok(ready.includes(`require('@/assets/brand/production/${APPROVED.M06}')`));
-  assert.ok(!ready.includes(APPROVED.M03), 'Ready draws the grocery-bag pose');
+test('M04 on the building interstitial and the paywall; M01, M02, M03, M05 and M06 are referenced nowhere', () => {
   const building = readFileSync(
     join(ROOT, 'src', 'components', 'onboarding', 'building-step.tsx'),
     'utf8',
@@ -299,9 +237,10 @@ test('M04 on the building interstitial and the paywall, M06 on Ready; M01, M02, 
   walk(join(ROOT, 'src'));
   // M01 left Welcome with the receipt composition (2026-09-29); M02 left
   // States with the grocery-atlas composition (2026-09-30), and M03 left
-  // Stores with the receipt (2026-09-30), each for an approved scene with
-  // its own mascot; M05 awaits its milestone.
-  for (const id of ['M01', 'M02', 'M03', 'M05'] as const) {
+  // Stores with the receipt (2026-09-30), and M06 left Ready with the
+  // preference board (2026-09-30), each for an approved scene with its own
+  // mascot; M05 awaits its milestone.
+  for (const id of ['M01', 'M02', 'M03', 'M05', 'M06'] as const) {
     const name = APPROVED[id];
     assert.ok(!sources.some((source) => source.includes(name)), `${id} (${name}) is integrated`);
   }
@@ -317,9 +256,4 @@ test('M04 on the building interstitial and the paywall, M06 on Ready; M01, M02, 
     'utf8',
   );
   assert.ok(panel.includes(`require('@/assets/brand/production/${APPROVED.M04}')`));
-  assert.equal(
-    sources.filter((source) => source.includes(`/${APPROVED.M06}')`)).length,
-    1,
-    'M06 is drawn somewhere other than Ready',
-  );
 });

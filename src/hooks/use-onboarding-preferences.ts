@@ -12,14 +12,24 @@
  * Saves are silent here: the shopper is mid-flow and the local write always
  * succeeds; a failed server sync is retried on the next launch or save as
  * it always was.
+ *
+ * A value committed anywhere else while this screen is mounted (the
+ * one-page Edit preferences over Ready, 2026-09-30) is shown the moment it
+ * is written locally, so Ready never draws the old board or the old preview
+ * under the newly saved choices while its focus re-read is in flight.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
 import type { UserRecallPreferences } from '@/domain/preferences';
 import type { PreferencesLoadState } from '@/lib/personalization-screen';
-import { loadPreferences, preferencesAvailable, savePreferences } from '@/lib/preferences-store';
+import {
+  loadPreferences,
+  onPreferencesSaved,
+  preferencesAvailable,
+  savePreferences,
+} from '@/lib/preferences-store';
 
 export function useOnboardingPreferences(): {
   load: PreferencesLoadState;
@@ -48,6 +58,8 @@ export function useOnboardingPreferences(): {
       };
     }, []),
   );
+
+  useEffect(() => onPreferencesSaved((prefs) => setLoad({ status: 'ready', prefs })), []);
 
   const update = useCallback((next: UserRecallPreferences) => {
     setLoad({ status: 'ready', prefs: next });

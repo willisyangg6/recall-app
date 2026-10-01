@@ -99,6 +99,7 @@ export const ROUTE_GROUPS: Record<RouteGroup, readonly string[]> = {
     'onboarding/retailers',
     'onboarding/building',
     'onboarding/preview',
+    'onboarding/edit-preferences',
     'onboarding/paywall',
   ],
   development: ['design-preview/index'],

@@ -87,9 +87,43 @@ export function savePreferences(prefs: UserRecallPreferences): Promise<SaveResul
   return enqueueSave(() => writePreferences(prefs));
 }
 
-async function writePreferences(prefs: UserRecallPreferences): Promise<SaveResult> {
+/**
+ * The same save, answered as soon as the LOCAL copy is written (2026-09-30,
+ * the one-page Edit preferences): resolves with the stored value once the
+ * device holds it, and rejects only if that local write fails. The server
+ * mirror still syncs in the same queued turn afterwards, with the same dirty
+ * flag and retry, so a screen that must not wait on the network (the editor
+ * returning to Ready) never does, and nothing is saved twice.
+ */
+export function commitPreferences(prefs: UserRecallPreferences): Promise<UserRecallPreferences> {
+  return new Promise((resolve, reject) => {
+    enqueueSave(() => writePreferences(prefs, resolve)).catch(reject);
+  });
+}
+
+/**
+ * Told every value this device commits, as soon as it is written locally, so
+ * a screen already showing preferences (Ready, under the editor it opened)
+ * shows the saved value at once instead of the one it last read. Returns the
+ * unsubscribe.
+ */
+export function onPreferencesSaved(listener: (prefs: UserRecallPreferences) => void): () => void {
+  savedListeners.add(listener);
+  return () => {
+    savedListeners.delete(listener);
+  };
+}
+
+const savedListeners = new Set<(prefs: UserRecallPreferences) => void>();
+
+async function writePreferences(
+  prefs: UserRecallPreferences,
+  onLocal?: (saved: UserRecallPreferences) => void,
+): Promise<SaveResult> {
   const cleaned = sanitizePreferences(prefs);
   await SecureStore.setItemAsync(PREFS_KEY, JSON.stringify(cleaned));
+  onLocal?.(cleaned);
+  for (const listener of savedListeners) listener(cleaned);
   try {
     await syncToServer(cleaned);
     await SecureStore.deleteItemAsync(DIRTY_KEY);

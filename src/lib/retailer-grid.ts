@@ -109,3 +109,49 @@ export const RAISED_SHEET_AT_SCALE = 1.5;
 export function clearRetailers(prefs: UserRecallPreferences): UserRecallPreferences {
   return prefs.retailers.length === 0 ? prefs : { ...prefs, retailers: [] };
 }
+
+// ── The editor's store catalog (2026-10-01) ─────────────────────────────────
+//
+// The one-page Edit preferences opens the store search over the WHOLE
+// current catalog: before anything is typed every store shows, alphabetical,
+// row by row, in two columns where a name's longest word still fits a
+// half-width tile at the reader's text size, otherwise one. Names wrap
+// between words and are never truncated; every tile is at least 44pt. A
+// query narrows the same catalog (the catalog's own matching); clearing it
+// restores the whole list. The Stores step's search is unchanged (one
+// instruction line until something is typed).
+
+/** A catalog tile's chrome: its side paddings, the gap and the checkbox. */
+export const CATALOG_TILE = { paddingHorizontal: spacing[12], gap: spacing[8], check: 20 } as const;
+export const CATALOG_TILE_CHROME =
+  CATALOG_TILE.paddingHorizontal * 2 + CATALOG_TILE.gap + CATALOG_TILE.check;
+/** Between the two columns, and between rows. */
+export const CATALOG_GAP = spacing[8];
+
+/**
+ * The catalog's widest single word at `body` (Public Sans 400, 16pt), in
+ * points: `Supermarkets` (105.5). Measured with the bundled face;
+ * retailer-grid.test.ts re-measures every catalog word against it.
+ */
+export const CATALOG_WIDEST_WORD = 105.5;
+
+/** From this text scale the catalog is always one column. */
+export const CATALOG_ONE_COLUMN_AT_SCALE = 1.5;
+
+/**
+ * Two columns when a half-width tile's label still holds the catalog's
+ * widest word at the reader's text size; otherwise one. `contentWidth` is
+ * the sheet's content width (between its page margins).
+ */
+export function storeCatalogColumns(contentWidth: number, fontScale: number): 1 | 2 {
+  if (fontScale >= CATALOG_ONE_COLUMN_AT_SCALE) return 1;
+  const label = (contentWidth - CATALOG_GAP) / 2 - CATALOG_TILE_CHROME;
+  return label >= CATALOG_WIDEST_WORD * fontScale + 1 ? 2 : 1;
+}
+
+/** Items in reading order, row by row: [A, B], [C, D], … */
+export function catalogRows<T>(items: readonly T[], columns: 1 | 2): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += columns) rows.push(items.slice(i, i + columns));
+  return rows;
+}

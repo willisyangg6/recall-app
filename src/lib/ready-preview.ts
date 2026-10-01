@@ -106,12 +106,13 @@ export function hasLockedMatches(preview: ReadyPreviewState): boolean {
 }
 
 /**
- * The pagination dots: one per READABLE match, never one for the locked
- * sentinel, and none at all for a single match (a lone dot says nothing).
+ * The count under `Your recall preview`: EVERY real current match, imaged
+ * or not — never the deck's length, never the image-bearing subset, never a
+ * fixed number. Null where there is nothing to count yet (checking,
+ * unavailable) or nothing matched (the empty card says so instead).
  */
-export function previewDotCount(preview: ReadyPreviewState): number {
-  if (preview.kind !== 'matches' || preview.models.length < 2) return 0;
-  return preview.models.length;
+export function previewMatchCount(preview: ReadyPreviewState): number | null {
+  return preview.kind === 'matches' ? preview.total : null;
 }
 
 /**

@@ -13,16 +13,24 @@ import { EMPTY_PREFERENCES } from '@/domain/preferences';
 import { buildAffectsMeSections } from '@/lib/affects-me-ranking';
 import { makeFeedItem } from '@/lib/feed-fixtures';
 import type { FeedItem } from '@/lib/recall-feed';
+import { deckDotCount } from '@/lib/ready-presentation';
 import { evaluatePersonalRelevance } from '@/lib/relevance';
 import {
   buildReadyPreview,
   hasLockedMatches,
   matchAccessibilityLabel,
   PREVIEW_MATCH_LIMIT,
-  previewDotCount,
+  previewMatchCount,
+  type ReadyPreviewState,
 } from './ready-preview';
 
 const TODAY = '2026-08-28';
+
+/** The deck's dots for a preview: one per navigable page (readable cards plus the locked one). */
+function dots(preview: ReadyPreviewState): number {
+  if (preview.kind !== 'matches') return 0;
+  return deckDotCount(preview.models.length + (preview.locked ? 1 : 0));
+}
 const PREFS = { states: ['CA'], allergens: [], retailers: [] };
 
 /**
@@ -63,7 +71,7 @@ test('zero matches is an honest none — never an invented match', () => {
   const preview = buildReadyPreview({ status: 'ready', items: [ELSEWHERE] }, PREFS, TODAY);
   assert.deepEqual(preview, { kind: 'none' });
   assert.equal(hasLockedMatches(preview), false);
-  assert.equal(previewDotCount(preview), 0);
+  assert.equal(dots(preview), 0);
 });
 
 test('an empty profile matches nothing: the layer is the Feed’s own verdict', () => {
@@ -120,7 +128,7 @@ test('one, two and three image-bearing matches: exactly those cards, truthful do
     assert.equal(preview.models.length, count);
     assert.equal(preview.locked, null, `${count}: a locked card with nothing behind it`);
     assert.equal(hasLockedMatches(preview), false, `${count}: the strip claims more`);
-    assert.equal(previewDotCount(preview), count === 1 ? 0 : count, 'a lone dot says nothing');
+    assert.equal(dots(preview), count === 1 ? 0 : count, 'a lone dot says nothing');
   }
 });
 
@@ -131,7 +139,7 @@ test('four or more image-bearing matches: three readable and the real fourth loc
   assert.equal(preview.models.length, 3);
   assert.notEqual(preview.locked, null);
   assert.ok(!preview.models.some((m) => m.id === preview.locked!.id), 'a readable card is locked');
-  assert.equal(previewDotCount(preview), 3, 'the locked card earned a dot');
+  assert.equal(dots(preview), 4, 'the locked page is navigable, so it has its own dot');
   assert.equal(hasLockedMatches(preview), true);
 });
 
@@ -154,6 +162,66 @@ test('more matches without images: no invented locked card, but the strip still 
   assert.deepEqual(imageless.models, []);
   assert.equal(imageless.locked, null);
   assert.equal(imageless.total, 2);
+});
+
+test('the count is every real match: never the deck’s length, the imaged subset or a fixed number', () => {
+  // Three imaged + two imageless: three cards, five matching recalls.
+  const mixed = buildReadyPreview(
+    {
+      status: 'ready',
+      items: [match(1, true), match(2, true), match(3, true), match(4, false), match(5, false)],
+    },
+    PREFS,
+    TODAY,
+  );
+  assert.equal(previewMatchCount(mixed), 5);
+  // Five imaged: three readable, one locked, five counted.
+  const many = buildReadyPreview(
+    { status: 'ready', items: [1, 2, 3, 4, 5].map((n) => match(n, true)) },
+    PREFS,
+    TODAY,
+  );
+  assert.equal(previewMatchCount(many), 5);
+  // One and two matches count themselves.
+  for (const count of [1, 2]) {
+    const items = Array.from({ length: count }, (_, i) => match(i + 1, true));
+    assert.equal(
+      previewMatchCount(buildReadyPreview({ status: 'ready', items }, PREFS, TODAY)),
+      count,
+    );
+  }
+  // No matches imaged at all: no deck, and the count is still the truth.
+  const imageless = buildReadyPreview(
+    { status: 'ready', items: [match(1, false), match(2, false)] },
+    PREFS,
+    TODAY,
+  );
+  assert.equal(previewMatchCount(imageless), 2);
+  // Nothing to count while checking, when unavailable, or when none match.
+  assert.equal(previewMatchCount({ kind: 'checking' }), null);
+  assert.equal(previewMatchCount({ kind: 'unavailable' }), null);
+  assert.equal(previewMatchCount({ kind: 'none' }), null);
+});
+
+test('new preferences recompute the preview from the same feed: nothing stale survives an edit', () => {
+  // A recent Texas-only recall matches once Texas is chosen, and not before.
+  const texas = makeFeedItem(101, {
+    id: 'texas',
+    geography: { scope: 'states', states: ['Texas'], confidence: 'stated', sourceText: 'Texas' },
+    publishedAt: '2026-08-26T00:00:00.000Z',
+    lastPublicActivityAt: '2026-08-26T00:00:00.000Z',
+    heroImageUrl: 'https://example.test/hero-texas.webp',
+  });
+  const items = [match(1, true), texas];
+  const before = buildReadyPreview({ status: 'ready', items }, PREFS, TODAY);
+  const after = buildReadyPreview(
+    { status: 'ready', items },
+    { ...PREFS, states: ['CA', 'TX'] },
+    TODAY,
+  );
+  assert.equal(previewMatchCount(before), 1);
+  assert.equal(previewMatchCount(after), 2);
+  assert.ok(after.kind === 'matches' && after.models.some((m) => m.id === 'texas'));
 });
 
 test('a readable card speaks its position, risk, relevance, product and provenance', () => {

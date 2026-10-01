@@ -182,15 +182,15 @@ export const BUILDING_DONE_CAPTION = 'Your recall watch is ready';
 /** The screen's one spoken introduction; the captions are not read one by one. */
 export const BUILDING_ACCESSIBILITY_LABEL = 'Building your recall watch';
 
-// ── Screen: Ready (the personalized preview) ────────────────────────────────
+// ── Screen: Ready (the preference board, 2026-09-30) ────────────────────────
 
-export const PREVIEW_HEADLINE = 'Your recall watch is ready.';
-export const PREVIEW_BODY = 'Here’s what Lotly found for your household.';
-/** The body when nothing (yet) matches: still true before the query answers. */
-export const PREVIEW_BODY_EMPTY = 'Lotly will keep checking for recalls that match your household.';
-/** The summary card's heading (Option 2, 2026-09-26). */
-export const PREVIEW_SUMMARY_TITLE = 'Your preferences are set';
-/** Profile's own row names (lib/profile-hub.ts `SUMMARY_LABELS`): the app says store. */
+export const PREVIEW_HEADLINE = 'You’re all set.';
+/** The board's heading: the saved choices, native on the approved board. */
+export const PREVIEW_SUMMARY_TITLE = 'Your preferences';
+/**
+ * Profile's own row names (lib/profile-hub.ts `SUMMARY_LABELS`): the app
+ * says store. Drawn on the board in title case, exactly as spoken.
+ */
 export const PREVIEW_SUMMARY_LABELS = {
   states: 'States',
   allergens: 'Allergens',
@@ -198,32 +198,35 @@ export const PREVIEW_SUMMARY_LABELS = {
 } as const;
 /** An optional group with nothing chosen keeps its row and says so. */
 export const PREVIEW_NONE = 'None';
-/** Spoken after each summary row: the drawn check, in words. */
-export const PREVIEW_ROW_COMPLETED = 'completed';
-/**
- * The Stores row's visible tail once it is compacted (lib/ready-presentation
- * `storeSummaryText`): `Aldi, Costco +4 more`. The row still speaks every name.
- */
-export function moreStoresLabel(count: number): string {
-  // A no-break space: `+4 more` wraps as one unit, never `+4` / `more`.
-  return `+${count}\u00A0more`;
-}
-// ── The Ready preview: the carousel (2026-09-28) ────────────────────────────
 
 /** The heading over the personalized recall preview. */
-export const PREVIEW_MATCH_HEADING = 'See what affects you today';
+export const PREVIEW_MATCH_HEADING = 'Your recall preview';
 
-/** The lime count pill: `1 recall for your watch`, `2 recalls for your watch`. */
+/**
+ * The count line under it, in three pieces so only the number is
+ * emphasised: `We found 21 recalls for you.`, `We found 1 recall for you.`
+ * The number is every real match (lib/ready-preview `previewMatchCount`),
+ * never the deck's length.
+ */
+export function matchCountParts(count: number): { before: string; number: string; after: string } {
+  return {
+    before: 'We found ',
+    number: String(count),
+    after: count === 1 ? ' recall for you.' : ' recalls for you.',
+  };
+}
+
+/** The same line as one string. */
 export function matchCountLabel(count: number): string {
-  return count === 1 ? '1 recall for your watch' : `${count} recalls for your watch`;
+  const parts = matchCountParts(count);
+  return `${parts.before}${parts.number}${parts.after}`;
 }
 
 /** The soft-blue locked strip, shown only when more real matches exist. */
 export const PREVIEW_LOCKED_STRIP = 'More matching recalls are locked';
 export const PREVIEW_LOCKED_HINT = 'Opens the plan screen.';
-/** The locked sentinel card past the third match: no recall content at all. */
+/** The locked final card: no recall content at all. */
 export const PREVIEW_LOCKED_CARD_TITLE = 'More matches are locked';
-export const PREVIEW_LOCKED_CARD_BODY = 'See your plan to unlock every matching recall.';
 
 /** The honest empty state: no matches right now, and no pretence otherwise. */
 export const PREVIEW_EMPTY_TITLE = 'Nothing currently matches your watch.';
@@ -244,8 +247,44 @@ export const PREVIEW_CTA = 'See my plan';
 export const PREVIEW_CTA_HINT = 'Opens the plan screen.';
 
 export const PREVIEW_EDIT = 'Edit preferences';
-export const PREVIEW_EDIT_HINT =
-  'Returns to your states, allergens and stores. Your choices are kept.';
+export const PREVIEW_EDIT_HINT = 'Opens your states, allergens and stores on one page.';
+
+// ── Screen: Edit preferences (one page, 2026-09-30) ─────────────────────────
+
+export const EDIT_CANCEL = 'Cancel';
+export const EDIT_CANCEL_HINT = 'Closes without saving. Your preferences stay as they were.';
+export const EDIT_HEADLINE = 'Edit your preferences';
+export const EDIT_BODY = 'Adjust your watch, all in one place.';
+/** The three sections, under Profile's row names. */
+export const EDIT_SECTION_LABELS = PREVIEW_SUMMARY_LABELS;
+/** A section's count: `2 selected`. */
+export function editSelectedCount(count: number): string {
+  return `${count} selected`;
+}
+export const EDIT_STATES_HELPER = 'Choose at least one state.';
+export const EDIT_OPTIONAL = 'Optional';
+export const EDIT_ACTION = 'Edit';
+/** Each Edit's spoken name: which chooser it opens. */
+export const EDIT_ACTION_LABELS = {
+  states: 'Edit states',
+  allergens: 'Edit allergens',
+  retailers: 'Edit stores',
+} as const;
+export const EDIT_ADD_ALLERGENS = 'Add allergens';
+export const EDIT_CHOOSER_HINT = 'Opens the list. Nothing is saved until Save changes.';
+export const EDIT_CAPTION = 'Your recall preview updates when you save.';
+export const EDIT_SAVE = 'Save changes';
+export const EDIT_SAVE_HINT = 'Saves your changes and returns to your recall preview.';
+/** Why Save is unavailable, said to assistive technology on the disabled button. */
+export const EDIT_SAVE_NEEDS_STATE = 'Choose at least one state to save.';
+/** A failed local save: the page stays, with every change kept. */
+export const EDIT_SAVE_FAILED = 'Your changes couldn’t be saved. Try again.';
+/** A chip's removal control: `Remove Alabama`. */
+export function removeChipLabel(name: string): string {
+  return `Remove ${name}`;
+}
+/** The allergen chooser sheet's title (the States and Stores sheets keep theirs). */
+export const ALLERGENS_CHOOSER_TITLE = 'Choose allergens';
 export const INDEPENDENCE_NOTE = 'Lotly is independent and is not affiliated with the FDA or USDA.';
 
 // ── Screen 7: Notification education ────────────────────────────────────────
