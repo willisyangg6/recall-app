@@ -127,3 +127,40 @@ test('the hook holds no freshness state, no clock and no ageing timer', () => {
 test('the hook reads no environment directly', () => {
   assert.ok(!/process\.env/.test(CODE), 'the hook reads the environment directly');
 });
+
+// ── The Building → Ready handoff (2026-10-02) ──────────────────────────────
+
+test('reuseRecent starts from the corpus the session served and revalidates only past the threshold', () => {
+  // Opt-in, used by Ready alone: every other screen keeps the cold-launch
+  // contract above (loading, the cache, then a reconciliation).
+  assert.match(
+    CODE,
+    /export function useFeed\(\{ reuseRecent = false \}: FeedOptions = \{\}\): Feed/,
+  );
+  assert.match(CODE, /const served = reuseRecent \? getFeedSession\(\)\.served\(\) : null;/);
+  assert.match(
+    CODE,
+    /if \(reuseRecent\) void revalidate\(FOREGROUND_REVALIDATE_AFTER_MINUTES \* 60_000\);\n\s+else void revalidate\(\);/,
+  );
+  // A skipped revalidation changes nothing; the failure path is unchanged.
+  assert.match(
+    CODE,
+    /if \(outcome === null\) return;\n\s+setState\(\{ status: 'ready', items: outcome\.items \}\);/,
+  );
+});
+
+test('the development feed scenarios wrap the one session only inside a __DEV__ branch', () => {
+  // Metro folds the dead branch of a release bundle, and the module with it.
+  assert.match(
+    CODE,
+    /const developmentFeed = __DEV__\n\s+\? \/\/ eslint-disable-next-line @typescript-eslint\/no-require-imports\n\s+\(require\('@\/lib\/development-feed-scenarios'\)/,
+  );
+  assert.match(
+    CODE,
+    /__DEV__ && developmentFeed \? developmentFeed\.wrapDevelopmentFeedSession\(session\) : session/,
+  );
+  assert.ok(
+    !/import .*development-feed-scenarios/.test(CODE),
+    'a static import ships the scenarios',
+  );
+});

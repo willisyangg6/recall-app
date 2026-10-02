@@ -41,7 +41,8 @@ fill; and the development reset now genuinely restarts the flow (§6.6)._
 
 _Onboarding restructured (2026-09-28, uncommitted): the merged Ready/paywall
 presentation is retired. Two problem-framing screens follow Welcome (§6.5),
-a one-time "building your watch" interstitial follows Stores (§6.6), the
+a one-time "building your watch" interstitial follows Stores (§6.6; the
+five-stop watch since 2026-10-02), the
 Ready step is the personalized recall preview — the summary card and a
 horizontal carousel of real matches — with no purchase UI (§6.4), and the
 plans live on a dedicated onboarding paywall (§6.7) built from the shared
@@ -61,7 +62,7 @@ audit under `assets/brand/reference/statistics/`._
 ```
 Welcome → Problem: scale (1 of 5) → Problem: stakes (2 of 5)
   → States (3 of 5) → Allergens (4 of 5) → Stores (5 of 5)
-  → Building your watch (once, ~3.2s) → Ready (the personalized preview)
+  → Building (once; real results, ~8.3s with a usable feed) → Ready
   → the onboarding paywall → purchase or restore success
   → Notification education → Apple's prompt only if the shopper chooses it
   → Feed
@@ -79,10 +80,11 @@ The rules, each pinned by a test named in §11:
 - The two problem screens state the CDC's facts verbatim (§6.5), cite
   `Source: CDC` quietly, and never imply that every foodborne illness had a
   recall or that Lotly could have prevented them.
-- The building interstitial plays exactly once (§6.6): not again when
+- The Building step is presented exactly once (§6.6): not again when
   returning from Ready or the paywall, not on a relaunch after it
-  completed, and a kill during the play finishes the one play. It replaces
-  itself with Ready, so it never joins the back chain.
+  completed or after Continue to preview, and a kill during it presents it
+  again from the real state. It replaces itself with Ready, so it never
+  joins the back chain, and it shows a count only from real results.
 - States shows one search entry; the jurisdictions are listed only in the
   chooser it opens, and the chooser and the chips edit one draft (§6.1). No
   location permission is asked, no state is inferred, and none is chosen by
@@ -157,7 +159,7 @@ never-onboarded device has.
 | Field                            | Meaning                                                                                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `step`                           | The last onboarding screen shown, recorded on focus while personalization is incomplete                                                     |
-| `watchBuilt`                     | Sticky. The building interstitial completed its one play; Stores' Continue then skips it forever                                            |
+| `watchBuilt`                     | Sticky. The one-time Building presentation was spent (completed, or left by Continue to preview); never evidence that data succeeded        |
 | `personalizationCompleted`       | Sticky. Set with the entitlement by a purchase or restore (or by an entitled shopper's Continue on the onboarding paywall). Never regresses |
 | `notificationEducationCompleted` | Sticky. Set by either education choice. Cannot be true while personalization is incomplete                                                  |
 
@@ -1523,62 +1525,167 @@ or that Lotly could have prevented them, and the unverified "6K products",
 "18 recalls a day" and "25% Class I" figures appear nowhere
 (`onboarding-design.test.ts`).
 
-### 6.6 The building interstitial (2026-09-28)
+### 6.6 The Building step: the five-stop watch (2026-10-02)
 
-After Stores' Continue on a first pass, `/onboarding/building` plays ONE
-~3.2-second assembly of the watch (`src/lib/building-watch.ts`,
-`src/components/onboarding/building-step.tsx`): the M04 watchful mascot
-(its first integration; decorative, fixed box), then a checklist of four
-working captions at 700ms each and a completion line held 400ms —
+After Stores' Continue on a first pass, `/onboarding/building` presents the
+founder-approved five-stop composition
+(`assets/brand/reference/lotly-onboarding-building-grocery-search-target.png`;
+measurements in
+`assets/brand/reference/building-grocery-search/lotly-building-grocery-search-asset-report.json`)
+over REAL data. It replaces the 2026-09-28 checklist interstitial and its
+fixed 3.2-second success timer.
 
-1. `Checking recalls in your selected states`
-2. `Matching the allergens you watch` — or, with none chosen, `Keeping
-allergen matching broad`
-3. `Watching the stores you chose` — or, with none, `Scanning recalls
-across all stores`
-4. `Building your Affects You feed`
-5. `Your recall watch is ready`
+**Composition** (`src/components/onboarding/building-step.tsx`, every
+number in `src/lib/building-presentation.ts`). The decorative hero
+(`lotly-building-grocery-search-scene.png`: the canvas tote, its three
+hanging tags, the groceries, and the mascot holding binoculars over both
+eyes) at the page's full width, with the tags' three printed glyphs drawn
+back natively at their fitted centres, boxes and angles (location pin,
+the general octagon-and-exclamation allergen symbol, cart); the headline
+`Getting your watch ready.` (Public Sans 700, 36/36, centred, 270pt column);
+one native rail of five equal stops, Area, Allergens, Stores, Matches and
+Feed (map-pin, octagon-alert, shopping-cart, file-search-corner and the
+Lotly-authored stacked cards), joined by short thin connectors; and ONE
+changing caption (Public Sans 700, 18/23). The circles alternate blue,
+lime, blue, lime, blue as fixed decoration: the lime is
+`background/accent`, the blue is the mockup's lighter `#D4EBFE`, local to
+this screen so the shared `background/subtle` is unchanged. Active is two
+lime rays above a stop and complete is a navy badge with a white check on
+its lower right — shape and position, never colour alone. On a short screen
+(an SE) only the page cream above the art compresses; everything scrolls at
+large text sizes, and from text scale 1.5 the headline and caption take
+smaller bases (`heading-2`, and `body`'s size at a screen-local 1.25
+leading — 16/20 — stepping to `body-small`'s 13/16 wherever the widest
+caption word, `personalized`, would not fit the measured column with 5% to
+spare: at AX5, React Native's 3.571×, on an SE, where 16pt broke it as
+`personalize|d`), still multiplied by the reader's setting, so no word ever
+breaks across lines at AX5 and the slow or error message fits above its
+footer on an SE. M04 is no longer drawn
+here (it stays on the standalone paywall).
 
-The captions name real work: the route mounts `useFeed`, so the feed sync
-the Ready preview reads runs (or answers from cache) underneath — the
-prefetch — and the preferences described are the saved ones. No caption
-lists selection names, and none claims a match was found: matches are
-Ready's to report, after the query answers. The screen never waits on the
-feed and never traps — at the sequence's end it marks the sticky
-`watchBuilt` fact and REPLACES itself with Ready, whose own honest states
-cover a slow or failed feed (§6.4). An unreadable preference store skips
-the play entirely and routes to Ready, whose pending state explains it.
+**The stops and the real work** (`src/lib/building-watch.ts`). Mounting the
+route starts or joins the shared feed session's sync. Area is that sync
+delivering a complete corpus (the session's cache or a finished sync) plus
+the saved preferences; Allergens and Stores are the allergen and retailer
+signals of `evaluatePersonalRelevance`; Matches is `affectsYouMatches`, the
+Affects You current window whose length is exactly the count Ready shows;
+Feed is that ranked list, which Ready receives. Stops 2–5 are one
+synchronous evaluation over the loaded corpus presented one beat at a
+time — no request per stop, no matching of the screen's own, no staged
+work. Nothing completes before the corpus and the preferences exist: the
+presentation holds on Area, active, until usable results arrive.
 
-**Once means once.** Stores' Continue routes through the interstitial only
-while `watchBuilt` is false; returning from Ready or the paywall, editing
-preferences (`dismissTo` the Ready beneath), and every relaunch after
-completion skip it. A kill DURING the play resumes on it (the recorded
-step) and finishes the one play. Because it replaces itself, Back from
-Ready pops to Stores and can never land on a spent interstitial.
+**Captions.** `Searching recalls in your area…`, `Checking for allergen
+matches…` (`Checking recalls across allergens…` with none chosen),
+`Checking recalls where you shop…` (`Checking recalls across stores…`),
+`Found N recalls for you.` (`Found 1 recall for you.`; `No matching recalls
+found.` at zero), `Putting your personalized feed together…`, then `Your
+personalized feed is ready.` Every caption, the whole count sentence
+included, is Public Sans 700 (2026-10-02: the count line's earlier Medium
+words with a bold number are retired). `watch` appears only in the headline; no caption names
+a selection or claims safety.
 
-**Why a full-flow recording can miss it (polish-pass diagnosis).** The
-interstitial is skipped whenever the stored record already says
-`watchBuilt: true` — by design, once per onboarding. Walking Back to
-Welcome, or a record migrated from version 1 at the old Preview, keeps the
-flag, so a device that has played it once never plays it again from
-Stores: that is what the earlier recording showed. The development
-`Reset onboarding to Welcome` writes the INITIAL record (`watchBuilt:
-false`), but from the onboarding paywall (inside the onboarding phase) the
-phase did not change, so nothing moved and the reset LOOKED broken until a
-relaunch; it now pops to the stack's root and replaces it with the entry
-screen, as the Design Preview's gate scenarios do (the same same-phase gap
-was fixed there). A genuinely fresh flow after the reset was recorded
-playing the interstitial between Stores and Ready (§6.10). The intended
-once-only behavior is unchanged.
+**The handoff.** The feed session remembers the corpus it last served
+(`FeedSession.served()`), and Ready reads the feed with
+`useFeed({ reuseRecent: true })`: it opens on exactly the corpus Building
+counted and reconciles again only past the existing 15-minute foreground
+threshold (joining a sync still in flight). The count therefore matches
+Ready's from the same corpus; a sync that lands after the handoff updates
+Ready as Ready always updated. The preferences hand over the same way:
+Building and Ready read them with `useOnboardingPreferences({ reuseLoaded:
+true })`, starting from the choices already read or saved in this process
+(and still re-reading on focus), so Ready never flashes `Loading your
+preferences` after Building; a cold launch or resume onto Ready, or a store
+that fails, still shows Ready's real loading and error states. The selectors
+and the editor, which save, never reuse.
 
-**Motion and accessibility.** Rows appear one at a time with a single
-200ms fade each — no rings, no springs, no loops. Under Reduce Motion (or
-before the setting is known) the finished checklist is drawn at once and
-the screen advances after a readable 1.6s minimum. The checklist is ONE
-element (`Building your recall watch`, role `progressbar`); exactly two
-announcements are made — the start and the completion — never a frame or a
-percentage; the mascot is hidden and untouchable; and the replace hands
-focus to Ready's own heading.
+**Timing** (foreground, visible time). Presentation starts when the route
+is VISIBLE — the stack's `transitionEnd` for its arrival, or a 700ms
+fallback on a cold resume with no push — never at mount, and it stops while
+the app is in the background. With usable results each stop's caption is
+read for at least 1,500ms of foreground time ONCE FULLY VISIBLE — Area's
+from arrival, every later one after its 220ms fade-through — and the
+completion caption likewise for 800ms: about 9.4s in all (the founder's
+slower pacing, 2026-10-02; the transitions keep their own 80ms out and
+140ms in, only the settled reading time grew). These are
+display minima, not evidence: a stop holds longer while its data is not
+ready, and a usable cache presents at once. Under Reduce Motion the reduced
+path is unchanged (Area at least 560ms, the count held 1.6s, the
+completion 0.9s: about 3 s), never the
+9.4-second sequence. Under the existing freshness policy a valid cached corpus is
+the feed, so an offline launch with a cache completes from it without any
+freshness wording, while a first launch with no cache waits for the sync.
+
+**Slow and failed.** After 10 seconds of foreground visible time spent
+WAITING for usable results (Area pending) the caption becomes `Recalls are taking longer than usual to
+load.`; the presentation's own length can never trigger it, since the
+warning is armed only while data is pending. A failure with nothing cached says `Lotly couldn’t reach the recall
+service.` at once. Both show a footer with `Try again` (a real refresh
+through the same session; the slow bound restarts) and `Continue to
+preview`; when the footer appears the page scrolls the message into view
+from its first line (the rail too when both fit; positions from the
+screen's measured layout and the footer's own height). Neither
+path shows a count or a completion, and late results resume the
+presentation from the real state. Continue replaces Building with Ready,
+whose own checking and could-not-check states take over.
+
+**Once means once.** Completion and Continue both mark the sticky
+`watchBuilt` fact and REPLACE Building with Ready (one guarded exit), so
+Back from Ready pops to Stores and Stores' Continue then goes straight to
+Ready. `watchBuilt` records that the one-time presentation was spent —
+never that data succeeded. Onboarding is not completed here. A kill during
+the presentation resumes on Building, which presents again from the real
+state; a relaunch after it resumes on Ready. Interactive swipe-back is
+disabled on this route (`gestureEnabled: false`). An unreadable preference
+store routes straight to Ready, unspent.
+
+**Motion** (core `Animated`, native driver, opacity and transform only;
+expo-animation and emil-design-eng guidance). One beat moves everything
+together. The caption fades THROUGH: the outgoing caption fades to nothing
+over 80ms (linear — under the strong ease-out it vanished within ~25ms and
+left a measurable blank), the words change while nothing is visible, and the
+incoming caption fades in over 140ms with no pause between (ease-out
+`cubic-bezier(0.23, 1, 0.32, 1)`) — one native sequence over two layers
+that are never visible together, the incoming one created transparent, in a
+box of stable height (the tallest caption this screen can show for these
+choices, measured at the current width and text size, wrapping naturally):
+no overlapping sentences, no flash, no movement, no layout change. From that
+hidden swap point, over the fade-in, the finished stop's badge settles in
+(opacity, scale 0.85→1), the next stop's rays appear (0.9→1), and the
+matching bag-tag glyph swells to 1.1 and settles (260ms ease-in-out back)
+for Area, Allergens and Stores; at Matches and Feed the three glyphs stay
+settled. An interruption stops the running sequence and a stale completion
+is ignored. (Until 2026-10-02 the new words first replaced the old ones at
+once and an effect then reset their opacity — a one-frame flash, then a
+blank; an interim overlapping crossfade followed, then this fade-through.) Nothing loops, springs or bounces,
+and the hero never moves. Under Reduce Motion (or before the setting is known)
+every change is immediate — the caption's words swap with no fade —
+and there is no staged build-up: once results
+are usable the first three stops complete together, the count holds 1.6s
+and the completion 0.9s — it still waits for real results.
+
+**Accessibility.** The hero, its glyphs and the rail visuals are hidden.
+The headline is a header. The rail and caption are ONE element, `Recall
+check progress` (role `progressbar`), whose value is the current caption and
+`N of 5 done.` The start (`Getting your watch ready. Searching recalls in
+your area…`), the completion (`Found N recalls for you. Your personalized
+feed is ready.`) and the slow or error message are announced, each only
+when true and never mid-slide. Try again and Continue to preview are
+ordinary buttons.
+
+**QA controls** (Design Preview, development only). `BUILDING QA` sets a
+feed scenario (Live, slow 12 s, failed, zero matches, one match) that
+persists across relaunches under its own development key until changed,
+and clears the feed cache; the gate scenario `Resumed incomplete
+onboarding` opens Stores with the one-time flag unset and choices kept. The
+scenarios wrap the one session: the match scenarios hide real current
+matches for the saved preferences, the failure never reaches the network,
+and nothing filtered is cached. A display-only QA profile (`QA profile: no
+allergens, no stores`, its own development key) presents the saved choices
+to Building and Ready with no allergens and no stores, never saving them —
+a save would rewrite the device's preferences and their server mirror —
+so the no-selection captions and their real counts can be checked. A
+release bundle carries none of it.
 
 ### 6.7 The dedicated onboarding paywall (2026-09-28; the grocery watch, 2026-10-01)
 
@@ -1958,7 +2065,7 @@ What P2B7X.2 does, and what it does not touch:
 | Stores receipt layout: the slice maps to its rows at any height, the paper grows on every phone for 44pt rows, targets never overlap, scene vs stacked by text size, every word fits its column (measured from the font), the SE AX5 headline limit                                                                                                                                                                                                                                                                                                                                                                                                                                               | `src/lib/stores-receipt-presentation.test.ts`                                                                      |
 | Stores receipt layers: approved bytes and format, the report's offsets and slice, only Stores draws them, no reference imported                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/lib/stores-receipt-assets.test.ts`                                                                            |
 | Stores step and search sheet: no second mode and none of the retired grid, six checkbox rows in order, no marks, the count row's allocated slot, the search action, the three decorative layers growing upward and stacking, one Modal sheet with a fixed frame and pinned Done, autofocus, instruction and no-match lines, single-column checkbox results, one shared selection, choosing keeps the sheet, every exit keeps choices, query never saved, Reduce Motion, overlay gone, Profile unchanged, Back/Continue/resume, mock-ups unreferenced                                                                                                                                              | `src/components/onboarding-design.test.ts`                                                                         |
-| M04 on the interstitial and the standalone paywall; the onboarding paywall reaches no mascot file; M01, M02, M03, M05 and M06 unreferenced; M06's repaired bytes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/lib/mascot-assets.test.ts`                                                                                    |
+| M04 on the standalone paywall only (it left Building 2026-10-02); the onboarding paywall reaches no mascot file; M01, M02, M03, M05 and M06 unreferenced; M06's repaired bytes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `src/lib/mascot-assets.test.ts`                                                                                    |
 | The grocery-watch hero: approved bytes, RGBA sRGB at the measured size, the report's crop and accuracy, drawn only by the onboarding paywall, no reference, source, mask, report, sheet or kit in app code                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/lib/paywall-grocery-watch-assets.test.ts`                                                                     |
 | The onboarding paywall's presentation: approved copy, cards from the store prices, Monthly moving the action and the disclosure, no badge without a positive one-currency saving, long localized prices, the hero overlap and ascender rules, no type below the shared floor                                                                                                                                                                                                                                                                                                                                                                                                                      | `src/lib/onboarding-paywall-presentation.test.ts`                                                                  |
 | The onboarding paywall's composition: top bar, headline above the hero, decorative static hero, benefits as one element, radio cards, decorative pill, the shared footer's explicit `onboarding` appearance, no purchase state, mascot or close; the entitled panel; the 51pt pill's Button semantics                                                                                                                                                                                                                                                                                                                                                                                             | `src/components/onboarding-design.test.ts`                                                                         |
@@ -1974,7 +2081,8 @@ What P2B7X.2 does, and what it does not touch:
 | The problem screens: exact CDC copy and sources (comments only, never bundled), the spoken stat, the one-element pictograph, the four risk rows (one element each, decorative illustrations, heading-3 live labels, hairlines only between rows, no pill/card/background/grid), no mascot, no capped or truncated text, no unsupported statistics                                                                                                                                                                                                                                                                                                                                                 | `src/components/onboarding-design.test.ts`                                                                         |
 | The statistic assets: byte-identical sources, production format/alpha/holes, the report's accuracy, the one-to-one mapping, no reference imported by app code                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/lib/statistics-assets.test.ts`                                                                                |
 | The problem presentation rules: the accessibility threshold, the pictograph canvas, the risk rows' measured label widths, transparent-band trims, default iPhone 17 and SE fit arithmetic, larger-text and accessibility-size arrangements                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/lib/problem-presentation.test.ts`                                                                             |
-| The interstitial: truthful captions and both zero variants, ~3.2s timing, plays once and replaces itself, Reduce Motion static path, no loop, two announcements, safe preference-failure exit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/lib/building-watch.test.ts`, `src/components/onboarding-design.test.ts`                                       |
+| The Building step: the data gate and the shared Affects You count, the five captions with both no-selection variants and the singular/zero count, presentation only after visibility, foreground-only timing, the 10 s slow escape and the immediate error with Try again, Reduce Motion waiting for real results, one exit replacing with Ready, swipe-back disabled, one grouped progress element, the approved hero bytes and tag calibration, the pinned and Lotly-authored glyphs                                                                                                                                                                                                            | `src/lib/building-watch.test.ts`, `src/lib/building-assets.test.ts`, `src/components/onboarding-design.test.ts`    |
+| The Building → Ready handoff: `served()` is the newest complete corpus (a cache read never replaces a finished sync, a failure never replaces anything), and Ready alone opts into `reuseRecent`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/lib/feed-sync.test.ts`, `src/hooks/use-feed.test.ts`                                                          |
 | The segmented progress: five segments, no visible count, one spoken element, the five counted screens only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/components/onboarding-design.test.ts`                                                                         |
 | One purchase flow: purchase, restore and offering loads called only in `use-purchase-flow.tsx`, announced outcomes, both paywall routes composing it, Ready touching none of it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/components/onboarding-design.test.ts`                                                                         |
 | The paywall order (benefits → plans → controls → independence note → shared footer), no Ready content, the entitled panel without a purchase ask                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/components/onboarding-design.test.ts`                                                                         |

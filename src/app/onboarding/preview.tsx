@@ -29,14 +29,19 @@ import { useFeed } from '@/hooks/use-feed';
 import { useOnboardingPreferences } from '@/hooks/use-onboarding-preferences';
 import { goBackFrom } from '@/lib/onboarding-navigation';
 import { EDIT_PREFERENCES_ROUTE, onboardingRoute } from '@/lib/onboarding-routes';
+import { presentedPreferences } from '@/lib/presented-preferences';
 import { isFeedConfigured } from '@/lib/recall-feed';
 import { todayIso } from '@/lib/recall-presentation';
 import { buildReadyPreview, type ReadyFeedInput } from '@/lib/ready-preview';
 
 export default function OnboardingPreviewScreen() {
   const access = useAccess();
-  const { load } = useOnboardingPreferences();
-  const feed = useFeed();
+  // Arriving from the Building step, the choices it just read: no pending
+  // flash. A cold resume still loads (and can still fail) as before.
+  const { load } = useOnboardingPreferences({ reuseLoaded: true });
+  // Arriving from the Building step, Ready opens on the corpus Building
+  // counted, and does not reconcile again within the foreground threshold.
+  const feed = useFeed({ reuseRecent: true });
   // Back from the editor, focus returns to the action that opened it.
   const editRef = useRef<View>(null);
   const editing = useRef(false);
@@ -55,10 +60,13 @@ export default function OnboardingPreviewScreen() {
   // A build without a configured feed can never answer: say so honestly
   // rather than checking forever.
   const feedInput: ReadyFeedInput = isFeedConfigured() ? feed.state : { status: 'error' };
+  // The saved choices (a development QA profile may present them differently,
+  // display only).
+  const prefs = presentedPreferences(load.prefs);
   return (
     <PreviewStep
-      prefs={load.prefs}
-      preview={buildReadyPreview(feedInput, load.prefs, todayIso())}
+      prefs={prefs}
+      preview={buildReadyPreview(feedInput, prefs, todayIso())}
       onSeePlan={() => router.push(onboardingRoute('paywall'))}
       onEdit={() => {
         editing.current = true;

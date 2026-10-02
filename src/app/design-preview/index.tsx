@@ -29,6 +29,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  BuildingQaControls,
   GateScenarios,
   OnboardingGallery,
   PaywallGallery,
@@ -938,6 +939,11 @@ export default function DesignPreviewScreen() {
           GATE SCENARIOS
         </ThemedText>
         <GateScenarios />
+
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          BUILDING QA
+        </ThemedText>
+        <BuildingQaControls />
 
         {/* P2B6B: the trust documents' shared renderer and content blocks —
             imported from production, never copied — over the registry's own

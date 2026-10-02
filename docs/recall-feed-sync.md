@@ -333,6 +333,31 @@ snapshot and was never shipped; the number goes forward rather than back to
 2, because reusing a version is how a document written under one shape gets
 read as another later.
 
+### 8d. The Building → Ready handoff (2026-10-02)
+
+The onboarding Building step counts the shopper's matches from the shared
+session, and Ready must open on that same corpus without a second
+reconciliation seconds later. Two small additions, both in the session's
+terms:
+
+- `FeedSession.served()` is the newest complete corpus the session has
+  handed out — a finished sync's, or the cache's when no sync has finished.
+  In memory only. A cache read never replaces a finished sync's corpus, and
+  a failed sync changes nothing (`feed-sync.test.ts`).
+- `useFeed({ reuseRecent: true })`, used by Ready alone, starts from
+  `served()` instead of a loading state and revalidates on mount through
+  `syncIfOlderThan(15 min)` — joining a sync in flight, skipping one inside
+  the threshold. Every other screen keeps the cold-launch contract above;
+  the hook's returned shape is unchanged and carries no freshness surface.
+
+The Building step itself mounts the hook normally (start or join the sync)
+and reads only what it answers: a cached or freshly synced complete corpus
+is usable, a failure with nothing loaded is the honest error. In a
+development build, `src/lib/development-feed-scenarios.ts` wraps the one
+session to hold, fail or narrow what the screens are handed for QA; a
+release bundle folds it away
+([recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md) §6.6).
+
 ## 9. Ingestion freshness is operations-only
 
 Whether ingestion is healthy is answered by the **dead-man heartbeat**,

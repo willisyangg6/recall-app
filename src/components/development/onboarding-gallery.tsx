@@ -78,11 +78,19 @@ import { beginEditing, editorReducer, type EditorAction } from '@/lib/edit-prefe
 import { toggleAllergen, toggleRetailer, withStates } from '@/lib/personalization-screen';
 import type { Offering } from '@/lib/purchases/purchase-provider';
 import type { ReadyPreviewState } from '@/lib/ready-preview';
+import {
+  buildingCaption,
+  buildingCaptionCandidates,
+  type BuildingData,
+  type BuildingView,
+} from '@/lib/building-watch';
+import { createFeedCacheStore } from '@/lib/feed-cache-store';
 import { clearRetailers } from '@/lib/retailer-grid';
 import { retailerLogoCoverage } from '@/lib/retailer-logos';
 
 type DevelopmentProvider = typeof import('@/lib/purchases/development-provider');
 type DevelopmentScenarios = typeof import('@/lib/purchases/development-scenarios');
+type DevelopmentFeed = typeof import('@/lib/development-feed-scenarios');
 
 /** Development only: folded away, together with the modules, in a release bundle. */
 const devProvider = __DEV__
@@ -104,6 +112,73 @@ const TALL_FIXTURE =
 const SMALL_DEVICE_HEIGHT = 568;
 
 const noop = () => {};
+
+const devFeed = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/lib/development-feed-scenarios') as DevelopmentFeed)
+  : null;
+
+/**
+ * The Building step's states, SIMULATED: a held view and a stated result, so
+ * every frame can be reviewed without waiting on the network. The count is a
+ * labelled sample, not a claim about any recall; the live flow counts the
+ * real corpus.
+ */
+const BUILDING_SAMPLES: readonly {
+  caption: string;
+  view: BuildingView;
+  data: BuildingData;
+  /** Draw the captions for a shopper who chose no allergens and no stores. */
+  noSelections?: boolean;
+}[] = [
+  {
+    caption:
+      'Building, waiting for results — simulated: Area active (rays), nothing complete, the pending caption; the hero, its three native tag glyphs and the rail are real',
+    view: { phase: 'presenting', beat: 0 },
+    data: { kind: 'pending' },
+  },
+  {
+    caption:
+      'Building, Allergens active — the approved frame: Area complete (badge), rays on Allergens; simulated result held',
+    view: { phase: 'presenting', beat: 1 },
+    data: { kind: 'usable', total: 22 },
+  },
+  {
+    caption:
+      'Building, no allergens chosen — simulated: Checking recalls across allergens…, never a filter that does not exist',
+    view: { phase: 'presenting', beat: 1 },
+    data: { kind: 'usable', total: 22 },
+    noSelections: true,
+  },
+  {
+    caption: 'Building, no stores chosen — simulated: Checking recalls across stores…',
+    view: { phase: 'presenting', beat: 2 },
+    data: { kind: 'usable', total: 22 },
+    noSelections: true,
+  },
+  {
+    caption: 'Building, Matches — simulated count of 22 (only the number bold)',
+    view: { phase: 'presenting', beat: 3 },
+    data: { kind: 'usable', total: 22 },
+  },
+  {
+    caption: 'Building, complete — simulated: every stop done, the completion caption',
+    view: { phase: 'complete', beat: 5 },
+    data: { kind: 'usable', total: 22 },
+  },
+  {
+    caption:
+      'Building, slow — simulated: no usable results after 10 s of foreground time; Try again and Continue to preview',
+    view: { phase: 'slow', beat: 0 },
+    data: { kind: 'pending' },
+  },
+  {
+    caption:
+      'Building, could not reach the service — simulated: nothing cached; Try again and Continue to preview, no stop complete',
+    view: { phase: 'error', beat: 0 },
+    data: { kind: 'failed' },
+  },
+];
 
 /** Postal codes for the named jurisdictions, from the catalog (no code is typed here). */
 function codesFor(...names: string[]): string[] {
@@ -406,11 +481,26 @@ export function OnboardingGallery() {
           <ProblemRiskStep onContinue={noop} onBack={noop} />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Building your watch — real: the M04 mascot, the truthful captions for a full selection and the one-time play (it holds its finished state here); simulated: finishing routes nowhere">
-        <Screen>
-          <BuildingStep prefs={populated} onDone={noop} />
-        </Screen>
-      </GallerySample>
+      {BUILDING_SAMPLES.map((sample) => (
+        <GallerySample key={sample.caption} caption={sample.caption}>
+          <Screen>
+            <BuildingStep
+              view={sample.view}
+              caption={buildingCaption(
+                sample.view,
+                sample.noSelections ? { ...populated, allergens: [], retailers: [] } : populated,
+                sample.data,
+              )}
+              captionCandidates={buildingCaptionCandidates(
+                sample.noSelections ? { ...populated, allergens: [], retailers: [] } : populated,
+                sample.data,
+              )}
+              onRetry={noop}
+              onContinue={noop}
+            />
+          </Screen>
+        </GallerySample>
+      ))}
       <GallerySample caption="Ready, three matches of five — simulated: California, New York and Texas on the board (the first two and +1, every state spoken); Peanuts and Milk (both pictograms on the plate); Costco and Trader Joe’s; We found 5 recalls for you; three example cards stacked, the next two peeking as clean white right edges, the frosted locked clone as the final page, four dots (one per page) and the locked strip">
         <Screen>
           <LiveReady prefs={populated} preview={samplePreview(3, 5)} />
@@ -696,6 +786,74 @@ const GATE_SCENARIOS: readonly GateScenario[] = __DEV__
     ]
   : [];
 
+/**
+ * Building QA (development): what the shared feed session answers, so the
+ * Building step's real gates can be met on purpose. The scenario persists
+ * across relaunches; Clear the feed cache, then relaunch, to start the way a
+ * first launch does. Replay the step with the gate scenario "Resumed
+ * incomplete onboarding" (Stores, the one-time flag unset, choices kept).
+ */
+export function BuildingQaControls() {
+  const [scenario, setScenario] = useState(devFeed?.developmentFeedScenario() ?? 'live');
+  const [cleared, setCleared] = useState(false);
+  const [qaProfile, setQaProfile] = useState(devFeed?.developmentQaProfile() ?? 'saved');
+  if (!__DEV__ || devFeed === null) return null;
+  const feed = devFeed;
+  const current = feed.DEVELOPMENT_FEED_SCENARIOS.find((option) => option.id === scenario);
+  return (
+    <Surface background="background/page" radius={16} border="border/subtle" style={styles.gallery}>
+      <Text variant="caption" color="text/secondary">
+        Building QA — real: the shared feed session still makes every real request; a scenario only
+        changes what the screens are handed (held back, failed, or the current matches hidden for
+        the saved preferences). Nothing filtered is cached. The choice persists across relaunches
+        until changed: set Live when done.
+      </Text>
+      {feed.DEVELOPMENT_FEED_SCENARIOS.map((option) => (
+        <CheckRow
+          key={option.id}
+          label={option.title}
+          checked={option.id === scenario}
+          onPress={() => {
+            feed.setDevelopmentFeedScenario(option.id);
+            setScenario(option.id);
+          }}
+        />
+      ))}
+      {current ? (
+        <Text variant="caption" color="text/secondary">
+          {current.expectation}
+        </Text>
+      ) : null}
+      {feed.DEVELOPMENT_QA_PROFILES.map((option) => (
+        <CheckRow
+          key={option.id}
+          label={option.title}
+          checked={option.id === qaProfile}
+          onPress={() => {
+            feed.setDevelopmentQaProfile(option.id);
+            setQaProfile(option.id);
+          }}
+        />
+      ))}
+      <Text variant="caption" color="text/secondary">
+        {feed.DEVELOPMENT_QA_PROFILES.find((option) => option.id === qaProfile)?.expectation}
+      </Text>
+      <Button
+        label={cleared ? 'Feed cache cleared — relaunch to start uncached' : 'Clear the feed cache'}
+        variant="secondary"
+        onPress={() => {
+          void createFeedCacheStore()
+            ?.clear()
+            .then(() => setCleared(true));
+        }}
+      />
+    </Surface>
+  );
+}
+
+/** Longer than a native stack pop, so the popped-to screen's focus write has landed. */
+const POP_SETTLE_MS = 600;
+
 export function GateScenarios() {
   const access = useAccess();
   if (devProvider === null || devScenarios === null) return null;
@@ -727,8 +885,17 @@ export function GateScenarios() {
       // phase), or the phase did not change — a scenario applied from over
       // an onboarding screen lands in the onboarding phase again, so the
       // navigator keeps the popped-to screen. Either way, replace it with
-      // the entry screen once the navigator has settled.
-      const href = `/${entryRoute(next.phase, next.entryStep)}` as Href;
+      // the entry screen once the navigator has settled. The screen popped to
+      // may have recorded itself from the OLD in-memory record while the gate
+      // reloaded (Stores as the root re-records its step with the old one-time
+      // Building flag, which a relaunch then reads back): write the scenario
+      // again so the device's record and the gate agree before moving on. The
+      // popped-to screen records itself on FOCUS, which arrives only once the
+      // pop has finished, so the write waits that out first.
+      await new Promise((resolve) => setTimeout(resolve, POP_SETTLE_MS));
+      await saveOnboardingRecord(scenario.record);
+      const settled = await access.reload();
+      const href = `/${entryRoute(settled.phase, settled.entryStep)}` as Href;
       setTimeout(() => router.replace(href), 0);
     }
   };

@@ -68,6 +68,19 @@ export type ReadyPreviewState =
    */
   | { kind: 'matches'; models: HomeCardModel[]; locked: HomeCardModel | null; total: number };
 
+/**
+ * Every current match, ranked: the Affects You feed's own current window,
+ * through the Feed's own layers. ONE call site for "how many recalls match":
+ * the Ready preview's total and the Building step's count are both this
+ * list's length, so the two screens can never disagree over one corpus.
+ */
+export function affectsYouMatches(
+  items: readonly FeedItem[],
+  prefs: UserRecallPreferences,
+): FeedItem[] {
+  return buildAffectsMeSections(items, (item) => evaluatePersonalRelevance(item, prefs)).affects;
+}
+
 export function buildReadyPreview(
   feed: ReadyFeedInput,
   prefs: UserRecallPreferences,
@@ -75,10 +88,7 @@ export function buildReadyPreview(
 ): ReadyPreviewState {
   if (feed.status === 'loading') return { kind: 'checking' };
   if (feed.status === 'error') return { kind: 'unavailable' };
-  const sections = buildAffectsMeSections(feed.items, (item) =>
-    evaluatePersonalRelevance(item, prefs),
-  );
-  const affects = sections.affects;
+  const affects = affectsYouMatches(feed.items, prefs);
   if (affects.length === 0) return { kind: 'none' };
   // The ranked order, narrowed to recalls the deck can SHOW: the shared
   // image-role allocation decided `heroImageUrl`; the deck adds no image

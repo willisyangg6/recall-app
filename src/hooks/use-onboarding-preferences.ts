@@ -31,12 +31,39 @@ import {
   savePreferences,
 } from '@/lib/preferences-store';
 
-export function useOnboardingPreferences(): {
+/**
+ * The newest preferences this process has read or saved through the store
+ * (2026-10-02), in memory only. A screen that opts in starts from them
+ * instead of a loading state — the Building step and Ready, arriving from
+ * Stores, never flash `Loading your preferences` over choices read a moment
+ * ago — and still re-reads on focus, so a store that fails says so.
+ */
+let lastKnown: UserRecallPreferences | null = null;
+onPreferencesSaved((prefs) => {
+  lastKnown = prefs;
+});
+
+export interface OnboardingPreferencesOptions {
+  /**
+   * Start from the preferences already read or saved in this process. With
+   * none (a cold launch or resume), the screen shows its loading state as
+   * before.
+   */
+  reuseLoaded?: boolean;
+}
+
+export function useOnboardingPreferences({
+  reuseLoaded = false,
+}: OnboardingPreferencesOptions = {}): {
   load: PreferencesLoadState;
   /** Commit an edited copy: shown immediately, saved through the store. */
   update: (next: UserRecallPreferences) => void;
 } {
-  const [load, setLoad] = useState<PreferencesLoadState>({ status: 'loading' });
+  const [load, setLoad] = useState<PreferencesLoadState>(() =>
+    reuseLoaded && lastKnown !== null && preferencesAvailable()
+      ? { status: 'ready', prefs: lastKnown }
+      : { status: 'loading' },
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -47,9 +74,11 @@ export function useOnboardingPreferences(): {
       let current = true;
       loadPreferences().then(
         (prefs) => {
+          lastKnown = prefs;
           if (current) setLoad({ status: 'ready', prefs });
         },
         () => {
+          lastKnown = null;
           if (current) setLoad({ status: 'failed' });
         },
       );
@@ -62,6 +91,7 @@ export function useOnboardingPreferences(): {
   useEffect(() => onPreferencesSaved((prefs) => setLoad({ status: 'ready', prefs })), []);
 
   const update = useCallback((next: UserRecallPreferences) => {
+    lastKnown = next;
     setLoad({ status: 'ready', prefs: next });
     void savePreferences(next).catch(() => {});
   }, []);

@@ -23,6 +23,13 @@
  *   7. The onboarding paywall's `file-search` and `bell` benefit glyphs — the
  *      same vendored Lucide family, box and stroke (provenance in
  *      src/lib/onboarding-paywall-presentation.ts).
+ *   8. The Building step's five rail glyphs, which are also its three bag-tag
+ *      glyphs (2026-10-02): the vendored Lucide `map-pin`, `octagon-alert`,
+ *      `shopping-cart` and `file-search-corner`, plus `stacked-cards`, the one
+ *      Lotly-authored source on the Lucide grid (assets/icon-sources/lotly/),
+ *      drawn to match the approved mockup's Feed stop. They use the same
+ *      stroke and are rasterised natively on a 40pt box, because the tags draw
+ *      them at up to 39.8pt (provenance in src/lib/building-presentation.ts).
  *   4. Two Design Preview logo FIXTURES (a wide and a tall neutral shape,
  *      labelled FIXTURE) that exercise the retailer-logo container's aspect
  *      handling. They are not retailer marks and are keyed to no retailer.
@@ -38,8 +45,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ICONS = join(ROOT, 'assets', 'icons');
 const LUCIDE = join(ROOT, 'assets', 'icon-sources', 'lucide');
+const LOTLY = join(ROOT, 'assets', 'icon-sources', 'lotly');
 const ONBOARDING = join(ROOT, 'assets', 'onboarding');
 const PREVIEW = join(ROOT, 'assets', 'design-preview');
+const BUILDING = join(ROOT, 'assets', 'onboarding', 'building');
 
 /** The three scales the icon primitive resolves, as React Native names them. */
 const SCALES = [
@@ -87,6 +96,20 @@ const PAYWALL_GLYPHS = {
   bell: 'bell',
 };
 
+/**
+ * The Building step's glyphs (raster name → source). Mirrors
+ * src/lib/building-presentation.ts. `stacked-cards` is read from LOTLY.
+ */
+const BUILDING_GLYPHS = {
+  'building-area': 'map-pin',
+  'building-allergens': 'octagon-alert',
+  'building-stores': 'shopping-cart',
+  'building-matches': 'file-search-corner',
+};
+const BUILDING_LOTLY_GLYPHS = { 'building-feed': 'stacked-cards' };
+/** The Building glyphs' box: the largest tag glyph is 39.8pt at 402pt wide. */
+const BUILDING_BOX = 40;
+
 function write(path, canvas) {
   writeFileSync(path, canvas.toBuffer('image/png'));
 }
@@ -100,9 +123,12 @@ function write(path, canvas) {
  * stretched path so re-running this script leaves them byte-identical;
  * regenerating them natively is a separate, visible change.
  */
-async function renderLucideGlyphs(glyphs, { native = false, box = ICON_BOX, dir = ICONS } = {}) {
+async function renderLucideGlyphs(
+  glyphs,
+  { native = false, box = ICON_BOX, dir = ICONS, from = LUCIDE } = {},
+) {
   for (const [icon, lucideName] of Object.entries(glyphs)) {
-    const svg = readFileSync(join(LUCIDE, `${lucideName}.svg`), 'utf8')
+    const svg = readFileSync(join(from, `${lucideName}.svg`), 'utf8')
       .replace(/currentColor/g, '#000000')
       .replace(/stroke-width="2"/, `stroke-width="${ICON_STROKE}"`);
     const stretched = native ? null : await loadImage(Buffer.from(svg));
@@ -223,16 +249,24 @@ function renderLogoFixture(name, width, height) {
 async function main() {
   mkdirSync(ONBOARDING, { recursive: true });
   mkdirSync(PREVIEW, { recursive: true });
+  mkdirSync(BUILDING, { recursive: true });
   await renderLucideGlyphs(ALLERGEN_GLYPHS);
   await renderLucideGlyphs(STATES_GLYPHS);
   await renderLucideGlyphs(READY_GLYPHS, { native: true });
   await renderLucideGlyphs(PAYWALL_GLYPHS, { native: true });
+  await renderLucideGlyphs(BUILDING_GLYPHS, { native: true, box: BUILDING_BOX, dir: BUILDING });
+  await renderLucideGlyphs(BUILDING_LOTLY_GLYPHS, {
+    native: true,
+    box: BUILDING_BOX,
+    dir: BUILDING,
+    from: LOTLY,
+  });
   await renderChevronLeft();
   renderSampleIllustration();
   renderLogoFixture('logo-fixture-wide', 160, 24);
   renderLogoFixture('logo-fixture-tall', 24, 120);
   console.log(
-    'Rendered allergen glyphs, the States, Ready and paywall glyphs, chevron-left, the sample illustration and two logo fixtures.',
+    'Rendered allergen glyphs, the States, Ready, paywall and Building glyphs, chevron-left, the sample illustration and two logo fixtures.',
   );
 }
 

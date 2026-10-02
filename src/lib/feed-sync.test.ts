@@ -680,3 +680,48 @@ test('no cache and no network yields nothing to show, and says so by throwing', 
   assert.equal(await session.getCached(), null);
   await assert.rejects(session.sync());
 });
+
+// ── The Building → Ready handoff (2026-10-02) ──────────────────────────────
+
+test('served() is the newest complete corpus handed out: the cache until a sync finishes, then the sync', async () => {
+  const corpus = makeCorpus(12);
+  const { session: first, scripted, cache } = foregroundSession(corpus);
+  await first.sync();
+
+  const session = createFeedSession({ store: cache.store, transport: scripted.transport });
+  assert.equal(session.served(), null, 'served something before anything was read');
+  const cached = await session.getCached();
+  assert.deepEqual(ids(session.served() ?? []), ids(cached ?? []));
+
+  const next = [...corpus, makeFeedItem(901)];
+  scripted.setManifest(manifestFor(next));
+  scripted.setAll(next);
+  const outcome = await session.sync();
+  assert.equal(
+    session.served(),
+    outcome.items,
+    'Ready would not open on the corpus Building counted',
+  );
+  // A later cache read can only be as new as that sync: it never replaces it.
+  await session.getCached();
+  assert.equal(session.served(), outcome.items);
+});
+
+test('a failed sync leaves served() exactly as it was: a failure is never handed on as a corpus', async () => {
+  const corpus = makeCorpus(6);
+  const { session: first, scripted, cache } = foregroundSession(corpus);
+  await first.sync();
+  const session = createFeedSession({ store: cache.store, transport: scripted.transport });
+  const cached = await session.getCached();
+  scripted.setManifest(new Error('offline'));
+  scripted.setAll(new Error('offline'));
+  await assert.rejects(session.sync());
+  assert.equal(session.served(), cached);
+
+  const empty = createFeedSession({
+    store: memoryCacheStore().store,
+    transport: scripted.transport,
+  });
+  await assert.rejects(empty.sync());
+  assert.equal(empty.served(), null);
+});

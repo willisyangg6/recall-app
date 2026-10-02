@@ -19,6 +19,7 @@ import {
   allergenIconName,
   allergenIconRows,
 } from './allergen-icons';
+import { BUILDING_ICON_SOURCES } from './building-presentation';
 import { PAYWALL_ICON_SOURCES } from './onboarding-paywall-presentation';
 import { READY_ICON_SOURCES } from './ready-presentation';
 import { STATES_ICON_SOURCES } from './state-map';
@@ -76,9 +77,10 @@ test('one family, with license, repository, commit and retrieval date recorded',
   }
   // No source outside the nine, the States step's six (P2B7Y,
   // lib/state-map.ts), the Ready step's cart and lock
-  // (lib/ready-presentation.ts) and the onboarding paywall's file-search and
-  // bell (lib/onboarding-paywall-presentation.ts): a stray glyph would be a
-  // second decision.
+  // (lib/ready-presentation.ts), the onboarding paywall's file-search and
+  // bell (lib/onboarding-paywall-presentation.ts) and the Building step's
+  // map-pin and octagon-alert (lib/building-presentation.ts): a stray glyph
+  // would be a second decision.
   // (The problem pictograph's user-round was vendored 2026-09-28 and
   // retired 2026-09-29 with the authored pictograph.)
   const vendored = readdirSync(SOURCES)
@@ -91,11 +93,17 @@ test('one family, with license, repository, commit and retrieval date recorded',
       ...STATES_ICON_SOURCES,
       ...READY_ICON_SOURCES,
       ...PAYWALL_ICON_SOURCES,
+      ...BUILDING_ICON_SOURCES,
     ]
       .map((s) => `${s.lucideName}.svg`)
       .sort(),
   );
-  for (const source of [...STATES_ICON_SOURCES, ...READY_ICON_SOURCES, ...PAYWALL_ICON_SOURCES]) {
+  for (const source of [
+    ...STATES_ICON_SOURCES,
+    ...READY_ICON_SOURCES,
+    ...PAYWALL_ICON_SOURCES,
+    ...BUILDING_ICON_SOURCES,
+  ]) {
     const svg = readFileSync(join(SOURCES, `${source.lucideName}.svg`), 'utf8');
     assert.match(svg, /viewBox="0 0 24 24"/, `${source.lucideName} is not on the 24 grid`);
     assert.match(svg, /stroke-width="2"/, `${source.lucideName} has a foreign stroke weight`);

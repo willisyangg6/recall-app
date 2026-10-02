@@ -159,28 +159,49 @@ export function allergenCountLabel(count: number): string {
   return count === 1 ? '1 allergen selected' : `${count} allergens selected`;
 }
 
-// ── The building interstitial (2026-09-28) ──────────────────────────────────
+// ── Screen: Building (the five-stop watch, 2026-10-02) ─────────────────────
 //
-// The captions the one-time "building your watch" screen steps through.
-// Each names real deterministic work (reading the saved preferences and
-// syncing the recall feed the Ready preview reads); the allergen and store
-// captions tell the truth when nothing was selected, and no caption ever
-// claims a match was found — the Ready step reports matches only once the
-// query has answered.
+// One changing caption under the five-stop rail. Each names the real work of
+// its stop (lib/building-watch.ts maps them): `watch` appears only in the
+// headline, no caption names a selection, the no-selection variants never
+// imply a filter that does not exist, and the count appears only once real
+// results answered — the same Affects You total the Ready step shows.
 
-export function buildingStatesCaption(): string {
-  return 'Checking recalls in your selected states';
-}
+export const BUILDING_HEADLINE = 'Getting your watch ready.';
+export const BUILDING_AREA_CAPTION = 'Searching recalls in your area…';
 export function buildingAllergensCaption(hasAllergens: boolean): string {
-  return hasAllergens ? 'Matching the allergens you watch' : 'Keeping allergen matching broad';
+  return hasAllergens ? 'Checking for allergen matches…' : 'Checking recalls across allergens…';
 }
 export function buildingStoresCaption(hasStores: boolean): string {
-  return hasStores ? 'Watching the stores you chose' : 'Scanning recalls across all stores';
+  return hasStores ? 'Checking recalls where you shop…' : 'Checking recalls across stores…';
 }
-export const BUILDING_FEED_CAPTION = 'Building your Affects You feed';
-export const BUILDING_DONE_CAPTION = 'Your recall watch is ready';
-/** The screen's one spoken introduction; the captions are not read one by one. */
-export const BUILDING_ACCESSIBILITY_LABEL = 'Building your recall watch';
+/** The Matches stop, in parts; Building sets the whole sentence in one weight (700). */
+export function buildingMatchesParts(total: number): {
+  before: string;
+  number: string;
+  after: string;
+} {
+  if (total === 0) return { before: 'No matching recalls found.', number: '', after: '' };
+  return {
+    before: 'Found ',
+    number: String(total),
+    after: total === 1 ? ' recall for you.' : ' recalls for you.',
+  };
+}
+export const BUILDING_FEED_CAPTION = 'Putting your personalized feed together…';
+export const BUILDING_DONE_CAPTION = 'Your personalized feed is ready.';
+/** Usable results are still unavailable after the slow-load bound. */
+export const BUILDING_SLOW_CAPTION = 'Recalls are taking longer than usual to load.';
+/** The feed could not be read and there is nothing cached to show. */
+export const BUILDING_ERROR_CAPTION = 'Lotly couldn’t reach the recall service.';
+export const BUILDING_RETRY = 'Try again';
+export const BUILDING_CONTINUE = 'Continue to preview';
+/** The rail's spoken name; its value is the current caption and step. */
+export const BUILDING_PROGRESS_LABEL = 'Recall check progress';
+/** The rail's spoken value: the caption, then how many of the stops are done. */
+export function buildingProgressValue(caption: string, done: number, of: number): string {
+  return `${caption} ${done} of ${of} done.`;
+}
 
 // ── Screen: Ready (the preference board, 2026-09-30) ────────────────────────
 

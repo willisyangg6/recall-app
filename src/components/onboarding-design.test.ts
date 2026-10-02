@@ -280,9 +280,11 @@ test('every step reads and saves through the one preference store, progressively
       assert.ok(!source.includes(forbidden), `${name} reaches ${forbidden}`);
     }
   }
-  for (const name of ['states', 'allergens', 'retailers', 'preview'] as const) {
+  for (const name of ['states', 'allergens', 'retailers'] as const) {
     assert.ok(ROUTES[name].includes('useOnboardingPreferences()'), `${name} reads its own copy`);
   }
+  // Ready reads its own copy too, starting from the one already read (2026-10-02).
+  assert.ok(ROUTES.preview.includes('useOnboardingPreferences({ reuseLoaded: true })'));
   // The edits are the shared rules — the same functions Profile's editor uses.
   assert.ok(ROUTES.states.includes('update(withStates(prefs, codes))'));
   assert.ok(ROUTES.allergens.includes('update(toggleAllergen(prefs, token))'));
@@ -393,14 +395,33 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
     const module = readFileSync(join(SRC, 'lib', 'onboarding-copy.ts'), 'utf8');
     assert.ok(!module.includes(unsupported), `the copy claims ${unsupported}`);
   }
-  // The building interstitial's captions, truthful at both zeros.
-  assert.equal(ONBOARDING_COPY.buildingStatesCaption(), 'Checking recalls in your selected states');
-  assert.equal(ONBOARDING_COPY.buildingAllergensCaption(true), 'Matching the allergens you watch');
-  assert.equal(ONBOARDING_COPY.buildingAllergensCaption(false), 'Keeping allergen matching broad');
-  assert.equal(ONBOARDING_COPY.buildingStoresCaption(true), 'Watching the stores you chose');
-  assert.equal(ONBOARDING_COPY.buildingStoresCaption(false), 'Scanning recalls across all stores');
-  assert.equal(ONBOARDING_COPY.BUILDING_FEED_CAPTION, 'Building your Affects You feed');
-  assert.equal(ONBOARDING_COPY.BUILDING_DONE_CAPTION, 'Your recall watch is ready');
+  // The Building step (2026-10-02): the approved headline and five stops,
+  // truthful when nothing was chosen, `watch` only in the headline.
+  assert.equal(ONBOARDING_COPY.BUILDING_HEADLINE, 'Getting your watch ready.');
+  assert.equal(ONBOARDING_COPY.BUILDING_AREA_CAPTION, 'Searching recalls in your area…');
+  assert.equal(ONBOARDING_COPY.buildingAllergensCaption(true), 'Checking for allergen matches…');
+  assert.equal(
+    ONBOARDING_COPY.buildingAllergensCaption(false),
+    'Checking recalls across allergens…',
+  );
+  assert.equal(ONBOARDING_COPY.buildingStoresCaption(true), 'Checking recalls where you shop…');
+  assert.equal(ONBOARDING_COPY.buildingStoresCaption(false), 'Checking recalls across stores…');
+  assert.deepEqual(ONBOARDING_COPY.buildingMatchesParts(22), {
+    before: 'Found ',
+    number: '22',
+    after: ' recalls for you.',
+  });
+  assert.deepEqual(ONBOARDING_COPY.buildingMatchesParts(1), {
+    before: 'Found ',
+    number: '1',
+    after: ' recall for you.',
+  });
+  assert.equal(ONBOARDING_COPY.buildingMatchesParts(0).before, 'No matching recalls found.');
+  assert.equal(ONBOARDING_COPY.BUILDING_FEED_CAPTION, 'Putting your personalized feed together…');
+  assert.equal(ONBOARDING_COPY.BUILDING_DONE_CAPTION, 'Your personalized feed is ready.');
+  for (const old of ['buildingStatesCaption', 'BUILDING_ACCESSIBILITY_LABEL']) {
+    assert.ok(!(old in ONBOARDING_COPY), `the old checklist's ${old} survived`);
+  }
   // The preference-board Ready (2026-09-30): the approved manifest's copy,
   // with no line under the headline and no merged purchase copy.
   assert.equal(PREVIEW_HEADLINE, 'You’re all set.');
@@ -723,13 +744,17 @@ test('Ready: Back, Edit preferences (the one-page editor), See my plan and the r
   assert.ok(!route.includes("onboardingRoute('states')"), 'Edit preferences replays States');
   assert.ok(route.includes("onBack={() => goBackFrom('preview', router)}"));
   assert.ok(route.includes("onSeePlan={() => router.push(onboardingRoute('paywall'))}"));
-  assert.ok(route.includes('prefs={load.prefs}'));
+  assert.ok(route.includes('const prefs = presentedPreferences(load.prefs);'));
+  assert.ok(route.includes('prefs={prefs}'));
   // Back from the editor, focus returns to Edit preferences.
   assert.ok(route.includes('AccessibilityInfo.setAccessibilityFocus(tag)'));
   assert.ok(route.includes('editRef={editRef}'));
-  // The preview is the REAL feed through the REAL matching layer.
-  assert.ok(route.includes('const feed = useFeed();'));
-  assert.ok(route.includes('buildReadyPreview(feedInput, load.prefs, todayIso())'));
+  // The preview is the REAL feed through the REAL matching layer, opening on
+  // the corpus the Building step counted (2026-10-02).
+  assert.ok(route.includes('const feed = useFeed({ reuseRecent: true });'));
+  assert.ok(route.includes('buildReadyPreview(feedInput, prefs, todayIso())'));
+  // Arriving from Building: the choices it just read, no pending flash.
+  assert.ok(route.includes('useOnboardingPreferences({ reuseLoaded: true })'));
   assert.ok(!route.includes('usePurchaseFlow'), 'Ready grew purchase machinery back');
   const step = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
   // Back, and no progress bar.
@@ -1722,15 +1747,60 @@ test('the onboarding paywall: the grocery-watch composition over the shared purc
 
 // ── The building interstitial and the onboarding paywall (2026-09-28) ───────
 
-test('the interstitial plays once, replaces itself with Ready, prefetches the feed, and never traps', () => {
+test('Building and Ready reuse the choices already read; screens that save never do', () => {
+  const hook = codeOnly(HOOK);
+  assert.ok(hook.includes('let lastKnown: UserRecallPreferences | null = null;'));
+  assert.ok(
+    /\{\s*reuseLoaded = false,?\s*\}: OnboardingPreferencesOptions = \{\}/.test(hook),
+    'the reuse is not opt-in',
+  );
+  assert.ok(hook.includes('reuseLoaded && lastKnown !== null && preferencesAvailable()'));
+  // Still re-read on focus; a failed read clears the copy and says so.
+  assert.ok(hook.includes('loadPreferences().then('));
+  assert.ok(/lastKnown = null;\s+if \(current\) setLoad\(\{ status: 'failed' \}\);/.test(hook));
+  for (const name of ['building', 'preview'] as const) {
+    const route = codeOnly(ROUTES[name]);
+    assert.ok(route.includes('useOnboardingPreferences({ reuseLoaded: true })'), name);
+    assert.ok(route.includes('presentedPreferences(load.prefs)'), name);
+  }
+  // The selectors and the editor save: they read afresh and never present a
+  // development view of the choices.
+  for (const name of ['states', 'allergens', 'retailers', 'edit-preferences'] as const) {
+    const route = codeOnly(read('app', 'onboarding', `${name}.tsx`));
+    assert.ok(!route.includes('reuseLoaded'), `${name} reuses`);
+    assert.ok(!route.includes('presentedPreferences'), `${name} presents a view`);
+  }
+  const presented = codeOnly(read('lib', 'presented-preferences.ts'));
+  assert.ok(presented.includes('const developmentQa = __DEV__'));
+  assert.ok(presented.includes("require('@/lib/development-feed-scenarios')"));
+  assert.ok(
+    !/import .*development-feed-scenarios/.test(presented.replace(/import type[^;]+;/g, '')),
+  );
+});
+
+test('Building: real data presented once, replaced by Ready, never trapped, swipe disabled', () => {
   const route = codeOnly(ROUTES.building);
   assert.ok(route.includes("void access.recordShownStep('building');"));
-  // The prefetch: mounting the shared feed session during the play.
-  assert.ok(route.includes('useFeed();'));
-  assert.ok(route.includes('void access.completeWatchBuild();'));
+  // Start or join the shared sync at MOUNT; presentation waits for visibility.
+  assert.ok(route.includes('const feed = useFeed();'));
+  // One exit: completion and Continue both mark the spent presentation and
+  // REPLACE with Ready; an unreadable preference store routes on unspent.
+  assert.ok(route.includes('if (left.current) return;'));
+  assert.ok(route.includes('if (spent) void access.completeWatchBuild();'));
   assert.ok(route.includes('buildingDone(router);'));
-  // A failed preference read routes on rather than trapping.
   assert.ok(route.includes("load.status === 'failed' || load.status === 'unsupported'"));
+  assert.ok(route.includes('if (failed) leave(false);'));
+  // The gate is the shared feed's answer and the Affects You total; Continue
+  // disposes the sequence before leaving; Try again refreshes the same session.
+  assert.ok(route.includes('buildingData('));
+  assert.ok(route.includes('feed.refreshing'));
+  assert.ok(route.includes('sequence.leave();'));
+  assert.ok(route.includes('void feed.refresh();'));
+  assert.ok(!route.includes('completePersonalization'), 'Building completed onboarding');
+  const watch = codeOnly(read('lib', 'building-watch.ts'));
+  assert.ok(watch.includes('affectsYouMatches(feed.items, prefs).length'));
+  const ready = codeOnly(read('lib', 'ready-preview.ts'));
+  assert.ok(ready.includes('const affects = affectsYouMatches(feed.items, prefs);'));
   // buildingDone REPLACES, so Back from Ready pops to Stores; Stores'
   // Continue plays it only once and keeps the edit path direct.
   const nav = codeOnly(read('lib', 'onboarding-navigation.ts'));
@@ -1738,25 +1808,95 @@ test('the interstitial plays once, replaces itself with Ready, prefetches the fe
   assert.ok(nav.includes("else navigator.push(onboardingRoute('building'));"));
   assert.ok(nav.includes("if (previewBeneath) navigator.dismissTo(onboardingRoute('preview'));"));
   assert.ok(nav.includes("else if (watchBuilt) navigator.push(onboardingRoute('preview'));"));
-  const step = codeOnly(componentBody(BUILDING, 'BuildingStep'));
-  // One play, ref-guarded; the sequence and timing are lib/building-watch's.
-  assert.ok(step.includes('buildingSequence(prefs)'));
-  assert.ok(step.includes('if (finished.current) return;'));
-  // Reduce Motion: the finished checklist at once and a readable minimum —
-  // no sequential build-up, and nothing loops anywhere.
-  assert.ok(step.includes('motionAllowed(reduceMotion)'));
-  assert.ok(step.includes('animate ? 0 : doneAt'));
-  assert.ok(step.includes('animate ? DONE_MS : REDUCED_MOTION_MS'));
-  for (const forbidden of ['Animated.loop', 'setInterval', 'Animated.spring', 'iterations']) {
-    assert.ok(!codeOnly(BUILDING).includes(forbidden), `the interstitial uses ${forbidden}`);
+  // No interactive swipe back from Building.
+  const layout = codeOnly(read('app', '_layout.tsx'));
+  assert.ok(layout.includes("const BUILDING_SCREEN = onboardingRoute('building').slice(1);"));
+  assert.ok(layout.includes('? { headerShown: false, gestureEnabled: false }'));
+  // Visibility: the stack's transitionEnd, a cold-resume fallback, AppState
+  // pause/resume, and everything torn down on departure.
+  const hook = codeOnly(read('hooks', 'use-building-sequence.ts'));
+  assert.ok(hook.includes('navigation.addListener(') && hook.includes("'transitionEnd' as never"));
+  assert.ok(hook.includes('BUILDING_TIMING.visibilityFallbackMs'));
+  assert.ok(hook.includes("AppState.addEventListener('change'"));
+  assert.ok(hook.includes('created.pause()') && hook.includes('created.resume()'));
+  assert.ok(hook.includes('subscription.remove();') && hook.includes('created.dispose();'));
+  assert.ok(hook.includes('clearTimeout(fallback);') && hook.includes('unsubscribe();'));
+  // The composition: the approved hero, three native tag glyphs, the rail,
+  // one caption; finite native-driver motion, nothing looping or springing.
+  const step = codeOnly(BUILDING);
+  assert.ok(step.includes('lotly-building-grocery-search-scene.png'));
+  assert.ok(!step.includes('lotly-mascot-watchful-1024.png'), 'M04 is back on Building');
+  assert.ok(step.includes('TAG_GLYPHS.map('));
+  assert.ok(step.includes('BUILDING_STOPS.map('));
+  assert.ok(step.includes('useNativeDriver: true'));
+  assert.ok(!step.includes('useNativeDriver: false'));
+  for (const forbidden of [
+    'Animated.loop',
+    'setInterval',
+    'Animated.spring',
+    'iterations',
+    'setTimeout',
+  ]) {
+    assert.ok(!step.includes(forbidden), `the Building step uses ${forbidden}`);
   }
-  // The checklist is ONE spoken element; the mascot is decorative; exactly
-  // two announcements — the start and the completion — never per frame.
-  assert.ok(step.includes('accessibilityRole="progressbar"'));
-  assert.ok(step.includes('accessibilityLabel={BUILDING_ACCESSIBILITY_LABEL}'));
-  assert.equal((codeOnly(BUILDING).match(/announceForAccessibility/g) ?? []).length, 2);
-  assert.ok(codeOnly(BUILDING).includes('lotly-mascot-watchful-1024.png'));
+  // Colour is decoration; state is the rays and the badge.
+  assert.ok(step.includes("STOP_FILLS[index] === 'lime'"));
+  assert.ok(
+    step.includes("state === 'active' ? 1 : 0") && step.includes("state === 'complete' ? 1 : 0"),
+  );
+  // ONE grouped progress element; the hero and the rail visuals are hidden;
+  // the slow/error footer offers both controls.
+  assert.equal((step.match(/accessibilityRole="progressbar"/g) ?? []).length, 1);
+  assert.ok(step.includes('accessibilityLabel={BUILDING_PROGRESS_LABEL}'));
+  assert.ok(
+    step.includes('text: buildingProgressValue(text, completedStops(view), BUILDING_STOPS.length)'),
+  );
+  assert.equal(
+    ONBOARDING_COPY.buildingProgressValue('Found 22 recalls for you.', 3, 5),
+    'Found 22 recalls for you. 3 of 5 done.',
+  );
   assert.ok(step.includes('{...DECORATIVE}'));
+  assert.ok(step.includes('label={BUILDING_RETRY}') && step.includes('label={BUILDING_CONTINUE}'));
+  assert.ok(!step.includes('announceForAccessibility'), 'the view announces on its own');
+  // The caption (2026-10-02): faded THROUGH — out 80ms (linear), the words
+  // swap while nothing is visible, in 140ms — as one native timeline whose
+  // incoming curve holds at nothing until the swap, so two sentences are never
+  // on screen together and nothing waits on JS at the swap; no rise, no
+  // scale; the arriving layer is created transparent; a stale run changes
+  // nothing; Reduce Motion swaps at once; the layers are decorative (the
+  // progress element speaks once).
+  const fadeThrough = codeOnly(componentBody(BUILDING, 'CaptionFadeThrough'));
+  assert.ok(!step.includes('CAPTION_RISE') && !fadeThrough.includes('translateY'));
+  assert.ok(!fadeThrough.includes('scale') && !fadeThrough.includes('Animated.sequence'));
+  assert.ok(fadeThrough.includes('opacity: new Animated.Value(animate ? 0 : 1)'));
+  assert.ok(fadeThrough.includes('layers: animate ? [front, incoming] : [incoming]'));
+  assert.ok(
+    /Animated\.parallel\(\[\s*fade\(outgoing\.opacity, 0, \{ duration: MOTION\.out, easing: Easing\.linear \}\),\s*fade\(incoming\.opacity, 1, fromSwap\(EASE_OUT, MOTION\.in\)\),?\s*\]\)/.test(
+      fadeThrough,
+    ),
+  );
+  assert.ok(!/setValue\(/.test(fadeThrough), 'visible text then reset opacity');
+  assert.ok(fadeThrough.includes('if (!finished || current.current !== incoming.id) return;'));
+  assert.ok(fadeThrough.includes('return () => run.stop();'));
+  assert.ok(fadeThrough.includes('{...DECORATIVE}'));
+  assert.ok(fadeThrough.includes('candidates.map('));
+  // The reading hold starts when the fade-in has actually finished on screen.
+  assert.ok(fadeThrough.includes('onSettled?.();'));
+  assert.ok(codeOnly(ROUTES.building).includes('onCaptionSettled={sequence.captionSettled}'));
+  // The rail and tags change at the hidden swap point, over the fade-in, on
+  // the same native timeline (the hold is in the curve, never a JS delay).
+  assert.ok(step.includes('(t <= swap ? 0 : easing((t - swap) / (1 - swap)))'));
+  assert.ok(step.includes('...fromSwap(EASE_OUT, MOTION.in),'));
+  assert.ok(!step.includes('Animated.delay('));
+  assert.ok(codeOnly(BUILDING).includes('out: BUILDING_TIMING.captionFadeOutMs'));
+  assert.ok(codeOnly(BUILDING).includes('in: BUILDING_TIMING.captionFadeInMs'));
+  // Every caption is ONE Public Sans 700 sentence, the count line included.
+  const words = codeOnly(componentBody(BUILDING, 'CaptionWords'));
+  assert.ok(words.includes('{captionText(caption)}'));
+  assert.ok(
+    !codeOnly(BUILDING).includes('sans-500') && !codeOnly(BUILDING).includes('captionCount'),
+  );
+  assert.ok(step.includes('if (!animate) {'));
 });
 
 test('the onboarding paywall route: the shared flow, its resume point, Back to Ready, and the entitled Continue', () => {

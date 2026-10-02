@@ -1,0 +1,1706 @@
+{
+ "description": "Building \"Getting your watch ready.\" hero: one static decorative composite (cream page, wavy blue backdrop, canvas grocery tote with handles, broccoli, grapes, lettuce, egg carton, three hanging tags with their loops, the Lotly mascot holding binoculars over both eyes with three lime rays, peaches, striped cloth, wooden tabletop and its cream vignette) cut from the founder-approved five-stop reference by deterministic crop + alpha. The three printed navy tag glyphs were removed by a narrow deterministic repair so native icons can overlay them; nothing else was repainted. Prepared for review; NOT imported by the app.",
+ "reportDate": "2026-10-02",
+ "status": "Founder approved the export and the native bag-tag reconstruction (2026-10-02). Imported by the Building step only (src/components/onboarding/building-step.tsx); the production bytes are unchanged from the export.",
+ "reference": {
+  "path": "assets/brand/reference/lotly-onboarding-building-grocery-search-target.png",
+  "sha256": "764c5aff70de7f38413580aaf3eb02646079d58b8eb2053d2390c3f6ec9bb814",
+  "bytes": 1759196,
+  "dimensions": [
+   934,
+   1683
+  ],
+  "chunks": [
+   "IHDR",
+   "caBX",
+   "IDAT",
+   "IEND"
+  ],
+  "manifest": "assets/brand/reference/lotly-onboarding-building-grocery-search-source-manifest.json",
+  "manifestSha256Match": true,
+  "manifestDimensionsMatch": true,
+  "unchanged": true,
+  "colorProfile": "none (untagged RGB, treated as sRGB as every prior kit); caBX export chunk"
+ },
+ "skillsUsed": "No imaging or design skill was invoked for this export: none of the available skills performs pixel-exact extraction, and the established repo asset contract (paywall/States/Welcome reports) governs every rule. expo-animation and emil-design-eng informed the earlier motion audit in this conversation, not these pixels.",
+ "measuredPage": {
+  "referenceCream": [
+   254,
+   254,
+   251
+  ],
+  "noise": "Rows 0-59 full width: max-channel |C - cream| <= 3; modes 254,254,251 / 254,254,250 / 254,253,250. Rows 1066-1075 (between the vignette and the headline): <= 3.",
+  "appBackgroundPage": "#FDFCF6 (253,252,246) background/page",
+  "note": "Edges are unmatted against the MEASURED reference cream (the colour the art was blended with); the token is 1-5 units darker, mostly in blue."
+ },
+ "resolution": "Native reference pixels (934 px wide, app content without OS chrome). No upscaling or repainting. Native: one uniform scale = width / 934 (0.4304 pt/px at 402 pt, 0.4208 at 393 pt). At 402 pt @3x the hero shows ~1.29 device px per source px; it cannot be sharper than the approved mock.",
+ "cropDecisions": {
+  "crop_xyxy_exclusive": [
+   0,
+   100,
+   934,
+   1072
+  ],
+  "manifestHint_xyxy_exclusive": [
+   0,
+   0,
+   934,
+   1048
+  ],
+  "top": "First art (the tote handle crown) deviates from cream > 3 at row 106 (x 581) and > 24 at row 108 (x 601). Top 100 = 108 - 8, the Welcome/States/paywall convention. Rows 0-99 are page only (max deviation 3); the native layout reproduces that breathing room as the hero top offset (nativeLayout.heroTopInContent) instead of shipping 100 transparent rows.",
+  "bottom": "The tabletop/cloth vignette reaches page noise at row 1066 (row 1064 max deviation 8, row 1066 max 2); the headline soft edge starts at row 1076 (deviation 4) and glyph ink at row 1082. The crop ends at 1072 exclusive: 6 page-noise rows past the vignette, 4 rows above the first headline pixel. The manifest hint (1048) would have cut the visible vignette (row 1048 still deviates 23 from cream across 809 columns).",
+  "sides": "Full width 0-933: backdrop, egg carton, peaches, cloth and tabletop run off the frame edges in the approved art and keep those crops; nothing invented beyond the frame.",
+  "lowestObjects": "Mascot feet end near row 960; peaches ~row 960; the cloth reaches the right edge to ~row 1028; only the cream vignette continues below.",
+  "excluded": [
+   "headline \"Getting your / watch ready.\" (rows 1076-1250)",
+   "five-stop rail, connectors, completed badge, attention rays (rows 1270-1426)",
+   "caption \"Checking for allergen matches…\" (rows 1478-1520)"
+  ]
+ },
+ "tagGlyphRepair": {
+  "scope": "ONLY the three printed navy glyphs on the hanging tags (location pin, octagonal exclamation, cart). Tag paper, colour, shading, edges, holes, loops, shadows and the tote are untouched outside the footprints.",
+  "inkCores": "Luminance < 110 inside each glyph box: pin = 2 components (teardrop outline + inner circle), octagon = 3 (outline, bar, dot), cart = 1. Two dark slivers at x 555-559 / 565-571 are shadow gaps between overlapping tags, not ink, and are excluded.",
+  "footprintRadius": "Every pixel within 11 px (Euclidean) of an ink core. Measured falloff of |C - local paper| by distance from the core: mean 33-39 at 1 px, 2.3-2.6 at 6 px, 1.2-1.3 at 10 px, 1.0-1.1 at 11-12 px (95th percentile 2.1-2.5 at 11 px), i.e. the antialiasing/print softness reaches paper noise by ~11 px.",
+  "perGlyph": {
+   "pin": {
+    "inkCorePixels": 1517,
+    "inkCoreBbox_reference_xyxy_inclusive": [
+     481,
+     542,
+     536,
+     616
+    ],
+    "footprintPixels": 5500,
+    "footprintBbox_reference_xyxy_inclusive": [
+     470,
+     531,
+     547,
+     627
+    ],
+    "boundaryPixels": 241,
+    "boundaryPaperMedianRgb": [
+     185,
+     217,
+     248
+    ],
+    "boundaryMaxDevFromMedian": 4,
+    "boundaryPixelsNotPaper": 0
+   },
+   "octagon": {
+    "inkCorePixels": 2126,
+    "inkCoreBbox_reference_xyxy_inclusive": [
+     582,
+     575,
+     669,
+     665
+    ],
+    "footprintPixels": 8752,
+    "footprintBbox_reference_xyxy_inclusive": [
+     571,
+     564,
+     680,
+     676
+    ],
+    "boundaryPixels": 452,
+    "boundaryPaperMedianRgb": [
+     228,
+     243,
+     87
+    ],
+    "boundaryMaxDevFromMedian": 8,
+    "boundaryPixelsNotPaper": 0
+   },
+   "cart": {
+    "inkCorePixels": 1769,
+    "inkCoreBbox_reference_xyxy_inclusive": [
+     732,
+     567,
+     807,
+     631
+    ],
+    "footprintPixels": 6145,
+    "footprintBbox_reference_xyxy_inclusive": [
+     721,
+     556,
+     818,
+     642
+    ],
+    "boundaryPixels": 300,
+    "boundaryPaperMedianRgb": [
+     172,
+     204,
+     238
+    ],
+    "boundaryMaxDevFromMedian": 8,
+    "boundaryPixelsNotPaper": 0
+   }
+  },
+  "fill": "Harmonic (Laplace) interpolation per channel, the Welcome caption and paywall headline method: footprint pixels iterated to the mean of their 4 neighbours (Gauss-Seidel, 204 iterations to max change < 0.01), every non-footprint pixel fixed; rounded to 8-bit. Every footprint boundary pixel is same-tag paper (max deviation 4-8 from that tag's boundary median; 0 boundary pixels off the paper), so each fill draws only from its own tag.",
+  "result": {
+   "pixelsChangedInsideFootprints": 19727,
+   "pixelsChangedOutsideFootprints": 0,
+   "footprintsTouchingOtherTagsOrBag": 0,
+   "label": "DERIVED, not exact: the repaired paper is a smooth interpolation of the surrounding same-tag pixels; any fine plastic grain that existed under the ink is not recoverable."
+  },
+  "derivedSource": "assets/brand/reference/building-grocery-search/source/lotly-building-grocery-search-scene-blank-tags-source.png",
+  "mask": "assets/brand/reference/building-grocery-search/masks/lotly-building-grocery-search-repair-mask.png (crop coordinates; red = repair footprint, orange = printed ink core inside it, magenta = exterior page cleared, cyan = enclosed arch pocket cleared, grey = matted soft edge, blue = lower fade rows, black = untouched original)"
+ },
+ "operations": {
+  "sourceExport": "Rectangular crop of the reference; RGB samples copied unchanged (0 differing samples); re-encoded losslessly as 8-bit RGB with sRGB/gAMA/cHRM copied byte-for-byte from the approved States scene; caBX dropped; no ICC, bKGD, tIME or text chunks.",
+  "exteriorKey": "Welcome/States/paywall key on the blank-tag crop, with two documented changes. (1) The flood passes only page-indistinguishable pixels (max-channel deviation <= 6, not <= 24): at 24 (and already at 16) the flood ran into the sunlit back strap of the left handle, whose highlights reach page colour, and would have cleared canvas. (2) Silhouette protection: the flood may not enter the morphological closing (disc radius 4) of the solid art (deviation > 6) above the flood limit, so it cannot run between the strap's texture marks; 1,759 page-coloured pixels inside the canvas silhouette stay opaque original. Radius 3 left visible notches on dark; 4 and 6 were equivalent; 4 is the smallest that holds. Seeds: the crop's top row, plus the one enclosed page pocket inside the front handle's arch (seed 590,190; component x 514-659, rows 139-248). An enumeration of every page-like component above row 1066 found no other enclosed page: the other near-white pockets are the mascot face and tote highlights and are never seeded. Flood limit row 360 (lowest flooded row 342). Flooded pixels within 3 of the cream: alpha 0. Flooded pixels above that and solid pixels within 3 px of the exterior: alpha = projection of (C - cream) onto (F - cream), F = nearest interior art pixel (40 px radius for flooded, 6 px for solid edge); RGB unmatted as cream + (C - cream) / alpha.",
+  "flood": {
+   "top": {
+    "pixels": 129657,
+    "bbox_reference_xyxy_inclusive": [
+     0,
+     100,
+     933,
+     342
+    ]
+   },
+   "archPocket": {
+    "pixels": 10857,
+    "bbox_reference_xyxy_inclusive": [
+     514,
+     139,
+     655,
+     248
+    ]
+   },
+   "limitRowReference": 360,
+   "closeRadius": 4,
+   "pageLikePixelsProtectedByClosing": 1759
+  },
+  "keyCounts": {
+   "exteriorPageCleared": 139024,
+   "exteriorNoArtCleared": 0,
+   "exteriorNoArtMaxDev": 0,
+   "softEdgeMatted": 1490,
+   "solidEdgeMatted": 3593,
+   "solidEdgeKeptOpaque": 2,
+   "maxFDistance": 16.97056274847714,
+   "hazeMattedBeyond6px": 433
+  },
+  "nearOpaqueLift": "Existing contract: alpha 240-254 set to 255 with the SOURCE (derived) RGB. Applied last.",
+  "clearRgb": "Existing contract: alpha 0 has RGB 0.",
+  "lowerFade": "Rows 1060-1071 (reference): alpha multiplied by 1 - smoothstep((row - 1060 + 1) / 13), RGB left original (a compositing ramp, not a matte). Chosen by the paywall search (end rows 1060-1072, lengths 12-40) for the smallest maximum composite error on the reference cream: 3, the page-noise level, at length 12. The reference has itself already faded the tabletop to page by row 1066; the ramp only removes the opaque rectangle the crop would otherwise leave.",
+  "alphaHistory": {
+   "clear": 139741,
+   "edge1to239": 14374,
+   "lifted240to254": 1191,
+   "opaque": 753733,
+   "rgbZeroed": 139741
+  },
+  "tooling": "Pure Node (zlib PNG decode/encode, no canvas colour management) for every pixel; @napi-rs/canvas (existing devDependency) only for Lucide rasterisation in the overlay fit, the reconstruction and the comparison sheet. No dependency added. Scripts lived in the session scratchpad, as for Welcome, States, Stores and the paywall.",
+  "nothingRegenerated": "No pixel of the mascot, binoculars, face, gloves, feet, rays, groceries, tote, tags (outside the three glyph footprints), loops, shadows, backdrop or tabletop was repainted, generated or upscaled. The binoculars cover both eyes; no eye marks exist elsewhere in the export."
+ },
+ "tagOverlayCalibration": {
+  "coordinateSpace": "Hero pixels (the production PNG, 934 x 972, origin top-left) = reference minus 100 rows. Native: multiply by (hero display width / 934). ofWidth values are fractions of the hero WIDTH for both axes (uniform scale).",
+  "howToPlace": "For each tag: an icon box of side iconBox24Grid (the 24-unit Lucide grid box, not the ink bounds), centred at centre_heroPx, rotated rotationDegClockwise about its own centre (React Native transform rotate, positive = clockwise), tinted text/primary #001F3E, drawn ABOVE the hero and inside its bounds. The sizes are not icon-scale steps (12/16/20/24): implementation needs an explicit size for these decorative overlays.",
+  "rendering": "Fitted against the art's measured ink coverage ((paper - C) projected onto (paper - ink), with the blank-tag source as paper) using the exact rasterisation of scripts/render-onboarding-assets.mjs: Lucide SVG at the pinned commit with stroke-width 2.4 (the set stroke), coordinate descent over centre, box, rotation (and stroke for the free fit).",
+  "lucideProvenance": "lucide-icons/lucide f06ac67e33d645c40b8ce19a0419c85c5d7dd751 (release 1.47.0, the repo's pinned commit). shopping-cart.svg is byte-identical to the vendored assets/icon-sources/lucide/shopping-cart.svg. map-pin.svg and octagon-alert.svg are NOT vendored yet (the app's existing `map-pin` raster is a Figma export, not this Lucide source); implementation must vendor them under assets/icon-sources/lucide/ and rasterise them with the existing script.",
+  "pin": {
+   "tag": "left powder-blue tag",
+   "represents": "states (area)",
+   "lucideGlyph": "map-pin",
+   "lucideSourceSha256AtPinnedCommit": "16f1042a62f1bda20ebab8bfc1cb79c0be285c980dea6c2c733a17902631405b",
+   "centre_heroPx": [
+    507.05,
+    476.8
+   ],
+   "centre_reference": [
+    507.05,
+    576.8
+   ],
+   "centreX": {
+    "px": 507.05,
+    "ofWidth": 0.54289,
+    "pt402": 218.2,
+    "pt393": 213.4
+   },
+   "centreY_inHero": {
+    "px": 476.8,
+    "ofWidth": 0.5105,
+    "pt402": 205.2,
+    "pt393": 200.6
+   },
+   "iconBox24Grid": {
+    "px": 75.86,
+    "ofWidth": 0.08122,
+    "pt402": 32.7,
+    "pt393": 31.9
+   },
+   "rotationDegClockwise": 14.34,
+   "stroke24Grid": 2.4,
+   "fitQuality": {
+    "iouAt50": 0.769,
+    "meanAbsCoverageError": 0.0544
+   },
+   "freeStrokeFit": {
+    "stroke24Grid": 1.99,
+    "rotationDegClockwise": 15.09,
+    "iconBox_px": 75.86,
+    "iouAt50": 0.798,
+    "note": "the printed ink is a little lighter than the set stroke; the set stroke is recommended (difference ~0.2-0.5 grid units, under 0.3 pt at 402)"
+   },
+   "inkRgbMeasured": [
+    2,
+    15,
+    61
+   ],
+   "inkCoreBbox_reference_xyxy_inclusive": [
+    481,
+    542,
+    536,
+    616
+   ],
+   "repairFootprintBbox_reference_xyxy_inclusive": [
+    470,
+    531,
+    547,
+    627
+   ],
+   "repairFootprintBbox_hero_xyxy_inclusive": [
+    470,
+    431,
+    547,
+    527
+   ],
+   "reconstructionError": {
+    "fullRes": {
+     "meanMaxChannelError": 14.1,
+     "maxChannelError": 239
+    },
+    "phoneScale402": {
+     "size": [
+      37,
+      45
+     ],
+     "meanMaxChannelError": 13.61,
+     "maxChannelError": 204
+    }
+   }
+  },
+  "allergen": {
+   "tag": "centre lime tag",
+   "represents": "allergens",
+   "lucideGlyph": "octagon-alert",
+   "lucideSourceSha256AtPinnedCommit": "86d28171a1d6ee0e65ebd44c9e683dce5803a85a1d3980fcc60bd46465f8c6b2",
+   "centre_heroPx": [
+    625.99,
+    520.51
+   ],
+   "centre_reference": [
+    625.99,
+    620.51
+   ],
+   "centreX": {
+    "px": 625.99,
+    "ofWidth": 0.67023,
+    "pt402": 269.4,
+    "pt393": 263.4
+   },
+   "centreY_inHero": {
+    "px": 520.51,
+    "ofWidth": 0.55729,
+    "pt402": 224,
+    "pt393": 219
+   },
+   "iconBox24Grid": {
+    "px": 92.53,
+    "ofWidth": 0.09907,
+    "pt402": 39.8,
+    "pt393": 38.9
+   },
+   "rotationDegClockwise": 10.25,
+   "stroke24Grid": 2.4,
+   "fitQuality": {
+    "iouAt50": 0.681,
+    "meanAbsCoverageError": 0.0671
+   },
+   "freeStrokeFit": {
+    "stroke24Grid": 1.85,
+    "rotationDegClockwise": 10.75,
+    "iconBox_px": 93.03,
+    "iouAt50": 0.717,
+    "note": "the printed ink is a little lighter than the set stroke; the set stroke is recommended (difference ~0.2-0.5 grid units, under 0.3 pt at 402)"
+   },
+   "inkRgbMeasured": [
+    3,
+    16,
+    59
+   ],
+   "inkCoreBbox_reference_xyxy_inclusive": [
+    582,
+    575,
+    669,
+    665
+   ],
+   "repairFootprintBbox_reference_xyxy_inclusive": [
+    571,
+    564,
+    680,
+    676
+   ],
+   "repairFootprintBbox_hero_xyxy_inclusive": [
+    571,
+    464,
+    680,
+    576
+   ],
+   "reconstructionError": {
+    "fullRes": {
+     "meanMaxChannelError": 18.06,
+     "maxChannelError": 255
+    },
+    "phoneScale402": {
+     "size": [
+      51,
+      52
+     ],
+     "meanMaxChannelError": 17.47,
+     "maxChannelError": 250
+    }
+   }
+  },
+  "cart": {
+   "tag": "right powder-blue tag",
+   "represents": "stores",
+   "lucideGlyph": "shopping-cart",
+   "lucideSourceSha256AtPinnedCommit": "7cdc07053044af9e5fd24fff5e089ce97b2a39ea978933a160c4bbfebf8a167c",
+   "centre_heroPx": [
+    774.59,
+    495.59
+   ],
+   "centre_reference": [
+    774.59,
+    595.59
+   ],
+   "centreX": {
+    "px": 774.59,
+    "ofWidth": 0.82933,
+    "pt402": 333.4,
+    "pt393": 325.9
+   },
+   "centreY_inHero": {
+    "px": 495.59,
+    "ofWidth": 0.53061,
+    "pt402": 213.3,
+    "pt393": 208.5
+   },
+   "iconBox24Grid": {
+    "px": 72.42,
+    "ofWidth": 0.07754,
+    "pt402": 31.2,
+    "pt393": 30.5
+   },
+   "rotationDegClockwise": -10.52,
+   "stroke24Grid": 2.4,
+   "fitQuality": {
+    "iouAt50": 0.841,
+    "meanAbsCoverageError": 0.0394
+   },
+   "freeStrokeFit": {
+    "stroke24Grid": 2.22,
+    "rotationDegClockwise": -10.59,
+    "iconBox_px": 72.67,
+    "iouAt50": 0.858,
+    "note": "the printed ink is a little lighter than the set stroke; the set stroke is recommended (difference ~0.2-0.5 grid units, under 0.3 pt at 402)"
+   },
+   "inkRgbMeasured": [
+    2,
+    16,
+    61
+   ],
+   "inkCoreBbox_reference_xyxy_inclusive": [
+    732,
+    567,
+    807,
+    631
+   ],
+   "repairFootprintBbox_reference_xyxy_inclusive": [
+    721,
+    556,
+    818,
+    642
+   ],
+   "repairFootprintBbox_hero_xyxy_inclusive": [
+    721,
+    456,
+    818,
+    542
+   ],
+   "reconstructionError": {
+    "fullRes": {
+     "meanMaxChannelError": 10.13,
+     "maxChannelError": 206
+    },
+    "phoneScale402": {
+     "size": [
+      46,
+      41
+     ],
+     "meanMaxChannelError": 9.57,
+     "maxChannelError": 202
+    }
+   }
+  },
+  "inkColour": "Printed ink measures ~(2,15,61); the native tint text/primary #001F3E is (0,31,62): 16 units lighter in green, invisible at phone scale against the reconstruction (sheet panels I/J).",
+  "allergenGlyphNote": "The approved general allergen symbol is an octagon with an exclamation. Lucide octagon-alert matches the outline; the mock's exclamation bar is a heavier tapered bar with a larger dot than Lucide's stroked bar and dot (visible in sheet panel I). No peanut/milk or ingredient glyph is substituted."
+ },
+ "nativeLayout": {
+  "coordinateSpace": "Reference pixels (934 wide, content origin = top of the approved frame). pt = px x width/934.",
+  "heroBox_xyxy_exclusive": [
+   0,
+   100,
+   934,
+   1072
+  ],
+  "heroTopInContent": {
+   "px": 100,
+   "ofWidth": 0.10707,
+   "pt402": 43,
+   "pt393": 42.1
+  },
+  "heroHeight": {
+   "px": 972,
+   "ofWidth": 1.04069,
+   "pt402": 418.4,
+   "pt393": 409
+  },
+  "heroAspect": "934:972 (height = width x 1.04069)",
+  "heroBottomToHeadlineInk": {
+   "px": 10,
+   "ofWidth": 0.01071,
+   "pt402": 4.3,
+   "pt393": 4.2
+  },
+  "heroBottomToHeadlineSoftEdge": {
+   "px": 4,
+   "ofWidth": 0.00428,
+   "pt402": 1.7,
+   "pt393": 1.7
+  },
+  "headline": {
+   "lines": [
+    {
+     "text": "Getting your",
+     "inkBbox_reference_xyxy_inclusive": [
+      227,
+      1082,
+      709,
+      1165
+     ],
+     "inkWidth": {
+      "px": 483,
+      "ofWidth": 0.51713,
+      "pt402": 207.9,
+      "pt393": 203.2
+     },
+     "centreX": {
+      "px": 468,
+      "ofWidth": 0.50107,
+      "pt402": 201.4,
+      "pt393": 196.9
+     },
+     "baseline": {
+      "px": 1148,
+      "ofWidth": 1.22912,
+      "pt402": 494.1,
+      "pt393": 483
+     }
+    },
+    {
+     "text": "watch ready.",
+     "inkBbox_reference_xyxy_inclusive": [
+      219,
+      1169,
+      717,
+      1250
+     ],
+     "inkWidth": {
+      "px": 499,
+      "ofWidth": 0.53426,
+      "pt402": 214.8,
+      "pt393": 210
+     },
+     "centreX": {
+      "px": 468,
+      "ofWidth": 0.50107,
+      "pt402": 201.4,
+      "pt393": 196.9
+     },
+     "baseline": {
+      "px": 1233,
+      "ofWidth": 1.32013,
+      "pt402": 530.7,
+      "pt393": 518.8
+     }
+    }
+   ],
+   "capHeight": {
+    "px": 64,
+    "ofWidth": 0.06852,
+    "pt402": 27.5,
+    "pt393": 26.9
+   },
+   "baselinePitch": {
+    "px": 85,
+    "ofWidth": 0.09101,
+    "pt402": 36.6,
+    "pt393": 35.8
+   },
+   "alignment": "centred on the page (ink centre x 468 vs page centre 467)",
+   "typeFit": "Width-fit Public Sans size: 700 = 81.9 px (35.2 pt @402) for line 1; cap-height fit (64 px) = 86.4 px (37.2 pt). The mock lettering carries more ink than Public Sans 900 at equal width (700 renders 71-75% of the measured ink), so no app weight reproduces it exactly. Recommendation: Public Sans 700 at the Welcome-local 36/36 pt (measured pitch 36.6 pt @402), centred, two lines; global type scale unchanged.",
+   "inkVsWeight": {
+    "measuredInk": 16157,
+    "byWeight": {
+     "400": {
+      "sizePx": 85,
+      "renderedInk": 8333,
+      "ratioToMeasured": 0.516
+     },
+     "500": {
+      "sizePx": 84.2,
+      "renderedInk": 9157,
+      "ratioToMeasured": 0.567
+     },
+     "600": {
+      "sizePx": 83.3,
+      "renderedInk": 10154,
+      "ratioToMeasured": 0.628
+     },
+     "700": {
+      "sizePx": 81.9,
+      "renderedInk": 11465,
+      "ratioToMeasured": 0.71
+     },
+     "800": {
+      "sizePx": 80.5,
+      "renderedInk": 12843,
+      "ratioToMeasured": 0.795
+     },
+     "900": {
+      "sizePx": 79.3,
+      "renderedInk": 13824,
+      "ratioToMeasured": 0.856
+     }
+    }
+   }
+  },
+  "rail": {
+   "stops": [
+    {
+     "stop": 1,
+     "name": "Area",
+     "fillInMock": "powder blue",
+     "fillToken": "background/subtle #C0D6EB",
+     "measuredMockRgb": [
+      212,
+      235,
+      253
+     ],
+     "bbox_reference_xyxy_inclusive": [
+      64,
+      1307,
+      180,
+      1425
+     ],
+     "centreX": {
+      "px": 122,
+      "ofWidth": 0.13062,
+      "pt402": 52.5,
+      "pt393": 51.3
+     },
+     "centreY": {
+      "px": 1366,
+      "ofWidth": 1.46253,
+      "pt402": 587.9,
+      "pt393": 574.8
+     },
+     "diameter": {
+      "px": 118,
+      "ofWidth": 0.12634,
+      "pt402": 50.8,
+      "pt393": 49.7
+     }
+    },
+    {
+     "stop": 2,
+     "name": "Allergens",
+     "fillInMock": "lime",
+     "fillToken": "background/accent #E2EE57",
+     "measuredMockRgb": [
+      227,
+      241,
+      93
+     ],
+     "bbox_reference_xyxy_inclusive": [
+      236,
+      1308,
+      353,
+      1426
+     ],
+     "centreX": {
+      "px": 294.5,
+      "ofWidth": 0.31531,
+      "pt402": 126.8,
+      "pt393": 123.9
+     },
+     "centreY": {
+      "px": 1367,
+      "ofWidth": 1.4636,
+      "pt402": 588.4,
+      "pt393": 575.2
+     },
+     "diameter": {
+      "px": 118.5,
+      "ofWidth": 0.12687,
+      "pt402": 51,
+      "pt393": 49.9
+     }
+    },
+    {
+     "stop": 3,
+     "name": "Stores",
+     "fillInMock": "powder blue",
+     "fillToken": "background/subtle #C0D6EB",
+     "measuredMockRgb": [
+      211,
+      235,
+      254
+     ],
+     "bbox_reference_xyxy_inclusive": [
+      410,
+      1308,
+      527,
+      1425
+     ],
+     "centreX": {
+      "px": 468.5,
+      "ofWidth": 0.50161,
+      "pt402": 201.6,
+      "pt393": 197.1
+     },
+     "centreY": {
+      "px": 1366.5,
+      "ofWidth": 1.46306,
+      "pt402": 588.2,
+      "pt393": 575
+     },
+     "diameter": {
+      "px": 118,
+      "ofWidth": 0.12634,
+      "pt402": 50.8,
+      "pt393": 49.7
+     }
+    },
+    {
+     "stop": 4,
+     "name": "Matches",
+     "fillInMock": "lime",
+     "fillToken": "background/accent #E2EE57",
+     "measuredMockRgb": [
+      227,
+      241,
+      93
+     ],
+     "bbox_reference_xyxy_inclusive": [
+      582,
+      1308,
+      698,
+      1425
+     ],
+     "centreX": {
+      "px": 640,
+      "ofWidth": 0.68522,
+      "pt402": 275.5,
+      "pt393": 269.3
+     },
+     "centreY": {
+      "px": 1366.5,
+      "ofWidth": 1.46306,
+      "pt402": 588.2,
+      "pt393": 575
+     },
+     "diameter": {
+      "px": 117.5,
+      "ofWidth": 0.1258,
+      "pt402": 50.6,
+      "pt393": 49.4
+     }
+    },
+    {
+     "stop": 5,
+     "name": "Feed",
+     "fillInMock": "powder blue",
+     "fillToken": "background/subtle #C0D6EB",
+     "measuredMockRgb": [
+      212,
+      235,
+      253
+     ],
+     "bbox_reference_xyxy_inclusive": [
+      754,
+      1308,
+      871,
+      1425
+     ],
+     "centreX": {
+      "px": 812.5,
+      "ofWidth": 0.86991,
+      "pt402": 349.7,
+      "pt393": 341.9
+     },
+     "centreY": {
+      "px": 1366.5,
+      "ofWidth": 1.46306,
+      "pt402": 588.2,
+      "pt393": 575
+     },
+     "diameter": {
+      "px": 118,
+      "ofWidth": 0.12634,
+      "pt402": 50.8,
+      "pt393": 49.7
+     }
+    }
+   ],
+   "pitch": {
+    "px": 172.63,
+    "ofWidth": 0.18482,
+    "pt402": 74.3,
+    "pt393": 72.6
+   },
+   "pitchMeasuredPx": [
+    172.5,
+    174,
+    171.5,
+    172.5
+   ],
+   "centreRow": {
+    "px": 1366.6,
+    "ofWidth": 1.46317,
+    "pt402": 588.2,
+    "pt393": 575
+   },
+   "railCentreX": {
+    "px": 467.25,
+    "ofWidth": 0.50027,
+    "pt402": 201.1,
+    "pt393": 196.6
+   },
+   "equalSpacingAt393": "pitch 72.6 pt, diameter 49.6 pt, centred: centres at 393/2 + {-2, -1, 0, 1, 2} x 72.6 pt",
+   "fillColours": "Alternation blue, lime, blue, lime, blue is decorative, not state (LAYOUT_SPEC). The mock lime measures (227,241,93) ~ #E2EE57; the mock powder blue measures (212,235,254) ~ #D4EBFE, noticeably LIGHTER than the spec's #C0D6EB (background/subtle). The reconstruction uses the tokens; the circles therefore read slightly deeper than the mock (sheet panels B/C).",
+   "connectors": [
+    {
+     "between": [
+      1,
+      2
+     ],
+     "bbox_reference_xyxy_inclusive": [
+      192,
+      1364,
+      225,
+      1368
+     ],
+     "length": {
+      "px": 34,
+      "ofWidth": 0.0364,
+      "pt402": 14.6,
+      "pt393": 14.3
+     },
+     "thickness": {
+      "px": 5,
+      "ofWidth": 0.00535,
+      "pt402": 2.2,
+      "pt393": 2.1
+     },
+     "measuredMockRgb": [
+      195,
+      226,
+      252
+     ]
+    },
+    {
+     "between": [
+      2,
+      3
+     ],
+     "bbox_reference_xyxy_inclusive": [
+      365,
+      1364,
+      398,
+      1368
+     ],
+     "length": {
+      "px": 34,
+      "ofWidth": 0.0364,
+      "pt402": 14.6,
+      "pt393": 14.3
+     },
+     "thickness": {
+      "px": 5,
+      "ofWidth": 0.00535,
+      "pt402": 2.2,
+      "pt393": 2.1
+     },
+     "measuredMockRgb": [
+      193,
+      226,
+      253
+     ]
+    },
+    {
+     "between": [
+      3,
+      4
+     ],
+     "bbox_reference_xyxy_inclusive": [
+      538,
+      1364,
+      571,
+      1368
+     ],
+     "length": {
+      "px": 34,
+      "ofWidth": 0.0364,
+      "pt402": 14.6,
+      "pt393": 14.3
+     },
+     "thickness": {
+      "px": 5,
+      "ofWidth": 0.00535,
+      "pt402": 2.2,
+      "pt393": 2.1
+     },
+     "measuredMockRgb": [
+      190,
+      224,
+      252
+     ]
+    },
+    {
+     "between": [
+      4,
+      5
+     ],
+     "bbox_reference_xyxy_inclusive": [
+      710,
+      1364,
+      743,
+      1368
+     ],
+     "length": {
+      "px": 34,
+      "ofWidth": 0.0364,
+      "pt402": 14.6,
+      "pt393": 14.3
+     },
+     "thickness": {
+      "px": 5,
+      "ofWidth": 0.00535,
+      "pt402": 2.2,
+      "pt393": 2.1
+     },
+     "measuredMockRgb": [
+      193,
+      225,
+      251
+     ]
+    }
+   ],
+   "connectorNote": "Short thin rounded bars centred between circles (12 px clear of each circle), mock colour ~(193,226,253), between the mock circle blue and #C0D6EB.",
+   "icons": {
+    "stop1": {
+     "stop": "Area",
+     "candidates": [
+      {
+       "lucide": "map-pin",
+       "centre_reference": [
+        121.8,
+        1363.3
+       ],
+       "iconBox24Grid": {
+        "px": 64.49,
+        "ofWidth": 0.06905,
+        "pt402": 27.8,
+        "pt393": 27.1
+       },
+       "iouAt50": 0.849,
+       "freeStroke": 2.14
+      }
+     ]
+    },
+    "stop2": {
+     "stop": "Allergens",
+     "candidates": [
+      {
+       "lucide": "octagon-alert",
+       "centre_reference": [
+        295,
+        1370.6
+       ],
+       "iconBox24Grid": {
+        "px": 79.16,
+        "ofWidth": 0.08476,
+        "pt402": 34.1,
+        "pt393": 33.3
+       },
+       "iouAt50": 0.704,
+       "freeStroke": 2.12
+      }
+     ]
+    },
+    "stop3": {
+     "stop": "Stores",
+     "candidates": [
+      {
+       "lucide": "shopping-cart",
+       "centre_reference": [
+        467.9,
+        1368.3
+       ],
+       "iconBox24Grid": {
+        "px": 65.05,
+        "ofWidth": 0.06965,
+        "pt402": 28,
+        "pt393": 27.4
+       },
+       "iouAt50": 0.874,
+       "freeStroke": 2.17
+      }
+     ]
+    },
+    "stop4": {
+     "stop": "Matches",
+     "candidates": [
+      {
+       "lucide": "file-search-corner",
+       "centre_reference": [
+        638,
+        1365.4
+       ],
+       "iconBox24Grid": {
+        "px": 72.86,
+        "ofWidth": 0.07801,
+        "pt402": 31.4,
+        "pt393": 30.7
+       },
+       "iouAt50": 0.438,
+       "freeStroke": 1.68
+      },
+      {
+       "lucide": "file-search",
+       "centre_reference": [
+        638.7,
+        1365.5
+       ],
+       "iconBox24Grid": {
+        "px": 73.84,
+        "ofWidth": 0.07906,
+        "pt402": 31.8,
+        "pt393": 31.1
+       },
+       "iouAt50": 0.441,
+       "freeStroke": 1.57
+      },
+      {
+       "lucide": "file-text",
+       "centre_reference": [
+        639.1,
+        1366.7
+       ],
+       "iconBox24Grid": {
+        "px": 75.55,
+        "ofWidth": 0.08089,
+        "pt402": 32.5,
+        "pt393": 31.8
+       },
+       "iouAt50": 0.464,
+       "freeStroke": 1.56
+      }
+     ]
+    },
+    "stop5": {
+     "stop": "Feed",
+     "candidates": [
+      {
+       "lucide": "copy",
+       "centre_reference": [
+        826.1,
+        1357.9
+       ],
+       "iconBox24Grid": {
+        "px": 43.42,
+        "ofWidth": 0.04649,
+        "pt402": 18.7,
+        "pt393": 18.3
+       },
+       "iouAt50": 0.236,
+       "freeStroke": 2.82
+      },
+      {
+       "lucide": "layers-2",
+       "centre_reference": [
+        808.9,
+        1369.2
+       ],
+       "iconBox24Grid": {
+        "px": 67.21,
+        "ofWidth": 0.07196,
+        "pt402": 28.9,
+        "pt393": 28.3
+       },
+       "iouAt50": 0.262,
+       "freeStroke": 1
+      },
+      {
+       "lucide": "square-stack",
+       "centre_reference": [
+        820.5,
+        1359.2
+       ],
+       "iconBox24Grid": {
+        "px": 53.2,
+        "ofWidth": 0.05695,
+        "pt402": 22.9,
+        "pt393": 22.4
+       },
+       "iouAt50": 0.246,
+       "freeStroke": 2.38
+      },
+      {
+       "lucide": "gallery-horizontal-end",
+       "centre_reference": [
+        806.3,
+        1373.4
+       ],
+       "iconBox24Grid": {
+        "px": 62.13,
+        "ofWidth": 0.06651,
+        "pt402": 26.7,
+        "pt393": 26.1
+       },
+       "iouAt50": 0.277,
+       "freeStroke": 1.37
+      },
+      {
+       "lucide": "playing-cards",
+       "centre_reference": [
+        824.8,
+        1360.6
+       ],
+       "iconBox24Grid": {
+        "px": 50.2,
+        "ofWidth": 0.05374,
+        "pt402": 21.6,
+        "pt393": 21.1
+       },
+       "iouAt50": 0.301,
+       "freeStroke": 2.04
+      },
+      {
+       "lucide": "wallet-cards",
+       "centre_reference": [
+        807.8,
+        1366.8
+       ],
+       "iconBox24Grid": {
+        "px": 74.59,
+        "ofWidth": 0.07986,
+        "pt402": 32.1,
+        "pt393": 31.4
+       },
+       "iouAt50": 0.436,
+       "freeStroke": 1.51
+      },
+      {
+       "lucide": "file-stack",
+       "centre_reference": [
+        811.5,
+        1377.2
+       ],
+       "iconBox24Grid": {
+        "px": 87.95,
+        "ofWidth": 0.09417,
+        "pt402": 37.9,
+        "pt393": 37
+       },
+       "iouAt50": 0.303,
+       "freeStroke": 1
+      },
+      {
+       "lucide": "book-copy",
+       "centre_reference": [
+        807.7,
+        1367.9
+       ],
+       "iconBox24Grid": {
+        "px": 70.07,
+        "ofWidth": 0.07502,
+        "pt402": 30.2,
+        "pt393": 29.5
+       },
+       "iouAt50": 0.366,
+       "freeStroke": 1.16
+      }
+     ]
+    }
+   },
+   "iconNotes": "map-pin (0.85) and shopping-cart (0.87) match; octagon-alert matches the outline (0.70) with the mock's heavier exclamation; file-search-corner (the app's existing `file-search`) is the family of the mock's document-with-magnifier but lacks its four text lines (0.44). Stop 5 (stacked cards): NO Lucide glyph at the pinned commit reproduces the mock's three offset landscape cards (best overlap: wallet-cards 0.44, semantically wrong; copy 0.24 reads closest). The reconstruction shows `copy` as PROVISIONAL; the glyph is an implementation/founder decision. Uniform native icon box recommended ~65 px = 28 pt @402 (pin 64.5, cart 65.1 px measured).",
+   "completedBadge": {
+    "onStop": 1,
+    "navyDisc_reference_xyxy_inclusive": [
+     134,
+     1384,
+     176,
+     1426
+    ],
+    "centre": [
+     {
+      "px": 155,
+      "ofWidth": 0.16595,
+      "pt402": 66.7,
+      "pt393": 65.2
+     },
+     {
+      "px": 1405,
+      "ofWidth": 1.50428,
+      "pt402": 604.7,
+      "pt393": 591.2
+     }
+    ],
+    "diameter": {
+     "px": 43,
+     "ofWidth": 0.04604,
+     "pt402": 18.5,
+     "pt393": 18.1
+    },
+    "discRgbMeasured": [
+     0,
+     24,
+     71
+    ],
+    "whiteCheck_reference_xyxy_inclusive": [
+     144,
+     1397,
+     167,
+     1414
+    ],
+    "offsetFromStopCentre": [
+     {
+      "px": 33,
+      "ofWidth": 0.03533,
+      "pt402": 14.2,
+      "pt393": 13.9
+     },
+     {
+      "px": 39,
+      "ofWidth": 0.04176,
+      "pt402": 16.8,
+      "pt393": 16.4
+     }
+    ],
+    "note": "Overlaps the stop circle at its lower right; no separate white ring (antialias only). Completion is shape + position, not colour alone."
+   },
+   "attentionRays": {
+    "onStop": 2,
+    "rays": [
+     {
+      "centroid": [
+       313.1,
+       1283.4
+      ],
+      "angleDeg": -76.5,
+      "length": {
+       "px": 29.9,
+       "ofWidth": 0.03201,
+       "pt402": 12.9,
+       "pt393": 12.6
+      },
+      "thickness": {
+       "px": 11.9,
+       "ofWidth": 0.01274,
+       "pt402": 5.1,
+       "pt393": 5
+      }
+     },
+     {
+      "centroid": [
+       340.5,
+       1295.7
+      ],
+      "angleDeg": -41.6,
+      "length": {
+       "px": 26.6,
+       "ofWidth": 0.02848,
+       "pt402": 11.4,
+       "pt393": 11.2
+      },
+      "thickness": {
+       "px": 10.6,
+       "ofWidth": 0.01135,
+       "pt402": 4.6,
+       "pt393": 4.5
+      }
+     }
+    ],
+    "colour": "background/accent #E2EE57 (mock ~(227,241,93))",
+    "note": "Two round-capped strokes above the active stop's upper right; active state = rays + position, distinct from the fixed lime fill."
+   }
+  },
+  "caption": {
+   "text": "Checking for allergen matches…",
+   "inkBbox_reference_xyxy_inclusive": [
+    155,
+    1478,
+    783,
+    1520
+   ],
+   "centreX": {
+    "px": 469,
+    "ofWidth": 0.50214,
+    "pt402": 201.9,
+    "pt393": 197.3
+   },
+   "baseline": {
+    "px": 1511,
+    "ofWidth": 1.61777,
+    "pt402": 650.3,
+    "pt393": 635.8
+   },
+   "capHeight": {
+    "px": 32,
+    "ofWidth": 0.03426,
+    "pt402": 13.8,
+    "pt393": 13.5
+   },
+   "typeFit": "Width-fit 17.6 pt (700) / cap-fit 18.6 pt @402; mock ink heavier than 700. Recommendation: Public Sans 700, 18 pt, centred, single changing line.",
+   "inkVsWeight": {
+    "measuredInk": 8356,
+    "byWeight": {
+     "400": {
+      "sizePx": 42.3,
+      "renderedInk": 4780,
+      "ratioToMeasured": 0.572
+     },
+     "500": {
+      "sizePx": 41.9,
+      "renderedInk": 5401,
+      "ratioToMeasured": 0.646
+     },
+     "600": {
+      "sizePx": 41.5,
+      "renderedInk": 5997,
+      "ratioToMeasured": 0.718
+     },
+     "700": {
+      "sizePx": 40.9,
+      "renderedInk": 6938,
+      "ratioToMeasured": 0.83
+     },
+     "800": {
+      "sizePx": 40.3,
+      "renderedInk": 7442,
+      "ratioToMeasured": 0.891
+     },
+     "900": {
+      "sizePx": 39.8,
+      "renderedInk": 8260,
+      "ratioToMeasured": 0.988
+     }
+    }
+   }
+  },
+  "verticalRhythm": {
+   "heroBottom": {
+    "px": 1072,
+    "ofWidth": 1.14775,
+    "pt402": 461.4,
+    "pt393": 451.1
+   },
+   "headlineLine1Baseline": {
+    "px": 1148,
+    "ofWidth": 1.22912,
+    "pt402": 494.1,
+    "pt393": 483
+   },
+   "headlineLine2Baseline": {
+    "px": 1233,
+    "ofWidth": 1.32013,
+    "pt402": 530.7,
+    "pt393": 518.8
+   },
+   "headlineToRayTop": {
+    "px": 20,
+    "ofWidth": 0.02141,
+    "pt402": 8.6,
+    "pt393": 8.4
+   },
+   "railTop": {
+    "px": 1307,
+    "ofWidth": 1.39936,
+    "pt402": 562.5,
+    "pt393": 549.9
+   },
+   "railCentre": {
+    "px": 1366.6,
+    "ofWidth": 1.46317,
+    "pt402": 588.2,
+    "pt393": 575
+   },
+   "railBottom": {
+    "px": 1426,
+    "ofWidth": 1.52677,
+    "pt402": 613.8,
+    "pt393": 600
+   },
+   "railBottomToCaptionInk": {
+    "px": 52,
+    "ofWidth": 0.05567,
+    "pt402": 22.4,
+    "pt393": 21.9
+   },
+   "captionBaseline": {
+    "px": 1511,
+    "ofWidth": 1.61777,
+    "pt402": 650.3,
+    "pt393": 635.8
+   },
+   "pageBelowCaption": {
+    "px": 163,
+    "ofWidth": 0.17452,
+    "pt402": 70.2,
+    "pt393": 68.6
+   }
+  }
+ },
+ "files": [
+  {
+   "role": "source, EXACT crop (reference/review, not runtime)",
+   "path": "assets/brand/reference/building-grocery-search/source/lotly-building-grocery-search-scene-source.png",
+   "sha256": "9910df027ae36feecfc554cdb686ed42beca5ee4e825860ae617db8632c68b75",
+   "bytes": 1194722,
+   "dimensions": [
+    934,
+    972
+   ],
+   "channels": 3,
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "crop_xyxy_exclusive": [
+    0,
+    100,
+    934,
+    1072
+   ],
+   "mode": "8-bit RGB, opaque",
+   "rgbSamplesDifferingFromReferenceCrop": 0
+  },
+  {
+   "role": "source, DERIVED: exact crop with the three tag glyphs blanked (reference/review, not runtime)",
+   "path": "assets/brand/reference/building-grocery-search/source/lotly-building-grocery-search-scene-blank-tags-source.png",
+   "sha256": "014b2c9692752b80abeefdf3aab25ff70c6e8176ce6506e77a3512a17e5a3a11",
+   "bytes": 1166303,
+   "dimensions": [
+    934,
+    972
+   ],
+   "channels": 3,
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "mode": "8-bit RGB, opaque",
+   "pixelsDifferingFromExactCrop": 19727,
+   "allDifferencesInsideTagFootprints": true
+  },
+  {
+   "role": "repair/operation mask (review)",
+   "path": "assets/brand/reference/building-grocery-search/masks/lotly-building-grocery-search-repair-mask.png",
+   "sha256": "2e77074f3338063a6161192fab7527ca026955ca249f73a5bc34e61e124c0c60",
+   "bytes": 9164,
+   "dimensions": [
+    934,
+    972
+   ],
+   "channels": 3,
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ]
+  },
+  {
+   "role": "production (prepared, NOT imported)",
+   "path": "assets/brand/production/lotly-building-grocery-search-scene.png",
+   "sha256": "ffcfabc1800f2c4e84a29a1e22bfae1667a4be401e517ee6e54c81b166964f6a",
+   "bytes": 1222354,
+   "dimensions": [
+    934,
+    972
+   ],
+   "channels": 4,
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "mode": "8-bit RGBA, non-interlaced",
+   "alphaCounts": {
+    "clear": 139741,
+    "edge": 14374,
+    "opaque": 753733
+   },
+   "nearOpaque240to254": 0,
+   "clearPixelsWithNonZeroRgb": 0,
+   "visibleBounds_crop_xyxy_inclusive": [
+    0,
+    7,
+    933,
+    971
+   ],
+   "opaquePixels": 753733,
+   "opaqueRgbDifferingFromDerivedSource": 0,
+   "opaqueRgbDifferingFromExactSource": 19727,
+   "ofWhichOutsideTagFootprints": 0,
+   "lowestNonOpaqueRowAboveFade_reference": 345,
+   "protectedBand": {
+    "rows_reference": [
+     346,
+     1059
+    ],
+    "pixels": 666876,
+    "nonOpaque": 0,
+    "opaqueRgbDifferingFromExactSource": 19727,
+    "ofWhichOutsideTagFootprints": 0
+   },
+   "mascotBox": {
+    "box_reference_xyxy_inclusive": [
+     35,
+     545,
+     425,
+     965
+    ],
+    "pixels": 164611,
+    "nonOpaque": 0,
+    "rgbDifferingFromExactSource": 0
+   },
+   "composite": {
+    "vsDerived_aboveFade_onReferenceCream": {
+     "maxChannelDelta": 5,
+     "pixelsOver3": 1008,
+     "pixels": 896640
+    },
+    "vsDerived_aboveFade_onPageToken": {
+     "maxChannelDelta": 9,
+     "pixelsOver3": 133521,
+     "pixels": 896640
+    },
+    "vsDerived_fadeRows_onReferenceCream": {
+     "maxChannelDelta": 3,
+     "pixelsOver3": 0,
+     "pixels": 11208
+    },
+    "vsDerived_fadeRows_onPageToken": {
+     "maxChannelDelta": 7,
+     "pixelsOver3": 3828,
+     "pixels": 11208
+    },
+    "vsExact_outsideTagFootprints_onReferenceCream": {
+     "maxChannelDelta": 5,
+     "pixelsOver3": 1008,
+     "pixels": 887451
+    },
+    "vsExact_keyedExteriorOnly_onReferenceCream": {
+     "maxChannelDelta": 4,
+     "pixelsOver3": 992,
+     "pixels": 140514
+    }
+   },
+   "lastRowMaxAlpha": 4,
+   "fadeRowMaxAlpha": [
+    [
+     1060,
+     255
+    ],
+    [
+     1061,
+     239
+    ],
+    [
+     1062,
+     221
+    ],
+    [
+     1063,
+     197
+    ],
+    [
+     1064,
+     171
+    ],
+    [
+     1065,
+     142
+    ],
+    [
+     1066,
+     113
+    ],
+    [
+     1067,
+     84
+    ],
+    [
+     1068,
+     58
+    ],
+    [
+     1069,
+     34
+    ],
+    [
+     1070,
+     16
+    ],
+    [
+     1071,
+     4
+    ]
+   ]
+  },
+  {
+   "role": "comparison sheet (review)",
+   "path": "assets/brand/reference/building-grocery-search/lotly-building-grocery-search-asset-comparison.png",
+   "sha256": "d71e7e0eb184ce9de67dfa50d30777b90297a53ec73e5d8ee720d2c8e9c2721f",
+   "bytes": 3233408,
+   "panels": "A reference | B native-equivalent reconstruction | C |A-B| x4; D hero on page cream | E hero on dark | F alpha; G operation mask | derived blank-tag source | legend; H bottom fade (reference / page / dark); I per-tag close-ups (original / blank / reconstructed / diff x4) with calibration; J natural phone scale (402 pt @1x) reference vs reconstruction with notes"
+  }
+ ],
+ "protectedPixelFidelity": "Every alpha-255 pixel (753733) is RGB byte-identical to the derived source; outside the three tag footprints every one is byte-identical to the exact crop. Rows 346-1059 are 100% alpha 255. The mascot box (x 35-425, rows 545-965) is 100% opaque and byte-identical to the exact crop. Non-opaque pixels exist only above the wave/handles (lowest row 345), in the arch pocket, and in fade rows 1060-1071.",
+ "reconstructionFidelity": {
+  "metrics": {
+   "tags": {
+    "pin": {
+     "fullRes": {
+      "meanMaxChannelError": 14.1,
+      "maxChannelError": 239
+     },
+     "phoneScale402": {
+      "size": [
+       37,
+       45
+      ],
+      "meanMaxChannelError": 13.61,
+      "maxChannelError": 204
+     }
+    },
+    "octagon": {
+     "fullRes": {
+      "meanMaxChannelError": 18.06,
+      "maxChannelError": 255
+     },
+     "phoneScale402": {
+      "size": [
+       51,
+       52
+      ],
+      "meanMaxChannelError": 17.47,
+      "maxChannelError": 250
+     }
+    },
+    "cart": {
+     "fullRes": {
+      "meanMaxChannelError": 10.13,
+      "maxChannelError": 206
+     },
+     "phoneScale402": {
+      "size": [
+       46,
+       41
+      ],
+      "meanMaxChannelError": 9.57,
+      "maxChannelError": 202
+     }
+    }
+   },
+   "regions": {
+    "heroIncludingTagOverlays": {
+     "meanMaxChannelError": 1.35,
+     "maxChannelError": 255
+    },
+    "heroPhone402": {
+     "size": [
+      402,
+      418
+     ],
+     "meanMaxChannelError": 1.32,
+     "maxChannelError": 246
+    },
+    "headline": {
+     "meanMaxChannelError": 60.23,
+     "maxChannelError": 255
+    },
+    "rail": {
+     "meanMaxChannelError": 21.7,
+     "maxChannelError": 255
+    },
+    "caption": {
+     "meanMaxChannelError": 49.94,
+     "maxChannelError": 255
+    }
+   }
+  },
+  "reading": "Hero pixels outside the overlays compose within the page-token difference (mean 1.35). Tag regions differ only where Lucide strokes differ from the printed ink (mean 10-18 per channel inside the fit boxes, at both full and 402 pt phone scale; panel I). Headline/caption/rail differences are the expected typeface weight (Public Sans 700 vs the mock's heavier display lettering), token blue vs the lighter mock blue, and the provisional stop-5 glyph; they describe native-vs-mock, not asset error."
+ },
+ "limitations": [
+  "The hero is DERIVED inside the three tag-glyph footprints (19,727 pixels): a smooth harmonic fill of each tag's own surrounding paper. It is not the exact pixels that were under the ink; any fine grain there is not recoverable.",
+  "Lucide strokes are not the printed ink: the overlay fits score IoU 0.77 (pin), 0.68 (octagon), 0.84 (cart) at the set stroke. The octagon's exclamation in the mock is a heavier tapered bar with a larger dot than Lucide octagon-alert.",
+  "The sunlit back strap's brightest highlights are page-coloured in the mock; they stay opaque original under the closing rule, so on the cream page they are indistinguishable and on a dark surface the strap edge is whole. 992 of the 140,514 keyed exterior pixels (0.7%), all faint haze at deviation 4, composite 4 off the source on the reference cream (16 solid-edge pixels too; one at 5), the same page-noise level the paywall accepted.",
+  "Edges are unmatted against the measured reference cream (254,254,251), 1-5 units lighter than #FDFCF6; on the page token the hero differs from the mock by up to 9 on a few edge pixels, most of it the token's own blue-channel difference.",
+  "The lower band is the original table-to-page vignette, cream by design: on a non-cream surface it shows as a light band before alpha reaches 0. Dark mode is deferred; the hero is for background/page only.",
+  "Native lower UI cannot match the mock lettering weight with app weights (<= 700), and the mock's circle blue is lighter than the spec token. Stop 5's stacked-cards glyph does not exist in the pinned Lucide set.",
+  "The mock is 934 px wide; at 402 pt @3x the hero is ~1.29 device px per source px and cannot be sharper than the approved mock."
+ ],
+ "artContract": {
+  "baked": "Tote, handles, groceries, three physical tags with their colours, holes, loops and shadows (printed glyphs removed), mascot with binoculars over both eyes and three lime rays, backdrop, tabletop, cloth, peaches, cream vignette.",
+  "nativeOnly": [
+   "three bag-tag glyphs (tagOverlayCalibration)",
+   "headline",
+   "five-stop rail: circles, connectors, icons",
+   "active attention rays and completed badge",
+   "changing caption and match count",
+   "pending/slow/error controls"
+  ],
+  "mascot": "Exact approved pixels, never split or moved independently (LAYOUT_SPEC: static hero for the initial implementation)."
+ },
+ "runtime": "Only the production hero is imported, by src/components/onboarding/building-step.tsx (pinned by src/lib/building-assets.test.ts, which also pins the tag calibration below against src/lib/building-presentation.ts). The reference, manifest, source crops, repair mask, report, comparison sheet and source kit are never bundled (verified by npx expo export --platform ios, 2026-10-02). M04 left the Building step and remains on the standalone paywall.",
+ "revisions": [
+  {
+   "date": "2026-10-02",
+   "change": "Initial export: crop 0,100 to 934,1072; tag footprint radius 11; flood <= 6 with closing radius 4 and the arch pocket; fade 1060-1071. Awaiting founder review."
+  },
+  {
+   "date": "2026-10-02",
+   "change": "Founder approved the export and the reconstruction; imported by the Building step. No pixel changed. Implementation decisions: Feed stop = Lotly-authored stacked-cards on the Lucide grid (assets/icon-sources/lotly/stacked-cards.svg); circle blue = the mockup #D4EBFE local to Building (shared background/subtle unchanged); Public Sans 700 headline 36/36 and caption 18/23; standard Lucide octagon-alert. Native placement and rhythm: src/lib/building-presentation.ts."
+  }
+ ]
+}

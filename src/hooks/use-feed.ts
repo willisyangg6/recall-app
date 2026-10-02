@@ -81,10 +81,22 @@ export type FeedLoadState =
  * instead of issuing duplicate request storms. Created lazily because the
  * module loads before env configuration is checked.
  */
+type DevelopmentFeedModule = typeof import('@/lib/development-feed-scenarios');
+
+/**
+ * Development only: the Simulator's feed scenarios (slow, failed, zero or
+ * one match) wrap the one session. The `require` sits inside the `__DEV__`
+ * branch, so a release bundle folds it away with the module.
+ */
+const developmentFeed = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/lib/development-feed-scenarios') as DevelopmentFeedModule)
+  : null;
+
 let feedSession: FeedSession | null = null;
 function getFeedSession(): FeedSession {
   if (feedSession === null) {
-    feedSession = createFeedSession({
+    const session = createFeedSession({
       store: createFeedCacheStore(),
       transport: {
         fetchManifest: fetchCurrentManifest,
@@ -92,6 +104,8 @@ function getFeedSession(): FeedSession {
         fetchByIds: fetchFeedItemsByIds,
       },
     });
+    feedSession =
+      __DEV__ && developmentFeed ? developmentFeed.wrapDevelopmentFeedSession(session) : session;
   }
   return feedSession;
 }
@@ -102,15 +116,34 @@ export interface Feed {
   refresh: () => Promise<void>;
 }
 
-export function useFeed(): Feed {
-  const [state, setState] = useState<FeedLoadState>({ status: 'loading' });
+export interface FeedOptions {
+  /**
+   * The Ready step after the Building step (2026-10-02): start from the
+   * corpus the session last served instead of a loading state, and revalidate
+   * on mount only when the last successful sync is older than the foreground
+   * threshold (joining one in flight). Ready then opens on exactly the corpus
+   * Building counted, without a second reconciliation seconds later.
+   */
+  reuseRecent?: boolean;
+}
+
+export function useFeed({ reuseRecent = false }: FeedOptions = {}): Feed {
+  const [state, setState] = useState<FeedLoadState>(() => {
+    const served = reuseRecent ? getFeedSession().served() : null;
+    return served === null ? { status: 'loading' } : { status: 'ready', items: served };
+  });
   const [refreshing, setRefreshing] = useState(false);
 
   // A sync resolves with a COMPLETE corpus or throws — the reconciliation
-  // never hands back part of a feed, so `ready` keeps meaning complete.
-  const revalidate = useCallback(async () => {
+  // never hands back part of a feed, so `ready` keeps meaning complete. With
+  // a `maxAgeMs` the session may answer null: skipped, nothing changes.
+  const revalidate = useCallback(async (maxAgeMs?: number) => {
     try {
-      const outcome = await getFeedSession().sync();
+      const outcome =
+        maxAgeMs === undefined
+          ? await getFeedSession().sync()
+          : await getFeedSession().syncIfOlderThan(maxAgeMs);
+      if (outcome === null) return;
       setState({ status: 'ready', items: outcome.items });
     } catch (error) {
       // The cause is a developer fact (an HTTP status, a stalled page); it
@@ -145,11 +178,12 @@ export function useFeed(): Feed {
     // State updates happen after the network await resolves, not
     // synchronously in the effect body.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void revalidate();
+    if (reuseRecent) void revalidate(FOREGROUND_REVALIDATE_AFTER_MINUTES * 60_000);
+    else void revalidate();
     return () => {
       cancelled = true;
     };
-  }, [revalidate]);
+  }, [revalidate, reuseRecent]);
 
   // ── Foreground revalidation ───────────────────────────────────────────────
   useEffect(() => {

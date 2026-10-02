@@ -1,0 +1,26 @@
+{
+  "reference_path": "assets/brand/reference/lotly-onboarding-building-grocery-search-target.png",
+  "width": 934,
+  "height": 1683,
+  "mode": "RGB",
+  "sha256": "764c5aff70de7f38413580aaf3eb02646079d58b8eb2053d2390c3f6ec9bb814",
+  "approved_design": "Five-stop grocery tote with binoculars mascot; bottom backgrounds blue, lime, blue, lime, blue",
+  "production_asset_path": "assets/brand/production/lotly-building-grocery-search-scene.png",
+  "asset_status": "not yet prepared",
+  "hero_crop_hint": {
+    "x0": 0,
+    "y0": 0,
+    "x1": 934,
+    "y1": 1048,
+    "end_exclusive": true,
+    "requires_measurement": true
+  },
+  "native_ui": [
+    "headline",
+    "five-stop rail",
+    "status caption and match count",
+    "three bag-tag glyphs",
+    "active and completed markers"
+  ],
+  "behavior_spec": "docs/lotly-building-source-kit/LAYOUT_SPEC.md"
+}

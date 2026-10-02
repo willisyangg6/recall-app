@@ -372,11 +372,11 @@ Welcome with the receipt composition (2026-09-29), M02 left States with
 the grocery-atlas composition (2026-09-30), and M03 (the grocery-bag pose)
 left Stores with the receipt composition (2026-09-30), whose mascot is part
 of its approved scene, and M06 (the trust-peek pose) left Ready with the
-preference board (2026-09-30); like M05, all four are drawn nowhere. M04
-is on the building interstitial (2026-09-28); M05 waits for its own
-screen. M04, the standing watchful pose
-(shield-check and refresh arrow), is the interstitial's: the watch being
-assembled and verified. A mascot is drawn whole with `contain`, never cropped, recoloured or
+preference board (2026-09-30); like M05, all four are drawn nowhere. M04,
+the standing watchful pose (shield-check and refresh arrow), left the
+Building step (2026-10-02) for the approved binoculars scene, whose mascot
+is part of its own art; it stays beside the standalone paywall's heading.
+M05 waits for its own screen. A mascot is drawn whole with `contain`, never cropped, recoloured or
 placed on a dark surface, and is decorative: hidden from VoiceOver and never
 in the way of a touch. The earlier standalone mascot
 (`lotly-mascot-transparent.png`) is no longer drawn. The final logo and
@@ -1466,14 +1466,41 @@ the foot of the content; composition rules live in
 [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md)
 §6.5.
 
-**The building interstitial** (2026-09-28) is the one screen outside the
-frame: the warm page, the M04 watchful mascot in a fixed 160pt box, then a
-checklist that appears one row at a time — a 20pt check slot and `body`
-text, the completion line in `heading-3` — each row fading in once over
-200ms. About 3.2 seconds in all; under Reduce Motion the finished checklist
-is drawn at once and held a readable moment. The checklist is one spoken
-element (`Building your recall watch`); the mascot is hidden and
-untouchable; nothing loops, sweeps or bounces.
+**The Building step** (the five-stop watch, 2026-10-02) is the one screen
+outside the frame. Approved target:
+`assets/brand/reference/lotly-onboarding-building-grocery-search-target.png`;
+every measurement in `src/lib/building-presentation.ts`. The decorative
+hero (canvas tote, three hanging tags, groceries, the mascot holding
+binoculars over both eyes) at full page width on one uniform scale (page
+width / 934), with the tags' three glyphs drawn natively on top at their
+fitted centres, 24-grid boxes and angles; the headline `Getting your watch
+ready.` in Public Sans 700 at 36/36 (Welcome's screen-local size), centred
+in a 270pt column; one rail of five equal 118px circles at a 172.6px pitch,
+centred, joined by 34×5px rounded connectors; and one caption in Public Sans
+700 at 18/23 (every caption, the count sentence included). The
+circles alternate blue, lime, blue, lime, blue as DECORATION: lime is
+`background/accent`; blue is the mockup's lighter `#D4EBFE`, local to this
+screen (connectors `#C1E2FD`), so `background/subtle` stays `#C0D6EB`
+everywhere. State is never colour: active is two lime rays above the stop,
+complete a navy badge with a white check over its lower right. The five
+glyphs share one raster set (`assets/onboarding/building/`, 40pt box, the
+set's 2.4 stroke): Lucide `map-pin`, `octagon-alert` (the general allergen
+symbol, its own stroked exclamation), `shopping-cart`, `file-search-corner`,
+and the Lotly-authored `stacked-cards` (`assets/icon-sources/lotly/`), drawn
+on the Lucide grid to the mockup. From text scale 1.5 the headline and
+caption take the `heading-2` and `body` sizes (the caption at a screen-local
+16/20 leading, or `body-small`'s 13/16 where `personalized` would not fit
+the column — AX5 on an SE; adaptive bases, never caps), so no word breaks at
+AX5. Motion
+is finite and synchronised — one
+beat fades the caption THROUGH (80ms out, the words swap while nothing is
+visible, 140ms in; never two sentences at once, in a box of stable height)
+and, from that hidden swap point, moves the badge, the rays and the matching
+tag glyph's single swell, each caption then read for 1,500ms once fully visible
+— and immediate under Reduce Motion; nothing
+loops, springs or bounces, and the hero never moves. Behaviour:
+[docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md)
+§6.6.
 
 **The plan cards** are the shared ones, compacted (2026-09-28): the monthly
 equivalent and the saving share one caption line (`$2.50/month · Save 50%`),
@@ -2841,7 +2868,9 @@ chance.
   (P2B7Z) an Allergens tile's 150ms opacity fade as it is chosen or cleared,
   which moves nothing and is drawn final at once under Reduce Motion; and
   (2026-09-26) the Ready mascot's one fade-and-settle, the States mascot's
-  own. That
+  own; and (2026-10-02) the Building step's beats — badge, rays, caption
+  and tag glyph moving together — which under Reduce Motion become
+  immediate changes that still wait for real results. That
   entrance, and any future animation, is skipped when
   `AccessibilityInfo.isReduceMotionEnabled` reports true (or cannot be
   read): everything is shown in its final state at once. The P2B7Y motions
@@ -3019,8 +3048,9 @@ its press wired to nothing, so no sample can open the confirmation or start
 a deletion; and from P2B7X.1 every first-launch screen and every paywall
 state — Welcome, the two problem screens, the three selector steps empty,
 selected and searched, the retailer rows with the fallback and two neutral
-fixtures at extreme ratios, the building interstitial holding its finished
-checklist, the Ready step at its carousel edges (three matches of five with
+fixtures at extreme ratios, the Building step in each held state (waiting,
+the approved Allergens frame, no allergens or stores chosen, a simulated
+count, complete, slow and failed), the Ready step at its carousel edges (three matches of five with
 the locked strip and sentinel, two, one, and none — decks of clones of the
 approved example model, never fabricated recalls), the entitled paywall
 panel, the education idle and enabling, the paywall in twelve views

@@ -493,8 +493,10 @@ never copied (`src/components/development/onboarding-gallery.tsx`):
   Retailers empty, selected and searched; the retailer rows with the
   fallback for the longest catalog name and two neutral FIXTURE shapes at
   extreme ratios (not marks of anything) standing where a wide or tall mark
-  would; the building interstitial (it plays its one sequence and holds the
-  finished checklist; finishing routes nowhere); the Ready step at its
+  would; the Building step in each held, simulated state — waiting for
+  results, the approved Allergens frame, no allergens and no stores chosen,
+  a labelled count of 22, complete, slow and failed (Try again and Continue
+  are wired to nothing); the Ready step at its
   carousel edges — three matches of five with the locked strip and sentinel,
   two matches with the truthful monitoring line, one match without dots,
   and zero matches with the honest empty card — each deck built from clones
@@ -537,8 +539,23 @@ never copied (`src/components/development/onboarding-gallery.tsx`):
   onboarding screen), the gate has nothing to react to, so the hub replaces
   the popped-to screen with the new entry screen itself (polish pass); the
   paywall controls' `Reset onboarding to Welcome` restarts the flow the
-  same way, so it genuinely returns a device to Welcome with the building
-  interstitial unplayed.
+  same way, so it genuinely returns a device to Welcome with the Building
+  step unplayed. In that same-phase case the hub writes the scenario's
+  record a second time, once the pop has settled (2026-10-02): the
+  popped-to screen (Stores or Ready, whichever is the root) records itself on
+  focus from the OLD in-memory record, which otherwise left the device's
+  stored record — or the gate itself — disagreeing with the scenario.
+
+- **Building QA** (development only, 2026-10-02) — the feed scenario the
+  shared session answers with (Live, a 12 s slow sync, a failed sync, zero
+  matches, one match), persisted under its own development key until
+  changed, and `Clear the feed cache` (relaunch afterwards to start the way
+  a first launch does). With `Resumed incomplete onboarding` it replays the
+  Building step from Stores without walking onboarding again. The QA profile
+  (`Saved choices` or `QA profile: no allergens, no stores`) presents the
+  saved choices to Building and Ready only, display only and never saved.
+  Set Live and Saved choices when done. Reconnecting a QA simulator to its Metro:
+  `xcrun simctl openurl <udid> "exp+recall-app://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A<port>"`.
 
 The purchase flow (`src/hooks/use-purchase-flow.tsx`) hands both paywall
 routes development controls beneath the plans in a

@@ -12,8 +12,9 @@
  * translucent. So no pixel may sit at 240–254, the drawing has no enclosed
  * translucent hole, and there is no background hint or timestamp chunk.
  *
- * M04 (the watchful pose) is on the "building your watch" interstitial
- * (2026-09-28) and beside the paywall's heading (the polish pass); M05 is
+ * M04 (the watchful pose) is beside the standalone paywall's heading (the
+ * polish pass); it left the Building step on 2026-10-02 for the approved
+ * binoculars scene, whose mascot is part of its own artwork. M05 is
  * approved but not yet integrated, and nothing may reference it until its own
  * milestone. M01 (the welcome-peek pose) left Welcome with the receipt
  * composition (2026-09-29), M02 (the helper pose) left States with the
@@ -218,12 +219,18 @@ test('M06 carries the mechanical repair of the supplied 1254px export, uniformly
   assert.ok(!DECODED.M06.chunks.includes('caBX'), 'the export metadata came back');
 });
 
-test('M04 on the building interstitial and the standalone paywall; M01, M02, M03, M05 and M06 are referenced nowhere', () => {
+test('M04 on the standalone paywall only; M01, M02, M03, M05 and M06 are referenced nowhere', () => {
+  // The Building step draws its approved binoculars scene (2026-10-02), not M04.
   const building = readFileSync(
     join(ROOT, 'src', 'components', 'onboarding', 'building-step.tsx'),
     'utf8',
   );
-  assert.ok(building.includes(`require('@/assets/brand/production/${APPROVED.M04}')`));
+  assert.ok(!building.includes(APPROVED.M04), 'M04 is back on the Building step');
+  assert.ok(
+    building.includes(
+      "require('@/assets/brand/production/lotly-building-grocery-search-scene.png')",
+    ),
+  );
   const sources: string[] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -244,14 +251,13 @@ test('M04 on the building interstitial and the standalone paywall; M01, M02, M03
     const name = APPROVED[id];
     assert.ok(!sources.some((source) => source.includes(name)), `${id} (${name}) is integrated`);
   }
-  // M04, the watchful pose, is the interstitial's and (polish pass) the
-  // STANDALONE paywall's heading aside — exactly those two sources. The
-  // lapsed subscriber's `/paywall` still composes `PaywallPanel`, whose
-  // aside is M04.
+  // M04, the watchful pose, is (polish pass) the STANDALONE paywall's heading
+  // aside — exactly that one source. The lapsed subscriber's `/paywall` still
+  // composes `PaywallPanel`, whose aside is M04; the file stays approved.
   assert.equal(
     sources.filter((source) => source.includes(APPROVED.M04)).length,
-    2,
-    'M04 is drawn somewhere other than the interstitial and the standalone paywall',
+    1,
+    'M04 is drawn somewhere other than the standalone paywall',
   );
   const panel = readFileSync(
     join(ROOT, 'src', 'components', 'paywall', 'paywall-panel.tsx'),

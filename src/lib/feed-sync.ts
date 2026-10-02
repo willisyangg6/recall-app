@@ -299,6 +299,14 @@ export interface FeedSession {
   syncIfOlderThan(maxAgeMs: number): Promise<FeedSyncOutcome | null>;
   /** Device-clock ms of the last successful sync, or null. Test/diagnostic. */
   lastSyncedAtMs(): number | null;
+  /**
+   * The newest complete corpus this session has handed out — a finished
+   * sync, or the cache when no sync has finished yet — or null. In memory
+   * only. It lets a screen that mounts right after another (Ready after the
+   * Building step) start from exactly the corpus the first one showed,
+   * instead of from a loading state and a second reconciliation.
+   */
+  served(): FeedItem[] | null;
 }
 
 export function createFeedSession(deps: SyncDependencies): FeedSession {
@@ -306,12 +314,18 @@ export function createFeedSession(deps: SyncDependencies): FeedSession {
   // Device clock, used only as the left side of a device-to-device
   // subtraction, so a wrong-but-stable device clock measures it correctly.
   let lastSyncedAtMs: number | null = null;
+  // The newest complete corpus handed out. A cache read never replaces a
+  // finished sync's corpus: the cache can only be as new as that sync.
+  let served: FeedItem[] | null = null;
+  let servedBySync = false;
   const clockMs = (): number => (deps.now ? deps.now().getTime() : Date.now());
 
   const session: FeedSession = {
     async getCached(): Promise<FeedItem[] | null> {
       const cached = await loadCachedFeed(deps.store);
-      return cached?.items ?? null;
+      const items = cached?.items ?? null;
+      if (items !== null && !servedBySync) served = items;
+      return items;
     },
     sync(): Promise<FeedSyncOutcome> {
       if (inFlight === null) {
@@ -321,6 +335,8 @@ export function createFeedSession(deps: SyncDependencies): FeedSession {
             // standing, so a broken network cannot make the session believe
             // it is up to date.
             lastSyncedAtMs = clockMs();
+            served = outcome.items;
+            servedBySync = true;
             return outcome;
           })
           .finally(() => {
@@ -346,6 +362,9 @@ export function createFeedSession(deps: SyncDependencies): FeedSession {
     },
     lastSyncedAtMs(): number | null {
       return lastSyncedAtMs;
+    },
+    served(): FeedItem[] | null {
+      return served;
     },
   };
   return session;
