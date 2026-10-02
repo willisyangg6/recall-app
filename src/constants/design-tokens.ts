@@ -76,6 +76,11 @@ export const color = {
   // `1 of 4` text beside it carries the step, so colour is never the only
   // channel (DESIGN.md, "Onboarding and paywall").
   'onboarding/progress': '#E2EE57',
+  // The onboarding paywall's benefit-icon plates (2026-10-01): the powder
+  // blue measured from the approved target, under its own name so this one
+  // mark is a recorded decision (DESIGN.md, "Onboarding and paywall"). Never
+  // a surface for text, a relevance signal or a severity.
+  'onboarding/benefit-plate': '#E1F0FE',
 } as const satisfies Record<string, HexColor>;
 
 export type ColorToken = keyof typeof color;

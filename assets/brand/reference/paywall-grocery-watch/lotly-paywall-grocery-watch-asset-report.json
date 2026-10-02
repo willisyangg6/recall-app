@@ -1,0 +1,659 @@
+{
+ "description": "Paywall grocery-watch hero: one static decorative composite (blue wave backdrop, illustrative example notification with its printed lettering, groceries, cutting board, cloth, paper bag, tabletop, Lotly mascot with lime rays, navy glove and yellow bell) cut from the founder-approved reference by deterministic crop + alpha. The printed headline was removed from the page cream; nothing else was repainted. Prepared for review; NOT imported by the app.",
+ "reportDate": "2026-10-01",
+ "status": "Founder approved the export on the cream page (2026-10-01). Imported by the onboarding paywall only (src/components/paywall/onboarding-paywall-panel.tsx); the production bytes are unchanged from the export.",
+ "reference": {
+  "path": "assets/brand/reference/lotly-onboarding-paywall-grocery-watch-target.png",
+  "sha256": "5e2025faf937470bb94ac485189adf7e658ba4bc548cc7ca93621967099238a4",
+  "bytes": 1605772,
+  "dimensions": [
+   934,
+   1683
+  ],
+  "chunks": [
+   "IHDR",
+   "caBX",
+   "IDAT",
+   "IEND"
+  ],
+  "manifest": "assets/brand/reference/lotly-onboarding-paywall-grocery-watch-source-manifest.json",
+  "manifestSha256Match": true,
+  "manifestDimensionsMatch": true,
+  "unchanged": true,
+  "colorProfile": "none (untagged RGB); caBX export chunk",
+  "supersedes": "the earlier navy-bell concept (this yellow-bell reference is the approved one)"
+ },
+ "measuredPage": {
+  "referenceCream": [
+   254,
+   254,
+   250
+  ],
+  "referenceCreamNoise": "Rows 0-99 x200-899, rows 766-782 and rows 1660-1682 (full width): mode (254,254,250); max-channel |C - cream| <= 2 everywhere measured (0 of 56,000 pixels above 3 in rows 20-99).",
+  "appBackgroundPage": "#FDFCF6 (253,252,246) from src/constants/design-tokens.ts (background/page)",
+  "note": "Edges are unmatted against the MEASURED reference cream, the colour the art was blended with. The token is 1-4 units darker, so composites on the token differ from the source by up to 4 in the cream itself."
+ },
+ "resolution": "Native reference pixels (934 px wide, app content without OS chrome). No upscaling; the export carries no more detail than the approved mock. Native: one uniform scale = device width / 934 (0.4304 pt/px at 402 pt, 0.4208 at 393 pt).",
+ "cropDecisions": {
+  "crop_xyxy_exclusive": [
+   0,
+   152,
+   934,
+   772
+  ],
+  "manifestHint_xyxy_exclusive": [
+   0,
+   145,
+   934,
+   780
+  ],
+  "top": "The wave's highest art is at the right edge: first pixel deviating from cream > 3 at row 159 (x 919), solid (> 24) at row 160 (x 931). Top 152 = 160 - 8 (the Welcome/States convention). A crop starting below the headline (row 275) would have cut the wave, which rises from row ~301 at x 200 to row ~160 at x 933.",
+  "bottom": "The tabletop/cloth vignette reaches page noise (max-channel deviation <= 2, full width) at row 766; the first benefit pixel (the icon circle's antialiasing at x 94-185) is row 783. The crop ends at 772 (exclusive): 11 page rows above the first benefit pixel, 6 rows past the reference's own fade. Reference rows 772-782 are page noise only (max deviation 2).",
+  "sides": "Full width 0-933: backdrop, cloth, orange, bag, greens and pepper run off both edges in the approved frame and keep those crops; nothing invented beyond the frame.",
+  "lowestObjects": "Mascot feet end near row 690 (solid navy, all opaque original); the cutting board's front edge ~row 740; the cloth's lowest fibres at the left page edge reach page by ~row 765. No object reaches the fade rows except the cream table/cloth vignette itself.",
+  "excluded": [
+   "Back chevron (reference x 40-61, y 38-76: above the crop)",
+   "printed headline \"Keep a closer / watch.\" (removed; see headlineRemoval)",
+   "benefit icons and text (start row 783/784)",
+   "plan cards and Save badge (rows 1106-1432)",
+   "purchase action (1454-1546)",
+   "disclosure and legal links (1563-1641)"
+  ]
+ },
+ "headlineRemoval": {
+  "overlap": "The printed glyphs and their 1-2 px light sharpening ring lie entirely on page cream: 0 ring pixels touch non-cream art. The glyphs also carry a faint drop shadow/glow that measurably extends ~13 px (mean deviation 7.5 at 3 px, 2.7 at 6 px, 1.2 at 10 px; 1 pixel above 3 at 14 px). Under \"closer\" (x ~575-641) that shadow runs into the wave crest's soft haze, which there starts 4-8 rows below the glyph baseline (186). That is the only overlap with non-cream art.",
+  "glyphs": "Glyph cores = luminance < 120 in rows 100-289, x < 700: exactly 17 components (the 11 letters of \"Keep a closer\" and the 6 of \"watch.\"), bbox x 43-641, y 115-274 (reference, inclusive). No other pixel qualifies.",
+  "footprint": "Every pixel within 14 px (Euclidean) of a glyph core: 73345 pixels in the reference, 53233 inside the crop (bounds x 29-654, rows 152-288).",
+  "fill": "Harmonic (Laplace) interpolation per channel, the Welcome caption repair's method: each footprint pixel iterated to the mean of its 4 neighbours (Gauss-Seidel, 151 iterations to max change < 0.01) with every non-footprint pixel fixed at its original value; rounded to 8-bit. 0 pixels changed outside the footprint.",
+  "result": {
+   "footprintPixelsInCrop": 53233,
+   "pixelsChangedInCrop": 50649,
+   "endedTransparentAsPage": 53077,
+   "remainVisibleAsWaveHaze": 156,
+   "visibleRepairBounds_reference_xyxy_inclusive": [
+    579,
+    185,
+    637,
+    201
+   ],
+   "visibleRepairMaxChannelDeltaVsOriginal": 2,
+   "note": "The only visible derived pixels are 156 haze pixels under \"closer\", each within 2 units of its original value; every other footprint pixel became page cream and keyed to alpha 0. No subject, glyph-adjacent object or opaque art pixel was repainted."
+  },
+  "derivedSource": "assets/brand/reference/paywall-grocery-watch/source/lotly-paywall-grocery-watch-scene-headline-removed-source.png",
+  "mask": "assets/brand/reference/paywall-grocery-watch/masks/lotly-paywall-grocery-watch-operation-footprints.png (crop coordinates; red = headline footprint now clear page, yellow = footprint pixels left visible (haze), grey = matted soft edge/haze, blue = lower fade rows, black = untouched opaque original)"
+ },
+ "operations": {
+  "sourceExport": "Rectangular crop of the reference; RGB samples copied unchanged (verified 0 differing samples); re-encoded losslessly as 8-bit RGB with explicit sRGB/gAMA/cHRM copied byte-for-byte from the approved States scene; the caBX export chunk dropped; no ICC, bKGD, tIME or text chunks.",
+  "exteriorKey": "Welcome/States key, unchanged in rule, on the headline-removed crop: flood from the crop's top row through every pixel that is not solid art (max-channel deviation from the measured cream > 24), never at or below reference row 310. Flooded pixels within 3 of the cream: alpha 0. Flooded pixels above that and solid pixels within 3 px of the exterior: alpha = projection of (C - cream) onto (F - cream), F = the nearest interior art pixel; RGB unmatted as cream + (C - cream) / alpha. One documented extension: for FLOODED pixels the F search radius is 40 px instead of 6, because the wave crest at x ~510-710 carries a 20-33-row soft haze (deviation 4-24) that the 6 px rule would have cleared, sharpening the approved crest. Solid edge pixels keep the 6 px radius.",
+  "exteriorFloodResult": {
+   "floodedPixels": 91494,
+   "lowestFloodedRowReference": 301,
+   "limitRowReference": 310,
+   "note": "The flood stops at the wave everywhere (lowest row 301, where the crest is lowest at x ~175-200) and never reaches the notification plate, the mascot's face, the rays or any object."
+  },
+  "keyCounts": {
+   "exteriorPagePixelsCleared": 85001,
+   "exteriorNoArtCleared": 6,
+   "exteriorNoArtClearedMaxDeviation": 4,
+   "softEdgeAndHazeMatted": 6487,
+   "hazePixelsMattedBeyond6px": 4720,
+   "solidEdgeMatted": 2779,
+   "solidEdgeKeptOpaque": 0,
+   "maxInteriorDistanceUsedPx": 40
+  },
+  "nearOpaqueLift": "Existing contract: alpha 240-254 set to 255 with the SOURCE RGB (not unmatted). Applied last, so it also covers the first fade rows.",
+  "clearRgb": "Existing contract: alpha 0 has RGB 0.",
+  "lowerFade": "Rows 753-771 (reference): alpha multiplied by 1 - smoothstep((row - 753 + 1) / 20), RGB left ORIGINAL (a compositing ramp, not a matte). Chosen by search over end rows 762-772 and lengths 12-30 for the smallest maximum composite error on the reference cream (4, the page-noise level) at the longest length. The reference has itself already faded the tabletop to page by row 766; this ramp only removes the opaque rectangle the crop would otherwise leave.",
+  "alphaHistory": {
+   "clear": 85007,
+   "edge1to239": 23965,
+   "lifted240to254": 3044,
+   "opaque": 470108,
+   "rgbZeroed": 85007
+  },
+  "tooling": "Pure Node (zlib PNG decode/encode, no canvas colour management) for pixels; @napi-rs/canvas (already a devDependency) only to lay out the comparison sheet. No dependency added. Scripts lived in the session scratchpad, as for Welcome, States and Stores.",
+  "nothingRegenerated": "No pixel of the mascot, face, glove, bell, rays, feet, notification plate or its lettering, foods, cloth, bag or tabletop was repainted, recoloured, sharpened, resampled or upscaled; no image generation was used."
+ },
+ "nativeLayout": {
+  "coordinateSpace": "Reference pixels (934-wide); native = px x (device width / 934). Values below also given as fraction of width and in pt at 402 (iPhone 17) and 393.",
+  "heroBox_xyxy_exclusive": [
+   0,
+   152,
+   934,
+   772
+  ],
+  "heroTopInContent": {
+   "px": 152,
+   "ofWidth": 0.16274,
+   "pt402": 65.4,
+   "pt393": 64
+  },
+  "heroHeight": {
+   "px": 620,
+   "ofWidth": 0.66381,
+   "pt402": 266.9,
+   "pt393": 260.9
+  },
+  "heroBottomInContent": {
+   "px": 772,
+   "ofWidth": 0.82655,
+   "pt402": 332.3,
+   "pt393": 324.8
+  },
+  "heroAspect": "934:620 (height = width x 0.66381)",
+  "headlineGlyphBbox_reference_xyxy_inclusive": [
+   43,
+   115,
+   641,
+   274
+  ],
+  "headlineRelativeToHeroTop": {
+   "glyphTop": {
+    "px": -37,
+    "ofWidth": -0.03961,
+    "pt402": -15.9,
+    "pt393": -15.6
+   },
+   "line1CapTop": {
+    "px": -34,
+    "ofWidth": -0.0364,
+    "pt402": -14.6,
+    "pt393": -14.3
+   },
+   "line1Baseline": {
+    "px": 35,
+    "ofWidth": 0.03747,
+    "pt402": 15.1,
+    "pt393": 14.7
+   },
+   "line2Baseline": {
+    "px": 122,
+    "ofWidth": 0.13062,
+    "pt402": 52.5,
+    "pt393": 51.3
+   },
+   "note": "Negative = above the hero's top edge. The headline overlaps the hero's transparent top band; it must be drawn ABOVE (z-order) or beside the hero, never clipped by it."
+  },
+  "headlineMetrics": {
+   "leftEdge": {
+    "px": 43,
+    "ofWidth": 0.04604,
+    "pt402": 18.5,
+    "pt393": 18.1
+   },
+   "line1AscenderTop": {
+    "px": 115,
+    "ofWidth": 0.12313,
+    "pt402": 49.5,
+    "pt393": 48.4
+   },
+   "line1CapTop": {
+    "px": 118,
+    "ofWidth": 0.12634,
+    "pt402": 50.8,
+    "pt393": 49.7
+   },
+   "line1XHeightTop": {
+    "px": 134,
+    "ofWidth": 0.14347,
+    "pt402": 57.7,
+    "pt393": 56.4
+   },
+   "line1Baseline": {
+    "px": 187,
+    "ofWidth": 0.20021,
+    "pt402": 80.5,
+    "pt393": 78.7
+   },
+   "line1DescenderBottom": {
+    "px": 203,
+    "ofWidth": 0.21734,
+    "pt402": 87.4,
+    "pt393": 85.4
+   },
+   "line2AscenderTop": {
+    "px": 203,
+    "ofWidth": 0.21734,
+    "pt402": 87.4,
+    "pt393": 85.4
+   },
+   "line2XHeightTop": {
+    "px": 223,
+    "ofWidth": 0.23876,
+    "pt402": 96,
+    "pt393": 93.8
+   },
+   "line2Baseline": {
+    "px": 274,
+    "ofWidth": 0.29336,
+    "pt402": 117.9,
+    "pt393": 115.3
+   },
+   "capHeight": {
+    "px": 69,
+    "ofWidth": 0.07388,
+    "pt402": 29.7,
+    "pt393": 29
+   },
+   "xHeight": {
+    "px": 53,
+    "ofWidth": 0.05675,
+    "pt402": 22.8,
+    "pt393": 22.3
+   },
+   "baselinePitch": {
+    "px": 87,
+    "ofWidth": 0.09315,
+    "pt402": 37.4,
+    "pt393": 36.6
+   }
+  },
+  "headlineToHeroClearance": {
+   "toFirstVisiblePixel": {
+    "px": 8,
+    "ofWidth": 0.00857,
+    "pt402": 3.4,
+    "pt393": 3.4,
+    "atReferenceX": 622,
+    "note": "under the \"r\" of \"closer\": the wave haze"
+   },
+   "toFirstOpaquePixel": {
+    "px": 22,
+    "ofWidth": 0.02355,
+    "pt402": 9.5,
+    "pt393": 9.3,
+    "atReferenceX": 328,
+    "note": "under \"watch.\""
+   }
+  },
+  "heroTopEdgeProfile": {
+   "columns": "[x, first alpha>0 row, first alpha-255 row] in HERO rows (add 152 for reference rows)",
+   "samples": [
+    [
+     0,
+     130,
+     136
+    ],
+    [
+     47,
+     139,
+     143
+    ],
+    [
+     94,
+     144,
+     148
+    ],
+    [
+     141,
+     147,
+     152
+    ],
+    [
+     188,
+     149,
+     153
+    ],
+    [
+     235,
+     148,
+     153
+    ],
+    [
+     282,
+     145,
+     149
+    ],
+    [
+     329,
+     140,
+     144
+    ],
+    [
+     376,
+     133,
+     137
+    ],
+    [
+     423,
+     124,
+     128
+    ],
+    [
+     470,
+     113,
+     117
+    ],
+    [
+     517,
+     82,
+     105
+    ],
+    [
+     564,
+     57,
+     92
+    ],
+    [
+     611,
+     48,
+     79
+    ],
+    [
+     658,
+     34,
+     66
+    ],
+    [
+     705,
+     33,
+     53
+    ],
+    [
+     752,
+     36,
+     41
+    ],
+    [
+     799,
+     26,
+     30
+    ],
+    [
+     846,
+     16,
+     21
+    ],
+    [
+     893,
+     10,
+     14
+    ],
+    [
+     933,
+     7,
+     11
+    ]
+   ]
+  },
+  "backChevron_reference_xyxy_inclusive": [
+   40,
+   38,
+   61,
+   76
+  ],
+  "nativeBands_reference_rows": {
+   "benefit1": [
+    784,
+    865
+   ],
+   "benefit2": [
+    890,
+    971
+   ],
+   "benefit3": [
+    995,
+    1076
+   ],
+   "annualCard": [
+    1106,
+    1291
+   ],
+   "monthlyCard": [
+    1297,
+    1432
+   ],
+   "purchaseAction": [
+    1454,
+    1546
+   ],
+   "disclosure": [
+    1563,
+    1584
+   ],
+   "legalLinks": [
+    1619,
+    1641
+   ]
+  },
+  "firstBenefitPixelRow": 783,
+  "gapHeroToFirstBenefit": {
+   "px": 11,
+   "ofWidth": 0.01178,
+   "pt402": 4.7,
+   "pt393": 4.6
+  }
+ },
+ "files": [
+  {
+   "role": "source, EXACT crop (reference/review, not runtime)",
+   "path": "assets/brand/reference/paywall-grocery-watch/source/lotly-paywall-grocery-watch-scene-source.png",
+   "sha256": "8f6b01d0fea8645905ee99c70d72e480dbf393dbb8142843f36a51e0d3b55087",
+   "bytes": 703070,
+   "dimensions": [
+    934,
+    620
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "crop_xyxy_exclusive": [
+    0,
+    152,
+    934,
+    772
+   ],
+   "mode": "8-bit RGB, opaque",
+   "rgbSamplesDifferingFromReferenceCrop": 0
+  },
+  {
+   "role": "source, DERIVED: exact crop with the printed headline removed (reference/review, not runtime)",
+   "path": "assets/brand/reference/paywall-grocery-watch/source/lotly-paywall-grocery-watch-scene-headline-removed-source.png",
+   "sha256": "75d6dff6c753fd10c29a72fc451a1ea65e288f3cb5748c6520c4e69eb01e26b1",
+   "bytes": 637448,
+   "dimensions": [
+    934,
+    620
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "crop_xyxy_exclusive": [
+    0,
+    152,
+    934,
+    772
+   ],
+   "mode": "8-bit RGB, opaque",
+   "pixelsDifferingFromExactCrop": 50649,
+   "allDifferencesInsideHeadlineFootprint": true
+  },
+  {
+   "role": "production (imported by the onboarding paywall)",
+   "path": "assets/brand/production/lotly-paywall-grocery-watch-scene.png",
+   "sha256": "4ff24a80d368ec297db450ace644a5b4b8a667141e9c7dd26f9f01327dce0df4",
+   "bytes": 714891,
+   "dimensions": [
+    934,
+    620
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "crop_xyxy_exclusive": [
+    0,
+    152,
+    934,
+    772
+   ],
+   "mode": "8-bit RGBA, non-interlaced",
+   "alphaRange": [
+    0,
+    255
+   ],
+   "alphaCounts": {
+    "clear": 85007,
+    "edge1to239": 23965,
+    "nearOpaque240to254": 0,
+    "opaque": 470108
+   },
+   "visibleBounds_xyxy_inclusive": [
+    0,
+    7,
+    933,
+    619
+   ],
+   "opaquePixelsWithRgbChangedVsExactSource": 0,
+   "clearPixelsWithNonZeroRgb": 0,
+   "lowestNonOpaqueRowAboveFade_reference": 304,
+   "lastRowMaxAlpha": 2,
+   "protectedBand": {
+    "rows_reference": [
+     305,
+     752
+    ],
+    "pixels": 418432,
+    "nonOpaque": 0,
+    "opaqueRgbDifferingFromExactSource": 0,
+    "contains": "notification plate and lettering, Example notification, mascot body/face/limbs/glove/bell/rays/feet, all foods, board, cloth, bag, tabletop"
+   },
+   "compositeVsSource": {
+    "aboveFade_onReferenceCream_vsDerived": {
+     "maxChannelDelta": 4,
+     "pixelsOver3": 8,
+     "pixels": 561334
+    },
+    "aboveFade_onBackgroundPage_vsDerived": {
+     "maxChannelDelta": 8,
+     "pixelsOver3": 86091,
+     "pixels": 561334
+    },
+    "aboveFade_outsideHeadlineFootprint_onReferenceCream_vsExact": {
+     "maxChannelDelta": 4,
+     "pixelsOver3": 8,
+     "pixels": 508101
+    },
+    "aboveFade_outsideHeadlineFootprint_onBackgroundPage_vsExact": {
+     "maxChannelDelta": 8,
+     "pixelsOver3": 32953,
+     "pixels": 508101
+    },
+    "softEdgeAndHaze_onReferenceCream_vsExact": {
+     "maxChannelDelta": 4,
+     "pixelsOver3": 8,
+     "pixels": 38261
+    },
+    "fadeRows_onReferenceCream": {
+     "maxChannelDelta": 4,
+     "pixelsOver3": 6,
+     "pixels": 17746
+    },
+    "fadeRows_onBackgroundPage": {
+     "maxChannelDelta": 6,
+     "pixelsOver3": 3583,
+     "pixels": 17746
+    }
+   },
+   "headlineGhost": {
+    "onReferenceCream_maxVisibleDeviationInsideFootprint": 6,
+    "note": "Only the 156 haze pixels remain visible inside the footprint; they are wave haze (original deviation <= 6), not lettering. 12x contrast panels E1/E5/E7 show no glyph trace."
+   }
+  },
+  {
+   "role": "operation footprint map (review only), hero/crop coordinates",
+   "path": "assets/brand/reference/paywall-grocery-watch/masks/lotly-paywall-grocery-watch-operation-footprints.png",
+   "sha256": "9a1f4aace5518314906cdc78e97ace3bcdbbbf2b582438890eeb4e9156ce2a19",
+   "bytes": 4823,
+   "dimensions": [
+    934,
+    620
+   ],
+   "colorType": "RGB",
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ],
+   "referenceBox_xyxy_exclusive": [
+    0,
+    152,
+    934,
+    772
+   ]
+  },
+  {
+   "role": "review sheet: A exact crop / B on background/page / C on dark #1E2433 / D alpha / E0 operation map / E1-E7 top wave and removed headline (incl. 12x contrast) / F1-F5 yellow bell, glove, feet, cloth corner / G1-G6 lower fade and benefit clearance / H1 target vs H2 full-screen reconstruction with native placeholders",
+   "path": "assets/brand/reference/paywall-grocery-watch/lotly-paywall-grocery-watch-asset-comparison.png",
+   "sha256": "35517f0288b9c6ad82ffcf29922ecd338756421c1b80f241492f9f4809be8663",
+   "bytes": 4746690,
+   "dimensions": [
+    1910,
+    6899
+   ],
+   "colorType": "RGBA",
+   "chunks": [
+    "IHDR",
+    "sBIT",
+    "sRGB",
+    "IDAT",
+    "IEND"
+   ],
+   "mode": "8-bit RGB"
+  }
+ ],
+ "protectedPixelFidelity": "Every alpha-255 pixel (470108) is RGB byte-identical to the EXACT crop (none lies in the visible repair). Rows 305-752 are 100% alpha 255. Non-opaque pixels exist only above the wave edge (lowest row 304) and in the fade rows 753-771.",
+ "limitations": [
+  "The hero is a DERIVED asset: 50,649 footprint pixels differ from the exact crop, all inside the 14 px headline footprint; 53,077 of the 53,233 footprint pixels in the crop are transparent page, and the 156 still visible are wave haze within 2 units of the original.",
+  "Haze top on non-cream surfaces: the established cream threshold (flooded pixels within 3 of the cream are cleared) meets a smooth haze carrying the page's +-2 noise, so the haze's faintest top (x ~510-710) ends in a speckled boundary (898 boundary pixels, alpha <= 27 of 255). Invisible on the cream page (composite within 4 of the source); faintly visible at 3x on the dark QA surface. Dark mode is intentionally deferred (DESIGN.md), so the hero only renders on background/page; no new matte was introduced for a surface the app does not use.",
+  "The lower band is the original table/cloth-to-page vignette, which is cream by design: on a non-cream surface (panel C, G5) it shows as a light band before alpha reaches 0. The asset is intended for background/page.",
+  "Edges are unmatted against the measured reference cream (254,254,250), 1-4 units lighter than the page token: composites on #FDFCF6 differ from the source by up to 8 on a few edge pixels (most of the 32,953 \"over 3\" pixels are the 4-unit blue-channel difference of the page itself showing through).",
+  "The mock is 934 px wide. At 402 pt and 3x the hero displays at ~1.29 device px per source px; it cannot be sharper than the approved mock."
+ ],
+ "artContract": {
+  "notification": "Illustrative, non-interactive example artwork; its printed \"Lotly / A recall matches your watch / Open to check the details\" and \"Example notification\" stay in the image as approved. It is not notification state, requests no permission and changes nothing about push delivery.",
+  "mascot": "Exact approved pixels, not split out: yellow bell, navy glove, lime rays, face and short limbs unchanged.",
+  "nativeOnly": [
+   "Back",
+   "headline",
+   "benefit rows and app icons",
+   "plan selection and prices",
+   "computed savings",
+   "purchase action",
+   "renewal disclosure",
+   "restore and legal links",
+   "existing status and independence notices"
+  ]
+ },
+ "runtime": "Only the production hero is imported, by src/components/paywall/onboarding-paywall-panel.tsx (pinned by src/lib/paywall-grocery-watch-assets.test.ts). The reference, manifest, source crops, mask, report, comparison and source kit are never bundled (verified by npx expo export --platform ios, 2026-10-01).",
+ "revisions": [
+  {
+   "date": "2026-10-01",
+   "change": "Initial export: crop 0,152 to 934,772; headline footprint radius 14; haze F radius 40; fade 753-771. Awaiting founder review."
+  },
+  {
+   "date": "2026-10-01",
+   "change": "Founder approved the export on the cream page; imported by the onboarding paywall. No pixel changed. Native placement: the hero top sits 122 target px above the headline's last baseline (src/lib/onboarding-paywall-presentation.ts)."
+  }
+ ]
+}

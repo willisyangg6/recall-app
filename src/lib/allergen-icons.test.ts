@@ -19,6 +19,7 @@ import {
   allergenIconName,
   allergenIconRows,
 } from './allergen-icons';
+import { PAYWALL_ICON_SOURCES } from './onboarding-paywall-presentation';
 import { READY_ICON_SOURCES } from './ready-presentation';
 import { STATES_ICON_SOURCES } from './state-map';
 
@@ -74,8 +75,10 @@ test('one family, with license, repository, commit and retrieval date recorded',
     assert.match(svg, /stroke-width="2"/, `${source.lucideName} has a foreign stroke weight`);
   }
   // No source outside the nine, the States step's six (P2B7Y,
-  // lib/state-map.ts) and the Ready step's cart and lock
-  // (lib/ready-presentation.ts): a stray glyph would be a second decision.
+  // lib/state-map.ts), the Ready step's cart and lock
+  // (lib/ready-presentation.ts) and the onboarding paywall's file-search and
+  // bell (lib/onboarding-paywall-presentation.ts): a stray glyph would be a
+  // second decision.
   // (The problem pictograph's user-round was vendored 2026-09-28 and
   // retired 2026-09-29 with the authored pictograph.)
   const vendored = readdirSync(SOURCES)
@@ -83,11 +86,16 @@ test('one family, with license, repository, commit and retrieval date recorded',
     .sort();
   assert.deepEqual(
     vendored,
-    [...ALLERGEN_ICON_SOURCES, ...STATES_ICON_SOURCES, ...READY_ICON_SOURCES]
+    [
+      ...ALLERGEN_ICON_SOURCES,
+      ...STATES_ICON_SOURCES,
+      ...READY_ICON_SOURCES,
+      ...PAYWALL_ICON_SOURCES,
+    ]
       .map((s) => `${s.lucideName}.svg`)
       .sort(),
   );
-  for (const source of [...STATES_ICON_SOURCES, ...READY_ICON_SOURCES]) {
+  for (const source of [...STATES_ICON_SOURCES, ...READY_ICON_SOURCES, ...PAYWALL_ICON_SOURCES]) {
     const svg = readFileSync(join(SOURCES, `${source.lucideName}.svg`), 'utf8');
     assert.match(svg, /viewBox="0 0 24 24"/, `${source.lucideName} is not on the 24 grid`);
     assert.match(svg, /stroke-width="2"/, `${source.lucideName} has a foreign stroke weight`);
@@ -113,6 +121,40 @@ test('the Ready cart is Lucide’s own shopping-cart at the pinned commit, raste
       'cc774d083446101bce37ad91eba07d8b4b790a15850221705a4f3676d967eb44',
       '54d204d496204a38e40de2f20b725cba01497785580a755f6947dce0482892d5',
     ],
+  );
+});
+
+test('the paywall’s file-search and bell are Lucide’s own glyphs at the pinned commit, rasterised natively at every scale', () => {
+  // Byte-identical to lucide-icons/lucide@f06ac67e…/icons/file-search-corner.svg
+  // and …/icons/bell.svg, retrieved from the pinned commit on 2026-10-01 (the
+  // same fetch reproduced the vendored shopping-cart byte for byte).
+  const sha = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
+  assert.equal(
+    sha(join(SOURCES, 'file-search-corner.svg')),
+    '4830c66d8d8b4218a9945b6f2673942bb79e4638fa5fb4df051d61e3a9629a85',
+  );
+  assert.equal(
+    sha(join(SOURCES, 'bell.svg')),
+    '394889e9631fe3a9a63be9a479a95b451b708e432d895978d21d9130b5ee5dbe',
+  );
+  // True 24, 48 and 72px rasterisations (scripts/render-onboarding-assets.mjs,
+  // `native`); the renderer is deterministic, so the verified bytes are pinned.
+  const ICONS = join(SOURCES, '..', '..', 'icons');
+  const files = (icon: string) =>
+    ['', '@2x', '@3x'].map((suffix) => sha(join(ICONS, `${icon}${suffix}.png`)));
+  assert.deepEqual(files('file-search'), [
+    '8cad5f66ad4e9d8a9df79f2edb3a940173dbd2410377c7ae52c69a86bb98e819',
+    'a0f4147ec6b842f18141bb3de21b2657c0aa780df33430365a4ef0d0877ce362',
+    'c9a722eaf04022bf07d31ff2f7cdefead39f9e0862d7670d255b4c5f6562ff92',
+  ]);
+  assert.deepEqual(files('bell'), [
+    'bd0f6879909e3d9886e872594531a976874e46965c38b367ccf509b5d7694753',
+    'c2d57f7c95b22a32e616197fbbb70a42fcdbe756d2222c0de065ac22169aa46f',
+    '8e470d2eda85c3ba27e416dc604674d224ff1472c444ad7d46a48a0d796c6d66',
+  ]);
+  assert.deepEqual(
+    PAYWALL_ICON_SOURCES.map((s) => s.icon),
+    ['file-search', 'bell'],
   );
 });
 

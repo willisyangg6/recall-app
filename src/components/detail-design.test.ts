@@ -398,11 +398,20 @@ test('no share, bell, retailer, or helper-callout control was copied from Figma'
   }
   // P2B7X.1 added `chevron-left` for the onboarding screens' back control
   // (a rotation of `chevron-down`, like `chevron-right`); it is no longer an
-  // unused Figma glyph. Share, bell and sliders still have no behaviour.
-  for (const glyph of ['share', 'bell', 'sliders']) {
+  // unused Figma glyph. Share and sliders still have no behaviour.
+  for (const glyph of ['share', 'sliders']) {
     assert.ok(!ICON.includes(`'${glyph}'`), `the icon set gained an unused ${glyph} glyph`);
     assert.ok(!ICON.includes(`${glyph}:`), `the icon set gained an unused ${glyph} glyph`);
   }
+  // The onboarding paywall (2026-10-01) added a `bell` GLYPH for its second
+  // benefit row: drawing beside the words `Get matching recall alerts`, in a
+  // row that is not a control. Figma's bell CONTROL is still nowhere: the
+  // glyph is named by the paywall's benefit list and by no other source.
+  const bellUsers = clientSourceFiles()
+    .filter(({ source }) => /['"]?\bbell['"]?:|['"]bell['"]/.test(codeOnly(source)))
+    .map(({ path }) => path)
+    .sort();
+  assert.deepEqual(bellUsers, ['components/ui/icon.tsx', 'lib/onboarding-paywall-presentation.ts']);
   // The pressables the screen adds are its two external links and the title's
   // four-line disclosure (P2B7V); every other control is a shared primitive
   // with real behaviour.

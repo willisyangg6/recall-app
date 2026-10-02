@@ -78,6 +78,11 @@ const GLYPHS = {
   // src/lib/ready-presentation.ts.
   'shopping-cart': require('@/assets/icons/shopping-cart.png') as ImageSourcePropType,
   lock: require('@/assets/icons/lock.png') as ImageSourcePropType,
+  // The onboarding paywall's benefit rows (2026-10-01): the same vendored
+  // Lucide family, box and stroke (`file-search` is Lucide's
+  // `file-search-corner`). Provenance in src/lib/onboarding-paywall-presentation.ts.
+  'file-search': require('@/assets/icons/file-search.png') as ImageSourcePropType,
+  bell: require('@/assets/icons/bell.png') as ImageSourcePropType,
 } as const;
 
 export type IconName = keyof typeof GLYPHS;

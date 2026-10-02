@@ -31,6 +31,7 @@ colors:
   icon/brand: '#3560A9'
 
   onboarding/progress: '#E2EE57'
+  onboarding/benefit-plate: '#E1F0FE'
 
   risk/critical/background: '#EF4E47'
   risk/critical/foreground: '#001F3E'
@@ -462,6 +463,12 @@ accent.
 progress, step 3 of 5`) is the channel that does not depend on colour —
   there is no visible numeric copy. It is never a surface, a fill for
   text, or a severity.
+- **Onboarding benefit plate (`onboarding/benefit-plate`, `#E1F0FE`)** is the
+  powder-blue circle behind each benefit icon on the onboarding paywall
+  (2026-10-01), measured from the approved grocery-watch target. Its own
+  name, like `onboarding/progress`, so the one mark is a recorded decision.
+  It holds only an `icon/primary` glyph; it is never a surface for text, a
+  relevance signal or a severity.
 
 Use semantic colors rather than reaching directly for palette primitives.
 Components should conceptually resolve as:
@@ -1045,7 +1052,7 @@ is drawn full at once; nothing loops. The
 scrolling content column at the 16pt margin, capped at `max-content-width`:
 the headline in `heading-1`, the body in `body` `text/secondary` (with an
 optional decorative `aside` beside them at the trailing edge, which the text
-never overlaps: the paywall's mascot), then the screen's own content,
+never overlaps: the standalone paywall's mascot), then the screen's own content,
 `spacing/16` apart. A sticky footer on the page colour
 above a `border/subtle` hairline, padded by the bottom inset, holding the
 screen's actions as the shared `Button` (primary for the one forward action,
@@ -1288,8 +1295,8 @@ simply there and simply gone. No gradient, blur or new shadow. No alphabet
 index, section headers, location or ranking. Behaviour and verification:
 `docs/recall-onboarding-and-paywall.md` §6.3.
 
-The redesigns of the paywall and the notification education are later
-milestones; the Preview's is below. On States, Continue is disabled with
+The redesign of the notification education is a later milestone; the
+Preview's and the onboarding paywall's (2026-10-01) are below. On States, Continue is disabled with
 nothing chosen, its reason spoken as its hint and the requirement written in
 the helper (above). On the optional steps Continue is never disabled.
 
@@ -1473,13 +1480,14 @@ equivalent and the saving share one caption line (`$2.50/month · Save 50%`),
 so Annual measures ~97pt and Monthly ~72pt at the default size, with the
 radios aligned and no dead area on the right; every price stays the store's
 own string, and the line wraps between words at larger sizes. They appear
-only on the paywalls (below).
+only on the standalone paywall (below); the onboarding paywall has its own
+stacked cards.
 
-**The paywall** — one composition, two routes: `/onboarding/paywall`, which
-Ready's `See my plan` opens, and the standalone `/paywall` a lapsed
-subscriber meets; both draw the same shared pieces over the one purchase
-flow. The frame without progress; its back control is the one way back (to
-the Ready step). M04, the watchful pose, beside the heading in the frame's
+**The standalone paywall** — `/paywall`, which a lapsed subscriber meets.
+Until 2026-10-01 the onboarding paywall shared this composition; it now has
+its own (next paragraph), and both draw the same shared pieces over the one
+purchase flow. The frame without progress; its back control is the one way
+back (to the Ready step). M04, the watchful pose, beside the heading in the frame's
 `aside` at 120pt (the selectors' seat; omitted from text scale 1.5). The
 headline `Stay ahead of recalls that affect you.`, three benefit rows (a
 decorative 20pt navy `check` in `icon/primary` beside `body` text), then
@@ -1514,9 +1522,79 @@ development-store controls (development builds only) and the independence
 note in `caption`. No close, skip, dismiss, free, trial, lifetime,
 countdown, crossed-out price or scarcity — and no preference summary,
 example recall, notification preview or second "ready" message: those are
-Ready's and education's. A shopper already entitled meets the entitled
-panel instead: the `Subscription active` mark on lime, the benefits, and a
-fixed `Continue` footer — never a purchase ask.
+Ready's and education's.
+
+**The onboarding paywall (the grocery watch, 2026-10-01)** —
+`/onboarding/paywall`, which Ready's `See my plan` opens: the
+founder-approved composition
+(`assets/brand/reference/lotly-onboarding-paywall-grocery-watch-target.png`,
+934×1683) rebuilt from one approved image and native UI, at one scale
+(`width / 934`; 0.4304pt per target pixel at 402pt). Its own page like
+States, keeping the frame's top bar (Back, no progress). From the top:
+
+- The headline `Keep a closer watch.` in Public Sans Bold at **41pt on a
+  38pt leading** (the target's 29.7pt capitals and 596px of ink; baselines
+  37.4pt apart), breaking after `closer` by a 300pt × text-scale measure.
+  The tight leading needs two measured rules: iOS keeps the font's descent
+  at the bottom of each line box, so the last baseline sits 9.2pt above the
+  block's bottom; and Bold's ascenders rise 2.2pt above the first line box,
+  so the Text carries that much top padding of its own (it clipped `K` and
+  `l` without it).
+- The hero, `lotly-paywall-grocery-watch-scene.png` (934×620 RGBA, target
+  rows 152–771): the blue wave, the illustrative notification with its
+  printed `Example notification`, the groceries and the mascot with the
+  yellow bell and navy glove, drawn whole with `contain` across the page
+  width and hidden from assistive technology. It is drawn up under the
+  headline from the target's placement (its top edge 122px, 52.5pt at
+  402pt, above the headline's last baseline) less 7pt of breathing room
+  (spacing pass): the wave's closest approach beneath `watch.` is about
+  14pt on iPhone 17 and 12.5pt on an SE, and it still rises beside the
+  headline on the right. The headline is above the hero in drawing order,
+  so nothing covers the text. Static, no entrance. From text scale
+  1.5 the headline takes the `display` base (33pt, scaled) and the hero
+  follows it instead of sitting under it.
+- Three benefit rows at the page inset — each plate's left edge is the plan
+  cards' — a 36pt circular plate in
+  `onboarding/benefit-plate` holding a 20pt `icon/primary` line glyph
+  (`file-search`, `bell`, `bookmark`), then, 12pt from the plate and across
+  the rest of the width, the heading in Bold 15/20 and the explanation in
+  Regular 13/18 `text/secondary`. Each row is one spoken
+  element; the glyph is drawing.
+- The plans stacked: white `radius/12` cards with a `border/default`
+  border that turns a 2px `text/primary` navy when selected (the padding
+  gives the pixel back), 8pt vertical padding (about 12pt of optical space
+  around the text; Annual 82.7pt, Monthly 61.7pt tall), a 20pt ring with a navy dot, the title in
+  SemiBold 14/19, the store's price and period in Bold 18/23 (`$29.99 /
+year`), and on Annual the store-derived `$2.50/month equivalent` in
+  13/17 `text/secondary` and a `Save 50%` pill — `background/accent`, fully
+  rounded, Bold 13 — on the title row's trailing edge, shown only when the
+  store's prices show a positive saving in one currency. The pill is
+  drawing; the radio speaks the plan, its full charge and period, the
+  equivalent and the saving.
+- The development controls (development builds only), the independence
+  note, and the shared footer in its `onboarding` appearance: the notice,
+  the 51pt pill (the shared Button's primary treatment, Ready's 16pt
+  label) naming the chosen commitment, the chosen plan's renewal
+  disclosure (`Renews yearly.` / `Renews monthly.`, and the period-neutral
+  sentence while there is no offering), and the four footer actions. The
+  footer's hairline shows only while content runs beneath it.
+
+Where the mock's type is below the shared scale it keeps the shared floor:
+the benefit explanations, the equivalent and the pill are 13pt (the
+mock's ≈11, 10.7 and 12.8pt) and the disclosure and footer actions stay
+`caption` (the mock's ≈10pt). Measured on the iPhone 17 simulator against
+the width-normalised target under the real 62pt status bar (after the
+spacing pass): the headline's capitals 3.3pt lower, the hero 11pt lower
+(the 7pt of breathing room included), the Annual card's top 3.7pt lower,
+Monthly 20.7pt and the purchase action 28.7pt lower, because the real
+controls (51pt action, 44pt links, legible type) are taller than the
+mock's. Both plans are above the pinned footer at the default size on
+iPhone 17 (Monthly ends 8.3pt above its hairline); on an SE the page
+scrolls. The retired pieces — M04 beside the heading, the body,
+check-row benefits and `BEST VALUE` — remain only on the standalone
+paywall. A shopper already entitled meets the entitled panel on the same
+page: the headline and hero, the `Subscription active` mark on lime, the
+benefits, and a fixed 51pt `Continue` — never a purchase ask.
 
 **Notification education.** `Subscription active` as a compact
 `body-small-bold` mark on `background/accent` (rendered as written, not
@@ -2442,7 +2520,11 @@ and the label carries the meaning. Every glyph is decorative and hidden from
 assistive technology; every one of Profile's allergen rows uses one treatment
 (20pt, `icon/secondary` unchecked, `icon/primary` checked). The onboarding
 Allergens grid draws the Lotly pictograms instead ("Onboarding and
-paywall"); this set is unchanged and still serves Profile. No emoji, no second family, no food
+paywall"); this set is unchanged and still serves Profile. The onboarding
+paywall's benefit rows (2026-10-01) added `file-search` (Lucide's
+`file-search-corner`) and `bell` from the same vendored family, commit, box
+and stroke; the bell is drawing in a row that is not a control, and the
+Feed still has no bell control. No emoji, no second family, no food
 symbol drawn by hand. The "Branding status" rule against inventing food
 icons is unchanged: nothing here is invented, and the founder directed the
 set.

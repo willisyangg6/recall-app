@@ -10,7 +10,10 @@
  * Nothing of its own. The purchase flow (hooks/use-purchase-flow.tsx) owns
  * the offering, the plan, the purchase, the restore, the notices, the legal
  * links and the development controls; this route composes it into
- * `PaywallPanel`. A verified purchase or restore completes personalization
+ * `OnboardingPaywallPanel`, the approved grocery-watch composition
+ * (2026-10-01; components/paywall/onboarding-paywall-panel.tsx). The
+ * standalone `/paywall` keeps `PaywallPanel` over the same flow. A verified
+ * purchase or restore completes personalization
  * WITH the entitlement in one commit (hooks/use-access.tsx), so the gate
  * goes straight to notification education and never through the paywall
  * phase. A cancellation or an error stays here with every choice kept. Back
@@ -24,7 +27,10 @@
 import { useCallback } from 'react';
 import { router, useFocusEffect } from 'expo-router';
 
-import { EntitledPaywallPanel, PaywallPanel } from '@/components/paywall/paywall-panel';
+import {
+  OnboardingEntitledPanel,
+  OnboardingPaywallPanel,
+} from '@/components/paywall/onboarding-paywall-panel';
 import { useAccess } from '@/hooks/use-access';
 import { usePurchaseFlow } from '@/hooks/use-purchase-flow';
 import { isEntitled } from '@/lib/entitlement';
@@ -40,7 +46,7 @@ export default function OnboardingPaywallScreen() {
   const onBack = () => goBackFrom('paywall', router);
   if (isEntitled(access.entitlement)) {
     return (
-      <EntitledPaywallPanel
+      <OnboardingEntitledPanel
         onBack={onBack}
         onContinue={() => void access.completePersonalization()}
       />
@@ -56,8 +62,8 @@ export default function OnboardingPaywallScreen() {
 function PurchasePaywall({ onBack }: { onBack: () => void }) {
   const { purchase, developmentControls } = usePurchaseFlow();
   return (
-    <PaywallPanel purchase={purchase} onBack={onBack}>
+    <OnboardingPaywallPanel purchase={purchase} onBack={onBack}>
       {developmentControls}
-    </PaywallPanel>
+    </OnboardingPaywallPanel>
   );
 }

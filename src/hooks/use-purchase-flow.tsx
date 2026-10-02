@@ -28,10 +28,12 @@
  * The simulated store's controls exist in a development build only: the
  * branch is the bare `__DEV__` identifier and both modules are required
  * inside it, so a release bundle folds them away (Metro drops a dead
- * branch's `require`, which a static import could never achieve).
+ * branch's `require`, which a static import could never achieve). The
+ * Design Preview can hide them for a clean capture (2026-10-01); they return
+ * on the next launch.
  */
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { AccessibilityInfo, Linking } from 'react-native';
 
 import type { PurchaseProps } from '@/components/paywall/paywall-panel';
@@ -67,13 +69,29 @@ const DevelopmentControls = __DEV__
 const developmentScenarios = __DEV__
   ? // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('@/lib/purchases/development-scenarios') as ScenariosModule)
-      .DEVELOPMENT_PURCHASE_SCENARIOS
   : null;
 
 /** The scenario's preselected plan in development; Annual otherwise. */
 function initialPlanFor(id: string): PlanPeriod {
-  return developmentScenarios?.find((scenario) => scenario.id === id)?.initialPlan ?? 'annual';
+  return (
+    developmentScenarios?.DEVELOPMENT_PURCHASE_SCENARIOS.find((scenario) => scenario.id === id)
+      ?.initialPlan ?? 'annual'
+  );
 }
+
+/**
+ * Whether the paywall development controls are hidden for a clean capture
+ * (development-scenarios.ts). Behind the bare `__DEV__` identifier, so a
+ * release bundle folds the whole branch: no controls to hide, nothing to
+ * subscribe to, and none of the development store's names.
+ */
+const controlsHiddenStore =
+  __DEV__ && developmentScenarios
+    ? {
+        subscribe: developmentScenarios.subscribeDevelopmentControlsHidden,
+        get: developmentScenarios.developmentControlsHidden,
+      }
+    : { subscribe: () => () => {}, get: () => false };
 
 /** Speak an outcome the shopper did not otherwise hear. */
 function announce(notice: PaywallNoticeKind) {
@@ -93,6 +111,10 @@ export function usePurchaseFlow(): PurchaseFlow {
     access.entitlement.kind === 'inactive' && access.entitlement.reason === 'unconfirmed';
   const [view, setView] = useState<PaywallView>(() => initialPaywallView('annual', unconfirmed));
   const [destinationNotice, setDestinationNotice] = useState<string | null>(null);
+  const controlsHidden = useSyncExternalStore(
+    controlsHiddenStore.subscribe,
+    controlsHiddenStore.get,
+  );
 
   /** Ask the store; the view is already in its loading state when this runs. */
   const loadOfferings = useCallback(async (provider: PurchaseProvider) => {
@@ -173,19 +195,20 @@ export function usePurchaseFlow(): PurchaseFlow {
       onFooterAction: footerAction,
       destinationNotice,
     },
-    developmentControls: DevelopmentControls ? (
-      <DevelopmentControls
-        onScenarioApplied={(id) => {
-          setView((prior) => ({
-            ...prior,
-            offerings: { kind: 'loading' },
-            selectedPlan: initialPlanFor(id),
-            notice: null,
-            operation: 'idle',
-          }));
-          void loadOfferings(access.provider);
-        }}
-      />
-    ) : null,
+    developmentControls:
+      DevelopmentControls && !controlsHidden ? (
+        <DevelopmentControls
+          onScenarioApplied={(id) => {
+            setView((prior) => ({
+              ...prior,
+              offerings: { kind: 'loading' },
+              selectedPlan: initialPlanFor(id),
+              notice: null,
+              operation: 'idle',
+            }));
+            void loadOfferings(access.provider);
+          }}
+        />
+      ) : null,
   };
 }

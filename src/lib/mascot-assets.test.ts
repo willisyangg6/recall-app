@@ -218,7 +218,7 @@ test('M06 carries the mechanical repair of the supplied 1254px export, uniformly
   assert.ok(!DECODED.M06.chunks.includes('caBX'), 'the export metadata came back');
 });
 
-test('M04 on the building interstitial and the paywall; M01, M02, M03, M05 and M06 are referenced nowhere', () => {
+test('M04 on the building interstitial and the standalone paywall; M01, M02, M03, M05 and M06 are referenced nowhere', () => {
   const building = readFileSync(
     join(ROOT, 'src', 'components', 'onboarding', 'building-step.tsx'),
     'utf8',
@@ -245,15 +245,40 @@ test('M04 on the building interstitial and the paywall; M01, M02, M03, M05 and M
     assert.ok(!sources.some((source) => source.includes(name)), `${id} (${name}) is integrated`);
   }
   // M04, the watchful pose, is the interstitial's and (polish pass) the
-  // paywall's heading aside — exactly those two sources.
+  // STANDALONE paywall's heading aside — exactly those two sources. The
+  // lapsed subscriber's `/paywall` still composes `PaywallPanel`, whose
+  // aside is M04.
   assert.equal(
     sources.filter((source) => source.includes(APPROVED.M04)).length,
     2,
-    'M04 is drawn somewhere other than the interstitial and the paywall',
+    'M04 is drawn somewhere other than the interstitial and the standalone paywall',
   );
   const panel = readFileSync(
     join(ROOT, 'src', 'components', 'paywall', 'paywall-panel.tsx'),
     'utf8',
   );
   assert.ok(panel.includes(`require('@/assets/brand/production/${APPROVED.M04}')`));
+  assert.ok(panel.includes('<WatchfulMascot />'));
+  const standalone = readFileSync(join(ROOT, 'src', 'app', 'paywall.tsx'), 'utf8');
+  assert.ok(standalone.includes('<PaywallPanel purchase={purchase}'));
+  // The onboarding paywall (the grocery-watch redesign, 2026-10-01) retired
+  // the shield aside: its mascot is the approved hero's own, holding the
+  // yellow bell, and neither its panel nor its route reaches a mascot file
+  // or the standalone panel that draws M04.
+  const onboardingPanel = readFileSync(
+    join(ROOT, 'src', 'components', 'paywall', 'onboarding-paywall-panel.tsx'),
+    'utf8',
+  );
+  const onboardingRoute = readFileSync(
+    join(ROOT, 'src', 'app', 'onboarding', 'paywall.tsx'),
+    'utf8',
+  );
+  for (const [name, source] of [
+    ['onboarding paywall panel', onboardingPanel],
+    ['onboarding paywall route', onboardingRoute],
+  ] as const) {
+    assert.ok(!source.includes('lotly-mascot-'), `${name} draws a mascot file`);
+    assert.ok(!source.includes('WatchfulMascot'), `${name} draws the shield aside`);
+    assert.ok(!/<PaywallPanel\b/.test(source), `${name} composes the standalone panel`);
+  }
 });

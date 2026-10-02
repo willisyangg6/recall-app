@@ -17,9 +17,9 @@
  *                   (Restore Purchases, Terms, Privacy, Support) as text
  *                   buttons at the 44pt target, always present
  *   usePurchaseFooterSlots
- *                   the standalone paywall's placement rule: the CTA is
- *                   sticky, and the terms join it there at ordinary text
- *                   sizes or move inline from the accessibility sizes
+ *                   the paywalls' placement rule: the CTA is sticky, and the
+ *                   terms join it there at ordinary text sizes or move
+ *                   inline from the accessibility sizes
  *
  * Two screens compose them:
  *
@@ -27,12 +27,14 @@
  *                  frame without progress, back to the Ready step, the
  *                  headline and body, the benefits and the plans, the CTA
  *                  immediately available
- *   PreviewStep    the Ready step (components/onboarding/preview-step.tsx):
- *                  the plans follow the personalized summary, the terms are
- *                  always scroll content, and the CTA pins itself only once
- *                  the plan choice is on screen (lib/ready-presentation.ts)
+ *   OnboardingPaywallPanel
+ *                  the onboarding paywall (onboarding-paywall-panel.tsx,
+ *                  2026-10-01): the approved grocery-watch composition with
+ *                  its own plan cards, over the same CTA and terms in their
+ *                  explicit `onboarding` appearance (the 51pt pill, and the
+ *                  chosen plan's renewal disclosure)
  *
- * Neither holds purchase state, and neither duplicates a handler.
+ * None holds purchase state, and none duplicates a handler.
  *
  * ## What is not here
  *
@@ -83,8 +85,9 @@ import {
   typography,
 } from '@/constants/design-tokens';
 import type { PlanPeriod } from '@/lib/entitlement';
+import { CTA_MIN_HEIGHT, PAYWALL_TYPE } from '@/lib/onboarding-paywall-presentation';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
-import { CONTINUE_CTA, EDUCATION_SUCCESS, INDEPENDENCE_NOTE } from '@/lib/onboarding-copy';
+import { INDEPENDENCE_NOTE } from '@/lib/onboarding-copy';
 import { motionAllowed } from '@/lib/onboarding-state';
 import { HIDE_MASCOT_AT_SCALE, MASCOT_ENTRANCE } from '@/lib/state-map';
 import {
@@ -131,12 +134,13 @@ export interface PurchaseProps {
 }
 
 /**
- * The dedicated paywall: the onboarding frame without progress, its one way
- * back (to the Ready step), the headline and body, the benefits, the plans,
+ * The standalone paywall a lapsed subscriber meets (`/paywall`): the
+ * onboarding frame without progress, its one way back (to the Ready step),
+ * the headline and body beside M04, the check-row benefits, the plans,
  * whatever the route adds beneath (its development controls), the
- * independence note, and the shared purchase footer. Two routes compose it
- * identically: `/onboarding/paywall` (a first-time shopper, from Ready's
- * `See my plan`) and the standalone `/paywall` (a lapsed subscriber).
+ * independence note, and the shared purchase footer. The onboarding paywall
+ * (`/onboarding/paywall`) composed it too until the grocery-watch redesign
+ * (2026-10-01) gave it `OnboardingPaywallPanel` over the same flow.
  */
 export function PaywallPanel({
   purchase,
@@ -165,36 +169,6 @@ export function PaywallPanel({
         {INDEPENDENCE_NOTE}
       </Text>
       {slots.inlineTerms}
-    </OnboardingFrame>
-  );
-}
-
-/**
- * The onboarding paywall for a shopper who is ALREADY entitled (restored
- * elsewhere, or subscribed on another device) with onboarding unfinished:
- * never an actionable purchase — the plans, terms and store are left out,
- * the active subscription is said plainly, and `Continue` completes
- * personalization so the gate opens notification education.
- */
-export function EntitledPaywallPanel({
-  onBack,
-  onContinue,
-}: {
-  onBack: () => void;
-  onContinue: () => void;
-}) {
-  const { fontScale } = useWindowDimensions();
-  return (
-    <OnboardingFrame
-      headline={PAYWALL_HEADLINE}
-      body={PAYWALL_BODY}
-      back={{ label: PAYWALL_BACK_LABEL, hint: PAYWALL_BACK_HINT, onPress: onBack }}
-      aside={fontScale < HIDE_MASCOT_AT_SCALE ? <WatchfulMascot /> : null}
-      footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}>
-      <PaywallNotice tone="success" kind="entitled">
-        {EDUCATION_SUCCESS}
-      </PaywallNotice>
-      <BenefitChecks items={PAYWALL_BENEFITS} />
     </OnboardingFrame>
   );
 }
@@ -297,12 +271,32 @@ export function PurchasePlans({ purchase }: { purchase: PurchaseProps }) {
 }
 
 /**
+ * How the shared purchase pieces are drawn. `standard` is the standalone
+ * paywall's; `onboarding` is the grocery-watch paywall's 51pt pill. The
+ * state, the words and the handlers are the same in both.
+ */
+export type PurchaseAppearance = 'standard' | 'onboarding';
+
+/**
  * The last outcome's notice and the one primary action that names the
  * selected commitment with the store's price — the only thing either screen
  * ever pins.
  */
-export function PurchaseCta({ purchase }: { purchase: PurchaseProps }) {
+export function PurchaseCta({
+  purchase,
+  appearance = 'standard',
+}: {
+  purchase: PurchaseProps;
+  appearance?: PurchaseAppearance;
+}) {
   const shown = paywallPresentation(purchase.view);
+  const action = {
+    label: shown.cta.label,
+    disabled: !shown.cta.enabled,
+    busy: shown.cta.busy,
+    busyLabel: shown.cta.busyLabel,
+    onPress: purchase.onSubscribe,
+  };
   return (
     <>
       {shown.notice ? (
@@ -310,14 +304,50 @@ export function PurchaseCta({ purchase }: { purchase: PurchaseProps }) {
           {shown.notice.text}
         </PaywallNotice>
       ) : null}
-      <Button
-        label={shown.cta.label}
-        disabled={!shown.cta.enabled}
-        busy={shown.cta.busy}
-        busyLabel={shown.cta.busyLabel}
-        onPress={purchase.onSubscribe}
-      />
+      {appearance === 'onboarding' ? <OnboardingActionPill {...action} /> : <Button {...action} />}
     </>
+  );
+}
+
+/**
+ * The onboarding's 51pt pill: the shared Button's primary treatment — its
+ * fill and disabled fill, label colours, face, pressed opacity, role,
+ * disabled and busy state, and its busy word — at the States and Stores
+ * height with Ready's 16pt purchase-path label. The shared Button itself has
+ * no size override and is unchanged. The onboarding paywall's purchase
+ * action and its entitled `Continue`.
+ */
+export function OnboardingActionPill({
+  label,
+  onPress,
+  disabled = false,
+  busy = false,
+  busyLabel,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  busy?: boolean;
+  busyLabel?: string;
+}) {
+  const inert = disabled || busy;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: inert, busy }}
+      disabled={inert}
+      onPress={onPress}>
+      {({ pressed }) => (
+        <View style={[styles.pill, inert && styles.pillInert, pressed && styles.pressed]}>
+          <Text
+            variant="body-small-bold"
+            color={inert ? 'text/primary' : 'text/inverse'}
+            style={styles.pillLabel}>
+            {busy && busyLabel !== undefined ? busyLabel : label}
+          </Text>
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -326,13 +356,20 @@ export function PurchaseCta({ purchase }: { purchase: PurchaseProps }) {
  * unconfigured-destination notice: one block, always present before a
  * purchase, wherever the screen puts it.
  */
-export function PurchaseTerms({ purchase }: { purchase: PurchaseProps }) {
+export function PurchaseTerms({
+  purchase,
+  disclosure = PAYWALL_DISCLOSURE,
+}: {
+  purchase: PurchaseProps;
+  /** The renewal sentence; the standalone paywall's period-neutral one by default. */
+  disclosure?: string;
+}) {
   const shown = paywallPresentation(purchase.view);
   const { onFooterAction, destinationNotice } = purchase;
   return (
     <View style={styles.terms}>
       <Text variant="caption" color="text/secondary" style={styles.disclosure}>
-        {PAYWALL_DISCLOSURE}
+        {disclosure}
       </Text>
       <View style={styles.footerActions} accessibilityRole="toolbar">
         {shown.footer.map((action) => {
@@ -373,7 +410,7 @@ export function PurchaseTerms({ purchase }: { purchase: PurchaseProps }) {
 }
 
 /**
- * The standalone paywall's footer placement. The sticky footer always holds
+ * The paywalls' footer placement. The sticky footer always holds
  * the CTA; the terms join it at ordinary text sizes, and from the
  * accessibility sizes they are handed back as `inlineTerms` for the end of
  * the scrolling content, directly above the primary action
@@ -384,17 +421,20 @@ export function PurchaseTerms({ purchase }: { purchase: PurchaseProps }) {
  * the two slots. (The Ready step does not use the slots: its terms are
  * always scroll content and its CTA pins itself by scroll position.)
  */
-export function usePurchaseFooterSlots(purchase: PurchaseProps): {
+export function usePurchaseFooterSlots(
+  purchase: PurchaseProps,
+  options: { appearance?: PurchaseAppearance; disclosure?: string } = {},
+): {
   footer: ReactNode;
   inlineTerms: ReactNode;
 } {
   const { fontScale } = useWindowDimensions();
   const placement = paywallFooterPlacement(fontScale);
-  const terms = <PurchaseTerms purchase={purchase} />;
+  const terms = <PurchaseTerms purchase={purchase} disclosure={options.disclosure} />;
   return {
     footer: (
       <>
-        <PurchaseCta purchase={purchase} />
+        <PurchaseCta purchase={purchase} appearance={options.appearance} />
         {placement === 'sticky' ? terms : null}
       </>
     ),
@@ -616,6 +656,24 @@ const styles = StyleSheet.create({
     columnGap: spacing[24],
     rowGap: spacing[12],
     paddingVertical: spacing[8],
+  },
+  // The onboarding pill (see OnboardingActionPill): the shared Button's
+  // primary pill (components/ui/button.tsx) at 51pt.
+  pill: {
+    minHeight: CTA_MIN_HEIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing[16],
+    paddingVertical: spacing[8],
+    borderRadius: radius.full,
+    backgroundColor: color['action/primary'],
+  },
+  pillInert: {
+    backgroundColor: color['action/disabled'],
+  },
+  pillLabel: {
+    ...PAYWALL_TYPE.cta,
+    textAlign: 'center',
   },
   success: {
     padding: spacing[12],

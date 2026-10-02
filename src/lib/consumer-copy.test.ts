@@ -129,6 +129,8 @@ const COPY_MODULES: Record<string, string> = {
   'onboarding-copy': read('lib', 'onboarding-copy.ts'),
   'paywall-screen': read('lib', 'paywall-screen.ts'),
   'onboarding-sample': read('lib', 'onboarding-sample.ts'),
+  // 2026-10-01: the onboarding (grocery-watch) paywall.
+  'onboarding-paywall-presentation': read('lib', 'onboarding-paywall-presentation.ts'),
 };
 
 const DOCUMENT_SOURCES: Record<string, string> = Object.fromEntries(
@@ -170,6 +172,7 @@ const SCREENS: Record<string, string> = {
   'notification education': read('components', 'onboarding', 'notification-education.tsx'),
   'sample card': read('components', 'onboarding', 'sample-recall-card.tsx'),
   'paywall panel': read('components', 'paywall', 'paywall-panel.tsx'),
+  'onboarding paywall panel': read('components', 'paywall', 'onboarding-paywall-panel.tsx'),
   paywall: read('app', 'paywall.tsx'),
   'education route': read('app', 'onboarding', 'notifications.tsx'),
   'retailer logo': read('components', 'ui', 'retailer-logo.tsx'),

@@ -351,6 +351,10 @@ affect you.`, `See what affects you today`, `See my plan`, the pill and
    locked-strip copy, the interstitial captions, `1 in 6`, `Source: CDC`,
    `Onboarding progress, step`) present with `recall.entitlement`,
    `Subscribe for` and `Restore Purchases`.
+   The clean-capture switch (2026-10-01) lives in the same adapter module,
+   in memory and off at every launch; the purchase flow and the Design
+   Preview read it through the same `__DEV__` branches, so the 2026-10-01
+   export carries none of its names.
 2. Every method of the adapter re-checks the development gate and answers
    `unavailable` outside a development build, so even a constructed instance
    is inert.
@@ -1576,43 +1580,59 @@ announcements are made — the start and the completion — never a frame or a
 percentage; the mascot is hidden and untouchable; and the replace hands
 focus to Ready's own heading.
 
-### 6.7 The dedicated onboarding paywall (2026-09-28)
+### 6.7 The dedicated onboarding paywall (2026-09-28; the grocery watch, 2026-10-01)
 
 `/onboarding/paywall`, reached from Ready's `See my plan`, its locked strip
-and its locked sentinel — and nothing else. It composes the SAME
-`PaywallPanel` and the SAME purchase flow as the standalone `/paywall`
-(§6.4 of the 2026-09-27 work created both; the split keeps them): there is
-still exactly one implementation of offering loading, plan state, purchase,
-restore, notices, legal links, entitlement handling and the development
-controls (`hooks/use-purchase-flow.tsx`), and neither route holds purchase
-state. Top to bottom: Back (pops to Ready); the headline `Stay ahead of
-recalls that affect you.` (reworded for the split — the paywall now follows
-the personalized preview) and its body; the three approved benefits; the
-Annual and Monthly plan cards; the development-store controls in a
-development build only; the independence note; then the shared footer — the
-outcome notice and the primary purchase action pinned, with the renewal
-disclosure and Restore Purchases / Terms / Privacy / Support sticky at
-ordinary sizes and inline from the accessibility sizes
+and its locked sentinel — and nothing else. Since 2026-10-01 it draws
+`OnboardingPaywallPanel` (`components/paywall/onboarding-paywall-panel.tsx`),
+the founder-approved grocery-watch composition; the standalone `/paywall` a
+lapsed subscriber meets keeps `PaywallPanel`. Both compose the SAME purchase
+flow: there is still exactly one implementation of offering loading, plan
+state, purchase, restore, notices, legal links, entitlement handling and the
+development controls (`hooks/use-purchase-flow.tsx`), and neither route
+holds purchase state. Top to bottom: Back (pops to Ready); the headline
+`Keep a closer watch.` over the hero's open band, the blue wave rising
+beside it; the grocery hero (decorative, static, hidden from assistive
+technology; its notification is fixed example artwork labelled
+`Example notification` in the art, with no hit area, and has nothing to do
+with notification permission or delivery); three benefit rows — `See recalls
+that match you` / `Based on your states, allergens and stores.`, `Get
+matching recall alerts` / `Notifications tailored to your preferences.`,
+`Know what to check` / `Search, save and view full recall details.` — each an
+app line glyph on a powder-blue plate and one spoken element; the Annual and
+Monthly cards stacked; the development-store controls in a development build
+only; the independence note; then the shared footer in its explicit
+`onboarding` appearance — the outcome notice, the 51pt purchase pill, the
+renewal disclosure and Restore Purchases / Terms / Privacy / Support,
+sticky at ordinary sizes and inline from the accessibility sizes
 (`paywallFooterPlacement`, unchanged). No preference summary, no example
-recall, no notification preview, no progress bar, no second "your watch is
-ready" message, and no discount/back-out offer (deferred, §12).
+recall, no progress bar, no second "your watch is ready" message, and no
+discount/back-out offer (deferred, §12). Visual specification, measured
+type and deviations: [../DESIGN.md](../DESIGN.md) "Onboarding and paywall";
+rules and copy: `src/lib/onboarding-paywall-presentation.ts`.
 
-**Lotly personality, restrained (polish pass).** No new copy or sections.
-M04, the watchful pose, sits beside the heading in the frame's aside — the
-States and Stores seat and 120pt size — decorative, with the shared
-one-time entrance, and gone from the accessibility sizes. The three
-benefits are navy `check` rows (20pt `icon/primary`, the check decorative)
-instead of dots. The selected plan's border grows to 2px `action/primary`
-(the padding gives the pixel back, so nothing reflows); Monthly stays fully
-available and legible, subordinate by the absent badge and thinner border.
-`BEST VALUE` is a TAB of the Annual card: flush with its top trailing
-corner, its border on the card's, squared where it meets the card's radius;
-from the accessibility sizes it returns to the title row, where wrapping
-text cannot run under it. The badge is drawing — the radio's own label
-already speaks `Best value` — so it adds no second element. Store price
-strings are untouched, and every purchase, cancellation, error, restore and
-entitlement path is the shared flow's, unchanged. The entitled panel gains
-the same mascot and check rows.
+**Offer.** Every price is the provider's own `formatted` string: the cards
+show it with its period (`$29.99 / year`, `$4.99 / month`) and the action
+names it (`Subscribe for $29.99/year`). The Annual card adds the
+store-derived `$2.50/month equivalent` (explanatory, never the charge) and a
+`Save {N}%` pill computed by the existing `annualSavingsPercent`, shown only
+for a positive saving in one currency. Annual stays preselected (or the
+development scenario's plan). Choosing Monthly moves the border, the radio,
+the action (`Subscribe for $4.99/month`) and the disclosure (`Renews
+monthly. Cancel anytime in Apple Account settings.`) together; while there
+is no offering the disclosure is the period-neutral sentence. The radio
+speaks `Annual, $29.99 per year. $2.50 per month equivalent. Save 50%.`;
+the pill is drawing. No trial, discount, new product or provider.
+
+**Shared pieces, explicit variant.** The standalone paywall's appearance is
+unchanged. The onboarding panel passes `usePurchaseFooterSlots` an
+`appearance: 'onboarding'` (the CTA becomes `OnboardingActionPill`: the
+shared Button's primary treatment, disabled and busy state and busy word at
+51pt with a 16pt label; the shared Button has no size override and is
+untouched) and the chosen plan's `disclosure` (`PurchaseTerms` defaults to
+the standalone's sentence). `EntitledPaywallPanel` was onboarding-only and is
+replaced by `OnboardingEntitledPanel`; M04, the body, the check rows and
+`BEST VALUE` remain only on the standalone paywall.
 
 **Navigation and entitlement.** The route records itself as the resume
 point, so a kill on the paywall resumes there. A verified purchase or
@@ -1621,11 +1641,70 @@ the gate goes straight to education, never through the paywall phase or the
 Feed. Cancellation and failure stay here with their calm notice and every
 choice kept; no free Feed access exists in any path. A shopper already
 entitled (restored elsewhere, subscribed on another device) meets
-`EntitledPaywallPanel` instead: the active subscription said plainly
-(`Subscription active` on the success surface), the benefits, and a
-`Continue` that completes personalization — never a second purchase ask.
-The lapsed subscriber's standalone `/paywall` is untouched: same panel,
-same flow, its Back still `reviewingPreview` (§3).
+`OnboardingEntitledPanel` instead: the same headline and hero, the active
+subscription said plainly (`Subscription active` on the success surface),
+the benefits, and a 51pt `Continue` that completes personalization — never
+a second purchase ask. The lapsed subscriber's standalone `/paywall` is
+untouched: same panel, same flow, its Back still `reviewingPreview` (§3).
+
+**Grocery-watch hero (prepared 2026-10-01; founder-approved on the cream
+page and imported the same day).** The approved grocery-watch target
+(pinned by its manifest's SHA-256) is cut into one decorative hero,
+`assets/brand/production/lotly-paywall-grocery-watch-scene.png` (934×620,
+reference rows 152–771): a crop plus alpha from its ORIGINAL pixels, with
+the exterior cream keyed out, the 240–254 and alpha-0 rules, and a 19-row
+lower fade over original RGB. The printed headline is the one derived
+region: its glyph footprint is interpolated, and all but 156 of those
+pixels end as transparent page (the 156 are wave haze within 2 units of the
+original). Only `onboarding-paywall-panel.tsx` draws it, its bytes pinned by
+`src/lib/paywall-grocery-watch-assets.test.ts`. Crop, repair, placement
+offsets, fidelity and limitations are in
+`assets/brand/reference/paywall-grocery-watch/lotly-paywall-grocery-watch-asset-report.json`,
+with the review sheet beside it. None of the reference material is bundled.
+
+**Native verification (2026-10-01).** Separate QA simulators (`Lotly
+Onboarding Review`, iPhone 17, 402pt; `Lotly QA iPhone SE (3rd
+generation)`), the development provider only, a separate Metro; no real
+purchase, live restore, production service, push or permission prompt.
+Against the width-normalised target under the real status bar, on iPhone 17
+at the default size, the headline's capitals land 3.3pt lower, the hero 4pt
+and the first benefit 3.3pt lower, the Annual card 0.7pt lower; Monthly
+17.7pt and the action 28.7pt lower (the real 51pt action, 44pt links and
+legible type are taller than the mock's), with both plans above the pinned
+footer. A spacing pass the same day added 7pt between the headline and the
+hero (the wave's closest approach beneath `watch.` went from 7pt to 14pt on
+iPhone 17 and from 5.5pt to 12.5pt on the SE), moved the benefit plates to
+the plan cards' left edge (16pt, from 40pt) with the text 12pt from the
+plate across the remaining width, and trimmed the cards' vertical padding
+from 10pt to 8pt (Annual 86.7→82.7pt, Monthly 65.7→61.7pt), so both plans
+still end above the footer on iPhone 17 (Monthly 8.3pt clear) and, on the
+SE, the explanations fit one line each and the plans start higher. The
+first pass measured two line-box effects of the 38pt leading
+and corrected them: the hero sat 5pt low (iOS keeps the descent at the
+bottom of the line box rather than centring the glyphs), and the Text's
+own bounds shaved 1–2pt off `K` and `l` (it now pads its ascenders). On the
+SE the hero keeps its proportions and the page scrolls to the plans above
+the footer. xxxLarge, AX1 and AX5 wrap every word with no truncation; from
+AX1 the hero follows the headline and the terms move inline; the CTA stays
+pinned (three lines at AX5). Through the accessibility bridge: Monthly
+selection moves the radios, the action and the disclosure together; the
+`Loading`, `Unavailable, no prior entitlement` (could-not-confirm, fails
+closed), `User cancellation` (selection kept, including Monthly), `Purchase
+error` and `Restore finds nothing` scenarios show their notices with Subscribe
+pressed twice; `Monthly purchase success` goes straight to education; the
+`Active entitlement, onboarding unfinished` gate scenario shows the entitled
+panel, whose Back returns to Ready; a relaunch resumes on the paywall;
+Reduce Motion renders pixel-identically. `Subscribing…` (busy, inert) and
+the long localized pair were captured in the Design Preview, because the
+development store answers at once. Clean comparisons hide the development
+controls with the Design Preview's capture switch (§5.1); the controls were
+also exercised while shown. `npx expo export --platform ios` (2026-10-01):
+the hero's bytes identical in the bundle; the target, manifest, source
+crops, operation map, report, comparison sheet and source kit absent; the
+adapter markers, `Simulated store`, the capture switch's names and the long
+fixture absent; `Keep a closer watch.`, both renewal sentences, `Subscribe
+for`, `Restore Purchases` and `recall.entitlement` present; M04 still bundled
+for the standalone paywall.
 
 ### 6.8 Native verification of the restructure (2026-09-28)
 
@@ -1879,7 +1958,12 @@ What P2B7X.2 does, and what it does not touch:
 | Stores receipt layout: the slice maps to its rows at any height, the paper grows on every phone for 44pt rows, targets never overlap, scene vs stacked by text size, every word fits its column (measured from the font), the SE AX5 headline limit                                                                                                                                                                                                                                                                                                                                                                                                                                               | `src/lib/stores-receipt-presentation.test.ts`                                                                      |
 | Stores receipt layers: approved bytes and format, the report's offsets and slice, only Stores draws them, no reference imported                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/lib/stores-receipt-assets.test.ts`                                                                            |
 | Stores step and search sheet: no second mode and none of the retired grid, six checkbox rows in order, no marks, the count row's allocated slot, the search action, the three decorative layers growing upward and stacking, one Modal sheet with a fixed frame and pinned Done, autofocus, instruction and no-match lines, single-column checkbox results, one shared selection, choosing keeps the sheet, every exit keeps choices, query never saved, Reduce Motion, overlay gone, Profile unchanged, Back/Continue/resume, mock-ups unreferenced                                                                                                                                              | `src/components/onboarding-design.test.ts`                                                                         |
-| M04 on the interstitial and paywall; M01, M02, M03, M05 and M06 unreferenced; M06's repaired bytes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/lib/mascot-assets.test.ts`                                                                                    |
+| M04 on the interstitial and the standalone paywall; the onboarding paywall reaches no mascot file; M01, M02, M03, M05 and M06 unreferenced; M06's repaired bytes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `src/lib/mascot-assets.test.ts`                                                                                    |
+| The grocery-watch hero: approved bytes, RGBA sRGB at the measured size, the report's crop and accuracy, drawn only by the onboarding paywall, no reference, source, mask, report, sheet or kit in app code                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/lib/paywall-grocery-watch-assets.test.ts`                                                                     |
+| The onboarding paywall's presentation: approved copy, cards from the store prices, Monthly moving the action and the disclosure, no badge without a positive one-currency saving, long localized prices, the hero overlap and ascender rules, no type below the shared floor                                                                                                                                                                                                                                                                                                                                                                                                                      | `src/lib/onboarding-paywall-presentation.test.ts`                                                                  |
+| The onboarding paywall's composition: top bar, headline above the hero, decorative static hero, benefits as one element, radio cards, decorative pill, the shared footer's explicit `onboarding` appearance, no purchase state, mascot or close; the entitled panel; the 51pt pill's Button semantics                                                                                                                                                                                                                                                                                                                                                                                             | `src/components/onboarding-design.test.ts`                                                                         |
+| The paywall glyphs `file-search` and `bell`: Lucide's own sources at the pinned commit, native rasters pinned; the bell is named only by the paywall's benefits (no bell control)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `src/lib/allergen-icons.test.ts`, `src/components/detail-design.test.ts`                                           |
+| The clean-capture switch: in memory, off by default, heard by subscribers, scenario untouched, folded from release                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/lib/purchases/purchase-provider.test.ts`                                                                      |
 | The receipt Welcome's two images: approved bytes, RGBA sRGB at the measured sizes, the report's accuracy and superseded hero, drawn only by Welcome, no reference or source material imported                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/lib/welcome-receipt-assets.test.ts`                                                                           |
 | The grocery-atlas States' scene: approved bytes, RGBA sRGB at the measured size, the report's accuracy, drawn only by States, no reference or source material imported                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `src/lib/states-grocery-atlas-assets.test.ts`                                                                      |
 | The States chooser's search (names, postal codes, Washington DC, no match, no duplicates) and the measured geometry                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `src/lib/states-presentation.test.ts`                                                                              |

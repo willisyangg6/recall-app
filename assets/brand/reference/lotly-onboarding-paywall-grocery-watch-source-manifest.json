@@ -1,0 +1,75 @@
+{
+  "status": "founder-approved reference; production hero not yet exported",
+  "approved_on": "2026-10-01",
+  "source": {
+    "path": "assets/brand/reference/lotly-onboarding-paywall-grocery-watch-target.png",
+    "width": 934,
+    "height": 1683,
+    "mode": "RGB",
+    "sha256": "5e2025faf937470bb94ac485189adf7e658ba4bc548cc7ca93621967099238a4"
+  },
+  "production_destination": "assets/brand/production/lotly-paywall-grocery-watch-scene.png",
+  "reference_report_directory": "assets/brand/reference/paywall-grocery-watch/",
+  "crop_hint_not_certified": {
+    "x0": 0,
+    "y0": 145,
+    "x1": 934,
+    "y1": 780,
+    "end_exclusive": true
+  },
+  "approved_changes_from_initial_direction": [
+    "yellow handheld bell; navy glove preserved",
+    "three revised native benefit headings and explanations"
+  ],
+  "exact_copy": {
+    "headline": "Keep a closer watch.",
+    "benefits": [
+      {
+        "heading": "See recalls that match you",
+        "body": "Based on your states, allergens and stores."
+      },
+      {
+        "heading": "Get matching recall alerts",
+        "body": "Notifications tailored to your preferences."
+      },
+      {
+        "heading": "Know what to check",
+        "body": "Search, save and view full recall details."
+      }
+    ]
+  },
+  "decorative_example_copy": [
+    "Lotly",
+    "A recall matches your watch",
+    "Open to check the details",
+    "Example notification"
+  ],
+  "native_ui": [
+    "Back",
+    "headline",
+    "benefit rows and app icons",
+    "plan selection and prices",
+    "computed savings",
+    "purchase action",
+    "renewal disclosure",
+    "restore and legal links",
+    "existing status and independence notices"
+  ],
+  "reference_prices_only": {
+    "currency": "USD",
+    "annual": 29.99,
+    "monthly": 4.99,
+    "monthly_equivalent_display": 2.5,
+    "savings_display_percent": 50
+  },
+  "implementation_truth": "current local Mac worktree; current purchase-provider values and behavior",
+  "excluded_scope": [
+    "new trials or discounts",
+    "store-provider integration",
+    "production purchases",
+    "push activation",
+    "other finalized screens",
+    "Building redesign"
+  ],
+  "artifact_contract": "exact-source deterministic extraction; no mascot regeneration; all production artwork separate from reference files"
+}

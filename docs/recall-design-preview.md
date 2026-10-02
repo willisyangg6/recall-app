@@ -506,7 +506,15 @@ never copied (`src/components/development/onboarding-gallery.tsx`):
   reads or writes preferences or the onboarding record, and Continue, Back,
   See my plan and both education actions are wired to nothing. Dynamic Type
   is the simulator's setting.
-- **Paywall states** — Annual and Monthly selected, offering loading,
+- **Paywall states** — first a **clean-captures switch** (2026-10-01): it
+  hides the development controls the purchase flow hands both paywall
+  routes, so a paywall can be compared with its target exactly as a release
+  build draws it. It is in memory only and off at every launch, changes
+  nothing about the simulated store, and is folded from a release bundle
+  with the adapter. Then the onboarding (grocery-watch) paywall in Annual,
+  Monthly, offering loading, purchase in progress, user cancelled,
+  recoverable error, long localized prices and a 568 pt viewport; then the
+  standalone paywall in Annual and Monthly selected, offering loading,
   purchase in progress, user cancelled, recoverable error, restore in
   progress, restore success, restore finds nothing, provider unavailable,
   unavailable with no verified entitlement, a long localized price pair, and

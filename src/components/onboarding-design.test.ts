@@ -116,6 +116,7 @@ const CHOOSER = read('components', 'onboarding', 'allergen-chooser-sheet.tsx');
 const EDUCATION = read('components', 'onboarding', 'notification-education.tsx');
 const SAMPLE = read('components', 'onboarding', 'sample-recall-card.tsx');
 const PANEL = read('components', 'paywall', 'paywall-panel.tsx');
+const ONBOARDING_PANEL = read('components', 'paywall', 'onboarding-paywall-panel.tsx');
 const FORM = read('components', 'settings', 'personalization-form.tsx');
 const ROUTES = {
   welcome: read('app', 'onboarding', 'welcome.tsx'),
@@ -1384,18 +1385,34 @@ test('the paywall keeps its sticky/inline terms rule, and Ready carries no terms
   // the two slots; the CTA stays sticky at every size.
   const terms = codeOnly(componentBody(PANEL, 'PurchaseTerms'));
   assert.equal(terms.split('accessibilityRole="toolbar"').length, 2, 'the toolbar is drawn once');
-  assert.ok(terms.includes('{PAYWALL_DISCLOSURE}'));
-  assert.ok(slots.includes('const terms = <PurchaseTerms purchase={purchase} />;'));
+  // The standalone paywall's period-neutral disclosure is the default; the
+  // onboarding paywall passes the chosen plan's (2026-10-01).
+  assert.ok(terms.includes('disclosure = PAYWALL_DISCLOSURE,'));
+  assert.ok(terms.includes('{disclosure}'));
+  assert.ok(
+    slots.includes(
+      'const terms = <PurchaseTerms purchase={purchase} disclosure={options.disclosure} />;',
+    ),
+  );
   assert.ok(slots.includes("{placement === 'sticky' ? terms : null}"));
   assert.ok(slots.includes("inlineTerms: placement === 'inline' ? terms : null,"));
+  const cta = '<PurchaseCta purchase={purchase} appearance={options.appearance} />';
   assert.ok(
-    slots.indexOf('<PurchaseCta purchase={purchase} />') <
-      slots.indexOf("{placement === 'sticky' ? terms : null}"),
+    slots.indexOf(cta) > 0 &&
+      slots.indexOf(cta) < slots.indexOf("{placement === 'sticky' ? terms : null}"),
     'the primary action stays in the sticky footer',
   );
+  // Both paywalls use the one rule: the standalone with its defaults, the
+  // onboarding paywall with its explicit appearance and disclosure.
   const panel = codeOnly(componentBody(PANEL, 'PaywallPanel'));
+  assert.ok(panel.includes('const slots = usePurchaseFooterSlots(purchase);'));
   assert.ok(panel.includes('footer={slots.footer}>'));
   assert.ok(panel.indexOf('{children}') < panel.indexOf('{slots.inlineTerms}'));
+  const onboarding = codeOnly(componentBody(ONBOARDING_PANEL, 'OnboardingPaywallPanel'));
+  assert.ok(onboarding.includes("appearance: 'onboarding',"));
+  assert.ok(onboarding.includes('disclosure: renewalDisclosure(purchase.view),'));
+  assert.ok(onboarding.includes('footer={slots.footer}>'));
+  assert.ok(onboarding.indexOf('{children}') < onboarding.indexOf('{slots.inlineTerms}'));
   // The split (2026-09-28): Ready draws no terms, disclosure or legal links.
   for (const gone of ['PurchaseTerms', 'PAYWALL_DISCLOSURE', 'usePurchaseFooterSlots']) {
     assert.ok(!codeOnly(PREVIEW).includes(gone), `Ready draws ${gone}`);
@@ -1523,7 +1540,7 @@ test('the deck is one adjustable element: the active card’s whole content, nex
   assert.ok(deck.includes('if (target !== active) settle(target);'));
 });
 
-test('the dedicated paywall: M04 beside the heading, check-row benefits, the plans, the note and the shared footer', () => {
+test('the standalone paywall: M04 beside the heading, check-row benefits, the plans, the note and the shared footer', () => {
   const panel = codeOnly(componentBody(PANEL, 'PaywallPanel'));
   const order = [
     'aside={fontScale < HIDE_MASCOT_AT_SCALE ? <WatchfulMascot /> : null}',
@@ -1570,11 +1587,137 @@ test('the dedicated paywall: M04 beside the heading, check-row benefits, the pla
   ]) {
     assert.ok(!codeOnly(PANEL).includes(gone), `the paywall draws ${gone}`);
   }
-  // The entitled panel: no plans, no store, and a Continue.
-  const entitled = codeOnly(componentBody(PANEL, 'EntitledPaywallPanel'));
+  // The lapsed subscriber's route still composes it (2026-10-01).
+  assert.ok(
+    codeOnly(ROUTES.paywall).includes(
+      '<PaywallPanel purchase={purchase} onBack={access.reviewPreview}>',
+    ),
+  );
+});
+
+test('the onboarding paywall: the grocery-watch composition over the shared purchase pieces', () => {
+  const page = codeOnly(componentBody(ONBOARDING_PANEL, 'PaywallPage'));
+  // The frame's own top bar (Back, no progress), the headline above the
+  // hero, then the content column; the footer pinned over the bottom inset.
+  const order = [
+    '<OnboardingTopBar',
+    '{ONBOARDING_PAYWALL_HEADLINE}',
+    '<Image source={HERO} resizeMode="contain" style={styles.fill} />',
+    '<View style={styles.column}>{children}</View>',
+    '{footer}',
+  ].map((marker) => {
+    const at = page.indexOf(marker);
+    assert.ok(at > 0, `the page lacks ${marker}`);
+    return at;
+  });
+  assert.deepEqual(
+    order,
+    [...order].sort((a, b) => a - b),
+    'the page is out of order',
+  );
+  assert.ok(
+    page.includes('back={{ label: PAYWALL_BACK_LABEL, hint: PAYWALL_BACK_HINT, onPress: onBack }}'),
+  );
+  assert.ok(page.includes('progress={null}'));
+  // The headline is native text, a header, at the screen's measured size and
+  // measure; it is drawn above the hero (zIndex), and the hero is drawn up
+  // under it by the measured overlap.
+  assert.ok(page.includes('accessibilityRole="header"'));
+  assert.ok(page.includes('headlineType(fontScale),'));
+  assert.ok(page.includes('maxWidth: headlineMeasure(fontScale),'));
+  assert.ok(page.includes('paddingTop: headlineTopClearance(fontScale),'));
+  assert.ok(/headline: \{[^}]*zIndex: 1/s.test(ONBOARDING_PANEL));
+  assert.ok(page.includes('style={[styles.hero, { marginTop: -heroOverlap(width, fontScale) }]}>'));
+  // The hero: decorative, untouchable, whole, static.
+  assert.ok(page.includes('{...DECORATIVE}'));
+  assert.ok(page.includes('pointerEvents="none"'));
+  assert.ok(
+    ONBOARDING_PANEL.includes(
+      "require('@/assets/brand/production/lotly-paywall-grocery-watch-scene.png')",
+    ),
+  );
+  assert.ok(/hero: \{[^}]*aspectRatio: HERO_PX\.width \/ HERO_PX\.height/s.test(ONBOARDING_PANEL));
+  for (const motion of ['Animated', 'useReduceMotion', 'Easing', 'withTiming', 'setInterval']) {
+    assert.ok(
+      !codeOnly(ONBOARDING_PANEL).includes(motion),
+      `the onboarding paywall animates: ${motion}`,
+    );
+  }
+  // The purchase panel's order: benefits, plans, the route's controls, the
+  // independence note, and (from the accessibility sizes) the terms.
+  const panel = codeOnly(componentBody(ONBOARDING_PANEL, 'OnboardingPaywallPanel'));
+  const parts = [
+    '<BenefitRows />',
+    '<OnboardingPlans purchase={purchase} />',
+    '{children}',
+    '{INDEPENDENCE_NOTE}',
+    '{slots.inlineTerms}',
+  ].map((marker) => {
+    const at = panel.indexOf(marker);
+    assert.ok(at > 0, `the onboarding paywall lacks ${marker}`);
+    return at;
+  });
+  assert.deepEqual(
+    parts,
+    [...parts].sort((a, b) => a - b),
+    'the onboarding paywall is out of order',
+  );
+  // Each benefit is ONE spoken element; its icon is drawing on the plate token.
+  const benefits = codeOnly(componentBody(ONBOARDING_PANEL, 'BenefitRows'));
+  assert.ok(benefits.includes('accessibilityLabel={`${benefit.title}. ${benefit.body}`}'));
+  assert.ok(benefits.includes('<Icon name={benefit.icon} size={20} color="icon/primary" />'));
+  assert.ok(ONBOARDING_PANEL.includes("backgroundColor: color['onboarding/benefit-plate'],"));
+  // The plans: a real radio group of cards whose radios speak the full
+  // charge; the badge is drawing; the selection is the ring, the dot and
+  // the 2px navy border as well as the announced state.
+  const plans = codeOnly(componentBody(ONBOARDING_PANEL, 'OnboardingPlans'));
+  assert.ok(plans.includes('<ChoiceGroup label={PLAN_GROUP_LABEL} style={styles.plans}>'));
+  assert.ok(plans.includes('onPress={() => purchase.onSelectPlan(plan.period)}'));
+  assert.ok(plans.includes('{paywallPresentation(purchase.view).offeringMessage}'));
+  const card = codeOnly(componentBody(ONBOARDING_PANEL, 'PlanCard'));
+  assert.ok(card.includes('accessibilityRole="radio"'));
+  assert.ok(card.includes('accessibilityLabel={plan.accessibilityLabel}'));
+  assert.ok(
+    card.includes('accessibilityState={{ checked: plan.selected, selected: plan.selected }}'),
+  );
+  assert.ok(card.includes('<View style={styles.badge} {...DECORATIVE}>'));
+  assert.ok(/planSelected: \{[^}]*borderWidth: 2/s.test(ONBOARDING_PANEL));
+  // No purchase state or handler of its own, no mascot, no close or skip.
+  for (const gone of [
+    'useState<PaywallView',
+    'provider.',
+    'onSubscribe',
+    'lotly-mascot-',
+    'WatchfulMascot',
+    'BEST_VALUE',
+    'PAYWALL_BODY',
+    'onRequestClose',
+    'Maybe later',
+    'progress={stepProgress',
+  ]) {
+    assert.ok(!codeOnly(ONBOARDING_PANEL).includes(gone), `the onboarding paywall draws ${gone}`);
+  }
+  // The entitled panel: no plans, no store, the active subscription, and a Continue.
+  const entitled = codeOnly(componentBody(ONBOARDING_PANEL, 'OnboardingEntitledPanel'));
   assert.ok(entitled.includes('{EDUCATION_SUCCESS}'));
-  assert.ok(entitled.includes('<Button label={CONTINUE_CTA} onPress={onContinue} />'));
-  assert.ok(!entitled.includes('PurchasePlans') && !entitled.includes('PurchaseCta'));
+  assert.ok(
+    entitled.includes(
+      'footer={<OnboardingActionPill label={CONTINUE_CTA} onPress={onContinue} />}>',
+    ),
+  );
+  assert.ok(!entitled.includes('OnboardingPlans') && !entitled.includes('slots'));
+  // The 51pt pill is the shared Button's primary treatment, busy word included.
+  const pill = codeOnly(componentBody(PANEL, 'OnboardingActionPill'));
+  assert.ok(pill.includes('accessibilityState={{ disabled: inert, busy }}'));
+  assert.ok(pill.includes('{busy && busyLabel !== undefined ? busyLabel : label}'));
+  assert.ok(/pill: \{[^}]*minHeight: CTA_MIN_HEIGHT/s.test(PANEL));
+  const cta = codeOnly(componentBody(PANEL, 'PurchaseCta'));
+  assert.ok(cta.includes("appearance = 'standard',"));
+  assert.ok(
+    cta.includes(
+      "{appearance === 'onboarding' ? <OnboardingActionPill {...action} /> : <Button {...action} />}",
+    ),
+  );
 });
 
 // ── The building interstitial and the onboarding paywall (2026-09-28) ───────
@@ -1622,11 +1765,14 @@ test('the onboarding paywall route: the shared flow, its resume point, Back to R
   assert.ok(route.includes("goBackFrom('paywall', router)"));
   // Already entitled: never asked to purchase again.
   assert.ok(route.includes('isEntitled(access.entitlement)'));
-  assert.ok(route.includes('<EntitledPaywallPanel'));
+  assert.ok(route.includes('<OnboardingEntitledPanel'));
   assert.ok(route.includes('onContinue={() => void access.completePersonalization()}'));
-  // Otherwise: the one shared purchase flow, controls included.
+  // Otherwise: the one shared purchase flow, controls included, drawn by the
+  // grocery-watch panel (2026-10-01), never the standalone one.
   assert.ok(route.includes('usePurchaseFlow()'));
+  assert.ok(route.includes('<OnboardingPaywallPanel purchase={purchase} onBack={onBack}>'));
   assert.ok(route.includes('{developmentControls}'));
+  assert.ok(!/<PaywallPanel\b/.test(route));
 });
 
 test('the merged screen’s machinery is gone: no overlay footer, no scroll-driven CTA, no merged copy', () => {

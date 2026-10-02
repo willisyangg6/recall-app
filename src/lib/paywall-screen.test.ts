@@ -264,6 +264,27 @@ test('the disclosure and footer actions stay sticky at ordinary text sizes and m
 
 test('the paywall panel has no close, skip or dismiss control and renders all four footer actions', () => {
   const panel = codeOnly(read('components', 'paywall', 'paywall-panel.tsx'));
+  // The onboarding (grocery-watch) panel draws the same footer through the
+  // same pieces (2026-10-01) and is held to the same rule.
+  const onboarding = codeOnly(read('components', 'paywall', 'onboarding-paywall-panel.tsx'));
+  for (const forbidden of [
+    'Close',
+    'dismiss',
+    'Dismiss',
+    'skip',
+    'Skip',
+    'Maybe later',
+    'x-icon',
+    'onRequestClose',
+  ]) {
+    assert.ok(!onboarding.includes(forbidden), `the onboarding paywall offers ${forbidden}`);
+  }
+  assert.ok(onboarding.includes('usePurchaseFooterSlots(purchase, {'));
+  assert.ok(
+    onboarding.includes(
+      'back={{ label: PAYWALL_BACK_LABEL, hint: PAYWALL_BACK_HINT, onPress: onBack }}',
+    ),
+  );
   for (const forbidden of [
     'close',
     'Close',
@@ -279,7 +300,8 @@ test('the paywall panel has no close, skip or dismiss control and renders all fo
   }
   assert.ok(panel.includes('shown.footer.map((action) =>'));
   assert.ok(panel.includes('<BenefitChecks items={PAYWALL_BENEFITS} />'));
-  assert.ok(panel.includes('{PAYWALL_DISCLOSURE}'));
+  assert.ok(panel.includes('disclosure = PAYWALL_DISCLOSURE,'));
+  assert.ok(panel.includes('{disclosure}'));
   // Back exists, and it is the ONE way back: to the Preview, through the gate.
   assert.ok(
     panel.includes(
@@ -298,8 +320,11 @@ test('the paywall panel has no close, skip or dismiss control and renders all fo
 });
 
 test('the paywall draws from the tokens: no raw hex, no capped type, no fixed height around text', () => {
-  const panel = codeOnly(read('components', 'paywall', 'paywall-panel.tsx'));
-  assert.doesNotMatch(panel, /#[0-9A-Fa-f]{6}\b/);
-  assert.ok(!panel.includes('maxFontSizeMultiplier'));
-  assert.doesNotMatch(panel, /\n\s+height: \d+,/);
+  for (const file of ['paywall-panel.tsx', 'onboarding-paywall-panel.tsx']) {
+    const panel = codeOnly(read('components', 'paywall', file));
+    assert.doesNotMatch(panel, /#[0-9A-Fa-f]{6}\b/, file);
+    assert.ok(!panel.includes('maxFontSizeMultiplier'), file);
+    assert.ok(!panel.includes('numberOfLines'), file);
+    assert.doesNotMatch(panel, /\n\s+height: \d+,/, file);
+  }
 });

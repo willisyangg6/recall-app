@@ -30,7 +30,7 @@
  * requires, so a release bundle folds them away (release-exposure.test.ts).
  */
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { router, type Href } from 'expo-router';
 import { StyleSheet, View, type ImageSourcePropType } from 'react-native';
 
@@ -44,10 +44,10 @@ import { RetailersStep } from '@/components/onboarding/retailers-step';
 import { StatesStep } from '@/components/onboarding/states-step';
 import { WelcomeContent } from '@/components/onboarding/welcome-content';
 import {
-  EntitledPaywallPanel,
-  PaywallPanel,
-  type PurchaseProps,
-} from '@/components/paywall/paywall-panel';
+  OnboardingEntitledPanel,
+  OnboardingPaywallPanel,
+} from '@/components/paywall/onboarding-paywall-panel';
+import { PaywallPanel, type PurchaseProps } from '@/components/paywall/paywall-panel';
 import { Button } from '@/components/ui/button';
 import { CheckRow } from '@/components/ui/check-row';
 import { RetailerLogoFallback, RetailerLogoMark } from '@/components/ui/retailer-logo';
@@ -193,6 +193,47 @@ function useSamplePurchase(view: PaywallView): PurchaseProps {
     onFooterAction: noop,
     destinationNotice: null,
   };
+}
+
+/** The onboarding (grocery-watch) paywall with a view handed in. */
+function LiveOnboardingPaywall({ view }: { view: PaywallView }) {
+  const purchase = useSamplePurchase(view);
+  return <OnboardingPaywallPanel purchase={purchase} onBack={noop} />;
+}
+
+/**
+ * Whether the paywall development controls are hidden for a clean capture
+ * (development-scenarios.ts). Behind the bare `__DEV__` identifier, so a
+ * release bundle folds the whole branch: no controls to hide, nothing to
+ * subscribe to, and none of the development store's names.
+ */
+const controlsHiddenStore =
+  __DEV__ && devScenarios
+    ? {
+        subscribe: devScenarios.subscribeDevelopmentControlsHidden,
+        get: devScenarios.developmentControlsHidden,
+      }
+    : { subscribe: () => () => {}, get: () => false };
+
+/**
+ * The supported way to take a clean capture of a paywall in a development
+ * build: hide the simulated store's controls the purchase flow hands both
+ * routes. In memory only (development-scenarios.ts); they return on the next
+ * launch, and nothing about the simulated store changes.
+ */
+function CaptureControlsToggle() {
+  const hidden = useSyncExternalStore(controlsHiddenStore.subscribe, controlsHiddenStore.get);
+  if (!devScenarios) return null;
+  return (
+    <GallerySample
+      caption={`Clean captures — the paywall development controls are ${hidden ? 'hidden until the next launch, so a paywall can be compared with its target' : 'shown'}. The simulated store keeps its scenario either way.`}>
+      <Button
+        label={hidden ? 'Show paywall development controls' : 'Hide paywall development controls'}
+        variant="secondary"
+        onPress={() => devScenarios.setDevelopmentControlsHidden(!hidden)}
+      />
+    </GallerySample>
+  );
 }
 
 /** The standalone paywall with a view handed in. */
@@ -427,7 +468,7 @@ export function OnboardingGallery() {
       </GallerySample>
       <GallerySample caption="Onboarding paywall, already entitled — real: the entitled panel; simulated: Continue and Back do nothing">
         <Screen>
-          <EntitledPaywallPanel onBack={noop} onContinue={noop} />
+          <OnboardingEntitledPanel onBack={noop} onContinue={noop} />
         </Screen>
       </GallerySample>
       <GallerySample caption="Notification education — real: the success mark, the alert preview and both actions; simulated: neither action asks the system for anything">
@@ -502,14 +543,63 @@ export function PaywallGallery() {
       paywallView(long),
     ],
   ];
+  const onboardingViews: [caption: string, view: PaywallView][] = [
+    [
+      'Onboarding paywall, Annual selected — simulated: the fixture offering; Save from the store prices, the monthly equivalent, Renews yearly',
+      paywallView(offering),
+    ],
+    [
+      'Onboarding paywall, Monthly selected — simulated: the action and the disclosure name the monthly commitment',
+      paywallView(offering, {}, 'monthly'),
+    ],
+    [
+      'Onboarding paywall, offering loading — simulated: one line where the plans would be, Subscribe inert, the period-neutral disclosure',
+      paywallView(null),
+    ],
+    [
+      'Onboarding paywall, purchase in progress — simulated: Subscribing…, Restore inert',
+      paywallView(offering, { operation: 'purchasing' }),
+    ],
+    [
+      'Onboarding paywall, user cancelled — simulated: the calm sentence; plans still selectable',
+      paywallView(offering, { notice: 'cancelled' }),
+    ],
+    [
+      'Onboarding paywall, recoverable purchase error — simulated: the alert surface above the action',
+      paywallView(offering, { notice: 'purchase_error' }),
+    ],
+    [
+      'Onboarding paywall, long localized prices — simulated: a wide currency pair (not a real price); nothing truncates',
+      paywallView(long),
+    ],
+  ];
   return (
     <Surface background="background/page" radius={16} border="border/subtle" style={styles.gallery}>
+      <CaptureControlsToggle />
       <Text variant="caption" color="text/secondary">
-        The hard paywall (components/paywall), imported from production. Every view below is
-        simulated: the offering is the development adapter’s fixture (the expected US prices) or a
-        deliberately long localized pair, and Subscribe, Restore, Terms, Privacy, Support and Back
-        are wired to nothing. Cached active entitlement is a gate state, not a paywall state: with a
-        verified cache the paywall is never shown, which the gate scenarios below demonstrate.
+        The onboarding paywall (components/paywall/onboarding-paywall-panel.tsx, the grocery-watch
+        composition), imported from production, over the same simulated views as the standalone
+        paywall below.
+      </Text>
+      {onboardingViews.map(([caption, view]) => (
+        <GallerySample key={caption} caption={caption}>
+          <Screen>
+            <LiveOnboardingPaywall view={view} />
+          </Screen>
+        </GallerySample>
+      ))}
+      <GallerySample caption="Onboarding paywall, small device height — simulated: a 568pt viewport; the content scrolls above the pinned footer">
+        <Screen height={SMALL_DEVICE_HEIGHT}>
+          <LiveOnboardingPaywall view={paywallView(offering)} />
+        </Screen>
+      </GallerySample>
+      <Text variant="caption" color="text/secondary">
+        The standalone hard paywall a lapsed subscriber meets (components/paywall), imported from
+        production. Every view below is simulated: the offering is the development adapter’s fixture
+        (the expected US prices) or a deliberately long localized pair, and Subscribe, Restore,
+        Terms, Privacy, Support and Back are wired to nothing. Cached active entitlement is a gate
+        state, not a paywall state: with a verified cache the paywall is never shown, which the gate
+        scenarios below demonstrate.
       </Text>
       {views.map(([caption, view]) => (
         <GallerySample key={caption} caption={caption}>

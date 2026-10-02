@@ -583,8 +583,10 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
   // (one Lucide family; lib/allergen-icons.ts), P2B7Y the States step's six
   // (map, list, x, check, zoom-in, zoom-out; lib/state-map.ts), and the Ready
   // step its Stores row's shopping-cart and its locked-matches lock
-  // (lib/ready-presentation.ts). There is still no bell, share or sliders
-  // glyph.
+  // (lib/ready-presentation.ts), and the onboarding paywall its benefit rows'
+  // file-search and bell (lib/onboarding-paywall-presentation.ts; drawing in
+  // rows that are not controls). There is still no share or sliders glyph,
+  // and no bell control anywhere (detail-design.test.ts).
   assert.deepEqual(glyphs, [
     'allergen-egg',
     'allergen-fish',
@@ -595,6 +597,7 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'allergen-soy',
     'allergen-tree-nut',
     'allergen-wheat',
+    'bell',
     'bookmark',
     'bookmark-filled',
     'check',
@@ -602,6 +605,7 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'chevron-left',
     'chevron-right',
     'external-link',
+    'file-search',
     'flag',
     'home',
     'info',

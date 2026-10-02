@@ -15,11 +15,14 @@ import {
   createDevelopmentPurchaseProvider,
   DEVELOPMENT_OFFERING,
   DEVELOPMENT_PURCHASE_SCENARIOS,
+  developmentControlsHidden,
   developmentPurchaseScenario,
   parseSimulatedSubscription,
   seedSimulatedSubscription,
+  setDevelopmentControlsHidden,
   setDevelopmentPurchaseScenario,
   simulatedExpiry,
+  subscribeDevelopmentControlsHidden,
   type DevelopmentPurchaseScenarioId,
   type DevelopmentPurchaseStorage,
 } from './development-scenarios';
@@ -373,4 +376,32 @@ test('the development adapter re-checks the development gate on every method, no
   const checks =
     source.match(/if \(!deps\.isDevelopment\(\)\) return \{ kind: 'unavailable' \};/g) ?? [];
   assert.equal(checks.length, 4, 'loadOfferings, readEntitlement, purchase and restore each guard');
+});
+
+test('the clean-capture switch is in memory, off by default, tells its subscribers, and changes no scenario', () => {
+  assert.equal(developmentControlsHidden(), false, 'controls must be shown at every launch');
+  const scenario = developmentPurchaseScenario();
+  let heard = 0;
+  const unsubscribe = subscribeDevelopmentControlsHidden(() => {
+    heard += 1;
+  });
+  setDevelopmentControlsHidden(true);
+  assert.equal(developmentControlsHidden(), true);
+  setDevelopmentControlsHidden(false);
+  assert.equal(heard, 2);
+  unsubscribe();
+  setDevelopmentControlsHidden(true);
+  assert.equal(heard, 2, 'an unsubscribed listener is not called');
+  setDevelopmentControlsHidden(false);
+  assert.equal(developmentPurchaseScenario(), scenario);
+  // Reached only through the purchase flow's and the gallery's __DEV__
+  // branches, so a release bundle folds the store and its names away.
+  for (const path of [
+    join(SRC, 'hooks', 'use-purchase-flow.tsx'),
+    join(SRC, 'components', 'development', 'onboarding-gallery.tsx'),
+  ]) {
+    const code = codeOnly(readFileSync(path, 'utf8'));
+    assert.match(code, /const controlsHiddenStore =\s+__DEV__ && \w+\s+\?/);
+    assert.ok(code.includes(': { subscribe: () => () => {}, get: () => false };'), path);
+  }
 });

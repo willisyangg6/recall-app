@@ -20,6 +20,9 @@
  *   6. The Ready step's `shopping-cart` glyph for its Stores row — the same
  *      vendored Lucide family, box and stroke (provenance in
  *      src/lib/ready-presentation.ts).
+ *   7. The onboarding paywall's `file-search` and `bell` benefit glyphs — the
+ *      same vendored Lucide family, box and stroke (provenance in
+ *      src/lib/onboarding-paywall-presentation.ts).
  *   4. Two Design Preview logo FIXTURES (a wide and a tall neutral shape,
  *      labelled FIXTURE) that exercise the retailer-logo container's aspect
  *      handling. They are not retailer marks and are keyed to no retailer.
@@ -76,6 +79,12 @@ const STATES_GLYPHS = {
 const READY_GLYPHS = {
   'shopping-cart': 'shopping-cart',
   lock: 'lock',
+};
+
+/** The onboarding paywall's benefit glyphs (icon name → vendored Lucide source). Mirrors src/lib/onboarding-paywall-presentation.ts. */
+const PAYWALL_GLYPHS = {
+  'file-search': 'file-search-corner',
+  bell: 'bell',
 };
 
 function write(path, canvas) {
@@ -217,12 +226,13 @@ async function main() {
   await renderLucideGlyphs(ALLERGEN_GLYPHS);
   await renderLucideGlyphs(STATES_GLYPHS);
   await renderLucideGlyphs(READY_GLYPHS, { native: true });
+  await renderLucideGlyphs(PAYWALL_GLYPHS, { native: true });
   await renderChevronLeft();
   renderSampleIllustration();
   renderLogoFixture('logo-fixture-wide', 160, 24);
   renderLogoFixture('logo-fixture-tall', 24, 120);
   console.log(
-    'Rendered allergen glyphs, the States and Ready glyphs, chevron-left, the sample illustration and two logo fixtures.',
+    'Rendered allergen glyphs, the States, Ready and paywall glyphs, chevron-left, the sample illustration and two logo fixtures.',
   );
 }
 

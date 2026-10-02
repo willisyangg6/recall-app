@@ -378,3 +378,31 @@ export function developmentPurchaseScenario(): DevelopmentPurchaseScenarioId {
 export function setDevelopmentPurchaseScenario(id: DevelopmentPurchaseScenarioId): void {
   liveScenario = id;
 }
+
+// ── Clean captures ──────────────────────────────────────────────────────────
+
+/**
+ * In memory and nowhere else, like the scenario: whether the paywalls leave
+ * out their development controls, so a target comparison shows the screen
+ * exactly as a release build draws it. Off at every launch, so the controls
+ * can never stay hidden by accident; the Design Preview's paywall gallery
+ * switches it. Hiding the controls changes nothing about the simulated store.
+ */
+let controlsHidden = false;
+const controlsListeners = new Set<() => void>();
+
+export function developmentControlsHidden(): boolean {
+  return controlsHidden;
+}
+
+export function setDevelopmentControlsHidden(hidden: boolean): void {
+  controlsHidden = hidden;
+  for (const listener of controlsListeners) listener();
+}
+
+export function subscribeDevelopmentControlsHidden(listener: () => void): () => void {
+  controlsListeners.add(listener);
+  return () => {
+    controlsListeners.delete(listener);
+  };
+}
