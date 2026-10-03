@@ -30,6 +30,13 @@
  *      drawn to match the approved mockup's Feed stop. They use the same
  *      stroke and are rasterised natively on a 40pt box, because the tags draw
  *      them at up to 39.8pt (provenance in src/lib/building-presentation.ts).
+ *   9. The notification education step's two rasters (2026-10-03): the
+ *      vendored Lucide `shield-check` beside the reassurance line (the same
+ *      family, box and stroke), and the in-phone example's app icon — the
+ *      APPROVED iOS icon (assets/brand/production/lotly-icon-ios-1024.png)
+ *      uniformly downscaled to a 36pt box at 1x, 2x and 3x so the 1024 px
+ *      master is not bundled. Not redrawn, recoloured, cropped or outlined
+ *      (provenance in src/lib/notification-education-presentation.ts).
  *   4. Two Design Preview logo FIXTURES (a wide and a tall neutral shape,
  *      labelled FIXTURE) that exercise the retailer-logo container's aspect
  *      handling. They are not retailer marks and are keyed to no retailer.
@@ -49,6 +56,8 @@ const LOTLY = join(ROOT, 'assets', 'icon-sources', 'lotly');
 const ONBOARDING = join(ROOT, 'assets', 'onboarding');
 const PREVIEW = join(ROOT, 'assets', 'design-preview');
 const BUILDING = join(ROOT, 'assets', 'onboarding', 'building');
+const NOTIFICATIONS = join(ROOT, 'assets', 'onboarding', 'notifications');
+const APPROVED_IOS_ICON = join(ROOT, 'assets', 'brand', 'production', 'lotly-icon-ios-1024.png');
 
 /** The three scales the icon primitive resolves, as React Native names them. */
 const SCALES = [
@@ -109,6 +118,11 @@ const BUILDING_GLYPHS = {
 const BUILDING_LOTLY_GLYPHS = { 'building-feed': 'stacked-cards' };
 /** The Building glyphs' box: the largest tag glyph is 39.8pt at 402pt wide. */
 const BUILDING_BOX = 40;
+
+/** The notification education step's glyph. Mirrors src/lib/notification-education-presentation.ts. */
+const NOTIFICATIONS_GLYPHS = { 'shield-check': 'shield-check' };
+/** The example icon's box: the slot is ≈33.6pt at 402pt wide, up to 1.05× in perspective. */
+const EXAMPLE_ICON_BOX = 36;
 
 function write(path, canvas) {
   writeFileSync(path, canvas.toBuffer('image/png'));
@@ -246,10 +260,29 @@ function renderLogoFixture(name, width, height) {
   }
 }
 
+/**
+ * The approved iOS icon at the example's 36pt box: one uniform downscale per
+ * scale, high-quality resampling, nothing else. The slot's rounded mask is
+ * drawn natively, as iOS draws its own.
+ */
+async function renderExampleIcon() {
+  const icon = await loadImage(readFileSync(APPROVED_IOS_ICON));
+  for (const { suffix, factor } of SCALES) {
+    const side = EXAMPLE_ICON_BOX * factor;
+    const canvas = createCanvas(side, side);
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(icon, 0, 0, side, side);
+    write(join(NOTIFICATIONS, `notification-example-icon${suffix}.png`), canvas);
+  }
+}
+
 async function main() {
   mkdirSync(ONBOARDING, { recursive: true });
   mkdirSync(PREVIEW, { recursive: true });
   mkdirSync(BUILDING, { recursive: true });
+  mkdirSync(NOTIFICATIONS, { recursive: true });
   await renderLucideGlyphs(ALLERGEN_GLYPHS);
   await renderLucideGlyphs(STATES_GLYPHS);
   await renderLucideGlyphs(READY_GLYPHS, { native: true });
@@ -261,12 +294,14 @@ async function main() {
     dir: BUILDING,
     from: LOTLY,
   });
+  await renderLucideGlyphs(NOTIFICATIONS_GLYPHS, { native: true });
+  await renderExampleIcon();
   await renderChevronLeft();
   renderSampleIllustration();
   renderLogoFixture('logo-fixture-wide', 160, 24);
   renderLogoFixture('logo-fixture-tall', 24, 120);
   console.log(
-    'Rendered allergen glyphs, the States, Ready, paywall and Building glyphs, chevron-left, the sample illustration and two logo fixtures.',
+    'Rendered allergen glyphs, the States, Ready, paywall, Building and notification glyphs, the example icon, chevron-left, the sample illustration and two logo fixtures.',
   );
 }
 

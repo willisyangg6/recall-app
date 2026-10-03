@@ -399,7 +399,8 @@ test('no route navigates across a phase: transitions are state changes the gate 
   assert.ok(paywall.includes('onBack={access.reviewPreview}'));
   assert.ok(!paywall.includes('router.'), 'the paywall route holds no router');
   const education = codeOnly(read('onboarding', 'notifications.tsx'));
-  assert.ok(education.includes('access.completeNotificationEducation()'));
+  assert.ok(education.includes('.completeNotificationEducation()'));
+  assert.ok(education.includes('educationActions('));
   assert.ok(!education.includes('router.'), 'education holds no router');
 });
 

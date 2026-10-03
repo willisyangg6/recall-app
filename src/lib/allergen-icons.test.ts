@@ -20,6 +20,7 @@ import {
   allergenIconRows,
 } from './allergen-icons';
 import { BUILDING_ICON_SOURCES } from './building-presentation';
+import { NOTIFICATIONS_ICON_SOURCES } from './notification-education-presentation';
 import { PAYWALL_ICON_SOURCES } from './onboarding-paywall-presentation';
 import { READY_ICON_SOURCES } from './ready-presentation';
 import { STATES_ICON_SOURCES } from './state-map';
@@ -79,7 +80,8 @@ test('one family, with license, repository, commit and retrieval date recorded',
   // lib/state-map.ts), the Ready step's cart and lock
   // (lib/ready-presentation.ts), the onboarding paywall's file-search and
   // bell (lib/onboarding-paywall-presentation.ts) and the Building step's
-  // map-pin and octagon-alert (lib/building-presentation.ts): a stray glyph
+  // map-pin and octagon-alert (lib/building-presentation.ts) and notification
+  // education's shield-check (lib/notification-education-presentation.ts): a stray glyph
   // would be a second decision.
   // (The problem pictograph's user-round was vendored 2026-09-28 and
   // retired 2026-09-29 with the authored pictograph.)
@@ -94,6 +96,7 @@ test('one family, with license, repository, commit and retrieval date recorded',
       ...READY_ICON_SOURCES,
       ...PAYWALL_ICON_SOURCES,
       ...BUILDING_ICON_SOURCES,
+      ...NOTIFICATIONS_ICON_SOURCES,
     ]
       .map((s) => `${s.lucideName}.svg`)
       .sort(),
@@ -103,11 +106,31 @@ test('one family, with license, repository, commit and retrieval date recorded',
     ...READY_ICON_SOURCES,
     ...PAYWALL_ICON_SOURCES,
     ...BUILDING_ICON_SOURCES,
+    ...NOTIFICATIONS_ICON_SOURCES,
   ]) {
     const svg = readFileSync(join(SOURCES, `${source.lucideName}.svg`), 'utf8');
     assert.match(svg, /viewBox="0 0 24 24"/, `${source.lucideName} is not on the 24 grid`);
     assert.match(svg, /stroke-width="2"/, `${source.lucideName} has a foreign stroke weight`);
   }
+});
+
+test('notification education’s shield-check is Lucide’s own glyph at the pinned commit, rasterised natively at every scale', () => {
+  // Byte-identical to lucide-icons/lucide@f06ac67e…/icons/shield-check.svg,
+  // retrieved from the pinned commit on 2026-10-03.
+  const sha = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
+  assert.equal(
+    sha(join(SOURCES, 'shield-check.svg')),
+    '8d4fcdbde5bba4abb1a2f6fe53e37ceb6343a1d5449a9d88f6f97c1971d26c4e',
+  );
+  const ICONS = join(SOURCES, '..', '..', 'icons');
+  assert.deepEqual(
+    ['', '@2x', '@3x'].map((suffix) => sha(join(ICONS, `shield-check${suffix}.png`))),
+    [
+      '43fb7f7c4099c109098fbccb75f2d358094970bd56b874aa00597c4e0aebb05a',
+      '5ff42e62bd077135c5307c16fbfb0a888a3c0997e9f2f51797759eefb6878f04',
+      'd0ff6fff21c5c23f7ee9103cfccf4256969e115e2a2ab11bee2511d5772fd1e3',
+    ],
+  );
 });
 
 test('the Ready cart is Lucide’s own shopping-cart at the pinned commit, rasterised natively at every scale', () => {

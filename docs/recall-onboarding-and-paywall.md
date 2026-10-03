@@ -48,7 +48,8 @@ horizontal carousel of real matches — with no purchase UI (§6.4), and the
 plans live on a dedicated onboarding paywall (§6.7) built from the shared
 purchase flow the 2026-09-27 work created. The progress bar is a full-width
 five-segment mark with no visible count. The standalone paywall remains for
-a lapsed subscriber. The notification education keeps its P2B7X.1 content._
+a lapsed subscriber. The notification education takes the phone-led
+composition of 2026-10-03 (§6.11)._
 
 _Statistic screens (2026-09-28, uncommitted): the two problem screens take
 their approved statistic compositions — the 2×3 six-person pictograph and
@@ -513,7 +514,8 @@ primary action calls `enableRecallAlerts` — the same single path the
 Notifications screen uses, which prompts only when iOS can still ask, and
 once. `Not now` calls nothing but the completion. Both choices complete the
 education, the gate opens the app, and the Feed shows `Your preferences are
-set.` once, in that session, until it loses focus.
+set.` once, in that session, until it loses focus. The composition is
+§6.11.
 
 ### 6.1 The States step: the grocery atlas (2026-09-30)
 
@@ -2007,6 +2009,59 @@ against the live corpus, with the rebuilt dev client:
   release, raising the real notification prompt on the QA simulator, where
   `Don’t Allow` was chosen.
 
+### 6.11 Notification education: the phone-led example (2026-10-03)
+
+The founder approved the second concept: a phone above the headline whose
+screen shows an example notification, pointed at by the mascot from a crate.
+Source kit `docs/lotly-notifications-source-kit/`; asset report
+`assets/brand/reference/notifications-phone/lotly-notifications-phone-asset-report.json`;
+every measured number in `src/lib/notification-education-presentation.ts`.
+
+**Art and native.** One production image,
+`lotly-notifications-phone-scene.png` (934×768, rows 128–896): the mock's
+printed card content, its `Illustrative notification` caption and its badge
+are removed (harmonic fills, recorded), so the card is blank. The example is
+native, drawn in the card's own plane by the measured homography (the card is
+in true perspective — its edges differ by 1–2°, so no rotation can place it)
+as a React Native `matrix` transform about the top-left corner: the approved
+iOS icon, `Lotly`, the title and the body, in the system font at the art's
+scale. Verified on the Simulator by rectifying a screenshot back through the
+same homography: every line sits within ~1 unit of the mock vertically. iOS
+draws the system font this small in its looser Text optical size, so the
+example carries −0.09em tracking, which returns every line to the mock's
+width and wrapping.
+
+**The example is a real recall, formatted by the real formatter.** FDA,
+Regal Health Food International (Regal Gourmet Snacks), _Milk Chocolate
+Raisins_, undeclared peanuts, 2023-06-08 — since completed and terminated by
+FDA (`EDUCATION_EXAMPLE_SOURCE`). The screen shows the formatter's actual
+output, `Recall alert: Milk Chocolate Raisins` / `Undeclared peanut allergen.
+Check your package.`, pinned by `src/server/push/product-name.test.ts`; both
+fit the illustrated card whole (verified on iPhone 17 and SE, 2026-10-03), so
+nothing on the onboarding screens is truncated. The mock's `Glutinous Rice
+Balls` example was replaced (founder decision, 2026-10-03): its real
+formatter output, `…Glutinous Rice Balls with Black Sesame Filling`, needs
+three lines at the card's size and the card holds two.
+
+**Layout.** The mark sits over the hero's transparent top rows exactly as in
+the mock; when a larger mark would reach the art (measured clearance profile
+`BADGE_CLEARANCE`) the hero moves down instead. `Example notification` is
+centred under the phone, not the page. The headline, body and reassurance
+follow the mock's measured baselines. The footer is pinned with its hairline
+shown only while content runs beneath; from the accessibility sizes the
+footnote moves inline after the reassurance so the footer keeps only the two
+actions. An SE at the default size compacts the cream above the mark
+(Building's rule) and scrolls.
+
+**Choices.** `lib/notification-education-actions.ts`: the first press of
+either action takes the screen, so a double tap can neither prompt twice nor
+complete twice; every permission outcome (granted, previously granted,
+denied, previously denied, a registration error) completes the education and
+nothing claims alerts are on. The Feed's one-time notice is keyed to the
+stable taker: the foreground entitlement refresh that follows closing the
+system prompt used to re-run the Feed's focus effect and clear the notice it
+had just taken (found on the Simulator, 2026-10-03).
+
 ## 7. Local data on reset and on expiry
 
 - **Expiry** changes the phase and nothing else. Preferences, saved recalls,
@@ -2196,9 +2251,7 @@ discount products and purchase offerings are untouched.
    offer shown when a shopper leaves the onboarding paywall — App Store
    offer rules, pricing disclosure, gate behavior. No exit interception
    and no discount are built.
-4. **Notification education polish.** The education screen keeps its
-   P2B7X.1 composition; it is the one onboarding screen this pass left
-   visually untouched.
+4. ~~**Notification education polish.**~~ Done 2026-10-03 (§6.11).
 5. **Regenerate the remaining blurred Lucide rasters.** The allergen and
    States glyphs predate the native-scale rasterization (`shopping-cart`
    and `lock` are crisp; see §9 and `render-onboarding-assets.mjs`); a

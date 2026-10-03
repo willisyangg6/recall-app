@@ -260,14 +260,18 @@ export default function HomeScreen() {
   // P2B7X.1: the one-time confirmation after notification education. Taken
   // from the gate exactly once, in the session the education completed, and
   // shown until this screen loses focus — a lightweight acknowledgement, not
-  // a persistent banner.
-  const access = useAccess();
+  // a persistent banner. Keyed to the STABLE taker, not the whole access
+  // value: the entitlement refresh that runs whenever the app returns to the
+  // foreground (closing the notification prompt does exactly that) changes
+  // the access value, and re-running the effect then cleared the notice it
+  // had already taken (2026-10-03).
+  const { consumePreferencesSetNotice } = useAccess();
   const [preferencesSet, setPreferencesSet] = useState(false);
   useFocusEffect(
     useCallback(() => {
-      if (access.consumePreferencesSetNotice()) setPreferencesSet(true);
+      if (consumePreferencesSetNotice()) setPreferencesSet(true);
       return () => setPreferencesSet(false);
-    }, [access]),
+    }, [consumePreferencesSetNotice]),
   );
 
   // Search index: built once per loaded corpus, matched per keystroke.

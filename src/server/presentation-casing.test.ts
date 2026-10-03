@@ -204,10 +204,12 @@ test('recorded regression: the lowercase saucepans description is headline-cased
   const expected = '4 Sizes of Aluminum Saucepans with Capacities Ranging from 1 Quart to 3 Quarts';
   assert.equal(home.productName, expected);
   assert.equal(detail.productName, expected);
-  // Future push copy uses the same shared contract (founder decision D).
+  // Push copy uses the same shared casing (founder decision D), then the
+  // notification-only 55-character cut at a whole word, never ending on a
+  // joiner like `from` (push/product-name.ts, 2026-10-03).
   assert.equal(
     initialPushOf(projection).title,
-    'Recall alert: 4 Sizes of Aluminum Saucepans with Capacities Ranging from…',
+    'Recall alert: 4 Sizes of Aluminum Saucepans with Capacities Ranging…',
   );
   // The canonical description keeps the raw source casing.
   assert.equal(
@@ -379,7 +381,12 @@ test('recorded regression: both confirmed live escapes render corrected end to e
   const expectedByheart = 'Whole Nutrition Infant Formula 24 oz Cans and 0.6 oz Packets';
   assert.equal(byheart.home.productName, expectedByheart);
   assert.equal(byheart.detail.productName, expectedByheart);
-  assert.equal(initialPushOf(byheart.projection).title, `Recall alert: ${expectedByheart}`);
+  // The notification drops the trailing size list (push/product-name.ts,
+  // 2026-10-03); the casing it keeps is the cards'.
+  assert.equal(
+    initialPushOf(byheart.projection).title,
+    'Recall alert: Whole Nutrition Infant Formula',
+  );
   // Canonical stored text keeps the raw source casing and spacing.
   assert.equal(
     byheart.projection.productDescription,
@@ -567,7 +574,12 @@ test('the push formatter stays a pure server-safe module (structural)', () => {
   // formatting can never write the ledger or attempt a delivery.
   assert.ok(!/from '.*(push-store|expo-transport|worker)'/.test(source));
   assert.ok(!/from '(react|react-native|expo)/.test(source));
-  assert.match(source, /displayProductTitle/);
+  // The product name is the notification-only short name, which starts from
+  // the cards' own `cleanProductName` (and so their `displayProductTitle`).
+  assert.match(source, /notificationProductName\(projection\)/);
+  const name = readFileSync(join(__dirname, 'push', 'product-name.ts'), 'utf8');
+  assert.match(name, /cleanProductName\(/);
+  assert.ok(!/from '.*(push-store|expo-transport|worker)'/.test(name));
 });
 
 // ── P3E: reason-clause sentence-interior casing ─────────────────────────────
@@ -899,7 +911,9 @@ test('the corrected notices change no canonical, search, push, or materiality be
     // see APPROVED_UNIT_SPACING_DELTAS above. P2B7M: the lowercase tail under
     // the capitalized "Nutramigen Powder" head is now corrected too, and push
     // gets the correction at the same instant Feed, Saved and Detail do.
-    title: 'Recall alert: Nutramigen Powder Infant Formula in 12.6 and 19.8 oz Cans',
+    // 2026-10-03: the notification drops the closing `in 12.6 and 19.8 oz
+    // Cans` size phrase (push/product-name.ts); the card keeps it.
+    title: 'Recall alert: Nutramigen Powder Infant Formula',
     body: 'Potential Cronobacter sakazakii contamination. Check your package.',
   });
   // …and it is the card's sentence, character for character. Push used to

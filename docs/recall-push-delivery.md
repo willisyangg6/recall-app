@@ -132,7 +132,8 @@ titles flow through the shared display-capitalization contract (P3D,
 [recall-feed-usability.md](recall-feed-usability.md)), so a defectively
 lowercase source name is headline-cased in future delivery copy exactly as on
 the app's cards. The P3E reason-clause casing does not reach push copy at
-all — the push `reasonLine` renders the source verbatim. Both are formatting
+all — the push body is the card's own concise reason line (`conciseReasonLine`,
+since P2B7Q), never the raw source sentence. Both are formatting
 only: neither activates push, creates notification events, or rewrites any
 recorded notification data — copy is rendered at delivery time and is never
 stored in the ledger. Payload is
@@ -143,6 +144,78 @@ Scheduling: a `jobs:push` step at the end of both existing workflows. The
 30-minute tick delivers events created in the same cycle and reads the
 previous tick's receipts (≥15 min old — matching Expo's guidance); the daily
 maintenance run delivers enforcement-driven risk updates same-cycle.
+
+### Notification titles: the short product name (2026-10-03)
+
+Every title's product part is `notificationProductName`
+(`src/server/push/product-name.ts`), the same for new recalls, safety alerts,
+risk updates, recall updates and retractions; prefixes, bodies, the payload
+and the tap destination are unchanged. In order:
+
+1. **The card's own name** — `cleanProductName` (description, else the parsed
+   headline, else the title; the card's trailing-size rule; the shared
+   shopper casing) WITHOUT the card's brand-prefix strip: a notification has
+   no brand line, so `Tostitos Avocado Salsa Dip` keeps `Tostitos`. Before
+   this change push used only the display name, so 47 of 1,934 visible cases
+   named a product differently from the card they open.
+2. **Notification-only removals**, each a confident classification: code and
+   date tails after a separator (`, UPC …`, `| Lot …`, `, Best By …`),
+   size-only parentheticals (`(NET WT 38 OZ, 107 G)`, `(16 FL OZ glass
+jars)`), closing size lists (`, 7 oz., 10 oz. and 16 oz`, `in 50 gram, …
+and 1 kilogram packages.`) and exact list repeats. Flavours, formulations,
+   allergens and brands are never targeted (`Peanut Butter`, `Gluten-Free`,
+   `Black Sesame` pass through). An unmatched bracket left by the source is
+   dropped; a removal never empties a name.
+3. **Only when still over the limit and the recall names two or more
+   distinct products** (each affected-product line's own parsed name; sizes,
+   codes and `Field: value` fragments are not products): `{Brand} products`
+   when exactly one real brand is on record AND the name or every product
+   line carries it, or the existing `Multiple products and brands` when two
+   or more real brands are (corporate suffixes such as `Inc.` are not
+   brands). Never an invented brand or category.
+4. **Otherwise a whole-word cut with `…`**, joiners and punctuation dropped,
+   never inside a grapheme.
+
+**The limit** is a soft 55 graphemes for the product part (the prefix is
+outside it), down from the former hard 60-character cut. Over the 1,934
+visible live cases (read-only, 2026-10-03): 132 titles change, no body
+changes, the longest product part is 55, the median 20; 12 take a group
+label and 113 an ellipsis. iOS decides how many lines a title shows; nothing
+here promises a line count. Tests: `product-name.test.ts` (recorded FDA/FSIS
+notices plus synthetic edge shapes), `format.test.ts`.
+
+### Matching versus the Feed's Affects You (audited 2026-10-03, unchanged)
+
+Push and Affects You call the same `evaluatePersonalRelevance`, so states
+(including several), nationwide, unknown geography and the known-allergen
+rule agree once a jurisdiction is chosen. They differ where push is
+deliberately broader or unfiltered:
+
+- **No jurisdiction chosen** (or no preference row): `pushEligible` delivers
+  everything, while Affects You needs an allergen or store signal
+  (`relevance.ts` `pushEligible`; documented in
+  [recall-personalization.md](recall-personalization.md)). Onboarding requires
+  a state, so this reaches only installations without one.
+- **Lifecycle and merges:** the Feed reads only active, unmerged cases; the
+  worker's deliverable events are not filtered by case lifecycle or by a later
+  merge, so an update on a closed case, or an event on a case merged
+  afterwards, could send for a recall the Feed does not list.
+
+Only new ledger events created after the latest of activation, the
+subscription's enable time and the preferences' update time can send
+(per-subscription horizons in `worker.ts`), so enabling alerts or changing
+preferences never replays a backlog. Delivery remains globally inactive.
+
+### Known permission-path gaps (kept as they are)
+
+From notification education and the Notifications screen alike:
+
+- A shopper who **denied the permission earlier** gets no prompt and no
+  explanation from `Turn on notifications` — iOS cannot ask again, and the
+  education completes silently (the Notifications screen does explain it).
+- A **registration error** after a granted permission is swallowed by the
+  education route (logged in development only); the education completes and
+  nothing claims alerts are on.
 
 ## Client
 

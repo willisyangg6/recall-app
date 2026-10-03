@@ -51,8 +51,10 @@ export const EXTERNAL_LINK_HINT = 'Opens in your browser.';
  * every recall and short enough that the rest of the screen stays visible.
  *
  * It is a CLAMP on the rendering only. The full name is what search matches,
- * what a reader hears, what share and push copy carry, and what identity and
- * de-duplication use — none of them ever sees the shortened form.
+ * what a reader hears, what share copy carries, and what identity and
+ * de-duplication use — none of them ever sees this shortened form. (A push
+ * title carries its own notification-only short name, built from the full
+ * one: server/push/product-name.ts.)
  */
 export const DETAIL_TITLE_LINES = 4;
 

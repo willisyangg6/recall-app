@@ -1643,13 +1643,27 @@ paywall. A shopper already entitled meets the entitled panel on the same
 page: the headline and hero, the `Subscription active` mark on lime, the
 benefits, and a fixed 51pt `Continue` — never a purchase ask.
 
-**Notification education.** `Subscription active` as a compact
-`body-small-bold` mark on `background/accent` (rendered as written, not
-uppercased); the headline and body; a `caption` label `Notification preview`
-over a white `radius/16` card with the `card` lift — a 16pt `background/brand`
-square standing for the not-yet-final app icon beside `Lotly` in `caption`,
-the title in `body-small-bold`, the body in `body-small`; the footer's `Turn
-on notifications` over `Not now` and the reassurance in `caption`.
+**Notification education** (the phone-led composition, 2026-10-03). Its own
+full-bleed page, no back control: `Subscription active` as the compact
+`body-small-bold` mark on `background/accent` (rendered as written), over the
+hero's transparent top rows; the hero `lotly-notifications-phone-scene.png`
+(934×768 RGBA, reference rows 128–896), whose phone shows a blank
+notification card; inside it, drawn natively in the card's own perspective
+plane (the measured homography as a `matrix` transform, clipped to the card),
+the approved iOS app icon (`lotly-icon-ios-1024.png`, the finished icon on
+the Home Screen since 2026-09-23, uniformly downscaled, no outline), `Lotly`,
+the title and the body in the system font at the art's scale — decoration,
+never Dynamic Type, tracked −0.09em to the mock's width; the `caption`
+`Example notification` centred under the phone; the 36/36 Public Sans 700
+headline `Let the alerts come to you.`, the `body` text, and the Lucide
+`shield-check` with `Recall alerts only. No marketing.` in `body-small`; then
+the pinned footer — the 51pt `Turn on notifications`, `Not now` as plain
+navy words on a 44pt target, and `Change this anytime in Settings.` in
+`caption` (from the accessibility sizes the footnote reads after the
+reassurance instead). The shield marks a reassurance the approved mock pairs
+it with; it is not branding. The scene, the example and the caption are one
+VoiceOver element, spoken once as an example. Every number is in
+`lib/notification-education-presentation.ts`.
 
 **After either choice** the Feed shows `Your preferences are set.` once, as
 the information callout above the list, until the screen loses focus.

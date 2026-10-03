@@ -1,0 +1,20 @@
+{
+  "status": "founder-approved visual target; production assets not prepared",
+  "source_sha256": "8f3627ae5bc1e92710f1e39da8563113a4c9999570ec9b42e6c532a162e0a627",
+  "source_dimensions": [
+    934,
+    1684
+  ],
+  "target": "assets/brand/reference/lotly-onboarding-notifications-phone-target.png",
+  "selected_direction": "Second displayed notification concept: phone-led demonstration",
+  "native_copy_overrides": {
+    "example_label": "Example notification"
+  },
+  "preview_data": "Traceable illustrative example from provided Feed screenshot; not a notification sent to this user",
+  "phases": [
+    "asset preparation and visual review",
+    "native implementation and notification product-name shortening",
+    "review and commit"
+  ],
+  "delivery_activation_authorized": false
+}

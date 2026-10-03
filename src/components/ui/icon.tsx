@@ -83,6 +83,10 @@ const GLYPHS = {
   // `file-search-corner`). Provenance in src/lib/onboarding-paywall-presentation.ts.
   'file-search': require('@/assets/icons/file-search.png') as ImageSourcePropType,
   bell: require('@/assets/icons/bell.png') as ImageSourcePropType,
+  // Notification education's reassurance line (2026-10-03): the same
+  // vendored Lucide family, box and stroke. Provenance in
+  // src/lib/notification-education-presentation.ts.
+  'shield-check': require('@/assets/icons/shield-check.png') as ImageSourcePropType,
 } as const;
 
 export type IconName = keyof typeof GLYPHS;

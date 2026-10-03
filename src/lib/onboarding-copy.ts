@@ -311,19 +311,36 @@ export const INDEPENDENCE_NOTE = 'Lotly is independent and is not affiliated wit
 // ── Screen 7: Notification education ────────────────────────────────────────
 
 export const EDUCATION_SUCCESS = 'Subscription active';
-export const EDUCATION_HEADLINE = 'Get alerts when a recall matches.';
-export const EDUCATION_BODY =
-  'Turn on notifications so Lotly can tell you when a new recall matches your profile.';
-export const EDUCATION_PREVIEW_APP = 'Lotly';
-export const EDUCATION_PREVIEW_TITLE = 'Recall matches your profile';
-export const EDUCATION_PREVIEW_BODY = 'Gummy Products may contain undeclared peanut.';
-export const EDUCATION_PREVIEW_LABEL = 'Notification preview';
+export const EDUCATION_HEADLINE = 'Let the alerts come to you.';
+export const EDUCATION_BODY = 'New recalls and important updates, matched to your preferences.';
+/** The label under the phone: what the phone shows is an example, not a sent alert. */
+export const EDUCATION_EXAMPLE_LABEL = 'Example notification';
+/**
+ * The example notification in the phone: the app name, then the title and
+ * body the real push formatter (server/push/format.ts) produces for a real
+ * recall — FDA, Regal Health Food International (Regal Gourmet Snacks), Milk
+ * Chocolate Raisins, undeclared peanuts, 2023-06-08, since completed and
+ * terminated by FDA (EDUCATION_EXAMPLE_SOURCE; recorded in
+ * src/server/fda/fixtures/qa-corpus.json.gz, and pinned to the formatter's
+ * output by src/server/push/product-name.test.ts). Both lines fit the
+ * illustrated card whole. Illustrative: never a claim that this alert was
+ * sent to this shopper or that they bought the product.
+ */
+export const EDUCATION_EXAMPLE_APP = 'Lotly';
+export const EDUCATION_EXAMPLE_TITLE = 'Recall alert: Milk Chocolate Raisins';
+export const EDUCATION_EXAMPLE_BODY = 'Undeclared peanut allergen. Check your package.';
+/** The official notice the example is formatted from. */
+export const EDUCATION_EXAMPLE_SOURCE =
+  'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/regal-health-food-international-issues-allergy-alert-undeclared-peanut-milk-chocolate-covered';
+/** The example, spoken once: an example, then exactly what the phone shows. */
+export const EDUCATION_EXAMPLE_SPOKEN = `${EDUCATION_EXAMPLE_LABEL}. ${EDUCATION_EXAMPLE_APP}: ${EDUCATION_EXAMPLE_TITLE}. ${EDUCATION_EXAMPLE_BODY}`;
 export const EDUCATION_CTA = 'Turn on notifications';
 /** Spoken after the primary action: it may raise the system prompt. */
 export const EDUCATION_CTA_HINT = 'May ask for notification permission, then opens Lotly.';
 export const EDUCATION_SECONDARY = 'Not now';
 export const EDUCATION_SECONDARY_HINT = 'Opens Lotly without notifications. Nothing is asked.';
-export const EDUCATION_REASSURANCE = 'You can change this anytime in Settings.';
+export const EDUCATION_REASSURANCE = 'Recall alerts only. No marketing.';
+export const EDUCATION_FOOTNOTE = 'Change this anytime in Settings.';
 export const EDUCATION_BUSY = 'Opening…';
 
 // ── After either education choice, once, on Feed ────────────────────────────

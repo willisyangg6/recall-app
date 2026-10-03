@@ -242,8 +242,22 @@ function runBoundaryGate(): Failure[] {
     // Share and accessibility copy read Detail's productName field directly,
     // so they cannot diverge from it without changing this value.
     ['share / accessibility copy', detail.productName],
-    ['push notification', push.title.replace(/^Recall alert: /, '')],
   ];
+  // A notification carries a SHORTER form of the same cased name
+  // (src/server/push/product-name.ts: sizes and codes dropped, a whole-word
+  // cut): it must be a word-boundary prefix of the shared title, never a
+  // differently cased one.
+  const pushProduct = push.title.replace(/^Recall alert: /, '').replace(/…$/, '');
+  if (
+    !new RegExp(`^${pushProduct.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\b|$)`).test(
+      SHARED_TITLE,
+    )
+  ) {
+    failures.push({
+      area: 'shared boundary',
+      detail: `push notification bypasses the shared title contract\n        expected a prefix of ${JSON.stringify(SHARED_TITLE)}\n        rendered ${JSON.stringify(pushProduct)}`,
+    });
+  }
   for (const [surface, rendered] of surfaces) {
     if (rendered !== SHARED_TITLE) {
       failures.push({

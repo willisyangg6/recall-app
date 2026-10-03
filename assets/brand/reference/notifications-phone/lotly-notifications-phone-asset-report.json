@@ -1,0 +1,767 @@
+{
+ "description": "Notification education \"Let the alerts come to you.\" hero: one static decorative composite (powder-blue oval backdrop, phone with a blank notification card on its screen, the Lotly mascot pointing toward it from a wooden crate with three lime rays, peaches and snap peas, and the phone's ground shadow) cut from the founder-approved phone-led reference by deterministic crop + alpha. Three printed UI regions were removed by narrow deterministic repairs: the notification card's content (generated icon square, \"Lotly\", title, body), the \"Illustrative notification\" caption, and the \"Subscription active\" badge. Nothing else was repainted. Prepared for review; NOT imported by the app.",
+ "reportDate": "2026-10-03",
+ "status": "Founder approved the export (2026-10-03: the approved production app icon with no added outline, a 12pt native caption, the cream ground shadow accepted for the cream page, the system font inside the illustrated notification). Imported by the notification education step only (src/components/onboarding/notification-education.tsx, pinned by src/lib/notification-education-assets.test.ts); the production bytes are unchanged from the export.",
+ "reference": {
+  "path": "assets/brand/reference/lotly-onboarding-notifications-phone-target.png",
+  "sha256": "8f3627ae5bc1e92710f1e39da8563113a4c9999570ec9b42e6c532a162e0a627",
+  "dimensions": [
+   934,
+   1684
+  ],
+  "manifest": "assets/brand/reference/lotly-onboarding-notifications-phone-source-manifest.json",
+  "manifestSha256Match": true,
+  "manifestDimensionsMatch": true,
+  "unchanged": true,
+  "colorProfile": "none (untagged 8-bit RGB, treated as sRGB as every prior kit)"
+ },
+ "skillsUsed": "None. No available skill performs pixel-exact extraction; the established repo asset contract (Building/paywall/States/Welcome reports) governs every rule.",
+ "measuredPage": {
+  "referenceCream": [
+   254,
+   254,
+   249
+  ],
+  "noise": "Rows 0-107 full width: max-channel |C - cream| <= 2. Modes 254,254,249 / 254,254,248 / 253,253,248.",
+  "appBackgroundPage": "#FDFCF6 (253,252,246) background/page",
+  "note": "Edges are unmatted against the MEASURED reference cream; the token is 1-3 units darker."
+ },
+ "resolution": "Native reference pixels (934 px wide). No upscaling or repainting. Native: one uniform scale = width / 934 (0.4304 pt/px at 402 pt, 0.4208 at 393 pt).",
+ "cropDecisions": {
+  "crop_xyxy_exclusive": [
+   0,
+   128,
+   934,
+   896
+  ],
+  "top": "The backdrop first deviates from cream > 3 at row 135 and > 24 at row 136. Top 128 = 136 - 8, the Welcome/States/paywall/Building convention. The badge (rows 107-166, x 43-343) overlaps rows 128-166 of the crop and is removed as page UI (badgeRemoval).",
+  "bottom": "After the caption repair the last row deviating > 3 from cream is 889 (peach/pea shadow); the crop ends 7 rows later at 896 exclusive. The headline's first soft edge is at row 940, so no page text is inside the crop. All crop borders are page; no lower fade is needed (unlike Building's tabletop).",
+  "sides": "Full width 0-933; visible art spans x 19-933 (the peaches reach the right edge).",
+  "excluded": [
+   "badge \"Subscription active\" (native, verified entitlement only)",
+   "caption \"Illustrative notification\" (native \"Example notification\" instead)",
+   "headline, body, reassurance + shield, primary and secondary actions, footnote (rows 940+)",
+   "the notification card's printed icon, label, title and body (native, in the card plane)"
+  ]
+ },
+ "repairs": {
+  "method": "Each footprint is filled by harmonic (Laplace) interpolation per channel from its own boundary (Gauss-Seidel, non-footprint pixels fixed), the Welcome-caption / paywall-headline / Building-tag method. DERIVED, not exact.",
+  "badgeRemoval": {
+   "componentPixels": 17737,
+   "componentBbox_reference_xyxy_inclusive": [
+    43,
+    107,
+    343,
+    166
+   ],
+   "footprintPixels": 19830,
+   "footprintBbox_reference_xyxy_inclusive": [
+    40,
+    104,
+    346,
+    169
+   ],
+   "boundaryPixels": 701,
+   "boundaryMedianRgb": [
+    254,
+    254,
+    249
+   ],
+   "boundaryMaxDevFromMedian": 3,
+   "boundaryMaxDevFromSurface": 3,
+   "filledMaxDevFromCream": 2,
+   "rule": "connected component of pixels > 3 from cream seeded inside the badge (rows 95-180, x 0-400), dilated 3 px. Every boundary pixel is page (max 3 from cream), so the fill is cream (max 2) and the whole footprint is then cleared to alpha 0 by the exterior key. The badge never touches the backdrop (>= 69 px gap)."
+  },
+  "cardContent": {
+   "corePixels": 11251,
+   "coreBbox_reference_xyxy_inclusive": [
+    148,
+    367,
+    468,
+    490
+   ],
+   "footprintPixels": 30602,
+   "footprintBbox_reference_xyxy_inclusive": [
+    139,
+    358,
+    477,
+    499
+   ],
+   "boundaryPixels": 1170,
+   "boundaryMedianRgb": [
+    254,
+    253,
+    253
+   ],
+   "boundaryMaxDevFromMedian": 4,
+   "boundaryMaxDevFromSurface": 5,
+   "filledMaxDevFromCardWhite": 4,
+   "rule": "ink cores = pixels inside the card (card plane, inset 5 units, rounded) deviating > 12 from card white (254,254,254); footprint = cores dilated 9 px, clipped to the card interior (inset 1.5 units). Measured falloff of |C - white| by distance from a core: mean 3.6 at 1 px, 2.1 at 5 px, 1.29 at 9 px (p95 3, max 5) = card-white noise (untouched card: deviation <= 4, mostly <= 2). The card edge, its rim shadow and its drop shadow on the screen are outside the footprint and untouched.",
+   "result": "Filled card is within 4 of card white, a tighter spread than the untouched card; no ghost of the icon or text is measurable."
+  },
+  "caption": {
+   "corePixels": 1439,
+   "coreBbox_reference_xyxy_inclusive": [
+    248,
+    853,
+    458,
+    868
+   ],
+   "footprintPixels": 5789,
+   "footprintBbox_reference_xyxy_inclusive": [
+    241,
+    846,
+    465,
+    875
+   ],
+   "boundaryPixels": 482,
+   "boundaryMedianRgb": [
+    253,
+    253,
+    248
+   ],
+   "boundaryMaxDevFromMedian": 14,
+   "rule": "ink cores = pixels > 20 below their 25 px local median (box x 225-485, rows 840-885); footprint = cores dilated 7 px. Measured falloff vs the local median: p95 16 at 1 px, 4 at 3 px, 1 (max 2) from 6-7 px = background noise (p95 1). The boundary is the phone's ground shadow (median 253,253,248, spread 14 across the gradient), which the fill continues smoothly."
+  },
+  "fill": {
+   "method": "harmonic (Laplace), Gauss-Seidel, non-footprint pixels fixed, initialised at each footprint boundary median",
+   "iterations": 213,
+   "finalMaxChange": 0.0099,
+   "pixelsChangedInside": {
+    "badge": 19261,
+    "cardContent": 28469,
+    "caption": 5562
+   },
+   "pixelsChangedOutsideFootprints": 0
+  },
+  "derivedSource": "assets/brand/reference/notifications-phone/source/lotly-notifications-phone-scene-blank-card-source.png",
+  "mask": "assets/brand/reference/notifications-phone/masks/lotly-notifications-phone-operation-mask.png (crop coordinates; red = card-content footprint, orange = its ink cores, yellow/gold = caption footprint/cores, green = badge footprint, magenta = exterior page cleared, grey = matted soft edge, black = untouched opaque original)"
+ },
+ "operations": {
+  "sourceExport": "Rectangular crop of the reference; RGB samples copied unchanged (0 differing samples); re-encoded losslessly as 8-bit RGB with sRGB/gAMA/cHRM copied byte-for-byte from the approved States scene; no ICC, bKGD, tIME or text chunks.",
+  "exteriorKey": "Building key on the derived crop, seeded from ALL FOUR crop borders (all page here). The flood passes only page-indistinguishable pixels (max-channel deviation <= 6) outside the morphological closing (disc radius 4) of the solid art. Flooded pixels within 3 of cream: alpha 0. Flooded pixels above that and solid pixels within 3 px of the exterior: alpha = projection of (C - cream) onto (F - cream), F = nearest interior art pixel (40 px radius for flooded, 6 px for solid edge); RGB unmatted as cream + (C - cream) / alpha. Near-opaque 240-254 -> 255 with source RGB; alpha 0 -> RGB 0.",
+  "flood": {
+   "seeds": "all four crop borders",
+   "pixels": 146120,
+   "closeRadius": 4,
+   "pageLikePixelsProtectedByClosing": 17537
+  },
+  "enclosedPageLikeComponents": {
+   "note": "Page-coloured components not connected to the border are NEVER cleared. Enumerated (>= 40 px): the phone screen (79,758 px, rows 517-807 below the card), the glove highlights, the mascot face and highlights, and small highlights on the peas/peaches. None is page seen through the art.",
+   "count": 16,
+   "largest": [
+    {
+     "pixels": 79758,
+     "bbox_reference_xyxy_inclusive": [
+      142,
+      517,
+      523,
+      807
+     ]
+    },
+    {
+     "pixels": 58482,
+     "bbox_reference_xyxy_inclusive": [
+      133,
+      330,
+      492,
+      520
+     ]
+    },
+    {
+     "pixels": 38961,
+     "bbox_reference_xyxy_inclusive": [
+      112,
+      208,
+      479,
+      362
+     ]
+    },
+    {
+     "pixels": 11694,
+     "bbox_reference_xyxy_inclusive": [
+      610,
+      365,
+      755,
+      494
+     ]
+    },
+    {
+     "pixels": 1094,
+     "bbox_reference_xyxy_inclusive": [
+      764,
+      511,
+      813,
+      545
+     ]
+    },
+    {
+     "pixels": 753,
+     "bbox_reference_xyxy_inclusive": [
+      495,
+      425,
+      550,
+      458
+     ]
+    }
+   ]
+  },
+  "keyCounts": {
+   "exteriorPageCleared": 138784,
+   "exteriorNoArtCleared": 0,
+   "exteriorNoArtMaxDev": 0,
+   "softEdgeMatted": 7336,
+   "solidEdgeMatted": 5926,
+   "solidEdgeKeptOpaque": 0,
+   "maxFDistance": 14.142135623730951,
+   "hazeMattedBeyond6px": 2910
+  },
+  "alphaHistory": {
+   "clear": 139415,
+   "edge1to239": 11863,
+   "lifted240to254": 730,
+   "opaque": 566034,
+   "rgbZeroed": 139415
+  },
+  "groundShadow": "The phone's ground shadow and the soft haze under the peas are partly above the flood threshold and stay opaque near-cream (the approved art, like Building's cream vignette). Correct on the cream page; visible as a pale area on a dark surface (sheet panel E). Onboarding is drawn on the cream page only.",
+  "tooling": "Pure Node (zlib PNG decode/encode) for every production pixel; @napi-rs/canvas (existing devDependency) only for the reconstruction text/icon and the comparison sheet. No dependency added. Scripts lived in the session scratchpad, as for every prior kit.",
+  "nothingRegenerated": "No pixel of the mascot, rays, face, gloves, feet, crate, peaches, leaf, peas, phone body, bezel, buttons, screen, card surface/edge/shadows or backdrop was repainted, generated or upscaled."
+ },
+ "phonePlane": {
+  "inspection": "The phone and card are in true perspective, not a flat rotation: card top edge -3.56 deg, bottom -4.66 deg, left edge 5.54 deg and right 7.50 deg from vertical; top 342.9 px vs bottom 348.4, left 172.2 vs right 165.7. The card lies in the screen plane (screen left/right/bottom slopes 5.78 / 7.52 / -4.63 deg).",
+  "cardQuad_reference": {
+   "TL": [
+    130.82,
+    350.33
+   ],
+   "TR": [
+    473.03,
+    329.07
+   ],
+   "BR": [
+    494.68,
+    493.39
+   ],
+   "BL": [
+    147.44,
+    521.69
+   ],
+   "edgeFitMaxResidual_px": 0.6,
+   "note": "straight-edge intersections; the card corners are rounded (radius 20 units)"
+  },
+  "cardQuad_hero": {
+   "TL": [
+    130.82,
+    222.32999999999998
+   ],
+   "TR": [
+    473.03,
+    201.07
+   ],
+   "BR": [
+    494.68,
+    365.39
+   ],
+   "BL": [
+    147.44,
+    393.69000000000005
+   ]
+  },
+  "screenPolygon_reference": {
+   "TL": [
+    106.48,
+    218.81
+   ],
+   "TR": [
+    462.93,
+    204.98
+   ],
+   "BR": [
+    539.04,
+    781.67
+   ],
+   "BL": [
+    166.55,
+    811.83
+   ],
+   "definition": "inner edge of the dark bezel band (includes a 1-2 px bright rim highlight); straight-edge intersections of rounded corners; fit residuals 0.5-2.1 px"
+  },
+  "transform": {
+   "coordinateSpace": "card plane (u,v) in units = reference px at the card centre; output = hero px (production PNG, origin top-left). At display width w: multiply hero px by s = w/934; the plane is scaled by the same s, so H_display = S(s)·H·S(1/s) (translation × s, perspective terms h6,h7 ÷ s).",
+   "cardPlaneSize": [
+    345.6,
+    168.95
+   ],
+   "cardCornerRadius": 20,
+   "homography3x3_rowMajor": [
+    1.044830019,
+    0.08355882586,
+    130.82,
+    -0.03829088384,
+    0.9747100688,
+    222.33,
+    0.0001155086282,
+    -0.0001004711994,
+    1
+   ],
+   "matrix3d_columnMajor_transformOriginTopLeft": [
+    1.044830019,
+    -0.03829088384,
+    0,
+    0.0001155086282,
+    0.08355882586,
+    0.9747100688,
+    0,
+    -0.0001004711994,
+    0,
+    0,
+    1,
+    0,
+    130.82,
+    222.33,
+    0,
+    1
+   ],
+   "affineFallback": {
+    "a": [
+     0.99765128,
+     0.1136813,
+     131.80017
+    ],
+    "b": [
+     -0.071876291,
+     0.99367911,
+     223.37585
+    ],
+    "rotationDeg": -4.121,
+    "scaleU": 1.0002,
+    "scaleV": 1.0002,
+    "extraVerticalAxisTiltDeg": 2.406,
+    "errorOverSlots_px": {
+     "max": 3.49,
+     "mean": 0.96,
+     "max_pt402": 1.5
+    }
+   },
+   "quad_hero": {
+    "TL": [
+     130.82,
+     222.32999999999998
+    ],
+    "TR": [
+     473.03,
+     201.07
+    ],
+    "BR": [
+     494.68,
+     365.39
+    ],
+    "BL": [
+     147.44,
+     393.69000000000005
+    ]
+   }
+  },
+  "recommendation": "Draw the native notification inside a View of CARD_W x CARD_H card-plane units (x s) with transformOrigin top-left and the homography as a 16-value matrix transform (matrix3d_columnMajor_transformOriginTopLeft, translation x s, h6/h7 / s). Exact to the measured quad. If the RN matrix transform proves unsupported on iOS at implementation time, the affine fallback is off by up to 3.49 px (1.5 pt at 402) at the slot corners, mean 0.96 px; report that before accepting it. No art rework is needed for either.",
+  "slots_cardPlaneUnits": {
+   "icon": {
+    "centre": [
+     50,
+     63.75
+    ],
+    "side": 78,
+    "radius": 17.45
+   },
+   "textLeft": 104,
+   "textRight": 332,
+   "label": {
+    "text": "Lotly",
+    "font": "500 $px SFNS",
+    "size": 22,
+    "baseline": 42,
+    "colour": "#66747A"
+   },
+   "title": {
+    "lines": [
+     "Recall alert: Glutinous",
+     "Rice Balls"
+    ],
+    "font": "600 $px SFNS",
+    "size": 23.5,
+    "baselines": [
+     73.6,
+     98.9
+    ],
+    "colour": "#001F3E"
+   },
+   "body": {
+    "lines": [
+     "Undeclared peanut allergen.",
+     "Check your package."
+    ],
+    "font": "400 $px SFNS",
+    "size": 18.8,
+    "baselines": [
+     124.8,
+     146.9
+    ],
+    "colour": "#66747A"
+   }
+  },
+  "slotNotes": {
+   "units": "card-plane units = reference px at the card centre (local scale 0.95-1.05 across the card); pt = units x width/934 (402 pt: x 0.4304).",
+   "typeFit": "Width-fitted per line, SF Pro (the iOS notification face) reproduces the measured cap heights within ~0.5 units; Public Sans at equal width is ~1.5 units short. Recommendation: system font, label 22 / medium, title 23.5 / semibold, body 18.8 / regular (≈ 9.5 / 10.1 / 8.1 pt at 402), title 2 lines and body 2 lines, clipped to the column; text/secondary #66747A for label and body (measured ≈99,112,122), text/primary #001F3E for the title (measured ≈38,58,95 blurred). Decorative scale: these sizes follow the art, never Dynamic Type; the meaning goes to VoiceOver once as native copy.",
+   "placementAfterCalibration": {
+    "label": {
+     "dx": -0.22,
+     "dy": 0.04,
+     "inkRatio": 0.826,
+     "leftEdge": [
+      104.5,
+      104.75
+     ],
+     "rightEdge": [
+      148.5,
+      147.75
+     ]
+    },
+    "title1": {
+     "dx": -0.43,
+     "dy": 0.17,
+     "inkRatio": 1.189,
+     "leftEdge": [
+      104.25,
+      104.25
+     ],
+     "rightEdge": [
+      314.25,
+      315
+     ]
+    },
+    "title2": {
+     "dx": 1.74,
+     "dy": 0.14,
+     "inkRatio": 1.23,
+     "leftEdge": [
+      104.25,
+      104.25
+     ],
+     "rightEdge": [
+      194.75,
+      197.5
+     ]
+    },
+    "body1": {
+     "dx": 0.13,
+     "dy": -0.03,
+     "inkRatio": 0.941,
+     "leftEdge": [
+      104.5,
+      104.5
+     ],
+     "rightEdge": [
+      324,
+      322.5
+     ]
+    },
+    "body2": {
+     "dx": -0.17,
+     "dy": 0.1,
+     "inkRatio": 0.945,
+     "leftEdge": [
+      104,
+      104
+     ],
+     "rightEdge": [
+      267.25,
+      267.75
+     ]
+    }
+   },
+   "placementNote": "Centroid offsets reconstruction - reference, card units. Baselines were lowered 0.7 after the first pass. \"Rice Balls\" differs 1.74 units (≈ 0.75 pt) horizontally from glyph advance differences between SF and the mock lettering; ink ratio 1.19-1.23 on the title is the canvas renderer's semibold instance, not an iOS measurement.",
+   "iconSlot": "centre (50, 63.75), side 78 units (measured tile 77 x 80), radius 17.45 (= iOS 0.2237 x side; measured corner ≈ 16-18).",
+   "textColumn": "u 104-332 (left edge measured 104 on all five lines; right mirrors the icon inset). The approved example wraps \"Recall alert: Glutinous / Rice Balls\" in this column."
+  },
+  "foregroundOverlap": "None needed. Nothing in the scene overlaps the card. The glove fingertip lies on the black bezel; its nearest white pixel is about 3 px outside the card's right edge and >= 23 px from the text column (u 332). A separate glove layer would add nothing; native content must stay clipped to the card plane."
+ },
+ "appIcon": {
+  "finding": "A finalized production iOS icon EXISTS: assets/brand/production/lotly-icon-ios-1024.png (sha 20ca0126…, 1024x1024 opaque RGB sRGB), the approved reference assets/brand/reference/lotly-icon-approved.png (sha dfd6cd13…) scaled uniformly; installed as app.json ios.icon in c0f69e6 and verified on the Home Screen (docs/recall-release-readiness.md §11). DESIGN.md's Notification education paragraph still calls it \"the not-yet-final app icon\" — stale since 2026-09-23; phase 2 must update it.",
+  "decision": "The reference's icon square is a generated miniature (both eyes closed, light-blue tile) that differs from the approved icon (winking, white full-bleed). It is REMOVED from the art, not adopted. The reconstruction draws the approved icon in the icon slot. Phase 2 needs a small derived raster of the approved icon (uniform downscale only) rather than bundling the 823 KB 1024 px file; that is implementation, not a new icon.",
+  "openDecision": "White on white: the approved icon's white background meets the white card, so the tile edge disappears and the ring appears to float (sheet panel I). Options for the founder: (a) keep it as drawn; (b) a native hairline/very light tile edge around the slot (decoration, not part of the icon). app.json and the top-level template icon.png are unchanged."
+ },
+ "nativeLayout": {
+  "coordinateSpace": "Reference px (934 wide). pt = px x width/934.",
+  "heroTopInContent": {
+   "px": 128,
+   "ofWidth": 0.13704,
+   "pt402": 55.1,
+   "pt393": 53.9
+  },
+  "heroHeight": {
+   "px": 768,
+   "ofWidth": 0.82227,
+   "pt402": 330.6,
+   "pt393": 323.2
+  },
+  "heroAspect": "934:768 (height = width x 0.82227)",
+  "badge": {
+   "inkBbox_reference_xyxy_inclusive": [
+    43,
+    107,
+    343,
+    166
+   ],
+   "note": "native lime mark, verified entitlement only; it overlaps the hero's transparent rows 128-166 and draws above the hero."
+  },
+  "caption": {
+   "text": "Example notification",
+   "mockInkBbox_reference_xyxy_inclusive": [
+    248,
+    853,
+    458,
+    868
+   ],
+   "centreX": {
+    "px": 353,
+    "ofWidth": 0.37794,
+    "pt402": 151.9,
+    "pt393": 148.5
+   },
+   "baseline": {
+    "px": 868,
+    "ofWidth": 0.92934,
+    "pt402": 373.6,
+    "pt393": 365.2
+   },
+   "note": "centred under the PHONE (ink centre x 353), not the page centre (467). Mock size ≈ 20.6 px (8.9 pt at 402, Public Sans); recommended native `caption` 12 pt like the paywall's small mock text; ink measured ≈104,121,139 → text/secondary. It sits on the hero's ground-shadow rows (hero rows 725-740)."
+  },
+  "heroBottomToHeadlineSoftEdge": {
+   "px": 44,
+   "ofWidth": 0.04711,
+   "pt402": 18.9,
+   "pt393": 18.5
+  }
+ },
+ "files": [
+  {
+   "role": "source, EXACT crop (reference/review, not runtime)",
+   "path": "assets/brand/reference/notifications-phone/source/lotly-notifications-phone-scene-source.png",
+   "sha256": "d65c487631416fe8ebe699f0d025e2f63801010f8ebabc97948711dcca6ebef0",
+   "bytes": 710783,
+   "dimensions": [
+    934,
+    768
+   ],
+   "channels": 3,
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ]
+  },
+  {
+   "role": "source, DERIVED: exact crop with the card content, caption and badge removed (reference/review, not runtime)",
+   "path": "assets/brand/reference/notifications-phone/source/lotly-notifications-phone-scene-blank-card-source.png",
+   "sha256": "9a3118c7ca3caad360b61ae3329cc6b6abcee84db316d8f7f14f658841ef636f",
+   "bytes": 640142,
+   "dimensions": [
+    934,
+    768
+   ],
+   "channels": 3,
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ]
+  },
+  {
+   "role": "operation mask (review)",
+   "path": "assets/brand/reference/notifications-phone/masks/lotly-notifications-phone-operation-mask.png",
+   "sha256": "7e0f1f7fd4a9a290e963b405d43b1ba3b0aeeee3c81e83a0fadc14fdc19f1099",
+   "bytes": 15305,
+   "dimensions": [
+    934,
+    768
+   ],
+   "channels": 3,
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ]
+  },
+  {
+   "role": "production (prepared, NOT imported)",
+   "path": "assets/brand/production/lotly-notifications-phone-scene.png",
+   "sha256": "1bf5c79fbf88fc65501780694319e8b635c960fe71c0774b95308e3b96b7bbbd",
+   "bytes": 675296,
+   "dimensions": [
+    934,
+    768
+   ],
+   "channels": 4,
+   "chunks": [
+    "IHDR",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "IDAT",
+    "IEND"
+   ]
+  },
+  {
+   "role": "comparison sheet (review)",
+   "path": "assets/brand/reference/notifications-phone/lotly-notifications-phone-asset-comparison.png",
+   "sha256": "335af542d3a2ec6279a0afe6d1674c945f4966f012e4b43285f3d07848610596",
+   "bytes": 4143457,
+   "dimensions": [
+    1700,
+    4961
+   ],
+   "channels": 4,
+   "chunks": [
+    "IHDR",
+    "sBIT",
+    "sRGB",
+    "IDAT",
+    "IEND"
+   ]
+  }
+ ],
+ "protectedPixelFidelity": {
+  "exactCropSamplesDifferingFromReference": 0,
+  "opaquePixels": 566034,
+  "opaqueRgbDifferingFromDerivedSource": 0,
+  "opaqueRgbDifferingFromExactSource": 28915,
+  "ofWhichOutsideRepairFootprints": 0,
+  "clearPixelsWithNonZeroRgb": 0,
+  "nearOpaque240to254": 0,
+  "visibleBounds_crop_xyxy_inclusive": [
+   19,
+   8,
+   933,
+   761
+  ],
+  "protectedBoxes": [
+   {
+    "name": "mascot incl. rays, gloves, feet (inside the backdrop)",
+    "box_reference_xyxy_inclusive": [
+     490,
+     240,
+     845,
+     620
+    ],
+    "pixels": 135636,
+    "nonOpaque": 0,
+    "opaqueDifferingFromExact": 0
+   },
+   {
+    "name": "phone body and screen",
+    "box_reference_xyxy_inclusive": [
+     85,
+     190,
+     560,
+     835
+    ],
+    "pixels": 307496,
+    "nonOpaque": 7957,
+    "opaqueDifferingFromExact": 28469
+   },
+   {
+    "name": "crate",
+    "box_reference_xyxy_inclusive": [
+     525,
+     580,
+     890,
+     790
+    ],
+    "pixels": 77226,
+    "nonOpaque": 1576,
+    "opaqueDifferingFromExact": 0
+   },
+   {
+    "name": "peaches",
+    "box_reference_xyxy_inclusive": [
+     650,
+     665,
+     918,
+     868
+    ],
+    "pixels": 54876,
+    "nonOpaque": 2573,
+    "opaqueDifferingFromExact": 0
+   },
+   {
+    "name": "notification card quad bbox",
+    "box_reference_xyxy_inclusive": [
+     130,
+     329,
+     495,
+     522
+    ],
+    "pixels": 71004,
+    "nonOpaque": 0,
+    "opaqueDifferingFromExact": 28469
+   }
+  ],
+  "statement": "Every alpha-255 pixel is RGB byte-identical to the derived source; outside the three repair footprints every one is byte-identical to the exact crop. The mascot box is 100% opaque and unchanged; the only changed opaque pixels in the phone are the card-content footprint."
+ },
+ "reconstructionFidelity": {
+  "panels": "Sheet B/C (full screen) and I/L.",
+  "errorsOnReferenceCream": {
+   "textSlots": {
+    "pixels": 31230,
+    "meanMaxChannelError": 21.24,
+    "maxChannelError": 255
+   },
+   "iconSlot": {
+    "pixels": 7652,
+    "meanMaxChannelError": 49.89,
+    "maxChannelError": 254
+   },
+   "cardOutsideSlots": {
+    "pixels": 17409,
+    "meanMaxChannelError": 0.08,
+    "maxChannelError": 2
+   }
+  },
+  "note": "cardOutsideSlots error 0.08 mean / 2 max: the card surface around the native content is the approved pixels. Text-slot error is glyph-shape difference (SF vs the mock lettering) at matching placement; icon-slot error is the approved icon replacing the generated square by design."
+ },
+ "limitations": [
+  "DERIVED inside three footprints (card content 30,602 px, caption 5,789 px, badge 19,830 px; the badge becomes transparent). The card and badge fills are within surface noise; the caption fill is a smooth continuation of the ground-shadow gradient, not the exact pixels under the ink.",
+  "The notification text is decorative and small at phone width (≈ 8-10 pt): readable as an illustration, not meant as body copy.",
+  "The ground shadow is opaque near-cream (panel E); the hero is for the cream page only.",
+  "The mock's printed text is not SF exactly; native glyph shapes differ slightly (panel I diff)."
+ ],
+ "artContract": {
+  "baked": "Backdrop, phone (body, bezel, buttons, screen), blank notification card with its edge and shadows, mascot with three rays, crate, peaches and leaf, snap peas, ground shadow.",
+  "nativeOnly": [
+   "notification icon (approved iOS icon), \"Lotly\", title, body — in the card plane",
+   "\"Example notification\" caption",
+   "Subscription active badge",
+   "headline, body, reassurance + shield, Turn on notifications, Not now, footnote"
+  ],
+  "decorative": "The scene and the in-phone example are decorative: hidden from VoiceOver except one native description of the example as an example."
+ },
+ "runtime": "Only the production hero is imported, by src/components/onboarding/notification-education.tsx. The example icon is a uniform downscale of the approved iOS icon (assets/onboarding/notifications/, scripts/render-onboarding-assets.mjs). The reference, manifest, source crops, operation mask, report, comparison sheet and source kit are never bundled (verified by npx expo export --platform ios, 2026-10-03).",
+ "openDecisions": [
+  "Icon on the white card: keep as drawn, or add a native hairline tile edge (appIcon.openDecision).",
+  "Caption size: `caption` 12 pt (recommended, precedent) vs the mock's ≈ 8.9 pt.",
+  "\"Glutinous Rice Balls\" appears in no recorded fixture (only src/server/duplicates.ts mentions glutinous); phase 2 must confirm the example name against real data or report a source-derived replacement, per the prompt."
+ ],
+ "revisions": [
+  "2026-10-03 (asset approval): approved production app icon with no added outline; native `Example notification` caption at 12pt (`caption`); cream ground shadow accepted for the cream page; system font inside the illustrated notification; Public Sans for the page UI. appIcon.openDecision and openDecisions[0-1] are resolved by these.",
+  "2026-10-03 (native implementation): the in-phone text carries -0.09em tracking (iOS sets the ~10pt system font in its looser Text optical size; measured on the Simulator, every line then matches the mock's width). The slots below were measured on the mock's own lettering and stand unchanged.",
+  "2026-10-03 (final example, founder decision): the example is the real formatter's output for FDA Regal Health Food International (Regal Gourmet Snacks) Milk Chocolate Raisins, undeclared peanuts, 2023-06-08 — `Recall alert: Milk Chocolate Raisins` / `Undeclared peanut allergen. Check your package.` — which fits the card whole on iPhone 17 and SE. The Glutinous Rice Balls wording in reconstruction panels and openDecisions[2] is the approved mock's, superseded."
+ ]
+}

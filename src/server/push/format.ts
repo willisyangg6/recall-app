@@ -1,10 +1,12 @@
 /**
  * Deterministic push copy — one source-grounded formatter for every
  * notification the delivery worker sends. No LLM, no raw agency headlines:
- * the product identity and the reason sentence come from the SAME shared
- * contracts the app's cards build from (`consumer-summary` for the title,
- * `conciseReasonLine` + `cardSummaryText` for the reason), so a push and the
- * card it opens can never disagree.
+ * the reason sentence is the card's own (`conciseReasonLine` +
+ * `cardSummaryText`), and the product starts from the card's own name
+ * (`cleanProductName`, minus the brand-prefix strip a brand-less notification
+ * cannot afford), shortened for notifications only by
+ * `notificationProductName` (./product-name.ts): deterministic, source-derived,
+ * soft-limited to 55 characters. The full name stays on the recall it opens.
  *
  * Titles carry no regulatory jargon; consumer risk speaks the ConsumerRiskTier
  * language (Critical/Very High/High/Moderate/Low), read from the one label
@@ -17,22 +19,11 @@
  * material-change rule that fired — nothing is invented.
  */
 
-import { displayProductTitle, productDisplayName } from '../../lib/consumer-summary';
 import { cardSummaryText, conciseReasonLine } from '../../lib/recall-presentation';
 import { agencyLabel, riskTierWord } from '../../lib/risk-display';
 import { consumerRiskTier, classificationStatus } from '../../domain/risk-tier';
+import { notificationProductName } from './product-name';
 import type { DeliverableEvent, PushMessage } from './types';
-
-/** Notification titles stay glanceable; long product names truncate cleanly. */
-const MAX_PRODUCT_CHARS = 60;
-
-export function truncateForPush(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed.length <= MAX_PRODUCT_CHARS) return trimmed;
-  const cut = trimmed.slice(0, MAX_PRODUCT_CHARS - 1);
-  const lastSpace = cut.lastIndexOf(' ');
-  return `${(lastSpace > 40 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
-}
 
 export interface PushContent {
   title: string;
@@ -41,17 +32,10 @@ export interface PushContent {
 
 export function formatPushContent(event: DeliverableEvent): PushContent {
   const projection = event.projection;
-  // The same shared shopper-title pipeline the app's cards use (P3D, extended
-  // by P2B7G): a jammed quantity+unit boundary is spaced, ALL-CAPS is
-  // un-shouted and a defectively lowercase name is headline-cased before
-  // truncation, so a push and the card it opens can never disagree about a
-  // name. Formatting only — rendered at delivery time, never stored in the
-  // ledger, and delivery stays dormant until push is explicitly activated.
-  const product = truncateForPush(
-    displayProductTitle(
-      productDisplayName(projection.productDescription ?? null, projection.title),
-    ),
-  );
+  // One short product name for every event kind, rendered at delivery time,
+  // never stored in the ledger; delivery stays dormant until push is
+  // explicitly activated.
+  const product = notificationProductName(projection);
   const agency = agencyLabel(projection.sourceAgency);
 
   if (event.kind === 'initial') {

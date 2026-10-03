@@ -585,7 +585,9 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
   // step its Stores row's shopping-cart and its locked-matches lock
   // (lib/ready-presentation.ts), and the onboarding paywall its benefit rows'
   // file-search and bell (lib/onboarding-paywall-presentation.ts; drawing in
-  // rows that are not controls). There is still no share or sliders glyph,
+  // rows that are not controls), and notification education its
+  // reassurance line's shield-check (drawing, not a control;
+  // lib/notification-education-presentation.ts). There is still no share or sliders glyph,
   // and no bell control anywhere (detail-design.test.ts).
   assert.deepEqual(glyphs, [
     'allergen-egg',
@@ -614,6 +616,7 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'map',
     'map-pin',
     'search',
+    'shield-check',
     'shopping-cart',
     'user',
     'warning',

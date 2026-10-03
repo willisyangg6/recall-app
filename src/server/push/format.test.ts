@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { CaseProjection, OfficialClass } from '../../domain/recall-types';
-import { buildPushMessage, formatPushContent, truncateForPush } from './format';
+import { buildPushMessage, formatPushContent } from './format';
 import type { DeliverableEvent } from './types';
 
 function makeProjection(overrides: Partial<CaseProjection> = {}): CaseProjection {
@@ -28,7 +28,7 @@ function makeProjection(overrides: Partial<CaseProjection> = {}): CaseProjection
     pathogenOrAllergen: 'Undeclared Peanut',
     recallingFirm: { displayName: 'Acme Foods', rawVariants: ['Acme Foods'] },
     brands: [],
-    productDescription: 'Crunchy Trail Mix 16 oz',
+    productDescription: 'Crunchy Trail Mix',
     retailerNames: [],
     heroImageUrl: null,
     geography: { scope: 'unknown', states: [], confidence: 'inferred', sourceText: null },
@@ -75,7 +75,7 @@ function classified(classes: OfficialClass[]): CaseProjection {
 
 test('new FDA recall: product identity + hazard, no agency headline, no tier claim', () => {
   const content = formatPushContent(makeEvent('initial', 'new_case', makeProjection()));
-  assert.equal(content.title, 'Recall alert: Crunchy Trail Mix 16 oz');
+  assert.equal(content.title, 'Recall alert: Crunchy Trail Mix');
   assert.equal(content.body, 'Undeclared peanut allergen. Check your package.');
   // Pending risk: no invented tier, no regulatory class, no raw headline.
   assert.ok(!/class/i.test(content.title + content.body));
@@ -136,7 +136,7 @@ test('classification assigned (single Class I) speaks Critical, not Class I', ()
   const content = formatPushContent(
     makeEvent('material_update', 'classification_assigned', classified(['class_I'])),
   );
-  assert.equal(content.title, 'Risk update: Crunchy Trail Mix 16 oz');
+  assert.equal(content.title, 'Risk update: Crunchy Trail Mix');
   assert.equal(content.body, 'FDA classified this recall as Critical risk.');
   assert.ok(!/class[\s_]I/i.test(content.body));
 });
@@ -184,13 +184,13 @@ test('expansion, correction, health impact, instructions, retraction', () => {
   ];
   for (const [ruleId, body] of cases) {
     const content = formatPushContent(makeEvent('material_update', ruleId, makeProjection()));
-    assert.equal(content.title, 'Recall updated: Crunchy Trail Mix 16 oz', ruleId);
+    assert.equal(content.title, 'Recall updated: Crunchy Trail Mix', ruleId);
     assert.equal(content.body, body, ruleId);
   }
   const retraction = formatPushContent(
     makeEvent('material_update', 'retraction', makeProjection({ sourceAgency: 'FSIS' })),
   );
-  assert.equal(retraction.title, 'Recall retracted: Crunchy Trail Mix 16 oz');
+  assert.equal(retraction.title, 'Recall retracted: Crunchy Trail Mix');
   assert.equal(retraction.body, 'USDA FSIS retracted this notice.');
 });
 
@@ -202,13 +202,27 @@ test('unknown future rule degrades to honest generic copy, never crashes', () =>
   assert.ok(!content.body.includes('some_future_rule'));
 });
 
-test('long product names truncate deterministically at a word boundary', () => {
-  const long =
-    'Extra Long Product Name With Many Descriptive Words That Goes On And On Forever 24 oz';
-  const truncated = truncateForPush(long);
-  assert.ok(truncated.length <= 60);
-  assert.ok(truncated.endsWith('…'));
-  assert.equal(truncateForPush('Short Name'), 'Short Name');
+test('every title shortens the product the same way; bodies never shorten for it', () => {
+  // The rules and the real-record goldens live in product-name.test.ts; here,
+  // only that every event kind carries the one short name and an untouched body.
+  const long = makeProjection({
+    productDescription:
+      'Extra Long Product Name With Many Descriptive Words That Goes On And On Forever 24 oz',
+  });
+  for (const [kind, rule] of [
+    ['initial', 'new_case'],
+    ['material_update', 'classification_assigned'],
+    ['material_update', 'expansion_products'],
+    ['material_update', 'retraction'],
+  ] as const) {
+    const { title } = formatPushContent(makeEvent(kind, rule, long));
+    const product = title.slice(title.indexOf(': ') + 2);
+    assert.equal(product, 'Extra Long Product Name With Many Descriptive Words…', rule);
+  }
+  assert.equal(
+    formatPushContent(makeEvent('initial', 'new_case', long)).body,
+    'Undeclared peanut allergen. Check your package.',
+  );
 });
 
 test('push message payload is small, typed, and secret-free', () => {
@@ -239,7 +253,8 @@ test('P3D: a defectively lowercase product name is headline-cased in push copy o
     content.title,
     // P2B7M: minor words follow headline style, and push gets the same
     // rendering as the card it opens because both call displayProductTitle.
-    'Recall alert: Dietary Supplements Marketed for Male Sexual Enhancement',
+    // The 56-character name then takes the notification's whole-word cut.
+    'Recall alert: Dietary Supplements Marketed for Male Sexual…',
   );
   // Canonical input keeps its source casing.
   assert.equal(
@@ -275,6 +290,7 @@ test('P3D: push un-shouts an ALL-CAPS product name exactly as the app cards do',
       makeProjection({ productDescription: 'TOP SIRLOIN BUTT, 12 OZ' }),
     ),
   );
-  // "OZ" → "Oz" is existing humanizeAllCaps behavior, identical on the cards.
-  assert.equal(content.title, 'Recall alert: Top Sirloin Butt, 12 Oz');
+  // The cards' own name: un-shouted, and the description's trailing size
+  // moved to package evidence, exactly as Home and Detail show it.
+  assert.equal(content.title, 'Recall alert: Top Sirloin Butt');
 });

@@ -323,17 +323,24 @@ export function OnboardingActionPill({
   disabled = false,
   busy = false,
   busyLabel,
+  accessibilityHint,
+  labelType = null,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   busy?: boolean;
   busyLabel?: string;
+  /** Spoken after the label: what pressing will do, when that needs saying. */
+  accessibilityHint?: string;
+  /** A screen's adaptive label base at large text sizes; the pill's own type otherwise. */
+  labelType?: { fontSize: number; lineHeight: number } | null;
 }) {
   const inert = disabled || busy;
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: inert, busy }}
       disabled={inert}
       onPress={onPress}>
@@ -342,7 +349,7 @@ export function OnboardingActionPill({
           <Text
             variant="body-small-bold"
             color={inert ? 'text/primary' : 'text/inverse'}
-            style={styles.pillLabel}>
+            style={[styles.pillLabel, labelType]}>
             {busy && busyLabel !== undefined ? busyLabel : label}
           </Text>
         </View>

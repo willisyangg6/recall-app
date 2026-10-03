@@ -33,8 +33,8 @@ import {
   EDUCATION_BODY,
   EDUCATION_CTA,
   EDUCATION_HEADLINE,
-  EDUCATION_PREVIEW_BODY,
-  EDUCATION_PREVIEW_TITLE,
+  EDUCATION_EXAMPLE_LABEL,
+  EDUCATION_FOOTNOTE,
   EDUCATION_REASSURANCE,
   EDUCATION_SECONDARY,
   EDUCATION_SUCCESS,
@@ -477,16 +477,14 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
     'Lotly is independent and is not affiliated with the FDA or USDA.',
   );
   assert.equal(EDUCATION_SUCCESS, 'Subscription active');
-  assert.equal(EDUCATION_HEADLINE, 'Get alerts when a recall matches.');
-  assert.equal(
-    EDUCATION_BODY,
-    'Turn on notifications so Lotly can tell you when a new recall matches your profile.',
-  );
-  assert.equal(EDUCATION_PREVIEW_TITLE, 'Recall matches your profile');
-  assert.equal(EDUCATION_PREVIEW_BODY, 'Gummy Products may contain undeclared peanut.');
+  // The approved phone-led screen (2026-10-03, source-kit LAYOUT_SPEC).
+  assert.equal(EDUCATION_HEADLINE, 'Let the alerts come to you.');
+  assert.equal(EDUCATION_BODY, 'New recalls and important updates, matched to your preferences.');
+  assert.equal(EDUCATION_EXAMPLE_LABEL, 'Example notification');
   assert.equal(EDUCATION_CTA, 'Turn on notifications');
   assert.equal(EDUCATION_SECONDARY, 'Not now');
-  assert.equal(EDUCATION_REASSURANCE, 'You can change this anytime in Settings.');
+  assert.equal(EDUCATION_REASSURANCE, 'Recall alerts only. No marketing.');
+  assert.equal(EDUCATION_FOOTNOTE, 'Change this anytime in Settings.');
   assert.equal(PREFERENCES_SET_CONFIRMATION, 'Your preferences are set.');
   // Rendered from the module, not retyped: the screens carry the constants.
   for (const [name, source, constants] of [
@@ -599,8 +597,11 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
         'EDUCATION_CTA',
         'EDUCATION_SECONDARY',
         'EDUCATION_REASSURANCE',
-        'EDUCATION_PREVIEW_TITLE',
-        'EDUCATION_PREVIEW_BODY',
+        'EDUCATION_FOOTNOTE',
+        'EDUCATION_EXAMPLE_LABEL',
+        'EDUCATION_EXAMPLE_SPOKEN',
+        'EDUCATION_EXAMPLE_TITLE',
+        'EDUCATION_EXAMPLE_BODY',
       ],
     ],
     ['feed', FEED, ['PREFERENCES_SET_CONFIRMATION']],
@@ -1028,18 +1029,22 @@ test('the notification permission is reachable from the education primary action
     2,
     'once as an import, once on the press',
   );
-  assert.ok(route.includes('await enableRecallAlerts();'));
+  // The one enable path is handed to the choices' leaf as `enable`; which
+  // choice reaches it, and that Not now completes without reading, asking or
+  // registering, is proven behaviourally (lib/notification-education-actions.test.ts).
+  assert.ok(route.includes('enable: enableRecallAlerts,'));
   assert.ok(!route.includes('useEffect'), 'nothing runs on mount');
   assert.ok(!route.includes('useFocusEffect'), 'nothing runs on focus');
-  const skip = route.slice(
-    route.indexOf('const skip = () => {'),
-    route.indexOf('return <NotificationEducation'),
+  assert.ok(route.includes("onEnable={() => choose('enable')}"));
+  assert.ok(route.includes("onSkip={() => choose('skip')}"));
+  assert.ok(!route.includes('getAlertStatus'), 'the route reads the permission');
+  // Both choices complete the education through the one completion, so both
+  // enter the Feed through the gate.
+  assert.equal((route.match(/access\.completeNotificationEducation\(\)/g) ?? []).length, 1);
+  const actions = codeOnly(
+    readFileSync(join(__dirname, '..', 'lib', 'notification-education-actions.ts'), 'utf8'),
   );
-  assert.ok(!skip.includes('enableRecallAlerts'), 'Not now reaches the prompt');
-  assert.ok(!skip.includes('getAlertStatus'), 'Not now reads the permission');
-  assert.ok(skip.includes('access.completeNotificationEducation()'));
-  // Both choices complete the education, so both enter the Feed through the gate.
-  assert.equal((route.match(/access\.completeNotificationEducation\(\)/g) ?? []).length, 2);
+  assert.ok(!/\bimport\b/.test(actions), 'the choices reach something of their own');
   // The component itself imports no permission API.
   const component = codeOnly(EDUCATION);
   for (const forbidden of [
@@ -1079,7 +1084,10 @@ test('the notification permission is reachable from the education primary action
 
 test('the Feed shows the one-time confirmation once, taken from the gate, without announcing it as a refresh', () => {
   const feed = codeOnly(FEED);
-  assert.ok(feed.includes('if (access.consumePreferencesSetNotice()) setPreferencesSet(true);'));
+  assert.ok(feed.includes('if (consumePreferencesSetNotice()) setPreferencesSet(true);'));
+  // Keyed to the stable taker: the foreground entitlement refresh (closing the
+  // notification prompt is one) must not re-run the effect and clear it.
+  assert.ok(feed.includes('}, [consumePreferencesSetNotice]),'));
   assert.ok(feed.includes('return () => setPreferencesSet(false);'));
   assert.ok(feed.includes('<Callout tone="information">{PREFERENCES_SET_CONFIRMATION}</Callout>'));
 });
@@ -1484,10 +1492,24 @@ test('Welcome is static: no entrance, no loop, and no screen animates the shared
   }
 });
 
-test('the paywall and education keep the shared frame, and the paywall keeps its four footer actions in one toolbar', () => {
+test('the paywall keeps the shared frame and its four footer actions in one toolbar; education draws its own page with no way back', () => {
   assert.ok(codeOnly(PANEL).includes('<OnboardingFrame'));
-  assert.ok(codeOnly(EDUCATION).includes('<OnboardingFrame'));
   assert.ok(codeOnly(PANEL).includes('accessibilityRole="toolbar"'));
+  // The approved phone-led page (2026-10-03) is full-bleed, as Building and
+  // the onboarding paywall: its own page, no back control, no tabs, and the
+  // two actions and the footnote pinned in the footer.
+  const education = codeOnly(EDUCATION);
+  assert.ok(!education.includes('<OnboardingFrame'));
+  assert.ok(!education.includes('OnboardingTopBar'));
+  assert.ok(!education.includes('chevron-left'));
+  const footer = education.slice(education.indexOf('</ScrollView>'));
+  for (const piece of [
+    '<OnboardingActionPill',
+    'EDUCATION_SECONDARY',
+    '{large ? null : footnote}',
+  ]) {
+    assert.ok(footer.includes(piece), `the footer lost ${piece}`);
+  }
 });
 
 test('the paywall keeps its sticky/inline terms rule, and Ready carries no terms at all', () => {
