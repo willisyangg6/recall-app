@@ -1,8 +1,8 @@
 /**
  * The Ready step's presentation rules (the preference-board Ready,
  * 2026-09-30): where the approved layers sit, how the physical board grows
- * to hold its native rows, when the page switches to its full-width
- * preferences, what each board row shows and says, and the physical recall
+ * to hold its native rows, when the page uses the wide board instead, what
+ * each board row shows and says, and the physical recall
  * deck's poses and gesture rules. Numbers and pure functions only, so all
  * of it is testable under Node; `components/onboarding/preview-step.tsx` and
  * `ready-carousel.tsx` map them onto React Native. A leaf.
@@ -34,9 +34,18 @@
  * not the mascot, the food, the cloth or the tabletop.
  *
  * Growth is capped at `BOARD_GROWTH_MAX_PX` (80 source pixels, the founder's
- * cap): beyond about 2.5x the slice's crackle visibly streaks. Content that
- * needs more than the board plus that cap, and every accessibility text
- * size, switches the page to its full-width layout instead (`boardLayout`).
+ * cap): beyond about 2.5x the slice's crackle visibly streaks.
+ *
+ * ## Two boards, chosen by fit (2026-10-02)
+ *
+ * The founder rejected any separate preferences card: every preference and
+ * `Edit preferences` are always on illustrated paper. Content that fits the
+ * compact board (above) within its cap, with no word broken, keeps the
+ * compact board. Anything else takes the WIDE board
+ * (assets/brand/reference/ready-wide-board/lotly-ready-wide-board-asset-report.json):
+ * broader paper whose native block sits above the mascot and groceries, which
+ * overlap only a blank bottom margin, and which grows without limit by
+ * quilted extension plates rather than by stretching (`wideTemplate`).
  *
  * ## Native content inside the measured safe rectangle
  *
@@ -126,32 +135,181 @@ export function boardGrowthMax(scale: number): number {
   return BOARD_GROWTH_MAX_PX * scale;
 }
 
-/** From this text scale the page always uses its full-width layout (iOS's accessibility sizes). */
+/** iOS's accessibility text sizes start at this text scale. */
 export const ACCESSIBILITY_SCALE = 1.5;
 
 export function atAccessibilitySize(fontScale: number): boolean {
   return fontScale >= ACCESSIBILITY_SCALE;
 }
 
-/** The preferences on the board, or the decorative scene above a full-width summary. */
-export type BoardLayout = { kind: 'board'; growth: number } | { kind: 'stacked' };
+// ── The wide board (asset report, 2026-10-02) ───────────────────────────────
+
+/** The wide scene, lotly-ready-wide-board-scene.png: target rows 190–960, full width. */
+export const WIDE_SCENE_PX = { width: 934, height: 771 } as const;
+/** The wide blank paper and where it sits in the wide scene. */
+export const WIDE_PAPER_PX = { width: 782, height: 597, left: 85, top: 60 } as const;
+/** The wide foreground overlap, fixed below the insertion row. */
+export const WIDE_OVERLAP_PX = { width: 786, height: 267, left: 83, top: 392 } as const;
+/**
+ * Growth: new rows go between target rows 469 and 470, which are paper row
+ * 220 and scene row 280. Each layer draws its rows above the insertion, then
+ * its extension plate (`plateRows` tall, repeated mirrored past that), then
+ * its `featherRows` (the original rows below the insertion with a 0→1 alpha
+ * ramp) over the plate's end, then the rest of the layer.
+ */
+export const WIDE_GROWTH = {
+  paperRow: 220,
+  sceneRow: 280,
+  plateRows: 1200,
+  featherRows: 24,
+} as const;
+/**
+ * The native block's region on the wide paper, in paper pixels: 48px inside
+ * the board's left edge and 14px inside its top, `width` wide (14px inside
+ * the right edge). `headingWidth` keeps the heading 8px clear of the lime
+ * ribbon, which it sits beside; every row starts below the ribbon's reach.
+ * How far down the block may run is not a rectangle: see `wideGrowth`.
+ */
+export const WIDE_TEXT_PX = { left: 49, top: 15, width: 719, headingWidth: 648 } as const;
+
+/** The wide native block's width, in points, at `scale`. */
+export function wideTextWidth(scale: number): number {
+  return WIDE_TEXT_PX.width * scale;
+}
+
+/** The wide heading's width, in points, at `scale`. */
+export function wideHeadingWidth(scale: number): number {
+  return WIDE_TEXT_PX.headingWidth * scale;
+}
 
 /**
- * Where the preferences go, from the board content's MEASURED height in
- * points (null before the first measurement): on the board, which grows by
- * whatever the content needs up to the cap; or, past the cap and at every
- * accessibility size, below the scene at full width. The scene is never
- * shrunk and no text is ever capped to make it fit.
+ * The top of the wide foreground (the pear, bowl and mascot, with the
+ * overlap's 3px exact-pixel apron) in each 8px column of the wide paper, as
+ * a paper row at default height; 0 where nothing stands in front of the
+ * board. Measured from lotly-ready-wide-board-overlap.png
+ * (`ready-wide-board-assets.test.ts` re-derives it).
  */
-export function boardLayout(
-  contentHeight: number | null,
-  scale: number,
-  fontScale: number,
-): BoardLayout {
-  if (atAccessibilitySize(fontScale)) return { kind: 'stacked' };
-  const need = Math.max(0, (contentHeight ?? 0) - boardCapacity(scale));
-  if (need > boardGrowthMax(scale)) return { kind: 'stacked' };
-  return { kind: 'board', growth: need };
+export const WIDE_FOREGROUND_COLUMN_PX = 8;
+export const WIDE_FOREGROUND_TOP_PX: readonly number[] = [
+  332, 366, 380, 392, 407, 445, 477, 495, 499, 502, 510, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 551, 534, 520, 507, 499, 476, 468, 460, 453, 447, 443, 438, 435,
+  432, 430, 429, 428, 428, 428, 429, 430, 406, 383, 377, 376, 377, 383, 416, 407, 404,
+];
+/**
+ * Clearance from the foreground's apron, in source pixels: 5 to the side
+ * (the report's 8px from the art) and 13 below (16px from the art, a
+ * deliberate, comfortable margin).
+ */
+export const WIDE_CLEARANCE_PX = { side: 5, below: 13 } as const;
+/** The lowest paper row native content may reach where nothing stands in front: 14px above the foot. */
+export const WIDE_PAPER_FLOOR_PX = 582;
+
+/** One drawn piece of the native block (a line of text, a plate, a rule, the action), in points from its top-left. */
+export interface BlockRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * How far the wide board grows for a block whose drawn pieces are `rects`:
+ * just enough that every piece clears the foreground directly beneath it
+ * (and the board's foot) by `WIDE_CLEARANCE_PX`. Growth moves the
+ * foreground and the foot down 1:1 while the block stays, so a long last
+ * line under the mascot's rays needs more than a short `Edit preferences`
+ * above the empty middle of the board.
+ */
+export function wideGrowth(rects: readonly BlockRect[], scale: number): number {
+  let need = 0;
+  const columns = WIDE_FOREGROUND_TOP_PX.length;
+  for (const r of rects) {
+    if (r.width <= 0 || r.height <= 0) continue;
+    const x0 = WIDE_TEXT_PX.left + r.x / scale - WIDE_CLEARANCE_PX.side;
+    const x1 = WIDE_TEXT_PX.left + (r.x + r.width) / scale + WIDE_CLEARANCE_PX.side;
+    const bottom = WIDE_TEXT_PX.top + (r.y + r.height) / scale;
+    let limit = WIDE_PAPER_FLOOR_PX;
+    const first = Math.max(0, Math.floor(x0 / WIDE_FOREGROUND_COLUMN_PX));
+    const last = Math.min(columns - 1, Math.floor(x1 / WIDE_FOREGROUND_COLUMN_PX));
+    for (let c = first; c <= last; c += 1) {
+      const top = WIDE_FOREGROUND_TOP_PX[c];
+      if (top > 0) limit = Math.min(limit, top - WIDE_CLEARANCE_PX.below);
+    }
+    need = Math.max(need, bottom - limit);
+  }
+  return need * scale;
+}
+
+// ── Choosing the board ──────────────────────────────────────────────────────
+
+/** One hidden measurement of the board's native block: its height, its broken words and (wide) its drawn pieces. */
+export interface BlockMeasure {
+  height: number;
+  broken: number;
+  rects?: readonly BlockRect[];
+}
+
+/**
+ * The block measured three ways: on the compact board (plates beside the
+ * words), and on the wide board with the plates beside and above the words.
+ */
+export interface BoardMeasurement {
+  compact: BlockMeasure;
+  wide: BlockMeasure;
+  wideStacked: BlockMeasure;
+}
+
+export type BoardTemplate =
+  { kind: 'compact'; growth: number } | { kind: 'wide'; growth: number; stacked: boolean };
+
+/**
+ * The board for this content: the compact board when its block fits the
+ * compact column within the approved +80px growth with no word broken;
+ * otherwise the wide board, plates beside the words unless that breaks more
+ * words than putting them above, grown by what its drawn pieces need
+ * (`wideGrowth`). Text is never shrunk, capped or truncated:
+ * the wide board grows instead.
+ */
+export function boardTemplate(m: BoardMeasurement, scale: number): BoardTemplate {
+  const need = m.compact.height - boardCapacity(scale);
+  if (m.compact.broken === 0 && need <= boardGrowthMax(scale) + MEASURE_TOLERANCE) {
+    return { kind: 'compact', growth: Math.max(0, need) };
+  }
+  const stacked = m.wideStacked.broken < m.wide.broken;
+  const block = stacked ? m.wideStacked : m.wide;
+  return { kind: 'wide', growth: wideGrowth(block.rects ?? [], scale), stacked };
+}
+
+/**
+ * How many words of `text` broke across the lines iOS laid it out in: a line
+ * that ends inside a word (no ordinary space or hyphen at the break; a split
+ * inside the no-break `+N` glue counts). Lines are matched back into the
+ * text, so a trailing space kept or dropped on a wrapped line does not
+ * matter.
+ */
+export function brokenWordCount(text: string, lines: readonly string[]): number {
+  let broken = 0;
+  let at = 0;
+  for (let i = 0; i < lines.length - 1; i += 1) {
+    const line = lines[i].replace(/[ \t\n]+$/, '');
+    const start = text.indexOf(line, at);
+    if (start < 0) return broken;
+    const end = start + line.length;
+    if (end >= text.length) return broken;
+    if (!/[ \t\n]/.test(text[end]) && !/[ \t\n\-\u2010-\u2014]/.test(text[end - 1])) broken += 1;
+    at = end;
+  }
+  return broken;
+}
+
+/**
+ * How many copies of the wide board's extension plate cover `rows` of it
+ * (the growth plus the feather beneath), in source pixels: the plate as
+ * drawn, then mirrored copies, alternately, only past its own height.
+ */
+export function plateCopies(rows: number): number {
+  return Math.max(1, Math.ceil(rows / WIDE_GROWTH.plateRows));
 }
 
 /**

@@ -1343,17 +1343,37 @@ board shows:
   through hitSlop.
 
 Each row is one accessibility element that speaks every chosen name. The
-plates and rules are never heard. Text never shrinks to fit the
-board. Instead:
+plates and rules are never heard.
 
-- The board grows upward by what its rows need. Growth comes only from one
-  slice of blank paper and, by the same amount, one thin band of
-  out-of-focus wall. The foot, the painted shadows and the mascot, food and
-  cloth never move or stretch.
-- Growth is capped at 80 source pixels, about 34pt.
-- Past the cap, and at every accessibility size, the scene is drawn whole
-  with a blank board. The rows then follow at full width on a white
-  `radius/16` surface with a `border/subtle` edge.
+**Every preference stays on illustrated paper** (2026-10-02). There is no
+separate preferences card at any screen or text size, and text never
+shrinks, caps or truncates to fit. Two boards are chosen by measured fit:
+
+- **The compact board** above is used whenever the native block fits its
+  content-safe column within the approved 80-source-pixel growth with every
+  word whole. Growth comes only from one slice of blank paper and, by the
+  same amount, one thin band of out-of-focus wall. The foot, the painted
+  shadows and the mascot, food and cloth never move or stretch.
+- **The wide board**
+  (`assets/brand/reference/lotly-onboarding-ready-wide-board-target.png`)
+  is used otherwise: broader paper with the block above the mascot and
+  groceries.
+  - The block starts at x 134, row 265 in board pixels and is 289pt wide
+    on the SE (310pt on iPhone 17); the heading stays 8px clear of the lime
+    ribbon. It may run down until each drawn piece (line, plate, rule,
+    action) is 16px above the art directly beneath it and 8px beside it, so
+    a short `Edit preferences` over the empty middle sits lower than a
+    full-width line under the mascot's rays.
+  - The paper grows upward as far as the block needs, through quilted
+    extension plates of real paper and wall. They are never stretched, and
+    a feather cross-fades each one back into the original. The page
+    scrolls.
+  - The plates sit beside the words, unless that breaks more words than
+    putting them above.
+- **No layout jump on arrival.** The choice comes from a hidden measurement
+  of this content at this width and text size. The page is not shown until
+  it answers and the chosen board's images have loaded, so the board and
+  its text appear together.
 
 The deviations from the target are deliberate:
 

@@ -1,8 +1,9 @@
 /**
  * The saved choices as the Building step and Ready present them. In a
  * release build this is the identity. In a development build the Design
- * Preview's QA profile may present them with no allergens and no stores
- * (display only, never saved: development-feed-scenarios.ts). The `require`
+ * Preview's QA profile may present them differently — no allergens and no
+ * stores, or a fixed short or long summary (display only, never saved:
+ * development-feed-scenarios.ts). The `require`
  * sits inside the `__DEV__` branch, so a release bundle folds the module away.
  */
 

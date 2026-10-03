@@ -1,8 +1,8 @@
 /**
  * The Ready step's presentation rules (lib/ready-presentation.ts, the
  * preference-board Ready, 2026-09-30): where the board's native rows may go,
- * how far the board grows before the page switches to its full-width
- * preferences, what each board row shows and says, the allergen plate for
+ * how far the compact board grows and when the wide board takes over (never a
+ * separate card), what each board row shows and says, the allergen plate for
  * every selection size, and the deck's geometry. The layer offsets
  * themselves are checked against the asset report in
  * ready-board-assets.test.ts.
@@ -19,7 +19,21 @@ import {
   boardCapacity,
   boardColumnWidth,
   boardGrowthMax,
-  boardLayout,
+  boardTemplate,
+  brokenWordCount,
+  plateCopies,
+  WIDE_GROWTH,
+  WIDE_OVERLAP_PX,
+  WIDE_PAPER_PX,
+  WIDE_SCENE_PX,
+  WIDE_TEXT_PX,
+  WIDE_CLEARANCE_PX,
+  WIDE_FOREGROUND_COLUMN_PX,
+  WIDE_FOREGROUND_TOP_PX,
+  WIDE_PAPER_FLOOR_PX,
+  wideGrowth,
+  wideHeadingWidth,
+  wideTextWidth,
   boardRowLabel,
   boardValue,
   DECK_CARD_PADDING,
@@ -69,31 +83,169 @@ test('the board holds its native rows inside the measured safe rectangle at ever
   assert.equal(Math.round(boardCapacity(sceneScale(393))), 175);
 });
 
-test('the board grows by what its rows need, up to the founder’s 80px cap, then the page stacks', () => {
+const fits = (height: number, broken = 0) => ({ height, broken });
+
+test('the compact board keeps every block that fits its column within the founder’s 80px cap, whole', () => {
   const scale = sceneScale(393);
   const capacity = boardCapacity(scale);
   assert.equal(BOARD_GROWTH_MAX_PX, 80);
   assert.ok(Math.abs(boardGrowthMax(scale) - 80 * scale) < 1e-9);
-  // Before the first measurement, and when the rows fit, nothing grows.
-  assert.deepEqual(boardLayout(null, scale, 1), { kind: 'board', growth: 0 });
-  assert.deepEqual(boardLayout(capacity - 10, scale, 1), { kind: 'board', growth: 0 });
-  // A wrapped value grows the board by exactly the overflow.
-  const grown = boardLayout(capacity + 17, scale, 1);
-  assert.equal(grown.kind, 'board');
-  assert.ok(grown.kind === 'board' && Math.abs(grown.growth - 17) < 1e-9);
-  // Right at the cap the board still holds them; one point past it, it stacks.
-  assert.equal(boardLayout(capacity + boardGrowthMax(scale), scale, 1).kind, 'board');
-  assert.deepEqual(boardLayout(capacity + boardGrowthMax(scale) + 1, scale, 1), {
-    kind: 'stacked',
-  });
+  const wide = fits(10);
+  // Rows that fit: compact, ungrown.
+  assert.deepEqual(
+    boardTemplate({ compact: fits(capacity - 10), wide, wideStacked: wide }, scale),
+    {
+      kind: 'compact',
+      growth: 0,
+    },
+  );
+  // A wrapped value grows the compact board by exactly the overflow, up to the cap.
+  const grown = boardTemplate({ compact: fits(capacity + 17), wide, wideStacked: wide }, scale);
+  assert.ok(grown.kind === 'compact' && Math.abs(grown.growth - 17) < 1e-9);
+  const atCap = boardTemplate(
+    { compact: fits(capacity + boardGrowthMax(scale)), wide, wideStacked: wide },
+    scale,
+  );
+  assert.equal(atCap.kind, 'compact');
 });
 
-test('every accessibility text size uses the full-width preferences, whatever was measured', () => {
+/** A one-piece block: a single drawn rectangle of `height` points across the block. */
+const piece = (height: number, scale: number, width = wideTextWidth(scale)) => ({
+  height,
+  broken: 0,
+  rects: [{ x: 0, y: 0, width, height }],
+});
+
+test('past the cap, or with any word broken in the compact column, the wide board takes over and grows', () => {
+  const scale = sceneScale(375);
+  const capacity = boardCapacity(scale);
+  const over = boardTemplate(
+    {
+      compact: fits(capacity + boardGrowthMax(scale) + 1),
+      wide: piece(209, scale),
+      wideStacked: piece(260, scale),
+    },
+    scale,
+  );
+  assert.equal(over.kind, 'wide');
+  assert.ok(over.kind === 'wide' && !over.stacked);
+  assert.ok(Math.abs(over.growth - wideGrowth(piece(209, scale).rects, scale)) < 1e-9);
+  // Short enough, but a word breaks in the narrow column: wide, never a broken word kept.
+  const broken = boardTemplate(
+    { compact: fits(capacity - 20, 1), wide: piece(40, scale), wideStacked: piece(60, scale) },
+    scale,
+  );
+  assert.deepEqual(broken, { kind: 'wide', growth: 0, stacked: false });
+  // Growth is never capped on the wide board.
+  const tall = boardTemplate(
+    {
+      compact: fits(2000, 9),
+      wide: { ...piece(1800, scale), broken: 4 },
+      wideStacked: { ...piece(2200, scale), broken: 2 },
+    },
+    scale,
+  );
+  assert.ok(tall.kind === 'wide' && tall.stacked && tall.growth > 2000);
+});
+
+test('the wide board grows only as far as the foreground directly beneath each drawn piece needs', () => {
+  const scale = sceneScale(375);
+  const toPt = (paperRow: number) => (paperRow - WIDE_TEXT_PX.top) * scale;
+  // A full-width piece is held by the mascot's rays (the highest foreground, column top 376).
+  const columns = (x0: number, x1: number) =>
+    WIDE_FOREGROUND_TOP_PX.slice(
+      Math.floor(x0 / WIDE_FOREGROUND_COLUMN_PX),
+      Math.floor(x1 / WIDE_FOREGROUND_COLUMN_PX) + 1,
+    ).filter((t) => t > 0);
+  const rays = Math.min(
+    ...columns(
+      WIDE_TEXT_PX.left - WIDE_CLEARANCE_PX.side,
+      WIDE_TEXT_PX.left + WIDE_TEXT_PX.width + WIDE_CLEARANCE_PX.side,
+    ),
+  );
+  assert.equal(rays, 376);
+  const fullLimit = toPt(rays - WIDE_CLEARANCE_PX.below);
+  assert.ok(
+    Math.abs(wideGrowth([{ x: 0, y: 0, width: wideTextWidth(scale), height: fullLimit }], scale)) <
+      1e-9,
+  );
+  assert.ok(
+    Math.abs(
+      wideGrowth([{ x: 0, y: 0, width: wideTextWidth(scale), height: fullLimit + 10 }], scale) - 10,
+    ) < 1e-6,
+  );
+  // A short piece over the empty middle of the board reaches far lower without growing:
+  // only the board's foot holds it.
+  const middleX = (300 - WIDE_TEXT_PX.left) * scale;
+  const middle = { x: middleX, y: 0, width: 40 * scale, height: toPt(WIDE_PAPER_FLOOR_PX) };
+  assert.ok(Math.abs(wideGrowth([middle], scale)) < 1e-9);
+  assert.ok(
+    wideGrowth([middle], scale) <
+      wideGrowth([{ ...middle, x: 0, width: wideTextWidth(scale) }], scale),
+  );
+  // Every piece counts: the worst one decides.
+  assert.ok(
+    Math.abs(
+      wideGrowth(
+        [middle, { x: 0, y: 0, width: wideTextWidth(scale), height: fullLimit + 4 }],
+        scale,
+      ) - 4,
+    ) < 1e-6,
+  );
+  // Empty pieces are ignored.
+  assert.equal(wideGrowth([{ x: 0, y: 0, width: 0, height: 9999 }], scale), 0);
+  assert.equal(WIDE_FOREGROUND_TOP_PX.length * WIDE_FOREGROUND_COLUMN_PX, 784);
+  assert.deepEqual(WIDE_CLEARANCE_PX, { side: 5, below: 13 });
+});
+
+test('the wide board puts the plates above the words only when that breaks fewer words', () => {
   const scale = sceneScale(402);
+  const m = (side: number, stacked: number) =>
+    boardTemplate(
+      { compact: fits(9999, 9), wide: fits(300, side), wideStacked: fits(400, stacked) },
+      scale,
+    );
+  assert.equal((m(0, 0) as { stacked: boolean }).stacked, false);
+  assert.equal((m(2, 2) as { stacked: boolean }).stacked, false);
+  assert.equal((m(3, 1) as { stacked: boolean }).stacked, true);
+});
+
+test('the wide board’s layers and text region are the asset report’s, at every QA width', () => {
+  assert.deepEqual(WIDE_SCENE_PX, { width: 934, height: 771 });
+  assert.deepEqual(WIDE_PAPER_PX, { width: 782, height: 597, left: 85, top: 60 });
+  assert.deepEqual(WIDE_OVERLAP_PX, { width: 786, height: 267, left: 83, top: 392 });
+  assert.deepEqual(WIDE_GROWTH, { paperRow: 220, sceneRow: 280, plateRows: 1200, featherRows: 24 });
+  for (const width of WIDTHS) {
+    const scale = sceneScale(width);
+    assert.ok(Math.abs(wideTextWidth(scale) - 719 * scale) < 1e-9);
+    assert.ok(Math.abs(wideHeadingWidth(scale) - WIDE_TEXT_PX.headingWidth * scale) < 1e-9);
+    // Much wider than the compact column: the long store summary fits two lines.
+    assert.ok(wideTextWidth(scale) - 45 > 188);
+  }
+  // The heading stays 8px clear of the lime ribbon (its left edge is x 782 at row 265).
+  assert.ok(WIDE_PAPER_PX.left + WIDE_TEXT_PX.left + WIDE_TEXT_PX.headingWidth <= 782);
+});
+
+test('the wide plates repeat only past their own 1,200 rows', () => {
+  assert.equal(plateCopies(1), 1);
+  assert.equal(plateCopies(1200), 1);
+  assert.equal(plateCopies(1201), 2);
+  assert.equal(plateCopies(3000), 3);
+});
+
+test('a word is broken only when a line ends inside it', () => {
+  assert.equal(brokenWordCount('Alabama, Arizona', ['Alabama, ', 'Arizona']), 0);
+  assert.equal(brokenWordCount('Alabama, Arizona', ['Alabama,', 'Arizona']), 0);
+  assert.equal(brokenWordCount('Massachusetts, Iowa', ['Massachusett', 's, Iowa']), 1);
+  assert.equal(brokenWordCount('Your preferences', ['Your ', 'pref', 'eren', 'ces']), 2);
+  assert.equal(brokenWordCount('Hy-Vee', ['Hy-', 'Vee']), 0);
+  assert.equal(brokenWordCount('Iowa', ['Iowa']), 0);
+  assert.equal(brokenWordCount('Market\u00A0+1', ['Market\u00A0', '+1']), 1);
+});
+
+test('the accessibility sizes start at text scale 1.5', () => {
   assert.equal(atAccessibilitySize(1.49), false);
   assert.equal(atAccessibilitySize(1.5), true);
-  assert.deepEqual(boardLayout(null, scale, 1.5), { kind: 'stacked' });
-  assert.deepEqual(boardLayout(10, scale, 3.118), { kind: 'stacked' });
 });
 
 test('a stretched slice is drawn from the whole image, its rows filling the slice’s box', () => {

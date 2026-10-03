@@ -19,20 +19,25 @@
  * over the real bottom inset, the hairline drawn only while content runs
  * beneath it. The page scrolls above the footer at every text size.
  *
- * ## Three approved layers and a native board
+ * ## Two illustrated boards and a native block
  *
- * The scene, the blank board and the foreground overlap
+ * The compact board's scene, blank board and foreground overlap
  * (lib/ready-presentation.ts) are drawn at one scale, the page width over
  * 934; the board's contents are NATIVE and sit between the board and the
  * overlap, inside the report's content-safe rectangle, so the mascot, bowl
- * and cloth always stand in front and no row can ever reach them. The
- * board grows upward by what its rows need, at most `BOARD_GROWTH_MAX_PX`,
- * through one slice of quiet paper and the same amount of the thin blue-wall
- * band; past that, and at every accessibility size, the scene is drawn whole
- * with its board blank and the preferences follow at full width
- * (`boardLayout`). The decision is made from a hidden measurement of the
- * board's own contents at the board's own column width, so it never depends
- * on which layout is showing.
+ * and cloth always stand in front and no row can ever reach them. It grows
+ * upward by what its rows need, at most `BOARD_GROWTH_MAX_PX`, through one
+ * slice of quiet paper and the same amount of the thin blue-wall band.
+ *
+ * Content that does not fit the compact board within that cap with every
+ * word whole takes the WIDE board (`boardTemplate`): broader paper whose
+ * native block sits above the mascot and groceries, which overlap only a
+ * blank bottom margin, and which grows as far as the block needs through
+ * quilted extension plates and feathers (`WideBoardHero`). Every preference
+ * and `Edit preferences` are always on illustrated paper; there is no
+ * separate preferences card. The choice comes from a hidden measurement of
+ * this content at this width and text size, and the page is not shown until
+ * it first answers, so arrival never shows one board and then the other.
  *
  * ## The board's rows
  *
@@ -58,9 +63,10 @@
  * known. The deck is components/onboarding/ready-carousel.tsx.
  */
 
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import {
   Image,
+  PixelRatio,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -109,12 +115,12 @@ import {
 import { summarizePreferences } from '@/lib/profile-hub';
 import {
   allergenArtwork,
-  atAccessibilitySize,
   BLOCK_GAP,
   boardColumnWidth,
-  boardLayout,
   boardRowLabel,
+  boardTemplate,
   boardValue,
+  brokenWordCount,
   CONTENT_PX,
   CTA_MIN_HEIGHT,
   headlineType,
@@ -134,7 +140,19 @@ import {
   sliceImagePlacement,
   WALL_BAND_PX,
   WELL_WASH_OPACITY,
+  WIDE_GROWTH,
+  WIDE_OVERLAP_PX,
+  WIDE_PAPER_PX,
+  WIDE_SCENE_PX,
+  WIDE_TEXT_PX,
+  wideHeadingWidth,
+  wideTextWidth,
+  plateCopies,
   type AllergenArtwork,
+  type BlockMeasure,
+  type BlockRect,
+  type BoardMeasurement,
+  type BoardTemplate,
 } from '@/lib/ready-presentation';
 import { hasLockedMatches, previewMatchCount, type ReadyPreviewState } from '@/lib/ready-preview';
 
@@ -145,6 +163,24 @@ const PAPER =
   require('@/assets/brand/production/lotly-ready-preference-board-paper.png') as ImageSourcePropType;
 const OVERLAP =
   require('@/assets/brand/production/lotly-ready-preference-board-overlap.png') as ImageSourcePropType;
+
+/** The wide board's prepared layers (wide-board asset report, 2026-10-02). */
+const WIDE = {
+  scene:
+    require('@/assets/brand/production/lotly-ready-wide-board-scene.png') as ImageSourcePropType,
+  paper:
+    require('@/assets/brand/production/lotly-ready-wide-board-paper.png') as ImageSourcePropType,
+  overlap:
+    require('@/assets/brand/production/lotly-ready-wide-board-overlap.png') as ImageSourcePropType,
+  paperPlate:
+    require('@/assets/brand/production/lotly-ready-wide-board-paper-extension.png') as ImageSourcePropType,
+  wallPlate:
+    require('@/assets/brand/production/lotly-ready-wide-board-wall-extension.png') as ImageSourcePropType,
+  paperFeather:
+    require('@/assets/brand/production/lotly-ready-wide-board-paper-feather.png') as ImageSourcePropType,
+  wallFeather:
+    require('@/assets/brand/production/lotly-ready-wide-board-wall-feather.png') as ImageSourcePropType,
+} as const;
 
 /** `Edit preferences` is one 18pt line; hitSlop makes it a 44pt target. */
 const EDIT_HIT_SLOP = hitSlopToMinimum(READY_TYPE.edit.lineHeight);
@@ -184,12 +220,8 @@ export function PreviewStep({
   const [pageWidth, setPageWidth] = useState(() => Math.min(width, layout.maxContentWidth));
   const sceneWidth = Math.min(pageWidth, layout.maxContentWidth);
   const scale = sceneScale(sceneWidth);
-  // The board's own contents, measured hidden at the board's column width.
-  const [measured, setMeasured] = useState<number | null>(null);
-  const board = boardLayout(measured, scale, fontScale);
-
   const summary = summarizePreferences(prefs);
-  const rows: { key: RowKey; names: readonly string[]; artwork: ReactNode }[] = [
+  const rows: BoardRowModel[] = [
     {
       key: 'states',
       names: summary.states,
@@ -206,9 +238,65 @@ export function PreviewStep({
       artwork: <Icon name="shopping-cart" size={20} color="icon/primary" />,
     },
   ];
-  const content = (ref?: React.Ref<View>) => (
-    <BoardContent rows={rows} onEdit={onEdit} editRef={ref} />
-  );
+
+  // The board's own block, measured hidden three ways (compact; wide with
+  // the plates beside and above the words) for exactly this content, width
+  // and text size. Until the first answer the page is laid out but not
+  // shown, so arrival never shows one board and then the other.
+  const contentKey = [sceneWidth, fontScale, ...rows.map((row) => row.names.join(','))].join('|');
+  const [measures, setMeasures] = useState<Readonly<Record<string, number>>>({});
+  const record = (key: string, value: number) =>
+    setMeasures((prev) => (prev[key] === value ? prev : { ...prev, [key]: value }));
+  // Where each drawn piece of the wide block sits (the wide board grows by
+  // what the foreground beneath each piece needs).
+  const [pieces, setPieces] = useState<Readonly<Record<string, readonly BlockRect[]>>>({});
+  const recordPieces = (key: string, rects: readonly BlockRect[]) =>
+    setPieces((prev) => (sameRects(prev[key], rects) ? prev : { ...prev, [key]: rects }));
+  const wideRoot = useRef<View>(null);
+  const wideStackedRoot = useRef<View>(null);
+  const measurement = boardMeasurement(measures, pieces, contentKey);
+  const resolved = measurement ? boardTemplate(measurement, scale) : null;
+  // The last answer stays while new content is measured (after an edit).
+  const [settled, setSettled] = useState<BoardTemplate | null>(null);
+  if (resolved && !sameTemplate(resolved, settled)) setSettled(resolved);
+  const template = resolved ?? settled;
+  // The chosen board's own artwork: the page is revealed, board and text
+  // together, once every one of its images has loaded (or failed), never on
+  // a timer. The compact board is drawn from the first frame (as it always
+  // was); the wide one once chosen. Each counts its own loads.
+  const [artLoads, setArtLoads] = useState<Readonly<Record<BoardTemplate['kind'], number>>>({
+    compact: 0,
+    wide: 0,
+  });
+  const onArt = (kind: BoardTemplate['kind']) => () =>
+    setArtLoads((prev) => ({ ...prev, [kind]: prev[kind] + 1 }));
+  const [revealed, setRevealed] = useState(false);
+  if (!revealed && template && artLoads[template.kind] >= heroImageCount(template, scale))
+    setRevealed(true);
+  const measureVariant = (variant: MeasureVariant) => {
+    const root = variant === 'wide' ? wideRoot : variant === 'wideStacked' ? wideStackedRoot : null;
+    return (
+      <View
+        style={{ width: variant === 'compact' ? boardColumnWidth(scale) : wideTextWidth(scale) }}
+        onLayout={(event) => record(`${contentKey}|${variant}:h`, event.nativeEvent.layout.height)}>
+        <BoardContent
+          rows={rows}
+          onEdit={onEdit}
+          stacked={variant === 'wideStacked'}
+          headingWidth={variant === 'compact' ? undefined : wideHeadingWidth(scale)}
+          onBroken={(part, broken) => record(`${contentKey}|${variant}:b:${part}`, broken)}
+          geometry={
+            root
+              ? {
+                  root,
+                  report: (part, rects) => recordPieces(`${contentKey}|${variant}:${part}`, rects),
+                }
+              : undefined
+          }
+        />
+      </View>
+    );
+  };
 
   // The footer's hairline shows only while content runs beneath it.
   const [viewport, setViewport] = useState(0);
@@ -231,88 +319,92 @@ export function PreviewStep({
           setPageWidth(event.nativeEvent.layout.width);
         }}
         onContentSizeChange={(_, height) => setContentHeight(height)}>
-        <View style={styles.heading}>
-          <Text variant="display" accessibilityRole="header" style={headlineType(fontScale)}>
-            {PREVIEW_HEADLINE}
-          </Text>
+        {/* The measurement: the board's block three ways, invisible,
+            untouchable and never heard. */}
+        <View {...DECORATIVE} style={styles.measure}>
+          {measureVariant('compact')}
+          {measureVariant('wide')}
+          {measureVariant('wideStacked')}
         </View>
-        {/* The measurement: the board's rows at the board's column width,
-            invisible, untouchable and never heard. */}
-        {atAccessibilitySize(fontScale) ? null : (
-          <View
-            {...DECORATIVE}
-            style={[styles.measure, { width: boardColumnWidth(scale) }]}
-            onLayout={(event) => setMeasured(event.nativeEvent.layout.height)}>
-            {content()}
-          </View>
-        )}
-        <BoardHero width={sceneWidth} growth={board.kind === 'board' ? board.growth : 0}>
-          {board.kind === 'board' ? content(editRef) : null}
-        </BoardHero>
-        {board.kind === 'stacked' ? (
-          <View style={styles.stacked}>
-            <Surface background="background/surface" radius={16} style={styles.stackedCard}>
-              {content(editRef)}
-            </Surface>
-          </View>
-        ) : null}
-        <View style={styles.previewSection}>
-          <View style={styles.previewHeading}>
-            <Text variant="display" accessibilityRole="header" style={READY_TYPE.previewHeading}>
-              {PREVIEW_MATCH_HEADING}
+        <View style={revealed ? null : styles.unsettled}>
+          <View style={styles.heading}>
+            <Text variant="display" accessibilityRole="header" style={headlineType(fontScale)}>
+              {PREVIEW_HEADLINE}
             </Text>
-            {count !== null ? <CountLine count={count} /> : null}
           </View>
-          {preview.kind === 'matches' ? (
-            <>
-              {preview.models.length > 0 ? (
-                <ReadyDeck
-                  // New content or a new text size is a new deck: it
-                  // re-measures and starts from its first card.
-                  key={deckKey(preview.models, preview.locked, fontScale)}
-                  models={preview.models}
-                  locked={preview.locked}
-                  width={sceneWidth - 2 * layout.pageMargin}
-                  onLockedPress={onSeePlan}
-                />
-              ) : null}
-              {hasLockedMatches(preview) ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={PREVIEW_LOCKED_STRIP}
-                  accessibilityHint={PREVIEW_LOCKED_HINT}
-                  onPress={onSeePlan}
-                  style={({ pressed }) => [pressed && styles.pressed]}>
-                  <Surface background="background/subtle" radius={12} style={styles.lockedStrip}>
-                    <View {...DECORATIVE}>
-                      <Icon name="lock" size={20} color="icon/primary" />
-                    </View>
-                    <Text variant="body-small-bold" style={styles.lockedText}>
-                      {PREVIEW_LOCKED_STRIP}
-                    </Text>
-                  </Surface>
-                </Pressable>
-              ) : (
-                // No more matches are known, so nothing is claimed locked.
-                <Text variant="caption" color="text/secondary">
+          {template?.kind === 'wide' ? (
+            <WideBoardHero width={sceneWidth} growth={template.growth} onArt={onArt('wide')}>
+              <BoardContent
+                rows={rows}
+                onEdit={onEdit}
+                editRef={editRef}
+                stacked={template.stacked}
+                headingWidth={wideHeadingWidth(scale)}
+              />
+            </WideBoardHero>
+          ) : (
+            <BoardHero width={sceneWidth} growth={template?.growth ?? 0} onArt={onArt('compact')}>
+              <BoardContent rows={rows} onEdit={onEdit} editRef={editRef} stacked={false} />
+            </BoardHero>
+          )}
+          <View style={styles.previewSection}>
+            <View style={styles.previewHeading}>
+              <Text variant="display" accessibilityRole="header" style={READY_TYPE.previewHeading}>
+                {PREVIEW_MATCH_HEADING}
+              </Text>
+              {count !== null ? <CountLine count={count} /> : null}
+            </View>
+            {preview.kind === 'matches' ? (
+              <>
+                {preview.models.length > 0 ? (
+                  <ReadyDeck
+                    // New content or a new text size is a new deck: it
+                    // re-measures and starts from its first card.
+                    key={deckKey(preview.models, preview.locked, fontScale)}
+                    models={preview.models}
+                    locked={preview.locked}
+                    width={sceneWidth - 2 * layout.pageMargin}
+                    onLockedPress={onSeePlan}
+                  />
+                ) : null}
+                {hasLockedMatches(preview) ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={PREVIEW_LOCKED_STRIP}
+                    accessibilityHint={PREVIEW_LOCKED_HINT}
+                    onPress={onSeePlan}
+                    style={({ pressed }) => [pressed && styles.pressed]}>
+                    <Surface background="background/subtle" radius={12} style={styles.lockedStrip}>
+                      <View {...DECORATIVE}>
+                        <Icon name="lock" size={20} color="icon/primary" />
+                      </View>
+                      <Text variant="body-small-bold" style={styles.lockedText}>
+                        {PREVIEW_LOCKED_STRIP}
+                      </Text>
+                    </Surface>
+                  </Pressable>
+                ) : (
+                  // No more matches are known, so nothing is claimed locked.
+                  <Text variant="caption" color="text/secondary">
+                    {PREVIEW_MONITORING_NOTE}
+                  </Text>
+                )}
+              </>
+            ) : (
+              <Surface background="background/subtle" radius={16} style={styles.emptyCard}>
+                <Text variant="body">
+                  {preview.kind === 'checking'
+                    ? PREVIEW_CHECKING_TITLE
+                    : preview.kind === 'unavailable'
+                      ? PREVIEW_UNAVAILABLE_TITLE
+                      : PREVIEW_EMPTY_TITLE}
+                </Text>
+                <Text variant="body-small" color="text/secondary">
                   {PREVIEW_MONITORING_NOTE}
                 </Text>
-              )}
-            </>
-          ) : (
-            <Surface background="background/subtle" radius={16} style={styles.emptyCard}>
-              <Text variant="body">
-                {preview.kind === 'checking'
-                  ? PREVIEW_CHECKING_TITLE
-                  : preview.kind === 'unavailable'
-                    ? PREVIEW_UNAVAILABLE_TITLE
-                    : PREVIEW_EMPTY_TITLE}
-              </Text>
-              <Text variant="body-small" color="text/secondary">
-                {PREVIEW_MONITORING_NOTE}
-              </Text>
-            </Surface>
-          )}
+              </Surface>
+            )}
+          </View>
         </View>
       </ScrollView>
       <View
@@ -367,10 +459,13 @@ function BoardHero({
   width,
   growth,
   children,
+  onArt,
 }: {
   width: number;
   growth: number;
   children?: ReactNode;
+  /** Each image's load (or failure), so the page reveals with its art. */
+  onArt?: () => void;
 }) {
   const scale = sceneScale(width);
   const paperLeft = PAPER_PX.left * scale;
@@ -385,6 +480,7 @@ function BoardHero({
           slice={WALL_BAND_PX}
           scale={scale}
           growth={growth}
+          onArt={onArt}
         />
         <View style={[styles.anchored, { left: paperLeft, top: paperTop }]}>
           <SlicedImage
@@ -394,6 +490,7 @@ function BoardHero({
             slice={PAPER_SLICE_PX}
             scale={scale}
             growth={growth}
+            onArt={onArt}
           />
         </View>
       </View>
@@ -421,7 +518,7 @@ function BoardHero({
             height: OVERLAP_PX.height * scale,
           },
         ]}>
-        <Image source={OVERLAP} style={styles.fill} />
+        <Image source={OVERLAP} style={styles.fill} onLoadEnd={onArt} />
       </View>
     </View>
   );
@@ -438,6 +535,7 @@ function SlicedImage({
   slice,
   scale,
   growth,
+  onArt,
 }: {
   source: ImageSourcePropType;
   width: number;
@@ -445,6 +543,7 @@ function SlicedImage({
   slice: Slice;
   scale: number;
   growth: number;
+  onArt?: () => void;
 }) {
   const height = imageRows * scale;
   const topCap = slice.top * scale;
@@ -457,13 +556,381 @@ function SlicedImage({
           source={source}
           resizeMode="stretch"
           style={[styles.sliceImage, sliceImagePlacement(slice, imageRows)]}
+          onLoadEnd={onArt}
         />
       </View>
       <View style={[styles.slice, { top: 0, height: topCap }]}>
-        <Image source={source} style={[whole, { top: 0 }]} />
+        <Image source={source} style={[whole, { top: 0 }]} onLoadEnd={onArt} />
       </View>
       <View style={[styles.slice, { bottom: 0, height: foot }]}>
-        <Image source={source} style={[whole, { bottom: 0 }]} />
+        <Image source={source} style={[whole, { bottom: 0 }]} onLoadEnd={onArt} />
+      </View>
+    </View>
+  );
+}
+
+type BoardRowModel = { key: RowKey; names: readonly string[]; artwork: ReactNode };
+
+/** The three hidden measurements of the board's block. */
+type MeasureVariant = keyof BoardMeasurement;
+const MEASURE_VARIANTS: readonly MeasureVariant[] = ['compact', 'wide', 'wideStacked'];
+/** Each text in the block reports its broken words under one of these names. */
+const MEASURE_PARTS = [
+  'heading',
+  ...[0, 1, 2].flatMap((row) => [`${row}.label`, `${row}.value`]),
+  'edit',
+] as const;
+
+/** The wide block's drawn pieces, each reported where it sits in the block. */
+const GEOMETRY_PARTS = [
+  'heading',
+  ...[0, 1, 2].flatMap((row) => [
+    ...(row > 0 ? [`${row}.rule`] : []),
+    `${row}.plate`,
+    `${row}.label`,
+    `${row}.value`,
+  ]),
+  'edit',
+] as const;
+
+/** The measurement for `contentKey`, once every reading has arrived. */
+function boardMeasurement(
+  measures: Readonly<Record<string, number>>,
+  pieces: Readonly<Record<string, readonly BlockRect[]>>,
+  contentKey: string,
+): BoardMeasurement | null {
+  const read = (variant: MeasureVariant): BlockMeasure | null => {
+    const height = measures[`${contentKey}|${variant}:h`];
+    if (height === undefined) return null;
+    let broken = 0;
+    for (const part of MEASURE_PARTS) {
+      const value = measures[`${contentKey}|${variant}:b:${part}`];
+      if (value === undefined) return null;
+      broken += value;
+    }
+    if (variant === 'compact') return { height, broken };
+    const rects: BlockRect[] = [];
+    for (const part of GEOMETRY_PARTS) {
+      const found = pieces[`${contentKey}|${variant}:${part}`];
+      if (found === undefined) return null;
+      rects.push(...found);
+    }
+    return { height, broken, rects };
+  };
+  const [compact, wide, wideStacked] = MEASURE_VARIANTS.map(read);
+  return compact && wide && wideStacked ? { compact, wide, wideStacked } : null;
+}
+
+function sameRects(a: readonly BlockRect[] | undefined, b: readonly BlockRect[]): boolean {
+  return (
+    a !== undefined &&
+    a.length === b.length &&
+    a.every(
+      (r, i) =>
+        r.x === b[i].x && r.y === b[i].y && r.width === b[i].width && r.height === b[i].height,
+    )
+  );
+}
+
+/** Where the hidden measurement reports the wide block's drawn pieces. */
+type Geometry = {
+  root: React.RefObject<View | null>;
+  report: (part: string, rects: readonly BlockRect[]) => void;
+};
+
+/** A View that reports its own rectangle in the block (the hidden measurement only). */
+function Piece({
+  geometry,
+  part,
+  style,
+  children,
+  decorative,
+}: {
+  geometry?: Geometry;
+  part: string;
+  style?: React.ComponentProps<typeof View>['style'];
+  children?: ReactNode;
+  decorative?: boolean;
+}) {
+  const self = useRef<View>(null);
+  return (
+    <View
+      ref={self}
+      {...(decorative ? DECORATIVE : null)}
+      style={style}
+      onLayout={
+        geometry
+          ? () => {
+              const root = geometry.root.current;
+              if (root && self.current)
+                self.current.measureLayout(root, (x, y, width, height) =>
+                  geometry.report(part, [{ x, y, width, height }]),
+                );
+            }
+          : undefined
+      }>
+      {children}
+    </View>
+  );
+}
+
+/**
+ * A board text that reports, in the hidden measurement, its broken words and
+ * where each of its lines sits in the block.
+ */
+function PieceText({
+  geometry,
+  part,
+  text,
+  onBroken,
+  ...props
+}: React.ComponentProps<typeof Text> & {
+  geometry?: Geometry;
+  part: string;
+  text: string;
+  onBroken?: (broken: number) => void;
+}) {
+  const self = useRef<View>(null);
+  const seen = useRef<{ lines?: readonly BlockRect[]; offset?: { x: number; y: number } }>({});
+  const flush = () => {
+    const { lines, offset } = seen.current;
+    if (geometry && lines && offset)
+      geometry.report(
+        part,
+        lines.map((line) => ({ ...line, x: line.x + offset.x, y: line.y + offset.y })),
+      );
+  };
+  if (!geometry) {
+    // On the board itself the text is exactly the approved one: no wrapper.
+    return (
+      <Text
+        {...props}
+        onTextLayout={
+          onBroken
+            ? (event) =>
+                onBroken(
+                  brokenWordCount(
+                    text,
+                    event.nativeEvent.lines.map((line) => line.text),
+                  ),
+                )
+            : undefined
+        }>
+        {text}
+      </Text>
+    );
+  }
+  return (
+    <View
+      ref={self}
+      onLayout={() => {
+        const root = geometry.root.current;
+        if (root && self.current)
+          self.current.measureLayout(root, (x, y) => {
+            seen.current.offset = { x, y };
+            flush();
+          });
+      }}>
+      <Text
+        {...props}
+        onTextLayout={
+          onBroken || geometry
+            ? (event) => {
+                const lines = event.nativeEvent.lines;
+                onBroken?.(
+                  brokenWordCount(
+                    text,
+                    lines.map((line) => line.text),
+                  ),
+                );
+                seen.current.lines = lines.map(({ x, y, width, height }) => ({
+                  x,
+                  y,
+                  width,
+                  height,
+                }));
+                flush();
+              }
+            : undefined
+        }>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+function sameTemplate(a: BoardTemplate, b: BoardTemplate | null): boolean {
+  if (b === null || a.kind !== b.kind || a.growth !== b.growth) return false;
+  return a.kind === 'compact' || (b.kind === 'wide' && a.stacked === b.stacked);
+}
+
+/** How many images a grown wide layer draws (`GrownLayer`). */
+function grownLayerImageCount(growth: number, scale: number): number {
+  if (growth <= 0) return 1;
+  return 3 + plateCopies((growth + WIDE_GROWTH.featherRows * scale) / scale);
+}
+
+/** How many images the chosen board draws: the page reveals once each has loaded. */
+function heroImageCount(template: BoardTemplate, scale: number): number {
+  if (template.kind === 'compact') return 3 + 3 + 1;
+  return 2 * grownLayerImageCount(template.growth, scale) + 1;
+}
+
+/**
+ * The wide board at `width`: scene, broad paper, the native block, then the
+ * mascot and groceries in front. `growth` points of extra board come from
+ * the extension plates (scene and paper alike) inserted at the growth row,
+ * each ending under its feather; everything below the row, the foreground
+ * included, moves down together. The block sits in the measured text region,
+ * which the foreground never reaches.
+ */
+function WideBoardHero({
+  width,
+  growth,
+  children,
+  onArt,
+}: {
+  width: number;
+  growth: number;
+  children: ReactNode;
+  /** Each image's load (or failure), so the page reveals with its art. */
+  onArt?: () => void;
+}) {
+  const scale = sceneScale(width);
+  const paperLeft = WIDE_PAPER_PX.left * scale;
+  const paperTop = WIDE_PAPER_PX.top * scale;
+  return (
+    <View style={{ width, height: WIDE_SCENE_PX.height * scale + growth }}>
+      <View {...DECORATIVE} style={StyleSheet.absoluteFill}>
+        <GrownLayer
+          source={WIDE.scene}
+          plate={WIDE.wallPlate}
+          feather={WIDE.wallFeather}
+          imageRows={WIDE_SCENE_PX.height}
+          imageWidth={WIDE_SCENE_PX.width}
+          insertRow={WIDE_GROWTH.sceneRow}
+          scale={scale}
+          growth={growth}
+          onArt={onArt}
+        />
+        <View style={[styles.anchored, { left: paperLeft, top: paperTop }]}>
+          <GrownLayer
+            source={WIDE.paper}
+            plate={WIDE.paperPlate}
+            feather={WIDE.paperFeather}
+            imageRows={WIDE_PAPER_PX.height}
+            imageWidth={WIDE_PAPER_PX.width}
+            insertRow={WIDE_GROWTH.paperRow}
+            scale={scale}
+            growth={growth}
+            onArt={onArt}
+          />
+        </View>
+      </View>
+      <View
+        style={[
+          styles.anchored,
+          {
+            left: paperLeft + WIDE_TEXT_PX.left * scale,
+            top: paperTop + WIDE_TEXT_PX.top * scale,
+            width: wideTextWidth(scale),
+          },
+        ]}>
+        {children}
+      </View>
+      <View
+        {...DECORATIVE}
+        style={[
+          styles.anchored,
+          {
+            left: WIDE_OVERLAP_PX.left * scale,
+            top: WIDE_OVERLAP_PX.top * scale + growth,
+            width: WIDE_OVERLAP_PX.width * scale,
+            height: WIDE_OVERLAP_PX.height * scale,
+          },
+        ]}>
+        <Image source={WIDE.overlap} style={styles.fill} onLoadEnd={onArt} />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * One wide layer grown by `growth` points: its rows above `insertRow`; the
+ * extension plate for the growth plus the feather's rows (repeated mirrored
+ * past its own height); the feather (the rows below the insertion fading
+ * in); then the rest of the layer. With no growth, the layer whole. Pieces
+ * meet on device pixels and the plate starts one pixel early, so no hairline
+ * of what is behind shows between them.
+ */
+function GrownLayer({
+  source,
+  plate,
+  feather,
+  imageRows,
+  imageWidth,
+  insertRow,
+  scale,
+  growth,
+  onArt,
+}: {
+  source: ImageSourcePropType;
+  plate: ImageSourcePropType;
+  feather: ImageSourcePropType;
+  imageRows: number;
+  imageWidth: number;
+  insertRow: number;
+  scale: number;
+  growth: number;
+  onArt?: () => void;
+}) {
+  const width = imageWidth * scale;
+  const height = imageRows * scale;
+  const whole: ImageStyle = { position: 'absolute', left: 0, width, height };
+  if (growth <= 0) {
+    return (
+      <View style={{ width, height }}>
+        <Image source={source} style={[whole, { top: 0 }]} onLoadEnd={onArt} />
+      </View>
+    );
+  }
+  const snap = PixelRatio.roundToNearestPixel;
+  const pixel = 1 / PixelRatio.get();
+  const insert = snap(insertRow * scale);
+  const featherHeight = WIDE_GROWTH.featherRows * scale;
+  const plateHeight = WIDE_GROWTH.plateRows * scale;
+  const plateSpan = growth + featherHeight;
+  // (`grownLayerImageCount` counts the images drawn here.)
+  const below = snap(insert + featherHeight + growth);
+  return (
+    <View style={{ width, height: height + growth }}>
+      <View style={[styles.slice, { top: 0, height: insert }]}>
+        <Image source={source} style={[whole, { top: 0 }]} onLoadEnd={onArt} />
+      </View>
+      {Array.from({ length: plateCopies(plateSpan / scale) }, (_, index) => (
+        <View
+          key={index}
+          style={[
+            styles.slice,
+            {
+              top: insert - pixel + index * plateHeight,
+              height: Math.min(plateHeight, plateSpan - index * plateHeight) + pixel,
+            },
+          ]}>
+          <View style={[{ width, height: plateHeight }, index % 2 === 1 && styles.mirrored]}>
+            <Image source={plate} style={styles.fill} onLoadEnd={onArt} />
+          </View>
+        </View>
+      ))}
+      <View style={[styles.slice, { top: insert + growth, height: featherHeight }]}>
+        <Image source={feather} style={styles.fill} onLoadEnd={onArt} />
+      </View>
+      <View style={[styles.slice, { top: below, bottom: 0 }]}>
+        <Image
+          source={source}
+          style={[whole, { top: -(insertRow + WIDE_GROWTH.featherRows) * scale }]}
+          onLoadEnd={onArt}
+        />
       </View>
     </View>
   );
@@ -471,48 +938,96 @@ function SlicedImage({
 
 /**
  * The board's contents: `Your preferences`, the three rows between dashed
- * rules, and `Edit preferences`. The same contents on the board and, at
- * full width, below the scene.
+ * rules, and `Edit preferences`. The same contents on either board and in the
+ * hidden measurement. `stacked` puts each row's plate above its words, so
+ * the words have the block's whole width; `headingWidth` keeps the wide
+ * heading clear of the lime ribbon; `onBroken` (the measurement only)
+ * reports each text's broken words.
  */
 function BoardContent({
   rows,
   onEdit,
   editRef,
+  stacked,
+  headingWidth,
+  onBroken,
+  geometry,
 }: {
-  rows: { key: RowKey; names: readonly string[]; artwork: ReactNode }[];
+  rows: readonly BoardRowModel[];
   onEdit: () => void;
   editRef?: React.Ref<View>;
+  stacked: boolean;
+  headingWidth?: number;
+  onBroken?: (part: string, broken: number) => void;
+  /** The hidden wide measurement: report every drawn piece's place in the block. */
+  geometry?: Geometry;
 }) {
-  return (
-    <View>
-      <Text variant="display" accessibilityRole="header" style={READY_TYPE.boardHeading}>
-        {PREVIEW_SUMMARY_TITLE}
+  const edit = (
+    <Pressable
+      ref={editRef}
+      accessibilityRole="button"
+      accessibilityLabel={PREVIEW_EDIT}
+      accessibilityHint={PREVIEW_EDIT_HINT}
+      hitSlop={EDIT_HIT_SLOP}
+      onPress={onEdit}
+      style={({ pressed }) => [styles.edit, pressed && styles.pressed]}>
+      <Text
+        variant="body-small-bold"
+        color="action/secondary"
+        style={[READY_TYPE.edit, styles.editText]}
+        onTextLayout={
+          onBroken
+            ? (event) =>
+                onBroken(
+                  'edit',
+                  brokenWordCount(
+                    PREVIEW_EDIT,
+                    event.nativeEvent.lines.map((line) => line.text),
+                  ),
+                )
+            : undefined
+        }>
+        {PREVIEW_EDIT}
       </Text>
+      <Icon name="chevron-right" size={16} color="icon/brand" />
+    </Pressable>
+  );
+  return (
+    <View ref={geometry?.root}>
+      <PieceText
+        geometry={geometry}
+        part="heading"
+        text={PREVIEW_SUMMARY_TITLE}
+        variant="display"
+        accessibilityRole="header"
+        style={[READY_TYPE.boardHeading, headingWidth ? { maxWidth: headingWidth } : null]}
+        onBroken={onBroken && ((n) => onBroken('heading', n))}
+      />
       <View style={styles.rows}>
         {rows.map((row, index) => (
           <View key={row.key}>
-            {index > 0 ? <DashedRule /> : null}
+            {index > 0 ? (
+              <DashedRule stacked={stacked} geometry={geometry} part={`${index}.rule`} />
+            ) : null}
             <BoardRow
               label={PREVIEW_SUMMARY_LABELS[row.key]}
               names={row.names}
               artwork={row.artwork}
+              stacked={stacked}
+              onBroken={onBroken && ((part, n) => onBroken(`${index}.${part}`, n))}
+              geometry={geometry}
+              part={`${index}`}
             />
           </View>
         ))}
       </View>
-      <Pressable
-        ref={editRef}
-        accessibilityRole="button"
-        accessibilityLabel={PREVIEW_EDIT}
-        accessibilityHint={PREVIEW_EDIT_HINT}
-        hitSlop={EDIT_HIT_SLOP}
-        onPress={onEdit}
-        style={({ pressed }) => [styles.edit, pressed && styles.pressed]}>
-        <Text variant="body-small-bold" color="action/secondary" style={READY_TYPE.edit}>
-          {PREVIEW_EDIT}
-        </Text>
-        <Icon name="chevron-right" size={16} color="icon/brand" />
-      </Pressable>
+      {geometry ? (
+        <Piece geometry={geometry} part="edit" style={styles.editPiece}>
+          {edit}
+        </Piece>
+      ) : (
+        edit
+      )}
     </View>
   );
 }
@@ -522,39 +1037,72 @@ function BoardRow({
   label,
   names,
   artwork,
+  stacked,
+  onBroken,
+  geometry,
+  part,
 }: {
   /** The category's name, drawn and spoken as written. */
   label: string;
   names: readonly string[];
   artwork: ReactNode;
+  /** The plate above the words rather than beside them. */
+  stacked: boolean;
+  onBroken?: (part: 'label' | 'value', broken: number) => void;
+  geometry?: Geometry;
+  part: string;
 }) {
+  const value = boardValue(names, PREVIEW_NONE);
   return (
     <View
-      style={styles.row}
+      style={[styles.row, stacked && styles.rowStacked]}
       accessible
       accessibilityLabel={boardRowLabel(label, names, PREVIEW_NONE)}>
-      <View {...DECORATIVE} style={styles.well}>
+      <Piece geometry={geometry} part={`${part}.plate`} style={styles.well} decorative>
         <View style={styles.wellWash} />
         {artwork}
-      </View>
-      <View style={styles.rowText}>
-        <Text variant="body-small-bold" color="text/secondary" style={READY_TYPE.label}>
-          {label}
-        </Text>
-        <Text variant="body" style={READY_TYPE.value}>
-          {boardValue(names, PREVIEW_NONE)}
-        </Text>
+      </Piece>
+      <View style={stacked ? null : styles.rowText}>
+        <PieceText
+          geometry={geometry}
+          part={`${part}.label`}
+          text={label}
+          variant="body-small-bold"
+          color="text/secondary"
+          style={READY_TYPE.label}
+          onBroken={onBroken && ((n) => onBroken('label', n))}
+        />
+        <PieceText
+          geometry={geometry}
+          part={`${part}.value`}
+          text={value}
+          variant="body"
+          style={READY_TYPE.value}
+          onBroken={onBroken && ((n) => onBroken('value', n))}
+        />
       </View>
     </View>
   );
 }
 
-/** A dashed rule from the text column to the column's end. */
-function DashedRule() {
+/** A dashed rule from the text column (the row's start when stacked) to the block's end. */
+function DashedRule({
+  stacked,
+  geometry,
+  part,
+}: {
+  stacked: boolean;
+  geometry?: Geometry;
+  part: string;
+}) {
   return (
-    <View {...DECORATIVE} style={styles.rule}>
+    <Piece
+      geometry={geometry}
+      part={part}
+      decorative
+      style={[styles.rule, stacked && styles.ruleStacked]}>
       <View style={styles.ruleDashes} />
-    </View>
+    </Piece>
   );
 }
 
@@ -649,14 +1197,13 @@ const styles = StyleSheet.create({
     left: 0,
     width: '100%',
   },
-  stacked: {
-    paddingHorizontal: layout.pageMargin,
-    marginTop: spacing[16],
+  // Laid out but not shown until the board's measurement first answers.
+  unsettled: {
+    opacity: 0,
   },
-  stackedCard: {
-    padding: spacing[16],
-    borderWidth: 1,
-    borderColor: color['border/subtle'],
+  // A repeated extension plate's every other copy, upside down.
+  mirrored: {
+    transform: [{ scaleY: -1 }],
   },
   rows: {
     marginTop: BLOCK_GAP,
@@ -666,6 +1213,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: ROW_WELL_GAP,
     minHeight: ROW_WELL_SIZE,
+  },
+  // The plate on its own line, the words beneath at the block's full width.
+  rowStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: spacing[8],
   },
   well: {
     width: ROW_WELL_SIZE,
@@ -690,6 +1243,9 @@ const styles = StyleSheet.create({
     marginVertical: RULE_GAP,
     marginLeft: ROW_WELL_SIZE + ROW_WELL_GAP,
   },
+  ruleStacked: {
+    marginLeft: 0,
+  },
   ruleDashes: {
     height: 3,
     borderWidth: 1,
@@ -702,6 +1258,14 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: spacing[4],
     marginTop: BLOCK_GAP,
+  },
+  // The action's own box, hugging the action (as the Pressable alone did).
+  editPiece: {
+    alignSelf: 'flex-start',
+  },
+  // Wraps beside its chevron at the largest sizes rather than overflowing.
+  editText: {
+    flexShrink: 1,
   },
   dash: {
     width: 12,

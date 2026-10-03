@@ -63,9 +63,12 @@ export const DEVELOPMENT_FEED_SCENARIOS: readonly {
  * choices, display only. `no-selections` keeps the saved states and clears
  * allergens and stores, so the no-selection captions and their real counts
  * can be seen without saving anything: a save would rewrite this device's
- * preferences and their server mirror. Never applied to a screen that saves.
+ * preferences and their server mirror. `short-summary` and `long-summary`
+ * (2026-10-02) replace the choices with fixed real ones, so Ready's board can
+ * be checked at its shortest and longest compact values. Never applied to a
+ * screen that saves.
  */
-export type DevelopmentQaProfileId = 'saved' | 'no-selections';
+export type DevelopmentQaProfileId = 'saved' | 'no-selections' | 'short-summary' | 'long-summary';
 
 export const DEVELOPMENT_QA_PROFILES: readonly {
   id: DevelopmentQaProfileId;
@@ -80,7 +83,31 @@ export const DEVELOPMENT_QA_PROFILES: readonly {
       'Display only, never saved: Building and Ready treat the saved states as chosen with no ' +
       'allergens and no stores. Checking recalls across allergens… and across stores…',
   },
+  {
+    id: 'short-summary',
+    title: 'QA profile: short summary',
+    expectation:
+      'Display only, never saved: Ready’s board shows one short name per row (Iowa, Milk, Aldi).',
+  },
+  {
+    id: 'long-summary',
+    title: 'QA profile: long summary',
+    expectation:
+      'Display only, never saved: Ready’s board shows its longest compact values (Massachusetts, ' +
+      'North Carolina +2; Sesame, Crustacean shellfish; Whole Foods Market, Sprouts Farmers ' +
+      'Market +1).',
+  },
 ];
+
+/** The QA profiles' fixed choices: real tokens, presented only, never saved. */
+const QA_CHOICES: Partial<Record<DevelopmentQaProfileId, UserRecallPreferences>> = {
+  'short-summary': { states: ['IA'], allergens: ['milk'], retailers: ['aldi'] },
+  'long-summary': {
+    states: ['MA', 'NC', 'PA', 'WV'],
+    allergens: ['sesame', 'shellfish'],
+    retailers: ['whole-foods', 'sprouts', 'pcc'],
+  },
+};
 
 const SLOW_MS = 12_000;
 const FAIL_AFTER_MS = 600;
@@ -124,7 +151,8 @@ export function setDevelopmentQaProfile(id: DevelopmentQaProfileId): void {
 
 /** The choices the Building step and Ready are shown under the QA profile. */
 export function developmentPreferencesView(prefs: UserRecallPreferences): UserRecallPreferences {
-  return profile === 'no-selections' ? { ...prefs, allergens: [], retailers: [] } : prefs;
+  if (profile === 'no-selections') return { ...prefs, allergens: [], retailers: [] };
+  return QA_CHOICES[profile] ?? prefs;
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));

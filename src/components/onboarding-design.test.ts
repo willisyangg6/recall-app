@@ -638,7 +638,8 @@ test('Ready draws the three approved layers whole, decorative, with the native r
   );
   // Every layer is decorative: never heard, never touched.
   assert.equal((hero.match(/\{\.\.\.DECORATIVE\}/g) ?? []).length, 2);
-  const decorative = code.slice(code.indexOf('const DECORATIVE = {'), code.indexOf('} as const;'));
+  const decorativeAt = code.indexOf('const DECORATIVE = {');
+  const decorative = code.slice(decorativeAt, code.indexOf('} as const;', decorativeAt));
   for (const prop of [
     'accessible: false',
     'accessibilityElementsHidden: true',
@@ -670,22 +671,105 @@ test('the board grows only through its paper slice and the thin wall band; its f
   assert.equal((sliced.match(/<Image/g) ?? []).length, 3);
 });
 
-test('past the growth cap and at every accessibility size, the preferences go full width below the decorative scene', () => {
+test('two illustrated boards chosen by measured fit; every preference always on the paper, never a separate card', () => {
   const step = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
-  assert.ok(step.includes('const board = boardLayout(measured, scale, fontScale);'));
-  // The measurement: the same rows at the board's column width, hidden,
-  // untouchable and never heard, so the choice never depends on the layout.
-  assert.ok(step.includes('style={[styles.measure, { width: boardColumnWidth(scale) }]}'));
-  assert.ok(step.includes('onLayout={(event) => setMeasured(event.nativeEvent.layout.height)}'));
+  assert.ok(
+    step.includes('const resolved = measurement ? boardTemplate(measurement, scale) : null;'),
+  );
+  // The measurement: the same block three ways, hidden, untouchable, unheard.
   const measure = step.slice(step.indexOf('styles.measure') - 200, step.indexOf('styles.measure'));
   assert.ok(measure.includes('{...DECORATIVE}'), 'the measurement can be heard or touched');
-  // Stacked: the scene whole with its board blank, then the rows at full width.
-  assert.ok(step.includes("{board.kind === 'board' ? content(editRef) : null}"));
-  assert.ok(step.includes("{board.kind === 'stacked' ? ("));
+  for (const variant of [
+    "measureVariant('compact')",
+    "measureVariant('wide')",
+    "measureVariant('wideStacked')",
+  ]) {
+    assert.ok(step.includes(variant), `the measurement lost ${variant}`);
+  }
+  // Keyed by this content, width and text size; arrival shows nothing until it answers.
+  assert.ok(
+    step.includes(
+      "const contentKey = [sceneWidth, fontScale, ...rows.map((row) => row.names.join(','))].join('|');",
+    ),
+  );
+  // Revealed together with the chosen board's own artwork: the page shows once
+  // each of that board's images has loaded (or failed), never on a timer.
+  assert.ok(step.includes('<View style={revealed ? null : styles.unsettled}>'));
+  assert.ok(
+    /if \(!revealed && template && artLoads\[template\.kind\] >= heroImageCount\(template, scale\)\)\s+setRevealed\(true\);/.test(
+      step,
+    ),
+  );
+  assert.ok(
+    !/setTimeout|requestAnimationFrame|InteractionManager/.test(step),
+    'the reveal waits on a timer',
+  );
+  assert.equal((codeOnly(PREVIEW).match(/onLoadEnd=\{onArt\}/g) ?? []).length, 10);
+  // The rows are always on one of the two boards: the full-width card is gone.
+  assert.ok(step.includes("{template?.kind === 'wide' ? ("));
+  assert.ok(
+    step.includes(
+      "<WideBoardHero width={sceneWidth} growth={template.growth} onArt={onArt('wide')}>",
+    ),
+  );
+  assert.ok(
+    step.includes(
+      "<BoardHero width={sceneWidth} growth={template?.growth ?? 0} onArt={onArt('compact')}>",
+    ),
+  );
+  // The wide board grows by where each drawn piece of the block actually sits.
+  assert.ok(codeOnly(PREVIEW).includes('measureLayout(root'));
+  assert.ok(!codeOnly(PREVIEW).includes('stackedCard'), 'the separate card came back');
+  assert.ok(!codeOnly(PREVIEW).includes("'stacked' ? ("), 'the separate card came back');
+  // The superseded workaround is gone: no tiled strip, no arrangement scoring.
+  for (const gone of ['sliceTileCount', 'boardPlan', 'PAPER_SLICE_MAX_STRETCH', 'blockWidths']) {
+    assert.ok(!codeOnly(PREVIEW).includes(gone), `${gone} came back`);
+  }
   // The page always scrolls above the pinned action: nothing is capped.
   assert.ok(step.includes('<ScrollView'));
-  assert.ok(!codeOnly(PREVIEW).includes('maxFontSizeMultiplier'));
-  assert.ok(!codeOnly(PREVIEW).includes('numberOfLines'));
+  for (const banned of ['maxFontSizeMultiplier', 'numberOfLines', 'adjustsFontSizeToFit']) {
+    assert.ok(!codeOnly(PREVIEW).includes(banned), `Ready uses ${banned}`);
+  }
+});
+
+test('the wide board: its approved layers in order, the native block between paper and foreground, growth by plates and feathers', () => {
+  const code = codeOnly(PREVIEW);
+  for (const file of [
+    'scene',
+    'paper',
+    'overlap',
+    'paper-extension',
+    'wall-extension',
+    'paper-feather',
+    'wall-feather',
+  ]) {
+    assert.ok(
+      code.includes(`require('@/assets/brand/production/lotly-ready-wide-board-${file}.png')`),
+      `Ready lost ${file}`,
+    );
+  }
+  const hero = codeOnly(componentBody(PREVIEW, 'WideBoardHero'));
+  const scene = hero.indexOf('source={WIDE.scene}');
+  const paper = hero.indexOf('source={WIDE.paper}');
+  const rows = hero.indexOf('{children}');
+  const overlap = hero.indexOf('source={WIDE.overlap}');
+  assert.ok(
+    scene > 0 && scene < paper && paper < rows && rows < overlap,
+    'the layer order changed',
+  );
+  assert.equal((hero.match(/\{\.\.\.DECORATIVE\}/g) ?? []).length, 2);
+  // The native block sits in the report's text region; the foreground moves down with growth.
+  assert.ok(hero.includes('left: paperLeft + WIDE_TEXT_PX.left * scale,'));
+  assert.ok(hero.includes('top: paperTop + WIDE_TEXT_PX.top * scale,'));
+  assert.ok(hero.includes('width: wideTextWidth(scale),'));
+  assert.ok(hero.includes('top: WIDE_OVERLAP_PX.top * scale + growth,'));
+  assert.ok(hero.includes('height: WIDE_SCENE_PX.height * scale + growth'));
+  // Each layer: rows above the insertion, the plate (mirrored past its height), the feather, the rest.
+  const layer = codeOnly(componentBody(PREVIEW, 'GrownLayer'));
+  assert.ok(layer.includes('plateCopies(plateSpan / scale)'));
+  assert.ok(layer.includes('index % 2 === 1 && styles.mirrored'));
+  assert.ok(layer.includes('source={feather}'));
+  assert.ok(!layer.includes('resizeMode="stretch"'), 'the wide board stretches');
 });
 
 test('the board: three rows in order, each heard once with every chosen name; the plates and rules never are', () => {
@@ -702,21 +786,27 @@ test('the board: three rows in order, each heard once with every chosen name; th
       'accessible\n      accessibilityLabel={boardRowLabel(label, names, PREVIEW_NONE)}>',
     ),
   );
-  assert.ok(row.includes('{boardValue(names, PREVIEW_NONE)}'));
+  assert.ok(row.includes('const value = boardValue(names, PREVIEW_NONE);'));
+  assert.ok(row.includes('text={value}'));
   // The label: the copy module's title-case name, in Public Sans SemiBold
   // (`body-small-bold`) at Ready's 14pt, with no letter spacing of its own.
   assert.ok(
     row.includes(
-      '<Text variant="body-small-bold" color="text/secondary" style={READY_TYPE.label}>\n          {label}',
+      'text={label}\n          variant="body-small-bold"\n          color="text/secondary"\n          style={READY_TYPE.label}',
     ),
   );
-  assert.ok(row.includes('<Text variant="body" style={READY_TYPE.value}>'));
+  assert.ok(
+    row.includes('text={value}\n          variant="body"\n          style={READY_TYPE.value}'),
+  );
   assert.ok(!codeOnly(PREVIEW).includes('letterSpacing'));
-  assert.ok(row.includes('<View {...DECORATIVE} style={styles.well}>'));
-  assert.ok(codeOnly(componentBody(PREVIEW, 'DashedRule')).includes('{...DECORATIVE}'));
+  assert.ok(/<Piece[^>]*style=\{styles\.well\}[^>]*decorative>/.test(row));
+  assert.ok(codeOnly(componentBody(PREVIEW, 'DashedRule')).includes('decorative'));
+  assert.ok(
+    codeOnly(componentBody(PREVIEW, 'Piece')).includes('{...(decorative ? DECORATIVE : null)}'),
+  );
   const content = codeOnly(componentBody(PREVIEW, 'BoardContent'));
   assert.ok(content.includes('accessibilityRole="header"'));
-  assert.ok(content.includes('{PREVIEW_SUMMARY_TITLE}'));
+  assert.ok(content.includes('text={PREVIEW_SUMMARY_TITLE}'));
   // Edit preferences: blue words and a chevron, a 44pt target by hitSlop.
   assert.ok(content.includes('accessibilityLabel={PREVIEW_EDIT}'));
   assert.ok(content.includes('accessibilityHint={PREVIEW_EDIT_HINT}'));
