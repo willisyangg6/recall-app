@@ -16,6 +16,15 @@
  * so an expired subscription meets the paywall on the next return, never a
  * relaunch later.
  *
+ * Every read, refresh and apply goes through ONE entitlement session
+ * (lib/entitlement-session.ts), which orders them: a refresh that started
+ * before a purchase or restore succeeded is discarded whole, a foreground
+ * refresh waits for an in-flight store operation, a reading older than the
+ * verified fact cannot revoke it, and cache writes are serialized. The
+ * StoreKit sheet backgrounds the app, so without that ordering the return
+ * to the foreground could overwrite a purchase that had just succeeded
+ * (2026-10-04, audit F5).
+ *
  * ## What it changes
  *
  * Every transition is a pure function over the record (lib/onboarding-state)
@@ -51,13 +60,8 @@ import {
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { onboardingEntryStep, resolveAccessPhase, type AccessPhase } from '@/lib/access-gate';
-import {
-  isEntitled,
-  readWithTimeout,
-  resolveEntitlement,
-  type ActiveEntitlement,
-  type EntitlementStatus,
-} from '@/lib/entitlement';
+import { isEntitled, type ActiveEntitlement, type EntitlementStatus } from '@/lib/entitlement';
+import { createEntitlementSession, type EntitlementSession } from '@/lib/entitlement-session';
 import { loadCachedEntitlement, saveCachedEntitlement } from '@/lib/entitlement-store';
 import {
   completeNotificationEducation as completeEducationRecord,
@@ -105,6 +109,12 @@ export interface AccessActions {
   /** Re-read the entitlement through the provider (foreground, development). */
   refreshEntitlement: () => Promise<void>;
   /**
+   * Run a purchase or restore — and, on success, its `applyEntitlement` —
+   * under the store guard: a foreground refresh waits until it settles,
+   * whatever the outcome.
+   */
+  runStoreOperation: <T>(operation: () => Promise<T>) => Promise<T>;
+  /**
    * Development: re-read everything from disk, as a relaunch would, and
    * answer with the phase that read resolves to and its entry step.
    */
@@ -137,28 +147,46 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   }, []);
   const [reviewingPreview, setReviewingPreview] = useState(false);
   const noticePending = useRef(false);
-  const refreshing = useRef(false);
 
-  /** Read the provider, resolve against the cache, persist the cache. */
-  const readEntitlement = useCallback(async (): Promise<EntitlementStatus> => {
-    const cache = await loadCachedEntitlement();
-    const reading = await readWithTimeout(provider.readEntitlement());
-    const resolution = resolveEntitlement(reading, cache, new Date().toISOString());
-    if (resolution.cache !== cache) await saveCachedEntitlement(resolution.cache);
-    return resolution.status;
-  }, [provider]);
+  /** A status that survived the session's guards lands on the current record. */
+  const commitEntitlement = useCallback(
+    (entitlement: EntitlementStatus) => {
+      const prior = loadedRef.current;
+      if (prior !== null) commit({ ...prior, entitlement });
+    },
+    [commit],
+  );
+
+  // The one orderer of launch read, foreground refresh and apply. Its
+  // committed statuses land on the current record; the launch read commits
+  // through `load` instead, together with the record. Created lazily, on
+  // first use from an effect or a handler, never during render.
+  const sessionRef = useRef<EntitlementSession | null>(null);
+  const session = useCallback((): EntitlementSession => {
+    if (sessionRef.current === null) {
+      sessionRef.current = createEntitlementSession({
+        readEntitlement: () => provider.readEntitlement(),
+        loadCache: loadCachedEntitlement,
+        saveCache: saveCachedEntitlement,
+        now: () => new Date().toISOString(),
+        onStatus: commitEntitlement,
+      });
+    }
+    return sessionRef.current;
+  }, [provider, commitEntitlement]);
 
   const load = useCallback(async () => {
-    const [onboarding, entitlement] = await Promise.all([
+    const [onboarding, read] = await Promise.all([
       loadOnboardingRecord().catch(() => ({ ...INITIAL_ONBOARDING })),
-      readEntitlement().catch<EntitlementStatus>(() => ({
-        kind: 'inactive',
-        reason: 'unconfirmed',
-      })),
+      session().read(),
     ]);
+    // A read the session declined (one already running, or a store operation
+    // in flight — the development reload only) keeps the last status.
+    const entitlement: EntitlementStatus = read ??
+      loadedRef.current?.entitlement ?? { kind: 'inactive', reason: 'unconfirmed' };
     commit({ onboarding, entitlement });
     return { onboarding, entitlement };
-  }, [readEntitlement, commit]);
+  }, [session, commit]);
 
   useEffect(() => {
     // Deferred a tick so the effect body itself sets no state (the reads are
@@ -167,27 +195,23 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   }, [load]);
 
   const refreshEntitlement = useCallback(async () => {
-    if (refreshing.current) return;
-    refreshing.current = true;
-    try {
-      const entitlement = await readEntitlement();
-      const prior = loadedRef.current;
-      if (prior !== null) commit({ ...prior, entitlement });
-    } catch {
-      // A failed refresh keeps the last resolved status; the next one settles it.
-    } finally {
-      refreshing.current = false;
-    }
-  }, [readEntitlement, commit]);
+    await session().read();
+  }, [session]);
+
+  const runStoreOperation = useCallback(
+    <T,>(operation: () => Promise<T>) => session().runStoreOperation(operation),
+    [session],
+  );
 
   // Foreground re-check: an expired subscription meets the paywall on return.
+  // The session defers it while a purchase or restore is in flight.
   useEffect(() => {
     const onChange = (status: AppStateStatus) => {
-      if (status === 'active' && loaded !== null) void refreshEntitlement();
+      if (status === 'active' && loaded !== null) session().onForeground();
     };
     const subscription = AppState.addEventListener('change', onChange);
     return () => subscription.remove();
-  }, [loaded, refreshEntitlement]);
+  }, [loaded, session]);
 
   const writeOnboarding = useCallback(
     async (next: (record: OnboardingRecord) => OnboardingRecord) => {
@@ -232,12 +256,19 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   // from the Ready step straight to education, never through the paywall
   // phase in between. On the paywall the record is already complete and
   // `completePersonalization` hands back the same record.
+  //
+  // `session().apply` advances the sequence synchronously, so a refresh in
+  // flight is already stale before this commit, and queues the cache write
+  // behind any pending one.
   const applyEntitlement = useCallback(
     async (entitlement: ActiveEntitlement) => {
-      await saveCachedEntitlement(entitlement).catch(() => {});
+      const written = session().apply(entitlement);
       setReviewingPreview(false);
       const prior = loadedRef.current;
-      if (prior === null) return;
+      if (prior === null) {
+        await written;
+        return;
+      }
       const onboarding = completePersonalizationRecord(prior.onboarding);
       commit({
         onboarding,
@@ -246,8 +277,9 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       if (onboarding !== prior.onboarding) {
         await saveOnboardingRecord(onboarding).catch(() => {});
       }
+      await written;
     },
-    [commit],
+    [session, commit],
   );
 
   const reload = useCallback(async () => {
@@ -281,6 +313,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       completeNotificationEducation,
       applyEntitlement,
       refreshEntitlement,
+      runStoreOperation,
       reload,
       consumePreferencesSetNotice,
       provider,
@@ -295,6 +328,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     completeNotificationEducation,
     applyEntitlement,
     refreshEntitlement,
+    runStoreOperation,
     reload,
     consumePreferencesSetNotice,
     provider,

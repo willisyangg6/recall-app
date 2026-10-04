@@ -12,6 +12,7 @@ import {
   ENTITLEMENT_READ_TIMEOUT_MS,
   isEntitled,
   readWithTimeout,
+  reconcileReading,
   resolveEntitlement,
   type ActiveEntitlement,
   type EntitlementReading,
@@ -38,7 +39,7 @@ test('a verified active reading grants access and becomes the cache', () => {
 });
 
 test('a verified inactive reading denies access and clears the cache', () => {
-  const result = resolveEntitlement({ kind: 'inactive' }, VERIFIED, NOW);
+  const result = resolveEntitlement({ kind: 'inactive', asOf: NOW }, VERIFIED, NOW);
   assert.deepEqual(result.status, { kind: 'inactive', reason: 'verified' });
   assert.equal(result.cache, null);
   assert.equal(isEntitled(result.status), false);
@@ -109,4 +110,55 @@ test('a reading that answers in time is returned as is, and a rejection is unava
 
 test('a loading status is never entitled', () => {
   assert.equal(isEntitled({ kind: 'loading' }), false);
+});
+
+// ── Freshness ───────────────────────────────────────────────────────────────
+
+test('a reading dated before the verified fact is stale and says nothing: unavailable', () => {
+  const before = '2026-08-31T23:59:59.000Z';
+  assert.deepEqual(reconcileReading({ kind: 'inactive', asOf: before }, VERIFIED), {
+    kind: 'unavailable',
+  });
+  const older: ActiveEntitlement = { ...VERIFIED, productId: 'lotly_monthly', verifiedAt: before };
+  assert.deepEqual(reconcileReading({ kind: 'active', entitlement: older }, VERIFIED), {
+    kind: 'unavailable',
+  });
+});
+
+test('a reading dated at or after the verified fact is returned as is: a real expiry revokes', () => {
+  const same: EntitlementReading = { kind: 'inactive', asOf: VERIFIED.verifiedAt };
+  assert.equal(reconcileReading(same, VERIFIED), same);
+  const later: EntitlementReading = { kind: 'inactive', asOf: NOW };
+  assert.equal(reconcileReading(later, VERIFIED), later);
+  assert.deepEqual(resolveEntitlement(reconcileReading(later, VERIFIED), VERIFIED, NOW), {
+    status: { kind: 'inactive', reason: 'verified' },
+    cache: null,
+  });
+});
+
+test('with nothing verified there is nothing to compare: the reading is returned as is', () => {
+  const early: EntitlementReading = { kind: 'inactive', asOf: '2020-01-01T00:00:00.000Z' };
+  assert.equal(reconcileReading(early, null), early);
+  const unavailable: EntitlementReading = { kind: 'unavailable' };
+  assert.equal(reconcileReading(unavailable, VERIFIED), unavailable);
+});
+
+test('an undatable reading is neither a fresh confirmation nor a fresh revocation: unavailable', () => {
+  const undatedInactive: EntitlementReading = { kind: 'inactive', asOf: 'not a date' };
+  assert.deepEqual(reconcileReading(undatedInactive, VERIFIED), { kind: 'unavailable' });
+  const undatedActive: EntitlementReading = {
+    kind: 'active',
+    entitlement: { ...VERIFIED, productId: 'lotly_monthly', verifiedAt: '' },
+  };
+  assert.deepEqual(reconcileReading(undatedActive, VERIFIED), { kind: 'unavailable' });
+  // The verified fact stands, under the existing cached-access bound.
+  assert.deepEqual(resolveEntitlement(reconcileReading(undatedActive, VERIFIED), VERIFIED, NOW), {
+    status: { kind: 'active', entitlement: VERIFIED, confirmation: 'cached' },
+    cache: VERIFIED,
+  });
+  // A confirmation that cannot itself be dated protects nothing.
+  const undatedCache: ActiveEntitlement = { ...VERIFIED, verifiedAt: 'never' };
+  assert.deepEqual(reconcileReading({ kind: 'inactive', asOf: NOW }, undatedCache), {
+    kind: 'unavailable',
+  });
 });

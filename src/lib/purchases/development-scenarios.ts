@@ -311,7 +311,7 @@ export function createDevelopmentPurchaseProvider(deps: DevelopmentProviderDeps)
       if (!current().available) return { kind: 'unavailable' };
       const subscription = await readSubscription();
       return subscription === null
-        ? { kind: 'inactive' }
+        ? { kind: 'inactive', asOf: deps.now() }
         : { kind: 'active', entitlement: entitlementFor(subscription, deps.now()) };
     },
 

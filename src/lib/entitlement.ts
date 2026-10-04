@@ -49,9 +49,58 @@ export interface ActiveEntitlement {
 /** What a provider answers when asked whether this device is entitled. */
 export type EntitlementReading =
   | { kind: 'active'; entitlement: ActiveEntitlement }
-  | { kind: 'inactive' }
+  | {
+      kind: 'inactive';
+      /**
+       * ISO instant the store's data this answer rests on was fetched — the
+       * store's own request date, never the moment the adapter was asked. A
+       * store SDK may answer from a cache minutes old, so this is what lets
+       * `reconcileReading` tell "no subscription as of before the purchase"
+       * from "no subscription any more".
+       */
+      asOf: string;
+    }
   /** The provider could not answer: offline, store outage, or no provider. */
   | { kind: 'unavailable' };
+
+/**
+ * Freshness (2026-10-04): a reading dated BEFORE the entitlement this device
+ * last verified says nothing new, and is treated as `unavailable` — the
+ * existing cached-access rule then applies, with its grace bound, so a store
+ * that keeps serving stale data cannot keep access alive indefinitely and
+ * cannot revoke a purchase that happened after the data it is serving.
+ *
+ *   inactive, asOf < confirmed.verifiedAt   → unavailable (stale)
+ *   active,   verifiedAt < confirmed.verifiedAt → unavailable (stale: an
+ *             older record must not overwrite the newer one in the cache)
+ *   anything dated at or after the confirmation → returned as is: an
+ *             `inactive` from then on is a real expiry or revocation
+ *
+ * `confirmed` is the cache — the last verified fact — so the rule is the
+ * same whether the confirmation came from a purchase, a restore or an
+ * earlier verified reading. A reading that cannot be dated against it (a
+ * missing or unparseable instant on either side) is never a fresh
+ * confirmation and never a fresh revocation: it resolves as `unavailable`,
+ * so the verified fact stands under the cached-access bound. With nothing
+ * verified there is nothing to compare, and the reading is returned as is.
+ *
+ * The real adapter stamps `verifiedAt` and `asOf` from the SAME store clock —
+ * `CustomerInfo.requestDate`, the instant the store last served that
+ * customer info — and never from `Date.now()`: the SDK answers from a cache
+ * minutes old, and dating that answer with the device's clock would turn
+ * pre-purchase data into a fresh revocation.
+ */
+export function reconcileReading(
+  reading: EntitlementReading,
+  confirmed: ActiveEntitlement | null,
+): EntitlementReading {
+  if (reading.kind === 'unavailable' || confirmed === null) return reading;
+  const dated = reading.kind === 'inactive' ? reading.asOf : reading.entitlement.verifiedAt;
+  const readingAt = Date.parse(dated);
+  const confirmedAt = Date.parse(confirmed.verifiedAt);
+  if (Number.isNaN(readingAt) || Number.isNaN(confirmedAt)) return { kind: 'unavailable' };
+  return readingAt < confirmedAt ? { kind: 'unavailable' } : reading;
+}
 
 /** The gate's decision. */
 export type EntitlementStatus =

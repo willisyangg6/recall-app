@@ -131,7 +131,7 @@ test('the ten scenarios the brief names exist, in order, each with an expectatio
 
 test('inactive: no subscription, a purchase succeeds and persists, a restore finds nothing', async () => {
   const { provider, storage } = devProvider('inactive');
-  assert.deepEqual(await provider.readEntitlement(), { kind: 'inactive' });
+  assert.deepEqual(await provider.readEntitlement(), { kind: 'inactive', asOf: NOW });
   assert.deepEqual(await provider.restore(), { kind: 'nothing_to_restore' });
   const outcome = await provider.purchase(DEVELOPMENT_OFFERING.monthly);
   assert.equal(outcome.kind, 'success');
@@ -171,7 +171,7 @@ test('loading: the offering never resolves while the entitlement still answers',
     new Promise<string>((resolve) => setTimeout(() => resolve('pending'), 30)),
   ]);
   assert.equal(raced, 'pending');
-  assert.deepEqual(await provider.readEntitlement(), { kind: 'inactive' });
+  assert.deepEqual(await provider.readEntitlement(), { kind: 'inactive', asOf: NOW });
 });
 
 test('user cancellation and a purchase error change nothing', async () => {
@@ -182,7 +182,7 @@ test('user cancellation and a purchase error change nothing', async () => {
     const { provider, storage } = devProvider(id);
     assert.deepEqual(await provider.purchase(DEVELOPMENT_OFFERING.annual), { kind });
     assert.equal(storage.value, null, `${id} wrote a subscription`);
-    assert.deepEqual(await provider.readEntitlement(), { kind: 'inactive' });
+    assert.deepEqual(await provider.readEntitlement(), { kind: 'inactive', asOf: NOW });
   }
 });
 

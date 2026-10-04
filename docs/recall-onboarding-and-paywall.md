@@ -291,6 +291,51 @@ directions, so launch never hangs on a store. The entitlement is re-read on
 every return to the foreground, so an expired subscription meets the paywall
 on the next return.
 
+### 4.1 Ordering: the entitlement session (2026-10-04)
+
+The StoreKit sheet backgrounds the app, so the return to the foreground —
+and its refresh — overlaps the purchase. The 2026-10-03 audit (F5) found
+that a refresh started before the purchase succeeded could land after it
+with pre-purchase data and, resolved against its own stale cache snapshot,
+revoke the purchase and move an entitled shopper to the lapsed paywall. Every
+read, refresh and apply now goes through one **entitlement session**
+(`src/lib/entitlement-session.ts`), which orders them with three guards:
+
+1. **A sequence number.** `applyEntitlement` advances it synchronously,
+   before anything else. A read that started under an older number is
+   discarded whole when it answers — no cache write, no status — whether
+   its answer was `inactive`, `unavailable` or the timeout.
+2. **A store-operation guard.** The purchase flow runs a purchase or restore
+   _and the apply that follows a success_ under `runStoreOperation`. A
+   foreground event during it starts no refresh; one runs when it settles,
+   and the guard is released in `finally`, so success, cancellation, error
+   and a thrown store exception all release it.
+3. **Freshness.** An `inactive` reading carries `asOf`, the instant the
+   store's data was fetched. `reconcileReading` treats a reading dated
+   _before_ the last verified fact (the cache's `verifiedAt`, whether from a
+   purchase, a restore or an earlier verified reading) as `unavailable`: it
+   says nothing new, so the first refresh after a success cannot revoke it
+   with pre-purchase data. A reading dated at or after the verification is
+   taken as is — an `inactive` from then on is a real expiry or revocation,
+   clears the cache and ends access. A stale _active_ reading is treated the
+   same way, so an older record never overwrites the newer one in the cache.
+   A reading that cannot be dated against the verified fact (a missing or
+   unparseable instant on either side) is neither a fresh confirmation nor a
+   fresh revocation: it resolves as `unavailable` too. This adds **no grace
+   period**: a stale store falls under the existing cached-access bound, so
+   it cannot keep a lapsed subscription alive either.
+
+Cache writes are serialized through one chain in call order, and every read
+waits for the chain before loading the cache, so a refresh never resolves
+against a cache a pending write is about to replace. The real adapter must
+stamp `asOf` and `verifiedAt` from the same store clock —
+`CustomerInfo.requestDate`, the instant the store last served that customer
+info — and **never from `Date.now()`**: the SDK answers from a cache minutes
+old, and dating a cached answer with the device clock would turn
+pre-purchase data into a fresh revocation.
+`entitlement-session.test.ts` drives all of this with a fake provider whose
+every answer the test releases by hand.
+
 `src/hooks/use-access.tsx` is the provider that performs all of this once,
 above the stack, and exposes the phase and the transitions.
 
@@ -303,7 +348,7 @@ the gate and the education stand on:
 interface PurchaseProvider {
   readonly id: 'unconfigured' | 'development' | 'revenuecat';
   loadOfferings(): Promise<OfferingsResult>; // ready | unavailable | error
-  readEntitlement(): Promise<EntitlementReading>; // active | inactive | unavailable
+  readEntitlement(): Promise<EntitlementReading>; // active | inactive (dated `asOf`) | unavailable
   purchase(pkg: PlanPackage): Promise<PurchaseOutcome>; // success | cancelled | error | unavailable
   restore(): Promise<RestoreOutcome>; // restored | nothing_to_restore | error | unavailable
 }
@@ -2289,10 +2334,13 @@ What P2B7X.2 does, and what it does not touch:
 3. Add the RevenueCat adapter behind `PurchaseProvider` — `id: 'revenuecat'`
    — constructed with `purchaseIdentity` (`Purchases.logIn(installationId)`),
    mapping `CustomerInfo` to `EntitlementReading` (an active entitlement with
-   its expiry; `unavailable` on a network or configuration error, never a
-   guess), `Offerings` to `Offering` (the store's `priceString`, `price` and
-   `currencyCode`), and the purchase and restore results to the four
-   outcomes. Replace the one line in `resolvePurchaseProvider`'s release
+   its expiry; `inactive` dated `asOf` `CustomerInfo.requestDate`, with
+   `verifiedAt` stamped from that same date — never `Date.now()`, which
+   would date a cached answer as fresh — so §4.1's freshness comparison
+   never crosses a device clock; `unavailable` on a network or configuration
+   error, never a guess), `Offerings` to `Offering` (the store's
+   `priceString`, `price` and `currencyCode`), and the purchase and restore
+   results to the four outcomes. Replace the one line in `resolvePurchaseProvider`'s release
    path. Nothing above the boundary changes: not the gate, not the paywall,
    not onboarding.
 4. Add the SDK's public API key as the third `EXPO_PUBLIC_` variable, which
@@ -2310,7 +2358,8 @@ What P2B7X.2 does, and what it does not touch:
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | Record transitions, sticky completion and `watchBuilt`, empty optional ≠ incomplete, the v1→v2 migration that keeps the shopper's place, foreign blobs restart                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/lib/onboarding-state.test.ts`                                                                                 |
 | Phase matrix, route matrix, layout order and guards, push-tap guard, no cross-phase navigation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/lib/access-gate.test.ts`                                                                                      |
-| Fail-closed, cached access, grace, launch timeout                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/lib/entitlement.test.ts`                                                                                      |
+| Fail-closed, cached access, grace, launch timeout, freshness reconciliation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/lib/entitlement.test.ts`                                                                                      |
+| Entitlement session: a stale refresh is discarded whole, foreground waits for a store operation, post-success stale data cannot revoke, cache writes in order, later expiry honoured                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `src/lib/entitlement-session.test.ts`                                                                              |
 | Unconfigured provider, adapter scenarios and containment, savings math, no USD in product code                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/lib/purchases/purchase-provider.test.ts`                                                                      |
 | Paywall copy, prices, cards, state matrix, no close/free/trial/lifetime                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `src/lib/paywall-screen.test.ts`                                                                                   |
 | Release destinations and the readiness failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/lib/release-destinations.test.ts`                                                                             |

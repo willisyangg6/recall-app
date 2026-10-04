@@ -136,12 +136,18 @@ export function usePurchaseFlow(): PurchaseFlow {
     if (view.offerings.kind !== 'ready' || view.operation !== 'idle') return;
     const pkg = view.offerings.offering[view.selectedPlan];
     setView((prior) => ({ ...prior, operation: 'purchasing', notice: null }));
-    const outcome = await access.provider.purchase(pkg);
-    if (outcome.kind === 'success') {
-      // The gate moves the app on; this screen unmounts with the phase.
-      await access.applyEntitlement(outcome.entitlement);
-      return;
-    }
+    // Under the store guard: a return to the foreground (the StoreKit sheet
+    // backgrounds the app) cannot start a refresh until the purchase AND its
+    // apply have settled, whatever the outcome.
+    const outcome = await access.runStoreOperation(async () => {
+      const outcome = await access.provider.purchase(pkg);
+      if (outcome.kind === 'success') {
+        // The gate moves the app on; this screen unmounts with the phase.
+        await access.applyEntitlement(outcome.entitlement);
+      }
+      return outcome;
+    });
+    if (outcome.kind === 'success') return;
     const notice: PaywallNoticeKind =
       outcome.kind === 'cancelled'
         ? 'cancelled'
@@ -155,13 +161,16 @@ export function usePurchaseFlow(): PurchaseFlow {
   const restore = async () => {
     if (view.operation !== 'idle') return;
     setView((prior) => ({ ...prior, operation: 'restoring', notice: null }));
-    const outcome = await access.provider.restore();
-    if (outcome.kind === 'restored') {
-      setView((prior) => ({ ...prior, operation: 'idle', notice: 'restore_success' }));
-      announce('restore_success');
-      await access.applyEntitlement(outcome.entitlement);
-      return;
-    }
+    const outcome = await access.runStoreOperation(async () => {
+      const outcome = await access.provider.restore();
+      if (outcome.kind === 'restored') {
+        setView((prior) => ({ ...prior, operation: 'idle', notice: 'restore_success' }));
+        announce('restore_success');
+        await access.applyEntitlement(outcome.entitlement);
+      }
+      return outcome;
+    });
+    if (outcome.kind === 'restored') return;
     const notice: PaywallNoticeKind =
       outcome.kind === 'nothing_to_restore'
         ? 'restore_nothing'
