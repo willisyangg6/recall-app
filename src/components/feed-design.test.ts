@@ -195,7 +195,7 @@ test('IBM Plex Mono is used only for compact status labels, never for words peop
     'the card reintroduced the 10pt micro-caption',
   );
   assert.ok(
-    /<Text\s+variant="heading-3"\s+numberOfLines=\{uniform \? PREVIEW_TITLE_LINES : 3\}[^>]*>\s*\{model\.productName\}\s*<\/Text>/.test(
+    /<Text\s+variant="heading-3"\s+numberOfLines=\{\s*uniform \? PREVIEW_TITLE_LINES : mediaPlacement === 'above' \? undefined : 3\s*\}[^>]*>\s*\{model\.productName\}\s*<\/Text>/.test(
       CARD,
     ),
   );
@@ -391,14 +391,26 @@ test('the product name is the ONE clamped element on Feed and Saved: three lines
   // line limits are the brand's and the reason's, and they are `undefined` —
   // no limit — on every card but the onboarding deck's uniform variant.
   assert.equal((CARD.match(/numberOfLines=/g) ?? []).length, 3);
-  assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}'));
+  // Three lines on Feed and Saved (`mediaPlacement` is `beside` there); the
+  // onboarding deck's uniform variant clamps by its own rule, and the deck
+  // at the accessibility sizes (`above`) shows the whole name (2026-10-04).
+  assert.match(
+    CARD,
+    /numberOfLines=\{\s*uniform \? PREVIEW_TITLE_LINES : mediaPlacement === 'above' \? undefined : 3\s*\}/,
+  );
+  assert.ok(!FEED.includes('mediaPlacement'));
+  assert.ok(!read('app', '(tabs)', 'saved.tsx').includes('mediaPlacement'));
   assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_BRAND_LINES : undefined}'));
   assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_REASON_LINES : undefined}'));
   assert.ok(!CARD.includes('ellipsizeMode'));
   // The clamped node's CONTENT stays the complete product name — no slicing,
   // no substring, no separate visual string — so the card's grouped
   // accessibility element announces the full title and no override hides it.
-  assert.ok(/PREVIEW_TITLE_LINES : 3\}[^>]*>\s*\{model\.productName\}/.test(CARD));
+  assert.ok(
+    /PREVIEW_TITLE_LINES : mediaPlacement === 'above' \? undefined : 3\s*\}[^>]*>\s*\{model\.productName\}/.test(
+      CARD,
+    ),
+  );
   assert.ok(!CARD.includes('accessibilityLabel={model.productName'));
   assert.ok(!/\.slice\(|\.substring\(/.test(codeOnly(CARD)));
 });

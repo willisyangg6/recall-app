@@ -95,6 +95,7 @@ import {
   deckReleaseTarget,
   deckStatusHeight,
   previewCardLayout,
+  previewCardUniform,
   type PreviewCardLayout,
   wholePoints,
 } from '@/lib/ready-presentation';
@@ -147,9 +148,9 @@ export function ReadyDeck({
   width,
   onLockedPress,
 }: {
-  /** The readable image-bearing matches, at most the limit, in rank order. */
+  /** The readable cards, at most the limit, in rank order (imaged or not). */
   models: readonly HomeCardModel[];
-  /** The REAL next image-bearing match, frosted as the final card; or null. */
+  /** The REAL next match, frosted as the final card; or null. */
   locked: HomeCardModel | null;
   /** The deck's width: the content width between the page margins. */
   width: number;
@@ -274,6 +275,9 @@ export function ReadyDeck({
     current.kind === 'match'
       ? matchAccessibilityLabel(current.model, active, models.length)
       : PREVIEW_LOCKED_CARD_TITLE;
+  // From the accessibility sizes the tile moves above the text, so a title
+  // is never squeezed beside it (2026-10-04); the Feed's own rule otherwise.
+  const mediaPlacement = previewCardUniform(fontScale) ? 'beside' : 'above';
 
   return (
     <View style={styles.deck}>
@@ -314,7 +318,12 @@ export function ReadyDeck({
               onLayout={(event) => onCardLayout(event.nativeEvent.layout.height)}
               style={[styles.card, { width: frontWidth }, poses[index].style]}>
               {item.kind === 'match' ? (
-                <DeckCard item={item} uniform={uniform} height={shared} />
+                <DeckCard
+                  item={item}
+                  uniform={uniform}
+                  height={shared}
+                  mediaPlacement={mediaPlacement}
+                />
               ) : (
                 <Pressable
                   accessible={false}
@@ -324,6 +333,7 @@ export function ReadyDeck({
                     item={item}
                     uniform={uniform}
                     height={shared}
+                    mediaPlacement={mediaPlacement}
                     veil={poses[index].veil}
                   />
                 </Pressable>
@@ -347,12 +357,14 @@ function DeckCard({
   item,
   uniform,
   height,
+  mediaPlacement,
   veil,
 }: {
   item: DeckItem;
   uniform: PreviewCardLayout | null;
   /** The deck's shared card height, at every text size; absent until measured. */
   height: number | undefined;
+  mediaPlacement: 'beside' | 'above';
   /** The locked card's plain face while it is behind the front card. */
   veil?: Animated.AnimatedInterpolation<number>;
 }) {
@@ -370,6 +382,7 @@ function DeckCard({
       trailing={null}
       uniform={uniform}
       deckHeight={height}
+      mediaPlacement={mediaPlacement}
     />
   );
   if (item.kind === 'match') return card;

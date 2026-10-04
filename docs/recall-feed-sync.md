@@ -347,8 +347,17 @@ terms:
 - `useFeed({ reuseRecent: true })`, used by Ready alone, starts from
   `served()` instead of a loading state and revalidates on mount through
   `syncIfOlderThan(15 min)` — joining a sync in flight, skipping one inside
-  the threshold. Every other screen keeps the cold-launch contract above;
-  the hook's returned shape is unchanged and carries no freshness surface.
+  the threshold. The Feed itself passes `startFromServed: true` (2026-10-04):
+  arriving after onboarding it starts from the corpus Building and Ready
+  just showed instead of `Loading recalls…`, and still revalidates on mount
+  exactly as a cold launch does; a session that served nothing still starts
+  loading, so the loading and error states stay honest.
+- A session that cannot answer at all (a fresh install with no network)
+  is not the feed's concern: the onboarding Building and Ready steps stand
+  the bundled baseline corpus in through `readyCorpus`
+  ([recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md)
+  §6.4); the Feed and Saved keep their honest loading and error states, and
+  the hook carries no freshness surface.
 
 The Building step itself mounts the hook normally (start or join the sync)
 and reads only what it answers: a cached or freshly synced complete corpus

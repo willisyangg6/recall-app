@@ -85,6 +85,7 @@ import {
   EDIT_BODY,
   EDIT_CANCEL,
   EDIT_CANCEL_HINT,
+  EDIT_CANCEL_LOCKED_HINT,
   EDIT_CAPTION,
   EDIT_CHOOSER_HINT,
   EDIT_HEADLINE,
@@ -165,7 +166,7 @@ export function EditPreferencesStep({
   return (
     <Surface background="background/page" style={styles.page}>
       <View style={[styles.topBar, { paddingTop: insets.top + spacing[8] }]}>
-        <CancelAction onPress={onCancel} />
+        <CancelAction onPress={onCancel} disabled={saving} />
       </View>
       <ScrollView
         style={styles.page}
@@ -305,11 +306,18 @@ export function EditPreferencesPending({
   );
 }
 
-function CancelAction({ onPress }: { onPress: () => void }) {
+/**
+ * `Cancel`: back to Ready with nothing saved. Locked while a save is in
+ * flight (2026-10-04) — the draft being written must not be abandoned
+ * half-way, and the page leaves on its own the moment the write lands.
+ */
+function CancelAction({ onPress, disabled = false }: { onPress: () => void; disabled?: boolean }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityHint={EDIT_CANCEL_HINT}
+      accessibilityHint={disabled ? EDIT_CANCEL_LOCKED_HINT : EDIT_CANCEL_HINT}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [styles.cancel, pressed && styles.pressed]}>
       <Text variant="body" color="action/secondary" style={EDITOR_TYPE.cancel}>

@@ -253,7 +253,10 @@ test('Dynamic Type is honoured, and long labels wrap instead of clipping', () =>
   // brand's and reason's, which exist only in the onboarding deck's uniform
   // variant.
   assert.equal((CARD.match(/numberOfLines=/g) ?? []).length, 3);
-  assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}'));
+  assert.match(
+    CARD,
+    /numberOfLines=\{\s*uniform \? PREVIEW_TITLE_LINES : mediaPlacement === 'above' \? undefined : 3\s*\}/,
+  );
   assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_BRAND_LINES : undefined}'));
   assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_REASON_LINES : undefined}'));
   assert.deepEqual(codeOnly(CARD).match(/\bheight: [^,]+/g) ?? [], []);

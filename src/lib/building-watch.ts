@@ -64,7 +64,7 @@ import {
   buildingMatchesParts,
   buildingStoresCaption,
 } from '@/lib/onboarding-copy';
-import { affectsYouMatches, type ReadyFeedInput } from '@/lib/ready-preview';
+import { affectsYouMatches, type FeedAnswer, type ReadyFeedInput } from '@/lib/ready-preview';
 
 // ── The stops ───────────────────────────────────────────────────────────────
 
@@ -93,13 +93,14 @@ export type BuildingData =
  * retry in flight, which makes an earlier failure pending again.
  */
 export function buildingData(
-  feed: ReadyFeedInput,
+  feed: FeedAnswer | ReadyFeedInput,
   refreshing: boolean,
   prefs: UserRecallPreferences,
+  now?: Date,
 ): BuildingData {
   if (feed.status === 'loading') return { kind: 'pending' };
   if (feed.status === 'error') return refreshing ? { kind: 'pending' } : { kind: 'failed' };
-  return { kind: 'usable', total: affectsYouMatches(feed.items, prefs).length };
+  return { kind: 'usable', total: affectsYouMatches(feed.items, prefs, now).length };
 }
 
 // ── Timing ──────────────────────────────────────────────────────────────────
@@ -107,10 +108,11 @@ export function buildingData(
 export const BUILDING_TIMING = {
   /**
    * Each stop's readable minimum, once results are usable: foreground,
-   * visible time, measured from the beat that made it active (the beat's own
-   * ≤220ms transitions run inside it, at their usual speed).
+   * visible time, counted from the moment its caption is FULLY visible —
+   * after the beat's fade-through, which runs at its usual speed outside
+   * the hold (founder, 2026-10-04: 1,100ms, from 1,500ms).
    */
-  stopMs: 1_500,
+  stopMs: 1_100,
   /**
    * The caption fade-through that opens every beat after Area: the outgoing
    * caption fades to nothing (`captionFadeOutMs`), the words swap while

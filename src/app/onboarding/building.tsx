@@ -44,6 +44,7 @@ import { buildingDone } from '@/lib/onboarding-navigation';
 import { motionAllowed } from '@/lib/onboarding-state';
 import { presentedPreferences } from '@/lib/presented-preferences';
 import { isFeedConfigured } from '@/lib/recall-feed';
+import { readyCorpus } from '@/lib/ready-preview';
 
 export default function OnboardingBuildingScreen() {
   const access = useAccess();
@@ -93,10 +94,12 @@ function BuildingPresentation({
   onLeave: () => void;
 }) {
   const reduceMotion = useReduceMotion();
-  // A build without a configured feed can never answer: that is a failure,
-  // offered the same Continue, never an endless wait.
+  // The one corpus decision Ready makes too (lib/ready-preview `readyCorpus`,
+  // 2026-10-04): the session's answer, else the bundled baseline — so the
+  // count here is the count Ready shows. A build without a configured feed
+  // never answers, so it stands on the baseline like a failed first sync.
   const data = buildingData(
-    isFeedConfigured() ? feed.state : { status: 'error' },
+    readyCorpus(isFeedConfigured() ? feed.state : { status: 'error' }),
     feed.refreshing,
     prefs,
   );

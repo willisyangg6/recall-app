@@ -32,7 +32,7 @@ import { EDIT_PREFERENCES_ROUTE, onboardingRoute } from '@/lib/onboarding-routes
 import { presentedPreferences } from '@/lib/presented-preferences';
 import { isFeedConfigured } from '@/lib/recall-feed';
 import { todayIso } from '@/lib/recall-presentation';
-import { buildReadyPreview, type ReadyFeedInput } from '@/lib/ready-preview';
+import { buildReadyPreview, readyCorpus } from '@/lib/ready-preview';
 
 export default function OnboardingPreviewScreen() {
   const access = useAccess();
@@ -57,9 +57,10 @@ export default function OnboardingPreviewScreen() {
   );
 
   if (load.status !== 'ready') return <StepPending step="preview" status={load.status} />;
-  // A build without a configured feed can never answer: say so honestly
-  // rather than checking forever.
-  const feedInput: ReadyFeedInput = isFeedConfigured() ? feed.state : { status: 'error' };
+  // The one corpus decision Building made too (`readyCorpus`): the session's
+  // answer, else the bundled baseline, so Ready shows the count Building
+  // counted; a sync that lands later replaces it with the live corpus.
+  const feedInput = readyCorpus(isFeedConfigured() ? feed.state : { status: 'error' });
   // The saved choices (a development QA profile may present them differently,
   // display only).
   const prefs = presentedPreferences(load.prefs);

@@ -64,7 +64,7 @@ import {
 } from '@/lib/feed-filters';
 import { buildSearchEntry, filterBySearch, type SearchEntry } from '@/lib/feed-search';
 import { buildFeedSections } from '@/lib/feed-relevance';
-import { preferencesAvailable } from '@/lib/preferences-store';
+import { knownPreferences, preferencesAvailable } from '@/lib/preferences-store';
 import { isFeedConfigured, type FeedItem } from '@/lib/recall-feed';
 import { buildHomeCardModel, todayIso } from '@/lib/recall-presentation';
 import { evaluatePersonalRelevance, type PersonalRelevance } from '@/lib/relevance';
@@ -242,18 +242,31 @@ interface HomeSection {
 }
 
 export default function HomeScreen() {
-  const { state, refreshing, refresh } = useFeed();
+  // After onboarding the session has already served the complete corpus
+  // Building and Ready showed; the Feed starts from it rather than from
+  // `Loading recalls…`, and revalidates on mount as it always did.
+  const { state, refreshing, refresh } = useFeed({ startFromServed: true });
   const [showOlder, setShowOlder] = useState(false);
-  const [tab, setTab] = useState<FeedTab>('all');
+  // The intended view before the first visible frame (2026-10-04): a
+  // shopper with preferences this process has already read lands on
+  // Affects me at once; the first read still decides for a cold launch.
+  const [tab, setTab] = useState<FeedTab>(() => {
+    const known = knownPreferences();
+    return known !== null && hasAnyPreference(known) ? 'affects_me' : 'all';
+  });
   // Browsing state (C6): session-only, in memory, never persisted, never part
   // of the personalization profile. Filters apply to All Recalls; switching to
   // Affects me ignores them TEMPORARILY while preserving the selections.
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<FeedFilterState>(EMPTY_FEED_FILTERS);
   const [openSheet, setOpenSheet] = useState<'location' | 'risk' | 'category' | null>(null);
+  const decidedFromKnown = useRef(knownPreferences() !== null);
   const prefs = usePreferences(
     useCallback((loaded: UserRecallPreferences) => {
-      // Default to the personalized view only when personalization exists.
+      // Default to the personalized view only when personalization exists —
+      // and only when the first frame could not already decide, so a tab the
+      // shopper chose meanwhile is never overridden by the focus read.
+      if (decidedFromKnown.current) return;
       if (hasAnyPreference(loaded)) setTab('affects_me');
     }, []),
   );

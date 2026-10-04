@@ -70,6 +70,7 @@
     "qa:personalization": "tsx scripts/qa-personalization.ts",
     "qa:feed": "tsx scripts/qa-feed-completeness.ts",
     "qa:egress": "tsx scripts/qa-egress.ts",
+    "record:baseline": "tsx scripts/record-baseline-recalls.ts",
     "qa:duplicates": "tsx scripts/qa-duplicate-cases.ts",
     "qa:categories": "tsx scripts/qa-categories-launch.ts",
     "qa:categories:launch": "tsx scripts/qa-categories-launch.ts",

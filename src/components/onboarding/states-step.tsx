@@ -27,11 +27,13 @@
  * touching nothing. It is static and the same for every household; its
  * atlas shows no state, and nothing about the selection is drawn on it.
  *
- * ## One draft, one search entry
+ * ## One selection, one search entry
  *
- * The draft lives HERE, seeded from the saved selection, and every change is
- * reported to the route through `onChange`, which saves progressively: there
- * is no save step and nothing to lose on a kill. The search entry opens the
+ * The step edits the SAVED selection the route hands it — no copy of its own
+ * (a copy seeded once went stale under an editor save, 2026-10-04) — and
+ * every change is reported to the route through `onChange`, which shows it
+ * at once and saves progressively: there is no save step and nothing to lose
+ * on a kill. The search entry opens the
  * chooser (state-search-sheet.tsx), whose rows toggle this same draft
  * through `toggleStateCode`, the shared selector's rule; a chip removes its
  * state through the same rule. The jurisdictions are listed only in the
@@ -123,16 +125,13 @@ export function StatesStep({
   const gaps = verticalGaps(height);
   const chips = chipLayout(fontScale);
 
-  // The one draft the chooser and the chips edit; the saved value seeds it.
-  const [draft, setDraft] = useState<readonly string[]>(selected);
-  const commit = useCallback(
-    (codes: readonly string[]) => {
-      setDraft(codes);
-      onChange(codes);
-    },
-    [onChange],
-  );
-  const toggle = (code: string) => commit(toggleStateCode(draft, code));
+  // The chooser and the chips edit ONE selection: the saved one the route
+  // hands down, which the route updates the moment a change is requested.
+  // No copy is kept here (2026-10-04): a copy seeded once went stale when
+  // the editor over Ready saved while this step was still mounted beneath,
+  // and the next tap here then wrote the stale list back.
+  const draft = selected;
+  const toggle = (code: string) => onChange(toggleStateCode(draft, code));
   const canContinue = canContinueFromStates(draft);
 
   // The chooser, and the search entry focus returns to once it has gone.

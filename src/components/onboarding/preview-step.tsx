@@ -110,7 +110,6 @@ import {
   PREVIEW_NONE,
   PREVIEW_SUMMARY_LABELS,
   PREVIEW_SUMMARY_TITLE,
-  PREVIEW_UNAVAILABLE_TITLE,
 } from '@/lib/onboarding-copy';
 import { summarizePreferences } from '@/lib/profile-hub';
 import {
@@ -356,17 +355,15 @@ export function PreviewStep({
             </View>
             {preview.kind === 'matches' ? (
               <>
-                {preview.models.length > 0 ? (
-                  <ReadyDeck
-                    // New content or a new text size is a new deck: it
-                    // re-measures and starts from its first card.
-                    key={deckKey(preview.models, preview.locked, fontScale)}
-                    models={preview.models}
-                    locked={preview.locked}
-                    width={sceneWidth - 2 * layout.pageMargin}
-                    onLockedPress={onSeePlan}
-                  />
-                ) : null}
+                <ReadyDeck
+                  // New content or a new text size is a new deck: it
+                  // re-measures and starts from its first card.
+                  key={deckKey(preview.models, preview.locked, fontScale)}
+                  models={preview.models}
+                  locked={preview.locked}
+                  width={sceneWidth - 2 * layout.pageMargin}
+                  onLockedPress={onSeePlan}
+                />
                 {hasLockedMatches(preview) ? (
                   <Pressable
                     accessibilityRole="button"
@@ -393,15 +390,15 @@ export function PreviewStep({
             ) : (
               <Surface background="background/subtle" radius={16} style={styles.emptyCard}>
                 <Text variant="body">
-                  {preview.kind === 'checking'
-                    ? PREVIEW_CHECKING_TITLE
-                    : preview.kind === 'unavailable'
-                      ? PREVIEW_UNAVAILABLE_TITLE
-                      : PREVIEW_EMPTY_TITLE}
+                  {preview.kind === 'checking' ? PREVIEW_CHECKING_TITLE : PREVIEW_EMPTY_TITLE}
                 </Text>
-                <Text variant="body-small" color="text/secondary">
-                  {PREVIEW_MONITORING_NOTE}
-                </Text>
+                {preview.kind === 'none' ? (
+                  // The check answered and nothing matches right now: said
+                  // plainly, no cards, nothing locked.
+                  <Text variant="body-small" color="text/secondary">
+                    {PREVIEW_MONITORING_NOTE}
+                  </Text>
+                ) : null}
               </Surface>
             )}
           </View>

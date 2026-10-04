@@ -2,21 +2,29 @@
  * Launch readiness (P2B7X.1): the offline checks a release must pass before
  * a build is prepared. Exits non-zero while any fails.
  *
- * Today it checks the three release destinations the paywall's footer opens
- * — Terms, Privacy, Support — which are typed configuration in
+ * It checks the three release destinations the paywall's footer opens —
+ * Terms, Privacy, Support — which are typed configuration in
  * src/lib/release-destinations.ts and are null until the founder supplies
- * real HTTPS URLs (docs/recall-launch-blockers.md §1). Nothing here reads
- * the network or the database.
+ * real HTTPS URLs (docs/recall-launch-blockers.md §1), and (2026-10-04) that
+ * the bundled baseline recall corpus is still inside the recency window
+ * (`npm run record:baseline` refreshes it). Nothing here reads the network
+ * or the database.
  *
  *   npm run qa:launch-readiness
  */
 
+import { baselineReadinessFailures } from '../src/lib/baseline-recalls';
 import { launchReadinessFailures } from '../src/lib/release-destinations';
 
 function main(): void {
-  const failures = launchReadinessFailures();
+  const destinationFailures = launchReadinessFailures();
+  const baselineFailures = baselineReadinessFailures();
+  const failures = [...destinationFailures, ...baselineFailures];
   console.log('Launch readiness (offline)');
   console.log('');
+  if (baselineFailures.length === 0) {
+    console.log('  OK: the bundled baseline recall corpus is inside the recency window.');
+  }
   if (failures.length === 0) {
     console.log('  OK: every release destination is a valid HTTPS URL.');
     return;

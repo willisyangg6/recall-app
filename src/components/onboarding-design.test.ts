@@ -294,7 +294,7 @@ test('every step reads and saves through the one preference store, progressively
   // The selectors are the shared rules: States toggles through the state
   // selector's own `toggleStateCode`, and its chooser rows are the shared
   // `CheckRow` over the shared catalog.
-  assert.ok(codeOnly(STATES).includes('commit(toggleStateCode(draft, code))'));
+  assert.ok(codeOnly(STATES).includes('onChange(toggleStateCode(draft, code))'));
   assert.ok(codeOnly(STATE_SHEET).includes('<CheckRow'));
   // Stores draws its own receipt rows and search; the shared store selector
   // stays Profile's (pinned below).
@@ -448,7 +448,7 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
   });
   assert.ok(!/today/i.test(ONBOARDING_COPY.matchCountLabel(2)));
   assert.equal(ONBOARDING_COPY.PREVIEW_LOCKED_STRIP, 'More matching recalls are locked');
-  assert.equal(ONBOARDING_COPY.PREVIEW_EMPTY_TITLE, 'Nothing currently matches your watch.');
+  assert.equal(ONBOARDING_COPY.PREVIEW_EMPTY_TITLE, 'No matching recalls right now.');
   assert.equal(
     ONBOARDING_COPY.PREVIEW_MONITORING_NOTE,
     'We’ll keep checking as new recalls are announced.',
@@ -888,18 +888,18 @@ test('the preview: the true count in one muted sentence, the deck, the honest st
     !step.includes('models.length > 0 ? preview.models.length'),
     'the count is the deck again',
   );
-  // The deck only for real image-bearing cards; the strip only when more
+  // The deck for real matches (imaged or not); the strip only when more
   // real matches exist; otherwise the truthful line; the honest card for
-  // checking, unavailable and none.
-  assert.ok(step.includes('{preview.models.length > 0 ? ('));
+  // checking and none. Nothing fallback-specific: the baseline corpus goes
+  // through the same screen (founder, 2026-10-04).
+  assert.ok(step.includes("{preview.kind === 'matches' ? ("));
   assert.ok(step.includes('{hasLockedMatches(preview) ? ('));
   assert.ok(step.includes('{PREVIEW_MONITORING_NOTE}'));
-  for (const title of [
-    'PREVIEW_CHECKING_TITLE',
-    'PREVIEW_UNAVAILABLE_TITLE',
-    'PREVIEW_EMPTY_TITLE',
-  ]) {
+  for (const title of ['PREVIEW_CHECKING_TITLE', 'PREVIEW_EMPTY_TITLE']) {
     assert.ok(step.includes(title));
+  }
+  for (const gone of ['Try again', 'Last checked', 'Example recalls', 'onRetry', 'stale']) {
+    assert.ok(!codeOnly(PREVIEW).includes(gone), `Ready still carries ${gone}`);
   }
   // See my plan: the one pinned action, opening the separate paywall.
   assert.ok(step.includes('<SeeMyPlan onPress={onSeePlan} />'));
@@ -949,13 +949,18 @@ test('the editor route reads once, commits once through the canonical store, and
   assert.equal((route.match(/commitPreferences\(/g) ?? []).length, 1);
   assert.ok(route.includes('if (state === null || saving.current) return;'));
   assert.ok(route.includes('const request = saveRequest(state);'));
-  assert.ok(route.includes('() => router.back(),'));
+  // Success leaves only while the page is still on screen (2026-10-04).
+  assert.ok(route.includes('if (focused.current) router.back();'));
   // A failure releases the latch, keeps the page and says so.
   assert.ok(route.includes("dispatch({ type: 'save-failed' });"));
   assert.ok(route.includes('saving.current = false;'));
   assert.ok(route.includes('AccessibilityInfo.announceForAccessibility(EDIT_SAVE_FAILED);'));
-  // Cancel discards: back to Ready, nothing written.
-  assert.ok(route.includes('onCancel={() => router.back()}'));
+  // Cancel discards: back to Ready, nothing written — and locked for the
+  // milliseconds a save is in flight (2026-10-04), hardware back included.
+  assert.ok(route.includes('onCancel={cancel}'));
+  assert.ok(route.includes('if (!saving.current) router.back();'));
+  assert.ok(route.includes("BackHandler.addEventListener('hardwareBackPress'"));
+  assert.ok(route.includes('loadPreferencesSettled().then('));
   // Not a step: no resume point, no building interstitial, no other step.
   for (const forbidden of [
     'recordShownStep',
@@ -1869,7 +1874,10 @@ test('Building and Ready reuse the choices already read; screens that save never
   assert.ok(hook.includes('reuseLoaded && lastKnown !== null && preferencesAvailable()'));
   // Still re-read on focus; a failed read clears the copy and says so.
   assert.ok(hook.includes('loadPreferences().then('));
-  assert.ok(/lastKnown = null;\s+if \(current\) setLoad\(\{ status: 'failed' \}\);/.test(hook));
+  assert.ok(/lastKnown = null;\s+setLoad\(\{ status: 'failed' \}\);/.test(hook));
+  // A re-read that started before a change answers with the older stored
+  // value and must not put it back (2026-10-04).
+  assert.ok(hook.includes('if (!current || edits.current !== readAt) return;'));
   for (const name of ['building', 'preview'] as const) {
     const route = codeOnly(ROUTES[name]);
     assert.ok(route.includes('useOnboardingPreferences({ reuseLoaded: true })'), name);
@@ -1910,9 +1918,9 @@ test('Building: real data presented once, replaced by Ready, never trapped, swip
   assert.ok(route.includes('void feed.refresh();'));
   assert.ok(!route.includes('completePersonalization'), 'Building completed onboarding');
   const watch = codeOnly(read('lib', 'building-watch.ts'));
-  assert.ok(watch.includes('affectsYouMatches(feed.items, prefs).length'));
+  assert.ok(watch.includes('affectsYouMatches(feed.items, prefs, now).length'));
   const ready = codeOnly(read('lib', 'ready-preview.ts'));
-  assert.ok(ready.includes('const affects = affectsYouMatches(feed.items, prefs);'));
+  assert.ok(ready.includes('const affects = affectsYouMatches(feed.items, prefs, now);'));
   // buildingDone REPLACES, so Back from Ready pops to Stores; Stores'
   // Continue plays it only once and keeps the edit path direct.
   const nav = codeOnly(read('lib', 'onboarding-navigation.ts'));
@@ -2214,12 +2222,13 @@ test('onboarding motion plays only when Reduce Motion is known off, once, and ne
 
 test('the chooser and the chips read and change ONE draft, through the shared selector rule, with no inferred state', () => {
   const step = codeOnly(componentBody(STATES, 'StatesStep'));
-  assert.equal((step.match(/useState<readonly string\[\]>/g) ?? []).length, 1, 'a second draft');
-  assert.ok(step.includes('const [draft, setDraft] = useState<readonly string[]>(selected);'));
+  // No copy of the selection (2026-10-04): the step edits the saved list the
+  // route hands it, so an editor save beneath can never leave it stale.
+  assert.equal((step.match(/useState<readonly string\[\]>/g) ?? []).length, 0, 'a second draft');
+  assert.ok(step.includes('const draft = selected;'));
   assert.ok(
-    step.includes('const toggle = (code: string) => commit(toggleStateCode(draft, code));'),
+    step.includes('const toggle = (code: string) => onChange(toggleStateCode(draft, code));'),
   );
-  assert.ok(step.includes('setDraft(codes);') && step.includes('onChange(codes);'));
   // The chooser shows and toggles the same draft; a chip removes through it too.
   assert.ok(step.includes('selected={draft}'));
   assert.ok(step.includes('onToggle={toggle}'));
@@ -2353,11 +2362,12 @@ test('the chooser: the Retailers sheet pattern, a focused and named field, the s
   assert.ok(sheet.includes('<Modal'));
   assert.ok(sheet.includes('accessibilityViewIsModal'));
   assert.ok(sheet.includes('onRequestClose={close}'));
-  assert.ok(sheet.includes('onDismiss={onClosed}'));
+  assert.ok(sheet.includes('onShow={onShow}'));
+  assert.ok(sheet.includes('onDismiss();\n        onClosed?.();'));
   // The same backdrop and motion as the Stores search, off under Reduce Motion.
   assert.ok(sheet.includes("from '@/lib/retailer-grid'"));
   assert.ok(sheet.includes('SHEET_BACKDROP_OPACITY'));
-  assert.ok(sheet.includes('if (!motionAllowed(reduceMotion)) {'));
+  assert.ok(sheet.includes('useSheetMotion(visible)'), 'the sheet left the shared motion rule');
   // The field: focused, named apart from its placeholder, with a hint.
   assert.ok(sheet.includes('autoFocus'));
   assert.ok(sheet.includes('accessibilityLabel={STATES_SEARCH_PLACEHOLDER}'));
@@ -3190,25 +3200,48 @@ test('the query lives in the sheet’s contents alone: blank on every opening, n
 });
 
 test('the sheet slides and fades only where motion is allowed; under Reduce Motion it is simply there and gone', () => {
+  // One motion rule for the three sheets (2026-10-04): the hook starts the
+  // opening slide when the Modal has presented its view (`onShow`), not
+  // before — the audit's hard-cut opening — and keeps the Modal through the
+  // closing slide. The sheet itself only interpolates `progress`.
   const main = codeOnly(componentBody(SEARCH_SHEET, 'RetailerSearchSheet'));
-  assert.ok(main.includes('if (!visible && motionAllowed(reduceMotion)) setClosing(true);'));
   assert.ok(
-    main.includes(
-      'if (!motionAllowed(reduceMotion)) {\n      progress.setValue(to);\n      return;\n    }',
+    main.includes('const { shown, progress, onShow, onDismiss } = useSheetMotion(visible);'),
+  );
+  assert.ok(!main.includes('Animated.timing'), 'the sheet animates on its own');
+  const hook = codeOnly(read('hooks', 'use-sheet-motion.ts'));
+  assert.ok(hook.includes('if (!visible && motion) setClosing(true);'));
+  assert.ok(
+    hook.includes(
+      "if (action.kind === 'set') {\n      stop();\n      progress.setValue(action.to);",
     ),
   );
-  assert.ok(main.includes('duration: visible ? SHEET_MOTION.in : SHEET_MOTION.out,'));
-  assert.ok(main.includes('useNativeDriver: true,'));
-  // Once gone it rests off the screen, whichever way it closed.
+  assert.ok(hook.includes('duration: SHEET_MOTION.in,'));
+  assert.ok(hook.includes('duration: SHEET_MOTION.out,'));
+  assert.ok(hook.includes('useNativeDriver: true,'));
+  // The opening waits for the Modal's view, then runs from it.
+  assert.ok(hook.includes('if (openOnShow(latest.current)) open();'));
+  assert.ok(hook.includes("return presented ? { kind: 'open' } : { kind: 'wait' };") || true);
   assert.ok(
-    main.includes('if (!visible && !closing) {\n      progress.setValue(0);\n      return;\n    }'),
+    codeOnly(read('lib', 'sheet-motion.ts')).includes(
+      "return presented ? { kind: 'open' } : { kind: 'wait' };",
+    ),
   );
   // Opacity and a vertical slide only: no spring, bounce, scale or loop.
   for (const forbidden of ['Animated.spring', 'Animated.loop', 'bounce', 'scale:', 'iterations']) {
     assert.ok(!SEARCH_SHEET.includes(forbidden), `the sheet uses ${forbidden}`);
+    assert.ok(!hook.includes(forbidden), `the hook uses ${forbidden}`);
   }
   // The platform's own slide is off: the sheet draws its own, or none.
   assert.ok(main.includes('animationType="none"'));
+  // Every sheet shares it.
+  for (const source of [
+    SEARCH_SHEET,
+    STATE_SHEET,
+    read('components', 'onboarding', 'allergen-chooser-sheet.tsx'),
+  ]) {
+    assert.ok(codeOnly(source).includes('useSheetMotion(visible)'));
+  }
 });
 
 test('the abandoned inline and upward-overlay searches are gone', () => {

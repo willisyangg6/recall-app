@@ -35,7 +35,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
 import type { UserRecallPreferences } from '@/domain/preferences';
-import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
+import { knownPreferences, loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
 
 /**
  * @param onFirstLoad Called once per mount, with the FIRST profile read —
@@ -46,7 +46,13 @@ import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
 export function usePreferences(
   onFirstLoad?: (prefs: UserRecallPreferences) => void,
 ): UserRecallPreferences | null {
-  const [prefs, setPrefs] = useState<UserRecallPreferences | null>(null);
+  // Start from what this process already knows (2026-10-04): a screen that
+  // follows onboarding draws its first frame with the choices, not with
+  // "not read yet". `onFirstLoad` then still fires once per mount, with the
+  // first read — but a caller can tell whether it already had them.
+  const [prefs, setPrefs] = useState<UserRecallPreferences | null>(() =>
+    preferencesAvailable() ? knownPreferences() : null,
+  );
   const initialized = useRef(false);
 
   useFocusEffect(

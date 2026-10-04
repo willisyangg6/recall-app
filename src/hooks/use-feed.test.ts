@@ -135,9 +135,12 @@ test('reuseRecent starts from the corpus the session served and revalidates only
   // contract above (loading, the cache, then a reconciliation).
   assert.match(
     CODE,
-    /export function useFeed\(\{ reuseRecent = false \}: FeedOptions = \{\}\): Feed/,
+    /export function useFeed\(\{ reuseRecent = false, startFromServed = false \}: FeedOptions = \{\}\): Feed/,
   );
-  assert.match(CODE, /const served = reuseRecent \? getFeedSession\(\)\.served\(\) : null;/);
+  assert.match(
+    CODE,
+    /const served = reuseRecent \|\| startFromServed \? getFeedSession\(\)\.served\(\) : null;/,
+  );
   assert.match(
     CODE,
     /if \(reuseRecent\) void revalidate\(FOREGROUND_REVALIDATE_AFTER_MINUTES \* 60_000\);\n\s+else void revalidate\(\);/,

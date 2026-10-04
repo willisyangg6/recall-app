@@ -61,7 +61,6 @@ import { useEffect, useState } from 'react';
 import {
   AccessibilityInfo,
   Animated,
-  Easing,
   Keyboard,
   Modal,
   Pressable,
@@ -79,7 +78,7 @@ import { SearchBar } from '@/components/ui/search-bar';
 import { Text } from '@/components/ui/text';
 import { color, hitTarget, layout, radius, spacing } from '@/constants/design-tokens';
 import { searchRetailers, type CanonicalRetailer } from '@/domain/retailer-catalog';
-import { useReduceMotion } from '@/hooks/use-reduce-motion';
+import { useSheetMotion } from '@/hooks/use-sheet-motion';
 import {
   NO_STORES_FOUND,
   SEARCH_ALL_STORES_LABEL,
@@ -91,7 +90,6 @@ import {
   SEARCH_STORES_LABEL,
   searchResultsAnnouncement,
 } from '@/lib/onboarding-copy';
-import { motionAllowed } from '@/lib/onboarding-state';
 import {
   CATALOG_GAP,
   CATALOG_TILE,
@@ -99,7 +97,6 @@ import {
   retailerSearchResults,
   SHEET_BACKDROP_OPACITY,
   storeCatalogColumns,
-  SHEET_MOTION,
   searchSheetTop,
 } from '@/lib/retailer-grid';
 
@@ -121,44 +118,14 @@ export function RetailerSearchSheet({
   /** Show the whole catalog before a query (the editor); the step leaves this off. */
   catalog?: boolean;
 }) {
-  const reduceMotion = useReduceMotion();
   const { height, fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const top = searchSheetTop(height, insets.top, fontScale);
 
-  // Closing plays the slide out before the modal goes, where motion is allowed.
-  const [closing, setClosing] = useState(false);
-  const [wasVisible, setWasVisible] = useState(visible);
-  if (wasVisible !== visible) {
-    setWasVisible(visible);
-    if (!visible && motionAllowed(reduceMotion)) setClosing(true);
-  }
-  const shown = visible || closing;
-
-  // 0 = off the screen, 1 = in place.
-  const [progress] = useState(() => new Animated.Value(visible ? 1 : 0));
-  useEffect(() => {
-    // Gone: rest off the screen, so the next opening slides in from there.
-    if (!visible && !closing) {
-      progress.setValue(0);
-      return;
-    }
-    const to = visible ? 1 : 0;
-    if (!motionAllowed(reduceMotion)) {
-      progress.setValue(to);
-      return;
-    }
-    const run = Animated.timing(progress, {
-      toValue: to,
-      duration: visible ? SHEET_MOTION.in : SHEET_MOTION.out,
-      easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    });
-    run.start(({ finished }) => {
-      if (finished && !visible) setClosing(false);
-    });
-    return () => run.stop();
-  }, [visible, closing, reduceMotion, progress]);
+  // The one motion rule the three sheets share (hooks/use-sheet-motion.ts):
+  // the opening slide starts when the Modal has presented its view, the
+  // closing one at once, and Reduce Motion is immediate both ways.
+  const { shown, progress, onShow, onDismiss } = useSheetMotion(visible);
 
   const close = () => {
     Keyboard.dismiss();
@@ -171,7 +138,11 @@ export function RetailerSearchSheet({
       transparent
       animationType="none"
       onRequestClose={close}
-      onDismiss={onClosed}
+      onShow={onShow}
+      onDismiss={() => {
+        onDismiss();
+        onClosed?.();
+      }}
       statusBarTranslucent>
       <View style={styles.root}>
         <Animated.View

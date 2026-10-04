@@ -10,13 +10,15 @@
  * double tap, kept open with the draft intact on a failed local write — and
  * then returns directly to Ready, which already shows the saved choices and
  * recomputes its real preview from them. `Cancel` and Android's back return
- * to Ready having saved nothing. Onboarding completion, `watchBuilt`, the
+ * to Ready having saved nothing — and are locked for the milliseconds a save
+ * is in flight, so a draft can never be half-written and abandoned, and a
+ * save's answer never pops a page that has already gone (2026-10-04). Onboarding completion, `watchBuilt`, the
  * installation, the paywall and any purchase are untouched either way.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo } from 'react-native';
-import { router } from 'expo-router';
+import { AccessibilityInfo, BackHandler } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 
 import {
   EditPreferencesPending,
@@ -30,14 +32,21 @@ import {
   type EditorState,
 } from '@/lib/edit-preferences';
 import { EDIT_SAVE_FAILED } from '@/lib/onboarding-copy';
-import { commitPreferences, loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
+import {
+  commitPreferences,
+  loadPreferencesSettled,
+  preferencesAvailable,
+} from '@/lib/preferences-store';
 
 export default function EditPreferencesScreen() {
   const [state, setState] = useState<EditorState | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let current = true;
-    loadPreferences().then(
+    // Read AFTER every write already requested has landed, so a toggle still
+    // in the queue when the page opened can never be missed here and then
+    // reverted by Save (2026-10-04).
+    loadPreferencesSettled().then(
       (saved) => {
         if (current) setState(beginEditing(saved));
       },
@@ -57,6 +66,26 @@ export default function EditPreferencesScreen() {
   // One save at a time, whatever the taps: the latch is released only by a
   // failure, which is the only way the page stays open after a save.
   const saving = useRef(false);
+  // Whether this page is still the one on screen: a save that lands after
+  // the page has already gone (it cannot, while Cancel is locked during a
+  // save — but a late answer must never pop Ready too) navigates nowhere.
+  const focused = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      focused.current = true;
+      // Android's back is Cancel: locked while a save is in flight, so the
+      // draft being written is never abandoned half-way (2026-10-04).
+      const back = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (saving.current) return true;
+        router.back();
+        return true;
+      });
+      return () => {
+        focused.current = false;
+        back.remove();
+      };
+    }, []),
+  );
   const save = useCallback(() => {
     if (state === null || saving.current) return;
     const request = saveRequest(state);
@@ -64,7 +93,9 @@ export default function EditPreferencesScreen() {
     saving.current = true;
     dispatch({ type: 'save-started' });
     commitPreferences(request).then(
-      () => router.back(),
+      () => {
+        if (focused.current) router.back();
+      },
       () => {
         saving.current = false;
         dispatch({ type: 'save-failed' });
@@ -72,13 +103,18 @@ export default function EditPreferencesScreen() {
       },
     );
   }, [dispatch, state]);
+  // Cancel is locked while a save is in flight: the page stays until the
+  // local write has answered (milliseconds), then leaves on its own.
+  const cancel = useCallback(() => {
+    if (!saving.current) router.back();
+  }, []);
 
   if (state === null) {
     // Never an empty draft the store did not give; Cancel is always there.
     return (
       <EditPreferencesPending
         status={!preferencesAvailable() ? 'unsupported' : failed ? 'failed' : 'loading'}
-        onCancel={() => router.back()}
+        onCancel={cancel}
       />
     );
   }
@@ -90,7 +126,7 @@ export default function EditPreferencesScreen() {
       onClearAllergens={() => dispatch({ type: 'clear-allergens' })}
       onToggleStore={(id) => dispatch({ type: 'toggle-store', id })}
       onSave={save}
-      onCancel={() => router.back()}
+      onCancel={cancel}
     />
   );
 }

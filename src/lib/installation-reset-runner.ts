@@ -14,7 +14,7 @@ import {
 import { enqueueInstallationMutation } from './installation-lifecycle';
 import { resetInstallationData, type InstallationResetResult } from './installation-reset';
 import { deleteLocalOnboardingState } from './onboarding-store';
-import { deleteLocalPreferenceState } from './preferences-store';
+import { deleteLocalPreferenceState, settlePreferenceMirror } from './preferences-store';
 import { deleteInstallationData } from './push-api';
 import { clearLocalAlertState } from './push-registration';
 import { deleteLocalSavedRecalls } from './saved-recalls-store';
@@ -27,6 +27,7 @@ export function resetAvailable(): boolean {
 export function runInstallationReset(): Promise<InstallationResetResult> {
   return resetInstallationData({
     enqueue: enqueueInstallationMutation,
+    settleRemoteSync: settlePreferenceMirror,
     peekInstallationId,
     deleteServerData: deleteInstallationData,
     clearLocalPreferences: deleteLocalPreferenceState,

@@ -10,8 +10,8 @@
  * never rendered as an empty selection the store did not actually give.
  *
  * Saves are silent here: the shopper is mid-flow and the local write always
- * succeeds; a failed server sync is retried on the next launch or save as
- * it always was.
+ * succeeds (and, since 2026-10-04, never waits on the server mirror); a
+ * failed server sync is retried on the next launch or save as it always was.
  *
  * A value committed anywhere else while this screen is mounted (the
  * one-page Edit preferences over Ready, 2026-09-30) is shown the moment it
@@ -19,7 +19,7 @@
  * under the newly saved choices while its focus re-read is in flight.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
 import type { UserRecallPreferences } from '@/domain/preferences';
@@ -64,6 +64,10 @@ export function useOnboardingPreferences({
       ? { status: 'ready', prefs: lastKnown }
       : { status: 'loading' },
   );
+  // Every change this screen committed, counted: a focus re-read that
+  // started before a change was requested answers with the OLDER stored
+  // value, and must not put it back over the newer one (2026-10-04).
+  const edits = useRef(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -72,14 +76,17 @@ export function useOnboardingPreferences({
         return;
       }
       let current = true;
+      const readAt = edits.current;
       loadPreferences().then(
         (prefs) => {
+          if (!current || edits.current !== readAt) return;
           lastKnown = prefs;
-          if (current) setLoad({ status: 'ready', prefs });
+          setLoad({ status: 'ready', prefs });
         },
         () => {
+          if (!current || edits.current !== readAt) return;
           lastKnown = null;
-          if (current) setLoad({ status: 'failed' });
+          setLoad({ status: 'failed' });
         },
       );
       return () => {
@@ -91,6 +98,7 @@ export function useOnboardingPreferences({
   useEffect(() => onPreferencesSaved((prefs) => setLoad({ status: 'ready', prefs })), []);
 
   const update = useCallback((next: UserRecallPreferences) => {
+    edits.current += 1;
     lastKnown = next;
     setLoad({ status: 'ready', prefs: next });
     void savePreferences(next).catch(() => {});

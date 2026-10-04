@@ -74,6 +74,7 @@ import {
   EXTERNAL_LINK_HINT,
   retractedNotice,
 } from '@/lib/detail-copy';
+import { baselineCaseDetail } from '@/lib/baseline-recalls';
 import { fetchCaseDetail, type CaseDetail } from '@/lib/recall-feed';
 import {
   buildDetailModel,
@@ -382,12 +383,20 @@ export default function RecallDetailScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // A recall shown from the bundled baseline (lib/baseline-recalls.ts,
+      // 2026-10-04) always opens: when the live row cannot be fetched, or no
+      // longer exists, its bundled detail is rendered instead.
+      const bundled = baselineCaseDetail(id);
       try {
-        const detail = await fetchCaseDetail(id);
+        const detail = (await fetchCaseDetail(id)) ?? bundled;
         if (cancelled) return;
         setState(detail ? { status: 'ready', detail } : { status: 'missing' });
       } catch (error) {
         if (cancelled) return;
+        if (bundled) {
+          setState({ status: 'ready', detail: bundled });
+          return;
+        }
         // The cause stays in the developer console; the shopper reads one
         // sentence that says what did not load and what to try.
         if (__DEV__) console.warn('Recall detail load failed', error);

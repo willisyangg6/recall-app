@@ -24,7 +24,8 @@ import type { FeedSession } from '@/lib/feed-sync';
 import type { FeedItem } from '@/lib/recall-feed';
 import { affectsYouMatches } from '@/lib/ready-preview';
 
-export type DevelopmentFeedScenarioId = 'live' | 'slow' | 'fail' | 'zero-matches' | 'one-match';
+export type DevelopmentFeedScenarioId =
+  'live' | 'slow' | 'fail' | 'zero-matches' | 'one-match' | 'one-match-no-image' | 'two-matches';
 
 export const DEVELOPMENT_FEED_SCENARIOS: readonly {
   id: DevelopmentFeedScenarioId;
@@ -55,6 +56,19 @@ export const DEVELOPMENT_FEED_SCENARIOS: readonly {
     id: 'one-match',
     title: 'One match',
     expectation: 'The real corpus with only its top current match: Found 1 recall for you.',
+  },
+  {
+    id: 'one-match-no-image',
+    title: 'One match, no image',
+    expectation:
+      'The top current match with its product image withheld (display only): one readable ' +
+      'text-led card, no locked strip, Found 1 recall for you.',
+  },
+  {
+    id: 'two-matches',
+    title: 'Two matches',
+    expectation:
+      'The real corpus with only its top two current matches: two cards, no locked strip.',
   },
 ];
 
@@ -159,12 +173,26 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
 
 /** Hide current matches for the saved preferences, per the scenario. */
 async function view(items: FeedItem[]): Promise<FeedItem[]> {
-  if (current !== 'zero-matches' && current !== 'one-match') return items;
+  const keepCount =
+    current === 'zero-matches'
+      ? 0
+      : current === 'one-match' || current === 'one-match-no-image'
+        ? 1
+        : current === 'two-matches'
+          ? 2
+          : null;
+  if (keepCount === null) return items;
   const prefs = developmentPreferencesView(await loadPreferences());
   const matches = affectsYouMatches(items, prefs);
-  const keep = current === 'one-match' ? matches.slice(0, 1) : [];
-  const hidden = new Set(matches.filter((item) => !keep.includes(item)).map((item) => item.id));
-  return items.filter((item) => !hidden.has(item.id));
+  const keep = new Set(matches.slice(0, keepCount).map((item) => item.id));
+  const hidden = new Set(matches.filter((item) => !keep.has(item.id)).map((item) => item.id));
+  return items
+    .filter((item) => !hidden.has(item.id))
+    .map((item) =>
+      current === 'one-match-no-image' && keep.has(item.id)
+        ? { ...item, heroImageUrl: null }
+        : item,
+    );
 }
 
 /** The session the hooks see in development: the real one, answered per scenario. */

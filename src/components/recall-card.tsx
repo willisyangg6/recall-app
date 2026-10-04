@@ -169,10 +169,19 @@ export function RecallCardSurface({
   trailing,
   uniform = null,
   deckHeight,
+  mediaPlacement = 'beside',
 }: {
   model: HomeCardModel;
   media: ReactNode;
   trailing: ReactNode;
+  /**
+   * Where the media sits (2026-10-04): `beside` the identity column, as
+   * every Feed and Saved card draws it; `above` it, full width, where the
+   * onboarding deck's text at the accessibility sizes would otherwise be
+   * squeezed into the column beside the tile and break mid-word. The Feed
+   * passes nothing and is unchanged.
+   */
+  mediaPlacement?: 'beside' | 'above';
   /**
    * The onboarding deck's uniform variant (lib/ready-presentation
    * `previewCardLayout`): the status row reserved, the title, brand and
@@ -265,7 +274,12 @@ export function RecallCardSurface({
           below the identity column — never between the title, brand,
           category and reason, which stay grouped exactly as the Feed groups
           them — so every card's location sits on the same bottom line. */}
-      <View style={[styles.content, deckHeight ? styles.contentGrows : null]}>
+      <View
+        style={[
+          styles.content,
+          mediaPlacement === 'above' && styles.contentStacked,
+          deckHeight ? styles.contentGrows : null,
+        ]}>
         {media}
         <View style={styles.identity}>
           <View>
@@ -276,7 +290,15 @@ export function RecallCardSurface({
                     element announces — so a screen-reader user hears the
                     whole title exactly once, with no second element and no
                     truncation. */}
-            <Text variant="heading-3" numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}>
+            {/* The onboarding deck at the accessibility sizes stacks the
+                media above the text and shows the WHOLE name (2026-10-04):
+                the card is measured once, so nothing moves, and a title
+                that would be cut at three lines is read in full. */}
+            <Text
+              variant="heading-3"
+              numberOfLines={
+                uniform ? PREVIEW_TITLE_LINES : mediaPlacement === 'above' ? undefined : 3
+              }>
               {model.productName}
             </Text>
             <Text
@@ -340,6 +362,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing[12],
+  },
+  // The media above the identity, which then takes the full width.
+  contentStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
   },
   // flex + minWidth 0 let long product names wrap instead of pushing the
   // media off the card — and, with no media column, fill the whole row.

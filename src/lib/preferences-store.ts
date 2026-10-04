@@ -5,15 +5,23 @@
  * choices, they must work offline and before push is ever enabled, and only
  * this installation writes them. The server row (installation_preferences)
  * is explicitly a mirror the delivery worker reads for push eligibility —
- * synced after every local save, and re-synced on the next save or app
- * launch when a sync fails (dirty flag). There are never two authorities:
- * local wins, the server converges.
+ * mirrored after every local save, and mirrored again on the next save or
+ * app launch when a sync fails (dirty flag). There are never two
+ * authorities: local wins, the server converges.
  *
  * Stored in SecureStore alongside the installation id: allergen selections
  * are sensitive-ish personal data, and the keychain survives reinstalls, so
  * preferences and the installation identity live and die together. Reading
  * or writing preferences NEVER triggers a notification-permission prompt —
  * the installation id is an opaque UUID with no permission attached.
+ *
+ * Since 2026-10-04 the durable local write and the server mirror are two
+ * separate things (lib/preference-persistence.ts, where the rules and their
+ * proofs live): the write runs in the shared installation mutation queue
+ * and answers at once; the mirror is one coalescing worker that always
+ * sends the newest local value, so a slow network can never delay what the
+ * device holds and an older value can never overwrite a newer one. This
+ * file only wires that module to SecureStore, the RPC and the queue.
  */
 
 import * as SecureStore from 'expo-secure-store';
@@ -25,10 +33,13 @@ import {
 } from '@/domain/preferences';
 import { getOrCreateInstallationId } from './installation-id';
 import { enqueueInstallationMutation } from './installation-lifecycle';
+import { createPreferencePersistence, type SaveResult } from './preference-persistence';
 import { setInstallationPreferences } from './push-api';
 
+export type { SaveResult } from './preference-persistence';
+
 const PREFS_KEY = 'recall.preferences';
-/** '1' while the last server sync failed and a retry is owed. */
+/** '1' while the newest local value has not been confirmed by the mirror. */
 const DIRTY_KEY = 'recall.preferences-dirty';
 
 /** Preferences are available on this platform. */
@@ -36,12 +47,25 @@ export function preferencesAvailable(): boolean {
   return true;
 }
 
+/**
+ * The newest preferences this process has read or written (2026-10-04), in
+ * memory only, or null before any read. A screen arriving after another
+ * (the Feed after onboarding) starts from them instead of from "not read
+ * yet", so its first visible frame already reflects the choices — no
+ * flip once the focus read lands. Every screen still re-reads on focus.
+ */
+let known: UserRecallPreferences | null = null;
+
+export function knownPreferences(): UserRecallPreferences | null {
+  return known;
+}
+
 /** The locally stored preferences; EMPTY when none were ever saved. */
 export async function loadPreferences(): Promise<UserRecallPreferences> {
   try {
     const raw = await SecureStore.getItemAsync(PREFS_KEY);
-    if (!raw) return { ...EMPTY_PREFERENCES };
-    return sanitizePreferences(JSON.parse(raw));
+    known = raw ? sanitizePreferences(JSON.parse(raw)) : { ...EMPTY_PREFERENCES };
+    return known;
   } catch {
     // A corrupt or unreadable value degrades to empty preferences — it never
     // crashes Home or Settings.
@@ -58,47 +82,63 @@ async function syncToServer(prefs: UserRecallPreferences): Promise<void> {
   });
 }
 
-export interface SaveResult {
-  /** False = saved locally but the server sync failed (retried later). */
-  synced: boolean;
-}
+type DevelopmentMirrorModule = typeof import('./development-preference-mirror');
 
 /**
- * Serializes saves. Settings autosaves on every toggle, so several saves can
- * be in flight at once; without a queue a slower earlier write could land
- * last and silently revert the user's latest choice (locally and on the
- * mirror). Ordering/rejection-resilience proofs live in serial-queue.test.ts
- * — SecureStore makes this file itself unimportable under the test harness.
- *
- * C7.1: the queue is the SHARED installation mutation queue, so saves — and
- * the launch flush below — also serialize against push registration writes
- * and "Reset app and delete my data". A save queued before a reset finishes
- * before the deletion runs; one queued after runs against the fresh
- * installation identity. Save-vs-save ordering is exactly what it was.
+ * In a development build the Design Preview can keep saves on this device
+ * (QA of the real selectors without a production write). The `require` sits
+ * inside the `__DEV__` branch, so a release bundle folds the module away and
+ * the mirror below is always the real RPC.
  */
-const enqueueSave = enqueueInstallationMutation;
+const developmentMirror = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./development-preference-mirror') as DevelopmentMirrorModule)
+  : null;
+
+const persistence = createPreferencePersistence({
+  // C7.1: the SHARED installation mutation queue, so local writes — and the
+  // launch flush — serialize against push registration writes and "Reset
+  // app and delete my data". Save-vs-save ordering is exactly what it was.
+  enqueueLocal: enqueueInstallationMutation,
+  readLocal: loadPreferences,
+  writeLocal: (prefs) => SecureStore.setItemAsync(PREFS_KEY, JSON.stringify(prefs)),
+  isDirty: async () => (await SecureStore.getItemAsync(DIRTY_KEY)) === '1',
+  setDirty: (dirty) =>
+    dirty ? SecureStore.setItemAsync(DIRTY_KEY, '1') : SecureStore.deleteItemAsync(DIRTY_KEY),
+  syncRemote:
+    __DEV__ && developmentMirror
+      ? developmentMirror.wrapDevelopmentMirror(syncToServer)
+      : syncToServer,
+});
 
 /**
- * Persist preferences: local write first (never lost to a network error),
- * then best-effort server sync. A failed sync sets the dirty flag so
- * `flushPreferencesSync` retries on the next app launch.
+ * Persist preferences: the durable local write first (never lost to a
+ * network error, never delayed by one), then the coalescing server mirror.
+ * Answers `{ synced }` once the mirror attempt covering this value has
+ * finished; the Personalization screen's status line reads it.
  */
 export function savePreferences(prefs: UserRecallPreferences): Promise<SaveResult> {
-  return enqueueSave(() => writePreferences(prefs));
+  return persistence.save(prefs);
 }
 
 /**
  * The same save, answered as soon as the LOCAL copy is written (2026-09-30,
  * the one-page Edit preferences): resolves with the stored value once the
- * device holds it, and rejects only if that local write fails. The server
- * mirror still syncs in the same queued turn afterwards, with the same dirty
- * flag and retry, so a screen that must not wait on the network (the editor
- * returning to Ready) never does, and nothing is saved twice.
+ * device holds it, and rejects only if that local write fails. The mirror
+ * follows on its own, with the same dirty flag and retry.
  */
 export function commitPreferences(prefs: UserRecallPreferences): Promise<UserRecallPreferences> {
-  return new Promise((resolve, reject) => {
-    enqueueSave(() => writePreferences(prefs, resolve)).catch(reject);
-  });
+  return persistence.commit(prefs);
+}
+
+/**
+ * The stored preferences, read AFTER every write requested before this call
+ * has landed (2026-10-04): what a screen that opens a draft over another
+ * (the editor over Ready) reads, so a toggle still in the queue can never be
+ * missed and then reverted by Save.
+ */
+export function loadPreferencesSettled(): Promise<UserRecallPreferences> {
+  return persistence.readSettled();
 }
 
 /**
@@ -108,49 +148,31 @@ export function commitPreferences(prefs: UserRecallPreferences): Promise<UserRec
  * unsubscribe.
  */
 export function onPreferencesSaved(listener: (prefs: UserRecallPreferences) => void): () => void {
-  savedListeners.add(listener);
-  return () => {
-    savedListeners.delete(listener);
-  };
+  return persistence.onSaved(listener);
 }
 
-const savedListeners = new Set<(prefs: UserRecallPreferences) => void>();
+persistence.onSaved((prefs) => {
+  known = prefs;
+});
 
-async function writePreferences(
-  prefs: UserRecallPreferences,
-  onLocal?: (saved: UserRecallPreferences) => void,
-): Promise<SaveResult> {
-  const cleaned = sanitizePreferences(prefs);
-  await SecureStore.setItemAsync(PREFS_KEY, JSON.stringify(cleaned));
-  onLocal?.(cleaned);
-  for (const listener of savedListeners) listener(cleaned);
-  try {
-    await syncToServer(cleaned);
-    await SecureStore.deleteItemAsync(DIRTY_KEY);
-    return { synced: true };
-  } catch {
-    await SecureStore.setItemAsync(DIRTY_KEY, '1');
-    return { synced: false };
-  }
+/**
+ * Mirror again while a previous sync is still owed (called once at app
+ * launch). No-op when the last mirror landed; silent — launch is never
+ * blocked. Queued (C7.1) so a launch-time flush can never interleave with a
+ * save or with data deletion.
+ */
+export function flushPreferencesSync(): Promise<void> {
+  return persistence.flush();
 }
 
 /**
- * Retry a previously failed server sync (called once at app launch).
- * No-op when the last sync succeeded; silent — launch is never blocked.
- * Queued (C7.1) so a launch-time flush can never interleave with a save or
- * with data deletion — unqueued, a flush in flight during a reset could
- * re-upsert the just-deleted server row under the old installation id.
+ * The reset's guard (C7.1, 2026-10-04): inside the reset's own queue turn,
+ * before the server deletion, drop any pending mirror request and wait for
+ * the run in flight, so nothing written under the old installation id can
+ * land after its rows are deleted.
  */
-export function flushPreferencesSync(): Promise<void> {
-  return enqueueSave(async () => {
-    try {
-      if ((await SecureStore.getItemAsync(DIRTY_KEY)) !== '1') return;
-      await syncToServer(await loadPreferences());
-      await SecureStore.deleteItemAsync(DIRTY_KEY);
-    } catch {
-      // Still offline: the flag stays set for the next launch or save.
-    }
-  });
+export function settlePreferenceMirror(): Promise<void> {
+  return persistence.settleMirror();
 }
 
 /**

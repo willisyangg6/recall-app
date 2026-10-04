@@ -63,7 +63,7 @@ audit under `assets/brand/reference/statistics/`._
 ```
 Welcome → Problem: scale (1 of 5) → Problem: stakes (2 of 5)
   → States (3 of 5) → Allergens (4 of 5) → Stores (5 of 5)
-  → Building (once; real results, ~8.3s with a usable feed) → Ready
+  → Building (once; real results, ~7.4s with a usable feed) → Ready
   → the onboarding paywall → purchase or restore success
   → Notification education → Apple's prompt only if the shopper chooses it
   → Feed
@@ -106,15 +106,23 @@ selected`). States has no list on the step, so no count: its chips sit
   below the one search entry, and a chip added or removed moves nothing a
   finger is on.
 - Preferences save progressively through the existing store on every change.
-  There is no Done and nothing to lose on a kill.
+  There is no Done and nothing to lose on a kill: since 2026-10-04 the
+  durable local write never waits on the server mirror
+  (`src/lib/preference-persistence.ts`), so rapid changes land on the device
+  in order within milliseconds and the mirror follows as one coalescing run
+  that always sends the newest value.
 - Killing and reopening resumes the exact incomplete screen, forwards or
   backwards — the paywall included.
 - Ready shows what the watch found (§6.4): up to three REAL current matches
-  through the Feed's own matching layer and card, or the honest empty,
-  checking or could-not-check state. Nothing is ever fabricated, and
+  through the Feed's own matching layer and card (with or without a product
+  image) over the corpus the session answered — else the bundled baseline
+  of real records under the same rules — or the honest checking or zero
+  state. Nothing is ever fabricated, Affects You is always computed, and
   matches beyond the third are locked without exposing anything about them.
 - Ready's Back goes to Stores; `Edit preferences` opens the one-page editor
-  over Ready (§6.4), which saves only on `Save changes`; `See my plan` (and
+  over Ready (§6.4), which saves only on `Save changes` (Cancel and the
+  hardware back are locked for the milliseconds a save is in flight, and a
+  save's answer never pops a page that has already gone, 2026-10-04); `See my plan` (and
   the locked strip and card) opens the dedicated onboarding paywall, whose
   Back returns to Ready.
 - Personalization is completed by the purchase or restore made on the
@@ -991,11 +999,12 @@ watch found. It sells nothing. From the top:
    header), then one muted `body` sentence counting every real match:
    `We found 21 recalls for you.` (`We found 1 recall for you.`). Only the
    number is emphasised, in Bold primary ink; it is not a pill or a button,
-   and it never says `today`.
-5. **The deck and its dots** (below).
+   and it never says `today`. The count is absent in every other state.
+5. **The deck and its dots** (below), or the state's own card (see "Four
+   states").
 6. **The locked strip or the monitoring line:** the soft-blue locked strip
    only when more real matches exist than the deck shows; otherwise the
-   truthful monitoring line.
+   truthful monitoring line. Never under an example deck.
 7. **The footer:** `See my plan`, pinned, opening the separate onboarding
    paywall (§6.7).
 
@@ -1182,12 +1191,79 @@ own layers in the Feed's own order:
 - `evaluatePersonalRelevance`;
 - `buildAffectsMeSections`, the current Affects Me ordering;
 - `buildHomeCardModel` for each shown item;
-- the image-led selection, with the real next image-bearing match as the
-  locked card.
+- the first three ranked matches as the readable cards, imaged or not (the
+  image-led narrowing of the polish pass is retired, 2026-10-04: a match
+  without a product image draws the card's own text-led shape, as the Feed
+  does, so a count can never stand beside an empty deck), with the real
+  next match as the locked card.
 
-The deck shows up to three readable image-bearing matches, and the locked
-final card only when a real next one exists. The strip shows only when more
-real matches exist (imaged or not).
+The deck shows up to three readable matches, and the locked final card only
+when a real next match exists. The strip shows only when more real matches
+exist than the deck shows; one match is one card, no strip, nothing locked.
+From the accessibility text sizes the card's media sits ABOVE its text
+(`RecallCardSurface`'s `mediaPlacement`, used by the deck alone), so a title
+is never squeezed into the column beside the tile and broken mid-word.
+
+**One experience over three sources (founder override, 2026-10-04).** Ready
+looks and behaves the same whether its corpus was just downloaded, is the
+device's cached copy, or is the bundled baseline: `Your recall preview`,
+`We found N recalls for you.` with N bold, the card stack and dots, the
+locked strip only when more genuine matches exist, and `See my plan`. There
+is no fallback-specific notice, heading or action — no saved-results banner,
+no last-checked time, no Try again, no example deck, no connection-error
+panel. The corpus is chosen by `lib/ready-preview.ts` `readyCorpus`, which
+the Building step calls too, so their counts agree:
+
+1. the feed the shared session answered — a finished sync, or the cached
+   corpus `useFeed` serves first (the cached-offline case);
+2. else, when the session could not answer at all (a fresh install with no
+   network), the bundled baseline (`lib/baseline-recalls.ts`): real, verified
+   recall records recorded from the public feed by one rule — every active,
+   unmerged case whose material activity was within the Affects Me recency
+   window at recording time — with each case's detail rows, through the SAME
+   matching, lifecycle and recency rules. Dates, hazards, locations and
+   identities are the agencies' own; Affects You is computed, never stored;
+   N is the genuine match count over that corpus; nothing is manufactured.
+
+The choice is remembered in the process so Ready, mounting while the quiet
+retry is still failing, shows exactly the corpus Building counted; it is
+forgotten the moment a sync succeeds, and live results replace the baseline
+with the genuine corpus and its actual count (the deck remounts on new
+content as it always did). The retry is the shared feed path alone —
+`useFeed`'s mount and foreground revalidation — and Ready asks the network
+for nothing itself. A recall shown from the baseline always opens: Recall
+Detail renders the bundled detail when the live row cannot be fetched or no
+longer exists.
+
+`lib/ready-preview.ts` then builds one of three states:
+
+- `matches` — above. The count is every current match: a recall whose
+  stated geography names a chosen state or is Nationwide (which qualifies
+  for every state, whatever the hazard), or whose geography is unknown but
+  carries a chosen allergen or store signal, within the Affects Me recency
+  window, less the one allergen-only exclusion (an identified allergen-only
+  recall is withheld from a shopper who chose none of its allergens,
+  including a shopper who chose no allergens; `ready-count.test.ts`).
+- `none` — the check answered and nothing currently matches:
+  `No matching recalls right now.` and the monitoring line, no cards,
+  nothing locked. A defensive state: with a healthy corpus Nationwide
+  recalls make it rare, so an unexpected zero is investigated as a data or
+  loading problem, never papered over with a positive count.
+- `checking` — the first read has not answered; nothing is claimed.
+
+**The baseline ages.** The recency window is measured against the device's
+clock, so a baseline recorded on its `recordedAt` holds fewer current
+matches each day and none once it is older than the window (60 days): a
+fresh install offline then meets the truthful `none`. Re-record before each
+release with `npm run record:baseline` (read-only: public GETs under the
+publishable key, writing only `src/content/baseline-recalls.json`), and
+`npm run qa:launch-readiness` FAILS while the shipped baseline is past the
+window (`baselineReadinessFailures`) — a hard gate, not a warning. The
+baseline is read and matched, never written to the feed cache or the session,
+and a session answer always replaces it. Recorded 2026-10-04 04:13 UTC: 64
+cases (16 Nationwide, of which 13 qualify for a no-allergen profile and 3 are
+identified allergen-only), ~0.73 MB of JSON in the bundle (`summaryHtml`
+dropped), approved by the founder 2026-10-04.
 
 The count is now `previewMatchCount`, the true total of every match. The
 previous pill counted the deck's readable cards whenever any existed, so a
@@ -1677,16 +1753,16 @@ and the editor, which save, never reuse.
 is VISIBLE — the stack's `transitionEnd` for its arrival, or a 700ms
 fallback on a cold resume with no push — never at mount, and it stops while
 the app is in the background. With usable results each stop's caption is
-read for at least 1,500ms of foreground time ONCE FULLY VISIBLE — Area's
-from arrival, every later one after its 220ms fade-through — and the
-completion caption likewise for 800ms: about 9.4s in all (the founder's
-slower pacing, 2026-10-02; the transitions keep their own 80ms out and
-140ms in, only the settled reading time grew). These are
+read for at least 1,100ms of foreground time ONCE FULLY VISIBLE — Area's
+from arrival, every later one after its 220ms fade-through completes — and
+the completion caption for 800ms: about 7.4s in all (the founder's pacing of
+2026-10-04, from the 1,500ms holds of 2026-10-02; the transitions keep their
+own 80ms out and 140ms in, only the settled reading time changed). These are
 display minima, not evidence: a stop holds longer while its data is not
 ready, and a usable cache presents at once. Under Reduce Motion the reduced
 path is unchanged (Area at least 560ms, the count held 1.6s, the
 completion 0.9s: about 3 s), never the
-9.4-second sequence. Under the existing freshness policy a valid cached corpus is
+7.4-second sequence. Under the existing freshness policy a valid cached corpus is
 the feed, so an offline launch with a cache completes from it without any
 freshness wording, while a first launch with no cache waits for the sync.
 
@@ -2204,7 +2280,11 @@ What P2B7X.2 does, and what it does not touch:
 | Ready: the safe rectangle at 393/402/375pt, the compact board within the 80px cap with every word whole, otherwise the wide board (never a separate card), plates above the words only when that breaks fewer words, the wide layers and text region against the report, plate copies only past 1,200 rows, broken-word counting, slice placement, allergen artwork for 0, 1, 2 and 3+ in canonical order, compact values that speak every name with `+N` glued to the last name, the 14pt/15pt board type, the physical deck's pose table (front upright; the outgoing card rigid and unscaled; the card beneath promoted uniformly from where it sits, never from the right; at most two rear cards showing only a strip inside their padding), drag resistance at both ends, the commit/cancel/flick release rule, one dot per navigable page, the tallest-card height, only the status row reserved | `src/lib/ready-presentation.test.ts`                                                                               |
 | Ready: both boards' layers in order with the native rows between board and foreground, compact growth through the slice and wall band only, wide growth by plates and feathers only, no separate preferences card and no workaround, the hidden three-way measurement keyed to the content and the page hidden until it answers, rows heard once, untinted pictograms and the dash, Back/Edit (the one-page editor)/See my plan, the true count as plain text, no purchase UI, honest empty/checking/unavailable states                                                                                                                                                                                                                                                                                                                                                                                 | `src/components/onboarding-design.test.ts`                                                                         |
 | The deck: no pager; one position driven by a horizontal PanResponder; every real card posed from the shared table and painted last-first; only the front card touchable; the one uniform scale and no rotation/skew/perspective/axis scale; the locked card's white veil behind the front; measured geometry; the index committed on release before the settle; remount on new content or text size; one adjustable element with next/previous and the locked card's activation, Reduce Motion, no arrows/instruction copy/auto-advance/loop, decorative dots                                                                                                                                                                                                                                                                                                                                           | `src/components/onboarding-design.test.ts`, `src/lib/ready-presentation.test.ts`                                   |
-| The preview data: the Feed's own matching and ordering, at most three readable, the true total as the count (never the deck's length), zero/one/two/three/more-than-three, checking and unavailable, a preference edit recomputing from the same feed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/lib/ready-preview.test.ts`                                                                                    |
+| The preview data: the Feed's own matching and ordering, at most three readable (imaged or not), the true total as the count (never the deck's length), zero/one/two/three/more-than-three, checking, the corpus decision (session answer, else the remembered baseline), baseline matching with computed Affects You, live recovery, an offline preference edit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `src/lib/ready-preview.test.ts`                                                                                    |
+| What the count includes and excludes: Nationwide for every chosen state, any non-allergen hazard, no image or category or page-size dependence, Building/Ready/Affects You parity, the allergen-only exclusion recorded                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `src/lib/ready-count.test.ts`                                                                                      |
+| The bundled baseline corpus: recorded by one rule within the recency window, every record active with an official URL, a bundled detail that renders for each, Nationwide non-allergen hazards matching any state, the age reported                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/lib/baseline-recalls.test.ts`                                                                                 |
+| Preference persistence: the durable local write never waits on the network, rapid changes land in order, the mirror sends the newest value and never regresses, failures stay owed and flush retries, the reset settles the mirror, a settled read sees every prior write                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `src/lib/preference-persistence.test.ts`                                                                           |
+| The selection sheets' motion rule: the opening waits for the Modal's view, an interrupted close reopens from where it is, closing keeps the Modal, Reduce Motion is immediate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `src/lib/sheet-motion.test.ts`                                                                                     |
 | The problem screens: exact CDC copy and sources (comments only, never bundled), the spoken stat, the one-element pictograph, the four risk rows (one element each, decorative illustrations, heading-3 live labels, hairlines only between rows, no pill/card/background/grid), no mascot, no capped or truncated text, no unsupported statistics                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/components/onboarding-design.test.ts`                                                                         |
 | The statistic assets: byte-identical sources, production format/alpha/holes, the report's accuracy, the one-to-one mapping, no reference imported by app code                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `src/lib/statistics-assets.test.ts`                                                                                |
 | The problem presentation rules: the accessibility threshold, the pictograph canvas, the risk rows' measured label widths, transparent-band trims, default iPhone 17 and SE fit arithmetic, larger-text and accessibility-size arrangements                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `src/lib/problem-presentation.test.ts`                                                                             |
@@ -2215,7 +2295,7 @@ What P2B7X.2 does, and what it does not touch:
 | The paywall order (benefits → plans → controls → independence note → shared footer), no Ready content, the entitled panel without a purchase ask                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `src/components/onboarding-design.test.ts`                                                                         |
 | A paywall purchase completes personalization in the same commit and goes straight to education, never the paywall phase                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `src/lib/access-gate.test.ts`                                                                                      |
 | The merged machinery is gone: no overlay footer, no scroll CTA rule, no merged copy in product source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/components/onboarding-design.test.ts`                                                                         |
-| Polish pass — the image-led deck: ranked matches narrowed to image-bearing ones in rank order, three readable, the real fourth locked, no locked card without one, the strip counting every unshown match, deterministic                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/lib/ready-preview.test.ts`                                                                                    |
+| The deck's selection: the first ranked matches in rank order whatever their images, three readable, the real fourth locked, the strip counting every unshown match, deterministic                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `src/lib/ready-preview.test.ts`                                                                                    |
 | Polish pass — uniform cards (one outer height; since 2026-10-01 only the status row is reserved and the brand is one line; off from the accessibility sizes), the measured status row, restrained depth; the variant opt-in with no Feed or Saved caller                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/lib/ready-presentation.test.ts`, `src/components/feed-design.test.ts`, `src/server/feed-saved-parity.test.ts` |
 | Polish pass — the deck's frosted real final card (one button, nothing exposed), Stores' quiet count row with no summary or chips, the story screens, the paywall's M04, check rows and corner badge                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/components/onboarding-design.test.ts`                                                                         |
 | Polish pass — the progress fill only forward-by-one; Stores' Continue and the reset restoring the interstitial                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/lib/onboarding-state.test.ts`, `src/lib/onboarding-navigation.test.ts`                                        |

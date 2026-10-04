@@ -24,10 +24,8 @@
  * returns focus to the action that opened it.
  */
 
-import { useEffect, useState } from 'react';
 import {
   Animated,
-  Easing,
   Modal,
   Pressable,
   ScrollView,
@@ -42,15 +40,14 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { color, hitTarget, layout, radius, spacing } from '@/constants/design-tokens';
-import { useReduceMotion } from '@/hooks/use-reduce-motion';
+import { useSheetMotion } from '@/hooks/use-sheet-motion';
 import {
   ALLERGENS_CHOOSER_TITLE,
   SEARCH_CLOSE_LABEL,
   SEARCH_DISMISS_HINT,
   SEARCH_DONE_LABEL,
 } from '@/lib/onboarding-copy';
-import { motionAllowed } from '@/lib/onboarding-state';
-import { SHEET_BACKDROP_OPACITY, SHEET_MOTION } from '@/lib/retailer-grid';
+import { SHEET_BACKDROP_OPACITY } from '@/lib/retailer-grid';
 import { chooserTop } from '@/lib/states-presentation';
 
 export function AllergenChooserSheet({
@@ -71,43 +68,14 @@ export function AllergenChooserSheet({
   /** After the sheet is gone: the editor returns focus to the opening action. */
   onClosed?: () => void;
 }) {
-  const reduceMotion = useReduceMotion();
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const top = chooserTop(insets.top);
 
-  // Closing plays the slide out before the modal goes, where motion is allowed.
-  const [closing, setClosing] = useState(false);
-  const [wasVisible, setWasVisible] = useState(visible);
-  if (wasVisible !== visible) {
-    setWasVisible(visible);
-    if (!visible && motionAllowed(reduceMotion)) setClosing(true);
-  }
-  const shown = visible || closing;
-
-  // 0 = off the screen, 1 = in place.
-  const [progress] = useState(() => new Animated.Value(visible ? 1 : 0));
-  useEffect(() => {
-    if (!visible && !closing) {
-      progress.setValue(0);
-      return;
-    }
-    const to = visible ? 1 : 0;
-    if (!motionAllowed(reduceMotion)) {
-      progress.setValue(to);
-      return;
-    }
-    const run = Animated.timing(progress, {
-      toValue: to,
-      duration: visible ? SHEET_MOTION.in : SHEET_MOTION.out,
-      easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    });
-    run.start(({ finished }) => {
-      if (finished && !visible) setClosing(false);
-    });
-    return () => run.stop();
-  }, [visible, closing, reduceMotion, progress]);
+  // The one motion rule the three sheets share (hooks/use-sheet-motion.ts):
+  // the opening slide starts when the Modal has presented its view, the
+  // closing one at once, and Reduce Motion is immediate both ways.
+  const { shown, progress, onShow, onDismiss } = useSheetMotion(visible);
 
   return (
     <Modal
@@ -115,7 +83,11 @@ export function AllergenChooserSheet({
       transparent
       animationType="none"
       onRequestClose={onClose}
-      onDismiss={onClosed}
+      onShow={onShow}
+      onDismiss={() => {
+        onDismiss();
+        onClosed?.();
+      }}
       statusBarTranslucent>
       <View style={styles.root}>
         <Animated.View

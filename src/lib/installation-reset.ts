@@ -7,6 +7,8 @@
  *
  * Order of operations, and why the order is the safety property:
  *
+ *   0. settle the preference mirror: nothing for the old id in flight or
+ *      pending (the mirror runs outside the queue since 2026-10-04),
  *   1. peek the installation id (never create one — deletion must not mint
  *      an identity as a side effect; with no id there is nothing on the
  *      server keyed to this installation),
@@ -35,6 +37,14 @@
 export interface InstallationResetDeps {
   /** Serialize with every other installation mutation (the shared queue). */
   enqueue: <T>(task: () => Promise<T>) => Promise<T>;
+  /**
+   * Before the server deletion (2026-10-04): drop any pending preference
+   * mirror request and wait for the mirror run in flight, so a write for the
+   * OLD id can never land after its rows are deleted. The mirror runs
+   * outside the queue (a slow network must not delay local saves), so the
+   * queue's ordering alone no longer covers it.
+   */
+  settleRemoteSync?: () => Promise<void>;
   /** The stored installation id, or null. MUST NOT create one. */
   peekInstallationId(): Promise<string | null>;
   /** The atomic, idempotent server-side deletion RPC for one id. */
@@ -75,6 +85,7 @@ export function resetInstallationData(
   deps: InstallationResetDeps,
 ): Promise<InstallationResetResult> {
   return deps.enqueue(async () => {
+    await deps.settleRemoteSync?.();
     const installationId = await deps.peekInstallationId();
     if (installationId !== null) {
       try {

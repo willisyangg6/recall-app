@@ -625,7 +625,10 @@ test('the PHA status row still wraps rather than shrinking, clipping or fixing a
   // On Feed and Saved the one bounded element stays the product name, a LINE
   // count; the brand's and reason's clamps exist only in the uniform variant.
   assert.equal((CARD_CODE.match(/numberOfLines=/g) ?? []).length, 3);
-  assert.ok(CARD_SOURCE.includes('numberOfLines={uniform ? PREVIEW_TITLE_LINES : 3}'));
+  assert.match(
+    CARD_SOURCE,
+    /numberOfLines=\{\s*uniform \? PREVIEW_TITLE_LINES : mediaPlacement === 'above' \? undefined : 3\s*\}/,
+  );
   assert.ok(CARD_SOURCE.includes('numberOfLines={uniform ? PREVIEW_BRAND_LINES : undefined}'));
   assert.ok(CARD_SOURCE.includes('numberOfLines={uniform ? PREVIEW_REASON_LINES : undefined}'));
   // Neither label is abbreviated on its way to the card.

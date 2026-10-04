@@ -125,11 +125,20 @@ export interface FeedOptions {
    * Building counted, without a second reconciliation seconds later.
    */
   reuseRecent?: boolean;
+  /**
+   * The Feed arriving after onboarding (2026-10-04): start from the corpus
+   * the session last served — the complete corpus Building and Ready just
+   * showed — instead of `Loading recalls…`, and still revalidate on mount
+   * exactly as a cold launch does. A session that served nothing (a true
+   * cold launch, or a feed that never answered) still starts loading, so the
+   * loading and error states stay honest. Implied by `reuseRecent`.
+   */
+  startFromServed?: boolean;
 }
 
-export function useFeed({ reuseRecent = false }: FeedOptions = {}): Feed {
+export function useFeed({ reuseRecent = false, startFromServed = false }: FeedOptions = {}): Feed {
   const [state, setState] = useState<FeedLoadState>(() => {
-    const served = reuseRecent ? getFeedSession().served() : null;
+    const served = reuseRecent || startFromServed ? getFeedSession().served() : null;
     return served === null ? { status: 'loading' } : { status: 'ready', items: served };
   });
   const [refreshing, setRefreshing] = useState(false);

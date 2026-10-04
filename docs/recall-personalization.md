@@ -442,6 +442,26 @@ identity (`src/lib/installation-id.ts`); no second device identity exists.
   is retried at next launch (`flushPreferencesSync`) or next save. The RPC is
   a strict no-op for identical values — including `updated_at` — which
   matters below.
+- **Local first, really (2026-10-04)**: the durable local write and the
+  server mirror are separate (`src/lib/preference-persistence.ts`, pure and
+  proven with real delays in `preference-persistence.test.ts`). The write
+  runs in the shared installation mutation queue and answers at once; the
+  mirror is one coalescing run that reads the newest local value when it
+  starts and runs again if a newer write arrives meanwhile, so a slow
+  network never delays what the device holds, an older value never
+  overwrites a newer one, and five quick toggles cost one or two requests.
+  The dirty flag is set by every local write and cleared only when a run has
+  mirrored exactly the newest value. `savePreferences` still answers
+  `{ synced }` for the Personalization screen's status line — after the run
+  that covers its value — while `commitPreferences` answers after the local
+  write alone. Every RPC write carries a 15 s timeout (`push-api.ts`), so a
+  stalled request can no longer hold the queue open. The reset settles the
+  mirror inside its queue turn before the server deletion
+  (`settlePreferenceMirror`), so nothing written under the old id can land
+  after its rows are gone. In a development build the Design Preview can
+  keep saves on the device (`development-preference-mirror.ts`, folded out
+  of a release bundle) so QA can walk the real selectors without a
+  production write.
 - **Readers**: the Feed (Affects Me, re-read on focus), the Personalization
   screen (the only writer — restyled in P2B6A onto the design tokens with
   its controls and this store untouched, and its jurisdiction list moved to a

@@ -380,12 +380,25 @@ test('the route alone reads and saves through the one store; the sections and ru
       assert.ok(!codeOnly(source).includes(forbidden), `${name} touches ${forbidden}`);
     }
   }
-  assert.ok(STORE.includes('return enqueueSave(() => writePreferences(prefs));'));
-  const local = STORE.indexOf(
-    'await SecureStore.setItemAsync(PREFS_KEY, JSON.stringify(cleaned));',
+  // The store wires the pure persistence module (2026-10-04): the durable
+  // local write runs in the shared installation queue and answers at once;
+  // the server mirror is a separate coalescing run that always sends the
+  // newest local value (lib/preference-persistence.ts, with its proofs).
+  assert.ok(STORE.includes('return persistence.save(prefs);'));
+  assert.ok(STORE.includes('enqueueLocal: enqueueInstallationMutation,'));
+  const persistence = readFileSync(
+    join(__dirname, '..', 'lib', 'preference-persistence.ts'),
+    'utf8',
   );
-  const mirror = STORE.indexOf('await syncToServer(cleaned);');
-  assert.ok(local > 0 && mirror > local, 'the local write precedes the best-effort sync');
+  const local = persistence.indexOf('await deps.writeLocal(cleaned);');
+  const request = persistence.indexOf('requestMirror();', local);
+  const mirror = persistence.indexOf('await deps.syncRemote(prefs);');
+  assert.ok(local > 0 && request > local, 'the local write precedes the mirror request');
+  assert.ok(mirror > 0, 'the mirror is the best-effort run');
+  assert.ok(
+    !persistence.includes('await deps.syncRemote(cleaned)'),
+    'the mirror ran inside the local write',
+  );
 });
 
 test('the edited values are exactly what the store saves and the Profile summary reads', () => {

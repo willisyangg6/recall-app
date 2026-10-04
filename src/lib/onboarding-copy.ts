@@ -249,12 +249,10 @@ export const PREVIEW_LOCKED_HINT = 'Opens the plan screen.';
 /** The locked final card: no recall content at all. */
 export const PREVIEW_LOCKED_CARD_TITLE = 'More matches are locked';
 
-/** The honest empty state: no matches right now, and no pretence otherwise. */
-export const PREVIEW_EMPTY_TITLE = 'Nothing currently matches your watch.';
-/** Also the truthful line under a short preview when no more matches exist. */
+/** The honest empty state (founder wording, 2026-10-04): the check succeeded and nothing matches now. */
+export const PREVIEW_EMPTY_TITLE = 'No matching recalls right now.';
+/** The truthful line under a short preview when no more matches exist. */
 export const PREVIEW_MONITORING_NOTE = 'We’ll keep checking as new recalls are announced.';
-/** When the recall feed could not be read at all: honest, and not an empty claim. */
-export const PREVIEW_UNAVAILABLE_TITLE = 'Lotly couldn’t check for matches right now.';
 /** While the first read is still answering: claims nothing either way. */
 export const PREVIEW_CHECKING_TITLE = 'Checking for recalls that match your watch…';
 
@@ -274,6 +272,8 @@ export const PREVIEW_EDIT_HINT = 'Opens your states, allergens and stores on one
 
 export const EDIT_CANCEL = 'Cancel';
 export const EDIT_CANCEL_HINT = 'Closes without saving. Your preferences stay as they were.';
+/** Cancel while a save is in flight: locked for the milliseconds the write takes. */
+export const EDIT_CANCEL_LOCKED_HINT = 'Saving your changes. The page closes when they are saved.';
 export const EDIT_HEADLINE = 'Edit your preferences';
 export const EDIT_BODY = 'Adjust your watch, all in one place.';
 /** The three sections, under Profile's row names. */

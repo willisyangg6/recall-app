@@ -121,6 +121,11 @@ npm run qa:launch-readiness  # offline: exits non-zero while the paywall's
                              # Terms / Privacy / Support destinations are
                              # absent or not real HTTPS URLs (all three are
                              # absent today, by design)
+npm run record:baseline      # read-only, public feed: re-records the bundled
+                             # baseline recall corpus the onboarding Ready
+                             # and Building steps match against before any
+                             # download (src/content/baseline-recalls.json);
+                             # run before each release — it ages out
 ```
 
 The test suite never touches the network: it runs against real FSIS API

@@ -11,21 +11,38 @@
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
+/**
+ * How long one write may wait for the server (2026-10-04). A stalled
+ * request used to hold the installation mutation queue open indefinitely —
+ * every later save waited behind it, and the notification education's
+ * registration had no way out. Past this bound the write throws like any
+ * other failure and the caller's retry (the dirty flag, the Notifications
+ * screen) takes over.
+ */
+export const RPC_TIMEOUT_MS = 15_000;
+
 async function rpcPost(fn: string, args: Record<string, unknown>): Promise<void> {
   if (!supabaseUrl || !publishableKey) {
     throw new Error('Recall backend is not configured.');
   }
-  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${fn}`, {
-    method: 'POST',
-    headers: {
-      apikey: publishableKey,
-      Authorization: `Bearer ${publishableKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(args),
-  });
-  if (!response.ok) {
-    throw new Error(`Alert registration failed (HTTP ${response.status}).`);
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), RPC_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: {
+        apikey: publishableKey,
+        Authorization: `Bearer ${publishableKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(args),
+      signal: abort.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Alert registration failed (HTTP ${response.status}).`);
+    }
+  } finally {
+    clearTimeout(timer);
   }
 }
 

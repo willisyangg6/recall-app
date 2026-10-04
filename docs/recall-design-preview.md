@@ -548,9 +548,16 @@ never copied (`src/components/development/onboarding-gallery.tsx`):
 
 - **Building QA** (development only, 2026-10-02) — the feed scenario the
   shared session answers with (Live, a 12 s slow sync, a failed sync, zero
-  matches, one match), persisted under its own development key until
-  changed, and `Clear the feed cache` (relaunch afterwards to start the way
-  a first launch does). With `Resumed incomplete onboarding` it replays the
+  matches, one match, one match with its image withheld, two matches),
+  persisted under its own development key until changed, and `Clear the
+feed cache` (relaunch afterwards to start the way a first launch does).
+  `Keep preference saves on this device (no server mirror)` (2026-10-04)
+  answers every preference save locally without sending the server mirror
+  (`src/lib/development-preference-mirror.ts`, reached only through the
+  `__DEV__` `require` in `preferences-store.ts`), so QA can walk the real
+  States, Allergens and Stores routes and the editor on a simulator without
+  a production write; it persists across relaunches — turn it off when
+  done. With `Resumed incomplete onboarding` it replays the
   Building step from Stores without walking onboarding again. The QA profile
   (`Saved choices` or `QA profile: no allergens, no stores`) presents the
   saved choices to Building and Ready only, display only and never saved.

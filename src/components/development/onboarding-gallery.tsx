@@ -91,6 +91,7 @@ import { retailerLogoCoverage } from '@/lib/retailer-logos';
 type DevelopmentProvider = typeof import('@/lib/purchases/development-provider');
 type DevelopmentScenarios = typeof import('@/lib/purchases/development-scenarios');
 type DevelopmentFeed = typeof import('@/lib/development-feed-scenarios');
+type DevelopmentMirror = typeof import('@/lib/development-preference-mirror');
 
 /** Development only: folded away, together with the modules, in a release bundle. */
 const devProvider = __DEV__
@@ -112,6 +113,15 @@ const TALL_FIXTURE =
 const SMALL_DEVICE_HEIGHT = 568;
 
 const noop = () => {};
+
+/**
+ * Development only: keep preference saves on this device (no server
+ * mirror), so QA can walk the real selectors without a production write.
+ */
+const devMirror = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/lib/development-preference-mirror') as DevelopmentMirror)
+  : null;
 
 const devFeed = __DEV__
   ? // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -368,7 +378,7 @@ function LiveEditor({ saved }: { saved: UserRecallPreferences }) {
  * the deck's text slots, depth and frost, not the media region.
  */
 function samplePreview(count: number, total: number): ReadyPreviewState {
-  if (count === 0) return { kind: 'none' };
+  if (count === 0) return { kind: 'none', source: 'feed' };
   return {
     kind: 'matches',
     models: Array.from({ length: count }, (_, i) => ({
@@ -378,6 +388,7 @@ function samplePreview(count: number, total: number): ReadyPreviewState {
     locked:
       total > count ? { ...SAMPLE_RECALL_MODEL, id: `${SAMPLE_RECALL_MODEL.id}-locked` } : null,
     total,
+    source: 'feed',
   };
 }
 
@@ -533,11 +544,11 @@ export function OnboardingGallery() {
           />
         </Screen>
       </GallerySample>
-      <GallerySample caption="Ready, nothing matches — simulated: one state; Allergens (the neutral dash) and Stores read None; no count, no deck, and the honest empty card">
+      <GallerySample caption="Ready, nothing matches — simulated: one state; Allergens (the neutral dash) and Stores read None; no count, no deck, and the honest empty card `No matching recalls right now.`">
         <Screen>
           <LiveReady
             prefs={{ ...EMPTY_PREFERENCES, states: codesFor('Oregon') }}
-            preview={{ kind: 'none' }}
+            preview={{ kind: 'none', source: 'feed' }}
           />
         </Screen>
       </GallerySample>
@@ -797,7 +808,9 @@ export function BuildingQaControls() {
   const [scenario, setScenario] = useState(devFeed?.developmentFeedScenario() ?? 'live');
   const [cleared, setCleared] = useState(false);
   const [qaProfile, setQaProfile] = useState(devFeed?.developmentQaProfile() ?? 'saved');
-  if (!__DEV__ || devFeed === null) return null;
+  const [localOnly, setLocalOnly] = useState(devMirror?.localOnlySaves() ?? false);
+  if (!__DEV__ || devFeed === null || devMirror === null) return null;
+  const mirror = devMirror;
   const feed = devFeed;
   const current = feed.DEVELOPMENT_FEED_SCENARIOS.find((option) => option.id === scenario);
   return (
@@ -837,6 +850,21 @@ export function BuildingQaControls() {
       ))}
       <Text variant="caption" color="text/secondary">
         {feed.DEVELOPMENT_QA_PROFILES.find((option) => option.id === qaProfile)?.expectation}
+      </Text>
+      <CheckRow
+        label="Keep preference saves on this device (no server mirror)"
+        checked={localOnly}
+        onPress={() => {
+          mirror.setLocalOnlySaves(!localOnly);
+          setLocalOnly(!localOnly);
+        }}
+      />
+      <Text variant="caption" color="text/secondary">
+        {localOnly
+          ? 'On: every save through States, Allergens, Stores, the editor and Profile is written to ' +
+            'this device only and marked mirrored; nothing reaches the server. Persists across ' +
+            'relaunches. Turn it off when testing is done.'
+          : 'Off: saves mirror to the server as shipped.'}
       </Text>
       <Button
         label={cleared ? 'Feed cache cleared — relaunch to start uncached' : 'Clear the feed cache'}

@@ -1516,7 +1516,7 @@ is finite and synchronised — one
 beat fades the caption THROUGH (80ms out, the words swap while nothing is
 visible, 140ms in; never two sentences at once, in a box of stable height)
 and, from that hidden swap point, moves the badge, the rays and the matching
-tag glyph's single swell, each caption then read for 1,500ms once fully visible
+tag glyph's single swell, each caption then read for 1,100ms once fully visible
 — and immediate under Reduce Motion; nothing
 loops, springs or bounces, and the hero never moves. Behaviour:
 [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md)
