@@ -32,8 +32,7 @@ import { test } from 'node:test';
 import { deriveIllnessStatus, illnessNoticeCopy, noticeTexts } from '@/domain/illness-status';
 import type { CaseProjection, TimelineEntry } from '@/domain/recall-types';
 import { displayableRetailerNames } from '@/domain/retailer-display';
-import { formatPushContent } from '@/server/push/format';
-import type { DeliverableEvent } from '@/server/push/types';
+import { formatPushContent, type FormattableEvent } from '@/server/push/format';
 import { buildSearchEntry, matchesSearch, parseSearchQuery } from './feed-search';
 import type { CaseDetail, FeedItem } from './recall-feed';
 import { buildDetailModel, buildHomeCardModel } from './recall-presentation';
@@ -118,7 +117,7 @@ function cardOf(overrides: Partial<CaseProjection> = {}) {
 }
 
 function initialPushOf(source: CaseProjection) {
-  const event: DeliverableEvent = {
+  const event: FormattableEvent = {
     id: 'event-1',
     recallCaseId: 'case-1',
     kind: 'initial',

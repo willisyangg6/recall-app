@@ -343,6 +343,28 @@ export const EDUCATION_REASSURANCE = 'Recall alerts only. No marketing.';
 export const EDUCATION_FOOTNOTE = 'Change this anytime in Settings.';
 export const EDUCATION_BUSY = 'Opening…';
 
+// ── The outcomes of Turn on notifications (2026-10-04) ─────────────────────
+
+/** The system will not ask again — a denial before today. One notice, two sentences. */
+export const EDUCATION_BLOCKED_TITLE = 'Notifications are turned off for Lotly.';
+export const EDUCATION_BLOCKED_BODY = 'Enable them in your device settings.';
+export const EDUCATION_BLOCKED_NOTICE = `${EDUCATION_BLOCKED_TITLE} ${EDUCATION_BLOCKED_BODY}`;
+export const EDUCATION_OPEN_SETTINGS = 'Open settings';
+/** Spoken after Open settings: what it does, and that Lotly waits. */
+export const EDUCATION_OPEN_SETTINGS_HINT =
+  'Opens the system settings for this app. Come back to Lotly afterwards.';
+/** The re-check after Settings, on the primary. */
+export const EDUCATION_CHECKING = 'Checking…';
+/** Permission granted, but the registration did not complete. */
+export const EDUCATION_FAILED_NOTICE = 'We couldn’t finish turning on alerts.';
+export const EDUCATION_TRY_AGAIN = 'Try again';
+export const EDUCATION_TRY_AGAIN_HINT = 'Tries to turn on notifications again.';
+export const EDUCATION_TRYING_AGAIN = 'Trying again…';
+/** The secondary in both outcome phases. */
+export const EDUCATION_CONTINUE_WITHOUT = 'Continue without alerts';
+export const EDUCATION_CONTINUE_WITHOUT_HINT =
+  'Opens Lotly without notifications. Nothing is asked.';
+
 // ── After either education choice, once, on Feed ────────────────────────────
 
 export const PREFERENCES_SET_CONFIRMATION = 'Your preferences are set.';

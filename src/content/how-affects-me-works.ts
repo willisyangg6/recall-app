@@ -101,9 +101,9 @@ export const HOW_AFFECTS_ME_WORKS: TrustDocument = {
       blocks: [
         paragraph(
           'Recall alerts are decided by the same relevance evaluation as the Affects me list, so what ' +
-            'the app shows and what it sends can never disagree. Until you choose a state, alerts ' +
-            'are not narrowed at all, and every new recall alert qualifies, because allergen and store ' +
-            'choices only ever add relevance and are never used to silently drop safety information.',
+            'the app shows and what it sends can never disagree. A recall is sent to you only when it ' +
+            'would appear in Affects me: until you choose a state, that means only recalls that name ' +
+            'one of your allergens or stores. Every recall stays in All recalls either way.',
         ),
       ],
     },

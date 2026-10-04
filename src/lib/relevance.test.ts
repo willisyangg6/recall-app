@@ -318,9 +318,33 @@ test('changing the state recalculates relevance against the same facts', () => {
 
 // ── Push eligibility policy (§24) ────────────────────────────────────────────
 
-test('push: no preferences or no state → deliver-all behavior stands', () => {
-  assert.equal(pushEligible(item(), null), true);
-  assert.equal(pushEligible(item(), prefs({ allergens: ['peanut'] })), true);
+test('push: no preferences → nothing qualifies; no state → only a personal signal does (2026-10-04)', () => {
+  // The Feed's verdict, exactly: `null` and an empty profile match nothing.
+  assert.equal(pushEligible(item(), null), false);
+  assert.equal(pushEligible(item({ geography: geo('nationwide') }), null), false);
+  assert.equal(pushEligible(item({ geography: geo('nationwide') }), prefs()), false);
+  // Allergen-only profile: the recall must carry that allergen (or a store).
+  const peanut = prefs({ allergens: ['peanut'] });
+  assert.equal(pushEligible(item(), peanut), false);
+  assert.equal(pushEligible(item({ geography: geo('nationwide') }), peanut), false);
+  assert.equal(pushEligible(item({ pathogenOrAllergen: 'undeclared peanuts' }), peanut), true);
+  assert.equal(
+    pushEligible(item({ retailerNames: ['Costco'] }), prefs({ retailers: ['costco'] })),
+    true,
+  );
+  // And it is the same answer Affects You renders for the same inputs.
+  for (const p of [null, prefs(), peanut]) {
+    for (const i of [
+      item(),
+      item({ geography: geo('nationwide') }),
+      item({ pathogenOrAllergen: 'undeclared peanuts' }),
+    ]) {
+      assert.equal(
+        pushEligible(i, p),
+        p === null ? false : evaluatePersonalRelevance(i, p).affectsMe,
+      );
+    }
+  }
 });
 
 test('push: with a state, geography gates delivery', () => {
@@ -752,9 +776,10 @@ test('an empty jurisdiction list is the old "no state chosen": location is not a
     ).affectsMe,
     true,
   );
-  // Push is not narrowed at all until a jurisdiction is chosen.
-  assert.equal(pushEligible(item({ geography: geo('states', ['Maine']) }), none), true);
-  assert.equal(pushEligible(item({ geography: geo('states', ['Maine']) }), null), true);
+  // Push answers as Affects You does: a Maine-only notice reaches none of
+  // these profiles — not the empty one, not the absent one, not the three.
+  assert.equal(pushEligible(item({ geography: geo('states', ['Maine']) }), none), false);
+  assert.equal(pushEligible(item({ geography: geo('states', ['Maine']) }), null), false);
   assert.equal(pushEligible(item({ geography: geo('states', ['Maine']) }), THREE), false);
 });
 

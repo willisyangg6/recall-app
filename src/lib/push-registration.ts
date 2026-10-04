@@ -1,9 +1,49 @@
 /**
  * Push registration flow (native). The permission prompt fires ONLY from the
- * user's explicit "Enable recall alerts" action — nothing here runs a system
- * prompt on app launch. Silent paths (app start refresh, Expo token rotation)
- * re-register only when the user already enabled alerts on this device, and
- * re-registration is idempotent on the backend (same installation id).
+ * user's explicit enable action — the Notifications screen's "Enable recall
+ * alerts" and the notification education's "Turn on notifications" —
+ * nothing here runs a system prompt on app launch. Silent paths (app start
+ * refresh, Expo token rotation) re-register only when the user already
+ * enabled alerts on this device, and re-registration is idempotent on the
+ * backend (same installation id).
+ *
+ * ## The two ports (2026-10-04)
+ *
+ * Enabling is two distinct steps and the app never conflates them:
+ *
+ * 1. `resolvePermission` — the SYSTEM permission: read it, and prompt once
+ *    only while the system can still ask. Its answer says whether iOS
+ *    allows notifications, and whether a prompt was shown just now.
+ * 2. `register` — the SERVER registration: the Expo push token, the
+ *    installation's subscription row, and only then the local
+ *    alerts-enabled flag. Alerts are "on" when, and only when, this step
+ *    completed; a granted permission alone is not an enabled alert.
+ *
+ * `attemptRecallAlerts` runs both and reports which of the three outcomes
+ * was reached — enabled, permission denied (with whether a prompt was
+ * shown and whether one can still be shown), or registration failed — so a
+ * caller can tell a shopper the truth. `enableRecallAlerts` is the
+ * Notifications screen's original shape on top of it.
+ *
+ * ## Cancellation, and the write that may have landed
+ *
+ * `register` takes an `AbortSignal`. The server write honours it (the fetch
+ * is aborted). Reading the Expo push token is a platform operation with no
+ * cancellation — it is awaited to completion — but its result is discarded
+ * when the signal has fired by then: nothing is registered, no flag is
+ * written. A write that was already sent may still land on the server —
+ * in the instant before the abort, or later — so every registration whose
+ * outcome is unknown is followed by a disable that OUTRANKS it, by sequence
+ * (src/lib/alert-intent.ts; the push_subscription_sequence migration):
+ * whichever order the two reach the server in, the row ends disabled, and a
+ * newer registration the shopper retries successfully outranks that cleanup
+ * in turn. The confirmed flag is written only after the server answered,
+ * so nothing reports alerts as on while the server's state is unknown.
+ *
+ * The prompt itself stays OUTSIDE the shared installation queue (queueing a
+ * user dialog would stall every queued save behind it); only the server
+ * registration + flag write are queued (C7.1), so enabling serializes with
+ * saves, refreshes, and data deletion.
  */
 
 import Constants from 'expo-constants';
@@ -14,10 +54,67 @@ import { Platform } from 'react-native';
 import { alertStatus, type AlertStatus } from './alert-status';
 import { getOrCreateInstallationId } from './installation-id';
 import { enqueueInstallationMutation } from './installation-lifecycle';
-import { disablePushSubscription, registerPushSubscription } from './push-api';
+import {
+  alertIntent,
+  INITIAL_ALERT_INTENT,
+  parseAlertIntent,
+  serializeAlertIntent,
+  type AlertIntent,
+  type AlertIntentState,
+} from './alert-intent';
+import {
+  disablePushSubscription,
+  isDefiniteRejection,
+  registerPushSubscription,
+  RpcAbortedError,
+} from './push-api';
 
-/** Set once the user enables alerts here; silent refresh only acts when set. */
+/**
+ * The flag as it was stored before the intent record (below) replaced it:
+ * read once, so a device that enabled alerts under the old key stays
+ * enabled. Never written any more.
+ */
 const ENABLED_FLAG_KEY = 'recall.alerts-enabled';
+/**
+ * The installation's alert intent (src/lib/alert-intent.ts): the write
+ * sequence, whether a registration is CONFIRMED, and any disable still owed
+ * to the server. `enabled` here is the one source of "alerts are on for
+ * this device": written only after the server confirmed a registration,
+ * cleared before any disable is sent.
+ */
+const INTENT_KEY = 'recall.alerts-intent';
+
+async function loadIntentState(): Promise<AlertIntentState> {
+  const stored = parseAlertIntent(await SecureStore.getItemAsync(INTENT_KEY));
+  if (stored) return stored;
+  const legacyEnabled = (await SecureStore.getItemAsync(ENABLED_FLAG_KEY)) === '1';
+  return { ...INITIAL_ALERT_INTENT, enabled: legacyEnabled };
+}
+
+/**
+ * The protocol over this installation's server row. `token` is the Expo
+ * push token a registration will carry; null for a caller that only
+ * disables or reconciles (a registration is then a programming error).
+ */
+function installationIntent(installationId: string, token: string | null): AlertIntent {
+  return alertIntent({
+    load: loadIntentState,
+    save: (state) => SecureStore.setItemAsync(INTENT_KEY, serializeAlertIntent(state)),
+    async register(sequence, signal) {
+      if (token === null) throw new Error('registration needs a push token');
+      return registerPushSubscription({
+        installationId,
+        expoPushToken: token,
+        platform: Platform.OS === 'ios' ? 'ios' : 'android',
+        appVersion: Constants.expoConfig?.version ?? null,
+        sequence,
+        signal,
+      });
+    },
+    disable: (sequence) => disablePushSubscription(installationId, sequence),
+    isDefiniteRejection,
+  });
+}
 
 function easProjectId(): string | null {
   const fromConfig = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
@@ -35,8 +132,9 @@ export async function ensureAndroidChannel(): Promise<void> {
   });
 }
 
+/** True only while a registration is CONFIRMED and no disable was issued since. */
 async function hasEnabledFlag(): Promise<boolean> {
-  return (await SecureStore.getItemAsync(ENABLED_FLAG_KEY)) === '1';
+  return (await loadIntentState()).enabled;
 }
 
 /** Current control state. Read-only: never triggers a permission prompt. */
@@ -48,59 +146,137 @@ export async function getAlertStatus(): Promise<AlertStatus> {
   );
 }
 
-async function obtainAndRegisterToken(): Promise<void> {
-  const projectId = easProjectId();
-  if (!projectId) {
-    throw new Error(
-      'This build is not linked to an EAS project yet, so push tokens are unavailable. ' +
-        '(Founder: run `eas init`, then rebuild.)',
-    );
+// ── The ports ───────────────────────────────────────────────────────────────
+
+/** The system permission after one deliberate enable: read, and prompted if it could be. */
+export interface PermissionResolution {
+  granted: boolean;
+  /** False once the system will not ask again: only Settings can change it. */
+  canAskAgain: boolean;
+  /** True when the system prompt was shown by THIS call. */
+  prompted: boolean;
+}
+
+export interface EnablePorts {
+  /**
+   * Read the permission and prompt ONCE if, and only if, it is not granted
+   * and the system can still ask. The one place the prompt can fire.
+   */
+  resolvePermission(): Promise<PermissionResolution>;
+  /**
+   * Register this installation: token, server row, then the local flag.
+   * Rejects on any failure; rejects with `RpcAbortedError` when `signal`
+   * fired before the server write began.
+   */
+  register(signal?: AbortSignal): Promise<void>;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new RpcAbortedError();
+}
+
+/** The ports as the app ships them. */
+export function realEnablePorts(): EnablePorts {
+  return {
+    async resolvePermission() {
+      await ensureAndroidChannel();
+      let permission = await Notifications.getPermissionsAsync();
+      let prompted = false;
+      if (!permission.granted && permission.canAskAgain) {
+        permission = await Notifications.requestPermissionsAsync();
+        prompted = true;
+      }
+      return { granted: permission.granted, canAskAgain: permission.canAskAgain, prompted };
+    },
+    register(signal) {
+      return enqueueInstallationMutation(async () => {
+        throwIfAborted(signal);
+        const projectId = easProjectId();
+        if (!projectId) {
+          throw new Error(
+            'This build is not linked to an EAS project yet, so push tokens are unavailable. ' +
+              '(Founder: run `eas init`, then rebuild.)',
+          );
+        }
+        // A platform read with no cancellation: awaited, then discarded if
+        // the caller gave up meanwhile — nothing below runs on a dead signal.
+        const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+        throwIfAborted(signal);
+        // The protocol: a sequence on the write, the confirmed flag only on
+        // success, and a cleanup disable — carrying the next sequence, so it
+        // outranks the write however the two are ordered — when the
+        // outcome is unknown (the abort, the timeout, the network).
+        await installationIntent(await getOrCreateInstallationId(), token).register(signal);
+      });
+    },
+  };
+}
+
+// ── The one enable path ─────────────────────────────────────────────────────
+
+export type EnableAttempt =
+  /** Permission granted AND this installation registered. */
+  | { outcome: 'enabled' }
+  /** iOS does not allow notifications; `prompted` says whether it just asked. */
+  | { outcome: 'permission_denied'; canAskAgain: boolean; prompted: boolean }
+  /** Permission granted, but the registration did not complete. */
+  | { outcome: 'registration_failed'; error: unknown };
+
+/**
+ * The user's deliberate enable: resolve the permission (prompting only while
+ * the system can ask), then register when it allows. Never throws — every
+ * way it can end is a named outcome.
+ */
+export async function attemptRecallAlerts(
+  ports: EnablePorts = realEnablePorts(),
+  signal?: AbortSignal,
+): Promise<EnableAttempt> {
+  const permission = await ports.resolvePermission();
+  if (!permission.granted) {
+    return {
+      outcome: 'permission_denied',
+      canAskAgain: permission.canAskAgain,
+      prompted: permission.prompted,
+    };
   }
-  const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-  await registerPushSubscription({
-    installationId: await getOrCreateInstallationId(),
-    expoPushToken: token,
-    platform: Platform.OS === 'ios' ? 'ios' : 'android',
-    appVersion: Constants.expoConfig?.version ?? null,
-  });
+  try {
+    await ports.register(signal);
+    return { outcome: 'enabled' };
+  } catch (error) {
+    return { outcome: 'registration_failed', error };
+  }
 }
 
 /**
- * The user tapped "Enable recall alerts". The one and only place the system
- * permission prompt can fire. The prompt itself stays OUTSIDE the shared
- * installation queue (queueing a user dialog would stall every queued save
- * behind it); only the server registration + flag write are queued (C7.1),
- * so enabling serializes with saves, refreshes, and data deletion.
+ * The Notifications screen's "Enable recall alerts": the attempt, reported
+ * as the control state the screen renders. A registration failure throws,
+ * as it always did, so the screen shows its failure line.
  */
 export async function enableRecallAlerts(): Promise<AlertStatus> {
-  await ensureAndroidChannel();
-  let permission = await Notifications.getPermissionsAsync();
-  if (!permission.granted && permission.canAskAgain) {
-    permission = await Notifications.requestPermissionsAsync();
+  const attempt = await attemptRecallAlerts();
+  switch (attempt.outcome) {
+    case 'enabled':
+      return 'enabled';
+    case 'permission_denied':
+      return alertStatus(
+        { granted: false, canAskAgain: attempt.canAskAgain },
+        await hasEnabledFlag(),
+      );
+    case 'registration_failed':
+      throw attempt.error;
   }
-  if (!permission.granted) {
-    return alertStatus(
-      { granted: false, canAskAgain: permission.canAskAgain },
-      await hasEnabledFlag(),
-    );
-  }
-  return enqueueInstallationMutation<AlertStatus>(async () => {
-    await obtainAndRegisterToken();
-    await SecureStore.setItemAsync(ENABLED_FLAG_KEY, '1');
-    return 'enabled';
-  });
 }
 
-/** The user turned alerts off. Local flag + backend row, both disabled. */
+/**
+ * The user turned alerts off. The confirmed flag is cleared first, then the
+ * server row is disabled with the next sequence. Offline is fine: the
+ * disable stays pending in the intent record and is retried at the next
+ * launch and before the next registration; meanwhile the cleared flag stops
+ * silent refresh, and nothing reports alerts as on.
+ */
 export function disableRecallAlerts(): Promise<AlertStatus> {
   return enqueueInstallationMutation<AlertStatus>(async () => {
-    await SecureStore.deleteItemAsync(ENABLED_FLAG_KEY);
-    try {
-      await disablePushSubscription(await getOrCreateInstallationId());
-    } catch {
-      // Offline is fine: the local flag stops silent refresh, and the backend
-      // row dies at the next DeviceNotRegistered receipt if the token expires.
-    }
+    await installationIntent(await getOrCreateInstallationId(), null).disable();
     return 'not_enabled';
   });
 }
@@ -119,11 +295,18 @@ export function disableRecallAlerts(): Promise<AlertStatus> {
 export function refreshRegistrationIfEnabled(): Promise<void> {
   return enqueueInstallationMutation(async () => {
     try {
+      // First, what the server is still owed: a disable left pending offline,
+      // or the cleanup of a registration a crash interrupted.
+      const installationId = await getOrCreateInstallationId();
+      await installationIntent(installationId, null).reconcile();
       if (!(await hasEnabledFlag())) return;
       const permission = await Notifications.getPermissionsAsync();
       if (!permission.granted) return;
       await ensureAndroidChannel();
-      await obtainAndRegisterToken();
+      const projectId = easProjectId();
+      if (!projectId) return;
+      const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      await installationIntent(installationId, token).refresh();
     } catch {
       // Best-effort: a failed silent refresh must never surface at launch.
     }
@@ -139,5 +322,6 @@ export function refreshRegistrationIfEnabled(): Promise<void> {
  * alerts stay off until the user explicitly enables them again.
  */
 export async function clearLocalAlertState(): Promise<void> {
+  await SecureStore.deleteItemAsync(INTENT_KEY);
   await SecureStore.deleteItemAsync(ENABLED_FLAG_KEY);
 }

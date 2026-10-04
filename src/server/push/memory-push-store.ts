@@ -10,6 +10,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type {
+  CaseLink,
   DeliverableEvent,
   DeliveryPatch,
   DeliveryRow,
@@ -19,13 +20,29 @@ import type {
   PushSubscription,
 } from './types';
 
+/** What the sequenced RPCs return: the gate's decision and the sequence now recorded. */
+export interface SequencedWriteResult {
+  applied: boolean;
+  lastSequence: number;
+}
+
 interface SubscriptionRow extends PushSubscription {
   disabledAt: string | null;
   disabledReason: string | null;
 }
 
-interface StoredEvent extends DeliverableEvent {
+/**
+ * An event as the ledger holds it: the case's lifecycle is NOT stored on the
+ * event — it is joined from `cases` at read time, exactly as the SQL store
+ * joins `recall_cases`, so a test that closes or merges a case after adding
+ * an event sees the change on the next read.
+ */
+interface StoredEvent extends Omit<
+  DeliverableEvent,
+  'caseState' | 'mergedInto' | 'projection' | 'materialChangeRef'
+> {
   suppressed: string | null;
+  materialChangeRef: string | null;
 }
 
 export class MemoryPushStore implements PushStore {
@@ -34,11 +51,87 @@ export class MemoryPushStore implements PushStore {
   events: StoredEvent[] = [];
   deliveries = new Map<string, DeliveryRow>();
   preferences = new Map<string, InstallationPreferences>();
+  /** The recall_cases rows the events join: lifecycle, tombstone, projection. */
+  cases = new Map<string, CaseLink>();
 
   // ── Test setup helpers ─────────────────────────────────────────────────────
 
-  addEvent(event: Omit<StoredEvent, 'suppressed'> & { suppressed?: string | null }): void {
-    this.events.push({ ...event, suppressed: event.suppressed ?? null });
+  /** Register (or update) a case row; an event's case defaults to active and unmerged. */
+  setCase(link: Omit<CaseLink, 'state' | 'mergedInto'> & Partial<CaseLink>): void {
+    this.cases.set(link.id, {
+      id: link.id,
+      projection: link.projection,
+      state: link.state ?? 'active',
+      mergedInto: link.mergedInto ?? null,
+    });
+  }
+
+  /** Mark `absorbedId` as reconciled into `survivorId` (the duplicate-merge write). */
+  merge(absorbedId: string, survivorId: string): void {
+    const absorbed = this.cases.get(absorbedId);
+    if (!absorbed) throw new Error(`unknown case ${absorbedId}`);
+    absorbed.mergedInto = survivorId;
+  }
+
+  addEvent(
+    event: Omit<StoredEvent, 'suppressed' | 'materialChangeRef'> & {
+      suppressed?: string | null;
+      materialChangeRef?: string | null;
+      /** The case's projection; registers the case as active and unmerged unless set already. */
+      projection: CaseLink['projection'];
+    },
+  ): void {
+    const { projection, ...rest } = event;
+    if (!this.cases.has(event.recallCaseId)) {
+      this.setCase({ id: event.recallCaseId, projection });
+    }
+    this.events.push({
+      ...rest,
+      suppressed: event.suppressed ?? null,
+      materialChangeRef: event.materialChangeRef ?? null,
+    });
+  }
+
+  private join(event: StoredEvent): DeliverableEvent {
+    const link = this.cases.get(event.recallCaseId);
+    if (!link) throw new Error(`notification event ${event.id} has no joined recall case`);
+    const { suppressed: _suppressed, ...rest } = event;
+    return {
+      ...rest,
+      caseState: link.state,
+      mergedInto: link.mergedInto,
+      projection: link.projection,
+    };
+  }
+
+  /**
+   * push_installation_sequences, mirrored (2026-10-04): the highest write
+   * sequence applied per installation and the operation that carried it. A
+   * lower sequence is refused; an equal one applies only for the same
+   * operation (the same write retried); none (a legacy client) applies only
+   * while the installation has never written with a sequence. Every write
+   * reports the decision and the sequence now recorded.
+   */
+  sequences = new Map<string, { sequence: number; operation: 'register' | 'disable' }>();
+
+  private gate(
+    installationId: string,
+    sequence: number | undefined,
+    operation: 'register' | 'disable',
+  ): SequencedWriteResult {
+    const last = this.sequences.get(installationId);
+    if (sequence === undefined) {
+      return { applied: last === undefined, lastSequence: last?.sequence ?? 0 };
+    }
+    if (!Number.isInteger(sequence) || sequence < 1) throw new Error('invalid sequence');
+    if (
+      last !== undefined &&
+      (last.sequence > sequence || (last.sequence === sequence && last.operation !== operation))
+    ) {
+      return { applied: false, lastSequence: last.sequence };
+    }
+    this.sequences.set(installationId, { sequence, operation });
+    return { applied: true, lastSequence: sequence };
   }
 
   /** The register_push_subscription RPC's semantics, mirrored. */
@@ -47,7 +140,10 @@ export class MemoryPushStore implements PushStore {
     expoPushToken: string,
     platform: 'ios' | 'android',
     nowIso: string,
-  ): void {
+    sequence?: number,
+  ): SequencedWriteResult {
+    const decision = this.gate(installationId, sequence, 'register');
+    if (!decision.applied) return decision;
     for (const row of this.subscriptions.values()) {
       if (
         row.expoPushToken === expoPushToken &&
@@ -69,7 +165,7 @@ export class MemoryPushStore implements PushStore {
       existing.enabled = true;
       existing.disabledAt = null;
       existing.disabledReason = null;
-      return;
+      return decision;
     }
     const id = randomUUID();
     this.subscriptions.set(id, {
@@ -82,6 +178,42 @@ export class MemoryPushStore implements PushStore {
       disabledAt: null,
       disabledReason: null,
     });
+    return decision;
+  }
+
+  /** The disable_push_subscription RPC's semantics, mirrored. */
+  disable(installationId: string, nowIso: string, sequence?: number): SequencedWriteResult {
+    const decision = this.gate(installationId, sequence, 'disable');
+    if (!decision.applied) return decision;
+    for (const row of this.subscriptions.values()) {
+      if (row.installationId === installationId && row.enabled) {
+        row.enabled = false;
+        row.disabledAt = nowIso;
+        row.disabledReason = 'user_disabled';
+      }
+    }
+    return decision;
+  }
+
+  /** The delete_installation_data RPC's semantics, mirrored. */
+  deleteInstallation(installationId: string): void {
+    for (const [id, row] of this.subscriptions) {
+      if (row.installationId === installationId) {
+        for (const [deliveryId, delivery] of this.deliveries) {
+          if (delivery.subscriptionId === id) this.deliveries.delete(deliveryId);
+        }
+        this.subscriptions.delete(id);
+      }
+    }
+    this.sequences.delete(installationId);
+    this.preferences.delete(installationId);
+  }
+
+  /** The row for one installation, as the server holds it; null when none. */
+  subscriptionOf(installationId: string): SubscriptionRow | null {
+    return (
+      [...this.subscriptions.values()].find((r) => r.installationId === installationId) ?? null
+    );
   }
 
   /**
@@ -178,7 +310,7 @@ export class MemoryPushStore implements PushStore {
       .filter((event) => event.suppressed === null && event.createdAt >= sinceIso)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .slice(0, limit)
-      .map(({ suppressed: _suppressed, ...event }) => event);
+      .map((event) => this.join(event));
   }
 
   async countDeliverableEventsBefore(beforeIso: string): Promise<number> {
@@ -242,8 +374,25 @@ export class MemoryPushStore implements PushStore {
 
   async getEvent(eventId: string): Promise<DeliverableEvent | null> {
     const found = this.events.find((e) => e.id === eventId);
-    if (!found) return null;
-    const { suppressed: _suppressed, ...event } = found;
-    return event;
+    return found ? this.join(found) : null;
+  }
+
+  async getCase(caseId: string): Promise<CaseLink | null> {
+    const link = this.cases.get(caseId);
+    return link ? { ...link } : null;
+  }
+
+  async hasDeliverableEvent(
+    caseId: string,
+    triggerRuleId: string,
+    materialChangeRef: string | null,
+  ): Promise<boolean> {
+    return this.events.some(
+      (e) =>
+        e.recallCaseId === caseId &&
+        e.triggerRuleId === triggerRuleId &&
+        e.materialChangeRef === materialChangeRef &&
+        e.suppressed === null,
+    );
   }
 }

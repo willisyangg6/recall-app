@@ -1665,6 +1665,33 @@ it with; it is not branding. The scene, the example and the caption are one
 VoiceOver element, spoken once as an example. Every number is in
 `lib/notification-education-presentation.ts`.
 
+**The outcomes of `Turn on notifications`** (2026-10-04) change only the
+pinned footer; the page above it is the composition described. When the
+system will not ask again, the footer holds the information Callout —
+`Notifications are turned off for Lotly. Enable them in your device
+settings.` — a step above the 51pt `Open settings` pill, with `Continue
+without alerts` in the secondary's place and the footnote unchanged. When a
+granted permission's registration did not complete (an error, or 10 s
+without an answer), the footer holds the paywall's bordered alert surface
+(`radius/8`, `border/strong`, the alert role, a polite live region) —
+`We couldn't finish turning on alerts.` — over `Try again` and `Continue
+without alerts`. The pill's busy words are `Opening…`, `Checking…` (the
+re-check after Settings) and `Trying again…`. Both notices are
+`PaywallNotice`'s `calm` and `alert` treatments, so an outcome reads as a
+purchase outcome does on the screen before; nothing animates in or out, and
+nothing in any phase says alerts are on. The screen announces the notice
+once, when an attempt settles on it (not through a live region). From the
+accessibility sizes the notice reads inline after the reassurance, and when
+the notice with its margins would not fit in the room the pinned footer
+leaves above it — measured, never counted — the two actions follow it into
+the scrolling content and no footer is pinned (founder review 2026-10-04:
+at AX5 on an SE the scaled actions took half the screen and the notice could
+only be read by its end). Either way the page jumps, unanimated, so the
+notice's first line sits just below the safe area: the explanation is read
+before its actions, on screen and in the reading order. The blocked phase
+does not repeat the Settings footnote at those sizes, since the notice
+already says so. Text is never capped or shrunk; targets stay 44pt.
+
 **After either choice** the Feed shows `Your preferences are set.` once, as
 the information callout above the list, until the screen loses focus.
 

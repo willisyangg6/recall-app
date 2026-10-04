@@ -16,12 +16,29 @@
  * ## The permission rule
  *
  * Only the primary action may invoke Apple's prompt, and it does so through
- * the route's `onEnable` — the same `enableRecallAlerts` path the
- * Notifications screen uses, which prompts only when the system can still
- * ask. `Not now` calls `onSkip` and nothing else: no read of the permission,
- * no request, no registration. The route decides what follows; this
- * component only reports the choice. While the enable runs, both actions are
- * inert and the primary shows its progress word.
+ * the route's `onEnable` — the same enable ports the Notifications screen
+ * uses, which prompt only when the system can still ask. `Not now` calls
+ * `onSkip` and nothing else: no read of the permission, no request, no
+ * registration. The route decides what follows; this component only reports
+ * the choice. While the enable runs, both actions are inert and the primary
+ * shows its progress word.
+ *
+ * ## The outcomes (2026-10-04)
+ *
+ * The page above the footer is the approved composition in every phase.
+ * What the footer holds is the phase's own (lib/notification-education-
+ * outcomes.ts): on the intro the approved pair; when the system will not
+ * ask again, the calm information callout — `Notifications are turned off
+ * for Lotly. Enable them in your device settings.` — over `Open settings`
+ * and `Continue without alerts`; when a granted permission's registration
+ * did not complete, the bordered alert — `We couldn't finish turning on
+ * alerts.` — over `Try again` and `Continue without alerts`. The notices are
+ * the paywall's own two treatments, so an outcome here reads as a purchase
+ * outcome does on the screen before. The screen announces a notice once,
+ * when the attempt settles on it; nothing animates in or out (the approved
+ * motion is unchanged). From the accessibility sizes the notice reads inline
+ * after the reassurance, and the two actions follow it into the scrolling
+ * content when a pinned footer would crowd it (the measured rule, below).
  *
  * ## The example
  *
@@ -45,8 +62,9 @@
  * down when a larger mark would cover its art.
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   Image,
   Pressable,
   Text as NativeText,
@@ -58,7 +76,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { OnboardingActionPill } from '@/components/paywall/paywall-panel';
+import { OnboardingActionPill, PaywallNotice } from '@/components/paywall/paywall-panel';
 import { Icon } from '@/components/ui/icon';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
@@ -82,11 +100,10 @@ import {
   RHYTHM_PX,
   systemBaselineInLine,
 } from '@/lib/notification-education-presentation';
+import type { EducationView } from '@/lib/notification-education-actions';
+import { educationFooter } from '@/lib/notification-education-outcomes';
 import {
   EDUCATION_BODY,
-  EDUCATION_BUSY,
-  EDUCATION_CTA,
-  EDUCATION_CTA_HINT,
   EDUCATION_EXAMPLE_APP,
   EDUCATION_EXAMPLE_BODY,
   EDUCATION_EXAMPLE_LABEL,
@@ -95,8 +112,6 @@ import {
   EDUCATION_FOOTNOTE,
   EDUCATION_HEADLINE,
   EDUCATION_REASSURANCE,
-  EDUCATION_SECONDARY,
-  EDUCATION_SECONDARY_HINT,
   EDUCATION_SUCCESS,
 } from '@/lib/onboarding-copy';
 
@@ -120,17 +135,22 @@ const SECONDARY_TYPE = { fontSize: 15, lineHeight: 20 } as const;
 const SHIELD_SIZE = 24;
 
 export function NotificationEducation({
-  busy,
+  view,
   onEnable,
   onSkip,
+  onOpenSettings,
 }: {
-  /** The enable is in flight (the system prompt may be up). */
-  busy: boolean;
-  /** The ONE path to the system permission prompt on this screen. */
+  /** The phase and whether an enable is in flight (the system prompt may be up). */
+  view: EducationView;
+  /** The ONE path to the system permission prompt on this screen; also `Try again`. */
   onEnable: () => void;
-  /** Proceeds without asking anything. */
+  /** Proceeds without asking anything: `Not now` and `Continue without alerts`. */
   onSkip: () => void;
+  /** Opens the system settings for this app (the blocked phase's primary). */
+  onOpenSettings: () => void;
 }) {
+  const footer = educationFooter(view);
+  const { busy } = footer;
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const { fontScale } = window;
@@ -194,18 +214,101 @@ export function NotificationEducation({
       {EDUCATION_FOOTNOTE}
     </Text>
   );
+  // The footnote points at Settings; the blocked notice already says so,
+  // and from the accessibility sizes the two would read back to back.
+  const inlineFootnote = large && view.phase !== 'blocked';
+
+  // ── The outcome (2026-10-04) ────────────────────────────────────────────
+  // The notice sits a step above the pill by default. From the accessibility
+  // sizes it reads inline after the reassurance, and the two actions follow
+  // it into the scrolling content when the notice, with its margins, would
+  // not fit in the room the pinned footer leaves above it (at AX5 on an SE
+  // the scaled actions took half the screen and the notice could only be
+  // read by its end; founder review 2026-10-04). Both are measured, never
+  // counted: the scroll view's height — which is the room above the pinned
+  // footer — and the notice's once it is laid out. When the notice appears
+  // the page jumps — no animation — so that its FIRST line sits just below
+  // the safe area: the explanation is read before the actions it explains,
+  // in the reading order and on the screen alike.
+  const notice = footer.notice ? (
+    <PaywallNotice tone={footer.notice.tone} kind={`education-${footer.notice.kind}`} live={false}>
+      {footer.notice.text}
+    </PaywallNotice>
+  ) : null;
+  const phase = view.phase;
+  const [noticeBox, setNoticeBox] = useState<{ y: number; height: number } | null>(null);
+  // Decided in the two layout handlers, from whichever measure arrives last.
+  // Once the actions have joined the content they stay there: the room
+  // above the footer is then the whole page, and the layout must not flip
+  // back.
+  const [joined, setJoined] = useState(false);
+  const joinIfCrowded = (room: number, noticeHeight: number) => {
+    if (large && room > 0 && noticeHeight > 0 && room < noticeHeight + 2 * spacing[16]) {
+      setJoined(true);
+    }
+  };
+  const actionsInline = large && notice !== null && joined;
+
+  // The notice is read aloud once per outcome — when an attempt settles on
+  // it — by the screen, never by the notice's own live region.
+  const noticeText = footer.notice?.text ?? null;
+  useEffect(() => {
+    if (!busy && noticeText !== null) AccessibilityInfo.announceForAccessibility(noticeText);
+  }, [busy, noticeText]);
+
+  const scroll = useRef<ScrollView>(null);
+  const scrolledFor = useRef<string | null>(null);
+  const noticeTop = noticeBox?.y ?? null;
+  useEffect(() => {
+    if (!large || noticeTop === null) return;
+    const key = `${phase}:${actionsInline ? 'inline' : 'pinned'}`;
+    if (scrolledFor.current === key) return;
+    scrolledFor.current = key;
+    scroll.current?.scrollTo({
+      y: Math.max(0, noticeTop - insets.top - spacing[8]),
+      animated: false,
+    });
+  }, [large, phase, actionsInline, noticeTop, insets.top]);
+
+  const actions = (
+    <>
+      <OnboardingActionPill
+        label={footer.primary.label}
+        accessibilityHint={footer.primary.hint}
+        labelType={ctaLabelType(fontScale, width - 2 * layout.pageMargin - 2 * spacing[16])}
+        busy={busy}
+        busyLabel={footer.primary.busyLabel}
+        onPress={footer.primary.kind === 'settings' ? onOpenSettings : onEnable}
+      />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={footer.secondary.label}
+        accessibilityHint={footer.secondary.hint}
+        accessibilityState={{ disabled: busy }}
+        disabled={busy}
+        onPress={onSkip}
+        style={({ pressed }) => [styles.secondary, (pressed || busy) && styles.dimmed]}>
+        <Text variant="display" style={[styles.secondaryText, SECONDARY_TYPE]}>
+          {footer.secondary.label}
+        </Text>
+      </Pressable>
+    </>
+  );
 
   return (
     <Surface background="background/page" style={styles.page}>
       <ScrollView
+        ref={scroll}
         style={styles.page}
         contentContainerStyle={[
           styles.content,
           { paddingTop: insets.top + badgeTopGap(width, window.height - insets.top) },
+          actionsInline && { paddingBottom: insets.bottom + spacing[16] },
         ]}
         onLayout={(event) => {
           setPageWidth(event.nativeEvent.layout.width);
           setViewport(event.nativeEvent.layout.height);
+          joinIfCrowded(event.nativeEvent.layout.height, noticeBox?.height ?? 0);
         }}
         onContentSizeChange={(_, height) => setContentHeight(height)}>
         {/* Above the hero in drawing order, so the art never covers it. */}
@@ -291,40 +394,38 @@ export function NotificationEducation({
               {EDUCATION_REASSURANCE}
             </Text>
           </View>
-          {/* From the accessibility sizes the footnote reads after the
-              reassurance instead, so the pinned footer keeps only the two
-              actions and the page keeps room to scroll. */}
-          {large ? <View style={styles.inlineFootnote}>{footnote}</View> : null}
         </View>
+        {/* From the accessibility sizes the outcome and the footnote read
+            after the reassurance; the actions join them when the pinned
+            footer would crowd the notice (above). */}
+        {large && notice ? (
+          <View
+            style={styles.inlineOutcome}
+            onLayout={(event) => {
+              const { y, height } = event.nativeEvent.layout;
+              if (noticeBox === null || noticeBox.y !== y || noticeBox.height !== height) {
+                setNoticeBox({ y, height });
+                joinIfCrowded(viewport, height);
+              }
+            }}>
+            {notice}
+          </View>
+        ) : null}
+        {actionsInline ? <View style={styles.inlineActions}>{actions}</View> : null}
+        {inlineFootnote ? <View style={styles.inlineFootnote}>{footnote}</View> : null}
       </ScrollView>
-      <View
-        style={[
-          styles.footer,
-          overflowing && styles.footerRule,
-          { paddingBottom: insets.bottom + spacing[8] },
-        ]}>
-        <OnboardingActionPill
-          label={EDUCATION_CTA}
-          accessibilityHint={EDUCATION_CTA_HINT}
-          labelType={ctaLabelType(fontScale, width - 2 * layout.pageMargin - 2 * spacing[16])}
-          busy={busy}
-          busyLabel={EDUCATION_BUSY}
-          onPress={onEnable}
-        />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={EDUCATION_SECONDARY}
-          accessibilityHint={EDUCATION_SECONDARY_HINT}
-          accessibilityState={{ disabled: busy }}
-          disabled={busy}
-          onPress={onSkip}
-          style={({ pressed }) => [styles.secondary, (pressed || busy) && styles.dimmed]}>
-          <Text variant="display" style={[styles.secondaryText, SECONDARY_TYPE]}>
-            {EDUCATION_SECONDARY}
-          </Text>
-        </Pressable>
-        {large ? null : footnote}
-      </View>
+      {actionsInline ? null : (
+        <View
+          style={[
+            styles.footer,
+            overflowing && styles.footerRule,
+            { paddingBottom: insets.bottom + spacing[8] },
+          ]}>
+          {!large && notice ? <View style={styles.notice}>{notice}</View> : null}
+          {actions}
+          {large ? null : footnote}
+        </View>
+      )}
     </Surface>
   );
 }
@@ -464,8 +565,19 @@ const styles = StyleSheet.create({
   measured: {
     alignSelf: 'center',
   },
+  inlineOutcome: {
+    marginTop: spacing[16],
+    paddingHorizontal: layout.pageMargin,
+  },
+  // The two actions in the content: the pinned footer's own spacing.
+  inlineActions: {
+    marginTop: spacing[16],
+    paddingHorizontal: layout.pageMargin,
+    gap: spacing[4],
+  },
   inlineFootnote: {
     marginTop: spacing[16],
+    paddingHorizontal: layout.pageMargin,
   },
   column: {
     paddingHorizontal: layout.pageMargin,
@@ -503,6 +615,10 @@ const styles = StyleSheet.create({
   },
   footerRule: {
     borderTopColor: color['border/subtle'],
+  },
+  // An outcome notice sits a step above the pill, as the paywall's does.
+  notice: {
+    marginBottom: spacing[4],
   },
   secondary: {
     minHeight: 44,

@@ -61,7 +61,7 @@ import type { FeedItem } from '../lib/recall-feed';
 import { parseFdaAnnouncement, slugFromPath, type FdaListingItem } from './fda/parse';
 import { parseFsisRecord, type FsisRawRecord } from './fsis/parse';
 import { formatPushContent } from './push/format';
-import type { DeliverableEvent } from './push/types';
+import type { FormattableEvent } from './push/format';
 
 const TODAY = '2026-09-04';
 
@@ -169,7 +169,7 @@ function modelsOf(fragment: string) {
 }
 
 function initialPushOf(projection: CaseProjection) {
-  const event: DeliverableEvent = {
+  const event: FormattableEvent = {
     id: 'test-event',
     recallCaseId: 'test-case',
     kind: 'initial',

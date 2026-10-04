@@ -25,7 +25,7 @@ import { evaluatePersonalRelevance } from './relevance';
 import { makeCorpus } from './feed-fixtures';
 import type { FeedItem } from './recall-feed';
 import { formatPushContent } from '../server/push/format';
-import type { DeliverableEvent } from '../server/push/types';
+import type { FormattableEvent } from '../server/push/format';
 
 const PROFILE: UserRecallPreferences = {
   states: ['CA'],
@@ -148,7 +148,7 @@ test('the consumer risk tier is unchanged by categories', () => {
 
 test('push copy is unchanged by categories, and the payload carries none', () => {
   const projection = baseProjection();
-  const event: DeliverableEvent = {
+  const event: FormattableEvent = {
     id: 'event-1',
     recallCaseId: 'case-1',
     kind: 'initial',

@@ -228,14 +228,22 @@ export function affectsYouVerdict(
 }
 
 /**
- * Push delivery policy (C3 §24): personalization gates delivery only once a
- * jurisdiction is chosen. Until then the pre-C3 behavior stands — every
- * deliverable event qualifies — because allergen/retailer preferences alone
- * are positive signals, not exclusion filters, and recalls are safety
- * information. An empty jurisdiction list is exactly the old `null` state:
- * no location preference, so delivery is not narrowed.
+ * Push delivery policy (C3 §24, aligned 2026-10-04): delivery qualifies
+ * exactly when the Feed's Affects You verdict does — the SAME two inputs,
+ * the SAME answer. In particular, a profile with no jurisdiction chosen is
+ * reached only by an allergen or store signal, and a profile with nothing
+ * chosen (or no preference row at all) is reached by nothing.
+ *
+ * Until this date an empty jurisdiction list meant "deliver every event" on
+ * the grounds that allergen and store choices are positive signals, not
+ * filters. That was the one place push was BROADER than the Feed: Affects
+ * You shows such a shopper only the recalls that carry one of their signals
+ * and asks for a state, while push would have sent every food recall in the
+ * country (audit K3, 2026-10-03). Recalls are safety information, and All
+ * Recalls remains the complete safety net in the app; an alert, though, is
+ * a claim that THIS recall is for THIS shopper, and the Feed's verdict is
+ * the only honest basis for it.
  */
 export function pushEligible(input: RelevanceInput, prefs: UserRecallPreferences | null): boolean {
-  if (prefs === null || prefs.states.length === 0) return true;
-  return evaluatePersonalRelevance(input, prefs).affectsMe;
+  return affectsYouVerdict(input, prefs);
 }

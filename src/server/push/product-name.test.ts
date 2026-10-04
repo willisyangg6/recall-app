@@ -25,7 +25,7 @@ import {
   notificationProductName,
   PRODUCT_SOFT_LIMIT,
 } from './product-name';
-import type { DeliverableEvent } from './types';
+import type { FormattableEvent } from './format';
 
 const FDA = join(__dirname, '..', 'fda', 'fixtures');
 const FSIS = join(__dirname, '..', 'fsis', 'fixtures');
@@ -64,9 +64,9 @@ function fsis(recallNumber: string): CaseProjection {
 
 function event(
   projection: CaseProjection,
-  kind: DeliverableEvent['kind'] = 'initial',
+  kind: FormattableEvent['kind'] = 'initial',
   triggerRuleId = 'new_case',
-): DeliverableEvent {
+): FormattableEvent {
   return {
     id: '11111111-1111-4111-8111-111111111111',
     recallCaseId: '22222222-2222-4222-8222-222222222222',

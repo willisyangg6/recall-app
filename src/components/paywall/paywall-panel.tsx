@@ -526,10 +526,17 @@ export function PaywallNotice({
   tone,
   kind,
   children,
+  live = true,
 }: {
   tone: PaywallNoticeTone;
   kind: string;
   children: string;
+  /**
+   * False when the screen announces the outcome itself
+   * (`AccessibilityInfo.announceForAccessibility`), so a platform that
+   * honours live regions does not say it a second time.
+   */
+  live?: boolean;
 }) {
   if (tone === 'calm') return <Callout tone="information">{children}</Callout>;
   if (tone === 'success') {
@@ -551,7 +558,7 @@ export function PaywallNotice({
       border="border/strong"
       accessible
       accessibilityRole="alert"
-      accessibilityLiveRegion="polite"
+      accessibilityLiveRegion={live ? 'polite' : undefined}
       testID={`paywall-notice-${kind}`}
       style={styles.alert}>
       <Text variant="body-small">{children}</Text>

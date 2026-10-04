@@ -2129,14 +2129,76 @@ footnote moves inline after the reassurance so the footer keeps only the two
 actions. An SE at the default size compacts the cream above the mark
 (Building's rule) and scrolls.
 
-**Choices.** `lib/notification-education-actions.ts`: the first press of
-either action takes the screen, so a double tap can neither prompt twice nor
-complete twice; every permission outcome (granted, previously granted,
-denied, previously denied, a registration error) completes the education and
-nothing claims alerts are on. The Feed's one-time notice is keyed to the
-stable taker: the foreground entitlement refresh that follows closing the
-system prompt used to re-run the Feed's focus effect and clear the notice it
-had just taken (found on the Simulator, 2026-10-03).
+**Choices and outcomes (2026-10-04).** `lib/notification-education-actions.ts`
+drives the two enable ports of `lib/push-registration.ts` — the SYSTEM
+permission (`resolvePermission`: read, and prompt once only while the
+system can still ask) and the SERVER registration (`register`: token,
+subscription row, then the local flag) — and never conflates them: alerts
+are on only when the registration succeeded. One attempt at a time (a
+double tap is one prompt and one registration); the registration is bounded
+by a 10 s deadline that aborts the attempt's signal (the server write is
+cancelled; the Expo token read is a platform call with no cancellation, so
+it is awaited and discarded — nothing registers on a dead signal); the
+education completes at most once, and a result that lands after
+`Continue without alerts` changes no view and completes nothing again.
+
+| Outcome                                | What the shopper sees                                                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Granted (now or before) and registered | the Feed, with `Your preferences are set.` once                                                                                                  |
+| Denied at the prompt shown now         | the Feed, with the same notice — no enabled claim                                                                                                |
+| Denied before; the system will not ask | the calm callout `Notifications are turned off for Lotly. Enable them in your device settings.` over `Open settings` / `Continue without alerts` |
+| Granted, registration failed or > 10 s | the bordered alert `We couldn't finish turning on alerts.` over `Try again` / `Continue without alerts`                                          |
+| Not now                                | the Feed — no read, no prompt, no registration                                                                                                   |
+
+`Open settings` opens the system settings and remembers that it did; when
+the app becomes active again the route calls `resume`, which re-runs the
+enable ONLY in that case — a now-granted permission registers (the primary
+reads `Checking…`), a still-denied one leaves the blocked notice. Opening
+settings alone never completes the education, and a foreground for any
+other reason reads nothing. `Try again` is the same single enable path. The
+page above the footer is the approved composition in every phase; the
+notices are the paywall's own two treatments (`PaywallNotice`), so an
+outcome here reads as a purchase outcome does on the screen before, and
+nothing animates in or out; the screen announces the notice once, when an
+attempt settles on it, and the notice itself is not a live region. From the
+accessibility sizes (text scale ≥ 1.5) the notice reads inline after the
+reassurance, as the footnote already does. When the notice with its margins
+would not fit in the room the pinned footer leaves above it — the scroll
+view's measured height against the notice's measured height, never a
+character count — the two actions follow it into the scrolling content and
+no footer is pinned; once joined they never move back. Either way the page
+jumps, unanimated, so the notice's first line sits just below the safe
+area, and the reading order is explanation, then its actions. The blocked
+phase omits the Settings footnote at those sizes, since the notice already
+says so. Nothing is capped or shrunk, and both actions keep their 44pt
+targets. (Founder review 2026-10-04: a pinned footer at AX5 on an iPhone SE
+took half the screen and the first version's jump to the page's end showed
+the notice by its last line; on the SE at AX5 the blocked notice now goes
+inline with its actions, while the shorter failed notice, and both notices
+on an iPhone 17 at AX5, still fit above a pinned footer.) Copy and footer
+mapping:
+`lib/notification-education-outcomes.ts`; behaviour:
+`notification-education-actions.test.ts` (granted, denied now, blocked,
+failure, timeout, late result, double tap, skip during an attempt, Settings
+return granted/denied).
+
+The Feed's one-time notice is keyed to the stable taker: the foreground
+entitlement refresh that follows closing the system prompt used to re-run
+the Feed's focus effect and clear the notice it had just taken (found on
+the Simulator, 2026-10-03). A relaunch from the blocked or failed phase
+shows the intro again: nothing was completed.
+
+**Development QA.** The Design Preview's `Notification education QA`
+controls choose what `Turn on notifications` meets on this device
+(`lib/notification-enable-scenarios.ts`, persisted by
+`lib/development-notification-scenarios.ts`, reached through a `__DEV__`
+`require` in `lib/notification-education-ports.ts`): `Live` (the real
+ports), or a simulated permission and registration — granted and
+succeeding, failing, never answering, answering late after the deadline,
+denied at the prompt, denied before with Settings granting, denied before
+and staying so. No simulated choice prompts, reads a push token or writes
+anywhere. Set `Live` when done; `notification-education-ports.test.ts` pins
+the containment.
 
 ## 7. Local data on reset and on expiry
 

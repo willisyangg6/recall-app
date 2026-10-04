@@ -533,11 +533,13 @@ test('the notification permission is requested only from the explicit action; op
     }
   }
   assert.ok(ROUTE_N.includes('onOpenSettings={() => void Linking.openSettings()}'));
+  // The read never prompts; the prompt lives in the ONE enable port.
   const readBody = PUSH.slice(
     PUSH.indexOf('export async function getAlertStatus('),
-    PUSH.indexOf('async function obtainAndRegisterToken('),
+    PUSH.indexOf('// ── The ports'),
   );
   assert.ok(!readBody.includes('requestPermissionsAsync'));
+  assert.equal(count(PUSH, 'requestPermissionsAsync'), 1, 'one prompt site');
   assert.ok(PUSH.includes('if (!permission.granted && permission.canAskAgain) {'));
 });
 

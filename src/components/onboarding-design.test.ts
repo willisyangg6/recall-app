@@ -485,6 +485,17 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
   assert.equal(EDUCATION_SECONDARY, 'Not now');
   assert.equal(EDUCATION_REASSURANCE, 'Recall alerts only. No marketing.');
   assert.equal(EDUCATION_FOOTNOTE, 'Change this anytime in Settings.');
+  // The outcomes of Turn on notifications (2026-10-04), as the brief words them.
+  assert.equal(ONBOARDING_COPY.EDUCATION_BLOCKED_TITLE, 'Notifications are turned off for Lotly.');
+  assert.equal(ONBOARDING_COPY.EDUCATION_BLOCKED_BODY, 'Enable them in your device settings.');
+  assert.equal(
+    ONBOARDING_COPY.EDUCATION_BLOCKED_NOTICE,
+    'Notifications are turned off for Lotly. Enable them in your device settings.',
+  );
+  assert.equal(ONBOARDING_COPY.EDUCATION_OPEN_SETTINGS, 'Open settings');
+  assert.equal(ONBOARDING_COPY.EDUCATION_CONTINUE_WITHOUT, 'Continue without alerts');
+  assert.equal(ONBOARDING_COPY.EDUCATION_FAILED_NOTICE, 'We couldn’t finish turning on alerts.');
+  assert.equal(ONBOARDING_COPY.EDUCATION_TRY_AGAIN, 'Try again');
   assert.equal(PREFERENCES_SET_CONFIRMATION, 'Your preferences are set.');
   // Rendered from the module, not retyped: the screens carry the constants.
   for (const [name, source, constants] of [
@@ -594,14 +605,35 @@ test('the founder’s onboarding copy, verbatim, rendered from the copy module',
         'EDUCATION_SUCCESS',
         'EDUCATION_HEADLINE',
         'EDUCATION_BODY',
-        'EDUCATION_CTA',
-        'EDUCATION_SECONDARY',
         'EDUCATION_REASSURANCE',
         'EDUCATION_FOOTNOTE',
         'EDUCATION_EXAMPLE_LABEL',
         'EDUCATION_EXAMPLE_SPOKEN',
         'EDUCATION_EXAMPLE_TITLE',
         'EDUCATION_EXAMPLE_BODY',
+        // The footer's words come through the outcomes leaf, phase by phase.
+        'educationFooter',
+      ],
+    ],
+    [
+      'education outcomes',
+      readFileSync(join(__dirname, '..', 'lib', 'notification-education-outcomes.ts'), 'utf8'),
+      [
+        'EDUCATION_CTA',
+        'EDUCATION_CTA_HINT',
+        'EDUCATION_BUSY',
+        'EDUCATION_SECONDARY',
+        'EDUCATION_SECONDARY_HINT',
+        'EDUCATION_BLOCKED_NOTICE',
+        'EDUCATION_OPEN_SETTINGS',
+        'EDUCATION_OPEN_SETTINGS_HINT',
+        'EDUCATION_CHECKING',
+        'EDUCATION_FAILED_NOTICE',
+        'EDUCATION_TRY_AGAIN',
+        'EDUCATION_TRY_AGAIN_HINT',
+        'EDUCATION_TRYING_AGAIN',
+        'EDUCATION_CONTINUE_WITHOUT',
+        'EDUCATION_CONTINUE_WITHOUT_HINT',
       ],
     ],
     ['feed', FEED, ['PREFERENCES_SET_CONFIRMATION']],
@@ -1029,27 +1061,48 @@ test('the editor’s artwork and mini mascot are decorative; focus returns to th
 
 test('the notification permission is reachable from the education primary action alone — never on mount, never from Not now', () => {
   const route = codeOnly(ROUTES.education);
-  assert.equal(
-    (route.match(/enableRecallAlerts/g) ?? []).length,
-    2,
-    'once as an import, once on the press',
+  // The one enable path — the two ports shared with the Notifications screen
+  // — is handed to the choices' leaf once, through `educationEnablePorts`
+  // (the real ports, or the Design Preview's stand-ins in development).
+  // Which choice reaches it, that Not now completes without reading, asking
+  // or registering, and every outcome, is proven behaviourally
+  // (lib/notification-education-actions.test.ts).
+  assert.equal((route.match(/educationEnablePorts\(\)/g) ?? []).length, 1);
+  assert.ok(route.includes('resolvePermission: async () => (await ports).resolvePermission(),'));
+  assert.ok(route.includes('register: async (signal) => (await ports).register(signal),'));
+  assert.ok(
+    !route.includes('enableRecallAlerts'),
+    'the route goes through the ports, not the screen path',
   );
-  // The one enable path is handed to the choices' leaf as `enable`; which
-  // choice reaches it, and that Not now completes without reading, asking or
-  // registering, is proven behaviourally (lib/notification-education-actions.test.ts).
-  assert.ok(route.includes('enable: enableRecallAlerts,'));
-  assert.ok(!route.includes('useEffect'), 'nothing runs on mount');
   assert.ok(!route.includes('useFocusEffect'), 'nothing runs on focus');
-  assert.ok(route.includes("onEnable={() => choose('enable')}"));
-  assert.ok(route.includes("onSkip={() => choose('skip')}"));
+  // The ONE effect subscribes to the app state and forwards `active` to the
+  // leaf's `resume`, which reads the permission only after the shopper
+  // opened Settings from the enable flow (proven in the leaf's tests).
+  assert.equal(
+    (route.match(/useEffect\(/g) ?? []).length,
+    1,
+    'one effect: the app-state subscription',
+  );
+  assert.match(
+    route,
+    /AppState\.addEventListener\('change', \(status\) => \{\s*if \(status === 'active'\) actions\.current\?\.resume\(\);/,
+  );
+  assert.ok(route.includes('onEnable={() => void ready().enable()}'));
+  assert.ok(route.includes('onSkip={() => void ready().skip()}'));
+  assert.ok(route.includes('onOpenSettings={() => ready().openSettings()}'));
+  assert.ok(route.includes('openSettings: () => void Linking.openSettings(),'));
   assert.ok(!route.includes('getAlertStatus'), 'the route reads the permission');
-  // Both choices complete the education through the one completion, so both
-  // enter the Feed through the gate.
+  assert.ok(!route.includes('getPermissionsAsync'), 'the route reads the permission itself');
+  // Every completing path goes through the one completion, so the gate —
+  // and the Feed's one-time notice — see exactly one completion.
   assert.equal((route.match(/access\.completeNotificationEducation\(\)/g) ?? []).length, 1);
   const actions = codeOnly(
     readFileSync(join(__dirname, '..', 'lib', 'notification-education-actions.ts'), 'utf8'),
   );
-  assert.ok(!/\bimport\b/.test(actions), 'the choices reach something of their own');
+  assert.ok(
+    !/^import (?!type )/m.test(actions),
+    'the choices reach nothing of their own (a type import only)',
+  );
   // The component itself imports no permission API.
   const component = codeOnly(EDUCATION);
   for (const forbidden of [
@@ -1509,12 +1562,55 @@ test('the paywall keeps the shared frame and its four footer actions in one tool
   assert.ok(!education.includes('chevron-left'));
   const footer = education.slice(education.indexOf('</ScrollView>'));
   for (const piece of [
-    '<OnboardingActionPill',
-    'EDUCATION_SECONDARY',
+    // The outcome notice, when a phase has one, then the primary, the
+    // secondary and the footnote — the words come from the outcomes leaf.
+    '{!large && notice ? <View style={styles.notice}>{notice}</View> : null}',
+    '{actions}',
     '{large ? null : footnote}',
   ]) {
     assert.ok(footer.includes(piece), `the footer lost ${piece}`);
   }
+  // The two actions are one element, pinned by default and in the content
+  // when the measured rule moves them (below); the words come from the leaf.
+  const actions = education.slice(
+    education.indexOf('const actions = ('),
+    education.indexOf('return ('),
+  );
+  for (const piece of [
+    '<OnboardingActionPill',
+    'label={footer.primary.label}',
+    "onPress={footer.primary.kind === 'settings' ? onOpenSettings : onEnable}",
+    'accessibilityLabel={footer.secondary.label}',
+  ]) {
+    assert.ok(actions.includes(piece), `the actions lost ${piece}`);
+  }
+  // From the accessibility sizes (founder review 2026-10-04): the notice is
+  // in the content; the actions join it only when the pinned footer would
+  // leave less room than the notice needs — measured, never counted — and
+  // never move back; the page jumps to the notice's FIRST line below the
+  // safe area; the blocked phase does not repeat the Settings footnote; the
+  // outcome is announced once by the screen, not by a live region.
+  assert.ok(education.includes('room < noticeHeight + 2 * spacing[16]'));
+  assert.ok(
+    education.includes('joinIfCrowded(event.nativeEvent.layout.height, noticeBox?.height ?? 0);'),
+  );
+  assert.ok(education.includes('joinIfCrowded(viewport, height);'));
+  assert.ok(education.includes('const actionsInline = large && notice !== null && joined;'));
+  assert.ok(!education.includes('setJoined(false)'), 'the actions never move back');
+  assert.ok(
+    education.includes(
+      '{actionsInline ? <View style={styles.inlineActions}>{actions}</View> : null}',
+    ),
+  );
+  assert.ok(education.includes('{actionsInline ? null : ('));
+  assert.ok(education.includes('y: Math.max(0, noticeTop - insets.top - spacing[8]),'));
+  assert.ok(
+    !education.includes('scrollToEnd'),
+    'the end of the notice is not where reading starts',
+  );
+  assert.ok(education.includes("const inlineFootnote = large && view.phase !== 'blocked';"));
+  assert.ok(education.includes('AccessibilityInfo.announceForAccessibility(noticeText)'));
+  assert.ok(education.includes('live={false}'));
 });
 
 test('the paywall keeps its sticky/inline terms rule, and Ready carries no terms at all', () => {

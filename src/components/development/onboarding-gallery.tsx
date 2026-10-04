@@ -92,6 +92,7 @@ type DevelopmentProvider = typeof import('@/lib/purchases/development-provider')
 type DevelopmentScenarios = typeof import('@/lib/purchases/development-scenarios');
 type DevelopmentFeed = typeof import('@/lib/development-feed-scenarios');
 type DevelopmentMirror = typeof import('@/lib/development-preference-mirror');
+type DevelopmentEnable = typeof import('@/lib/development-notification-scenarios');
 
 /** Development only: folded away, together with the modules, in a release bundle. */
 const devProvider = __DEV__
@@ -121,6 +122,10 @@ const noop = () => {};
 const devMirror = __DEV__
   ? // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('@/lib/development-preference-mirror') as DevelopmentMirror)
+  : null;
+const devEnable = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/lib/development-notification-scenarios') as DevelopmentEnable)
   : null;
 
 const devFeed = __DEV__
@@ -574,12 +579,42 @@ export function OnboardingGallery() {
       </GallerySample>
       <GallerySample caption="Notification education — real: the success mark, the alert preview and both actions; simulated: neither action asks the system for anything">
         <Screen>
-          <NotificationEducation busy={false} onEnable={noop} onSkip={noop} />
+          <NotificationEducation
+            view={{ phase: 'intro', busy: false }}
+            onEnable={noop}
+            onSkip={noop}
+            onOpenSettings={noop}
+          />
         </Screen>
       </GallerySample>
       <GallerySample caption="Notification education, enabling — simulated: the primary action busy while the system prompt would be up">
         <Screen>
-          <NotificationEducation busy onEnable={noop} onSkip={noop} />
+          <NotificationEducation
+            view={{ phase: 'intro', busy: true }}
+            onEnable={noop}
+            onSkip={noop}
+            onOpenSettings={noop}
+          />
+        </Screen>
+      </GallerySample>
+      <GallerySample caption="Notification education, previously denied — simulated: the system will not ask again; the blocked notice over Open settings and Continue without alerts">
+        <Screen>
+          <NotificationEducation
+            view={{ phase: 'blocked', busy: false }}
+            onEnable={noop}
+            onSkip={noop}
+            onOpenSettings={noop}
+          />
+        </Screen>
+      </GallerySample>
+      <GallerySample caption="Notification education, registration failed — simulated: permission granted, the registration did not complete; the alert over Try again and Continue without alerts">
+        <Screen>
+          <NotificationEducation
+            view={{ phase: 'failed', busy: false }}
+            onEnable={noop}
+            onSkip={noop}
+            onOpenSettings={noop}
+          />
         </Screen>
       </GallerySample>
       <GallerySample caption="Small device height — simulated: a 568pt viewport; the footer stays pinned and the content scrolls beneath it">
@@ -949,6 +984,49 @@ export function GateScenarios() {
           />
         </View>
       ))}
+    </Surface>
+  );
+}
+
+/**
+ * Notification education QA (development): what `Turn on notifications`
+ * meets — the real permission and registration, or a simulated outcome —
+ * so every outcome can be exercised on the Simulator without a prompt
+ * reset, a push token or a server registration. The choice persists across
+ * relaunches until changed; reach the screen with the gate scenario
+ * "Active entitlement, education pending".
+ */
+export function NotificationQaControls() {
+  const [scenario, setScenario] = useState(devEnable?.developmentEnableScenario() ?? 'live');
+  if (!__DEV__ || devEnable === null) return null;
+  const enable = devEnable;
+  const current = enable.DEVELOPMENT_ENABLE_SCENARIOS.find((option) => option.id === scenario);
+  return (
+    <Surface background="background/page" radius={16} border="border/subtle" style={styles.gallery}>
+      <Text variant="caption" color="text/secondary">
+        Notification education QA — what Turn on notifications meets on this device. Live is the
+        real system permission and the real registration (a granted permission registers with the
+        production server). Every other choice answers the permission and the registration locally:
+        no prompt, no push token, nothing written anywhere. The choice persists across relaunches
+        until changed: set Live when done. Apply the gate scenario Active entitlement, education
+        pending to reach the screen.
+      </Text>
+      {enable.DEVELOPMENT_ENABLE_SCENARIOS.map((option) => (
+        <CheckRow
+          key={option.id}
+          label={option.title}
+          checked={option.id === scenario}
+          onPress={() => {
+            enable.setDevelopmentEnableScenario(option.id);
+            setScenario(option.id);
+          }}
+        />
+      ))}
+      {current ? (
+        <Text variant="caption" color="text/secondary">
+          {current.expectation}
+        </Text>
+      ) : null}
     </Surface>
   );
 }

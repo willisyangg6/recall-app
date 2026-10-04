@@ -104,6 +104,77 @@ app's ONLY write path is two `SECURITY DEFINER` RPCs —
 id) and `disable_push_subscription`. A client can never list tokens, read
 other rows, or touch events/deliveries.
 
+### Write ordering: the subscription sequence (prepared 2026-10-04, validated locally, NOT applied remotely)
+
+`supabase/migrations/20261004000000_push_subscription_sequence.sql` adds
+`push_installation_sequences` (installation id → the highest write sequence
+applied and the operation that carried it), a gate function
+`push_sequence_gate` (not callable by the client role), and an optional
+`p_sequence bigint default null` on both RPCs, which now return
+`{"applied": bool, "last_sequence": n}`. The rule per installation:
+
+- a write carrying a LOWER sequence than the recorded one is refused;
+- the recorded sequence with the SAME operation is the same write retried
+  and applies (idempotent; a retried registration keeps `enabled_at`); the
+  recorded sequence with a DIFFERENT operation is refused — one sequence
+  names one write;
+- a HIGHER sequence applies and is recorded;
+- NO sequence is a legacy client: it applies only while the installation
+  has never written with a sequence; once an installation has entered the
+  protocol an unsequenced write is refused, so an older build can never undo
+  a sequenced disable.
+
+Concurrent writes for one installation are serialized on a transaction-scoped
+advisory lock inside the gate, so two requests in flight at once are decided
+one after the other in commit order. The data-reset RPC deletes the sequence
+row with everything else; the fresh installation id starts at 1. The old
+four- and one-argument function signatures are dropped and re-created with
+the defaulted parameter, so PostgREST has exactly one candidate per name and
+old-shaped calls still resolve (they ignore the returned value).
+
+Why: the education's 10 s deadline aborts a registration the server may
+commit in the instant before the abort. The client then knows nothing, writes
+no flag, and `Continue without alerts` would leave an enabled row. The
+client's side (`src/lib/alert-intent.ts`, persisted under
+`recall.alerts-intent`): every write carries the next sequence from one
+monotonic counter per installation; a registration whose outcome is unknown
+(abort, timeout, network, a gateway 5xx — anything but a 4xx refusal, which
+committed nothing) is followed by a disable carrying the NEXT sequence, so
+it outranks the registration whether that landed before it, after it, or
+never; the cleanup stays `pending` in storage until the server answers it
+(applied, or refused because this installation has since written something
+newer — only this client writes for its id), or until a LATER registration
+is confirmed; a pending cleanup is retried at launch and before the next
+registration; a registration interrupted by a crash (`inFlight` in storage)
+is cleaned up the same way at launch. A refused registration means the
+persisted counter is behind the server's (lost or reset while the
+installation id survived): nothing was committed, the client adopts the
+server's count and sends once more ahead of it. The confirmed flag
+(`enabled`) is written only after the server answered and cleared before any
+disable is sent, so "Recall alerts are on" is never reported while the
+server's state is unknown. The silent refresh carries a sequence but never
+cleans up: the state it re-asserts is the one already wanted. Every
+operation runs on the installation mutation queue, so sequence allocation
+and the intent record are never raced from the client.
+
+Validation (2026-10-04, local Supabase stack from `supabase start`, which
+applied the full migration chain): the SQL cases — registration then a
+higher-sequence disable; a disable arriving before the lower-sequence
+registration; a retry outranking its cleanup; the same request repeated;
+equal sequence with a different operation; legacy before and after protocol
+entry; data reset and re-registration; concurrent transactions in both
+orders — all behaved as stated above, and local PostgREST resolved exactly
+one function per RPC name for the old and the new argument lists. The client
+side is proven in `src/lib/alert-intent.test.ts` against the memory store's
+mirror of the gate (server commit before abort, delayed commit after
+cleanup, Continue after timeout, immediate retry, stale cleanup after a
+successful retry, relaunch with a pending cleanup, crash mid-registration,
+lost counter, refused cleanup, and simultaneous operations on the queue).
+Until the migration is applied in production, a client built from this code
+fails every registration with a 404 (`p_sequence` unknown): apply it before
+any build carrying this code is distributed. See
+[recall-operations.md](recall-operations.md) "Push subscription sequence".
+
 ## Worker (`npm run jobs:push`)
 
 Runs through the C1 runner — same lease (`push_delivery`, 25-min TTL, stale
@@ -184,47 +255,92 @@ label and 113 an ellipsis. iOS decides how many lines a title shows; nothing
 here promises a line count. Tests: `product-name.test.ts` (recorded FDA/FSIS
 notices plus synthetic edge shapes), `format.test.ts`.
 
-### Matching versus the Feed's Affects You (audited 2026-10-03, unchanged)
+### Matching versus the Feed's Affects You (aligned 2026-10-04)
 
-Push and Affects You call the same `evaluatePersonalRelevance`, so states
-(including several), nationwide, unknown geography and the known-allergen
-rule agree once a jurisdiction is chosen. They differ where push is
-deliberately broader or unfiltered:
+Push and Affects You call the same `evaluatePersonalRelevance`, and since
+2026-10-04 `pushEligible` IS the Affects You verdict (`affectsYouVerdict`):
+the same two inputs, the same answer, for every profile. The two places
+where push used to be broader than the Feed (audit K3, 2026-10-03) are
+closed:
 
-- **No jurisdiction chosen** (or no preference row): `pushEligible` delivers
-  everything, while Affects You needs an allergen or store signal
-  (`relevance.ts` `pushEligible`; documented in
-  [recall-personalization.md](recall-personalization.md)). Onboarding requires
-  a state, so this reaches only installations without one.
-- **Lifecycle and merges:** the Feed reads only active, unmerged cases; the
-  worker's deliverable events are not filtered by case lifecycle or by a later
-  merge, so an update on a closed case, or an event on a case merged
-  afterwards, could send for a recall the Feed does not list.
+- **No jurisdiction chosen** (or no preference row): formerly deliver-all.
+  Now only an allergen or store signal qualifies, and a profile with nothing
+  chosen — or no preference row at all — receives nothing, exactly as
+  Affects You shows nothing and asks for a state. Nationwide alone is not a
+  personal signal. The consumer document `How Affects Me works` says the same
+  ([recall-personalization.md](recall-personalization.md) has the policy).
+- **Lifecycle and merges**: see the next section.
 
 Only new ledger events created after the latest of activation, the
 subscription's enable time and the preferences' update time can send
 (per-subscription horizons in `worker.ts`), so enabling alerts or changing
 preferences never replays a backlog. Delivery remains globally inactive.
 
-### Known permission-path gaps (kept as they are)
+### Eligibility by event type (2026-10-04)
 
-From notification education and the Notifications screen alike:
+The ledger never rewrites an event, but between its creation and the tick
+that would deliver it the case can close, be retracted, or be reconciled
+into a surviving duplicate — and the Feed lists a case only while
+`state = 'active' AND merged_into IS NULL`. Before any subscription is
+considered, `resolveDeliverableEvent` (`worker.ts`) reads the case's current
+`state` and `merged_into` with the projection, follows a merge tombstone to
+the canonical surviving case (bounded, cycle-safe), and `decideDelivery`
+(`src/server/push/event-eligibility.ts`, a pure leaf) applies this table:
 
-- A shopper who **denied the permission earlier** gets no prompt and no
-  explanation from `Turn on notifications` — iOS cannot ask again, and the
-  education completes silently (the Notifications screen does explain it).
-- A **registration error** after a granted permission is swallowed by the
-  education route (logged in development only); the education completes and
-  nothing claims alerts are on.
+| Event                              | Destination case      | Decision                                                  |
+| ---------------------------------- | --------------------- | --------------------------------------------------------- |
+| `initial` (new recall)             | active, unmerged      | deliver                                                   |
+| `initial`                          | closed or retracted   | skip (`lifecycleSkipped`) — not an active recall          |
+| `initial`                          | an absorbed duplicate | skip (`mergedDuplicateSkipped`) — the survivor's own      |
+|                                    |                       | `initial` is the new-recall alert                         |
+| `material_update` · `retraction`   | retracted             | deliver — the one update whose case is not active         |
+| `material_update` · `retraction`   | not retracted         | skip (`lifecycleSkipped`)                                 |
+| `material_update` · any other rule | active                | deliver (expansion, correction, classification, health    |
+|                                    |                       | impact, instructions changed)                             |
+| `material_update` · any other rule | closed or retracted   | skip (`lifecycleSkipped`)                                 |
+| `material_update` on an absorbed   | survivor, eligible    | deliver RE-POINTED at the survivor (`reroutedToSurvivor`) |
+| duplicate                          | per the rows above    | — payload id and copy are the survivor's                  |
+| `material_update` on an absorbed   | survivor already has  | skip (`mergedDuplicateSkipped`) — one alert per change    |
+| duplicate                          | the same change       |                                                           |
+| any                                | chain unresolvable    | skip (`destinationUnresolved`)                            |
+
+The decision is made again for a retry or crash-recovered delivery row
+whose event is no longer in the run's map, so a case merged or closed
+between runs fails that row closed (`case_<reason>`) instead of sending.
+Every alert's payload `recallCaseId` is therefore a case the client's RLS
+policy lets Detail read (closed and retracted cases included; a tombstone
+never), and no second alert is produced for one change across a merge. The
+horizons, suppression, per-pair idempotency and ticket/receipt honesty are
+untouched; this leaf never creates an event and is not a blanket
+active-only filter — retractions are delivered precisely because the Feed
+no longer lists them. Tests: `event-eligibility.test.ts` (the table) and
+`worker.test.ts` (closed, retracted, merged, chained, twin, retry and
+no-backlog cases).
+
+### Permission outcomes on the education screen (repaired 2026-10-04)
+
+The two gaps recorded here on 2026-10-03 are closed in
+[recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md) §6.11:
+a denial the system will not revisit shows `Notifications are turned off
+for Lotly. Enable them in your device settings.` with `Open settings` /
+`Continue without alerts`, and a registration that fails or passes its 10 s
+deadline shows `We couldn't finish turning on alerts.` with `Try again` /
+`Continue without alerts`. The system permission and the server
+registration are two distinct steps (`EnablePorts` in
+`src/lib/push-registration.ts`); the education completes only when the
+registration succeeded, the prompt was refused just now, or the shopper
+chose to go on without alerts. The Notifications screen's behaviour is
+unchanged.
 
 ## Client
 
 - Explicit opt-in only: Profile → **Notifications** → "Enable recall alerts"
   and, since P2B7X.1, the one-time notification-education screen's "Turn on
   notifications" — shown only after a verified purchase or restore — are the
-  two explicit presses that reach `enableRecallAlerts`, and therefore the
-  system permission prompt (never on launch, never merely by opening a
-  screen, never from "Not now"; see
+  two explicit presses that reach the enable ports (`resolvePermission`,
+  then `register`; `enableRecallAlerts` is the Notifications screen's shape
+  of them), and therefore the system permission prompt (never on launch,
+  never merely by opening a screen, never from "Not now"; see
   [recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md) §6);
   denial routes to system settings, no re-prompting. P2A split the former
   combined "Alerts" screen into Personalization and Notifications; the
@@ -233,14 +349,17 @@ From notification education and the Notifications screen alike:
   and the one action that state allows ([../DESIGN.md](../DESIGN.md)
   "Personalization and Notifications") — with the read, the enable path,
   the registration and this boundary untouched.
-- `expo-notifications` + `expo-secure-store` (installation id + enabled
-  flag) + `expo-crypto` (random UUID). Foreground notifications show the
+- `expo-notifications` + `expo-secure-store` (installation id + the alert
+  intent record: sequence, confirmed flag, pending cleanup) + `expo-crypto`
+  (random UUID). Foreground notifications show the
   system banner/list (no custom duplicate). Cold start / background /
   foreground taps all route through `useLastNotificationResponse` →
   validated payload → `/recall/[id]`; unknown ids land on the detail
   screen's "not found" state.
-- Silent upkeep: on launch and on Expo token rotation the app re-registers
-  (idempotent) — only if the user enabled alerts here.
+- Silent upkeep: on launch and on Expo token rotation the app first sends
+  any disable it still owes the server (see "Write ordering" above), then
+  re-registers (idempotent, sequenced) — only if a registration is confirmed
+  here and nothing is owed.
 
 ## Secrets and privacy
 

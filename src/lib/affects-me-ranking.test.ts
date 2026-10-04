@@ -703,8 +703,9 @@ test('push eligibility is unchanged: ranking is not part of the delivery decisio
   });
   assert.equal(pushEligible(facts(nationwideCritical), CALIFORNIAN), true);
   assert.equal(pushEligible(facts(excludedWithSignal), CALIFORNIAN), false);
-  // No preferences at all: every deliverable event still qualifies.
-  assert.equal(pushEligible(facts(excludedWithSignal), null), true);
+  // No preferences at all: nothing qualifies — the Feed's own answer (2026-10-04).
+  assert.equal(pushEligible(facts(excludedWithSignal), null), false);
+  assert.equal(pushEligible(facts(nationwideCritical), null), false);
 });
 
 // ── Review affordance ────────────────────────────────────────────────────────

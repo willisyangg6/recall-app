@@ -16,7 +16,18 @@
  *   horizons, so changing preferences (new allergen, new state) can never
  *   make an older event newly deliverable — no retroactive blast.
  * - Personalized matching happens only in that same seam, via the SAME pure
- *   relevance evaluation the app renders (src/lib/relevance).
+ *   relevance evaluation the app renders (src/lib/relevance) — including the
+ *   Feed's own answer for a profile with no jurisdiction (2026-10-04): only
+ *   an allergen or store signal qualifies, and a profile with nothing chosen
+ *   (or no preference row) receives nothing, exactly as Affects You shows
+ *   nothing. Delivery is never broader than the Feed.
+ * - Event-type eligibility (2026-10-04, event-eligibility.ts): before the
+ *   seam, each event is resolved to its canonical case and judged by type —
+ *   a new-recall alert only for an active, unmerged case; a retraction only
+ *   for a retracted one; any other update only for an active one; an event
+ *   on an absorbed duplicate re-pointed at its survivor or dropped as a
+ *   double — so an alert never names a recall the Feed would not list and
+ *   its tap always has a Detail to open.
  * - Idempotency: the (event, subscription) unique row is created before any
  *   send; reruns and scheduler retries cannot re-enqueue, and a delivery that
  *   already holds a ticket is never re-sent.
@@ -34,9 +45,11 @@
 import type { UserRecallPreferences } from '../../domain/preferences';
 import { pushEligible, type RelevanceInput } from '../../lib/relevance';
 import type { JobRunOutcome } from '../store/types';
+import { decideDelivery, type DeliveryDecision } from './event-eligibility';
 import { buildPushMessage } from './format';
 import { MAX_MESSAGES_PER_REQUEST, MAX_RECEIPT_IDS_PER_REQUEST } from './expo-transport';
 import type {
+  CaseLink,
   DeliverableEvent,
   DeliveryRow,
   InstallationPreferences,
@@ -78,6 +91,66 @@ const PERMANENT_ERROR_CODES = new Set([
 
 export function isPermanentPushError(code: string | undefined): boolean {
   return code !== undefined && PERMANENT_ERROR_CODES.has(code);
+}
+
+/** A merge chain longer than this is treated as unresolvable, never followed further. */
+export const MAX_MERGE_HOPS = 8;
+
+/**
+ * Follow an event's case to its canonical destination: the case itself when
+ * it is unmerged, else the survivor its tombstone names (and that one's, if
+ * it was itself absorbed later). Bounded and cycle-safe; a hop that reads
+ * nothing, or a chain that does not settle, resolves to null. Reads are
+ * cached per run.
+ */
+export async function resolveCanonicalCase(
+  store: Pick<PushStore, 'getCase'>,
+  event: Pick<DeliverableEvent, 'recallCaseId' | 'caseState' | 'mergedInto' | 'projection'>,
+  cache: Map<string, CaseLink | null>,
+): Promise<CaseLink | null> {
+  const read = async (id: string): Promise<CaseLink | null> => {
+    if (cache.has(id)) return cache.get(id) ?? null;
+    const link = await store.getCase(id);
+    cache.set(id, link);
+    return link;
+  };
+  // The event already carries its own case's lifecycle from the join.
+  let current: CaseLink | null = {
+    id: event.recallCaseId,
+    state: event.caseState,
+    mergedInto: event.mergedInto,
+    projection: event.projection,
+  };
+  const seen = new Set<string>();
+  for (let hop = 0; current !== null && current.mergedInto !== null; hop += 1) {
+    if (hop >= MAX_MERGE_HOPS || seen.has(current.id)) return null;
+    seen.add(current.id);
+    current = await read(current.mergedInto);
+  }
+  return current;
+}
+
+/**
+ * The per-event decision (event-eligibility.ts) with its facts read from the
+ * store: the canonical destination, and — for an event on an absorbed case —
+ * whether the survivor already carries the same change.
+ */
+export async function resolveDeliverableEvent(
+  store: Pick<PushStore, 'getCase' | 'hasDeliverableEvent'>,
+  event: DeliverableEvent,
+  cache: Map<string, CaseLink | null>,
+): Promise<DeliveryDecision> {
+  const destination = await resolveCanonicalCase(store, event, cache);
+  const merged = destination !== null && destination.id !== event.recallCaseId;
+  const survivorHasTwin =
+    merged && event.kind === 'material_update'
+      ? await store.hasDeliverableEvent(
+          destination.id,
+          event.triggerRuleId,
+          event.materialChangeRef,
+        )
+      : false;
+  return decideDelivery(event, { destination, survivorHasTwin });
 }
 
 /** The case facts personalization reads, adapted from the joined projection. */
@@ -123,13 +196,14 @@ export interface EventEligibility {
  *    preferences' updated_at. The last one makes preference changes safe:
  *    events older than the change were already decided under the previous
  *    preferences (or never qualified), and never become newly deliverable.
- * 2. Preference matching (src/lib/relevance `pushEligible` — the same
- *    evaluation the app renders): with any jurisdiction chosen, deliver on
+ * 2. Preference matching (src/lib/relevance `pushEligible` — the Affects
+ *    You verdict the app renders): with any jurisdiction chosen, deliver on
  *    geographic match (nationwide always matches, and one chosen jurisdiction
  *    in the source's own state list is enough) or unknown geography with an
  *    allergen/retailer signal; an authoritative geographic exclusion never
- *    delivers. With no jurisdiction chosen, pre-C3 deliver-all behavior
- *    stands.
+ *    delivers. With no jurisdiction chosen, only an allergen or store
+ *    signal qualifies; with nothing chosen, or no preference row, nothing
+ *    is delivered (2026-10-04 — formerly deliver-all).
  */
 export function classifySubscriptionsForEvent(
   event: Pick<DeliverableEvent, 'createdAt' | 'projection'>,
@@ -229,6 +303,11 @@ export async function runPushDelivery(
     subscriptionHorizonSkipped: 0,
     preferenceHorizonSkipped: 0,
     preferenceSkipped: 0,
+    /** Event-type eligibility (event-eligibility.ts), counted per event. */
+    lifecycleSkipped: 0,
+    mergedDuplicateSkipped: 0,
+    destinationUnresolved: 0,
+    reroutedToSurvivor: 0,
     deliveriesCreated: 0,
     sent: 0,
     ticketsAccepted: 0,
@@ -359,8 +438,28 @@ export async function runPushDelivery(
       existingPairs.add(`${delivery.eventId}:${delivery.subscriptionId}`);
   }
 
-  const eventById = new Map(events.map((e) => [e.id, e]));
+  // Resolve each event to its canonical destination and judge it by type
+  // BEFORE any subscription is considered (event-eligibility.ts). The map
+  // holds the RESOLVED events, so the send pool formats what was decided.
+  const caseCache = new Map<string, CaseLink | null>();
+  const skipReasons = {
+    lifecycle: 'lifecycleSkipped',
+    merged_duplicate: 'mergedDuplicateSkipped',
+    unresolved: 'destinationUnresolved',
+  } as const;
+  const eventById = new Map<string, DeliverableEvent>();
+  const deliverable: DeliverableEvent[] = [];
   for (const event of events) {
+    const decision = await resolveDeliverableEvent(store, event, caseCache);
+    if (decision.kind === 'skip') {
+      metrics[skipReasons[decision.reason]] += 1;
+      continue;
+    }
+    if (decision.rerouted) metrics.reroutedToSurvivor += 1;
+    eventById.set(decision.event.id, decision.event);
+    deliverable.push(decision.event);
+  }
+  for (const event of deliverable) {
     const classified = classifySubscriptionsForEvent(
       event,
       subscriptions,
@@ -451,18 +550,31 @@ export async function runPushDelivery(
           });
           continue;
         }
-        const event = eventById.get(delivery.eventId) ?? (await store.getEvent(delivery.eventId));
-        if (!event) {
-          metrics.permanentFailures += 1;
-          await store.updateDelivery(delivery.id, {
-            status: 'permanent_failure',
-            failureCode: 'event_missing',
-            lastError: 'ledger event no longer resolvable',
-            updatedAt: nowIso(),
-          });
-          continue;
+        let event = eventById.get(delivery.eventId) ?? null;
+        if (event === null) {
+          // A retry or crash-recovered row from an earlier run: the case may
+          // have closed, been retracted or been merged since the row was
+          // created, so the same per-event decision is made again now.
+          const ledgered = await store.getEvent(delivery.eventId);
+          const decision = ledgered
+            ? await resolveDeliverableEvent(store, ledgered, caseCache)
+            : null;
+          if (decision?.kind === 'deliver') {
+            event = decision.event;
+            eventById.set(event.id, event);
+          } else {
+            metrics.permanentFailures += 1;
+            await store.updateDelivery(delivery.id, {
+              status: 'permanent_failure',
+              failureCode: decision ? `case_${decision.reason}` : 'event_missing',
+              lastError: decision
+                ? `case no longer eligible before send (${decision.reason})`
+                : 'ledger event no longer resolvable',
+              updatedAt: nowIso(),
+            });
+            continue;
+          }
         }
-        eventById.set(event.id, event);
         prepared.push({ delivery, message: buildPushMessage(event, subscription.expoPushToken) });
       }
       if (prepared.length === 0) continue;
@@ -560,6 +672,12 @@ export async function runPushDelivery(
     `  horizons: activation ${pushEnabledAt} — ${metrics.skippedPreActivation} pre-activation ` +
       `deliverable event(s) excluded, ${metrics.suppressedSkipped} suppressed excluded, ` +
       `${metrics.subscriptionHorizonSkipped} subscription-horizon exclusion(s).`,
+  );
+  console.log(
+    `  event eligibility: ${metrics.lifecycleSkipped} lifecycle exclusion(s), ` +
+      `${metrics.mergedDuplicateSkipped} merged-duplicate exclusion(s), ` +
+      `${metrics.destinationUnresolved} unresolved destination(s), ` +
+      `${metrics.reroutedToSurvivor} re-pointed at a surviving case.`,
   );
   console.log(
     `  personalization: ${metrics.preferencesStored} preference record(s) ` +

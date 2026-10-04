@@ -1993,6 +1993,66 @@ A second, separately authorized migration drops `state_code` and the singular
 RPC signature. Its preconditions are in [../README.md](../README.md) under the
 deferred contract-phase milestone.
 
+## Push subscription sequence: a PREPARED schema migration (2026-10-04)
+
+**Status: prepared and validated on a local stack, NOT applied remotely.**
+No production write, DDL or data change has been made. Applying it needs its
+own explicit founder authorization, and it must be applied BEFORE any build
+carrying the matching client code is distributed: that client sends
+`p_sequence` on every subscription write, and the current production
+functions do not accept it (PostgREST answers 404 and every registration
+fails until the migration lands). Nothing shipped today sends it; nothing
+shipped today breaks.
+
+`supabase/migrations/20261004000000_push_subscription_sequence.sql`:
+
+|           |                                                                                                                                 |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| adds      | `push_installation_sequences (installation_id, last_sequence, last_operation, updated_at)` — RLS on, service role only          |
+| adds      | `push_sequence_gate(text, bigint, text)` — records the sequence; refuses lower, equal-with-other-op, and legacy-after-entry     |
+| replaces  | `register_push_subscription(text, text, text, text)` → `(…, p_sequence bigint default null) returns jsonb`, same body behind it |
+| replaces  | `disable_push_subscription(text)` → `(text, p_sequence bigint default null) returns jsonb`, same body behind it                 |
+| re-bodies | `delete_installation_data` to delete the installation's sequence row too                                                        |
+| touches   | no existing table, column, row or policy                                                                                        |
+
+"Replaces" means the old function signature is dropped and the new one
+created in the same migration. A call without `p_sequence` (today's clients)
+resolves to the new function with the default and behaves exactly as before
+for an installation that never sequenced; it ignores the returned JSON. The
+drop is there so PostgREST has one candidate per name — two overloads
+differing only by a defaulted parameter would make the old-shaped call
+ambiguous.
+
+Why it exists, the rule, and the client protocol it serves:
+[recall-push-delivery.md](recall-push-delivery.md) "Write ordering: the
+subscription sequence".
+
+### Validation done (2026-10-04, local only)
+
+On a local stack (`supabase start`, Docker Desktop; the whole migration
+chain applied from the repository, no link to the hosted project used): the
+ordering cases, idempotent retries, equal-sequence refusal, legacy before and
+after protocol entry, reset and re-registration, two concurrent transactions
+in both orders (the second waits on the gate's advisory lock and is then
+decided against the first's commit), PostgREST resolution with the old and
+new argument lists (200 with the JSON decision; one candidate per name; a
+sequence of 0 is a 400; the gate function is 401 for the client role), and
+the delivery worker's new store reads (`getCase`, `hasDeliverableEvent`,
+the event embed, merge-chain resolution, distinct-update deduplication)
+through the real `SupabasePushStore`. The P2B7U live test file also passed
+against that stack. Scripts and output are kept with the review evidence
+(`~/Desktop/Lotly-Notification-Eligibility-Review/notes/`).
+
+### Applying (founder, separately authorized)
+
+1. `supabase db push` with explicit authorization — review the single new
+   file in the diff it prints first.
+2. Confirm over the Data API that `register_push_subscription` accepts
+   `p_sequence` (a call with it answers 200 and `{"applied": …}`).
+3. Only then distribute a build carrying `src/lib/alert-intent.ts`.
+   Rollback is not needed for today's clients: without `p_sequence` they are
+   unaffected by the migration either way.
+
 ## Enforcement: weekly-gated
 
 The daily job reads the one-request openFDA bulk manifest and compares its

@@ -700,13 +700,26 @@ All per-subscription delivery decisions happen in
 `eligibleSubscriptions` seam, now preference-aware, calling the SAME
 `pushEligible`/`evaluatePersonalRelevance` the app renders. Policy:
 
-- No preference row, or no jurisdiction chosen → pre-C3 behavior: every
-  deliverable event qualifies (allergen/retailer selections alone never become
-  exclusion filters — recalls are safety information).
+- `pushEligible` IS `affectsYouVerdict` (aligned 2026-10-04): a recall is
+  delivered to an installation exactly when it would appear in that
+  shopper's Affects me. Until then an empty jurisdiction list (or no
+  preference row) meant deliver-all; that was the one place push was broader
+  than the Feed (audit K3), and it would have sent every food recall to an
+  installation that cleared its states. Now:
+- No preference row, or nothing chosen → nothing is delivered (Affects You
+  shows nothing and asks for a state).
+- No jurisdiction chosen but an allergen or store chosen → only a matching
+  allergen or store signal delivers; nationwide alone is not personal.
 - Any jurisdiction chosen → deliver when geography **matches** (nationwide
   always, and one chosen jurisdiction in the source's own state list is
   enough), or geography is **unknown** with a matching allergen/retailer. An
-  authoritative geographic exclusion never delivers.
+  authoritative geographic exclusion never delivers, and the known
+  allergen-only mismatch is withheld as on Home.
+
+All Recalls remains the complete safety net in the app; an alert is a claim
+that this recall is for this shopper, and the Feed's verdict is its only
+basis. Event-type eligibility (lifecycle, retractions, merges) is decided
+before this seam — see [recall-push-delivery.md](recall-push-delivery.md).
 
 The worker reads the same `pushEligible`/`evaluatePersonalRelevance` the app
 renders, over `installation_preferences.state_codes` mapped straight into the

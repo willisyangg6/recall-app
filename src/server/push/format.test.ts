@@ -11,7 +11,7 @@ import { test } from 'node:test';
 
 import type { CaseProjection, OfficialClass } from '../../domain/recall-types';
 import { buildPushMessage, formatPushContent } from './format';
-import type { DeliverableEvent } from './types';
+import type { FormattableEvent } from './format';
 
 function makeProjection(overrides: Partial<CaseProjection> = {}): CaseProjection {
   return {
@@ -51,7 +51,7 @@ function makeEvent(
   kind: 'initial' | 'material_update',
   triggerRuleId: string,
   projection: CaseProjection,
-): DeliverableEvent {
+): FormattableEvent {
   return {
     id: '11111111-1111-4111-8111-111111111111',
     recallCaseId: '22222222-2222-4222-8222-222222222222',

@@ -200,6 +200,15 @@ therefore satisfied. The separately authorized **contract** phase (dropping
 `state_code` and the singular signature) is still unwritten and is not a
 launch blocker.
 
+A second migration is **prepared and NOT applied**:
+`supabase/migrations/20261004000000_push_subscription_sequence.sql` adds a
+per-installation write sequence to the two subscription RPCs so an abandoned
+registration can never outrank the disable that cleans it up, nor that
+cleanup a later successful retry. It must be applied before any build that
+carries the matching client is distributed; see
+[docs/recall-operations.md](docs/recall-operations.md) "Push subscription
+sequence".
+
 ### Push notifications (Phase C2)
 
 Deliverable NotificationEvents become real device pushes via the Expo Push

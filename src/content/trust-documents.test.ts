@@ -183,11 +183,18 @@ test('push delivery uses the same relevance result, including the no-state defau
       evaluatePersonalRelevance(input, CA_PREFS).affectsMe,
     );
   }
-  // No state chosen → delivery is not narrowed at all.
-  assert.equal(pushEligible(excluded, { states: [], allergens: ['peanut'], retailers: [] }), true);
+  // No state chosen → only a personal signal qualifies, exactly as Affects me
+  // (2026-10-04; formerly deliver-all). `excluded` carries no signal.
+  const noState = { states: [], allergens: ['peanut'], retailers: [] };
+  assert.equal(pushEligible(excluded, noState), false);
+  assert.equal(
+    pushEligible(excluded, noState),
+    evaluatePersonalRelevance(excluded, noState).affectsMe,
+  );
 
   assert.match(affectsMeText, /same relevance evaluation/i);
-  assert.match(affectsMeText, /Until you choose a state, alerts are not narrowed/i);
+  assert.match(affectsMeText, /only when it would appear in Affects me/i);
+  assert.match(affectsMeText, /until you choose a state, that means only recalls that name/i);
 });
 
 test('the documented allergen vocabulary is exactly the canonical consumer set', () => {

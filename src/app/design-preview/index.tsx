@@ -31,6 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BuildingQaControls,
   GateScenarios,
+  NotificationQaControls,
   OnboardingGallery,
   PaywallGallery,
 } from '@/components/development/onboarding-gallery';
@@ -944,6 +945,11 @@ export default function DesignPreviewScreen() {
           BUILDING QA
         </ThemedText>
         <BuildingQaControls />
+
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          NOTIFICATION EDUCATION QA
+        </ThemedText>
+        <NotificationQaControls />
 
         {/* P2B6B: the trust documents' shared renderer and content blocks —
             imported from production, never copied — over the registry's own

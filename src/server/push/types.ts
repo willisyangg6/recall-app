@@ -11,7 +11,7 @@
  *   PushTransport — the Expo Push Service HTTP surface (fake in tests)
  */
 
-import type { CaseProjection, NotificationKind } from '../../domain/recall-types';
+import type { CaseProjection, LifecycleState, NotificationKind } from '../../domain/recall-types';
 
 /** One app installation that opted into recall alerts. */
 export interface PushSubscription {
@@ -41,14 +41,42 @@ export interface InstallationPreferences {
   updatedAt: string;
 }
 
-/** A deliverable ledger event joined with its case's current projection. */
+/**
+ * One recall case as delivery sees it (2026-10-04): the canonical consumer
+ * projection plus the two lifecycle facts the Feed filters on and the
+ * ledger does not carry — `state` and the merge tombstone. The Feed shows a
+ * case only while `state = 'active' AND merged_into IS NULL`
+ * (consumer_feed_manifest); delivery reads the same two columns so an alert
+ * can never name a recall the Feed would not list, or open one that RLS
+ * hides.
+ */
+export interface CaseLink {
+  id: string;
+  state: LifecycleState;
+  /** The surviving case this one was reconciled into; null when canonical. */
+  mergedInto: string | null;
+  projection: CaseProjection;
+}
+
+/**
+ * A deliverable ledger event joined with its case's CURRENT lifecycle and
+ * projection. `recallCaseId` and `projection` are the event's own case as
+ * ledgered; `resolveDeliverableEvent` (worker.ts) re-points both at the
+ * canonical destination before anything is formatted or sent.
+ */
 export interface DeliverableEvent {
   id: string;
   recallCaseId: string;
   kind: NotificationKind;
   triggerRuleId: string;
+  /** The material change's fingerprint; null on an `initial`. */
+  materialChangeRef: string | null;
   payloadSummary: string;
   createdAt: string;
+  /** The ledgered case's lifecycle state at read time. */
+  caseState: LifecycleState;
+  /** The ledgered case's merge tombstone at read time. */
+  mergedInto: string | null;
   projection: CaseProjection;
 }
 
@@ -123,6 +151,20 @@ export interface PushStore {
 
   getSubscription(id: string): Promise<PushSubscription | null>;
   getEvent(eventId: string): Promise<DeliverableEvent | null>;
+
+  /** One case's current lifecycle, merge tombstone and projection; null when unknown. */
+  getCase(caseId: string): Promise<CaseLink | null>;
+  /**
+   * Whether `caseId` carries its own deliverable (unsuppressed) event for
+   * the same material change — the twin check that keeps an update ledgered
+   * on an absorbed duplicate from alerting twice once it is re-pointed at
+   * the surviving case.
+   */
+  hasDeliverableEvent(
+    caseId: string,
+    triggerRuleId: string,
+    materialChangeRef: string | null,
+  ): Promise<boolean>;
 }
 
 /** One message for the Expo Push Service. */

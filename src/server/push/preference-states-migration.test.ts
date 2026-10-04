@@ -33,7 +33,14 @@ test('the migration is forward-only and appended to the end of the chain', () =>
   const files = readdirSync(MIGRATIONS_DIR)
     .filter((name) => name.endsWith('.sql'))
     .sort();
-  assert.equal(files[files.length - 1], MIGRATION_FILE);
+  // Appended after every migration that preceded it (it was the last file
+  // when applied, 2026-09-22); later milestones may follow it, never
+  // precede it.
+  const position = files.indexOf(MIGRATION_FILE);
+  assert.ok(position >= 0, 'the expand migration is present');
+  for (const later of files.slice(position + 1)) {
+    assert.ok(later > MIGRATION_FILE, `${later} is dated before the applied expand migration`);
+  }
   assert.match(MIGRATION_FILE, /^\d{14}_[a-z_]+\.sql$/);
   // One migration per milestone: the destructive draft was REPLACED, not
   // patched over with a second file, so an unapplied mistake never reaches

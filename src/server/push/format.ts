@@ -25,12 +25,23 @@ import { consumerRiskTier, classificationStatus } from '../../domain/risk-tier';
 import { notificationProductName } from './product-name';
 import type { DeliverableEvent, PushMessage } from './types';
 
+/**
+ * What the formatter reads of an event: its identity, kind, trigger and the
+ * projection it is formatted from. The worker hands over a RESOLVED event
+ * (event-eligibility.ts), so for an event on an absorbed duplicate these are
+ * already the surviving case's id and projection.
+ */
+export type FormattableEvent = Pick<
+  DeliverableEvent,
+  'id' | 'recallCaseId' | 'kind' | 'triggerRuleId' | 'payloadSummary' | 'createdAt' | 'projection'
+>;
+
 export interface PushContent {
   title: string;
   body: string;
 }
 
-export function formatPushContent(event: DeliverableEvent): PushContent {
+export function formatPushContent(event: FormattableEvent): PushContent {
   const projection = event.projection;
   // One short product name for every event kind, rendered at delivery time,
   // never stored in the ledger; delivery stays dormant until push is
@@ -143,7 +154,7 @@ export function formatPushContent(event: DeliverableEvent): PushContent {
 }
 
 /** The complete Expo message for one delivery. Data stays small and typed. */
-export function buildPushMessage(event: DeliverableEvent, expoPushToken: string): PushMessage {
+export function buildPushMessage(event: FormattableEvent, expoPushToken: string): PushMessage {
   const content = formatPushContent(event);
   return {
     to: expoPushToken,

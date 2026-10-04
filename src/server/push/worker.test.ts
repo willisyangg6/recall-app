@@ -105,6 +105,9 @@ function fixtureProjection(
 }
 
 let eventCounter = 0;
+function caseId(n: number): string {
+  return `${String(n).padStart(8, '0')}-0000-4000-8000-00000000cccc`;
+}
 function addEvent(
   store: MemoryPushStore,
   createdAtMs: number,
@@ -115,21 +118,84 @@ function addEvent(
     pathogenOrAllergen?: string | null;
     retailerNames?: string[];
     hazardCategory?: string;
+    /** The ledger row's kind and trigger; a new recall by default. */
+    kind?: 'initial' | 'material_update';
+    triggerRuleId?: string;
+    materialChangeRef?: string | null;
+    /** The case the event sits on; a fresh case per event by default. */
+    recallCaseId?: string;
   } = {},
 ): string {
   eventCounter += 1;
   const id = `${String(eventCounter).padStart(8, '0')}-0000-4000-8000-000000000000`;
+  const kind = overrides.kind ?? 'initial';
   store.addEvent({
     id,
-    recallCaseId: `${String(eventCounter).padStart(8, '0')}-0000-4000-8000-00000000cccc`,
-    kind: 'initial',
-    triggerRuleId: 'new_case',
+    recallCaseId: overrides.recallCaseId ?? caseId(eventCounter),
+    kind,
+    triggerRuleId:
+      overrides.triggerRuleId ?? (kind === 'initial' ? 'new_case' : 'expansion_products'),
+    materialChangeRef:
+      overrides.materialChangeRef ??
+      (kind === 'initial' ? null : `fp-${overrides.triggerRuleId ?? 'expansion_products'}`),
     payloadSummary: 'summary',
     createdAt: iso(createdAtMs),
     suppressed: overrides.suppressed ?? null,
     projection: fixtureProjection(overrides),
   });
   return id;
+}
+
+/** A subscriber with a state (and optionally more), enabled at `enabledAtMs`. */
+function subscribe(
+  store: MemoryPushStore,
+  installation: string,
+  token: string,
+  prefs: { stateCodes: string[]; allergens: string[]; retailerIds: string[] } | null,
+  enabledAtMs = HOUR,
+): void {
+  store.register(installation, token, 'ios', iso(enabledAtMs));
+  if (prefs) store.setPreferences(installation, prefs, iso(enabledAtMs));
+}
+
+/**
+ * A subscriber the fixture events reach: since 2026-10-04 delivery answers
+ * as Affects You does, so a subscription with no preference row receives
+ * nothing. The C2 transport and ledger tests therefore register with a
+ * California + peanut profile, which the default fixture (unknown
+ * geography, peanut) matches on its allergen signal.
+ */
+function registerMatching(
+  store: MemoryPushStore,
+  installationId: string,
+  token: string,
+  platform: 'ios' | 'android',
+  enabledAtIso: string,
+): void {
+  store.register(installationId, token, platform, enabledAtIso);
+  store.setPreferences(
+    installationId,
+    { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: [] },
+    enabledAtIso,
+  );
+}
+
+/**
+ * A nationwide general-hazard event: what the C2 transport and ledger tests
+ * ledger, so every `registerMatching` profile is reached by geography alone
+ * and no allergen or retailer detail of the fixture decides the outcome.
+ */
+function addNationwideEvent(
+  store: MemoryPushStore,
+  createdAtMs: number,
+  overrides: Parameters<typeof addEvent>[2] = {},
+): string {
+  return addEvent(store, createdAtMs, {
+    geography: { scope: 'nationwide', states: [] },
+    pathogenOrAllergen: 'Salmonella',
+    hazardCategory: 'pathogen',
+    ...overrides,
+  });
 }
 
 function setup(activatedAtMs: number | null = 0): {
@@ -150,8 +216,8 @@ function setup(activatedAtMs: number | null = 0): {
 
 test('not activated: no-send no-op even with waiting subscriptions and events', async () => {
   const { store, transport, runAt } = setup(null);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  addEvent(store, HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
   const result = await runAt(2 * HOUR);
   assert.equal(result.outcome, 'succeeded');
   assert.equal(result.metrics.activation, 'not_activated');
@@ -161,8 +227,8 @@ test('not activated: no-send no-op even with waiting subscriptions and events', 
 
 test('pre-activation deliverable events are excluded forever', async () => {
   const { store, transport, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-2 * HOUR));
-  addEvent(store, -HOUR); // deliverable, but created before the horizon
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-2 * HOUR));
+  addNationwideEvent(store, -HOUR); // deliverable, but created before the horizon
   const result = await runAt(HOUR);
   assert.equal(result.metrics.deliveriesCreated, 0);
   assert.equal(result.metrics.sent, 0);
@@ -172,8 +238,8 @@ test('pre-activation deliverable events are excluded forever', async () => {
 
 test('post-activation event: one delivery, one send, ticket persisted — and reruns stay silent', async () => {
   const { store, transport, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  addEvent(store, HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
 
   const first = await runAt(2 * HOUR);
   assert.equal(first.metrics.deliveriesCreated, 1);
@@ -193,9 +259,9 @@ test('post-activation event: one delivery, one send, ticket persisted — and re
 
 test('a subscription enabled after the event never receives it', async () => {
   const { store, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(30 * MINUTE));
-  store.register('b'.repeat(32), 'ExponentPushToken[b]', 'android', iso(2 * HOUR)); // late
-  addEvent(store, HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(30 * MINUTE));
+  registerMatching(store, 'b'.repeat(32), 'ExponentPushToken[b]', 'android', iso(2 * HOUR)); // late
+  addNationwideEvent(store, HOUR);
   const result = await runAt(3 * HOUR);
   assert.equal(result.metrics.deliveriesCreated, 1);
   assert.equal(result.metrics.subscriptionHorizonSkipped, 1);
@@ -206,9 +272,9 @@ test('a subscription enabled after the event never receives it', async () => {
 
 test('suppressed events are never delivered, C2 cannot override suppression', async () => {
   const { store, transport, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  addEvent(store, HOUR, { suppressed: 'backfill' });
-  addEvent(store, HOUR, { suppressed: 'coalesced' });
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR, { suppressed: 'backfill' });
+  addNationwideEvent(store, HOUR, { suppressed: 'coalesced' });
   const result = await runAt(2 * HOUR);
   assert.equal(result.metrics.deliveriesCreated, 0);
   assert.equal(result.metrics.suppressedSkipped, 2);
@@ -217,9 +283,9 @@ test('suppressed events are never delivered, C2 cannot override suppression', as
 
 test('one event, two devices: exactly one delivery per device', async () => {
   const { store, transport, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  store.register('b'.repeat(32), 'ExponentPushToken[b]', 'android', iso(-HOUR));
-  addEvent(store, HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  registerMatching(store, 'b'.repeat(32), 'ExponentPushToken[b]', 'android', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
   const result = await runAt(2 * HOUR);
   assert.equal(result.metrics.deliveriesCreated, 2);
   assert.equal(result.metrics.sent, 2);
@@ -230,8 +296,8 @@ test('one event, two devices: exactly one delivery per device', async () => {
 
 test('receipt ok marks receipt_ok only after the receipt delay', async () => {
   const { store, transport, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  addEvent(store, HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
   await runAt(2 * HOUR);
   transport.receipts['ticket-1'] = { status: 'ok' };
 
@@ -248,8 +314,8 @@ test('receipt ok marks receipt_ok only after the receipt delay', async () => {
 
 test('receipt DeviceNotRegistered disables the token, keeps history, stops future sends', async () => {
   const { store, transport, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  addEvent(store, HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
   await runAt(2 * HOUR);
   transport.receipts['ticket-1'] = {
     status: 'error',
@@ -268,14 +334,14 @@ test('receipt DeviceNotRegistered disables the token, keeps history, stops futur
   assert.equal(store.deliveries.size, 1); // history retained
 
   // A later event goes nowhere: the dead subscription is out of the pool.
-  addEvent(store, 3 * HOUR);
+  addNationwideEvent(store, 3 * HOUR);
   const later = await runAt(4 * HOUR);
   assert.equal(later.metrics.deliveriesCreated, 0);
   assert.equal(transport.sentMessages.length, 1);
 
   // Re-registration with a fresh token re-enables with a new horizon.
-  store.register('a'.repeat(32), 'ExponentPushToken[a2]', 'ios', iso(5 * HOUR));
-  addEvent(store, 6 * HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a2]', 'ios', iso(5 * HOUR));
+  addNationwideEvent(store, 6 * HOUR);
   const revived = await runAt(7 * HOUR);
   assert.equal(revived.metrics.deliveriesCreated, 1);
   assert.equal(transport.sentMessages.at(-1)?.to, 'ExponentPushToken[a2]');
@@ -283,8 +349,8 @@ test('receipt DeviceNotRegistered disables the token, keeps history, stops futur
 
 test('ticket-level DeviceNotRegistered also disables immediately', async () => {
   const { store, transport, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  addEvent(store, HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
   transport.ticketFor = () => ({
     status: 'error',
     message: 'not registered',
@@ -298,8 +364,8 @@ test('ticket-level DeviceNotRegistered also disables immediately', async () => {
 
 test('permanent ticket errors stop retrying; transient ones retry after backoff', async () => {
   const { store, transport, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  addEvent(store, HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
   transport.ticketFor = () => ({
     status: 'error',
     message: 'too big',
@@ -312,8 +378,8 @@ test('permanent ticket errors stop retrying; transient ones retry after backoff'
 
   // Transient: MessageRateExceeded goes retryable and resends after backoff.
   const rate = setup(0);
-  rate.store.register('b'.repeat(32), 'ExponentPushToken[b]', 'ios', iso(-HOUR));
-  addEvent(rate.store, HOUR);
+  registerMatching(rate.store, 'b'.repeat(32), 'ExponentPushToken[b]', 'ios', iso(-HOUR));
+  addNationwideEvent(rate.store, HOUR);
   rate.transport.ticketFor = () => ({
     status: 'error',
     message: 'slow down',
@@ -333,8 +399,8 @@ test('permanent ticket errors stop retrying; transient ones retry after backoff'
 
 test('a network failure marks the chunk retryable and the run partial', async () => {
   const { store, transport, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  addEvent(store, HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
   transport.failSends = 1;
   const result = await runAt(2 * HOUR);
   assert.equal(result.outcome, 'partial');
@@ -350,8 +416,8 @@ test('a network failure marks the chunk retryable and the run partial', async ()
 
 test('retries are bounded: attempts exhaust into permanent_failure', async () => {
   const { store, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  const eventId = addEvent(store, HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  const eventId = addNationwideEvent(store, HOUR);
   const subscription = [...store.subscriptions.values()][0];
   await store.createDeliveryIfAbsent(eventId, subscription.id, iso(2 * HOUR));
   const delivery = [...store.deliveries.values()][0];
@@ -366,8 +432,8 @@ test('retries are bounded: attempts exhaust into permanent_failure', async () =>
 
 test('a crashed run\'s "sending" row is recovered and retried', async () => {
   const { store, transport, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  const eventId = addEvent(store, HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  const eventId = addNationwideEvent(store, HOUR);
   const subscription = [...store.subscriptions.values()][0];
   await store.createDeliveryIfAbsent(eventId, subscription.id, iso(2 * HOUR));
   const delivery = [...store.deliveries.values()][0];
@@ -382,8 +448,8 @@ test('a crashed run\'s "sending" row is recovered and retried', async () => {
 
 test('a delivery whose subscription was disabled before send is never sent', async () => {
   const { store, transport, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  addEvent(store, HOUR);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
   transport.failSends = 1;
   await runAt(2 * HOUR); // delivery exists as retryable
   store.userDisable('a'.repeat(32), iso(2 * HOUR + 5 * MINUTE));
@@ -396,10 +462,10 @@ test('a delivery whose subscription was disabled before send is never sent', asy
 
 test('dry run: accurate would-counts, zero writes, zero Expo traffic', async () => {
   const { store, transport, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
-  addEvent(store, HOUR);
-  addEvent(store, -HOUR); // pre-activation
-  addEvent(store, HOUR, { suppressed: 'backfill' });
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
+  addNationwideEvent(store, -HOUR); // pre-activation
+  addNationwideEvent(store, HOUR, { suppressed: 'backfill' });
   const result = await runAt(2 * HOUR, true);
   assert.equal(result.metrics.deliveriesCreated, 1);
   assert.equal(result.metrics.sent, 1);
@@ -418,18 +484,18 @@ test('dry run: accurate would-counts, zero writes, zero Expo traffic', async () 
 
 test('registration is idempotent; token reassignment disables the stale install', () => {
   const store = new MemoryPushStore();
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(0));
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(HOUR));
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(0));
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(HOUR));
   assert.equal(store.subscriptions.size, 1);
   assert.equal([...store.subscriptions.values()][0].enabledAt, iso(0)); // horizon kept
 
   // Token update on the same install: same row, new token.
-  store.register('a'.repeat(32), 'ExponentPushToken[a2]', 'ios', iso(2 * HOUR));
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a2]', 'ios', iso(2 * HOUR));
   assert.equal(store.subscriptions.size, 1);
   assert.equal([...store.subscriptions.values()][0].expoPushToken, 'ExponentPushToken[a2]');
 
   // Reinstall: a new installation claims the same token — old row disabled.
-  store.register('r'.repeat(32), 'ExponentPushToken[a2]', 'ios', iso(3 * HOUR));
+  registerMatching(store, 'r'.repeat(32), 'ExponentPushToken[a2]', 'ios', iso(3 * HOUR));
   const rows = [...store.subscriptions.values()];
   assert.equal(rows.length, 2);
   assert.equal(rows.find((r) => r.installationId === 'a'.repeat(32))?.enabled, false);
@@ -442,15 +508,15 @@ test('registration is idempotent; token reassignment disables the stale install'
 
 test('disable + re-enable moves the horizon: dark-period events stay unsent', async () => {
   const { store, runAt } = setup(0);
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
   store.userDisable('a'.repeat(32), iso(HOUR));
-  addEvent(store, 2 * HOUR); // created while alerts were off
-  store.register('a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(3 * HOUR));
+  addNationwideEvent(store, 2 * HOUR); // created while alerts were off
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(3 * HOUR));
   const result = await runAt(4 * HOUR);
   assert.equal(result.metrics.deliveriesCreated, 0);
   assert.equal(result.metrics.subscriptionHorizonSkipped, 1);
 
-  addEvent(store, 5 * HOUR); // after re-enable: delivered
+  addNationwideEvent(store, 5 * HOUR); // after re-enable: delivered
   const later = await runAt(6 * HOUR);
   assert.equal(later.metrics.deliveriesCreated, 1);
 });
@@ -482,10 +548,24 @@ test('eligibility seam: the later of activation and enabled_at wins', () => {
       enabledAt: iso(-HOUR),
     },
   ];
+  const preferences = new Map(
+    ['i1', 'i2', 'i3'].map((installationId) => [
+      installationId,
+      { installationId, stateCodes: ['CA'], allergens: [], retailerIds: [], updatedAt: iso(-HOUR) },
+    ]),
+  );
   const eligible = eligibleSubscriptions(
-    { createdAt: iso(HOUR), projection: fixtureProjection() },
+    {
+      createdAt: iso(HOUR),
+      projection: fixtureProjection({
+        geography: { scope: 'nationwide', states: [] },
+        pathogenOrAllergen: 'Salmonella',
+        hazardCategory: 'pathogen',
+      }),
+    },
     subscriptions,
     iso(0),
+    preferences,
   );
   assert.deepEqual(
     eligible.map((s) => s.id),
@@ -628,21 +708,368 @@ test('personalized: a GENERAL hazard with no location still reaches the retailer
   );
 });
 
-test('no state chosen: allergen/retailer-only preferences keep deliver-all behavior', async () => {
-  const { store, runAt } = setup(0);
-  const installation = 'a'.repeat(32);
-  store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
-  store.setPreferences(
-    installation,
-    { stateCodes: [], allergens: ['sesame'], retailerIds: [] },
-    iso(HOUR),
-  );
-  // A Salmonella event with no allergen match still delivers: preferences
-  // without a state never become exclusion filters.
-  addEvent(store, 2 * HOUR, { pathogenOrAllergen: 'Salmonella' });
+test('no state chosen: delivery answers as Affects You does — a personal signal or nothing (2026-10-04)', async () => {
+  const { store, transport, runAt } = setup(0);
+  const sesame = 'a'.repeat(32);
+  const nothingChosen = 'b'.repeat(32);
+  const noRow = 'c'.repeat(32);
+  subscribe(store, sesame, 'ExponentPushToken[sesame]', {
+    stateCodes: [],
+    allergens: ['sesame'],
+    retailerIds: [],
+  });
+  subscribe(store, nothingChosen, 'ExponentPushToken[none]', {
+    stateCodes: [],
+    allergens: [],
+    retailerIds: [],
+  });
+  subscribe(store, noRow, 'ExponentPushToken[norow]', null);
+  // A nationwide Salmonella recall: no signal for the sesame profile, and the
+  // other two have nothing to match on. Before this date all three received
+  // every event — the flood the audit named.
+  addEvent(store, 2 * HOUR, {
+    pathogenOrAllergen: 'Salmonella',
+    hazardCategory: 'pathogen',
+    geography: { scope: 'nationwide', states: [] },
+  });
+  // A nationwide sesame recall: the sesame profile's own signal.
+  addEvent(store, 2 * HOUR, {
+    pathogenOrAllergen: 'undeclared sesame',
+    geography: { scope: 'nationwide', states: [] },
+  });
   const result = await runAt(3 * HOUR);
   assert.equal(result.metrics.deliveriesCreated, 1);
-  assert.equal(result.metrics.sent, 1);
+  assert.equal(result.metrics.preferenceSkipped, 5);
+  assert.deepEqual(
+    transport.sentMessages.map((m) => m.to),
+    ['ExponentPushToken[sesame]'],
+  );
+});
+
+test('a nationwide non-allergen hazard reaches every valid selected-state profile; the allergen-only exclusion still holds', async () => {
+  const { store, transport, runAt } = setup(0);
+  const profiles: [string, string[]][] = [
+    ['ca', ['CA']],
+    ['ny', ['NY']],
+    ['three', ['DC', 'MT', 'NY']],
+    ['tx-peanut', ['TX']],
+  ];
+  for (const [name, stateCodes] of profiles) {
+    subscribe(store, name.padEnd(32, '0'), `ExponentPushToken[${name}]`, {
+      stateCodes,
+      allergens: name === 'tx-peanut' ? ['peanut'] : [],
+      retailerIds: [],
+    });
+  }
+  // Nationwide Listeria: a general hazard, every state profile.
+  addEvent(store, 2 * HOUR, {
+    pathogenOrAllergen: 'Listeria monocytogenes',
+    hazardCategory: 'pathogen',
+    geography: { scope: 'nationwide', states: [] },
+  });
+  // Nationwide milk-only recall: withheld from every profile that chose none
+  // of its allergens — including the ones that chose no allergen at all.
+  addEvent(store, 2 * HOUR, {
+    pathogenOrAllergen: 'undeclared milk',
+    hazardCategory: 'allergen',
+    geography: { scope: 'nationwide', states: [] },
+  });
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.deliveriesCreated, 4);
+  assert.equal(result.metrics.preferenceSkipped, 4);
+  assert.deepEqual(transport.sentMessages.map((m) => m.to).sort(), [
+    'ExponentPushToken[ca]',
+    'ExponentPushToken[ny]',
+    'ExponentPushToken[three]',
+    'ExponentPushToken[tx-peanut]',
+  ]);
+});
+
+test('state-specific matching: a stated state list reaches the profiles that name one of its states', async () => {
+  const { store, transport, runAt } = setup(0);
+  subscribe(store, 'a'.repeat(32), 'ExponentPushToken[ca]', {
+    stateCodes: ['CA'],
+    allergens: [],
+    retailerIds: [],
+  });
+  subscribe(store, 'b'.repeat(32), 'ExponentPushToken[tx]', {
+    stateCodes: ['TX'],
+    allergens: [],
+    retailerIds: [],
+  });
+  subscribe(store, 'c'.repeat(32), 'ExponentPushToken[ny-ca]', {
+    stateCodes: ['NY', 'CA'],
+    allergens: [],
+    retailerIds: [],
+  });
+  addEvent(store, 2 * HOUR, {
+    pathogenOrAllergen: 'Salmonella',
+    hazardCategory: 'pathogen',
+    geography: { scope: 'states', states: ['California', 'Oregon'] },
+  });
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.deliveriesCreated, 2);
+  assert.deepEqual(transport.sentMessages.map((m) => m.to).sort(), [
+    'ExponentPushToken[ca]',
+    'ExponentPushToken[ny-ca]',
+  ]);
+});
+
+// ── Eligibility by event type (2026-10-04) ──────────────────────────────────
+
+function nationwide(store: MemoryPushStore, token: string): void {
+  subscribe(store, token.padEnd(32, '0'), `ExponentPushToken[${token}]`, {
+    stateCodes: ['CA'],
+    allergens: ['peanut'],
+    retailerIds: [],
+  });
+}
+const NATIONWIDE = { scope: 'nationwide' as const, states: [] };
+
+test('a new recall on a case that has since closed or been retracted never alerts', async () => {
+  const { store, transport, runAt } = setup(0);
+  nationwide(store, 'a');
+  addEvent(store, 2 * HOUR, { geography: NATIONWIDE, recallCaseId: caseId(901) });
+  addEvent(store, 2 * HOUR, { geography: NATIONWIDE, recallCaseId: caseId(902) });
+  addEvent(store, 2 * HOUR, { geography: NATIONWIDE, recallCaseId: caseId(903) });
+  store.cases.get(caseId(901))!.state = 'closed';
+  store.cases.get(caseId(902))!.state = 'retracted';
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.lifecycleSkipped, 2);
+  assert.equal(result.metrics.deliveriesCreated, 1);
+  assert.equal(transport.sentMessages[0].data.recallCaseId, caseId(903));
+});
+
+test('a retraction alerts for the retracted case — the one update whose case is not active', async () => {
+  const { store, transport, runAt } = setup(0);
+  nationwide(store, 'a');
+  store.setCase({
+    id: caseId(910),
+    projection: fixtureProjection({ geography: NATIONWIDE }),
+    state: 'retracted',
+  });
+  addEvent(store, 2 * HOUR, {
+    geography: NATIONWIDE,
+    recallCaseId: caseId(910),
+    kind: 'material_update',
+    triggerRuleId: 'retraction',
+    materialChangeRef: 'retraction',
+  });
+  // The same event shape on a case that is NOT retracted would mislead: skipped.
+  addEvent(store, 2 * HOUR, {
+    geography: NATIONWIDE,
+    recallCaseId: caseId(911),
+    kind: 'material_update',
+    triggerRuleId: 'retraction',
+    materialChangeRef: 'retraction',
+  });
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.deliveriesCreated, 1);
+  assert.equal(result.metrics.lifecycleSkipped, 1);
+  assert.equal(transport.sentMessages.length, 1);
+  assert.equal(transport.sentMessages[0].data.recallCaseId, caseId(910));
+  assert.match(transport.sentMessages[0].title, /retract/i);
+});
+
+test('important updates alert on an active case and not on a closed one', async () => {
+  const { store, transport, runAt } = setup(0);
+  nationwide(store, 'a');
+  const rules = [
+    'expansion_products',
+    'expansion_geography',
+    'correction_broadened',
+    'classification_assigned',
+    'classification_upgraded',
+    'classification_downgraded',
+    'classification_changed',
+    'health_impact',
+    'instructions_changed',
+  ];
+  for (const rule of rules) {
+    addEvent(store, 2 * HOUR, {
+      geography: NATIONWIDE,
+      recallCaseId: caseId(920),
+      kind: 'material_update',
+      triggerRuleId: rule,
+    });
+  }
+  store.setCase({
+    id: caseId(921),
+    projection: fixtureProjection({ geography: NATIONWIDE }),
+    state: 'closed',
+  });
+  addEvent(store, 2 * HOUR, {
+    geography: NATIONWIDE,
+    recallCaseId: caseId(921),
+    kind: 'material_update',
+    triggerRuleId: 'health_impact',
+  });
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.deliveriesCreated, rules.length);
+  assert.equal(result.metrics.lifecycleSkipped, 1);
+  assert.ok(transport.sentMessages.every((m) => m.data.recallCaseId === caseId(920)));
+});
+
+test('merged cases: the duplicate initial is dropped; an update is re-pointed at the survivor, once', async () => {
+  const { store, transport, runAt } = setup(0);
+  nationwide(store, 'a');
+  const survivor = caseId(930);
+  const absorbed = caseId(931);
+  store.setCase({
+    id: survivor,
+    projection: {
+      ...fixtureProjection({ geography: NATIONWIDE }),
+      productDescription: 'Survivor Trail Mix',
+    },
+  });
+  store.setCase({
+    id: absorbed,
+    projection: {
+      ...fixtureProjection({ geography: NATIONWIDE }),
+      productDescription: 'Absorbed Trail Mix',
+    },
+  });
+  // Both cards were founded, so both carry an initial; the absorbed one also
+  // carries an expansion the survivor does not, and a classification the
+  // survivor ALSO recorded for itself.
+  addEvent(store, 2 * HOUR, { recallCaseId: survivor });
+  addEvent(store, 2 * HOUR, { recallCaseId: absorbed });
+  addEvent(store, 2 * HOUR, {
+    recallCaseId: absorbed,
+    kind: 'material_update',
+    triggerRuleId: 'expansion_products',
+    materialChangeRef: 'exp-1',
+  });
+  addEvent(store, 2 * HOUR, {
+    recallCaseId: absorbed,
+    kind: 'material_update',
+    triggerRuleId: 'classification_assigned',
+    materialChangeRef: 'class-1',
+  });
+  addEvent(store, 2 * HOUR, {
+    recallCaseId: survivor,
+    kind: 'material_update',
+    triggerRuleId: 'classification_assigned',
+    materialChangeRef: 'class-1',
+  });
+  store.merge(absorbed, survivor);
+
+  const result = await runAt(3 * HOUR);
+  // Survivor initial + re-pointed expansion + survivor classification = 3;
+  // the absorbed initial and the twin classification are dropped.
+  assert.equal(result.metrics.deliveriesCreated, 3);
+  assert.equal(result.metrics.mergedDuplicateSkipped, 2);
+  assert.equal(result.metrics.reroutedToSurvivor, 1);
+  assert.equal(result.metrics.destinationUnresolved, 0);
+  assert.equal(transport.sentMessages.length, 3);
+  // Every alert opens the surviving case — the card the Feed lists — and the
+  // re-pointed expansion is formatted from the survivor's projection.
+  assert.ok(transport.sentMessages.every((m) => m.data.recallCaseId === survivor));
+  assert.ok(
+    transport.sentMessages.every((m) => m.title.includes('Survivor')),
+    transport.sentMessages.map((m) => m.title).join(' | '),
+  );
+  // Exactly one alert per distinct change.
+  const changes = transport.sentMessages.map((m) => m.title + '|' + m.body);
+  assert.equal(new Set(changes).size, changes.length);
+});
+
+test('a merge chain is followed to the canonical case; a broken or circular chain never sends', async () => {
+  const { store, transport, runAt } = setup(0);
+  nationwide(store, 'a');
+  const [a, b, c] = [caseId(940), caseId(941), caseId(942)];
+  for (const id of [a, b, c])
+    store.setCase({ id, projection: fixtureProjection({ geography: NATIONWIDE }) });
+  store.merge(a, b);
+  store.merge(b, c);
+  addEvent(store, 2 * HOUR, {
+    recallCaseId: a,
+    kind: 'material_update',
+    triggerRuleId: 'expansion_products',
+    materialChangeRef: 'chain',
+  });
+  // A tombstone pointing at a case that does not exist.
+  store.setCase({
+    id: caseId(943),
+    projection: fixtureProjection({ geography: NATIONWIDE }),
+    mergedInto: caseId(999),
+  });
+  addEvent(store, 2 * HOUR, {
+    recallCaseId: caseId(943),
+    kind: 'material_update',
+    triggerRuleId: 'expansion_products',
+    materialChangeRef: 'lost',
+  });
+  // A cycle.
+  store.setCase({
+    id: caseId(944),
+    projection: fixtureProjection({ geography: NATIONWIDE }),
+    mergedInto: caseId(945),
+  });
+  store.setCase({
+    id: caseId(945),
+    projection: fixtureProjection({ geography: NATIONWIDE }),
+    mergedInto: caseId(944),
+  });
+  addEvent(store, 2 * HOUR, {
+    recallCaseId: caseId(944),
+    kind: 'material_update',
+    triggerRuleId: 'expansion_products',
+    materialChangeRef: 'loop',
+  });
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.deliveriesCreated, 1);
+  assert.equal(result.metrics.destinationUnresolved, 2);
+  assert.equal(transport.sentMessages[0].data.recallCaseId, c);
+});
+
+test('a retry row whose case was merged or closed after the row was created fails closed instead of sending', async () => {
+  const { store, transport, runAt } = setup(0);
+  nationwide(store, 'a');
+  transport.failSends = 1;
+  const survivor = caseId(950);
+  const absorbed = caseId(951);
+  store.setCase({ id: survivor, projection: fixtureProjection({ geography: NATIONWIDE }) });
+  store.setCase({ id: absorbed, projection: fixtureProjection({ geography: NATIONWIDE }) });
+  addEvent(store, 2 * HOUR, { recallCaseId: absorbed });
+  const first = await runAt(3 * HOUR);
+  assert.equal(first.metrics.retryableFailures, 1);
+  // Between runs the duplicate is reconciled into the survivor.
+  store.merge(absorbed, survivor);
+  const second = await runAt(3 * HOUR + 40 * MINUTE);
+  assert.equal(second.metrics.sent, 0);
+  assert.equal(second.metrics.permanentFailures, 1);
+  const delivery = [...store.deliveries.values()][0];
+  assert.equal(delivery.status, 'permanent_failure');
+  assert.equal(delivery.failureCode, 'case_merged_duplicate');
+  assert.equal(transport.sentMessages.length, 0);
+});
+
+test('no backlog: a retraction or update created before activation or before the subscription never sends', async () => {
+  const { store, transport, runAt } = setup(2 * HOUR);
+  nationwide(store, 'a'); // enabled at HOUR, before activation
+  store.setCase({
+    id: caseId(960),
+    projection: fixtureProjection({ geography: NATIONWIDE }),
+    state: 'retracted',
+  });
+  addEvent(store, HOUR, {
+    recallCaseId: caseId(960),
+    kind: 'material_update',
+    triggerRuleId: 'retraction',
+    materialChangeRef: 'retraction',
+  });
+  addEvent(store, HOUR + 30 * MINUTE, {
+    recallCaseId: caseId(961),
+    kind: 'material_update',
+    triggerRuleId: 'health_impact',
+  });
+  // After activation: the one that may send.
+  addEvent(store, 3 * HOUR, { recallCaseId: caseId(962), geography: NATIONWIDE });
+  const result = await runAt(4 * HOUR);
+  assert.equal(result.metrics.skippedPreActivation, 2);
+  assert.equal(result.metrics.deliveriesCreated, 1);
+  assert.equal(transport.sentMessages[0].data.recallCaseId, caseId(962));
 });
 
 test('changing state never backfills: old events stay behind the preference horizon', async () => {

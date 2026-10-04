@@ -9,8 +9,9 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import type { CaseProjection } from '../../domain/recall-types';
+import type { CaseProjection, LifecycleState } from '../../domain/recall-types';
 import type {
+  CaseLink,
   DeliverableEvent,
   DeliveryPatch,
   DeliveryRow,
@@ -33,17 +34,33 @@ const DELIVERY_STATUSES: DeliveryStatus[] = [
   'permanent_failure',
 ];
 
+/**
+ * The event with its case's CURRENT lifecycle (2026-10-04): `state` and
+ * `merged_into` are the two columns the Feed filters on, read here so
+ * delivery judges each event against the same facts (event-eligibility.ts).
+ */
 const EVENT_SELECT =
-  'id, recall_case_id, kind, trigger_rule_id, payload_summary, created_at, recall_cases (projection)';
+  'id, recall_case_id, kind, trigger_rule_id, material_change_ref, payload_summary, created_at, ' +
+  'recall_cases (projection, state, merged_into)';
+
+const CASE_SELECT = 'id, projection, state, merged_into';
+
+interface CaseRow {
+  id: string;
+  projection: CaseProjection;
+  state: LifecycleState;
+  merged_into: string | null;
+}
 
 interface EventRow {
   id: string;
   recall_case_id: string;
   kind: DeliverableEvent['kind'];
   trigger_rule_id: string;
+  material_change_ref: string | null;
   payload_summary: string;
   created_at: string;
-  recall_cases: { projection: CaseProjection } | null;
+  recall_cases: Omit<CaseRow, 'id'> | null;
 }
 
 export class SupabasePushStore implements PushStore {
@@ -141,10 +158,50 @@ export class SupabasePushStore implements PushStore {
       recallCaseId: row.recall_case_id,
       kind: row.kind,
       triggerRuleId: row.trigger_rule_id,
+      materialChangeRef: row.material_change_ref ?? null,
       payloadSummary: row.payload_summary,
       createdAt: row.created_at,
+      caseState: row.recall_cases.state,
+      mergedInto: row.recall_cases.merged_into ?? null,
       projection: row.recall_cases.projection,
     };
+  }
+
+  async getCase(caseId: string): Promise<CaseLink | null> {
+    const { data, error } = await this.client
+      .from('recall_cases')
+      .select(CASE_SELECT)
+      .eq('id', caseId)
+      .maybeSingle();
+    if (error) this.fail('getCase', error);
+    if (!data) return null;
+    const row = data as unknown as CaseRow;
+    return {
+      id: row.id,
+      state: row.state,
+      mergedInto: row.merged_into ?? null,
+      projection: row.projection,
+    };
+  }
+
+  async hasDeliverableEvent(
+    caseId: string,
+    triggerRuleId: string,
+    materialChangeRef: string | null,
+  ): Promise<boolean> {
+    let query = this.client
+      .from('notification_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('recall_case_id', caseId)
+      .eq('trigger_rule_id', triggerRuleId)
+      .is('suppressed', null);
+    query =
+      materialChangeRef === null
+        ? query.is('material_change_ref', null)
+        : query.eq('material_change_ref', materialChangeRef);
+    const { count, error } = await query;
+    if (error) this.fail('hasDeliverableEvent', error);
+    return (count ?? 0) > 0;
   }
 
   async listDeliverableEventsSince(sinceIso: string, limit: number): Promise<DeliverableEvent[]> {
