@@ -365,10 +365,80 @@ interface PurchaseProvider {
 - The anonymous purchase identity is the existing installation id
   (`purchaseIdentity.appUserId` resolves `getOrCreateInstallationId` lazily).
   No account, no sign-in.
-- `unconfiguredPurchaseProvider()` is what a release build runs until a real
-  provider is configured: it answers `unavailable` to everything, which the
-  gate resolves to inactive with no cache. **Production without a configured
-  provider fails closed.**
+- `unconfiguredPurchaseProvider()` answers `unavailable` to everything, which
+  the gate resolves to inactive with no cache. It is what a release build runs
+  whenever the real provider cannot be constructed (§5.2). **Production
+  without a configured provider fails closed.**
+
+### 5.2 The RevenueCat provider (P2B7X.2, 2026-10-04)
+
+The release build's provider is RevenueCat, `react-native-purchases`
+**10.11.0** (peer React Native ≥ 0.73; this repo runs 0.86.3 under Expo SDK
+57). No config plugin and no extra native configuration: the SDK autolinks
+its pod (`RNPurchases` → `PurchasesHybridCommon` 19.5.0). The custom paywall
+stays; `react-native-purchases-ui` is deliberately not installed.
+
+Two modules split the work so the mapping is provable in Node:
+
+- `src/lib/purchases/revenuecat-adapter.ts` — SDK-agnostic. Takes a
+  five-method `RevenueCatSdk` interface, the public key and the purchase
+  identity, and implements `PurchaseProvider`:
+  - **Configure once, lazily.** The first call that needs the store resolves
+    the installation id and calls `configure({ apiKey, appUserID })`;
+    concurrent callers share the one in-flight promise, so the SDK is never
+    configured twice. A failed configuration (no identity, SDK refusal) is
+    forgotten so the next call retries, and classifies as `unavailable`.
+  - **The store's configuration is validated, never assumed.** The CURRENT
+    offering (expected `default`) must carry the built-in `annual` and
+    `monthly` packages, each selling exactly its Apple product
+    (`com.willisyang.lotly.annual`, `com.willisyang.lotly.monthly`) with a
+    finite positive `price`, a non-empty `priceString` and a `currencyCode`.
+    Anything else is `unavailable`. The paywall receives `priceString`
+    verbatim; no price lives in product code.
+  - **Readings are dated by the store.** `CustomerInfo.requestDate` becomes
+    `verifiedAt` for an active `premium` entitlement and `asOf` for an
+    inactive one — **never `Date.now()`**, because the SDK answers from a
+    cache up to five minutes old and dating that with the device clock would
+    make pre-purchase data look like a fresh revocation (§4.1). A customer
+    info with no parseable `requestDate` is `unavailable`. An active
+    entitlement for an unknown product, or without a parseable
+    `expirationDate`, is `unavailable` too: these are subscriptions, and
+    nothing here invents an expiry or grants lifetime access.
+  - **A resolved SDK call is not proof of access.** `purchase` buys the
+    actual `PurchasesPackage` the offering resolved (re-resolved from the
+    store if the plan predates this adapter, `unavailable` if the store no
+    longer sells it) and succeeds only when the returned customer info holds
+    an active, valid `premium`; a sheet that completes without one is a
+    recoverable `error`. `restore` is reached only from the explicit Restore
+    Purchases action; an active `premium` is `restored`, none is
+    `nothing_to_restore`, an undatable answer is `unavailable`.
+  - **Rejections are classified, never trusted.** `userCancelled` or
+    `PURCHASE_CANCELLED_ERROR` → `cancelled`; the store-unreachable and
+    misconfiguration codes (store problem, network, offline, credentials,
+    Apple subscription key, configuration, unsupported, endpoint blocked) →
+    `unavailable`; everything else, including a non-SDK throw → `error`.
+- `src/lib/purchases/revenuecat-provider.ts` — the native wiring. Binds the
+  real SDK and returns the **unconfigured** provider when the platform is not
+  iOS, when `EXPO_PUBLIC_REVENUECAT_IOS_KEY` is absent from the build, or
+  when the `RNPurchases` native module is not linked. The last check matters:
+  without it the SDK falls back to its browser "preview" store in Expo Go,
+  which answers purchases, and that must never be a source of access.
+  `revenuecat-provider.web.ts` returns the unconfigured provider and imports
+  no SDK.
+
+`resolvePurchaseProvider` is unchanged for a development build — the
+development adapter and its controls (§5.1) still run in the Simulator and
+the Design Preview, so an ordinary preview never touches the live store —
+and its release path now constructs the RevenueCat provider with
+`purchaseIdentity`. Nothing above the boundary changed: not the gate, the
+paywalls, onboarding or the notification education.
+
+The public key is the third `EXPO_PUBLIC_` variable
+(`release-exposure.test.ts`, `.env.example`,
+[recall-release-readiness.md](recall-release-readiness.md) §2). It is set on
+EAS `production`; it is **not** in the local `.env`, so every local export
+and compile recorded here ran with the key absent and exercised the
+fail-closed path, not the live store.
 
 ### 5.1 The development adapter, and why it cannot ship as a bypass
 
@@ -2321,31 +2391,36 @@ carries the meaning; every icon is decorative and hidden from assistive
 technology. Every row uses one treatment: a 20 pt glyph, `icon/secondary`
 unchecked and `icon/primary` checked, with the checkbox carrying the state.
 
-## 10. P2B7X.2 — connecting the real store (not started)
+## 10. P2B7X.2 — connecting the real store (adapter implemented 2026-10-04; device-unverified)
 
-What P2B7X.2 does, and what it does not touch:
+What exists, and what still stands between it and a verified purchase:
 
-1. Create the App Store subscription group with two products, expected US
-   prices `$29.99/year` and `$4.99/month`. Apple Developer enrollment and the
-   App Store Connect record come first
+1. **Founder setup — done (2026-10-04).** Apple Developer membership active
+   with agreements, tax and banking entered; bundle `com.willisyang.lotly`;
+   Apple products `com.willisyang.lotly.annual` and
+   `com.willisyang.lotly.monthly`; RevenueCat entitlement `premium` attached
+   to both; offering `default` with `$rc_annual` and `$rc_monthly`; the
+   public iOS SDK key saved on EAS `production` as
+   `EXPO_PUBLIC_REVENUECAT_IOS_KEY`.
+2. **The adapter — implemented (§5.2)**, behind `PurchaseProvider`, with
+   `id: 'revenuecat'`, mapping `CustomerInfo` to `EntitlementReading` (an
+   active entitlement with its expiry; `inactive` dated `asOf`
+   `CustomerInfo.requestDate`, with `verifiedAt` stamped from that same date
+   — never `Date.now()`, which would date a cached answer as fresh — so
+   §4.1's freshness comparison never crosses a device clock; `unavailable`
+   on a network or configuration error, never a guess), `Offerings` to
+   `Offering` (the store's `priceString`, `price` and `currencyCode`), and
+   the purchase and restore results to the four outcomes. The release line
+   in `resolvePurchaseProvider` constructs it with `purchaseIdentity`.
+3. **The public variable — recorded** in `release-exposure.test.ts`,
+   `.env.example` and the release-readiness doc.
+4. **Not yet verified on a device.** No purchase, restore or sandbox
+   transaction has been made. Local verification covered the mapping and the
+   ordering in Node, a release export whose bundle contains the provider and
+   none of the development adapter, and a Release compile onto a dedicated QA
+   simulator — all with the key absent, so all on the fail-closed path. A
+   physical-device sandbox build is the next step
    ([recall-release-readiness.md](recall-release-readiness.md) §6).
-2. Configure RevenueCat with those products, one entitlement, and one
-   offering holding the annual and monthly packages.
-3. Add the RevenueCat adapter behind `PurchaseProvider` — `id: 'revenuecat'`
-   — constructed with `purchaseIdentity` (`Purchases.logIn(installationId)`),
-   mapping `CustomerInfo` to `EntitlementReading` (an active entitlement with
-   its expiry; `inactive` dated `asOf` `CustomerInfo.requestDate`, with
-   `verifiedAt` stamped from that same date — never `Date.now()`, which
-   would date a cached answer as fresh — so §4.1's freshness comparison
-   never crosses a device clock; `unavailable` on a network or configuration
-   error, never a guess), `Offerings` to `Offering` (the store's
-   `priceString`, `price` and `currencyCode`), and the purchase and restore
-   results to the four outcomes. Replace the one line in `resolvePurchaseProvider`'s release
-   path. Nothing above the boundary changes: not the gate, not the paywall,
-   not onboarding.
-4. Add the SDK's public API key as the third `EXPO_PUBLIC_` variable, which
-   `release-exposure.test.ts` freezes today on purpose so the addition is a
-   recorded decision, and set it on EAS for `production`.
 5. Supply the Terms, Privacy and Support destinations and make
    `qa:launch-readiness` pass.
 6. Update the App Privacy answers (Purchases: collected, linked to the
@@ -2360,7 +2435,8 @@ What P2B7X.2 does, and what it does not touch:
 | Phase matrix, route matrix, layout order and guards, push-tap guard, no cross-phase navigation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/lib/access-gate.test.ts`                                                                                      |
 | Fail-closed, cached access, grace, launch timeout, freshness reconciliation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `src/lib/entitlement.test.ts`                                                                                      |
 | Entitlement session: a stale refresh is discarded whole, foreground waits for a store operation, post-success stale data cannot revoke, cache writes in order, later expiry honoured                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `src/lib/entitlement-session.test.ts`                                                                              |
-| Unconfigured provider, adapter scenarios and containment, savings math, no USD in product code                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/lib/purchases/purchase-provider.test.ts`                                                                      |
+| Unconfigured provider, adapter scenarios and containment, savings math, no USD in product code, the RevenueCat wiring fails closed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `src/lib/purchases/purchase-provider.test.ts`                                                                      |
+| RevenueCat adapter: customer-info and offering mapping, requestDate dating, undatable/unknown/expiry-less fail closed, localized prices, configure-once, purchase/restore/cancel/error outcomes, the races through its readings                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `src/lib/purchases/revenuecat-adapter.test.ts`                                                                     |
 | Paywall copy, prices, cards, state matrix, no close/free/trial/lifetime                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `src/lib/paywall-screen.test.ts`                                                                                   |
 | Release destinations and the readiness failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/lib/release-destinations.test.ts`                                                                             |
 | Allergen icons: coverage, one family, provenance, assets                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/lib/allergen-icons.test.ts`                                                                                   |

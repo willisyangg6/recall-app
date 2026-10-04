@@ -197,20 +197,21 @@ Everything in §3, plus (tracked in `recall-app-store-readiness.md`):
    push delivery itself remains not activated).
 6. Final review that the shipped build's behavior still matches the label
    (the C7 tests keep the no-tracking and no-analytics claims pinned).
-7. **Subscription launch (P2B7X.2, not started).** P2B7X.1 built the hard
-   paywall, the access gate and the typed purchase boundary with a
-   development-only adapter
-   ([recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md)).
-   Still needed before any purchase can occur: Apple enrollment (§6 of the
-   release-readiness doc), the App Store subscription group with the annual
-   and monthly products (expected US prices $29.99/year and $4.99/month),
-   RevenueCat configured with one entitlement and one offering, the
-   RevenueCat adapter behind `PurchaseProvider`, the SDK's public key as a
-   recorded third `EXPO_PUBLIC_` variable, the Terms/Privacy/Support
-   destinations above, subscription language in the EULA decision, and the
-   App Privacy "Purchases" answer. Production without a configured provider
-   fails closed: the paywall shows the could-not-confirm state and nothing
-   grants access.
+7. **Subscription launch (P2B7X.2 — adapter implemented 2026-10-04,
+   device-unverified).** P2B7X.1 built the hard paywall, the access gate and
+   the typed purchase boundary; on 2026-10-04 the founder completed Apple
+   enrollment, the subscription products, the RevenueCat entitlement and
+   offering and the public key on EAS `production`, and the RevenueCat
+   adapter now sits behind `PurchaseProvider` with the key recorded as the
+   third `EXPO_PUBLIC_` variable
+   ([recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md)
+   §5.2, §10). Still needed before the subscription can be called working: a
+   physical-device sandbox build with real purchase, cancel and restore
+   ([recall-release-readiness.md](recall-release-readiness.md) §7), the
+   Terms/Privacy/Support destinations above, subscription language in the
+   EULA decision, and the App Privacy "Purchases" answer. A build without
+   the key still fails closed: the paywall shows the could-not-confirm state
+   and nothing grants access.
 8. Expo display name: **applied by P3C1 (2026-09-16)** — `app.json` now
    names the app `Lotly`, with scheme `lotly` and bundle identifier
    `com.willisyang.lotly` (iPhone-only). What remains is the native release

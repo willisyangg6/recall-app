@@ -80,11 +80,17 @@ true`, and it is boxed in for that reason: `internal`, no development
 
 ### Environment variables on EAS
 
-The app needs exactly two public variables, and **only** these two
-(`src/lib/release-exposure.test.ts` fails if a third appears):
+The app needs exactly three public variables, and **only** these three
+(`src/lib/release-exposure.test.ts` fails if another appears):
 
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `EXPO_PUBLIC_REVENUECAT_IOS_KEY` — added by P2B7X.2 (2026-10-04): the
+  RevenueCat **public** iOS SDK key. It identifies the app to the store and
+  grants nothing; a build without it runs the fail-closed purchase provider
+  ([recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md)
+  §5.2). The founder set it on `production` on 2026-10-04. It is **not** in
+  the local `.env`, so local exports and compiles run without a store.
 
 `.env` is gitignored and is **not** uploaded by EAS Build, so these must exist
 in each EAS environment before a build can work. They are public by design
@@ -340,12 +346,33 @@ build still needs signing, and so still waits on enrollment.
   is the expected answer. It is **not** set: it is a compliance assertion, and
   it belongs to submission prep with the rest of the questionnaire.
 - **Onboarding and the hard paywall — built (P2B7X.1, 2026-09-23); the
-  store is not connected.** The first-launch flow, the access gate, the
-  paywall and the typed purchase boundary exist; a release build runs the
-  fail-closed `unconfigured` provider, so no purchase can occur and nothing
-  grants access until P2B7X.2 adds RevenueCat and the App Store products
-  ([recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md) §10).
-  Guideline 3.1.x applies from that milestone on.
+  RevenueCat adapter — implemented (P2B7X.2, 2026-10-04), unverified on a
+  device.** The release build now constructs the RevenueCat provider; with
+  the public key absent, off iOS, or without the native module it falls back
+  to the fail-closed `unconfigured` provider. No purchase, restore or
+  sandbox transaction has been made yet
+  ([recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md)
+  §5.2, §10). Guideline 3.1.x applies from now on.
+
+  **The device sandbox build, when authorized** (nothing below has been run):
+  1. Set the three public variables on the EAS environment the build
+     profile uses. `preview` is the natural sandbox profile (a release
+     bundle, `distribution: internal`, no dev client, so `__DEV__` is false
+     and the RevenueCat provider runs): `npx eas-cli env:create --environment
+preview --name EXPO_PUBLIC_REVENUECAT_IOS_KEY --visibility plaintext`
+     plus the two Supabase variables, each by name only. Alternatively build
+     `production` (store distribution) and test through TestFlight, which
+     Apple runs against the sandbox.
+  2. Register the test iPhone's UDID and let EAS manage the signing
+     credentials (§6), then `npx eas-cli build --platform ios --profile
+preview`.
+  3. On the device, sign the sandbox tester (App Store Connect → Users and
+     Access → Sandbox) in under Settings → App Store → Sandbox Account.
+  4. Walk: annual purchase, monthly purchase, cancel at the sheet, Restore on
+     a fresh install, kill and relaunch, and the foreground-during-sheet
+     case; confirm the entitlement in the RevenueCat customer view. Only
+     then may the paywall be described as working.
+
 - **Terms, Privacy and Support destinations.** The paywall's footer reads
   them from `src/lib/release-destinations.ts`, where all three are `null`.
   `npm run qa:launch-readiness` is the offline gate: it exits non-zero while

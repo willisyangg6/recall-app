@@ -25,9 +25,9 @@ carousel of up to three REAL matched recalls through the Feed's own
 matching layer) → a dedicated paywall with no way past it but a verified
 purchase or restore, then a one-time notification education; every product
 route is a protected route the navigator does not have outside its phase. The
-store itself is NOT connected — no RevenueCat, no App Store products, and a
-release build runs a fail-closed provider — so no purchase can occur until
-P2B7X.2 (see
+RevenueCat adapter is connected behind the purchase boundary (P2B7X.2,
+2026-10-04) but **unverified on a device** — no purchase has been made; a
+build without the public key still runs the fail-closed provider (see
 [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md)). See
 [docs/recall-production-runbook.md](docs/recall-production-runbook.md) §16
 and §18. Push delivery machinery — registration, the
@@ -543,9 +543,9 @@ via manual input, not location permissions. See
 
 ## Intentionally not implemented yet
 
-Accounts/auth, the store connection behind the paywall (RevenueCat and the
-App Store subscription products — P2B7X.2; the paywall, gate and boundary
-exist), quiet hours and other notification preferences, ingest-time retailer
+Accounts/auth, a device-verified purchase (the RevenueCat adapter and the
+App Store products exist — P2B7X.2 — but no sandbox transaction has been
+made), quiet hours and other notification preferences, ingest-time retailer
 enrichment of stored projections, pet-food scope, Spanish records, CPSC/NHTSA,
 analytics, final visual design. Native
 sharing is deferred on purpose — its founder contract (an HTTPS Lotly

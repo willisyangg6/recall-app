@@ -72,11 +72,15 @@ test('the client bundle is not empty, so an empty scan can never pass silently',
 
 /**
  * The public configuration the app genuinely depends on. Frozen: adding a
- * third public variable is a release-configuration decision (it has to be
+ * public variable is a release-configuration decision (it has to be
  * set on EAS for every profile before a build can work), so it should fail
  * here and be recorded in `docs/recall-release-readiness.md`.
  */
 const REQUIRED_PUBLIC_ENV = [
+  // P2B7X.2 (2026-10-04): the RevenueCat public iOS SDK key. Public by
+  // design (it identifies the app to the store, grants nothing), set on EAS
+  // `production`; a build without it runs the fail-closed provider.
+  'EXPO_PUBLIC_REVENUECAT_IOS_KEY',
   'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
   'EXPO_PUBLIC_SUPABASE_URL',
 ] as const;

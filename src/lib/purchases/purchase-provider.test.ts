@@ -308,15 +308,29 @@ test('the release resolver reaches the development adapter only through a __DEV_
   assert.ok(resolver.includes('if (__DEV__) {'));
   const branch = resolver.slice(
     resolver.indexOf('if (__DEV__) {'),
-    resolver.indexOf('resolved = unconfiguredPurchaseProvider();'),
+    resolver.indexOf('resolved = revenueCatPurchaseProvider(purchaseIdentity);'),
   );
   assert.ok(branch.includes("require('./development-provider')"));
   assert.ok(
-    resolver.includes('resolved = unconfiguredPurchaseProvider();'),
-    'the release path fails closed',
+    resolver.includes('resolved = revenueCatPurchaseProvider(purchaseIdentity);'),
+    'the release path runs the RevenueCat provider',
   );
   // The identity handed to a real adapter is the installation id.
   assert.ok(resolver.includes('appUserId: getOrCreateInstallationId'));
+  // The RevenueCat wiring fails closed off iOS, without the public key, and
+  // without the native module — each by returning the unconfigured provider —
+  // and reads nothing from the environment but the one public key.
+  const wiring = codeOnly(readFileSync(join(__dirname, 'revenuecat-provider.ts'), 'utf8'));
+  assert.equal((wiring.match(/return unconfiguredPurchaseProvider\(\);/g) ?? []).length, 3);
+  assert.ok(wiring.includes("if (Platform.OS !== 'ios') return unconfiguredPurchaseProvider();"));
+  assert.ok(wiring.includes('if (!nativeModuleLinked()) return unconfiguredPurchaseProvider();'));
+  assert.deepEqual(
+    [...wiring.matchAll(/process\.env\.([A-Z_]+)/g)].map((m) => m[1]),
+    ['EXPO_PUBLIC_REVENUECAT_IOS_KEY'],
+  );
+  const web = codeOnly(readFileSync(join(__dirname, 'revenuecat-provider.web.ts'), 'utf8'));
+  assert.ok(!web.includes('react-native-purchases'), 'the web variant imports the SDK');
+  assert.ok(web.includes('return unconfiguredPurchaseProvider();'));
 });
 
 test('nothing imports the development adapter statically except its own native wiring and the dev-only controls', () => {

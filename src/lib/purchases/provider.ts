@@ -3,9 +3,10 @@
  *
  *   development build   the DEVELOPMENT adapter — a fake store for the
  *                       Simulator and the Design Preview
- *   release build       the real provider once one is configured
- *                       (RevenueCat, P2B7X.2); until then the UNCONFIGURED
- *                       provider, which fails closed on every call
+ *   release build       the RevenueCat provider (P2B7X.2), which itself
+ *                       falls back to the UNCONFIGURED provider — fail closed
+ *                       on every call — off iOS, without the public key, or
+ *                       without the native module (revenuecat-provider.ts)
  *
  * The development branch is the bare `__DEV__` identifier, which Metro
  * replaces with a literal at build time so a release bundle folds the whole
@@ -20,11 +21,8 @@
  */
 
 import { getOrCreateInstallationId } from '../installation-id';
-import {
-  unconfiguredPurchaseProvider,
-  type PurchaseIdentity,
-  type PurchaseProvider,
-} from './purchase-provider';
+import type { PurchaseIdentity, PurchaseProvider } from './purchase-provider';
+import { revenueCatPurchaseProvider } from './revenuecat-provider';
 
 /** The anonymous purchase identity: the existing installation id. */
 export const purchaseIdentity: PurchaseIdentity = {
@@ -46,8 +44,6 @@ export function resolvePurchaseProvider(): PurchaseProvider {
     resolved = development.developmentPurchaseProvider();
     return resolved;
   }
-  // P2B7X.2 replaces this line with the configured RevenueCat adapter,
-  // constructed with `purchaseIdentity`. Nothing above this module changes.
-  resolved = unconfiguredPurchaseProvider();
+  resolved = revenueCatPurchaseProvider(purchaseIdentity);
   return resolved;
 }
