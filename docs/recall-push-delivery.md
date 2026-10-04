@@ -104,7 +104,7 @@ app's ONLY write path is two `SECURITY DEFINER` RPCs —
 id) and `disable_push_subscription`. A client can never list tokens, read
 other rows, or touch events/deliveries.
 
-### Write ordering: the subscription sequence (prepared 2026-10-04, validated locally, NOT applied remotely)
+### Write ordering: the subscription sequence (applied in production 2026-10-04)
 
 `supabase/migrations/20261004000000_push_subscription_sequence.sql` adds
 `push_installation_sequences` (installation id → the highest write sequence
@@ -170,9 +170,9 @@ mirror of the gate (server commit before abort, delayed commit after
 cleanup, Continue after timeout, immediate retry, stale cleanup after a
 successful retry, relaunch with a pending cleanup, crash mid-registration,
 lost counter, refused cleanup, and simultaneous operations on the queue).
-Until the migration is applied in production, a client built from this code
-fails every registration with a 404 (`p_sequence` unknown): apply it before
-any build carrying this code is distributed. See
+The migration was applied in production on 2026-10-04 and verified read-only
+(schema, signatures, grants, RLS, reset body); no hosted RPC was executed in
+that step. Builds carrying this client may be distributed. See
 [recall-operations.md](recall-operations.md) "Push subscription sequence".
 
 ## Worker (`npm run jobs:push`)

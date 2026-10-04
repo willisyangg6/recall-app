@@ -1995,14 +1995,15 @@ deferred contract-phase milestone.
 
 ## Push subscription sequence: a PREPARED schema migration (2026-10-04)
 
-**Status: prepared and validated on a local stack, NOT applied remotely.**
-No production write, DDL or data change has been made. Applying it needs its
-own explicit founder authorization, and it must be applied BEFORE any build
-carrying the matching client code is distributed: that client sends
-`p_sequence` on every subscription write, and the current production
-functions do not accept it (PostgREST answers 404 and every registration
-fails until the migration lands). Nothing shipped today sends it; nothing
-shipped today breaks.
+**Status: APPLIED in production on 2026-10-04** (`supabase db push --linked`,
+founder-authorized, project `recall-app` / `fytfiqduqlkaskaqegxx`), after
+validation on a local stack. Verified read-only afterwards: the migration is
+in the remote history, both RPCs carry `p_sequence bigint default null` and
+return `jsonb` with one definition per name and the expected grants,
+`push_installation_sequences` exists with RLS on, `delete_installation_data`
+deletes the sequence row, and push delivery is still not activated. No real
+RPC call was made against the hosted project; schema verification only.
+Builds carrying `src/lib/alert-intent.ts` may now be distributed.
 
 `supabase/migrations/20261004000000_push_subscription_sequence.sql`:
 
@@ -2043,15 +2044,17 @@ through the real `SupabasePushStore`. The P2B7U live test file also passed
 against that stack. Scripts and output are kept with the review evidence
 (`~/Desktop/Lotly-Notification-Eligibility-Review/notes/`).
 
-### Applying (founder, separately authorized)
+### How it was applied (2026-10-04)
 
-1. `supabase db push` with explicit authorization — review the single new
-   file in the diff it prints first.
-2. Confirm over the Data API that `register_push_subscription` accepts
-   `p_sequence` (a call with it answers 200 and `{"applied": …}`).
-3. Only then distribute a build carrying `src/lib/alert-intent.ts`.
-   Rollback is not needed for today's clients: without `p_sequence` they are
-   unaffected by the migration either way.
+1. Pre-apply: linked ref verified, `supabase migration list --linked` showed
+   exactly `20261004000000` pending, `supabase db push --linked --dry-run`
+   listed exactly that file.
+2. `supabase db push --linked` applied it in one transaction.
+3. Read-only verification: migration list, a `supabase db dump --linked
+--schema public` grep of signatures, return types, grants, the table's RLS
+   and the reset body, and `npm run ops:health` (delivery not activated).
+   A hosted RPC execution with `p_sequence` was NOT performed; the first real
+   client registration will be the first hosted execution.
 
 ## Enforcement: weekly-gated
 
