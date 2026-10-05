@@ -174,6 +174,32 @@ test('a fresh classification assignment enriches the case and notifies', async (
   assert.equal(store.snapshots.length, 1);
 });
 
+test('D9: a record with no FDA date never stamps the ingest day — the entry takes the case’s last agency activity', async () => {
+  const store = new MemoryStore();
+  const recallCase = await seedCase(store);
+  // openFDA always carries both dates on real records; this is the defensive
+  // path. The timeline must still carry an agency-published date, so a
+  // newest-first feed can never be led by a recall on the strength of the
+  // moment we happened to read it.
+  const { accepted, rawByRecallNumber } = acceptedFor(
+    rawEnforcement({ center_classification_date: undefined, report_date: undefined }),
+  );
+
+  const outcome = await enrichCaseWithMatches(store, recallCase.id, accepted, rawByRecallNumber, {
+    apply: true,
+    now: NOW,
+  });
+
+  assert.deepEqual(outcome?.materialChanges, ['classification_assigned']);
+  const updated = (await store.getCase(recallCase.id))!;
+  const entry = updated.timeline.at(-1)!;
+  assert.equal(entry.kind, 'classified');
+  assert.equal(entry.material, true);
+  assert.equal(entry.occurredAt, '2026-08-01', 'the case’s own last agency-published activity');
+  assert.notEqual(entry.occurredAt, NOW().toISOString().slice(0, 10), 'never the run’s clock');
+  assert.equal(updated.projection.lastPublicActivityAt, '2026-08-01');
+});
+
 test('a historical classification is ledgered but suppressed as backfill', async () => {
   const store = new MemoryStore();
   const recallCase = await seedCase(store);

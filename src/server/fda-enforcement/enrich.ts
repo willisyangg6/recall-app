@@ -421,13 +421,19 @@ export async function enrichCaseWithMatches(
     outcome.materialChanges = material.map((m) => m.ruleId);
 
     // FDA's own classification date anchors the timeline — enrichment must
-    // never make the recall look newly announced or newly active.
+    // never make the recall look newly announced or newly active. A record
+    // carrying neither FDA date (never observed: every recorded enforcement
+    // record has both) falls back to the case's own last agency-published
+    // activity — never to this run's clock. A material entry stamped with
+    // our ingest day would make the recall the newest thing in a
+    // newest-first feed on no agency's word (D9, 2026-10-05).
     const classificationDates = accepted
       .flatMap((m) => m.records)
       .map((r) => r.centerClassificationDate ?? r.reportDate)
       .filter((d): d is string => d !== null)
       .sort();
-    const occurredAt = classificationDates.at(-1) ?? nowIso.slice(0, 10);
+    const occurredAt =
+      classificationDates.at(-1) ?? freshCase.projection.lastPublicActivityAt.slice(0, 10);
     const classificationAgeMs = now().getTime() - Date.parse(occurredAt);
     const isBackfill = classificationAgeMs > backfillHorizonDays * 24 * 60 * 60 * 1000;
 
