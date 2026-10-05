@@ -40,16 +40,9 @@ import {
 
 // ── Copy (founder-approved, P2B7X.1) ────────────────────────────────────────
 
-// Reworded for the Ready/paywall split (2026-09-28): the paywall follows
-// the personalized Ready preview, so it leads with staying ahead.
-export const PAYWALL_HEADLINE = 'Stay ahead of recalls that affect you.';
-export const PAYWALL_BODY = 'Get full access to Lotly’s personalized recall monitoring.';
-
-export const PAYWALL_BENEFITS: readonly string[] = [
-  'See which recalls affect you',
-  'Get matching recall notifications',
-  'Search, save, and view full details',
-];
+// The headline, body and check-row benefits of the earlier standalone
+// composition were retired on 2026-10-04: both paywall routes now draw the
+// grocery-watch panel, whose copy lives in onboarding-paywall-presentation.ts.
 
 export const PLAN_TITLES: Record<PlanPeriod, string> = {
   annual: 'Annual',

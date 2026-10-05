@@ -6,9 +6,10 @@
  * (components/paywall/onboarding-paywall-panel.tsx) maps it onto React
  * Native. A leaf.
  *
- * The standalone `/paywall` a lapsed subscriber meets keeps its own
- * presentation (lib/paywall-screen.ts and `PaywallPanel`). Both draw the SAME
- * purchase state from the one purchase flow; only what is drawn differs.
+ * Since 2026-10-04 the standalone `/paywall` a lapsed subscriber meets draws
+ * this same presentation; the shared state rules (notices, CTA, footer
+ * placement) stay in lib/paywall-screen.ts. Both routes draw the SAME
+ * purchase state from the one purchase flow.
  *
  * ## Measured from the approved target
  *

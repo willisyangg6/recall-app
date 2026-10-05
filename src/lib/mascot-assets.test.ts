@@ -12,9 +12,10 @@
  * translucent. So no pixel may sit at 240–254, the drawing has no enclosed
  * translucent hole, and there is no background hint or timestamp chunk.
  *
- * M04 (the watchful pose) is beside the standalone paywall's heading (the
- * polish pass); it left the Building step on 2026-10-02 for the approved
- * binoculars scene, whose mascot is part of its own artwork. M05 is
+ * M04 (the watchful pose) left the Building step on 2026-10-02 for the
+ * approved binoculars scene, whose mascot is part of its own artwork, and
+ * left the standalone paywall on 2026-10-04 when `/paywall` adopted the
+ * grocery-watch panel; it stays in the approved set, drawn nowhere. M05 is
  * approved but not yet integrated, and nothing may reference it until its own
  * milestone. M01 (the welcome-peek pose) left Welcome with the receipt
  * composition (2026-09-29), M02 (the helper pose) left States with the
@@ -219,7 +220,7 @@ test('M06 carries the mechanical repair of the supplied 1254px export, uniformly
   assert.ok(!DECODED.M06.chunks.includes('caBX'), 'the export metadata came back');
 });
 
-test('M04 on the standalone paywall only; M01, M02, M03, M05 and M06 are referenced nowhere', () => {
+test('every mascot file is retained and referenced nowhere: M04 left the standalone paywall on 2026-10-04', () => {
   // The Building step draws its approved binoculars scene (2026-10-02), not M04.
   const building = readFileSync(
     join(ROOT, 'src', 'components', 'onboarding', 'building-step.tsx'),
@@ -246,45 +247,36 @@ test('M04 on the standalone paywall only; M01, M02, M03, M05 and M06 are referen
   // States with the grocery-atlas composition (2026-09-30), and M03 left
   // Stores with the receipt (2026-09-30), and M06 left Ready with the
   // preference board (2026-09-30), each for an approved scene with its own
-  // mascot; M05 awaits its milestone.
-  for (const id of ['M01', 'M02', 'M03', 'M05', 'M06'] as const) {
+  // mascot; M05 awaits its milestone. M04, the watchful pose, was the
+  // standalone paywall's heading aside until 2026-10-04, when `/paywall`
+  // adopted the grocery-watch panel (whose mascot is the hero's own) so an
+  // expired subscriber meets the same approved design as a first-time one.
+  // The approved files all stay in the production set, pinned above.
+  for (const id of ['M01', 'M02', 'M03', 'M04', 'M05', 'M06'] as const) {
     const name = APPROVED[id];
     assert.ok(!sources.some((source) => source.includes(name)), `${id} (${name}) is integrated`);
   }
-  // M04, the watchful pose, is (polish pass) the STANDALONE paywall's heading
-  // aside — exactly that one source. The lapsed subscriber's `/paywall` still
-  // composes `PaywallPanel`, whose aside is M04; the file stays approved.
-  assert.equal(
-    sources.filter((source) => source.includes(APPROVED.M04)).length,
-    1,
-    'M04 is drawn somewhere other than the standalone paywall',
-  );
-  const panel = readFileSync(
-    join(ROOT, 'src', 'components', 'paywall', 'paywall-panel.tsx'),
-    'utf8',
-  );
-  assert.ok(panel.includes(`require('@/assets/brand/production/${APPROVED.M04}')`));
-  assert.ok(panel.includes('<WatchfulMascot />'));
-  const standalone = readFileSync(join(ROOT, 'src', 'app', 'paywall.tsx'), 'utf8');
-  assert.ok(standalone.includes('<PaywallPanel purchase={purchase}'));
-  // The onboarding paywall (the grocery-watch redesign, 2026-10-01) retired
-  // the shield aside: its mascot is the approved hero's own, holding the
-  // yellow bell, and neither its panel nor its route reaches a mascot file
-  // or the standalone panel that draws M04.
-  const onboardingPanel = readFileSync(
-    join(ROOT, 'src', 'components', 'paywall', 'onboarding-paywall-panel.tsx'),
-    'utf8',
-  );
-  const onboardingRoute = readFileSync(
-    join(ROOT, 'src', 'app', 'onboarding', 'paywall.tsx'),
-    'utf8',
-  );
-  for (const [name, source] of [
-    ['onboarding paywall panel', onboardingPanel],
-    ['onboarding paywall route', onboardingRoute],
-  ] as const) {
+  // Both paywall routes compose the one grocery-watch panel; neither the
+  // panel, the shared pieces nor the routes reach a mascot file or the
+  // retired standalone composition.
+  const checked = {
+    'onboarding paywall panel': join(
+      ROOT,
+      'src',
+      'components',
+      'paywall',
+      'onboarding-paywall-panel.tsx',
+    ),
+    'shared purchase pieces': join(ROOT, 'src', 'components', 'paywall', 'paywall-panel.tsx'),
+    'onboarding paywall route': join(ROOT, 'src', 'app', 'onboarding', 'paywall.tsx'),
+    'standalone paywall route': join(ROOT, 'src', 'app', 'paywall.tsx'),
+  };
+  for (const [name, path] of Object.entries(checked)) {
+    const source = readFileSync(path, 'utf8');
     assert.ok(!source.includes('lotly-mascot-'), `${name} draws a mascot file`);
     assert.ok(!source.includes('WatchfulMascot'), `${name} draws the shield aside`);
-    assert.ok(!/<PaywallPanel\b/.test(source), `${name} composes the standalone panel`);
+    assert.ok(!/<PaywallPanel\b/.test(source), `${name} composes the retired standalone panel`);
   }
+  const standalone = readFileSync(checked['standalone paywall route'], 'utf8');
+  assert.ok(standalone.includes('<OnboardingPaywallPanel purchase={purchase}'));
 });

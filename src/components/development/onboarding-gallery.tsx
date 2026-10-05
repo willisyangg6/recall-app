@@ -8,7 +8,7 @@
  * ## What is real, what is simulated
  *
  * REAL: every component. `WelcomeContent`, the four step components, the
- * `PaywallPanel`, `NotificationEducation`, the shared selectors, the
+ * `OnboardingPaywallPanel`, `NotificationEducation`, the shared selectors, the
  * example card and the retailer logo are the ones the routes render.
  *
  * SIMULATED, named on each caption: the selection a sample opens with, the
@@ -47,7 +47,7 @@ import {
   OnboardingEntitledPanel,
   OnboardingPaywallPanel,
 } from '@/components/paywall/onboarding-paywall-panel';
-import { PaywallPanel, type PurchaseProps } from '@/components/paywall/paywall-panel';
+import type { PurchaseProps } from '@/components/paywall/paywall-panel';
 import { Button } from '@/components/ui/button';
 import { CheckRow } from '@/components/ui/check-row';
 import { RetailerLogoFallback, RetailerLogoMark } from '@/components/ui/retailer-logo';
@@ -326,13 +326,17 @@ function CaptureControlsToggle() {
   );
 }
 
-/** The standalone paywall with a view handed in. */
+/**
+ * The standalone paywall with a view handed in: since 2026-10-04 the same
+ * grocery-watch panel the onboarding paywall draws, over the lapsed
+ * subscriber's route wiring.
+ */
 function LivePaywall({ view, children }: { view: PaywallView; children?: React.ReactNode }) {
   const purchase = useSamplePurchase(view);
   return (
-    <PaywallPanel purchase={purchase} onBack={noop}>
+    <OnboardingPaywallPanel purchase={purchase} onBack={noop}>
       {children}
-    </PaywallPanel>
+    </OnboardingPaywallPanel>
   );
 }
 
@@ -730,12 +734,12 @@ export function PaywallGallery() {
         </Screen>
       </GallerySample>
       <Text variant="caption" color="text/secondary">
-        The standalone hard paywall a lapsed subscriber meets (components/paywall), imported from
-        production. Every view below is simulated: the offering is the development adapter’s fixture
-        (the expected US prices) or a deliberately long localized pair, and Subscribe, Restore,
-        Terms, Privacy, Support and Back are wired to nothing. Cached active entitlement is a gate
-        state, not a paywall state: with a verified cache the paywall is never shown, which the gate
-        scenarios below demonstrate.
+        The standalone hard paywall a lapsed subscriber meets (/paywall), which since 2026-10-04
+        composes the same grocery-watch panel as the onboarding paywall. Every view below is
+        simulated: the offering is the development adapter’s fixture (the expected US prices) or a
+        deliberately long localized pair, and Subscribe, Restore, Terms, Privacy, Support and Back
+        are wired to nothing. Cached active entitlement is a gate state, not a paywall state: with a
+        verified cache the paywall is never shown, which the gate scenarios below demonstrate.
       </Text>
       {views.map(([caption, view]) => (
         <GallerySample key={caption} caption={caption}>

@@ -17,11 +17,8 @@ import {
   monthlyEquivalentLine,
   OFFERING_LOADING,
   OFFERING_UNAVAILABLE,
-  PAYWALL_BENEFITS,
-  PAYWALL_BODY,
   PAYWALL_DISCLOSURE,
   PAYWALL_FOOTER_ACTIONS,
-  PAYWALL_HEADLINE,
   PAYWALL_NOTICES,
   paywallFooterPlacement,
   paywallPresentation,
@@ -57,15 +54,10 @@ const ready = (overrides: Partial<PaywallView> = {}): PaywallView => ({
 // ── Copy ────────────────────────────────────────────────────────────────────
 
 test('the founder’s paywall copy, verbatim', () => {
-  // Reworded for the Ready/paywall split (2026-09-28): the paywall follows
-  // the personalized preview.
-  assert.equal(PAYWALL_HEADLINE, 'Stay ahead of recalls that affect you.');
-  assert.equal(PAYWALL_BODY, 'Get full access to Lotly’s personalized recall monitoring.');
-  assert.deepEqual(PAYWALL_BENEFITS, [
-    'See which recalls affect you',
-    'Get matching recall notifications',
-    'Search, save, and view full details',
-  ]);
+  // The standalone headline, body and check-row benefits were retired on
+  // 2026-10-04: both routes draw the grocery-watch panel, whose copy is
+  // pinned in onboarding-paywall-presentation.test.ts.
+  assert.ok(!read('lib', 'paywall-screen.ts').includes('Stay ahead of recalls'));
   assert.equal(BEST_VALUE_LABEL, 'BEST VALUE');
   assert.equal(
     PAYWALL_DISCLOSURE,
@@ -80,9 +72,6 @@ test('the founder’s paywall copy, verbatim', () => {
 test('no notice, label or action offers a trial, a lifetime plan, a free route, a countdown or fake scarcity', () => {
   const words = [
     ...Object.values(PAYWALL_NOTICES).map((n) => n.text),
-    PAYWALL_HEADLINE,
-    PAYWALL_BODY,
-    ...PAYWALL_BENEFITS,
     PAYWALL_DISCLOSURE,
     OFFERING_LOADING,
     OFFERING_UNAVAILABLE,
@@ -299,17 +288,15 @@ test('the paywall panel has no close, skip or dismiss control and renders all fo
     assert.ok(!panel.includes(forbidden), `the paywall offers ${forbidden}`);
   }
   assert.ok(panel.includes('shown.footer.map((action) =>'));
-  assert.ok(panel.includes('<BenefitChecks items={PAYWALL_BENEFITS} />'));
   assert.ok(panel.includes('disclosure = PAYWALL_DISCLOSURE,'));
   assert.ok(panel.includes('{disclosure}'));
+  // The standalone route composes the SAME grocery-watch panel (2026-10-04);
   // Back exists, and it is the ONE way back: to the Preview, through the gate.
-  assert.ok(
-    panel.includes(
-      'back={{ label: PAYWALL_BACK_LABEL, hint: PAYWALL_BACK_HINT, onPress: onBack }}',
-    ),
-  );
   const route = codeOnly(read('app', 'paywall.tsx'));
-  assert.ok(route.includes('onBack={access.reviewPreview}'));
+  assert.ok(
+    route.includes('<OnboardingPaywallPanel purchase={purchase} onBack={access.reviewPreview}>'),
+  );
+  assert.ok(!/<PaywallPanel\b/.test(route), 'the retired standalone panel is back');
   // Terms, Privacy and Support open a configured HTTPS destination or say so,
   // in the one purchase flow both the paywall and the Ready step use.
   const flow = codeOnly(read('hooks', 'use-purchase-flow.tsx'));

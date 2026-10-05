@@ -8,11 +8,13 @@
  * it; the grocery scene across the full width; three benefit rows; the
  * Annual and Monthly plan cards; then the shared purchase footer.
  *
- * The standalone `/paywall` a lapsed subscriber meets keeps `PaywallPanel`
- * (paywall-panel.tsx), unchanged. Both screens draw the SAME purchase state
- * from the one purchase flow (hooks/use-purchase-flow.tsx) and hold none of
- * their own: plan selection, the purchase, the restore, every notice, the
- * legal links and the entitled path are the flow's.
+ * Since 2026-10-04 this is BOTH paywall routes: `/onboarding/paywall` from
+ * Ready, and the standalone `/paywall` a lapsed or expired subscriber meets,
+ * so a returning shopper sees the same approved design as a first-time one.
+ * The routes differ only in the Back they hand in. Both draw the SAME
+ * purchase state from the one purchase flow (hooks/use-purchase-flow.tsx)
+ * and hold none of their own: plan selection, the purchase, the restore,
+ * every notice, the legal links and the entitled path are the flow's.
  *
  * ## Its own page, the frame's chrome
  *

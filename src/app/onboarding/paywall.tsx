@@ -11,9 +11,10 @@
  * the offering, the plan, the purchase, the restore, the notices, the legal
  * links and the development controls; this route composes it into
  * `OnboardingPaywallPanel`, the approved grocery-watch composition
- * (2026-10-01; components/paywall/onboarding-paywall-panel.tsx). The
- * standalone `/paywall` keeps `PaywallPanel` over the same flow. A verified
- * purchase or restore completes personalization
+ * (2026-10-01; components/paywall/onboarding-paywall-panel.tsx). Since
+ * 2026-10-04 the standalone `/paywall` composes the same panel over the same
+ * flow, with its own Back. A verified purchase or restore completes
+ * personalization
  * WITH the entitlement in one commit (hooks/use-access.tsx), so the gate
  * goes straight to notification education and never through the paywall
  * phase. A cancellation or an error stays here with every choice kept. Back

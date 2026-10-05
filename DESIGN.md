@@ -375,8 +375,9 @@ of its approved scene, and M06 (the trust-peek pose) left Ready with the
 preference board (2026-09-30); like M05, all four are drawn nowhere. M04,
 the standing watchful pose (shield-check and refresh arrow), left the
 Building step (2026-10-02) for the approved binoculars scene, whose mascot
-is part of its own art; it stays beside the standalone paywall's heading.
-M05 waits for its own screen. A mascot is drawn whole with `contain`, never cropped, recoloured or
+is part of its own art, and left the standalone paywall on 2026-10-04 when
+`/paywall` adopted the grocery-watch composition; it stays in the approved
+set, drawn nowhere. M05 waits for its own screen. A mascot is drawn whole with `contain`, never cropped, recoloured or
 placed on a dark surface, and is decorative: hidden from VoiceOver and never
 in the way of a touch. The earlier standalone mascot
 (`lotly-mascot-transparent.png`) is no longer drawn. The final logo and
@@ -1052,7 +1053,7 @@ is drawn full at once; nothing loops. The
 scrolling content column at the 16pt margin, capped at `max-content-width`:
 the headline in `heading-1`, the body in `body` `text/secondary` (with an
 optional decorative `aside` beside them at the trailing edge, which the text
-never overlaps: the standalone paywall's mascot), then the screen's own content,
+never overlaps; no screen uses it since 2026-10-04), then the screen's own content,
 `spacing/16` apart. A sticky footer on the page colour
 above a `border/subtle` hairline, padded by the bottom inset, holding the
 screen's actions as the shared `Button` (primary for the one forward action,
@@ -1522,18 +1523,16 @@ loops, springs or bounces, and the hero never moves. Behaviour:
 [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md)
 §6.6.
 
-**The plan cards** are the shared ones, compacted (2026-09-28): the monthly
-equivalent and the saving share one caption line (`$2.50/month · Save 50%`),
-so Annual measures ~97pt and Monthly ~72pt at the default size, with the
-radios aligned and no dead area on the right; every price stays the store's
-own string, and the line wraps between words at larger sizes. They appear
-only on the standalone paywall (below); the onboarding paywall has its own
-stacked cards.
+**The plan cards** are the grocery-watch paywall's stacked cards (below);
+the compact shared cards of the earlier standalone composition were retired
+with it on 2026-10-04.
 
-**The standalone paywall** — `/paywall`, which a lapsed subscriber meets.
-Until 2026-10-01 the onboarding paywall shared this composition; it now has
-its own (next paragraph), and both draw the same shared pieces over the one
-purchase flow. The frame without progress; its back control is the one way
+**The standalone paywall** — `/paywall`, which a lapsed or expired
+subscriber meets — **draws the grocery-watch composition (next heading)
+since 2026-10-04**, so a returning shopper meets the same approved design
+as a first-time one; only Back differs (it re-enters Ready through the
+gate). The composition below is the RETIRED one, kept for the record of
+what the 2026-09-28 polish pass measured. The frame without progress; its back control is the one way
 back (to the Ready step). M04, the watchful pose, beside the heading in the frame's
 `aside` at 120pt (the selectors' seat; omitted from text scale 1.5). The
 headline `Stay ahead of recalls that affect you.`, three benefit rows (a
@@ -1571,8 +1570,9 @@ countdown, crossed-out price or scarcity — and no preference summary,
 example recall, notification preview or second "ready" message: those are
 Ready's and education's.
 
-**The onboarding paywall (the grocery watch, 2026-10-01)** —
-`/onboarding/paywall`, which Ready's `See my plan` opens: the
+**The grocery-watch paywall (2026-10-01; both routes since 2026-10-04)** —
+`/onboarding/paywall`, which Ready's `See my plan` opens, and `/paywall`,
+which a lapsed subscriber meets: the
 founder-approved composition
 (`assets/brand/reference/lotly-onboarding-paywall-grocery-watch-target.png`,
 934×1683) rebuilt from one approved image and native UI, at one scale

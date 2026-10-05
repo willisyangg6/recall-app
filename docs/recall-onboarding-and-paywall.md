@@ -510,19 +510,19 @@ The copy is the founder's, verbatim, in `src/lib/onboarding-copy.ts` and
 `src/lib/paywall-screen.ts`; `onboarding-design.test.ts` and
 `paywall-screen.test.ts` pin every string.
 
-| Screen                    | Component                                                    | Route                       |
-| ------------------------- | ------------------------------------------------------------ | --------------------------- |
-| 1 Welcome                 | `WelcomeContent`                                             | `/onboarding/welcome`       |
-| 2 Problem: scale, 1 of 5  | `ProblemScaleStep`                                           | `/onboarding/problem-scale` |
-| 3 Problem: stakes, 2 of 5 | `ProblemRiskStep`                                            | `/onboarding/problem-risk`  |
-| 4 States, 3 of 5          | `StatesStep` and `StateSearchSheet`                          | `/onboarding/states`        |
-| 5 Allergens, 4 of 5       | `AllergensStep`: `AllergenTile` grid                         | `/onboarding/allergens`     |
-| 6 Stores, 5 of 5          | `RetailersStep`: the receipt and `RetailerSearchSheet`       | `/onboarding/retailers`     |
-| 7 Building your watch     | `BuildingStep` (once; outside the frame)                     | `/onboarding/building`      |
-| 8 Ready (the preview)     | `PreviewStep` with `ReadyCarousel`                           | `/onboarding/preview`       |
-| 9 Onboarding paywall      | `PaywallPanel` / `EntitledPaywallPanel` over the shared flow | `/onboarding/paywall`       |
-| 10 Hard paywall (lapsed)  | `PaywallPanel` over the same flow                            | `/paywall`                  |
-| 11 Notification education | `NotificationEducation`                                      | `/onboarding/notifications` |
+| Screen                    | Component                                              | Route                       |
+| ------------------------- | ------------------------------------------------------ | --------------------------- |
+| 1 Welcome                 | `WelcomeContent`                                       | `/onboarding/welcome`       |
+| 2 Problem: scale, 1 of 5  | `ProblemScaleStep`                                     | `/onboarding/problem-scale` |
+| 3 Problem: stakes, 2 of 5 | `ProblemRiskStep`                                      | `/onboarding/problem-risk`  |
+| 4 States, 3 of 5          | `StatesStep` and `StateSearchSheet`                    | `/onboarding/states`        |
+| 5 Allergens, 4 of 5       | `AllergensStep`: `AllergenTile` grid                   | `/onboarding/allergens`     |
+| 6 Stores, 5 of 5          | `RetailersStep`: the receipt and `RetailerSearchSheet` | `/onboarding/retailers`     |
+| 7 Building your watch     | `BuildingStep` (once; outside the frame)               | `/onboarding/building`      |
+| 8 Ready (the preview)     | `PreviewStep` with `ReadyCarousel`                     | `/onboarding/preview`       |
+| 9 Onboarding paywall      | `OnboardingPaywallPanel` / `OnboardingEntitledPanel`   | `/onboarding/paywall`       |
+| 10 Hard paywall (lapsed)  | the same `OnboardingPaywallPanel` over the same flow   | `/paywall`                  |
+| 11 Notification education | `NotificationEducation`                                | `/onboarding/notifications` |
 
 **Welcome (the receipt composition, 2026-09-29).** The founder-approved
 full-screen target
@@ -1957,9 +1957,10 @@ release bundle carries none of it.
 `/onboarding/paywall`, reached from Ready's `See my plan`, its locked strip
 and its locked sentinel — and nothing else. Since 2026-10-01 it draws
 `OnboardingPaywallPanel` (`components/paywall/onboarding-paywall-panel.tsx`),
-the founder-approved grocery-watch composition; the standalone `/paywall` a
-lapsed subscriber meets keeps `PaywallPanel`. Both compose the SAME purchase
-flow: there is still exactly one implementation of offering loading, plan
+the founder-approved grocery-watch composition. **Since 2026-10-04 the
+standalone `/paywall` a lapsed or expired subscriber meets draws the same
+panel** (§6.7.1); the earlier standalone composition is retired. Both
+compose the SAME purchase flow: there is still exactly one implementation of offering loading, plan
 state, purchase, restore, notices, legal links, entitlement handling and the
 development controls (`hooks/use-purchase-flow.tsx`), and neither route
 holds purchase state. Top to bottom: Back (pops to Ready); the headline
@@ -1996,15 +1997,15 @@ is no offering the disclosure is the period-neutral sentence. The radio
 speaks `Annual, $29.99 per year. $2.50 per month equivalent. Save 50%.`;
 the pill is drawing. No trial, discount, new product or provider.
 
-**Shared pieces, explicit variant.** The standalone paywall's appearance is
-unchanged. The onboarding panel passes `usePurchaseFooterSlots` an
-`appearance: 'onboarding'` (the CTA becomes `OnboardingActionPill`: the
-shared Button's primary treatment, disabled and busy state and busy word at
-51pt with a 16pt label; the shared Button has no size override and is
-untouched) and the chosen plan's `disclosure` (`PurchaseTerms` defaults to
-the standalone's sentence). `EntitledPaywallPanel` was onboarding-only and is
-replaced by `OnboardingEntitledPanel`; M04, the body, the check rows and
-`BEST VALUE` remain only on the standalone paywall.
+**Shared pieces, explicit variant.** The panel passes
+`usePurchaseFooterSlots` an `appearance: 'onboarding'` (the CTA becomes
+`OnboardingActionPill`: the shared Button's primary treatment, disabled and
+busy state and busy word at 51pt with a 16pt label; the shared Button has no
+size override and is untouched) and the chosen plan's `disclosure`
+(`PurchaseTerms` defaults to the period-neutral sentence). `EntitledPaywallPanel`
+was onboarding-only and is replaced by `OnboardingEntitledPanel`. Until
+2026-10-04, M04, the body, the check rows and the corner `BEST VALUE` tab
+remained on the standalone paywall; they are retired with it (§6.7.1).
 
 **Navigation and entitlement.** The route records itself as the resume
 point, so a kill on the paywall resumes there. A verified purchase or
@@ -2016,8 +2017,56 @@ entitled (restored elsewhere, subscribed on another device) meets
 `OnboardingEntitledPanel` instead: the same headline and hero, the active
 subscription said plainly (`Subscription active` on the success surface),
 the benefits, and a 51pt `Continue` that completes personalization — never
-a second purchase ask. The lapsed subscriber's standalone `/paywall` is
-untouched: same panel, same flow, its Back still `reviewingPreview` (§3).
+a second purchase ask. The lapsed subscriber's standalone `/paywall` draws
+the same panel over the same flow; its Back is still `reviewingPreview` (§3).
+
+#### 6.7.1 One paywall design for both routes (2026-10-04)
+
+Physical-device QA of the real store found the inconsistency: after a
+monthly expiry and a relaunch, `/paywall` showed the earlier standalone
+composition (`Stay ahead of recalls that affect you.`, M04 beside the
+heading, check-row benefits, the corner `BEST VALUE` tab), while Back to
+Ready → `See my plan` showed the approved grocery watch. The standalone
+route now composes `OnboardingPaywallPanel` itself — headline, hero,
+benefit rows, stacked plan cards, savings pill, spacing and the shared
+footer are one implementation — and `PaywallPanel`, `BenefitChecks`,
+`WatchfulMascot`, the standard plan card and the three standalone copy
+constants are deleted rather than left unused. `paywall-panel.tsx` keeps
+only the pieces both routes draw: `PurchaseCta`, `PurchaseTerms`,
+`usePurchaseFooterSlots`, `OnboardingActionPill` and `PaywallNotice`.
+
+What stays route-specific is wiring, handed in as props, never a second
+layout:
+
+- **Back.** `/paywall` passes `access.reviewPreview` (re-enter the Ready
+  step without losing completion, §3); `/onboarding/paywall` pops its
+  stack. Both routes hold no router call across a phase.
+- **After a success.** Both run the one purchase flow; a verified purchase
+  or restore is applied by the gate, which opens notification education
+  only while it is still pending and the Feed otherwise. An expired
+  subscriber who already completed education returns straight to the Feed;
+  nobody is routed back through onboarding to reach the design.
+- **Entitlement and expiry rules, prices, busy/error/cancellation states and
+  accessibility** are unchanged: the same `PurchaseProps`, the same
+  `paywallPresentation`, the same radio group and announcements.
+
+M04 (`lotly-mascot-watchful-1024.png`) is now referenced by no screen and
+stays in the approved production set (`mascot-assets.test.ts`). The Design
+Preview's standalone-paywall gallery draws the same panel.
+
+**Verification (2026-10-04, simulated store, QA iPhone 17 and iPhone SE,
+own Metro on 8085).** The gate scenario `Completed onboarding, inactive
+entitlement` relaunches directly onto the grocery-watch `/paywall`; Back
+reviews Ready (`You're all set.`); Ready's `See my plan` opens the same
+panel; its Back pops to Ready. Monthly moves the action to
+`Subscribe for $4.99/month` and the disclosure to `Renews monthly.` (on the
+SE the Monthly card sits under the pinned footer until scrolled, as
+before). User cancellation, purchase error, restore-finds-nothing and the
+unavailable offering each render their existing notice; a simulated annual
+purchase on `/paywall` with education pending opens education. Large text
+(AX sizes) and Reduce Motion were checked on the 17. The founder's
+physical-device results are recorded separately in §10; the
+purchase-sheet background/return case remains unverified on a device.
 
 **Grocery-watch hero (prepared 2026-10-01; founder-approved on the cream
 page and imported the same day).** The approved grocery-watch target
@@ -2414,8 +2463,13 @@ What exists, and what still stands between it and a verified purchase:
    in `resolvePurchaseProvider` constructs it with `purchaseIdentity`.
 3. **The public variable — recorded** in `release-exposure.test.ts`,
    `.env.example` and the release-readiness doc.
-4. **Not yet verified on a device.** No purchase, restore or sandbox
-   transaction has been made. Local verification covered the mapping and the
+4. **Founder device QA (2026-10-04, physical iPhone, Apple sandbox) —
+   reported by the founder, not reproduced here:** annual and monthly
+   sandbox purchases succeeded; purchase cancellation; restore after the
+   data reset and after deleting and reinstalling; relaunch preserved active
+   access; a monthly expiry removed access and opened the paywall. **Still
+   unverified on a device:** the purchase-sheet background/return case
+   (§4.1). Earlier local verification, before that QA: Local verification covered the mapping and the
    ordering in Node, a release export whose bundle contains the provider and
    none of the development adapter, and a Release compile onto a dedicated QA
    simulator — all with the key absent, so all on the fail-closed path. A
@@ -2455,7 +2509,7 @@ What exists, and what still stands between it and a verified purchase:
 | Stores receipt layout: the slice maps to its rows at any height, the paper grows on every phone for 44pt rows, targets never overlap, scene vs stacked by text size, every word fits its column (measured from the font), the SE AX5 headline limit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `src/lib/stores-receipt-presentation.test.ts`                                                                      |
 | Stores receipt layers: approved bytes and format, the report's offsets and slice, only Stores draws them, no reference imported                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `src/lib/stores-receipt-assets.test.ts`                                                                            |
 | Stores step and search sheet: no second mode and none of the retired grid, six checkbox rows in order, no marks, the count row's allocated slot, the search action, the three decorative layers growing upward and stacking, one Modal sheet with a fixed frame and pinned Done, autofocus, instruction and no-match lines, single-column checkbox results, one shared selection, choosing keeps the sheet, every exit keeps choices, query never saved, Reduce Motion, overlay gone, Profile unchanged, Back/Continue/resume, mock-ups unreferenced                                                                                                                                                                                                                                                                                                                                                    | `src/components/onboarding-design.test.ts`                                                                         |
-| M04 on the standalone paywall only (it left Building 2026-10-02); the onboarding paywall reaches no mascot file; M01, M02, M03, M05 and M06 unreferenced; M06's repaired bytes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/lib/mascot-assets.test.ts`                                                                                    |
+| All six mascots retained and referenced nowhere (M04 left the standalone paywall 2026-10-04); both paywall routes compose the one panel; M06's repaired bytes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `src/lib/mascot-assets.test.ts`                                                                                    |
 | The grocery-watch hero: approved bytes, RGBA sRGB at the measured size, the report's crop and accuracy, drawn only by the onboarding paywall, no reference, source, mask, report, sheet or kit in app code                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `src/lib/paywall-grocery-watch-assets.test.ts`                                                                     |
 | The onboarding paywall's presentation: approved copy, cards from the store prices, Monthly moving the action and the disclosure, no badge without a positive one-currency saving, long localized prices, the hero overlap and ascender rules, no type below the shared floor                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `src/lib/onboarding-paywall-presentation.test.ts`                                                                  |
 | The onboarding paywall's composition: top bar, headline above the hero, decorative static hero, benefits as one element, radio cards, decorative pill, the shared footer's explicit `onboarding` appearance, no purchase state, mascot or close; the entitled panel; the 51pt pill's Button semantics                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `src/components/onboarding-design.test.ts`                                                                         |

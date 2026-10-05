@@ -1221,7 +1221,7 @@ test('every onboarding screen draws from the tokens: no raw hex, no capped type,
   assert.ok(frame.includes('minHeight: hitTarget.minimum'));
   // Lime is reserved: the education's success mark and the value badge use the accent surface, nothing else on these screens does.
   assert.ok(codeOnly(EDUCATION).includes("backgroundColor: color['background/accent']"));
-  assert.ok(codeOnly(PANEL).includes("backgroundColor: color['background/accent']"));
+  assert.ok(codeOnly(ONBOARDING_PANEL).includes("backgroundColor: color['background/accent']"));
   for (const [name, source] of [
     ['welcome', WELCOME],
     ['states', STATES],
@@ -1298,7 +1298,7 @@ test('Welcome speaks the wordmark and the illustration once each, and its printe
   // paywall owns its benefits.
   assert.ok(!('WELCOME_BENEFITS' in ONBOARDING_COPY), 'the Welcome benefits came back');
   assert.ok(!welcome.includes('BenefitList') && !welcome.includes('accessibilityRole="list"'));
-  assert.ok(PANEL.includes('<BenefitChecks items={PAYWALL_BENEFITS} />'));
+  assert.ok(ONBOARDING_PANEL.includes('{ONBOARDING_PAYWALL_BENEFITS.map((benefit) => ('));
   // The headline is the screen's header; all copy is native, uncapped text.
   assert.ok(
     welcome.includes('<Text variant="display" accessibilityRole="header" style={styles.headline}>'),
@@ -1551,7 +1551,9 @@ test('Welcome is static: no entrance, no loop, and no screen animates the shared
 });
 
 test('the paywall keeps the shared frame and its four footer actions in one toolbar; education draws its own page with no way back', () => {
-  assert.ok(codeOnly(PANEL).includes('<OnboardingFrame'));
+  // Both paywall routes draw the grocery-watch page (2026-10-04), which
+  // keeps the frame's top bar for Back and the shared footer's one toolbar.
+  assert.ok(codeOnly(ONBOARDING_PANEL).includes('<OnboardingTopBar'));
   assert.ok(codeOnly(PANEL).includes('accessibilityRole="toolbar"'));
   // The approved phone-led page (2026-10-03) is full-bleed, as Building and
   // the onboarding paywall: its own page, no back control, no tabs, and the
@@ -1640,12 +1642,8 @@ test('the paywall keeps its sticky/inline terms rule, and Ready carries no terms
       slots.indexOf(cta) < slots.indexOf("{placement === 'sticky' ? terms : null}"),
     'the primary action stays in the sticky footer',
   );
-  // Both paywalls use the one rule: the standalone with its defaults, the
-  // onboarding paywall with its explicit appearance and disclosure.
-  const panel = codeOnly(componentBody(PANEL, 'PaywallPanel'));
-  assert.ok(panel.includes('const slots = usePurchaseFooterSlots(purchase);'));
-  assert.ok(panel.includes('footer={slots.footer}>'));
-  assert.ok(panel.indexOf('{children}') < panel.indexOf('{slots.inlineTerms}'));
+  // Both paywall routes compose the one panel, which uses the one rule with
+  // its explicit appearance and disclosure.
   const onboarding = codeOnly(componentBody(ONBOARDING_PANEL, 'OnboardingPaywallPanel'));
   assert.ok(onboarding.includes("appearance: 'onboarding',"));
   assert.ok(onboarding.includes('disclosure: renewalDisclosure(purchase.view),'));
@@ -1778,59 +1776,42 @@ test('the deck is one adjustable element: the active card’s whole content, nex
   assert.ok(deck.includes('if (target !== active) settle(target);'));
 });
 
-test('the standalone paywall: M04 beside the heading, check-row benefits, the plans, the note and the shared footer', () => {
-  const panel = codeOnly(componentBody(PANEL, 'PaywallPanel'));
-  const order = [
-    'aside={fontScale < HIDE_MASCOT_AT_SCALE ? <WatchfulMascot /> : null}',
-    '<BenefitChecks items={PAYWALL_BENEFITS} />',
-    '<PurchasePlans purchase={purchase} />',
-    '{children}',
-    '{INDEPENDENCE_NOTE}',
-    '{slots.inlineTerms}',
-  ].map((marker) => {
-    const at = panel.indexOf(marker);
-    assert.ok(at > 0, `the paywall lacks ${marker}`);
-    return at;
-  });
-  assert.deepEqual(
-    order,
-    [...order].sort((a, b) => a - b),
-    'the paywall is out of order',
-  );
-  // The benefits are navy check rows; the check is drawing.
-  const checks = codeOnly(componentBody(PANEL, 'BenefitChecks'));
-  assert.ok(checks.includes('<Icon name="check" size={20} color="icon/primary" />'));
-  // The mascot: M04, decorative and untouchable, the shared one-time entrance.
-  const mascot = codeOnly(componentBody(PANEL, 'WatchfulMascot'));
-  assert.ok(mascot.includes('accessibilityElementsHidden'));
-  assert.ok(mascot.includes('pointerEvents="none"'));
-  assert.ok(mascot.includes('const [animate] = useState(() => motionAllowed(reduceMotion));'));
-  assert.ok(PANEL.includes("require('@/assets/brand/production/lotly-mascot-watchful-1024.png')"));
-  // The Annual card: BEST VALUE on the card's corner (a tab of it), the
-  // chosen plan's 2px primary border; the badge is drawing because the
-  // radio's own label already speaks Best value.
-  const card = codeOnly(componentBody(PANEL, 'PlanCard'));
-  assert.ok(
-    card.includes('<View style={[styles.badge, styles.badgeCorner]} {...BADGE_DECORATIVE}>'),
-  );
-  assert.ok(/planSelected: \{[^}]*borderWidth: 2/s.test(PANEL));
-  // No Ready content on the paywall.
-  for (const gone of [
-    'PREVIEW_SUMMARY_TITLE',
-    'SampleRecallCard',
-    'EDUCATION_PREVIEW',
-    'progress=',
-    'PREVIEW_HEADLINE',
-    'ReadyCarousel',
-  ]) {
-    assert.ok(!codeOnly(PANEL).includes(gone), `the paywall draws ${gone}`);
-  }
-  // The lapsed subscriber's route still composes it (2026-10-01).
+test('the standalone paywall composes the grocery-watch panel: no second composition, no mascot, no check rows', () => {
+  // 2026-10-04: an expired subscriber meets the same approved design as a
+  // first-time one. The route hands the panel its own wiring (Back is
+  // `reviewPreview`), and nothing else differs.
   assert.ok(
     codeOnly(ROUTES.paywall).includes(
-      '<PaywallPanel purchase={purchase} onBack={access.reviewPreview}>',
+      '<OnboardingPaywallPanel purchase={purchase} onBack={access.reviewPreview}>',
     ),
   );
+  assert.ok(codeOnly(ROUTES.paywall).includes('usePurchaseFlow()'));
+  assert.ok(!codeOnly(ROUTES.paywall).includes('router.'), 'the standalone route navigates');
+  // The retired composition is gone from the shared pieces, not merely unused.
+  for (const gone of [
+    'PaywallPanel(',
+    'WatchfulMascot',
+    'BenefitChecks',
+    'lotly-mascot-',
+    'PAYWALL_HEADLINE',
+    'PAYWALL_BODY',
+    'PAYWALL_BENEFITS',
+    '<OnboardingFrame',
+    'badgeCorner',
+    'HIDE_MASCOT_AT_SCALE',
+  ]) {
+    assert.ok(!codeOnly(PANEL).includes(gone), `the shared pieces still draw ${gone}`);
+  }
+  // The shared pieces keep only what both routes use.
+  for (const kept of [
+    'PurchaseCta',
+    'PurchaseTerms',
+    'usePurchaseFooterSlots',
+    'PaywallNotice',
+    'OnboardingActionPill',
+  ]) {
+    assert.ok(PANEL.includes(`export function ${kept}(`), `${kept} left the shared pieces`);
+  }
 });
 
 test('the onboarding paywall: the grocery-watch composition over the shared purchase pieces', () => {
@@ -3406,7 +3387,7 @@ test('Stores: Continue is always enabled, and Back, Continue, saving and the res
   );
 });
 
-test('no onboarding step draws an aside but the paywall (M03 left Stores with the receipt)', () => {
+test('no onboarding screen draws a frame aside (M03 left Stores with the receipt; M04 left the paywall 2026-10-04)', () => {
   for (const [name, source] of [
     ['welcome', WELCOME],
     ['states', STATES],
@@ -3414,14 +3395,10 @@ test('no onboarding step draws an aside but the paywall (M03 left Stores with th
     ['retailers', RETAILERS],
     ['preview', PREVIEW],
     ['education', EDUCATION],
+    ['panel', PANEL],
+    ['onboarding panel', ONBOARDING_PANEL],
   ] as const) {
     assert.ok(!codeOnly(source).includes('aside='), `${name} gained an aside`);
-  }
-  for (const [name, source] of [['panel', PANEL]] as const) {
-    assert.ok(
-      codeOnly(source).includes('aside={fontScale < HIDE_MASCOT_AT_SCALE ?'),
-      `${name} lost its aside`,
-    );
   }
 });
 

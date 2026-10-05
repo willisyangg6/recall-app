@@ -20,11 +20,17 @@
  * Nothing of its own. The purchase flow (hooks/use-purchase-flow.tsx) owns
  * the offering, the plan, the purchase, the restore, the notices and the
  * legal links, exactly as it does for the onboarding paywall; this route
- * composes it into the same `PaywallPanel`. Back reviews the Ready step
- * without losing completion.
+ * composes it into the SAME `OnboardingPaywallPanel` — the founder-approved
+ * grocery-watch composition (2026-10-04: one paywall design for both
+ * routes). What differs is wiring, handed in as props: Back here is
+ * `reviewPreview` (re-enter the Ready step without losing completion),
+ * where the onboarding route pops its stack. A verified purchase or restore
+ * is applied by the flow and the gate moves on — to education if it is
+ * still pending, else the app — so this route never navigates and never
+ * sends an expired subscriber back through onboarding.
  */
 
-import { PaywallPanel } from '@/components/paywall/paywall-panel';
+import { OnboardingPaywallPanel } from '@/components/paywall/onboarding-paywall-panel';
 import { useAccess } from '@/hooks/use-access';
 import { usePurchaseFlow } from '@/hooks/use-purchase-flow';
 
@@ -32,8 +38,8 @@ export default function PaywallScreen() {
   const access = useAccess();
   const { purchase, developmentControls } = usePurchaseFlow();
   return (
-    <PaywallPanel purchase={purchase} onBack={access.reviewPreview}>
+    <OnboardingPaywallPanel purchase={purchase} onBack={access.reviewPreview}>
       {developmentControls}
-    </PaywallPanel>
+    </OnboardingPaywallPanel>
   );
 }
