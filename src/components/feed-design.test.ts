@@ -657,7 +657,6 @@ test('the presentation contract knows nothing about the visual layer, and the co
   // The screen still runs the same pipeline functions in the same order.
   for (const call of [
     'buildFeedSections(allVisible)',
-    'orderByLocationTiers(sectioned.recent, filters.stateCodes)',
     'buildAffectsMeSections(state.items,',
     'evaluatePersonalRelevance(',
     'buildHomeCardModel(item, {',

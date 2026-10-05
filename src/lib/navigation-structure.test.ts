@@ -193,7 +193,8 @@ test('the feed request and ordering path is unchanged by the move', () => {
   assert.match(hook, /fetchAll: fetchCurrentFeed/);
   assert.match(hook, /fetchByIds: fetchFeedItemsByIds/);
   assert.match(FEED, /buildFeedSections\(allVisible\)/);
-  assert.match(FEED, /orderByLocationTiers/);
+  // 2026-10-05: no filtered view re-sorts; the sections' shared order stands.
+  assert.doesNotMatch(FEED, /orderByLocationTiers/);
 });
 
 test('community shopper-report data stays off the Feed', () => {

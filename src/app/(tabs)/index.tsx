@@ -57,7 +57,6 @@ import {
   applyFeedFilters,
   EMPTY_FEED_FILTERS,
   hasActiveFilters,
-  orderByLocationTiers,
   RISK_FILTER_TIERS,
   sameFeedFilters,
   type FeedFilterState,
@@ -388,15 +387,11 @@ export default function HomeScreen() {
   // fetchCurrentFeed produced — sectioning and ordering byte-for-byte. The
   // loaded corpus itself is never mutated or truncated by any of this.
   const allVisible = filterBySearch(applyFeedFilters(state.items, filters), query, entryOf);
-  const sectioned = buildFeedSections(allVisible);
-  // C6.1: with a jurisdiction selected, order WITHIN each existing section so
-  // notices that explicitly name a selected state lead the nationwide ones
-  // that merely also reach it. Section membership is untouched — an old
-  // notice is never promoted into Recent activity by matching the location —
-  // and with no jurisdiction selected these return the same array instances,
-  // so All Recalls is byte-for-byte its pre-C6 self.
-  const recent = orderByLocationTiers(sectioned.recent, filters.stateCodes);
-  const olderActive = orderByLocationTiers(sectioned.olderActive, filters.stateCodes);
+  // Filters decide membership only (2026-10-05): a filtered view keeps the one
+  // shared newest-first order the sections already carry. The C6.1 re-sort
+  // that led a filtered section with explicit selected-state matches is gone,
+  // so a newer nationwide recall sits above an older one naming the state.
+  const { recent, olderActive } = buildFeedSections(allVisible);
 
   const personalized = tab === 'affects_me' && prefs !== null && hasAnyPreference(prefs);
   // One relevance evaluation per case whenever preferences exist, for Affects

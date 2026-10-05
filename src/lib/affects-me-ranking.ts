@@ -1,138 +1,52 @@
 /**
- * "Affects me" ordering (Phase C3.2): ONE deterministic, pure ranking shared by
- * every Affects-me surface, so the order can never depend on which component
- * happened to render.
+ * "Affects me" sections and ordering: ONE deterministic, pure ranking shared
+ * by every Affects-me surface (the Feed tab, the Ready preview, the Building
+ * count), so the order can never depend on which component happened to
+ * render.
  *
- * This module changes ORDER ONLY. It never decides whether a notice affects
- * the user — that stays `evaluatePersonalRelevance` (lib/relevance.ts),
- * untouched — and it never touches All Recalls, push eligibility, or lifecycle.
+ * This module changes ORDER and SECTION ONLY. It never decides whether a
+ * notice affects the user — that stays `evaluatePersonalRelevance`
+ * (lib/relevance.ts), untouched — and it never touches push eligibility or
+ * lifecycle.
  *
- * ## Lexicographic, not additive
+ * ## Newest first (2026-10-05, founder decision)
  *
- * The comparison is a tuple compared left to right, each dimension fully
- * deciding before the next is consulted. A points-based score was rejected
- * outright: with weights, two retailer matches could out-rank a Critical
- * classification, and no one could explain afterwards why a card was second.
- * Here every position is answerable in one sentence.
+ * The order is `lib/recency-order.ts`: material activity, then announcement
+ * date, then case id — the same comparator All recalls and every filtered view
+ * use. The C3.2 lexicographic tuple that led with consumer risk, then
+ * geographic confidence, then allergen-over-store signal strength is retired:
+ * a Pending recall announced today sits above a Critical recall from August,
+ * a recall matching three stores sits where its dates put it, and the only
+ * thing that can move a recall up is an authoritative agency event. There is
+ * no seen/acknowledged record, no viewed demotion, no pin and no urgency
+ * override.
  *
- *   1. consumer risk         — how bad is this if it reaches you
- *   2. geographic confidence — do we KNOW it reached your area
- *   3. personal signal       — allergen (a direct hazard relationship) then
- *                              retailer (only where you shop)
- *   4. material activity     — newest authoritative event first
- *   5. announcement date     — newest first
- *   6. case id               — total order, so renders never reshuffle
- *
- * Dimensions 1–3 are small integers where LOWER is more prominent; 4–5 are
- * dates compared descending; 6 breaks every remaining tie.
+ * Risk is a LABEL on the card (lib/risk-display.ts), never a position in the
+ * list; Pending and Unknown stay distinct labels and are never relabeled.
  */
 
 import { materialActivityAt } from '@/domain/material-activity';
-import type { Classification, TimelineEntry } from '@/domain/recall-types';
-import { consumerRiskTier, type ConsumerRiskTier } from '@/domain/risk-tier';
+import type { TimelineEntry } from '@/domain/recall-types';
 import { tierForActivityDate } from './feed-relevance';
+import { compareRecencyKeys, recencyKey, type RecencyKey } from './recency-order';
 import type { PersonalRelevance } from './relevance';
 
 /** The minimum a case must expose to be ranked. `FeedItem` satisfies it. */
 export interface AffectsMeRankable {
   id: string;
-  classification: Classification;
   publishedAt: string;
   timeline: TimelineEntry[];
 }
 
 /**
- * ORDERING ONLY — not a severity scale, and deliberately not
- * `RISK_TIER_RANK` (domain/risk-tier.ts), which ranks the non-scale states
- * `null` precisely because they have no severity.
- *
- * Pending and Unknown share one position between High and Moderate. A notice
- * the agency has not classified yet, or never will (a public health alert),
- * must not sink below one the agency actively rated Moderate or Low — but
- * neither may it be presented AS High. Sharing a rank says exactly that and
- * nothing more: they are grouped for sequence, are never relabeled, and no
- * risk level is inferred for them anywhere (see lib/risk-display.ts, which
- * badges them "Pending" / "Unknown").
- *
- * The sequence is unchanged by the label replacement: every case sits exactly
- * where it sat before, because each old tier and its new name occupy the same
- * rung (Critical, then the mixed-with-Class-I tier, then the Class-II tier,
- * then the two absences, then the remaining two).
+ * The complete sort key for one case — exactly the shared recency key. Every
+ * field is derived, never stored. Kept under its own name so Affects-me
+ * callers (the QA report, the tests) read one type.
  */
-export const RISK_PRIORITY: Record<ConsumerRiskTier, number> = {
-  critical: 0,
-  very_high: 1,
-  high: 2,
-  pending: 3,
-  unknown: 3,
-  moderate: 4,
-  low: 5,
-};
+export type AffectsMePriority = RecencyKey;
 
-/**
- * Explicit state inclusion and nationwide distribution are the SAME confidence:
- * both are the agency saying the product reached the user's area. Which one it
- * was is explained by the relevance reason ("Affects California" /
- * "Nationwide recall"), never by the position in the list.
- *
- * `2` exists only so the comparator is total for an input it should never
- * receive: an authoritative geographic exclusion is not "affects me" at all
- * (relevance.ts), so it is filtered out before ranking.
- */
-function geographyPriority(relevance: PersonalRelevance): 0 | 1 | 2 {
-  if (relevance.geographic === 'matches') return 0;
-  if (relevance.geographic === 'unknown') return 1;
-  return 2;
-}
-
-/**
- * Boolean categories, never counts: three selected retailers matching is the
- * same fact as one matching — the user shops there. Allergen outranks retailer
- * because an allergen match is a direct hazard relationship with the recalled
- * product, while a retailer match only says the user shops where it was sold;
- * it never implies they bought it.
- */
-function signalPriority(relevance: PersonalRelevance): 0 | 1 | 2 | 3 {
-  const allergen = relevance.matchedAllergens.length > 0;
-  const retailer = relevance.matchedRetailers.length > 0;
-  if (allergen && retailer) return 0;
-  if (allergen) return 1;
-  if (retailer) return 2;
-  return 3;
-}
-
-/** The complete sort key for one case. Every field is derived, never stored. */
-export interface AffectsMePriority {
-  /** 0 Critical · 1 Very High · 2 High · 3 Pending/Unknown · 4 Moderate · 5 Low */
-  riskPriority: number;
-  /** Carried for explanation only; never itself compared. */
-  riskTier: ConsumerRiskTier;
-  /** 0 confirmed (state or nationwide) · 1 unknown · 2 excluded (unreachable) */
-  geographyPriority: 0 | 1 | 2;
-  /** 0 allergen+retailer · 1 allergen · 2 retailer · 3 neither */
-  signalPriority: 0 | 1 | 2 | 3;
-  /** Latest authoritative event, `YYYY-MM-DD`; newest first. */
-  materialActivityAt: string;
-  /** Original announcement, `YYYY-MM-DD`; newest first. */
-  publishedAt: string;
-  /** Stable identifier; the final, total tie-break. */
-  id: string;
-}
-
-export function affectsMePriority(
-  item: AffectsMeRankable,
-  relevance: PersonalRelevance,
-): AffectsMePriority {
-  const riskTier = consumerRiskTier(item.classification);
-  return {
-    riskPriority: RISK_PRIORITY[riskTier],
-    riskTier,
-    geographyPriority: geographyPriority(relevance),
-    signalPriority: signalPriority(relevance),
-    materialActivityAt: materialActivityAt(item.publishedAt, item.timeline),
-    publishedAt: item.publishedAt.slice(0, 10),
-    id: item.id,
-  };
+export function affectsMePriority(item: AffectsMeRankable): AffectsMePriority {
+  return recencyKey(item);
 }
 
 /**
@@ -140,18 +54,8 @@ export function affectsMePriority(
  * tie-break guarantees the same input always renders in the same sequence.
  */
 export function compareAffectsMePriority(a: AffectsMePriority, b: AffectsMePriority): number {
-  return (
-    a.riskPriority - b.riskPriority ||
-    a.geographyPriority - b.geographyPriority ||
-    a.signalPriority - b.signalPriority ||
-    b.materialActivityAt.localeCompare(a.materialActivityAt) ||
-    b.publishedAt.localeCompare(a.publishedAt) ||
-    a.id.localeCompare(b.id)
-  );
+  return compareRecencyKeys(a, b);
 }
-
-const GEOGRAPHY_WORD = ['confirmed geography', 'unknown geography', 'excluded'] as const;
-const SIGNAL_WORD = ['allergen + retailer', 'allergen', 'retailer', 'no personal signal'] as const;
 
 /**
  * Human-readable priority, for QA review and debugging only. Never rendered to
@@ -159,13 +63,7 @@ const SIGNAL_WORD = ['allergen + retailer', 'allergen', 'retailer', 'no personal
  * honest consumer meaning.
  */
 export function explainAffectsMePriority(priority: AffectsMePriority): string {
-  return [
-    priority.riskTier,
-    GEOGRAPHY_WORD[priority.geographyPriority],
-    SIGNAL_WORD[priority.signalPriority],
-    `activity ${priority.materialActivityAt}`,
-    `announced ${priority.publishedAt}`,
-  ].join(' · ');
+  return `activity ${priority.materialActivityAt} · announced ${priority.publishedAt}`;
 }
 
 export interface AffectsMeSections<T> {
@@ -186,9 +84,8 @@ export interface AffectsMeSectionsResult<T> extends AffectsMeSections<T> {
  * Recency uses MATERIAL activity, not `lastPublicActivityAt`: an authoritative
  * expansion or classification today legitimately returns an older recall to the
  * top, while an agency wording edit — or any of our own maintenance writes —
- * cannot. Because every material entry is stamped with the source-published
- * activity date, material activity is always ≤ `lastPublicActivityAt`, so this
- * window is a strict tightening of the All Recalls one, never a widening.
+ * cannot. All recalls uses the same date for its own window
+ * (`buildFeedSections`), so the two views share one definition of "recent".
  *
  * There is no third "Location not specified" section (removed in C5.2B). A
  * notice that states no distribution and matches nothing personal said nothing
@@ -202,7 +99,8 @@ export interface AffectsMeSectionsResult<T> extends AffectsMeSections<T> {
  * Sections are disjoint and exhaustive over the qualifying set by
  * construction: `affects` and `older` take exactly the cases where
  * `affectsMe` holds, split by one boundary. Every other case appears in
- * neither.
+ * neither. The relevance verdict decides MEMBERSHIP only; nothing in it
+ * is compared when ordering.
  */
 export function buildAffectsMeSections<T extends AffectsMeRankable>(
   items: readonly T[],
@@ -215,10 +113,9 @@ export function buildAffectsMeSections<T extends AffectsMeRankable>(
   const priorityById = new Map<string, AffectsMePriority>();
 
   for (const item of items) {
-    const relevance = relevanceOf(item);
-    const priority = affectsMePriority(item, relevance);
+    const priority = affectsMePriority(item);
     priorityById.set(item.id, priority);
-    if (!relevance.affectsMe) continue;
+    if (!relevanceOf(item).affectsMe) continue;
     const tier = tierForActivityDate(priority.materialActivityAt, now);
     (tier === 'recent' ? affects : older).push(item);
   }
@@ -230,3 +127,5 @@ export function buildAffectsMeSections<T extends AffectsMeRankable>(
 
   return { affects, older, priorityById };
 }
+
+export { materialActivityAt };

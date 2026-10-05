@@ -171,11 +171,27 @@ test('All Recalls order is total and stable when every date is identical', async
   );
 });
 
-test('All Recalls recent order is newest public activity first, unchanged', async () => {
+test('All Recalls recent order is newest material activity first (2026-10-05), whatever the page order', async () => {
   const corpus = [
     item(1, { publishedAt: '2026-08-01', lastPublicActivityAt: '2026-08-02' }),
     item(2, { publishedAt: '2026-08-20', lastPublicActivityAt: '2026-08-20' }),
+    // A wording edit on 08-11 moved lastPublicActivityAt; nothing material.
     item(3, { publishedAt: '2026-07-01', lastPublicActivityAt: '2026-08-11' }),
+    // Announced in July, materially expanded on 08-25: the newest event.
+    item(4, {
+      publishedAt: '2026-07-10',
+      lastPublicActivityAt: '2026-08-25',
+      timeline: [
+        {
+          occurredAt: '2026-08-25',
+          kind: 'expanded',
+          summary: 'Affected products expanded.',
+          causedBySnapshotIds: [],
+          material: true,
+          ruleId: 'expansion_products',
+        },
+      ],
+    }),
   ];
   const { recent } = buildFeedSections(
     await loadAllPages(backend(corpus).fetchPage, { delay: noDelay }),
@@ -183,7 +199,7 @@ test('All Recalls recent order is newest public activity first, unchanged', asyn
   );
   assert.deepEqual(
     recent.map((r) => r.id),
-    [id(2), id(3), id(1)],
+    [id(4), id(2), id(1), id(3)],
   );
 });
 
@@ -327,15 +343,18 @@ function relevanceFor(i: FeedItem) {
 }
 
 test('the highest-ranked Affects Me case is found even when it lives on a later page', async () => {
-  // 1,300 unremarkable Moderate cases, plus one Critical peanut recall placed
-  // last in id order — i.e. on the final page, invisible before C5.1.
+  // 1,300 unremarkable cases, plus the NEWEST recall placed last in id order —
+  // i.e. on the final page, invisible before C5.1. Since 2026-10-05 the top of
+  // Affects me is the newest material activity, so that is what is buried.
   const filler = Array.from({ length: 1300 }, (_, i) =>
     item(i, {
       geography: { scope: 'nationwide', states: [], confidence: 'stated', sourceText: null },
     }),
   );
   const buried = item(99999, {
-    title: 'Buried Critical Peanut Recall',
+    title: 'Buried Newest Peanut Recall',
+    publishedAt: '2026-08-26',
+    lastPublicActivityAt: '2026-08-26',
     classification: { value: 'class_I', sourceText: 'Class I', officialClasses: ['class_I'] },
     pathogenOrAllergen: 'peanuts',
     retailerNames: ['Costco'],

@@ -31,7 +31,6 @@ import type { FoodCategoryId } from '@/domain/food-category';
 import { stateNameForCode } from '@/domain/preferences';
 import type { Classification, Geography } from '@/domain/recall-types';
 import { consumerRiskTier, type ConsumerRiskTier } from '@/domain/risk-tier';
-import { RISK_PRIORITY } from './affects-me-ranking';
 
 /** The filterable slice of a feed item. `FeedItem` satisfies it. */
 export interface FilterableRecall {
@@ -247,51 +246,14 @@ export function applyFeedFilters<T extends FilterableRecall>(
   );
 }
 
-/**
- * Location-aware ordering for one ALREADY-SECTIONED list (C6.1).
- *
- * The full ordering the user sees is four levels deep:
- *
- *   1. location tier   explicit selected-jurisdiction match, then nationwide
- *   2. consumer risk   the canonical display sequence (RISK_PRIORITY)
- *   3. activity date   newest first
- *   4. case id         the existing total tie-break
- *
- * Levels 3–4 are INHERITED, not restated: this is a stable sort (guaranteed
- * by ES2019+) keyed only on levels 1–2, applied to a list `buildFeedSections`
- * has already put in its canonical order. So each section keeps its own
- * notion of "activity date" — `lastPublicActivityAt` for Recent activity,
- * `publishedAt` for Older active notices — and its id tie-break, and those
- * definitions cannot drift out of sync with a copy kept here.
- *
- * Location specificity outranks risk and recency on purpose: a notice that
- * names your state is more useful than a newer or more severe one that merely
- * also reaches it. Ordering never changes MEMBERSHIP — sectioning already
- * happened, so an old notice cannot be promoted into Recent activity by
- * matching the selected location.
- *
- * The risk sequence is imported rather than redeclared so All Recalls and
- * Affects me can never disagree about how tiers sequence (Pending/Unrated sit
- * between Moderate and Low — they are not a low severity, they are none).
- *
- * @returns the SAME array instance when no jurisdiction is selected, so an
- * inactive Location filter provably leaves All Recalls untouched; otherwise a
- * new array — the input is never sorted in place.
+/*
+ * There is deliberately NO ordering in this module (2026-10-05, founder
+ * decision). C6.1 used to re-sort a filtered section so explicit
+ * selected-state matches led nationwide ones, and until 2026-10-05 consumer
+ * risk followed as a second rung. Both are gone: every filtered view,
+ * Location included, keeps the one shared newest-first order the sections
+ * already carry (`lib/recency-order.ts`), so a newer nationwide recall sits
+ * above an older recall that names the selected state. Filters decide
+ * MEMBERSHIP only — `locationMatchTier` above still exists so membership has
+ * one definition — and the loaded corpus is never re-sorted here.
  */
-export function orderByLocationTiers<T extends FilterableRecall>(
-  items: T[],
-  stateCodes: string[],
-): T[] {
-  if (stateCodes.length === 0) return items;
-  return [...items].sort((a, b) => {
-    // `2` is unreachable after filtering (an excluded notice is not in the
-    // list) and exists only to keep the comparator total.
-    const tierA = locationMatchTier(a.geography, stateCodes) ?? 2;
-    const tierB = locationMatchTier(b.geography, stateCodes) ?? 2;
-    return (
-      tierA - tierB ||
-      RISK_PRIORITY[consumerRiskTier(a.classification)] -
-        RISK_PRIORITY[consumerRiskTier(b.classification)]
-    );
-  });
-}

@@ -48,9 +48,18 @@ Every card and the detail header show exactly **one** activity label:
 
 Formats: `Today`, `Yesterday`, `Aug 29`, and `Aug 29, 2025` when the year
 differs from today's. Source precision is day-level at both agencies, so
-hour-level phrasing ("2 hours ago") is unknowable and never produced. Feed
-_ordering_ is unchanged — sections still sort by their canonical dates; only
-the displayed label moved to material activity.
+hour-level phrasing ("2 hours ago") is unknowable and never produced.
+
+**Feed ordering reads the same date (2026-10-05, founder decision).** Both
+feeds, both sections of each, and every filtered view including Location sort
+**newest first by material activity**, then announcement date, then case id
+(`src/lib/recency-order.ts`). The label and the position can no longer
+disagree: a card that says "Updated Sep 16" sits where September 16 puts it,
+and a card whose page the agency merely re-edited does not move. All recalls
+also splits Recent activity / Older active notices on material activity (it
+used `lastPublicActivityAt` until 2026-10-05). Consumer risk is a label on the
+card and never a position in any list; Pending and Unknown stay their own
+labels. Ties on both dates fall to the case id, so no render reshuffles.
 
 ### Product name
 
@@ -1708,30 +1717,20 @@ Search stays visible in both modes and is never reset by a mode switch.
 
 ### Location ordering (C6.1)
 
-With one or more jurisdictions selected, results are ordered **within the
-existing sections** (`orderByLocationTiers`), four levels deep:
-
-1. **Location tier** — Tier 1: the notice's own state list names a selected
-   jurisdiction. Tier 2: canonically nationwide. Every explicit match is one
-   tier: "California", "California + Texas", and "California + 40 others"
-   weigh the same, because a narrower list is not better evidence that the
-   product reached you.
-2. **Consumer risk** — the canonical display sequence, imported from the one
-   place it is defined (`RISK_PRIORITY`) so All Recalls and Affects me can
-   never sequence tiers differently.
-3. **Activity date**, newest first, and 4. **case id** — both _inherited_
-   rather than restated: the sort is stable and runs over a list
-   `buildFeedSections` has already ordered, so each section keeps its own
-   canonical date (`lastPublicActivityAt` for Recent activity, `publishedAt`
-   for Older active notices) and its id tie-break, with no second copy able
-   to drift.
-
-Location specificity outranks risk and recency: an explicit California notice
-stays above a nationwide one that is newer or more severe. Ordering never
-changes membership — an old notice is never promoted into Recent activity by
-matching the selected location. Measured live on the California filter: 351 of
-882 cases admitted (139 explicit, 212 nationwide), every explicit match ahead
-of every nationwide one in both sections, risk non-decreasing within each tier.
+**Retired 2026-10-05 (founder decision): the Location filter no longer
+re-orders anything.** C6.1 sorted a filtered section so notices that
+explicitly named a selected jurisdiction led the nationwide ones, with
+consumer risk as a second rung. Both rungs are gone and `orderByLocationTiers`
+is deleted. With one or more jurisdictions selected, the filter decides
+**membership only** — explicit matches and nationwide notices are admitted,
+unknown and unselected geography are not, exactly as before — and the
+admitted set keeps the one shared newest-first order the sections already
+carry (`lib/recency-order.ts`). A nationwide recall announced yesterday
+therefore sits above a recall from last month that names the selected state;
+equal dates fall to the case id. Membership never moves a notice between
+sections, so an old explicit match stays in Older active notices.
+`locationMatchTier` remains the single definition of what the filter admits;
+nothing reads it to order.
 
 ## Search
 

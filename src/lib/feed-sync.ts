@@ -152,7 +152,10 @@ async function commit(
   return store.write(serializeFeedCache(document));
 }
 
-/** Complete load through the frozen loader, committed with the given tokens. */
+/**
+ * Complete load through the frozen loader, committed with the given tokens,
+ * then one recovery pass for anything founded behind the loader's cursor.
+ */
 async function fullReload(
   deps: SyncDependencies,
   manifest: FeedManifestEntry[] | null,
@@ -173,12 +176,77 @@ async function fullReload(
   }
   const nextIds = new Set(items.map((item) => item.id));
   const persisted = await commit(deps.store, items, versions, now);
-  return {
+  const full: FeedSyncOutcome = {
     items,
     mode: 'full',
     manifestAvailable: manifest !== null,
     downloadedRows: items.length,
     removedIds: [...cachedIds].filter((id) => !nextIds.has(id)),
+    persisted,
+  };
+  return recoverBehindCursor(deps, full, versions, now);
+}
+
+/**
+ * The one gap in a complete load, closed (2026-10-05).
+ *
+ * The frozen loader pages by immutable id. A case that ingestion founds
+ * WHILE the scan is running, whose random uuid sorts before the cursor, is
+ * behind the scan and not in the result — demonstrated with the real loader:
+ * a recall announced today, inserted between page 1 and page 2 with a lower
+ * id, was absent from a 1,200-row cold load, and the newest-first feed led
+ * with a case from August. Stable ids prevent skips and duplicates; they do
+ * not prevent this. Under newest-first the one missing card is the one that
+ * belongs at the very top, so the full reload no longer waits for the next
+ * foreground revalidation to find it.
+ *
+ * One more manifest request (about 100 bytes per case) after the full commit:
+ * ids the manifest lists that the load did not return are fetched by id and
+ * committed with the token that listed them. Additive only — removals and
+ * token drift are the next ordinary reconciliation's job, exactly as before.
+ * Best effort: if this pass fails at any point, the complete full result
+ * stands, as it always has (the contract was already met; this only
+ * narrows a window).
+ */
+async function recoverBehindCursor(
+  deps: SyncDependencies,
+  full: FeedSyncOutcome,
+  versions: Record<string, string | null>,
+  now: () => Date,
+): Promise<FeedSyncOutcome> {
+  let manifest: FeedManifestEntry[];
+  try {
+    manifest = await deps.transport.fetchManifest();
+  } catch {
+    return full;
+  }
+  const have = new Set(full.items.map((item) => item.id));
+  const behind = manifest.filter((entry) => !have.has(entry.id));
+  if (behind.length === 0) return full;
+
+  let fetched: FeedItem[];
+  try {
+    fetched = await deps.transport.fetchByIds(behind.map((entry) => entry.id));
+  } catch {
+    return full;
+  }
+  const recovered = fetched.filter((item) => !have.has(item.id));
+  if (recovered.length === 0) return full;
+
+  const tokenById = new Map(behind.map((entry) => [entry.id, entry.version]));
+  const items = [...full.items];
+  const nextVersions = { ...versions };
+  for (const item of recovered) {
+    if (have.has(item.id)) continue;
+    have.add(item.id);
+    items.push(item);
+    nextVersions[item.id] = tokenById.get(item.id) ?? null;
+  }
+  const persisted = await commit(deps.store, items, nextVersions, now);
+  return {
+    ...full,
+    items,
+    downloadedRows: full.downloadedRows + recovered.length,
     persisted,
   };
 }

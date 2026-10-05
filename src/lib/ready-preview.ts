@@ -9,8 +9,9 @@
  * There is no onboarding matching algorithm. The preview is the Affects You
  * feed's own layers, called in the Feed's own order: every feed item through
  * `evaluatePersonalRelevance`, membership and ordering through
- * `buildAffectsMeSections` (risk, geography, personal signal, recency — the
- * current Affects Me ordering, unchanged), and each shown item through
+ * `buildAffectsMeSections` (newest first by material activity, then
+ * announcement, then id — the one shared feed order since 2026-10-05,
+ * inherited here without any change to the deck), and each shown item through
  * `buildHomeCardModel`, the same model the Feed's card draws. The preview
  * shows the CURRENT window (`affects`): recalls that affect the shopper
  * whose last material activity is within the Affects Me recency window. The

@@ -14,6 +14,8 @@
  */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import type { FoodCategoryId } from '@/domain/food-category';
@@ -24,6 +26,7 @@ import { buildFeedSections } from './feed-relevance';
 import { makeCorpus } from './feed-fixtures';
 import { buildSearchEntry, filterBySearch } from './feed-search';
 import type { FeedItem } from './recall-feed';
+import { sortNewestFirst } from './recency-order';
 import { evaluatePersonalRelevance } from './relevance';
 import {
   activeFilterCount,
@@ -31,7 +34,6 @@ import {
   EMPTY_FEED_FILTERS,
   hasActiveFilters,
   matchesCategoryFilter,
-  orderByLocationTiers,
   type FeedFilterState,
   type FilterableRecall,
 } from './feed-filters';
@@ -377,29 +379,26 @@ test('Affects Me is byte-identical no matter what All has selected', () => {
   }
 });
 
-test('filtering changes membership only — the comparator still orders the result', () => {
+test('filtering changes membership only — the shared comparator still orders the result', () => {
   const corpus = categorized(makeCorpus(40));
   const selected = filters({ categoryIds: ['produce'], stateCodes: ['CA'] });
   const filtered = applyFeedFilters(corpus, selected);
   const sectioned = buildFeedSections(filtered, NOW);
-  const ordered = orderByLocationTiers(sectioned.recent, selected.stateCodes);
 
-  // Every admitted case is a produce case, and sectioning + ordering over the
-  // filtered list equals sectioning + ordering over the same list built any
-  // other way — filtering hands the comparator a subset, nothing more.
+  // Every admitted case is a produce case, and each section is exactly the
+  // shared newest-first order over the filtered subset — filtering hands the
+  // comparator a subset, nothing more, and adds no ordering of its own.
   for (const item of filtered) {
     assert.equal(item.productCategories?.includes('produce'), true, item.id);
   }
-  assert.equal(
-    joined(ordered),
-    joined(orderByLocationTiers(buildFeedSections(filtered, NOW).recent, ['CA'])),
-  );
+  assert.equal(joined(sectioned.recent), joined(sortNewestFirst(sectioned.recent)));
+  assert.equal(joined(sectioned.olderActive), joined(sortNewestFirst(sectioned.olderActive)));
 });
 
-test('location-specific cases stay above nationwide ones after category filtering', () => {
+test('after category filtering, explicit-state and nationwide matches share one newest-first order', () => {
   // Hand-built rows rather than the shared corpus: the fixtures store postal
   // CODES in `geography.states` while the location filter matches canonical
-  // state NAMES, so no fixture case is ever an explicit match and the tier
+  // state NAMES, so no fixture case is ever an explicit match and the
   // assertion would hold vacuously over them.
   const rows = [
     row('nationwide-produce-a', ['produce'], NATIONWIDE),
@@ -419,12 +418,8 @@ test('location-specific cases stay above nationwide ones after category filterin
     'nationwide-produce-b',
   ]);
 
-  // Ordering then runs over the filtered set exactly as it does unfiltered:
-  // the explicit California match leads both nationwide ones, even though it
-  // arrived second.
-  assert.deepEqual(ids(orderByLocationTiers(filtered, ['CA'])), [
-    'california-produce',
-    'nationwide-produce-a',
-    'nationwide-produce-b',
-  ]);
+  // No location tier exists (2026-10-05): the filtered set is left for the
+  // shared comparator, and the module itself holds no sort.
+  const source = readFileSync(join(__dirname, 'feed-filters.ts'), 'utf8');
+  assert.doesNotMatch(source, /orderByLocationTiers|tierA - tierB|locationMatchTier\(a\./);
 });

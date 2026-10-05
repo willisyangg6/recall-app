@@ -1304,7 +1304,9 @@ own layers in the Feed's own order:
 
 - the shared feed session (`useFeed`);
 - `evaluatePersonalRelevance`;
-- `buildAffectsMeSections`, the current Affects Me ordering;
+- `buildAffectsMeSections`, the shared newest-first order (material activity,
+  announcement date, case id — 2026-10-05), inherited with no change to the
+  deck, its cards or its count;
 - `buildHomeCardModel` for each shown item;
 - the first three ranked matches as the readable cards, imaged or not (the
   image-led narrowing of the polish pass is retired, 2026-10-04: a match
@@ -2554,16 +2556,12 @@ from a chosen state ([recall-design-preview.md](recall-design-preview.md)).
 None of these is implemented. Ranking weights, matching semantics,
 discount products and purchase offerings are untouched.
 
-1. **Recency-led Affects You ranking.** Revisit the Affects Me ordering so
-   recency carries substantially more weight: the feed should feel current
-   and change over time rather than leaving the same high-risk recalls
-   permanently at the top. The Ready preview and the Feed both use the
-   CURRENT ordering deliberately; the full specification (match filter,
-   new/unseen first, recency primary with severity as an urgent
-   override/tiebreaker, decay, viewed below unseen, temporary pins for
-   critical unacknowledged notices, re-ranking on meaningful updates) is in
-   [recall-personalization.md](recall-personalization.md) ("Deferred:
-   recency-led Affects You ranking").
+1. ~~**Recency-led Affects You ranking.**~~ Superseded 2026-10-05 by founder
+   decisions: both feeds sort newest first with no severity, match-strength,
+   seen/acknowledged, pin or urgency logic, and the Ready preview selects up
+   to three matches with a usable photo and an assigned risk label while the
+   count stays on every genuine match. Planned, not implemented; the planning
+   record is [recall-feed-ordering.md](recall-feed-ordering.md).
 2. **Onboarding and paywall copy audit.** Once the layouts are approved,
    audit and rewrite repeated copy across the flow (the paywall headline
    and body, the Ready body, the benefits and education all restate
@@ -2571,7 +2569,9 @@ discount products and purchase offerings are untouched.
 3. **A compliant paywall back-out discount.** Research an introductory
    offer shown when a shopper leaves the onboarding paywall — App Store
    offer rules, pricing disclosure, gate behavior. No exit interception
-   and no discount are built.
+   and no discount are built. Reaffirmed deferred 2026-10-05: it sits after
+   the feed-ordering milestone, the feed/filter UI mockups and the card and
+   in-app polish ([recall-feed-ordering.md](recall-feed-ordering.md) §9).
 4. ~~**Notification education polish.**~~ Done 2026-10-03 (§6.11).
 5. **Regenerate the remaining blurred Lucide rasters.** The allergen and
    States glyphs predate the native-scale rasterization (`shopping-cart`

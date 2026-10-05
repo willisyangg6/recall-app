@@ -23,8 +23,8 @@
  * arm anything anyway, so a deep link reaches an inert page.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Stack, router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -375,6 +375,20 @@ interface ConfirmedSections {
 
 export default function DesignPreviewScreen() {
   const insets = useSafeAreaInsets();
+  // `lotly://design-preview?jump=gate` / `?jump=qa` (development QA,
+  // 2026-10-05): scroll straight to the gate scenarios or the Building QA
+  // controls. The hub
+  // is one long ScrollView whose acting controls sit at its end, and a
+  // simulator driver cannot reach them by accessibility scrolling. Display
+  // only: it moves the scroll position and nothing else.
+  const { jump } = useLocalSearchParams<{ jump?: string }>();
+  const scrollRef = useRef<ScrollView>(null);
+  const [gateY, setGateY] = useState<number | null>(null);
+  const [qaY, setQaY] = useState<number | null>(null);
+  useEffect(() => {
+    const target = jump === 'gate' ? gateY : jump === 'qa' ? qaY : null;
+    if (target !== null) scrollRef.current?.scrollTo({ y: target, animated: false });
+  }, [jump, gateY, qaY]);
   const feed = useFeed();
   const [chosen, setChosen] = useState<Partial<Record<PreviewCaseRequirement, string>>>({});
   const [confirmed, setConfirmed] = useState<Record<string, ConfirmedSections>>({});
@@ -669,6 +683,7 @@ export default function DesignPreviewScreen() {
     <ThemedView style={styles.container}>
       <Stack.Screen options={{ title: 'Design Preview' }} />
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[styles.content, { paddingBottom: Spacing.five + insets.bottom }]}>
         <ThemedView type="backgroundSelected" style={styles.banner}>
@@ -936,14 +951,18 @@ export default function DesignPreviewScreen() {
         </ThemedText>
         <PaywallGallery />
 
-        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
-          GATE SCENARIOS
-        </ThemedText>
+        <View onLayout={(event) => setGateY(event.nativeEvent.layout.y)}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+            GATE SCENARIOS
+          </ThemedText>
+        </View>
         <GateScenarios />
 
-        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
-          BUILDING QA
-        </ThemedText>
+        <View onLayout={(event) => setQaY(event.nativeEvent.layout.y)}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+            BUILDING QA
+          </ThemedText>
+        </View>
         <BuildingQaControls />
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>

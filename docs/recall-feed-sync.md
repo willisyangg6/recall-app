@@ -127,13 +127,30 @@ no id, count, or hash leaks. Pinned by `src/server/consumer-manifest.test.ts`
    loader when the cache is empty or more than half the manifest drifted.
 4. Commit atomically: the complete corpus plus, per item, the manifest token
    that **prompted** its download.
+5. **After a full reload only (2026-10-05):** one more manifest request. Ids
+   the manifest lists that the complete loader did not return are fetched by
+   id and committed with the token that listed them (`recoverBehindCursor`).
+   The complete loader pages by immutable id; a case ingestion founds _while
+   the scan runs_ whose random uuid sorts before the cursor is behind the scan
+   and absent from the result — demonstrated with the real loader over a
+   1,200-row scripted server, where a recall announced today was missing and
+   the newest-first feed led with an August case. Stable ids prevent skips
+   and duplicates; they do not prevent this. Under newest-first the one
+   missing card is the one that belongs at the top, so the cold load no
+   longer waits for the next foreground revalidation. Additive and
+   best-effort: removals and token drift stay the next reconciliation's job,
+   and if the extra manifest or row fetch fails the complete full result
+   stands exactly as before. Cost: one manifest (~100 bytes per case) per
+   cold start or large-drift reload; a warm incremental sync is unchanged at
+   one request.
 
 **Consistency model (stated honestly):** tokens are recorded before their
 rows are fetched, so cached content is always at least as new as its token
 claims. A row that changes mid-sync is stored with the older token and
 re-downloaded next sync — one redundant fetch, never an undetectable stale
 row. A case added/hidden after the manifest read appears/disappears one sync
-later. An id the manifest listed but the row fetch no longer sees is
+later — except a case founded behind the cursor during a full reload, which
+step 5 recovers in the same sync. An id the manifest listed but the row fetch no longer sees is
 authoritatively invisible and is removed in the same commit. An empty
 manifest over a non-empty cache is never trusted alone — it triggers a full
 verifying reload.

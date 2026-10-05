@@ -101,7 +101,6 @@ test('Saved is one plain list: no search, sorting, folders, filters, notes or bu
     'FeedFilterState',
     'buildFeedSections',
     'buildAffectsMeSections',
-    'orderByLocationTiers',
     '.sort(',
     'Modal',
     'SectionList',

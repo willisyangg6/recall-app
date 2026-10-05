@@ -189,7 +189,6 @@ test('Home ranks Affects me over the COMPLETE corpus, never the filtered list', 
   // branch reads `state.items`. This is what makes preserved filters inert.
   assert.match(HOME, /buildAffectsMeSections\(state\.items,/);
   assert.ok(!/buildAffectsMeSections\(allVisible/.test(HOME));
-  assert.ok(!/orderByLocationTiers\(ranked\./.test(HOME));
 });
 
 test('filters preserved while in Affects me do not change its results or ranking', () => {

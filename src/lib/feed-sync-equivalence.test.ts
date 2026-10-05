@@ -23,7 +23,7 @@ import {
   memoryCacheStore,
   scriptedTransport,
 } from './feed-fixtures';
-import { applyFeedFilters, orderByLocationTiers, type FeedFilterState } from './feed-filters';
+import { applyFeedFilters, type FeedFilterState } from './feed-filters';
 import { buildFeedSections } from './feed-relevance';
 import { buildSearchEntry, filterBySearch, type SearchEntry } from './feed-search';
 import { syncFeed } from './feed-sync';
@@ -64,10 +64,12 @@ function consumerView(items: FeedItem[]): unknown {
     allRecallsRecent: sections.recent.map((item) => item.id),
     allRecallsOlder: sections.olderActive.map((item) => item.id),
     locationFiltered: applyFeedFilters(items, locationFilter).map((item) => item.id),
-    // Explicit-state priority: selected-state matches order ahead of
-    // nationwide within each section.
-    locationOrderedRecent: orderByLocationTiers(sections.recent, ['CA']).map((item) => item.id),
-    locationOrderedOlder: orderByLocationTiers(sections.olderActive, ['CA']).map((item) => item.id),
+    // A filtered view keeps the shared newest-first order: sectioning the
+    // filtered subset is the whole pipeline (2026-10-05).
+    locationSectionedRecent: buildFeedSections(
+      applyFeedFilters(items, locationFilter),
+      NOW,
+    ).recent.map((item) => item.id),
     riskFiltered: applyFeedFilters(items, riskFilter).map((item) => item.id),
     affectsMe: affectsMe.affects.map((item) => item.id),
     affectsMeOlder: affectsMe.older.map((item) => item.id),

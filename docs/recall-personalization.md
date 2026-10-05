@@ -279,60 +279,51 @@ All Recalls is unchanged in membership, order, sectioning and count. It never
 reads preferences, so nothing personalization decides can remove a notice from
 the product — only from one person's shortlist.
 
-## Affects Me ordering (C3.2)
+## Affects Me ordering (C3.2; newest first since 2026-10-05)
 
 Qualifying is not enough: once dozens of notices affect one person, the order
-IS the product. One pure function ranks them (`src/lib/affects-me-ranking.ts`),
-used by every Affects-me surface, so ordering can never depend on which
-component rendered. It changes ORDER ONLY — eligibility, geography tri-state
-semantics, allergen/retailer matching, push eligibility, All Recalls, and
-NotificationEvent behavior are all untouched.
+IS the product. One pure function sections and ranks them
+(`src/lib/affects-me-ranking.ts`), used by every Affects-me surface — the Feed
+tab, the Ready preview, the Building count — so ordering can never depend on
+which component rendered. It changes ORDER and SECTION ONLY — eligibility,
+geography tri-state semantics, allergen/retailer matching, push eligibility
+and NotificationEvent behavior are all untouched.
 
-### A lexicographic tuple, never an additive score
-
-Each dimension fully decides before the next is consulted:
+### Newest first: one shared order (founder decision, 2026-10-05)
 
 ```
-risk priority → geographic confidence → personal signal → material activity
-              → announcement date → case id
+material activity → announcement date → case id
 ```
 
-A points model was rejected outright: with weights, two retailer matches could
-out-rank a Critical classification, and no one could explain afterwards why a
-card placed second. Here every position answers in one sentence.
+The comparator is `src/lib/recency-order.ts`, and it is the SAME comparator All
+recalls and every filtered view (including the Location filter) use, so no two
+screens can sequence the same recalls differently.
 
-| #   | Dimension             | Order                                                              |
-| --- | --------------------- | ------------------------------------------------------------------ |
-| 1   | Consumer risk         | Critical → Very High → High → **Pending/Unknown** → Moderate → Low |
-| 2   | Geographic confidence | confirmed (state **or** nationwide) → unknown-with-signal          |
-| 3   | Personal signal       | allergen+retailer → allergen → retailer → neither                  |
-| 4   | Material activity     | newest authoritative event first                                   |
-| 5   | Announcement date     | newest first                                                       |
-| 6   | Case id               | ascending — a total order, so renders never reshuffle              |
+| #   | Dimension         | Order                                                 |
+| --- | ----------------- | ----------------------------------------------------- |
+| 1   | Material activity | newest authoritative event first                      |
+| 2   | Announcement date | newest first                                          |
+| 3   | Case id           | ascending — a total order, so renders never reshuffle |
 
-**Pending and Unknown share one position, and are never relabeled.** A notice
-the agency has not classified yet, or never will (a public health alert), must
-not sink below one the agency actively rated Moderate or Low — but it is not
-High either, and nothing infers a preliminary level from hazard text. They are
-grouped for sequence only; `riskView` says "Pending" / "Unknown" and still
-refuses to badge them as a rated tier. The sequence itself did not move when
-the labels were replaced: each old tier and its new name occupy the same
-rung. This is deliberately separate
-from `RISK_TIER_RANK` (domain/risk-tier.ts), which ranks them `null` precisely
-because they have no severity.
+**What left the ordering, and why.** The C3.2 tuple led with consumer risk
+(Critical → Very High → High → Pending/Unknown → Moderate → Low), then
+geographic confidence (confirmed over unknown-with-signal), then personal
+signal (allergen+store → allergen → store → none), and only then the dates.
+Measured on the live corpus it left the same August Class I recalls
+permanently at the top while October recalls sat below them. Since 2026-10-05
+none of those three is compared: a Pending recall announced today sits above a
+Critical recall from August; a recall matching three stores sits where its
+dates put it; confirmed and unknown geography sort alike. Risk is a **label**
+on the card (`riskView`), never a position, and Pending and Unknown stay
+distinct labels. There is no seen/acknowledged record, no viewed demotion, no
+pin and no urgency override — all considered and rejected by the founder
+(`docs/recall-feed-ordering.md`).
 
-**Explicit state and nationwide are the same confidence** — both are the agency
-saying the product reached the user's area. Which one it was is carried by the
-relevance reasons ("Affects California" / "Nationwide recall") in the model,
-never by position — and since P2a not by any on-card chip.
-An authoritative geographic **exclusion** never enters Affects Me at all, so it
-cannot be out-ranked by any personal signal.
-
-**Signals are Boolean categories, never counts.** Matching three selected
-retailers is the same fact as matching one: the user shops there. Allergen
-outranks retailer because an allergen match is a direct hazard relationship
-with the product, while a retailer match only says the user shops where it was
-sold — it never implies they bought it.
+**Membership is untouched.** An authoritative geographic **exclusion** never
+enters Affects Me at all; an unknown-location notice still qualifies only on
+an allergen or store signal; the allergen-only rule (below) still withholds.
+The relevance verdict decides who is in the list and what the card says
+("Affects California" / "Nationwide recall"); it decides nothing about where.
 
 ### Material activity: the one date allowed to make a recall feel current
 
@@ -365,14 +356,25 @@ than counting keeps that distinction intact. Deliberately excluded:
 notification-eligible), and our own maintenance writes, which append no
 timeline entry at all.
 
-Because every material entry is stamped with the source-published activity date
-of the re-projection that created it, material activity is always
-≤ `lastPublicActivityAt`. The Affects-me 60-day window is therefore a strict
-**tightening** of the All Recalls one, never a widening — the same
-`RECENT_WINDOW_DAYS` boundary applied to a stricter date. Live delta for the
-representative profile: 22 recent by public activity → 21 by material activity
-(one demoted for bookkeeping-only movement), with 8 of the 21 raised above
-their announcement date by a genuine authoritative event.
+**Correction (2026-10-05): material activity is NOT bounded by
+`lastPublicActivityAt`.** Earlier versions of this section claimed every
+material entry is stamped with the re-projection's source-published activity
+date, so material activity ≤ `lastPublicActivityAt` and the Affects-me window
+was a strict tightening of All Recalls'. Pipeline entries are stamped that way;
+**enforcement-derived classification entries are not** — they carry FDA's own
+`center_classification_date` (`server/fda-enforcement/enrich.ts`), and
+enforcement records are never voiced into `lastPublicActivityAt`
+(`domain/projection.ts`). Live on 2026-10-05, 232 of 911 active cases had a
+classification dated AFTER their `lastPublicActivityAt`. Under two dates a
+recall could be Older in All Recalls and current in Affects me at once; since
+2026-10-05 both feeds split and order on material activity alone, and the
+claim is retired. The same change closed the one path that could have written
+our clock to a material entry (an enforcement record with no FDA date now
+falls back to the case's last agency-published activity, never the ingest
+day). Live delta for the representative profile at C3.2: 22 recent by public
+activity → 21 by material activity (one demoted for bookkeeping-only
+movement), with 8 of the 21 raised above their announcement date by a genuine
+authoritative event.
 
 The feed row therefore carries `timeline` (~257 bytes per active case, ~130 KB
 over a 500-row feed). The alternative — a persisted derived date — would be a
@@ -396,26 +398,20 @@ announced today. Cards still show risk state and that one date, plus the
 generic "Affects you" flag when the verdict holds; no numeric score, sort
 key, purchase claim, or safety claim about excluded items is ever exposed.
 
-### Deferred: recency-led Affects You ranking (recorded 2026-09-28)
+### Superseded: recency-led Affects You ranking (recorded 2026-09-28, superseded 2026-10-05)
 
-The onboarding Ready preview (2026-09-28) reuses the ordering above
-deliberately and unchanged. A future milestone — not started, not designed
-beyond this note — should rework the Affects Me ordering to be recency-led:
-
-1. filter to actual preference matches (membership as today);
-2. prioritize new and unseen matches;
-3. make recency the primary ordering signal;
-4. retain severity as an urgent override/tiebreaker, not the leading key;
-5. decay older notices;
-6. place viewed notices below unseen ones;
-7. temporarily pin critical unacknowledged notices;
-8. re-rank meaningfully updated recalls (the material-change ledger is the
-   evidence source).
-
-Items 2, 6 and 7 need a per-device seen/acknowledged record that does not
-exist yet; that storage design is part of the milestone. When it lands, the
-Ready preview inherits it automatically through the shared layer
-(`src/lib/ready-preview.ts`).
+The 2026-09-28 note proposed a recency-led rework that kept severity as an
+urgent override, demoted viewed notices, pinned critical unacknowledged
+notices and decayed older ones. Founder decisions on 2026-10-05 replace it:
+both feeds sort **newest first** by authoritative announcement or meaningful
+official-update recency; severity and preference-match strength leave the
+ordering entirely; there is **no** seen/acknowledged model, viewed demotion,
+pin or urgency override; eligibility above is preserved exactly. The planning
+record — current versus proposed behavior, the date hierarchy, before/after
+tables on real fixtures, Ready preview eligibility counts and the open
+decisions — is [recall-feed-ordering.md](recall-feed-ordering.md). The
+ordering described in this section is still the shipped behavior until that
+milestone is implemented; this section is then rewritten in the same change.
 
 ## Preferences: storage and sync
 

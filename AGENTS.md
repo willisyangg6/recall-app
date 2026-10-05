@@ -34,6 +34,7 @@ it in the same change rather than describing the new behavior somewhere else.
 | Runbook: failures, alerting, SLOs, cost            | [docs/recall-production-runbook.md](docs/recall-production-runbook.md)         |
 | Feed sync and cache                                | [docs/recall-feed-sync.md](docs/recall-feed-sync.md)                           |
 | Feed usability and filtering                       | [docs/recall-feed-usability.md](docs/recall-feed-usability.md)                 |
+| Feed ordering decision record; Ready preview plan  | [docs/recall-feed-ordering.md](docs/recall-feed-ordering.md)                   |
 | Product categories                                 | [docs/recall-food-categories.md](docs/recall-food-categories.md)               |
 | Personalization and Affects-Me                     | [docs/recall-personalization.md](docs/recall-personalization.md)               |
 | Community shopper reports                          | [docs/recall-shopper-reports.md](docs/recall-shopper-reports.md)               |

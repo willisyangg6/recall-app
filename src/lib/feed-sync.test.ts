@@ -20,6 +20,14 @@ import { createFeedSession, loadCachedFeed, syncFeed } from './feed-sync';
 
 const NOW = () => new Date('2026-08-28T12:00:00Z');
 
+/**
+ * Manifest requests one COLD sync costs (2026-10-05): the manifest that
+ * starts the reconciliation, and the recovery pass after the full reload
+ * that looks for a case founded behind the loader's cursor. A warm
+ * incremental sync still costs exactly one.
+ */
+const COLD_MANIFESTS = 2;
+
 function ids(items: { id: string }[]): string[] {
   return items.map((item) => item.id).sort();
 }
@@ -373,7 +381,9 @@ test('concurrent refreshes coalesce into one reconciliation', async () => {
   release!(manifestFor(corpus));
   const [a, b] = await Promise.all([first, second]);
   assert.equal(a, b);
-  assert.equal(scripted.calls.manifest, 1);
+  // One reconciliation for two callers: the cold manifest and its recovery
+  // pass, never a second reconciliation's worth.
+  assert.equal(scripted.calls.manifest, COLD_MANIFESTS);
 });
 
 test('a refresh after completion performs a fresh reconciliation (pull-to-refresh)', async () => {
@@ -392,7 +402,7 @@ test('a refresh after completion performs a fresh reconciliation (pull-to-refres
   scripted.setAll([...corpus, added]);
 
   const refreshed = await session.sync();
-  assert.equal(scripted.calls.manifest, 2); // a real second reconciliation
+  assert.equal(scripted.calls.manifest, COLD_MANIFESTS + 1); // a real second reconciliation
   assert.ok(refreshed.items.some((item) => item.id === added.id));
 });
 
@@ -560,11 +570,15 @@ const FIFTEEN_MINUTES = 15 * 60_000;
 test('a foreground return inside the threshold issues no request at all', async () => {
   const { session, scripted, advanceMinutes } = foregroundSession();
   await session.sync();
-  assert.equal(scripted.calls.manifest, 1);
+  assert.equal(scripted.calls.manifest, COLD_MANIFESTS);
 
   advanceMinutes(14);
   assert.equal(await session.syncIfOlderThan(FIFTEEN_MINUTES), null);
-  assert.equal(scripted.calls.manifest, 1, 'a skipped foreground still hit the network');
+  assert.equal(
+    scripted.calls.manifest,
+    COLD_MANIFESTS,
+    'a skipped foreground still hit the network',
+  );
 });
 
 test('a foreground return past the threshold revalidates exactly once', async () => {
@@ -574,7 +588,7 @@ test('a foreground return past the threshold revalidates exactly once', async ()
 
   const outcome = await session.syncIfOlderThan(FIFTEEN_MINUTES);
   assert.ok(outcome, 'the threshold boundary did not revalidate');
-  assert.equal(scripted.calls.manifest, 2);
+  assert.equal(scripted.calls.manifest, COLD_MANIFESTS + 1);
 });
 
 test('rapid AppState events cost one request, not one each', async () => {
@@ -588,7 +602,11 @@ test('rapid AppState events cost one request, not one each', async () => {
   const results = await Promise.all(
     Array.from({ length: 12 }, () => session.syncIfOlderThan(FIFTEEN_MINUTES)),
   );
-  assert.equal(scripted.calls.manifest, 2, 'a burst of transitions fanned out into requests');
+  assert.equal(
+    scripted.calls.manifest,
+    COLD_MANIFESTS + 1,
+    'a burst of transitions fanned out into requests',
+  );
   // Every caller got the same in-flight reconciliation.
   const synced = results.filter((outcome) => outcome !== null);
   assert.equal(synced.length, 12);
@@ -632,14 +650,16 @@ test('the threshold is measured from the last SUCCESSFUL sync, not the last atte
   scripted.setAll([]);
   const retried = await session.syncIfOlderThan(FIFTEEN_MINUTES);
   assert.ok(retried, 'a failed attempt was treated as a refresh');
-  assert.equal(scripted.calls.manifest, attempts + 1);
+  // An empty manifest over a non-empty cache takes the complete loader, whose
+  // recovery pass costs the second manifest of a cold sync.
+  assert.equal(scripted.calls.manifest, attempts + COLD_MANIFESTS);
 });
 
 test('a session that has never synced always revalidates on foreground', async () => {
   const { session, scripted } = foregroundSession();
   const outcome = await session.syncIfOlderThan(FIFTEEN_MINUTES);
   assert.ok(outcome);
-  assert.equal(scripted.calls.manifest, 1);
+  assert.equal(scripted.calls.manifest, COLD_MANIFESTS);
 });
 
 test('a device clock that jumps BACKWARD revalidates rather than believing it is fresh', async () => {
@@ -652,7 +672,7 @@ test('a device clock that jumps BACKWARD revalidates rather than believing it is
   setClock(synced - 3_600_000);
 
   assert.ok(await session.syncIfOlderThan(FIFTEEN_MINUTES));
-  assert.equal(scripted.calls.manifest, 2);
+  assert.equal(scripted.calls.manifest, COLD_MANIFESTS + 1);
 });
 
 test('the cached corpus is available before any request, so the list never flashes empty', async () => {
@@ -664,7 +684,7 @@ test('the cached corpus is available before any request, so the list never flash
   const cached = await warm.getCached();
   assert.ok(cached);
   assert.equal(cached.length, 9);
-  assert.equal(scripted.calls.manifest, 1, 'reading the cache issued a request');
+  assert.equal(scripted.calls.manifest, COLD_MANIFESTS, 'reading the cache issued a request');
 });
 
 test('no cache and no network yields nothing to show, and says so by throwing', async () => {
@@ -724,4 +744,118 @@ test('a failed sync leaves served() exactly as it was: a failure is never handed
   });
   await assert.rejects(empty.sync());
   assert.equal(empty.served(), null);
+});
+
+// ── Recovery behind the cursor (2026-10-05) ──────────────────────────────────
+
+/**
+ * A server whose complete loader can be interrupted by ingestion: between the
+ * first and second page, a case announced TODAY is founded with an id that
+ * sorts BEFORE the cursor. The real loader cannot see it (demonstrated with
+ * `loadAllPages` directly); the full reload's recovery pass must.
+ */
+function serverWithFoundingMidScan(size: number) {
+  let rows = makeCorpus(size);
+  const newest = makeFeedItem(7, {
+    id: 'case-00000-founded-mid-scan',
+    publishedAt: '2026-08-28T00:00:00.000Z',
+    lastPublicActivityAt: '2026-08-28T00:00:00.000Z',
+    timeline: [
+      {
+        occurredAt: '2026-08-28T00:00:00.000Z',
+        kind: 'published',
+        summary: 'Recall published.',
+        causedBySnapshotIds: [],
+        material: false,
+      },
+    ],
+  });
+  let founded = false;
+  const calls = { manifest: 0, byIds: [] as string[][] };
+  const transport = {
+    async fetchManifest() {
+      calls.manifest += 1;
+      return manifestFor(rows);
+    },
+    // The complete loader as the server sees it: id pages of 500, and the
+    // founding lands after page 1 has been served.
+    async fetchAll() {
+      const out = [];
+      let cursor: string | null = null;
+      for (;;) {
+        const page = [...rows]
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .filter((r) => cursor === null || r.id > cursor)
+          .slice(0, 500);
+        out.push(...page);
+        if (!founded) {
+          founded = true;
+          rows = [...rows, newest];
+        }
+        if (page.length < 500) break;
+        cursor = page[page.length - 1].id;
+      }
+      return out;
+    },
+    async fetchByIds(ids: string[]) {
+      calls.byIds.push([...ids]);
+      return rows.filter((r) => ids.includes(r.id));
+    },
+  };
+  return { transport, calls, newest, size: () => rows.length };
+}
+
+test('a case founded behind the cursor during a full reload is recovered in the same sync', async () => {
+  const server = serverWithFoundingMidScan(1200);
+  const cache = memoryCacheStore();
+
+  const outcome = await syncFeed({ store: cache.store, transport: server.transport, now: NOW });
+
+  assert.equal(outcome.mode, 'full');
+  assert.equal(server.size(), 1201);
+  assert.equal(outcome.items.length, 1201, 'the founded case is in the committed corpus');
+  assert.ok(outcome.items.some((item) => item.id === server.newest.id));
+  assert.equal(outcome.downloadedRows, 1201);
+  // Exactly one recovery manifest after the cold one, and exactly the missing id.
+  assert.equal(server.calls.manifest, 2);
+  assert.deepEqual(server.calls.byIds, [[server.newest.id]]);
+  // Committed under the token that listed it, so the next sync does not re-fetch it.
+  const stored = parseFeedCache(cache.current()!);
+  assert.ok(stored);
+  assert.equal(stored.items.length, 1201);
+  assert.equal(stored.versions[server.newest.id], manifestFor([server.newest])[0].version);
+  const again = await syncFeed({ store: cache.store, transport: server.transport, now: NOW });
+  assert.equal(again.mode, 'incremental');
+  assert.equal(again.downloadedRows, 0);
+});
+
+test('with nothing founded behind the cursor the recovery pass downloads nothing', async () => {
+  const corpus = makeCorpus(30);
+  const scripted = scriptedTransport(corpus);
+  const cache = memoryCacheStore();
+  const outcome = await syncFeed({ store: cache.store, transport: scripted.transport, now: NOW });
+  assert.equal(outcome.downloadedRows, 30);
+  assert.equal(scripted.calls.manifest, 2, 'the cold manifest and the recovery manifest');
+  assert.deepEqual(scripted.calls.byIds, []);
+});
+
+test('a failing recovery pass leaves the complete full result standing', async () => {
+  const server = serverWithFoundingMidScan(600);
+  const cache = memoryCacheStore();
+  let manifests = 0;
+  const transport = {
+    ...server.transport,
+    async fetchManifest() {
+      manifests += 1;
+      if (manifests === 2) throw new Error('recovery manifest offline');
+      return server.transport.fetchManifest();
+    },
+  };
+  const outcome = await syncFeed({ store: cache.store, transport, now: NOW });
+  assert.equal(outcome.items.length, 600, 'complete as of the scan; the founded case waits');
+  assert.equal(outcome.persisted, true);
+  // The next ordinary reconciliation finds it, exactly as before.
+  const next = await syncFeed({ store: cache.store, transport, now: NOW });
+  assert.equal(next.mode, 'incremental');
+  assert.ok(next.items.some((item) => item.id === server.newest.id));
 });

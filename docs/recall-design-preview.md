@@ -563,6 +563,11 @@ feed cache` (relaunch afterwards to start the way a first launch does).
   saved choices to Building and Ready only, display only and never saved.
   Set Live and Saved choices when done. Reconnecting a QA simulator to its Metro:
   `xcrun simctl openurl <udid> "exp+recall-app://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A<port>"`.
+  **Jumping to the acting controls (2026-10-05):** the hub is one long
+  ScrollView and a simulator driver cannot reach its end by accessibility
+  scrolling, so `lotly://design-preview?jump=gate` opens it scrolled to the
+  gate scenarios and `?jump=qa` to the Building QA controls. Display only:
+  the parameter moves the scroll position and nothing else.
 
 The purchase flow (`src/hooks/use-purchase-flow.tsx`) hands both paywall
 routes development controls beneath the plans in a

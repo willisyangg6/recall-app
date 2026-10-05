@@ -30,8 +30,24 @@
  *
  * Deliberately NOT counted: `source_updated` bookkeeping entries, agency
  * closure (dashboard-visible, never notification-eligible — and closed cases
- * leave the active feed anyway), and anything our own maintenance writes,
- * which never append a timeline entry at all.
+ * leave the active feed anyway), repair `corrected` entries (`material:
+ * false`, dated by our clock), and anything our own maintenance writes, which
+ * never append a timeline entry at all. The flag is what is read, never the
+ * kind: `health_impact` and `instructions_changed` write kind
+ * `source_updated` with `material: true`, and they count.
+ *
+ * Since 2026-10-05 this is THE feed date: both feeds and every filtered view
+ * order by it and split recent/older on it (lib/recency-order.ts,
+ * lib/feed-relevance.ts). `lastPublicActivityAt` is no longer an ordering key
+ * anywhere.
+ *
+ * Material activity is NOT bounded by `lastPublicActivityAt`. Pipeline
+ * entries are stamped with the re-projection's `lastPublicActivityAt`, but
+ * enforcement-derived classification entries carry FDA's own classification
+ * date, and enforcement records are never voiced into `lastPublicActivityAt`
+ * — so a classification can, and routinely does, postdate it (live,
+ * 2026-10-05: 232 of 911 active cases). Earlier versions of this comment
+ * claimed the opposite; nothing may rely on that ordering.
  */
 
 import type { TimelineEntry } from './recall-types';
@@ -47,9 +63,8 @@ function day(iso: string): string {
 
 /**
  * The latest authoritative event date for a case, as `YYYY-MM-DD`.
- * Always ≥ the announcement date, and never later than
- * `lastPublicActivityAt` (every material entry is stamped with the
- * source-published activity date of the re-projection that created it).
+ * Always ≥ the announcement date; see the header for why it may exceed
+ * `lastPublicActivityAt`.
  */
 export function materialActivityAt(
   publishedAt: string,

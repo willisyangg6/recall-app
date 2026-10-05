@@ -559,6 +559,26 @@ speculative improvement; each needs its own milestone and its own founder
 review. Nothing here is a launch blocker — those live in
 [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md).
 
+- **Newest-first feed ordering (founder decision, IMPLEMENTED 2026-10-05,
+  uncommitted).** All recalls and Affects me now sort by one shared order —
+  material activity, then announcement date, then case id
+  (`src/lib/recency-order.ts`) — in both sections and in every filtered view
+  including Location. All recalls splits Recent / Older on material activity
+  too, so a wording edit never moves or resurfaces a recall. Consumer risk,
+  geographic confidence and allergen/store match strength left the ordering;
+  there is no seen/acknowledged record, viewed demotion, pin or urgency
+  override; matching eligibility, the 60-day window, lifecycle and push are
+  unchanged. A full feed reload now runs one manifest reconciliation after it
+  commits, recovering a case founded behind the id cursor during the scan. A
+  prerequisite server change (D9) stops an enforcement classification with no
+  FDA date from ever carrying our ingest day. The Ready preview inherits the
+  order; its planned photo/rated-risk selection is **not** implemented.
+  Decision record and evidence:
+  [docs/recall-feed-ordering.md](docs/recall-feed-ordering.md). Next:
+  **feed/filter UI mockups** (one Filters button on both feeds, no separate
+  risk-only control), then **card and in-app polish**. Discounts stay
+  deferred.
+
 - **P2B7O — search field audit and retailer presentation. IMPLEMENTED
   2026-09-20.** The audit found search reads six stored fields the Feed card
   renders none of directly, two of which it never renders at all — so

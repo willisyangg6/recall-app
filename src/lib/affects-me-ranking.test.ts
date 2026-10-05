@@ -1,6 +1,8 @@
 /**
- * The approved C3.2 hierarchy, proved dimension by dimension, plus the
- * invariants that say what this milestone must NOT have changed.
+ * Newest-first Affects me (2026-10-05): the one shared recency order, proved
+ * on each thing that used to move a recall and no longer does, plus the
+ * invariants this milestone must NOT have changed — eligibility, sections,
+ * push, and the count the Ready preview and the Building step show.
  */
 
 import assert from 'node:assert/strict';
@@ -14,14 +16,16 @@ import type {
   TimelineEntry,
 } from '@/domain/recall-types';
 import { consumerRiskTier } from '@/domain/risk-tier';
+import { BASELINE_RECALLS, BASELINE_RECORDED_AT } from '@/lib/baseline-recalls';
 import {
   affectsMePriority,
   buildAffectsMeSections,
   compareAffectsMePriority,
   explainAffectsMePriority,
 } from './affects-me-ranking';
-import { buildFeedSections } from './feed-relevance';
+import { buildFeedSections, tierForActivityDate } from './feed-relevance';
 import type { FeedItem } from './recall-feed';
+import { compareRecency, sortNewestFirst } from './recency-order';
 import { evaluatePersonalRelevance, pushEligible } from './relevance';
 import { riskView } from './risk-display';
 
@@ -67,14 +71,17 @@ function published(occurredAt: string): TimelineEntry {
 function materialEntry(
   occurredAt: string,
   kind: TimelineEntry['kind'] = 'expanded',
+  ruleId: TimelineEntry['ruleId'] = kind === 'classified'
+    ? 'classification_assigned'
+    : 'expansion_products',
 ): TimelineEntry {
   return {
     occurredAt,
     kind,
-    summary: 'The agency expanded this recall.',
+    summary: 'Authoritative change.',
     causedBySnapshotIds: [],
     material: true,
-    ruleId: kind === 'classified' ? 'classification_assigned' : 'expansion_products',
+    ruleId,
   };
 }
 
@@ -110,7 +117,7 @@ function item(overrides: Partial<FeedItem> = {}): FeedItem {
     retailerNames: [],
     heroImageUrl: null,
     productNames: [],
-    geography: geo('unknown'),
+    geography: geo('nationwide'),
     officialUrl: 'https://example.gov',
     timeline: [published(publishedAt)],
     ...overrides,
@@ -118,17 +125,7 @@ function item(overrides: Partial<FeedItem> = {}): FeedItem {
 }
 
 function relevanceOf(prefs: UserRecallPreferences) {
-  return (candidate: FeedItem) =>
-    evaluatePersonalRelevance(
-      {
-        geography: candidate.geography,
-        pathogenOrAllergen: candidate.pathogenOrAllergen,
-        retailerNames: candidate.retailerNames,
-        hazardCategory: candidate.hazardCategory,
-        reasonText: candidate.reasonText,
-      },
-      prefs,
-    );
+  return (candidate: FeedItem) => evaluatePersonalRelevance(candidate, prefs);
 }
 
 function rank(items: FeedItem[], prefs: UserRecallPreferences = CALIFORNIAN) {
@@ -139,219 +136,123 @@ function order(items: FeedItem[], prefs: UserRecallPreferences = CALIFORNIAN): s
   return rank(items, prefs).affects.map((entry) => entry.id);
 }
 
-// ── Dimension 1: consumer risk leads ─────────────────────────────────────────
+// ── Newest first ─────────────────────────────────────────────────────────────
 
-test('risk is the first dimension: Critical, Very High, High, Pending/Unknown, Moderate, Low', () => {
-  const minimal = item({ classification: classes('class_III'), geography: geo('nationwide') });
-  const unrated = item({ classification: PHA_CLASSIFICATION, geography: geo('nationwide') });
-  const critical = item({ classification: classes('class_I'), geography: geo('nationwide') });
-  const low = item({
-    classification: classes('class_II', 'class_III'),
-    geography: geo('nationwide'),
-  });
-  const pending = item({ classification: classes(), geography: geo('nationwide') });
-  const high = item({
-    classification: classes('class_I', 'class_II'),
-    geography: geo('nationwide'),
-  });
-  const moderate = item({ classification: classes('class_II'), geography: geo('nationwide') });
-
-  assert.deepEqual(order([minimal, unrated, critical, low, pending, high, moderate]), [
-    critical.id,
-    high.id,
-    moderate.id,
-    // Pending and Unknown share one position; the id tie-break settles them.
-    ...[pending.id, unrated.id].sort(),
-    low.id,
-    minimal.id,
-  ]);
+test('a newer Pending recall ranks ahead of an older Critical one', () => {
+  const criticalOlder = item({ classification: classes('class_I'), publishedAt: '2026-08-01' });
+  const pendingNewer = item({ classification: classes(), publishedAt: '2026-08-19' });
+  assert.deepEqual(order([criticalOlder, pendingNewer]), [pendingNewer.id, criticalOlder.id]);
+  // The labels are untouched: Pending stays Pending, Critical stays Critical.
+  assert.equal(riskView(pendingNewer.classification, 'FDA', 'recall').badgeLabel, 'PENDING');
+  assert.equal(riskView(criticalOlder.classification, 'FDA', 'recall').badgeLabel, 'CRITICAL');
 });
 
-test('Critical with confirmed geography outranks High with an exact personal signal', () => {
-  const criticalPlain = item({
-    classification: classes('class_I'),
-    geography: geo('states', ['California']),
+test('a newer Moderate recall ranks ahead of an older Critical one', () => {
+  const criticalOlder = item({ classification: classes('class_I'), publishedAt: '2026-08-05' });
+  const moderateNewer = item({
+    classification: classes('class_II', 'class_III'),
+    publishedAt: '2026-08-21',
   });
-  const highWithBoth = item({
-    classification: classes('class_I', 'class_II'),
-    geography: geo('states', ['California']),
+  assert.equal(consumerRiskTier(moderateNewer.classification), 'moderate');
+  assert.deepEqual(order([criticalOlder, moderateNewer]), [moderateNewer.id, criticalOlder.id]);
+});
+
+test('every tier on one day: risk decides nothing, the id decides everything', () => {
+  const tiers = [
+    item({ classification: classes('class_III') }),
+    item({ classification: PHA_CLASSIFICATION, noticeType: 'public_health_alert' }),
+    item({ classification: classes('class_I') }),
+    item({ classification: classes('class_II', 'class_III') }),
+    item({ classification: classes() }),
+    item({ classification: classes('class_I', 'class_II') }),
+    item({ classification: classes('class_II') }),
+  ];
+  assert.deepEqual(order(tiers), tiers.map((entry) => entry.id).sort());
+});
+
+// ── Match strength moves nothing ─────────────────────────────────────────────
+
+test('a stronger preference match does not change the order: allergen + store, allergen, store, none', () => {
+  const both = item({
+    publishedAt: '2026-08-10',
     pathogenOrAllergen: 'Undeclared sesame',
     retailerNames: ['Costco'],
   });
-  assert.deepEqual(order([highWithBoth, criticalPlain]), [criticalPlain.id, highWithBoth.id]);
+  const allergenOnly = item({ publishedAt: '2026-08-12', pathogenOrAllergen: 'Undeclared sesame' });
+  const retailerOnly = item({ publishedAt: '2026-08-14', retailerNames: ['Costco'] });
+  const neither = item({ publishedAt: '2026-08-16' });
+  // Newest first, which here is the REVERSE of signal strength.
+  assert.deepEqual(order([both, allergenOnly, retailerOnly, neither]), [
+    neither.id,
+    retailerOnly.id,
+    allergenOnly.id,
+    both.id,
+  ]);
+  // The relevance layer still sees every signal — membership and card copy
+  // keep them; only the position stopped reading them.
+  assert.equal(relevanceOf(CALIFORNIAN)(both).matchedAllergens.length, 1);
+  assert.equal(relevanceOf(CALIFORNIAN)(both).matchedRetailers.length, 1);
 });
 
-test('Pending and Unknown rank below High and above Moderate — and are never relabeled', () => {
-  const pending = item({ classification: classes() });
-  const unrated = item({ classification: PHA_CLASSIFICATION, noticeType: 'public_health_alert' });
-
-  assert.equal(consumerRiskTier(pending.classification), 'pending');
-  assert.equal(consumerRiskTier(unrated.classification), 'unknown');
-  // Ordering never becomes a label: the risk layer still says Pending /
-  // Unknown, and neither is ever badged as a rated tier on a card.
-  assert.equal(riskView(pending.classification, 'FDA', pending.noticeType).tier, 'pending');
-  assert.equal(riskView(pending.classification, 'FDA', pending.noticeType).badgeLabel, 'PENDING');
-  // `unrated` is a Public Health Alert, so its Unknown is the one absence that
-  // is no longer badged (P2B7N). What matters HERE is that suppressing the
-  // badge changed nothing about ranking: the tier the priority sequence reads
-  // is still `unknown`, and the assertions below still place it exactly where
-  // it always sat. Presentation visibility and ordering are separate layers.
-  assert.equal(riskView(unrated.classification, 'FSIS', unrated.noticeType).tier, 'unknown');
-  assert.equal(riskView(unrated.classification, 'FSIS', unrated.noticeType).badgeLabel, null);
-  // Read as a recall, the identical classification still badges UNKNOWN — the
-  // exception is the notice type's, not the tier's.
-  assert.equal(riskView(unrated.classification, 'FSIS', 'recall').badgeLabel, 'UNKNOWN');
-
-  const pendingPriority = affectsMePriority(pending, relevanceOf(CALIFORNIAN)(pending));
-  const unratedPriority = affectsMePriority(unrated, relevanceOf(CALIFORNIAN)(unrated));
-  const moderate = item({ classification: classes('class_II') });
-  const low = item({ classification: classes('class_II', 'class_III') });
-  const moderatePriority = affectsMePriority(moderate, relevanceOf(CALIFORNIAN)(moderate));
-  const lowPriority = affectsMePriority(low, relevanceOf(CALIFORNIAN)(low));
-
-  assert.equal(pendingPriority.riskPriority, unratedPriority.riskPriority);
-  assert.ok(moderatePriority.riskPriority < pendingPriority.riskPriority);
-  assert.ok(pendingPriority.riskPriority < lowPriority.riskPriority);
+test('three matched stores are not worth more than one, and two allergens not more than one', () => {
+  const one = item({ retailerNames: ['Costco'] });
+  const three = item({
+    retailerNames: ['Costco', "Trader Joe's", 'Costco Wholesale'],
+    pathogenOrAllergen: 'Undeclared sesame and peanuts',
+  });
+  assert.deepEqual(affectsMePriority(one), { ...affectsMePriority(three), id: one.id });
+  assert.deepEqual(order([three, one]), [one.id, three.id].sort());
 });
 
-// ── Dimension 2: geographic confidence ───────────────────────────────────────
-
-test('within equal risk, confirmed geography outranks unknown geography with signals', () => {
-  const confirmed = item({ geography: geo('states', ['California']) });
-  const unknownWithBoth = item({
+test('confirmed geography does not outrank unknown geography kept by a signal', () => {
+  const confirmedOlder = item({
+    geography: geo('states', ['California']),
+    publishedAt: '2026-08-10',
+  });
+  const unknownNewer = item({
     geography: geo('unknown'),
     pathogenOrAllergen: 'Undeclared sesame',
+    publishedAt: '2026-08-18',
+  });
+  assert.deepEqual(order([confirmedOlder, unknownNewer]), [unknownNewer.id, confirmedOlder.id]);
+});
+
+test('a geography correction changes membership only, never a position among the eligible', () => {
+  // C5.2A repairs `projection.geography` only. The sort key does not read
+  // geography, so a corrected case holds exactly the place its dates give it.
+  const other = item({ geography: geo('states', ['California']), publishedAt: '2026-08-01' });
+  const beforeRepair = item({
+    geography: geo('unknown'),
     retailerNames: ['Costco'],
+    publishedAt: RECENT_DAY,
   });
-  assert.deepEqual(order([unknownWithBoth, confirmed]), [confirmed.id, unknownWithBoth.id]);
+  const afterRepair: FeedItem = { ...beforeRepair, geography: geo('states', ['California']) };
+  assert.deepEqual(affectsMePriority(beforeRepair), affectsMePriority(afterRepair));
+  assert.deepEqual(order([other, beforeRepair]), [beforeRepair.id, other.id]);
+  assert.deepEqual(order([other, afterRepair]), [afterRepair.id, other.id]);
 });
 
-test('explicit state inclusion and nationwide are equal geographic confidence', () => {
-  const stateListed = item({ geography: geo('states', ['California', 'Nevada']) });
-  const nationwide = item({ geography: geo('nationwide') });
-  const a = affectsMePriority(stateListed, relevanceOf(CALIFORNIAN)(stateListed));
-  const b = affectsMePriority(nationwide, relevanceOf(CALIFORNIAN)(nationwide));
-  assert.equal(a.geographyPriority, 0);
-  assert.equal(b.geographyPriority, 0);
-  // The distinction is carried by the reason chip, not by the position.
-  assert.deepEqual(
-    relevanceOf(CALIFORNIAN)(stateListed).reasons.map((r) => r.label),
-    ['Affects California'],
-  );
-  assert.deepEqual(
-    relevanceOf(CALIFORNIAN)(nationwide).reasons.map((r) => r.label),
-    ['Nationwide recall'],
-  );
-});
+// ── Material activity: what may move a recall ────────────────────────────────
 
-test('an authoritative geographic exclusion still overrides every personal signal', () => {
-  const excluded = item({
-    classification: classes('class_I'),
-    geography: geo('states', ['Maine']),
-    pathogenOrAllergen: 'Undeclared sesame and peanuts',
-    retailerNames: ['Costco', "Trader Joe's"],
+test('a meaningful official update resurfaces an old recall to the top', () => {
+  const freshAnnouncement = item({ publishedAt: '2026-08-18' });
+  const expanded = item({
+    publishedAt: OLD_DAY,
+    lastPublicActivityAt: '2026-08-24',
+    timeline: [published(OLD_DAY), materialEntry('2026-08-24')],
   });
-  const ordinary = item({ classification: classes('class_III'), geography: geo('nationwide') });
-  const sections = rank([excluded, ordinary]);
+  const sections = rank([freshAnnouncement, expanded]);
   assert.deepEqual(
     sections.affects.map((i) => i.id),
-    [ordinary.id],
+    [expanded.id, freshAnnouncement.id],
   );
   assert.deepEqual(sections.older, []);
-});
-
-// ── Dimension 3: personal-signal strength ────────────────────────────────────
-
-test('allergen + retailer > allergen > retailer > no signal, at equal risk and geography', () => {
-  const both = item({
-    geography: geo('nationwide'),
-    pathogenOrAllergen: 'Undeclared sesame',
-    retailerNames: ['Costco'],
-  });
-  const allergenOnly = item({
-    geography: geo('nationwide'),
-    pathogenOrAllergen: 'Undeclared sesame',
-  });
-  const retailerOnly = item({ geography: geo('nationwide'), retailerNames: ['Costco'] });
-  const neither = item({ geography: geo('nationwide') });
-  assert.deepEqual(order([neither, retailerOnly, allergenOnly, both]), [
-    both.id,
-    allergenOnly.id,
-    retailerOnly.id,
-    neither.id,
-  ]);
-});
-
-test('signals are boolean categories — matching three retailers is not worth more than one', () => {
-  const oneRetailer = item({ geography: geo('nationwide'), retailerNames: ['Costco'] });
-  const twoRetailers = item({
-    geography: geo('nationwide'),
-    retailerNames: ['Costco', "Trader Joe's"],
-  });
-  const a = affectsMePriority(oneRetailer, relevanceOf(CALIFORNIAN)(oneRetailer));
-  const b = affectsMePriority(twoRetailers, relevanceOf(CALIFORNIAN)(twoRetailers));
-  assert.equal(a.signalPriority, b.signalPriority);
-  assert.equal(relevanceOf(CALIFORNIAN)(twoRetailers).matchedRetailers.length, 2);
-});
-
-test('two matched allergens do not outrank one matched allergen', () => {
-  const one = item({ geography: geo('nationwide'), pathogenOrAllergen: 'Undeclared sesame' });
-  const two = item({
-    geography: geo('nationwide'),
-    pathogenOrAllergen: 'Undeclared sesame and peanuts',
-  });
-  const a = affectsMePriority(one, relevanceOf(CALIFORNIAN)(one));
-  const b = affectsMePriority(two, relevanceOf(CALIFORNIAN)(two));
-  assert.equal(a.signalPriority, b.signalPriority);
-  assert.equal(relevanceOf(CALIFORNIAN)(two).matchedAllergens.length, 2);
-});
-
-test('the strongest possible case ranks first in a mixed field', () => {
-  const best = item({
-    classification: classes('class_I'),
-    geography: geo('states', ['California']),
-    pathogenOrAllergen: 'Undeclared sesame',
-    retailerNames: ['Costco'],
-  });
-  const rivals = [
-    item({ classification: classes('class_I'), geography: geo('nationwide') }),
-    item({
-      classification: classes('class_I', 'class_II'),
-      geography: geo('states', ['California']),
-      pathogenOrAllergen: 'Undeclared peanuts',
-      retailerNames: ["Trader Joe's"],
-    }),
-    item({
-      classification: classes('class_I'),
-      geography: geo('unknown'),
-      pathogenOrAllergen: 'Undeclared sesame',
-      retailerNames: ['Costco'],
-    }),
-  ];
-  assert.equal(order([...rivals, best])[0], best.id);
-});
-
-// ── Dimension 4: material activity ───────────────────────────────────────────
-
-test('within an identical relevance tuple, the latest material activity ranks first', () => {
-  const quiet = item({
-    publishedAt: '2026-07-01',
-    geography: geo('nationwide'),
-    timeline: [published('2026-07-01')],
-  });
-  const updated = item({
-    publishedAt: '2026-07-01',
-    geography: geo('nationwide'),
-    timeline: [published('2026-07-01'), materialEntry('2026-08-20', 'classified')],
-  });
-  assert.deepEqual(order([quiet, updated]), [updated.id, quiet.id]);
 });
 
 test('a material classification update raises an older recall back into recent activity', () => {
   const reclassified = item({
     publishedAt: OLD_DAY,
     lastPublicActivityAt: '2026-08-04',
-    geography: geo('nationwide'),
     timeline: [published(OLD_DAY), materialEntry('2026-08-04', 'classified')],
   });
   const sections = rank([reclassified]);
@@ -362,13 +263,65 @@ test('a material classification update raises an older recall back into recent a
   assert.deepEqual(sections.older, []);
 });
 
-test('a bookkeeping source edit cannot raise an old recall — even though it moved lastPublicActivityAt', () => {
+test('an enforcement-dated classification AFTER lastPublicActivityAt still counts — the key is not bounded by it', () => {
+  // The live shape on 2026-10-05 (232 of 911 active cases): FDA's
+  // classification date postdates the announcement page's last edit, because
+  // enforcement records are never voiced into lastPublicActivityAt.
+  const classified = item({
+    publishedAt: '2026-05-01',
+    lastPublicActivityAt: '2026-05-04',
+    timeline: [published('2026-05-01'), materialEntry('2026-08-15', 'classified')],
+  });
+  const key = affectsMePriority(classified);
+  assert.equal(key.materialActivityAt, '2026-08-15');
+  assert.ok(key.materialActivityAt > classified.lastPublicActivityAt);
+  assert.equal(tierForActivityDate(key.materialActivityAt, NOW), 'recent');
+  assert.deepEqual(
+    rank([classified]).affects.map((i) => i.id),
+    [classified.id],
+  );
+});
+
+test('the material source_updated kinds (illnesses, instructions) count: the flag is read, not the kind', () => {
+  const instructions = item({
+    publishedAt: OLD_DAY,
+    timeline: [
+      published(OLD_DAY),
+      materialEntry('2026-08-22', 'source_updated', 'instructions_changed'),
+    ],
+  });
+  const illnesses = item({
+    publishedAt: OLD_DAY,
+    timeline: [published(OLD_DAY), materialEntry('2026-08-23', 'source_updated', 'health_impact')],
+  });
+  assert.deepEqual(order([instructions, illnesses]), [illnesses.id, instructions.id]);
+  assert.equal(affectsMePriority(instructions).materialActivityAt, '2026-08-22');
+});
+
+test('a same-day material entry bumps nothing: the case keeps its announcement date', () => {
+  const sameDay = item({
+    publishedAt: '2026-08-10',
+    timeline: [published('2026-08-10'), materialEntry('2026-08-10', 'classified')],
+  });
+  assert.equal(affectsMePriority(sameDay).materialActivityAt, '2026-08-10');
+  const plain = item({ publishedAt: '2026-08-10' });
+  assert.deepEqual(order([sameDay, plain]), [sameDay.id, plain.id].sort());
+});
+
+test('a missing or empty timeline falls back to the announcement date', () => {
+  const none = item({ publishedAt: '2026-08-12', timeline: [] });
+  assert.equal(affectsMePriority(none).materialActivityAt, '2026-08-12');
+  const withTime = item({ publishedAt: '2026-08-12T15:30:00.000Z', timeline: [] });
+  assert.equal(affectsMePriority(withTime).materialActivityAt, '2026-08-12');
+  assert.equal(affectsMePriority(withTime).publishedAt, '2026-08-12');
+});
+
+// ── What can never move a recall ─────────────────────────────────────────────
+
+test('a wording edit cannot raise an old recall — even though it moved lastPublicActivityAt', () => {
   const churned = item({
     publishedAt: OLD_DAY,
-    // The agency re-touched the page yesterday; the diff found nothing
-    // consumer-relevant, so the pipeline logged a non-material entry.
     lastPublicActivityAt: '2026-08-25',
-    geography: geo('nationwide'),
     timeline: [published(OLD_DAY), bookkeepingEntry('2026-08-25')],
   });
   const sections = rank([churned]);
@@ -377,62 +330,87 @@ test('a bookkeeping source edit cannot raise an old recall — even though it mo
     sections.older.map((i) => i.id),
     [churned.id],
   );
+  // And among recent recalls a wording edit yesterday beats nothing announced earlier.
+  const edited = item({
+    publishedAt: '2026-08-01',
+    lastPublicActivityAt: '2026-08-25',
+    timeline: [published('2026-08-01'), bookkeepingEntry('2026-08-25')],
+  });
+  const later = item({ publishedAt: '2026-08-02' });
+  assert.deepEqual(order([edited, later]), [later.id, edited.id]);
 });
 
-test('a retailer backfill cannot raise an old recall: it writes no timeline entry at all', () => {
-  // The repair patches projection.retailerNames only (server/retailer-backfill.ts).
-  const before = item({
-    publishedAt: OLD_DAY,
-    geography: geo('nationwide'),
-    timeline: [published(OLD_DAY)],
-  });
+test('an internal write cannot raise an old recall: a retailer backfill writes no timeline entry', () => {
+  const before = item({ publishedAt: OLD_DAY, timeline: [published(OLD_DAY)] });
   const afterBackfill: FeedItem = { ...before, retailerNames: ['Costco'] };
-  assert.deepEqual(
-    rank([before]).older.map((i) => i.id),
-    [before.id],
-  );
+  assert.deepEqual(affectsMePriority(before), affectsMePriority(afterBackfill));
+  assert.deepEqual(rank([afterBackfill]).affects, []);
   assert.deepEqual(
     rank([afterBackfill]).older.map((i) => i.id),
     [afterBackfill.id],
   );
-  assert.deepEqual(rank([afterBackfill]).affects, []);
 });
 
-// ── Dimensions 5–6: announcement date, then a total order ────────────────────
+test('a repair entry (material: false, our clock) and agency closure move nothing', () => {
+  const repaired = item({
+    publishedAt: OLD_DAY,
+    timeline: [
+      published(OLD_DAY),
+      {
+        occurredAt: '2026-08-25T10:00:00.000Z',
+        kind: 'corrected',
+        summary: 'The app corrected its reading of the original official notice.',
+        causedBySnapshotIds: [],
+        material: false,
+        repair: {
+          fingerprint: 'x',
+          derivationContract: 'c',
+          wave: 'w',
+          changedCategories: [],
+          consumerVisible: true,
+          notificationEventCreated: false,
+        },
+      },
+      {
+        occurredAt: '2026-08-25',
+        kind: 'closed',
+        summary: 'Recall closed by the agency.',
+        causedBySnapshotIds: [],
+        material: false,
+      },
+    ],
+  });
+  assert.equal(affectsMePriority(repaired).materialActivityAt, OLD_DAY);
+});
+
+// ── Ties and totality ────────────────────────────────────────────────────────
 
 test('with equal material activity, the newer announcement ranks first', () => {
   const older = item({
     publishedAt: '2026-07-01',
-    geography: geo('nationwide'),
     timeline: [published('2026-07-01'), materialEntry('2026-08-20')],
   });
   const newer = item({
     publishedAt: '2026-08-01',
-    geography: geo('nationwide'),
     timeline: [published('2026-08-01'), materialEntry('2026-08-20')],
   });
   assert.deepEqual(order([older, newer]), [newer.id, older.id]);
 });
 
 test('ordering is stable and total: repeated sorts of any input permutation agree', () => {
-  const items = [
-    item({ id: 'zzz', geography: geo('nationwide') }),
-    item({ id: 'aaa', geography: geo('nationwide') }),
-    item({ id: 'mmm', geography: geo('nationwide') }),
-  ];
+  const items = [item({ id: 'zzz' }), item({ id: 'aaa' }), item({ id: 'mmm' })];
   const expected = ['aaa', 'mmm', 'zzz'];
   assert.deepEqual(order(items), expected);
   assert.deepEqual(order([...items].reverse()), expected);
   assert.deepEqual(order([items[1], items[2], items[0]]), expected);
-  // Two runs over the same list must not drift.
   assert.deepEqual(order(items), order(items));
 });
 
 test('the comparator never reports two distinct cases as equal', () => {
-  const a = item({ id: 'a', geography: geo('nationwide') });
-  const b = item({ id: 'b', geography: geo('nationwide') });
-  const pa = affectsMePriority(a, relevanceOf(CALIFORNIAN)(a));
-  const pb = affectsMePriority(b, relevanceOf(CALIFORNIAN)(b));
+  const a = item({ id: 'a' });
+  const b = item({ id: 'b' });
+  const pa = affectsMePriority(a);
+  const pb = affectsMePriority(b);
   assert.notEqual(compareAffectsMePriority(pa, pb), 0);
   assert.equal(compareAffectsMePriority(pa, pa), 0);
   assert.equal(
@@ -441,54 +419,24 @@ test('the comparator never reports two distinct cases as equal', () => {
   );
 });
 
-test('a geography correction moves a case by exactly one tier, and nothing else', () => {
-  // C5.2A repairs `projection.geography` only. The ranking rules are
-  // untouched, so a corrected case moves for exactly the reason its geography
-  // changed — from "unknown, kept by a personal signal" to "confirmed" — and
-  // every other case holds its place.
-  const other = item({ geography: geo('states', ['California']), publishedAt: '2026-07-01' });
-  const beforeRepair = item({
-    geography: geo('unknown'),
-    retailerNames: ['Costco'],
-    publishedAt: RECENT_DAY,
-  });
-  const afterRepair: FeedItem = {
-    ...beforeRepair,
-    geography: geo('states', ['California']),
-  };
-
-  const before = affectsMePriority(beforeRepair, relevanceOf(CALIFORNIAN)(beforeRepair));
-  const after = affectsMePriority(afterRepair, relevanceOf(CALIFORNIAN)(afterRepair));
-  assert.equal(before.geographyPriority, 1, 'unknown geography, kept by the retailer signal');
-  assert.equal(after.geographyPriority, 0, 'the source’s own state list, once it is read');
-  // The geography tier is the ONLY dimension that moved.
-  assert.deepEqual({ ...before, geographyPriority: 0 }, { ...after, geographyPriority: 0 });
-
-  // Eligibility is unchanged — the case affected this user before and after —
-  // and it simply overtakes the older confirmed case it used to rank behind.
-  assert.deepEqual(order([other, beforeRepair]), [other.id, beforeRepair.id]);
-  assert.deepEqual(order([other, afterRepair]), [afterRepair.id, other.id]);
-});
-
-test('a corrected state list that excludes the user is final, as it always was', () => {
-  // The repair can also move a case OUT: once the source's own state list is
-  // read, a user outside it is authoritatively excluded, and no personal
-  // signal overrides that. Same rule as before — new input, not new behavior.
-  const unknown = item({
-    geography: geo('unknown'),
-    pathogenOrAllergen: 'Undeclared sesame',
-    retailerNames: ['Costco'],
-  });
-  const corrected: FeedItem = { ...unknown, geography: geo('states', ['Ohio', 'Indiana']) };
-  const before = rank([unknown]);
+test('Affects me, All recalls and the plain comparator are ONE order', () => {
+  const corpus = [
+    item({ publishedAt: '2026-08-01' }),
+    item({ publishedAt: OLD_DAY, timeline: [published(OLD_DAY), materialEntry('2026-08-22')] }),
+    item({ publishedAt: '2026-08-22' }),
+    item({ publishedAt: '2026-08-10', classification: classes() }),
+    item({ publishedAt: '2026-08-10', classification: classes('class_I') }),
+  ];
+  const shared = sortNewestFirst(corpus).map((i) => i.id);
+  assert.deepEqual(order(corpus), shared);
   assert.deepEqual(
-    before.affects.map((entry) => entry.id),
-    [unknown.id],
-    'unknown geography plus a personal signal still qualifies',
+    buildFeedSections(corpus, NOW).recent.map((i) => i.id),
+    shared,
   );
-  const after = rank([corrected]);
-  assert.equal(after.affects.length, 0, 'an authoritative exclusion is final');
-  assert.equal(after.older.length, 0, 'and it does not leak into older notices either');
+  assert.deepEqual(
+    [...corpus].sort(compareRecency).map((i) => i.id),
+    shared,
+  );
 });
 
 // ── Sections ─────────────────────────────────────────────────────────────────
@@ -499,35 +447,36 @@ test('every case appears in at most one section', () => {
     item({ geography: geo('unknown') }),
     item({ geography: geo('unknown'), retailerNames: ['Costco'] }),
     item({ geography: geo('states', ['Maine']) }),
-    item({
-      publishedAt: OLD_DAY,
-      geography: geo('nationwide'),
-      timeline: [published(OLD_DAY)],
-    }),
-    item({
-      publishedAt: OLD_DAY,
-      geography: geo('unknown'),
-      timeline: [published(OLD_DAY)],
-    }),
+    item({ publishedAt: OLD_DAY, timeline: [published(OLD_DAY)] }),
+    item({ publishedAt: OLD_DAY, geography: geo('unknown'), timeline: [published(OLD_DAY)] }),
   ];
   const { affects, older } = rank(items);
   const seen = [...affects, ...older].map((i: FeedItem) => i.id);
   assert.equal(new Set(seen).size, seen.length);
-  // Excluded Maine, and BOTH unknown-geography cases with no personal signal,
-  // appear nowhere: only the California case, the Costco one, and the older
-  // nationwide one qualify.
   assert.equal(seen.length, 3);
 });
 
 test('unknown geography with no personal signal appears in NO Affects Me section', () => {
-  // C5.2B removed the generic "Location not specified" section: a notice that
-  // says nothing about this user is not placed at all, and All Recalls holds it.
   const silent = item({ geography: geo('unknown') });
   const { affects, older } = rank([silent]);
   assert.deepEqual(affects, []);
   assert.deepEqual(older, []);
-  // And the relevance layer still refuses to claim anything about it.
   assert.deepEqual(relevanceOf(CALIFORNIAN)(silent).reasons, []);
+});
+
+test('an authoritative geographic exclusion never enters Affects Me, whatever its signals', () => {
+  const excluded = item({
+    geography: geo('states', ['Maine']),
+    pathogenOrAllergen: 'Undeclared sesame and peanuts',
+    retailerNames: ['Costco', "Trader Joe's"],
+  });
+  const ordinary = item({ classification: classes('class_III') });
+  const sections = rank([excluded, ordinary]);
+  assert.deepEqual(
+    sections.affects.map((i) => i.id),
+    [ordinary.id],
+  );
+  assert.deepEqual(sections.older, []);
 });
 
 test('an unknown-location notice with a real match ranks in the main flow', () => {
@@ -542,7 +491,7 @@ test('an unknown-location notice with a real match ranks in the main flow', () =
   assert.deepEqual(sections.older, []);
 });
 
-// ── Invariants: what C3.2 must NOT have changed ──────────────────────────────
+// ── Invariants: what 2026-10-05 must NOT have changed ────────────────────────
 
 test('Affects Me eligibility is unchanged: the sections hold exactly the qualifying cases', () => {
   const items = [
@@ -551,7 +500,7 @@ test('Affects Me eligibility is unchanged: the sections hold exactly the qualify
     item({ geography: geo('states', ['Maine']), pathogenOrAllergen: 'Undeclared sesame' }),
     item({ geography: geo('unknown') }),
     item({ geography: geo('unknown'), retailerNames: ["Trader Joe's"] }),
-    item({ publishedAt: OLD_DAY, geography: geo('nationwide'), timeline: [published(OLD_DAY)] }),
+    item({ publishedAt: OLD_DAY, timeline: [published(OLD_DAY)] }),
   ];
   const eligible = items
     .filter((i) => relevanceOf(CALIFORNIAN)(i).affectsMe)
@@ -561,61 +510,112 @@ test('Affects Me eligibility is unchanged: the sections hold exactly the qualify
   assert.deepEqual([...affects, ...older].map((i) => i.id).sort(), eligible);
 });
 
-test('All Recalls sectioning and ordering are untouched by material activity', () => {
+test('the matching count is unchanged by the order, on the synthetic corpus and the real offline baseline', () => {
+  // The count the Ready preview and the Building step show is the length of
+  // `affects`: eligibility AND the material window, nothing about position.
+  const expectedCount = (items: readonly FeedItem[], prefs: UserRecallPreferences, now: Date) =>
+    items.filter(
+      (i) =>
+        relevanceOf(prefs)(i).affectsMe &&
+        tierForActivityDate(affectsMePriority(i).materialActivityAt, now) === 'recent',
+    ).length;
+
+  const synthetic = [
+    item({ geography: geo('states', ['California']) }),
+    item({ geography: geo('unknown'), retailerNames: ['Costco'] }),
+    item({ geography: geo('states', ['Maine']) }),
+    item({ publishedAt: OLD_DAY, timeline: [published(OLD_DAY)] }),
+    item({ classification: classes(), publishedAt: '2026-08-25' }),
+  ];
+  assert.equal(rank(synthetic).affects.length, expectedCount(synthetic, CALIFORNIAN, NOW));
+
+  // The bundled baseline: real records, clock fixed at its recording time.
+  const recordedAt = new Date(BASELINE_RECORDED_AT);
+  for (const prefs of [
+    { states: ['CA'], allergens: [], retailers: [] },
+    { states: ['TX'], allergens: [], retailers: ['walmart'] },
+    { states: ['AL', 'AZ'], allergens: ['peanut', 'milk'], retailers: ['aldi'] },
+    { states: [], allergens: ['peanut'], retailers: [] },
+  ] satisfies UserRecallPreferences[]) {
+    const sections = buildAffectsMeSections(BASELINE_RECALLS, relevanceOf(prefs), {
+      now: recordedAt,
+    });
+    assert.equal(sections.affects.length, expectedCount(BASELINE_RECALLS, prefs, recordedAt));
+    // Offline ordering is the same shared order a downloaded corpus gets.
+    assert.deepEqual(
+      sections.affects.map((i) => i.id),
+      sortNewestFirst(sections.affects).map((i) => i.id),
+    );
+  }
+});
+
+test('the offline baseline is ordered newest first with no severity rung', () => {
+  const recordedAt = new Date(BASELINE_RECORDED_AT);
+  const { affects } = buildAffectsMeSections(
+    BASELINE_RECALLS,
+    relevanceOf({ states: ['CA'], allergens: [], retailers: [] }),
+    { now: recordedAt },
+  );
+  assert.ok(affects.length > 3);
+  for (let i = 1; i < affects.length; i += 1) {
+    assert.ok(
+      compareAffectsMePriority(affectsMePriority(affects[i - 1]), affectsMePriority(affects[i])) <
+        0,
+    );
+  }
+  // The real corpus has Pending recalls announced after Critical ones; the
+  // first Pending must sit above the first older Critical.
+  const firstPending = affects.findIndex((i) => consumerRiskTier(i.classification) === 'pending');
+  const lastCritical = affects
+    .map((i, index) => ({ i, index }))
+    .filter(({ i }) => consumerRiskTier(i.classification) === 'critical')
+    .at(-1)!.index;
+  assert.ok(firstPending >= 0 && firstPending < lastCritical);
+});
+
+test('All recalls splits and orders on the same material date as Affects me', () => {
   const churned = item({
     publishedAt: OLD_DAY,
-    // Bookkeeping moved public activity but not material activity: All Recalls
-    // must still treat this as recent, exactly as it did before C3.2.
     lastPublicActivityAt: '2026-08-25',
     timeline: [published(OLD_DAY), bookkeepingEntry('2026-08-25')],
   });
   const fresh = item({ publishedAt: RECENT_DAY });
-  const stale = item({
-    publishedAt: OLD_DAY,
-    lastPublicActivityAt: OLD_DAY,
-    timeline: [published(OLD_DAY)],
-  });
+  const stale = item({ publishedAt: OLD_DAY, timeline: [published(OLD_DAY)] });
   const { recent, olderActive } = buildFeedSections([churned, fresh, stale], NOW);
   assert.deepEqual(
     recent.map((i) => i.id),
-    [churned.id, fresh.id],
+    [fresh.id],
   );
+  // Wording-edit movement is not recency: the churned case is older, and
+  // among the older it ties with `stale` on dates, so the id decides.
   assert.deepEqual(
     olderActive.map((i) => i.id),
-    [stale.id],
+    [churned.id, stale.id].sort(),
   );
 });
 
 test('C5.2B: All Recalls is byte-identical — personalization cannot touch it', () => {
-  // All Recalls never sees preferences at all, so the strongest statement is
-  // the direct one: the same input produces the same output, deeply equal,
-  // including for the cases Affects Me now withholds.
   const corpus = [
     item({ geography: geo('states', ['California']) }),
     item({ geography: geo('unknown') }),
     item({ geography: geo('states', ['Maine']), pathogenOrAllergen: 'undeclared sesame' }),
-    // Known allergen mismatch for every profile below.
     item({
       geography: geo('nationwide'),
       hazardCategory: 'allergen',
       reasonText: 'Unreported Allergens',
       pathogenOrAllergen: 'undeclared milk',
     }),
-    item({ publishedAt: OLD_DAY, timeline: [published(OLD_DAY)], geography: geo('nationwide') }),
+    item({ publishedAt: OLD_DAY, timeline: [published(OLD_DAY)] }),
   ];
   const baseline = buildFeedSections(corpus, NOW);
-
   for (const prefs of [
     CALIFORNIAN,
     { states: ['CA'], allergens: [], retailers: [] } as UserRecallPreferences,
     { states: [], allergens: ['milk'], retailers: [] } as UserRecallPreferences,
   ]) {
-    // Ranking the same corpus for a profile must not disturb All Recalls.
     rank(corpus, prefs);
-    const after = buildFeedSections(corpus, NOW);
-    assert.deepEqual(after, baseline, JSON.stringify(prefs));
+    assert.deepEqual(buildFeedSections(corpus, NOW), baseline, JSON.stringify(prefs));
   }
-  // Membership and count are complete: every case is in exactly one section.
   assert.equal(baseline.recent.length + baseline.olderActive.length, corpus.length);
 });
 
@@ -627,15 +627,12 @@ test('C5.2B: a withheld allergen-only recall appears in NO Affects Me section', 
     pathogenOrAllergen: 'undeclared milk',
   });
   const staleMilkOnly = item({
-    geography: geo('states', ['California']),
-    hazardCategory: 'allergen',
-    reasonText: 'Unreported Allergens',
-    pathogenOrAllergen: 'undeclared milk',
+    ...milkOnly,
+    id: 'stale-milk',
     publishedAt: OLD_DAY,
     timeline: [published(OLD_DAY)],
   });
   const sections = rank([milkOnly, staleMilkOnly]);
-  // Not in the recent list, and — the leak this guards — not in older either.
   assert.deepEqual(sections.affects, []);
   assert.deepEqual(sections.older, []);
 });
@@ -658,70 +655,38 @@ test('C5.2B: every placed notice has an explainable qualifying reason', () => {
   const { affects, older } = rank(corpus);
   const placed = [...affects, ...older];
   for (const entry of placed) {
-    const reasons = relevanceOf(CALIFORNIAN)(entry).reasons;
-    assert.ok(reasons.length > 0, `${entry.id} must explain why it is here`);
+    assert.ok(
+      relevanceOf(CALIFORNIAN)(entry).reasons.length > 0,
+      `${entry.id} must explain itself`,
+    );
   }
-  // Exactly once, and only the qualifying ones.
   const ids = placed.map((entry) => entry.id);
   assert.equal(new Set(ids).size, ids.length);
-  const qualifying = corpus.filter((entry) => relevanceOf(CALIFORNIAN)(entry).affectsMe);
-  assert.equal(placed.length, qualifying.length);
-});
-
-test('C5.2B: ranking of the notices that remain is unchanged', () => {
-  // The comparator is untouched; only the eligible SET changed. With every
-  // case eligible for this profile, the order is exactly the C3.2 order.
-  const critical = item({ classification: classes('class_I'), geography: geo('nationwide') });
-  const moderate = item({ classification: classes('class_II'), geography: geo('nationwide') });
-  const unknownWithSignal = item({
-    classification: classes('class_I'),
-    geography: geo('unknown'),
-    retailerNames: ['Costco'],
-  });
-  assert.deepEqual(order([moderate, unknownWithSignal, critical]), [
-    critical.id,
-    unknownWithSignal.id,
-    moderate.id,
-  ]);
+  assert.equal(placed.length, corpus.filter((e) => relevanceOf(CALIFORNIAN)(e).affectsMe).length);
 });
 
 test('push eligibility is unchanged: ranking is not part of the delivery decision', () => {
-  const nationwideCritical = item({
-    classification: classes('class_I'),
-    geography: geo('nationwide'),
-  });
+  const nationwideCritical = item({ classification: classes('class_I') });
   const excludedWithSignal = item({
     geography: geo('states', ['Maine']),
     pathogenOrAllergen: 'Undeclared sesame',
   });
-  const facts = (i: FeedItem) => ({
-    geography: i.geography,
-    pathogenOrAllergen: i.pathogenOrAllergen,
-    retailerNames: i.retailerNames,
-    hazardCategory: i.hazardCategory,
-    reasonText: i.reasonText,
-  });
-  assert.equal(pushEligible(facts(nationwideCritical), CALIFORNIAN), true);
-  assert.equal(pushEligible(facts(excludedWithSignal), CALIFORNIAN), false);
-  // No preferences at all: nothing qualifies — the Feed's own answer (2026-10-04).
-  assert.equal(pushEligible(facts(excludedWithSignal), null), false);
-  assert.equal(pushEligible(facts(nationwideCritical), null), false);
+  assert.equal(pushEligible(nationwideCritical, CALIFORNIAN), true);
+  assert.equal(pushEligible(excludedWithSignal, CALIFORNIAN), false);
+  assert.equal(pushEligible(excludedWithSignal, null), false);
+  assert.equal(pushEligible(nationwideCritical, null), false);
 });
 
 // ── Review affordance ────────────────────────────────────────────────────────
 
-test('a priority explains itself in review copy without exposing a score', () => {
-  const best = item({
+test('a priority explains itself in review copy with the two dates and nothing else', () => {
+  const explained = item({
     id: 'explained',
-    classification: classes('class_I'),
     publishedAt: '2026-07-01',
-    geography: geo('states', ['California']),
-    pathogenOrAllergen: 'Undeclared sesame',
-    retailerNames: ['Costco'],
     timeline: [published('2026-07-01'), materialEntry('2026-08-04', 'classified')],
   });
   assert.equal(
-    explainAffectsMePriority(affectsMePriority(best, relevanceOf(CALIFORNIAN)(best))),
-    'critical · confirmed geography · allergen + retailer · activity 2026-08-04 · announced 2026-07-01',
+    explainAffectsMePriority(affectsMePriority(explained)),
+    'activity 2026-08-04 · announced 2026-07-01',
   );
 });

@@ -39,7 +39,8 @@ import {
 } from '../src/lib/affects-me-ranking';
 import { buildDistribution } from '../src/lib/consumer-projection';
 import { productDisplayName } from '../src/lib/consumer-summary';
-import { feedTier } from '../src/lib/feed-relevance';
+import { consumerRiskTier } from '../src/domain/risk-tier';
+import { feedTier, tierForActivityDate } from '../src/lib/feed-relevance';
 import { interpretTables } from '../src/lib/source-tables';
 import { evaluatePersonalRelevance } from '../src/lib/relevance';
 import { createSupabaseServerClient } from '../src/server/store/supabase-store';
@@ -368,7 +369,7 @@ async function main(): Promise<void> {
       `  ${String(index + 1).padStart(2)}. ${product.slice(0, 68)}${product.length > 68 ? '…' : ''}`,
     );
     console.log(
-      `      risk ${priority.riskTier} · ${geographyReason} · signals: ${signals}` +
+      `      risk ${consumerRiskTier(candidate.projection.classification)} (label only) · ${geographyReason} · signals: ${signals}` +
         ` · announced ${priority.publishedAt} · material activity ${priority.materialActivityAt}`,
     );
     console.log(`      priority: ${explainAffectsMePriority(priority)}`);
@@ -396,8 +397,7 @@ async function main(): Promise<void> {
   // Recency source: material activity vs the All Recalls date. The delta is the
   // point of the milestone — cases whose only recent movement was bookkeeping.
   const byPublicActivity = eligible.filter(
-    (candidate) =>
-      feedTier({ lastPublicActivityAt: candidate.projection.lastPublicActivityAt }) === 'recent',
+    (candidate) => tierForActivityDate(candidate.projection.lastPublicActivityAt) === 'recent',
   ).length;
   console.log(
     `    recent qualifying by lastPublicActivityAt: ${byPublicActivity}; ` +
@@ -410,13 +410,14 @@ async function main(): Promise<void> {
   }).length;
   console.log(`    recent qualifying raised by a post-announcement material event: ${raised}`);
 
-  // All Recalls: the untouched sectioning, reported so the review can see it
-  // did not move. `buildFeedSections` is unchanged by C3.2.
+  // All Recalls: since 2026-10-05 the same material window as Affects me.
   const allRecent = active.filter(
-    (row) => feedTier({ lastPublicActivityAt: row.projection.lastPublicActivityAt }) === 'recent',
+    (row) =>
+      feedTier({ publishedAt: row.projection.publishedAt, timeline: row.timeline ?? [] }) ===
+      'recent',
   ).length;
   console.log(
-    `    All Recalls (unchanged): recent ${allRecent}, older active ${active.length - allRecent}`,
+    `    All Recalls (material window): recent ${allRecent}, older active ${active.length - allRecent}`,
   );
 }
 
