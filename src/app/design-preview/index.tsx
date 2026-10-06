@@ -197,6 +197,13 @@ import {
   type QuestionnaireChoices,
 } from '@/lib/shopper-report-presentation';
 
+type ReadyReview = typeof import('@/components/development/ready-selection-review');
+/** Development only: folded away, with the module, in a release bundle. */
+const readyReview = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/components/development/ready-selection-review') as ReadyReview)
+  : null;
+
 /** How many candidates per requirement the hub offers as alternatives. */
 const CANDIDATES_SHOWN = 6;
 /** How many of the primary bucket are confirmed against the real detail model. */
@@ -381,7 +388,9 @@ export default function DesignPreviewScreen() {
   // is one long ScrollView whose acting controls sit at its end, and a
   // simulator driver cannot reach them by accessibility scrolling. Display
   // only: it moves the scroll position and nothing else.
-  const { jump } = useLocalSearchParams<{ jump?: string }>();
+  // `?review=<n>` draws the n-th Ready selection review scenario full-screen
+  // (`components/development/ready-selection-review.tsx`) instead of the hub.
+  const { jump, review } = useLocalSearchParams<{ jump?: string; review?: string }>();
   const scrollRef = useRef<ScrollView>(null);
   const [gateY, setGateY] = useState<number | null>(null);
   const [qaY, setQaY] = useState<number | null>(null);
@@ -676,6 +685,16 @@ export default function DesignPreviewScreen() {
           </ThemedText>
         </View>
       </ThemedView>
+    );
+  }
+
+  if (__DEV__ && readyReview !== null && typeof review === 'string' && review !== '') {
+    const ReadyReviewScreen = readyReview.ReadyReviewScreen;
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ReadyReviewScreen index={Number(review) - 1} />
+      </>
     );
   }
 

@@ -63,22 +63,24 @@
  * known. The deck is components/onboarding/ready-carousel.tsx.
  */
 
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  Image,
   PixelRatio,
   Pressable,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
   View,
+  type ImageResizeMode,
   type ImageSourcePropType,
   type ImageStyle,
+  type StyleProp,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { OnboardingTopBar } from '@/components/onboarding/onboarding-frame';
 import { ReadyDeck } from '@/components/onboarding/ready-carousel';
+import { GuardedImage } from '@/components/ui/guarded-image';
 import { Icon } from '@/components/ui/icon';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
@@ -196,11 +198,13 @@ type RowKey = keyof typeof PREVIEW_SUMMARY_LABELS;
 
 export function PreviewStep({
   prefs,
-  preview,
+  preview: latest,
   onSeePlan,
   onEdit,
   onBack,
   editRef,
+  onPhotoFailed,
+  onDeckSettling,
 }: {
   prefs: UserRecallPreferences;
   /** What the watch found (lib/ready-preview.ts): real matches or the truth. */
@@ -211,8 +215,26 @@ export function PreviewStep({
   onBack: () => void;
   /** The visible `Edit preferences`, so focus can return to it from the editor. */
   editRef?: React.Ref<View>;
+  /** A readable card's photo failed to render after all (lib/ready-photo-session.ts). */
+  onPhotoFailed?: (url: string) => void;
+  /** The deck began settling a committed move (development QA hooks in here). */
+  onDeckSettling?: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  // Deck changes land only at rest (2026-10-05): while the deck is dragging
+  // or settling, the preview it was given stays on screen and the newest one
+  // waits; the moment the deck reports rest, the newest is shown, which is
+  // when the deck's key may change and it remounts. A sync landing, a
+  // reclassified photo or a saved edit can therefore never replace a card
+  // under a finger or mid-settle.
+  const [deckBusy, setDeckBusy] = useState(false);
+  // The last preview shown while the deck was at rest, adjusted during
+  // render (the documented pattern for state derived from a changed prop).
+  const [held, setHeld] = useState(latest);
+  if (!deckBusy && held !== latest) setHeld(latest);
+  const preview = deckBusy ? held : latest;
+  // The last deck's measured card height: a rebuilt deck starts in that room.
+  const [deckCardRoom, setDeckCardRoom] = useState<number | undefined>(undefined);
   const { width, fontScale } = useWindowDimensions();
   // The page's own width: the window's on the first frame, then whatever the
   // page is actually given (the Design Preview's frames are narrower).
@@ -363,6 +385,13 @@ export function PreviewStep({
                   locked={preview.locked}
                   width={sceneWidth - 2 * layout.pageMargin}
                   onLockedPress={onSeePlan}
+                  onBusyChange={(busy, phase) => {
+                    setDeckBusy(busy);
+                    if (busy && phase === 'settle') onDeckSettling?.();
+                  }}
+                  onPhotoFailed={onPhotoFailed}
+                  initialCardHeight={deckCardRoom}
+                  onCardHeight={setDeckCardRoom}
                 />
                 {hasLockedMatches(preview) ? (
                   <Pressable
@@ -515,7 +544,7 @@ function BoardHero({
             height: OVERLAP_PX.height * scale,
           },
         ]}>
-        <Image source={OVERLAP} style={styles.fill} onLoadEnd={onArt} />
+        <BoardImage source={OVERLAP} style={styles.fill} onArt={onArt} />
       </View>
     </View>
   );
@@ -549,20 +578,113 @@ function SlicedImage({
   return (
     <View style={{ width, height: height + growth }}>
       <View style={[styles.slice, { top: topCap, bottom: foot }]}>
-        <Image
+        <BoardImage
           source={source}
           resizeMode="stretch"
           style={[styles.sliceImage, sliceImagePlacement(slice, imageRows)]}
-          onLoadEnd={onArt}
+          onArt={onArt}
         />
       </View>
       <View style={[styles.slice, { top: 0, height: topCap }]}>
-        <Image source={source} style={[whole, { top: 0 }]} onLoadEnd={onArt} />
+        <BoardImage source={source} style={[whole, { top: 0 }]} onArt={onArt} />
       </View>
       <View style={[styles.slice, { bottom: 0, height: foot }]}>
-        <Image source={source} style={[whole, { bottom: 0 }]} onLoadEnd={onArt} />
+        <BoardImage source={source} style={[whole, { bottom: 0 }]} onArt={onArt} />
       </View>
     </View>
+  );
+}
+
+/**
+ * How many times a board layer whose request failed asks again before it is
+ * left out (2026-10-05).
+ */
+const BOARD_IMAGE_RETRIES = 3;
+/** The pause before each new request, growing with every attempt. */
+const BOARD_IMAGE_RETRY_MS = 200;
+
+type DevelopmentBoardArt = typeof import('@/lib/development-board-art');
+
+/** Development only: the board-art failure fixtures (lib/development-board-art.ts). */
+const developmentBoardArt = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/lib/development-board-art') as DevelopmentBoardArt)
+  : null;
+
+/**
+ * One layer of the board's artwork.
+ *
+ * The platform clears an image view whose request fails — its first one, or
+ * any later one (a new layout size asks again) — and never asks again by
+ * itself, which once left a board without its wall and counter for good
+ * (2026-10-05). A failed layer therefore asks again as a new request, a
+ * bounded number of times, and stays absent only when every attempt fails.
+ * It tells the page's reveal once: when it first loads, or when its attempts
+ * run out, so a broken asset can never hold the page hidden.
+ */
+function BoardImage({
+  source,
+  style,
+  resizeMode,
+  onArt,
+}: {
+  source: ImageSourcePropType;
+  style: StyleProp<ImageStyle>;
+  resizeMode?: ImageResizeMode;
+  onArt?: () => void;
+}) {
+  const [attempt, setAttempt] = useState(0);
+  // Development `fail-later` only: this layer is asked for again from an
+  // address that refuses, as a loaded view can be.
+  const [refused, setRefused] = useState(false);
+  const reported = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+    },
+    [],
+  );
+  const report = () => {
+    if (reported.current) return;
+    reported.current = true;
+    onArt?.();
+  };
+  return (
+    <GuardedImage
+      // A new key is a new view and a new request.
+      key={attempt}
+      source={
+        developmentBoardArt
+          ? developmentBoardArt.developmentBoardSource(source, attempt, refused)
+          : source
+      }
+      style={style}
+      resizeMode={resizeMode}
+      onLoad={() => {
+        report();
+        if (
+          developmentBoardArt?.developmentBoardArt() === 'fail-later' &&
+          attempt === 0 &&
+          !refused
+        ) {
+          timer.current = setTimeout(() => setRefused(true), developmentBoardArt.FAIL_LATER_MS);
+        }
+      }}
+      onError={() => {
+        if (attempt >= BOARD_IMAGE_RETRIES) {
+          report();
+          return;
+        }
+        timer.current = setTimeout(
+          () => {
+            setRefused(false);
+            setAttempt(attempt + 1);
+          },
+          BOARD_IMAGE_RETRY_MS * (attempt + 1),
+        );
+      }}
+    />
   );
 }
 
@@ -846,7 +968,7 @@ function WideBoardHero({
             height: WIDE_OVERLAP_PX.height * scale,
           },
         ]}>
-        <Image source={WIDE.overlap} style={styles.fill} onLoadEnd={onArt} />
+        <BoardImage source={WIDE.overlap} style={styles.fill} onArt={onArt} />
       </View>
     </View>
   );
@@ -887,7 +1009,7 @@ function GrownLayer({
   if (growth <= 0) {
     return (
       <View style={{ width, height }}>
-        <Image source={source} style={[whole, { top: 0 }]} onLoadEnd={onArt} />
+        <BoardImage source={source} style={[whole, { top: 0 }]} onArt={onArt} />
       </View>
     );
   }
@@ -902,7 +1024,7 @@ function GrownLayer({
   return (
     <View style={{ width, height: height + growth }}>
       <View style={[styles.slice, { top: 0, height: insert }]}>
-        <Image source={source} style={[whole, { top: 0 }]} onLoadEnd={onArt} />
+        <BoardImage source={source} style={[whole, { top: 0 }]} onArt={onArt} />
       </View>
       {Array.from({ length: plateCopies(plateSpan / scale) }, (_, index) => (
         <View
@@ -915,18 +1037,18 @@ function GrownLayer({
             },
           ]}>
           <View style={[{ width, height: plateHeight }, index % 2 === 1 && styles.mirrored]}>
-            <Image source={plate} style={styles.fill} onLoadEnd={onArt} />
+            <BoardImage source={plate} style={styles.fill} onArt={onArt} />
           </View>
         </View>
       ))}
       <View style={[styles.slice, { top: insert + growth, height: featherHeight }]}>
-        <Image source={feather} style={styles.fill} onLoadEnd={onArt} />
+        <BoardImage source={feather} style={styles.fill} onArt={onArt} />
       </View>
       <View style={[styles.slice, { top: below, bottom: 0 }]}>
-        <Image
+        <BoardImage
           source={source}
           style={[whole, { top: -(insertRow + WIDE_GROWTH.featherRows) * scale }]}
-          onLoadEnd={onArt}
+          onArt={onArt}
         />
       </View>
     </View>
@@ -1125,7 +1247,7 @@ export function AllergenPlate({ artwork }: { artwork: AllergenArtwork }) {
 
 function Pictogram({ token, side }: { token: string; side: number }) {
   return (
-    <Image
+    <GuardedImage
       source={allergenPictogram(token) ?? undefined}
       resizeMode="contain"
       accessible={false}

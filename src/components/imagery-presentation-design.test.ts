@@ -101,8 +101,11 @@ test('P2B7I: an absent image renders no media column — no footprint, no placeh
   );
   assert.equal((MEDIA_TILE_CODE.match(/return null/g) ?? []).length, 1);
   // The Surface exists only to hold an Image: exactly one, unconditional
-  // inside it, with the square footprint sized by the caller's token.
-  assert.equal((MEDIA_TILE_CODE.match(/<Image\b/g) ?? []).length, 1);
+  // inside it, with the square footprint sized by the caller's token. It is
+  // the guarded Image, so a stale answer can never show another recall's
+  // photo (components/ui/guarded-image.tsx, 2026-10-05).
+  assert.equal((MEDIA_TILE_CODE.match(/<GuardedImage\b/g) ?? []).length, 1);
+  assert.equal((MEDIA_TILE_CODE.match(/<Image\b/g) ?? []).length, 0);
   assert.ok(!MEDIA_TILE_CODE.includes('image !== null ?'), 'a placeholder branch survives');
   assert.ok(MEDIA_TILE.includes('{ width: size, height: size }'));
   // The card hands every state to the tile and holds no media rule, no

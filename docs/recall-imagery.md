@@ -515,6 +515,24 @@ the shared tile `src/components/ui/media-tile.tsx` and the session failure
 memory `src/lib/image-failures.ts`. The visual composition is recorded in
 [../DESIGN.md](../DESIGN.md) ("Recall Card", "Recall Detail", conflict 30).
 
+**A tile can never keep another recall's photo (2026-10-05).** React Native
+(0.86, iOS) recycles image views, and a reused view accepts whatever answer
+reaches it: an answer still in flight for the view's previous image can
+replace the right one, with no error and no reload. It was seen on Ready's
+illustrated board in a release build. The media tile therefore draws through
+`src/components/ui/guarded-image.tsx`. No image event says which request it
+answers (the `onLoad` payload's `uri` is the view's current source; `onError`
+carries none), so the guard counts instead (`src/lib/image-answer-ledger.ts`):
+a drawing gets one `onLoadStart` per request and one answer per start, the
+first answer possibly just before its start; an answer, load or error, beyond
+that is not passed on, and the image is drawn again as a new view, at most
+three times per source. A source change starts a new drawing. A stale answer
+that lands before the view's own answer is indistinguishable and passed on,
+and is then corrected by the own answer's redraw — except a stale error,
+which hides the photo for the session: it fails safe, never showing another
+recall's photo. Nothing else about the tile changes; the design icons draw
+through the same guard.
+
 ### Where official imagery appears — the complete list
 
 | Surface                         | What renders                                            |

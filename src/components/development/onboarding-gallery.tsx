@@ -93,6 +93,7 @@ type DevelopmentScenarios = typeof import('@/lib/purchases/development-scenarios
 type DevelopmentFeed = typeof import('@/lib/development-feed-scenarios');
 type DevelopmentMirror = typeof import('@/lib/development-preference-mirror');
 type DevelopmentEnable = typeof import('@/lib/development-notification-scenarios');
+type DevelopmentProbe = typeof import('@/lib/development-photo-probe');
 
 /** Development only: folded away, together with the modules, in a release bundle. */
 const devProvider = __DEV__
@@ -131,6 +132,11 @@ const devEnable = __DEV__
 const devFeed = __DEV__
   ? // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('@/lib/development-feed-scenarios') as DevelopmentFeed)
+  : null;
+/** Development only: stand-in photo probes, so the Ready deck's reclassification can be watched. */
+const devProbe = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/lib/development-photo-probe') as DevelopmentProbe)
   : null;
 
 /**
@@ -848,9 +854,12 @@ export function BuildingQaControls() {
   const [cleared, setCleared] = useState(false);
   const [qaProfile, setQaProfile] = useState(devFeed?.developmentQaProfile() ?? 'saved');
   const [localOnly, setLocalOnly] = useState(devMirror?.localOnlySaves() ?? false);
-  if (!__DEV__ || devFeed === null || devMirror === null) return null;
+  const [photoProbe, setPhotoProbe] = useState(devProbe?.developmentPhotoProbe() ?? 'live');
+  const [settleChange, setSettleChange] = useState(devProbe?.deckChangeOnSettleArmed() ?? false);
+  if (!__DEV__ || devFeed === null || devMirror === null || devProbe === null) return null;
   const mirror = devMirror;
   const feed = devFeed;
+  const probe = devProbe;
   const current = feed.DEVELOPMENT_FEED_SCENARIOS.find((option) => option.id === scenario);
   return (
     <Surface background="background/page" radius={16} border="border/subtle" style={styles.gallery}>
@@ -904,6 +913,34 @@ export function BuildingQaControls() {
             'this device only and marked mirrored; nothing reaches the server. Persists across ' +
             'relaunches. Turn it off when testing is done.'
           : 'Off: saves mirror to the server as shipped.'}
+      </Text>
+      {probe.DEVELOPMENT_PHOTO_PROBES.map((option) => (
+        <CheckRow
+          key={option.id}
+          label={option.title}
+          checked={option.id === photoProbe}
+          onPress={() => {
+            probe.setDevelopmentPhotoProbe(option.id);
+            setPhotoProbe(option.id);
+          }}
+        />
+      ))}
+      <Text variant="caption" color="text/secondary">
+        {probe.DEVELOPMENT_PHOTO_PROBES.find((option) => option.id === photoProbe)?.expectation} In
+        memory only: resets at launch. Reopen Ready to see the effect.
+      </Text>
+      <CheckRow
+        label="Deck: change the card set during the next settle"
+        checked={settleChange}
+        onPress={() => {
+          probe.armDeckChangeOnSettle(!settleChange);
+          setSettleChange(!settleChange);
+        }}
+      />
+      <Text variant="caption" color="text/secondary">
+        One shot, in memory only. On Ready, the next time a released swipe starts settling, the
+        front-most photo is reported failed: a real reclassification arriving mid-settle. The deck
+        must finish its move unchanged and apply the new set at rest, with the same count.
       </Text>
       <Button
         label={cleared ? 'Feed cache cleared — relaunch to start uncached' : 'Clear the feed cache'}

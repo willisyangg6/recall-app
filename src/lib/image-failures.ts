@@ -34,3 +34,8 @@ export function hasImageFailed(uri: string): boolean {
 export function recordImageFailure(uri: string): void {
   failedImageUris.add(uri);
 }
+
+/** Tests and development QA only: forget every failure, as a cold launch would. */
+export function resetImageFailures(): void {
+  failedImageUris.clear();
+}

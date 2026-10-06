@@ -571,9 +571,25 @@ review. Nothing here is a launch blocker — those live in
   unchanged. A full feed reload now runs one manifest reconciliation after it
   commits, recovering a case founded behind the id cursor during the scan. A
   prerequisite server change (D9) stops an enforcement classification with no
-  FDA date from ever carrying our ingest day. The Ready preview inherits the
-  order; its planned photo/rated-risk selection is **not** implemented.
-  Decision record and evidence:
+  FDA date from ever carrying our ingest day. Committed as `e6f5e7e` and
+  `2858916`.
+
+- **Ready preview selection by priority group (founder decision, IMPLEMENTED
+  2026-10-05, uncommitted).** The deck fills three readable cards whenever
+  three genuine Affects You matches exist, chosen by group — a confirmed risk
+  label with a photo that loaded, a confirmed label without, Pending with a
+  loaded photo, Pending without, and Unknown or public health alerts last,
+  never relabeled — newest first inside each group, with the real next match
+  locked only when one remains and the count on every genuine match. Photos
+  are prefetched under a per-photo deadline, a concurrency cap and a session
+  memory that never asks twice; a failed or timed-out photo moves its recall
+  to the no-photo group; the deck is built once its probes settle or the
+  photo deadline passes; the session starts during Building, unawaited, and
+  Ready adopts it, so arriving from Building needs no second wait; deck
+  changes land only at rest, never under a drag or a settle. Matching eligibility, the 60-day window, feed ordering, the
+  Building step's fallback and push are unchanged. Contract:
+  [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md)
+  §6.4; decision record and evidence:
   [docs/recall-feed-ordering.md](docs/recall-feed-ordering.md). Next:
   **feed/filter UI mockups** (one Filters button on both feeds, no separate
   risk-only control), then **card and in-app polish**. Discounts stay

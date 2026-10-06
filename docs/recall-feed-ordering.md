@@ -1,7 +1,7 @@
 # Feed ordering and the Ready preview: newest first (planning pass, 2026-10-05)
 
-**Status (2026-10-05): the feed ordering is IMPLEMENTED (uncommitted); the Ready preview
-selection is NOT.** Implemented: the shared comparator (`src/lib/recency-order.ts`) in both feeds,
+**Status (2026-10-05): the feed ordering is COMMITTED (e6f5e7e, 2858916); the Ready preview
+selection is NOT implemented — its decision brief is §17.** Implemented: the shared comparator (`src/lib/recency-order.ts`) in both feeds,
 both sections and every filtered view including Location; All recalls' recent/older split on
 material activity (D1); the post-full-reload recovery pass (D8, `recoverBehindCursor` in
 `src/lib/feed-sync.ts`); and the D9 prerequisite in `src/server/fda-enforcement/enrich.ts`. Not
@@ -336,14 +336,14 @@ the count, the second pins determinism.
 
 ## 7. Decisions flagged for the founder (first pass; the current list is §16)
 
-| #   | Decision                                                                                                                        | Recommendation                                                                                              |
-| --- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| D1  | All recalls recent/older split: material activity (one date) or keep `lastPublicActivityAt`?                                    | Material activity. One date for position and section; strict tightening; a few quiet cases move to Older.   |
-| D2  | Location-filter ordering keeps its consumer-risk rung or drops it?                                                              | Drop it in this pass. It is ordering, not filter UI, and it is the last severity ordering in the app.       |
-| D3  | Does "assigned risk label" admit Unknown?                                                                                       | No. Five rated tiers only; Pending and Unknown excluded by separate, named checks.                          |
-| D4  | Photo usability: selection on `heroImageUrl` only, or also on the device's recorded load failures?                              | `heroImageUrl` only at selection; a failed load falls back to the card's text-led shape, never a reshuffle. |
-| D5  | Matches exist but none is previewable (Costco-only above): what does Ready draw?                                                | Count line and the locked strip, no cards. The `none` copy would be false; a hidden count would be worse.   |
-| D6  | Accept that the deck lags the feed (§5.2)? The alternative is to relax the photo or Pending rule when fewer than three qualify. | Flagged for awareness; the decisions as given are implementable as-is.                                      |
+| #   | Decision                                                                                                                        | Recommendation                                                                                                                                                                                                                                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | All recalls recent/older split: material activity (one date) or keep `lastPublicActivityAt`?                                    | Material activity. One date for position and section; strict tightening; a few quiet cases move to Older.                                                                                                                                       |
+| D2  | Location-filter ordering keeps its consumer-risk rung or drops it?                                                              | Drop it in this pass. It is ordering, not filter UI, and it is the last severity ordering in the app.                                                                                                                                           |
+| D3  | Does "assigned risk label" admit Unknown?                                                                                       | No. Five rated tiers only; Pending and Unknown excluded by separate, named checks.                                                                                                                                                              |
+| D4  | A selected photo fails                                                                                                          | **Revised in §17.4, awaiting founder:** a readable preview needs a LOADED photo; a failed or timed-out candidate reclassifies to its no-photo group; bounded probes, generation-tagged callbacks, session memory, changes applied only at rest. |
+| D5  | Matches exist, zero previews qualify                                                                                            | **Superseded by the priority groups (§17.1):** with one or more genuine matches at least one preview is always readable, so the zero-readable state no longer arises.                                                                           |
+| D6  | Accept that the deck lags the feed (§5.2)? The alternative is to relax the photo or Pending rule when fewer than three qualify. | Flagged for awareness; the decisions as given are implementable as-is.                                                                                                                                                                          |
 
 The "strict tightening" claim in D1 was wrong; §14 corrects it.
 
@@ -573,14 +573,214 @@ is optional, and the bound above holds without it.
 
 ## 16. Updated decision list
 
-| #   | Decision                                                                               | Status after the second pass                                                                                                                                                                                                                                                         |
-| --- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| D1  | All recalls recent/older split on material activity                                    | **Approved and IMPLEMENTED 2026-10-05** (`buildFeedSections`, `feedTier`). §14 showed the two-date model contradictory on 232 live cases.                                                                                                                                            |
-| D2  | Location-filter ordering drops the risk rung                                           | **Closed by founder, IMPLEMENTED — and widened in review:** the location tier went too. `orderByLocationTiers` is deleted; a filtered view keeps the sections' shared order, so a newer nationwide recall precedes an older explicit state match. Location eligibility is unchanged. |
-| D3  | Unknown excluded from previews, separately from Pending                                | **Closed** by founder; the Ready selection itself is not implemented (deferred with D4/D5).                                                                                                                                                                                          |
-| D4  | Photo usability keyed on the stored hero URL only; deck changes applied at rest        | **OPEN — not approved.** Founder direction 2026-10-05: image-failure behavior is not approved and D4 is not settled. §13 is a proposal only.                                                                                                                                         |
-| D5  | Matches but none previewable                                                           | **OPEN — not approved.** Founder direction 2026-10-05: the zero-eligible rendering is not approved and D5 is not settled. §13 is a proposal only.                                                                                                                                    |
-| D6  | The deck lags the feed                                                                 | **Quantified live** (§11): the same three August FDA recalls lead every state-only profile; left as awareness.                                                                                                                                                                       |
-| D7  | Revisit the frozen FSIS label-render policy so Ready (or cards) can show FSIS recalls? | **Founder's.** Outside this milestone; §12 states the consequence. Not recommended silently either way.                                                                                                                                                                              |
-| D8  | One manifest reconciliation immediately after a cold full reload                       | **Approved and IMPLEMENTED 2026-10-05** (`recoverBehindCursor`, `src/lib/feed-sync.ts`; [recall-feed-sync.md](recall-feed-sync.md) §3b step 5).                                                                                                                                      |
-| D9  | Close the ingest-day fallback for enforcement classification dates                     | **IMPLEMENTED as the prerequisite change** (`src/server/fda-enforcement/enrich.ts`): no FDA date → the case's `lastPublicActivityAt`, never the ingest day. Not deployed.                                                                                                            |
+| #   | Decision                                                                        | Status after the second pass                                                                                                                                                                                                                                                         |
+| --- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D1  | All recalls recent/older split on material activity                             | **Approved and IMPLEMENTED 2026-10-05** (`buildFeedSections`, `feedTier`). §14 showed the two-date model contradictory on 232 live cases.                                                                                                                                            |
+| D2  | Location-filter ordering drops the risk rung                                    | **Closed by founder, IMPLEMENTED — and widened in review:** the location tier went too. `orderByLocationTiers` is deleted; a filtered view keeps the sections' shared order, so a newer nationwide recall precedes an older explicit state match. Location eligibility is unchanged. |
+| D3  | Unknown excluded from previews, separately from Pending                         | **Closed** by founder; the Ready selection itself is not implemented (deferred with D4/D5).                                                                                                                                                                                          |
+| D4  | Photo usability keyed on the stored hero URL only; deck changes applied at rest | **OPEN — not approved.** Founder direction 2026-10-05: image-failure behavior is not approved and D4 is not settled. §13 is a proposal only.                                                                                                                                         |
+| D5  | Matches but none previewable                                                    | **OPEN — not approved.** Founder direction 2026-10-05: the zero-eligible rendering is not approved and D5 is not settled. §13 is a proposal only.                                                                                                                                    |
+| D6  | The deck lags the feed                                                          | **Quantified live** (§11): the same three August FDA recalls lead every state-only profile; left as awareness.                                                                                                                                                                       |
+| D7  | FSIS label visuals as preview images                                            | **No (kept for this milestone):** documents, not product photos; the frozen policy stays; FSIS recalls now enter the deck as rated-without-photo cards instead.                                                                                                                      |
+| D8  | One manifest reconciliation immediately after a cold full reload                | **Approved and IMPLEMENTED 2026-10-05** (`recoverBehindCursor`, `src/lib/feed-sync.ts`; [recall-feed-sync.md](recall-feed-sync.md) §3b step 5).                                                                                                                                      |
+| D9  | Close the ingest-day fallback for enforcement classification dates              | **IMPLEMENTED as the prerequisite change** (`src/server/fda-enforcement/enrich.ts`): no FDA date → the case's `lastPublicActivityAt`, never the ingest day. Not deployed.                                                                                                            |
+
+## 17. Ready preview decision brief, revised (2026-10-05, after commits e6f5e7e and 2858916)
+
+**Status: IMPLEMENTED 2026-10-05 (uncommitted), awaiting review.** The selection in §17.1, the photo
+loading in §17.4 and the at-rest rule are now the shipped code: `lib/ready-preview.ts`
+(`priorityGroup`, `selectReadyMatches`, `photoCandidates`, photo knowledge on
+`buildReadyPreview`), `lib/photo-probe.ts` and `lib/ready-photo-session.ts` (the bounded probe
+and the per-screen session), `hooks/use-ready-preview.ts` (one session per corpus and
+preferences, as an external store), `components/onboarding/ready-carousel.tsx` (busy reporting
+and the shown photo's failure) and `components/onboarding/preview-step.tsx` (the held preview).
+Unknown and public health alerts sit after the four groups as recommended (option A, §17.3), never
+relabeled. The authoritative description now lives in
+[recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md) §6.4; the sections below are
+the decision record. This revision replaced the earlier strict photo-and-rated rule and the
+locked-only proposal. The founder's direction: fill three
+readable previews whenever at least three genuine Affects You matches exist, selecting by priority
+group; never borrow a non-matching recall or inflate the count; show every match when fewer than
+three exist; add the existing locked fourth page only when genuine matches remain beyond the
+readable previews; preserve the count, board, purchase boundary and approved deck styling; keep
+FSIS label pages excluded. Captures, the record list and a comparison sheet are in
+`~/Desktop/Lotly-Feed-Ordering-Staging/evidence/ready-review/`.
+
+### 17.1 The rule under review
+
+```
+matches   = affectsYouMatches(corpus, prefs)        -- unchanged; shared newest-first order
+total     = matches.length                            -- the count line AND the Building count
+
+group 1   confirmed risk label, photo successfully loaded
+group 2   confirmed risk label, no photo (none stored, or the stored one failed to load)
+group 3   Pending, photo successfully loaded
+group 4   Pending, no photo
+group 5   Unknown / public health alert — not in the founder's list; see §17.3
+
+readable  = the first three of matches ordered by group, the shared newest-first order
+            inside each group; every match when fewer than three exist
+locked    = the next match in that same order, when one remains     (flag: see §17.2)
+strip     = total > readable.length                                   -- unchanged
+```
+
+"Confirmed risk label" is one of the five rated tiers. Pending and Unknown are tested separately
+by name, never folded into one "unrated" notion.
+
+### 17.2 The examples, on real records
+
+The review is `src/components/development/ready-selection-review.tsx`, a development-only file
+that applies the rule above to the bundled baseline (64 real recalls recorded 2026-10-04, clock
+fixed at the recording) and hands the result to the production Ready step. It does not touch
+`lib/ready-preview.ts`; it shares only what must not change (`affectsYouMatches`,
+`buildHomeCardModel`, `PreviewStep`). Each scenario is a real preference profile found by
+searching every single-choice profile and the named pairs; nothing was chosen by hand to look good.
+"Photo" in the review means a stored photo: the review cannot probe loading (§17.4 does).
+
+| #   | Scenario                                     | Profile            | Genuine | Readable                                                                                                                                                              | Locked page                                                          | Strip  |
+| --- | -------------------------------------------- | ------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------ |
+| 1   | Three rated recalls with photos              | California         | 19      | g1 `7a9159b7` Moringa Leaf Powder (Critical, Updated Sep 11); g1 `6c54040d` Granola (Critical); g1 `080dedcf` Green Powder Products (Critical)                        | g2 `6fcdc02c` Ineligible Pork Cracklings (Critical, no photo, Oct 2) | shown  |
+| 2   | A mix requiring rated recalls without photos | tree nuts + Kroger | 3       | g1 `c858146a` Eridanous shortbread (High, photo); g2 `b3faf760` Apulian almond spread (High, no photo); g2 `e29ba3f8` Fruit puree pouches (High, no photo)            | none                                                                 | hidden |
+| 3   | A mix requiring Pending recalls              | soy                | 3       | g1 `c858146a` Eridanous shortbread (High); g3 `ea4c7576` Loaded bacon & cheddar chips (Pending, photo); g4 `11032eb1` Saint Francis pizzas (Pending, no photo, Oct 3) | none                                                                 | hidden |
+| 4   | Pending fills, a Pending match locked        | milk               | 5       | g1 `4e2cb847` Variety of Breads (Moderate); g1 `c858146a` Eridanous shortbread (High); g3 `6061bbb8` Chocolatey Eyeballs (Pending, photo)                             | g3 `fab432cd` Plant Based Snack (Pending, photo); 1 beyond           | shown  |
+| 5   | Two genuine matches total                    | tree nuts          | 2       | g1 `c858146a` Eridanous shortbread; g2 `b3faf760` Apulian almond spread (no photo)                                                                                    | none                                                                 | hidden |
+| 6   | One genuine match total                      | Costco             | 1       | g3 `365434a6` Pepper Jalapenos (Pending, photo)                                                                                                                       | none                                                                 | hidden |
+
+Captures: `i17-review-<n>.png` and `se-review-<n>.png` (scenario top), `-bottom` (scrolled to
+the strip) and `-locked` (deck swiped to the locked page) for scenarios 1 and 4, and
+`comparison-sheet.png` with every cell labelled by scenario, genuine match count, readable count
+and device. The deck's dots, frost, strip, monitoring line and See my plan are the production
+components unchanged.
+
+**What the examples show.** Three readable cards appear in every scenario with three or more
+matches, so the count never stands beside an empty deck and the 2026-10-03 audit's F7 cannot
+recur. In scenario 3 the newest recall (Saint Francis, announced Oct 3, Pending, no photo) is the
+third card, behind an August High recall with a photo: the groups outrank recency by design. In
+scenario 1 the locked page is a Critical FSIS recall from Oct 2 with no photo, frosted; the
+fourteen Pending California matches and the public health alert sit behind it, unseen.
+
+**Flags on the locked page and the strip copy (founder decision, not changed silently):**
+
+- **Which match is locked.** The review locks the next match in group order (scenario 1: a
+  Critical FSIS recall). The alternative is the newest remaining match (scenario 1: the Oct 2
+  Pending sprouts recall). Under frost the difference is invisible on the card and audible only
+  as "More matches are locked", so this is a question of what the locked page stands for, not
+  of what it shows.
+- **"More matching recalls are locked" and "More matches are locked" are plural.** Accurate in
+  scenarios 1 (16 hidden) and 4 (2 hidden). When exactly four matches exist, three are readable,
+  the locked page is the fourth and nothing lies beyond it: both strings then say "more … are"
+  about one recall. No baseline single-choice profile has exactly four matches, but live profiles
+  will. Options: accept the plural, or add a singular form; neither is done here.
+- **The monitoring line** ("We'll keep checking as new recalls are announced.") replaces the
+  strip whenever every match is readable (scenarios 2, 3, 5, 6). It remains accurate.
+
+### 17.3 Unknown and public health alert records — flagged for the founder
+
+The founder's four groups name "confirmed" and "Pending" labels. A third state exists:
+**Unknown**, which `riskView` gives to a public health alert (no classification ever arrives;
+the badge is suppressed and the card shows "Public Health Alert" instead) and to a recall whose
+classification is unrecoverable (badge `UNKNOWN`). Live on 2026-10-05: 167 Unknown cases, every
+one an FSIS public health alert, all nationwide and all photo-less, so one or more are genuine
+matches for every state profile. The baseline carries one (`dab5f7c7`, Aug 8; the 19th match in
+scenario 1, never readable there).
+
+The review does not exclude them and does not invent a label: it places them in a fifth group
+after Pending without photo, so they become readable only when fewer than three rated or Pending
+matches exist, and they count in the total exactly as today. Three placements are possible:
+
+| Option | Placement                              | Consequence                                                                                                      |
+| ------ | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| A      | Group 5, last (the review as captured) | A PHA is readable only for sparse profiles; the card shows "Public Health Alert", no risk label.                 |
+| B      | With Pending, by photo (group 3 or 4)  | A PHA could outrank a Pending recall without a photo; it never has a photo, so in practice group 4 ties by date. |
+| C      | Never readable, counted only           | A profile whose only matches are alerts shows a count and no cards — the F7 shape returns for that profile.      |
+
+Recommendation: **A**, because it fills the deck without presenting an alert as a rated recall
+and without re-creating an empty deck. It needs the founder's word; the groups list is theirs.
+
+### 17.4 Photo loading: bounded, reclassifying, at rest
+
+A readable preview in group 1 or 3 must have a photo that **loaded**, not merely a stored URL.
+The specification, with its named bounds:
+
+1. **Probe, do not render.** Candidates with a stored photo are probed with the platform image
+   prefetch (`Image.prefetch`), in group order, at most `PHOTO_PROBE_CONCURRENCY = 3` in flight,
+   until three readable cards are confirmed or the candidates run out. A probe resolves
+   `loaded`, `failed`, or `timed out` after `PHOTO_PROBE_TIMEOUT_MS = 4000`.
+2. **Reclassify, never drop.** A failed or timed-out candidate moves to its no-photo group
+   (1 → 2, 3 → 4) and keeps its place there by the shared order. The selection is recomputed
+   over the same matches. `total` never changes: probing reads matches, it never filters them.
+3. **One bounded wait.** The deck stays in `checking` until the probes needed for the first
+   three settle, or `PHOTO_DECK_DEADLINE_MS = 5000` passes, whichever is first; unsettled candidates
+   are treated as no-photo for that build. No candidate is ever awaited indefinitely. (As built,
+   the session starts during Building and Ready adopts it, so arriving from Building usually needs
+   no wait at all — [recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md) §6.4.)
+4. **Stale callbacks.** Every build carries a generation (the corpus identity, the preferences
+   and a counter). A probe result tagged with an older generation is dropped. Unmount advances
+   the generation, so nothing settles into a screen that is gone.
+5. **No unnecessary retries.** The session failure memory (`lib/image-failures.ts`) is consulted
+   before probing: a URL that failed or timed out this session is treated as no-photo at once,
+   with no request. Loaded URLs are remembered for the session too, so a rebuild (a preference
+   edit, a sync) re-probes nothing it already knows. Nothing retries within a session; a relaunch
+   starts fresh.
+6. **Changes only at rest.** The carousel owns the items it is showing. A new deck — from a
+   reclassification, a sync completing, or a saved edit — is held while a drag is active or a
+   settle animation runs, and applied once on settle; if several arrive, the last wins. Nothing
+   is replaced mid-gesture.
+7. **A shown photo that fails anyway** (prefetch succeeded, the tile's `onError` fires) takes the
+   same path: the failure is recorded, the candidate reclassifies, the new deck is applied at
+   rest. Until then the card draws its text-led shape in place, exactly as the Feed card does.
+8. **Late successes do not reorder.** Once a deck has been shown, a probe that resolves `loaded`
+   afterwards promotes nothing in that session; only failures move cards. This keeps a shown deck
+   from rearranging itself while the shopper is looking at it.
+9. **Offline and the bundled baseline.** With no network every probe fails inside the bound, every
+   photo candidate reclassifies, and the deck still fills with text-led cards: the honest answer,
+   with the same count.
+
+### 17.5 Implementation scope, once approved
+
+- `lib/ready-preview.ts`: `priorityGroup(item, photoState)`, the grouped selection, the locked
+  page, and the probe state machine with the named constants; `total` and `hasLockedMatches`
+  unchanged. The photo probe is injected (a port), so the selection stays pure and testable.
+- `components/onboarding/ready-carousel.tsx`: hold incoming items while dragging or settling;
+  apply on settle. No new motion, copy or layout.
+- Tests: `ready-preview.test.ts` rewritten around the groups (the six scenarios above over the
+  real baseline, plus failure, timeout, generation and session-memory cases);
+  `ready-count.test.ts` must pass unchanged; a carousel test for the deferred apply.
+- Device check on both simulators through the review screen and the real route with the
+  device-only saves switch.
+- The review file and the hub's `?review=<n>` branch are development tooling and fold out of a
+  release with the hub; they can stay as the standing visual harness for the Ready deck or be
+  removed in the implementation change.
+
+### 17.6 Limitations of this review
+
+- "Photo" is a stored URL, not a loaded image: the review cannot exercise §17.4, so a scenario
+  whose photo fails live would show one more text-led card than the capture does.
+- The hub's gallery cannot host the Ready step: its hidden board measurement never settles inside
+  the hub's scrolling gallery (the hub's own three Ready samples are blank there too, a
+  pre-existing limitation), which is why the review draws full-screen through `?review=<n>`.
+- On the iPhone 17 at the default size the locked strip sits half under the sticky footer until
+  the page is scrolled; this is the audit's open V1, not something this review changes.
+- The captures come from development builds on simulators, not from a release build.
+
+## 18. Follow-up tasks recorded 2026-10-05 (not started)
+
+Each arose from this milestone's work and is kept here, separately, rather than folded into the
+implementation above. Ingestion healthchecks stay on the separate operations roadmap and are only
+pointed to from here.
+
+1. **The Building step's fallback gap.** Building counts `affectsYouMatches` over `readyCorpus`,
+   so when the session cannot answer it counts the bundled baseline and Ready then previews from
+   it. Ready's photo probes cannot succeed without a network, so an offline fresh install shows the
+   baseline's count beside text-led cards; and the baseline count can differ from the live count
+   that replaces it moments later (today, California: 19 on the baseline, 18 live). Audit the
+   handoff (what Building promises, what Ready then shows, and whether a baseline-backed count
+   should be worded or timed differently) before changing either screen.
+2. **Older-match and count audit.** The count covers the Affects You current window only; the
+   collapsed older tail (live, California: 221 cases) is neither counted nor previewed, and the
+   locked page can stand for a match the shopper would rank lower than many hidden ones. Audit
+   whether the count, the strip's "more" and the older tail tell one consistent story to a
+   shopper who then opens the Feed.
+3. **Ingestion healthchecks.** Not part of the feed or Ready work; tracked in
+   [recall-production-runbook.md](recall-production-runbook.md) and
+   [recall-scheduler-watchdog.md](recall-scheduler-watchdog.md) as operations work.

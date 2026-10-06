@@ -484,10 +484,10 @@ test('P2B7F: the primitive can never render an Image without a source', () => {
   );
   assert.ok(!/source=\{[^}]*undefined/.test(icon), 'the icon source can be undefined');
 
-  // Exactly one `Image` renders here, so there is no second path with a
-  // different source rule.
+  // Exactly one `Image` renders here — the guarded one (2026-10-05) — so
+  // there is no second path with a different source rule.
   assert.equal(
-    [...icon.matchAll(/<Image\b/g)].length,
+    [...icon.matchAll(/<GuardedImage\b/g)].length,
     1,
     'the primitive renders more than one Image',
   );

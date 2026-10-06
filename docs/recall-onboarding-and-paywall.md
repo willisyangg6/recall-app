@@ -1203,10 +1203,32 @@ the page scrolls.
   After an edit, the last board stays until the new content is measured.
 - **No jump and no text without its art on arrival.** The page is laid out
   but not shown until the choice is made AND every image of the chosen
-  board has loaded or failed (`heroImageCount`, each `Image`'s
-  `onLoadEnd`). It waits on no timer, and Building's timing is untouched.
+  board has loaded or failed (`heroImageCount`, each layer's `BoardImage`
+  reporting once). It waits on no timer, and Building's timing is untouched.
   The compact board is mounted from the first frame, as before, so its
   pixels are unchanged; the wide board mounts once chosen.
+- **Every board layer keeps its own picture (2026-10-05).** A loaded board
+  once lost its wall and countertop for good, with a thin stretch of the
+  wall band crossing the page (founder screenshot, iPhone 17); a release
+  build showed the same fault plainly — the scene drawn as the peanut
+  pictogram, the row icons as tinted rectangles, the allergen plate as tiny
+  copies of the scene. The cause is React Native's image view recycling
+  (0.86, iOS): a reused view accepts whatever answer reaches it, so an answer
+  still in flight for its previous image can replace the right one, with no
+  error and no reload. Two guards, the art, its slices and its layout
+  unchanged:
+  - every image on the board, every icon and every recall photo draws
+    through `GuardedImage` (`components/ui/guarded-image.tsx`), which counts
+    answers against requests (`lib/image-answer-ledger.ts`: one answer per
+    `onLoadStart`, the first possibly just before it) and redraws itself as
+    a new view on an answer beyond that count — the stale answer's
+    signature — at most `STALE_REDRAW_LIMIT` (3) times per source;
+  - every board layer is a `BoardImage`: a failed request (the platform
+    clears the view and never asks again) is made again as a new view, up to
+    `BOARD_IMAGE_RETRIES` (3) times with a growing pause
+    (`BOARD_IMAGE_RETRY_MS`, 200 ms). It tells the reveal once — on its first
+    load, or when its attempts run out — so a broken asset can never hold the
+    page hidden.
   - Measurement wrappers exist only in the hidden copies, so the visible
     texts keep their original view tree and antialiasing.
 
@@ -1308,15 +1330,61 @@ own layers in the Feed's own order:
   announcement date, case id — 2026-10-05), inherited with no change to the
   deck, its cards or its count;
 - `buildHomeCardModel` for each shown item;
-- the first three ranked matches as the readable cards, imaged or not (the
-  image-led narrowing of the polish pass is retired, 2026-10-04: a match
-  without a product image draws the card's own text-led shape, as the Feed
-  does, so a count can never stand beside an empty deck), with the real
-  next match as the locked card.
+- **the readable cards chosen by priority group (founder decision,
+  2026-10-05):** three whenever three genuine matches exist, taken in group
+  order with the shared newest-first order inside each group — a confirmed
+  risk label with a photo that loaded; a confirmed label without a photo;
+  Pending with a photo that loaded; Pending without — and Unknown (a public
+  health alert, or an unrecoverable classification) after those four, never
+  relabeled. The real next match in that same order is the locked card when
+  one remains. Fewer than three matches show every match. "Loaded" is a
+  verdict only the screen can supply: `hooks/use-ready-preview.ts` prefetches
+  each candidate photo (`lib/photo-probe.ts`) under a per-photo deadline
+  (`PHOTO_PROBE_TIMEOUT_MS`, 4 s), a concurrency cap (3) and a session memory
+  that never asks for a photo twice, and the deck is built once the probes
+  for its first cards settle or the photo deadline passes
+  (`PHOTO_DECK_DEADLINE_MS`, 5 s; `lib/ready-photo-session.ts` — a data
+  deadline, distinct from the carousel's 260 ms `DECK_SETTLE_MS` motion). A
+  photo that fails or times out moves its recall to the no-photo group of the
+  same label; a late success never rearranges a shown deck; a shown photo
+  that fails to render after all reclassifies its recall. Every candidate
+  past the first `PHOTO_PROBE_LIMIT` (6) counts as no photo for that build.
+  With no verdicts at all (offline, the bundled baseline), every match is a
+  text-led card in the right group — a count never stands beside an empty
+  deck.
+- **the photo session starts during Building (2026-10-05):** once Building
+  has its corpus and the saved choices it calls `warmReadyPhotos`, which
+  starts the session Ready will need and returns — never awaited, never read
+  there, so Building's timing, data gate and count are untouched. Sessions
+  live in one registry (`lib/ready-photo-registry.ts`) keyed by the ordered
+  candidate URLs themselves, not by any array object: Ready derives the same
+  candidates from the same corpus and choices and adopts the same session,
+  usually already answered, so arriving from Building shows the deck with no
+  second wait. A corpus update or edit that changes the candidates gets its
+  own session; one that does not keeps the session it has. The registry
+  holds at most `PHOTO_SESSION_LIMIT` (3) sessions, evicting the least
+  recently used unwatched one, and cancels a session nobody watches
+  `PHOTO_SESSION_IDLE_MS` (60 s) after it was left or warmed. Entered
+  directly (a cold resume, a deep link), Ready starts the session itself,
+  bounded by the photo deadline. While a corpus update's new photos are
+  checked under the SAME choices, Ready keeps the deck it shows rather than
+  returning to the check; after a preference change it shows the check.
 
 The deck shows up to three readable matches, and the locked final card only
 when a real next match exists. The strip shows only when more real matches
 exist than the deck shows; one match is one card, no strip, nothing locked.
+**Deck changes land only at rest (2026-10-05):** `PreviewStep` keeps the
+preview the deck was given while `ReadyDeck` reports itself busy — from a
+drag taking the responder, or a committed move, until the cards have settled
+(at once under Reduce Motion) — and shows the newest preview the moment the
+deck reports rest, which is when the deck's key may change and it remounts.
+A rebuilt deck keeps the room of the deck it replaced (`initialCardHeight`)
+until its own cards have measured, so the dots and the locked strip never
+ride up over its first frame; a taller new deck then grows downward. A
+sync landing, a reclassified photo or a saved edit never replaces a card under
+a finger or mid-settle. The count, the board, the strip copy, the artwork and
+the purchase boundary are unchanged; matching eligibility, the 60-day window,
+feed ordering, the Building step's fallback and push are untouched.
 From the accessibility text sizes the card's media sits ABOVE its text
 (`RecallCardSurface`'s `mediaPlacement`, used by the deck alone), so a title
 is never squeezed into the column beside the tile and broken mid-word.

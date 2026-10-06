@@ -24,7 +24,9 @@
  * so an icon can never be announced as a bare "image".
  */
 
-import { Image, type ImageSourcePropType } from 'react-native';
+import { type ImageSourcePropType } from 'react-native';
+
+import { GuardedImage } from '@/components/ui/guarded-image';
 
 import {
   color,
@@ -117,7 +119,7 @@ export function Icon({
 }) {
   const side = iconSize[size];
   return (
-    <Image
+    <GuardedImage
       source={GLYPHS[name]}
       style={{ width: side, height: side, tintColor: tint ?? color[colorToken] }}
       resizeMode="contain"

@@ -24,6 +24,7 @@ import { router, useFocusEffect } from 'expo-router';
 
 import { PreviewStep } from '@/components/onboarding/preview-step';
 import { StepPending } from '@/components/onboarding/step-pending';
+import { EMPTY_PREFERENCES } from '@/domain/preferences';
 import { useAccess } from '@/hooks/use-access';
 import { useFeed } from '@/hooks/use-feed';
 import { useOnboardingPreferences } from '@/hooks/use-onboarding-preferences';
@@ -32,7 +33,16 @@ import { EDIT_PREFERENCES_ROUTE, onboardingRoute } from '@/lib/onboarding-routes
 import { presentedPreferences } from '@/lib/presented-preferences';
 import { isFeedConfigured } from '@/lib/recall-feed';
 import { todayIso } from '@/lib/recall-presentation';
-import { buildReadyPreview, readyCorpus } from '@/lib/ready-preview';
+import { readyCorpus } from '@/lib/ready-preview';
+import { useReadyPreview } from '@/hooks/use-ready-preview';
+
+type DevelopmentProbe = typeof import('@/lib/development-photo-probe');
+
+/** Development only: the one-shot "change the card set during a settle" control. */
+const developmentProbe = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/lib/development-photo-probe') as DevelopmentProbe)
+  : null;
 
 export default function OnboardingPreviewScreen() {
   const access = useAccess();
@@ -42,6 +52,21 @@ export default function OnboardingPreviewScreen() {
   // Arriving from the Building step, Ready opens on the corpus Building
   // counted, and does not reconcile again within the foreground threshold.
   const feed = useFeed({ reuseRecent: true });
+  // The one corpus decision Building made too (`readyCorpus`): the session's
+  // answer, else the bundled baseline, so Ready shows the count Building
+  // counted; a sync that lands later replaces it with the live corpus.
+  const feedInput = readyCorpus(isFeedConfigured() ? feed.state : { status: 'error' });
+  // The saved choices (a development QA profile may present them differently,
+  // display only). Before they load, nothing matches and nothing is probed.
+  const prefs = presentedPreferences(load.status === 'ready' ? load.prefs : EMPTY_PREFERENCES);
+  // The preview with photo knowledge: the pure selection over the real
+  // matches, fed by the bounded photo session for these candidates — the one
+  // the Building step started when Ready is reached from it.
+  const { preview, onPhotoFailed } = useReadyPreview(
+    load.status === 'ready' ? feedInput : { status: 'loading' },
+    prefs,
+    todayIso(),
+  );
   // Back from the editor, focus returns to the action that opened it.
   const editRef = useRef<View>(null);
   const editing = useRef(false);
@@ -57,17 +82,16 @@ export default function OnboardingPreviewScreen() {
   );
 
   if (load.status !== 'ready') return <StepPending step="preview" status={load.status} />;
-  // The one corpus decision Building made too (`readyCorpus`): the session's
-  // answer, else the bundled baseline, so Ready shows the count Building
-  // counted; a sync that lands later replaces it with the live corpus.
-  const feedInput = readyCorpus(isFeedConfigured() ? feed.state : { status: 'error' });
-  // The saved choices (a development QA profile may present them differently,
-  // display only).
-  const prefs = presentedPreferences(load.prefs);
   return (
     <PreviewStep
       prefs={prefs}
-      preview={buildReadyPreview(feedInput, prefs, todayIso())}
+      preview={preview}
+      onPhotoFailed={onPhotoFailed}
+      onDeckSettling={
+        developmentProbe
+          ? () => developmentProbe.developmentDeckSettling(preview, onPhotoFailed)
+          : undefined
+      }
       onSeePlan={() => router.push(onboardingRoute('paywall'))}
       onEdit={() => {
         editing.current = true;

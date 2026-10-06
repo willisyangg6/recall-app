@@ -1,8 +1,9 @@
 /**
  * The Ready step's recall preview (2026-09-28; one experience over three
- * sources, 2026-10-04): which real recalls the deck shows and what the count
- * counts — the same screen whether the corpus was just downloaded, is the
- * device's cached copy, or is the bundled baseline.
+ * sources, 2026-10-04; priority-group selection, 2026-10-05): which real
+ * recalls the deck shows and what the count counts — the same screen whether
+ * the corpus was just downloaded, is the device's cached copy, or is the
+ * bundled baseline.
  *
  * ## One matching layer, one card model
  *
@@ -10,13 +11,12 @@
  * feed's own layers, called in the Feed's own order: every feed item through
  * `evaluatePersonalRelevance`, membership and ordering through
  * `buildAffectsMeSections` (newest first by material activity, then
- * announcement, then id — the one shared feed order since 2026-10-05,
- * inherited here without any change to the deck), and each shown item through
- * `buildHomeCardModel`, the same model the Feed's card draws. The preview
- * shows the CURRENT window (`affects`): recalls that affect the shopper
- * whose last material activity is within the Affects Me recency window. The
- * collapsed older tail the Feed keeps behind a disclosure is not "today"
- * and is not counted here.
+ * announcement, then id — the one shared feed order since 2026-10-05), and
+ * each shown item through `buildHomeCardModel`, the same model the Feed's
+ * card draws. The preview shows the CURRENT window (`affects`): recalls that
+ * affect the shopper whose last material activity is within the Affects Me
+ * recency window. The collapsed older tail the Feed keeps behind a
+ * disclosure is not "today" and is not counted here.
  *
  * ## What the count includes and excludes
  *
@@ -32,6 +32,27 @@
  * corpus (`readyCorpus`), so the two screens cannot disagree
  * (`ready-count.test.ts`).
  *
+ * ## Which matches are readable (founder decision, 2026-10-05)
+ *
+ * The deck fills three readable cards whenever three genuine matches exist,
+ * chosen by priority group, the shared newest-first order inside each group:
+ *
+ *   1  a confirmed risk label and a photo that LOADED
+ *   2  a confirmed risk label and no photo
+ *   3  Pending and a photo that loaded
+ *   4  Pending and no photo
+ *   5  Unknown — a public health alert, or a recall whose classification is
+ *      unrecoverable — kept after the four named groups, never relabeled
+ *
+ * "Loaded" is a verdict the screen supplies (`PhotoKnowledge`): the photo
+ * was prefetched within the probe's bounds (lib/photo-probe.ts). A stored
+ * URL that has not loaded, failed, or timed out counts as no photo, so a
+ * recall with a broken image is still a readable text-led card in the right
+ * group rather than a blank one. With no knowledge at all, nothing counts
+ * as loaded. Fewer than three matches show every match; the real next match
+ * beyond the readable ones is the locked final page, when one remains. The
+ * count never depends on any of this.
+ *
  * ## The corpus (2026-10-04)
  *
  * `readyCorpus` chooses, in order: the feed the shared session answered
@@ -45,23 +66,16 @@
  * the shared feed path (`useFeed`'s mount and foreground revalidation);
  * nothing here asks the network.
  *
- * ## The deck
- *
- * The first `PREVIEW_MATCH_LIMIT` matches in rank order are the readable
- * cards, with or without a product image (a match without one draws the
- * card's own text-led shape, as the Feed does). The next match, when one
- * exists, is the locked final card (a real recall, frosted, never
- * invented), and the locked strip appears only when real matches beyond the
- * readable ones exist. One match is one card, no strip, nothing locked.
- *
  * `none` — the check answered and nothing currently matches — is said
  * plainly with no cards: a defensive state. With a healthy corpus Nationwide
  * recalls make it rare, so an unexpected zero is a data or loading problem
  * to investigate, never something to paper over with a positive count.
- * `checking` claims nothing while the first read is still answering.
+ * `checking` claims nothing while the first read, or the first photo
+ * probes, are still answering.
  */
 
 import type { UserRecallPreferences } from '@/domain/preferences';
+import { consumerRiskTier } from '@/domain/risk-tier';
 import { buildAffectsMeSections } from '@/lib/affects-me-ranking';
 import { BASELINE_RECALLS } from '@/lib/baseline-recalls';
 import { matchPositionLabel } from '@/lib/onboarding-copy';
@@ -71,6 +85,14 @@ import { evaluatePersonalRelevance } from '@/lib/relevance';
 
 /** The most matches the preview ever makes readable. */
 export const PREVIEW_MATCH_LIMIT = 3;
+
+/**
+ * How many candidate photos a screen probes for one deck: the readable three
+ * plus a reserve, so a few failures still fill the deck from the photo groups
+ * without probing every match a broad profile has. Candidates past the limit
+ * count as no photo for that build.
+ */
+export const PHOTO_PROBE_LIMIT = 6;
 
 /** What the shared feed session has answered, as the hooks report it. */
 export type FeedAnswer =
@@ -111,13 +133,13 @@ export function resetReadyCorpusMemory(): void {
 }
 
 export type ReadyPreviewState =
-  /** The feed has not answered yet: claim nothing, show the quiet check. */
+  /** The feed, or the first photo probes, have not answered yet: claim nothing, show the quiet check. */
   | { kind: 'checking' }
   /** The check answered and nothing currently matches: said plainly, no cards. */
   | { kind: 'none'; source: CorpusSource }
   /**
-   * Real current matches: up to the limit of readable cards (imaged or not),
-   * the REAL next match as the locked card (or null), and the true total.
+   * Real current matches: up to the limit of readable cards, the REAL next
+   * match as the locked card (or null), and the true total.
    */
   | {
       kind: 'matches';
@@ -143,26 +165,98 @@ export function affectsYouMatches(
     .affects;
 }
 
+/** The founder's four groups, and the fifth their list does not name. */
+export type PriorityGroup = 1 | 2 | 3 | 4 | 5;
+
+/** What the screen knows about photos: a URL is loaded only when its probe said so. */
+export interface PhotoKnowledge {
+  loaded: (url: string) => boolean;
+}
+
+/** Nothing has loaded: the knowledge a screen has before its probes answer. */
+export const NO_PHOTO_KNOWLEDGE: PhotoKnowledge = { loaded: () => false };
+
+/**
+ * A recall's group. The two absences are tested by name, separately: Pending
+ * is a label that is coming, Unknown is one that is not — neither is ever
+ * folded into the other or into a rated tier.
+ */
+export function priorityGroup(
+  item: Pick<FeedItem, 'classification' | 'heroImageUrl'>,
+  photos: PhotoKnowledge,
+): PriorityGroup {
+  const tier = consumerRiskTier(item.classification);
+  const photo = item.heroImageUrl !== null && photos.loaded(item.heroImageUrl);
+  if (tier === 'pending') return photo ? 3 : 4;
+  if (tier === 'unknown') return 5;
+  return photo ? 1 : 2;
+}
+
+export interface ReadySelection {
+  /** The readable cards: the first three by group, every match when fewer exist. */
+  readable: FeedItem[];
+  /** The next genuine match in that same order, or null when none remains. */
+  locked: FeedItem | null;
+}
+
+/**
+ * The selection over an already-matched, already-ordered list. A stable sort
+ * by group keeps the shared newest-first order inside each group. It reads
+ * the matches and never filters them: the total is theirs, untouched.
+ */
+export function selectReadyMatches(
+  matches: readonly FeedItem[],
+  photos: PhotoKnowledge,
+): ReadySelection {
+  const ordered = [...matches].sort((a, b) => priorityGroup(a, photos) - priorityGroup(b, photos));
+  return {
+    readable: ordered.slice(0, PREVIEW_MATCH_LIMIT),
+    locked: ordered[PREVIEW_MATCH_LIMIT] ?? null,
+  };
+}
+
+/**
+ * The photos a screen should probe for this corpus and these preferences:
+ * the stored URLs of the matches that could be readable if their photo
+ * loads, in the order the groups would place them (rated before Pending,
+ * newest first inside each), capped at `PHOTO_PROBE_LIMIT`. Unknown
+ * recalls carry no photo today and are never probed.
+ */
+export function photoCandidates(
+  items: readonly FeedItem[],
+  prefs: UserRecallPreferences,
+  now?: Date,
+): string[] {
+  const optimistic: PhotoKnowledge = { loaded: () => true };
+  const urls: string[] = [];
+  for (const item of [...affectsYouMatches(items, prefs, now)].sort(
+    (a, b) => priorityGroup(a, optimistic) - priorityGroup(b, optimistic),
+  )) {
+    if (item.heroImageUrl === null) continue;
+    if (priorityGroup(item, optimistic) === 5) continue;
+    if (!urls.includes(item.heroImageUrl)) urls.push(item.heroImageUrl);
+    if (urls.length >= PHOTO_PROBE_LIMIT) break;
+  }
+  return urls;
+}
+
 export function buildReadyPreview(
   feed: ReadyFeedInput,
   prefs: UserRecallPreferences,
   today: string,
   now?: Date,
+  photos: PhotoKnowledge = NO_PHOTO_KNOWLEDGE,
 ): ReadyPreviewState {
   if (feed.status === 'loading') return { kind: 'checking' };
   const affects = affectsYouMatches(feed.items, prefs, now);
   const source = feed.source ?? 'feed';
   if (affects.length === 0) return { kind: 'none', source };
-  // The ranked order, readable up to the limit whether or not a recall has
-  // a product image; the deck adds no image logic and never reorders.
-  const models = affects
-    .slice(0, PREVIEW_MATCH_LIMIT)
-    .map((item) => buildHomeCardModel(item, { today, prefs }));
-  const next = affects[PREVIEW_MATCH_LIMIT];
+  const selection = selectReadyMatches(affects, photos);
   return {
     kind: 'matches',
-    models,
-    locked: next === undefined ? null : buildHomeCardModel(next, { today, prefs }),
+    models: selection.readable.map((item) => buildHomeCardModel(item, { today, prefs })),
+    locked:
+      selection.locked === null ? null : buildHomeCardModel(selection.locked, { today, prefs }),
     total: affects.length,
     source,
   };

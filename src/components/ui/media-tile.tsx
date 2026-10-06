@@ -43,8 +43,9 @@
  */
 
 import { useState } from 'react';
-import { Image, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
+import { GuardedImage } from '@/components/ui/guarded-image';
 import { Surface } from '@/components/ui/surface';
 import type { layout } from '@/constants/design-tokens';
 import { hasImageFailed, recordImageFailure } from '@/lib/image-failures';
@@ -94,7 +95,7 @@ export function MediaTile({
       accessibilityRole="image"
       accessibilityLabel={alt}
       accessibilityValue={positionLabel !== null ? { text: positionLabel } : undefined}>
-      <Image
+      <GuardedImage
         source={{ uri }}
         style={styles.image}
         resizeMode="contain"

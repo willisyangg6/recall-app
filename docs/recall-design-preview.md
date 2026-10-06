@@ -568,6 +568,55 @@ feed cache` (relaunch afterwards to start the way a first launch does).
   scrolling, so `lotly://design-preview?jump=gate` opens it scrolled to the
   gate scenarios and `?jump=qa` to the Building QA controls. Display only:
   the parameter moves the scroll position and nothing else.
+  **Photo probe stand-ins (2026-10-05):** `Photos: live`, `Photos: every photo
+fails` and `Photos: every photo hangs` replace the Ready deck's image
+  prefetch (`lib/development-photo-probe.ts`, reached only through the
+  `__DEV__` `require` in `hooks/use-ready-preview.ts`) so the priority-group
+  selection can be watched reclassifying a recall whose photo fails or never
+  answers. `Photos: first photo passes prefetch, fails to render` keeps the
+  real prefetch but draws the card of the first candidate photo from an
+  address on the reserved `.invalid` domain, so the probe passes and the
+  render fails: the tile disappears, the recall moves to its no-photo group
+  at the next rest, and the count does not change. Choosing any stand-in
+  forgets this session's photo verdicts and cancels every running photo
+  session, so the next Building and Ready probe afresh under the new answer;
+  in memory only, so a launch returns to Live. Note that the app may launch
+  straight onto Ready (a gate record that points there), which probes live
+  before the hub can be opened — choose the stand-in, then apply the gate
+  scenario again. `Deck: change the card set during the next settle` is a
+  one-shot switch: the next time a released swipe on Ready starts settling,
+  the front-most photo is reported failed, so a real reclassification
+  arrives mid-settle and must wait for rest. In development the Metro log
+  carries one `[Ready photos]` line per session event (`started` by `warm` or
+  `watch`, `adopted`, `failed`, `expired`, `evicted`), which is how the
+  Building-to-Ready handoff is checked; Fast Refresh creates a fresh registry,
+  so judge the handoff from a cold launch.
+  **Fixtures chosen when the development server starts (2026-10-05):** two
+  `EXPO_PUBLIC_QA_*` variables, read only inside `__DEV__` modules, need no
+  tap, so they also work on a locked QA machine. Restart the server with
+  `--clear` to change them. `EXPO_PUBLIC_QA_BOARD_ART=fail-first` sends every
+  Ready board layer's first request to an address that refuses at once;
+  `fail-later` lets every layer load, then asks for it again from that
+  address three seconds later, the way a loaded view is re-requested and
+  cleared (`lib/development-board-art.ts`). `EXPO_PUBLIC_QA_PHOTOS=local`
+  probes and draws every deck photo from a QA fixture server on
+  `127.0.0.1:8099` (a disk copy of each real recall photo, `GET /photo?u=…`,
+  with `GET /missing?u=…` always 404), so failure testing neither depends on
+  nor loads the agencies' image hosts; `local-render-fail` also starts in
+  the render-failure stand-in, with its broken address on that server. The
+  fixture server is QA tooling outside the repository.
+  **Ready selection review (2026-10-05):** `lotly://design-preview?review=<n>`
+  draws the n-th scenario of `components/development/ready-selection-review.tsx`
+  full-screen with the production Ready step and the production selection
+  (`lib/ready-preview.ts`) over the bundled baseline's real recalls, with one
+  simulation — every stored photo counts as loaded, because a static screen
+  cannot probe ([recall-feed-ordering.md](recall-feed-ordering.md) §17). Nothing
+  reads or writes preferences. It draws
+  full-screen rather than in the gallery because the Ready step reveals its
+  page only once its hidden board measurement settles, and that measurement
+  does not settle inside this hub's scrolling gallery (the gallery's own three
+  Ready samples stay blank there too; a known limitation of the hub, not of
+  the step).
 
 The purchase flow (`src/hooks/use-purchase-flow.tsx`) hands both paywall
 routes development controls beneath the plans in a

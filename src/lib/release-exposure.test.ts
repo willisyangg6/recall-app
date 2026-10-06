@@ -85,6 +85,14 @@ const REQUIRED_PUBLIC_ENV = [
   'EXPO_PUBLIC_SUPABASE_URL',
 ] as const;
 
+/**
+ * Development-only QA fixtures (2026-10-05): read only inside
+ * `lib/development-*.ts` modules, which are reached through `__DEV__`
+ * requires and folded out of a release bundle. They are never release
+ * configuration and are never set on EAS.
+ */
+const DEVELOPMENT_ONLY_ENV = ['EXPO_PUBLIC_QA_BOARD_ART', 'EXPO_PUBLIC_QA_PHOTOS'] as const;
+
 test('every environment variable the client reads is an EXPO_PUBLIC_ one', () => {
   const found = new Set<string>();
   for (const { path, source } of CLIENT) {
@@ -94,6 +102,14 @@ test('every environment variable the client reads is an EXPO_PUBLIC_ one', () =>
         name.startsWith('EXPO_PUBLIC_'),
         `${path} reads process.env.${name}, which Metro would not inline and which may be a secret`,
       );
+      if ((DEVELOPMENT_ONLY_ENV as readonly string[]).includes(name)) {
+        assert.match(
+          path,
+          /lib\/development-[a-z-]+\.ts$/,
+          `${path} reads the development-only ${name} outside a development module`,
+        );
+        continue;
+      }
       found.add(name);
     }
     // Bracket and destructured reads would slip past the pattern above.
@@ -256,5 +272,28 @@ test('the developer wording of the not-configured screens is behind __DEV__', ()
     );
     assert.ok(release.length > 0, `${name} must keep both wordings`);
     assert.doesNotMatch(release, /EXPO_PUBLIC|\.env|README|dev server/, name);
+  }
+});
+
+test('the development-only fixture modules are reachable only through __DEV__ requires (2026-10-06)', () => {
+  // A release bundle folds `__DEV__ ? require(...) : null` away, so neither
+  // module — nor the QA variables only they read — can reach production.
+  for (const name of ['development-board-art', 'development-photo-probe']) {
+    for (const { path, source } of CLIENT) {
+      if (path.endsWith(`lib/${name}.ts`)) continue;
+      const uses = source.split(`@/lib/${name}`).length - 1;
+      if (uses === 0) continue;
+      const typeOnly = (source.match(new RegExp(`typeof import\\('@/lib/${name}'\\)`, 'g')) ?? [])
+        .length;
+      const devRequires = (
+        source.match(new RegExp(`__DEV__\\s*\\?[^:]*?require\\('@/lib/${name}'\\)`, 'g')) ?? []
+      ).length;
+      assert.equal(
+        uses,
+        typeOnly + devRequires,
+        `${path} reaches ${name} outside a __DEV__ require`,
+      );
+      assert.doesNotMatch(source, new RegExp(`^import [^;]*'@/lib/${name}'`, 'm'));
+    }
   }
 });

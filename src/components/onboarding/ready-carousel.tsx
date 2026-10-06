@@ -147,8 +147,12 @@ export function ReadyDeck({
   locked,
   width,
   onLockedPress,
+  onBusyChange,
+  initialCardHeight,
+  onCardHeight,
+  onPhotoFailed,
 }: {
-  /** The readable cards, at most the limit, in rank order (imaged or not). */
+  /** The readable cards, at most the limit, in selection order. */
   models: readonly HomeCardModel[];
   /** The REAL next match, frosted as the final card; or null. */
   locked: HomeCardModel | null;
@@ -156,6 +160,23 @@ export function ReadyDeck({
   width: number;
   /** The locked card's one action: the plan screen, never a hidden recall. */
   onLockedPress: () => void;
+  /**
+   * The deck is busy from the moment a drag takes the responder (or a move
+   * is committed) until its cards have settled. A holder uses this to apply
+   * new content only at rest, so a deck is never replaced mid-gesture
+   * (2026-10-05). A settle starting reports `(true, 'settle')`.
+   */
+  onBusyChange?: (busy: boolean, phase?: 'settle') => void;
+  /** A readable card's photo failed to render after all: the holder may reclassify it. */
+  onPhotoFailed?: (url: string) => void;
+  /**
+   * The card height the deck this one replaces had measured. A rebuilt deck
+   * keeps that room until its own cards have measured, so the dots and the
+   * strip below never ride up over its first frame (2026-10-05).
+   */
+  initialCardHeight?: number;
+  /** This deck's measured card height, for the deck that replaces it. */
+  onCardHeight?: (height: number) => void;
 }) {
   const { fontScale } = useWindowDimensions();
   const reduceMotion = useReduceMotion();
@@ -175,6 +196,11 @@ export function ReadyDeck({
   // sizes too, where the line limits come off — so a taller card can never
   // show beneath the front one.
   const shared = cardHeight > 0 ? cardHeight : undefined;
+  // The stack's room: its own measurement, or until then the deck it replaced.
+  const room = cardHeight > 0 ? cardHeight : (initialCardHeight ?? 0);
+  useEffect(() => {
+    if (cardHeight > 0) onCardHeight?.(cardHeight);
+  }, [cardHeight, onCardHeight]);
   // Every card reserves the tallest status row the deck measured, so all
   // titles start on one line (lib/ready-presentation `deckStatusHeight`).
   const [statusRows, setStatusRows] = useState<readonly number[]>([]);
@@ -228,16 +254,22 @@ export function ReadyDeck({
       setActive(target);
       if (!motionAllowed(reduceMotion)) {
         position.setValue(target);
+        onBusyChange?.(false);
         return;
       }
+      onBusyChange?.(true, 'settle');
       Animated.timing(position, {
         toValue: target,
         duration: DECK_SETTLE_MS,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
-      }).start();
+      }).start(({ finished }) => {
+        // A settle interrupted by a new drag is still busy: that drag's own
+        // release settles again and reports rest itself.
+        if (finished) onBusyChange?.(false);
+      });
     },
-    [position, reduceMotion],
+    [position, reduceMotion, onBusyChange],
   );
 
   // The drag. Its inputs change only on a commit or a new layout — never
@@ -248,6 +280,7 @@ export function ReadyDeck({
       onMoveShouldSetPanResponderCapture: (_, g) =>
         count > 1 && Math.abs(g.dx) > DRAG_SLOP && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
       onPanResponderGrant: () => {
+        onBusyChange?.(true);
         // A drag during a settle carries on from wherever the cards are.
         drag.from = active;
         position.stopAnimation((value) => {
@@ -264,7 +297,7 @@ export function ReadyDeck({
       onPanResponderTerminate: () => settle(active),
       onPanResponderTerminationRequest: () => false,
     });
-  }, [active, count, exit, position, settle]);
+  }, [active, count, exit, position, settle, onBusyChange]);
 
   const goTo = (index: number) => {
     const target = Math.min(Math.max(index, 0), count - 1);
@@ -301,10 +334,7 @@ export function ReadyDeck({
           else if (event.nativeEvent.actionName === 'decrement') goTo(active - 1);
           else if (event.nativeEvent.actionName === 'activate') onLockedPress();
         }}
-        style={[
-          styles.stack,
-          cardHeight > 0 && { height: DECK_ROOM.top + cardHeight + DECK_ROOM.bottom },
-        ]}
+        style={[styles.stack, room > 0 && { height: DECK_ROOM.top + room + DECK_ROOM.bottom }]}
         {...pan.panHandlers}>
         {/* Painted last-first, so each card lies over the ones after it. */}
         {items
@@ -323,6 +353,7 @@ export function ReadyDeck({
                   uniform={uniform}
                   height={shared}
                   mediaPlacement={mediaPlacement}
+                  onPhotoFailed={onPhotoFailed}
                 />
               ) : (
                 <Pressable
@@ -359,11 +390,14 @@ function DeckCard({
   height,
   mediaPlacement,
   veil,
+  onPhotoFailed,
 }: {
   item: DeckItem;
   uniform: PreviewCardLayout | null;
   /** The deck's shared card height, at every text size; absent until measured. */
   height: number | undefined;
+  /** A readable card's photo failed to render; the locked card reports nothing. */
+  onPhotoFailed?: (url: string) => void;
   mediaPlacement: 'beside' | 'above';
   /** The locked card's plain face while it is behind the front card. */
   veil?: Animated.AnimatedInterpolation<number>;
@@ -377,6 +411,7 @@ function DeckCard({
           uri={item.model.heroImageUrl}
           alt={item.kind === 'match' ? item.model.productName : ''}
           size={layout.cardMediaSize}
+          onLoadFailed={item.kind === 'match' ? onPhotoFailed : undefined}
         />
       }
       trailing={null}

@@ -701,7 +701,7 @@ test('the board grows only through its paper slice and the thin wall band; its f
   const sliced = codeOnly(componentBody(PREVIEW, 'SlicedImage'));
   assert.ok(sliced.includes('resizeMode="stretch"'));
   assert.ok(sliced.includes('sliceImagePlacement(slice, imageRows)'));
-  assert.equal((sliced.match(/<Image/g) ?? []).length, 3);
+  assert.equal((sliced.match(/<BoardImage/g) ?? []).length, 3);
 });
 
 test('two illustrated boards chosen by measured fit; every preference always on the paper, never a separate card', () => {
@@ -737,7 +737,11 @@ test('two illustrated boards chosen by measured fit; every preference always on 
     !/setTimeout|requestAnimationFrame|InteractionManager/.test(step),
     'the reveal waits on a timer',
   );
-  assert.equal((codeOnly(PREVIEW).match(/onLoadEnd=\{onArt\}/g) ?? []).length, 10);
+  // Every board layer is a BoardImage that reports to the reveal (2026-10-05).
+  assert.equal((codeOnly(PREVIEW).match(/<BoardImage\b/g) ?? []).length, 10);
+  // Ten layers, plus the four places a board hands it to its sliced layers.
+  assert.equal((codeOnly(PREVIEW).match(/onArt=\{onArt\}/g) ?? []).length, 14);
+  assert.ok(!codeOnly(PREVIEW).includes('onLoadEnd='), 'a board layer reports on load end again');
   // The rows are always on one of the two boards: the full-width card is gone.
   assert.ok(step.includes("{template?.kind === 'wide' ? ("));
   assert.ok(
@@ -867,7 +871,11 @@ test('Ready: Back, Edit preferences (the one-page editor), See my plan and the r
   assert.ok(!route.includes("onboardingRoute('states')"), 'Edit preferences replays States');
   assert.ok(route.includes("onBack={() => goBackFrom('preview', router)}"));
   assert.ok(route.includes("onSeePlan={() => router.push(onboardingRoute('paywall'))}"));
-  assert.ok(route.includes('const prefs = presentedPreferences(load.prefs);'));
+  assert.ok(
+    route.includes(
+      "const prefs = presentedPreferences(load.status === 'ready' ? load.prefs : EMPTY_PREFERENCES);",
+    ),
+  );
   assert.ok(route.includes('prefs={prefs}'));
   // Back from the editor, focus returns to Edit preferences.
   assert.ok(route.includes('AccessibilityInfo.setAccessibilityFocus(tag)'));
@@ -875,7 +883,11 @@ test('Ready: Back, Edit preferences (the one-page editor), See my plan and the r
   // The preview is the REAL feed through the REAL matching layer, opening on
   // the corpus the Building step counted (2026-10-02).
   assert.ok(route.includes('const feed = useFeed({ reuseRecent: true });'));
-  assert.ok(route.includes('buildReadyPreview(feedInput, prefs, todayIso())'));
+  // The preview with photo knowledge (2026-10-05): the pure selection fed by
+  // one bounded photo session, and a shown photo's failure reported back.
+  assert.ok(route.includes('const { preview, onPhotoFailed } = useReadyPreview('));
+  assert.ok(route.includes('onPhotoFailed={onPhotoFailed}'));
+  assert.ok(!route.includes('buildReadyPreview('), 'the route selects without photo knowledge');
   // Arriving from Building: the choices it just read, no pending flash.
   assert.ok(route.includes('useOnboardingPreferences({ reuseLoaded: true })'));
   assert.ok(!route.includes('usePurchaseFlow'), 'Ready grew purchase machinery back');
@@ -1669,7 +1681,7 @@ test('the deck: a physical stack of the real cards, the top one leaving left, th
   assert.ok(deck.includes('onPanResponderTerminate: () => settle(active),'));
   // The responder's inputs change only on a commit or a new layout, never
   // during a drag.
-  assert.ok(deck.includes('}, [active, count, exit, position, settle]);'));
+  assert.ok(deck.includes('}, [active, count, exit, position, settle, onBusyChange]);'));
   // Every card is a REAL card, posed by its depth below the position from
   // the one shared table — so the next card is mounted beneath the top one.
   assert.ok(deck.includes('const ranges = deckPoseRanges(frontWidth, exit);'));
@@ -1692,9 +1704,7 @@ test('the deck: a physical stack of the real cards, the top one leaving left, th
   assert.equal((codeOnly(CAROUSEL).match(/scale:/g) ?? []).length, 1);
   // Geometry comes from measured card heights, never from a drag.
   assert.ok(deck.includes('onLayout={(event) => onCardLayout(event.nativeEvent.layout.height)}'));
-  assert.ok(
-    deck.includes('cardHeight > 0 && { height: DECK_ROOM.top + cardHeight + DECK_ROOM.bottom }'),
-  );
+  assert.ok(deck.includes('room > 0 && { height: DECK_ROOM.top + room + DECK_ROOM.bottom }'));
   // Measurements are whole points past layout's noise, so raising a card to
   // its own height can never creep (the XL deck once grew to 1,023pt).
   assert.equal((deck.match(/wholePoints\(h\) >= wholePoints\(height\)/g) ?? []).length, 2);
@@ -1958,7 +1968,13 @@ test('Building and Ready reuse the choices already read; screens that save never
   for (const name of ['building', 'preview'] as const) {
     const route = codeOnly(ROUTES[name]);
     assert.ok(route.includes('useOnboardingPreferences({ reuseLoaded: true })'), name);
-    assert.ok(route.includes('presentedPreferences(load.prefs)'), name);
+    // Ready presents the loaded choices too; before they load it hands the
+    // photo session nothing to match (2026-10-05), so it reads `load.status`.
+    assert.ok(
+      route.includes('presentedPreferences(load.prefs)') ||
+        route.includes("presentedPreferences(load.status === 'ready' ? load.prefs"),
+      name,
+    );
   }
   // The selectors and the editor save: they read afresh and never present a
   // development view of the choices.
@@ -2268,11 +2284,16 @@ test('onboarding motion plays only when Reduce Motion is known off, once, and ne
   const deck = codeOnly(CAROUSEL);
   assert.equal((deck.match(/Animated\.timing\(/g) ?? []).length, 1);
   assert.ok(!deck.includes('Animated.spring') && !deck.includes('Animated.loop'));
+  // Under Reduce Motion the settle is immediate and the deck reports rest at
+  // once (2026-10-05), so a held preview lands without waiting on an animation.
   assert.ok(
     deck.includes(
-      'if (!motionAllowed(reduceMotion)) {\n        position.setValue(target);\n        return;\n      }',
+      'if (!motionAllowed(reduceMotion)) {\n        position.setValue(target);\n        onBusyChange?.(false);\n        return;\n      }',
     ),
   );
+  // With motion, rest is reported only when the settle finishes; an
+  // interrupted settle stays busy until the next release settles again.
+  assert.ok(deck.includes('if (finished) onBusyChange?.(false);'));
   for (const [name, source] of [['progress', PROGRESS]] as const) {
     const code = codeOnly(source);
     // Decided on the first render; the final state is drawn at once otherwise.
@@ -3428,4 +3449,60 @@ test('the approved Stores mock-ups are design references only: no source or conf
     assert.deepEqual(hits, []);
   }
   assert.ok(!codeOnly(RETAILERS).includes('brand/reference'));
+});
+
+test('a failed board layer asks again, bounded, and reports to the reveal once (2026-10-05)', () => {
+  // The platform clears an image view whose request fails and never asks
+  // again: a loaded board once lost its wall and counter for good.
+  const image = codeOnly(componentBody(PREVIEW, 'BoardImage'));
+  assert.ok(codeOnly(PREVIEW).includes('const BOARD_IMAGE_RETRIES = 3;'));
+  assert.ok(image.includes('key={attempt}'), 'a retry must be a new view and a new request');
+  assert.ok(image.includes('if (attempt >= BOARD_IMAGE_RETRIES) {'));
+  assert.ok(image.includes('BOARD_IMAGE_RETRY_MS * (attempt + 1)'));
+  // Once: on the first load, or when the attempts run out — never held hidden.
+  assert.ok(image.includes('if (reported.current) return;'));
+  assert.ok(image.includes('onLoad={() => {\n        report();'));
+  // The failure fixtures exist only in development.
+  assert.ok(
+    PREVIEW.includes(
+      "? // eslint-disable-next-line @typescript-eslint/no-require-imports\n    (require('@/lib/development-board-art') as DevelopmentBoardArt)",
+    ),
+  );
+  assert.ok(PREVIEW.includes('const developmentBoardArt = __DEV__'));
+});
+
+test('a rebuilt deck keeps the room of the deck it replaced until its own cards measure (2026-10-05)', () => {
+  const deck = codeOnly(read('components', 'onboarding', 'ready-carousel.tsx'));
+  assert.ok(deck.includes('const room = cardHeight > 0 ? cardHeight : (initialCardHeight ?? 0);'));
+  // The cards themselves are never forced to the old height: they still measure.
+  assert.ok(deck.includes('const shared = cardHeight > 0 ? cardHeight : undefined;'));
+  assert.ok(deck.includes('if (cardHeight > 0) onCardHeight?.(cardHeight);'));
+  const step = codeOnly(componentBody(PREVIEW, 'PreviewStep'));
+  assert.ok(step.includes('initialCardHeight={deckCardRoom}'));
+  assert.ok(step.includes('onCardHeight={setDeckCardRoom}'));
+});
+
+test('board art, icons, pictograms and recall photos draw through the guarded Image (2026-10-05)', () => {
+  // A recycled image view can be handed the answer meant for its previous
+  // image; an onLoad no onLoadStart announced is that answer, and is redrawn.
+  const guarded = codeOnly(read('components', 'ui', 'guarded-image.tsx'));
+  assert.ok(guarded.includes('export const STALE_REDRAW_LIMIT = 3;'));
+  // A new view for every redraw AND every source: a ledger counts one source.
+  assert.ok(guarded.includes('const key = `${drawing}|${source}`;'));
+  assert.ok(guarded.includes('key={key}'));
+  // Loads and errors alike: an answer beyond the count is never passed on.
+  assert.equal(
+    (guarded.match(/if \(!isOwnAnswer\(own\.value\)\) return redraw\(\);/g) ?? []).length,
+    2,
+  );
+  assert.ok(guarded.includes('own.value = recordStart(own.value);'));
+  // Bounded per source (lib/image-answer-ledger.test.ts covers the orders).
+  assert.ok(guarded.includes('if (ref.current.count >= STALE_REDRAW_LIMIT) return false;'));
+  // Every board layer and pictogram on Ready, every icon, every recall photo.
+  assert.equal((codeOnly(PREVIEW).match(/<Image\b/g) ?? []).length, 0);
+  assert.equal((codeOnly(read('components', 'ui', 'icon.tsx')).match(/<Image\b/g) ?? []).length, 0);
+  assert.equal(
+    (codeOnly(read('components', 'ui', 'media-tile.tsx')).match(/<Image\b/g) ?? []).length,
+    0,
+  );
 });
