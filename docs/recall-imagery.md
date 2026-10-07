@@ -444,7 +444,10 @@ exact version. Closed evidence set:
 - `caption_name_size` — the caption contains the row's identity **and**
   states the row's exact package size, for sibling rows that share a name
   and differ by size (Crystal Temptations). Exact size-token equality: a
-  "10 oz" row can never claim a "10.5 oz" caption.
+  "10 oz" row can never claim a "10.5 oz" caption, and a "15 lb" row never a
+  "1.5 lb" one — the size key keeps its decimal point. Equivalent spellings of
+  one unit ("lbs", "pound", "lb"; "grams", "g") compare equal; units are never
+  converted into one another.
   Only a row stating exactly ONE size can win this way (Correctness A,
   2026-10-07): its structured Package Size holds one value, and that value
   names one quantity per unit, decimal point kept ("10.5 oz and 105 oz" is

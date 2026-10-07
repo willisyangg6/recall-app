@@ -151,6 +151,16 @@ function reasonClause(input: WhatHappenedInput, product: string): ReasonClause |
 
   switch (typed.family) {
     case 'pathogen':
+      // Several supported hazards: each is named, with the source's own
+      // connective, under the same "may be" uncertainty (decision E).
+      if (typed.hazards) {
+        return {
+          clause: upstream
+            ? `because of possible ${typed.hazards.phrase} contamination`
+            : `because the products may be contaminated with ${typed.hazards.phrase}`,
+          context: null,
+        };
+      }
       if (typed.pathogen === null) {
         return { clause: 'because the products may be contaminated', context: null };
       }

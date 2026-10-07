@@ -67,7 +67,7 @@ import type { CaseDetail, FeedItem } from './recall-feed';
 import {
   allergenReasonLabel,
   healthRiskSummary,
-  selectHazardGuidance,
+  selectHazardGuides,
   type HazardGuidance,
 } from './recall-display';
 import { interpretReason } from './recall-reason';
@@ -421,6 +421,9 @@ export function conciseReasonLine(input: ReasonInput): string | null {
   });
   switch (typed.family) {
     case 'pathogen':
+      // Every supported hazard the reason names, joined as the source joins
+      // them ("Potential E. coli and/or Salmonella contamination.") — E.
+      if (typed.hazards) return `Potential ${typed.hazards.phrase} contamination.`;
       return typed.pathogen
         ? `Potential ${pathogenDisplayName(typed.pathogen)} contamination.`
         : 'Potential contamination.';
@@ -2018,14 +2021,34 @@ export function communityReportsSection(
  * in this recall.
  */
 export interface HealthRiskSection {
-  /** The standardized risk statement — always present when the section is. */
-  risk: string;
+  /** The standardized risk statement — present whenever the section is,
+   * except when `hazards` holds several guides instead. */
+  risk: string | null;
   /** Reviewed symptom bullets, or null when no symptom list is defensible. */
   symptoms: readonly string[] | null;
   /** Higher-risk-group statement, when the authoritative source states one. */
   higherRisk: string | null;
   /** The official source link ("Learn more from CDC"), tier 1 only. */
   source: { label: string; url: string } | null;
+  /**
+   * Founder decision E (2026-10-07): when the reason names two or more
+   * supported hazards, EVERY reviewed guide, in the source's order — and the
+   * four single-guide fields above are null. Each entry is one guide whole:
+   * its own organism label, wording, symptoms and source link, never merged
+   * or deduplicated with another's. Null for every single-hazard notice,
+   * whose section is exactly what it always was.
+   */
+  hazards: readonly HealthRiskHazard[] | null;
+}
+
+/** One reviewed guide inside a multi-hazard Health Risk section. */
+export interface HealthRiskHazard {
+  /** The small organism label ("E. coli", "Salmonella"). */
+  organism: string;
+  risk: string;
+  symptoms: readonly string[] | null;
+  higherRisk: string | null;
+  source: { label: string; url: string };
 }
 
 /**
@@ -2039,24 +2062,43 @@ export interface HealthRiskSection {
  * know what the hazard does.
  */
 export function healthRiskSection(
-  guidance: HazardGuidance | null,
+  guidance: HazardGuidance | readonly HazardGuidance[] | null,
   fallbackRisk: string | null,
   options: { retracted: boolean },
 ): HealthRiskSection | null {
   if (options.retracted) return null;
-  if (guidance) {
+  const guides = guidance === null ? [] : Array.isArray(guidance) ? guidance : [guidance];
+  const sourceLink = (guide: HazardGuidance) => ({
+    label: `Learn more from ${guide.source.organization}`,
+    url: guide.source.url,
+  });
+  if (guides.length >= 2 && guides.every((guide) => guide.organism !== null)) {
     return {
-      risk: guidance.risk,
-      symptoms: guidance.symptoms,
-      higherRisk: guidance.higherRisk,
-      source: {
-        label: `Learn more from ${guidance.source.organization}`,
-        url: guidance.source.url,
-      },
+      risk: null,
+      symptoms: null,
+      higherRisk: null,
+      source: null,
+      hazards: guides.map((guide) => ({
+        organism: guide.organism!,
+        risk: guide.risk,
+        symptoms: guide.symptoms,
+        higherRisk: guide.higherRisk,
+        source: sourceLink(guide),
+      })),
+    };
+  }
+  const [guide] = guides;
+  if (guide) {
+    return {
+      risk: guide.risk,
+      symptoms: guide.symptoms,
+      higherRisk: guide.higherRisk,
+      source: sourceLink(guide),
+      hazards: null,
     };
   }
   if (fallbackRisk) {
-    return { risk: fallbackRisk, symptoms: null, higherRisk: null, source: null };
+    return { risk: fallbackRisk, symptoms: null, higherRisk: null, source: null, hazards: null };
   }
   return null;
 }
@@ -2537,7 +2579,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
   // the hazard is interpreted in exactly one place. The guide's own organism
   // lookup then reads only the canonical structured reason (never the
   // announcement body), so the same hazard yields the same copy everywhere.
-  const hazardGuidance: HazardGuidance | null = selectHazardGuidance(
+  const hazardGuides: HazardGuidance[] = selectHazardGuides(
     interpretReason({
       reasonText: projection.reasonText,
       hazardCategory: projection.hazardCategory,
@@ -2625,7 +2667,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     sections: {
       whereSold: whereSoldDecision,
       communityReports: communityReportsSection(detail.id, projection),
-      healthRisk: healthRiskSection(hazardGuidance, standardizedRisk, {
+      healthRisk: healthRiskSection(hazardGuides, standardizedRisk, {
         retracted: projection.state === 'retracted',
       }),
       affectedProducts: productsSection,

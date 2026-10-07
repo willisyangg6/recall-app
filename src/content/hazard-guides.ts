@@ -88,8 +88,12 @@ export interface HazardGuide {
    * people toward urgent care (botulism 100, listeriosis 80, Shiga
    * toxin-producing E. coli 60, undeclared allergens 50) are shown ahead of
    * guides whose sources describe an illness people most often manage at home
-   * (salmonellosis 40, hepatitis A 30, cyclosporiasis 20). No recorded notice
-   * names two supported hazards today, so this has never chosen in practice.
+   * (salmonellosis 40, hepatitis A 30, cyclosporiasis 20).
+   *
+   * Founder decision E (2026-10-07) narrowed it: a reason that names several
+   * supported hazards as one stated list ("STEC and/or Salmonella") shows
+   * EVERY guide, in the source's order (`selectHazardGuides`). The priority
+   * still decides only for a reason naming several hazards some other way.
    */
   displayPriority: number;
   /**
@@ -99,6 +103,15 @@ export interface HazardGuide {
    * typed-reason family rather than by name.
    */
   match: readonly RegExp[];
+  /**
+   * The short organism name a notice naming SEVERAL supported hazards uses —
+   * in its reason line, its What Happened clause, and as the small label that
+   * separates this guide's explanation and symptoms from another guide's in
+   * one Health Risk section (founder decision E, 2026-10-07). Null for a guide
+   * selected by family rather than by organism. Never rendered for a notice
+   * naming one hazard, whose copy is unchanged.
+   */
+  organism: string | null;
   /**
    * The standardized risk statement: why exposure matters, in one or two
    * plain sentences.
@@ -132,6 +145,7 @@ export const HAZARD_GUIDES: readonly HazardGuide[] = [
     key: 'botulism',
     version: 1,
     displayPriority: 100,
+    organism: 'Clostridium botulinum',
     match: [
       /\bclostridium botulinum\b/i,
       /\bc\.\s?botulinum\b/i,
@@ -162,6 +176,7 @@ export const HAZARD_GUIDES: readonly HazardGuide[] = [
     key: 'listeria',
     version: 1,
     displayPriority: 80,
+    organism: 'Listeria',
     match: [/\blisteria\b/i, /\blisteriosis\b/i],
     // Founder visual QA (2026-09-10): one combined paragraph reads more
     // cleanly on the Detail screen than a risk sentence followed by a
@@ -188,6 +203,7 @@ export const HAZARD_GUIDES: readonly HazardGuide[] = [
     key: 'stec',
     version: 1,
     displayPriority: 60,
+    organism: 'E. coli',
     match: [/\be\.\s?coli\b/i, /\bescherichia coli\b/i, /\bshiga toxin\b/i, /\bstec\b/i],
     // Founder visual QA (2026-09-10): one combined paragraph — see the
     // Listeria comment above for the reasoning. `higherRisk` is null.
@@ -211,6 +227,7 @@ export const HAZARD_GUIDES: readonly HazardGuide[] = [
     key: 'undeclared-allergen',
     version: 1,
     displayPriority: 50,
+    organism: null,
     // Selected by typed-reason family (`allergen`), never by organism name.
     match: [],
     // Named per allergen by the approved template — see the `risk` doc above.
@@ -237,6 +254,7 @@ export const HAZARD_GUIDES: readonly HazardGuide[] = [
     key: 'salmonella',
     version: 1,
     displayPriority: 40,
+    organism: 'Salmonella',
     match: [/\bsalmonella\b/i, /\bsalmonellosis\b/i],
     // Founder visual QA (2026-09-10): one combined paragraph — see the
     // Listeria comment above for the reasoning. `higherRisk` is null.
@@ -261,6 +279,7 @@ export const HAZARD_GUIDES: readonly HazardGuide[] = [
     key: 'hepatitis-a',
     version: 1,
     displayPriority: 30,
+    organism: 'Hepatitis A',
     match: [/\bhepatitis a\b/i],
     risk:
       'Hepatitis A is a contagious infection of the liver. Most people recover completely, but ' +
@@ -287,6 +306,7 @@ export const HAZARD_GUIDES: readonly HazardGuide[] = [
     key: 'cyclospora',
     version: 1,
     displayPriority: 20,
+    organism: 'Cyclospora',
     match: [/\bcyclospora\b/i, /\bcyclosporiasis\b/i],
     risk:
       'Cyclospora is a parasite that can cause an intestinal illness, and symptoms may improve ' +

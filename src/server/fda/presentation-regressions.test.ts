@@ -791,6 +791,11 @@ const PINNED_ROW_IMAGE_CENSUS = [
   'great-one-trading-inc-issues-expanding-a|t0r4|Image 5_4.jpg|caption_name',
   'lyons-magnus-expands-voluntary-recall-in|t0r144|image-14_4.jpg|caption_name',
   'lyons-magnus-expands-voluntary-recall-in|t0r205|image-17_3.jpg|caption_name',
+  // Each product of the "Item / Description" list (2026-10-07) holds the photo
+  // whose caption names its own single size: "…Unsalted 34 oz (964 grams)"
+  // and "…Unsalted 11.5 oz (326 grams) bag".
+  'mellace-family-brands-california-inc-rec|list0i0|1_1.jpeg|source_row',
+  'mellace-family-brands-california-inc-rec|list0i1|3_0.jpeg|source_row',
   'motivate-me-ashley-llc-recalling-vidasli|t0r0|image_2_93.jpg|caption_name',
   'motivate-me-ashley-llc-recalling-vidasli|t0r1|image_4_40.jpg|caption_name',
   'motivate-me-ashley-llc-recalling-vidasli|t0r2|image_6_18.jpg|caption_name',

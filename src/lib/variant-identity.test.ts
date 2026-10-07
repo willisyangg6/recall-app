@@ -16,6 +16,7 @@ import {
   packagingOnlyName,
   splitTrailingMeasurements,
   statesOneSize,
+  captionSizeKeys,
   variantIdentityRejection,
 } from './variant-identity';
 
@@ -329,4 +330,26 @@ test('one Package Size value states one size per unit, however it is punctuated'
   for (const value of ['1.25 lbs.', '0.84 oz', '2 lbs.', '1,000 g']) {
     assert.equal(statesOneSize(value), true, value);
   }
+});
+
+test('size keys keep the decimal point and fold equivalent unit spellings', () => {
+  // The collision: "1.5 lb" once keyed as `15lb`, the same as "15 lb".
+  assert.notDeepEqual([...captionSizeKeys('1.5 lb')], [...captionSizeKeys('15 lb')]);
+  assert.notDeepEqual([...captionSizeKeys('10.5 oz')], [...captionSizeKeys('105 oz')]);
+  // Equivalent spellings of one size are one key.
+  for (const [a, b] of [
+    ['1.25 lbs.', '1.25 lb'],
+    ['2 pounds', '2 lbs'],
+    ['964 grams', '964 g'],
+    ['8 ounces', '8 oz.'],
+    ['1.50 lb', '1.5 lb'],
+    ['16 fl. oz', '16 fl oz'],
+  ]) {
+    assert.deepEqual([...captionSizeKeys(a)], [...captionSizeKeys(b)], `${a} = ${b}`);
+  }
+  // …and the contradiction policy follows: a 1.5 lb caption is not a 15 lb
+  // package, while an equivalent spelling of the package's size is.
+  const pkg = { name: 'Crunch Bites', size: '15 lb', upc: null };
+  assert.equal(captionContradictsPackage('Crunch Bites, 1.5 lb', pkg), true);
+  assert.equal(captionContradictsPackage('Crunch Bites, 15 lbs.', pkg), false);
 });

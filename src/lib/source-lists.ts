@@ -269,11 +269,44 @@ interface DeclaredList {
   lead: string;
   items: string[];
   role: ListRole;
+  /** Per item, the product name the source set in bold — present only for
+   * the heading-led "Item / Description" shape, where the bold text IS the
+   * name and everything after it is that product's own detail lines. */
+  boldNames?: string[];
+}
+
+/**
+ * The one heading-led product list accepted without a colon lead-in
+ * (2026-10-07, Mellace / Wegmans Deluxe Mixed Nuts): a list directly under the
+ * column-style heading "Item / Description" in which EVERY item opens with its
+ * product name in bold and states its own barcode or lot —
+ *
+ *   Item / Description
+ *   • **Wegmans Deluxe Mixed Nuts Unsalted 34 oz (964 grams)**
+ *     ➢ packaged in a plastic tub ➢ UPC 077890421314
+ *     ➢ Lot code: 58041 BEST BY: JUL 28, 2026
+ *
+ * The heading names the list's columns, and each bold name with its own
+ * identifiers is a source-stated product record. Anything less — another
+ * heading, a plain item, an item without its own identifier — stays prose.
+ */
+const ITEM_DESCRIPTION_HEADING = /(?:^|[.!?]\s|\s)Item\s*\/\s*Description\s*:?$/i;
+const OPENS_WITH_BOLD_NAME = /^\s*<(strong|b)\b[^>]*>[^<]{3,}<\/\1>/i;
+const ITEM_OWN_IDENTIFIER = /\b(?:UPC|lot)\b/i;
+
+function isItemDescriptionList(lead: string, rawItems: string[]): boolean {
+  return (
+    ITEM_DESCRIPTION_HEADING.test(lead) &&
+    rawItems.length >= 2 &&
+    rawItems.every(
+      (item) => OPENS_WITH_BOLD_NAME.test(item) && ITEM_OWN_IDENTIFIER.test(stripHtml(item)),
+    )
+  );
 }
 
 /**
  * Every list the announcement's own prose declares with a lead-in ending in a
- * colon. Page chrome, figures, and undeclared lists never qualify.
+ * colon (or the one heading-led shape above). Page chrome, figures, and undeclared lists never qualify.
  */
 function declaredLists(summaryHtml: string | null): DeclaredList[] {
   if (!summaryHtml) return [];
@@ -294,13 +327,32 @@ function declaredLists(summaryHtml: string | null): DeclaredList[] {
       .replace(/\s+/g, ' ')
       .trim()
       .slice(-240);
-    if (!/[:]\s*$/.test(lead) || !LEAD_IN_WORDS.test(lead)) continue;
+    const rawItems = [...match[1].matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)].map((item) => item[1]);
+    const declared = /[:]\s*$/.test(lead) && LEAD_IN_WORDS.test(lead);
+    const headed = !declared && isItemDescriptionList(lead, rawItems);
+    if (!declared && !headed) continue;
 
-    const items = [...match[1].matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)]
-      .map((item) => stripHtml(item[1]).replace(/\s+/g, ' ').trim())
-      .filter((text) => text.length >= 2 && text.length <= 400);
+    // An arrow or bullet glyph inside an item ("➢ UPC …") separates the
+    // item's own lines; it is never part of a value.
+    const kept = rawItems
+      .map((item) => ({
+        text: stripHtml(item)
+          .replace(/\s*[➢►▶▪◦•]\s*/g, '; ')
+          .replace(/\s+/g, ' ')
+          .trim(),
+        bold: stripHtml(item.match(OPENS_WITH_BOLD_NAME)?.[0] ?? '')
+          .replace(/\s+/g, ' ')
+          .trim(),
+      }))
+      .filter(({ text }) => text.length >= 2 && text.length <= 400);
+    const items = kept.map(({ text }) => text);
     if (items.length < 2) continue;
-    out.push({ lead, items, role: classifyListRole(lead, items) });
+    out.push({
+      lead,
+      items,
+      role: classifyListRole(lead, items),
+      ...(headed ? { boldNames: kept.map(({ bold }) => bold) } : {}),
+    });
   }
   return out;
 }
@@ -324,7 +376,7 @@ export function extractAffectedProductLists(summaryHtml: string | null): ListVar
     list.items.forEach((text, itemIndex) => {
       if (text.length < 4) return;
       const scope = `list${index}i${itemIndex}`;
-      const { name, size, packaging, quoted } = itemName(text);
+      const { name, size, packaging, quoted } = itemName(list.boldNames?.[itemIndex] ?? text);
       // A lowercase lead marks a prose fragment — unless the source itself
       // quoted the name ("tasty KITCHEN Chicken Noodle Condensed Soup"),
       // which makes the identity certain whatever its casing.

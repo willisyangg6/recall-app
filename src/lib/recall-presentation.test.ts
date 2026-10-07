@@ -2797,10 +2797,10 @@ test('the Health Risk section renders the reviewed guide for a recognized hazard
   );
   const section = model.sections.healthRisk;
   assert.ok(section);
-  assert.match(section.risk, /Listeria bacteria can cause/);
+  assert.match(section.risk ?? '', /Listeria bacteria can cause/);
   // Founder visual QA (2026-09-10): the higher-risk group is folded into the
   // one risk paragraph — the section carries no separate second paragraph.
-  assert.match(section.risk, /Pregnant women/);
+  assert.match(section.risk ?? '', /Pregnant women/);
   assert.equal(section.higherRisk, null);
   assert.ok(section.symptoms && section.symptoms.length > 0);
   // The source link label is model-owned and names the citing agency.
@@ -2880,7 +2880,7 @@ test('an undeclared allergen gets the allergen guide, named to the allergen', ()
     { today: TODAY, affectsYou: false },
   ).sections.healthRisk;
   assert.ok(section);
-  assert.match(section.risk, /milk allergy/i);
+  assert.match(section.risk ?? '', /milk allergy/i);
   assert.ok(section.symptoms?.some((symptom) => /hives/i.test(symptom)));
   assert.equal(section.source?.label, 'Learn more from FDA');
   // Founder visual QA (2026-09-10): the section goes straight from the
@@ -2900,7 +2900,7 @@ test('a hazard with no reviewed guide renders risk only — never invented sympt
     { today: TODAY, affectsYou: false },
   ).sections.healthRisk;
   assert.ok(foreign);
-  assert.match(foreign.risk, /Swallowing pieces of glass/);
+  assert.match(foreign.risk ?? '', /Swallowing pieces of glass/);
   assert.equal(foreign.symptoms, null);
   assert.equal(foreign.higherRisk, null);
   assert.equal(foreign.source, null);
@@ -2957,7 +2957,7 @@ test('a CLOSED recall keeps its Health Risk; a RETRACTED notice suppresses it', 
     affectsYou: false,
   });
   assert.ok(closed.sections.healthRisk);
-  assert.match(closed.sections.healthRisk.risk, /Salmonella/);
+  assert.match(closed.sections.healthRisk.risk ?? '', /Salmonella/);
   // Retracted means the agency withdrew the claim that this product carries
   // the hazard; standing hazard education beside it would assert a risk the
   // source no longer states.
@@ -2974,6 +2974,7 @@ test('a CLOSED recall keeps its Health Risk; a RETRACTED notice suppresses it', 
 test('the Health Risk section is a pure function of the section builder', () => {
   const guidance = {
     key: 'salmonella' as const,
+    organism: 'Salmonella',
     version: 1,
     risk: 'Risk sentence.',
     symptoms: ['One', 'Two'],
@@ -2989,6 +2990,7 @@ test('the Health Risk section is a pure function of the section builder', () => 
     symptoms: ['One', 'Two'],
     higherRisk: 'Group statement.',
     source: { label: 'Learn more from CDC', url: 'https://www.cdc.gov/x' },
+    hazards: null,
   });
   // A guide always outranks the fallback sentence — never both.
   assert.equal(
@@ -3329,4 +3331,23 @@ test('one lot the source pairs with two dates keeps both relationships', () => {
   assert.equal(cell('bestBy').text, 'July 28, 2026\nAugust 10, 2026\nSeptember 1, 2026');
   assert.equal(cell('lotCodes').pairGroup, 'bestBy+lotCodes');
   assert.equal(cell('bestBy').pairGroup, 'bestBy+lotCodes');
+});
+
+test('a 1.5 lb caption never matches a 15 lb row; an equivalent spelling still does', () => {
+  // Both routes refuse the decimal collision: the name+size pass and the
+  // named attachment.
+  assert.deepEqual(
+    crunchEvidence(crunchTable('15 lb', 'Front label of Crunch Bites, 1.5 lb.')),
+    {},
+  );
+  assert.deepEqual(crunchEvidence(crunchTable('15 lb', 'Crunch Bites, Front Label, 1.5 lb.')), {});
+  assert.deepEqual(crunchEvidence(crunchTable('15 lb', 'Front label of Crunch Bites, 15 lbs.')), {
+    t0r0: 'caption_name_size',
+  });
+  assert.deepEqual(
+    crunchEvidence(crunchTable('1.5 lb', 'Front label of Crunch Bites, 1.5 pounds.')),
+    {
+      t0r0: 'caption_name_size',
+    },
+  );
 });

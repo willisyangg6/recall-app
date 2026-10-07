@@ -117,16 +117,36 @@ test('Sunco "Best If Used By D, Lot# X": each lot keeps its own date, in source 
   ]);
 });
 
-test('Mellace "Lot code: X BEST BY: D": both small-set pairs render aligned', () => {
+test('Mellace "Item / Description": each product owns its own UPC, lot and best-by', () => {
+  // The source gives each product its own list item: a bold name and size,
+  // then that package's UPC and its "Lot code: X BEST BY: D". Each row holds
+  // exactly what its item states — no recall-wide set repeats into either.
   const projection = fdaCase('mellace-family-brands');
-  assert.deepEqual(packageCheck(projection).lotCodes?.pairs, [
-    { code: '58041', date: 'July 28, 2026' },
-    { code: '58171', date: 'August 10, 2026' },
-  ]);
-  const [row] = renderedRows(projection);
-  assert.deepEqual(renderedPairs(row, 'bestBy'), [
-    ['58041', 'July 28, 2026'],
-    ['58171', 'August 10, 2026'],
+  const check = packageCheck(projection);
+  assert.equal(check.lotCodes, null);
+  assert.deepEqual(check.fields, []);
+  const rows = renderedRows(projection).map((row) => ({
+    product: row.product.text,
+    size: row.size.text,
+    upc: row.upc.text,
+    lot: row.lotCodes.text,
+    bestBy: row.bestBy.text,
+  }));
+  assert.deepEqual(rows, [
+    {
+      product: 'Wegmans Deluxe Mixed Nuts Unsalted',
+      size: '34 oz (964 grams)',
+      upc: '077890421314',
+      lot: '58041',
+      bestBy: 'July 28, 2026',
+    },
+    {
+      product: 'Wegmans Deluxe Mixed Nuts Unsalted',
+      size: '11.5 oz (326 grams)',
+      upc: '077890421352',
+      lot: '58171',
+      bestBy: 'August 10, 2026',
+    },
   ]);
 });
 

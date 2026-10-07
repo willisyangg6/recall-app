@@ -48,11 +48,17 @@
  * `src/lib/recall-reason.test.ts` and the two presentation-regression suites.
  */
 
+import { HAZARD_GUIDES, type HazardGuideKey } from '@/content/hazard-guides';
 import { extractForeignMaterialEvidence } from '@/domain/hazard';
 
 /** Closed set of reason families both surfaces render from. */
 export type TypedReason =
-  | { family: 'pathogen'; pathogen: string | null }
+  | {
+      family: 'pathogen';
+      pathogen: string | null;
+      /** Present only when the reason names two or more supported hazards. */
+      hazards?: NamedHazards;
+    }
   | { family: 'allergen'; raw: string | null }
   | { family: 'foreign_material'; material: string | null }
   | { family: 'chemical'; agent: string | null }
@@ -67,6 +73,24 @@ export type TypedReason =
   | { family: 'contents'; contents: string }
   | { family: 'verbatim'; noun: string }
   | { family: 'unknown' };
+
+/**
+ * Two or more supported hazards the canonical reason names, joined exactly as
+ * the source joins them (founder decision E, 2026-10-07). "Shiga
+ * toxin-producing Escherichia coli (STEC) and/or Salmonella" is
+ * `{ keys: ['stec', 'salmonella'], connective: 'and/or' }`, phrased
+ * "E. coli and/or Salmonella" — never strengthened to "and", and never
+ * reordered: the source's order is the order.
+ */
+export interface NamedHazards {
+  /** The reviewed guides, in the order the reason names them. */
+  keys: HazardGuideKey[];
+  /** Each guide's short organism name, in the same order. */
+  names: string[];
+  connective: 'and' | 'or' | 'and/or';
+  /** The names joined by the source's own connective. */
+  phrase: string;
+}
 
 export interface ReasonEvidence {
   reasonText: string | null;
@@ -153,6 +177,68 @@ function sniffMaterial(evidence: ReasonEvidence): string | null {
 }
 
 /**
+ * The supported hazards the canonical reason text names, or null.
+ *
+ * Read from `reasonText` alone — the field both surfaces carry — so Home and
+ * Detail name the same hazards. Deliberately strict: every hazard must be a
+ * reviewed guide's organism, each named once in one contiguous mention, and
+ * the words BETWEEN them must be nothing but the source's connective ("and",
+ * "or", "and/or", or a comma list closed by one). Anything else — an organism
+ * mentioned twice, a clause between two organisms, an unsupported organism in
+ * the list — returns null, and the notice keeps its single-hazard rendering.
+ * The stored `pathogenOrAllergen` scalar is never consulted or changed.
+ */
+function namedHazards(reasonText: string | null): NamedHazards | null {
+  const text = reasonText ?? '';
+  const spans: { key: HazardGuideKey; name: string; start: number; end: number }[] = [];
+  for (const guide of HAZARD_GUIDES) {
+    if (guide.organism === null || guide.match.length === 0) continue;
+    let start = Infinity;
+    let end = -1;
+    for (const pattern of guide.match) {
+      for (const match of text.matchAll(new RegExp(pattern.source, 'gi'))) {
+        start = Math.min(start, match.index);
+        end = Math.max(end, match.index + match[0].length);
+      }
+    }
+    if (end >= 0) spans.push({ key: guide.key, name: guide.organism, start, end });
+  }
+  if (spans.length < 2) return null;
+  spans.sort((a, b) => a.start - b.start);
+  // The text between consecutive mentions, minus the closing bracket of an
+  // abbreviation ("… coli (STEC) and/or Salmonella").
+  const separators: string[] = [];
+  for (let index = 1; index < spans.length; index += 1) {
+    if (spans[index].start < spans[index - 1].end) return null;
+    separators.push(
+      text
+        .slice(spans[index - 1].end, spans[index].start)
+        .replace(/^[\s)\]]+/, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase(),
+    );
+  }
+  const last = separators[separators.length - 1].replace(/^,\s*/, '');
+  if (last !== 'and' && last !== 'or' && last !== 'and/or') return null;
+  if (separators.slice(0, -1).some((separator) => separator !== ',')) return null;
+  const connective = last;
+  const names = spans.map((span) => span.name);
+  const phrase =
+    names.length === 2
+      ? `${names[0]} ${connective} ${names[1]}`
+      : `${names.slice(0, -1).join(', ')}, ${connective} ${names[names.length - 1]}`;
+  return { keys: spans.map((span) => span.key), names, connective, phrase };
+}
+
+/** The pathogen family, carrying the named-hazard list only when one exists —
+ * so every single-hazard reason is exactly the value it always was. */
+function pathogenReason(pathogen: string | null, reasonText: string | null): TypedReason {
+  const hazards = namedHazards(reasonText);
+  return hazards ? { family: 'pathogen', pathogen, hazards } : { family: 'pathogen', pathogen };
+}
+
+/**
  * Classify the canonical reason evidence into exactly one family. Precedence
  * follows the established template order: the FSIS structured reason strings
  * first (they are exact enum values, not prose), then the source-agnostic
@@ -166,7 +252,7 @@ export function interpretReason(evidence: ReasonEvidence): TypedReason {
   const allergenRaw = evidence.pathogenOrAllergen?.match(/^undeclared\s+(.+)$/i)?.[1] ?? null;
 
   if (reasons.includes('product contamination')) {
-    if (pathogen) return { family: 'pathogen', pathogen };
+    if (pathogen) return pathogenReason(pathogen, evidence.reasonText);
     // The canonical category already weighed this notice's evidence under the
     // shared contract — including the rare contamination-filed allergen recall
     // (115-2017). Honour its answer rather than re-deciding from the enum
@@ -175,7 +261,7 @@ export function interpretReason(evidence: ReasonEvidence): TypedReason {
     if (evidence.hazardCategory === 'foreign_material') {
       return { family: 'foreign_material', material: sniffMaterial(evidence) };
     }
-    return { family: 'pathogen', pathogen: null };
+    return pathogenReason(null, evidence.reasonText);
   }
   if (reasons.includes('unreported allergens')) {
     return { family: 'allergen', raw: allergenRaw };
@@ -202,7 +288,7 @@ export function interpretReason(evidence: ReasonEvidence): TypedReason {
   // wording survives the fallback gates.
   const microbial = evidence.hazardCategory === 'microbial_contamination';
   if (microbial && pathogen) {
-    return { family: 'pathogen', pathogen };
+    return pathogenReason(pathogen, evidence.reasonText);
   }
   if (evidence.hazardCategory === 'allergen') {
     return { family: 'allergen', raw: allergenRaw };
@@ -235,7 +321,9 @@ export function interpretReason(evidence: ReasonEvidence): TypedReason {
     if (contents) return { family: 'contents', contents: contents[1].trim() };
     if (!CLAUSE_NOT_NOUN.test(reason)) return { family: 'verbatim', noun: reason };
   }
-  if (microbial) return { family: 'pathogen', pathogen: null };
+  if (microbial) {
+    return pathogenReason(null, evidence.reasonText);
+  }
   return { family: 'unknown' };
 }
 

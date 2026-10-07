@@ -412,15 +412,16 @@ test('no share, bell, retailer, or helper-callout control was copied from Figma'
     .map(({ path }) => path)
     .sort();
   assert.deepEqual(bellUsers, ['components/ui/icon.tsx', 'lib/onboarding-paywall-presentation.ts']);
-  // The pressables the screen adds are its two external links and the title's
-  // four-line disclosure (P2B7V); every other control is a shared primitive
-  // with real behaviour.
-  assert.equal((code.match(/<Pressable\b/g) ?? []).length, 3);
-  assert.equal((code.match(/accessibilityRole="link"/g) ?? []).length, 2);
-  assert.equal((code.match(/Linking\.openURL\(/g) ?? []).length, 2);
-  assert.equal((code.match(/accessibilityHint=\{EXTERNAL_LINK_HINT\}/g) ?? []).length, 2);
-  assert.equal((code.match(/<ExternalLinkLabel /g) ?? []).length, 2);
-  assert.equal((code.match(/hitSlop=\{LINK_HIT_SLOP\}/g) ?? []).length, 2);
+  // The pressables the screen adds are its external links — the official
+  // notice, the Health Risk guide source, and (decision E) each guide's own
+  // source in a multi-hazard section — and the title's four-line disclosure
+  // (P2B7V); every other control is a shared primitive with real behaviour.
+  assert.equal((code.match(/<Pressable\b/g) ?? []).length, 4);
+  assert.equal((code.match(/accessibilityRole="link"/g) ?? []).length, 3);
+  assert.equal((code.match(/Linking\.openURL\(/g) ?? []).length, 3);
+  assert.equal((code.match(/accessibilityHint=\{EXTERNAL_LINK_HINT\}/g) ?? []).length, 3);
+  assert.equal((code.match(/<ExternalLinkLabel /g) ?? []).length, 3);
+  assert.equal((code.match(/hitSlop=\{LINK_HIT_SLOP\}/g) ?? []).length, 3);
   // The one horizontally scrolling surface is the table.
   assert.equal((code.match(/\bhorizontal\b/g) ?? []).length, 1);
   // The save control is the shared one, in the product header, once.
@@ -854,9 +855,10 @@ test('P2B7V: the retailer and symptom labels are body text, never the muted grey
     'the retailer sentence is no longer one body-small flow',
   );
 
+  const symptomsStart = DETAIL.indexOf('{healthRisk.symptoms ?');
   const symptoms = DETAIL.slice(
-    DETAIL.indexOf('{healthRisk.symptoms ?'),
-    DETAIL.indexOf('accessibilityRole="list"'),
+    symptomsStart,
+    DETAIL.indexOf('accessibilityRole="list"', symptomsStart),
   );
   assert.ok(symptoms.length > 0, 'the symptom label moved');
   assert.ok(!symptoms.includes('text/secondary'), 'the Common symptoms: label is muted again');
@@ -1075,4 +1077,25 @@ test('the retailer names wrap inline and fix no height', () => {
   // …and the text takes the remaining width, so a long list wraps INSIDE the
   // text column instead of running back under the icon.
   assert.match(styles, /retailerText: \{\s*flex: 1,/);
+});
+
+test('decision E: a multi-hazard Health Risk keeps one heading and one Common symptoms subheading', () => {
+  const start = DETAIL.indexOf('{healthRisk.hazards ? (');
+  const block = DETAIL.slice(start, DETAIL.indexOf(') : (', start));
+  assert.ok(start >= 0 && block.length > 0, 'the multi-hazard branch moved');
+  // ONE major heading for the section, whichever branch renders inside it,
+  // and one Common symptoms subheading for all the guides; the organism
+  // labels are small body-small-bold text.
+  assert.equal((DETAIL.match(/<Section title="Health Risk">/g) ?? []).length, 1);
+  assert.ok(DETAIL.indexOf('<Section title="Health Risk">') < start);
+  assert.equal((block.match(/Common symptoms:/g) ?? []).length, 1);
+  assert.equal((block.match(/variant="body-small-bold"/g) ?? []).length, 2);
+  // Each guide keeps its own source link, named for its organism to a screen
+  // reader, and its symptom group is its own list.
+  assert.match(
+    block,
+    /accessibilityLabel=\{`\$\{hazard\.source\.label\} about \$\{hazard\.organism\}`\}/,
+  );
+  assert.match(block, /accessibilityLabel=\{`\$\{hazard\.organism\} symptoms`\}/);
+  assert.ok(!block.includes('text/secondary'));
 });

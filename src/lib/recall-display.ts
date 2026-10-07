@@ -330,6 +330,8 @@ const HAZARD_HEALTH_RISK: [RegExp, string][] = [
  */
 export interface HazardGuidance {
   key: HazardGuideKey;
+  /** The guide's short organism label (`HazardGuide.organism`). */
+  organism: string | null;
   version: number;
   risk: string;
   symptoms: readonly string[] | null;
@@ -363,6 +365,7 @@ const ORGANISM_BEARING_FAMILIES: ReadonlySet<TypedReason['family']> = new Set([
 function guidance(guide: HazardGuide, risk: string): HazardGuidance {
   return {
     key: guide.key,
+    organism: guide.organism,
     version: guide.version,
     risk,
     symptoms: guide.symptoms,
@@ -384,8 +387,10 @@ function guidance(guide: HazardGuide, risk: string): HazardGuidance {
  *    and `reasonText`). The announcement body is deliberately never read: a
  *    guide must be the same for every recall carrying the hazard, and source
  *    prose is exactly what would make it differ.
- *  - MULTI-HAZARD DISPLAY PRECEDENCE: a notice must show exactly one guide.
- *    When its reason names more than one supported hazard, the guide with the
+ *  - MULTI-HAZARD DISPLAY PRECEDENCE: this function returns ONE guide. A
+ *    reason naming several supported hazards as a stated list is answered
+ *    by `selectHazardGuides` instead (decision E). For any other reason
+ *    naming more than one supported hazard, the guide with the
  *    highest `displayPriority` wins — a presentation tie-breaker, not a claim
  *    that one hazard is medically worse than another. Match order, registry
  *    order, and the order the organisms appear in the text decide nothing, so
@@ -393,6 +398,28 @@ function guidance(guide: HazardGuide, risk: string): HazardGuidance {
  *  - No recognized hazard means null, and the caller falls back to a
  *    risk-only sentence or omits the section entirely.
  */
+/**
+ * Every reviewed guide this notice's reason names, in the source's order —
+ * founder decision E (2026-10-07), which retires multi-hazard display
+ * precedence for the case it was written for. When the shared typed reason
+ * carries two or more named supported hazards (`TypedReason.hazards`), each
+ * guide is returned whole, its wording untouched; a notice naming ONE hazard
+ * returns exactly `selectHazardGuidance`'s single answer, unchanged.
+ */
+export function selectHazardGuides(
+  reason: TypedReason,
+  evidence: { pathogenOrAllergen: string | null; reasonText: string | null },
+): HazardGuidance[] {
+  if (reason.family === 'pathogen' && reason.hazards) {
+    const guides = reason.hazards.keys.map((key) => hazardGuideByKey(key));
+    if (guides.every((guide) => guide !== null && guide.risk !== null)) {
+      return guides.map((guide) => guidance(guide!, guide!.risk!));
+    }
+  }
+  const single = selectHazardGuidance(reason, evidence);
+  return single ? [single] : [];
+}
+
 export function selectHazardGuidance(
   reason: TypedReason,
   evidence: { pathogenOrAllergen: string | null; reasonText: string | null },

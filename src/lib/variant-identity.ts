@@ -308,8 +308,28 @@ export interface PackageIdentity {
 const CAPTION_SIZE_TOKEN =
   /\d[\d.,/]*\s*-?\s*(?:fl\.?\s*oz|oz|ounces?|lbs?|pounds?|grams?|g|kg|mg|ml|liters?|litres?|ct|count|bars?|packs?|pks?|pieces?)\b\.?/gi;
 
+/**
+ * Each size a text states, as a quantity and one spelling of its unit. The
+ * quantity keeps its decimal point — "1.5 lb" and "15 lb" are different
+ * packages — and is read as a number, so "1.50 lb" is "1.5 lb". The unit folds
+ * plural and spelled-out forms ("lbs", "pound" → `lb`), so an equivalent
+ * spelling still matches. Units are never converted into one another.
+ */
+function sizeTokens(text: string): { quantity: string; unit: string }[] {
+  return [...text.matchAll(CAPTION_SIZE_TOKEN)].map((match) => {
+    const token = match[0].toLowerCase();
+    const raw = token.match(/^\d[\d.,/]*/)![0].replace(/[.,]+$/, '');
+    const number = Number(raw.replace(/,/g, ''));
+    return {
+      quantity: Number.isFinite(number) ? String(number) : raw,
+      unit: sizeUnit(token.slice(raw.length)),
+    };
+  });
+}
+
+/** The size keys a text states ("1.5lb", "34oz", "964g"). */
 export function captionSizeKeys(text: string): Set<string> {
-  return new Set([...text.matchAll(CAPTION_SIZE_TOKEN)].map((match) => measurementKey(match[0])));
+  return new Set(sizeTokens(text).map(({ quantity, unit }) => `${quantity}${unit}`));
 }
 
 /**
@@ -319,19 +339,14 @@ export function captionSizeKeys(text: string): Set<string> {
  * 48 oz", from a source cell naming both) are two sizes, however they were
  * punctuated. Decided from the parsed size tokens, never from separators.
  *
- * The quantity keeps its decimal point: the shared size key drops it
- * ("10.5 oz" and "105 oz" both key as `105oz`), which would let "10.5 oz and
- * 105 oz" pass as one size. Plural and spelled-out units fold together
- * ("1 lb and 2 lbs" is two sizes of one unit).
+ * Plural and spelled-out units fold together ("1 lb and 2 lbs" is two sizes
+ * of one unit), and decimals stay decimals ("10.5 oz and 105 oz" is two).
  */
 export function statesOneSize(value: string): boolean {
   const quantitiesByUnit = new Map<string, Set<string>>();
-  for (const match of value.matchAll(CAPTION_SIZE_TOKEN)) {
-    const token = match[0].toLowerCase();
-    const quantity = token.match(/^\d[\d.,/]*/)![0].replace(/[.,]+$/, '');
-    const unit = sizeUnit(token.slice(quantity.length));
+  for (const { quantity, unit } of sizeTokens(value)) {
     const quantities = quantitiesByUnit.get(unit) ?? new Set<string>();
-    quantities.add(String(Number(quantity.replace(/,/g, ''))) || quantity);
+    quantities.add(quantity);
     quantitiesByUnit.set(unit, quantities);
   }
   return [...quantitiesByUnit.values()].every((quantities) => quantities.size <= 1);

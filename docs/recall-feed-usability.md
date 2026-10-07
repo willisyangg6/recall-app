@@ -870,6 +870,18 @@ elsewhere (the recorded PT Organics notice declares one such list, and routing
 it through a row dropped the metric weight "(113 g)" its product description
 preserved).
 
+**A heading-led product list (2026-10-07).** One product-list shape is read
+without a colon lead-in: a `<ul>` directly under the column-style heading
+"Item / Description" in which EVERY item opens with its product name in bold
+and states its own barcode or lot (Mellace's Wegmans Deluxe Mixed Nuts: a
+34 oz tub with UPC 077890421314 and lot 58041 best by July 28, 2026; an
+11.5 oz bag with UPC 077890421352 and lot 58171 best by August 10, 2026).
+The bold text is the item's name; the lines after it, separated by arrow or
+bullet glyphs that never join a value, are that product's own identifiers.
+Each item becomes its own row. Any weaker shape — another heading, a plain
+item, an item without its own barcode or lot — stays prose, and nothing is
+inferred across items.
+
 **Shape B — a source table with no Product column.** `buildVariants` used to
 discard a table row that carried no product-name fact, even when the row held
 supported package, code, or date facts. It no longer does. A nameless row
@@ -1601,15 +1613,36 @@ existing `healthRiskSummary` templates) maps a case to at most one guide:
   canonical structured reason (`pathogenOrAllergen`, `reasonText`). The
   announcement body is deliberately never read: source prose is precisely
   what would make the same hazard read differently on two recalls.
-- **Multi-hazard display precedence.** A notice must show exactly one guide,
-  so when its reason names more than one supported hazard the highest
-  `displayPriority` wins — never match order, never registry order, never the
-  order the organisms happen to appear in the text. This is a presentation
-  tie-breaker only: the registry offers no universal comparison of medical
-  severity, makes no claim about which hazard is worse for any person, and
-  the number is never rendered or described in the app. No recorded notice
-  names two supported hazards today, so it ships as a tested guard and has
-  never chosen in practice.
+- **Several named hazards (founder decision E, 2026-10-07).** When the
+  canonical `reasonText` names two or more supported hazards as one stated
+  list — the organisms joined by nothing but the source's own connective
+  ("and", "or", "and/or", or a comma list closed by one) — every surface names
+  all of them, in the source's order, with that connective:
+  - the Feed reason: `Potential E. coli and/or Salmonella contamination.`;
+  - What Happened: `…because the products may be contaminated with E. coli
+and/or Salmonella.` — the same "may be" uncertainty, never strengthened;
+  - Health Risk: ONE `Health Risk` heading and ONE `Common symptoms`
+    subheading. Each reviewed guide appears whole beneath a small organism
+    label — its explanation and its own source link, then its own symptom
+    group — never merged or deduplicated with another guide's.
+
+  The organism names are each guide's short `organism` label ("E. coli",
+  "Salmonella"). The three recorded sprout notices are exactly this shape
+  ("Shiga toxin-producing Escherichia coli (STEC) and/or Salmonella", "…
+  (STEC) or Salmonella", "Salmonella and … (STEC)"), and the stored
+  `pathogenOrAllergen` scalar — which names only Salmonella on all three — is
+  read, never changed. Anything short of a clean list (a clause between two
+  organisms, a repeated mention, an unsupported organism in the list) keeps
+  the single-hazard rendering, and a notice naming one supported hazard
+  renders exactly as before: Lyons Magnus names Cronobacter and Clostridium
+  botulinum, but only botulism has a reviewed guide.
+
+- **Display precedence, for everything else.** Where a reason names more than
+  one supported hazard but not as a clean list, one guide still shows, and
+  the highest `displayPriority` wins — never match order, never registry
+  order. This is a presentation tie-breaker only: the registry offers no
+  universal comparison of medical severity, and the number is never rendered
+  or described in the app.
 - Undeclared allergens are selected by family. Their risk sentence still
   names the specific allergen through the existing approved template, so
   `Undeclared milk` and `Undeclared soy` differ by exactly the allergen.

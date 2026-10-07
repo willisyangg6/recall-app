@@ -748,48 +748,112 @@ export default function RecallDetailScreen() {
           <>
             <View style={styles.divider} />
             <Section title="Health Risk">
-              <Text variant="body-small">{healthRisk.risk}</Text>
-              {healthRisk.higherRisk ? (
-                <Text variant="body-small">{healthRisk.higherRisk}</Text>
-              ) : null}
-              {healthRisk.symptoms ? (
-                <View style={styles.symptoms}>
-                  {/* Body-text colour, like the symptoms beneath it, and a
+              {healthRisk.hazards ? (
+                // Several supported hazards (founder decision E): ONE Health Risk
+                // heading and ONE Common symptoms subheading, each reviewed guide
+                // whole beneath a small organism label — its own explanation and
+                // source link, then its own symptom group. Nothing is merged or
+                // deduplicated across guides, and the order is the source's.
+                <>
+                  {healthRisk.hazards.map((hazard) => (
+                    <View key={hazard.organism} style={styles.hazardGroup}>
+                      <Text variant="body-small-bold" accessibilityRole="header">
+                        {hazard.organism}
+                      </Text>
+                      <Text variant="body-small">{hazard.risk}</Text>
+                      {hazard.higherRisk ? (
+                        <Text variant="body-small">{hazard.higherRisk}</Text>
+                      ) : null}
+                      <Pressable
+                        accessibilityRole="link"
+                        accessibilityLabel={`${hazard.source.label} about ${hazard.organism}`}
+                        onPress={() => Linking.openURL(hazard.source.url)}
+                        accessibilityHint={EXTERNAL_LINK_HINT}
+                        hitSlop={LINK_HIT_SLOP}
+                        style={styles.linkPressable}>
+                        <ExternalLinkLabel label={hazard.source.label} />
+                      </Pressable>
+                    </View>
+                  ))}
+                  {healthRisk.hazards.some((hazard) => hazard.symptoms) ? (
+                    <View style={styles.symptoms}>
+                      <Text variant="caption" accessibilityRole="header">
+                        Common symptoms:
+                      </Text>
+                      {healthRisk.hazards.map((hazard) =>
+                        hazard.symptoms ? (
+                          <View key={hazard.organism} style={styles.symptomGroup}>
+                            <Text variant="body-small-bold">{hazard.organism}</Text>
+                            <View
+                              accessibilityRole="list"
+                              accessibilityLabel={`${hazard.organism} symptoms`}
+                              style={styles.symptomList}>
+                              {hazard.symptoms.map((symptom) => (
+                                <View
+                                  key={symptom}
+                                  style={styles.symptomRow}
+                                  accessible
+                                  accessibilityRole="text"
+                                  accessibilityLabel={symptom}>
+                                  <Text variant="body-small">{'•'}</Text>
+                                  <Text variant="body-small" style={styles.symptomText}>
+                                    {symptom}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        ) : null,
+                      )}
+                    </View>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <Text variant="body-small">{healthRisk.risk}</Text>
+                  {healthRisk.higherRisk ? (
+                    <Text variant="body-small">{healthRisk.higherRisk}</Text>
+                  ) : null}
+                  {healthRisk.symptoms ? (
+                    <View style={styles.symptoms}>
+                      {/* Body-text colour, like the symptoms beneath it, and a
                       colon so it reads as the opening of the list rather than
                       a muted eyebrow over it. Its `caption` size, weight,
                       position and spacing are unchanged. */}
-                  <Text variant="caption" accessibilityRole="header">
-                    Common symptoms:
-                  </Text>
-                  <View accessibilityRole="list" style={styles.symptomList}>
-                    {healthRisk.symptoms.map((symptom) => (
-                      // One accessible node per symptom, labelled with the
-                      // symptom alone so the bullet glyph is never announced.
-                      <View
-                        key={symptom}
-                        style={styles.symptomRow}
-                        accessible
-                        accessibilityRole="text"
-                        accessibilityLabel={symptom}>
-                        <Text variant="body-small">{'•'}</Text>
-                        <Text variant="body-small" style={styles.symptomText}>
-                          {symptom}
-                        </Text>
+                      <Text variant="caption" accessibilityRole="header">
+                        Common symptoms:
+                      </Text>
+                      <View accessibilityRole="list" style={styles.symptomList}>
+                        {healthRisk.symptoms.map((symptom) => (
+                          // One accessible node per symptom, labelled with the
+                          // symptom alone so the bullet glyph is never announced.
+                          <View
+                            key={symptom}
+                            style={styles.symptomRow}
+                            accessible
+                            accessibilityRole="text"
+                            accessibilityLabel={symptom}>
+                            <Text variant="body-small">{'•'}</Text>
+                            <Text variant="body-small" style={styles.symptomText}>
+                              {symptom}
+                            </Text>
+                          </View>
+                        ))}
                       </View>
-                    ))}
-                  </View>
-                </View>
-              ) : null}
-              {healthRisk.source ? (
-                <Pressable
-                  accessibilityRole="link"
-                  onPress={() => Linking.openURL(healthRisk.source!.url)}
-                  accessibilityHint={EXTERNAL_LINK_HINT}
-                  hitSlop={LINK_HIT_SLOP}
-                  style={styles.linkPressable}>
-                  <ExternalLinkLabel label={healthRisk.source.label} />
-                </Pressable>
-              ) : null}
+                    </View>
+                  ) : null}
+                  {healthRisk.source ? (
+                    <Pressable
+                      accessibilityRole="link"
+                      onPress={() => Linking.openURL(healthRisk.source!.url)}
+                      accessibilityHint={EXTERNAL_LINK_HINT}
+                      hitSlop={LINK_HIT_SLOP}
+                      style={styles.linkPressable}>
+                      <ExternalLinkLabel label={healthRisk.source.label} />
+                    </Pressable>
+                  ) : null}
+                </>
+              )}
             </Section>
           </>
         ) : null}
@@ -1014,6 +1078,14 @@ const styles = StyleSheet.create({
   },
   symptomText: {
     flexShrink: 1,
+  },
+  // One reviewed guide inside a multi-hazard Health Risk section, and one
+  // guide's symptoms under the shared Common symptoms subheading.
+  hazardGroup: {
+    gap: spacing[4],
+  },
+  symptomGroup: {
+    gap: spacing[4],
   },
   // The Affected Products table. The viewport is the content column; the
   // grid inside may be wider and pans on its own. Fixed column widths keep

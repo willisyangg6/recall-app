@@ -290,3 +290,45 @@ test('a product name merely ENDING in a container word keeps its head', () => {
   );
   assert.deepEqual(names, ['Harvest Gift Baskets', 'Holiday Snack Crates']);
 });
+
+test('an "Item / Description" list qualifies only when every item is a bold-named record with its own identifier', () => {
+  const item = (name: string, body: string, bold = true) =>
+    `<li>${bold ? `<strong>${name}</strong>` : name}<br>&nbsp;➢ ${body}</li>`;
+  const list = (heading: string, items: string[]) => `<p>${heading}</p><ul>${items.join('')}</ul>`;
+  const nuts = [
+    item('Acme Mixed Nuts 34 oz', 'UPC 077890421314<br>➢ Lot code: 58041 BEST BY: JUL 28, 2026'),
+    item('Acme Mixed Nuts 11.5 oz', 'UPC 077890421352<br>➢ Lot code: 58171 BEST BY: AUG 10, 2026'),
+  ];
+  const variants = extractAffectedProductLists(list('Item / Description', nuts));
+  assert.equal(variants.length, 2);
+  const values = (index: number, concept: string) =>
+    variants[index].facts.filter((f) => f.concept === concept).map((f) => f.value);
+  assert.deepEqual(values(0, 'upc'), ['077890421314']);
+  assert.deepEqual(values(1, 'upc'), ['077890421352']);
+  assert.deepEqual(values(0, 'lot'), ['58041']);
+  assert.deepEqual(values(1, 'lot'), ['58171']);
+  // The name is exactly the bold text: the item's own detail lines (and the
+  // arrow glyphs between them) never join it. The projection's measurement
+  // split later moves "34 oz" into Size.
+  assert.deepEqual(values(0, 'variant'), ['Acme Mixed Nuts 34 oz']);
+  assert.deepEqual(values(1, 'variant'), ['Acme Mixed Nuts 11.5 oz']);
+
+  // Any weaker shape stays prose: another heading, a plain (unbolded) item,
+  // or an item without its own barcode or lot.
+  assert.deepEqual(extractAffectedProductLists(list('Product Photos', nuts)), []);
+  assert.deepEqual(
+    extractAffectedProductLists(
+      list('Item / Description', [
+        nuts[0],
+        item('Acme Mixed Nuts 11.5 oz', 'UPC 077890421352', false),
+      ]),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    extractAffectedProductLists(
+      list('Item / Description', [nuts[0], item('Acme Mixed Nuts 11.5 oz', 'packaged in a bag')]),
+    ),
+    [],
+  );
+});
