@@ -389,14 +389,20 @@ test('P3C-2 AquaStar combined: three rows, each owning only its own list', () =>
 
   // Row 2 states two codes, which read inline with no control at all; row 3
   // states four and row 1 states ten, which each reach their OWN in-cell
-  // reveal. No row can see another's codes.
-  assert.equal(cellOf(view, 1, 'lotCodes').text, '10662 5112 11, 10662 5113 10');
+  // reveal. No row can see another's codes. Row 2's source prints each code
+  // with its OWN best-before date, so even this two-code set keeps its pairs
+  // (Correctness C): one line per pair, aligned with its date.
+  assert.equal(cellOf(view, 1, 'lotCodes').text, '10662 5112 11\n10662 5113 10');
+  assert.equal(cellOf(view, 1, 'lotCodes').pairGroup, 'bestBy+lotCodes');
   assert.equal(cellOf(view, 1, 'lotCodes').disclosure, null);
+  // Row 3's four codes each carry their own date as well.
   assert.equal(
     cellOf(view, 2, 'lotCodes').text,
-    '10662 5127 10, 10662 5128 11, 10662 5133 11, 10662 5135 10',
+    '10662 5127 10\n10662 5128 11\n10662 5133 11\n10662 5135 10',
   );
-  assert.equal(cellOf(view, 2, 'lotCodes').collapsedText, '10662 5127 10, 10662 5128 11');
+  assert.equal(cellOf(view, 2, 'lotCodes').pairGroup, 'bestBy+lotCodes');
+  assert.equal(cellOf(view, 2, 'lotCodes').collapsedText, '10662 5127 10\n10662 5128 11');
+  assert.equal(cellOf(view, 2, 'bestBy').collapsedText, 'November 7, 2027\nNovember 8, 2027');
   assert.equal(cellOf(view, 2, 'lotCodes').disclosure?.expandLabel, 'See all (4)');
   const first = cellOf(view, 0, 'lotCodes');
   assert.equal(first.disclosure?.expandLabel, 'See all (10)');
@@ -440,12 +446,12 @@ test('P3C-2 AquaStar combined: three rows, each owning only its own list', () =>
     'April 24, 2027',
   );
 
-  // Row 2 and row 3's own best-by values, complete and comma-separated —
-  // P3C-1's formatting is unchanged by the regrouping.
-  assert.equal(cellOf(view, 1, 'bestBy').text, 'October 22, 2027, October 23, 2027');
+  // Row 2 and row 3's own best-by values, complete — one line per pair now
+  // that each small set keeps its pairs (Correctness C).
+  assert.equal(cellOf(view, 1, 'bestBy').text, 'October 22, 2027\nOctober 23, 2027');
   assert.equal(
     cellOf(view, 2, 'bestBy').text,
-    'November 7, 2027, November 8, 2027, November 13, 2027, November 15, 2027',
+    'November 7, 2027\nNovember 8, 2027\nNovember 13, 2027\nNovember 15, 2027',
   );
   for (const key of ['bestBy', 'upc', 'lotCodes', 'size']) {
     for (let row = 0; row < view.rows.length; row += 1) {

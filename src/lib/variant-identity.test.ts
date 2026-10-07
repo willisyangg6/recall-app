@@ -15,6 +15,7 @@ import {
   isGeographicName,
   packagingOnlyName,
   splitTrailingMeasurements,
+  statesOneSize,
   variantIdentityRejection,
 } from './variant-identity';
 
@@ -295,4 +296,37 @@ test('the shared caption-contradiction policy: stated identifiers veto, silence 
     }),
     false,
   );
+});
+
+test('one Package Size value states one size per unit, however it is punctuated', () => {
+  // One size, possibly in two units.
+  for (const value of [
+    '10 oz',
+    '16 fl oz',
+    '34 oz (964 grams)',
+    '500 g / 17.6 oz',
+    '12 x 1.5 oz',
+  ]) {
+    assert.equal(statesOneSize(value), true, value);
+  }
+  // Two or more quantities in one unit are several sizes — with or without a
+  // comma ("10 oz and 48 oz" is exactly what `joinValues` and source cells say).
+  for (const value of ['10 oz and 48 oz', '10 oz, 48 oz', '10 oz, 48 oz, and 64 oz']) {
+    assert.equal(statesOneSize(value), false, value);
+  }
+  // Decimal quantities keep their point: the shared size key reads "10.5 oz"
+  // and "105 oz" alike, which must not make two sizes look like one. Plural
+  // and spelled-out units are one unit.
+  for (const value of [
+    '10.5 oz and 105 oz',
+    '1.5 lb and 15 lb',
+    '10.5 oz, 12.5 oz',
+    '1 lb and 2 lbs',
+    '8 ounces and 12 oz',
+  ]) {
+    assert.equal(statesOneSize(value), false, value);
+  }
+  for (const value of ['1.25 lbs.', '0.84 oz', '2 lbs.', '1,000 g']) {
+    assert.equal(statesOneSize(value), true, value);
+  }
 });

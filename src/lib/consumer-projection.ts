@@ -75,6 +75,7 @@ import {
   measurementOnlyName,
   packagingOnlyName,
   splitTrailingMeasurements,
+  statesOneSize,
   variantIdentityRejection,
   type PackageIdentity,
 } from './variant-identity';
@@ -1162,7 +1163,7 @@ function buildVariants(sources: VariantSource[]): BuiltVariants {
     // This version's own codes stay with this version. A large set still
     // collapses, but behind the version it belongs to.
     const lotSet = buildLotCodes(expanded);
-    const collapse = lotSet !== null && lotSet.count > SMALL_CODE_SET;
+    const collapse = keepsCodeSet(lotSet);
     const aggregated = aggregateFacts(
       collapse ? expanded.filter((f) => f.concept !== 'lot') : expanded,
     );
@@ -1301,13 +1302,22 @@ function captionVariantName(caption: string): { name: string | null; size: strin
 }
 
 /** The closed exact identity a variant's own row states, for the shared
- * caption-contradiction policy (`captionContradictsPackage`). A merged
- * multi-size cell is not one matchable size. */
+ * caption-contradiction policy (`captionContradictsPackage`). It is used ONLY
+ * to rule a photo out, never to match one, so it carries EVERY size the row
+ * states: a multi-size row still rejects a caption naming a size outside it.
+ * (It used to drop a comma-joined multi-size value, which switched that veto
+ * off; "10 oz and 48 oz" kept it only by having no comma.) */
+/** Whether a version's own Package Size states more than one size. */
+function statesSeveralSizes(variant: AffectedVariant): boolean {
+  const size = variant.fields.find((field) => field.key === 'size');
+  return size !== undefined && (size.values.length > 1 || !statesOneSize(size.value));
+}
+
 function variantPackageIdentity(variant: AffectedVariant): PackageIdentity {
   const size = variant.fields.find((field) => field.key === 'size')?.value ?? null;
   return {
     name: variant.name,
-    size: size !== null && !size.includes(',') ? size : null,
+    size,
     upc: variant.fields.find((field) => field.key === 'upc')?.value ?? null,
   };
 }
@@ -1358,13 +1368,22 @@ function attachNamedPhotos(variants: AffectedVariant[], photos: ProductPhoto[]):
     // caption whose stated identifiers discriminate (each sibling it does
     // not depict is contradicted) proves the pairing; otherwise the photo
     // stays unassigned for a later correctly-supported role.
+    //
+    // A version stating SEVERAL sizes may not win by size (Correctness A,
+    // 2026-10-07): ruling a "12 oz" sibling out because the caption says
+    // "48 oz" is a size match by elimination, and a "10 oz, 48 oz" row is not
+    // one matchable size. For it, only a barcode can rule a sibling out.
+    const sizeBlind = statesSeveralSizes(variant);
     const ambiguous = variants.some(
       (sibling) =>
         sibling !== variant &&
         sibling.photo === null &&
         !matched.has(sibling) &&
         dedupeKey(sibling.name ?? '') === key &&
-        !captionContradictsPackage(match.alt ?? '', variantPackageIdentity(sibling)),
+        !captionContradictsPackage(match.alt ?? '', {
+          ...variantPackageIdentity(sibling),
+          ...(sizeBlind ? { size: null } : {}),
+        }),
     );
     if (ambiguous) continue;
     used.add(match.url);
@@ -2172,18 +2191,21 @@ function buildLotCodes(
       // reached the UI as lot codes. It passes the same gate as every other
       // rendered value now.
       if (!isValidForConcept(concept, code)) continue;
-      if (seen.has(code)) continue;
-      seen.add(code);
-      codes.push(code);
+      if (!seen.has(code)) {
+        seen.add(code);
+        codes.push(code);
+      }
       const date = item.pairedDate ?? compound.pairs.find((p) => p.code === code)?.date ?? null;
       if (date) {
         // The code itself can prove an ambiguous numeric date's order; when it
         // cannot, the source's own wording stands.
         const resolved = resolveDateWithCode(date, code);
-        pairs.push({
-          code,
-          date: resolved.canonical ? resolved.display : normalizeDateValue(date).display,
-        });
+        const display = resolved.canonical ? resolved.display : normalizeDateValue(date).display;
+        // A code the source pairs with SEVERAL dates keeps every pairing (one
+        // line each); only an exact repeat of a pair is dropped.
+        if (!pairs.some((pair) => pair.code === code && pair.date === display)) {
+          pairs.push({ code, date: display });
+        }
       }
     }
   }
@@ -2212,6 +2234,29 @@ const IDENTIFYING_CONCEPTS = new Set<ConsumerConcept>([
 
 /** At or below this many codes, show them inline rather than behind a tap. */
 const SMALL_CODE_SET = 4;
+
+/**
+ * Whether a lot set stays a code set rather than dissolving into a plain field.
+ *
+ * A large set always does. A small set does too when the source PAIRED its
+ * codes with dates and two independent lists would lose that (Correctness C,
+ * 2026-10-07): "Lot GRA240602 … 08/2025" and "Lot GDR240901 … 05/2025" as a
+ * plain lot field beside a plain date field read as every code with every
+ * date — the reading the source ruled out. That loss exists only when the
+ * pairs name more than one date, or when some code was left undated (it would
+ * silently inherit the date). Codes all paired with ONE date lose nothing as
+ * plain fields, and stay plain. The set carries the pairs, its undated codes
+ * as orphan lines, and the shared-scope test, through the existing mechanism.
+ * Production codes keep their count gate: they have no field path, and a
+ * small production set is withheld on purpose (see `collapseProduction`).
+ */
+function keepsCodeSet(set: LotCodeSet | null): set is LotCodeSet {
+  if (set === null) return false;
+  if (set.count > SMALL_CODE_SET) return true;
+  if (set.pairs.length === 0) return false;
+  const dates = new Set(set.pairs.map((pair) => pair.date));
+  return dates.size > 1 || set.codes.some((code) => !set.pairs.some((pair) => pair.code === code));
+}
 
 /**
  * Photos to show inside the package checker.
@@ -2491,7 +2536,7 @@ function buildPackageCheck(
   const lotSet = buildLotCodes(unclaimedLotFacts);
   // A handful of codes is easier to read inline than behind a second tap;
   // only genuinely large sets earn their own disclosure step.
-  const collapseLots = lotSet !== null && lotSet.count > SMALL_CODE_SET;
+  const collapseLots = keepsCodeSet(lotSet);
   // Production codes are opaque by nature ("26192"). The readable calendar
   // date the source paired with each one is what leads; the printed code stays
   // available, mapped to its date, for the person checking a package.

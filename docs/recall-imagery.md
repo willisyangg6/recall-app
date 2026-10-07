@@ -445,6 +445,15 @@ exact version. Closed evidence set:
   states the row's exact package size, for sibling rows that share a name
   and differ by size (Crystal Temptations). Exact size-token equality: a
   "10 oz" row can never claim a "10.5 oz" caption.
+  Only a row stating exactly ONE size can win this way (Correctness A,
+  2026-10-07): its structured Package Size holds one value, and that value
+  names one quantity per unit, decimal point kept ("10.5 oz and 105 oz" is
+  two sizes). A "10 oz and 48 oz" row stating two sizes never wins a
+  size-matched photo, however its sizes are punctuated — and neither does
+  the projection's name-only attachment by elimination: for a row stating
+  several sizes, only a caption's barcode can rule a same-named sibling out,
+  never its size. Explicit source pairing (a table deferring to its photos,
+  one per row) is unaffected.
 
 Guards that apply to every mechanism:
 
@@ -452,7 +461,10 @@ Guards that apply to every mechanism:
   or a package size the row does not state depicts a sibling package, and
   the match is dropped — even a source-established one (observed: 4Earth
   Farms' same-named medleys differing only by UPC; Conagra's 15 oz vs
-  24 oz dressings). Caption silence never contradicts. The policy is ONE
+  24 oz dressings). Caption silence never contradicts. The veto reads EVERY
+  size a row states, so a multi-size row still rules out a caption naming a
+  size outside its list, in every allocator pass, the name-only passes
+  included. The policy is ONE
   shared pure function (`captionContradictsPackage`,
   `src/lib/variant-identity.ts`), enforced at BOTH layers — the
   projection's photo attachment refuses to store a contradicted

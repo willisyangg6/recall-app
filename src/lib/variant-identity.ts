@@ -292,7 +292,12 @@ export function measurementKey(text: string): string {
  * decisions. Extra fields on a caller's richer row shape are fine. */
 export interface PackageIdentity {
   name: string | null;
-  /** The row's own Package Size value when it states exactly one. */
+  /**
+   * The row's own Package Size value — every size it states. The
+   * contradiction policy only ever uses it to RULE OUT a caption naming a
+   * size outside it; size-based MATCHING requires exactly one stated size and
+   * is decided by the caller (`statesOneSize`).
+   */
   size: string | null;
   /** The row's own Barcode (UPC) value, when the source states one. */
   upc: string | null;
@@ -306,6 +311,47 @@ const CAPTION_SIZE_TOKEN =
 export function captionSizeKeys(text: string): Set<string> {
   return new Set([...text.matchAll(CAPTION_SIZE_TOKEN)].map((match) => measurementKey(match[0])));
 }
+
+/**
+ * Whether one Package Size value states ONE package size. A value may give a
+ * single size in two units ("34 oz (964 grams)", "500 g / 17.6 oz") — that is
+ * still one size — but two different quantities in the same unit ("10 oz and
+ * 48 oz", from a source cell naming both) are two sizes, however they were
+ * punctuated. Decided from the parsed size tokens, never from separators.
+ *
+ * The quantity keeps its decimal point: the shared size key drops it
+ * ("10.5 oz" and "105 oz" both key as `105oz`), which would let "10.5 oz and
+ * 105 oz" pass as one size. Plural and spelled-out units fold together
+ * ("1 lb and 2 lbs" is two sizes of one unit).
+ */
+export function statesOneSize(value: string): boolean {
+  const quantitiesByUnit = new Map<string, Set<string>>();
+  for (const match of value.matchAll(CAPTION_SIZE_TOKEN)) {
+    const token = match[0].toLowerCase();
+    const quantity = token.match(/^\d[\d.,/]*/)![0].replace(/[.,]+$/, '');
+    const unit = sizeUnit(token.slice(quantity.length));
+    const quantities = quantitiesByUnit.get(unit) ?? new Set<string>();
+    quantities.add(String(Number(quantity.replace(/,/g, ''))) || quantity);
+    quantitiesByUnit.set(unit, quantities);
+  }
+  return [...quantitiesByUnit.values()].every((quantities) => quantities.size <= 1);
+}
+
+/** One spelling per unit, so "lbs", "pound" and "lb" compare as one. */
+function sizeUnit(text: string): string {
+  const unit = measurementKey(text).replace(/s$/, '');
+  return UNIT_SPELLINGS[unit] ?? unit;
+}
+
+const UNIT_SPELLINGS: Record<string, string> = {
+  pound: 'lb',
+  ounce: 'oz',
+  gram: 'g',
+  count: 'ct',
+  liter: 'l',
+  litre: 'l',
+  pk: 'pack',
+};
 
 /** Barcode-length digit strings inside a value ("UPC 021130 13224 9" →
  * "021130132249"), spacing and separators removed. */

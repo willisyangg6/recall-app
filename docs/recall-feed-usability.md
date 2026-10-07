@@ -537,6 +537,26 @@ composes no columns, labels, or cell values of its own; wiring-test-pinned):
   (`See all 4 identifiers (2 paired with a date)`), so the word "pairs" never
   covers a value the source never paired.
 
+  **Where pairs come from.** Only an explicit pair statement pairs a code
+  with a date (Correctness B, 2026-10-07): a table cell or row that prints
+  them together, or one of the verified prose clauses — "Lot code: X BEST
+  BY: D" (Mellace), "Best If Used By D, Lot# X" (Sunco), "lot code X and
+  best by D" (Meal Simple), "Lot X with expiration date of D" (Hampton), and
+  a "Batch Numbers: … Corresponding Best By Dates: …" list of equal length
+  (Nestlé). Prose pairs are read per product segment, so the same code under
+  two products keeps each product's own date, and one code the source pairs
+  with two dates keeps both pairs, one line each. Two independent lists in one
+  sentence — "lot codes X and Y" (Maggi), "Best By dates of …, and lot codes
+  …" (FSIS 006-2025), "lot # X or # Y with an expiration date of D or E"
+  (Bettergoods) — stay independent: position alone never pairs.
+
+  **Small sets keep their pairs** (Correctness C). A set of four or fewer
+  codes normally renders as a plain field. It stays a code set, and so forms
+  a pair group, when its pairs name more than one date or some code was left
+  undated: as two plain lists those would read as every code with every
+  date. Codes that all pair with their row's one date lose nothing as plain
+  fields, and stay plain.
+
   **A version's codes still live inside its own table row** (integration
   correction, 2026-09-02 — the below-table row-code disclosure area is
   retired; the table is the only affected-product presentation) — never a

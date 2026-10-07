@@ -34,7 +34,12 @@ import {
   type PhotoRole,
   type ProductPhoto,
 } from './product-photos';
-import { captionContradictsPackage, captionSizeKeys, measurementKey } from './variant-identity';
+import {
+  captionContradictsPackage,
+  captionSizeKeys,
+  measurementKey,
+  type PackageIdentity,
+} from './variant-identity';
 
 // ── Model ───────────────────────────────────────────────────────────────────
 
@@ -109,11 +114,29 @@ export interface RowImageCandidate {
   /** The row's own Package Size value when it states exactly one; null
    * otherwise (a merged multi-size cell is not a matchable size). */
   size: string | null;
+  /**
+   * EVERY size the row states (its whole Package Size value), even when it
+   * states several. Used ONLY to rule a photo OUT — a caption naming a size
+   * the row does not state depicts a sibling — never to match one, so a
+   * multi-size row keeps the size veto that `size: null` alone would drop.
+   * Absent means the same as `size`.
+   */
+  statedSizes?: string | null;
   /** The row's own Barcode (UPC) value, when the source states one. */
   upc: string | null;
   /** URL of the photo the projection's source-established matching attached
    * to this row, when it did. */
   sourcePhotoUrl: string | null;
+}
+
+/**
+ * The identity a caption is checked AGAINST: the row's name and barcode, and
+ * every size it states. Matching uses `size` (one stated size or none); the
+ * veto uses all of them, so declining to size-MATCH a multi-size row never
+ * stops a caption naming a size outside it from ruling the photo out.
+ */
+function vetoIdentity(row: RowImageCandidate): PackageIdentity {
+  return { name: row.name, size: row.statedSizes ?? row.size, upc: row.upc };
 }
 
 // ── Normalization ───────────────────────────────────────────────────────────
@@ -226,7 +249,7 @@ export function allocateRecallImages(input: {
     // depicts a sibling package, and rendering it would misidentify the
     // version (observed: caption-prefix matches between same-named versions
     // that differ only by UPC or size).
-    if (photo.alt && captionContradictsPackage(photo.alt, row)) continue;
+    if (photo.alt && captionContradictsPackage(photo.alt, vetoIdentity(row))) continue;
     assign(row, photo, 'source_row');
   }
 
@@ -258,7 +281,7 @@ export function allocateRecallImages(input: {
         if (!captionContainsName(photo.alt, nameKey)) continue;
         const captionSizes = captionSizeKeys(photo.alt);
         if (![...captionSizes].some((size) => rowSizes.has(size))) continue;
-        if (captionContradictsPackage(photo.alt, row)) continue;
+        if (captionContradictsPackage(photo.alt, vetoIdentity(row))) continue;
         pairRowsByUrl.set(photo.url, [...(pairRowsByUrl.get(photo.url) ?? []), row]);
         pairPhotosByRow.set(row.rowId, [...(pairPhotosByRow.get(row.rowId) ?? []), photo]);
       }
@@ -303,7 +326,7 @@ export function allocateRecallImages(input: {
             !used.has(photo.url) &&
             photo.alt &&
             captionContainsName(photo.alt, nameKey) &&
-            !captionContradictsPackage(photo.alt, row),
+            !captionContradictsPackage(photo.alt, vetoIdentity(row)),
         )
         .sort((a, b) => measurementKey(a.alt!).length - measurementKey(b.alt!).length);
       if (candidates.length === 0) continue;

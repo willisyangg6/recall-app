@@ -3162,3 +3162,171 @@ test('P1D: the community section changes no official field on the model', () => 
   assert.equal(model.whereSold.lead, 'California and Nevada');
   assert.equal(model.affectsYou, false);
 });
+
+// ── Correctness A (2026-10-07): single-size eligibility for row images ──────
+
+function crunchModel(summaryHtml: string) {
+  return buildDetailModel(
+    detail({
+      title: 'Acme Recalls Crunch Bites',
+      summaryHtml,
+      summaryText: 'Acme recalls Crunch Bites.',
+    }),
+    { today: TODAY, affectsYou: false },
+  );
+}
+
+/** Two same-named rows — the first stating `size0`, the second 12 oz — and
+ * one captioned photo. */
+function crunchTable(size0: string, alt: string): string {
+  return (
+    '<table><thead><tr><th>Product</th><th>Size</th><th>UPC</th></tr></thead><tbody>' +
+    `<tr><td>Crunch Bites</td><td>${size0}</td><td>012345678905</td></tr>` +
+    '<tr><td>Crunch Bites</td><td>12 oz</td><td>012345678912</td></tr></tbody></table>' +
+    `<p><img src="https://www.fda.gov/files/crunch.png" alt="${alt}"/></p>`
+  );
+}
+
+function crunchRows(size0: string, alt: string): (string | null)[] {
+  const model = crunchModel(crunchTable(size0, alt));
+  assert.ok(model.sections.affectedProducts);
+  return model.sections.affectedProducts.table.expanded.rows.map((row) => row.image?.url ?? null);
+}
+
+/** Which allocator pass assigned each row's image (absent = refused). */
+function crunchEvidence(summaryHtml: string): Record<string, string> {
+  return Object.fromEntries(
+    [...crunchModel(summaryHtml).images.rowImages].map(([rowId, assignment]) => [
+      rowId,
+      assignment.evidence,
+    ]),
+  );
+}
+
+test('a row stating two sizes never wins a size-matched photo, however the sizes are punctuated', () => {
+  const url = 'https://www.fda.gov/files/crunch.png';
+  // The caption names the product (not as its prefix) and ONE size: only the
+  // name+size pass could place it. A source cell naming two sizes is not one
+  // matchable size, with or without a comma.
+  assert.deepEqual(crunchRows('10 oz and 48 oz', 'Front label of Crunch Bites, 10 oz.'), [
+    null,
+    null,
+  ]);
+  assert.deepEqual(crunchRows('10 oz, 48 oz', 'Front label of Crunch Bites, 10 oz.'), [null, null]);
+  // A single-size row still matches its caption.
+  assert.deepEqual(crunchRows('10 oz', 'Front label of Crunch Bites, 10 oz.'), [url, null]);
+});
+
+test('a multi-size row still vetoes a caption naming a size it does not state', () => {
+  // Before 2026-10-07 a comma-joined multi-size value switched the size veto
+  // off, and this 64 oz photo was attached to the 10/48 oz row.
+  assert.deepEqual(crunchRows('10 oz, 48 oz', 'Crunch Bites, Front Label, 64 oz.'), [null, null]);
+  // A caption naming ONLY a size the row does state is not contradicted,
+  // and it still cannot win by size: see the next test.
+  assert.deepEqual(crunchRows('10 oz, 48 oz', 'Crunch Bites, Front Label, 48 oz.'), [null, null]);
+});
+
+test('which pass assigns or refuses a multi-size row its photo', () => {
+  // Inferred name-only matching, refused. The caption begins with the row's
+  // name, so the projection's named attachment considers it; the only thing
+  // separating the two same-named rows is the caption's size ruling the
+  // 12 oz sibling out. That is a size match by elimination, and a row
+  // stating two sizes may not win one, punctuated either way.
+  assert.deepEqual(
+    crunchEvidence(crunchTable('10 oz, 48 oz', 'Crunch Bites, Front Label, 48 oz.')),
+    {},
+  );
+  assert.deepEqual(
+    crunchEvidence(crunchTable('10 oz and 48 oz', 'Crunch Bites, Front Label, 48 oz.')),
+    {},
+  );
+  // …and the name+size pass refuses it too.
+  assert.deepEqual(
+    crunchEvidence(crunchTable('10 oz, 48 oz', 'Front label of Crunch Bites, 48 oz.')),
+    {},
+  );
+
+  // A single-size row still wins by size, through either route.
+  assert.deepEqual(crunchEvidence(crunchTable('10 oz', 'Crunch Bites, Front Label, 10 oz.')), {
+    t0r0: 'source_row',
+  });
+  assert.deepEqual(crunchEvidence(crunchTable('10 oz', 'Front label of Crunch Bites, 10 oz.')), {
+    t0r0: 'caption_name_size',
+  });
+
+  // A caption carrying the row's own barcode proves identity without size:
+  // the sibling is ruled out by its UPC, so the multi-size row keeps it.
+  assert.deepEqual(
+    crunchEvidence(crunchTable('10 oz, 48 oz', 'Crunch Bites 48 oz UPC 012345678905')),
+    {
+      t0r0: 'source_row',
+    },
+  );
+
+  // Explicit source pairing stays: a table whose product cells defer to the
+  // photos ("See Image Below"), with exactly one photo per row, pairs each
+  // row with its own photo whatever sizes the row states.
+  const deferred =
+    '<table><thead><tr><th>Product</th><th>Size</th><th>Lot</th></tr></thead><tbody>' +
+    '<tr><td>See Image Below</td><td>10 oz, 48 oz</td><td>L10048</td></tr>' +
+    '<tr><td>See Image Below</td><td>12 oz</td><td>L12</td></tr></tbody></table>' +
+    '<p><img src="https://www.fda.gov/files/a.png" alt="Crunch Bites Variety"/></p>' +
+    '<p><img src="https://www.fda.gov/files/b.png" alt="Crunch Bites Classic"/></p>';
+  assert.deepEqual(crunchEvidence(deferred), { t0r0: 'source_row', t0r1: 'source_row' });
+});
+
+test('decimal multi-size values cannot bypass the single-size photo rule', () => {
+  // "10.5 oz and 105 oz" and "1.5 lb and 15 lb" share one size key each
+  // (`105oz`, `15lb`); they are still two sizes. Neither route places the
+  // photo: not the name+size pass, and not the named attachment that rules
+  // the 12 oz sibling out by size.
+  for (const size of ['10.5 oz and 105 oz', '10.5 oz, 12.5 oz', '1.5 lb and 15 lb']) {
+    const caption = size.includes('lb') ? '1.5 lb' : '10.5 oz';
+    assert.deepEqual(
+      crunchEvidence(crunchTable(size, `Front label of Crunch Bites, ${caption}.`)),
+      {},
+      size,
+    );
+    assert.deepEqual(
+      crunchEvidence(crunchTable(size, `Crunch Bites, Front Label, ${caption}.`)),
+      {},
+      size,
+    );
+  }
+  // A single decimal size still wins through the name+size pass.
+  assert.deepEqual(
+    crunchEvidence(crunchTable('10.5 oz', 'Front label of Crunch Bites, 10.5 oz.')),
+    {
+      t0r0: 'caption_name_size',
+    },
+  );
+});
+
+test('one lot the source pairs with two dates keeps both relationships', () => {
+  const summaryText =
+    'Acme recalls Deluxe Mixed Nuts. Lot code: 58041 BEST BY: JUL 28, 2026 and ' +
+    'Lot code: 58041 BEST BY: AUG 10, 2026. Lot code: 58171 BEST BY: SEP 01, 2026.';
+  const input = detail({
+    title: 'Acme Recalls Deluxe Mixed Nuts',
+    summaryText,
+    summaryHtml: `<p>${summaryText}</p>`,
+  });
+  // The projection: one code, two pairs — plus the other lot's own pair.
+  const codes = buildConsumerCase(input.projection, []).packageCheck.lotCodes;
+  assert.deepEqual(codes?.codes, ['58041', '58171']);
+  assert.deepEqual(codes?.pairs, [
+    { code: '58041', date: 'July 28, 2026' },
+    { code: '58041', date: 'August 10, 2026' },
+    { code: '58171', date: 'September 1, 2026' },
+  ]);
+  // The rendered table: one aligned line per relationship, never a list in
+  // which 58171 could read beside July 28.
+  const model = buildDetailModel(input, { today: TODAY, affectsYou: false });
+  assert.ok(model.sections.affectedProducts);
+  const view = model.sections.affectedProducts.table.expanded;
+  const cell = (key: string) => view.rows[0].cells[view.columns.findIndex((c) => c.key === key)];
+  assert.equal(cell('lotCodes').text, '58041\n58041\n58171');
+  assert.equal(cell('bestBy').text, 'July 28, 2026\nAugust 10, 2026\nSeptember 1, 2026');
+  assert.equal(cell('lotCodes').pairGroup, 'bestBy+lotCodes');
+  assert.equal(cell('bestBy').pairGroup, 'bestBy+lotCodes');
+});

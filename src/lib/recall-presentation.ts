@@ -78,6 +78,7 @@ import {
   measurementOnlyName,
   packagingOnlyName,
   splitTrailingMeasurements,
+  statesOneSize,
 } from './variant-identity';
 import { buildWhatHappened } from './what-happened';
 
@@ -2501,12 +2502,20 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     photos: consumer.officialPhotos,
     labelVisuals,
     rows: affectedProductsView.items.map((item): RowImageCandidate => {
-      const size = item.fields.find((field) => field.key === 'size')?.value ?? null;
+      const sizeField = item.fields.find((field) => field.key === 'size') ?? null;
       return {
         rowId: item.rowId,
         name: item.name,
-        // A merged multi-size cell is not one matchable size.
-        size: size !== null && !size.includes(',') ? size : null,
+        // A merged multi-size cell is not one matchable size. Decided from
+        // the structured values and the sizes they state, never from
+        // punctuation: two sizes join as "10 oz and 48 oz" with no comma (and
+        // a source cell can say exactly that), and both once passed as one.
+        size:
+          sizeField !== null && sizeField.values.length === 1 && statesOneSize(sizeField.values[0])
+            ? sizeField.value
+            : null,
+        // …but every stated size still vetoes a caption naming another one.
+        statedSizes: sizeField?.value ?? null,
         upc: item.fields.find((field) => field.key === 'upc')?.value ?? null,
         sourcePhotoUrl: item.photo?.url ?? null,
       };

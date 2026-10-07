@@ -87,8 +87,16 @@ const VALUE = String.raw`([^;():\n]{1,90}?)(?=\s*[;():\n]|\.\s|\.$|,?\s+(?:and\s
  * The clause must not END in another identifier label: in "…with Best if Used
  * by Date Dec 10, 2024, and Lot Code: BFFG327A6" the colon belongs to the LOT
  * label, and reading across it files a lot code under a best-by date.
+ *
+ * Nor is the colon of a clock time a label's colon: "…can be communicated to
+ * Perrigo Consumer Affairs at 1-800-538-9543, M-F from 8:00am-5:00pm" filed
+ * "00am-5" as a lot. One or two digits before the colon is a time; a longer
+ * run ("lot number 05023:28") is left exactly as it was.
  */
-const CLAUSE_THEN_COLON = String.raw`(?:[^:.;\n]{0,80})(?<!\b(?:UPC|Lot|Batch|Item|Case|Product|Production)(?:[- ]?(?:Code|Number|#)s?)?|\b(?:Best|Use|Sell)[- ](?:If[- ]Used[- ])?By(?:[- ]Date)?|\bBest[- ]Before(?:[- ]Date)?|\bExpiration(?:[- ]Date)?):\s*`;
+const CLAUSE_THEN_COLON = String.raw`(?:[^:.;\n]{0,80})(?<!\b(?:UPC|Lot|Batch|Item|Case|Product|Production)(?:[- ]?(?:Code|Number|#)s?)?|\b(?:Best|Use|Sell)[- ](?:If[- ]Used[- ])?By(?:[- ]Date)?|\bBest[- ]Before(?:[- ]Date)?|\bExpiration(?:[- ]Date)?)(?<!\b\d{1,2}):\s*`;
+
+/** A value that opens with a passive modal ("can be communicated to …"). */
+const REFERENCE_VERB_PHRASE = /^(?:can|could|should|will|would|may|must)\s+be\b/i;
 
 /** The source explicitly stating that no codes exist. */
 const NO_CODES_STATEMENT =
@@ -279,12 +287,27 @@ export interface ProseIdentifierResult {
 const SUPPLIER_RECALL_SENTENCE =
   /\b(?:notification|notified|being\s+notified|learning|notice)\b[^.\n]{0,240}?\b(?:was|were|has\s+been|have\s+been|had\s+been|is\s+being|are\s+being)\s+recall/i;
 
-/** The text with supplier-recall reference sentences removed. */
+/**
+ * A sentence reporting the SUPPLIER'S tested sample (Correctness D,
+ * 2026-10-07). The Hampton Grocer's notice reads "…was notified by its
+ * ingredient supplier, Food to Live, that a sample of its Organic SuperGreens
+ * Powder Mix … bearing lot number SO-77820, tested positive for Salmonella" —
+ * SO-77820 is the supplier's ingredient lot, not an affected Lacnola lot. It
+ * is withheld exactly like a supplier-recall reference.
+ */
+const SUPPLIER_SAMPLE_SENTENCE =
+  /\b(?:notification|notified)\b[^.\n]{0,80}\bsupplier\b[^.\n]{0,240}?\btested\s+positive\b/i;
+
+function isSupplierReference(sentence: string): boolean {
+  return SUPPLIER_RECALL_SENTENCE.test(sentence) || SUPPLIER_SAMPLE_SENTENCE.test(sentence);
+}
+
+/** The text with supplier-recall and supplier-sample sentences removed. */
 export function withoutSupplierRecallReferences(text: string): string {
-  if (!SUPPLIER_RECALL_SENTENCE.test(text)) return text;
+  if (!isSupplierReference(text)) return text;
   return text
     .split(/(?<=[.!?])\s+(?=[A-Z“"])|\n/)
-    .filter((sentence) => !SUPPLIER_RECALL_SENTENCE.test(sentence))
+    .filter((sentence) => !isSupplierReference(sentence))
     .join('\n');
 }
 
@@ -361,6 +384,139 @@ const LOT_DATE_RUN = new RegExp(
   'gi',
 );
 
+/** A printed lot/batch code inside an explicit pair clause. */
+const PAIR_CODE = String.raw`([A-Z0-9][A-Z0-9-]{2,19})`;
+
+/**
+ * A date as these clauses print it: "JUL 28, 2026", "10/15/2020", "10/13/20",
+ * "08/2025" (month/year) or "21OCT2026". The shared date model reads each.
+ */
+const PAIR_DATE = String.raw`((?:[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{2,4})|(?:\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})|(?:\d{1,2}\/\d{4})|(?:\d{1,2}[A-Za-z]{3}\d{4}))`;
+
+/**
+ * Explicit code↔date clauses, each one VERIFIED against a recorded notice
+ * (Correctness B, 2026-10-07). Only a clause whose own wording binds one code
+ * to one date pairs them; separate lists of codes and of dates never do, and
+ * position alone never does. Each label is the one the recorded notice uses;
+ * a variant wording is a new clause, verified on its own evidence before it is
+ * added. Each entry: the pattern, and which capture holds the code, the date
+ * label and the date.
+ */
+const EXPLICIT_PAIR_CLAUSES: {
+  source: string;
+  pattern: RegExp;
+  code: number;
+  label: number;
+  date: number;
+}[] = [
+  {
+    // Mellace / Wegmans: "Lot code: 58041 BEST BY: JUL 28, 2026"
+    source: 'Lot code: X BEST BY: D',
+    pattern: new RegExp(
+      String.raw`\bLot\s+code\s*:\s*${PAIR_CODE}\s+(Best\s+By)\s*:\s*${PAIR_DATE}`,
+      'gi',
+    ),
+    code: 1,
+    label: 2,
+    date: 3,
+  },
+  {
+    // Sunco & Frenchie: "Best If Used By 08/2025, Lot#GRA240602"
+    source: 'Best If Used By D, Lot# X',
+    pattern: new RegExp(
+      String.raw`\b(Best\s+If\s+Used\s+By)\s+${PAIR_DATE}\s*,\s*Lot\s*#\s*${PAIR_CODE}`,
+      'gi',
+    ),
+    code: 3,
+    label: 1,
+    date: 2,
+  },
+  {
+    // Meal Simple (FSIS PHA-10092020-01): "lot code TFD279AU23 and best by 10/15/2020"
+    source: 'lot code X and best by D',
+    pattern: new RegExp(
+      String.raw`\blot\s+code\s+${PAIR_CODE}\s+and\s+(best\s+by)\s+${PAIR_DATE}`,
+      'gi',
+    ),
+    code: 1,
+    label: 2,
+    date: 3,
+  },
+  {
+    // The Hampton Grocer: "Lot HGLC-102125 with expiration date of 21OCT2026"
+    source: 'Lot X with expiration date of D',
+    pattern: new RegExp(
+      String.raw`\bLot\s+${PAIR_CODE}\s+with\s+(expiration)\s+date\s+of\s+${PAIR_DATE}`,
+      'gi',
+    ),
+    code: 1,
+    label: 2,
+    date: 3,
+  },
+];
+
+/**
+ * "Batch Numbers: 311457531K and 311557534K Corresponding Best By Dates:
+ * 8/22/23 and 10/23/23" (Nestlé). The two lists pair in order ONLY because
+ * the source says "Corresponding", and only when they hold the same number
+ * of entries; anything else stays two independent lists.
+ */
+const CORRESPONDING_LISTS = new RegExp(
+  String.raw`\b((?:Batch|Lot)\s+(?:Numbers?|Codes?))\s*:\s*([A-Z0-9][A-Z0-9 ,&-]*?(?:\s+and\s+[A-Z0-9-]+)?)\s*;?\s+Corresponding\s+(Best\s+By|Use\s+By|Expiration)\s+Dates?\s*:\s*([\d/., ]+?(?:\s+and\s+[\d/.]+)?)(?=\s|$)`,
+  'gi',
+);
+
+/** Each explicitly bound code with its date, in source order. */
+function extractExplicitPairs(
+  summaryText: string,
+): { code: string; date: string; label: string; codeLabel: string; raw: string }[] {
+  const out: {
+    code: string;
+    date: string;
+    label: string;
+    codeLabel: string;
+    raw: string;
+    at: number;
+  }[] = [];
+  for (const clause of EXPLICIT_PAIR_CLAUSES) {
+    for (const match of summaryText.matchAll(clause.pattern)) {
+      out.push({
+        code: match[clause.code].trim(),
+        date: match[clause.date].trim(),
+        label: match[clause.label].replace(/\s+/g, ' ').trim(),
+        codeLabel: 'Lot',
+        raw: match[0],
+        at: match.index,
+      });
+    }
+  }
+  for (const match of summaryText.matchAll(CORRESPONDING_LISTS)) {
+    const split = (list: string) =>
+      list
+        .split(/\s*(?:,|&|\band\b)\s*/i)
+        .map((part) => part.trim())
+        .filter((part) => part !== '');
+    const codes = split(match[2]);
+    const dates = split(match[4]);
+    if (codes.length < 2 || codes.length !== dates.length) continue;
+    if (!codes.every((code) => /\d/.test(code))) continue;
+    codes.forEach((code, index) =>
+      out.push({
+        code,
+        date: dates[index],
+        label: match[3].replace(/\s+/g, ' ').trim(),
+        // The source's own heading ("Batch Numbers"), so a batch stays a batch.
+        codeLabel: match[1].replace(/\s+/g, ' ').trim(),
+        raw: match[0],
+        at: match.index,
+      }),
+    );
+  }
+  // Source order, so a row's pairs read as the notice prints them.
+  // Stable sort, so a list's own pairs keep their order at one position.
+  return out.sort((a, b) => a.at - b.at).map(({ at: _at, ...pair }) => pair);
+}
+
 function dateConceptForLabel(label: string): ConsumerConcept {
   if (/best/i.test(label)) return 'best_by';
   if (/use/i.test(label)) return 'use_by';
@@ -370,7 +526,7 @@ function dateConceptForLabel(label: string): ConsumerConcept {
 
 /** A segment that opens its own identifier label, ending the previous list. */
 const SEGMENT_STARTS_A_LABEL =
-  /^["“'’]?(?:(?:and|or|the)\s+)*(?:lot|batch|upc|u\.p\.c|bar[\s-]?code|item|case|sku|product|package|packaging|production|best|use|sell|freeze|expir)\b/i;
+  /^["“'’]?(?:(?:and|or|the|corresponding)\s+)*(?:lot|batch|upc|u\.p\.c|bar[\s-]?code|item|case|sku|product|package|packaging|production|best|use|sell|freeze|expir)\b/i;
 
 /**
  * Extend a matched value across the semicolons that continue its list.
@@ -460,6 +616,41 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
   // Code↔date lists come first, so a paired code is never also emitted as a
   // bare, unexplained value.
   const pairedCodes = new Set<string>();
+
+  // Explicit pair clauses (Correctness B): each code keeps the date its own
+  // clause binds to it, under that clause's own date label.
+  for (const pair of extractExplicitPairs(summaryText)) {
+    const dateConcept = dateConceptForLabel(pair.label);
+    // Keyed by code AND date: one lot the source pairs with two dates is two
+    // relationships, and both survive.
+    const lotKey = `lot|${pair.code.toLowerCase()}|${pair.date.toLowerCase()}`;
+    if (!seen.has(lotKey)) {
+      seen.add(lotKey);
+      seen.add(`lot|${pair.code.toLowerCase()}`);
+      facts.push({
+        concept: 'lot',
+        sourceLabel: pair.codeLabel,
+        value: pair.code,
+        raw: pair.raw,
+        evidence: 'prose',
+        pairedDate: pair.date,
+      });
+    }
+    pairedCodes.add(pair.code.toLowerCase());
+    const dateKey = `${dateConcept}|${pair.date.toLowerCase()}`;
+    if (!seen.has(dateKey)) {
+      seen.add(dateKey);
+      facts.push({
+        concept: dateConcept,
+        sourceLabel: pair.label,
+        value: pair.date,
+        raw: pair.raw,
+        evidence: 'prose',
+        pairedCode: pair.code,
+      });
+    }
+  }
+
   for (const fact of extractPairedCodeLists(summaryText)) {
     const key = `${fact.concept}|${fact.value.toLowerCase()}`;
     if (seen.has(key)) continue;
@@ -480,6 +671,11 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
       const sourceLabel = match[1].replace(/\s+/g, ' ').trim();
       const rawValue = cleanValue(continueAcrossSemicolons(summaryText, match));
       if (rawValue === '') continue;
+      // A label the sentence only REFERS to ("questions about these lot codes
+      // can be communicated to … M-F from 8:00am-5:00pm") states no value:
+      // what follows is a passive verb phrase, never a code (Correctness D,
+      // Perrigo 2026-10-07).
+      if (REFERENCE_VERB_PHRASE.test(rawValue)) continue;
 
       // A list of values under one label becomes one fact per value. Date
       // lists split too — "SEP 01 2026", …, and "SEP 07 2026" is five dates,
@@ -541,9 +737,14 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
         // with — "best by date on 05/2026" states May 2026 — exactly as a
         // leading "of" is. Before a CODE the same word means placement, which
         // is why only dates strip it.
+        // A list under "lot codes" can repeat the bare word before ONE code
+        // ("…lot codes Lot HGLC-102125") — the Hampton Grocer's notice. Only a
+        // single digit-bearing token loses it, so prose is never trimmed.
         const value = isDateList
           ? withoutTrailingDateWord(cleaned.replace(/^on\s+/i, ''))
-          : cleaned;
+          : concept === 'lot'
+            ? cleaned.replace(/^Lot\s+(?=[A-Z0-9-]*\d[A-Z0-9-]*$)/i, '')
+            : cleaned;
         if (!isPlausibleValue(concept, value)) continue;
         // A code already published with its calendar date is fully described
         // by that pair; re-emitting the bare code loses the explanation.

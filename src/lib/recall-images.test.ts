@@ -423,3 +423,89 @@ test('the allocation is deterministic: identical inputs allocate identically', (
   );
   assert.equal(first.hero?.url, second.hero?.url);
 });
+
+// ── Correctness A (2026-10-07): only a single stated size is size-matchable ──
+
+test('a multi-size row never wins a size-based match, but still vetoes a foreign size', () => {
+  // Two sibling rows share a name (so the name-only pass cannot tell them
+  // apart). Row r0 states TWO sizes: the presentation passes `size: null`
+  // (not one matchable size) and every stated size as `statedSizes`.
+  const photos = [photo({ url: URL_A, alt: 'Crunch Bites, Front Label, 10 oz.' })];
+  const multi = allocateRecallImages({
+    heroImageUrl: null,
+    photos,
+    labelVisuals: [],
+    rows: [
+      row({ rowId: 'r0', name: 'Crunch Bites', size: null, statedSizes: '10 oz and 48 oz' }),
+      row({ rowId: 'r1', name: 'Crunch Bites', size: '12 oz' }),
+    ],
+  });
+  assert.equal(multi.rowImages.get('r0'), undefined, 'a two-size row claimed a 10 oz photo');
+  assert.equal(multi.rowImages.get('r1'), undefined);
+  // A single-size sibling still matches by name + exact size.
+  const single = allocateRecallImages({
+    heroImageUrl: null,
+    photos,
+    labelVisuals: [],
+    rows: [
+      row({ rowId: 'r0', name: 'Crunch Bites', size: '10 oz' }),
+      row({ rowId: 'r1', name: 'Crunch Bites', size: '12 oz' }),
+    ],
+  });
+  assert.equal(single.rowImages.get('r0')?.evidence, 'caption_name_size');
+  // The veto keeps every stated size: a source-attached photo whose caption
+  // names a size the multi-size row does not state is ruled out…
+  const foreign = allocateRecallImages({
+    heroImageUrl: null,
+    photos: [photo({ url: URL_A, alt: 'Crunch Bites, Front Label, 64 oz.' })],
+    labelVisuals: [],
+    rows: [
+      row({
+        rowId: 'r0',
+        name: 'Crunch Bites',
+        size: null,
+        statedSizes: '10 oz and 48 oz',
+        sourcePhotoUrl: URL_A,
+      }),
+      row({ rowId: 'r1', name: 'Other Snack' }),
+    ],
+  });
+  assert.equal(foreign.rowImages.get('r0'), undefined, 'a 64 oz caption backed a 10/48 oz row');
+  // …while one naming a size it does state survives the veto.
+  const own = allocateRecallImages({
+    heroImageUrl: null,
+    photos: [photo({ url: URL_A, alt: 'Crunch Bites, Front Label, 48 oz.' })],
+    labelVisuals: [],
+    rows: [
+      row({
+        rowId: 'r0',
+        name: 'Crunch Bites',
+        size: null,
+        statedSizes: '10 oz and 48 oz',
+        sourcePhotoUrl: URL_A,
+      }),
+      row({ rowId: 'r1', name: 'Other Snack' }),
+    ],
+  });
+  assert.equal(own.rowImages.get('r0')?.evidence, 'source_row');
+});
+
+test('the name-only pass cannot hand a multi-size row a photo of a size it does not state', () => {
+  // A uniquely named multi-size row: the caption-identity pass may match it
+  // by name, but a caption stating a foreign size is still vetoed.
+  const allocation = allocateRecallImages({
+    heroImageUrl: null,
+    photos: [photo({ url: URL_A, alt: 'Crunch Bites Original, 64 oz.' })],
+    labelVisuals: [],
+    rows: [
+      row({
+        rowId: 'r0',
+        name: 'Crunch Bites Original',
+        size: null,
+        statedSizes: '10 oz, 48 oz, and 12 oz',
+      }),
+      row({ rowId: 'r1', name: 'Something Else Entirely' }),
+    ],
+  });
+  assert.equal(allocation.rowImages.get('r0'), undefined);
+});
