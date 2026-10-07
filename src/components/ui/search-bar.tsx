@@ -31,6 +31,7 @@ import {
   textStyle,
   typography,
 } from '@/constants/design-tokens';
+import { feedInputType } from '@/constants/feed-design';
 
 /** The clear control is one caption line tall; hitSlop makes it 44pt. */
 const CLEAR_HIT_SLOP = hitSlopToMinimum(typography.caption.lineHeight);
@@ -44,6 +45,7 @@ export function SearchBar({
   placeholder,
   accessibilityLabel,
   accessibilityHint,
+  appearance = 'card',
   ...input
 }: {
   value: string;
@@ -51,11 +53,21 @@ export function SearchBar({
   placeholder: string;
   accessibilityLabel: string;
   accessibilityHint?: string;
+  /**
+   * `card` (default): the elevated bar every other surface uses. `outline`:
+   * the Feed's approved header field (2026-10-06) — a 1pt default border, no
+   * lift, 16/22 type. Behaviour is identical.
+   */
+  appearance?: 'card' | 'outline';
 } & Pick<TextInputProps, 'autoCapitalize' | 'autoCorrect' | 'returnKeyType' | 'autoFocus'>) {
   const field = useRef<TextInput>(null);
 
   return (
-    <Surface radius={12} elevation="card" style={styles.bar}>
+    <Surface
+      radius={12}
+      elevation={appearance === 'card' ? 'card' : undefined}
+      border={appearance === 'outline' ? 'border/default' : undefined}
+      style={styles.bar}>
       <Icon name="search" size={20} color="icon/secondary" />
       <TextInput
         ref={field}
@@ -65,7 +77,7 @@ export function SearchBar({
         placeholderTextColor={color['text/secondary']}
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
-        style={[textStyle('caption'), styles.field]}
+        style={[appearance === 'outline' ? feedInputType : textStyle('caption'), styles.field]}
         {...input}
       />
       {value !== '' ? (

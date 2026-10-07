@@ -167,7 +167,7 @@ See [recall-feed-usability.md](recall-feed-usability.md), "A. Row-owned lot and 
 - **Key fields (official YAML descriptions) [VERIFIED]:**
   - `recall_number` — FDA tracking number for the (classified) recalled product.
   - `event_id` — FDA number for the recall event (groups products).
-  - `status` — `Ongoing` ("On-Going" in the YAML enum; live data says "Ongoing") / `Completed` (firm retrieved what it could) / `Terminated` (FDA closed the recall) / `Pending` (defined but unobserved). Live distribution: Terminated 27,817 / Ongoing 1,058 / Completed 435.
+  - `status` — `Ongoing` ("On-Going" in the YAML enum; live data says "Ongoing") / `Completed` (firm retrieved what it could) / `Terminated` (FDA closed the recall) / `Pending` (defined but unobserved). Live distribution: Terminated 27,817 / Ongoing 1,058 / Completed 435. _As used since 2026-10-06: a case's accepted, linked records with `status` exactly `Ongoing` (trimmed; `On-Going` accepted, never observed) confirm the recall is still open for the Affects me count only (`recall_cases.fda_ongoing_as_of`); `Completed`, `Terminated`, `Pending` or anything else confirm nothing. Read only from a complete bulk export (record count equals the manifest total). Never lifecycle, never alerting. Measured 2026-10-06 (export 2026-10-06): Terminated 27,958 / Ongoing 1,066 / Completed 447, 29,471 records._
   - `classification` — Class I/II/III (see definitions §2 note below).
   - `recall_initiation_date` — "Date that the firm first began notifying the public or their consignees of the recall."
   - `center_classification_date` — date FDA classified (per iRES definitions; the YAML description is empty).

@@ -714,44 +714,50 @@ the nearest step, never copied.
 
 The Feed is a vertically scrolling recall feed. Its hierarchy is:
 
-1. top utility/header area
+1. the screen's own `Feed` title
 2. search — search lives **inside** the Feed and is never a destination
-3. feed-mode and filter controls (All / Affects me, Location, Category, Risk)
-4. section heading
+3. the feed-mode control (All recalls / Affects you)
+4. section heading, with the one Filters control beside the first heading
 5. recall cards
 6. persistent bottom navigation
 
-The category/filter row may overflow horizontally when needed, but it must not
-cause the page itself to overflow.
-
-Feed chips are browse/navigation controls, not a pile of independent
-multi-select toggles. Keep unrelated filter dimensions visually distinct. In
-the shipped product `All` and `Affects me` are mutually exclusive **feed
-modes** and the Location / Risk / Category chips are filters that apply to the
-`All` feed only; the visual row may present them together, the behavior stays.
+`All recalls` and `Affects you` (the approved names, 2026-10-06: the tabs,
+the personalized section's heading and the Feed's own instructions; internal
+ids are unchanged) are mutually exclusive **feed modes**. Location, Risk
+level and Category are filters, reached through ONE Filters control that
+opens one sheet on both feeds (founder-approved Feed + Filters design,
+2026-10-06); each feed keeps its own selection, and in Affects me the filters
+only narrow the already-eligible, already-ranked list.
 
 The Feed's section headings are decided by the presentation contract
-(`Recent activity`, `Older active notices`, `Affects me`), not by the
+(`Recent activity`, `Affects you`, `Older notices`), not by the
 composition.
 
-**As implemented (P2B1, `src/app/(tabs)/index.tsx`).** The header area is the
-navigator's own `Feed` title bar on the page colour with no shadow (Figma's
-frame has no title and a notification bell; the bell has no product behaviour
-and is not rendered — conflict 11). Then the search bar, then one horizontally
-scrolling chip row: the `All` / `Affects me` pair first, a hairline, and —
-while `All` is active — `Location`, `Risk`, `Category` (each with a chevron,
-because each opens its picker sheet) and `Clear all` once a filter is applied.
-Figma's `Urgency` chip is the shipped `Risk` filter under its shipped name;
-Figma's leading sliders glyph has no behaviour and is not rendered. In
-`Affects me` the row holds the pair alone and the `Based on your
-personalization · Edit` line follows. Section headings render in `heading-3`
-with the contract's words; the older section keeps its count, its
-explanation, and its in-place reveal. Cards sit 16px apart at the content
-width. Every whole-screen state (not configured, loading, load failure, no
-results, nothing personal, nothing loaded) is a `heading-3` title over a
-`body-small` explanation, centred; loading is announced to assistive
-technology. The stale-feed notice is the soft-blue Information callout, a
-polite live region so a failed refresh is announced (P2B6C).
+**As implemented (Feed + Filters design, 2026-10-06; `src/app/(tabs)/index.tsx`,
+`src/components/feed/`).** Built from the verified source kit in
+`docs/lotly-feed-filters-source-kit/` (its `spec/` is the authority for every
+number). The navigator's bar is hidden for Feed alone; the screen draws a
+left-aligned 32/38 bold `Feed`, a 44pt outlined search field (1pt
+`border/default`, radius 12, 16pt type, the unchanged placeholder and
+matching), and the two feeds as one connected control (two equal 44pt
+halves in a 12pt-radius outline, the chosen one `background/brand` with
+white text; stacked full-width from the accessibility text sizes). These sit
+in the list's header, so they scroll with the recalls — at the largest text
+sizes a fixed header would fill a small screen. In `Affects you` the `Based on
+your personalization · Edit` line follows. The first section's heading row
+(16/22 bold, the contract's words) carries the native Filters button —
+outlined, at least 88 × 44pt, `Filters` or `Filters · 2` (active filter
+GROUPS, never a result count); with no section on screen it keeps its own
+row. From the accessibility sizes the heading and Filters stack and scroll
+with the list rather than sticking (founder review, 2026-10-06). Cards sit
+14pt apart inside 14pt gutters. Every whole-screen state is unchanged
+(`heading-3` title over a `body-small` explanation, centred) and keeps the
+`Feed` title above it.
+
+The values the kit introduces beyond the global scale (32/38, 28/34, 20/26,
+16/22 and 14/20 and 12/16 bold type; radius 5, 6, 14 and 20) are scoped to
+the Feed's header, cards and sheet in `src/constants/feed-design.ts`; the
+global scale above is unchanged. See "Recall Card" and "Filters sheet" below.
 
 ### Saved
 
@@ -770,8 +776,8 @@ stays on the device.
 **As implemented (P2B4, `src/app/(tabs)/saved.tsx`).** The navigator's own
 `Saved` title bar on the warm page with no shadow, styled from the same
 `screenHeader` as the Feed's, and no second in-page heading. Below it the
-list: the shared `RecallCard` at the content width, 16px apart, inside 16pt
-page margins — the Feed's rhythm exactly, with the same pull-to-refresh over
+list: the shared `RecallCard` at the content width, 14pt apart, inside 14pt
+gutters — the Feed's rhythm exactly (since 2026-10-06), with the same pull-to-refresh over
 the one shared feed session. Every whole-screen state (saving unavailable,
 backend not configured, loading, empty, load failure) is the shared
 `StateMessage`; the empty state adds the `bookmark` glyph the tab and the
@@ -2137,11 +2143,86 @@ rule rather than a visual one:
 [docs/recall-feed-usability.md](docs/recall-feed-usability.md), "The card tag
 (P2B7D)". Implemented in `src/components/ui/category-tag.tsx`.
 
+### Feed card, labels and Filters sheet (2026-10-06)
+
+The founder-approved Feed + Filters design (source kit:
+`docs/lotly-feed-filters-source-kit/`; scoped tokens:
+`src/constants/feed-design.ts`). It governs the LIVE card Feed and Saved draw
+(`components/feed/feed-card-surface.tsx`). The onboarding's Welcome example
+and Ready deck keep `RecallCardSurface` exactly as described under "Recall
+Card" below — those screens are finalized — and both surfaces read the same
+presentation model.
+
+**Card.** White, 1pt `#D1D7D9` border, radius 14, padding 12, no lift.
+Metadata row: the risk label (or PUBLIC HEALTH ALERT), the activity date
+(14/20, secondary) and AFFECTS YOU at the trailing edge when the
+personalization verdict is genuinely positive; the row wraps, a label moves
+to the next line whole before it is squeezed. 12pt below, the photo (112pt
+box, radius 6, contained, through the guarded `MediaTile` — no photo, no
+tile) beside the text column: product name 20/26 bold (the existing
+three-line bound; the whole name when stacked), company 16/22 secondary,
+category label 8pt below, reason 16/22 secondary 8pt below that. The photo
+stacks above the text from 1.5× text scale, or when the column beside it
+would be under 180pt. A full-width 1pt `#E1E5E6` divider (12pt above and
+below), then the location (18pt pin, 14/20) and the save control (24pt
+bookmark, 44pt target).
+
+**Labels** share one shape: radius 5, at least 28pt, 8/6 padding, Public
+Sans 12/16 bold (the category's 14/20), a 1pt border. Risk uses the
+documented palette EXCEPT Critical, which is white on `#DC001D` (5.17:1) on
+the card and in the sheet ONLY — the global `riskPalette`, Detail's label and
+the illness notices are unchanged pending their own approval
+(`feedRiskPalette`, pinned in design-foundation.test.ts). AFFECTS YOU is the
+existing lime with a 16pt flag. PUBLIC HEALTH ALERT is the existing neutral
+blue.
+
+**Categories.** All nine launch categories, each with its tint, ink, border
+and pinned glyph (lucide-static 0.468.0); every pairing is at least 4.5:1:
+
+| Category            | Glyph       | Tint      | Ink       | Border    | Source  |
+| ------------------- | ----------- | --------- | --------- | --------- | ------- |
+| Fruits & Vegetables | `leaf`      | `#EFF7EC` | `#24582D` | `#A7CFA0` | kit     |
+| Meat & Poultry      | `drumstick` | `#FFF0F1` | `#8B2532` | `#DAA0A9` | kit     |
+| Seafood             | `fish`      | `#EBF5FF` | `#174F7A` | `#98BEE0` | kit     |
+| Dairy & Eggs        | `milk`      | `#F2EDFF` | `#482B7B` | `#BDA6E3` | kit     |
+| Bakery              | `sandwich`  | `#FFF5DF` | `#805000` | `#DDBA6C` | kit     |
+| Snacks & Sweets     | `cookie`    | `#FFF0F5` | `#902944` | `#DEA4B5` | kit     |
+| Beverages           | `cup-soda`  | `#E9F8F7` | `#005E62` | `#8ACCCC` | kit     |
+| Pantry & Staples    | `cylinder`  | `#F7F0E6` | `#6C471C` | `#CFB18A` | kit     |
+| Baby Food & Formula | `baby`      | `#FFF1E8` | `#8A3A14` | `#E6B092` | founder |
+
+The kit specified eight; the app offers nine, and the founder kept Baby
+Food & Formula (2026-10-06) and approved its soft peach (7.05:1) and the
+pinned `baby` glyph after the native review. Hidden ids (Prepared Foods,
+Supplements, Other) have no style.
+
+**Filters sheet** (`components/feed/filters-sheet.tsx`). One sheet on both
+feeds: the page colour, radius-20 top corners, a black 32% scrim, a 40 × 4
+handle, `Filters` (28/34) with a 44pt Close. Sections, each a 24pt glyph and
+a 20/26 heading, separated by 1pt rules: **Location** (a row summarising the
+choice — `All locations`, the state names, or `A, B +N` — with `Includes
+nationwide recalls` when a state is chosen, opening the 52-jurisdiction
+list as a page inside the sheet, with the Profile state chooser's search —
+`Search states`, the same matcher — that narrows the list but never the
+choice); **Risk level** (`All risks`
+and all seven tiers, flowing at their natural widths, 44pt); **Category**
+(`All categories` full width, then the nine in two columns, 48pt). Unchosen
+options are white/navy/default border; a chosen risk takes its own colours
+and a tick; a chosen category keeps its colours with a 2pt ink border and a
+tick — selection is never colour alone. The footer holds `Clear all` and
+`Apply filters`. The sheet edits a DRAFT: Apply commits, Close / backdrop /
+back discard, Clear all empties the draft only. From 1.5× text scale the
+risks, categories and footer take one column, and the title scrolls with the
+options. Nothing in the sheet reads or writes preferences.
+
 ### Recall Card
 
 Recall Card is the primary feed object. It is a white card at the content
 width with `radius/16`, a 1px `border/subtle` border, `elevation/card`, strong
-product-title hierarchy, and a trailing save/bookmark action.
+product-title hierarchy, and a trailing save/bookmark action. (Since
+2026-10-06 this section describes the onboarding example's and Ready deck's
+`RecallCardSurface`; the live Feed and Saved card is "Feed card, labels and
+Filters sheet" above.)
 
 The component has two independent state dimensions:
 
@@ -2616,6 +2697,17 @@ Feed still has no bell control. No emoji, no second family, no food
 symbol drawn by hand. The "Branding status" rule against inventing food
 icons is unchanged: nothing here is invented, and the founder directed the
 set.
+
+**The Feed + Filters glyphs (2026-10-06).** The approved Feed design's
+source kit supplies its own pinned family: `lucide-static` 0.468.0 (ISC),
+sources and license vendored in `assets/icon-sources/lucide-static/`, each
+scale rendered directly from its SVG (never enlarged from 1x). They enter the
+set as `filters` (`sliders-horizontal` — the Filters control gives it
+behaviour, so it is no longer a dead Figma glyph), `close` (`x`), `tick`
+(`check`), `categories` (`grid-2x2`) and the nine `category-*` glyphs listed
+under "Feed card, labels and Filters sheet". The kit draws them at stroke 2,
+a touch lighter than the P2B1 set's 2.4; the existing `map-pin`, `flag`,
+`bookmark`, `search`, `warning` and `chevron-*` glyphs are reused unchanged.
 
 ## Product contracts the design must carry
 
@@ -3171,7 +3263,7 @@ Figma wins on composition; open items are the founder's.
 11. **Feed header bell.** No product behavior is defined for it (notification
     settings live under Profile). Not rendered (P2B1) until one is.
 12. **Feed heading.** Figma `Recent recalls`; product `Recent activity` /
-    `Older active notices` / `Affects me` from the presentation contract. The
+    `Older notices` / `Affects me` from the presentation contract. The
     contract's words render in the design's `heading-3` (P2B1).
 13. **Search placeholder.** Figma `Search product, brands, or recalls.`;
     shipped `Search product, company, brand, or code` (the field genuinely

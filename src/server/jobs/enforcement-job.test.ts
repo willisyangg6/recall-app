@@ -34,6 +34,7 @@ function stats(overrides: Partial<ReconcileStats> = {}): ReconcileStats {
     classSets: {},
     tiers: {},
     classificationChanges: [],
+    openEvidence: null,
     ...overrides,
   };
 }
@@ -139,4 +140,38 @@ test('an implausibly small manifest is a source failure, not a fresh start', asy
   );
   assert.equal(report.outcome, 'failed');
   assert.match(report.error!, /implausibly small/);
+});
+
+test('the open-evidence sync rides the reconciliation: applied on a real run, planned on a dry run', async () => {
+  const seen: {
+    apply: boolean;
+    evidenceApply: boolean | undefined;
+    previousTotal: number | null | undefined;
+  }[] = [];
+  const reconcile: EnforcementJobOptions['reconcile'] = async (_client, _store, opts) => {
+    seen.push({
+      apply: opts.apply,
+      evidenceApply: opts.openEvidence?.apply,
+      previousTotal: opts.openEvidence?.previousTotal,
+    });
+    return stats();
+  };
+  await runEnforcementJob(context(new MemoryStore()), options({ reconcile }));
+  await runEnforcementJob(context(new MemoryStore()), options({ reconcile, dryRun: true }));
+  assert.deepEqual(seen, [
+    { apply: true, evidenceApply: true, previousTotal: null },
+    { apply: false, evidenceApply: false, previousTotal: null },
+  ]);
+});
+
+test('an open-evidence failure fails the run and leaves the export unrecorded, so the next run retries it', async () => {
+  const store = new MemoryStore();
+  const report = await runEnforcementJob(
+    context(store),
+    options({ reconcileStats: stats({ openEvidence: { error: 'simulated write failure' } }) }),
+  );
+  assert.equal(report.outcome, 'failed');
+  assert.match(report.error ?? '', /open evidence: simulated write failure/);
+  assert.equal(report.metrics?.completedExportDate, undefined);
+  assert.equal(report.metrics?.checkedExportDate, '2026-08-25');
 });

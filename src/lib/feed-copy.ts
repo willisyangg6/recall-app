@@ -69,9 +69,20 @@ export const FEED_EMPTY_FILTERS: FeedStateCopy = {
   body: 'No current recalls match these filters. Clear all to see the complete feed.',
 };
 
+/**
+ * Affects you with its own filters matching nothing (2026-10-06). Clearing
+ * them restores this feed's MATCHING recalls, never the complete national
+ * feed, so it does not borrow All recalls' sentence; its action clears this
+ * feed's filters in place.
+ */
+export const FEED_EMPTY_FILTERS_AFFECTS = {
+  title: 'No recalls match these filters.',
+  action: 'Clear filters',
+} as const;
+
 export const FEED_EMPTY_PERSONALIZED: FeedStateCopy = {
   title: 'No current recalls match your preferences',
-  body: 'Nothing current matches your state, allergens, or stores. Switch to All to see every current recall.',
+  body: 'Nothing current matches your state, allergens, or stores. Switch to All recalls to see every current recall.',
 };
 
 export const FEED_EMPTY_CORPUS: FeedStateCopy = {
@@ -88,9 +99,26 @@ export const FEED_EMPTY_CORPUS: FeedStateCopy = {
  * serves the different, honest case of having NO data to show at all.
  */
 
-/** Why the Older active notices section is collapsed by default. */
-export const OLDER_NOTICES_EXPLANATION =
-  'Still listed as active by the issuing agency, with no announcement or update in the last 60 days.';
+/**
+ * The second, collapsed-by-default section in both feeds (2026-10-06). It
+ * was "Older active notices", explained as "Still listed as active by the
+ * issuing agency" — a claim Lotly cannot make for FDA, whose closures it does
+ * not receive (318 linked FDA recalls there are terminated by FDA). The title
+ * and explanations now claim only what the dates and the agencies' evidence
+ * prove: never that a notice is active, never that it is closed.
+ */
+export const OLDER_NOTICES_TITLE = 'Older notices';
+
+/** All recalls: the section is date-only — no update in the window. */
+export const OLDER_NOTICES_EXPLANATION_ALL =
+  'No announcement or update from the agency in the last 60 days.';
+
+/**
+ * Affects you: the matches outside the window that no agency currently
+ * confirms are still open — confirmed-open older matches are in the main list.
+ */
+export const OLDER_NOTICES_EXPLANATION_AFFECTS =
+  'These match your choices but have had no announcement or update in the last 60 days, and the agency hasn’t confirmed they’re still open.';
 
 /**
  * The invitation to personalize. The screen is Feed, never Home (DESIGN.md,
@@ -98,6 +126,6 @@ export const OLDER_NOTICES_EXPLANATION =
  */
 export const PERSONALIZE_CTA = {
   title: 'Set up personalization',
-  body: 'Choose your states, allergens, and stores to see matching recalls in Affects me.',
+  body: 'Choose your states, allergens, and stores to see matching recalls in Affects you.',
   compactBody: 'Choose your states to see which recalls affect your area.',
 } as const;

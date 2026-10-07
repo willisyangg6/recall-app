@@ -43,6 +43,7 @@ export function makeFeedItem(seed: number, overrides: Partial<FeedItem> = {}): F
         : { value: 'not_yet_classified' as const, sourceText: null };
   return {
     id: `case-${String(seed).padStart(5, '0')}`,
+    fdaOngoingAsOf: null,
     sourceAgency: seed % 2 === 0 ? 'FDA' : 'FSIS',
     noticeType: seed % 11 === 0 ? 'public_health_alert' : 'recall',
     state: 'active',

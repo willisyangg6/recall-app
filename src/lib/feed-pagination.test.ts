@@ -30,6 +30,7 @@ function id(n: number): string {
 function item(n: number, overrides: Partial<FeedItem> = {}): FeedItem {
   return {
     id: id(n),
+    fdaOngoingAsOf: null,
     sourceAgency: 'FSIS',
     noticeType: 'recall',
     state: 'active',

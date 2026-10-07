@@ -167,7 +167,7 @@ test('Critical has exactly one treatment: the palette is read only through named
   // index the risk palette directly; the Risk Label remains the only
   // component that does.
   const readers = clientSources()
-    .filter(({ source }) => /riskPalette[[.]/.test(source))
+    .filter(({ source }) => /\briskPalette[[.]/.test(source))
     .map(({ path }) => path)
     .sort();
   assert.deepEqual(readers, [
@@ -175,6 +175,8 @@ test('Critical has exactly one treatment: the palette is read only through named
     'components/ui/risk-label.tsx',
     'constants/design-tokens.test.ts',
     'constants/design-tokens.ts',
+    // Proves the global palette is untouched by the Feed's override.
+    'constants/feed-design.test.ts',
   ]);
   // Components and screens reach severity only through the named maps.
   const components = clientSources().filter(
@@ -182,8 +184,31 @@ test('Critical has exactly one treatment: the palette is read only through named
   );
   for (const { path, source } of components) {
     if (path === 'components/ui/risk-label.tsx') continue;
-    assert.ok(!/riskPalette[[.]/.test(source), `${path} indexes the risk palette directly`);
+    assert.ok(!/\briskPalette[[.]/.test(source), `${path} indexes the risk palette directly`);
   }
+  // The ONE sanctioned second Critical treatment (founder-approved Feed +
+  // Filters design, 2026-10-06): white on red for the Feed card's label and
+  // the Filters sheet's selected Critical option. It is a NAMED map, defined
+  // once in constants/feed-design.ts as the documented palette with Critical
+  // overridden, and read by exactly those two components — so Detail, the
+  // illness notices and every RiskLabel keep the one global treatment until
+  // their own approval.
+  const feedReaders = clientSources()
+    .filter(({ path }) => !/\.test\.tsx?$/.test(path))
+    .filter(({ source }) => /\bfeedRiskPalette[[.]/.test(source))
+    .map(({ path }) => path)
+    .sort();
+  assert.deepEqual(feedReaders, [
+    'components/feed/feed-labels.tsx',
+    'components/feed/filters-sheet.tsx',
+  ]);
+  const FEED_DESIGN = read('constants/feed-design.ts');
+  assert.ok(FEED_DESIGN.includes('...riskPalette,'));
+  assert.ok(
+    FEED_DESIGN.includes(
+      "critical: { background: '#DC001D', foreground: '#FFFFFF', border: '#DC001D' },",
+    ),
+  );
 });
 
 test('the harm notices are one treatment map, read only by their own component', () => {

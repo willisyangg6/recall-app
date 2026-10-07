@@ -21,6 +21,7 @@ import type {
   TimelineEntry,
 } from '@/domain/recall-types';
 import { loadAllPages, type LoadAllPagesOptions } from './feed-pagination';
+import { readFdaOngoingAsOf } from './open-evidence';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -90,6 +91,16 @@ export interface FeedItem {
    * `undefined`, so `[]` can never reach a consumer surface.
    */
   productCategories?: FoodCategoryId[];
+  /**
+   * FDA open evidence (2026-10-06): the openFDA export date on which at least
+   * one of this case's accepted, linked enforcement products was `Ongoing`;
+   * null when there is none. A column, not a projection key — written only by
+   * the enforcement job, so a status change never touches the projection,
+   * timeline or ledger. REQUIRED so no surface can forget it: Affects-me
+   * membership reads it through `confirmedOpen` (lib/open-evidence.ts),
+   * which also applies the 21-day expiry. Never displayed.
+   */
+  fdaOngoingAsOf: string | null;
 }
 
 /** A hosted visual rendered from an official source document (FSIS labels). */
@@ -156,6 +167,8 @@ interface FeedRow {
    * normalized by the canonical reader and is never trusted as-is.
    */
   product_categories: unknown;
+  /** `recall_cases.fda_ongoing_as_of` — read through the strict date reader. */
+  fda_ongoing_as_of: unknown;
 }
 
 const FEED_SELECT = [
@@ -185,6 +198,8 @@ const FEED_SELECT = [
   // confidence, or a fixture. Egress measured over the complete active feed
   // with `npm run qa:egress`; see docs/recall-feed-usability.md.
   'product_categories:projection->productCategories',
+  // FDA open evidence: one date column, written only by the enforcement job.
+  'fda_ongoing_as_of',
 ].join(',');
 
 function toFeedItem(row: FeedRow): FeedItem {
@@ -219,6 +234,7 @@ function toFeedItem(row: FeedRow): FeedItem {
     officialUrl: row.official_url,
     timeline: row.timeline ?? [],
     productCategories,
+    fdaOngoingAsOf: readFdaOngoingAsOf(row.fda_ongoing_as_of),
   };
 }
 

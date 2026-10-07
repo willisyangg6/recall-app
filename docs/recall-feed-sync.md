@@ -115,6 +115,23 @@ tables. Hidden/inactive/merged cases produce **no manifest row at all** —
 no id, count, or hash leaks. Pinned by `src/server/consumer-manifest.test.ts`
 (repo-standard textual migration pins) and live-gated by `qa:egress`.
 
+**FDA open evidence (2026-10-06).** `20261006000000_fda_ongoing_evidence.sql`
+adds one column the feed serves, `recall_cases.fda_ongoing_as_of`, and
+recreates the view so the token is the C8 hash
+`|| case when fda_ongoing_as_of is null then '' else '|' || date end`. A null
+appends nothing, so applying the migration moves no token and re-downloads
+nothing anywhere; a written date moves that row's token and only that row's
+(verified on a local stack: tokens equal the C8 formula before any write, the
+one written row moves, and clearing it restores the original token byte for
+byte). The column is written only by the enforcement job's open-evidence sync,
+never with projection, timeline or `last_changed_at`, so a status change
+re-downloads the row without touching its dates, its position or the
+notification ledger. The cache schema moved to **v4** in the same change (v3
+is skipped: P2B7S development builds wrote v3 documents), because an old
+build can re-cache a row under its new token without asking for the column.
+While the evidence is current the job advances the date weekly, so about 80
+rows re-download per export (~110 KB per device).
+
 **Client protocol** (`src/lib/feed-sync.ts`, pure and injectable):
 
 1. Fetch the complete manifest (id-cursor paging, complete-or-throw — the

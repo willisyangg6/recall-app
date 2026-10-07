@@ -148,6 +148,9 @@ npm run jobs:fsis           # FSIS recalls/PHAs (ingest:fsis is an alias)
 npm run jobs:labels         # FSIS label visuals, recent window (incremental)
 npm run jobs:labels -- --full   # daily full sweep + failure retries
 npm run jobs:enforcement    # openFDA reconcile, gated on the weekly export date
+npm run open-evidence:sync  # FDA open evidence (recall_cases.fda_ongoing_as_of) — dry run by
+                            # default; the enforcement job runs the same sync after each
+                            # reconcile. Writes need -- --apply --confirm --expect <n>
 npm run jobs:push           # push delivery + Expo receipt processing
 npm run ops:health          # source/job health from the database, non-zero when unhealthy
 npm run ops:heartbeat       # dead-man heartbeat (P2B7S) — read-only, pings the external

@@ -143,6 +143,7 @@ function fdaFixture(slugFragment: string): CaseProjection {
 function feedItemOf(id: string, projection: CaseProjection): FeedItem {
   return {
     id,
+    fdaOngoingAsOf: null,
     sourceAgency: projection.sourceAgency,
     noticeType: projection.noticeType,
     state: projection.state,
@@ -289,6 +290,7 @@ const AUDITED_FIELDS: Record<keyof HomeCardModel, string> = {
   noticeLabel: 'notice-type badge (PUBLIC HEALTH ALERT)',
   affectsYou: 'the Affects You treatment',
   categoryLabel: 'category tag',
+  categoryId: 'the category tag’s colour and icon (2026-10-06 Feed design)',
   reasonLine: 'hazard summary',
   locationSummary: 'geography',
   heroImageUrl: 'imagery, and therefore the image / no-image card shape',

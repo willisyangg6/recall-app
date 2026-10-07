@@ -28,6 +28,12 @@ import {
 import type { RecallStore, SourceRecordRow } from '../store/types';
 import { retryTransientRead, type RetryHooks, type RetryPolicy } from '../transient-retry';
 import { enrichCaseWithMatches, type ClassificationChangePreviewEntry } from './enrich';
+import {
+  describeOpenEvidence,
+  openEvidenceMetrics,
+  runOpenEvidenceSync,
+  type OpenEvidenceStore,
+} from './open-evidence-sync';
 import { fetchEnforcementBulkUrl } from './fetch';
 import {
   announcementFactsFor,
@@ -187,6 +193,13 @@ export interface ReconcileOptions {
    * `EnrichOptions` and `IngestOptions`; it was only missing here.
    */
   now?: () => Date;
+  /**
+   * The open-evidence sync (`recall_cases.fda_ongoing_as_of`), run AFTER every
+   * enrichment write over the same complete corpus. Omitted → not run (the
+   * manual reconcile CLI; `npm run open-evidence:sync` is its own command).
+   * Its writes are gated by `openEvidence.apply`, never by `apply` alone.
+   */
+  openEvidence?: { store: OpenEvidenceStore; apply: boolean; previousTotal: number | null };
 }
 
 /** JSON-friendly stats — persisted as job-run metrics. */
@@ -213,6 +226,12 @@ export interface ReconcileStats {
   /** Every proposed classification assignment/change, for founder review
    * before an apply. Length always equals assignments + reclassifications. */
   classificationChanges: ClassificationChangeReviewEntry[];
+  /**
+   * The open-evidence sync's outcome, or null when it was not run. An error
+   * is captured here, never thrown: enrichment has already committed, and
+   * the job reports the run as failed so operations sees it.
+   */
+  openEvidence: Record<string, unknown> | null;
 }
 
 export async function reconcileFdaEnforcement(
@@ -495,6 +514,22 @@ export async function reconcileFdaEnforcement(
     console.log('\n  Ambiguous (left for a human, classification stays Not yet assigned):');
     for (const example of ambiguousExamples) console.log(`    · ${example}`);
   }
+  let openEvidence: Record<string, unknown> | null = null;
+  if (options.openEvidence) {
+    try {
+      const result = await runOpenEvidenceSync(options.openEvidence.store, options.corpus, {
+        apply: options.openEvidence.apply,
+        previousTotal: options.openEvidence.previousTotal,
+      });
+      console.log(`\n  ${describeOpenEvidence(result)}`);
+      openEvidence = openEvidenceMetrics(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`\n  open evidence FAILED: ${message}`);
+      openEvidence = { error: message };
+    }
+  }
+
   console.log(
     apply
       ? '\n  ✓ Applied. Re-run at any time — reconciliation is idempotent.\n'
@@ -522,5 +557,6 @@ export async function reconcileFdaEnforcement(
     classSets: Object.fromEntries(summary.classSets),
     tiers: Object.fromEntries(summary.tiers),
     classificationChanges: reviewEntries,
+    openEvidence,
   };
 }

@@ -29,6 +29,8 @@ import {
   type ActionableApplyRow,
   type AppliedStateCounts,
 } from '../src/server/applied-state-health';
+import { summarizeOpenEvidenceAge } from '../src/server/fda-enforcement/open-evidence';
+import { OPEN_EVIDENCE_MAX_AGE_DAYS } from '../src/lib/open-evidence';
 import {
   describeEnforcementExport,
   summarizeJobRuns,
@@ -476,6 +478,34 @@ async function main(): Promise<void> {
   for (const line of formatWatchdogSection(watchdogReport)) console.log(line);
   if (watchdogReport?.summary.unhealthy) unhealthy += 1;
   console.log('');
+
+  // FDA open evidence (2026-10-06): the AGE OF THE AGENCY EVIDENCE devices
+  // count, distinct from the enforcement job's run health above. A warning
+  // at 14 days, a week before devices stop counting it at 21.
+  const evidence = await client
+    .from('recall_cases')
+    .select('fda_ongoing_as_of')
+    .eq('state', 'active')
+    .is('merged_into', null)
+    .not('fda_ongoing_as_of', 'is', null)
+    .limit(5000);
+  if (evidence.error && /fda_ongoing_as_of/.test(evidence.error.message)) {
+    console.log('FDA open evidence: not installed (open-evidence migration pending).\n');
+  } else if (evidence.error) {
+    console.log(`FDA open evidence: read failed (${evidence.error.message}).\n`);
+  } else {
+    const report = summarizeOpenEvidenceAge(
+      (evidence.data ?? []).map((row) => row.fda_ongoing_as_of as string | null),
+      Date.now(),
+      OPEN_EVIDENCE_MAX_AGE_DAYS,
+    );
+    console.log('FDA open evidence (stored state; openFDA was not queried)');
+    console.log(`  status:              ${report.status}`);
+    console.log(`  cases with evidence: ${report.count} (newest ${report.newest ?? '—'})`);
+    console.log(`  older than 14 days:  ${report.olderThanWarn}`);
+    for (const note of report.notes) console.log(`    · ${note}`);
+    console.log('');
+  }
 
   // Deliverable notification flow (informational — C2 consumes these).
   const since = new Date(Date.now() - 7 * 86_400_000).toISOString();

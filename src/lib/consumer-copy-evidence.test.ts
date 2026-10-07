@@ -90,6 +90,7 @@ function detailOf(overrides: Partial<CaseProjection> = {}, extra: Partial<CaseDe
 function feedItemOf(source: CaseProjection): FeedItem {
   return {
     id: 'case-1',
+    fdaOngoingAsOf: null,
     sourceAgency: source.sourceAgency,
     noticeType: source.noticeType,
     state: source.state,

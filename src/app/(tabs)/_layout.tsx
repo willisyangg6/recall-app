@@ -115,6 +115,10 @@ export default function TabLayout() {
           tabBarAccessibilityLabel: 'Feed',
           tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
           ...screenHeader,
+          // The approved Feed header (2026-10-06) draws its own left-aligned
+          // 32pt title above the search field, so the navigator's centred
+          // bar is hidden for Feed alone; Saved and Profile keep theirs.
+          headerShown: false,
         }}
       />
       <Tabs.Screen

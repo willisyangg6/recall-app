@@ -86,8 +86,10 @@ const TIER_WORD: Record<ConsumerRiskTier, string> = {
 };
 
 /**
- * Consumer explanation per tier. The lowest level never implies safe — this is
- * still an active recall, and the copy says so.
+ * Consumer explanation per tier. The lowest level never implies safe — it is
+ * still a recall, and the copy says so. It does NOT say the recall is still
+ * active: Lotly receives no FDA closures (2026-10-06), so that claim would be
+ * unsupported for FDA. Same words as the Risk Levels document.
  */
 const TIER_NOTE: Record<ConsumerRiskTier, string | null> = {
   critical: 'Every affected product carries the agency’s most serious recall classification.',
@@ -95,8 +97,8 @@ const TIER_NOTE: Record<ConsumerRiskTier, string | null> = {
     'Affected products carry different official classifications, including the most serious one.',
   high: 'The agency placed this recall in its middle classification.',
   moderate:
-    'The affected products carry the agency’s two lower classifications. This is still an active recall.',
-  low: 'The affected products carry only the agency’s least serious classification. This is still an active recall.',
+    'The affected products carry the agency’s two lower classifications. A lower classification is still a recall.',
+  low: 'The affected products carry only the agency’s least serious classification. A lower classification is still a recall.',
   pending: 'The agency assigns a formal recall classification later in its process.',
   unknown: null,
 };

@@ -37,6 +37,7 @@ import {
   explainAffectsMePriority,
   type AffectsMeRankable,
 } from '../src/lib/affects-me-ranking';
+import { readFdaOngoingAsOf } from '../src/lib/open-evidence';
 import { buildDistribution } from '../src/lib/consumer-projection';
 import { productDisplayName } from '../src/lib/consumer-summary';
 import { consumerRiskTier } from '../src/domain/risk-tier';
@@ -52,6 +53,8 @@ interface Row {
   hazard_category: string;
   projection: CaseProjection;
   timeline: TimelineEntry[] | null;
+  /** FDA open evidence; absent before the 2026-10-06 migration. */
+  fda_ongoing_as_of?: string | null;
 }
 
 function loadDotEnv(): void {
@@ -72,6 +75,10 @@ async function fetchAllCases(): Promise<Row[]> {
   }
   const client = createSupabaseServerClient(url, secretKey);
   const rows: Row[] = [];
+  // FDA open evidence is read when the column exists; before the migration
+  // the sweep falls back to the old columns and every value reads null.
+  let columns =
+    'id, source_agency, state, hazard_category, projection, timeline, fda_ongoing_as_of';
   for (let from = 0; ; from += 500) {
     // Two constraints the earlier sweep was missing (C5.1):
     //   `merged_into is null` is the consumer read contract (the client's RLS
@@ -83,15 +90,20 @@ async function fetchAllCases(): Promise<Row[]> {
     //   the app itself.
     const { data, error } = await client
       .from('recall_cases')
-      .select('id, source_agency, state, hazard_category, projection, timeline')
+      .select(columns)
       .is('merged_into', null)
       .order('id', { ascending: true })
       .range(from, from + 499);
+    if (error && /fda_ongoing_as_of/.test(error.message) && columns.includes('fda_ongoing_as_of')) {
+      columns = 'id, source_agency, state, hazard_category, projection, timeline';
+      from -= 500;
+      continue;
+    }
     if (error) {
       console.error(`recall_cases query failed: ${error.message}`);
       process.exit(1);
     }
-    rows.push(...(data as Row[]));
+    rows.push(...(data as unknown as Row[]));
     if (!data || data.length < 500) break;
   }
   return rows;
@@ -329,6 +341,10 @@ async function main(): Promise<void> {
   }
   const candidates: Candidate[] = active.map((row) => ({
     id: row.id,
+    sourceAgency: row.projection.sourceAgency,
+    noticeType: row.projection.noticeType,
+    state: row.projection.state,
+    fdaOngoingAsOf: readFdaOngoingAsOf(row.fda_ongoing_as_of),
     classification: row.projection.classification,
     publishedAt: row.projection.publishedAt,
     timeline: row.timeline ?? [],

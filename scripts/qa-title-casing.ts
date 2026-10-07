@@ -298,6 +298,7 @@ function feedItemOf(row: CaseRow): FeedItem {
   };
   return {
     id: row.id,
+    fdaOngoingAsOf: null,
     sourceAgency: projection.sourceAgency,
     noticeType: projection.noticeType,
     state: projection.state,

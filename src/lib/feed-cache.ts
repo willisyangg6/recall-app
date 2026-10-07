@@ -46,8 +46,19 @@ import type { FeedItem } from './recall-feed';
  * is correct — what changed is which columns the CLIENT asks for. A cache
  * document is only interchangeable between builds that select the same fields,
  * which is exactly what this version number means.
+ *
+ * v4 (2026-10-06) — feed rows gained `fdaOngoingAsOf`, the FDA open-evidence
+ * date that lets Affects You count a confirmed-open recall older than the
+ * window. The same race as v2, for the same reason: an old build re-caches a
+ * row whose evidence just changed (its token moved) without asking for the
+ * column, and the new build would find that token current and keep a row
+ * with no evidence. Every earlier document is discarded whole.
+ *
+ * v3 is skipped on purpose: P2B7S development builds briefly wrote v3
+ * documents carrying an ingestion-freshness snapshot and no evidence, and
+ * claiming 3 now would accept them as current.
  */
-export const FEED_CACHE_SCHEMA_VERSION = 2;
+export const FEED_CACHE_SCHEMA_VERSION = 4;
 
 export interface FeedCacheDocument {
   schemaVersion: typeof FEED_CACHE_SCHEMA_VERSION;

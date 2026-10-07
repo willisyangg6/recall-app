@@ -110,51 +110,56 @@ test('Feed switches modes without any write path to preferences', () => {
   }
 });
 
-test('the filter bar offers Location, Risk and Category — and only those three', () => {
-  const home = read('(tabs)', 'index.tsx');
-  // C10B ships the Category chip. This pin previously asserted its ABSENCE,
-  // on the reasoning that a chip could only ship once the classifier passed
-  // its frozen accuracy gates. It did not pass them; the founder accepted the
-  // measured 87.5% for a narrower purpose instead, with Prepared foods —
-  // the weak category — hidden from the filter. The pin is therefore
-  // inverted rather than deleted, so the bar's contents stay one asserted
-  // fact. See docs/recall-food-categories.md.
-  assert.ok(home.includes("setOpenSheet('location')"));
-  assert.ok(home.includes("setOpenSheet('risk')"));
-  assert.ok(home.includes("setOpenSheet('category')"));
-  assert.deepEqual([...home.matchAll(/setOpenSheet\('(\w+)'\)/g)].map((m) => m[1]).sort(), [
-    'category',
-    'location',
-    'risk',
-  ]);
+test('the Filters sheet offers Location, Risk level and Category — and only those three', () => {
+  // C10B shipped the Category filter (the founder accepted the measured 87.5%
+  // for a narrower purpose, with Prepared foods hidden; see
+  // docs/recall-food-categories.md). Since the Feed + Filters design
+  // (2026-10-06) the three dimensions share ONE sheet rather than three chip
+  // sheets; the set of dimensions stays one asserted fact.
+  const sheet = read('..', 'components', 'feed', 'filters-sheet.tsx');
+  assert.deepEqual(
+    [...sheet.matchAll(/<SectionTitle icon="[a-z-]+" title="([^"]+)" \/>/g)].map((m) => m[1]),
+    ['Location', 'Risk level', 'Category'],
+  );
+  // And each dimension writes only its own field of the draft.
+  for (const field of ['stateCodes', 'riskTiers', 'categoryIds']) {
+    assert.ok(sheet.includes(`toggleDraftOption(draft, '${field}',`));
+  }
 });
 
-test('Home takes its category options from the launch allowlist, never a local list', () => {
+test('the Filters sheet takes its category options from the launch allowlist, never a local list', () => {
   const home = read('(tabs)', 'index.tsx');
-  assert.ok(home.includes("from '@/domain/food-category-launch'"));
-  assert.ok(home.includes('LAUNCH_CATEGORY_OPTIONS'));
+  const sheet = read('..', 'components', 'feed', 'filters-sheet.tsx');
+  const draft = read('..', 'lib', 'feed-filter-draft.ts');
+  assert.ok(sheet.includes("from '@/domain/food-category-launch'"));
+  assert.ok(sheet.includes('LAUNCH_CATEGORY_OPTIONS'));
   // Every selection is sanitized before it becomes filter state, so a hidden
   // id cannot enter through the sheet or through any future caller.
-  assert.ok(home.includes('sanitizeLaunchCategoryIds'));
-  // No hidden id and no category LABEL may appear as a STRING LITERAL on this
-  // screen: ids and labels belong to the frozen vocabulary, and a hardcoded
-  // one would silently survive a rewording or an allowlist change. Prose in a
-  // comment is fine and is deliberately not matched — the failure mode being
-  // guarded is code that hardcodes the taxonomy, not documentation of it.
-  for (const forbidden of [
-    'prepared_foods',
-    'supplements',
-    'Prepared Foods',
-    'Supplements',
-    'Fruits & Vegetables',
-    'Meat & Poultry',
-    'Baby Food & Formula',
-  ]) {
-    for (const quote of ["'", '"', '`']) {
-      assert.ok(
-        !home.includes(`${quote}${forbidden}${quote}`),
-        `index.tsx must not hardcode ${quote}${forbidden}${quote}`,
-      );
+  assert.ok(draft.includes('categoryIds: sanitizeLaunchCategoryIds(draft.categoryIds)'));
+  assert.ok(sheet.includes('onApply(committedFilters(draft))'));
+  // No hidden id and no category LABEL may appear as a STRING LITERAL on
+  // these screens: ids and labels belong to the frozen vocabulary, and a
+  // hardcoded one would silently survive a rewording or an allowlist change.
+  // Prose in a comment is fine and is deliberately not matched.
+  for (const [name, source] of [
+    ['index.tsx', home],
+    ['filters-sheet.tsx', sheet],
+  ] as const) {
+    for (const forbidden of [
+      'prepared_foods',
+      'supplements',
+      'Prepared Foods',
+      'Supplements',
+      'Fruits & Vegetables',
+      'Meat & Poultry',
+      'Baby Food & Formula',
+    ]) {
+      for (const quote of ["'", '"', '`']) {
+        assert.ok(
+          !source.includes(`${quote}${forbidden}${quote}`),
+          `${name} must not hardcode ${quote}${forbidden}${quote}`,
+        );
+      }
     }
   }
 });

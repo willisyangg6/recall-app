@@ -163,10 +163,11 @@ test('the client makes no freshness request and stores no freshness metadata', (
   const cache = readFileSync(join(SRC, 'lib', 'feed-cache.ts'), 'utf8');
   const cacheCode = cache.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   assert.ok(!cacheCode.includes('freshness'), 'the cache document still stores freshness');
-  // The document shape is v2's again, so the version stayed at 2 rather
-  // than advancing to a number whose shape would be identical — which
-  // would have cost every device a cold reload for nothing.
-  assert.match(cacheCode, /FEED_CACHE_SCHEMA_VERSION = 2;/);
+  // When freshness left, the document shape was v2's again, so the version
+  // stayed at 2 rather than costing every device a cold reload for nothing.
+  // The next real shape change (open evidence, 2026-10-06) went to 4, never
+  // 3: the dev-only freshness documents used 3 and must stay rejected.
+  assert.match(cacheCode, /FEED_CACHE_SCHEMA_VERSION = 4;/);
 });
 
 test('the consumer-facing freshness migration is gone, and nothing references it', () => {

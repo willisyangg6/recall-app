@@ -111,6 +111,7 @@ function feedItemOf(id: string, projection: CaseProjection): FeedItem {
   };
   return {
     id,
+    fdaOngoingAsOf: null,
     sourceAgency: projection.sourceAgency,
     noticeType: projection.noticeType,
     state: projection.state,
@@ -270,6 +271,7 @@ test('the card model has no query, no provenance, and no way to receive one', ()
     'activity',
     'affectsYou',
     'brand',
+    'categoryId',
     'categoryLabel',
     'heroImageUrl',
     'id',

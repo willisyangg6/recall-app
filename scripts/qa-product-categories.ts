@@ -469,6 +469,7 @@ async function main(): Promise<void> {
       const p = row.projection;
       return {
         id: row.id,
+        fdaOngoingAsOf: null,
         sourceAgency: p.sourceAgency,
         noticeType: p.noticeType,
         state: p.state,

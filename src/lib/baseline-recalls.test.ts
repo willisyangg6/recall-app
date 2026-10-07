@@ -14,6 +14,15 @@ import { RECENT_WINDOW_DAYS } from '@/lib/feed-relevance';
 import { buildDetailModel, buildHomeCardModel } from '@/lib/recall-presentation';
 import { evaluatePersonalRelevance } from '@/lib/relevance';
 import {
+  baselineIncludes,
+  baselineRecordingRefusal,
+  BASELINE_MAX_EVIDENCE_AGE_DAYS,
+  newestEvidenceDate,
+} from '@/lib/baseline-selection';
+import { makeFeedItem } from '@/lib/feed-fixtures';
+import { affectsYouMatches } from '@/lib/ready-preview';
+import type { FeedItem } from '@/lib/recall-feed';
+import {
   BASELINE_RECALLS,
   BASELINE_RECORDED_AT,
   baselineAgeDays,
@@ -39,7 +48,12 @@ test('the baseline is a recorded rule over the live feed: every record active, u
     assert.equal(item.state, 'active');
     const age =
       recordedAt.getTime() - Date.parse(materialActivityAt(item.publishedAt, item.timeline));
-    assert.ok(age >= 0 && age <= RECENT_WINDOW_DAYS * 86_400_000, `${item.id} outside the window`);
+    assert.ok(age >= 0, `${item.id} dated after the recording`);
+    // In the window at recording, or confirmed open then — the one shared rule.
+    assert.ok(
+      age <= RECENT_WINDOW_DAYS * 86_400_000 || baselineIncludes(item, recordedAt),
+      `${item.id} is neither in the window nor confirmed open at recording`,
+    );
     assert.ok(item.officialUrl.startsWith('http'), `${item.id} has no official URL`);
     assert.ok(item.title.length > 0);
   }
@@ -99,4 +113,93 @@ test('the baseline can never overwrite newer live data: it is read, never writte
   }
   const preview = readFileSync(join(__dirname, 'ready-preview.ts'), 'utf8');
   assert.ok(preview.includes("if (feed.status === 'ready') {\n    baselineActive = false;"));
+});
+
+// ── Open evidence in the baseline (2026-10-06) ──────────────────────────────
+
+function aged(
+  id: string,
+  recordedAtIso: string,
+  daysAgo: number,
+  overrides: Partial<FeedItem>,
+): FeedItem {
+  const when = new Date(Date.parse(recordedAtIso) - daysAgo * 86_400_000).toISOString();
+  return makeFeedItem(1, {
+    id,
+    noticeType: 'recall',
+    publishedAt: when,
+    lastPublicActivityAt: when,
+    timeline: [
+      {
+        occurredAt: when,
+        kind: 'published',
+        summary: 'x',
+        causedBySnapshotIds: [],
+        material: false,
+      },
+    ],
+    geography: { scope: 'nationwide', states: [], confidence: 'stated', sourceText: 'Nationwide' },
+    hazardCategory: 'microbial_contamination',
+    pathogenOrAllergen: 'Salmonella',
+    reasonText: 'Potential Salmonella contamination',
+    ...overrides,
+  });
+}
+
+test('every shipped baseline row carries an evidence value through the strict reader', () => {
+  for (const item of BASELINE_RECALLS) {
+    assert.ok(
+      item.fdaOngoingAsOf === null || /^\d{4}-\d{2}-\d{2}$/.test(item.fdaOngoingAsOf),
+      `${item.id} evidence ${String(item.fdaOngoingAsOf)}`,
+    );
+  }
+});
+
+test('the recorder carries exactly what the app would count at recording: window, FSIS active, current FDA evidence', () => {
+  const at = '2026-10-06T12:00:00.000Z';
+  const recorded = new Date(at);
+  const corpus = [
+    aged('window', at, 5, { sourceAgency: 'FDA' }),
+    aged('fda-open', at, 400, { sourceAgency: 'FDA', fdaOngoingAsOf: '2026-10-06' }),
+    aged('fsis-active', at, 90, { sourceAgency: 'FSIS' }),
+    aged('fda-resolved', at, 400, { sourceAgency: 'FDA', fdaOngoingAsOf: null }),
+    aged('fda-stale-evidence', at, 400, { sourceAgency: 'FDA', fdaOngoingAsOf: '2026-09-01' }),
+    aged('fsis-alert', at, 400, { sourceAgency: 'FSIS', noticeType: 'public_health_alert' }),
+  ];
+  assert.deepEqual(
+    corpus.filter((item) => baselineIncludes(item, recorded)).map((item) => item.id),
+    ['window', 'fda-open', 'fsis-active'],
+  );
+  // And offline, the carried rows count by the same function as live rows.
+  const carried = corpus.filter((item) => baselineIncludes(item, recorded));
+  const ca = { states: ['CA'], allergens: [], retailers: [] };
+  assert.deepEqual(
+    affectsYouMatches(carried, ca, recorded)
+      .map((item) => item.id)
+      .sort(),
+    ['fda-open', 'fsis-active', 'window'],
+  );
+  // 22 days later the carried FDA evidence has expired on the device clock,
+  // exactly as live evidence does; FSIS lifecycle does not expire.
+  const later = new Date(Date.parse(at) + 22 * 86_400_000);
+  assert.deepEqual(
+    affectsYouMatches(carried, ca, later)
+      .map((item) => item.id)
+      .sort(),
+    ['fsis-active', 'window'],
+  );
+});
+
+test('the recorder refuses a feed with no FDA evidence, or only stale evidence', () => {
+  const at = new Date('2026-10-06T12:00:00.000Z');
+  const none = [aged('a', at.toISOString(), 1, { fdaOngoingAsOf: null })];
+  assert.match(baselineRecordingRefusal(none, at) ?? '', /not populated/);
+  const fresh = [aged('a', at.toISOString(), 1, { fdaOngoingAsOf: '2026-09-28' })];
+  assert.equal(baselineRecordingRefusal(fresh, at), null);
+  assert.equal(newestEvidenceDate(fresh), '2026-09-28');
+  const stale = [aged('a', at.toISOString(), 1, { fdaOngoingAsOf: '2026-09-20' })];
+  assert.match(
+    baselineRecordingRefusal(stale, at) ?? '',
+    new RegExp(`limit ${BASELINE_MAX_EVIDENCE_AGE_DAYS}`),
+  );
 });

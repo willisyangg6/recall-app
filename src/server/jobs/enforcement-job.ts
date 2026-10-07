@@ -14,6 +14,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { fetchEnforcementBulkUrl } from '../fda-enforcement/fetch';
 import {
+  SupabaseOpenEvidenceStore,
+  type OpenEvidenceStore,
+} from '../fda-enforcement/open-evidence-sync';
+import {
   downloadEnforcementCorpus,
   reconcileFdaEnforcement,
   type EnforcementCorpus,
@@ -39,6 +43,8 @@ export interface EnforcementJobOptions {
   fetchManifest?: typeof fetchEnforcementBulkUrl;
   downloadCorpus?: () => Promise<EnforcementCorpus>;
   reconcile?: typeof reconcileFdaEnforcement;
+  /** The open-evidence writer; defaults to the Supabase store over `client`. */
+  openEvidenceStore?: OpenEvidenceStore;
 }
 
 export async function runEnforcementJob(
@@ -94,19 +100,33 @@ export async function runEnforcementJob(
     const stats: ReconcileStats = await reconcile(options.client, options.dataStore, {
       apply: !options.dryRun,
       corpus,
+      openEvidence: {
+        store: options.openEvidenceStore ?? new SupabaseOpenEvidenceStore(options.client),
+        apply: !options.dryRun,
+        previousTotal: typeof previousTotal === 'number' ? previousTotal : null,
+      },
     });
 
     const failedGate = stats.mixedExposedAsScalar > 0;
+    // The open-evidence sync runs after enrichment has committed; its failure
+    // fails the RUN (so ops:health shows it) without undoing enrichment.
+    const openEvidenceError =
+      stats.openEvidence && typeof stats.openEvidence.error === 'string'
+        ? stats.openEvidence.error
+        : null;
+    const failed = failedGate || openEvidenceError !== null;
     return {
       pipelineRunId: null,
-      outcome: failedGate ? 'failed' : 'succeeded',
+      outcome: failed ? 'failed' : 'succeeded',
       error: failedGate
         ? `HARD GATE: ${stats.mixedExposedAsScalar} mixed-class case(s) exposed as a scalar class`
-        : undefined,
+        : openEvidenceError !== null
+          ? `open evidence: ${openEvidenceError}`
+          : undefined,
       metrics: {
         // Recorded only when the reconciliation actually applied — a dry run
         // must not stop the next scheduled run from doing the real work.
-        ...(options.dryRun || failedGate
+        ...(options.dryRun || failed
           ? { checkedExportDate: manifest.exportDate }
           : { completedExportDate: manifest.exportDate }),
         totalRecords: manifest.totalRecords,
@@ -123,6 +143,7 @@ export async function runEnforcementJob(
         mixedClassCases: stats.mixedClassCases,
         mixedExposedAsScalar: stats.mixedExposedAsScalar,
         tiers: stats.tiers,
+        openEvidence: stats.openEvidence,
       },
     };
   });

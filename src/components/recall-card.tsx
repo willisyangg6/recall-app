@@ -90,6 +90,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { FeedCardSurface } from '@/components/feed/feed-card-surface';
 import { SaveRecallButton } from '@/components/save-recall-button';
 import { CategoryTag } from '@/components/ui/category-tag';
 import { Icon } from '@/components/ui/icon';
@@ -100,6 +101,7 @@ import { RiskLabel } from '@/components/ui/risk-label';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
 import { layout, spacing } from '@/constants/design-tokens';
+import { feedGeometry } from '@/constants/feed-design';
 import { useSavedRecalls } from '@/hooks/use-saved-recalls';
 import {
   PREVIEW_BRAND_LINES,
@@ -141,16 +143,20 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
           if (event.nativeEvent.actionName === SAVE_ACTION) void savedRecalls.toggle(model.id);
         }}
         style={({ pressed }) => pressed && styles.pressed}>
-        <RecallCardSurface
+        {/* The Feed + Filters design (2026-10-06): the live Feed and Saved
+            card draws `FeedCardSurface`. `RecallCardSurface` below stays the
+            onboarding example's and Ready deck's, unchanged. */}
+        <FeedCardSurface
           model={model}
           media={
             <MediaTile
               uri={model.heroImageUrl}
               alt={model.productName}
               size={layout.cardMediaSize}
+              cornerRadius={feedGeometry.photoRadius}
             />
           }
-          trailing={<SaveRecallButton caseId={model.id} />}
+          trailing={<SaveRecallButton caseId={model.id} glyphSize={24} />}
         />
       </Pressable>
     </Link>

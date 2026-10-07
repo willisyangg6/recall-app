@@ -79,6 +79,36 @@ test('the C10B bump discards every pre-category cache document (v1)', () => {
   assert.equal(parseFeedCache(legacyComplete), null);
 });
 
+test('the open-evidence bump discards every v2 and v3 document, however complete', () => {
+  // A v2 document's rows were selected without `fda_ongoing_as_of`, and can sit
+  // under CURRENT tokens (an old build re-downloaded a row whose evidence moved,
+  // without asking for the column). Accepting one would serve no evidence under
+  // tokens that claim it is current — Affects You would undercount silently.
+  // v3 is the P2B7S development-only freshness document; it carries no
+  // evidence either, so the open-evidence version skipped past it.
+  assert.equal(FEED_CACHE_SCHEMA_VERSION, 4, 'the open-evidence cache bump must not be reverted');
+  for (const legacy of [2, 3]) {
+    const legacyComplete = JSON.stringify({
+      ...document({ items: makeCorpus(50) }),
+      schemaVersion: legacy,
+    });
+    assert.equal(parseFeedCache(legacyComplete), null, `v${legacy} was accepted`);
+  }
+});
+
+test('a current-version document round-trips open evidence exactly', () => {
+  const items = makeCorpus(3).map((item, index) => ({
+    ...item,
+    fdaOngoingAsOf: index === 0 ? '2026-09-28' : null,
+  }));
+  const parsed = parseFeedCache(serializeFeedCache(document({ items })));
+  assert.ok(parsed);
+  assert.deepEqual(
+    parsed.items.map((item) => item.fdaOngoingAsOf),
+    ['2026-09-28', null, null],
+  );
+});
+
 test('a current-version document carrying categories round-trips them', () => {
   const items = makeCorpus(4).map((item, index) => ({
     ...item,

@@ -13,6 +13,11 @@
  *
  * Old notices are never terminated, hidden, or relabeled based on age.
  *
+ * This split is DATE-ONLY, in All recalls and everywhere "Recent" appears.
+ * Affects me additionally counts an older match its agency confirms is still
+ * open (2026-10-06, `lib/affects-me-ranking.ts` + `lib/open-evidence.ts`);
+ * that is membership in the personalized list, never a change to this tier.
+ *
  * ## One date (2026-10-05, founder decision)
  *
  * Both the window and the order read MATERIAL activity

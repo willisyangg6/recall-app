@@ -36,6 +36,7 @@ function item(overrides: Partial<FeedItem> = {}): FeedItem {
   counter += 1;
   return {
     id: `case-${String(counter).padStart(3, '0')}`,
+    fdaOngoingAsOf: null,
     sourceAgency: 'FSIS',
     noticeType: 'recall',
     state: 'active',
@@ -315,7 +316,7 @@ test('unknown and unselected geography stay excluded, so they never appear at al
 });
 
 test('filtering never moves a notice between sections', () => {
-  // An old explicit California match stays in Older active notices; it is not
+  // An old explicit California match stays in Older notices; it is not
   // promoted into Recent activity by matching the selected location.
   const oldCa = item({ geography: geo('states', ['California']), ...announced('2024-01-05') });
   const recentNational = recentItem({ geography: geo('nationwide') });
@@ -509,8 +510,29 @@ test('the Feed Location filter is untouched by multi-state personalization (P2B7
 
   // 3. The Feed screen feeds it session state, never the saved profile.
   const home = readFileSync(join(__dirname, '..', 'app', '(tabs)', 'index.tsx'), 'utf8');
-  assert.ok(home.includes('applyFeedFilters(state.items, filters)'));
+  // (All: the All feed's own session selection, 2026-10-06; Affects me:
+  // its own, applied to the ranked sections.)
+  assert.ok(home.includes('applyFeedFilters(state.items, filtersByTab.all)'));
+  assert.ok(home.includes('applyFeedFilters(ranked.affects, filters)'));
   assert.ok(!home.includes('prefs.states)'), 'the filter is fed from the saved profile');
+  // The Filters sheet edits a draft seeded from the applied session filters
+  // and never reads or writes the saved profile either.
+  const sheet = readFileSync(
+    join(__dirname, '..', 'components', 'feed', 'filters-sheet.tsx'),
+    'utf8',
+  );
+  const draft = readFileSync(join(__dirname, 'feed-filter-draft.ts'), 'utf8');
+  for (const source of [sheet, draft]) {
+    for (const forbidden of [
+      'preferences-store',
+      'loadPreferences',
+      'savePreferences',
+      'usePreferences',
+      'prefs.',
+    ]) {
+      assert.ok(!source.includes(forbidden), `the Filters sheet reaches ${forbidden}`);
+    }
+  }
   assert.ok(!/applyFeedFilters\([^)]*prefs/.test(home));
   assert.ok(!/stateCodes:\s*prefs\./.test(home));
 });

@@ -82,6 +82,8 @@ Every card shows its authoritative date ("Announced Aug 18" / "Updated Mar 9").
 
 **Superseded (2026-10-05, founder decision): one date, both feeds, newest first.** All Recalls no longer uses `lastPublicActivityAt` for anything: both feeds and every filtered view (including the Location filter) split recent/older on **material activity** and order by it — material activity, then announcement date, then case id (`src/lib/recency-order.ts`). Consumer risk, geographic confidence and allergen/store match strength left the ordering; there is no seen/acknowledged record, pin or urgency override. **Correction to this section's earlier claim:** material activity is _not_ bounded by `lastPublicActivityAt`. Enforcement-derived classification entries carry FDA's own classification date, and enforcement records are never voiced into `lastPublicActivityAt`, so a classification routinely postdates it (live, 2026-10-05: 232 of 911 active cases). The "strict tightening" argument was therefore false, and under two dates a recall could be Older in All Recalls and current in Affects me at once; one date ends that. See `docs/recall-personalization.md` ("Affects Me ordering") and `docs/recall-feed-ordering.md`.
 
+**Refinement (2026-10-06, founder decision): Affects me also counts older matches the agency confirms are still open.** "Recent" is unchanged and stays date-only everywhere (All Recalls never reads evidence). The personalized Affects me list — and the one count Building and Ready show — is now the matches whose material activity is within 60 days **or** that an agency affirmatively shows are still open: an FSIS recall FSIS still lists as `Active Recall` (lifecycle, re-read every 30 minutes), or an FDA recall with at least one accepted, linked enforcement product whose openFDA `status` is `Ongoing`, read from a complete weekly export no more than 21 days old (`recall_cases.fda_ongoing_as_of`, written only by the enforcement job; expiry evaluated on the device, `src/lib/open-evidence.ts`). FSIS public health alerts never qualify by age (FSIS has no closure mechanism for them), nor do FDA recalls whose linked products are all `Completed`/`Terminated`, nor unlinked ones. This is membership only: each section is still sorted once by the shared comparator, so an older confirmed-open recall sits below every in-window one because its date is older, never by a tier. Lifecycle is untouched: `active` still means "no authoritative closure signal", which for FDA means only "not recorded as closed" — the reason the consumer copy never calls an FDA recall active. See `docs/recall-personalization.md` ("Confirmed open") and `docs/recall-operations.md` ("FDA open evidence").
+
 ### 2.4 The complete-feed contract **[DECISION]** (2026-08-27, C5.1)
 
 Everything above computes on the client — the recent/older split, section counts, "affects me" eligibility, the ranking — over one array of active cases. That makes **completeness a correctness property, not a performance one**: a feed missing its tail produces a wrong answer in every one of those places at once, and produces it silently.
@@ -1218,7 +1220,12 @@ assigned" persisting.
   never re-linked — the 17 events matched by two cases each are exactly the
   unmerged duplicate-review pairs, which stay unclassified until merged.
 - **Deliberately out of scope, by decision:** enforcement status/termination
-  never drives consumer lifecycle (FDA's own disclaimer calls it untimely);
+  never drives consumer lifecycle (FDA's own disclaimer calls it untimely).
+  _Since 2026-10-06 it drives one thing only: the Affects me count, through
+  `recall_cases.fda_ongoing_as_of` — an `Ongoing` linked product confirms an
+  older match is still open. Untimely is safe in that direction: a late
+  `Terminated` keeps a recall counted a little longer, never hides one, and
+  the device stops counting evidence older than 21 days (§2.3);_
   enforcement prose never overwrites Phase A consumer projection; and the
   ~7,400 enforcement events with no announcement in our corpus are
   quantified but NOT surfaced as consumer cases (a future bounded task).

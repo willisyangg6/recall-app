@@ -1848,6 +1848,80 @@ rollback data.
 test pins that the data is sufficient. Nothing else moved, so there is nothing
 else to restore.
 
+## FDA open evidence: a PREPARED column and sync (2026-10-06)
+
+**What it is.** `recall_cases.fda_ongoing_as_of` (migration
+`20261006000000_fda_ongoing_evidence.sql`, additive): the openFDA export date of
+the last **complete** export in which at least one enforcement record linked to
+and owned by the case had status `Ongoing`. Affects me counts an older FDA match
+only while that date is at most 21 days old on the device
+(`src/lib/open-evidence.ts`). One writer: the open-evidence sync
+(`src/server/fda-enforcement/open-evidence-sync.ts`).
+
+**When it runs.** The scheduled `fda_enforcement` job runs it after every
+applied reconciliation, over the same complete bulk export. It is isolated: a
+sync failure is captured in the run's `openEvidence` metric and fails the run
+(so `completedExportDate` is not recorded and the next daily run retries the
+export) without undoing enrichment.
+
+**What a write touches.** One column on one row, compare-and-set on the value
+the plan read. Never `projection`, `timeline`, `last_changed_at`, affected
+products, source records, snapshots or the notification ledger — so a status
+change cannot re-date, reorder or notify. The manifest token moves for that row
+only (verified on a local stack, 2026-10-06).
+
+**Completeness gate.** Nothing is written unless the raw export's record count
+equals the manifest's `total_records`, the total is non-zero and at least half
+the previous run's, and the export is dated. A record present in the export but
+unparseable never clears its case's value (the case is skipped).
+
+**Commands.**
+
+```bash
+npm run open-evidence:sync                                    # dry run: the plan, writes nothing
+npm run open-evidence:sync -- --apply --confirm --expect <n>  # write exactly the reviewed plan
+npm run open-evidence:sync -- --clear                         # dry run of the rollback (all values to null)
+npm run open-evidence:sync -- --clear --apply --confirm --expect <n>
+```
+
+An offline export needs `--file <path> --export-date <YYYY-MM-DD>
+--manifest-total <n>`, because a file carries no manifest.
+
+**Health.** `npm run ops:health` prints an "FDA open evidence" section — the
+age of the agency evidence, distinct from the enforcement job's run health:
+newest date, count, values older than 14 days. **STALE EVIDENCE at 14 days** (a
+warning, one week before devices stop counting it at 21). The heartbeat is
+unchanged (the enforcement channel stays off it by design).
+
+**Rollout order (not applied).** Code first, production second; each step
+needs its own approval:
+
+1. Review and commit this change locally; integrate it with any concurrent
+   branches (Feed/Filters) and re-run `npm run check` on the integrated tree.
+2. Push the reviewed, integrated commits.
+3. `supabase db push --linked` — the migration (additive; moves no token, so
+   devices re-download nothing).
+4. `npm run open-evidence:sync` (read-only dry run), then
+   `npm run open-evidence:sync -- --apply --confirm --expect <n>` — the
+   initial population (84 cases on 2026-10-06).
+5. Deploy the enforcement job code, so the weekly upkeep runs on schedule.
+6. Re-record the baseline (`npm run record:baseline`; it refuses until step 4
+   has populated evidence), re-search the Ready review scenarios, commit and
+   push that change.
+7. Release the app build.
+
+**The migration must precede any build or OTA update carrying this code.**
+The client's feed select names `fda_ongoing_as_of` explicitly, and PostgREST
+rejects a select of a column that does not exist (verified against production
+before the migration, 2026-10-06: HTTP 400, `42703 column
+recall_cases.fda_ongoing_as_of does not exist`). Such a build would load no live
+feed — it keeps its cached corpus, onboarding falls back to the bundled
+baseline, and the Feed shows its load-failure state — until step 3 lands.
+Development builds pointed at production have the same limitation; QA them
+against a migrated local stack. The migration and population are harmless to
+every EXISTING build (their selects never name the column), and a migrated
+database with no population yet counts exactly as today.
+
 ## P2B7U preference-states expand: a PREPARED schema migration
 
 **Status: prepared and previewed, NOT applied.** No production write, DDL or

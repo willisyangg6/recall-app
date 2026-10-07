@@ -64,6 +64,7 @@ function recorded(fixture: string): CaseProjection {
 function feedItemOf(id: string, projection: CaseProjection): FeedItem {
   return {
     id,
+    fdaOngoingAsOf: null,
     sourceAgency: projection.sourceAgency,
     noticeType: projection.noticeType,
     state: projection.state,
@@ -183,12 +184,7 @@ test('nothing the shopper can see or hear on a PHA says the risk is unknown', ()
   // Detail's header area, likewise. `official.text` deliberately reads "Not
   // assigned" with its own explanation — an honest statement about the
   // classification, which is not the same as badging the risk as unknown.
-  const detailHeader = [
-    detail.noticeTypeLabel,
-    detail.risk.headlineLabel,
-    detail.lifecycleLabel,
-    detail.activity.text,
-  ]
+  const detailHeader = [detail.noticeTypeLabel, detail.risk.headlineLabel, detail.activity.text]
     .filter((value): value is string => value !== null)
     .join(' | ');
   assert.doesNotMatch(detailHeader, /unknown/i);

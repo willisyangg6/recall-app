@@ -51,6 +51,7 @@ function item(overrides: Partial<FeedItem>): FeedItem {
   seq += 1;
   return {
     id: `case-${String(seq).padStart(3, '0')}`,
+    fdaOngoingAsOf: null,
     sourceAgency: 'FSIS',
     noticeType: 'recall',
     state: 'active',

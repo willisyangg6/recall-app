@@ -784,3 +784,16 @@ pointed to from here.
 3. **Ingestion healthchecks.** Not part of the feed or Ready work; tracked in
    [recall-production-runbook.md](recall-production-runbook.md) and
    [recall-scheduler-watchdog.md](recall-scheduler-watchdog.md) as operations work.
+
+## 19. Confirmed-open membership (2026-10-06, founder decision)
+
+The comparator in §3.2 is unchanged and remains the only order. What changed is
+membership of the Affects me list (and therefore the Building and Ready count):
+a match outside the 60-day window is counted when its agency confirms it is
+still open — an FSIS recall FSIS lists as active, or an FDA recall with an
+accepted linked product FDA lists as `Ongoing` (evidence at most 21 days old).
+The counted list is sorted once by the shared comparator, so confirmed-open
+older recalls sit below every in-window recall because their dates are older;
+there is no current-first tier. All recalls' "Recent activity" stays date-only.
+Ready's priority groups (§17) are unchanged and apply over the larger list.
+Authoritative description: `docs/recall-personalization.md`, "Confirmed open".

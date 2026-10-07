@@ -383,7 +383,9 @@ second truth able to drift from the timeline it was derived from.
 ### Sections and copy
 
 At C3.2 the structure was unchanged: recent qualifying notices, "Location not
-specified", then older active collapsed. Only the recency date changed, and
+specified", then older active collapsed. _Since 2026-10-06 the first section
+holds recent OR confirmed-open matches and the second is titled "Older
+notices" (see "Confirmed open" below)._ Only the recency date changed, and
 all sections are ordered by the one comparator, so nothing jumps between
 renders. Sections are disjoint by construction — qualifying cases split by one
 boundary into recent/older. _Superseded by C5.2B (see "Home" above): the
@@ -397,6 +399,42 @@ happened) in every feed mode, so a card can never imply an old recall was
 announced today. Cards still show risk state and that one date, plus the
 generic "Affects you" flag when the verdict holds; no numeric score, sort
 key, purchase claim, or safety claim about excluded items is ever exposed.
+
+### Confirmed open: older matches the agency still lists (2026-10-06)
+
+The **counted** list — the Affects me section, and the one number Building and
+Ready show (`affectsYouMatches`) — is every match whose material activity is
+within 60 days, **or** that an agency confirms is still open
+(`confirmedOpen`, `src/lib/open-evidence.ts`):
+
+| Older match (outside the window)                                                   | Counted?           |
+| ---------------------------------------------------------------------------------- | ------------------ |
+| FSIS recall, lifecycle `active` (FSIS `Active Recall`)                             | Yes                |
+| FDA recall, an accepted linked enforcement product `Ongoing`, export ≤ 21 days old | Yes                |
+| FDA recall, `fda_ongoing_as_of` older than 21 days (refreshes stopped)             | No — Older notices |
+| FDA recall, linked products all `Completed`/`Terminated`; FDA recall with no link  | No — Older notices |
+| FSIS public health alert, any age                                                  | No — Older notices |
+
+- **Membership only.** `buildAffectsMeSections` puts each match in exactly one
+  section and sorts each ONCE by the shared comparator — there is no
+  current-first tier, group or evidence key. A confirmed-open 2024 recall sits
+  below every in-window recall because its date is older.
+- **One clock.** The window and the evidence expiry are measured against the
+  screen's calendar clock (`hooks/use-calendar-clock.ts`), which moves at each
+  UTC/local midnight and on every return to the foreground — so the count
+  changes with the date even when no sync lands, and Building, Ready and the
+  Feed always agree.
+- **Never shown.** No badge, no "still open" label, no evidence date on a
+  card: the card's authoritative date is how an older recall reads honestly.
+  Push eligibility is unchanged (`pushEligible` never reads evidence).
+- **Copy.** The second section is "Older notices". In Affects me it explains:
+  "These match your choices but have had no announcement or update in the last
+  60 days, and the agency hasn’t confirmed they’re still open." In All Recalls:
+  "No announcement or update from the agency in the last 60 days." Neither
+  calls a notice active or closed.
+- **Measured (production, 2026-10-06, exact links):** California 18 → 39, New
+  York 24 → 47, Texas 24 → 45, Alabama + Arizona 18 → 38 once the evidence is
+  populated.
 
 ### Superseded: recency-led Affects You ranking (recorded 2026-09-28, superseded 2026-10-05)
 

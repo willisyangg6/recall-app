@@ -1426,9 +1426,18 @@ longer exists.
   stated geography names a chosen state or is Nationwide (which qualifies
   for every state, whatever the hazard), or whose geography is unknown but
   carries a chosen allergen or store signal, within the Affects Me recency
-  window, less the one allergen-only exclusion (an identified allergen-only
-  recall is withheld from a shopper who chose none of its allergens,
-  including a shopper who chose no allergens; `ready-count.test.ts`).
+  window **or confirmed still open by its agency** (2026-10-06: an FSIS
+  recall FSIS still lists as active, or an FDA recall with an accepted linked
+  product FDA lists as `Ongoing`, evidence at most 21 days old — see
+  `docs/recall-personalization.md`, "Confirmed open"), less the one
+  allergen-only exclusion (an identified allergen-only recall is withheld
+  from a shopper who chose none of its allergens, including a shopper who
+  chose no allergens; `ready-count.test.ts`). Building, Ready and the Feed
+  read one calendar clock (`hooks/use-calendar-clock.ts`), so the count moves
+  with the date while the screen stays open, not only when a sync lands. The
+  priority groups and the newest-first order inside them are unchanged: an
+  older confirmed-open recall with a confirmed risk label and a loaded photo
+  can take a readable card ahead of a current Pending one.
 - `none` — the check answered and nothing currently matches:
   `No matching recalls right now.` and the monitoring line, no cards,
   nothing locked. A defensive state: with a healthy corpus Nationwide
@@ -1436,10 +1445,17 @@ longer exists.
   loading problem, never papered over with a positive count.
 - `checking` — the first read has not answered; nothing is claimed.
 
-**The baseline ages.** The recency window is measured against the device's
-clock, so a baseline recorded on its `recordedAt` holds fewer current
-matches each day and none once it is older than the window (60 days): a
-fresh install offline then meets the truthful `none`. Re-record before each
+**The baseline ages.** The baseline carries exactly what the app would
+count at recording (`lib/baseline-selection.ts`, since 2026-10-06): in-window
+recalls plus confirmed-open older ones, each FDA row with its own
+`fdaOngoingAsOf`. Both clocks run on the device as for a live corpus: the
+window part ages out over 60 days and each FDA evidence date stops counting
+21 days after its export, so an offline baseline never counts a recall a live
+corpus would have stopped counting; a fresh install offline long after release
+meets the truthful `none`. The recorder refuses — writing nothing — when the
+live feed carries no FDA evidence (the open-evidence sync has not populated it)
+or only evidence older than 10 days, and `--out <path>` records elsewhere for
+validation. Re-record before each
 release with `npm run record:baseline` (read-only: public GETs under the
 publishable key, writing only `src/content/baseline-recalls.json`), and
 `npm run qa:launch-readiness` FAILS while the shipped baseline is past the

@@ -110,6 +110,9 @@ const APPROVED_UPPERCASING: Record<string, string> = {
   // The notice label ("Public Health Alert") is a compact status badge and
   // cases the contract's own words for that treatment.
   'components/ui/notice-label.tsx': '{label.toUpperCase()}',
+  // The Feed card's notice label (2026-10-06) is the same badge on the
+  // approved Feed shape, casing the same contract words the same way.
+  'components/feed/feed-labels.tsx': '{label.toUpperCase()}',
 };
 
 test('P2B7H: no shopper-facing surface transforms text to uppercase in a style', () => {

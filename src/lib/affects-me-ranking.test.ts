@@ -101,6 +101,7 @@ function item(overrides: Partial<FeedItem> = {}): FeedItem {
   seq += 1;
   return {
     id: `case-${String(seq).padStart(3, '0')}`,
+    fdaOngoingAsOf: null,
     sourceAgency: 'FDA',
     noticeType: 'recall',
     state: 'active',
@@ -689,4 +690,121 @@ test('a priority explains itself in review copy with the two dates and nothing e
     explainAffectsMePriority(affectsMePriority(explained)),
     'activity 2026-08-04 · announced 2026-07-01',
   );
+});
+
+// ── Confirmed open (2026-10-06): membership only, one comparator ─────────────
+
+const LONG_AGO = '2025-01-15';
+
+test('older matches join Affects me only on agency evidence: FSIS recall, current FDA Ongoing', () => {
+  const sections = rank([
+    item({
+      id: 'fda-ongoing',
+      publishedAt: LONG_AGO,
+      timeline: [published(LONG_AGO)],
+      fdaOngoingAsOf: '2026-08-24',
+    }),
+    item({
+      id: 'fsis-recall',
+      sourceAgency: 'FSIS',
+      publishedAt: LONG_AGO,
+      timeline: [published(LONG_AGO)],
+    }),
+    item({ id: 'fda-none', publishedAt: LONG_AGO, timeline: [published(LONG_AGO)] }),
+    item({
+      id: 'fsis-alert',
+      sourceAgency: 'FSIS',
+      noticeType: 'public_health_alert',
+      publishedAt: LONG_AGO,
+      timeline: [published(LONG_AGO)],
+    }),
+    item({
+      id: 'fda-expired',
+      publishedAt: LONG_AGO,
+      timeline: [published(LONG_AGO)],
+      fdaOngoingAsOf: '2026-07-01',
+    }),
+  ]);
+  assert.deepEqual(sections.affects.map((i) => i.id).sort(), ['fda-ongoing', 'fsis-recall']);
+  assert.deepEqual(sections.older.map((i) => i.id).sort(), [
+    'fda-expired',
+    'fda-none',
+    'fsis-alert',
+  ]);
+});
+
+test('no current-first tier: the counted list IS the shared comparator over the counted set', () => {
+  // A deliberately mixed set: in-window and confirmed-open older matches, ties
+  // on dates, ids out of order. If any evidence or "current" key took part in
+  // the order, some permutation would disagree with the plain sort.
+  const items = [
+    item({ id: 'case-z-recent', publishedAt: RECENT_DAY, timeline: [published(RECENT_DAY)] }),
+    item({
+      id: 'case-a-open-old',
+      publishedAt: LONG_AGO,
+      timeline: [published(LONG_AGO)],
+      fdaOngoingAsOf: '2026-08-24',
+    }),
+    item({
+      id: 'case-m-open-old',
+      publishedAt: LONG_AGO,
+      timeline: [published(LONG_AGO)],
+      sourceAgency: 'FSIS',
+    }),
+    item({
+      id: 'case-b-open-newer',
+      publishedAt: '2026-05-01',
+      timeline: [published('2026-05-01')],
+      fdaOngoingAsOf: '2026-08-24',
+    }),
+    item({ id: 'case-c-recent', publishedAt: '2026-08-25', timeline: [published('2026-08-25')] }),
+  ];
+  const counted = rank(items).affects;
+  assert.deepEqual(
+    counted.map((i) => i.id),
+    sortNewestFirst(items).map((i) => i.id),
+  );
+  assert.deepEqual(
+    counted.map((i) => i.id),
+    ['case-c-recent', 'case-z-recent', 'case-b-open-newer', 'case-a-open-old', 'case-m-open-old'],
+  );
+  for (const permutation of [
+    [...items].reverse(),
+    [items[2], items[0], items[4], items[1], items[3]],
+  ]) {
+    assert.deepEqual(
+      rank(permutation).affects.map((i) => i.id),
+      counted.map((i) => i.id),
+    );
+  }
+});
+
+test('All recalls never reads evidence: "Recent activity" stays date-only', () => {
+  const old = item({
+    id: 'open-old',
+    publishedAt: LONG_AGO,
+    timeline: [published(LONG_AGO)],
+    fdaOngoingAsOf: '2026-08-24',
+  });
+  const fsis = item({
+    id: 'fsis-old',
+    sourceAgency: 'FSIS',
+    publishedAt: LONG_AGO,
+    timeline: [published(LONG_AGO)],
+  });
+  const sections = buildFeedSections([old, fsis], NOW);
+  assert.deepEqual(sections.recent, []);
+  assert.deepEqual(sections.olderActive.map((i) => i.id).sort(), ['fsis-old', 'open-old']);
+  // Byte-identical with and without evidence.
+  assert.deepEqual(
+    buildFeedSections([{ ...old, fdaOngoingAsOf: null }, fsis], NOW).olderActive.map((i) => i.id),
+    sections.olderActive.map((i) => i.id),
+  );
+});
+
+test('evidence never changes push eligibility or a recency key', () => {
+  const base = item({ id: 'p', publishedAt: LONG_AGO, timeline: [published(LONG_AGO)] });
+  const evidenced = { ...base, fdaOngoingAsOf: '2026-08-24' };
+  assert.equal(pushEligible(evidenced, CALIFORNIAN), pushEligible(base, CALIFORNIAN));
+  assert.deepEqual(rank([evidenced]).priorityById.get('p'), rank([base]).priorityById.get('p'));
 });

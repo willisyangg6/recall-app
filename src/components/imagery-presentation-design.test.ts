@@ -111,9 +111,11 @@ test('P2B7I: an absent image renders no media column — no footprint, no placeh
   // The card hands every state to the tile and holds no media rule, no
   // placeholder and no reserved width of its own; its content row is a
   // gapped flex row and its text column fills whatever is left.
+  // (The live Feed card passes the approved 6pt corner, 2026-10-06; the
+  // tile still decides presence alone.)
   assert.match(
     CARD,
-    /<MediaTile\s+uri=\{model\.heroImageUrl\}\s+alt=\{model\.productName\}\s+size=\{layout\.cardMediaSize\}\s*\/>/,
+    /<MediaTile\s+uri=\{model\.heroImageUrl\}\s+alt=\{model\.productName\}\s+size=\{layout\.cardMediaSize\}\s+cornerRadius=\{feedGeometry\.photoRadius\}\s*\/>/,
   );
   assert.ok(!/heroImageUrl \?/.test(CARD_CODE), 'the card decides the media itself');
   assert.ok(!CARD.includes('media-placeholder'));
@@ -134,7 +136,7 @@ test('P2B7I: an absent image renders no media column — no footprint, no placeh
   );
   // (The onboarding deck's uniform variant alone tightens the footer.)
   assert.ok(CARD.includes('<View style={[styles.footerRow, uniform && styles.footerRowCompact]}>'));
-  assert.ok(CARD.includes('<SaveRecallButton caseId={model.id} />'));
+  assert.ok(CARD.includes('<SaveRecallButton caseId={model.id} glyphSize={24} />'));
   assert.equal(layout.cardMediaSize, 112);
 });
 

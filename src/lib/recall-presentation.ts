@@ -17,7 +17,7 @@
  *    with a fixed date and no formatting depends on the process timezone.
  */
 
-import { foodCategoryLabel } from '@/domain/food-category';
+import { foodCategoryLabel, type FoodCategoryId } from '@/domain/food-category';
 import { sanitizeLaunchCategoryIds } from '@/domain/food-category-launch';
 import {
   deriveIllnessStatus,
@@ -68,7 +68,6 @@ import {
   allergenReasonLabel,
   healthRiskSummary,
   selectHazardGuidance,
-  stateLabel,
   type HazardGuidance,
 } from './recall-display';
 import { interpretReason } from './recall-reason';
@@ -2178,8 +2177,18 @@ export function detailNarrative(
  * word, no empty container, no spacer, no spoken element.
  */
 export function cardCategoryLabel(productCategories: unknown): string | null {
+  const id = cardCategoryId(productCategories);
+  return id === null ? null : foodCategoryLabel(id);
+}
+
+/**
+ * The id behind `cardCategoryLabel` — the same first launch-visible id, so
+ * the card's category colour and icon (constants/feed-design.ts) can never
+ * describe a different category from the word beside them.
+ */
+export function cardCategoryId(productCategories: unknown): FoodCategoryId | null {
   const [displayable] = sanitizeLaunchCategoryIds(productCategories);
-  return displayable === undefined ? null : foodCategoryLabel(displayable);
+  return displayable ?? null;
 }
 
 // ── Card summary punctuation ────────────────────────────────────────────────
@@ -2273,6 +2282,12 @@ export interface HomeCardModel {
    * a risk, a relevance or a completeness statement — see `cardCategoryLabel`.
    */
   categoryLabel: string | null;
+  /**
+   * The id `categoryLabel` names (null exactly when it is null). Optional so
+   * the onboarding's static sample model, which predates the category
+   * styling and never shows a category, needs no change; absent = null.
+   */
+  categoryId?: FoodCategoryId | null;
   heroImageUrl: string | null;
   locationSummary: string;
 }
@@ -2338,6 +2353,7 @@ export function buildHomeCardModel(item: FeedItem, context: HomeCardContext): Ho
     // both reach the card through this builder, so the same recall carries
     // the same tag on both — there is no second display rule to drift.
     categoryLabel: cardCategoryLabel(item.productCategories),
+    categoryId: cardCategoryId(item.productCategories),
     heroImageUrl: item.heroImageUrl,
     locationSummary: homeLocationSummary(item.geography),
   };
@@ -2349,8 +2365,6 @@ export interface DetailModel {
   id: string;
   /** 'Recall' / 'Public Health Alert' — always explicit on Detail. */
   noticeTypeLabel: string;
-  /** 'Active' / 'Closed by agency (2024)' / 'Retracted'. */
-  lifecycleLabel: string;
   retracted: boolean;
   risk: RiskView;
   activity: ActivityDisplay;
@@ -2436,13 +2450,6 @@ export interface DetailModel {
 export interface DetailContext {
   today: string;
   affectsYou: boolean;
-}
-
-function lifecycleLabel(projection: CaseProjection): string {
-  const base = stateLabel(projection.state);
-  return projection.state === 'closed' && projection.closedYear
-    ? `${base} (${projection.closedYear})`
-    : base;
 }
 
 export function buildDetailModel(detail: CaseDetail, context: DetailContext): DetailModel {
@@ -2566,7 +2573,6 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     id: detail.id,
     noticeTypeLabel:
       projection.noticeType === 'public_health_alert' ? 'Public Health Alert' : 'Recall',
-    lifecycleLabel: lifecycleLabel(projection),
     retracted: projection.state === 'retracted',
     risk: riskView(projection.classification, projection.sourceAgency, projection.noticeType),
     activity: activityDisplay(projection.publishedAt, detail.timeline, context.today),

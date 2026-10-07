@@ -127,6 +127,7 @@ const CORPUS = loadCorpus();
 function feedItemOf(id: string, projection: CaseProjection): FeedItem {
   return {
     id,
+    fdaOngoingAsOf: null,
     sourceAgency: projection.sourceAgency,
     noticeType: projection.noticeType,
     state: projection.state,

@@ -56,7 +56,7 @@ feeds, both sections of each, and every filtered view including Location sort
 (`src/lib/recency-order.ts`). The label and the position can no longer
 disagree: a card that says "Updated Sep 16" sits where September 16 puts it,
 and a card whose page the agency merely re-edited does not move. All recalls
-also splits Recent activity / Older active notices on material activity (it
+also splits Recent activity / Older notices on material activity (it
 used `lastPublicActivityAt` until 2026-10-05). Consumer risk is a label on the
 card and never a position in any list; Pending and Unknown stay their own
 labels. Ties on both dates fall to the case id, so no render reshuffles.
@@ -1671,25 +1671,29 @@ projection, notification, push, feed-order, cache-schema, or database change;
   and left unused: no recorded notice today carries health instruction so
   specific that a standardized guide would be unsafe.
 
-## Control hierarchy (C6.1)
+## Control hierarchy (C6.1, revised 2026-10-06)
 
-Feed renders **two conceptual levels**, not one row of peer chips:
+Feed renders **two conceptual levels**, not one row of peer controls:
 
-1. **Feed mode** — a segmented `All | Affects me` control. Which feed you are
-   looking at. Mutually exclusive.
-2. **All-only filters** — a horizontally scrollable `Location · Risk ·
-Category · Clear all` row, rendered **only while All is active**. Category is
-   last because it is the only dimension whose values are _derived_ rather than
-   stated by the agency (C10B).
+1. **Feed mode** — the connected `All recalls | Affects you` control (the
+   approved tab names, 2026-10-06). Which feed you
+   are looking at. Mutually exclusive.
+2. **Filters** — ONE Filters control (beside the first section heading) that
+   opens ONE sheet holding Location, Risk level and Category. Since the
+   founder-approved Feed + Filters design (2026-10-06) it is offered on
+   **both** feeds: All always, Affects me once personalization exists. Category
+   stays last because it is the only dimension whose values are _derived_
+   rather than stated by the agency (C10B).
 
-In Affects me the filter row, its active counts, and Clear all are absent
-entirely — they cannot be opened, read, or cleared from there, and the earlier
-"Location/Risk filters apply to All recalls — selections kept" sentence is
-gone. The selections survive silently in session state and return with All. A
-short context row (`Based on your personalization` + `Edit` → the
-Personalization screen) replaces the instruction; it holds no preference
-logic.
-Search stays visible in both modes and is never reset by a mode switch.
+Each feed keeps its **own** filter selection: switching feeds neither carries
+nor clears the other's, and Apply never switches the feed (C6.1's All-only
+row, which ignored its selection while Affects me was showing and switched
+to All when a filter was applied there, is retired). The Filters label counts
+the active filter GROUPS (`Filters · 2`); the chip row's `Filtering All
+recalls · N selected` line went with the chips. A short context row (`Based
+on your personalization` + `Edit` → the Personalization screen) still scopes
+Affects me; it holds no preference logic. Search stays visible in both modes
+and is never reset by a mode switch.
 
 ## Filter model
 
@@ -1697,12 +1701,25 @@ Search stays visible in both modes and is never reset by a mode switch.
   default-mode rule (personalized once preferences exist, chosen once per
   session), the same eligibility (`lib/relevance.ts`), the same ranking
   (`lib/affects-me-ranking.ts`).
-- **Location / Risk / Category** are browsing filters over the complete All
-  Recalls feed (`lib/feed-filters.ts`): multi-select sheets with Apply / Clear
-  / Cancel, a count on the chip when active, and a global Clear all chip. OR
-  within a dimension, AND across dimensions. They are session-only view state —
-  never persisted, never part of the personalization profile, never applied to
-  Affects me.
+- **Location / Risk / Category** are browsing filters (`lib/feed-filters.ts`):
+  multi-select, OR within a dimension, AND across dimensions, session-only —
+  never persisted, never part of the personalization profile. In **All** they
+  narrow the complete feed before search. In **Affects me** they narrow the
+  already-eligible, already-ranked sections AFTER ranking and before search,
+  order-preserving: a filter can hide a match but never add a non-match,
+  re-rank one, or move one between sections (test-pinned in
+  `lib/feed-controls.test.ts`).
+- **The sheet edits a draft** (`lib/feed-filter-draft.ts`): Apply commits it
+  to the open feed (categories through the launch allowlist), Close / the
+  backdrop / back discard it, Clear all empties the draft only. `All
+risks` / `All categories` / `All locations` are the empty selection, so they
+  and a specific option are never both chosen. Only a changed selection
+  returns the list to the top.
+- **Filtered to nothing.** All recalls keeps "No matching recalls / … Clear
+  all to see the complete feed." Affects you says "No recalls match these
+  filters." with one action, "Clear filters", which applies the empty set to
+  Affects you through the same guarded path — clearing restores its MATCHING
+  recalls, never the national feed.
 - **Location semantics** (canonical tri-state geography): a selected
   jurisdiction matches notices explicitly distributed there and nationwide
   notices; explicitly-elsewhere and unknown-geography notices do not match.
@@ -1728,7 +1745,7 @@ admitted set keeps the one shared newest-first order the sections already
 carry (`lib/recency-order.ts`). A nationwide recall announced yesterday
 therefore sits above a recall from last month that names the selected state;
 equal dates fall to the case id. Membership never moves a notice between
-sections, so an old explicit match stays in Older active notices.
+sections, so an old explicit match stays in Older notices.
 `locationMatchTier` remains the single definition of what the filter admits;
 nothing reads it to order.
 
@@ -1958,7 +1975,9 @@ The rest of the error is a near-miss between two adjacent aisles, and 20 of the
 
 The decision rests entirely on what Category is allowed to do:
 
-- it applies **only to All Recalls**, and only when the user selects a chip;
+- it narrows a feed **only when the user selects it** in the Filters sheet —
+  in All Recalls, and since 2026-10-06 also within Affects me's already-
+  eligible list, where it can never make a recall eligible;
 - **every recall stays reachable** with it cleared — the unfiltered feed,
   search, Affects Me, risk and notifications are the authoritative surfaces
   and none of them consults a category;
@@ -2049,6 +2068,12 @@ classifier, no ingestion change, no schema change, no client-side inference:
 the only rule, it takes one argument, and there is no overload by which a
 title, brand, reason, agency, hazard or image could reach it.
 
+**How it looks (2026-10-06).** The approved Feed design draws the tag as a
+category label: its own tint, ink, border and glyph, keyed by
+`cardCategoryId` — the same first launch-visible id `cardCategoryLabel`
+names, so the colour can never describe a different category from the word
+(DESIGN.md, "Feed card, labels and Filters sheet").
+
 **Which categories may appear.** Exactly the nine the filter offers, decided
 by the same `sanitizeLaunchCategoryIds` boundary rather than a second list.
 `prepared_foods`, `supplements` and `other` render **nothing** — they are
@@ -2124,7 +2149,8 @@ existed, and every deep link — including the push handler's
 
 **Search and Affects Me stay inside Feed.** Neither is a destination: search
 is the field at the top of the feed, and Affects Me is the existing
-`All | Affects me` segmented control described under Control hierarchy above.
+connected `All recalls | Affects you` control described under Control
+hierarchy above.
 Making either a tab would imply a second feed; there is one feed with two
 modes.
 

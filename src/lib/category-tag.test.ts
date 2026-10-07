@@ -43,6 +43,7 @@ function geo(scope: 'nationwide' | 'states' | 'unknown', states: string[] = []) 
 function item(overrides: Partial<FeedItem> = {}): FeedItem {
   return {
     id: 'category-001',
+    fdaOngoingAsOf: null,
     sourceAgency: 'FDA',
     noticeType: 'recall',
     state: 'active',

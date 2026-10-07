@@ -89,6 +89,24 @@ const GLYPHS = {
   // vendored Lucide family, box and stroke. Provenance in
   // src/lib/notification-education-presentation.ts.
   'shield-check': require('@/assets/icons/shield-check.png') as ImageSourcePropType,
+  // The Feed + Filters milestone (2026-10-06): the source kit's glyphs,
+  // lucide-static 0.468.0 (ISC), each scale rendered directly from its SVG —
+  // never enlarged from 1x. Sources and license in
+  // assets/icon-sources/lucide-static/; the name → source map and the
+  // category assignments are in src/constants/feed-design.ts.
+  filters: require('@/assets/icons/filters.png') as ImageSourcePropType,
+  close: require('@/assets/icons/close.png') as ImageSourcePropType,
+  tick: require('@/assets/icons/tick.png') as ImageSourcePropType,
+  categories: require('@/assets/icons/categories.png') as ImageSourcePropType,
+  'category-produce': require('@/assets/icons/category-produce.png') as ImageSourcePropType,
+  'category-meat': require('@/assets/icons/category-meat.png') as ImageSourcePropType,
+  'category-seafood': require('@/assets/icons/category-seafood.png') as ImageSourcePropType,
+  'category-dairy': require('@/assets/icons/category-dairy.png') as ImageSourcePropType,
+  'category-bakery': require('@/assets/icons/category-bakery.png') as ImageSourcePropType,
+  'category-snacks': require('@/assets/icons/category-snacks.png') as ImageSourcePropType,
+  'category-beverages': require('@/assets/icons/category-beverages.png') as ImageSourcePropType,
+  'category-pantry': require('@/assets/icons/category-pantry.png') as ImageSourcePropType,
+  'category-baby': require('@/assets/icons/category-baby.png') as ImageSourcePropType,
 } as const;
 
 export type IconName = keyof typeof GLYPHS;
@@ -104,6 +122,7 @@ export function Icon({
   size = 20,
   color: colorToken = 'icon/primary',
   tint,
+  points,
 }: {
   name: IconName;
   /** From the icon scale: 12 inside a label, 16 inline with text, 20 utility, 24 tab. */
@@ -116,8 +135,14 @@ export function Icon({
    * Overrides `color`.
    */
   tint?: HexColor;
+  /**
+   * An exact side in points, overriding `size`. Only for a surface whose own
+   * approved contract names a size off the scale (the Feed + Filters kit's
+   * 18pt location pin); everything else stays on the four steps.
+   */
+  points?: number;
 }) {
-  const side = iconSize[size];
+  const side = points ?? iconSize[size];
   return (
     <GuardedImage
       source={GLYPHS[name]}

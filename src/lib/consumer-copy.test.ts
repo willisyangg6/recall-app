@@ -42,7 +42,9 @@ import {
   FEED_EMPTY_CORPUS,
   FEED_EMPTY_PERSONALIZED,
   FEED_LOAD_FAILURE,
-  OLDER_NOTICES_EXPLANATION,
+  OLDER_NOTICES_EXPLANATION_AFFECTS,
+  OLDER_NOTICES_EXPLANATION_ALL,
+  OLDER_NOTICES_TITLE,
   PERSONALIZE_CTA,
 } from '@/lib/feed-copy';
 import {
@@ -319,7 +321,7 @@ test('Recall is never the product; the product is Lotly', () => {
   assert.equal(PERSONALIZE_CTA.title, 'Set up personalization');
   assert.equal(
     PERSONALIZE_CTA.body,
-    'Choose your states, allergens, and stores to see matching recalls in Affects me.',
+    'Choose your states, allergens, and stores to see matching recalls in Affects you.',
   );
   assert.equal(SAVED_UNAVAILABLE.title, 'Available in the app');
   assert.match(SAVED_UNAVAILABLE.body, /Open Lotly on your phone/);
@@ -341,8 +343,13 @@ test('Affects me, All recalls, recall alerts and AFFECTS YOU follow their rules'
   // `All recalls` in prose; the chip alone says `All`.
   assert.doesNotMatch(documents, /All Recalls/);
   assert.match(documents, /All recalls always remains available/);
-  assert.match(FEED_EMPTY_PERSONALIZED.body, /Switch to All to see every current recall/);
-  assert.match(SCREENS.feed, /Filtering All recalls · /);
+  // The tab names (2026-10-06): the instruction names the tab as shown.
+  assert.match(FEED_EMPTY_PERSONALIZED.body, /Switch to All recalls to see every current recall/);
+  // The Feed + Filters design (2026-10-06): the active-filter state is the
+  // Filters control's own label ("Filters · 2"), on both feeds; the chip
+  // row's "Filtering All recalls · N selected" line went with the chips.
+  assert.doesNotMatch(SCREENS.feed, /Filtering All recalls · /);
+  assert.match(SCREENS.feed, /filtersButtonLabel\(filters\)/);
   for (const module of Object.values(COPY_MODULES)) {
     for (const literal of literals(module).filter(isProse)) {
       assert.doesNotMatch(literal, /Affects Me|All Recalls/, literal);
@@ -563,10 +570,24 @@ test('frozen and protected copy is still present, word for word', () => {
     REPORT_PAUSED_MESSAGE,
     'Shopper reports are temporarily unavailable, so this report can’t be edited right now. You can still remove it.',
   );
+  // 2026-10-06: the older section claims only what dates and agency
+  // evidence prove — never "active" (Lotly receives no FDA closures).
+  assert.equal(OLDER_NOTICES_TITLE, 'Older notices');
   assert.equal(
-    OLDER_NOTICES_EXPLANATION,
-    'Still listed as active by the issuing agency, with no announcement or update in the last 60 days.',
+    OLDER_NOTICES_EXPLANATION_ALL,
+    'No announcement or update from the agency in the last 60 days.',
   );
+  assert.equal(
+    OLDER_NOTICES_EXPLANATION_AFFECTS,
+    'These match your choices but have had no announcement or update in the last 60 days, and the agency hasn’t confirmed they’re still open.',
+  );
+  for (const text of [
+    OLDER_NOTICES_TITLE,
+    OLDER_NOTICES_EXPLANATION_ALL,
+    OLDER_NOTICES_EXPLANATION_AFFECTS,
+  ]) {
+    assert.doesNotMatch(text, /\bactive\b/i);
+  }
   assert.equal(
     RESET_FAILURE_MESSAGE,
     'Could not delete your data. Nothing was changed. Check your connection and try again.',

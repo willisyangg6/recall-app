@@ -192,7 +192,8 @@ test('the feed request and ordering path is unchanged by the move', () => {
   assert.match(hook, /fetchManifest: fetchCurrentManifest/);
   assert.match(hook, /fetchAll: fetchCurrentFeed/);
   assert.match(hook, /fetchByIds: fetchFeedItemsByIds/);
-  assert.match(FEED, /buildFeedSections\(allVisible\)/);
+  // The calendar clock is the only addition (2026-10-06, open-evidence expiry).
+  assert.match(FEED, /buildFeedSections\(allVisible, now\)/);
   // 2026-10-05: no filtered view re-sorts; the sections' shared order stands.
   assert.doesNotMatch(FEED, /orderByLocationTiers/);
 });

@@ -7,9 +7,11 @@
  *
  * `content/baseline-recalls.json` is written by
  * `scripts/record-baseline-recalls.ts` from the PUBLIC consumer feed, by one
- * rule: every active, unmerged case whose material activity falls within the
- * Affects Me recency window at recording time, with each case's detail rows
- * so Recall Detail can render one when the live service cannot answer.
+ * rule (`lib/baseline-selection.ts`): every active, unmerged case the app
+ * would COUNT at recording time — material activity within the Affects Me
+ * recency window, or confirmed still open by its agency (2026-10-06) — with
+ * each case's detail rows so Recall Detail can render one when the live
+ * service cannot answer. Each row keeps its FDA open-evidence date.
  * Nothing is hand-picked, edited or invented: dates, hazards, locations and
  * identities are the agencies' own, and the records go through the SAME
  * matching, lifecycle and recency rules as a downloaded corpus
@@ -18,16 +20,20 @@
  *
  * ## How it ages
  *
- * The recency window is measured against the device's clock, so a baseline
- * recorded on `recordedAt` holds fewer current matches each day and none
- * once it is older than the window. That is the truthful outcome — a count
- * is never inflated to hide it — and the reason the script is re-run before
- * each release (`npm run record:baseline`). `baselineAgeDays` lets QA and
- * tests say how old the shipped baseline is.
+ * Both clocks run on the device, exactly as for a downloaded corpus: the
+ * recency window ages the in-window part out over 60 days, and each FDA
+ * open-evidence date stops counting 21 days after its export
+ * (`lib/open-evidence.ts`) — an offline baseline can never keep counting a
+ * recall a live corpus would have stopped counting. FSIS recalls the agency
+ * still lists as active count while the baseline is shipped. That is the
+ * truthful outcome — a count is never inflated to hide it — and the reason
+ * the script is re-run before each release (`npm run record:baseline`).
+ * `baselineAgeDays` lets QA and tests say how old the shipped baseline is.
  */
 
 import baseline from '@/content/baseline-recalls.json';
 import { RECENT_WINDOW_DAYS } from '@/lib/feed-relevance';
+import { readFdaOngoingAsOf } from '@/lib/open-evidence';
 import type { CaseDetail, FeedItem } from '@/lib/recall-feed';
 
 interface BaselineCase {
@@ -39,6 +45,8 @@ interface BaselineDocument {
   recordedAt: string;
   recentActivityDays: number;
   rule: string;
+  /** The openFDA export the FDA open evidence was read from (absent before 2026-10-06). */
+  openEvidenceExportDate?: string | null;
   cases: BaselineCase[];
 }
 
@@ -48,7 +56,12 @@ const document = baseline as unknown as BaselineDocument;
 export const BASELINE_RECORDED_AT: string = document.recordedAt;
 
 /** The baseline as feed rows: what Building and Ready match against offline. */
-export const BASELINE_RECALLS: readonly FeedItem[] = document.cases.map((entry) => entry.item);
+export const BASELINE_RECALLS: readonly FeedItem[] = document.cases.map((entry) => ({
+  ...entry.item,
+  // Through the strict reader: a baseline recorded before open evidence (or a
+  // malformed value) reads as no evidence, never as evidence.
+  fdaOngoingAsOf: readFdaOngoingAsOf((entry.item as { fdaOngoingAsOf?: unknown }).fdaOngoingAsOf),
+}));
 
 const DETAILS = new Map(document.cases.map((entry) => [entry.detail.id, entry.detail]));
 

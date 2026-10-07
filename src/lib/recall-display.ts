@@ -416,15 +416,3 @@ export function selectHazardGuidance(
   }
   return selected && selected.risk !== null ? guidance(selected, selected.risk) : null;
 }
-
-export function stateLabel(state: 'active' | 'closed' | 'retracted'): string {
-  switch (state) {
-    case 'active':
-      return 'Active';
-    case 'closed':
-      // "Closed" means the agency concluded its process — never "safe now".
-      return 'Closed by agency';
-    case 'retracted':
-      return 'Retracted';
-  }
-}

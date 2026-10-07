@@ -28,11 +28,16 @@
 import { materialActivityAt } from '@/domain/material-activity';
 import type { TimelineEntry } from '@/domain/recall-types';
 import { tierForActivityDate } from './feed-relevance';
+import { confirmedOpen, type OpenEvidenceInput } from './open-evidence';
 import { compareRecencyKeys, recencyKey, type RecencyKey } from './recency-order';
 import type { PersonalRelevance } from './relevance';
 
-/** The minimum a case must expose to be ranked. `FeedItem` satisfies it. */
-export interface AffectsMeRankable {
+/**
+ * The minimum a case must expose to be ranked. `FeedItem` satisfies it. The
+ * open-evidence facts are REQUIRED so no surface can split the sections
+ * without them — Building, Ready and the Feed tab count one set.
+ */
+export interface AffectsMeRankable extends OpenEvidenceInput {
   id: string;
   publishedAt: string;
   timeline: TimelineEntry[];
@@ -67,9 +72,17 @@ export function explainAffectsMePriority(priority: AffectsMePriority): string {
 }
 
 export interface AffectsMeSections<T> {
-  /** Qualifying notices with recent material activity — the primary list. */
+  /**
+   * The COUNTED matches — the primary list, and the one number Building and
+   * Ready show: material activity within 60 days, or confirmed open by the
+   * agency (lib/open-evidence.ts).
+   */
   affects: T[];
-  /** Qualifying notices whose last authoritative event is older than 60 days. */
+  /**
+   * Matches outside the window that no agency currently confirms are open:
+   * FSIS alerts, FDA recalls whose linked products are Completed/Terminated,
+   * unlinked FDA recalls, and FDA evidence older than 21 days.
+   */
   older: T[];
 }
 
@@ -80,6 +93,18 @@ export interface AffectsMeSectionsResult<T> extends AffectsMeSections<T> {
 
 /**
  * Partition the active feed into the two Affects-me sections and rank each.
+ *
+ * ## Counted: recent OR confirmed open (2026-10-06, founder decision)
+ *
+ * A match is counted when its material activity is within the 60-day window
+ * OR an agency affirmatively shows it is still open — FSIS lifecycle for an
+ * FSIS recall, or a current FDA `Ongoing` enforcement status
+ * (`confirmedOpen`, which also applies the 21-day evidence expiry against
+ * the SAME `now`). Membership only: each section is still sorted ONCE by the
+ * shared comparator, with no tier, group or evidence key. A confirmed-open
+ * recall from 2024 lands below every in-window recall only because its date
+ * is older. "Recent" stays date-only everywhere: All recalls never reads
+ * evidence (`buildFeedSections`).
  *
  * Recency uses MATERIAL activity, not `lastPublicActivityAt`: an authoritative
  * expansion or classification today legitimately returns an older recall to the
@@ -116,8 +141,10 @@ export function buildAffectsMeSections<T extends AffectsMeRankable>(
     const priority = affectsMePriority(item);
     priorityById.set(item.id, priority);
     if (!relevanceOf(item).affectsMe) continue;
-    const tier = tierForActivityDate(priority.materialActivityAt, now);
-    (tier === 'recent' ? affects : older).push(item);
+    const counted =
+      tierForActivityDate(priority.materialActivityAt, now) === 'recent' ||
+      confirmedOpen(item, now);
+    (counted ? affects : older).push(item);
   }
 
   const byPriority = (a: T, b: T) =>

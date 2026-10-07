@@ -40,8 +40,8 @@ const SEVERITY_MEANING: Record<string, string> = {
     'Affected products carry different official classifications, including the most serious one.',
   high: 'The agency placed this recall in its middle classification.',
   moderate:
-    'The affected products carry the agency’s two lower classifications. This is still an active recall.',
-  low: 'The affected products carry only the agency’s least serious classification. This is still an active recall.',
+    'The affected products carry the agency’s two lower classifications. A lower classification is still a recall.',
+  low: 'The affected products carry only the agency’s least serious classification. A lower classification is still a recall.',
 };
 
 const UNCERTAINTY_MEANING: Record<string, string> = {

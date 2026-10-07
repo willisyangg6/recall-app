@@ -1,40 +1,29 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  Modal,
+  AccessibilityInfo,
+  findNodeHandle,
+  Keyboard,
   Pressable,
   RefreshControl,
-  ScrollView,
   SectionList,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Link, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FiltersSheet } from '@/components/feed/filters-sheet';
 import { StateMessage } from '@/components/state-message';
 import { RecallCard } from '@/components/recall-card';
 import { Callout } from '@/components/ui/callout';
-import { Chip } from '@/components/ui/chip';
+import { Icon } from '@/components/ui/icon';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
-import {
-  color,
-  hitSlopToMinimum,
-  hitTarget,
-  layout,
-  radius,
-  spacing,
-  typography,
-} from '@/constants/design-tokens';
-import type { FoodCategoryId } from '@/domain/food-category';
-import { LAUNCH_CATEGORY_OPTIONS, sanitizeLaunchCategoryIds } from '@/domain/food-category-launch';
-import {
-  hasAnyPreference,
-  stateNameForCode,
-  SUPPORTED_STATE_CODES,
-  type UserRecallPreferences,
-} from '@/domain/preferences';
+import { color, hitSlopToMinimum, layout, spacing, typography } from '@/constants/design-tokens';
+import { CARD_STACK_SCALE, feedColor, feedGeometry, feedType } from '@/constants/feed-design';
+import { hasAnyPreference, type UserRecallPreferences } from '@/domain/preferences';
 import { useAccess } from '@/hooks/use-access';
 import { useFeed } from '@/hooks/use-feed';
 import { usePreferences } from '@/hooks/use-preferences';
@@ -42,22 +31,24 @@ import { buildAffectsMeSections } from '@/lib/affects-me-ranking';
 import {
   FEED_EMPTY_CORPUS,
   FEED_EMPTY_FILTERS,
+  FEED_EMPTY_FILTERS_AFFECTS,
   FEED_EMPTY_PERSONALIZED,
   FEED_EMPTY_SEARCH,
   FEED_ERROR_TITLE,
   FEED_LOADING,
   FEED_NOT_CONFIGURED,
   FEED_NOT_CONFIGURED_DEV,
-  OLDER_NOTICES_EXPLANATION,
+  OLDER_NOTICES_EXPLANATION_AFFECTS,
+  OLDER_NOTICES_EXPLANATION_ALL,
+  OLDER_NOTICES_TITLE,
   PERSONALIZE_CTA,
 } from '@/lib/feed-copy';
 import { PREFERENCES_SET_CONFIRMATION } from '@/lib/onboarding-copy';
+import { filtersButtonAccessibilityLabel, filtersButtonLabel } from '@/lib/feed-filter-draft';
 import {
-  activeFilterCount,
   applyFeedFilters,
   EMPTY_FEED_FILTERS,
   hasActiveFilters,
-  RISK_FILTER_TIERS,
   sameFeedFilters,
   type FeedFilterState,
 } from '@/lib/feed-filters';
@@ -66,8 +57,8 @@ import { buildFeedSections } from '@/lib/feed-relevance';
 import { knownPreferences, preferencesAvailable } from '@/lib/preferences-store';
 import { isFeedConfigured, type FeedItem } from '@/lib/recall-feed';
 import { buildHomeCardModel, todayIso } from '@/lib/recall-presentation';
+import { useCalendarClock } from '@/hooks/use-calendar-clock';
 import { evaluatePersonalRelevance, type PersonalRelevance } from '@/lib/relevance';
-import { riskTierWord } from '@/lib/risk-display';
 
 /**
  * The Feed (P2B1 appearance; behaviour unchanged since C10B / P2A).
@@ -90,122 +81,98 @@ import { riskTierWord } from '@/lib/risk-display';
 
 type FeedTab = 'affects_me' | 'all';
 
-/** The Location sheet's 52 canonical jurisdictions, alphabetical by name. */
-const LOCATION_OPTIONS = SUPPORTED_STATE_CODES.map((code) => ({
-  value: code,
-  label: stateNameForCode(code) as string,
-})).sort((a, b) => a.label.localeCompare(b.label));
-
-/** The Risk sheet's canonical tiers, existing labels only. */
-const RISK_OPTIONS = RISK_FILTER_TIERS.map((tier) => ({
-  value: tier as string,
-  label: riskTierWord(tier),
-}));
-
-/**
- * The Category sheet's nine launch-visible aisles, in canonical display order.
- * Imported whole from the one place the allowlist is defined — Prepared foods,
- * Supplements and Other are absent because that module hides them, never
- * because this screen filters them out (see domain/food-category-launch.ts).
- */
-const CATEGORY_OPTIONS = LAUNCH_CATEGORY_OPTIONS.map((option) => ({ ...option }));
-
 /** A one-caption-line control reaches the 44pt target through hitSlop. */
 const CAPTION_HIT_SLOP = hitSlopToMinimum(typography.caption.lineHeight);
 
 /**
- * A sheet action: the primary Apply as a brand-navy pill, Cancel and Clear
- * as bordered white pills — each a full 44pt target on its own.
+ * The two feeds as one connected control (2026-10-06, the approved Feed
+ * header): two equal halves inside a 12pt-radius outline, the chosen one
+ * brand navy with white text. Exactly one is selected; each half is a full
+ * 44pt tab that announces its selection. From the accessibility text sizes
+ * the halves stack, full width, so no label breaks mid-word.
  */
-function SheetButton({
-  label,
-  primary,
+function FeedTabs({ tab, onChange }: { tab: FeedTab; onChange: (next: FeedTab) => void }) {
+  const { fontScale } = useWindowDimensions();
+  const stacked = fontScale >= CARD_STACK_SCALE;
+  return (
+    <View accessibilityRole="tablist" style={[styles.tabs, stacked && styles.tabsStacked]}>
+      {(
+        [
+          { key: 'all', label: 'All recalls' },
+          { key: 'affects_me', label: 'Affects you' },
+        ] as const
+      ).map(({ key, label }) => {
+        const selected = tab === key;
+        return (
+          <Pressable
+            key={key}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            accessibilityLabel={label}
+            onPress={() => onChange(key)}
+            style={({ pressed }) => [
+              styles.tab,
+              stacked && styles.tabStacked,
+              selected && styles.tabSelected,
+              pressed && styles.pressed,
+            ]}>
+            <Text style={[feedType.control, selected ? styles.tabTextSelected : styles.tabText]}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * The Filters control: a native outlined button (the kit's raster is a
+ * visual reference only), at least 88 × 44pt, growing to fit its count —
+ * the number of filter GROUPS narrowing this feed, never a result count.
+ */
+function FiltersButton({
+  filters,
   onPress,
+  buttonRef,
 }: {
-  label: string;
-  primary?: boolean;
+  filters: FeedFilterState;
   onPress: () => void;
+  buttonRef: React.RefObject<View | null>;
 }) {
   return (
     <Pressable
+      ref={buttonRef}
       accessibilityRole="button"
+      accessibilityLabel={filtersButtonAccessibilityLabel(filters)}
+      accessibilityHint="Opens location, risk and category filters."
       onPress={onPress}
-      style={({ pressed }) => pressed && styles.pressed}>
-      <Surface
-        background={primary ? 'background/brand' : 'background/surface'}
-        border={primary ? undefined : 'border/default'}
-        radius="full"
-        style={styles.sheetButton}>
-        <Text variant="caption" color={primary ? 'text/inverse' : 'text/primary'}>
-          {label}
-        </Text>
-      </Surface>
+      style={({ pressed }) => [styles.filtersButton, pressed && styles.pressed]}>
+      <Icon name="filters" points={18} tint={feedColor.text} />
+      <Text style={[feedType.metaStrong, styles.ink]}>{filtersButtonLabel(filters)}</Text>
     </Pressable>
   );
 }
 
 /**
- * Modal multi-select for one filter dimension. Selections are a DRAFT until
- * Apply — Cancel discards, Clear empties the dimension. This is browsing
- * state for the current session, never a saved preference.
+ * Affects you with its own filters matching nothing: the plain sentence and
+ * one action that clears THIS feed's filters (through the same guarded Apply
+ * path), bringing its matching recalls back.
  */
-function FilterSheet({
-  title,
-  options,
-  selected,
-  onApply,
-  onClose,
-}: {
-  title: string;
-  options: { value: string; label: string }[];
-  selected: string[];
-  onApply: (next: string[]) => void;
-  onClose: () => void;
-}) {
-  const insets = useSafeAreaInsets();
-  const [draft, setDraft] = useState<string[]>(selected);
-  const toggle = (value: string) =>
-    setDraft((prior) =>
-      prior.includes(value) ? prior.filter((v) => v !== value) : [...prior, value],
-    );
+function AffectsFilteredEmpty({ onClear }: { onClear: () => void }) {
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.sheetBackdrop}>
-        <Surface style={[styles.sheet, { paddingBottom: spacing[16] + insets.bottom }]}>
-          <Text variant="heading-3" accessibilityRole="header">
-            {title}
-          </Text>
-          <ScrollView style={styles.sheetList} keyboardShouldPersistTaps="handled">
-            {options.map((option) => {
-              const isSelected = draft.includes(option.value);
-              return (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: isSelected }}
-                  accessibilityLabel={option.label}
-                  onPress={() => toggle(option.value)}
-                  style={({ pressed }) => [styles.sheetItem, pressed && styles.pressed]}>
-                  <Text variant="body">{isSelected ? `✓ ${option.label}` : option.label}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <View style={styles.sheetActions}>
-            <SheetButton label="Cancel" onPress={onClose} />
-            <SheetButton label="Clear selection" onPress={() => setDraft([])} />
-            <SheetButton
-              label="Apply"
-              primary
-              onPress={() => {
-                onApply(draft);
-                onClose();
-              }}
-            />
-          </View>
-        </Surface>
-      </View>
-    </Modal>
+    <View style={styles.filteredEmpty}>
+      <Text variant="heading-3" accessibilityRole="header" style={styles.centerText}>
+        {FEED_EMPTY_FILTERS_AFFECTS.title}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityHint="Shows every recall that matches your choices again."
+        onPress={onClear}
+        style={({ pressed }) => [styles.clearFilters, pressed && styles.pressed]}>
+        <Text style={[feedType.control, styles.ink]}>{FEED_EMPTY_FILTERS_AFFECTS.action}</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -234,6 +201,22 @@ function Page({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * The title alone, for the whole-screen states (loading, error, not
+ * configured) that have no list: the screen still says where it is now that
+ * the navigator's bar is hidden.
+ */
+function TitleOnly() {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.titleOnly, { paddingTop: insets.top + feedGeometry.headerGap }]}>
+      <Text accessibilityRole="header" style={[feedType.heading, styles.ink]}>
+        Feed
+      </Text>
+    </View>
+  );
+}
+
 interface HomeSection {
   key: 'affects' | 'recent' | 'older';
   title: string;
@@ -245,6 +228,14 @@ export default function HomeScreen() {
   // Building and Ready showed; the Feed starts from it rather than from
   // `Loading recalls…`, and revalidates on mount as it always did.
   const { state, refreshing, refresh } = useFeed({ startFromServed: true });
+  // The one clock for sections, evidence expiry and card dates: it moves at
+  // each calendar boundary and on resume, not only when a sync lands.
+  const now = useCalendarClock();
+  // The screen draws its own title (the navigator's bar is hidden for Feed).
+  const insets = useSafeAreaInsets();
+  // From the accessibility text sizes the heading/Filters row stacks.
+  const { fontScale } = useWindowDimensions();
+  const largeText = fontScale >= CARD_STACK_SCALE;
   const [showOlder, setShowOlder] = useState(false);
   // The intended view before the first visible frame (2026-10-04): a
   // shopper with preferences this process has already read lands on
@@ -254,11 +245,28 @@ export default function HomeScreen() {
     return known !== null && hasAnyPreference(known) ? 'affects_me' : 'all';
   });
   // Browsing state (C6): session-only, in memory, never persisted, never part
-  // of the personalization profile. Filters apply to All Recalls; switching to
-  // Affects me ignores them TEMPORARILY while preserving the selections.
+  // of the personalization profile. Since the Feed + Filters design
+  // (2026-10-06) each feed keeps its OWN filters: one Filters sheet works on
+  // both, and switching feeds neither carries nor clears the other's
+  // selection. In Affects me they only narrow the already-eligible,
+  // already-ranked list (see below) — they never change who is eligible.
   const [query, setQuery] = useState('');
-  const [filters, setFilters] = useState<FeedFilterState>(EMPTY_FEED_FILTERS);
-  const [openSheet, setOpenSheet] = useState<'location' | 'risk' | 'category' | null>(null);
+  const [filtersByTab, setFiltersByTab] = useState<Record<FeedTab, FeedFilterState>>({
+    all: EMPTY_FEED_FILTERS,
+    affects_me: EMPTY_FEED_FILTERS,
+  });
+  const filters = filtersByTab[tab];
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // Focus returns to the Filters button once the sheet has gone.
+  const filtersButton = useRef<View>(null);
+  const focusFiltersButton = useCallback(() => {
+    const tag = findNodeHandle(filtersButton.current);
+    if (tag !== null) AccessibilityInfo.setAccessibilityFocus(tag);
+  }, []);
+  const openFilters = useCallback(() => {
+    Keyboard.dismiss();
+    setSheetOpen(true);
+  }, []);
   const decidedFromKnown = useRef(knownPreferences() !== null);
   const prefs = usePreferences(
     useCallback((loaded: UserRecallPreferences) => {
@@ -316,43 +324,26 @@ export default function HomeScreen() {
     listRef.current?.getScrollResponder()?.scrollTo({ y: 0, animated: false });
   }, []);
 
-  // Applying a browsing filter while viewing Affects me switches to All —
-  // the filters describe the complete feed, never the personal one. The
-  // selection itself survives mode switches in `filters` untouched.
-  //
-  // An Apply that selects what was already applied is a COMPLETE no-op. That
-  // is what keeps the reading position safe from everything that is not a
-  // real change: Cancel never reaches here at all, and Apply-without-edits
-  // returns before touching state. Only a changed selection scrolls.
-  const applyDimension = useCallback(
-    (dimension: 'stateCodes' | 'riskTiers' | 'categoryIds', next: string[]) => {
-      // Category is the one dimension whose vocabulary is wider than what the
-      // UI offers, so every incoming selection crosses the launch allowlist
-      // before it becomes state. A hidden or unknown id therefore cannot enter
-      // the filter through the sheet, through a restored draft, or through any
-      // future path that reaches this callback.
-      const value =
-        dimension === 'categoryIds' ? (sanitizeLaunchCategoryIds(next) as FoodCategoryId[]) : next;
-      const updated = { ...filters, [dimension]: value } as FeedFilterState;
-      if (sameFeedFilters(filters, updated)) return;
-      setFilters(updated);
-      if (value.length > 0) setTab('all');
+  // Apply filters commits the sheet's draft to THIS feed only. An Apply that
+  // selects what was already applied is a COMPLETE no-op, which keeps the
+  // reading position safe from everything that is not a real change: Close
+  // never reaches here at all, and Apply-without-edits returns before
+  // touching state. Only a changed selection scrolls. The categories have
+  // already crossed the launch allowlist (`committedFilters`).
+  const applyFilters = useCallback(
+    (next: FeedFilterState) => {
+      if (sameFeedFilters(filters, next)) return;
+      setFiltersByTab((prior) => ({ ...prior, [tab]: next }));
       scrollFeedToTop();
     },
-    [filters, scrollFeedToTop],
+    [filters, tab, scrollFeedToTop],
   );
-
-  /** Clear all: the same rule — only a real change moves the reader. */
-  const clearAllFilters = useCallback(() => {
-    if (!hasActiveFilters(filters)) return;
-    setFilters(EMPTY_FEED_FILTERS);
-    scrollFeedToTop();
-  }, [filters, scrollFeedToTop]);
   // ── END SCROLL POSITION ON FILTER CHANGE ────────────────────────────────
 
   if (!isFeedConfigured()) {
     return (
       <Page>
+        <TitleOnly />
         {/* `__DEV__` is false in a release build, so a shopper reads the
             shopper sentence and never the one naming environment
             variables. See lib/feed-copy.ts. */}
@@ -364,6 +355,7 @@ export default function HomeScreen() {
   if (state.status === 'loading') {
     return (
       <Page>
+        <TitleOnly />
         <StateMessage {...FEED_LOADING} tone="loading" />
       </Page>
     );
@@ -372,6 +364,7 @@ export default function HomeScreen() {
   if (state.status === 'error') {
     return (
       <Page>
+        <TitleOnly />
         <StateMessage title={FEED_ERROR_TITLE} body={state.message} tone="error" />
       </Page>
     );
@@ -386,12 +379,16 @@ export default function HomeScreen() {
   // with nothing active buildFeedSections receives exactly what
   // fetchCurrentFeed produced — sectioning and ordering byte-for-byte. The
   // loaded corpus itself is never mutated or truncated by any of this.
-  const allVisible = filterBySearch(applyFeedFilters(state.items, filters), query, entryOf);
+  const allVisible = filterBySearch(
+    applyFeedFilters(state.items, filtersByTab.all),
+    query,
+    entryOf,
+  );
   // Filters decide membership only (2026-10-05): a filtered view keeps the one
   // shared newest-first order the sections already carry. The C6.1 re-sort
   // that led a filtered section with explicit selected-state matches is gone,
   // so a newer nationwide recall sits above an older one naming the state.
-  const { recent, olderActive } = buildFeedSections(allVisible);
+  const { recent, olderActive } = buildFeedSections(allVisible, now);
 
   const personalized = tab === 'affects_me' && prefs !== null && hasAnyPreference(prefs);
   // One relevance evaluation per case whenever preferences exist, for Affects
@@ -414,7 +411,7 @@ export default function HomeScreen() {
   }
   // The injected calendar date every card's activity line is formatted
   // against — one read per render, so all cards agree on what "Today" is.
-  const today = todayIso();
+  const today = todayIso(now);
 
   let sections: HomeSection[];
   let affectsCounts = { affects: 0, older: 0 };
@@ -425,17 +422,22 @@ export default function HomeScreen() {
     // ranking run over the COMPLETE corpus exactly as before; search then
     // narrows the already-eligible, already-ranked output (order-preserving),
     // so it can never surface an ineligible notice or reorder an eligible one.
-    // Location/Risk browsing filters are deliberately NOT applied here.
-    const ranked = buildAffectsMeSections(state.items, (item) => relevanceById.get(item.id)!);
-    const affects = filterBySearch(ranked.affects, query, entryOf);
-    const older = filterBySearch(ranked.older, query, entryOf);
+    // This feed's own browsing filters (2026-10-06) narrow the same way:
+    // AFTER eligibility and ranking, order-preserving (`applyFeedFilters`
+    // only removes), so they can hide a match but never add a non-match,
+    // re-rank one, or move one between sections.
+    const ranked = buildAffectsMeSections(state.items, (item) => relevanceById.get(item.id)!, {
+      now,
+    });
+    const affects = filterBySearch(applyFeedFilters(ranked.affects, filters), query, entryOf);
+    const older = filterBySearch(applyFeedFilters(ranked.older, filters), query, entryOf);
     affectsCounts = { affects: affects.length, older: older.length };
     sections = [
       ...(affects.length > 0
-        ? [{ key: 'affects' as const, title: 'Affects me', data: affects }]
+        ? [{ key: 'affects' as const, title: 'Affects you', data: affects }]
         : []),
       ...(older.length > 0
-        ? [{ key: 'older' as const, title: 'Older active notices', data: showOlder ? older : [] }]
+        ? [{ key: 'older' as const, title: OLDER_NOTICES_TITLE, data: showOlder ? older : [] }]
         : []),
     ];
   } else if (tab === 'affects_me') {
@@ -451,7 +453,7 @@ export default function HomeScreen() {
         ? [
             {
               key: 'older' as const,
-              title: 'Older active notices',
+              title: OLDER_NOTICES_TITLE,
               data: showOlder ? olderActive : [],
             },
           ]
@@ -463,124 +465,43 @@ export default function HomeScreen() {
   const filtersActive = hasActiveFilters(filters);
   const searchActive = query.trim() !== '';
   const olderCount = personalized ? affectsCounts.older : olderActive.length;
+  // Filters serve a list: All always, Affects me once personalization exists
+  // (with nothing configured it shows only the invitation, nothing to narrow).
+  const filtersAvailable = tab === 'all' || personalized;
+  const firstSectionKey = sections[0]?.key ?? null;
+  const filtersControl = filtersAvailable ? (
+    <FiltersButton filters={filters} onPress={openFilters} buttonRef={filtersButton} />
+  ) : null;
 
-  return (
-    <Page>
+  // The approved Feed header (2026-10-06): the screen's own left-aligned
+  // title (the navigator's bar is hidden for this tab, (tabs)/_layout), the
+  // search field, and the two feeds as one connected control. It is the
+  // list's header, so it scrolls with the recalls: at the largest text sizes
+  // a fixed header would fill a small screen and leave no room for a card.
+  const header = (
+    <View style={styles.header}>
+      <Text accessibilityRole="header" style={[feedType.heading, styles.ink]}>
+        Feed
+      </Text>
       {/* Search lives inside the Feed and is never a destination: it filters
           the loaded corpus and navigates nowhere. The bar is the shared
           primitive; what it matches against is `filterBySearch`, unchanged. */}
-      <View style={styles.searchRow}>
-        <SearchBar
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search product, company, brand, or code"
-          accessibilityLabel="Search recalls"
-          accessibilityHint="Narrows the recalls below as you type."
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-        />
-      </View>
-
-      {/* One horizontally scrolling chip row (the approved composition), two
-          conceptual levels (the shipped behaviour): the feed-mode pair first,
-          then — only while All is active — the filters that refine it, kept
-          visually apart by a hairline. The row may overflow sideways; the
-          page never does. */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        style={styles.chipBar}
-        contentContainerStyle={styles.chipBarContent}>
-        {/* ── FEED MODE CONTROL (C6.1) ──────────────────────────────────────
-            The top-level choice: WHICH feed you are looking at. All and
-            Affects me are mutually exclusive scopes, so they are a pair of
-            either/or chips — exactly one selected — rather than toggles
-            among the filters that merely refine All. */}
-        {showTabs
-          ? (
-              [
-                { key: 'all', label: 'All' },
-                { key: 'affects_me', label: 'Affects me' },
-              ] as const
-            ).map(({ key, label }) => (
-              <Chip key={key} label={label} selected={tab === key} onPress={() => setTab(key)} />
-            ))
-          : null}
-        {/* ── END FEED MODE CONTROL ─────────────────────────────────────────*/}
-        {/* ── ALL-ONLY FILTER ROW (C6.1) ────────────────────────────────────
-            Location and Risk refine the All Recalls feed and NOTHING else, so
-            they render only while All is the active mode. In Affects me they —
-            and their counts and Clear all — are absent entirely: they cannot
-            be opened, read, or cleared from there, while the selections stay
-            untouched in session state for the return to All.
-
-            Category (C10B) is a third peer in this row, deliberately last: it is
-            the only dimension whose values are DERIVED rather than stated by the
-            agency, so it sits after the two the source vouches for. It is an
-            optional discovery aid — every recall stays reachable with it
-            cleared — and it never applies to Affects me.
-
-            Each of these opens a picker sheet, which is what the chevron says. */}
-        {tab === 'all' && showTabs ? <View style={styles.chipDivider} /> : null}
-        {tab === 'all' ? (
-          <Chip
-            label={
-              filters.stateCodes.length > 0 ? `Location · ${filters.stateCodes.length}` : 'Location'
-            }
-            selected={filters.stateCodes.length > 0}
-            trailingIcon="chevron-down"
-            accessibilityLabel={
-              filters.stateCodes.length > 0
-                ? `Location filter, ${filters.stateCodes.length} selected`
-                : 'Location filter'
-            }
-            onPress={() => setOpenSheet('location')}
-          />
-        ) : null}
-        {tab === 'all' ? (
-          <Chip
-            label={filters.riskTiers.length > 0 ? `Risk · ${filters.riskTiers.length}` : 'Risk'}
-            selected={filters.riskTiers.length > 0}
-            trailingIcon="chevron-down"
-            accessibilityLabel={
-              filters.riskTiers.length > 0
-                ? `Risk filter, ${filters.riskTiers.length} selected`
-                : 'Risk filter'
-            }
-            onPress={() => setOpenSheet('risk')}
-          />
-        ) : null}
-        {tab === 'all' ? (
-          <Chip
-            label={
-              filters.categoryIds.length > 0
-                ? `Category · ${filters.categoryIds.length}`
-                : 'Category'
-            }
-            selected={filters.categoryIds.length > 0}
-            trailingIcon="chevron-down"
-            accessibilityLabel={
-              filters.categoryIds.length > 0
-                ? `Category filter, ${filters.categoryIds.length} selected`
-                : 'Category filter'
-            }
-            onPress={() => setOpenSheet('category')}
-          />
-        ) : null}
-        {tab === 'all' && filtersActive ? (
-          <Chip label="Clear all" selected={false} onPress={clearAllFilters} />
-        ) : null}
-      </ScrollView>
-      {tab === 'all' && filtersActive ? (
-        <View style={styles.contextRow}>
-          <Text variant="caption" color="text/secondary">
-            Filtering All recalls · {activeFilterCount(filters)} selected
-          </Text>
-        </View>
-      ) : null}
-      {/* ── END ALL-ONLY FILTER ROW ───────────────────────────────────────*/}
+      <SearchBar
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search product, company, brand, or code"
+        accessibilityLabel="Search recalls"
+        accessibilityHint="Narrows the recalls below as you type."
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="search"
+        appearance="outline"
+      />
+      {/* ── FEED MODE CONTROL (C6.1) ────────────────────────────────────────
+          The top-level choice: WHICH feed you are looking at. All and
+          Affects me are mutually exclusive scopes — exactly one selected. */}
+      {showTabs ? <FeedTabs tab={tab} onChange={setTab} /> : null}
+      {/* ── END FEED MODE CONTROL ─────────────────────────────────────────*/}
       {/* Affects me says what it is scoped by and offers the way to change
           it. Not an instruction, and no preference logic of its own — the
           link opens the one existing personalization screen. */}
@@ -603,52 +524,51 @@ export default function HomeScreen() {
           </Link>
         </View>
       ) : null}
-      {openSheet === 'location' ? (
-        <FilterSheet
-          title="Location"
-          options={LOCATION_OPTIONS}
-          selected={filters.stateCodes}
-          onApply={(next) => applyDimension('stateCodes', next)}
-          onClose={() => setOpenSheet(null)}
-        />
-      ) : null}
-      {openSheet === 'risk' ? (
-        <FilterSheet
-          title="Risk level"
-          options={RISK_OPTIONS}
-          selected={filters.riskTiers}
-          onApply={(next) => applyDimension('riskTiers', next)}
-          onClose={() => setOpenSheet(null)}
-        />
-      ) : null}
-      {openSheet === 'category' ? (
-        <FilterSheet
-          title="Category"
-          options={CATEGORY_OPTIONS}
-          selected={filters.categoryIds}
-          onApply={(next) => applyDimension('categoryIds', next)}
-          onClose={() => setOpenSheet(null)}
-        />
-      ) : null}
+    </View>
+  );
+
+  return (
+    <Page>
+      {/* The safe area stays the page's colour; everything below scrolls. */}
+      <View style={{ height: insets.top }} />
+      <FiltersSheet
+        visible={sheetOpen}
+        applied={filters}
+        onApply={applyFilters}
+        onClose={() => setSheetOpen(false)}
+        onClosed={focusFiltersButton}
+      />
       <SectionList
         ref={listRef}
         sections={sections}
+        // Headings stick at the default sizes; from the accessibility sizes
+        // the heading and Filters row scroll with the list instead, because
+        // a pinned row of AX5 type would cover a quarter of the screen and
+        // the card beneath it (founder review, 2026-10-06). Filters stays
+        // reachable at the top of its section; Dynamic Type is not capped.
+        stickySectionHeadersEnabled={!largeText}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <RecallCard model={buildHomeCardModel(item, { today, prefs })} />}
         // The heading words are the presentation contract's (Recent activity,
-        // Older active notices, Affects me); the composition gives them the
-        // design's section-heading type. The older section keeps its count,
-        // its plain explanation, and its reveal — which grows the list in
-        // place and never moves the reading position.
+        // Older notices, Affects you). The FIRST section's heading row
+        // carries the Filters control (2026-10-06), so it stays at hand while
+        // that sticky heading does. The older section keeps its count, its
+        // plain explanation, and its reveal — which grows the list in place
+        // and never moves the reading position.
         renderSectionHeader={({ section }) => (
           <View style={styles.sectionHeader}>
-            <Text variant="heading-3" accessibilityRole="header">
-              {section.key === 'older' ? `${section.title} (${olderCount})` : section.title}
-            </Text>
+            <View style={[styles.sectionRow, largeText && styles.sectionRowStacked]}>
+              <Text
+                accessibilityRole="header"
+                style={[feedType.sectionRow, styles.ink, styles.grow]}>
+                {section.key === 'older' ? `${section.title} (${olderCount})` : section.title}
+              </Text>
+              {section.key === firstSectionKey ? filtersControl : null}
+            </View>
             {section.key === 'older' ? (
               <>
                 <Text variant="body-small" color="text/secondary">
-                  {OLDER_NOTICES_EXPLANATION}
+                  {personalized ? OLDER_NOTICES_EXPLANATION_AFFECTS : OLDER_NOTICES_EXPLANATION_ALL}
                 </Text>
                 <Pressable
                   accessibilityRole="button"
@@ -675,6 +595,7 @@ export default function HomeScreen() {
         // operational dead-man heartbeat, not by the app.
         ListHeaderComponent={
           <>
+            {header}
             {preferencesSet ? (
               <View style={styles.preferencesSet}>
                 <Callout tone="information">{PREFERENCES_SET_CONFIRMATION}</Callout>
@@ -686,6 +607,12 @@ export default function HomeScreen() {
               ) : prefs.states.length === 0 ? (
                 <PersonalizeCta compact />
               ) : null
+            ) : null}
+            {/* With no section on screen (a filter or search that matches
+                nothing) the Filters control keeps its own row, so a filter
+                can always be changed or cleared. */}
+            {firstSectionKey === null && filtersControl ? (
+              <View style={[styles.sectionRow, styles.sectionRowAlone]}>{filtersControl}</View>
             ) : null}
           </>
         }
@@ -699,7 +626,9 @@ export default function HomeScreen() {
           />
         }
         ListEmptyComponent={
-          searchActive || (tab === 'all' && filtersActive) ? (
+          personalized && filtersActive && !searchActive ? (
+            <AffectsFilteredEmpty onClear={() => applyFilters(EMPTY_FEED_FILTERS)} />
+          ) : searchActive || (filtersAvailable && filtersActive) ? (
             <StateMessage {...(searchActive ? FEED_EMPTY_SEARCH : FEED_EMPTY_FILTERS)} />
           ) : personalized ? (
             <StateMessage {...FEED_EMPTY_PERSONALIZED} />
@@ -726,48 +655,68 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.6,
   },
-  // The page margin is the one reference value that carries over to every
-  // device; the content column is whatever remains, capped only on tablets.
-  searchRow: {
+  ink: {
+    color: feedColor.text,
+  },
+  // The section heading takes the row and wraps by words; when it and
+  // Filters no longer fit side by side, Filters moves to the next line.
+  grow: {
+    flexGrow: 1,
+    flexShrink: 1,
+  },
+  // The approved header, inside the list's gutter: 12pt between title,
+  // search and tabs; the list's own 14pt gap separates it from the first
+  // section's Filters row.
+  header: {
+    gap: feedGeometry.headerGap,
+  },
+  // The whole-screen states' title, which sits outside any list.
+  titleOnly: {
     maxWidth: layout.maxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    paddingTop: spacing[8],
-    paddingHorizontal: layout.pageMargin,
+    paddingHorizontal: feedGeometry.pageGutter,
   },
-  // Horizontally scrollable so every chip stays reachable on small viewports;
-  // flexGrow: 0 keeps the bar its content height instead of stealing the
-  // list's. The vertical padding is what lets each chip's 44pt hit area sit
-  // inside the scroll view's own bounds.
-  chipBar: {
-    flexGrow: 0,
-    maxWidth: layout.maxContentWidth,
-    width: '100%',
-    alignSelf: 'center',
-  },
-  chipBarContent: {
+  tabs: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[8],
-    paddingHorizontal: layout.pageMargin,
-    paddingVertical: spacing[8],
+    minHeight: feedGeometry.tabHeight,
+    borderWidth: 1,
+    borderColor: feedColor.border,
+    borderRadius: feedGeometry.tabRadius,
+    backgroundColor: feedColor.surface,
+    overflow: 'hidden',
   },
-  // The two conceptual levels of the row, kept visually distinct.
-  chipDivider: {
-    width: 1,
-    height: spacing[16],
-    backgroundColor: color['border/default'],
+  tab: {
+    flex: 1,
+    minHeight: feedGeometry.tabHeight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  tabsStacked: {
+    flexDirection: 'column',
+  },
+  // In a column, flex: 1 would size each half from a zero basis.
+  tabStacked: {
+    flex: 0,
+  },
+  tabSelected: {
+    backgroundColor: feedColor.brand,
+  },
+  tabText: {
+    color: feedColor.text,
+    textAlign: 'center',
+  },
+  tabTextSelected: {
+    color: feedColor.inverse,
+    textAlign: 'center',
   },
   contextRow: {
-    maxWidth: layout.maxContentWidth,
-    width: '100%',
-    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing[8],
-    paddingHorizontal: layout.pageMargin,
-    paddingBottom: spacing[8],
   },
   // flex: 1 so the list gets the screen height and can actually scroll —
   // without it the list sizes to its content and the parent just clips it.
@@ -781,56 +730,69 @@ const styles = StyleSheet.create({
     maxWidth: layout.maxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    paddingHorizontal: layout.pageMargin,
-    paddingTop: spacing[8],
+    paddingHorizontal: feedGeometry.pageGutter,
+    paddingTop: feedGeometry.headerGap,
     paddingBottom: spacing[24],
-    gap: spacing[16],
+    gap: feedGeometry.cardGap,
   },
   // Section headers stick on iOS, so they carry the page colour and cards
   // scroll under them.
   sectionHeader: {
     backgroundColor: color['background/page'],
-    paddingTop: spacing[8],
+    paddingTop: spacing[4],
+    paddingBottom: spacing[4],
     gap: spacing[4],
+  },
+  sectionRow: {
+    minHeight: feedGeometry.filtersButtonHeight,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing[8],
+  },
+  sectionRowStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+  },
+  sectionRowAlone: {
+    justifyContent: 'flex-end',
+  },
+  filtersButton: {
+    minWidth: feedGeometry.filtersButtonMinWidth,
+    minHeight: feedGeometry.filtersButtonHeight,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: feedColor.text,
+    borderRadius: feedGeometry.controlRadius,
+    backgroundColor: feedColor.surface,
+  },
+  filteredEmpty: {
+    alignItems: 'center',
+    gap: spacing[12],
+    paddingVertical: spacing[24],
+  },
+  centerText: {
+    textAlign: 'center',
+  },
+  clearFilters: {
+    minHeight: feedGeometry.touchMin,
+    minWidth: feedGeometry.touchMin,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing[16],
+    borderWidth: 1,
+    borderColor: feedColor.text,
+    borderRadius: feedGeometry.controlRadius,
+    backgroundColor: feedColor.surface,
   },
   callout: {
     padding: spacing[12],
     gap: spacing[4],
-  },
-  sheetBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: '#0006',
-  },
-  sheet: {
-    maxWidth: layout.maxContentWidth,
-    width: '100%',
-    alignSelf: 'center',
-    borderTopLeftRadius: radius[16],
-    borderTopRightRadius: radius[16],
-    padding: spacing[16],
-    gap: spacing[12],
-  },
-  sheetList: {
-    maxHeight: 340,
-  },
-  // 44pt is the platform minimum touch target: every option row is at least
-  // that tall, with its text sitting left as before.
-  sheetItem: {
-    minHeight: hitTarget.minimum,
-    justifyContent: 'center',
-    paddingVertical: spacing[4],
-  },
-  sheetActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: spacing[8],
-  },
-  sheetButton: {
-    minHeight: hitTarget.minimum,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing[16],
   },
 });

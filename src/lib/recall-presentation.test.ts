@@ -108,6 +108,7 @@ function detail(overrides: Partial<CaseProjection>, extra: Partial<CaseDetail> =
 function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
   return {
     id: 'case-1',
+    fdaOngoingAsOf: null,
     sourceAgency: 'FDA',
     noticeType: 'recall',
     state: 'active',

@@ -61,7 +61,9 @@ test('C. Class III only — Low, official Class III, never called safe', () => {
   assert.equal(v.badgeLabel, 'LOW');
   assert.equal(v.headlineLabel, 'LOW');
   assert.equal(v.official?.text, 'Class III');
-  assert.match(v.note ?? '', /still an active recall/);
+  assert.match(v.note ?? '', /still a recall/);
+  // Never claimed active: Lotly has no FDA closure signal (2026-10-06).
+  assert.doesNotMatch(v.note ?? '', /\bactive\b/i);
   assert.doesNotMatch(v.note ?? '', /safe/i);
 });
 

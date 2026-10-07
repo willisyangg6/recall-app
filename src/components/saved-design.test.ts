@@ -315,12 +315,14 @@ test('Saved spells no colour, size, family, radius or spacing of its own', () =>
 });
 
 test('the list keeps the Feed’s rhythm, margins and content width', () => {
+  // The Feed + Filters design (2026-10-06) moved both lists to the approved
+  // 14pt gutter and card gap together; the parity is what is pinned.
   for (const [property, value] of [
     ['maxWidth', 'layout.maxContentWidth'],
-    ['paddingHorizontal', 'layout.pageMargin'],
-    ['paddingTop', 'spacing[8]'],
+    ['paddingHorizontal', 'feedGeometry.pageGutter'],
+    ['paddingTop', 'feedGeometry.headerGap'],
     ['paddingBottom', 'spacing[24]'],
-    ['gap', 'spacing[16]'],
+    ['gap', 'feedGeometry.cardGap'],
   ]) {
     const rule = `${property}: ${value},`;
     assert.ok(SAVED.includes(rule), `the list content is missing ${rule}`);
@@ -347,7 +349,8 @@ test('the card’s save action, its spoken names and the 44pt minimum are intact
     ),
   );
   assert.match(SAVE_BUTTON, /accessibilityState=\{\{ selected: state\.selected \}\}/);
-  assert.match(SAVE_BUTTON, /hitSlop=\{HIT_SLOP\}/);
+  assert.match(SAVE_BUTTON, /hitSlop=\{glyphSize === 24 \? HIT_SLOP_24 : HIT_SLOP\}/);
+  assert.match(SAVE_BUTTON, /hitSlopToMinimum\(iconSize\[24\]\)/);
   assert.match(SAVE_BUTTON, /hitSlopToMinimum\(iconSize\[20\]\)/);
   assert.equal(hitTarget.minimum, 44);
   assert.ok(TAB_LAYOUT.includes('minHeight: hitTarget.minimum'));

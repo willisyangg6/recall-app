@@ -98,7 +98,11 @@ test('P2B7H: nothing that carries the date fixes a height or caps Dynamic Type',
 
 test('P2B7H: the save control renders the bookmark alone — no visible word anywhere', () => {
   assert.ok(!SAVE_BUTTON.includes('<Text'), 'the save control renders text again');
-  assert.ok(SAVE_BUTTON.includes('<Icon name={state.icon} size={20} color="icon/primary" />'));
+  // 20pt on Detail; the Feed card asks for 24pt (2026-10-06 Feed design).
+  assert.ok(
+    SAVE_BUTTON.includes('<Icon name={state.icon} size={glyphSize} color="icon/primary" />'),
+  );
+  assert.ok(SAVE_BUTTON.includes('glyphSize = 20,'));
   // Neither the icon nor its absence may be conditional.
   assert.ok(!/\{[^}]*\?[^}]*<Icon/.test(SAVE_BUTTON), 'the icon is rendered conditionally');
   // Both glyphs exist and differ: outline unsaved, the SAME bookmark filled.
@@ -124,7 +128,7 @@ test('P2B7H: Feed, Saved and Detail use the ONE control, not three implementatio
   assert.ok(CARD.includes("import { SaveRecallButton } from '@/components/save-recall-button';"));
   assert.ok(DETAIL.includes("import { SaveRecallButton } from '@/components/save-recall-button';"));
   assert.ok(DETAIL.includes('<SaveRecallButton caseId={model.id} />'));
-  assert.ok(CARD.includes('<SaveRecallButton caseId={model.id} />'));
+  assert.ok(CARD.includes('<SaveRecallButton caseId={model.id} glyphSize={24} />'));
   assert.ok(FEED.includes('<RecallCard'));
   assert.ok(SAVED.includes('<RecallCard'));
   for (const [name, source] of [
@@ -166,7 +170,9 @@ test('P2B7H: the icon-only control still meets the 44pt minimum target', () => {
   // hitSlop is what makes the target honest — and it is computed from the
   // token, not typed as a number.
   assert.ok(SAVE_BUTTON.includes('const HIT_SLOP = hitSlopToMinimum(iconSize[20]);'));
-  assert.ok(SAVE_BUTTON.includes('hitSlop={HIT_SLOP}'));
+  // The Feed card's 24pt glyph gets its own computed slop, also to 44.
+  assert.ok(SAVE_BUTTON.includes('const HIT_SLOP_24 = hitSlopToMinimum(iconSize[24]);'));
+  assert.ok(SAVE_BUTTON.includes('hitSlop={glyphSize === 24 ? HIT_SLOP_24 : HIT_SLOP}'));
   assert.equal(iconSize[20], 20);
   // The computed slop really does reach 44 on both axes.
   const { top, bottom, left, right } = {
@@ -193,6 +199,7 @@ test('P2B7H: the development gallery shows both save states without touching the
 function item(overrides: Partial<FeedItem> = {}): FeedItem {
   return {
     id: 'summary-001',
+    fdaOngoingAsOf: null,
     sourceAgency: 'FSIS',
     noticeType: 'recall',
     state: 'active',

@@ -45,6 +45,10 @@ const PRESENTATION = read('lib', 'recall-presentation.ts');
 const FEED_COPY = read('lib', 'feed-copy.ts');
 
 /** Every file that renders Feed consumer text. */
+const FEED_CARD_SURFACE = read('components', 'feed', 'feed-card-surface.tsx');
+const FEED_LABELS = read('components', 'feed', 'feed-labels.tsx');
+const FILTERS_SHEET = read('components', 'feed', 'filters-sheet.tsx');
+
 const FEED_SURFACES: Record<string, string> = {
   feed: FEED,
   card: CARD,
@@ -57,6 +61,11 @@ const FEED_SURFACES: Record<string, string> = {
   // same type scale, and (below) deliberately NOT the mono label type.
   'category tag': CATEGORY_TAG,
   'tab layout': TAB_LAYOUT,
+  // The Feed + Filters design (2026-10-06): the live card's surface, its
+  // labels and the Filters sheet — same rule, scoped tokens.
+  'feed card surface': FEED_CARD_SURFACE,
+  'feed labels': FEED_LABELS,
+  'filters sheet': FILTERS_SHEET,
 };
 
 /** Source with comments removed, so a file may document what it does not do. */
@@ -75,6 +84,7 @@ function geo(scope: 'nationwide' | 'states' | 'unknown', states: string[] = []) 
 function item(overrides: Partial<FeedItem> = {}): FeedItem {
   return {
     id: 'design-001',
+    fdaOngoingAsOf: null,
     sourceAgency: 'FSIS',
     noticeType: 'recall',
     state: 'active',
@@ -105,18 +115,23 @@ function item(overrides: Partial<FeedItem> = {}): FeedItem {
 // ── 1. The four-state card matrix ───────────────────────────────────────────
 
 test('the card renders relevance and media as two independent, upstream-decided dimensions', () => {
-  // Relevance: the shared primitive, gated on the model's verdict and nothing else.
+  // Relevance: the shared primitive, gated on the model's verdict and nothing
+  // else — on the onboarding surface (RecallCardSurface) and on the live Feed
+  // and Saved surface (FeedCardSurface, 2026-10-06), once each.
   assert.ok(CARD.includes('{model.affectsYou ? <RelevanceLabel /> : null}'));
   assert.equal((CARD.match(/<RelevanceLabel \/>/g) ?? []).length, 1);
+  assert.ok(FEED_CARD_SURFACE.includes('{model.affectsYou ? <FeedRelevanceLabel /> : null}'));
+  assert.equal((FEED_CARD_SURFACE.match(/<FeedRelevanceLabel \/>/g) ?? []).length, 1);
   // Media: the card hands the tile every state unconditionally and the
   // shared primitive (P2B2 extracted it for Detail) decides what renders —
   // since P2B7I, nothing at all for an absent or failed image — so the card
   // holds no media rule of its own that Saved could drift from.
   assert.match(
     CARD,
-    /<MediaTile\s+uri=\{model\.heroImageUrl\}\s+alt=\{model\.productName\}\s+size=\{layout\.cardMediaSize\}\s*\/>/,
+    /<MediaTile\s+uri=\{model\.heroImageUrl\}\s+alt=\{model\.productName\}\s+size=\{layout\.cardMediaSize\}\s+cornerRadius=\{feedGeometry\.photoRadius\}\s*\/>/,
   );
   assert.ok(!/heroImageUrl \?/.test(codeOnly(CARD)), 'the media tile must not be conditional');
+  assert.ok(!/heroImageUrl \?/.test(codeOnly(FEED_CARD_SURFACE)));
   // The two dimensions are read from the model, never derived on the card.
   assert.ok(!CARD.includes('evaluatePersonalRelevance'));
   assert.ok(!CARD.includes('allocateRecallImages'));
@@ -143,19 +158,26 @@ test('every Feed surface draws its text from the type scale and the tokens, neve
       assert.ok(!code.includes(forbidden), `${name} contains ${forbidden}`);
     }
   }
-  // Every Text element on the Feed and the card names its variant. The save
-  // control is absent from this list because since P2B7H it renders NO Text
-  // at all — the icon-only test below pins that directly, which is a
-  // stronger statement than "its Text names a variant".
+  // Every Text element on the Feed and the card names its type token: a
+  // scale variant, or — for the approved Feed + Filters design (2026-10-06)
+  // — one of the kit's scoped roles in constants/feed-design.ts (`feedType`),
+  // which only those surfaces use. Never an ad-hoc size. The save control is
+  // absent from this list because since P2B7H it renders NO Text at all.
   for (const [name, source] of [
     ['feed', FEED],
     ['card', CARD],
     ['state message', STATE_MESSAGE],
+    ['feed card surface', FEED_CARD_SURFACE],
+    ['feed labels', FEED_LABELS],
+    ['filters sheet', FILTERS_SHEET],
   ]) {
     const openings = source.match(/<Text\b[^>]*>/g) ?? [];
     assert.ok(openings.length > 0, `${name} renders Text`);
     for (const opening of openings) {
-      assert.ok(opening.includes('variant='), `${name}: ${opening} has no variant`);
+      assert.ok(
+        opening.includes('variant=') || /style=\{\[\s*(selected \? )?feedType\./.test(opening),
+        `${name}: ${opening} names no type token`,
+      );
     }
   }
   // The tab labels are the caption token.
@@ -282,8 +304,25 @@ test('the media column exists only for a usable image — no placeholder square 
 // ── 5. Search and the feed modes are unchanged ──────────────────────────────
 
 test('search filters the same corpus the same way, through the shared bar', () => {
+  // All: complete corpus → this feed's filters → search (unchanged order).
+  assert.match(
+    FEED,
+    /filterBySearch\(\s*applyFeedFilters\(state\.items, filtersByTab\.all\),\s*query,\s*entryOf,?\s*\)/,
+  );
+  // Affects me (2026-10-06): its own filters narrow the RANKED sections,
+  // before search — never the corpus eligibility is computed from.
   assert.ok(
-    FEED.includes('filterBySearch(applyFeedFilters(state.items, filters), query, entryOf)'),
+    FEED.includes('filterBySearch(applyFeedFilters(ranked.affects, filters), query, entryOf)'),
+  );
+  assert.ok(
+    FEED.includes('filterBySearch(applyFeedFilters(ranked.older, filters), query, entryOf)'),
+  );
+  assert.ok(
+    // The shared calendar clock rides the call (2026-10-06, open-evidence
+    // expiry), so the Feed counts on the same clock as Building and Ready.
+    /buildAffectsMeSections\(state\.items, \(item\) => relevanceById\.get\(item\.id\)!, \{\s*now,\s*\}\)/.test(
+      FEED,
+    ),
   );
   assert.ok(FEED.includes('<SearchBar'));
   assert.ok(FEED.includes('value={query}'));
@@ -300,31 +339,22 @@ test('search filters the same corpus the same way, through the shared bar', () =
   assert.ok(SEARCH_BAR.includes("CLEAR_SEARCH_ACCESSIBILITY_LABEL = 'Clear search'"));
 });
 
-test('All and Affects me are two either/or chips that only switch the mode', () => {
-  assert.ok(FEED.includes("{ key: 'all', label: 'All' }"));
-  assert.ok(FEED.includes("{ key: 'affects_me', label: 'Affects me' }"));
-  assert.ok(
-    FEED.includes(
-      '<Chip key={key} label={label} selected={tab === key} onPress={() => setTab(key)} />',
-    ),
-  );
-  // The chip reports selection semantically and holds no behaviour.
-  assert.ok(CHIP.includes('accessibilityState={{ selected }}'));
-  for (const forbidden of ['useState', 'expo-router', 'setTab', 'setOpenSheet']) {
-    assert.ok(!CHIP.includes(forbidden), `chip references ${forbidden}`);
-  }
-  // No invented multi-select: every chip on the Feed does one of the three
-  // existing things — switch the mode, open a sheet, or clear all.
-  const chips = FEED.match(/<Chip[\s\S]*?\/>/g) ?? [];
-  assert.equal(chips.length, 5, 'All, Affects me, Location, Risk, Category, Clear all');
-  for (const chip of chips) {
-    assert.ok(
-      /onPress=\{(\(\) => setTab\(key\)|\(\) => setOpenSheet\('(location|risk|category)'\)|clearAllFilters)\}/.test(
-        chip,
-      ),
-      `a chip does something new: ${chip}`,
-    );
-  }
+test('All and Affects me are one connected either/or control that only switches the mode', () => {
+  // The approved Feed header (2026-10-06): two equal tabs in one outline.
+  // The approved tab names (2026-10-06); the feeds' ids are unchanged.
+  assert.ok(FEED.includes("{ key: 'all', label: 'All recalls' }"));
+  assert.ok(FEED.includes("{ key: 'affects_me', label: 'Affects you' }"));
+  assert.ok(FEED.includes('<FeedTabs tab={tab} onChange={setTab} />'));
+  assert.ok(FEED.includes('accessibilityRole="tablist"'));
+  assert.ok(FEED.includes('accessibilityRole="tab"'));
+  assert.ok(FEED.includes('accessibilityState={{ selected }}'));
+  assert.ok(FEED.includes('onPress={() => onChange(key)}'));
+  // The chip row is gone from the Feed: the mode is the tabs, and every
+  // filter lives behind the ONE Filters control, which only opens the sheet.
+  assert.ok(!codeOnly(FEED).includes('<Chip'), 'the Feed still draws chips');
+  assert.equal((FEED.match(/<FiltersButton\b/g) ?? []).length, 1);
+  assert.ok(FEED.includes('onPress={openFilters}'));
+  assert.equal((FEED.match(/<FiltersSheet\b/g) ?? []).length, 1);
 });
 
 // ── 6. Save behaviour is unchanged ──────────────────────────────────────────
@@ -345,13 +375,15 @@ test('the save control still toggles the same device-local store, now icon-only'
   for (const gone of ['SAVE_ACTION_LABEL', 'SAVED_ACTION_LABEL', 'state.label']) {
     assert.ok(!SAVE_BUTTON.includes(gone), `the save control still carries ${gone}`);
   }
-  assert.ok(SAVE_BUTTON.includes('<Icon name={state.icon} size={20} color="icon/primary" />'));
+  assert.ok(
+    SAVE_BUTTON.includes('<Icon name={state.icon} size={glyphSize} color="icon/primary" />'),
+  );
   // The icon is not inside any conditional in this file.
   assert.ok(
     !/\{[^}]*\?[^}]*<Icon/.test(SAVE_BUTTON),
     'the save control renders its icon conditionally',
   );
-  assert.ok(SAVE_BUTTON.includes('hitSlop={HIT_SLOP}'));
+  assert.ok(SAVE_BUTTON.includes('hitSlop={glyphSize === 24 ? HIT_SLOP_24 : HIT_SLOP}'));
   for (const forbidden of ['expo-router', 'router.', 'fetch(', 'supabase']) {
     assert.ok(!SAVE_BUTTON.includes(forbidden), `save control references ${forbidden}`);
   }
@@ -366,7 +398,7 @@ test('saving is a nested pressable inside the card link, and the card exposes it
   );
   const link = CARD.slice(CARD.indexOf('<Link '), CARD.indexOf('</Link>'));
   assert.ok(
-    link.includes('<SaveRecallButton caseId={model.id} />'),
+    link.includes('<SaveRecallButton caseId={model.id} glyphSize={24} />'),
     'the save control sits inside the link',
   );
   assert.ok(SAVE_BUTTON.includes('<Pressable'), 'the save control is its own responder');
@@ -599,8 +631,12 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
   // file-search and bell (lib/onboarding-paywall-presentation.ts; drawing in
   // rows that are not controls), and notification education its
   // reassurance line's shield-check (drawing, not a control;
-  // lib/notification-education-presentation.ts). There is still no share or sliders glyph,
-  // and no bell control anywhere (detail-design.test.ts).
+  // lib/notification-education-presentation.ts). The Feed + Filters design
+  // (2026-10-06, founder-approved source kit) added the Filters control's
+  // `filters` (Lucide sliders-horizontal — no longer a dead Figma glyph: it
+  // opens the Filters sheet), the sheet's `close`, `tick` and `categories`,
+  // and the nine category glyphs (constants/feed-design.ts). There is still
+  // no share glyph, and no bell control anywhere (detail-design.test.ts).
   assert.deepEqual(glyphs, [
     'allergen-egg',
     'allergen-fish',
@@ -614,12 +650,24 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'bell',
     'bookmark',
     'bookmark-filled',
+    'categories',
+    'category-baby',
+    'category-bakery',
+    'category-beverages',
+    'category-dairy',
+    'category-meat',
+    'category-pantry',
+    'category-produce',
+    'category-seafood',
+    'category-snacks',
     'check',
     'chevron-down',
     'chevron-left',
     'chevron-right',
+    'close',
     'external-link',
     'file-search',
+    'filters',
     'flag',
     'home',
     'info',
@@ -630,6 +678,7 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'search',
     'shield-check',
     'shopping-cart',
+    'tick',
     'user',
     'warning',
     'x',
@@ -653,10 +702,11 @@ test('the presentation contract knows nothing about the visual layer, and the co
   // P2B6C: the invitation names the mode it fills, and claims no knowledge of
   // what actually affects the shopper.
   assert.equal(PERSONALIZE_CTA.title, 'Set up personalization');
-  assert.ok(PERSONALIZE_CTA.body.includes('matching recalls in Affects me'));
-  // The screen still runs the same pipeline functions in the same order.
+  assert.ok(PERSONALIZE_CTA.body.includes('matching recalls in Affects you'));
+  // The screen still runs the same pipeline functions in the same order —
+  // with the one calendar clock injected (2026-10-06, open-evidence expiry).
   for (const call of [
-    'buildFeedSections(allVisible)',
+    'buildFeedSections(allVisible, now)',
     'buildAffectsMeSections(state.items,',
     'evaluatePersonalRelevance(',
     'buildHomeCardModel(item, {',
@@ -682,10 +732,15 @@ test('P2B7F: every Feed-content glyph renders independently of the mode', () => 
   // with no `tab`/mode expression anywhere near them.
   assert.ok(CARD.includes('<Icon name="map-pin" size={12} color="icon/primary" />'));
   assert.ok(RELEVANCE_LABEL.includes('<Icon name="flag" size={12} tint={palette.foreground} />'));
+  // The live Feed and Saved surface (2026-10-06) draws the same two outright.
+  assert.match(FEED_CARD_SURFACE, /<Icon name="map-pin" points=\{feedGeometry\.locationIconSide\}/);
+  assert.match(FEED_LABELS, /<Icon name="flag" points=\{feedGeometry\.badgeIconSide\}/);
 
   // The save control's glyph comes from the save state alone — never from a
   // feed mode, a filter, or a loading flag.
-  assert.ok(SAVE_BUTTON.includes('<Icon name={state.icon} size={20} color="icon/primary" />'));
+  assert.ok(
+    SAVE_BUTTON.includes('<Icon name={state.icon} size={glyphSize} color="icon/primary" />'),
+  );
 
   // No `Icon` in any Feed surface sits inside a mode conditional. A card that
   // rendered its pin only in `All` would lose it on the very transition this
@@ -721,4 +776,13 @@ test('P2B7F: the glyphs outside the remount boundary are unchanged', () => {
   assert.ok(CHIP.includes('{trailingIcon ? ('));
   assert.ok(CHIP.includes('name={trailingIcon}'));
   assert.ok(!/trailingIcon[^\n]*\btab\b/.test(CHIP), 'the chevron depends on the feed mode');
+});
+
+test('from the accessibility sizes the heading and Filters row scroll with the list', () => {
+  // Founder review, 2026-10-06: a pinned AX5 heading row obscured the cards.
+  assert.ok(FEED.includes('stickySectionHeadersEnabled={!largeText}'));
+  assert.ok(FEED.includes('const largeText = fontScale >= CARD_STACK_SCALE;'));
+  // Dynamic Type is never capped to make it fit.
+  assert.ok(!codeOnly(FEED).includes('maxFontSizeMultiplier'));
+  assert.ok(!codeOnly(FEED_CARD_SURFACE).includes('maxFontSizeMultiplier'));
 });

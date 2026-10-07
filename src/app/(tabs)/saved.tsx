@@ -50,6 +50,7 @@ import { StateMessage } from '@/components/state-message';
 import { Callout } from '@/components/ui/callout';
 import { Surface } from '@/components/ui/surface';
 import { color, layout, spacing } from '@/constants/design-tokens';
+import { feedGeometry } from '@/constants/feed-design';
 import { useFeed } from '@/hooks/use-feed';
 import { usePreferences } from '@/hooks/use-preferences';
 import { useSavedRecalls } from '@/hooks/use-saved-recalls';
@@ -172,16 +173,17 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
-  // The Feed's rhythm exactly: the page margin, the same gap between cards,
+  // The Feed's rhythm exactly: the page gutter, the same gap between cards,
   // and the same breathing room below the last one — the bottom navigation
-  // already sits above the home indicator.
+  // already sits above the home indicator. Since the Feed + Filters design
+  // (2026-10-06) that is the approved 14pt gutter and card gap.
   listContent: {
     maxWidth: layout.maxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    paddingHorizontal: layout.pageMargin,
-    paddingTop: spacing[8],
+    paddingHorizontal: feedGeometry.pageGutter,
+    paddingTop: feedGeometry.headerGap,
     paddingBottom: spacing[24],
-    gap: spacing[16],
+    gap: feedGeometry.cardGap,
   },
 });

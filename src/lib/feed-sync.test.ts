@@ -17,6 +17,7 @@ import {
   scriptedTransport,
 } from './feed-fixtures';
 import { createFeedSession, loadCachedFeed, syncFeed } from './feed-sync';
+import type { FeedItem } from './recall-feed';
 
 const NOW = () => new Date('2026-08-28T12:00:00Z');
 
@@ -505,13 +506,12 @@ test('a cache from any other app version is discarded whole, never half-read', a
   // a corpus of unknown field coverage.
   //
   // v3 is in this list deliberately. P2B7S briefly wrote a v3 document
-  // carrying an ingestion-freshness snapshot; that field is gone and the
-  // document shape is v2's again, so the version stayed at 2 rather than
-  // advancing to a number whose shape would have been identical anyway.
-  // The only devices holding a v3 are development ones, and this is what
-  // makes their caches drop cleanly instead of being half-read.
+  // carrying an ingestion-freshness snapshot; that field is gone, and when
+  // rows next changed shape (open evidence, 2026-10-06) the version skipped
+  // to 4 so those development-only v3 caches still drop cleanly instead of
+  // being half-read. v2 is the last shipped shape without open evidence.
   const cache = memoryCacheStore();
-  for (const stale of [1, 3, 99]) {
+  for (const stale of [1, 2, 3, 99]) {
     cache.setStored(
       JSON.stringify({
         schemaVersion: stale,
@@ -858,4 +858,160 @@ test('a failing recovery pass leaves the complete full result standing', async (
   const next = await syncFeed({ store: cache.store, transport, now: NOW });
   assert.equal(next.mode, 'incremental');
   assert.ok(next.items.some((item) => item.id === server.newest.id));
+});
+
+// ── Open evidence (2026-10-06): status-only changes ─────────────────────────
+
+/**
+ * The server token's shape (20261006000000_fda_ongoing_evidence.sql): the C8
+ * content hash, plus `|<date>` only when evidence exists — so a null leaves
+ * the token exactly as it was, and any change to the date moves it.
+ */
+function serverToken(item: ReturnType<typeof makeFeedItem>): string {
+  const { fdaOngoingAsOf, ...content } = item;
+  return `c8:${JSON.stringify(content)}${fdaOngoingAsOf === null ? '' : `|${fdaOngoingAsOf}`}`;
+}
+
+test('a status-only evidence change is detected and downloads only that row, with no other change', async () => {
+  const { buildAffectsMeSections } = await import('./affects-me-ranking');
+  const { buildFeedSections } = await import('./feed-relevance');
+  const { buildHomeCardModel } = await import('./recall-presentation');
+  const { recencyKey } = await import('./recency-order');
+  const { evaluatePersonalRelevance } = await import('./relevance');
+
+  // Every row is an FDA recall long past the window, matching California.
+  const old = '2025-03-01T00:00:00.000Z';
+  const corpus: FeedItem[] = makeCorpus(12).map((item) => ({
+    ...item,
+    sourceAgency: 'FDA' as const,
+    noticeType: 'recall' as const,
+    publishedAt: old,
+    lastPublicActivityAt: old,
+    timeline: [],
+    geography: {
+      scope: 'nationwide' as const,
+      states: [],
+      confidence: 'stated' as const,
+      sourceText: 'Nationwide',
+    },
+    hazardCategory: 'microbial_contamination',
+    pathogenOrAllergen: 'Salmonella',
+    reasonText: 'Potential Salmonella contamination',
+  }));
+  const scripted = scriptedTransport(corpus);
+  scripted.setManifest(manifestFor(corpus, serverToken));
+  const cache = memoryCacheStore();
+  const first = await syncFeed({ store: cache.store, transport: scripted.transport, now: NOW });
+
+  // The enforcement job confirms one recall open: only its column moved.
+  const target = corpus[5];
+  const evidenced = { ...target, fdaOngoingAsOf: '2026-08-24' };
+  const next = corpus.map((item) => (item.id === target.id ? evidenced : item));
+  scripted.setManifest(manifestFor(next, serverToken));
+  scripted.setAll(next);
+  const second = await syncFeed({ store: cache.store, transport: scripted.transport, now: NOW });
+
+  // Sync detection: exactly that row, and nothing else, was re-downloaded.
+  assert.deepEqual(scripted.calls.byIds, [[target.id]]);
+  assert.equal(second.downloadedRows, 1);
+
+  const now = NOW();
+  const before = first.items.find((item) => item.id === target.id)!;
+  const after = second.items.find((item) => item.id === target.id)!;
+  assert.equal(after.fdaOngoingAsOf, '2026-08-24');
+  // No resurfacing: the recency key, the card's date line, the timeline and
+  // All recalls (section and position) are exactly as before.
+  assert.deepEqual(recencyKey(after), recencyKey(before));
+  assert.deepEqual(after.timeline, before.timeline);
+  const card = (item: FeedItem) => buildHomeCardModel(item, { today: '2026-08-28', prefs: null });
+  assert.deepEqual(card(after).activity, card(before).activity);
+  const allBefore = buildFeedSections(first.items, now).olderActive.map((item) => item.id);
+  const allAfter = buildFeedSections(second.items, now).olderActive.map((item) => item.id);
+  assert.deepEqual(allAfter, allBefore);
+  assert.deepEqual(buildFeedSections(second.items, now).recent, []);
+
+  // Membership: the recall joins the counted Affects me list — at its own
+  // date's position, which for a 2025 recall is not the top.
+  const ca = { states: ['CA'], allergens: [], retailers: [] };
+  const counted = (items: readonly FeedItem[]) =>
+    buildAffectsMeSections(items, (item) => evaluatePersonalRelevance(item, ca), {
+      now,
+    }).affects.map((item) => item.id);
+  assert.deepEqual(counted(first.items), []);
+  assert.deepEqual(counted(second.items), [target.id]);
+});
+
+test('a null evidence value leaves the server token formula unchanged', () => {
+  const item = makeFeedItem(3);
+  assert.equal(serverToken(item), `c8:${JSON.stringify({ ...item, fdaOngoingAsOf: undefined })}`);
+});
+
+test('evidence REMOVAL reaches a cached phone: the token returns to its original value, the engine downloads it, and all three counts drop', async () => {
+  const { buildAffectsMeSections } = await import('./affects-me-ranking');
+  const { buildingData } = await import('./building-watch');
+  const { buildReadyPreview, previewMatchCount } = await import('./ready-preview');
+  const { evaluatePersonalRelevance } = await import('./relevance');
+
+  const old = '2025-03-01T00:00:00.000Z';
+  const base: FeedItem[] = makeCorpus(8).map((item) => ({
+    ...item,
+    sourceAgency: 'FDA' as const,
+    noticeType: 'recall' as const,
+    publishedAt: old,
+    lastPublicActivityAt: old,
+    timeline: [],
+    geography: {
+      scope: 'nationwide' as const,
+      states: [],
+      confidence: 'stated' as const,
+      sourceText: 'Nationwide',
+    },
+    hazardCategory: 'microbial_contamination',
+    pathogenOrAllergen: 'Salmonella',
+    reasonText: 'Potential Salmonella contamination',
+  }));
+  const target = base[3];
+  const originalToken = serverToken(target);
+
+  // 1. The phone caches the corpus while the server holds evidence on one row.
+  const withEvidence = base.map((item) =>
+    item.id === target.id ? { ...item, fdaOngoingAsOf: '2026-08-24' } : item,
+  );
+  const scripted = scriptedTransport(withEvidence);
+  scripted.setManifest(manifestFor(withEvidence, serverToken));
+  const cache = memoryCacheStore();
+  const cached = await syncFeed({ store: cache.store, transport: scripted.transport, now: NOW });
+  const stored = parseFeedCache(cache.current()!)!;
+  assert.equal(stored.items.find((item) => item.id === target.id)!.fdaOngoingAsOf, '2026-08-24');
+  assert.notEqual(stored.versions[target.id], originalToken);
+
+  // 2. The enforcement job clears it: the server token is the ORIGINAL token
+  //    again, byte for byte — and still differs from what the phone holds.
+  scripted.setManifest(manifestFor(base, serverToken));
+  scripted.setAll(base);
+  assert.equal(manifestFor(base, serverToken)[3].version, originalToken);
+
+  // 3. The real incremental engine downloads exactly that row.
+  const synced = await syncFeed({ store: cache.store, transport: scripted.transport, now: NOW });
+  assert.equal(synced.mode, 'incremental');
+  assert.deepEqual(scripted.calls.byIds, [[target.id]]);
+  assert.equal(synced.items.find((item) => item.id === target.id)!.fdaOngoingAsOf, null);
+  assert.equal(parseFeedCache(cache.current()!)!.versions[target.id], originalToken);
+
+  // 4. All three counts drop by exactly that recall, on the same clock.
+  const ca = { states: ['CA'], allergens: [], retailers: [] };
+  const now = NOW();
+  const counts = (items: readonly FeedItem[]) => {
+    const building = buildingData({ status: 'ready', items }, false, ca, now);
+    return {
+      feed: buildAffectsMeSections(items, (item) => evaluatePersonalRelevance(item, ca), { now })
+        .affects.length,
+      building: building.kind === 'usable' ? building.total : -1,
+      ready:
+        previewMatchCount(buildReadyPreview({ status: 'ready', items }, ca, '2026-08-28', now)) ??
+        0,
+    };
+  };
+  assert.deepEqual(counts(cached.items), { feed: 1, building: 1, ready: 1 });
+  assert.deepEqual(counts(synced.items), { feed: 0, building: 0, ready: 0 });
 });

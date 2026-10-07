@@ -32,8 +32,8 @@ import { goBackFrom } from '@/lib/onboarding-navigation';
 import { EDIT_PREFERENCES_ROUTE, onboardingRoute } from '@/lib/onboarding-routes';
 import { presentedPreferences } from '@/lib/presented-preferences';
 import { isFeedConfigured } from '@/lib/recall-feed';
-import { todayIso } from '@/lib/recall-presentation';
 import { readyCorpus } from '@/lib/ready-preview';
+import { useCalendarClock } from '@/hooks/use-calendar-clock';
 import { useReadyPreview } from '@/hooks/use-ready-preview';
 
 type DevelopmentProbe = typeof import('@/lib/development-photo-probe');
@@ -62,10 +62,11 @@ export default function OnboardingPreviewScreen() {
   // The preview with photo knowledge: the pure selection over the real
   // matches, fed by the bounded photo session for these candidates — the one
   // the Building step started when Ready is reached from it.
+  const now = useCalendarClock();
   const { preview, onPhotoFailed } = useReadyPreview(
     load.status === 'ready' ? feedInput : { status: 'loading' },
     prefs,
-    todayIso(),
+    now,
   );
   // Back from the editor, focus returns to the action that opened it.
   const editRef = useRef<View>(null);

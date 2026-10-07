@@ -38,6 +38,7 @@ import {
   type ReadyFeedInput,
   type ReadyPreviewState,
 } from '@/lib/ready-preview';
+import { todayIso } from '@/lib/recall-presentation';
 
 type DevelopmentProbe = typeof import('@/lib/development-photo-probe');
 
@@ -76,8 +77,12 @@ if (__DEV__ && developmentProbe) developmentProbe.onDevelopmentPhotoReset(() => 
  * The Building step's warm-up: start the photo session Ready will need for
  * this corpus and these preferences, and return at once. Idempotent per key.
  */
-export function warmReadyPhotos(items: readonly FeedItem[], prefs: UserRecallPreferences): void {
-  registry.warm(photoCandidates(items, prefs));
+export function warmReadyPhotos(
+  items: readonly FeedItem[],
+  prefs: UserRecallPreferences,
+  now: Date,
+): void {
+  registry.warm(photoCandidates(items, prefs, now));
 }
 
 /** One candidate set's session as an external store (stable per key). */
@@ -93,14 +98,18 @@ function photoStore(candidates: readonly string[]) {
 export function useReadyPreview(
   feed: ReadyFeedInput,
   prefs: UserRecallPreferences,
-  today: string,
+  /** The screen's calendar clock (hooks/use-calendar-clock): eligibility and card dates. */
+  now: Date,
 ): { preview: ReadyPreviewState; onPhotoFailed: (url: string) => void } {
   const items = feed.status === 'ready' ? feed.items : null;
   const prefsKey = JSON.stringify(prefs);
+  const today = todayIso(now);
   const candidates = useMemo(
     () =>
-      items === null ? [] : photoCandidates(items, JSON.parse(prefsKey) as UserRecallPreferences),
-    [items, prefsKey],
+      items === null
+        ? []
+        : photoCandidates(items, JSON.parse(prefsKey) as UserRecallPreferences, now),
+    [items, prefsKey, now],
   );
   const candidatesKey = photoSessionKey(candidates);
   // Keyed by the candidates' content: a new array with the same photos is
@@ -117,9 +126,9 @@ export function useReadyPreview(
 
   const computed = useMemo<ReadyPreviewState>(() => {
     if (items === null || !photos.settled) return { kind: 'checking' };
-    const built = buildReadyPreview(feed, prefs, today, undefined, { loaded: photos.loaded });
+    const built = buildReadyPreview(feed, prefs, today, now, { loaded: photos.loaded });
     return developmentProbe ? developmentProbe.developmentPreview(built, candidates[0]) : built;
-  }, [items, photos, feed, prefs, today, candidates]);
+  }, [items, photos, feed, prefs, today, now, candidates]);
 
   // The last answered preview and the preferences it answered. While a
   // corpus update's new photos are checked for the SAME preferences, that

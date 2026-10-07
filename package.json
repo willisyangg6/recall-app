@@ -82,6 +82,7 @@
     "qa:launch-readiness": "tsx scripts/qa-launch-readiness.ts",
     "qa:product-categories": "tsx scripts/qa-product-categories.ts",
     "reconcile:fda-enforcement": "tsx scripts/reconcile-fda-enforcement.ts",
+    "open-evidence:sync": "tsx scripts/sync-open-evidence.ts",
     "qa:fda-enforcement": "tsx scripts/qa-fda-enforcement.ts",
     "reconcile:duplicates": "tsx scripts/reconcile-duplicate-cases.ts",
     "reconcile:applied-state:dry": "tsx scripts/reconcile-applied-state.ts",

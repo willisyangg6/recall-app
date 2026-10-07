@@ -71,6 +71,7 @@ function projectedFixture(fragment: string): CaseProjection {
 function feedItemFrom(projection: CaseProjection): FeedItem {
   return {
     id: 'case-1',
+    fdaOngoingAsOf: null,
     sourceAgency: projection.sourceAgency,
     noticeType: projection.noticeType,
     state: 'active',

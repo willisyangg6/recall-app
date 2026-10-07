@@ -13,10 +13,11 @@
  * `buildAffectsMeSections` (newest first by material activity, then
  * announcement, then id — the one shared feed order since 2026-10-05), and
  * each shown item through `buildHomeCardModel`, the same model the Feed's
- * card draws. The preview shows the CURRENT window (`affects`): recalls that
+ * card draws. The preview shows the COUNTED list (`affects`): recalls that
  * affect the shopper whose last material activity is within the Affects Me
- * recency window. The collapsed older tail the Feed keeps behind a
- * disclosure is not "today" and is not counted here.
+ * recency window, or that an agency confirms are still open (2026-10-06,
+ * `lib/open-evidence.ts`). The Feed's collapsed Older notices — matches no
+ * agency currently confirms are open — are not counted here.
  *
  * ## What the count includes and excludes
  *
@@ -24,9 +25,15 @@
  * stated geography names one of the chosen states or is Nationwide (which
  * qualifies for every state, whatever the hazard), or whose geography is
  * unknown but which carries one of the chosen allergen or store signals —
- * less the one allergen-only exclusion the Feed applies. It excludes recalls
- * stated for other states only, unknown-geography recalls with no personal
- * signal, and matches whose material activity is older than the window. It
+ * less the one allergen-only exclusion the Feed applies — when its material
+ * activity is within the window OR its agency confirms it is still open: an
+ * FSIS recall FSIS still lists as active, or an FDA recall with an accepted
+ * linked product FDA lists as Ongoing (evidence at most 21 days old). It
+ * excludes recalls stated for other states only, unknown-geography recalls
+ * with no personal signal, and older matches with no such confirmation (FSIS
+ * alerts, FDA recalls whose products are Completed or Terminated, unlinked FDA
+ * recalls). The clock is the screen's calendar clock, so the count moves with
+ * the date even when no sync lands. It
  * never depends on an image, a product category or a page size, and the
  * Building step reads the same list (`affectsYouMatches`) over the same
  * corpus (`readyCorpus`), so the two screens cannot disagree
@@ -150,15 +157,15 @@ export type ReadyPreviewState =
     };
 
 /**
- * Every current match, ranked: the Affects You feed's own current window,
- * through the Feed's own layers. ONE call site for "how many recalls match":
+ * Every counted match, ranked: the Affects You feed's own main list (in the
+ * window, or confirmed open), through the Feed's own layers. ONE call site for "how many recalls match":
  * the Ready preview's total and the Building step's count are both this
  * list's length, so the two screens can never disagree over one corpus.
  */
 export function affectsYouMatches(
   items: readonly FeedItem[],
   prefs: UserRecallPreferences,
-  /** The clock the recency window is measured against (tests); the device's by default. */
+  /** The clock the window and evidence expiry are measured against; the device's by default. */
   now?: Date,
 ): FeedItem[] {
   return buildAffectsMeSections(items, (item) => evaluatePersonalRelevance(item, prefs), { now })

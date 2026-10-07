@@ -83,15 +83,16 @@ export const SOURCES_METHODOLOGY: TrustDocument = {
       ],
     },
     {
-      title: 'Active, closed, and retracted',
+      title: 'Closed, retracted, and still listed',
       blocks: [
         paragraph(
-          'Each case carries the lifecycle state its agency gives it: active, closed, or retracted. ' +
-            'Lotly never ends, hides, or relabels a notice on its own. A notice the agency lists as ' +
-            'active stays active in Lotly no matter how old it is.',
+          'Lotly keeps a recall or alert listed until its agency closes or retracts it, and never ' +
+            'ends, hides, or relabels a notice on its own. USDA FSIS marks a recall closed when its ' +
+            'process ends. FDA’s announcements carry no reliable closure signal, so an FDA recall ' +
+            'stays listed in Lotly even after FDA may have ended it.',
         ),
         bullets([
-          `For readability, active notices with recent activity (within ${RECENT_WINDOW_DAYS} days) are shown ahead of older active notices, which stay fully available in their own clearly labeled section. This is presentation only; it never changes a notice’s official status.`,
+          `Notices with an announcement or update within ${RECENT_WINDOW_DAYS} days come first. Older notices stay fully available in their own section. In Affects me, an older recall stays in the main list while FSIS lists it as an active recall, or while FDA’s enforcement report lists one of its products as ongoing.`,
           'FSIS Public Health Alerts carry their own Public Health Alert label, distinct from recalls. They never receive an official recall classification, so Lotly shows their risk level as “Unknown” rather than inventing one.',
         ]),
       ],

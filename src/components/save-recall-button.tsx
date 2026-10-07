@@ -48,6 +48,7 @@ import { useSavedRecalls } from '@/hooks/use-saved-recalls';
 import { isSavedId, saveControlState, type SaveControlState } from '@/lib/saved-recalls';
 
 const HIT_SLOP = hitSlopToMinimum(iconSize[20]);
+const HIT_SLOP_24 = hitSlopToMinimum(iconSize[24]);
 
 /**
  * The control's APPEARANCE for one already-decided state, and the only
@@ -61,19 +62,29 @@ const HIT_SLOP = hitSlopToMinimum(iconSize[20]);
 export function SaveControlAppearance({
   state,
   pressed = false,
+  glyphSize = 20,
 }: {
   state: SaveControlState;
   pressed?: boolean;
+  /** 20 on Detail; 24 on the Feed card (the 2026-10-06 Feed design). */
+  glyphSize?: 20 | 24;
 }) {
   // Never conditional: BOTH states carry a bookmark.
   return (
     <View style={[styles.control, pressed && styles.pressed]}>
-      <Icon name={state.icon} size={20} color="icon/primary" />
+      <Icon name={state.icon} size={glyphSize} color="icon/primary" />
     </View>
   );
 }
 
-export function SaveRecallButton({ caseId }: { caseId: string }) {
+export function SaveRecallButton({
+  caseId,
+  glyphSize = 20,
+}: {
+  caseId: string;
+  /** See `SaveControlAppearance`; the touch target reaches 44pt either way. */
+  glyphSize?: 20 | 24;
+}) {
   const { ids, available, toggle } = useSavedRecalls();
 
   // Web has no saved-recall storage (saved-recalls-store.web.ts); offering a
@@ -90,9 +101,11 @@ export function SaveRecallButton({ caseId }: { caseId: string }) {
       accessibilityRole="button"
       accessibilityState={{ selected: state.selected }}
       accessibilityLabel={state.accessibilityLabel}
-      hitSlop={HIT_SLOP}
+      hitSlop={glyphSize === 24 ? HIT_SLOP_24 : HIT_SLOP}
       onPress={() => void toggle(caseId)}>
-      {({ pressed }) => <SaveControlAppearance state={state} pressed={pressed} />}
+      {({ pressed }) => (
+        <SaveControlAppearance state={state} pressed={pressed} glyphSize={glyphSize} />
+      )}
     </Pressable>
   );
 }

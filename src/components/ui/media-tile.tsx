@@ -59,6 +59,7 @@ export function MediaTile({
   size,
   positionLabel = null,
   onLoadFailed,
+  cornerRadius,
 }: {
   uri: string | null;
   /** The spoken description of the image — the model's product name. */
@@ -76,6 +77,12 @@ export function MediaTile({
    * for a caller that must stop counting it.
    */
   onLoadFailed?: (uri: string) => void;
+  /**
+   * A corner radius off the radius scale, for a surface whose own approved
+   * contract names one (the Feed card's 6pt photo, 2026-10-06). Every other
+   * tile keeps `radius/8`.
+   */
+  cornerRadius?: number;
 }) {
   // The URL that failed under THIS mount, so the tile re-renders into its
   // absent shape the moment the platform reports the failure. The session
@@ -90,7 +97,11 @@ export function MediaTile({
     <Surface
       background="background/media-placeholder"
       radius={8}
-      style={[styles.tile, { width: size, height: size }]}
+      style={[
+        styles.tile,
+        { width: size, height: size },
+        cornerRadius !== undefined && { borderRadius: cornerRadius },
+      ]}
       accessible
       accessibilityRole="image"
       accessibilityLabel={alt}

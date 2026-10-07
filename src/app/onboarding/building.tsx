@@ -39,6 +39,7 @@ import { useBuildingSequence } from '@/hooks/use-building-sequence';
 import { useFeed, type Feed } from '@/hooks/use-feed';
 import { useOnboardingPreferences } from '@/hooks/use-onboarding-preferences';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
+import { useCalendarClock } from '@/hooks/use-calendar-clock';
 import { warmReadyPhotos } from '@/hooks/use-ready-preview';
 import { buildingCaption, buildingCaptionCandidates, buildingData } from '@/lib/building-watch';
 import { buildingDone } from '@/lib/onboarding-navigation';
@@ -100,7 +101,10 @@ function BuildingPresentation({
   // count here is the count Ready shows. A build without a configured feed
   // never answers, so it stands on the baseline like a failed first sync.
   const corpus = readyCorpus(isFeedConfigured() ? feed.state : { status: 'error' });
-  const data = buildingData(corpus, feed.refreshing, prefs);
+  // The same calendar clock Ready and the Feed read, so the count here is the
+  // count Ready shows on any day (window and FDA evidence expiry included).
+  const now = useCalendarClock();
+  const data = buildingData(corpus, feed.refreshing, prefs, now);
   // Ready's photos, started now (2026-10-05): the session Ready will adopt
   // for this corpus and these choices (hooks/use-ready-preview.ts), so its
   // deck needs no second wait. Started, never awaited and never read here:
@@ -109,8 +113,8 @@ function BuildingPresentation({
   const prefsKey = JSON.stringify(prefs);
   useEffect(() => {
     if (warmItems !== null)
-      warmReadyPhotos(warmItems, JSON.parse(prefsKey) as UserRecallPreferences);
-  }, [warmItems, prefsKey]);
+      warmReadyPhotos(warmItems, JSON.parse(prefsKey) as UserRecallPreferences, now);
+  }, [warmItems, prefsKey, now]);
   // Every caption this screen can show for these choices: the caption box is
   // sized to the tallest, so a change of words never moves the layout.
   // (The React Compiler memoizes this per choices and result.)

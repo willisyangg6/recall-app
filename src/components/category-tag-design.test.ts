@@ -62,16 +62,23 @@ test('the tag is written once, in the shared card, so Feed and Saved cannot disa
   // Saved touches the category vocabulary at all — it has no filter row, so
   // its cards' tags can only have come from the shared card.
   assert.ok(!codeOnly(SAVED).includes('food-category'));
-  // The Feed's ONLY category imports are the filter's (C10B, untouched): the
-  // id type and the launch allowlist's sheet options and sanitizer. It reads
-  // no label and renders no tag.
+  // Since the Feed + Filters design (2026-10-06) the Feed screen has NO
+  // category import at all: the filter's options live in the Filters sheet
+  // (the launch allowlist's options, sanitized on Apply by
+  // lib/feed-filter-draft.ts). It reads no label and renders no tag.
   const feedCategoryImports = [...codeOnly(FEED).matchAll(/^import .*food-category.*$/gm)].map(
     (m) => m[0],
   );
-  assert.deepEqual(feedCategoryImports, [
-    "import type { FoodCategoryId } from '@/domain/food-category';",
-    "import { LAUNCH_CATEGORY_OPTIONS, sanitizeLaunchCategoryIds } from '@/domain/food-category-launch';",
-  ]);
+  assert.deepEqual(feedCategoryImports, []);
+  const SHEET = read('components', 'feed', 'filters-sheet.tsx');
+  assert.ok(
+    SHEET.includes("import { LAUNCH_CATEGORY_OPTIONS } from '@/domain/food-category-launch';"),
+  );
+  // The live Feed and Saved card draws its category exactly once, from the
+  // model's own label and id, through the shared card surface.
+  const SURFACE = read('components', 'feed', 'feed-card-surface.tsx');
+  assert.equal((SURFACE.match(/<FeedCategoryLabel\b/g) ?? []).length, 1);
+  assert.ok(SURFACE.includes('label={model.categoryLabel}'));
   // Both screens reach the card through the same builder with the same
   // arguments, so the same recall carries the same word on both. Since
   // P2B7N.1 the two call sites are BYTE-IDENTICAL — there is no longer a

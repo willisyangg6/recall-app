@@ -158,7 +158,7 @@ const SHAPE: Record<string, [title: string | null, kinds: string][]> = {
     ['How often Lotly checks', 'paragraph'],
     ['Source snapshots and traceability', 'paragraph'],
     ['One recall, one case', 'paragraph bullets'],
-    ['Active, closed, and retracted', 'paragraph bullets'],
+    ['Closed, retracted, and still listed', 'paragraph bullets'],
     ['What counts as a change', 'paragraph bullets'],
     ['Official sources take precedence', 'note'],
     ['Products, packages, and stores', 'bullets'],

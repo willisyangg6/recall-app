@@ -97,3 +97,70 @@ test('the by-id row fetch keeps the frozen consumer contract filters', () => {
   assert.match(byIds, /FEED_SELECT/);
   assert.match(byIds, /affected_products\.order=ordinal\.asc/);
 });
+
+// ── FDA open evidence (2026-10-06): the view recreated, additively ──────────
+
+const EVIDENCE_SQL = readFileSync(
+  join(ROOT, 'supabase', 'migrations', '20261006000000_fda_ongoing_evidence.sql'),
+  'utf8',
+).replace(/^\s*--.*$/gm, '');
+
+test('open evidence: one nullable column, and nothing dropped, written or widened', () => {
+  assert.match(
+    EVIDENCE_SQL,
+    /alter table public\.recall_cases\s+add column fda_ongoing_as_of date null;/,
+  );
+  for (const forbidden of [
+    /\bdrop\b/i,
+    /\bupdate\b/i,
+    /\binsert\b/i,
+    /\bdelete\b/i,
+    /security definer/i,
+    /create policy/i,
+  ]) {
+    assert.doesNotMatch(EVIDENCE_SQL, forbidden);
+  }
+  for (const forbidden of [
+    'source_records',
+    'source_snapshots',
+    'notification_events',
+    'push_',
+    'installation_',
+  ]) {
+    assert.equal(
+      EVIDENCE_SQL.includes(forbidden),
+      false,
+      `migration must not reference ${forbidden}`,
+    );
+  }
+});
+
+test('open evidence: the recreated view keeps the C8 security and read contract', () => {
+  assert.match(
+    EVIDENCE_SQL,
+    /create or replace view public\.consumer_feed_manifest\s*\n?\s*with \(security_invoker = true\)/,
+  );
+  assert.match(EVIDENCE_SQL, /where rc\.state = 'active'\s*\n?\s*and rc\.merged_into is null/);
+  const grants = EVIDENCE_SQL.match(/^\s*grant\b.*$/gim) ?? [];
+  assert.deepEqual(
+    grants.map((line) => line.trim()),
+    ['grant select on public.consumer_feed_manifest to anon, authenticated, service_role;'],
+  );
+});
+
+test('open evidence: the token is the C8 token, plus the date only when one exists', () => {
+  // Every C8 input, unchanged…
+  assert.match(EVIDENCE_SQL, /rc\.projection::text/);
+  assert.match(EVIDENCE_SQL, /rc\.timeline::text/);
+  assert.match(EVIDENCE_SQL, /string_agg\(ap\.name, chr\(31\) order by ap\.ordinal\)/);
+  // …and the evidence appended so that NULL appends nothing: applying the
+  // migration moves no token, and re-downloads nothing on any device.
+  assert.match(
+    EVIDENCE_SQL,
+    /\|\| case\s+when rc\.fda_ongoing_as_of is null then ''\s+else '\|' \|\| rc\.fda_ongoing_as_of::text\s+end/,
+  );
+});
+
+test('the client serves the column it hashes', () => {
+  assert.match(CLIENT, /'fda_ongoing_as_of'/);
+});

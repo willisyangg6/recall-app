@@ -36,6 +36,14 @@ function recall(
     daysAgo?: number;
     categoryLabel?: string | null;
     hazard?: { category: string; agent: string | null; reason?: string };
+    /**
+     * Pin the agency (a recall, not an alert). Unpinned, the agency follows
+     * the fixture seed — and an FSIS recall is confirmed open at any age, so
+     * a test about an OLD, unconfirmed recall must pin FDA.
+     */
+    agency?: 'FDA' | 'FSIS';
+    /** FDA open evidence: the export date an accepted linked product was Ongoing. */
+    fdaOngoingAsOf?: string | null;
   } = {},
 ): FeedItem {
   const daysAgo = options.daysAgo ?? 3;
@@ -72,6 +80,8 @@ function recall(
     pathogenOrAllergen: options.hazard ? options.hazard.agent : 'Salmonella',
     reasonText: options.hazard?.reason ?? 'Potential Salmonella contamination',
     retailerNames: [],
+    ...(options.agency ? { sourceAgency: options.agency, noticeType: 'recall' as const } : {}),
+    fdaOngoingAsOf: options.fdaOngoingAsOf ?? null,
   });
 }
 
@@ -132,7 +142,8 @@ test('what the count excludes: another state’s recall, unknown geography with 
   const chosen = prefs(['CA']);
   const texasOnly = recall('texas', { scope: 'states', states: ['Texas'] });
   const unknownNoSignal = recall('unknown', { scope: 'unknown' });
-  const stale = recall('stale', { daysAgo: 90 });
+  // Past the window with no agency evidence that it is still open.
+  const stale = recall('stale', { daysAgo: 90, agency: 'FDA' });
   const fresh = recall('fresh');
   const matches = affectsYouMatches([texasOnly, unknownNoSignal, stale, fresh], chosen, NOW);
   assert.deepEqual(
@@ -197,7 +208,7 @@ test('Building, Ready and the Feed’s Affects You include the same Nationwide r
       hazard: { category: 'foreign_material', agent: null, reason: 'Metal' },
     }),
     recall('texas-only', { scope: 'states', states: ['Texas'] }),
-    recall('old-nat', { daysAgo: 120 }),
+    recall('old-nat', { daysAgo: 120, agency: 'FDA' }),
     recall('nat-no-image', { imaged: false }),
   ];
   const chosen = prefs(['OH'], ['milk'], ['kroger']);
@@ -235,4 +246,84 @@ test('the one filter that lowers a Nationwide count: an identified allergen-only
     hazard: { category: 'allergen', agent: null, reason: 'Undeclared allergen' },
   });
   assert.equal(evaluatePersonalRelevance(unnamed, prefs(['CA'])).affectsMe, true);
+});
+
+// ── Confirmed-open older matches (2026-10-06) ───────────────────────────────
+
+test('an older match counts on every surface exactly when an agency confirms it is still open', () => {
+  const chosen = prefs(['CA']);
+  const items = [
+    recall('current', { agency: 'FDA' }),
+    recall('fda-ongoing', { daysAgo: 400, agency: 'FDA', fdaOngoingAsOf: '2026-08-24' }),
+    recall('fsis-active', { daysAgo: 90, agency: 'FSIS' }),
+    recall('fda-resolved', { daysAgo: 400, agency: 'FDA', fdaOngoingAsOf: null }),
+    {
+      ...recall('fsis-alert', { daysAgo: 400, agency: 'FSIS' }),
+      noticeType: 'public_health_alert' as const,
+    },
+  ];
+  const sections = buildAffectsMeSections(
+    items,
+    (item) => evaluatePersonalRelevance(item, chosen),
+    {
+      now: NOW,
+    },
+  );
+  const building = buildingData({ status: 'ready', items }, false, chosen, NOW);
+  const ready = buildReadyPreview({ status: 'ready', items }, chosen, TODAY, NOW);
+  // Newest first by the one shared comparator: no current-first tier, the
+  // older recalls simply carry older dates.
+  assert.deepEqual(
+    sections.affects.map((item) => item.id),
+    ['current', 'fsis-active', 'fda-ongoing'],
+  );
+  // Same date, so the shared comparator's id tie-break decides.
+  assert.deepEqual(
+    sections.older.map((item) => item.id),
+    ['fda-resolved', 'fsis-alert'],
+  );
+  assert.deepEqual(
+    affectsYouMatches(items, chosen, NOW).map((item) => item.id),
+    sections.affects.map((item) => item.id),
+  );
+  assert.ok(building.kind === 'usable');
+  assert.equal(building.total, 3);
+  assert.equal(previewMatchCount(ready), 3);
+});
+
+test('FDA evidence expires on the device clock alone: 22 days on, all three surfaces drop it together, with no new download', () => {
+  const chosen = prefs(['CA']);
+  // The SAME corpus object at two clocks — nothing re-downloaded, nothing
+  // re-synced. Evidence dated 2026-08-24 counts through 2026-09-14 00:00 UTC.
+  const items = [
+    recall('fda-ongoing', { daysAgo: 400, agency: 'FDA', fdaOngoingAsOf: '2026-08-24' }),
+    recall('fsis-active', { daysAgo: 400, agency: 'FSIS' }),
+  ];
+  const counts = (now: Date) => {
+    const today = now.toISOString().slice(0, 10);
+    const building = buildingData({ status: 'ready', items }, false, chosen, now);
+    return {
+      feed: buildAffectsMeSections(items, (item) => evaluatePersonalRelevance(item, chosen), {
+        now,
+      }).affects.length,
+      building: building.kind === 'usable' ? building.total : -1,
+      ready: previewMatchCount(buildReadyPreview({ status: 'ready', items }, chosen, today, now)),
+    };
+  };
+  assert.deepEqual(counts(new Date('2026-09-14T00:00:00.000Z')), {
+    feed: 2,
+    building: 2,
+    ready: 2,
+  });
+  assert.deepEqual(counts(new Date('2026-09-14T00:00:00.001Z')), {
+    feed: 1,
+    building: 1,
+    ready: 1,
+  });
+  // FSIS evidence is lifecycle itself: it does not expire on the device.
+  assert.deepEqual(counts(new Date('2027-09-14T00:00:00.000Z')), {
+    feed: 1,
+    building: 1,
+    ready: 1,
+  });
 });

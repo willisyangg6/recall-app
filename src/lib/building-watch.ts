@@ -11,8 +11,9 @@
  *                 the Feed and Ready read — and the saved preferences.
  *   2. Allergens  The allergen signal of `evaluatePersonalRelevance`.
  *   3. Stores     Its retailer signal.
- *   4. Matches    `affectsYouMatches(...)`: the Affects You current window,
- *                 whose length is the count Ready shows.
+ *   4. Matches    `affectsYouMatches(...)`: the Affects You counted list (in
+ *                 the window, or confirmed open by the agency), whose length
+ *                 is the count Ready shows.
  *   5. Feed       That same ranked list, which Ready receives.
  *
  * Stops 2–5 are ONE synchronous evaluation over the loaded corpus: the screen

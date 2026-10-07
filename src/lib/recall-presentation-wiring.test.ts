@@ -391,8 +391,10 @@ test('Home and Detail render the same shared risk state, and no explanatory risk
 test('Detail header: badge + one activity date + name + brand + one link; no metadata line', () => {
   // The one material date renders beside the badge, from the shared model.
   assert.match(DETAIL, /model\.activity\.text/);
-  // "Recall · Active" metadata is gone entirely.
-  assert.ok(!DETAIL.includes('model.lifecycleLabel'), 'lifecycle metadata rendered');
+  // "Recall · Active" metadata is gone entirely — and since 2026-10-06 so is
+  // the model field that built it: it called every FDA case "Active", a claim
+  // Lotly cannot support without an FDA closure signal.
+  assert.ok(!DETAIL.includes('lifecycleLabel'), 'lifecycle metadata rendered');
   assert.ok(!DETAIL.includes('· {model'), 'a dotted metadata line rendered');
   // The official link renders exactly once, near the heading, and the legacy
   // bottom source block, official-title quote, provenance copy, and share

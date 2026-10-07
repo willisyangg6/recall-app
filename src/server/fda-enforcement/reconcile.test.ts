@@ -357,3 +357,144 @@ test('push-active state is attached to every preview entry', async () => {
   assert.equal(inactive.classificationChanges[0].pushActive, false);
   assert.equal(inactive.classificationChanges[0].currentlyDeliverable, false);
 });
+
+// ── Open evidence (2026-10-06) ──────────────────────────────────────────────
+
+/** An OpenEvidenceStore whose links are the MemoryStore's real enrichment links. */
+function evidenceStoreOver(store: MemoryStore, caseIds: string[]) {
+  const values = new Map<string, string | null>(caseIds.map((id) => [id, null]));
+  return {
+    values,
+    async listFdaCases() {
+      return {
+        cases: caseIds.map((id) => ({
+          id,
+          mergedInto: null,
+          fdaOngoingAsOf: values.get(id) ?? null,
+        })),
+        columnPresent: true,
+      };
+    },
+    async listEnforcementLinks() {
+      return [...store.sourceRecords.values()]
+        .filter((r) => r.sourceSystem === 'openfda_enforcement')
+        .map((r) => ({ recallNumber: r.nativeId, caseId: r.recallCaseId }));
+    },
+    async setFdaOngoingAsOf(caseId: string, before: string | null, after: string | null) {
+      if ((values.get(caseId) ?? null) !== before) return false;
+      values.set(caseId, after);
+      return true;
+    },
+  };
+}
+
+test('a status-only change moves the evidence and nothing else: no projection, timeline, date, product or ledger change', async () => {
+  const store = new MemoryStore();
+  const seeded = await seedCase(store, {
+    nativeId: 'matched-case',
+    title: 'Firm Recalls Product UPC 012345678905',
+    productDescription: 'Product UPC 012345678905',
+  });
+  const client = fakeClient([seeded]);
+  const evidence = evidenceStoreOver(store, [seeded.id]);
+  const run = (status: string, exportDate: string) =>
+    reconcileFdaEnforcement(client, store, {
+      apply: true,
+      corpus: { records: [rawEnforcement({ status })], exportDate, totalRecords: 1 },
+      now: NOW,
+      openEvidence: { store: evidence, apply: true, previousTotal: null },
+    });
+
+  // Export 1: the match links and classifies (its own, pre-existing events),
+  // and the case gains evidence.
+  const first = await run('Ongoing', '2026-08-25');
+  assert.equal(first.matched, 1);
+  assert.equal(evidence.values.get(seeded.id), '2026-08-25');
+  assert.equal(first.openEvidence?.gained, 1);
+
+  const snapshot = () => ({
+    case: JSON.stringify(store.cases.get(seeded.id)),
+    products: JSON.stringify(store.products.get(seeded.id) ?? null),
+    ledger: JSON.stringify([...store.notifications.values()]),
+  });
+  const before = snapshot();
+
+  // Export 2: FDA terminates. Evidence clears; the case row is untouched.
+  const second = await run('Terminated', '2026-09-01');
+  assert.equal(evidence.values.get(seeded.id), null);
+  assert.equal(second.openEvidence?.lost, 1);
+  assert.equal(second.assignments + second.reclassifications, 0);
+  assert.deepEqual(second.notifications, { delivered: 0, suppressed: 0 });
+  assert.deepEqual(snapshot(), before);
+
+  // Export 3: back to Ongoing (never observed live; same silent path).
+  const third = await run('Ongoing', '2026-09-08');
+  assert.equal(evidence.values.get(seeded.id), '2026-09-08');
+  assert.equal(third.openEvidence?.gained, 1);
+  assert.deepEqual(snapshot(), before);
+
+  // Export 4: still Ongoing — the date advances, nothing else moves.
+  const fourth = await run('Ongoing', '2026-09-15');
+  assert.equal(evidence.values.get(seeded.id), '2026-09-15');
+  assert.equal(fourth.openEvidence?.advanced, 1);
+  assert.deepEqual(snapshot(), before);
+});
+
+test('an incomplete export never clears evidence, and enrichment still runs', async () => {
+  const store = new MemoryStore();
+  const seeded = await seedCase(store, {
+    nativeId: 'matched-case',
+    title: 'Firm Recalls Product UPC 012345678905',
+    productDescription: 'Product UPC 012345678905',
+  });
+  const client = fakeClient([seeded]);
+  const evidence = evidenceStoreOver(store, [seeded.id]);
+  await reconcileFdaEnforcement(client, store, {
+    apply: true,
+    corpus: {
+      records: [rawEnforcement({ status: 'Ongoing' })],
+      exportDate: '2026-08-25',
+      totalRecords: 1,
+    },
+    now: NOW,
+    openEvidence: { store: evidence, apply: true, previousTotal: null },
+  });
+  assert.equal(evidence.values.get(seeded.id), '2026-08-25');
+
+  // A truncated download: the manifest names 2 records, 1 arrived, and the one
+  // that arrived says Terminated. A naive plan would clear the evidence.
+  const truncated = await reconcileFdaEnforcement(client, store, {
+    apply: true,
+    corpus: {
+      records: [rawEnforcement({ status: 'Terminated' })],
+      exportDate: '2026-09-01',
+      totalRecords: 2,
+    },
+    now: NOW,
+    openEvidence: { store: evidence, apply: true, previousTotal: null },
+  });
+  assert.match(String(truncated.openEvidence?.skipped), /manifest names 2/);
+  assert.equal(evidence.values.get(seeded.id), '2026-08-25');
+  assert.equal(truncated.matched, 1);
+});
+
+test('an open-evidence failure is captured in the stats, never thrown over committed enrichment', async () => {
+  const store = new MemoryStore();
+  const seeded = await seedCase(store, {
+    nativeId: 'matched-case',
+    title: 'Firm Recalls Product UPC 012345678905',
+    productDescription: 'Product UPC 012345678905',
+  });
+  const evidence = evidenceStoreOver(store, [seeded.id]);
+  evidence.setFdaOngoingAsOf = async () => {
+    throw new Error('simulated write failure');
+  };
+  const stats = await reconcileFdaEnforcement(fakeClient([seeded]), store, {
+    apply: true,
+    corpus: { records: [rawEnforcement({})], exportDate: '2026-08-25', totalRecords: 1 },
+    now: NOW,
+    openEvidence: { store: evidence, apply: true, previousTotal: null },
+  });
+  assert.equal(stats.assignments, 1);
+  assert.deepEqual(stats.openEvidence, { error: 'simulated write failure' });
+});
