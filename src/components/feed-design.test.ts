@@ -786,3 +786,42 @@ test('from the accessibility sizes the heading and Filters row scroll with the l
   assert.ok(!codeOnly(FEED).includes('maxFontSizeMultiplier'));
   assert.ok(!codeOnly(FEED_CARD_SURFACE).includes('maxFontSizeMultiplier'));
 });
+
+// ── The personalization row at accessibility sizes (2026-10-06) ─────────────
+//
+// At AX5 the caption claimed the whole row and pushed Edit past the screen
+// edge (measured on device: x≈929 on a 921pt-wide content area). Static, like
+// the rest of this file: the screen is React Native and is not rendered here.
+
+test('the personalization row wraps its caption and never pushes Edit off screen', () => {
+  // The caption shrinks to wrap; Edit keeps its own width.
+  assert.match(
+    FEED,
+    /<Text variant="caption" color="text\/secondary" style=\{styles\.contextText\}>/,
+  );
+  assert.match(FEED, /contextText: \{ flexShrink: 1 \}/);
+  assert.match(FEED, /contextEdit: \{ flexShrink: 0 \}/);
+});
+
+test('from the card-stacking text scale, Edit takes its own row with a 44pt target', () => {
+  assert.match(FEED, /style=\{\[styles\.contextRow, largeText && styles\.contextRowStacked\]\}/);
+  assert.match(FEED, /contextRowStacked: \{\s*flexDirection: 'column',\s*alignItems: 'flex-start'/);
+  assert.match(
+    FEED,
+    /contextEditStacked: \{\s*flexShrink: 0,\s*minHeight: hitTarget\.minimum,\s*minWidth: hitTarget\.minimum,/,
+  );
+  // A single style object: Link asChild passes props through expo-router's
+  // Slot, which throws a render error on a style ARRAY (seen on device).
+  assert.match(FEED, /style=\{largeText \? styles\.contextEditStacked : styles\.contextEdit\}/);
+});
+
+test('the default size keeps its one-line row and its hitSlop-grown Edit target', () => {
+  // Unchanged below the stacking scale: a row, space-between, the caption
+  // target grown to 44pt by hitSlop exactly as before.
+  assert.match(
+    FEED,
+    /contextRow: \{\s*flexDirection: 'row',\s*alignItems: 'center',\s*justifyContent: 'space-between',/,
+  );
+  assert.match(FEED, /hitSlop=\{largeText \? undefined : CAPTION_HIT_SLOP\}/);
+  assert.match(FEED, /accessibilityLabel="Edit personalization"/);
+});

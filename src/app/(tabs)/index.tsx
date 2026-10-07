@@ -21,7 +21,14 @@ import { Icon } from '@/components/ui/icon';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
-import { color, hitSlopToMinimum, layout, spacing, typography } from '@/constants/design-tokens';
+import {
+  color,
+  hitSlopToMinimum,
+  hitTarget,
+  layout,
+  spacing,
+  typography,
+} from '@/constants/design-tokens';
 import { CARD_STACK_SCALE, feedColor, feedGeometry, feedType } from '@/constants/feed-design';
 import { hasAnyPreference, type UserRecallPreferences } from '@/domain/preferences';
 import { useAccess } from '@/hooks/use-access';
@@ -504,17 +511,24 @@ export default function HomeScreen() {
       {/* ── END FEED MODE CONTROL ─────────────────────────────────────────*/}
       {/* Affects me says what it is scoped by and offers the way to change
           it. Not an instruction, and no preference logic of its own — the
-          link opens the one existing personalization screen. */}
+          link opens the one existing personalization screen. The caption
+          shrinks and wraps rather than pushing Edit past the screen edge;
+          from the card-stacking text scale Edit takes its own row with an
+          explicit 44pt target (a hitSlop alone leaves the accessible frame
+          caption-sized). The default size is unchanged. */}
       {tab === 'affects_me' && showTabs ? (
-        <View style={styles.contextRow}>
-          <Text variant="caption" color="text/secondary">
+        <View style={[styles.contextRow, largeText && styles.contextRowStacked]}>
+          <Text variant="caption" color="text/secondary" style={styles.contextText}>
             Based on your personalization
           </Text>
           <Link href="/settings/personalization" asChild>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Edit personalization"
-              hitSlop={CAPTION_HIT_SLOP}>
+              hitSlop={largeText ? undefined : CAPTION_HIT_SLOP}
+              // One style object, never an array: Link asChild hands its
+              // props through expo-router's Slot, which rejects style arrays.
+              style={largeText ? styles.contextEditStacked : styles.contextEdit}>
               {({ pressed }) => (
                 <Text variant="caption" color="action/secondary" style={pressed && styles.pressed}>
                   Edit
@@ -717,6 +731,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing[8],
+  },
+  contextRowStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    gap: 0,
+  },
+  // Wraps instead of claiming the whole row at large sizes.
+  contextText: { flexShrink: 1 },
+  // Never squeezed: Edit keeps its own width.
+  contextEdit: { flexShrink: 0 },
+  contextEditStacked: {
+    flexShrink: 0,
+    minHeight: hitTarget.minimum,
+    minWidth: hitTarget.minimum,
+    justifyContent: 'center',
   },
   // flex: 1 so the list gets the screen height and can actually scroll —
   // without it the list sizes to its content and the parent just clips it.
