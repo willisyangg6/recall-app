@@ -141,6 +141,23 @@ RPCs are explicitly revoked from anon/authenticated. A client can therefore
 write its own opaque rows and can never read tokens, preferences, or any
 other installation's data back.
 
+Table-level privileges (2026-10-09). The platform's default ACL for relations
+`postgres` creates in `public` withholds SELECT/INSERT/UPDATE/DELETE from the
+Data API roles but used to grant them `TRUNCATE`, `REFERENCES`, `TRIGGER` and
+`MAINTAIN` on every relation — and `TRUNCATE` is not subject to RLS. No
+exposed interface could issue them (PostgREST has no such verbs, GraphQL is
+disabled, and no anon-callable function runs dynamic SQL), but nothing needed
+them either. Migration `20261010000000_data_api_role_least_privilege.sql`
+revokes all four from `anon` and `authenticated` on every relation in `public`
+and in `postgres`'s default ACL, so a new table starts with no Data API grants
+and gets only the explicit `grant select` a migration gives it. It aborts if
+any of the four survives or a feed read is lost, and
+`src/server/data-api-privileges-migration.test.ts` fails any later migration
+that grants them back. `supabase_admin`'s own default ACL in `public` (full
+privileges to the Data API roles) is outside what a migration can change; it
+only matters for an object `supabase_admin` creates there, and today there are
+none.
+
 Server-side processing (service-role key, never in the app):
 
 - GitHub Actions workflows `scheduled-ingest.yml` / `daily-maintenance.yml`
