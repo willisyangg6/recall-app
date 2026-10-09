@@ -214,9 +214,9 @@ test('accessibility announces the same count the canonical set holds', () => {
   );
   const sold = whereSoldModel(consumer.distribution);
   assert.ok(sold.statesDisclosure);
-  // "See all 6 states" — the REAL total, not the hidden remainder.
-  assert.equal(sold.statesDisclosure!.expandAccessibilityLabel, `See all ${states.length} states`);
-  assert.equal(sold.statesDisclosure!.expandLabel, `See all (${states.length})`);
+  // "Show all 6 states" — the REAL total, not the hidden remainder.
+  assert.equal(sold.statesDisclosure!.expandAccessibilityLabel, `Show all ${states.length} states`);
+  assert.equal(sold.statesDisclosure!.expandLabel, `Show all (${states.length})`);
   // Collapsed shows the first five of the same list, in the same order.
   assert.equal(sold.leadCollapsed, states.slice(0, WHERE_SOLD_INITIAL_STATES).join(', '));
   // And the card's "+N" counts the same set.

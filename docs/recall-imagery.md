@@ -598,8 +598,12 @@ and above the threshold they **coexist** (`ImagePageView.indicator`):
 | ------------- | ----- | ---------------------------------------------------------------------- |
 | 0             | —     | nothing at all (the no-image header; the set is `null`)                |
 | 1             | 1     | `none` — the static tile, nothing to swipe                             |
-| 2–5           | 2–5   | `dots` — one position dot per image                                    |
+| 2             | 2     | `dots` — one position dot per image                                    |
+| 3–5           | 3–5   | `dots-and-counter` — one dot per image, and `2 / 3` beside them        |
 | 6 or more     | all   | `dots-and-counter` — a five-dot sliding window, and `2 / 74` beside it |
+
+(Recall Detail kit, 2026-10-07: the counter starts at three usable images,
+`IMAGE_COUNTER_MIN`; the header photo is a contained 112×144.)
 
 - The **dots** communicate swipe position within the rendered carousel: a
   window of at most `IMAGE_DOTS_WINDOW` (5) marks, computed by
@@ -652,11 +656,11 @@ were attempted:
 - all candidates fail → the header's no-image shape (never a blank tile with
   dots over it);
 - one left → the static tile, no indicator;
-- two to five left, everything published shown → one dot per survivor;
-- six or more left → the five-dot window and the counter;
-- fewer left than were published → the counter appears whatever the size, so
-  the shortfall is visible, with the spoken sentence above saying how many
-  of the published photos could not be loaded.
+- two left → two dots and no number; when that is fewer than were
+  published, the dots carry the one spoken sentence saying how many of the
+  published photos could not be loaded;
+- three or more left → the dots (a five-dot window from six) and the counter
+  of the survivors, which carries that sentence when something failed.
 
 The visible page is tracked by image identity, so a late failure on an
 offscreen page never moves the page the shopper is looking at; when the

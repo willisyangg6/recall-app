@@ -30,6 +30,7 @@ import {
   imagePageView,
   imagePositionLabel,
   imageUnavailableLabel,
+  IMAGE_COUNTER_MIN,
   IMAGE_DOTS_WINDOW,
   productImagery,
   caseIdentity,
@@ -988,11 +989,15 @@ test('P2B7I correction: the page view is UNCAPPED \u2014 every usable image is a
   assert.equal(detailImageSet([], 'Widget'), null);
   // The founder's matrix. `pages` always equals the official count, because
   // nothing is ever dropped for presentation \u2014 74 official photos are 74
-  // swipeable pages, and page 7 and page 74 are both reachable.
+  // swipeable pages, and page 7 and page 74 are both reachable. AMENDED FOR
+  // THE RECALL DETAIL KIT (2026-10-07): two pages show dots alone; from
+  // three the counter joins the dots.
+  assert.equal(IMAGE_COUNTER_MIN, 3);
   for (const [count, indicator] of [
     [1, 'none'],
     [2, 'dots'],
-    [5, 'dots'],
+    [3, 'dots-and-counter'],
+    [5, 'dots-and-counter'],
     [6, 'dots-and-counter'],
     [7, 'dots-and-counter'],
     [74, 'dots-and-counter'],
@@ -1045,16 +1050,24 @@ test('P2B7I correction: a failed page leaves the set and every healthy image aft
     imageUnavailableLabel(earlyFailed.usableCount, earlyFailed.officialCount),
     '73 of 74 official images can be shown; the rest could not be loaded',
   );
-  // A small set: a failure leaves fewer pages than were published, so the
-  // counter appears even under the dot window to say so.
+  // A small set: the counter counts only the survivors. A failure that
+  // leaves two pages shows two dots and no number (Recall Detail kit); the
+  // one sentence about what could not be loaded then rides the dots.
   const three = setOf(3);
   const oneOfThree = imagePageView(three, new Set([three.images[1].url]));
   assert.deepEqual(
     oneOfThree.pages.map((image) => image.url),
     [three.images[0].url, three.images[2].url],
   );
-  assert.equal(oneOfThree.indicator, 'dots-and-counter');
-  assert.equal(imageCounterText(1, oneOfThree.usableCount), '2 / 2');
+  assert.equal(oneOfThree.indicator, 'dots');
+  assert.equal(
+    imageUnavailableLabel(oneOfThree.usableCount, oneOfThree.officialCount),
+    '2 of 3 official images can be shown; the rest could not be loaded',
+  );
+  const four = setOf(4);
+  const threeOfFour = imagePageView(four, new Set([four.images[0].url]));
+  assert.equal(threeOfFour.indicator, 'dots-and-counter');
+  assert.equal(imageCounterText(0, threeOfFour.usableCount), '1 / 3');
   // Down to one page: the static tile, no indicator at all.
   const two = setOf(2);
   assert.equal(imagePageView(two, new Set([two.images[0].url])).indicator, 'none');

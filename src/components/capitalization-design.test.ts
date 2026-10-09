@@ -150,9 +150,9 @@ test('P2B7H: the labels this milestone corrected are rendered exactly as written
   assert.ok(DEV_ENTRY.includes('{DEVELOPMENT_HEADING}'));
   assert.ok(!DEV_ENTRY.includes('toUpperCase'));
 
-  // Detail's symptom label. P2B7V gave it a colon, because it now opens the
-  // list beneath it rather than sitting over it as a muted eyebrow.
-  assert.ok(DETAIL.includes('Common symptoms:'));
+  // Detail's symptom label: since the Recall Detail kit (2026-10-07) an
+  // 18/24 subheading beneath Health Risk, cased as written, no colon.
+  assert.match(DETAIL, />\s*Common symptoms\s*</);
   assert.ok(!DETAIL.includes('COMMON SYMPTOMS'));
 });
 
@@ -161,7 +161,7 @@ test('P2B7H: every group, section and navigation label is written in natural cas
     ...PROFILE_DOCUMENT_GROUPS.map((group) => group.title),
     'App',
     DEVELOPMENT_HEADING,
-    'Common symptoms:',
+    'Common symptoms',
     'Privacy & Data',
     'About & Safety',
     'Legal',

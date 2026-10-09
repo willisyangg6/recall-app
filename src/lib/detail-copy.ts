@@ -39,16 +39,17 @@ export function retractedNotice(agencyLabel: string): string {
 /** Spoken after an external link's label, so the leave is never a surprise. */
 export const EXTERNAL_LINK_HINT = 'Opens in your browser.';
 
-// ── The Detail title's four-line disclosure (P2B7V) ─────────────────────────
+// ── The Detail title's disclosure (P2B7V; two lines since 2026-10-07) ───────
 
 /**
  * How many lines of the product name Detail shows before offering the rest.
  *
- * Four, by founder decision. A handful of live titles are product LISTS the
- * agency wrote as one name — the longest in the active corpus runs 255
- * characters across a dozen cheeses — and at the top of the screen they push
- * every other fact below the fold. Four lines is enough to identify almost
- * every recall and short enough that the rest of the screen stays visible.
+ * Two, by the approved Recall Detail kit (2026-10-07; P2B7V set four). A
+ * handful of live titles are product LISTS the agency wrote as one name — the
+ * longest in the active corpus runs 255 characters across a dozen cheeses —
+ * and at the top of the screen they push every other fact below the fold.
+ * Whether the control appears is MEASURED from the real text layout, never
+ * inferred from a character count.
  *
  * It is a CLAMP on the rendering only. The full name is what search matches,
  * what a reader hears, what share copy carries, and what identity and
@@ -56,7 +57,7 @@ export const EXTERNAL_LINK_HINT = 'Opens in your browser.';
  * title carries its own notification-only short name, built from the full
  * one: server/push/product-name.ts.)
  */
-export const DETAIL_TITLE_LINES = 4;
+export const DETAIL_TITLE_LINES = 2;
 
 /**
  * The title disclosure's two words. It is deliberately quiet: this reveals
@@ -68,4 +69,13 @@ export const DETAIL_TITLE_EXPAND_LABEL = 'Show full title';
 export const DETAIL_TITLE_COLLAPSE_LABEL = 'Show less';
 /** Spoken with the control, so its effect is clear before it is pressed. */
 export const DETAIL_TITLE_EXPAND_HINT = 'Shows the rest of the product name.';
-export const DETAIL_TITLE_COLLAPSE_HINT = 'Shortens the product name to four lines.';
+export const DETAIL_TITLE_COLLAPSE_HINT = 'Shortens the product name to two lines.';
+
+/**
+ * The retailer row's SPOKEN prefix (Recall Detail kit, 2026-10-07). The row
+ * shows the store glyph and the names alone — no visible "Retailers:" — and a
+ * screen reader still hears what the names are. This is the one place the
+ * app-wide "store, never retailer" rule is waived (lib/consumer-copy.test.ts,
+ * rule 4): personalization calls the same choice "Retailers".
+ */
+export const RETAILERS_SPOKEN_PREFIX = 'Retailers:';

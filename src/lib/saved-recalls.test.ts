@@ -231,8 +231,9 @@ test('Saved never shows community shopper-report data', () => {
 
 test('the save control is the same component on the card and on Detail', () => {
   assert.match(CARD, /import \{ SaveRecallButton \} from '@\/components\/save-recall-button'/);
-  assert.match(DETAIL, /import \{ SaveRecallButton \} from '@\/components\/save-recall-button'/);
-  assert.match(DETAIL, /<SaveRecallButton caseId=\{model\.id\} \/>/);
+  // Detail's sits in the navigation bar (Recall Detail kit) as a native bar
+  // item built by the same module from the same shared save state.
+  assert.match(DETAIL, /import \{ useSaveHeaderItems \} from '@\/components\/save-recall-button'/);
 });
 
 test('saving never writes a preference, a ranking signal, or an official field', () => {

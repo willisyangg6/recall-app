@@ -107,9 +107,35 @@ const GLYPHS = {
   'category-beverages': require('@/assets/icons/category-beverages.png') as ImageSourcePropType,
   'category-pantry': require('@/assets/icons/category-pantry.png') as ImageSourcePropType,
   'category-baby': require('@/assets/icons/category-baby.png') as ImageSourcePropType,
+  // The Recall Detail source kit (2026-10-07): the same pinned lucide-static
+  // 0.468.0 family, each scale rendered directly from its SVG. `store` marks
+  // the retailer line; the nine symptom glyphs are decorative shorthand in
+  // the Health Risk bubbles (the mapping is src/lib/symptom-icons.ts).
+  // `chevron-up` is the set's own `chevron-down` rasters turned half a turn,
+  // so the title's Show full title / Show less pair shares one stroke.
+  'chevron-up': require('@/assets/icons/chevron-up.png') as ImageSourcePropType,
+  store: require('@/assets/icons/store.png') as ImageSourcePropType,
+  activity: require('@/assets/icons/activity.png') as ImageSourcePropType,
+  brain: require('@/assets/icons/brain.png') as ImageSourcePropType,
+  circle: require('@/assets/icons/circle.png') as ImageSourcePropType,
+  droplets: require('@/assets/icons/droplets.png') as ImageSourcePropType,
+  eye: require('@/assets/icons/eye.png') as ImageSourcePropType,
+  hand: require('@/assets/icons/hand.png') as ImageSourcePropType,
+  thermometer: require('@/assets/icons/thermometer.png') as ImageSourcePropType,
+  'utensils-crossed': require('@/assets/icons/utensils-crossed.png') as ImageSourcePropType,
+  wind: require('@/assets/icons/wind.png') as ImageSourcePropType,
 } as const;
 
 export type IconName = keyof typeof GLYPHS;
+
+/**
+ * A glyph's raster source, for the one surface that must hand an image to
+ * native code rather than render it: Recall Detail's navigation-bar Save
+ * item (a native bar button). Same files, same tinting by the platform.
+ */
+export function iconSource(name: IconName): ImageSourcePropType {
+  return GLYPHS[name];
+}
 
 /** The approved glyph names, for tests and galleries. */
 export const ICON_NAMES = Object.keys(GLYPHS) as IconName[];

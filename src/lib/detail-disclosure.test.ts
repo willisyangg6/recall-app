@@ -148,17 +148,18 @@ test('five jurisdictions render complete, with no action at all', () => {
   );
 });
 
-test('six or more jurisdictions show the first five plus See all (N)', () => {
+test('six or more jurisdictions show the first five plus Show all (N)', () => {
+  // Recall Detail kit (2026-10-07): the jurisdiction reveal says "Show all".
   const six = soldIn(STATES.slice(0, 6));
-  assert.equal(six.statesDisclosure?.expandLabel, 'See all (6)');
+  assert.equal(six.statesDisclosure?.expandLabel, 'Show all (6)');
   assert.equal(six.leadCollapsed, 'Alabama, California, Delaware, Florida, Georgia');
   // No terminal "and" while collapsed: it would assert the list had ended.
   assert.doesNotMatch(six.leadCollapsed, /\band\b/);
 
   const ten = soldIn(STATES);
-  assert.equal(ten.statesDisclosure?.expandLabel, 'See all (10)');
+  assert.equal(ten.statesDisclosure?.expandLabel, 'Show all (10)');
   // Spoken in the consumer word (P2B6C): the list shows states, so the reveal says states.
-  assert.equal(ten.statesDisclosure?.expandAccessibilityLabel, 'See all 10 states');
+  assert.equal(ten.statesDisclosure?.expandAccessibilityLabel, 'Show all 10 states');
   assert.equal(ten.statesDisclosure?.collapseLabel, 'Show less');
 });
 

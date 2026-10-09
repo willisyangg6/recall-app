@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { hitTarget, iconSize, typography } from '@/constants/design-tokens';
+import { detailType } from '@/constants/detail-design';
 import type { FeedItem } from '@/lib/recall-feed';
 import { buildHomeCardModel, cardSummaryText, todayIso } from '@/lib/recall-presentation';
 import { saveControlState } from '@/lib/saved-recalls';
@@ -50,12 +51,17 @@ test('P2B7H: the activity date renders in the readable caption token, at least 1
   assert.equal(typography['micro-caption'].fontSize, 10);
 
   // Card (Feed and Saved) and Detail draw the date from the same model
-  // field in the same token, so there is ONE metadata hierarchy.
+  // field. The card keeps the caption token; Detail (Recall Detail kit,
+  // 2026-10-07) uses its approved 14/20 metadata role — larger, so the
+  // founder's floor holds there too.
   const dateLine = '<Text variant="caption" color="text/secondary">';
-  for (const [name, source] of [
-    ['card', CARD],
-    ['detail', DETAIL],
-  ] as const) {
+  {
+    const index = DETAIL.indexOf('{model.activity.text}');
+    const opening = DETAIL.lastIndexOf('<Text', index);
+    assert.ok(DETAIL.slice(opening, index).includes('detailType.metadata'));
+    assert.ok(detailType.metadata.fontSize! >= 12);
+  }
+  for (const [name, source] of [['card', CARD]] as const) {
     const index = source.indexOf('{model.activity.text}');
     assert.ok(index > 0, `${name} does not render the activity date`);
     const opening = source.lastIndexOf('<Text', index);
@@ -123,11 +129,14 @@ test('P2B7H: the save control renders the bookmark alone — no visible word any
 });
 
 test('P2B7H: Feed, Saved and Detail use the ONE control, not three implementations', () => {
-  // Feed and Saved reach it through the shared card; Detail renders it
-  // directly. Nothing draws a bookmark of its own.
+  // Feed and Saved reach it through the shared card; Detail (Recall Detail
+  // kit) puts the same contract in its navigation bar as a native item built
+  // by the same module. Nothing draws a bookmark of its own.
   assert.ok(CARD.includes("import { SaveRecallButton } from '@/components/save-recall-button';"));
-  assert.ok(DETAIL.includes("import { SaveRecallButton } from '@/components/save-recall-button';"));
-  assert.ok(DETAIL.includes('<SaveRecallButton caseId={model.id} />'));
+  assert.ok(
+    DETAIL.includes("import { useSaveHeaderItems } from '@/components/save-recall-button';"),
+  );
+  assert.ok(DETAIL.includes('unstable_headerRightItems: () => saveItems'));
   assert.ok(CARD.includes('<SaveRecallButton caseId={model.id} glyphSize={24} />'));
   assert.ok(FEED.includes('<RecallCard'));
   assert.ok(SAVED.includes('<RecallCard'));

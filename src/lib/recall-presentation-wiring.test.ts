@@ -23,11 +23,6 @@ const HOME = [
   readFileSync(join(__dirname, '..', 'components', 'recall-card.tsx'), 'utf8'),
 ].join('\n');
 const DETAIL = readFileSync(join(__dirname, '..', 'app', 'recall', '[id].tsx'), 'utf8');
-/** The shared disclosure primitive (P2B0) every Detail reveal renders through. */
-const DISCLOSURE = readFileSync(
-  join(__dirname, '..', 'components', 'ui', 'disclosure-control.tsx'),
-  'utf8',
-);
 /** The one imagery component (P2B7C) both Detail image surfaces render through. */
 const IMAGE_SET = readFileSync(
   join(__dirname, '..', 'components', 'ui', 'official-image-set.tsx'),
@@ -163,10 +158,10 @@ test('the recall quantity is narrative the model composed, never screen styling 
   // secondary text at all and no third slot for one to come back into.
   const section = DETAIL.slice(
     DETAIL.indexOf('<Section title="What Happened">'),
-    DETAIL.indexOf('{/* Where it was sold'),
+    DETAIL.indexOf('{/* Where It Was Sold'),
   );
   assert.equal(
-    section.match(/color="text\/secondary"/g)?.length ?? 0,
+    section.match(/secondaryColor|color="text\/secondary"/g)?.length ?? 0,
     0,
     'What happened carries a muted line again',
   );
@@ -178,8 +173,9 @@ test('the recall quantity is narrative the model composed, never screen styling 
   // The second paragraph is the model's `scope` and nothing else, rendered in
   // the SAME body type as the cause: it is prose, never a badge or a heading.
   assert.match(section, /model\.whatHappened\.scope/);
+  // (Recall Detail kit: the body role is the kit's 16/23.)
   assert.equal(
-    section.match(/variant="body-small"/g)?.length ?? 0,
+    section.match(/detailType\.body, styles\.textColor/g)?.length ?? 0,
     2,
     'the scope paragraph is not the cause paragraph’s body type',
   );
@@ -210,78 +206,57 @@ test('Detail introduces none of the disallowed dead controls', () => {
   }
 });
 
-test('Affected Products renders the shared P2b table model, not screen-built rows', () => {
-  // The screen consumes `model.sections.affectedProducts.table` — columns and
-  // cells are decided by the shared contract; no raw fact bags, package-check
-  // internals, or rejected facts reach JSX, and the screen composes no field
-  // labels or cell values of its own. The model supplies the collapsed and
-  // expanded VIEWS (columns recomputed from the rows each shows) — the
-  // screen only picks which one to render.
+test('Affected Products renders the shared table model as cards, not screen-built rows', () => {
+  // AMENDED FOR THE RECALL DETAIL KIT (2026-10-07): each table row is a
+  // vertical card. The screen consumes `model.sections.affectedProducts.table`
+  // through the contract's own `affectedProductCards` — rows, field groups,
+  // labels, pairs and collapsed lines are all decided there; the screen only
+  // picks the collapsed or expanded view.
   assert.match(DETAIL, /affectedProducts\.table/);
-  assert.match(DETAIL, /expanded \? table\.expanded : table\.collapsed/);
-  assert.match(DETAIL, /view\.columns\.map/);
-  assert.match(DETAIL, /row\.cells\.map/);
+  assert.match(
+    DETAIL,
+    /tableExpanded \? affectedProducts\.table\.expanded : affectedProducts\.table\.collapsed/,
+  );
+  assert.match(DETAIL, /affectedProductCards\(/);
+  assert.match(DETAIL, /card\.groups\.map/);
   assert.ok(!DETAIL.includes('.rejected'), 'Detail reads rejected facts');
   assert.ok(!DETAIL.includes('rawText'), 'Detail renders raw extracted text');
   assert.ok(!DETAIL.includes('PACKAGE_FIELD_LABEL'), 'Detail composes its own field labels');
-  // The screen never re-derives visible columns or rows itself.
   assert.ok(!DETAIL.includes('rows.slice'), 'the screen slices rows itself');
   assert.ok(!DETAIL.includes('columns.filter'), 'the screen filters columns itself');
-  // The table scrolls horizontally as ONE unit — header and rows together.
-  assert.match(DETAIL, /ScrollView[\s\S]{0,40}horizontal/);
-  // The reveal control comes from the model ("See all (N)" / "Show less"),
-  // and no screen-invented count or label exists: the screen hands the
-  // model's `DisclosureControl` to the shared primitive (P2B0,
-  // components/ui/disclosure-control.tsx), which renders its values and
-  // composes no disclosure copy of its own either.
+  // No horizontal table survives.
+  assert.ok(!/ScrollView[\s\S]{0,40}horizontal/.test(DETAIL), 'the horizontal table returned');
+  // The reveal controls are the model's; the screen's one disclosure
+  // component renders their values and composes no disclosure copy.
   assert.match(DETAIL, /table\.rowsDisclosure/);
-  assert.match(
-    DETAIL,
-    /import \{ DisclosureControl \} from '@\/components\/ui\/disclosure-control'/,
-  );
-  assert.match(DETAIL, /<DisclosureControl\s+control=\{affectedProducts\.table\.rowsDisclosure\}/);
-  assert.ok(
-    !DETAIL.includes('function DisclosureButton'),
-    'a screen-local disclosure control returned',
-  );
-  assert.match(DISCLOSURE, /control\.expandLabel/);
-  assert.match(DISCLOSURE, /control\.collapseLabel/);
-  assert.ok(!DISCLOSURE.includes("'See all"), 'the See all label is primitive-composed');
-  assert.ok(!DISCLOSURE.includes("'Show less"), 'the Show less label is primitive-composed');
+  assert.match(DETAIL, /<DetailDisclosure\s+control=\{affectedProducts\.table\.rowsDisclosure\}/);
+  assert.match(DETAIL, /expanded \? control\.collapseLabel : control\.expandLabel/);
   assert.ok(!DETAIL.includes("'See all"), 'the See all label is screen-composed');
   assert.ok(!DETAIL.includes("'Show less"), 'the Show less label is screen-composed');
+  assert.ok(!DETAIL.includes("'Show more"), 'the Show more label is screen-composed');
   assert.ok(!DETAIL.includes("'Show fewer"), 'the retired collapse word returned');
-  // A missing cell renders EMPTY — never a dash or placeholder text.
+  // An empty field is OMITTED in a card — never a dash or placeholder text.
   assert.ok(!DETAIL.includes("?? '—'"), 'a dash placeholder is rendered');
   assert.ok(!DETAIL.includes('Unknown'), 'an unknown placeholder is rendered');
-  // No version image or image placeholder in P2b (P2c owns image roles).
+  assert.ok(!DETAIL.includes('Not available'), 'an unavailable placeholder is rendered');
   assert.ok(!DETAIL.includes('item.photo'), 'a version image is rendered');
   assert.ok(!DETAIL.includes('row.photo'), 'a version image is rendered');
 });
 
-test('a long cell discloses IN PLACE — no modal, no route, no sibling row leakage', () => {
-  // Every multi-value cell reveals its own values where it already is. The
-  // retired "View N codes" modal is gone entirely: no Modal import, no
-  // modal-only props, no Close control, and no navigation route replaced it.
-  assert.match(DETAIL, /cell\.disclosure/);
-  assert.match(DETAIL, /cell\.collapsedText/);
-  assert.match(DETAIL, /onToggle\(stateId\)/);
-  // Expansion is keyed by the SHARED contract's `cellStateId`, which returns
-  // the cell's pair-group identity when it has one and its column otherwise.
-  // The screen derives no key of its own, so a paired column cannot be given
-  // a state entry separate from its partner's.
-  assert.match(DETAIL, /stateId=\{cellStateId\(row\.id, cell\)\}/);
-  assert.match(DETAIL, /openCells\.has\(cellStateId\(row\.id, cell\)\)/);
-  assert.match(DETAIL, /cellStateId,\n\s+visibleCellState,/);
-  assert.ok(!DETAIL.includes('function cellStateId'), 'the screen defines its own state key');
+test('a long field discloses IN PLACE — no modal, no route, no sibling card leakage', () => {
+  // Every multi-value field group reveals its own lines where it already is
+  // ("Show more" / "Show less", Recall Detail kit). No modal, no route.
+  assert.match(DETAIL, /group\.disclosure/);
+  assert.match(DETAIL, /group\.collapsedLines/);
+  assert.match(DETAIL, /onToggleGroup\(stateId\)/);
+  // Expansion is keyed by the SHARED contract's `cardGroupStateId`, by card
+  // and group — a pair group is ONE group, so its two halves cannot expand
+  // apart.
+  assert.match(DETAIL, /cardGroupStateId\(card\.id, group\.id\)/);
+  assert.ok(!DETAIL.includes('function cardGroupStateId'), 'the screen defines its own state key');
   assert.ok(!DETAIL.includes('function visibleCellState'), 'the screen defines its own pruning');
-  // A paired cell renders one value per line and never comma-joins, because
-  // its values can contain commas. The screen splits the model's own
-  // line-joined text rather than re-deriving which values are visible.
-  assert.match(DETAIL, /cell\.pairGroup === null/);
-  assert.match(DETAIL, /shown\.split\('\\n'\)/);
-  assert.match(DETAIL, /numberOfLines=\{1\}/);
   assert.ok(!DETAIL.includes('values.slice('), 'the screen re-derives which values are visible');
+  assert.ok(!DETAIL.includes('lines.slice('), 'the screen re-derives which lines are visible');
   for (const retired of [
     'RowCodesModal',
     'OpenRowCodes',
@@ -294,9 +269,9 @@ test('a long cell discloses IN PLACE — no modal, no route, no sibling row leak
   }
   assert.ok(!/\bModal\b/.test(DETAIL), 'a modal is still imported or rendered');
   assert.ok(!DETAIL.includes('router.push'), 'the disclosure became a navigation route');
-  assert.ok(!DETAIL.includes('row.codes'), 'a row code set is read outside its cell');
-  // Collapsing the rows drops the cell state of rows that disappear, through
-  // the shared contract's pruning rather than a screen-local copy.
+  assert.ok(!DETAIL.includes('row.codes'), 'a row code set is read outside its card');
+  // Collapsing the rows drops the group state of cards that disappear,
+  // through the shared contract's pruning.
   assert.match(DETAIL, /visibleCellState\(/);
 });
 
@@ -310,15 +285,7 @@ test('no shared-facts block can render under Affected Products', () => {
   assert.ok(!DETAIL.includes('sharedFields'), 'package-check shared internals reach the screen');
 });
 
-test('P3C-2: no code or date disclosure can render beneath the Affected Products table', () => {
-  // The founder's final ruling: lot, batch, case and production codes, and
-  // row-applicable production dates, appear in table columns and cells and
-  // nowhere else. The screen must have no second surface for them — not the
-  // retired disclosures, not a renamed replacement.
-  //
-  // The retired model fields are the first gate. They no longer exist on the
-  // section type, so naming one is a compile error; naming one as a string
-  // is what a future refactor would do first.
+test('P3C-2: no code or date disclosure can render beneath the Affected Products cards', () => {
   for (const retired of [
     'caseCodes',
     'productionCodes',
@@ -332,28 +299,21 @@ test('P3C-2: no code or date disclosure can render beneath the Affected Products
   ]) {
     assert.ok(!DETAIL.includes(retired), `the below-table disclosure returned: ${retired}`);
   }
-  // The section renders the table and nothing else: one child, no sibling
-  // control, no second heading, no "applies to all" replacement card.
-  // The section renders the table and its heading-level row reveal — and
-  // nothing else. No second heading, no sibling control below the table, no
+  // The section renders its cards and its heading-level row reveal — and
+  // nothing else. No second heading, no sibling control below the cards, no
   // "applies to all" replacement card.
   const section = DETAIL.slice(
     DETAIL.search(/<Section\s+title="Affected Products"/),
     DETAIL.indexOf('</Section>', DETAIL.search(/<Section\s+title="Affected Products"/)),
   );
-  assert.match(section, /<AffectedProductsTableView/);
   assert.equal(
-    (section.match(/<AffectedProductsTableView/g) ?? []).length,
+    (section.match(/<AffectedProductCardView/g) ?? []).length,
     1,
-    'the Affected Products section renders more than one table',
+    'the Affected Products section renders something besides one card per row',
   );
-  assert.ok(
-    !/<\/AffectedProductsTableView>|<ThemedText/.test(section),
-    'the Affected Products section renders content besides the table and its reveal',
-  );
+  assert.match(section, /\{cards\.map\(\(card\) => \(/);
+  assert.ok(!/<ThemedText/.test(section));
   assert.ok(!DETAIL.includes('Applies to all affected versions'), 'the retired card returned');
-  // And the screen never redistributes: no code set is read outside the cell
-  // the model put it in, and no row/code assignment happens on the screen.
   assert.ok(!DETAIL.includes('sharedCodes'), 'the screen reads the model shared-code evidence');
   assert.ok(!DETAIL.includes('.items'), 'the screen reads model items instead of table rows');
   assert.ok(!DETAIL.includes('rowImages'), 'the screen matches images to rows itself');
@@ -462,11 +422,15 @@ test('the retired lower sections are gone; the product imagery renders once, nea
   assert.ok(!DETAIL.includes('galleryPhotos'), 'the screen collects photos itself');
   // Exactly one product-imagery render: the model's own bounded set, in the
   // header, through the one shared component.
-  assert.equal(DETAIL.split('model.productImages').length - 1, 2); // condition + prop
-  assert.match(
-    DETAIL,
-    /\{model\.productImages \? <OfficialImageSet set=\{model\.productImages\} \/> : null\}/,
+  // The model's set, overridden only by a development fixture (never in a
+  // release build).
+  assert.equal(DETAIL.split('model.productImages').length - 1, 1);
+  assert.ok(
+    DETAIL.includes(
+      'DEVELOPMENT_FIXTURES?.developmentDetailFixture(id)?.images ?? model.productImages',
+    ),
   );
+  assert.match(DETAIL, /\{productImages \? <OfficialImageSet set=\{productImages\} \/> : null\}/);
   assert.equal((DETAIL.match(/<OfficialImageSet\b/g) ?? []).length, 1);
   // The header reads the SET, never the raw hero field or the allocation.
   assert.ok(!DETAIL.includes('model.heroImageUrl'), 'the screen renders the hero field directly');
@@ -484,7 +448,8 @@ test('P1B: Health Risk renders the model-decided standardized section', () => {
   // The symptom list is a labelled bulleted group with list semantics, and
   // each symptom is one accessible node labelled with the symptom alone, so
   // the bullet glyph is never announced.
-  assert.match(DETAIL, /Common symptoms:/);
+  // (Recall Detail kit: "Common symptoms" is an 18/24 subheading, no colon.)
+  assert.match(DETAIL, />\s*Common symptoms\s*</);
   assert.match(DETAIL, /accessibilityRole="list"/);
   assert.match(DETAIL, /accessibilityLabel=\{symptom\}/);
   // The official source link is an accessible link whose LABEL comes from the
@@ -506,9 +471,10 @@ test('P1B: an absent higher-risk paragraph renders null — no blank line or fil
   // placeholder string, or a spacing view a `null` child would leave behind.
   // P2B2: the paragraph is the shared Text primitive in the section's body
   // type; Prettier may wrap the conditional, so the parens are optional.
+  // (Recall Detail kit: the paragraph takes the kit's body role.)
   assert.match(
     DETAIL,
-    /\{healthRisk\.higherRisk \? \(?\s*<Text variant="body-small">\{healthRisk\.higherRisk\}<\/Text>\s*\)? : null\}/,
+    /\{healthRisk\.higherRisk \? \(?\s*<Text style=\{\[detailType\.body, styles\.textColor\]\}>\{healthRisk\.higherRisk\}<\/Text>\s*\)? : null\}/,
   );
   for (const filler of ['No additional risk', 'N/A', 'Not applicable']) {
     assert.ok(!DETAIL.includes(filler), `fallback filler "${filler}" fills the absent paragraph`);
@@ -607,9 +573,10 @@ test('both screens share one relevance evaluation — matching logic is not dupl
 test('P2c: row images render only the shared allocation — no screen-local matching', () => {
   // The table row carries the allocator's verdict; the screen renders it
   // verbatim (URL + conservative accessibility text) and decides nothing.
-  assert.match(DETAIL, /row\.image \?/);
-  assert.match(DETAIL, /uri=\{row\.image\.url\}/);
-  assert.match(DETAIL, /alt=\{row\.image\.accessibilityText\}/);
+  // (Recall Detail kit: the row's own card renders it.)
+  assert.match(DETAIL, /card\.image \?/);
+  assert.match(DETAIL, /uri=\{card\.image\.url\}/);
+  assert.match(DETAIL, /alt=\{card\.image\.accessibilityText\}/);
   // No screen-side matching signals: the screen never reads captions,
   // classifications, or the raw photo set to decide what an image belongs to.
   assert.ok(!DETAIL.includes('.caption'), 'Detail inspects image captions');
@@ -623,8 +590,8 @@ test('P2c: row images render only the shared allocation — no screen-local matc
   assert.ok(!DETAIL.includes('images.gallery'), 'the screen reads the raw gallery');
   assert.ok(!DETAIL.includes('images.supporting'), 'supporting close-ups rendered');
   // The thumbnail render is gated on the assignment itself — an unassigned
-  // row reaches no image element at all, so no placeholder can exist.
-  assert.match(DETAIL, /\{row\.image \? \(/);
+  // card reaches no image element at all, so no placeholder can exist.
+  assert.match(DETAIL, /const image = card\.image \? \(/);
 });
 
 test('P2B7C: the header renders a model-decided set, and no label gallery exists', () => {
@@ -633,7 +600,7 @@ test('P2B7C: the header renders a model-decided set, and no label gallery exists
   // standalone section for a notice without one — was REMOVED by founder
   // decision in the P2B7C correction. Imagery under Affected Products is
   // only ever a thumbnail matched to that exact row.
-  assert.match(DETAIL, /<OfficialImageSet set=\{model\.productImages\} \/>/);
+  assert.match(DETAIL, /<OfficialImageSet set=\{productImages\} \/>/);
   assert.equal((DETAIL.match(/<OfficialImageSet\b/g) ?? []).length, 1);
   for (const retired of [
     'Official product labels',

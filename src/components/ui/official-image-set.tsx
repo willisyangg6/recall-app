@@ -36,10 +36,13 @@
  *
  *   0 usable → nothing at all (Detail's approved no-image header)
  *   1 usable → the static tile, with no indicator (nothing to swipe)
- *   2–5      → one dot each, no counter: every published photo is there
+ *   2        → two dots, no counter
+ *   3–5      → one dot each, and the counter beside them
  *   6+       → a five-dot window, and the counter beside it
- *   (a failure that leaves fewer pages than published also takes the
- *    counter, so the shortfall is visible even in a small set)
+ *   (Recall Detail kit, 2026-10-07: the counter starts at three usable
+ *    pages and counts only the survivors of a failure. When a failure
+ *    leaves two, the one spoken sentence about what could not be shown
+ *    rides the dots instead, so it is never lost.)
  *
  * There is no prose — no `Showing 6 of 74 official images`.
  *
@@ -100,6 +103,7 @@ import {
 import { MediaTile } from '@/components/ui/media-tile';
 import { Text } from '@/components/ui/text';
 import { color, layout, radius, spacing } from '@/constants/design-tokens';
+import { detailGeometry } from '@/constants/detail-design';
 import { hasImageFailed } from '@/lib/image-failures';
 import {
   imageCounterText,
@@ -111,8 +115,16 @@ import {
   type DetailImageSet,
 } from '@/lib/recall-presentation';
 
-/** One page is exactly the tile, so paging always lands on a whole image. */
-const PAGE = layout.detailMediaSize;
+/**
+ * The Recall Detail kit's header photo (2026-10-07): 112 wide by 144 tall,
+ * `contain`, so a tall package fills it and a wide one letterboxes. One page
+ * is exactly the photo, so paging always lands on a whole image.
+ */
+const PHOTO = {
+  width: detailGeometry.headerPhotoWidth,
+  height: detailGeometry.headerPhotoHeight,
+} as const;
+const PAGE = PHOTO.width;
 
 export function OfficialImageSet({ set }: { set: DetailImageSet }) {
   /**
@@ -177,7 +189,8 @@ export function OfficialImageSet({ set }: { set: DetailImageSet }) {
         <MediaTile
           uri={pages[0].url}
           alt={pages[0].accessibilityLabel}
-          size={layout.detailMediaSize}
+          size={PHOTO}
+          cornerRadius={detailGeometry.headerPhotoRadius}
           onLoadFailed={onFailed}
         />
       </View>
@@ -210,7 +223,8 @@ export function OfficialImageSet({ set }: { set: DetailImageSet }) {
           <MediaTile
             uri={item.url}
             alt={item.accessibilityLabel}
-            size={layout.detailMediaSize}
+            size={PHOTO}
+            cornerRadius={detailGeometry.headerPhotoRadius}
             positionLabel={imagePositionLabel(index, usableCount)}
             onLoadFailed={onFailed}
           />
@@ -224,8 +238,16 @@ export function OfficialImageSet({ set }: { set: DetailImageSet }) {
             images there are; the counter says that. */}
         <View
           style={styles.dots}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants">
+          // Decoration — unless a failure left only the dots to speak for the
+          // set (two survivors, no counter), when they carry that sentence.
+          accessible={indicator === 'dots' && unavailable !== null}
+          accessibilityLabel={
+            indicator === 'dots' && unavailable !== null ? unavailable : undefined
+          }
+          accessibilityElementsHidden={!(indicator === 'dots' && unavailable !== null)}
+          importantForAccessibility={
+            indicator === 'dots' && unavailable !== null ? 'yes' : 'no-hide-descendants'
+          }>
           {imageDotWindow(current, usableCount).map((page) => (
             <View
               key={pages[page].url}
@@ -262,16 +284,17 @@ const styles = StyleSheet.create({
   // The set is exactly as wide as the tile it replaces, so the identity
   // column beside it keeps the width it always had.
   set: {
-    width: layout.detailMediaSize,
+    width: PHOTO.width,
     gap: spacing[8],
   },
   // A ScrollView's base style grows (`flexGrow: 1`); pinned to 0 so the
   // pager stays exactly the tile and the indicator sits directly beneath it
   // even when a long product name makes the identity column taller (P2B7I).
   viewport: {
-    width: layout.detailMediaSize,
-    height: layout.detailMediaSize,
+    width: PHOTO.width,
+    height: PHOTO.height,
     flexGrow: 0,
+    borderRadius: detailGeometry.headerPhotoRadius,
   },
   // Dots and counter share one centred row; at a large text size the
   // counter wraps beneath the dots rather than pushing them off the tile.

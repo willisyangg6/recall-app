@@ -596,6 +596,21 @@ export function disclosureControl(total: number, noun: string): DisclosureContro
 }
 
 /**
+ * The Recall Detail kit's wording for the jurisdiction reveal (2026-10-07):
+ * "Show all (8)", collapsing to "Show less", spoken "Show all 8 states". The
+ * count is still the complete total; only the verb differs from the
+ * Affected Products rows' "See all (N)".
+ */
+function showAll(control: DisclosureControl): DisclosureControl {
+  // Spoken with the same verb it shows, so Voice Control matches the words.
+  return {
+    ...control,
+    expandLabel: control.expandLabel.replace(/^See all/, 'Show all'),
+    expandAccessibilityLabel: control.expandAccessibilityLabel.replace(/^See all/, 'Show all'),
+  };
+}
+
+/**
  * At most this many jurisdictions render on Recall Detail before the list
  * discloses the rest in place. Five is the founder's number; Home is
  * unaffected and keeps its own two-code "+N" summary
@@ -737,7 +752,7 @@ export function whereSoldModel(distribution: ConsumerDistribution): WhereSoldMod
     locationState,
     lead,
     leadCollapsed,
-    statesDisclosure: hiddenStates ? disclosureControl(states.length, 'states') : null,
+    statesDisclosure: hiddenStates ? showAll(disclosureControl(states.length, 'states')) : null,
     states,
     retailers: distribution.retailers,
     retailerCount: distribution.retailers.length,
@@ -1600,6 +1615,191 @@ function emptyCell(key: AffectedProductsTableColumnKey): AffectedProductsTableCe
   return { key, values: [], text: null, collapsedText: null, disclosure: null, pairGroup: null };
 }
 
+// ── Affected-product cards (Recall Detail kit, 2026-10-07) ──────────────────
+
+/**
+ * The approved Detail renders each affected-product row as a vertical CARD
+ * instead of a horizontally scrolling table row. The cards are a pure
+ * re-presentation of the table model above — the same rows in the same
+ * order, the same row count before See all (N), the same shared values
+ * repeated into each row, the same strict per-row image — so nothing about
+ * which facts exist, or which row owns them, is decided here.
+ *
+ * Two kinds of field group, in the table's closed column order:
+ *
+ *  - an INDEPENDENT field (Package Size, Best by, Barcode (UPC), Lot codes…):
+ *    its structured `values`, first two shown, then its OWN Show more;
+ *  - a verified PAIR group: each code/date pair the source stated is ONE
+ *    indivisible entry — the code under its singular label ("Lot code") and
+ *    its own date under the source's date type ("Expiration", "Best by") —
+ *    first two entries shown, then the group's own Show more (founder
+ *    Granola review, 2026-10-08). The two halves are never truncated, sorted
+ *    or expanded apart; an undated code is an entry of its own with no date,
+ *    and no pair is ever inferred.
+ *
+ * Values are never re-split from display text: a date carries its own comma.
+ * Empty fields are omitted — never "Not available".
+ */
+export interface AffectedProductCard {
+  /** The stable row identity (the table row's id). */
+  id: string;
+  /** The product name; null renders no title, never a placeholder. */
+  name: string | null;
+  /** The strictly allocated row image, or null (no reserved space). */
+  image: { url: string; accessibilityText: string } | null;
+  groups: AffectedProductFieldGroup[];
+}
+
+export interface AffectedProductFieldGroup {
+  /** Stable within the card: the column key, or the pair group's identity —
+   * the key a group's expansion state lives under. */
+  id: string;
+  label: string;
+  /** Every line this group holds, in source order. */
+  lines: string[];
+  /** The lines shown while collapsed: the first two, or all of them. */
+  collapsedLines: string[];
+  /** The group's own Show more / Show less, or null at two lines or fewer. */
+  disclosure: DisclosureControl | null;
+  /** True for a verified code/date pair group. */
+  paired: boolean;
+  /** A pair group's entries in source order (every one, and the first two
+   * shown while collapsed); null for an independent field. Each entry's
+   * spoken text is the matching item of `lines`. */
+  pairs: AffectedProductPairEntry[] | null;
+  collapsedPairs: AffectedProductPairEntry[] | null;
+}
+
+/** One verified pair — or a code the source stated with no date. */
+export interface AffectedProductPairEntry {
+  code: { label: string; value: string };
+  date: { label: string; value: string } | null;
+}
+
+/** A code column's label for ONE code ("Lot code"), inside a pair entry. */
+const PAIR_CODE_LABEL: Partial<Record<AffectedProductsTableColumnKey, string>> = {
+  lotCodes: 'Lot code',
+  batchCodes: 'Batch code',
+  productionCodes: 'Production code',
+};
+
+/** A date column's label for ONE date, inside a pair entry. */
+const PAIR_DATE_LABEL: Partial<Record<AffectedProductsTableColumnKey, string>> = {
+  productionDates: 'Production date',
+};
+
+/** How many lines a card field shows before its own Show more. */
+export const CARD_FIELD_INLINE_VALUES = 2;
+
+/** "Show more" / "Show less", spoken with the complete total and noun. */
+export function fieldDisclosureControl(total: number, noun: string): DisclosureControl {
+  return {
+    expandLabel: 'Show more',
+    collapseLabel: SHOW_LESS_LABEL,
+    expandAccessibilityLabel: `Show all ${total} ${noun}`,
+    collapseAccessibilityLabel: SHOW_LESS_LABEL,
+  };
+}
+
+/** One rendered view of the table as cards: the same rows, field groups instead of cells. */
+export function affectedProductCards(view: AffectedProductsTableViewModel): AffectedProductCard[] {
+  return view.rows.map((row) => {
+    const groups: AffectedProductFieldGroup[] = [];
+    const seenPairs = new Set<string>();
+    row.cells.forEach((cell, index) => {
+      const key = view.columns[index]?.key ?? cell.key;
+      if (key === 'product') return;
+      if (cell.pairGroup !== null) {
+        if (seenPairs.has(cell.pairGroup)) return;
+        seenPairs.add(cell.pairGroup);
+        // The group's two halves, wherever they sit in the row.
+        const halves = row.cells.filter((other) => other.pairGroup === cell.pairGroup);
+        const codeHalf = halves.find((half) => CODE_COLUMNS.has(half.key));
+        const dateHalf = halves.find((half) => !CODE_COLUMNS.has(half.key));
+        if (codeHalf === undefined || dateHalf === undefined) return;
+        const codeLabel = PAIR_CODE_LABEL[codeHalf.key] ?? TABLE_COLUMN_LABEL[codeHalf.key];
+        const dateLabel = PAIR_DATE_LABEL[dateHalf.key] ?? TABLE_COLUMN_LABEL[dateHalf.key];
+        // Index-aligned only because the source verified these halves as one
+        // pair group; an empty date half means the code was stated undated.
+        const pairs: AffectedProductPairEntry[] = codeHalf.values.map((code, line) => {
+          const date = dateHalf.values[line] ?? '';
+          return {
+            code: { label: codeLabel, value: code },
+            date: date === '' ? null : { label: dateLabel, value: date },
+          };
+        });
+        const lines = pairs.map((entry) =>
+          entry.date === null
+            ? `${entry.code.label} ${entry.code.value}`
+            : `${entry.code.label} ${entry.code.value}, ${entry.date.label} ${entry.date.value}`,
+        );
+        groups.push({
+          id: cell.pairGroup,
+          label: TABLE_COLUMN_LABEL[codeHalf.key],
+          lines,
+          collapsedLines: lines.slice(0, CARD_FIELD_INLINE_VALUES),
+          disclosure:
+            lines.length > CARD_FIELD_INLINE_VALUES
+              ? fieldDisclosureControl(
+                  lines.length,
+                  pairGroupNoun(lines.length, pairs.filter((entry) => entry.date !== null).length),
+                )
+              : null,
+          paired: true,
+          pairs,
+          collapsedPairs: pairs.slice(0, CARD_FIELD_INLINE_VALUES),
+        });
+        return;
+      }
+      if (cell.values.length === 0) return;
+      groups.push({
+        id: key,
+        label: TABLE_COLUMN_LABEL[key],
+        lines: [...cell.values],
+        collapsedLines: cell.values.slice(0, CARD_FIELD_INLINE_VALUES),
+        disclosure:
+          cell.values.length > CARD_FIELD_INLINE_VALUES
+            ? fieldDisclosureControl(cell.values.length, CARD_FIELD_NOUN[key])
+            : null,
+        paired: false,
+        pairs: null,
+        collapsedPairs: null,
+      });
+    });
+    // Groups follow the table's frozen column order; a pair group sits where
+    // its first half's column does.
+    return { id: row.id, name: row.name, image: row.image, groups };
+  });
+}
+
+/** What a card field's Show more names when spoken ("Show all 3 barcodes"). */
+const CARD_FIELD_NOUN: Record<AffectedProductsTableColumnKey, string> = {
+  product: 'products',
+  size: 'package sizes',
+  packaging: 'packaging descriptions',
+  bestBy: 'best by dates',
+  useBy: 'use by dates',
+  sellBy: 'sell by dates',
+  expiration: 'expiration dates',
+  productionDates: 'production dates',
+  upc: 'barcodes',
+  lotCodes: 'lot codes',
+  batchCodes: 'batch codes',
+  productionCodes: 'production codes',
+};
+
+/** The columns that hold printed codes — the code half of a pair group. */
+const CODE_COLUMNS = new Set<AffectedProductsTableColumnKey>([
+  'lotCodes',
+  'batchCodes',
+  'productionCodes',
+]);
+
+/** The expansion-state identity of one card field group. */
+export function cardGroupStateId(cardId: string, groupId: string): string {
+  return `${cardId}\u0000${groupId}`;
+}
+
 // ── The header's official product imagery (P2B7C) ───────────────────────────
 
 /** One official product photograph as the header renders it. */
@@ -1656,6 +1856,13 @@ export const OFFICIAL_LABEL_ALT = 'Official product label';
  */
 export const IMAGE_DOTS_WINDOW = 5;
 
+/**
+ * From this many usable pages the numeric counter (`1 / 3`) joins the dots
+ * (Recall Detail kit, 2026-10-07). Two pages are told apart by their two dots
+ * alone; the counter starts where the dots stop being self-evident.
+ */
+export const IMAGE_COUNTER_MIN = 3;
+
 /** Which indicator a rendered image set carries — see `imagePageView`. */
 export type ImageIndicator = 'none' | 'dots' | 'dots-and-counter';
 
@@ -1695,12 +1902,12 @@ export function imagePageView(set: DetailImageSet, failed: ReadonlySet<string>):
   const pages = set.images.filter((image) => !failed.has(image.url));
   const officialCount = set.images.length;
   const usableCount = pages.length;
+  // Recall Detail kit (2026-10-07): two pages show dots alone; from
+  // `IMAGE_COUNTER_MIN` pages the counter joins them. A failure that leaves
+  // two pages keeps the dots alone — its one spoken sentence about what could
+  // not be loaded rides the dots instead (`imageUnavailableLabel`).
   const indicator: ImageIndicator =
-    usableCount < 2
-      ? 'none'
-      : usableCount > IMAGE_DOTS_WINDOW || usableCount < officialCount
-        ? 'dots-and-counter'
-        : 'dots';
+    usableCount < 2 ? 'none' : usableCount >= IMAGE_COUNTER_MIN ? 'dots-and-counter' : 'dots';
   return { pages, officialCount, usableCount, indicator };
 }
 
@@ -2234,6 +2441,12 @@ export function cardCategoryId(productCategories: unknown): FoodCategoryId | nul
   return displayable ?? null;
 }
 
+/** The Detail header's category: the card's own id and label, or null. */
+function detailCategory(productCategories: unknown): DetailModel['category'] {
+  const id = cardCategoryId(productCategories);
+  return id === null ? null : { id, label: foodCategoryLabel(id) };
+}
+
 // ── Card summary punctuation ────────────────────────────────────────────────
 
 /**
@@ -2430,6 +2643,13 @@ export interface DetailModel {
    * nowhere else either.
    */
   productImages: DetailImageSet | null;
+  /**
+   * The product category label (Recall Detail kit, 2026-10-07): the SAME
+   * first launch-visible category the Feed card shows, through the same
+   * `cardCategoryId` / `cardCategoryLabel`, so Detail and the card cannot
+   * name different categories. Null renders nothing.
+   */
+  category: { id: FoodCategoryId; label: string } | null;
   affectsYou: boolean;
   /** The generic approved banner text, shown iff `affectsYou`. */
   affectsYouBanner: string;
@@ -2636,6 +2856,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     ),
     heroImageUrl,
     productImages,
+    category: detailCategory(projection.productCategories),
     affectsYou: context.affectsYou,
     affectsYouBanner: 'Warning: This recall affects you.',
     whatHappened: {

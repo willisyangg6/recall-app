@@ -297,15 +297,17 @@ test('the disclosure control is a button with an expanded state and a 44pt targe
   assert.ok(DISCLOSURE.includes('color="action/secondary"'));
 });
 
-test('Recall Detail renders every in-place reveal through the shared control', () => {
-  assert.ok(
-    DETAIL.includes("import { DisclosureControl } from '@/components/ui/disclosure-control';"),
-  );
+test('Recall Detail renders every in-place reveal through its one disclosure control', () => {
+  // AMENDED FOR THE RECALL DETAIL KIT (2026-10-07): Detail's reveals take the
+  // kit's action type with a down/up chevron, so they render through ONE
+  // screen component, `DetailDisclosure`, over the model's
+  // `DisclosureControl` values — never a per-site button. The shared caption
+  // primitive stays for the surfaces that still use it.
+  assert.ok(DETAIL.includes('function DetailDisclosure({'));
   assert.ok(!DETAIL.includes('function DisclosureButton'));
   assert.ok(!DETAIL.includes('DISCLOSURE_HIT_SLOP'));
-  const uses = DETAIL.match(/<DisclosureControl\b/g) ?? [];
-  // Jurisdictions, product rows, and cells: three sites, none local.
-  assert.equal(uses.length, 3);
+  // Jurisdictions, product rows (cards), and card fields: three sites.
+  assert.equal((DETAIL.match(/<DetailDisclosure\b/g) ?? []).length, 3);
 });
 
 // ── The development gallery ─────────────────────────────────────────────────

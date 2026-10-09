@@ -250,7 +250,9 @@ const isProse = (literal: string) => /\s/.test(literal.slice(1, -1));
 /**
  * The ONE approved use of the word "retailer" in consumer copy (P2B7O,
  * founder override). Detail's Where It Was Sold labels the retailers a notice
- * named with exactly this string.
+ * named with exactly this string — since the Recall Detail kit (2026-10-07)
+ * SPOKEN only: the row shows the store glyph and the names, and its one
+ * accessible label opens with `RETAILERS_SPOKEN_PREFIX` from detail-copy.
  *
  * The rule below is otherwise unchanged: everywhere else the app says
  * "store". This is an exception granted for one label, not a relaxation —
@@ -284,13 +286,25 @@ test('consumer copy says state and store, never jurisdiction or retailer', () =>
       assert.doesNotMatch(text, /\bretailers?\b/i, `${name}: ${text}`);
     }
   }
-  // The exemption is spent on exactly one label, on exactly one screen.
+  // The exemption is spent on exactly one SPOKEN label, on exactly one
+  // screen: the copy module's one constant, read once by Detail's retailer
+  // row. No screen shows the word as visible text.
   const usages = Object.entries(sources).flatMap(([name, source]) =>
     jsxText(source)
       .filter((text) => text === APPROVED_RETAILER_LABEL)
       .map(() => name),
   );
-  assert.deepEqual(usages, ['detail'], 'the approved retailer label moved or multiplied');
+  assert.deepEqual(usages, [], 'the retailer label became visible text again');
+  assert.ok(
+    COPY_MODULES['detail-copy'].includes(
+      `export const RETAILERS_SPOKEN_PREFIX = '${APPROVED_RETAILER_LABEL}';`,
+    ),
+  );
+  assert.equal(
+    (SCREENS.detail.match(/RETAILERS_SPOKEN_PREFIX/g) ?? []).length,
+    2,
+    'the spoken retailer label moved or multiplied',
+  );
   for (const doc of TRUST_DOCUMENTS) {
     assert.doesNotMatch(documentPlainText(doc), /\b(jurisdictions?|retailers?)\b/i, doc.slug);
   }
@@ -558,9 +572,9 @@ test('frozen and protected copy is still present, word for word', () => {
     codeOnly(read('lib', 'recall-presentation.ts')).includes("'Warning: This recall affects you.'"),
   );
   assert.ok(SCREENS.detail.includes('title="What Happened"'));
-  // P2B7H: the label keeps its caption treatment, cased as written. P2B7V
-  // added the colon and moved it to body colour.
-  assert.ok(SCREENS.detail.includes('Common symptoms:'));
+  // P2B7H: cased as written. The Recall Detail kit (2026-10-07) made it an
+  // 18/24 subheading beneath Health Risk, without the colon P2B7V added.
+  assert.match(SCREENS.detail, />\s*Common symptoms\s*</);
   assert.ok(!SCREENS.detail.includes('COMMON SYMPTOMS'));
   // The approved P2B6C sentences themselves.
   assert.equal(DECLINED_TITLE, 'Thanks. Nothing was submitted.');

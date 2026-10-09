@@ -174,10 +174,7 @@ test('P2B7I: Feed and Saved share the one card, and neither lists a media rule o
     assert.ok(!screen.includes('OfficialImageSet'));
   }
   // Detail's approved no-image header is unchanged: null renders nothing.
-  assert.match(
-    DETAIL,
-    /\{model\.productImages \? <OfficialImageSet set=\{model\.productImages\} \/> : null\}/,
-  );
+  assert.match(DETAIL, /\{productImages \? <OfficialImageSet set=\{productImages\} \/> : null\}/);
 });
 
 // ── 2. Failure: settle once, remember, never loop ───────────────────────────
@@ -246,10 +243,13 @@ test('P2B7I: 0 / 1 / 2 / 6 / 7 / 74 official images — nothing, static, dots, t
   );
   // `pages` is ALWAYS the official count — the corrected contract drops
   // nothing for presentation — and only the dot COUNT is bounded.
+  // AMENDED FOR THE RECALL DETAIL KIT (2026-10-07): the counter joins the
+  // dots from THREE pages; two pages show their two dots alone.
   const expected = {
     1: { indicator: 'none', dots: 1 },
     2: { indicator: 'dots', dots: 2 },
-    5: { indicator: 'dots', dots: 5 },
+    3: { indicator: 'dots-and-counter', dots: 3 },
+    5: { indicator: 'dots-and-counter', dots: 5 },
     6: { indicator: 'dots-and-counter', dots: 5 },
     7: { indicator: 'dots-and-counter', dots: 5 },
     74: { indicator: 'dots-and-counter', dots: 5 },
@@ -343,11 +343,18 @@ test('P2B7I: the counter follows the page the shopper settled on', () => {
 // ── 4. Accessibility ────────────────────────────────────────────────────────
 
 test('P2B7I: the dots are hidden from assistive technology, and the counter speaks only when something failed', () => {
-  // The dots' container carries both platforms' hiding props…
-  assert.match(
-    IMAGE_SET,
-    /<View\s+style=\{styles\.dots\}\s+accessibilityElementsHidden\s+importantForAccessibility="no-hide-descendants">/,
+  // The dots' container is hidden on both platforms — EXCEPT when a failure
+  // leaves two pages (dots, no counter: Recall Detail kit), when it carries
+  // the one failure sentence instead, so that sentence is never lost.
+  const dots = IMAGE_SET.slice(
+    IMAGE_SET.indexOf('style={styles.dots}'),
+    IMAGE_SET.indexOf('{imageDotWindow('),
   );
+  assert.ok(
+    dots.includes("accessibilityElementsHidden={!(indicator === 'dots' && unavailable !== null)}"),
+  );
+  assert.ok(dots.includes("'no-hide-descendants'"));
+  assert.ok(dots.includes("accessible={indicator === 'dots' && unavailable !== null}"));
   // …and the counter sits OUTSIDE it, silent while every published photo is
   // reachable (each page already announces the same two numbers, so a
   // second element would duplicate them) and spoken — as a sentence, never
@@ -424,13 +431,17 @@ test('P2B7I: a failed page leaves the set, every healthy image after it stays re
     imageUnavailableLabel(earlyFailed.usableCount, earlyFailed.officialCount),
     '73 of 74 official images can be shown; the rest could not be loaded',
   );
-  // In a small complete set: two remain of three, still paged, and the
-  // counter appears to say one of the three published is not shown.
+  // In a small complete set: two remain of three, still paged, with two
+  // dots and no number (Recall Detail kit); the failure sentence rides the
+  // dots.
   const three = setOf(3);
   const twoLeft = imagePageView(three, new Set([three.images[1].url]));
   assert.equal(twoLeft.pages.length, 2);
-  assert.equal(twoLeft.indicator, 'dots-and-counter');
-  assert.equal(imageCounterText(1, twoLeft.usableCount), '2 / 2');
+  assert.equal(twoLeft.indicator, 'dots');
+  assert.equal(
+    imageUnavailableLabel(twoLeft.usableCount, twoLeft.officialCount),
+    '2 of 3 official images can be shown; the rest could not be loaded',
+  );
   // The index correction: identity first, then the clamped settled position,
   // once, with no animation and no second programmatic scroll.
   assert.ok(IMAGE_SET.includes('pages.findIndex((image) => image.url === visible.url)'));
@@ -482,11 +493,12 @@ test('P2B7I: no auto-advance, no arrows, no press target, no new gallery, no cov
   assert.ok(IMAGE_SET.includes('pagingEnabled'));
   assert.ok(IMAGE_SET.includes('horizontal'));
   assert.ok(MEDIA_TILE.includes('resizeMode="contain"'));
-  // The pager is exactly the tile: it never grows to the identity column's
-  // height, so the indicator sits directly beneath the image.
+  // The pager is exactly the photo — the Recall Detail kit's contained
+  // 112×144 — and never grows to the identity column's height, so the
+  // indicator sits directly beneath the image.
   assert.match(
     IMAGE_SET,
-    /viewport: \{\s*width: layout\.detailMediaSize,\s*height: layout\.detailMediaSize,\s*flexGrow: 0,\s*\}/,
+    /viewport: \{\s*width: PHOTO\.width,\s*height: PHOTO\.height,\s*flexGrow: 0,/,
   );
   // Detail renders the one carousel, once; Feed stays single-image.
   assert.equal((DETAIL.match(/<OfficialImageSet\b/g) ?? []).length, 1);
@@ -505,12 +517,12 @@ test('P2B7I: no general gallery under Affected Products; row-matched thumbnails 
   ]) {
     assert.ok(!DETAIL.includes(gallery), `a gallery returned: ${gallery}`);
   }
-  // The row thumbnail: rendered only when the allocator matched an image to
-  // that exact row, through the same tile — which now renders nothing for a
-  // failed row image instead of a grey square, with nothing reserved.
+  // The card thumbnail (Recall Detail kit): rendered only when the
+  // allocator matched an image to that exact row, through the same tile —
+  // which renders nothing for a failed image, with nothing reserved.
   assert.match(
     DETAIL,
-    /\{row\.image \? \(\s*<MediaTile\s+uri=\{row\.image\.url\}\s+alt=\{row\.image\.accessibilityText\}\s+size=\{layout\.rowMediaSize\}\s*\/>\s*\) : null\}/,
+    /const image = card\.image \? \(\s*<MediaTile\s+uri=\{card\.image\.url\}\s+alt=\{card\.image\.accessibilityText\}\s+size=\{CARD_THUMBNAIL\}/,
   );
   assert.equal((DETAIL.match(/<MediaTile\b/g) ?? []).length, 1);
 });

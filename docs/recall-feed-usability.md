@@ -449,6 +449,17 @@ version-specific evidence internally, and the table materializes the proven
 set into each row's cells). Large code sets stay behind their disclosure;
 production dates lead their codes.
 
+**Rendered as cards (Recall Detail kit, 2026-10-07).** The approved Detail
+renders each table row below as a vertical card (`affectedProductCards`):
+the same rows, order, row count before `See all (N)`, shared values and
+strict row images, with each field group showing two lines then its own
+`Show more` / `Show less`, and each verified pair as one compact entry — a
+`Lot code` row over its own source-specific date row such as `Expiration`,
+with no outer `Lot codes` label (founder Granola review, 2026-10-08). Where the bullets below describe columns,
+cells, horizontal scrolling or aligned half-columns, read them as the model
+the cards are drawn from; DESIGN.md "Recall Detail" records the card
+presentation.
+
 **The compact table (P2b).** Detail renders the versions through one shared
 pure table model (`affectedProductsTable` over the item model — the screen
 composes no columns, labels, or cell values of its own; wiring-test-pinned):
@@ -715,7 +726,8 @@ same words on both.
 (`WHERE_SOLD_INITIAL_STATES`) renders complete, with no control. Beyond five,
 Detail renders the first five in the notice's canonical order — comma-joined
 with no terminal "and", because an "and" would assert the list had ended —
-followed by `See all (N)`, where N is the **total** number of jurisdictions.
+followed by `Show all (N)` (Recall Detail kit, 2026-10-07; spoken `Show all N
+states`), where N is the **total** number of jurisdictions.
 Tapping expands the list in place (no page, no modal, no sheet) and the action
 becomes `Show less`. Nothing is reordered, nationwide and unknown-geography
 handling are untouched (neither carries a control), and the community

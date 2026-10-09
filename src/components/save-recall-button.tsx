@@ -40,10 +40,10 @@
  * recall.
  */
 
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type ImageSourcePropType } from 'react-native';
 
-import { Icon } from '@/components/ui/icon';
-import { hitSlopToMinimum, iconSize } from '@/constants/design-tokens';
+import { Icon, iconSource } from '@/components/ui/icon';
+import { color, hitSlopToMinimum, iconSize } from '@/constants/design-tokens';
 import { useSavedRecalls } from '@/hooks/use-saved-recalls';
 import { isSavedId, saveControlState, type SaveControlState } from '@/lib/saved-recalls';
 
@@ -108,6 +108,49 @@ export function SaveRecallButton({
       )}
     </Pressable>
   );
+}
+
+/** One native navigation-bar button, in the shape the native stack takes
+ * (checked where Detail hands it to `Stack.Screen`; this module stays free of
+ * any navigation import). */
+export interface SaveHeaderItem {
+  type: 'button';
+  identifier: string;
+  label: string;
+  accessibilityLabel: string;
+  icon: { type: 'image'; source: ImageSourcePropType };
+  tintColor: string;
+  selected: boolean;
+  onPress: () => void;
+}
+
+/**
+ * The SAME save control as a native navigation-bar item (Recall Detail kit,
+ * 2026-10-07: Save sits opposite Back). A React Native Pressable inside a
+ * native-stack header began its press but never completed it on iOS 26 —
+ * the header measured its press area in the wrong place (found on device;
+ * react-native-screens #2551) — so the bar gets a native UIBarButtonItem
+ * instead. Everything a shopper meets is the shared contract's: the glyph
+ * pair (outline / filled), the spoken action (`accessibilityLabel`), the
+ * selected state, and the same `toggle`. Empty when saving is unavailable
+ * or there is nothing to save yet.
+ */
+export function useSaveHeaderItems(caseId: string | null): SaveHeaderItem[] {
+  const { ids, available, toggle } = useSavedRecalls();
+  if (!available || caseId === null) return [];
+  const state = saveControlState(isSavedId(ids, caseId));
+  return [
+    {
+      type: 'button',
+      identifier: 'save-recall',
+      label: state.accessibilityLabel,
+      accessibilityLabel: state.accessibilityLabel,
+      icon: { type: 'image', source: iconSource(state.icon) },
+      tintColor: color['icon/primary'],
+      selected: state.selected,
+      onPress: () => void toggle(caseId),
+    },
+  ];
 }
 
 const styles = StyleSheet.create({

@@ -2557,6 +2557,79 @@ external link.
 Loading, not-found and load-failure states are the shared `StateMessage`
 with the copy in `src/lib/detail-copy.ts`.
 
+**The Recall Detail source kit (2026-10-07).** The founder-approved Detail
+design (`docs/lotly-recall-detail-source-kit/`) supersedes the P2B2/P2B7V
+presentation details above wherever they differ; facts, section order,
+conditional sections, source links, save, the retraction and affects-you
+callouts, the community block and the risk and illness labels are unchanged
+(the kit's Critical white-on-red is not adopted). Its numbers live in the
+scoped `src/constants/detail-design.ts` over the same Public Sans faces, as
+the Feed kit's do in `feed-design.ts`, so the app-wide scale above is
+untouched.
+
+- **Type and spacing.** A 20pt page gutter; the product title 28/34 bold;
+  section headings 24/30 bold; `Common symptoms` and card titles 18/24 bold;
+  body 16/23; metadata (the activity date, field labels) 14/20 in
+  `text/secondary`; text actions 16/22 in `action/secondary`. A full-width
+  `border/subtle` divider separates every major section, including the header
+  from What Happened.
+- **Title.** Two displayed lines (`DETAIL_TITLE_LINES`); `Show full title`
+  with a down chevron only after measured overflow, `Show less` with an up
+  chevron. At accessibility sizes (text scale 1.5 and up,
+  `DETAIL_STACK_SCALE`, the Feed card's threshold) the complete title shows
+  with no control and the photo stacks beneath the identity.
+- **Category.** The Feed card's own category label (`FeedCategoryLabel`,
+  `categoryStyle`), for the same first launch-visible category
+  (`cardCategoryId`), beneath the brand. All nine categories, Baby Food &
+  Formula included; none renders when the card has none.
+- **Photo.** A contained 112×144 photo (radius 10). Two images show two dots;
+  from three the `current / total` counter joins them; the five-dot window is
+  unchanged. Not pressable.
+- **Where It Was Sold.** The 24pt map pin, then the location; the 24pt
+  `store` glyph, then the retailer names. No visible `States` or `Retailers`
+  prefix; the retailer row is one accessible element spoken
+  `Retailers: …`. More than five states: `Show all (N)` / `Show less`.
+- **Health Risk.** The reviewed paragraph, then `Common symptoms` (18/24,
+  no divider before it). Each symptom row: a 36pt `#EDF4FA` disc holding a
+  22pt decorative glyph (`src/lib/symptom-icons.ts`), 12pt from the exact
+  reviewed wording in body type, light dividers between rows only. Several
+  supported hazards (decision E): one heading and one subheading, each
+  guide's explanation and link and then its symptom group beneath a small
+  14/20 bold organism label.
+- **Affected Products.** One white card per existing row (border
+  `border/default`, radius 12, padding 14) through `affectedProductCards`:
+  the product name, the strictly allocated row image top-right at 64pt (no
+  reserved space without one), then each field group in the closed column
+  order with a 104pt label column. Each group shows two lines, then its own
+  `Show more` / `Show less`. Labels stack above values at accessibility sizes
+  or in a narrow card. The first card shows before `See all (N)`, as before.
+- **Verified pairs (founder Granola review, 2026-10-08).** A verified
+  code/date pair group has no outer label (no `Lot codes` around it). Each
+  pair is a compact entry: the code on its own row under the singular code
+  label (`Lot code`, `Batch code`, `Production code`), then its date under
+  the source's own date type (`Expiration`, `Best by`, `Production date`…),
+  the two rows 4pt apart; 16pt separates one entry from the next and from
+  the field after the group. VoiceOver reads each entry as one element
+  (`Lot code HGLC-102125, Expiration October 21, 2026`). An undated code in
+  a verified group is an entry with its code row alone. Two whole entries
+  show, then the group's own `Show more` / `Show less` in the value column;
+  an entry is never split. Unpaired codes and dates stay ordinary labelled
+  fields (`Lot codes`), and no pair is ever inferred.
+- **Card titles never lose a line.** React Native can lay a text frame out a
+  pixel short of its text (React Native #57920), and iOS then draws one line
+  fewer — on device a two-line name showed as one clipped line. A title
+  beside a card image is at least the image's 64pt tall, which covers one-
+  and two-line names, and every card title (`CardTitle`) checks the lines
+  iOS drew against its frame: the exact signature of one dropped line, at
+  the current text size, sets a minimum height of that frame plus 1pt, so a
+  name of any length is drawn whole.
+- **Save.** In the navigation bar, opposite Back (superseding P2A's place
+  in the product header). It is the shared save contract — the same glyph
+  pair, spoken action, selected state and toggle — as a native bar item
+  (`useSaveHeaderItems`), because a React Native Pressable inside the native
+  header began presses it never completed on iOS 26. iOS draws its own
+  selected treatment (a filled disc) around the filled bookmark.
+
 ### Bottom Navigation
 
 The bottom navigation is a 72px-tall white surface with 24px icons. It has
@@ -2643,6 +2716,9 @@ Lucide-style outline the design uses, unchanged in shape.
 | `zoom-in`/`-out`  | Lucide repository, vendored SVG sources    | `zoom-in`/`zoom-out` | the P2B7Y Northeast control (now unreferenced)   |
 | `check`, `x`      | Lucide repository, vendored SVG sources    | `check`, `x`         | the chosen-state chips; sheet Close (2026-09-30) |
 | `shopping-cart`   | Lucide, vendored SVG source (native scale) | `shopping-cart`      | the Ready summary's Stores row (2026-09-26)      |
+| `chevron-up`      | the `chevron-down` export, a half turn     | `chevron-up`         | Detail's `Show less` controls (2026-10-07)       |
+| `store`           | lucide-static 0.468.0 (Detail kit)         | `store`              | Detail's retailer line (2026-10-07)              |
+| symptom glyphs    | lucide-static 0.468.0 (Detail kit)         | see below            | Health Risk symptom bubbles (2026-10-07)         |
 
 Figma exports each glyph cropped to its path bounds at some scale; each was
 drawn at `export size × S / (24 × k)` centred in an `S`-point box, where `k`
@@ -2708,6 +2784,19 @@ behaviour, so it is no longer a dead Figma glyph), `close` (`x`), `tick`
 under "Feed card, labels and Filters sheet". The kit draws them at stroke 2,
 a touch lighter than the P2B1 set's 2.4; the existing `map-pin`, `flag`,
 `bookmark`, `search`, `warning` and `chevron-*` glyphs are reused unchanged.
+
+**The Recall Detail glyphs (2026-10-07).** The Detail kit's pinned
+`lucide-static` 0.468.0 sources join the same vendored folder: `store` for
+the retailer line, and nine decorative symptom glyphs — `activity`, `brain`,
+`circle` (the fallback for an unmapped symptom), `droplets`, `eye`, `hand`,
+`thermometer`, `utensils-crossed` and `wind` — each scale rendered directly
+from its SVG at stroke 2. The symptom mapping is
+`src/lib/symptom-icons.ts`, keyed by the guides' exact strings and pinned so
+every reviewed symptom is mapped deliberately; a glyph is shorthand, never a
+diagnosis, and never spoken. `chevron-up` is the set's own `chevron-down`
+turned half a turn, so the title's `Show full title` / `Show less` pair
+shares one stroke. Existing equivalents (`map-pin`, `external-link`, `info`,
+`warning`, `bookmark`, `chevron-down`/`left`) are reused, not duplicated.
 
 ## Product contracts the design must carry
 
@@ -2827,7 +2916,8 @@ is unchanged and remains authoritative.
 Jurisdictions (Where It Was Sold):
 
 - Five or fewer: show all.
-- More than five: show the first five and `See all (N)`.
+- More than five: show the first five and `Show all (N)` (Recall Detail kit;
+  spoken `Show all N states`).
 - Expanded action: `Show less`.
 - Do not reorder values — a collapsed list is always a prefix of the expanded
   one, in the source's order.
@@ -2838,15 +2928,15 @@ Affected products:
 - If more exist, show `See all (N)` beside the section heading.
 - Expanded action: `Show less`.
 
-Multi-value cells:
+Multi-value fields (product cards, Recall Detail kit):
 
 - Show the first two values.
-- More than two uses that cell's own independent `See all (N)` control.
-- Explicit identifier/date pairs remain aligned line-for-line: line _n_ of the
-  code column sits level with line _n_ of its date column, and an undated
-  code keeps a blank line so nothing below it shifts.
-- A paired group expands and collapses together; one column can never move
-  alone.
+- More than two uses that field's own independent `Show more` / `Show less`.
+- An explicit identifier/date pair is one indivisible entry: a labelled code
+  row over its labelled date row (`Lot code` / `Expiration`), with no outer
+  group label; an undated code is an entry with no date.
+- A pair group expands and collapses together, two whole entries first; an
+  entry's two halves can never move apart.
 - Never reconstruct pairs by array position. A pair exists only where the
   source stated it.
 

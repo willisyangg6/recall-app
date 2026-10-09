@@ -53,6 +53,16 @@ import { hasImageFailed, recordImageFailure } from '@/lib/image-failures';
 /** The only footprints a tile may have: the three media-size layout tokens. */
 export type MediaSize = (typeof layout)['cardMediaSize' | 'detailMediaSize' | 'rowMediaSize'];
 
+/**
+ * A footprint a screen's own approved design contract names exactly — the
+ * Recall Detail kit's 112×144 header photo and 64pt card thumbnail
+ * (constants/detail-design.ts). Still `contain`, still no placeholder.
+ */
+export interface MediaFootprint {
+  width: number;
+  height: number;
+}
+
 export function MediaTile({
   uri,
   alt,
@@ -64,8 +74,9 @@ export function MediaTile({
   uri: string | null;
   /** The spoken description of the image — the model's product name. */
   alt: string;
-  /** The square footprint — `card-media-size`, `detail-media-size` or `row-media-size`. */
-  size: MediaSize;
+  /** The square footprint — `card-media-size`, `detail-media-size` or
+   * `row-media-size` — or a design contract's exact footprint. */
+  size: MediaSize | MediaFootprint;
   /**
    * The presentation contract's spoken position for this page, when the
    * tile is one page of a paged set. Spoken as the image's value; null for
@@ -99,7 +110,7 @@ export function MediaTile({
       radius={8}
       style={[
         styles.tile,
-        { width: size, height: size },
+        typeof size === 'number' ? { width: size, height: size } : size,
         cornerRadius !== undefined && { borderRadius: cornerRadius },
       ]}
       accessible

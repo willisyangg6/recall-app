@@ -217,19 +217,25 @@ test('jurisdiction, product-row and cell disclosures are recorded with the shipp
   assert.equal(WHERE_SOLD_INITIAL_STATES, 5);
   assert.equal(AFFECTED_PRODUCTS_INITIAL_ROWS, 1);
   assert.ok(body.includes('Five or fewer: show all.'));
-  assert.ok(body.includes('More than five: show the first five and `See all (N)`.'));
+  // Recall Detail kit (2026-10-07): the jurisdiction reveal says Show all.
+  assert.ok(body.includes('More than five: show the first five and `Show all (N)`'));
   assert.ok(body.includes('Initially show the first product row.'));
   assert.ok(body.includes('show `See all (N)` beside the section heading'));
   assert.ok(body.includes('Show the first two values.'));
-  assert.ok(body.includes("More than two uses that cell's own independent `See all (N)` control."));
-  assert.ok(body.includes('aligned line-for-line'));
-  assert.ok(body.includes('A paired group expands and collapses together'));
+  // Card fields (Recall Detail kit): each field's own Show more / Show less,
+  // and a verified pair is one indivisible labelled entry (founder Granola
+  // review, 2026-10-08).
+  assert.ok(
+    body.includes("More than two uses that field's own independent `Show more` / `Show less`."),
+  );
+  assert.ok(body.includes('is one indivisible entry'));
+  assert.ok(body.includes('A pair group expands and collapses together'));
   assert.ok(body.includes('Never reconstruct pairs by array position.'));
   assert.ok(body.includes('Do not reorder values'));
   assert.equal(
     (body.match(/`Show less`/g) ?? []).length,
-    2,
-    'both expanded actions read Show less',
+    3,
+    'every expanded action reads Show less',
   );
 
   const control = disclosureControl(10, 'jurisdictions');

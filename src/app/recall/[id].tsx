@@ -35,24 +35,26 @@
  * each of these.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Linking,
+  PixelRatio,
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
   type TextLayoutLine,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommunityReportsBlock } from '@/components/community-reports-section';
-import { SaveRecallButton } from '@/components/save-recall-button';
+import { FeedCategoryLabel } from '@/components/feed/feed-labels';
+import { useSaveHeaderItems } from '@/components/save-recall-button';
 import { StateMessage } from '@/components/state-message';
 import { Callout } from '@/components/ui/callout';
 import { IllnessNotice } from '@/components/ui/illness-notice';
-import { DisclosureControl } from '@/components/ui/disclosure-control';
 import { Icon } from '@/components/ui/icon';
 import { MediaTile } from '@/components/ui/media-tile';
 import { NoticeLabel } from '@/components/ui/notice-label';
@@ -60,7 +62,15 @@ import { OfficialImageSet } from '@/components/ui/official-image-set';
 import { RiskLabel } from '@/components/ui/risk-label';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
-import { color, hitSlopToMinimum, layout, spacing, typography } from '@/constants/design-tokens';
+import { hitSlopToMinimum, layout, spacing } from '@/constants/design-tokens';
+import {
+  DETAIL_STACK_SCALE,
+  detailColor,
+  detailGeometry,
+  detailType,
+  fieldStacks,
+} from '@/constants/detail-design';
+import { categoryStyle } from '@/constants/feed-design';
 import {
   DETAIL_ERROR_FALLBACK,
   DETAIL_ERROR_TITLE,
@@ -72,21 +82,37 @@ import {
   DETAIL_TITLE_EXPAND_LABEL,
   DETAIL_TITLE_LINES,
   EXTERNAL_LINK_HINT,
+  RETAILERS_SPOKEN_PREFIX,
   retractedNotice,
 } from '@/lib/detail-copy';
 import { baselineCaseDetail } from '@/lib/baseline-recalls';
 import { fetchCaseDetail, type CaseDetail } from '@/lib/recall-feed';
 import {
+  affectedProductCards,
   buildDetailModel,
+  cardGroupStateId,
   todayIso,
-  cellStateId,
   visibleCellState,
-  type AffectedProductsTable,
-  type AffectedProductsTableCell,
+  type AffectedProductCard,
   type DetailModel,
+  type DisclosureControl as DisclosureControlModel,
 } from '@/lib/recall-presentation';
+import { symptomIcon } from '@/lib/symptom-icons';
 import { usePreferences } from '@/hooks/use-preferences';
 import { affectsYouVerdict } from '@/lib/relevance';
+
+/**
+ * DEVELOPMENT-ONLY gallery fixtures (components/development/detail-image-fixtures):
+ * a bundled recall with a local 2-, 3-, 7-image or failing header set, for
+ * native QA of states the bundled baseline cannot show. `__DEV__` is folded
+ * to `false` in a production build, so this require — and the fixtures'
+ * images — never reach a release bundle. Real recall ids never match.
+ */
+type DevelopmentDetailFixtures = typeof import('@/components/development/detail-image-fixtures');
+const DEVELOPMENT_FIXTURES: DevelopmentDetailFixtures | null = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/components/development/detail-image-fixtures') as DevelopmentDetailFixtures)
+  : null;
 
 type LoadState =
   | { status: 'loading' }
@@ -94,17 +120,40 @@ type LoadState =
   | { status: 'missing' }
   | { status: 'ready'; detail: CaseDetail };
 
-/** A link's visible footprint is one caption line; hitSlop makes it 44pt. */
-const LINK_HIT_SLOP = hitSlopToMinimum(typography['caption'].lineHeight);
+/**
+ * Every link and disclosure is one action line (16/22). `hitSlop` grows the
+ * TARGET to the 44pt minimum without growing the mark, so controls stay
+ * comfortably tappable while reading as quiet text actions.
+ */
+const LINK_HIT_SLOP = hitSlopToMinimum(detailType.action.lineHeight ?? 22);
+const ACTION_HIT_SLOP = LINK_HIT_SLOP;
+
+/** The chevron beside a disclosure's words and the external-link glyph. */
+const DISCLOSURE_GLYPH = 18;
+
+/** The card thumbnail's exact footprint, and its horizontal padding total. */
+const CARD_THUMBNAIL = {
+  width: detailGeometry.productThumbnail,
+  height: detailGeometry.productThumbnail,
+} as const;
+const CARD_PADDING_X = detailGeometry.productCardPadding * 2 + 2;
 
 /**
- * The title disclosure's footprint is one caption line too, and it stays that
- * small on purpose — a 44pt pill under the product name would read as the
- * screen's primary action. `hitSlop` grows the TARGET to the minimum without
- * growing the mark, so the control is comfortably tappable while staying
- * visually quiet.
+ * Two centring offsets, snapped to the device's pixel grid. Unsnapped they are
+ * half points (6.5 and 1.5), off the 3× grid, and every view below them would
+ * inherit a sub-pixel offset — one of the conditions behind the clipped-title
+ * defect `CardTitle` corrects.
  */
-const TITLE_CONTROL_HIT_SLOP = hitSlopToMinimum(typography['caption'].lineHeight);
+const CENTRED_ON_BUBBLE = PixelRatio.roundToNearestPixel(
+  (detailGeometry.symptomBubble - (detailType.body.lineHeight ?? 23)) / 2,
+);
+const LABEL_ON_VALUE_LINE = PixelRatio.roundToNearestPixel(
+  ((detailType.body.lineHeight ?? 23) - (detailType.metadata.lineHeight ?? 20)) / 2,
+);
+/** A product card title's unscaled line height. */
+const TITLE_LINE_HEIGHT = detailType.productCardTitle.lineHeight ?? 24;
+/** The width a card title leaves for the image beside it. */
+const TITLE_IMAGE_RESERVE = detailGeometry.productThumbnail + detailGeometry.fieldColumnGap;
 
 /**
  * Whether the rendered product name had to break a single word across two
@@ -149,7 +198,9 @@ function Section({
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text variant="heading-3" accessibilityRole="header" style={styles.sectionTitle}>
+        <Text
+          style={[detailType.section, styles.textColor, styles.sectionTitle]}
+          accessibilityRole="header">
           {title}
         </Text>
         {action}
@@ -167,170 +218,284 @@ function Section({
 function ExternalLinkLabel({ label }: { label: string }) {
   return (
     <View style={styles.link}>
-      <Text variant="caption" color="action/secondary" style={styles.linkText}>
-        {label}
-      </Text>
-      <Icon name="external-link" size={16} color="icon/brand" />
+      <Text style={[detailType.action, styles.linkColor, styles.linkText]}>{label}</Text>
+      <Icon name="external-link" points={DISCLOSURE_GLYPH} color="icon/brand" />
     </View>
   );
 }
 
 /**
- * The compact Affected Products table (P2b, restructured). Column labels
- * render once as the uppermost row, then one affected version per row, in
- * source order. The whole table scrolls horizontally as one unit so header
- * and row cells stay aligned. The model supplies TWO precomputed views —
- * collapsed (the first row) and expanded — each with columns justified by
- * exactly the rows it shows, so no rendered column is ever entirely empty.
- * An empty cell stays empty: no dash, no placeholder word, no value borrowed
- * from another version. A version's image renders beside its Product value
- * only when the shared image-role allocation assigned one to that exact row
- * (P2c).
- *
- * TWO INDEPENDENT DISCLOSURES live here, and neither knows about the other:
- *
- *   ROWS — owned by the screen (the control sits on the section heading) and
- *   passed in, because a single-product recall must render with no control at
- *   all.
- *
- *   CELLS — owned here, one per (row, column). A field holding more than two
- *   values shows its first two and reveals the rest in place. The retired
- *   "View N codes" modal is gone; nothing leaves the table.
- *
- * Collapsing the rows drops the cell state of rows that are about to
- * disappear, so a hidden row can never come back already expanded. Cells in
- * the row that stays visible keep theirs.
- *
- * Geometry (P2B2): a white `radius/8` surface with a `border/subtle` border,
- * `body-small-bold` column labels, `caption` values, hairlines between
- * columns and between rows, and one fixed column width
- * (`table-column-width`) so every row lines up under the header. The table
- * viewport is exactly the content column; only the table pans sideways.
+ * A Detail disclosure (Recall Detail kit, 2026-10-07): the control's own words
+ * in the action type and the link colour, with a down chevron while collapsed
+ * and an up chevron while expanded. The words carry the state, so it survives
+ * greyscale; the chevron is decorative. The spoken label is the model's, with
+ * the complete count and what it reveals.
  */
-function AffectedProductsTableView({
-  table,
+function DetailDisclosure({
+  control,
   expanded,
-  openCells,
-  onToggleCell,
+  onPress,
 }: {
-  table: AffectedProductsTable;
+  control: DisclosureControlModel;
   expanded: boolean;
-  /** Which (row, column) cells are expanded, owned by the screen so
-   * collapsing the rows can prune the ones that disappear. */
-  openCells: ReadonlySet<string>;
-  onToggleCell: (cellId: string) => void;
+  onPress: () => void;
 }) {
-  const view = expanded ? table.expanded : table.collapsed;
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableViewport}>
-      <Surface radius={8} border="border/subtle" style={styles.table}>
-        <View style={styles.tableRow}>
-          {view.columns.map((column, index) => (
-            <View key={column.key} style={[styles.tableCell, index > 0 && styles.tableCellDivided]}>
-              <Text variant="body-small-bold">{column.label}</Text>
-            </View>
-          ))}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={
+        expanded ? control.collapseAccessibilityLabel : control.expandAccessibilityLabel
+      }
+      accessibilityState={{ expanded }}
+      hitSlop={ACTION_HIT_SLOP}
+      style={styles.disclosure}
+      onPress={onPress}>
+      {({ pressed }) => (
+        <View style={[styles.disclosureInner, pressed ? styles.pressedControl : null]}>
+          <Text style={[detailType.action, styles.linkColor]}>
+            {expanded ? control.collapseLabel : control.expandLabel}
+          </Text>
+          <Icon
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            points={DISCLOSURE_GLYPH}
+            color="icon/brand"
+          />
         </View>
-        {view.rows.map((row) => (
-          <View key={row.id} style={[styles.tableRow, styles.tableDataRow]}>
-            {row.cells.map((cell, index) =>
-              cell.key === 'product' ? (
-                // The version's own image (P2c) renders left of the Product
-                // value only when the shared allocator assigned one to this
-                // exact row — no placeholder, no reserved space otherwise.
-                <View
-                  key="product"
-                  style={[
-                    styles.tableCell,
-                    styles.productCell,
-                    index > 0 && styles.tableCellDivided,
-                  ]}>
-                  {row.image ? (
-                    <MediaTile
-                      uri={row.image.url}
-                      alt={row.image.accessibilityText}
-                      size={layout.rowMediaSize}
-                    />
-                  ) : null}
-                  <Text variant="caption" style={styles.productCellText}>
-                    {cell.text ?? ''}
-                  </Text>
-                </View>
-              ) : (
-                // Reading order inside the cell is value then control, so a
-                // screen reader hears the values before it is offered more.
-                <ProductCell
-                  key={cell.key}
-                  cell={cell}
-                  divided={index > 0}
-                  // A PAIRED cell's expansion belongs to its GROUP, not its
-                  // column: both halves read and write the one entry, so it
-                  // is not merely discouraged but impossible for one paired
-                  // column to expand while its partner stays collapsed.
-                  stateId={cellStateId(row.id, cell)}
-                  open={openCells.has(cellStateId(row.id, cell))}
-                  onToggle={onToggleCell}
-                />
-              ),
-            )}
-          </View>
-        ))}
-      </Surface>
-    </ScrollView>
+      )}
+    </Pressable>
   );
 }
 
 /**
- * One non-product cell.
+ * A product card's name, never missing a line. React Native can lay a text
+ * frame out up to one device pixel shorter than its text (Yoga rounds the
+ * frame's edges onto the pixel grid; React Native issue #57920), and iOS then
+ * draws one line fewer — on device the second Mellace card showed "Wegmans
+ * Deluxe Mixed Nuts U…". Whether it happens depends only on where the title
+ * lands on the grid, so it can strike a name of any length.
  *
- * An ordinary field renders as one wrapping run of comma-joined text, exactly
- * as it always has. A cell belonging to an identifier PAIR group renders one
- * value per line instead, each capped to a single line, so line _n_ of the
- * codes column sits level with line _n_ of its date column and the two read
- * as the pairs the source actually stated. Those values are never
- * comma-joined: a date like "September 30, 2027" carries its own comma.
- *
- * An undated code's empty partner renders as a non-breaking space rather than
- * nothing, so the blank keeps its line and the rows below it stay aligned —
- * an empty line that collapsed to zero height would shift every later pair
- * against the wrong code, which is the exact defect this grouping exists to
- * prevent.
+ * The title therefore checks the lines iOS actually drew against its own
+ * frame. The loss is at most a pixel, so at most ONE line drops, and the
+ * signature is exact: a frame taller than the drawn lines by more than half
+ * a line but no more than a line and a pixel, which no minimum height of
+ * ours explains, drawn at the CURRENT text size. Text and frame events
+ * arrive separately, so a pair from two different layouts (a Dynamic Type
+ * change mid-screen) fails the line-height or the window test and is
+ * ignored. On a real drop the title takes that frame plus 1pt as its
+ * minimum height, so the next layout draws every line. A title that drew
+ * every line is never touched, and the correction is keyed to the window
+ * and text size, so a Dynamic Type change measures afresh.
  */
-function ProductCell({
-  cell,
-  divided,
-  stateId,
-  open,
-  onToggle,
-}: {
-  cell: AffectedProductsTableCell;
-  /** Every column after the first carries the hairline on its leading edge. */
-  divided: boolean;
-  stateId: string;
-  open: boolean;
-  onToggle: (id: string) => void;
-}) {
-  const shown = (open ? cell.text : cell.collapsedText) ?? '';
+function CardTitle({ name, besideImage }: { name: string; besideImage: boolean }) {
+  const { width, fontScale } = useWindowDimensions();
+  const layoutKey = `${width}|${fontScale}`;
+  const [correction, setCorrection] = useState<{ key: string; minHeight: number } | null>(null);
+  const frameHeight = useRef(0);
+  const drawn = useRef<{ total: number; perLine: number } | null>(null);
+  const repairMinHeight = correction?.key === layoutKey ? correction.minHeight : 0;
+  const ownMinHeight = Math.max(besideImage ? detailGeometry.productThumbnail : 0, repairMinHeight);
+
+  const checkForDroppedLine = () => {
+    const lines = drawn.current;
+    const frame = frameHeight.current;
+    if (lines === null || frame === 0) return;
+    if (Math.abs(frame - ownMinHeight) < 0.01) return;
+    // Drawn at the current text size, or this is a stale text layout.
+    if (Math.abs(lines.perLine - TITLE_LINE_HEIGHT * fontScale) > 1) return;
+    const excess = frame - lines.total;
+    if (excess <= lines.perLine / 2 || excess > lines.perLine + 1) return;
+    setCorrection({ key: layoutKey, minHeight: PixelRatio.roundToNearestPixel(frame) + 1 });
+  };
+
   return (
-    <View style={[styles.tableCell, divided && styles.tableCellDivided]}>
-      {cell.pairGroup === null ? (
-        <Text variant="caption">{shown}</Text>
-      ) : (
-        <View>
-          {shown.split('\n').map((value, index) => (
-            <Text key={`${cell.key}-${index}`} variant="caption" numberOfLines={1}>
-              {value === '' ? '\u00A0' : value}
-            </Text>
-          ))}
+    <Text
+      style={[
+        detailType.productCardTitle,
+        styles.textColor,
+        besideImage ? styles.cardTitleBesideImage : null,
+        repairMinHeight > 0 ? { minHeight: repairMinHeight } : null,
+      ]}
+      accessibilityRole="header"
+      onLayout={(event) => {
+        frameHeight.current = event.nativeEvent.layout.height;
+        checkForDroppedLine();
+      }}
+      onTextLayout={(event) => {
+        const { lines } = event.nativeEvent;
+        drawn.current =
+          lines.length === 0
+            ? null
+            : {
+                total: lines.reduce((sum, line) => sum + line.height, 0),
+                perLine: lines[0].height,
+              };
+        checkForDroppedLine();
+      }}>
+      {name}
+    </Text>
+  );
+}
+
+/**
+ * One affected product as a vertical card (Recall Detail kit, 2026-10-07):
+ * the product name, the strictly allocated row image top-right when there is
+ * one (no reserved space otherwise), then each field group in the closed
+ * column order. A group shows its first two lines and its OWN Show more; a
+ * verified pair group shows its first two whole pair entries, each a labelled
+ * code over its own labelled date, and reveals the rest whole.
+ * At large text sizes, or when the value column would be too narrow, the
+ * labels stack above their values and the image sits above the name, so no
+ * word is broken to fit beside anything.
+ */
+function AffectedProductCardView({
+  card,
+  openGroups,
+  onToggleGroup,
+  fontScale,
+}: {
+  card: AffectedProductCard;
+  openGroups: ReadonlySet<string>;
+  onToggleGroup: (id: string) => void;
+  fontScale: number;
+}) {
+  const [contentWidth, setContentWidth] = useState(0);
+  const stacked = fieldStacks(contentWidth, fontScale);
+  const imageAbove = fontScale >= DETAIL_STACK_SCALE;
+  const image = card.image ? (
+    <MediaTile
+      uri={card.image.url}
+      alt={card.image.accessibilityText}
+      size={CARD_THUMBNAIL}
+      cornerRadius={detailGeometry.headerPhotoRadius}
+    />
+  ) : null;
+  return (
+    <View
+      style={styles.card}
+      onLayout={(event) => setContentWidth(event.nativeEvent.layout.width - CARD_PADDING_X)}>
+      {imageAbove && image ? <View style={styles.cardImageAbove}>{image}</View> : null}
+      {card.name !== null || (image && !imageAbove) ? (
+        <View style={!imageAbove && image ? styles.cardHeaderWithImage : null}>
+          {card.name !== null ? (
+            <CardTitle name={card.name} besideImage={!imageAbove && image !== null} />
+          ) : null}
+          {!imageAbove && image ? <View style={styles.cardImage}>{image}</View> : null}
         </View>
-      )}
-      {cell.disclosure ? (
-        <DisclosureControl
-          control={cell.disclosure}
-          expanded={open}
-          onPress={() => onToggle(stateId)}
-        />
       ) : null}
+      {card.groups.map((group, groupIndex) => {
+        const stateId = cardGroupStateId(card.id, group.id);
+        const open = openGroups.has(stateId);
+        const lines = open ? group.lines : group.collapsedLines;
+        const disclosure = group.disclosure ? (
+          <DetailDisclosure
+            control={group.disclosure}
+            expanded={open}
+            onPress={() => onToggleGroup(stateId)}
+          />
+        ) : null;
+        if (group.pairs !== null) {
+          // A verified pair group (founder Granola review, 2026-10-08): no
+          // outer label; each pair is a compact block — its code under the
+          // code's own label, its date under the source's date type — read
+          // by VoiceOver as one element, with clear space between blocks.
+          const entries = (open ? group.pairs : group.collapsedPairs) ?? [];
+          return (
+            <View key={group.id}>
+              {entries.map((entry, index) => (
+                <View
+                  key={`${group.id}-${index}`}
+                  style={styles.pairEntry}
+                  accessible
+                  accessibilityRole="text"
+                  accessibilityLabel={lines[index]}>
+                  <FieldRow label={entry.code.label} value={entry.code.value} stacked={stacked} />
+                  {entry.date ? (
+                    <FieldRow label={entry.date.label} value={entry.date.value} stacked={stacked} />
+                  ) : null}
+                </View>
+              ))}
+              {disclosure ? (
+                <View style={stacked ? styles.pairDisclosure : styles.pairDisclosureInValueColumn}>
+                  {disclosure}
+                </View>
+              ) : null}
+            </View>
+          );
+        }
+        // A field directly after a pair group keeps the pairs' own spacing,
+        // so it never reads as part of the last pair.
+        const afterPairs = groupIndex > 0 && card.groups[groupIndex - 1].pairs !== null;
+        return (
+          <View
+            key={group.id}
+            style={[
+              stacked ? styles.fieldStacked : styles.field,
+              afterPairs ? styles.fieldAfterPairs : null,
+            ]}>
+            <Text
+              style={[detailType.metadata, styles.secondaryColor, !stacked && styles.fieldLabel]}>
+              {group.label}
+            </Text>
+            <View style={styles.fieldValues}>
+              {lines.map((line, index) => (
+                <Text key={`${group.id}-${index}`} style={[detailType.body, styles.textColor]}>
+                  {line}
+                </Text>
+              ))}
+              {disclosure}
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** One labelled line of a pair entry: the label column and its value. */
+function FieldRow({ label, value, stacked }: { label: string; value: string; stacked: boolean }) {
+  return (
+    <View style={stacked ? styles.pairRowStacked : styles.pairRow}>
+      <Text style={[detailType.metadata, styles.secondaryColor, !stacked && styles.fieldLabel]}>
+        {label}
+      </Text>
+      <Text style={[detailType.body, styles.textColor, styles.fieldValues]}>{value}</Text>
+    </View>
+  );
+}
+
+/**
+ * One reviewed symptom (Recall Detail kit, 2026-10-07): a 36pt pale-blue disc
+ * holding a 22pt decorative glyph, 12pt from the symptom's exact reviewed
+ * wording. The disc is a native View and the glyph is decoration — the row is
+ * ONE accessible node labelled with the symptom alone. Multi-line text keeps
+ * the disc beside its first line.
+ */
+function SymptomRow({ symptom, divided }: { symptom: string; divided: boolean }) {
+  return (
+    <View
+      style={[styles.symptomRow, divided ? styles.symptomRowDivided : null]}
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={symptom}>
+      <View style={styles.symptomBubble}>
+        <Icon
+          name={symptomIcon(symptom)}
+          points={detailGeometry.symptomGlyph}
+          color="icon/primary"
+        />
+      </View>
+      <Text style={[detailType.body, styles.textColor, styles.symptomText]}>{symptom}</Text>
+    </View>
+  );
+}
+
+/** A guide's symptom list: rows with light dividers BETWEEN them only. */
+function SymptomList({ symptoms, label }: { symptoms: readonly string[]; label?: string }) {
+  return (
+    <View accessibilityRole="list" accessibilityLabel={label}>
+      {symptoms.map((symptom, index) => (
+        <SymptomRow key={symptom} symptom={symptom} divided={index > 0} />
+      ))}
     </View>
   );
 }
@@ -338,37 +503,38 @@ function ProductCell({
 export default function RecallDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
-  // The three in-place disclosures this screen owns. All start collapsed, all
-  // are independent, and none of them navigates anywhere.
+  // The in-place disclosures this screen owns. All start collapsed, all are
+  // independent, and none of them navigates anywhere.
   //
   //   statesExpanded — the Where-it-was-sold jurisdiction list.
-  //   tableExpanded  — Affected Products rows.
-  //   openCells      — per (row, column) multi-value cells, so collapsing the
-  //                    rows can drop the state of rows that disappear.
+  //   tableExpanded  — Affected Products rows (cards).
+  //   openGroups     — per (card, field group) Show more, so collapsing the
+  //                    rows can drop the state of cards that disappear.
   const [statesExpanded, setStatesExpanded] = useState(false);
   const [tableExpanded, setTableExpanded] = useState(false);
-  // The Detail title's four-line disclosure (P2B7V). `titleOverflows` is
-  // MEASURED — see the probe in the header — so a title that fits within four
-  // lines never gets a control, and `titleExpanded` is the reader's answer to
-  // the one it does get.
+  // The Detail title's two-line disclosure. `titleOverflows` is MEASURED —
+  // see the probe in the header — so a title that fits never gets a control.
   const [titleExpanded, setTitleExpanded] = useState(false);
   const [titleOverflows, setTitleOverflows] = useState(false);
-  const [openCells, setOpenCells] = useState<ReadonlySet<string>>(() => new Set());
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
   const prefs = usePreferences();
-  // Latched once the name's own layout shows a word broken beside the hero:
-  // the header then stacks (identity at full width, tile beneath) and stays
+  // Latched once the name's own layout shows a word broken beside the photo:
+  // the header then stacks (identity at full width, photo beneath) and stays
   // stacked, so the layout can never oscillate between the two shapes.
   const [stackedHeader, setStackedHeader] = useState(false);
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  // Save, in the navigation bar, for the recall this screen shows — and only
+  // once it has loaded. Called before any early return (rules of hooks).
+  const saveItems = useSaveHeaderItems(state.status === 'ready' ? state.detail.id : null);
 
   // Every per-recall disclosure resets when the route points at a DIFFERENT
   // recall, so a title left expanded, a jurisdiction list left open or a
-  // table left grown can never carry over to the next one (P2B7V).
+  // card list left grown can never carry over to the next one (P2B7V).
   //
   // Done DURING RENDER — React's documented way to adjust state when a prop
-  // changes — rather than in an effect. An effect would let one frame of the
-  // previous recall's expanded title paint before correcting itself, which is
-  // exactly the flicker this disclosure is supposed to avoid.
+  // changes — rather than in an effect, so no frame of the previous recall's
+  // expanded state paints first.
   const [shownId, setShownId] = useState(id);
   if (shownId !== id) {
     setShownId(id);
@@ -376,7 +542,7 @@ export default function RecallDetailScreen() {
     setTitleOverflows(false);
     setStatesExpanded(false);
     setTableExpanded(false);
-    setOpenCells(new Set());
+    setOpenGroups(new Set());
     setStackedHeader(false);
   }
 
@@ -386,6 +552,11 @@ export default function RecallDetailScreen() {
       // A recall shown from the bundled baseline (lib/baseline-recalls.ts,
       // 2026-10-04) always opens: when the live row cannot be fetched, or no
       // longer exists, its bundled detail is rendered instead.
+      const fixture = DEVELOPMENT_FIXTURES?.developmentDetailFixture(id) ?? null;
+      if (fixture) {
+        setState({ status: 'ready', detail: fixture.detail });
+        return;
+      }
       const bundled = baselineCaseDetail(id);
       try {
         const detail = (await fetchCaseDetail(id)) ?? bundled;
@@ -443,19 +614,46 @@ export default function RecallDetailScreen() {
   // inspects rows, columns, codes, or geography to decide for itself.
   const { whereSold, communityReports, healthRisk, affectedProducts } = model.sections;
 
+  // At accessibility text sizes the header always stacks: the photo sits
+  // beneath the identity, so the title never breaks a word to fit beside it.
+  const largeText = fontScale >= DETAIL_STACK_SCALE;
+  const headerStacked = stackedHeader || largeText;
+  // At accessibility sizes the complete title is shown, with no control.
+  const titleClamped = !largeText && !titleExpanded;
+  const category = model.category ? categoryStyle(model.category.id) : null;
+  // The header's and cards' images: the model's, unless a development
+  // fixture supplies local images for this route (never in a release build).
+  const productImages =
+    DEVELOPMENT_FIXTURES?.developmentDetailFixture(id)?.images ?? model.productImages;
+  const fixtureCardImage = DEVELOPMENT_FIXTURES?.developmentDetailFixture(id)?.cardImage ?? null;
+  const cards = affectedProducts
+    ? affectedProductCards(
+        tableExpanded ? affectedProducts.table.expanded : affectedProducts.table.collapsed,
+      ).map((card) =>
+        fixtureCardImage && !card.image ? { ...card, image: fixtureCardImage } : card,
+      )
+    : [];
+
   return (
     <Page>
+      {/* Save sits in the navigation bar, opposite Back (Recall Detail kit,
+          2026-10-07; P2A had placed it with the identity). It is the SAME
+          shared save contract the Feed card's control uses — one saved
+          state, one spoken action label, one selected state — as a native
+          bar item (see `useSaveHeaderItems`), registered by this screen
+          alone, so no other pushed screen gains a header button. */}
+      <Stack.Screen options={{ unstable_headerRightItems: () => saveItems }} />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.content, { paddingBottom: spacing[24] + insets.bottom }]}>
-        {/* The product header (P2a founder decision, P2B2 composition): the
-            risk label upper-left with the ONE material activity date beside
-            it and the shared save control opposite, then product name,
-            consumer brand, and the single official-source link beside the
-            hero. The "Recall · Active" metadata line and every explanatory
-            risk note are gone — the label states the risk by itself. A
-            Public Health Alert keeps its explicit notice label (standing
-            rule). */}
+        {/* The product header: the risk label with the ONE material activity
+            date and the shared save control opposite; then the product name
+            (two lines until the reader asks for the rest), the consumer
+            brand, the category label the Feed card shows, the compact illness
+            notice, and the single official-source link — beside the official
+            photo when the recall has one. A Public Health Alert keeps its
+            explicit notice label (standing rule). Risk and illness keep the
+            integrated application palette and wording. */}
         <View style={styles.header}>
           <View style={styles.statusRow}>
             <View style={styles.statusGroup}>
@@ -469,60 +667,41 @@ export default function RecallDetailScreen() {
               {model.noticeTypeLabel === 'Public Health Alert' ? (
                 <NoticeLabel label={model.noticeTypeLabel} />
               ) : null}
-              <Text variant="caption" color="text/secondary">
+              <Text style={[detailType.metadata, styles.secondaryColor]}>
                 {model.activity.text}
               </Text>
             </View>
-            {/* P2A: the only control this screen gained. It is about THIS
-                recall — the same shared control the feed card uses, so the
-                two can never disagree about whether a recall is saved — and
-                it sits with the recall's identity rather than in the
-                navigation header, which carries only navigation. */}
-            <SaveRecallButton caseId={model.id} />
           </View>
 
           {model.retracted ? (
             <Callout tone="information">{retractedNotice(model.agencyLabel)}</Callout>
           ) : null}
 
-          <View style={[styles.identityRow, stackedHeader && styles.identityStacked]}>
+          <View style={[styles.identityRow, headerStacked && styles.identityStacked]}>
             <View style={styles.identity}>
               <View style={styles.titleBlock}>
-                {/* The visible title, clamped to four lines until the reader
-                    asks for the rest (P2B7V). It carries the FULL name as its
+                {/* The visible title, clamped to two lines until the reader
+                    asks for the rest. It carries the FULL name as its
                     accessibility label, so a clamp a sighted reader sees is
-                    never a clamp a screen reader hears — and every other
-                    consumer of the name (search, share, push, identity) reads
-                    the model, which this never shortens. */}
+                    never a clamp a screen reader hears. */}
                 <Text
-                  variant="heading-2"
+                  style={[detailType.productTitle, styles.textColor]}
                   accessibilityRole="header"
                   accessibilityLabel={model.productName}
-                  numberOfLines={titleExpanded ? undefined : DETAIL_TITLE_LINES}>
+                  numberOfLines={titleClamped ? DETAIL_TITLE_LINES : undefined}>
                   {model.productName}
                 </Text>
-                {/* The measuring copy. It renders the same string, in the same
-                    type, at the same width, with no clamp — but absolutely
-                    positioned, so it occupies no space and changes no layout,
-                    and hidden from assistive technology so it is never read.
-                    Its layout is where BOTH of the header's measured decisions
-                    come from:
-
-                      · whether the name overflows four lines, which is what
-                        decides whether the disclosure exists at all;
-                      · whether a single word had to break across lines, which
-                        stacks the header away from the hero tile.
-
-                    Measuring rather than counting characters is the point: a
-                    reader at an accessibility text size overflows at a title
-                    length a character heuristic would call short, and the same
-                    title beside a hero tile wraps in a 194pt column where it
-                    would not in a 358pt one. It stays mounted, so a Dynamic
-                    Type change or a rotation re-measures rather than leaving
-                    a stale answer. */}
+                {/* The measuring copy: the same string, type and width with no
+                    clamp, absolutely positioned and hidden from assistive
+                    technology. Its real layout decides BOTH whether the name
+                    overflows two lines (so whether the control exists) and
+                    whether a word had to break beside the photo (which stacks
+                    the header). Measured, never counted: a character
+                    heuristic cannot know the reader's text size or the
+                    column's width. It stays mounted, so a Dynamic Type change
+                    re-measures. */}
                 <Text
-                  variant="heading-2"
-                  style={styles.titleProbe}
+                  style={[detailType.productTitle, styles.titleProbe]}
                   accessible={false}
                   accessibilityElementsHidden
                   importantForAccessibility="no"
@@ -534,44 +713,42 @@ export default function RecallDetailScreen() {
                   }}>
                   {model.productName}
                 </Text>
-                {/* Shown only when the name ACTUALLY overflows, so an ordinary
-                    short title carries no control at all. Quiet caption type
-                    in the secondary action colour, sitting with the title
-                    block: it reveals the rest of a name and must not read as
-                    the screen's primary action. */}
-                {titleOverflows ? (
+                {titleOverflows && !largeText ? (
                   <Pressable
                     accessibilityRole="button"
                     accessibilityState={{ expanded: titleExpanded }}
                     accessibilityHint={
                       titleExpanded ? DETAIL_TITLE_COLLAPSE_HINT : DETAIL_TITLE_EXPAND_HINT
                     }
-                    hitSlop={TITLE_CONTROL_HIT_SLOP}
-                    style={styles.titleControl}
+                    hitSlop={ACTION_HIT_SLOP}
+                    style={styles.disclosure}
                     onPress={() => setTitleExpanded((prior) => !prior)}>
                     {({ pressed }) => (
-                      <Text
-                        variant="caption"
-                        color="action/secondary"
-                        style={pressed && styles.pressedControl}>
-                        {titleExpanded ? DETAIL_TITLE_COLLAPSE_LABEL : DETAIL_TITLE_EXPAND_LABEL}
-                      </Text>
+                      <View
+                        style={[styles.disclosureInner, pressed ? styles.pressedControl : null]}>
+                        <Text style={[detailType.action, styles.linkColor]}>
+                          {titleExpanded ? DETAIL_TITLE_COLLAPSE_LABEL : DETAIL_TITLE_EXPAND_LABEL}
+                        </Text>
+                        <Icon
+                          name={titleExpanded ? 'chevron-up' : 'chevron-down'}
+                          points={DISCLOSURE_GLYPH}
+                          color="icon/brand"
+                        />
+                      </View>
                     )}
                   </Pressable>
                 ) : null}
-                <Text variant="body-small" color="text/secondary">
-                  {model.brand.text}
-                </Text>
+                <Text style={[detailType.body, styles.secondaryColor]}>{model.brand.text}</Text>
               </View>
+              {/* The product category — the integrated Feed label (its tint,
+                  border, ink and glyph), for the SAME category the card
+                  shows. Null renders nothing. */}
+              {model.category && category ? (
+                <FeedCategoryLabel label={model.category.label} style={category} />
+              ) : null}
               {/* The compact illness notice (P2B7K): whether the OFFICIAL
-                  notice reported illnesses, below the brand and above the
-                  source link. It is about illnesses alone — injuries, adverse
-                  reactions, hospitalizations and deaths stay in What Happened
-                  in the source's own words — and it is informational, never a
-                  control. Null renders nothing at all: a notice that never
-                  established illness status gets no row, no placeholder and no
-                  spacer, because silence is not a zero. The screen decides
-                  none of this; the contract hands it finished copy. */}
+                  notice reported illnesses. Null renders nothing at all:
+                  silence is not a zero. */}
               {model.illnessNotice ? <IllnessNotice copy={model.illnessNotice} /> : null}
               <Pressable
                 accessibilityRole="link"
@@ -582,187 +759,95 @@ export default function RecallDetailScreen() {
                 <ExternalLinkLabel label={model.officialSource.label} />
               </Pressable>
             </View>
-            {/* The official FDA product photography renders ONCE, beside the
-                title, from the shared image-role allocation (P2c) through the
-                presentation contract (P2B7C): the allocator's hero — the same
-                image the Feed card showed — first, then its gallery order,
-                complete, and never a label render. Null renders nothing and
-                the identity takes the full width; one usable image is the
-                static tile Detail has always shown; several page by hand
-                inside that same tile. The screen picks no image, orders none,
-                and counts none. */}
-            {model.productImages ? <OfficialImageSet set={model.productImages} /> : null}
+            {/* The official FDA product photography, from the shared
+                image-role allocation (P2c) through the presentation contract
+                (P2B7C). Null renders nothing and the identity takes the full
+                width — no tile, placeholder, gutter or reserved column. */}
+            {productImages ? <OfficialImageSet set={productImages} /> : null}
           </View>
         </View>
 
         {model.affectsYou ? <Callout tone="warning">{model.affectsYouBanner}</Callout> : null}
 
-        {/* The narrative is assembled by the shared presentation contract
-            (P3C-1, split in P2B7V): the cause paragraph, and — when the
-            source states a quantity the contract can read deterministically —
-            the recall's extent as an ORDINARY SECOND PARAGRAPH beneath it,
-            one normal paragraph gap apart.
-
-            The screen composes no sentence and decides no wording: it renders
-            `scope` when the model gives it one and renders nothing at all
-            otherwise — no paragraph, no gap, no empty element. The scope
-            sentence is body copy in the same type as the cause, never a
-            badge, tag, heading, card or section, and the model guarantees it
-            is never also inside `text`.
-
-            Two things deliberately do NOT render here:
-
-            · the illness status, which is the compact notice in the identity
-              area above — and which now carries hospitalizations and deaths
-              on their own lines too (P2B7Q.1);
-            · a generated update note. `normalizedUpdate` used to paraphrase
-              the newest Editor's Note into "Updated Feb 9, 2024: additional
-              affected products were added." P2B7Q proved that family could be
-              made truthful, and the founder then removed it anyway: a shopper
-              is told THAT a recall changed by its resurfacing in Recent
-              Activity and by its "Updated" date, which are earned from the
-              material-change ledger, and a paraphrase of WHAT changed is
-              editorial prose the app has no business writing. The generator
-              is deleted, not disabled. */}
+        {/* What Happened: the shared contract's paragraphs, verbatim — the
+            cause, and the recall's extent as its OWN paragraph when the
+            source states one. The screen composes no sentence. */}
+        <View style={styles.divider} />
         <Section title="What Happened">
-          <Text variant="body-small">{model.whatHappened.text}</Text>
+          <Text style={[detailType.body, styles.textColor]}>{model.whatHappened.text}</Text>
           {model.whatHappened.scope ? (
-            <Text variant="body-small">{model.whatHappened.scope}</Text>
+            <Text style={[detailType.body, styles.textColor]}>{model.whatHappened.scope}</Text>
           ) : null}
         </Section>
 
-        {/* Where it was sold: only the full state representation (P2a founder
-            decision). Retailers, addresses, online routes, and channel
-            evidence stay in the model for the later retailer-list milestone.
-            ALWAYS rendered (P2B7E): the model's lead is never empty, so a
-            recall whose distribution the notice never stated says
-            "Distribution not specified" here — with the same map pin as any
-            other location state — rather than losing the section. There is
-            no condition left on this section to regress. */}
+        {/* Where It Was Sold, ALWAYS rendered (P2B7E): the map pin then the
+            location itself, and the store glyph then the retailer names the
+            notice stated — no visible "States" or "Retailers" prefix. The
+            retailer row still SPEAKS its prefix. Five jurisdictions or fewer
+            render complete; beyond that the model's own reveal sits on the
+            heading row ("Show all (N)" / "Show less"). */}
         <View style={styles.divider} />
         <Section
           title="Where It Was Sold"
           action={
-            // Five jurisdictions or fewer render complete. Beyond that
-            // the model supplies the first five and its own reveal, on
-            // the heading row, and the list grows right here — no page,
-            // no sheet, no reordering; nationwide / unspecified
-            // distribution is untouched because the model gives those no
-            // control at all.
             whereSold.statesDisclosure ? (
-              <DisclosureControl
+              <DetailDisclosure
                 control={whereSold.statesDisclosure}
                 expanded={statesExpanded}
                 onPress={() => setStatesExpanded((prior) => !prior)}
               />
             ) : null
           }>
-          <View style={styles.geography}>
-            <View style={styles.geographyGlyph}>
-              <Icon name="map-pin" size={12} color="icon/primary" />
+          <View style={styles.distributionRow}>
+            <View style={styles.distributionGlyph}>
+              <Icon name="map-pin" points={detailGeometry.interfaceGlyph} color="icon/primary" />
             </View>
-            <Text variant="body-small" style={styles.geographyText}>
+            <Text style={[detailType.body, styles.textColor, styles.distributionText]}>
               {statesExpanded ? whereSold.lead : whereSold.leadCollapsed}
             </Text>
           </View>
-          {/* The retailers the notice named (P2B7O; one inline row from
-              P2B7V) — the milestone P2a deferred when it removed the retailer
-              summary from this section, and the ONLY surface in the app that
-              shows retailers: Feed and Saved carry none.
-
-              It sits UNDER the geography, never instead of it: where the
-              product went is the answer this section owes every reader, and a
-              store list is a narrowing detail only some notices state.
-
-              ONE SENTENCE-STYLE ROW, in the same shape as the geography row
-              above it: the house glyph in the same leading column the
-              location pin occupies, then "Retailers:" and the names in ONE
-              text flow, so the label and the list read as a sentence and wrap
-              as one. It replaces a caption heading stacked over a second line
-              of names, which indented the names under nothing and split one
-              statement across two announcements.
-
-              The glyph is the Feed tab's own `home` — the house a shopper
-              already reads as "where you shop" in this app — and it comes
-              from the shared icon system, never an image asset of its own.
-
-              The model decides which names may appear at all and hands over
-              the finished, punctuated list; the screen adds only the label.
-              Null renders nothing: no row, no icon, no spacer, no wrapper.
-
-              The label says RETAILER, which is a deliberate founder override
-              of the app-wide shopper vocabulary that otherwise says "store"
-              and never "retailer" (lib/consumer-copy.test.ts, rule 4, where
-              this one label is the single carved-out exception). Retailer is
-              the right consumer concept HERE because it is the word
-              personalization already uses: a shopper picks the stores they
-              shop at under "Retailers" in their preferences, and this row
-              answers the same question on a specific recall. The rest of the
-              app still says "store". */}
           {whereSold.retailersNamed ? (
-            <View style={styles.retailers}>
-              <View style={styles.retailerGlyph}>
-                <Icon name="home" size={12} color="icon/primary" />
+            <View
+              style={styles.distributionRow}
+              accessible
+              accessibilityLabel={`${RETAILERS_SPOKEN_PREFIX} ${whereSold.retailersNamed}`}>
+              <View style={styles.distributionGlyph}>
+                <Icon name="store" points={detailGeometry.interfaceGlyph} color="icon/primary" />
               </View>
-              {/* One Text, so "Retailers:" and the names are one flow: the
-                  list wraps under itself and every continuation line stays
-                  inside the text column, clear of the glyph beside it.
-
-                  ONE COLOUR for the whole sentence: the label is body text in
-                  `text/primary`, exactly like the names beside it. It was
-                  muted while it was a caption HEADING over a separate line;
-                  now that it opens the same sentence, muting it would split
-                  one statement into two visual registers.
-
-                  The label keeps a nested Text of its own — with no props of
-                  its own any more — because the consumer-copy contract's
-                  retailer exemption is an exact JSX-text match on this one
-                  string (lib/consumer-copy.test.ts, rule 4). Inlining it into
-                  the surrounding flow would hide the approved label from the
-                  check that scopes the override to exactly one screen. */}
-              <Text variant="body-small" style={styles.retailerText}>
-                <Text variant="body-small">Retailers:</Text> {whereSold.retailersNamed}
+              <Text style={[detailType.body, styles.textColor, styles.distributionText]}>
+                {whereSold.retailersNamed}
               </Text>
             </View>
           ) : null}
           {/* Community shopper reports (P1D) sit UNDER the official
-              statement, never beside or above it: they corroborate where the
-              notice says the product went, and the model nests them here so
-              an entry point can never outlive the statement it corroborates.
-              The block stays silent unless the server discloses something —
-              while the feature gate is off it renders nothing at all. */}
+              statement; silent while the server gate is off. */}
           {communityReports ? <CommunityReportsBlock section={communityReports} /> : null}
         </Section>
 
-        {/* Health Risk (P1B): standardized, reviewed hazard education owned by
-            the shared contract — the same recognized hazard renders the same
-            copy on every recall, and none of it is composed from this
-            notice's prose. The screen renders the model's decided section and
-            interprets no hazard of its own: whether a symptom list, a
-            higher-risk line, or a source link belongs here is already
-            decided. Whether THIS recall reported illnesses stays in What
-            Happened — the bullets below are what the hazard can cause, never
-            a claim about this recall. Absent for an unmapped hazard and for a
-            retracted notice. */}
+        {/* Health Risk (P1B): standardized, reviewed hazard education. The
+            risk paragraph, then ONE "Common symptoms" subheading (18/24, no
+            divider between them), each symptom in its exact reviewed words
+            beside a decorative glyph. Several supported hazards (decision E):
+            still one heading and one subheading — each guide's explanation
+            and source link, then its own symptom group, beneath a small
+            organism label, never merged. Absent for an unmapped hazard and
+            for a retracted notice. */}
         {healthRisk ? (
           <>
             <View style={styles.divider} />
             <Section title="Health Risk">
               {healthRisk.hazards ? (
-                // Several supported hazards (founder decision E): ONE Health Risk
-                // heading and ONE Common symptoms subheading, each reviewed guide
-                // whole beneath a small organism label — its own explanation and
-                // source link, then its own symptom group. Nothing is merged or
-                // deduplicated across guides, and the order is the source's.
                 <>
                   {healthRisk.hazards.map((hazard) => (
                     <View key={hazard.organism} style={styles.hazardGroup}>
-                      <Text variant="body-small-bold" accessibilityRole="header">
+                      <Text
+                        style={[detailType.metadataStrong, styles.textColor]}
+                        accessibilityRole="header">
                         {hazard.organism}
                       </Text>
-                      <Text variant="body-small">{hazard.risk}</Text>
+                      <Text style={[detailType.body, styles.textColor]}>{hazard.risk}</Text>
                       {hazard.higherRisk ? (
-                        <Text variant="body-small">{hazard.higherRisk}</Text>
+                        <Text style={[detailType.body, styles.textColor]}>{hazard.higherRisk}</Text>
                       ) : null}
                       <Pressable
                         accessibilityRole="link"
@@ -777,31 +862,21 @@ export default function RecallDetailScreen() {
                   ))}
                   {healthRisk.hazards.some((hazard) => hazard.symptoms) ? (
                     <View style={styles.symptoms}>
-                      <Text variant="caption" accessibilityRole="header">
-                        Common symptoms:
+                      <Text
+                        style={[detailType.symptomSubheading, styles.textColor]}
+                        accessibilityRole="header">
+                        Common symptoms
                       </Text>
                       {healthRisk.hazards.map((hazard) =>
                         hazard.symptoms ? (
                           <View key={hazard.organism} style={styles.symptomGroup}>
-                            <Text variant="body-small-bold">{hazard.organism}</Text>
-                            <View
-                              accessibilityRole="list"
-                              accessibilityLabel={`${hazard.organism} symptoms`}
-                              style={styles.symptomList}>
-                              {hazard.symptoms.map((symptom) => (
-                                <View
-                                  key={symptom}
-                                  style={styles.symptomRow}
-                                  accessible
-                                  accessibilityRole="text"
-                                  accessibilityLabel={symptom}>
-                                  <Text variant="body-small">{'•'}</Text>
-                                  <Text variant="body-small" style={styles.symptomText}>
-                                    {symptom}
-                                  </Text>
-                                </View>
-                              ))}
-                            </View>
+                            <Text style={[detailType.metadataStrong, styles.textColor]}>
+                              {hazard.organism}
+                            </Text>
+                            <SymptomList
+                              symptoms={hazard.symptoms}
+                              label={`${hazard.organism} symptoms`}
+                            />
                           </View>
                         ) : null,
                       )}
@@ -810,36 +885,18 @@ export default function RecallDetailScreen() {
                 </>
               ) : (
                 <>
-                  <Text variant="body-small">{healthRisk.risk}</Text>
+                  <Text style={[detailType.body, styles.textColor]}>{healthRisk.risk}</Text>
                   {healthRisk.higherRisk ? (
-                    <Text variant="body-small">{healthRisk.higherRisk}</Text>
+                    <Text style={[detailType.body, styles.textColor]}>{healthRisk.higherRisk}</Text>
                   ) : null}
                   {healthRisk.symptoms ? (
                     <View style={styles.symptoms}>
-                      {/* Body-text colour, like the symptoms beneath it, and a
-                      colon so it reads as the opening of the list rather than
-                      a muted eyebrow over it. Its `caption` size, weight,
-                      position and spacing are unchanged. */}
-                      <Text variant="caption" accessibilityRole="header">
-                        Common symptoms:
+                      <Text
+                        style={[detailType.symptomSubheading, styles.textColor]}
+                        accessibilityRole="header">
+                        Common symptoms
                       </Text>
-                      <View accessibilityRole="list" style={styles.symptomList}>
-                        {healthRisk.symptoms.map((symptom) => (
-                          // One accessible node per symptom, labelled with the
-                          // symptom alone so the bullet glyph is never announced.
-                          <View
-                            key={symptom}
-                            style={styles.symptomRow}
-                            accessible
-                            accessibilityRole="text"
-                            accessibilityLabel={symptom}>
-                            <Text variant="body-small">{'•'}</Text>
-                            <Text variant="body-small" style={styles.symptomText}>
-                              {symptom}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
+                      <SymptomList symptoms={healthRisk.symptoms} />
                     </View>
                   ) : null}
                   {healthRisk.source ? (
@@ -858,22 +915,11 @@ export default function RecallDetailScreen() {
           </>
         ) : null}
 
-        {/* Affected Products: the gated P0A data only — no helper, coverage,
-            or disclaimer prose (P2a founder decision; Figma's informational
-            callout is not reinstated). The shared table model is the WHOLE
-            section (P3C-2): headers once, one affected version per row, one
-            row before See all (N). Every affected-product code and every
-            row-applicable production date is a cell of the row it belongs to
-            — inline at two values or fewer, behind that cell's own in-place
-            reveal beyond that. There is no code block, production-date line,
-            shared-facts card, or modal, and the screen has no path to render
-            one: it receives finished rows and redistributes nothing. The
-            official attachment links stay preserved in the model for a later
-            source/image surface — no orphan attachment link renders here.
-
-            The row reveal sits on the heading, opposite the title. Collapsing
-            it also drops the cell state of every row about to disappear, so a
-            hidden row can never return already expanded. */}
+        {/* Affected Products: one vertical card per existing row, in source
+            order, the first card before See all (N) — the shared table
+            model's rows re-presented, nothing regrouped, split or merged.
+            Collapsing the rows also drops the Show more state of every card
+            about to disappear, so a hidden card never returns expanded. */}
         {affectedProducts ? (
           <>
             <View style={styles.divider} />
@@ -881,14 +927,14 @@ export default function RecallDetailScreen() {
               title="Affected Products"
               action={
                 affectedProducts.table.rowsDisclosure ? (
-                  <DisclosureControl
+                  <DetailDisclosure
                     control={affectedProducts.table.rowsDisclosure}
                     expanded={tableExpanded}
                     onPress={() => {
                       if (tableExpanded) {
-                        setOpenCells((cells) =>
+                        setOpenGroups((groups) =>
                           visibleCellState(
-                            cells,
+                            groups,
                             affectedProducts.table.collapsed.rows.map((row) => row.id),
                           ),
                         );
@@ -898,18 +944,23 @@ export default function RecallDetailScreen() {
                   />
                 ) : null
               }>
-              <AffectedProductsTableView
-                table={affectedProducts.table}
-                expanded={tableExpanded}
-                openCells={openCells}
-                onToggleCell={(cell) =>
-                  setOpenCells((prior) => {
-                    const next = new Set(prior);
-                    if (!next.delete(cell)) next.add(cell);
-                    return next;
-                  })
-                }
-              />
+              <View style={styles.cards}>
+                {cards.map((card) => (
+                  <AffectedProductCardView
+                    key={card.id}
+                    card={card}
+                    openGroups={openGroups}
+                    fontScale={fontScale}
+                    onToggleGroup={(group) =>
+                      setOpenGroups((prior) => {
+                        const next = new Set(prior);
+                        if (!next.delete(group)) next.add(group);
+                        return next;
+                      })
+                    }
+                  />
+                ))}
+              </View>
             </Section>
           </>
         ) : null}
@@ -930,58 +981,68 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
+  // The kit's 20pt page gutter, content capped for tablets and the web.
   content: {
     maxWidth: layout.maxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    padding: spacing[16],
-    gap: spacing[16],
+    paddingHorizontal: detailGeometry.pageGutter,
+    paddingTop: spacing[16],
+    gap: detailGeometry.bodyGap,
   },
-  // The product header: the status row, then identity beside the hero.
+  textColor: {
+    color: detailColor.text,
+  },
+  secondaryColor: {
+    color: detailColor.secondary,
+  },
+  linkColor: {
+    color: detailColor.link,
+  },
+  // The product header: the status row, then identity beside the photo.
   header: {
-    gap: spacing[12],
+    gap: detailGeometry.bodyGap,
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
-    gap: spacing[8],
+    gap: detailGeometry.inlineGap,
   },
   statusGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
     flexShrink: 1,
-    gap: spacing[8],
+    gap: detailGeometry.inlineGap,
   },
   identityRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing[12],
+    gap: detailGeometry.fieldColumnGap,
   },
-  // When a heading-2 word cannot fit beside the hero (accessibility text
-  // sizes), the row becomes a column: the identity at full width, the hero
-  // beneath it.
+  // At accessibility text sizes, or once a title word would break beside the
+  // photo, the row becomes a column: identity at full width, photo beneath.
   identityStacked: {
     flexDirection: 'column',
     alignItems: 'stretch',
   },
-  // flex + minWidth 0 let a long product name wrap beside the hero instead of
-  // pushing it off the page; with no hero, the identity takes the whole row.
+  // flex + minWidth 0 let a long product name wrap beside the photo instead of
+  // pushing it off the page; with no photo, the identity takes the whole row.
   identity: {
     flex: 1,
     minWidth: 0,
-    gap: spacing[8],
+    gap: detailGeometry.bodyGap,
+    alignItems: 'flex-start',
   },
   titleBlock: {
+    alignSelf: 'stretch',
     gap: spacing[4],
   },
-  // The measuring copy of the title (P2B7V). Absolutely positioned and
-  // transparent: it spans the identity column's real width, so it wraps
-  // exactly as the visible title does, while contributing no height of its
-  // own and catching no touches. It is never a fixed-height container — it
-  // has no height at all as far as the layout is concerned.
+  // The measuring copy of the title. Absolutely positioned and transparent:
+  // it spans the identity column's real width, so it wraps exactly as the
+  // visible title does, while contributing no height and catching no touch.
   titleProbe: {
     position: 'absolute',
     left: 0,
@@ -990,8 +1051,14 @@ const styles = StyleSheet.create({
     opacity: 0,
     zIndex: -1,
   },
-  titleControl: {
+  // A text action (disclosure or title control): its words then a chevron.
+  disclosure: {
     alignSelf: 'flex-start',
+  },
+  disclosureInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[4],
   },
   pressedControl: {
     opacity: 0.6,
@@ -1002,82 +1069,76 @@ const styles = StyleSheet.create({
   link: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[4],
+    gap: detailGeometry.inlineGap,
   },
   linkText: {
     flexShrink: 1,
   },
-  // The hairline between sections. A zero-height view with a top border,
-  // so no height is fixed anywhere on the screen.
+  // The full-width thin divider between major sections, 20pt each side.
   divider: {
-    borderTopWidth: 1,
-    borderTopColor: color['border/default'],
+    borderTopWidth: detailGeometry.dividerWidth,
+    borderTopColor: detailColor.divider,
+    marginVertical: detailGeometry.sectionDividerMargin - detailGeometry.bodyGap,
   },
   section: {
-    gap: spacing[8],
+    gap: detailGeometry.bodyGap,
   },
-  // The heading row: title on the left, an optional reveal opposite it.
+  // The heading row: title on the left, an optional reveal opposite it. It
+  // wraps, so at large text sizes the reveal moves beneath the heading.
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing[8],
+    flexWrap: 'wrap',
+    gap: detailGeometry.inlineGap,
   },
   sectionTitle: {
     flexShrink: 1,
   },
-  // The jurisdiction line: the pin centred on the first line of text,
-  // whatever the reader's type size, because its box is one line tall.
-  geography: {
+  // A distribution line: the 24pt glyph centred on the FIRST line of text at
+  // any type size (its box is one body line tall), the text wrapping in its
+  // own column, never back under the glyph.
+  distributionRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing[4],
+    gap: detailGeometry.fieldColumnGap,
   },
-  geographyGlyph: {
-    height: typography['body-small'].lineHeight,
+  distributionGlyph: {
+    height: detailType.body.lineHeight,
     justifyContent: 'center',
   },
-  geographyText: {
+  distributionText: {
     flex: 1,
   },
-  // The retailer row: the SAME shape as the geography row above it — glyph in
-  // the leading column, text taking the rest — so the house sits exactly
-  // where the location pin sits and the two read as one pair of facts. The
-  // top margin is the separation between them, and it is the only thing
-  // keeping them apart: neither is indented relative to the other.
-  //
-  // No height of its own, and the text takes the remaining width (`flex: 1`),
-  // so a long list wraps inside the text column at any Dynamic Type setting
-  // rather than clipping or running back under the glyph.
-  retailers: {
-    marginTop: spacing[8],
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing[4],
-  },
-  // One body-small line tall, so the glyph stays centred on the FIRST line of
-  // the sentence at any reader type size — the same rule the pin follows.
-  retailerGlyph: {
-    height: typography['body-small'].lineHeight,
-    justifyContent: 'center',
-  },
-  retailerText: {
-    flex: 1,
-  },
-  // The Health Risk symptom list: a labelled group of bulleted lines in the
-  // section's body type — no card, no icon, no alert treatment.
+  // Health Risk: the Common symptoms subheading follows the risk paragraph
+  // with no divider; symptom rows carry light dividers between them only.
   symptoms: {
-    gap: spacing[4],
-  },
-  symptomList: {
+    marginTop: spacing[4],
     gap: spacing[4],
   },
   symptomRow: {
     flexDirection: 'row',
-    gap: spacing[8],
+    alignItems: 'flex-start',
+    gap: detailGeometry.fieldColumnGap,
+    paddingVertical: detailGeometry.inlineGap,
   },
+  symptomRowDivided: {
+    borderTopWidth: detailGeometry.dividerWidth,
+    borderTopColor: detailColor.divider,
+  },
+  symptomBubble: {
+    width: detailGeometry.symptomBubble,
+    height: detailGeometry.symptomBubble,
+    borderRadius: detailGeometry.symptomBubble / 2,
+    backgroundColor: detailColor.symptomBubble,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Centred on the bubble while the symptom is one line; a longer one wraps
+  // beneath with the bubble beside its first line.
   symptomText: {
-    flexShrink: 1,
+    flex: 1,
+    paddingTop: CENTRED_ON_BUBBLE,
   },
   // One reviewed guide inside a multi-hazard Health Risk section, and one
   // guide's symptoms under the shared Common symptoms subheading.
@@ -1085,43 +1146,83 @@ const styles = StyleSheet.create({
     gap: spacing[4],
   },
   symptomGroup: {
+    marginTop: spacing[4],
+  },
+  // Affected products: one white bordered card per row.
+  cards: {
+    gap: detailGeometry.bodyGap,
+  },
+  card: {
+    backgroundColor: detailColor.surface,
+    borderWidth: 1,
+    borderColor: detailColor.border,
+    borderRadius: detailGeometry.productCardRadius,
+    padding: detailGeometry.productCardPadding,
+  },
+  // The image sits top-right, pinned; the title takes the card's width minus
+  // the image and its gap.
+  cardHeaderWithImage: {
+    minHeight: detailGeometry.productThumbnail,
+    paddingRight: TITLE_IMAGE_RESERVE,
+  },
+  // A title beside the image is at least as tall as the image — the header
+  // already is, so nothing moves. The slack means a one- or two-line name
+  // can never lose a line to the pixel rounding `CardTitle` corrects, so the
+  // common case never needs that correction at all.
+  cardTitleBesideImage: {
+    minHeight: detailGeometry.productThumbnail,
+  },
+  cardImage: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+  },
+  cardImageAbove: {
+    marginBottom: detailGeometry.fieldGap,
+  },
+  // A field: the 104pt label column, 12pt, then the values taking the rest.
+  field: {
+    flexDirection: 'row',
+    gap: detailGeometry.fieldColumnGap,
+    marginTop: detailGeometry.fieldGap,
+  },
+  // Stacked at large text sizes or a narrow card: label above values.
+  fieldStacked: {
+    gap: spacing[4],
+    marginTop: detailGeometry.fieldGap,
+  },
+  fieldLabel: {
+    width: detailGeometry.fieldLabelWidth,
+    paddingTop: LABEL_ON_VALUE_LINE,
+  },
+  fieldValues: {
+    flex: 1,
+    minWidth: 0,
+  },
+  // A pair entry: its code and date rows 4pt apart, so they read as one
+  // unit, and 16pt above each entry — clearly more than the 10pt between
+  // ordinary fields — so neighbouring pairs never run together.
+  pairEntry: {
+    marginTop: spacing[16],
     gap: spacing[4],
   },
-  // The Affected Products table. The viewport is the content column; the
-  // grid inside may be wider and pans on its own. Fixed column widths keep
-  // the header row and every version row aligned as one unit.
-  tableViewport: {
-    alignSelf: 'stretch',
+  fieldAfterPairs: {
+    marginTop: spacing[16],
   },
-  table: {
-    padding: spacing[4],
-  },
-  tableRow: {
+  pairRow: {
     flexDirection: 'row',
+    gap: detailGeometry.fieldColumnGap,
   },
-  tableDataRow: {
-    borderTopWidth: 1,
-    borderTopColor: color['border/subtle'],
-  },
-  tableCell: {
-    width: layout.tableColumnWidth,
-    paddingHorizontal: spacing[8],
-    paddingVertical: spacing[8],
+  pairRowStacked: {
     gap: spacing[4],
   },
-  tableCellDivided: {
-    borderLeftWidth: 1,
-    borderLeftColor: color['border/subtle'],
+  // The pair group's Show more / Show less sits where every field's does: in
+  // the value column, beneath the last entry shown.
+  pairDisclosureInValueColumn: {
+    marginTop: spacing[4],
+    marginLeft: detailGeometry.fieldLabelWidth + detailGeometry.fieldColumnGap,
   },
-  // A Product cell with a matched version image: thumbnail left of the value,
-  // inside the same fixed cell width so the grid stays aligned. Rows without
-  // an image keep the plain text cell — nothing is reserved.
-  productCell: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[8],
-  },
-  productCellText: {
-    flexShrink: 1,
+  pairDisclosure: {
+    marginTop: spacing[4],
   },
 });

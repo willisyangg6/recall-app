@@ -635,9 +635,13 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
   // (2026-10-06, founder-approved source kit) added the Filters control's
   // `filters` (Lucide sliders-horizontal — no longer a dead Figma glyph: it
   // opens the Filters sheet), the sheet's `close`, `tick` and `categories`,
-  // and the nine category glyphs (constants/feed-design.ts). There is still
-  // no share glyph, and no bell control anywhere (detail-design.test.ts).
+  // and the nine category glyphs (constants/feed-design.ts). The Recall
+  // Detail kit (2026-10-07) added the title control's `chevron-up`, the
+  // retailer line's `store`, and nine decorative symptom glyphs
+  // (lib/symptom-icons.ts). There is still no share glyph, and no bell
+  // control anywhere (detail-design.test.ts).
   assert.deepEqual(glyphs, [
+    'activity',
     'allergen-egg',
     'allergen-fish',
     'allergen-milk',
@@ -650,6 +654,7 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'bell',
     'bookmark',
     'bookmark-filled',
+    'brain',
     'categories',
     'category-baby',
     'category-bakery',
@@ -664,11 +669,16 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'chevron-down',
     'chevron-left',
     'chevron-right',
+    'chevron-up',
+    'circle',
     'close',
+    'droplets',
     'external-link',
+    'eye',
     'file-search',
     'filters',
     'flag',
+    'hand',
     'home',
     'info',
     'list',
@@ -678,9 +688,13 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'search',
     'shield-check',
     'shopping-cart',
+    'store',
+    'thermometer',
     'tick',
     'user',
+    'utensils-crossed',
     'warning',
+    'wind',
     'x',
     'zoom-in',
     'zoom-out',
