@@ -1199,8 +1199,12 @@ the page scrolls.
   untouchable measurement of the block three ways: compact, wide with the
   plates beside the words, and wide with them above. Each text reports its
   broken words (`brokenWordCount`), and the wide copies also report their
-  pieces. The measurement is keyed by this content, width and text size.
-  After an edit, the last board stays until the new content is measured.
+  pieces. The measurement is keyed by this content, width and text size,
+  and is remounted for each new content: a piece whose own frame did not
+  move never reports again, so a measurement kept mounted across an edit
+  never completed and the board kept the old content's size, pushing
+  `Edit preferences` off the plate (fixed 2026-10-09). After an edit, the
+  last board stays until the new content is measured.
 - **No jump and no text without its art on arrival.** The page is laid out
   but not shown until the choice is made AND every image of the chosen
   board has loaded or failed (`heroImageCount`, each layer's `BoardImage`

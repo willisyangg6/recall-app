@@ -712,6 +712,13 @@ test('two illustrated boards chosen by measured fit; every preference always on 
   // The measurement: the same block three ways, hidden, untouchable, unheard.
   const measure = step.slice(step.indexOf('styles.measure') - 200, step.indexOf('styles.measure'));
   assert.ok(measure.includes('{...DECORATIVE}'), 'the measurement can be heard or touched');
+  // Remounted for new content: a piece whose own frame does not move never
+  // reports again, so an in-place edit would keep the old board's size
+  // (2026-10-09, Edit preferences pushed off the plate).
+  assert.ok(
+    measure.includes('<View key={contentKey} {...DECORATIVE}'),
+    'the measurement is not remounted for new content',
+  );
   for (const variant of [
     "measureVariant('compact')",
     "measureVariant('wide')",

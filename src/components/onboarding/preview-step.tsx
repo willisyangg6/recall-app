@@ -341,8 +341,12 @@ export function PreviewStep({
         }}
         onContentSizeChange={(_, height) => setContentHeight(height)}>
         {/* The measurement: the board's block three ways, invisible,
-            untouchable and never heard. */}
-        <View {...DECORATIVE} style={styles.measure}>
+            untouchable and never heard. Keyed by the content, so new content
+            (an edit saved while Ready stays mounted) lays out afresh and
+            reports every reading under its own key: otherwise a piece whose
+            own frame did not move never reports again, the measurement never
+            completes and the board keeps the old content's size. */}
+        <View key={contentKey} {...DECORATIVE} style={styles.measure}>
           {measureVariant('compact')}
           {measureVariant('wide')}
           {measureVariant('wideStacked')}
