@@ -15,12 +15,12 @@
  * `useSyncExternalStore`, renders a snapshot (never a live object), and
  * keeps a shown deck on screen while a corpus update's new photos are being
  * checked for the same preferences, so a sync never turns a deck back into
- * the "checking" state. Everything about WHICH recalls are shown stays in
+ * the "checking" state (hooks/use-answered-ready-preview). Everything about WHICH recalls are shown stays in
  * the pure modules, and the count is the production count whatever the
  * photos do.
  */
 
-import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { Image } from 'react-native';
 
 import type { FeedItem } from '@/lib/recall-feed';
@@ -39,6 +39,8 @@ import {
   type ReadyPreviewState,
 } from '@/lib/ready-preview';
 import { todayIso } from '@/lib/recall-presentation';
+
+import { useAnsweredReadyPreview, type ReadyPreviewInputs } from './use-answered-ready-preview';
 
 type DevelopmentProbe = typeof import('@/lib/development-photo-probe');
 
@@ -85,6 +87,13 @@ export function warmReadyPhotos(
   registry.warm(photoCandidates(items, prefs, now));
 }
 
+/** The selection over the photo verdicts (and, in development, a QA stand-in). */
+function answerReadyPreview(inputs: ReadyPreviewInputs): ReadyPreviewState {
+  const { feed, prefs, today, now, photos, candidates } = inputs;
+  const built = buildReadyPreview(feed, prefs, today, now, { loaded: photos.loaded });
+  return developmentProbe ? developmentProbe.developmentPreview(built, candidates[0]) : built;
+}
+
 /** One candidate set's session as an external store (stable per key). */
 function photoStore(candidates: readonly string[]) {
   const key = photoSessionKey(candidates);
@@ -124,25 +133,12 @@ export function useReadyPreview(
     [store],
   );
 
-  const computed = useMemo<ReadyPreviewState>(() => {
-    if (items === null || !photos.settled) return { kind: 'checking' };
-    const built = buildReadyPreview(feed, prefs, today, now, { loaded: photos.loaded });
-    return developmentProbe ? developmentProbe.developmentPreview(built, candidates[0]) : built;
-  }, [items, photos, feed, prefs, today, now, candidates]);
-
-  // The last answered preview and the preferences it answered. While a
-  // corpus update's new photos are checked for the SAME preferences, that
-  // deck stays; a preference change shows the check, never the old deck.
-  const [shown, setShown] = useState<{ preview: ReadyPreviewState; prefsKey: string } | null>(null);
-  if (
-    computed.kind !== 'checking' &&
-    (shown?.preview !== computed || shown.prefsKey !== prefsKey)
-  ) {
-    setShown({ preview: computed, prefsKey });
-  }
-  const preview =
-    computed.kind === 'checking' && items !== null && shown?.prefsKey === prefsKey
-      ? shown.preview
-      : computed;
+  // The answer and the deck kept on screen (hooks/use-answered-ready-preview),
+  // memoised on the inputs' content — Ready rebuilds these objects every
+  // render.
+  const preview = useAnsweredReadyPreview(
+    { feed, prefs, today, now, photos, candidates },
+    answerReadyPreview,
+  );
   return { preview, onPhotoFailed };
 }
