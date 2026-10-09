@@ -608,10 +608,18 @@ fails` and `Photos: every photo hangs` replace the Ready deck's image
   **Ready selection review (2026-10-05):** `lotly://design-preview?review=<n>`
   draws the n-th scenario of `components/development/ready-selection-review.tsx`
   full-screen with the production Ready step and the production selection
-  (`lib/ready-preview.ts`) over the bundled baseline's real recalls, with one
-  simulation — every stored photo counts as loaded, because a static screen
-  cannot probe ([recall-feed-ordering.md](recall-feed-ordering.md) §17). Nothing
-  reads or writes preferences. It draws
+  (`lib/ready-preview.ts`) over real recalls, with one simulation — every
+  stored photo counts as loaded, because a static screen cannot probe
+  ([recall-feed-ordering.md](recall-feed-ordering.md) §17). Scenarios 1–3 read
+  the bundled baseline at its recording time (rated recalls with photos and a
+  locked match; two matches; one match). Scenarios 4–7, titled
+  `Historical (2026-10-04)`, read the frozen 2026-10-04 baseline
+  (`lib/historical-baseline.ts`; `src/content/historical/README.md`) for the
+  fallback decks the current baseline no longer produces — rated recalls
+  without photos, and Pending recalls filling the deck or locked behind it —
+  because its agency-confirmed open recalls now come first. That frozen copy is
+  imported only by tests and this development tooling and is absent from
+  release bundles. Nothing reads or writes preferences. It draws
   full-screen rather than in the gallery because the Ready step reveals its
   page only once its hidden board measurement settles, and that measurement
   does not settle inside this hub's scrolling gallery (the gallery's own three

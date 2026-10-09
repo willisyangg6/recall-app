@@ -24,6 +24,7 @@ import {
   explainAffectsMePriority,
 } from './affects-me-ranking';
 import { buildFeedSections, tierForActivityDate } from './feed-relevance';
+import { confirmedOpen } from './open-evidence';
 import type { FeedItem } from './recall-feed';
 import { compareRecency, sortNewestFirst } from './recency-order';
 import { evaluatePersonalRelevance, pushEligible } from './relevance';
@@ -513,12 +514,15 @@ test('Affects Me eligibility is unchanged: the sections hold exactly the qualify
 
 test('the matching count is unchanged by the order, on the synthetic corpus and the real offline baseline', () => {
   // The count the Ready preview and the Building step show is the length of
-  // `affects`: eligibility AND the material window, nothing about position.
+  // `affects`: eligibility AND (the material window OR an agency's confirmation
+  // that the recall is still open — the shared `confirmedOpen`, 2026-10-06),
+  // nothing about position.
   const expectedCount = (items: readonly FeedItem[], prefs: UserRecallPreferences, now: Date) =>
     items.filter(
       (i) =>
         relevanceOf(prefs)(i).affectsMe &&
-        tierForActivityDate(affectsMePriority(i).materialActivityAt, now) === 'recent',
+        (tierForActivityDate(affectsMePriority(i).materialActivityAt, now) === 'recent' ||
+          confirmedOpen(i, now)),
     ).length;
 
   const synthetic = [
@@ -548,6 +552,34 @@ test('the matching count is unchanged by the order, on the synthetic corpus and 
       sortNewestFirst(sections.affects).map((i) => i.id),
     );
   }
+});
+
+test('an older recall counts only when its agency confirms it is still open', () => {
+  // Both are eligible California matches, both well past the 60-day window,
+  // both FDA. Only the one with current FDA evidence (within 21 days of the
+  // clock) counts; the other stays in Older notices.
+  const confirmed = item({
+    publishedAt: OLD_DAY,
+    timeline: [published(OLD_DAY)],
+    geography: geo('states', ['California']),
+    fdaOngoingAsOf: '2026-08-20',
+  });
+  const unconfirmed = item({
+    publishedAt: OLD_DAY,
+    timeline: [published(OLD_DAY)],
+    geography: geo('states', ['California']),
+  });
+  assert.equal(confirmedOpen(confirmed, NOW), true);
+  assert.equal(confirmedOpen(unconfirmed, NOW), false);
+  const { affects, older } = rank([confirmed, unconfirmed]);
+  assert.deepEqual(
+    affects.map((i) => i.id),
+    [confirmed.id],
+  );
+  assert.deepEqual(
+    older.map((i) => i.id),
+    [unconfirmed.id],
+  );
 });
 
 test('the offline baseline is ordered newest first with no severity rung', () => {

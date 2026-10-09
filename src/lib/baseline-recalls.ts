@@ -36,12 +36,12 @@ import { RECENT_WINDOW_DAYS } from '@/lib/feed-relevance';
 import { readFdaOngoingAsOf } from '@/lib/open-evidence';
 import type { CaseDetail, FeedItem } from '@/lib/recall-feed';
 
-interface BaselineCase {
+export interface BaselineCase {
   item: FeedItem;
   detail: CaseDetail;
 }
 
-interface BaselineDocument {
+export interface BaselineDocument {
   recordedAt: string;
   recentActivityDays: number;
   rule: string;
@@ -56,12 +56,21 @@ const document = baseline as unknown as BaselineDocument;
 export const BASELINE_RECORDED_AT: string = document.recordedAt;
 
 /** The baseline as feed rows: what Building and Ready match against offline. */
-export const BASELINE_RECALLS: readonly FeedItem[] = document.cases.map((entry) => ({
-  ...entry.item,
-  // Through the strict reader: a baseline recorded before open evidence (or a
-  // malformed value) reads as no evidence, never as evidence.
-  fdaOngoingAsOf: readFdaOngoingAsOf((entry.item as { fdaOngoingAsOf?: unknown }).fdaOngoingAsOf),
-}));
+/**
+ * A recorded baseline document's feed items. One reader for every baseline
+ * document, so a frozen historical copy (lib/historical-baseline.ts, tests and
+ * development tooling only) is read exactly as the shipped one is.
+ */
+export function baselineFeedItems(recorded: BaselineDocument): FeedItem[] {
+  return recorded.cases.map((entry) => ({
+    ...entry.item,
+    // Through the strict reader: a baseline recorded before open evidence (or a
+    // malformed value) reads as no evidence, never as evidence.
+    fdaOngoingAsOf: readFdaOngoingAsOf((entry.item as { fdaOngoingAsOf?: unknown }).fdaOngoingAsOf),
+  }));
+}
+
+export const BASELINE_RECALLS: readonly FeedItem[] = baselineFeedItems(document);
 
 const DETAILS = new Map(document.cases.map((entry) => [entry.detail.id, entry.detail]));
 

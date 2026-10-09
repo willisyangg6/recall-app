@@ -12,7 +12,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { EMPTY_PREFERENCES } from '@/domain/preferences';
+import {
+  CONSUMER_ALLERGENS,
+  EMPTY_PREFERENCES,
+  STATE_CODES_IN_ORDER,
+  type UserRecallPreferences,
+} from '@/domain/preferences';
+import { RETAILER_CATALOG } from '@/domain/retailer-catalog';
+import { buildAffectsMeSections } from '@/lib/affects-me-ranking';
+import { buildingData } from '@/lib/building-watch';
+import { sortNewestFirst } from '@/lib/recency-order';
 import type { TimelineEntry } from '@/domain/recall-types';
 import { consumerRiskTier } from '@/domain/risk-tier';
 import { makeFeedItem } from '@/lib/feed-fixtures';
@@ -38,6 +47,10 @@ import {
   type ReadyPreviewState,
 } from './ready-preview';
 import { BASELINE_RECALLS, BASELINE_RECORDED_AT } from '@/lib/baseline-recalls';
+import {
+  HISTORICAL_BASELINE_RECALLS,
+  HISTORICAL_BASELINE_RECORDED_AT,
+} from '@/lib/historical-baseline';
 
 const TODAY = '2026-08-28';
 const NOW = new Date(`${TODAY}T12:00:00.000Z`);
@@ -401,21 +414,119 @@ test('readyCorpus: the session’s answer when it has one; the bundled baseline 
   resetReadyCorpusMemory();
 });
 
-// ── The real baseline: the six review scenarios (2026-10-05) ────────────────
+// ── The shipped baseline's clock, for the current-baseline tests below ─────
 
 const RECORDED_AT = new Date(BASELINE_RECORDED_AT);
 const RECORDED_DAY = BASELINE_RECORDED_AT.slice(0, 10);
-const BASELINE = { status: 'ready' as const, items: BASELINE_RECALLS, source: 'baseline' as const };
-const tierOf = (id: string) =>
-  consumerRiskTier(BASELINE_RECALLS.find((item) => item.id === id)!.classification);
-const photoOf = (id: string) => BASELINE_RECALLS.find((item) => item.id === id)!.heroImageUrl;
 
-test('baseline, California: three rated recalls with photos lead nineteen matches; a rated recall without a photo is locked', () => {
+// ── The current baseline: invariants over every real profile ────────────────
+//
+// Pinned to no particular id or count, so a re-recording never needs these
+// edited: they hold for whatever the shipped baseline answers.
+
+test('current baseline: every surface agrees, three readable cards when three exist, a locked card only when another remains, by group and newest first', () => {
+  const profiles: UserRecallPreferences[] = [
+    ...STATE_CODES_IN_ORDER.map((code) => ({ states: [code], allergens: [], retailers: [] })),
+    ...CONSUMER_ALLERGENS.map((a) => ({ states: [], allergens: [a.token], retailers: [] })),
+    ...RETAILER_CATALOG.map((r) => ({ states: [], allergens: [], retailers: [r.id] })),
+    { states: ['CA'], allergens: ['sesame', 'peanut'], retailers: ['costco', 'trader-joes'] },
+    { states: ['IA'], allergens: ['milk'], retailers: ['aldi'] },
+    { states: ['MA', 'NC', 'PA', 'WV'], allergens: ['sesame', 'shellfish'], retailers: ['pcc'] },
+  ];
+  const corpus = { status: 'ready' as const, items: BASELINE_RECALLS, source: 'baseline' as const };
+  let withMatches = 0;
+  let withLocked = 0;
+  for (const prefs of profiles) {
+    const label = JSON.stringify(prefs);
+    const feed = buildAffectsMeSections(
+      BASELINE_RECALLS,
+      (item) => evaluatePersonalRelevance(item, prefs),
+      { now: RECORDED_AT },
+    ).affects;
+    const matches = affectsYouMatches(BASELINE_RECALLS, prefs, RECORDED_AT);
+    const building = buildingData(corpus, false, prefs, RECORDED_AT);
+    const preview = buildReadyPreview(corpus, prefs, RECORDED_DAY, RECORDED_AT, ALL_LOADED);
+    // One count on every surface.
+    assert.deepEqual(
+      matches.map((i) => i.id),
+      feed.map((i) => i.id),
+      label,
+    );
+    assert.equal(building.kind === 'usable' ? building.total : 0, matches.length, label);
+    assert.equal(previewMatchCount(preview) ?? 0, matches.length, label);
+    // Newest first: the Affects You list is the shared order.
+    assert.deepEqual(
+      matches.map((i) => i.id),
+      sortNewestFirst(matches).map((i) => i.id),
+      label,
+    );
+    if (preview.kind !== 'matches') continue;
+    withMatches += 1;
+    // Three readable cards whenever three genuine matches exist; every match below that.
+    assert.equal(preview.models.length, Math.min(PREVIEW_MATCH_LIMIT, matches.length), label);
+    // A locked card only when another genuine match remains.
+    assert.equal(preview.locked !== null, matches.length > PREVIEW_MATCH_LIMIT, label);
+    assert.equal(hasLockedMatches(preview), matches.length > PREVIEW_MATCH_LIMIT, label);
+    // Preview priority: groups never worsen across the readable cards, no unshown
+    // match outranks a shown one, and inside a group the newest-first order holds.
+    const byId = new Map(matches.map((item, index) => [item.id, { item, index }]));
+    const shown = preview.models.map((m) => byId.get(m.id)!);
+    const group = (item: FeedItem) => priorityGroup(item, ALL_LOADED);
+    for (let i = 1; i < shown.length; i += 1) {
+      const [a, b] = [shown[i - 1], shown[i]];
+      assert.ok(group(a.item) <= group(b.item), label);
+      if (group(a.item) === group(b.item)) assert.ok(a.index < b.index, label);
+    }
+    const shownIds = new Set(shown.map((s) => s.item.id));
+    const worstShown = Math.max(...shown.map((s) => group(s.item)));
+    const rest = matches.filter((item) => !shownIds.has(item.id));
+    assert.ok(
+      rest.every((item) => group(item) >= worstShown),
+      label,
+    );
+    if (preview.locked !== null) {
+      withLocked += 1;
+      const best = Math.min(...rest.map(group));
+      const locked = byId.get(preview.locked.id)!;
+      assert.ok(!shownIds.has(locked.item.id), label);
+      assert.equal(group(locked.item), best, label);
+      assert.equal(locked.item.id, rest.find((item) => group(item) === best)!.id, label);
+    }
+  }
+  // The sweep exercised both deck shapes on real data.
+  assert.ok(withMatches > 0 && withLocked > 0 && withLocked < withMatches);
+});
+
+// ── Historical baseline (2026-10-04): the five fallback scenarios ───────────
+//
+// These decks were found by search over the baseline recorded on 2026-10-04
+// (review scenarios, 2026-10-05). The current baseline also carries the
+// recalls an agency confirms are still open, and those — mostly rated, with
+// photos — now fill every realistic profile's deck, so photo-less rated and
+// Pending recalls never reach it. The scenarios keep their real-data coverage
+// on that frozen recording (content/historical/README.md), at its own clock.
+
+const HISTORICAL_AT = new Date(HISTORICAL_BASELINE_RECORDED_AT);
+const HISTORICAL_DAY = HISTORICAL_BASELINE_RECORDED_AT.slice(0, 10);
+const HISTORICAL = {
+  status: 'ready' as const,
+  items: HISTORICAL_BASELINE_RECALLS,
+  source: 'baseline' as const,
+};
+const tierOf = (id: string) =>
+  consumerRiskTier(HISTORICAL_BASELINE_RECALLS.find((item) => item.id === id)!.classification);
+const photoOf = (id: string) =>
+  HISTORICAL_BASELINE_RECALLS.find((item) => item.id === id)!.heroImageUrl;
+
+test('historical baseline, California: three rated recalls with photos lead nineteen matches; a rated recall without a photo is locked', () => {
   const prefs = { states: ['CA'], allergens: [], retailers: [] };
-  const preview = buildReadyPreview(BASELINE, prefs, RECORDED_DAY, RECORDED_AT, ALL_LOADED);
+  const preview = buildReadyPreview(HISTORICAL, prefs, HISTORICAL_DAY, HISTORICAL_AT, ALL_LOADED);
   assert.ok(preview.kind === 'matches');
   assert.equal(preview.total, 19);
-  assert.equal(preview.total, affectsYouMatches(BASELINE_RECALLS, prefs, RECORDED_AT).length);
+  assert.equal(
+    preview.total,
+    affectsYouMatches(HISTORICAL_BASELINE_RECALLS, prefs, HISTORICAL_AT).length,
+  );
   assert.deepEqual(
     preview.models.map((m) => m.id.slice(0, 8)),
     ['7a9159b7', '6c54040d', '080dedcf'],
@@ -430,9 +541,9 @@ test('baseline, California: three rated recalls with photos lead nineteen matche
   assert.equal(hasLockedMatches(preview), true);
 });
 
-test('baseline, tree nuts + Kroger: one rated recall with a photo, then two rated without; nothing locked', () => {
+test('historical baseline, tree nuts + Kroger: one rated recall with a photo, then two rated without; nothing locked', () => {
   const prefs = { states: [], allergens: ['tree nuts'], retailers: ['kroger'] };
-  const preview = buildReadyPreview(BASELINE, prefs, RECORDED_DAY, RECORDED_AT, ALL_LOADED);
+  const preview = buildReadyPreview(HISTORICAL, prefs, HISTORICAL_DAY, HISTORICAL_AT, ALL_LOADED);
   assert.ok(preview.kind === 'matches');
   assert.equal(preview.total, 3);
   assert.deepEqual(
@@ -447,9 +558,9 @@ test('baseline, tree nuts + Kroger: one rated recall with a photo, then two rate
   assert.equal(hasLockedMatches(preview), false);
 });
 
-test('baseline, soy: a rated recall, then Pending with a photo, then Pending without — the newest recall last', () => {
+test('historical baseline, soy: a rated recall, then Pending with a photo, then Pending without — the newest recall last', () => {
   const prefs = { states: [], allergens: ['soy'], retailers: [] };
-  const preview = buildReadyPreview(BASELINE, prefs, RECORDED_DAY, RECORDED_AT, ALL_LOADED);
+  const preview = buildReadyPreview(HISTORICAL, prefs, HISTORICAL_DAY, HISTORICAL_AT, ALL_LOADED);
   assert.ok(preview.kind === 'matches');
   assert.equal(preview.total, 3);
   assert.deepEqual(
@@ -464,9 +575,9 @@ test('baseline, soy: a rated recall, then Pending with a photo, then Pending wit
   assert.equal(preview.locked, null);
 });
 
-test('baseline, milk: two rated with photos, a Pending with a photo, and a Pending match locked behind', () => {
+test('historical baseline, milk: two rated with photos, a Pending with a photo, and a Pending match locked behind', () => {
   const prefs = { states: [], allergens: ['milk'], retailers: [] };
-  const preview = buildReadyPreview(BASELINE, prefs, RECORDED_DAY, RECORDED_AT, ALL_LOADED);
+  const preview = buildReadyPreview(HISTORICAL, prefs, HISTORICAL_DAY, HISTORICAL_AT, ALL_LOADED);
   assert.ok(preview.kind === 'matches');
   assert.equal(preview.total, 5);
   assert.deepEqual(
@@ -478,12 +589,12 @@ test('baseline, milk: two rated with photos, a Pending with a photo, and a Pendi
   assert.equal(hasLockedMatches(preview), true);
 });
 
-test('baseline, one and two matches total: every match readable, nothing locked', () => {
+test('historical baseline, one and two matches total: every match readable, nothing locked', () => {
   const two = buildReadyPreview(
-    BASELINE,
+    HISTORICAL,
     { states: [], allergens: ['tree nuts'], retailers: [] },
-    RECORDED_DAY,
-    RECORDED_AT,
+    HISTORICAL_DAY,
+    HISTORICAL_AT,
     ALL_LOADED,
   );
   assert.ok(two.kind === 'matches');
@@ -494,10 +605,10 @@ test('baseline, one and two matches total: every match readable, nothing locked'
   );
   assert.equal(two.locked, null);
   const one = buildReadyPreview(
-    BASELINE,
+    HISTORICAL,
     { states: [], allergens: [], retailers: ['costco'] },
-    RECORDED_DAY,
-    RECORDED_AT,
+    HISTORICAL_DAY,
+    HISTORICAL_AT,
     ALL_LOADED,
   );
   assert.ok(one.kind === 'matches');
