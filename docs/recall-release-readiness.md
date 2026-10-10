@@ -4,7 +4,17 @@ Status: **the repository side of an iOS release is configured and verified
 (2026-09-16; re-verified 2026-09-22 — see §9). Nothing has been built, signed,
 submitted, or registered with Apple.** No Apple Developer account exists yet,
 so every step from "produce an installable binary" onward is blocked on an
-input this repository cannot supply. This document records what is decided,
+input this repository cannot supply.
+
+**Update (2026-10-10).** That Apple block is lifted: the founder activated
+the Apple Developer Program membership on 2026-10-04 and has since installed
+signed `preview` builds on a physical iPhone for sandbox purchase QA
+([recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md) §10;
+founder-reported, not agent-reproduced). **Not recorded:** the iPhone model,
+its iOS version, the EAS build IDs and build numbers, and the signing
+credentials EAS created. **No `production` archive, TestFlight build or App
+Store submission exists.** §6 carries the per-item state; the dated sections
+below it (§8–§11) are kept as written. This document records what is decided,
 what each command does, and what is genuinely still missing — separately, so
 neither is mistaken for the other.
 
@@ -113,11 +123,12 @@ EXPO_PUBLIC_SUPABASE_URL." Their **values are deliberately not recorded in
 this repository** — `.env` is gitignored, and EAS is the only place the build
 reads them from.
 
-`preview` and `development` are **deliberately left unconfigured**: both still
-report "No variables found for this environment." Only the `production`
-profile is on the TestFlight path, so neither is needed yet. A build on either
-profile would produce an app whose Feed shows the "Recalls are unavailable"
-state; the commands above close that gap whenever one of them is next used.
+`preview` **now holds the three public variables by the founder's report**
+(set for the sandbox builds in §7; not re-listed with `eas env:list` here).
+`development` is **deliberately left unconfigured** and, when last listed,
+reported "No variables found for this environment." A `development` build
+would produce an app whose Feed shows the "Recalls are unavailable" state;
+the commands above close that gap whenever it is next used.
 See §6.
 
 The server-only values (`SUPABASE_SECRET_KEY`, `WATCHDOG_SHARED_SECRET`, and
@@ -275,27 +286,40 @@ is consequently **still unreproduced**; see §8.
 under a release configuration on a physical device, that the error boundary
 renders correctly there, that the splash and icon composite properly, and that
 deep links on the `lotly` scheme resolve on a device. Screenshots and the
-simulator cannot establish any of these.
+simulator cannot establish any of these. Signed `preview` builds now exist
+(founder-reported, 2026-10-04/05), so the release launch on a device is
+implied by the purchase QA; the error boundary, the splash and icon, the name
+under the icon, the notification-permission dialog and `lotly://` deep links
+on a device are **unknown** — nothing records them either way.
 
-## 6. Blocked on Apple enrollment
+## 6. Apple enrollment (was the blocker; lifted 2026-10-04)
 
-The Apple Developer Program membership is not active. Until it is, **no iOS
-binary of any kind can be produced through EAS**, because every profile builds
-for a device and device builds require signing credentials:
+Until enrollment, **no iOS binary of any kind could be produced through
+EAS**, because every profile but `simulator` builds for a device and device
+builds require signing credentials. State as of 2026-10-10, from the
+founder's reports:
 
-- [ ] Apple Developer Program membership (and the §1 entity decision in
-      `recall-launch-blockers.md` — guideline 5.1.1(ix) prefers a legal entity
-      for apps in regulated fields, which interacts with whose account this is).
-- [ ] Register `com.willisyang.lotly` as an App ID.
-- [ ] Create the App Store Connect app record.
-- [ ] Signing credentials (distribution certificate, provisioning profiles).
-      EAS can manage these once an account exists; none exist now.
-- [ ] Register the founder's device UDID, for `development` and `preview`
-      installs.
+- [x] Apple Developer Program membership — active, with agreements, tax and
+      banking (2026-10-04). The §1 entity decision in
+      `recall-launch-blockers.md` is still open: guideline 5.1.1(ix) prefers
+      a legal entity for apps in regulated fields, which interacts with whose
+      account this is.
+- [x] `com.willisyang.lotly` registered (the founder's 2026-10-04 setup names
+      the bundle and its two subscription products).
+- [ ] App Store Connect app record — **unknown**. The subscription products
+      exist in App Store Connect, which implies a record, but its creation
+      and metadata state are not recorded.
+- [x] Signing for `preview` (ad hoc) — implied by the installed signed
+      `preview` builds; the certificate and profile details are not
+      recorded. Store-distribution signing for `production` is **unknown**
+      until the first `production` build.
+- [x] The test iPhone's UDID — implied by the `preview` installs; not
+      recorded which device.
 - [ ] APNs key, **only** when push is activated — it stays off
-      (`recall-push-delivery.md`).
-- [ ] Set the two `EXPO_PUBLIC_` variables in each EAS environment (§2). Not
-      itself Apple-blocked, but pointless before a build can run.
+      (`recall-push-delivery.md`). Whether EAS has already created one is
+      unknown.
+- [x] The public `EXPO_PUBLIC_` variables on `production` (all three) and
+      `preview` (all three, founder-reported) — §2.
 
 **The simulator route, taken in P3C1.5.** A simulator build needs no Apple
 account, so the `simulator` profile above is the one way to get a native
@@ -326,7 +350,8 @@ simulator build (`npx expo run:ios`) succeeded on this same Xcode 26.3 / Swift
 6.2.4. Its `ExpoModulesJSI` xcframework phase reused a simulator slice that the
 script's source-hash cache had kept since 2026-09-17 22:54, so a from-scratch
 compile of that header under Swift 6.2.4 was not re-proven. A local device
-build still needs signing, and so still waits on enrollment.
+build still needs signing; enrollment no longer blocks it (§6 above), but none
+has been recorded.
 
 ## 7. Still pending, not blocked by Apple
 
@@ -341,20 +366,29 @@ build still needs signing, and so still waits on enrollment.
 - **App Privacy answers**, including the unresolved health/coarse-location
   rows, and the app-level privacy manifest that must match them
   (`recall-app-store-readiness.md` §1–2).
-- **Export-compliance declaration.** The audit concluded the app uses only
-  exempt (OS/HTTPS) encryption, so `ios.config.usesNonExemptEncryption: false`
-  is the expected answer. It is **not** set: it is a compliance assertion, and
-  it belongs to submission prep with the rest of the questionnaire.
+- **Export-compliance declaration — set.** The audit concluded the app uses
+  only exempt (OS/HTTPS) encryption. `app.json` now sets
+  `ios.infoPlist.ITSAppUsesNonExemptEncryption: false` directly; Expo's
+  `ios.config.usesNonExemptEncryption` plugin makes no change when its own
+  key is absent, so the Info.plist value stands, and
+  `npx expo config --type introspect` resolves it to `false`. Still to
+  confirm at the first TestFlight upload that App Store Connect accepts the
+  build without asking.
 - **Onboarding and the hard paywall — built (P2B7X.1, 2026-09-23); the
-  RevenueCat adapter — implemented (P2B7X.2, 2026-10-04), unverified on a
-  device.** The release build now constructs the RevenueCat provider; with
+  RevenueCat adapter — implemented (P2B7X.2, 2026-10-04) and
+  sandbox-verified on a physical iPhone (founder-reported, 2026-10-04 and
+  2026-10-05).** The release build constructs the RevenueCat provider; with
   the public key absent, off iOS, or without the native module it falls back
-  to the fail-closed `unconfigured` provider. No purchase, restore or
-  sandbox transaction has been made yet
+  to the fail-closed `unconfigured` provider. The founder's `preview` builds
+  completed sandbox purchases, cancel, restore, expiry, relaunch and the
+  purchase-sheet background/return case
   ([recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md)
-  §5.2, §10). Guideline 3.1.x applies from now on.
+  §5.2, §10); no purchase has been checked from a TestFlight build yet.
+  Guideline 3.1.x applies from now on.
 
-  **The device sandbox build, when authorized** (nothing below has been run):
+  **The device sandbox build, as the founder ran it** (steps kept for the
+  next device or tester; the `preview` environment now holds the three
+  public variables by the founder's report, not re-listed here):
   1. Set the three public variables on the EAS environment the build
      profile uses. `preview` is the natural sandbox profile (a release
      bundle, `distribution: internal`, no dev client, so `__DEV__` is false
@@ -381,7 +415,9 @@ preview`.
 - **Push activation** — built, deliberately inactive, and activated only by
   `npm run push:activate` when the founder decides.
 - **Shopper reports** — the server gate stays off.
-- **A signed archive and a TestFlight build** — neither exists.
+- **A `production` archive and a TestFlight build** — neither exists. Signed
+  `preview` (ad hoc) builds do exist (founder-reported; build IDs not
+  recorded).
 
 ## 8. Working tree at the time of writing
 

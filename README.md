@@ -16,8 +16,10 @@ only on cold launch and pull-to-refresh. **Ingestion freshness is
 operations-only** — shoppers never see "last checked" times or stale-state
 messaging, and a refresh that fails over recalls already on screen is
 silent; the founder is alerted instead by a dead-man heartbeat, which is
-built and wired but **not yet live** (the Healthchecks check is paused
-pending a push). No migration is involved. **Onboarding and the hard paywall
+built and wired, and the workflow step that pings it is on `master`; whether
+the Healthchecks check has been unpaused is **not recorded** (see
+[docs/recall-production-runbook.md](docs/recall-production-runbook.md)
+§16.4). No migration is involved. **Onboarding and the hard paywall
 are built (P2B7X.1; restructured 2026-09-28)**: a first launch walks
 Welcome → two CDC problem-framing screens → States → Allergens → Stores →
 a one-time "building your watch" interstitial → Ready (a horizontal
@@ -26,8 +28,10 @@ matching layer) → a dedicated paywall with no way past it but a verified
 purchase or restore, then a one-time notification education; every product
 route is a protected route the navigator does not have outside its phase. The
 RevenueCat adapter is connected behind the purchase boundary (P2B7X.2,
-2026-10-04) but **unverified on a device** — no purchase has been made; a
-build without the public key still runs the fail-closed provider (see
+2026-10-04); founder-reported physical-device sandbox QA (2026-10-04 and
+2026-10-05) covered purchase, cancel, restore, expiry, relaunch and the
+purchase-sheet background/return case. A build without the public key still
+runs the fail-closed provider (see
 [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md)). See
 [docs/recall-production-runbook.md](docs/recall-production-runbook.md) §16
 and §18. Push delivery machinery — registration, the
@@ -546,9 +550,9 @@ via manual input, not location permissions. See
 
 ## Intentionally not implemented yet
 
-Accounts/auth, a device-verified purchase (the RevenueCat adapter and the
-App Store products exist — P2B7X.2 — but no sandbox transaction has been
-made), quiet hours and other notification preferences, ingest-time retailer
+Accounts/auth, a purchase verified from a TestFlight or App Store build
+(sandbox purchases on `preview` builds are founder-verified — P2B7X.2),
+quiet hours and other notification preferences, ingest-time retailer
 enrichment of stored projections, pet-food scope, Spanish records, CPSC/NHTSA,
 analytics, final visual design. Native
 sharing is deferred on purpose — its founder contract (an HTTPS Lotly

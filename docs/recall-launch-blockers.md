@@ -154,10 +154,13 @@ Already done by the founder:
 
 Remaining, and it is the **P0**:
 
-- [ ] **Unpause the Healthchecks check**, after the workflow that pings it
-      is on `master`. Until then the check is paused and nothing is
-      watching; the workflow step itself is harmless either way (it exits 0
-      and prints `NOT CONFIGURED` when the secret is absent).
+- [ ] **Unpause the Healthchecks check.** Its precondition is met: the
+      workflow that pings it is on `master` (`577e06d`, `8ce5d5f`, both
+      pushed). Whether the check has since been unpaused is **not
+      recorded** — confirm on the Healthchecks dashboard. While it is
+      paused nothing is watching; the workflow step itself is harmless
+      either way (it exits 0 and prints `NOT CONFIGURED` when the secret is
+      absent).
 - [ ] Confirm branch protection on `master` (it is the deploy channel) and
       whether GitHub emails you when a **watchdog-dispatched** run fails.
 
@@ -191,27 +194,33 @@ Everything in §3, plus (tracked in `recall-app-store-readiness.md`):
 1. Support URL with a real destination.
 2. App Privacy answers finalized (health + coarse-location rows) and the
    app-level privacy manifest populated to match.
-3. Export-compliance declaration added to the build config.
+3. Export-compliance declaration added to the build config — **set**:
+   `app.json` → `ios.infoPlist.ITSAppUsesNonExemptEncryption: false` (exempt
+   OS/HTTPS encryption only). Still to confirm at the first TestFlight
+   upload that App Store Connect accepts it without asking.
 4. Age rating completed.
 5. Push-notification production credentials/build path (out of C7's scope;
    push delivery itself remains not activated).
 6. Final review that the shipped build's behavior still matches the label
    (the C7 tests keep the no-tracking and no-analytics claims pinned).
-7. **Subscription launch (P2B7X.2 — adapter implemented 2026-10-04,
-   device-unverified).** P2B7X.1 built the hard paywall, the access gate and
+7. **Subscription launch (P2B7X.2 — adapter implemented 2026-10-04;
+   sandbox-verified on a physical iPhone, founder-reported, 2026-10-04 and
+   2026-10-05).** P2B7X.1 built the hard paywall, the access gate and
    the typed purchase boundary; on 2026-10-04 the founder completed Apple
    enrollment, the subscription products, the RevenueCat entitlement and
    offering and the public key on EAS `production`, and the RevenueCat
    adapter now sits behind `PurchaseProvider` with the key recorded as the
    third `EXPO_PUBLIC_` variable
    ([recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md)
-   §5.2, §10). Still needed before the subscription can be called working: a
-   physical-device sandbox build with real purchase, cancel and restore
-   ([recall-release-readiness.md](recall-release-readiness.md) §7), the
-   Terms/Privacy/Support destinations above, subscription language in the
-   EULA decision, and the App Privacy "Purchases" answer. A build without
-   the key still fails closed: the paywall shows the could-not-confirm state
-   and nothing grants access.
+   §5.2, §10). The founder's `preview`-build sandbox QA covered annual and
+   monthly purchase, cancel, restore after reset and reinstall, expiry,
+   relaunch, the unified paywall and the purchase-sheet background/return
+   case (recorded in the paywall doc §10; not agent-reproduced). Still
+   needed before launch: the Terms/Privacy/Support destinations above,
+   subscription language in the EULA decision, the App Privacy "Purchases"
+   answer, and a purchase check from the TestFlight build itself. A build
+   without the key still fails closed: the paywall shows the
+   could-not-confirm state and nothing grants access.
 8. Expo display name: **applied by P3C1 (2026-09-16)** — `app.json` now
    names the app `Lotly`, with scheme `lotly` and bundle identifier
    `com.willisyang.lotly` (iPhone-only). What remains is the native release

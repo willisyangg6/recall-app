@@ -10,7 +10,10 @@
     "ios": {
       "icon": "./assets/brand/production/lotly-icon-ios-1024.png",
       "bundleIdentifier": "com.willisyang.lotly",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {

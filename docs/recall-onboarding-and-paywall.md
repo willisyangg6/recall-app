@@ -334,7 +334,10 @@ info — and **never from `Date.now()`**: the SDK answers from a cache minutes
 old, and dating a cached answer with the device clock would turn
 pre-purchase data into a fresh revocation.
 `entitlement-session.test.ts` drives all of this with a fake provider whose
-every answer the test releases by hand.
+every answer the test releases by hand. On 2026-10-05 the founder reported
+the case on a physical iPhone against the Apple sandbox: backgrounding
+during the purchase sheet, returning and completing the purchase kept the
+entitlement (§10).
 
 `src/hooks/use-access.tsx` is the provider that performs all of this once,
 above the stack, and exposes the phase and the transitions.
@@ -2155,8 +2158,9 @@ before). User cancellation, purchase error, restore-finds-nothing and the
 unavailable offering each render their existing notice; a simulated annual
 purchase on `/paywall` with education pending opens education. Large text
 (AX sizes) and Reduce Motion were checked on the 17. The founder's
-physical-device results are recorded separately in §10; the
-purchase-sheet background/return case remains unverified on a device.
+physical-device results — including this unified design on the updated
+preview build and the purchase-sheet background/return case — are recorded
+separately in §10.
 
 **Grocery-watch hero (prepared 2026-10-01; founder-approved on the cream
 page and imported the same day).** The approved grocery-watch target
@@ -2530,7 +2534,7 @@ carries the meaning; every icon is decorative and hidden from assistive
 technology. Every row uses one treatment: a 20 pt glyph, `icon/secondary`
 unchecked and `icon/primary` checked, with the checkbox carrying the state.
 
-## 10. P2B7X.2 — connecting the real store (adapter implemented 2026-10-04; device-unverified)
+## 10. P2B7X.2 — connecting the real store (adapter implemented 2026-10-04; sandbox-verified on a physical iPhone, founder-reported)
 
 What exists, and what still stands between it and a verified purchase:
 
@@ -2553,18 +2557,30 @@ What exists, and what still stands between it and a verified purchase:
    in `resolvePurchaseProvider` constructs it with `purchaseIdentity`.
 3. **The public variable — recorded** in `release-exposure.test.ts`,
    `.env.example` and the release-readiness doc.
-4. **Founder device QA (2026-10-04, physical iPhone, Apple sandbox) —
-   reported by the founder, not reproduced here:** annual and monthly
-   sandbox purchases succeeded; purchase cancellation; restore after the
-   data reset and after deleting and reinstalling; relaunch preserved active
-   access; a monthly expiry removed access and opened the paywall. **Still
-   unverified on a device:** the purchase-sheet background/return case
-   (§4.1). Earlier local verification, before that QA: Local verification covered the mapping and the
+4. **Founder-reported physical-device QA (Apple sandbox, `preview`
+   builds) — reported by the founder, not reproduced by an agent.**
+   - _2026-10-04, first build:_ annual and monthly sandbox purchases
+     succeeded; purchase cancellation; restore after the data reset and
+     after deleting and reinstalling; relaunch preserved active access; a
+     monthly expiry removed access and opened the paywall. The same run
+     found the paywall design inconsistency fixed in §6.7.1.
+   - _2026-10-05, updated build with the unified paywall:_ an expired
+     user's relaunch opens the approved grocery-watch paywall; Back → Ready
+     → `See my plan` shows the same design; Annual/Monthly selection, the
+     purchase price and the renewal copy agree; **backgrounding during
+     Apple's purchase sheet, returning and completing the sandbox purchase
+     succeeds** (the §4.1 ordering, now exercised on a device); the correct
+     post-purchase destination opens; force-close and relaunch preserve
+     access.
+
+   Earlier local verification, before that QA, covered the mapping and the
    ordering in Node, a release export whose bundle contains the provider and
    none of the development adapter, and a Release compile onto a dedicated QA
-   simulator — all with the key absent, so all on the fail-closed path. A
-   physical-device sandbox build is the next step
-   ([recall-release-readiness.md](recall-release-readiness.md) §6).
+   simulator — all with the key absent, so all on the fail-closed path.
+   **Still open, not covered by this QA:** live purchase and restore from
+   a TestFlight or App Store build (sandbox under a production Apple
+   Account), VoiceOver listening on a device, and everything in items 5–6.
+
 5. Supply the Terms, Privacy and Support destinations and make
    `qa:launch-readiness` pass.
 6. Update the App Privacy answers (Purchases: collected, linked to the
