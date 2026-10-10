@@ -527,9 +527,14 @@ test('the callout, media tile and notice label are token-only primitives with th
   // every page of a set is that same tile.
   assert.match(IMAGE_SET, /<MediaTile\s+uri=\{pages\[0\]\.url\}/);
   assert.match(IMAGE_SET, /<MediaTile\s+uri=\{item\.url\}/);
-  // The notice label: label type on the neutral surface, spoken as the contract's words.
+  // The notice label: the kit's badge type on its own informational palette,
+  // spoken as the contract's words.
   assert.ok(NOTICE_LABEL.includes('accessibilityLabel={label}'));
-  assert.ok(NOTICE_LABEL.includes('<Text variant="label">{label.toUpperCase()}</Text>'));
+  assert.ok(NOTICE_LABEL.includes("const palette = noticeTypePalette['public-health-alert'];"));
+  assert.match(
+    NOTICE_LABEL,
+    /<Text style=\{\[labelType\.badge[^>]*>\s*\{label\.toUpperCase\(\)\}\s*<\/Text>/,
+  );
   assert.ok(DETAIL.includes('<NoticeLabel label={model.noticeTypeLabel} />'));
   // The state message is shared between the Feed and Detail.
   assert.ok(STATE_MESSAGE.includes('export function StateMessage'));

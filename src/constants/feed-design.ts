@@ -12,23 +12,16 @@
  * 20pt card title, 12/16 bold badges, radius 5/6/14/20) are therefore
  * declared here, for the Feed's header, its cards and its Filters sheet
  * only, over the SAME loaded Public Sans faces. Nothing here recolours a
- * global token: the Critical override below is the card and sheet label's
- * own, so Detail, the illness notices and every other RiskLabel keep the
- * documented palette until a separate approval.
+ * global token. The card's white-on-red Critical, once an override here,
+ * became the one risk palette with the label kit (2026-10-09), so risk
+ * colours are design-tokens.ts's `riskPalette` everywhere.
  */
 
 import type { TextStyle } from 'react-native';
 
 import type { IconName } from '@/components/ui/icon';
-import {
-  CUSTOM_FONTS_INSTALLED,
-  fontFace,
-  riskPalette,
-  type HexColor,
-  type LabelPalette,
-} from '@/constants/design-tokens';
+import { CUSTOM_FONTS_INSTALLED, fontFace, type HexColor } from '@/constants/design-tokens';
 import type { FoodCategoryId } from '@/domain/food-category';
-import type { ConsumerRiskTier } from '@/domain/risk-tier';
 
 export const feedColor = {
   page: '#FDFCF6',
@@ -134,18 +127,6 @@ export const feedType = {
   metaStrong: sans('700', 14, 20),
   badge: sans('700', 12, 16),
 } as const satisfies Record<string, TextStyle>;
-
-/**
- * The card's and the Filters sheet's risk label colours. Every tier is the
- * documented `riskPalette` EXCEPT Critical, which the approved Feed design
- * draws white on red (#DC001D, 5.17:1). Scoped here on purpose: the global
- * palette also colours Detail's label and the illness/death notices, which
- * await their own approval.
- */
-export const feedRiskPalette: Record<ConsumerRiskTier, LabelPalette> = {
-  ...riskPalette,
-  critical: { background: '#DC001D', foreground: '#FFFFFF', border: '#DC001D' },
-};
 
 export interface CategoryStyle {
   icon: IconName;

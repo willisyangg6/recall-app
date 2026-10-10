@@ -302,11 +302,11 @@ test('the Critical treatment is canonical and label/Critical is retired', () => 
   const body = sectionBody('### Risk colors');
   assert.match(
     body,
-    /\| Critical\s+\| `risk\/critical`\s+\| `#EF4E47`\s+\| `#001F3E`\s+\| `#C82728`\s+\|/,
+    /\| Critical\s+\| `risk\/critical`\s+\| `#DC001D`\s+\| `#FFFFFF`\s+\| 5\.17:1\s+\|/,
   );
   assert.ok(body.includes('**Critical is one treatment everywhere.**'));
   assert.ok(body.includes('`label/Critical`'));
-  assert.ok(body.includes('obsolete'));
+  assert.ok(body.includes('stays retired'));
   for (const label of ['Critical', 'Very High', 'High', 'Moderate', 'Low', 'Pending', 'Unknown']) {
     assert.match(body, new RegExp(`\\| ${label}\\s+\\|`), label);
   }

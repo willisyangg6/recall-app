@@ -124,6 +124,16 @@ const GLYPHS = {
   thermometer: require('@/assets/icons/thermometer.png') as ImageSourcePropType,
   'utensils-crossed': require('@/assets/icons/utensils-crossed.png') as ImageSourcePropType,
   wind: require('@/assets/icons/wind.png') as ImageSourcePropType,
+  // The risk and harm label kit (2026-10-09): the kit's own pinned
+  // lucide-static 0.468.0 rasters, each scale rendered directly from its SVG
+  // at stroke 2. `label-info` and `label-triangle-alert` are the same Lucide
+  // shapes as `info` and `warning`, but those are the heavier 2.4-stroke
+  // Figma exports the callouts keep; the harm notices need all four at one
+  // stroke. The mapping is src/constants/label-design.ts.
+  'label-info': require('@/assets/icons/label-info.png') as ImageSourcePropType,
+  'label-triangle-alert': require('@/assets/icons/label-triangle-alert.png') as ImageSourcePropType,
+  'label-square-plus': require('@/assets/icons/label-square-plus.png') as ImageSourcePropType,
+  'label-circle-alert': require('@/assets/icons/label-circle-alert.png') as ImageSourcePropType,
 } as const;
 
 export type IconName = keyof typeof GLYPHS;

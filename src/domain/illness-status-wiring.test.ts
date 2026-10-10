@@ -214,9 +214,10 @@ test('one fact is one box: the boxes are never recombined into a shared containe
   // each COMPLETE — its own border, its own glyph, its own treatment, its own
   // accessible element.
   assert.match(NOTICE, /copy\.notices\.map\(/);
-  // Exactly one bordered box definition, used per notice — not one wrapper
-  // border with lines inside it.
-  assert.equal((NOTICE.match(/borderWidth: 1/g) ?? []).length, 1);
+  // Exactly one box definition, used per notice — not one wrapper with lines
+  // inside it. (Since the label kit, 2026-10-09, the boxes are flat fills.)
+  assert.equal((NOTICE.match(/borderWidth:/g) ?? []).length, 1);
+  assert.ok(NOTICE.includes('borderWidth: labelGeometry.harmBorderWidth'));
   // The glyph is rendered inside the per-notice box, keyed off that box's own
   // tone: a single shared glyph above a list of lines cannot come back.
   assert.match(NOTICE, /GLYPH\[notice\.tone\]/);
@@ -230,21 +231,25 @@ test('one fact is one box: the boxes are never recombined into a shared containe
 });
 
 test('no harm box has a fixed height — every one grows with Dynamic Type', () => {
-  // The only `height` in the file is the glyph box, which is deliberately one
-  // caption LINE tall so the icon stays centred on the first line of text at
-  // any reader type size. A height on the box itself, or a minHeight, would
-  // clip a wrapped sentence at accessibility sizes.
-  const heights = NOTICE.match(/\bheight: [^,\n]+/g) ?? [];
-  assert.deepEqual(heights, ['height: typography.caption.lineHeight']);
-  assert.ok(!NOTICE.includes('minHeight'), 'a harm box has a minimum height');
+  // No fixed height anywhere: a fixed height would clip a wrapped sentence at
+  // accessibility sizes. The label kit (2026-10-09) gives each box a 28pt
+  // FLOOR, and the glyph box a floor of one harm line at the reader's text
+  // scale so the icon stays centred on the first line; both only grow.
+  assert.deepEqual(NOTICE.match(/\bheight: [^,\n]+/g) ?? [], []);
+  assert.deepEqual(NOTICE.match(/minHeight: [^,\n}]+/g) ?? [], [
+    'minHeight: HARM_LINE_HEIGHT * fontScale ',
+    'minHeight: labelGeometry.minHeight',
+  ]);
   assert.ok(!NOTICE.includes('maxHeight'));
   assert.ok(!NOTICE.includes('numberOfLines'), 'a harm sentence can be truncated');
 });
 
 test('the notice is visually distinct from the Risk Label and the Affects You callout', () => {
-  // Sentence-case caption type, not the Risk Label's uppercase mono `label`.
-  assert.match(NOTICE, /variant="caption"/);
-  assert.ok(!NOTICE.includes('variant="label"'), 'that is the Risk Label’s type');
+  // Sentence-case 13/18 semibold harm type, not the Risk Label's uppercase
+  // 12/16 bold badge type.
+  assert.match(NOTICE, /labelType\.harm/);
+  assert.ok(!NOTICE.includes('labelType.badge'), 'that is the Risk Label’s type');
+  assert.ok(!NOTICE.includes('toUpperCase'), 'a harm sentence is never shouted');
   assert.ok(!NOTICE.includes('riskPalette'), 'illness status is not a risk level');
   assert.ok(!NOTICE.includes('relevancePalette'), 'illness status is not personal relevance');
   // Auto-width: it is not a full-width band like the Affects You callout.

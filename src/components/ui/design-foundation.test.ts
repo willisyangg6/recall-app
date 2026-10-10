@@ -92,9 +92,11 @@ test('spacing and radii in the primitives come only from the approved scales', (
   for (const [name, source] of Object.entries(UI)) {
     assert.ok(!OFF_SCALE_NUMBER.test(source), `${name} has no numeric padding/margin/gap/radius`);
   }
-  assert.ok(RISK_LABEL.includes('paddingHorizontal: spacing[8]'));
-  assert.ok(RISK_LABEL.includes('paddingVertical: spacing[4]'));
-  assert.ok(RISK_LABEL.includes('borderRadius: radius[4]'));
+  // The risk label's shape is the approved label kit's (2026-10-09), declared
+  // once in constants/label-design.ts and pinned there.
+  assert.ok(RISK_LABEL.includes('paddingHorizontal: labelGeometry.paddingX'));
+  assert.ok(RISK_LABEL.includes('paddingVertical: labelGeometry.paddingY'));
+  assert.ok(RISK_LABEL.includes('borderRadius: labelGeometry.radius'));
   assert.ok(SURFACE.includes('borderRadius: radius[radiusStep]'));
 });
 
@@ -123,9 +125,12 @@ test('the Risk Label looks its treatment up by the domain tier from the seven-la
   assert.ok(RISK_LABEL.includes('backgroundColor: palette.background'));
   assert.ok(RISK_LABEL.includes('borderColor: palette.border'));
   assert.ok(RISK_LABEL.includes('color: palette.foreground'));
-  assert.ok(RISK_LABEL.includes('borderWidth: 1'));
-  assert.ok(RISK_LABEL.includes('variant="label"'));
-  assert.ok(RISK_LABEL.includes('minHeight: layout.riskLabelHeight'));
+  // The label kit's shape and type (2026-10-09; constants/label-design.ts).
+  assert.ok(RISK_LABEL.includes('borderWidth: labelGeometry.riskBorderWidth'));
+  assert.ok(RISK_LABEL.includes('labelType.badge'));
+  assert.ok(RISK_LABEL.includes('minHeight: labelGeometry.minHeight'));
+  assert.ok(!RISK_LABEL.includes('variant="label"'), 'the retired mono risk label');
+  assert.ok(!/<Icon\b/.test(RISK_LABEL), 'a risk label carries no severity glyph');
   // One size. The retired "large" Detail variant is gone.
   assert.ok(!/size\??:/.test(RISK_LABEL));
   assert.ok(!RISK_LABEL.includes('large'));
@@ -153,62 +158,42 @@ test('Critical has exactly one treatment: the palette is read only through named
   // A READ of the palette (`riskPalette[` / `riskPalette.`), not a mention:
   // theme.ts re-exports it and comments may name it.
   //
-  // P2B7K made this absolute — the Risk Label and nothing else — so that the
-  // compact illness notice could not borrow Critical's red and become a
-  // second Critical. P2B7V is the founder's deliberate reversal for ONE case,
-  // and it is narrower than it looks: a reported death IS the app's most
-  // severe consumer fact, and giving it a treatment of its own invented hue
-  // would have been the second vocabulary this rule exists to prevent.
-  //
-  // What the rule becomes is therefore not "one reader" but "one definition,
-  // reached only through a NAMED semantic map". `harmNoticePalette` in the
-  // contract is that map, and it holds references rather than values (pinned
-  // in `constants/design-tokens.test.ts`). No screen and no component may
-  // index the risk palette directly; the Risk Label remains the only
-  // component that does.
+  // The label kit (2026-10-09) made one risk palette canonical everywhere:
+  // the Feed's scoped white-on-red Critical became `riskPalette` itself, and
+  // the harm notices left it for an explicit palette of their own. So the
+  // readers are exactly the Risk Label (every risk badge, on every surface)
+  // and the Filters sheet's chosen risk options — which are risk options, in
+  // the risk palette, by design. No harm, callout or other component reads it.
   const readers = clientSources()
     .filter(({ source }) => /\briskPalette[[.]/.test(source))
     .map(({ path }) => path)
     .sort();
   assert.deepEqual(readers, [
+    'components/feed/filters-sheet.tsx',
     'components/ui/design-foundation.test.ts',
     'components/ui/risk-label.tsx',
     'constants/design-tokens.test.ts',
-    'constants/design-tokens.ts',
-    // Proves the global palette is untouched by the Feed's override.
+    // Proves the Feed's former override is now the global Critical.
     'constants/feed-design.test.ts',
+    'constants/label-design.test.ts',
   ]);
-  // Components and screens reach severity only through the named maps.
+  // Components and screens reach severity only through those two.
   const components = clientSources().filter(
     ({ path }) => !path.endsWith('.test.ts') && !path.startsWith('constants/'),
   );
   for (const { path, source } of components) {
-    if (path === 'components/ui/risk-label.tsx') continue;
+    if (path === 'components/ui/risk-label.tsx' || path === 'components/feed/filters-sheet.tsx') {
+      continue;
+    }
     assert.ok(!/\briskPalette[[.]/.test(source), `${path} indexes the risk palette directly`);
   }
-  // The ONE sanctioned second Critical treatment (founder-approved Feed +
-  // Filters design, 2026-10-06): white on red for the Feed card's label and
-  // the Filters sheet's selected Critical option. It is a NAMED map, defined
-  // once in constants/feed-design.ts as the documented palette with Critical
-  // overridden, and read by exactly those two components — so Detail, the
-  // illness notices and every RiskLabel keep the one global treatment until
-  // their own approval.
-  const feedReaders = clientSources()
-    .filter(({ path }) => !/\.test\.tsx?$/.test(path))
-    .filter(({ source }) => /\bfeedRiskPalette[[.]/.test(source))
-    .map(({ path }) => path)
-    .sort();
-  assert.deepEqual(feedReaders, [
-    'components/feed/feed-labels.tsx',
-    'components/feed/filters-sheet.tsx',
-  ]);
-  const FEED_DESIGN = read('constants/feed-design.ts');
-  assert.ok(FEED_DESIGN.includes('...riskPalette,'));
-  assert.ok(
-    FEED_DESIGN.includes(
-      "critical: { background: '#DC001D', foreground: '#FFFFFF', border: '#DC001D' },",
-    ),
-  );
+  // There is no second Critical: the Feed's scoped override is gone, not
+  // dormant, and no product source spells a risk colour outside the tokens.
+  for (const { path, source } of clientSources().filter((f) => !/\.test\.tsx?$/.test(f.path))) {
+    assert.ok(!source.includes('feedRiskPalette'), `${path} names the retired Feed override`);
+    if (path === 'constants/design-tokens.ts') continue;
+    assert.ok(!/#DC001D/i.test(source), `${path} spells Critical's red`);
+  }
 });
 
 test('the harm notices are one treatment map, read only by their own component', () => {
@@ -220,6 +205,7 @@ test('the harm notices are one treatment map, read only by their own component',
     'components/ui/design-foundation.test.ts',
     'components/ui/illness-notice.tsx',
     'constants/design-tokens.test.ts',
+    'constants/label-design.test.ts',
   ]);
   // The retired single-treatment palette is gone, not left dormant beside the
   // new one: no definition of it, and no read of it. Comments may still name
@@ -435,9 +421,9 @@ function contrast(text: ColorToken, surface: ColorToken): number {
 }
 
 test('every harm notice clears WCAG AA on its own severity fill, icon included', () => {
-  // P2B7V puts sentence-case `caption` (12/500) and a 12pt glyph on the risk
-  // palette's own fills. Neither is large text, so both answer to the 4.5:1
-  // AA floor — and the glyph is tinted with the SAME foreground as the words,
+  // The label kit puts sentence-case 13/18 semibold and a 16pt glyph on each
+  // harm's own fill. Neither is large text, so both answer to the 4.5:1 AA
+  // floor — and the glyph is tinted with the SAME foreground as the words,
   // so proving the text legible proves the icon legible too.
   const AA = 4.5;
   for (const [tone, palette] of Object.entries(harmNoticePalette)) {

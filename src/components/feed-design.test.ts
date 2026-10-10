@@ -201,13 +201,13 @@ test('IBM Plex Mono is used only for compact status labels, never for words peop
   ]) {
     assert.ok(!codeOnly(source).includes('variant="label'), `${name} uses the mono label type`);
   }
-  // The card uses it exactly once: the Public Health Alert notice label,
-  // which sits beside the risk label and is the same kind of thing.
-  // The notice label is the shared primitive (P2B2); the card holds no
-  // mono text of its own.
+  // The card holds no mono text of its own, and since the label kit
+  // (2026-10-09) neither does the Public Health Alert notice label beside
+  // it: the risk and notice labels are 12/16 bold Public Sans.
   assert.equal((codeOnly(CARD).match(/variant="label"/g) ?? []).length, 0);
   assert.ok(CARD.includes("import { NoticeLabel } from '@/components/ui/notice-label';"));
-  assert.equal((codeOnly(NOTICE_LABEL).match(/variant="label"/g) ?? []).length, 1);
+  assert.equal((codeOnly(NOTICE_LABEL).match(/variant="label/g) ?? []).length, 0);
+  assert.ok(NOTICE_LABEL.includes('labelType.badge'));
   // The timestamp, name, brand, summary and location are Public Sans tokens.
   // P2B7H: the activity date is `caption` (12pt), not `micro-caption`
   // (10pt) — see the readable-metadata test below for the size contract.
@@ -638,8 +638,9 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
   // and the nine category glyphs (constants/feed-design.ts). The Recall
   // Detail kit (2026-10-07) added the title control's `chevron-up`, the
   // retailer line's `store`, and nine decorative symptom glyphs
-  // (lib/symptom-icons.ts). There is still no share glyph, and no bell
-  // control anywhere (detail-design.test.ts).
+  // (lib/symptom-icons.ts). The risk and harm label kit (2026-10-09) added
+  // the four stroke-2 label glyphs (constants/label-design.ts). There is
+  // still no share glyph, and no bell control anywhere (detail-design.test.ts).
   assert.deepEqual(glyphs, [
     'activity',
     'allergen-egg',
@@ -681,6 +682,10 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'hand',
     'home',
     'info',
+    'label-circle-alert',
+    'label-info',
+    'label-square-plus',
+    'label-triangle-alert',
     'list',
     'lock',
     'map',

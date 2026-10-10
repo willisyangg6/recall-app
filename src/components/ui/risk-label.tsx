@@ -1,12 +1,15 @@
 /**
- * The Risk Label (P2B0) — the one rendering of a consumer risk tier, on the
- * feed card, on Recall Detail, and in the development gallery alike.
+ * The Risk Label (P2B0; restyled by the label kit, 2026-10-09) — the one
+ * rendering of a consumer risk tier, on the Feed and Saved cards, the Ready
+ * cards, Recall Detail, the Risk Levels document and the development gallery
+ * alike.
  *
- * A 24pt compact label: IBM Plex Mono label type, uppercase text, 4pt radius,
- * a 1px border in the tier's own colour, and no shadow. The treatment is
- * looked up from `riskPalette` by the tier the domain derived — this file
- * holds no colour of its own, and the tier itself comes from
- * `domain/risk-tier.ts`, which nothing here touches.
+ * The kit's compact label: radius 5, at least 28pt tall, 8/6 padding, 12/16
+ * bold Public Sans, uppercase text, a flat fill (its 1pt border is the fill
+ * colour) and no shadow or glyph. The treatment is looked up from
+ * `riskPalette` by the tier the domain derived — this file holds no colour of
+ * its own, and the tier itself comes from `domain/risk-tier.ts`, which
+ * nothing here touches. The shape is constants/label-design.ts's.
  *
  * Critical on Detail is exactly Critical on the feed: the same seven tokens,
  * one component. There is no separate "critical" treatment anywhere.
@@ -15,7 +18,9 @@
  * risk is communicated. Colour is a second, redundant channel, so the label
  * remains fully readable in greyscale, under any colour-vision deficiency, and
  * to a screen reader (which announces the spoken label instead of "HIGH").
- * Font scaling is left to the platform — no cap here.
+ * Font scaling is left to the platform — no cap here. Only a label wider
+ * than its whole row (the accessibility text sizes) shrinks, and then its words
+ * wrap inside it rather than overflowing.
  *
  * `Affects You` is not a tier and cannot be rendered here: the prop is typed
  * to `ConsumerRiskTier`, and relevance has its own palette.
@@ -24,7 +29,8 @@
 import { StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
-import { layout, radius, riskPalette, spacing } from '@/constants/design-tokens';
+import { riskPalette } from '@/constants/design-tokens';
+import { labelGeometry, labelType } from '@/constants/label-design';
 import type { ConsumerRiskTier } from '@/domain/risk-tier';
 
 export function RiskLabel({
@@ -46,9 +52,7 @@ export function RiskLabel({
       accessibilityRole="text"
       accessibilityLabel={accessibilityLabel}
       style={[styles.label, { backgroundColor: palette.background, borderColor: palette.border }]}>
-      <Text variant="label" style={{ color: palette.foreground }}>
-        {label}
-      </Text>
+      <Text style={[labelType.badge, styles.text, { color: palette.foreground }]}>{label}</Text>
     </View>
   );
 }
@@ -57,10 +61,14 @@ const styles = StyleSheet.create({
   label: {
     alignSelf: 'flex-start',
     justifyContent: 'center',
-    minHeight: layout.riskLabelHeight,
-    paddingHorizontal: spacing[8],
-    paddingVertical: spacing[4],
-    borderRadius: radius[4],
-    borderWidth: 1,
+    flexShrink: 1,
+    minHeight: labelGeometry.minHeight,
+    paddingHorizontal: labelGeometry.paddingX,
+    paddingVertical: labelGeometry.paddingY,
+    borderRadius: labelGeometry.radius,
+    borderWidth: labelGeometry.riskBorderWidth,
+  },
+  text: {
+    flexShrink: 1,
   },
 });

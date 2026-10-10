@@ -33,45 +33,64 @@ colors:
   onboarding/progress: '#E2EE57'
   onboarding/benefit-plate: '#E1F0FE'
 
-  risk/critical/background: '#EF4E47'
-  risk/critical/foreground: '#001F3E'
-  risk/critical/border: '#C82728'
+  # Risk labels: the approved label kit (2026-10-09). Each border is its own
+  # fill, so the label reads flat.
+  risk/critical/background: '#DC001D'
+  risk/critical/foreground: '#FFFFFF'
+  risk/critical/border: '#DC001D'
 
-  risk/very-high/background: '#F28C28'
-  risk/very-high/foreground: '#001F3E'
-  risk/very-high/border: '#C86700'
+  risk/very-high/background: '#C84B0B'
+  risk/very-high/foreground: '#FFFFFF'
+  risk/very-high/border: '#C84B0B'
 
-  risk/high/background: '#F3B63F'
+  risk/high/background: '#F4BC83'
   risk/high/foreground: '#001F3E'
-  risk/high/border: '#C78C00'
+  risk/high/border: '#F4BC83'
 
-  risk/moderate/background: '#E8D348'
+  risk/moderate/background: '#F4D579'
   risk/moderate/foreground: '#001F3E'
-  risk/moderate/border: '#BBA600'
+  risk/moderate/border: '#F4D579'
 
-  risk/low/background: '#F2E76B'
+  risk/low/background: '#F7EDC4'
   risk/low/foreground: '#001F3E'
-  risk/low/border: '#C8BD3E'
+  risk/low/border: '#F7EDC4'
 
-  risk/pending/background: '#C0D6EB'
+  risk/pending/background: '#DCE8F4'
   risk/pending/foreground: '#001F3E'
-  risk/pending/border: '#D1D7D9'
+  risk/pending/border: '#DCE8F4'
 
   risk/unknown/background: '#EEF1F1'
   risk/unknown/foreground: '#4B585E'
-  risk/unknown/border: '#D1D7D9'
+  risk/unknown/border: '#EEF1F1'
 
   relevance/affects-you/background: '#E2EE57'
   relevance/affects-you/foreground: '#001F3E'
   relevance/affects-you/border: '#ADB600'
 
-  # Harm notices (P2B7V). illnesses -> risk/high, hospitalizations ->
-  # risk/very-high, deaths -> risk/critical: REFERENCES to the risk palette's
-  # own entries, never copies of its values, so they define no colour here and
-  # the death box moves with Critical. Only the denial has a value of its own.
-  harm-notice/none/background: '#C0D6EB'
-  harm-notice/none/foreground: '#001F3E'
-  harm-notice/none/border: '#C0D6EB'
+  # Harm notices: the label kit's own palette (2026-10-09), separate from the
+  # risk tiers. Hospitalizations and deaths share a colour and differ by words
+  # and glyph. Borders are recorded but not drawn (the notices are flat).
+  harm-notice/none/background: '#E7F1FA'
+  harm-notice/none/foreground: '#173F67'
+  harm-notice/none/border: '#C8DAEC'
+
+  harm-notice/illnesses/background: '#FFF3D7'
+  harm-notice/illnesses/foreground: '#7A370B'
+  harm-notice/illnesses/border: '#EBD7A8'
+
+  harm-notice/hospitalizations/background: '#FCE4E2'
+  harm-notice/hospitalizations/foreground: '#8A1919'
+  harm-notice/hospitalizations/border: '#EAB5B1'
+
+  harm-notice/deaths/background: '#FCE4E2'
+  harm-notice/deaths/foreground: '#8A1919'
+  harm-notice/deaths/border: '#EAB5B1'
+
+  # The Public Health Alert notice-type label (2026-10-09): informational
+  # blue with a visible 1pt border.
+  notice/public-health-alert/background: '#E7F1FA'
+  notice/public-health-alert/foreground: '#173F67'
+  notice/public-health-alert/border: '#C8DAEC'
 
 typography:
   stat:
@@ -487,15 +506,19 @@ Risk and relevance are different systems.
 Risk labels use this ordered severity system. All seven are the complete set;
 there is no eighth label and no second spelling of any of them:
 
-| Label     | Token prefix     | Background | Foreground | Border    |
-| --------- | ---------------- | ---------- | ---------- | --------- |
-| Critical  | `risk/critical`  | `#EF4E47`  | `#001F3E`  | `#C82728` |
-| Very High | `risk/very-high` | `#F28C28`  | `#001F3E`  | `#C86700` |
-| High      | `risk/high`      | `#F3B63F`  | `#001F3E`  | `#C78C00` |
-| Moderate  | `risk/moderate`  | `#E8D348`  | `#001F3E`  | `#BBA600` |
-| Low       | `risk/low`       | `#F2E76B`  | `#001F3E`  | `#C8BD3E` |
-| Pending   | `risk/pending`   | `#C0D6EB`  | `#001F3E`  | `#D1D7D9` |
-| Unknown   | `risk/unknown`   | `#EEF1F1`  | `#4B585E`  | `#D1D7D9` |
+| Label     | Token prefix     | Background | Foreground | Contrast |
+| --------- | ---------------- | ---------- | ---------- | -------- |
+| Critical  | `risk/critical`  | `#DC001D`  | `#FFFFFF`  | 5.17:1   |
+| Very High | `risk/very-high` | `#C84B0B`  | `#FFFFFF`  | 4.70:1   |
+| High      | `risk/high`      | `#F4BC83`  | `#001F3E`  | 9.77:1   |
+| Moderate  | `risk/moderate`  | `#F4D579`  | `#001F3E`  | 11.57:1  |
+| Low       | `risk/low`       | `#F7EDC4`  | `#001F3E`  | 14.12:1  |
+| Pending   | `risk/pending`   | `#DCE8F4`  | `#001F3E`  | 13.35:1  |
+| Unknown   | `risk/unknown`   | `#EEF1F1`  | `#4B585E`  | 6.47:1   |
+
+These are the founder-approved label kit's values (2026-10-09,
+`docs/lotly-risk-illness-labels-source-kit/`). Every border equals its
+background, so the labels read as flat fills.
 
 `Pending` and `Unknown` deliberately leave the red-to-yellow severity
 spectrum. They communicate classification state, not danger.
@@ -504,12 +527,12 @@ The risk scale does **not** use green. Never make a low-severity recall green
 or describe green as "safe."
 
 **Critical is one treatment everywhere.** The canonical Critical label is
-`risk/critical` — `#EF4E47` background, `#001F3E` foreground, `#C82728`
-border, visible label `CRITICAL` — on the feed card, on Recall Detail, and in
-any gallery. The older darker-red/white `label/Critical` treatment on the
-Recall Detail frame (bound to `tomato/500` with white text) is obsolete: it is
-not reproduced in code, and it is retired in Figma (see "Figma corrections for
-Cheyenne").
+`risk/critical` — white on `#DC001D`, visible label `CRITICAL` — on the Feed
+and Saved cards, the Ready cards, Recall Detail, the Risk Levels document, the
+Filters sheet's chosen option and any gallery. The Feed + Filters kit
+(2026-10-06) introduced it as a card-only override; the label kit
+(2026-10-09) made it the one palette, so there is no second Critical. The
+older `label/Critical` treatment bound to `tomato/500` stays retired.
 
 **The mapping into these labels is business logic, not design.** Which recall
 gets which label is decided by `src/domain/risk-tier.ts` from the official
@@ -576,7 +599,8 @@ metadata. It should feel factual rather than decorative.
 
 Use it for:
 
-- risk labels and the relevance label
+- the relevance label on the Ready cards (risk and notice labels are Public
+  Sans since the label kit, 2026-10-09)
 - lot codes and identifiers when shown as compact metadata
 - other terse structured facts where monospacing improves recognition
 
@@ -1975,9 +1999,16 @@ each a full 44pt target.
 
 ### Risk Label
 
-Risk Label is a 24px-high compact status label using IBM Plex Mono `label`
-type, uppercase text, `radius/4`, `spacing/8` horizontal and `spacing/4`
-vertical padding, a 1px border in the tier's own border color, and no shadow.
+Risk Label is the label kit's compact status label (2026-10-09; shape and type
+in `src/constants/label-design.ts`): radius 5, at least 28pt tall, 8pt
+horizontal and 6pt vertical padding, Public Sans 12/16 bold, uppercase text, a
+flat fill (its 1pt border is the fill colour, which keeps it level with the
+bordered Affects You and category labels beside it), no glyph and no shadow.
+It is the Feed card's badge shape, and one component draws it on the Feed and
+Saved cards (`FeedRiskLabel` delegates to it), the Ready cards, Recall Detail
+and the Risk Levels document. The Filters sheet's chosen risk options read the
+same `riskPalette`. No fixed width or height and no font-scale cap: at the
+largest text sizes a label wider than its row wraps its words inside it.
 
 Supported states, and the only states:
 
@@ -1995,7 +2026,7 @@ color is the second, redundant channel — and the spoken label ("Risk level:
 High") comes from the presentation contract.
 
 There is exactly one Risk Label component (`src/components/ui/risk-label.tsx`),
-one size, and one word: Recall Detail renders the same 24px label as the feed
+one size, and one word: Recall Detail renders the same label as the feed
 card, reading exactly `CRITICAL`, `VERY HIGH`, `HIGH`, `MODERATE`, `LOW`,
 `PENDING`, or `UNKNOWN`. The former Detail wording `CRITICAL RISK` is retired
 (founder decision, 2026-09-14); `risk-display.test.ts` pins the closed
@@ -2027,8 +2058,9 @@ and a 1px `#ADB600` border.
 
 Never implement `Affects You` as an additional risk/severity variant.
 
-Implemented as `src/components/ui/relevance-label.tsx` (P2B1): the same 24px
-compact-label geometry as the Risk Label, the design's flag glyph, the visible
+Implemented as `src/components/ui/relevance-label.tsx` (P2B1): the original
+24px compact-label geometry (which the Risk Label left for the label kit's
+28pt shape on 2026-10-09; this label is deliberately unchanged), the design's flag glyph, the visible
 word `AFFECTS YOU` and the spoken label `Affects you`. It takes no props, so
 no tier can reach it, and it reads `relevancePalette` only. The card renders
 it exactly when the model's `affectsYou` verdict is true; the decision itself
@@ -2044,9 +2076,10 @@ It is a third, independent question. It is not severity and not personal
 relevance:
 
 - **Not a Risk Label.** A Critical recall can report no illnesses; a Low one
-  can report many. The Risk Label is uppercase IBM Plex Mono on a filled
-  severity colour at a 24px minimum height. The notice is sentence-case
-  `caption` sans on a foundation surface, `radius/4`, 8×4 padding, auto-width.
+  can report many. The Risk Label is uppercase 12/16 bold on a tier's fill.
+  A harm notice is sentence-case Public Sans 13/18 semibold on its own harm
+  colour, with a 16pt glyph 6pt before the words; radius 5, at least 28pt
+  tall, 8/6 padding, auto-width (label kit, 2026-10-09).
 - **Not an Affects You callout.** That is a full-width lime Callout about
   _this shopper_. The notice is compact and about the recall.
 
@@ -2054,36 +2087,36 @@ relevance:
 own compact box. The boxes stack vertically, every one aligned to the same
 left edge and sized to its own sentence, in the fixed order **illnesses →
 hospitalizations → deaths**. No box is indented under another, none has a
-leading inset of its own, and none has a fixed height — each is its own
-caption line box plus padding, so it grows with Dynamic Type instead of
-clipping. The order does not change when one of the three is absent.
+leading inset of its own, and none has a fixed height — each is at least 28pt
+and otherwise its own text plus padding, so it grows with Dynamic Type instead
+of clipping. Boxes are 8pt apart. The order does not change when one of the
+three is absent.
 
-**Severity is the treatment** (founder decision, P2B7V):
+**Each harm has its own palette and glyph** (label kit, 2026-10-09; glyphs are
+lucide-static 0.468.0 at stroke 2, mapped in `src/constants/label-design.ts`):
 
-| box              | treatment          | glyph     | copy                                                                                                                                    |
-| ---------------- | ------------------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| illnesses        | `risk/high`        | `warning` | `1 illness reported`, `12 illnesses reported`, `Approximately 12 illnesses reported`, or `Illnesses reported` when no trustworthy count |
-| hospitalizations | `risk/very-high`   | `warning` | `1 hospitalization reported` / `12 hospitalizations reported`                                                                           |
-| deaths           | `risk/critical`    | `warning` | `1 death reported` / `12 deaths reported`                                                                                               |
-| explicit none    | `harm-notice/none` | `info`    | `No illnesses reported`                                                                                                                 |
+| box              | treatment                     | glyph                  | copy                                                                                                                                    |
+| ---------------- | ----------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| illnesses        | `#7A370B` on `#FFF3D7` (8.01) | `label-triangle-alert` | `1 illness reported`, `12 illnesses reported`, `Approximately 12 illnesses reported`, or `Illnesses reported` when no trustworthy count |
+| hospitalizations | `#8A1919` on `#FCE4E2` (7.76) | `label-square-plus`    | `1 hospitalization reported` / `12 hospitalizations reported`                                                                           |
+| deaths           | `#8A1919` on `#FCE4E2` (7.76) | `label-circle-alert`   | `1 death reported` / `12 deaths reported`                                                                                               |
+| explicit none    | `#173F67` on `#E7F1FA` (9.45) | `label-info`           | `No illnesses reported`                                                                                                                 |
 
 **Unknown** — nothing renders. No box, no placeholder, no spacer, no spoken
 element. Absence of a statement is never displayed as a zero.
 
-`harmNoticePalette` holds **references** to `riskPalette`'s entries, never
-copies of their values, so this introduces no hex and cannot become a second
-definition of Critical. P2B7K's "the Risk Label is the only consumer of
-`riskPalette`" is deliberately narrowed rather than abandoned: severity is
-reached only through a **named semantic map**, and no screen and no component
-may index the risk palette directly — the Risk Label remains the only
-component that does.
+`harmNoticePalette` is the harms' own explicit palette, separate from
+`riskPalette` (P2B7V had borrowed the risk tiers' fills; the label kit
+replaced that). Restyling a risk tier can never recolour a harm notice.
+Hospitalizations and deaths share a colour and are told apart by their words
+and glyphs. The fills are flat: the kit's border colours are recorded but not
+drawn.
 
-These still never read as Risk Labels, because colour was never the
-distinction: a Risk Label is uppercase IBM Plex Mono at a 24px minimum height
-stating a TIER; a harm notice is sentence-case `caption` at its own line
-height stating a COUNTED FACT. Each glyph is tinted with its own box's
-foreground — the same navy the Risk Label's text uses on the same fills — so
-every treatment clears WCAG AA for both the words and the icon.
+These never read as Risk Labels: a Risk Label is uppercase 12/16 bold on a
+tier's fill stating a TIER; a harm notice is sentence-case 13/18 semibold with
+a glyph, stating a COUNTED FACT. Each glyph is tinted with its own box's
+foreground, so every treatment clears WCAG AA for both the words and the
+icon.
 
 Injuries and adverse reactions still never appear and never produce a box; the
 contract that feeds this component cannot express them.
@@ -2168,13 +2201,10 @@ below), then the location (18pt pin, 14/20) and the save control (24pt
 bookmark, 44pt target).
 
 **Labels** share one shape: radius 5, at least 28pt, 8/6 padding, Public
-Sans 12/16 bold (the category's 14/20), a 1pt border. Risk uses the
-documented palette EXCEPT Critical, which is white on `#DC001D` (5.17:1) on
-the card and in the sheet ONLY — the global `riskPalette`, Detail's label and
-the illness notices are unchanged pending their own approval
-(`feedRiskPalette`, pinned in design-foundation.test.ts). AFFECTS YOU is the
-existing lime with a 16pt flag. PUBLIC HEALTH ALERT is the existing neutral
-blue.
+Sans 12/16 bold (the category's 14/20), a 1pt border. Risk and PUBLIC HEALTH
+ALERT render through the shared `RiskLabel` and `NoticeLabel` in the label
+kit's palette (2026-10-09; see "Risk Label" and "Recall Card"). AFFECTS YOU
+is the existing lime with a 16pt flag.
 
 **Categories.** All nine launch categories, each with its tint, ink, border
 and pinned glyph (lucide-static 0.468.0); every pairing is at least 4.5:1:
@@ -2294,10 +2324,11 @@ trailing). The media tile renders the real hero image `contain`ed on
 wide label photo — and renders nothing at all when there is no image or the
 load fails, so the content row is the text column alone (`MediaTile` decides
 this; the card holds no media rule and reserves no width, which is how Feed
-and Saved stay identical). The Public Health Alert notice label is the compact-label
-geometry on `background/subtle` with a `border/default` border in `label`
-type — a notice type, so it borrows neither the risk nor the relevance
-palette. Nothing on the card is truncated or fixed in height; the text column
+and Saved stay identical). The Public Health Alert notice label
+(`NoticeLabel`, label kit 2026-10-09) is the Risk Label's shape with a 16pt
+`label-info` glyph 6pt before the uppercase words, `#173F67` on `#E7F1FA`
+with a visible 1pt `#C8DAEC` border (`notice/public-health-alert`) — a notice
+type, so it borrows neither the risk nor the relevance palette. Nothing on the card is truncated or fixed in height; the text column
 takes the remaining width and wraps.
 
 The save control (`src/components/save-recall-button.tsx`) is the design's
@@ -2719,6 +2750,7 @@ Lucide-style outline the design uses, unchanged in shape.
 | `chevron-up`      | the `chevron-down` export, a half turn     | `chevron-up`         | Detail's `Show less` controls (2026-10-07)       |
 | `store`           | lucide-static 0.468.0 (Detail kit)         | `store`              | Detail's retailer line (2026-10-07)              |
 | symptom glyphs    | lucide-static 0.468.0 (Detail kit)         | see below            | Health Risk symptom bubbles (2026-10-07)         |
+| `label-*` (four)  | lucide-static 0.468.0 (label kit)          | see below            | harm notices, PHA label (2026-10-09)             |
 
 Figma exports each glyph cropped to its path bounds at some scale; each was
 drawn at `export size × S / (24 × k)` centred in an `S`-point box, where `k`
@@ -2801,6 +2833,19 @@ diagnosis, and never spoken. `chevron-up` is the set's own `chevron-down`
 turned half a turn, so the title's `Show full title` / `Show less` pair
 shares one stroke. Existing equivalents (`map-pin`, `external-link`, `info`,
 `warning`, `bookmark`, `chevron-down`/`left`) are reused, not duplicated.
+
+**The risk and harm label glyphs (2026-10-09).** The label kit's four pinned
+`lucide-static` 0.468.0 rasters, copied unchanged from the kit (each scale
+rendered directly from its SVG at stroke 2) with `square-plus` and
+`circle-alert` sources added to the vendored folder: `label-info` (`info`:
+the "No illnesses reported" notice and the PUBLIC HEALTH ALERT label),
+`label-triangle-alert` (`triangle-alert`: reported illnesses),
+`label-square-plus` (`square-plus`: hospitalizations) and `label-circle-alert`
+(`circle-alert`: deaths). `info` and `warning` are the same Lucide shapes, but
+they are the P2B1 set's 2.4-stroke exports and about 20% heavier, so the
+callouts keep them and the harm stack uses one stroke throughout. The mapping
+is `src/constants/label-design.ts`. No skull, heartbeat or invented medical
+glyph.
 
 ## Product contracts the design must carry
 

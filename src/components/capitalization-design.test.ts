@@ -209,7 +209,10 @@ test('P2B7H: AFFECTS YOU stays uppercase, and is still spoken in natural case', 
 
 test('P2B7H: the notice label still cases its contract words for the badge treatment', () => {
   const NOTICE = read('components', 'ui', 'notice-label.tsx');
-  assert.ok(NOTICE.includes('<Text variant="label">{label.toUpperCase()}</Text>'));
+  assert.match(
+    NOTICE,
+    /<Text style=\{\[labelType\.badge[^>]*>\s*\{label\.toUpperCase\(\)\}\s*<\/Text>/,
+  );
   // A screen reader hears the contract's own words, not the shouted badge.
   assert.ok(NOTICE.includes('accessibilityLabel={label}'));
 });

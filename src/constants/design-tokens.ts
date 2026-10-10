@@ -103,18 +103,25 @@ export interface LabelPalette {
  * Unknown deliberately leave it, because they describe classification state,
  * not danger. There is no green anywhere: no level means "safe".
  *
+ * The values are the founder-approved label kit's (2026-10-09,
+ * docs/lotly-risk-illness-labels-source-kit/): Critical white on red and
+ * Very High white on burnt orange, the other rated tiers navy on warm fills,
+ * every pairing at least 4.5:1. Each border is its own fill, so the label
+ * reads flat. One palette on every surface — the Feed card, Saved, Detail,
+ * Ready, the Risk Levels document and the Filters sheet's chosen options.
+ *
  * The domain mapping from official classes to these tiers lives in
  * `domain/risk-tier.ts` and is untouched by any of this — a treatment is
  * looked up BY the tier, never inferred alongside it.
  */
 export const riskPalette: Record<ConsumerRiskTier, LabelPalette> = {
-  critical: { background: '#EF4E47', foreground: '#001F3E', border: '#C82728' },
-  very_high: { background: '#F28C28', foreground: '#001F3E', border: '#C86700' },
-  high: { background: '#F3B63F', foreground: '#001F3E', border: '#C78C00' },
-  moderate: { background: '#E8D348', foreground: '#001F3E', border: '#BBA600' },
-  low: { background: '#F2E76B', foreground: '#001F3E', border: '#C8BD3E' },
-  pending: { background: '#C0D6EB', foreground: '#001F3E', border: '#D1D7D9' },
-  unknown: { background: '#EEF1F1', foreground: '#4B585E', border: '#D1D7D9' },
+  critical: { background: '#DC001D', foreground: '#FFFFFF', border: '#DC001D' },
+  very_high: { background: '#C84B0B', foreground: '#FFFFFF', border: '#C84B0B' },
+  high: { background: '#F4BC83', foreground: '#001F3E', border: '#F4BC83' },
+  moderate: { background: '#F4D579', foreground: '#001F3E', border: '#F4D579' },
+  low: { background: '#F7EDC4', foreground: '#001F3E', border: '#F7EDC4' },
+  pending: { background: '#DCE8F4', foreground: '#001F3E', border: '#DCE8F4' },
+  unknown: { background: '#EEF1F1', foreground: '#4B585E', border: '#EEF1F1' },
 };
 
 /** The Figma variable name of each risk-palette entry, for the mapping table. */
@@ -139,48 +146,46 @@ export const relevancePalette = {
 } as const satisfies Record<string, LabelPalette>;
 
 /**
- * The harm notices (P2B7K as `illnessNoticePalette`; re-founded in P2B7V) —
- * the treatments for what the OFFICIAL notice reported about people, shown as
- * separate compact boxes in Recall Detail's identity area.
+ * The harm notices (P2B7K as `illnessNoticePalette`; re-founded in P2B7V; given
+ * their own colours by the label kit, 2026-10-09) — the treatments for what
+ * the OFFICIAL notice reported about people, shown as separate compact boxes
+ * in Recall Detail's identity area.
  *
- * ## Severity is the treatment (founder decision, P2B7V)
+ * ## A palette of their own
  *
- * P2B7K gave the notice a treatment of its own, deliberately built only from
- * foundation colours, so that illness status could never borrow Critical's
- * red. The reasoning was that illness status is not a risk LEVEL — and it is
- * not. What P2B7Q.1 then established is that these three facts are not one
- * status at all: a reported illness, a reported hospitalization and a reported
- * death are three different harms, and they are ordered by how bad they are.
- * The founder's decision is that the ordering should be visible, using the
- * severity vocabulary the app already has rather than a fourth one invented
- * here:
+ * P2B7V had these borrow the risk palette (illnesses `high`, hospitalizations
+ * `very_high`, deaths `critical`) so their order of severity was visible. The
+ * approved label kit keeps that order but gives the harms their own explicit
+ * colours, separate from the tiers: amber for reported illnesses, and a
+ * deep-red ink on a pale red fill for hospitalizations and deaths — which
+ * differ by their words and glyphs, not by colour. Restyling a risk tier can
+ * therefore never recolour a harm notice, and a harm notice never wears a
+ * tier's fill: a Critical recall that reported no illnesses and a Low one
+ * that reported many still never read as the same kind of object.
  *
- *   illnesses          the `high` risk treatment
- *   hospitalizations   the `very_high` risk treatment
- *   deaths             the `critical` risk treatment
- *
- * Every one of those is a REFERENCE to the risk palette's own entry, not a
- * copy of its values: there is exactly one definition of Critical's red in
- * this file, and changing it changes the death box with it. A second
- * vocabulary of hand-copied hexes is the thing this shape exists to prevent.
- *
- * These boxes still cannot be confused with the Risk Label, because colour
- * was never what distinguished them: the Risk Label is uppercase IBM Plex
- * Mono at a 24pt minimum height and says a TIER ("CRITICAL"); a harm notice
- * is sentence-case Public Sans at its own line height and says a COUNTED
- * FACT ("1 death reported"). Colour is the redundant channel in both.
- *
- * ## `none` is unchanged
+ * ## `none` is a reassurance
  *
  * "No illnesses reported" is a founder-approved reassurance, not a harm, and
- * it keeps the calm blue informational treatment it has always had — an
- * existing foundation colour (`background/subtle`), never a severity fill.
+ * keeps a calm blue informational treatment — the same one the Public Health
+ * Alert label uses, never a severity fill.
+ *
+ * Borders are recorded with the kit's values, but the notices draw none
+ * (`labelGeometry.harmBorderWidth`): the fills are flat.
  */
 export const harmNoticePalette = {
-  none: { background: '#C0D6EB', foreground: '#001F3E', border: '#C0D6EB' },
-  illnesses: riskPalette.high,
-  hospitalizations: riskPalette.very_high,
-  deaths: riskPalette.critical,
+  none: { background: '#E7F1FA', foreground: '#173F67', border: '#C8DAEC' },
+  illnesses: { background: '#FFF3D7', foreground: '#7A370B', border: '#EBD7A8' },
+  hospitalizations: { background: '#FCE4E2', foreground: '#8A1919', border: '#EAB5B1' },
+  deaths: { background: '#FCE4E2', foreground: '#8A1919', border: '#EAB5B1' },
+} as const satisfies Record<string, LabelPalette>;
+
+/**
+ * The notice-type label: `PUBLIC HEALTH ALERT`. A notice type, not a severity
+ * and not a relevance, so it is neither palette's: the informational blue the
+ * "No illnesses reported" notice shares, with a visible 1pt blue border.
+ */
+export const noticeTypePalette = {
+  'public-health-alert': { background: '#E7F1FA', foreground: '#173F67', border: '#C8DAEC' },
 } as const satisfies Record<string, LabelPalette>;
 
 // ── Spacing, radius, size ───────────────────────────────────────────────────

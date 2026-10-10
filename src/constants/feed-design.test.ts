@@ -20,7 +20,6 @@ import {
   FEED_ICON_FAMILY,
   FEED_INTERFACE_GLYPHS,
   feedColor,
-  feedRiskPalette,
 } from './feed-design';
 
 const ROOT = join(__dirname, '..', '..');
@@ -72,27 +71,18 @@ test('every category pairing reads at 4.5:1 or better, on its tint and on the pa
   }
 });
 
-test('Critical is white on red on the card and in the sheet ONLY; every other tier is unchanged', () => {
-  assert.deepEqual(feedRiskPalette.critical, {
+test('the card’s white-on-red Critical is now the one global treatment — no Feed override remains', () => {
+  // The Feed kit (2026-10-06) drew Critical white on #DC001D on the card and
+  // in the sheet only; the label kit (2026-10-09) made that the canonical
+  // palette, so the scoped override is gone rather than left as a copy.
+  assert.deepEqual(riskPalette.critical, {
     background: '#DC001D',
     foreground: '#FFFFFF',
     border: '#DC001D',
   });
-  assert.ok(contrast('#FFFFFF', '#DC001D') >= 4.5);
-  // The global palette — Detail's label, the illness notices — is untouched.
-  assert.deepEqual(riskPalette.critical, {
-    background: '#EF4E47',
-    foreground: '#001F3E',
-    border: '#C82728',
-  });
-  for (const tier of Object.keys(riskPalette) as (keyof typeof riskPalette)[]) {
-    if (tier === 'critical') continue;
-    assert.deepEqual(feedRiskPalette[tier], riskPalette[tier], tier);
-    assert.ok(
-      contrast(feedRiskPalette[tier].foreground, feedRiskPalette[tier].background) >= 4.5,
-      tier,
-    );
-  }
+  const source = readFileSync(join(__dirname, 'feed-design.ts'), 'utf8');
+  assert.ok(!source.includes('feedRiskPalette'));
+  assert.ok(!/#DC001D/i.test(source));
 });
 
 test('the card stacks its photo at the accessibility sizes or when the text column would be narrow', () => {

@@ -30,6 +30,7 @@ import {
   layout,
   radius,
   harmNoticePalette,
+  noticeTypePalette,
   relevancePalette,
   REQUIRED_FONT_FACES,
   RISK_TOKEN_NAME,
@@ -139,9 +140,12 @@ test('the contract names no colour the code lacks, and vice versa', () => {
       ['background', 'foreground', 'border'].map((part) => `${RISK_TOKEN_NAME[tier]}/${part}`),
     ),
     ...['background', 'foreground', 'border'].map((part) => `relevance/affects-you/${part}`),
-    // P2B7V: the three reported harms are references to `risk/*` and define no
-    // colour of their own, so only the denial names one here.
-    ...['background', 'foreground', 'border'].map((part) => `harm-notice/none/${part}`),
+    // The label kit (2026-10-09): every harm has a colour of its own, and the
+    // Public Health Alert notice type its own.
+    ...Object.keys(harmNoticePalette).flatMap((tone) =>
+      ['background', 'foreground', 'border'].map((part) => `harm-notice/${tone}/${part}`),
+    ),
+    ...['background', 'foreground', 'border'].map((part) => `notice/public-health-alert/${part}`),
   ].sort();
   assert.deepEqual(inCode, approved);
 });
@@ -152,67 +156,51 @@ test('every colour is an uppercase six-digit hex — the form the contract write
     ...Object.values(riskPalette).flatMap((p) => [p.background, p.foreground, p.border]),
     ...Object.values(relevancePalette).flatMap((p) => [p.background, p.foreground, p.border]),
     ...Object.values(harmNoticePalette).flatMap((p) => [p.background, p.foreground, p.border]),
+    ...Object.values(noticeTypePalette).flatMap((p) => [p.background, p.foreground, p.border]),
     elevation.card.shadowColor,
   ];
   for (const value of all) assert.match(value, HEX);
 });
 
-test('the harm notices introduce no colour of their own — every treatment is a reference', () => {
-  // P2B7V (founder decision): a reported harm wears the SEVERITY treatment
-  // that matches it — illnesses `high`, hospitalizations `very_high`, deaths
-  // `critical`. What this test protects is that they are REFERENCES to the
-  // risk palette's own entries, never copies of its values: there is one
-  // definition of Critical's red in the contract, and the death box must move
-  // with it. A hand-copied hex here would be a second vocabulary.
-  assert.equal(harmNoticePalette.illnesses, riskPalette.high);
-  assert.equal(harmNoticePalette.hospitalizations, riskPalette.very_high);
-  assert.equal(harmNoticePalette.deaths, riskPalette.critical);
+/** The approved label kit's exact values (docs/lotly-risk-illness-labels-source-kit/spec/design-tokens.json). */
+const KIT_RISK: Record<ConsumerRiskTier, [background: string, foreground: string]> = {
+  critical: ['#DC001D', '#FFFFFF'],
+  very_high: ['#C84B0B', '#FFFFFF'],
+  high: ['#F4BC83', '#001F3E'],
+  moderate: ['#F4D579', '#001F3E'],
+  low: ['#F7EDC4', '#001F3E'],
+  pending: ['#DCE8F4', '#001F3E'],
+  unknown: ['#EEF1F1', '#4B585E'],
+};
 
-  // Severity order is the point: the three treatments are distinct, and they
-  // are the risk palette's own three in ascending order. Swapping any two
-  // fails here rather than only on a screen.
-  const severities = [
-    harmNoticePalette.illnesses.background,
-    harmNoticePalette.hospitalizations.background,
-    harmNoticePalette.deaths.background,
-  ];
-  assert.equal(new Set(severities).size, 3, 'two harms share a treatment');
-  assert.deepEqual(severities, [
-    riskPalette.high.background,
-    riskPalette.very_high.background,
-    riskPalette.critical.background,
-  ]);
-
-  // The denial is NOT a harm and keeps its calm blue, which is an existing
-  // foundation colour and never a severity fill.
-  const foundation = new Set<string>(Object.values(color));
-  for (const part of ['background', 'foreground', 'border'] as const) {
-    assert.ok(
-      foundation.has(harmNoticePalette.none[part]),
-      `harm-notice/none/${part} must be an existing foundation colour`,
-    );
-  }
-  const severityColours = new Set(
-    (['critical', 'very_high', 'high', 'moderate', 'low'] as const).flatMap((tier) => [
-      riskPalette[tier].background,
-      riskPalette[tier].border,
-    ]),
-  );
-  assert.ok(!severityColours.has(harmNoticePalette.none.background));
-  assert.ok(!severityColours.has(harmNoticePalette.none.border));
-  // Nor personal relevance: lime belongs to Affects You alone.
-  for (const palette of Object.values(harmNoticePalette)) {
+test('the harm notices are their own explicit palette, separate from the risk tiers (label kit)', () => {
+  // The label kit (2026-10-09, founder-approved) replaced P2B7V's references
+  // to the risk palette with explicit harm colours. What this protects: no
+  // harm treatment IS a risk treatment (object or fill), so restyling a tier
+  // can never recolour a harm notice, and the exact approved values hold.
+  assert.deepEqual(harmNoticePalette, {
+    none: { background: '#E7F1FA', foreground: '#173F67', border: '#C8DAEC' },
+    illnesses: { background: '#FFF3D7', foreground: '#7A370B', border: '#EBD7A8' },
+    hospitalizations: { background: '#FCE4E2', foreground: '#8A1919', border: '#EAB5B1' },
+    deaths: { background: '#FCE4E2', foreground: '#8A1919', border: '#EAB5B1' },
+  });
+  const riskFills = new Set(Object.values(riskPalette).map((p) => p.background));
+  for (const [tone, palette] of Object.entries(harmNoticePalette)) {
+    for (const tier of TIERS) assert.notEqual(palette, riskPalette[tier], `${tone} is ${tier}`);
+    assert.ok(!riskFills.has(palette.background), `harm-notice/${tone} wears a risk fill`);
+    // Nor personal relevance: lime belongs to Affects You alone.
     assert.notEqual(palette.background, relevancePalette['affects-you'].background);
   }
+  // Illness is a different treatment from the two graver harms.
+  assert.notEqual(harmNoticePalette.illnesses.background, harmNoticePalette.deaths.background);
 });
 
-test('every harm treatment is visually distinguishable from every other', () => {
-  const backgrounds = Object.values(harmNoticePalette).map((p) => p.background);
-  assert.equal(
-    new Set(backgrounds).size,
-    backgrounds.length,
-    'two harm notices share a surface — colour is a redundant channel, not the only one',
-  );
+test('the Public Health Alert label is its own informational treatment, not a tier', () => {
+  assert.deepEqual(noticeTypePalette, {
+    'public-health-alert': { background: '#E7F1FA', foreground: '#173F67', border: '#C8DAEC' },
+  });
+  const riskFills = new Set(Object.values(riskPalette).map((p) => p.background));
+  assert.ok(!riskFills.has(noticeTypePalette['public-health-alert'].background));
 });
 
 test('the primitive Figma reds (tomato/500, tomato/300) are not tokens', () => {
@@ -237,21 +225,48 @@ test('each risk label carries the approved background, foreground and border', (
   }
 });
 
-test('Critical is the canonical semantic treatment — never the old dark red on white', () => {
-  assert.deepEqual(riskPalette.critical, {
-    background: '#EF4E47',
-    foreground: '#001F3E',
-    border: '#C82728',
-  });
-  assert.notEqual(riskPalette.critical.foreground, '#FFFFFF');
-  assert.notEqual(riskPalette.critical.background, '#C82728');
+test('every risk label is the approved label kit value, and reads flat', () => {
+  for (const tier of TIERS) {
+    const [background, foreground] = KIT_RISK[tier];
+    assert.deepEqual(riskPalette[tier], { background, foreground, border: background }, tier);
+  }
 });
+
+test('Critical and Very High are white on their fills; every label clears 4.5:1', () => {
+  assert.equal(riskPalette.critical.foreground, '#FFFFFF');
+  assert.equal(riskPalette.very_high.foreground, '#FFFFFF');
+  for (const tier of TIERS) {
+    const ratio = contrastRatio(riskPalette[tier].foreground, riskPalette[tier].background);
+    assert.ok(ratio >= 4.5, `${tier} is ${ratio.toFixed(2)}:1`);
+  }
+  for (const [tone, palette] of [
+    ...Object.entries(harmNoticePalette),
+    ...Object.entries(noticeTypePalette),
+  ]) {
+    const ratio = contrastRatio(palette.foreground, palette.background);
+    assert.ok(ratio >= 4.5, `${tone} is ${ratio.toFixed(2)}:1`);
+  }
+});
+
+function contrastRatio(a: string, b: string): number {
+  const lum = (hex: string) => {
+    const [r, g, bl] = [1, 3, 5]
+      .map((at) => parseInt(hex.slice(at, at + 2), 16) / 255)
+      .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [light, dark] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (light + 0.05) / (dark + 0.05);
+}
 
 test('the severity spectrum runs red to yellow with no green, and Pending/Unknown leave it', () => {
   const severity: ConsumerRiskTier[] = ['critical', 'very_high', 'high', 'moderate', 'low'];
-  let previous = -1;
+  // Hues just below 0° are still red (the kit's Critical, #DC001D, sits at
+  // about 352°), so the wheel is read from -60° here.
+  let previous = -60;
   for (const tier of severity) {
-    const h = hue(riskPalette[tier].background);
+    const raw = hue(riskPalette[tier].background);
+    const h = raw > 300 ? raw - 360 : raw;
     assert.ok(h < 70, `${tier} background hue ${h.toFixed(0)}° is red-to-yellow`);
     assert.ok(h >= previous, `${tier} sits at or past the previous tier on the hue wheel`);
     previous = h;
@@ -265,9 +280,8 @@ test('the severity spectrum runs red to yellow with no green, and Pending/Unknow
   assert.equal(riskPalette.unknown.background, color['background/media-placeholder']);
 });
 
-test('the six navy-text labels share text/primary; Unknown carries its own legible grey', () => {
-  for (const tier of TIERS) {
-    if (tier === 'unknown') continue;
+test('the warm and Pending labels share text/primary; Unknown carries its own legible grey', () => {
+  for (const tier of ['high', 'moderate', 'low', 'pending'] as const) {
     assert.equal(riskPalette[tier].foreground, color['text/primary']);
   }
   assert.equal(riskPalette.unknown.foreground, '#4B585E');

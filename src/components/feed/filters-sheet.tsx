@@ -52,11 +52,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Text } from '@/components/ui/text';
+import { riskPalette } from '@/constants/design-tokens';
 import {
   CATEGORY_STYLE,
   feedColor,
   feedGeometry,
-  feedRiskPalette,
   feedType,
   type CategoryStyle,
 } from '@/constants/feed-design';
@@ -467,7 +467,7 @@ function Choice({
           foreground: feedColor.inverse,
           border: feedColor.brand,
         } as const)
-      : feedRiskPalette[palette];
+      : riskPalette[palette];
   const colours = selected
     ? chosen
     : ({

@@ -5,12 +5,12 @@
  * 12/16 bold (the category's 14/20) — so no label reads as a capsule
  * button. They are informational text, never controls.
  *
- * The words and spoken labels are the presentation contract's own, passed
- * in unchanged; only the drawing is new. Colours come from
- * constants/feed-design.ts: the documented risk palette with the card's own
- * white-on-red Critical, the existing lime relevance palette, and the
- * category map. Detail, the illness notices and every other surface keep
- * `RiskLabel` and the global palette.
+ * Risk and the Public Health Alert render through the shared `RiskLabel` and
+ * `NoticeLabel` (label kit, 2026-10-09), so the card, Saved, Ready and Detail
+ * draw them identically from one palette. The words and spoken labels are the
+ * presentation contract's own, passed in unchanged. Affects You keeps the
+ * existing lime relevance palette and the category its map in
+ * constants/feed-design.ts.
  *
  * A label is never squeezed to fit beside its neighbours: in the wrapping
  * metadata row it moves to the next line whole first. Only a label wider
@@ -26,14 +26,11 @@ import {
   RELEVANCE_ACCESSIBILITY_LABEL,
   RELEVANCE_LABEL_TEXT,
 } from '@/components/ui/relevance-label';
+import { NoticeLabel } from '@/components/ui/notice-label';
+import { RiskLabel } from '@/components/ui/risk-label';
 import { Text } from '@/components/ui/text';
-import { color, relevancePalette, type LabelPalette } from '@/constants/design-tokens';
-import {
-  feedGeometry,
-  feedRiskPalette,
-  feedType,
-  type CategoryStyle,
-} from '@/constants/feed-design';
+import { relevancePalette, type LabelPalette } from '@/constants/design-tokens';
+import { feedGeometry, feedType, type CategoryStyle } from '@/constants/feed-design';
 import type { ConsumerRiskTier } from '@/domain/risk-tier';
 
 function LabelShape({
@@ -67,32 +64,12 @@ export function FeedRiskLabel({
   /** The spoken label ("Risk level: Critical"). */
   accessibilityLabel: string;
 }) {
-  const palette = feedRiskPalette[tier];
-  return (
-    <LabelShape palette={palette} accessibilityLabel={accessibilityLabel}>
-      <Text style={[feedType.badge, styles.text, { color: palette.foreground }]}>{label}</Text>
-    </LabelShape>
-  );
+  return <RiskLabel tier={tier} label={label} accessibilityLabel={accessibilityLabel} />;
 }
 
-/**
- * "PUBLIC HEALTH ALERT": the notice type, in the neutral blue it always had.
- * Cased for the badge exactly as NoticeLabel cases it; VoiceOver hears the
- * contract's own words.
- */
+/** "PUBLIC HEALTH ALERT": the notice type, through the shared NoticeLabel. */
 export function FeedNoticeLabel({ label }: { label: string }) {
-  const palette: LabelPalette = {
-    background: color['background/subtle'],
-    foreground: color['text/primary'],
-    border: color['border/default'],
-  };
-  return (
-    <LabelShape palette={palette} accessibilityLabel={label}>
-      <Text style={[feedType.badge, styles.text, { color: palette.foreground }]}>
-        {label.toUpperCase()}
-      </Text>
-    </LabelShape>
-  );
+  return <NoticeLabel label={label} />;
 }
 
 /** "AFFECTS YOU": the existing lime label, on the shared badge shape. */
