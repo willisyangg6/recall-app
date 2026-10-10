@@ -111,9 +111,10 @@ export const BUILDING_TIMING = {
    * Each stop's readable minimum, once results are usable: foreground,
    * visible time, counted from the moment its caption is FULLY visible —
    * after the beat's fade-through, which runs at its usual speed outside
-   * the hold (founder, 2026-10-04: 1,100ms, from 1,500ms).
+   * the hold (founder, 2026-10-10: 1,000ms, from 1,100ms on
+   * 2026-10-04 and 1,500ms on 2026-10-02).
    */
-  stopMs: 1_100,
+  stopMs: 1_000,
   /**
    * The caption fade-through that opens every beat after Area: the outgoing
    * caption fades to nothing (`captionFadeOutMs`), the words swap while

@@ -368,16 +368,16 @@ test('a usable cache presents at once; a later sync updates the count the screen
   );
 });
 
-// ── The founder's pacing (2026-10-02; 1,100ms holds 2026-10-04) ────────────
+// ── The founder's pacing (2026-10-02; 1,000ms holds 2026-10-10) ─────────────────────────────────
 
-test('every caption is read for 1,100ms once fully visible, the completion 800ms: 7.4 s in all', () => {
-  assert.equal(T.stopMs, 1_100);
+test('every caption is read for 1,000ms once fully visible, the completion 800ms: 6.9 s in all', () => {
+  assert.equal(T.stopMs, 1_000);
   assert.equal(T.captionFadeOutMs, 80);
   assert.equal(T.captionFadeInMs, 140);
   assert.equal(T.captionFadeMs, T.captionFadeOutMs + T.captionFadeInMs);
   assert.equal(T.completionHoldMs, 800);
-  // Area 1,100; four stops of fade-through (220) + 1,100; the completion's 220 + 800.
-  assert.equal(presentedDurationMs(), 1_100 + 4 * 1_320 + 220 + 800);
+  // Area 1,000; four stops of fade-through (220) + 1,000; the completion's 220 + 800.
+  assert.equal(presentedDurationMs(), 1_000 + 4 * 1_220 + 220 + 800);
   const h = harness();
   h.sequence.setData(usable(7));
   h.sequence.visible();
@@ -392,10 +392,10 @@ test('every caption is read for 1,100ms once fully visible, the completion 800ms
       last = h.view().beat;
     }
   }
-  // Beat changes: Area's 1,100, then fade + hold (1,320) apart; the screen
+  // Beat changes: Area's 1,000, then fade + hold (1,220) apart; the screen
   // leaves fade + 800 after the completion caption arrived.
-  assert.deepEqual(changes, [1_100, 2_420, 3_740, 5_060, 6_380]);
-  assert.equal(at, 6_380 + 220 + 800);
+  assert.deepEqual(changes, [1_000, 2_220, 3_440, 4_660, 5_880]);
+  assert.equal(at, 5_880 + 220 + 800);
   assert.equal(h.completions(), 1);
 });
 
@@ -408,7 +408,7 @@ test('the longer presentation alone never raises the slow warning: it waits only
     h.time.advance(100);
     seen.add(h.view().phase);
   }
-  assert.ok(!seen.has('slow'), 'a 7.4 s presentation looked like a slow load');
+  assert.ok(!seen.has('slow'), 'a 6.9 s presentation looked like a slow load');
   assert.equal(h.completions(), 1);
   // Results that arrive after 9.9 s of waiting: no warning, and Area still
   // holds its full reading time from visibility (long met) before moving on.
@@ -433,11 +433,11 @@ test('a stop takes longer when its data is not ready; Reduce Motion keeps its ow
   r.time.advance(T.reducedAreaMs);
   assert.deepEqual(r.view(), { phase: 'presenting', beat: 3 });
   r.time.advance(T.reducedCountHoldMs + T.reducedCompletionHoldMs);
-  assert.equal(r.completions(), 1, 'Reduce Motion was made to sit through 7.4 s');
+  assert.equal(r.completions(), 1, 'Reduce Motion was made to sit through 6.9 s');
   assert.equal(T.reducedAreaMs + T.reducedCountHoldMs + T.reducedCompletionHoldMs, 3_060);
 });
 
-test('a stop is read for 1,100ms from the moment its caption is fully visible on screen', () => {
+test('a stop is read for 1,000ms from the moment its caption is fully visible on screen', () => {
   const h = harness();
   h.sequence.setData(usable(4));
   h.sequence.visible();
