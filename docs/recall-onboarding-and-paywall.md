@@ -63,7 +63,7 @@ audit under `assets/brand/reference/statistics/`._
 ```
 Welcome → Problem: scale (1 of 5) → Problem: stakes (2 of 5)
   → States (3 of 5) → Allergens (4 of 5) → Stores (5 of 5)
-  → Building (once; real results, ~7.4s with a usable feed) → Ready
+  → Building (once; real results, ~6.9s with a usable feed) → Ready
   → the onboarding paywall → purchase or restore success
   → Notification education → Apple's prompt only if the shopper chooses it
   → Feed
@@ -1961,16 +1961,17 @@ and the editor, which save, never reuse.
 is VISIBLE — the stack's `transitionEnd` for its arrival, or a 700ms
 fallback on a cold resume with no push — never at mount, and it stops while
 the app is in the background. With usable results each stop's caption is
-read for at least 1,100ms of foreground time ONCE FULLY VISIBLE — Area's
+read for at least 1,000ms of foreground time ONCE FULLY VISIBLE — Area's
 from arrival, every later one after its 220ms fade-through completes — and
-the completion caption for 800ms: about 7.4s in all (the founder's pacing of
-2026-10-04, from the 1,500ms holds of 2026-10-02; the transitions keep their
+the completion caption for 800ms: about 6.9s in all (the founder's pacing of
+2026-10-10, from the 1,100ms holds of 2026-10-04 and the 1,500ms holds of
+2026-10-02; the transitions keep their
 own 80ms out and 140ms in, only the settled reading time changed). These are
 display minima, not evidence: a stop holds longer while its data is not
 ready, and a usable cache presents at once. Under Reduce Motion the reduced
 path is unchanged (Area at least 560ms, the count held 1.6s, the
 completion 0.9s: about 3 s), never the
-7.4-second sequence. Under the existing freshness policy a valid cached corpus is
+6.9-second sequence. Under the existing freshness policy a valid cached corpus is
 the feed, so an offline launch with a cache completes from it without any
 freshness wording, while a first launch with no cache waits for the sync.
 
