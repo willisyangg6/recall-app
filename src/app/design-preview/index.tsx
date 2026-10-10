@@ -28,13 +28,6 @@ import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {
-  BuildingQaControls,
-  GateScenarios,
-  NotificationQaControls,
-  OnboardingGallery,
-  PaywallGallery,
-} from '@/components/development/onboarding-gallery';
 import { DocumentBlockView } from '@/components/document/document-blocks';
 import { DocumentSectionView, DocumentView } from '@/components/document/document-view';
 import { ResetPanel } from '@/components/installation-reset-section';
@@ -196,6 +189,17 @@ import {
   type QuestionnaireAnswers,
   type QuestionnaireChoices,
 } from '@/lib/shopper-report-presentation';
+
+type OnboardingGalleryModule = typeof import('@/components/development/onboarding-gallery');
+/**
+ * Development only: folded away, with the module and the logo-fixture images
+ * it requires, in a release bundle. A static import here would ship both,
+ * because Expo Router bundles every route module.
+ */
+const onboardingGallery = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/components/development/onboarding-gallery') as OnboardingGalleryModule)
+  : null;
 
 type ReadyReview = typeof import('@/components/development/ready-selection-review');
 /** Development only: folded away, with the module, in a release bundle. */
@@ -963,31 +967,31 @@ export default function DesignPreviewScreen() {
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           ONBOARDING SCREENS
         </ThemedText>
-        <OnboardingGallery />
+        {onboardingGallery !== null ? <onboardingGallery.OnboardingGallery /> : null}
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           PAYWALL STATES
         </ThemedText>
-        <PaywallGallery />
+        {onboardingGallery !== null ? <onboardingGallery.PaywallGallery /> : null}
 
         <View onLayout={(event) => setGateY(event.nativeEvent.layout.y)}>
           <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
             GATE SCENARIOS
           </ThemedText>
         </View>
-        <GateScenarios />
+        {onboardingGallery !== null ? <onboardingGallery.GateScenarios /> : null}
 
         <View onLayout={(event) => setQaY(event.nativeEvent.layout.y)}>
           <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
             BUILDING QA
           </ThemedText>
         </View>
-        <BuildingQaControls />
+        {onboardingGallery !== null ? <onboardingGallery.BuildingQaControls /> : null}
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           NOTIFICATION EDUCATION QA
         </ThemedText>
-        <NotificationQaControls />
+        {onboardingGallery !== null ? <onboardingGallery.NotificationQaControls /> : null}
 
         {/* P2B6B: the trust documents' shared renderer and content blocks —
             imported from production, never copied — over the registry's own

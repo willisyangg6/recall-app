@@ -2743,6 +2743,10 @@ retrieved 2026-09-23, the SVG sources vendored with the license under
 `assets/icon-sources/lucide/` and rasterised offline by
 `scripts/render-onboarding-assets.mjs` onto the same 24pt box at 1x, 2x and
 3x at the set's 2.4-unit stroke, black on transparent, tinted at render time.
+Each scale is rendered directly from its SVG. Until 2026-10-09 the allergen
+and States glyphs' 2x and 3x files were the 24 px bitmap enlarged; every
+Lucide raster from that script is now a direct render, pinned by
+`src/lib/allergen-icons.test.ts`.
 The mapping and its provenance are the tested contract in
 `src/lib/allergen-icons.ts`:
 

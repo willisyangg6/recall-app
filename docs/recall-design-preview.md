@@ -486,7 +486,12 @@ asset), so a broken icon fails the suite before it reaches a screenshot.
 
 Three sections at the end of the hub, drawn by the production components in
 `src/components/onboarding/` and `src/components/paywall/`, imported and
-never copied (`src/components/development/onboarding-gallery.tsx`):
+never copied (`src/components/development/onboarding-gallery.tsx`). The hub
+reaches the gallery module through a `__DEV__` `require`, never a static
+import: Expo Router bundles every route module, so a static import shipped
+the gallery and its six `assets/design-preview/logo-fixture-*` images in the
+release bundle until a 2026-10-09 export scan found them
+(`src/lib/release-exposure.test.ts` now refuses one):
 
 - **Onboarding screens** — Welcome; the two problem screens; States empty,
   selected and searched; Allergens empty and with several selected;

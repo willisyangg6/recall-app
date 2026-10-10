@@ -130,31 +130,24 @@ function write(path, canvas) {
 
 /**
  * `loadImage` rasterises an SVG at its own `width`/`height` (24px), so drawing
- * that image into a 48 or 72px canvas stretches a 24px bitmap: the 2x and 3x
- * files come out soft. With `native`, each scale re-sizes the SVG itself to
- * the target side first, so every file is a true rasterisation at its own
- * resolution. The allergen and States glyphs predate the fix and keep the
- * stretched path so re-running this script leaves them byte-identical;
- * regenerating them natively is a separate, visible change.
+ * that image into a 48 or 72px canvas would stretch a 24px bitmap and the 2x
+ * and 3x files would come out soft. Each scale therefore re-sizes the SVG
+ * itself to the target side first, so every file is a true rasterisation at
+ * its own resolution. (The allergen and States glyphs were stretched until
+ * 2026-10-09; every Lucide raster is now rendered this way.)
  */
-async function renderLucideGlyphs(
-  glyphs,
-  { native = false, box = ICON_BOX, dir = ICONS, from = LUCIDE } = {},
-) {
+async function renderLucideGlyphs(glyphs, { box = ICON_BOX, dir = ICONS, from = LUCIDE } = {}) {
   for (const [icon, lucideName] of Object.entries(glyphs)) {
     const svg = readFileSync(join(from, `${lucideName}.svg`), 'utf8')
       .replace(/currentColor/g, '#000000')
       .replace(/stroke-width="2"/, `stroke-width="${ICON_STROKE}"`);
-    const stretched = native ? null : await loadImage(Buffer.from(svg));
     for (const { suffix, factor } of SCALES) {
       const side = box * factor;
-      const image =
-        stretched ??
-        (await loadImage(
-          Buffer.from(
-            svg.replace(/width="24"/, `width="${side}"`).replace(/height="24"/, `height="${side}"`),
-          ),
-        ));
+      const image = await loadImage(
+        Buffer.from(
+          svg.replace(/width="24"/, `width="${side}"`).replace(/height="24"/, `height="${side}"`),
+        ),
+      );
       const canvas = createCanvas(side, side);
       const ctx = canvas.getContext('2d');
       ctx.drawImage(image, 0, 0, side, side);
@@ -285,16 +278,15 @@ async function main() {
   mkdirSync(NOTIFICATIONS, { recursive: true });
   await renderLucideGlyphs(ALLERGEN_GLYPHS);
   await renderLucideGlyphs(STATES_GLYPHS);
-  await renderLucideGlyphs(READY_GLYPHS, { native: true });
-  await renderLucideGlyphs(PAYWALL_GLYPHS, { native: true });
-  await renderLucideGlyphs(BUILDING_GLYPHS, { native: true, box: BUILDING_BOX, dir: BUILDING });
+  await renderLucideGlyphs(READY_GLYPHS);
+  await renderLucideGlyphs(PAYWALL_GLYPHS);
+  await renderLucideGlyphs(BUILDING_GLYPHS, { box: BUILDING_BOX, dir: BUILDING });
   await renderLucideGlyphs(BUILDING_LOTLY_GLYPHS, {
-    native: true,
     box: BUILDING_BOX,
     dir: BUILDING,
     from: LOTLY,
   });
-  await renderLucideGlyphs(NOTIFICATIONS_GLYPHS, { native: true });
+  await renderLucideGlyphs(NOTIFICATIONS_GLYPHS);
   await renderExampleIcon();
   await renderChevronLeft();
   renderSampleIllustration();

@@ -297,3 +297,39 @@ test('the development-only fixture modules are reachable only through __DEV__ re
     }
   }
 });
+
+test('the development components and their images are reachable only through __DEV__ requires (2026-10-09)', () => {
+  // Expo Router bundles every route module, so a static import from a route —
+  // even one that is inert in a release build — ships the module and every
+  // image it requires. A release export on 2026-10-09 found exactly that: the
+  // Design Preview hub imported the onboarding gallery statically, and the six
+  // logo-fixture PNGs were in the bundle.
+  const reachers = CLIENT.filter(
+    ({ path, source }) =>
+      !path.startsWith('components/development/') && source.includes('@/components/development/'),
+  );
+  assert.deepEqual(reachers.map((r) => r.path).sort(), [
+    'app/design-preview/index.tsx',
+    'app/recall/[id].tsx',
+  ]);
+  for (const { path, source } of reachers) {
+    const uses = source.match(/'@\/components\/development\/[a-z-]+'/g) ?? [];
+    const typeOnly = source.match(/typeof import\('@\/components\/development\/[a-z-]+'\)/g) ?? [];
+    const devRequires =
+      source.match(/__DEV__\s*\?[^:]*?require\('@\/components\/development\/[a-z-]+'\)/g) ?? [];
+    assert.equal(
+      uses.length,
+      typeOnly.length + devRequires.length,
+      `${path} reaches a development component outside a __DEV__ require`,
+    );
+    assert.doesNotMatch(source, /^import [^;]*'@\/components\/development\//m, path);
+  }
+  // The Design Preview's own images are required from development components only.
+  for (const { path, source } of CLIENT) {
+    if (path.startsWith('components/development/')) continue;
+    assert.ok(
+      !source.includes('assets/design-preview/'),
+      `${path} requires a Design Preview image`,
+    );
+  }
+});
