@@ -198,3 +198,61 @@ test('a save queued behind another queue turn (a reset) still writes after it, i
   await Promise.all([turn, save]);
   assert.deepEqual(log.slice(0, 3), ['turn:start', 'turn:end', 'local:MT']);
 });
+
+test('remirror re-sends the stored value after the server row is gone (inactivity purge), and stays newest-wins', async () => {
+  const { world, store } = fakeDevice();
+  await store.commit(prefs(['CA']));
+  await store.mirrorIdle();
+  assert.deepEqual(world.serverStates(), ['CA']);
+  // The purge deleted the server row; the device still holds CA, synced.
+  world.server = null;
+  await store.flush();
+  await store.mirrorIdle();
+  assert.equal(world.server, null, 'flush alone sends nothing: no sync is owed');
+  await store.remirror();
+  await store.mirrorIdle();
+  assert.deepEqual(world.serverStates(), ['CA'], 'the check-in restores it');
+  assert.equal(world.dirty, false);
+  // A newer save during a remirror still wins.
+  await store.remirror();
+  await store.commit(prefs(['CA', 'TX']));
+  await store.mirrorIdle();
+  assert.deepEqual(world.serverStates(), ['CA', 'TX']);
+});
+
+test('remirror on a fresh process with nothing written this session sends the stored value', async () => {
+  const { world, store } = fakeDevice();
+  world.local = prefs(['NY']);
+  await store.remirror();
+  await store.mirrorIdle();
+  assert.deepEqual(world.serverStates(), ['NY']);
+});
+
+test('remirror sends nothing when no record was ever saved, or the record cannot be read', async () => {
+  for (const strict of [
+    async () => null, // a fresh install mid-setup: no server row is created
+    async () => {
+      throw new Error('keychain read failed'); // never send empty over a good copy
+    },
+  ]) {
+    const { world, deps } = fakeDevice();
+    world.server = prefs(['CA']); // the good server copy
+    const store = createPreferencePersistence({ ...deps, readStoredStrict: strict });
+    await store.remirror();
+    await store.mirrorIdle();
+    assert.deepEqual(world.serverStates(), ['CA'], 'the server copy is untouched');
+    assert.deepEqual(world.syncs, []);
+  }
+});
+
+test('remirror with a readable stored record re-sends it', async () => {
+  const { world, deps } = fakeDevice();
+  world.local = prefs(['NY']);
+  const store = createPreferencePersistence({
+    ...deps,
+    readStoredStrict: async () => world.local,
+  });
+  await store.remirror();
+  await store.mirrorIdle();
+  assert.deepEqual(world.serverStates(), ['NY']);
+});

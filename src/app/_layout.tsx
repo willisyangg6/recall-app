@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { AppErrorBoundary } from '@/components/app-error-boundary';
 import { color, textStyle } from '@/constants/design-tokens';
 import { AccessProvider, useAccess } from '@/hooks/use-access';
+import { useInstallationCheckin } from '@/hooks/use-installation-checkin';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
 import { onboardingDeclarationOrder, pushNavigationAllowed } from '@/lib/access-gate';
@@ -66,6 +67,9 @@ export default function RootLayout() {
     // Retry a preference sync that failed offline. Silent, launch never blocks.
     void flushPreferencesSync();
   }, []);
+  // The daily foreground check-in (inactivity retention): records that the
+  // app was used today and repairs server rows a purge removed. Silent.
+  useInstallationCheckin();
   useEffect(() => {
     // A failed load is not a reason to stay blank: the app proceeds with the
     // platform's fallback face for any name it cannot resolve, and the failure

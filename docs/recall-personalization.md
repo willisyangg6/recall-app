@@ -534,6 +534,19 @@ the migration idempotent by construction and leaves no singular field for a
 second authority to grow out of. A legacy profile with no state becomes the
 empty list, which is the same answer it always gave.
 
+### The mirror after an inactivity purge (prepared 2026-10-12)
+
+The server row can now disappear while the device is untouched: the
+12-month inactivity purge (`20261013000000`, not yet applied) deletes it.
+The daily foreground check-in calls `remirrorPreferences()`, which makes the
+coalescing mirror send the newest local value once even when this process
+already confirmed it. `set_installation_preferences` recreates a missing row
+and is a strict no-op on an intact one, so the delivery horizon only moves
+when a row is actually recreated. The re-send is skipped when no record was
+ever saved or the stored record cannot be read (`readStoredStrict`), so it
+never creates a row for a fresh install or overwrites a good server copy
+with empty preferences. Proofs: `preference-persistence.test.ts`.
+
 ### The server mirror: expand now, contract later
 
 `installation_preferences` is deployed, and the code reading it is deployed

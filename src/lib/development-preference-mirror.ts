@@ -49,3 +49,13 @@ export function wrapDevelopmentMirror(
     await sync(prefs);
   };
 }
+
+/**
+ * The persisted switch, once restored (2026-10-12): the foreground check-in
+ * also stays on the device while it is on, so a QA walk-through records no
+ * production activity.
+ */
+export async function localOnlySavesSettled(): Promise<boolean> {
+  await restored;
+  return localOnly;
+}

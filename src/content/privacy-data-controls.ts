@@ -44,6 +44,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'A random installation identifier, created on this device the first time it is needed. It contains nothing about you or your device. It is a random number the server uses to tell installations apart.',
           'Whether you turned recall alerts on.',
           'Your place in the setup steps, so the app knows whether setup is finished.',
+          'The date the app last told Lotly’s server it was opened, so it does so at most once a day.',
           'The last subscription status this device confirmed with the App Store (which plan, and when it was checked and renews), so access keeps working if the store is briefly unreachable.',
           'A purchase identifier, used only to check your subscription with RevenueCat (see Subscriptions). The app never sends it to Lotly’s server as a purchase identifier (on a device that completed setup with an earlier version, it starts out equal to the installation identifier until a reset).',
           'The recalls you saved, kept as a list of recall identifiers on this device only. Saving is a private bookmark: it is never sent to Lotly’s server, is not part of your personalization, and changes nothing about which recalls you are alerted to.',
@@ -56,9 +57,10 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'What Lotly’s server stores',
       blocks: [
         bullets([
-          'A mirror of your personalization choices (states, allergens, stores), keyed by the random installation identifier, so alert delivery can apply the same relevance rules the app shows you. It is sent every time you change a choice, including during setup, whether or not alerts are on.',
+          'A mirror of your personalization choices (states, allergens, stores), keyed by the random installation identifier, so alert delivery can apply the same relevance rules the app shows you. It is sent every time you change a choice, including during setup, whether or not alerts are on, and again once a day when you open the app, so the server copy stays complete.',
           'When you enable alerts: a push registration holding the delivery token issued for this installation, the platform (iOS or Android), the app version, and timestamps for when alerts were enabled and last refreshed, plus a counter that keeps turning alerts on and off in the right order.',
           'Per-alert delivery records: which alert was sent to which registration and whether the delivery service accepted it.',
+          'The date you last opened the app (a date only, no time), sent at most once a day when the app comes to the screen. It is used only to delete inactive data, described below.',
           'When community shopper reports are available for a recall, any report you choose to submit, keyed by the same random installation identifier. “Community shopper reports” below lists what one contains.',
         ]),
         paragraph(
@@ -66,10 +68,13 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
             'has no name, email, account, or contact information to attach them to.',
         ),
         paragraph(
-          'There is no automatic expiry for these records today: the preference mirror, the ' +
-            'push registration (including one that alerts were turned off for), and its delivery ' +
-            `records are kept until you use “${RESET_ACTION_LABEL}”. Shopper reports are the ` +
-            'exception; their 12-month limit is described below.',
+          'If this installation is not used for 12 months, Lotly deletes its server records ' +
+            'automatically: the preference mirror, the push registration, its delivery records, ' +
+            'the last-opened date, and any shopper reports. Opening the app, or changing a choice ' +
+            'in it, counts as use; receiving a notification does not. Nothing on your device is ' +
+            'deleted, and the next time you open the app it sends your choices again and, if ' +
+            'alerts are on, registers for them again. Your subscription is not affected. Until ' +
+            `then, these records are kept unless you use “${RESET_ACTION_LABEL}”.`,
         ),
       ],
     },
@@ -144,7 +149,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'Turning off recall alerts stops delivery immediately: the app clears its local ' +
             'alerts-on flag and marks this installation’s push registration disabled on the server. ' +
             'Your personalization choices are kept, and the disabled registration record itself is ' +
-            `not deleted. Deleting it is what “${RESET_ACTION_LABEL}” below is for.`,
+            `kept until “${RESET_ACTION_LABEL}” below or 12 months without using the app.`,
         ),
       ],
     },
@@ -163,7 +168,8 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
             'subscription status and purchase identifier saved on this device, are kept so a subscription you paid for ' +
             'keeps working. And if you reinstalled the app in the past, a registration left by the ' +
             'earlier installation is kept under a different, now-unused identifier; it is ' +
-            'disabled and no longer receives anything, and it is not reachable by this reset.',
+            'disabled and no longer receives anything, it is not reachable by this reset, and it is ' +
+            'deleted automatically 12 months after that earlier installation was last used.',
         ),
       ],
     },
@@ -177,7 +183,8 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
             'survive a reinstall, depending on the platform. To remove your data, use ' +
             `“${RESET_ACTION_LABEL}” on this screen first, then uninstall. A reinstall that ` +
             're-enables alerts re-uses or replaces the old registration rather than ' +
-            'double-registering the device.',
+            'double-registering the device. If you uninstall without resetting, the server ' +
+            'records are deleted automatically 12 months after the app was last used.',
         ),
       ],
     },

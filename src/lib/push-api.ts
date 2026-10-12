@@ -178,6 +178,16 @@ export async function setInstallationPreferences(input: {
 }
 
 /**
+ * Record that this installation was used today (2026-10-12, the inactivity
+ * retention rule). One UTC date per installation, nothing else; the server
+ * deletes Lotly-held installation data after 12 months without it (or any
+ * other app write). Called by the foreground check-in, at most once a day.
+ */
+export async function recordInstallationActivity(installationId: string): Promise<void> {
+  await rpcPost('record_installation_activity', { p_installation_id: installationId });
+}
+
+/**
  * Delete every server row keyed by this installation id (C7.1): its
  * preference mirror, its push registrations, and their delivery records —
  * one atomic, idempotent transaction on the backend. Returns nothing and
