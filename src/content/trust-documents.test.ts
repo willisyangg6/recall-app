@@ -311,14 +311,17 @@ test('no document invents accounts, households, or child profiles', () => {
 test('the privacy document names every data recipient and the limits of the reset', () => {
   // Reconciled with the 2026-10-10 data-practices audit: the purchase
   // provider receives the installation identifier, the preference mirror is
-  // sent whether or not alerts are on, server rows have no automatic expiry,
+  // sent whether or not alerts are on, server rows expire after 12 months of inactivity,
   // and the reset does not reach subscription records.
   const privacyText = documentPlainText(PRIVACY_DATA_CONTROLS);
   for (const processor of ['Supabase', 'Expo', 'RevenueCat']) {
     assert.match(privacyText, new RegExp(processor), `names ${processor}`);
   }
   assert.match(privacyText, /whether or not alerts are on/);
-  assert.match(privacyText, /no automatic expiry/i);
+  assert.match(privacyText, /not used for 12 months, Lotly deletes its server records/);
+  assert.match(privacyText, /receiving a notification does not/);
+  assert.match(privacyText, /Your subscription is not affected/);
+  assert.doesNotMatch(privacyText, /no automatic expiry/i);
   assert.match(privacyText, /Subscription records held by Apple and RevenueCat/);
   assert.match(privacyText, /stores no purchase records/);
 });

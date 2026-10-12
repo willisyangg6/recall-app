@@ -361,6 +361,17 @@ unchanged.
   re-registers (idempotent, sequenced) — only if a registration is confirmed
   here and nothing is owed.
 
+## Inactivity retention (prepared 2026-10-12, not applied)
+
+`20261013000000_installation_inactivity_retention` deletes an installation's
+push subscription and its `notification_deliveries` (with its other rows)
+after 12 months without user activity. Delivering a notification is never
+activity; the app opened from one is. A returning installation's daily
+foreground check-in (`src/lib/installation-checkin.ts`) calls
+`refreshRegistrationIfEnabled`, which re-registers with a fresh `enabled_at`,
+so no pre-purge event can be backfilled. Details:
+[recall-operations.md](recall-operations.md).
+
 ## Secrets and privacy
 
 Server env (GitHub repo secrets): `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and

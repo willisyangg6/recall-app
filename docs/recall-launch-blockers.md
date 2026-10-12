@@ -41,21 +41,17 @@ else was invented):
 
 Product decisions with policy consequences:
 
-- [ ] Retention promises for what the C7.1 reset cannot reach: **the in-app
-      "Reset app and delete my data" control now ships** (C7.1 — atomic
-      `delete_installation_data` RPC + local reset; migration
-      `20260902000000_installation_deletion.sql` was **verified applied in
-      production on 2026-09-05** by the O2-A read-only audit — linked
-      migration history matches the local file and the RPC is live on the
-      Data API surface — so the policy may describe deletion as live), so
-      self-service deletion of an installation's own rows is resolved in
-      the app.
-      Still open: how long rows persist for installations that never reset —
-      disabled `token_reassigned` rows from pre-reinstall installs
-      (unreachable by the reset RPC), abandoned installations, and delivery
-      history — i.e. whether to ship an automatic retention/purge job (its
-      own future migration). The consumer document states the current
-      behavior honestly.
+- [x] **Retention for installations that never reset — DECIDED 2026-10-12:**
+      Lotly-held installation data is deleted after 12 months without
+      meaningful user activity (founder-approved). Uninstalling is not a
+      deletion request. Built as `20261013000000_installation_inactivity_retention`
+      plus the client check-in (prepared, isolated-stack verified, **not
+      applied, purge not enabled**; [recall-operations.md](recall-operations.md)).
+      Rollout follows the one sequence in recall-operations.md: apply →
+      dry run → switch on with a grace date (go-live + 12 months) → only then
+      distribute the build carrying the check-in and the retention text →
+      publish the policy → re-anchor the grace date to publication + 12
+      months.
 - [ ] **Apply `20261012000000_installation_deletion_restore_shopper_reports`**
       (prepared 2026-10-10, isolated-stack verified, not applied): since the
       2026-10-04 apply, the reset has not deleted shopper reports

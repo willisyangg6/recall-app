@@ -2185,6 +2185,164 @@ byte-identical (repeat-safe). Evidence: `~/Desktop/Lotly-Privacy-Correctness-Rev
    `delete from public.shopper_reports` inside `delete_installation_data`
    and the unchanged grants.
 
+## Installation inactivity retention: a PREPARED schema migration (2026-10-12)
+
+**Status: PREPARED, NOT APPLIED; purge NOT enabled.** Founder-approved
+direction (2026-10-12): Lotly-held installation data is deleted after 12
+months without meaningful user activity. Roll out only in the sequence below.
+Applying the migration alone schedules a daily job that deletes nothing.
+
+`supabase/migrations/20261013000000_installation_inactivity_retention.sql`:
+
+|           |                                                                                                                                                                                  |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| adds      | `installation_activity (installation_id, last_active_on date)` — RLS on, service role only; seeded with today's date for every installation that already holds data              |
+| adds      | `installation_retention_config (purge_enabled default false)` — the switch                                                                                                       |
+| adds      | `record_installation_activity(text)` — the only client-callable addition; anon/authenticated/service_role                                                                        |
+| adds      | `installation_last_activity`, `inactive_installation_candidates`, `preview_inactive_installation_purge` (dry run), `purge_inactive_installations(limit 500)` — service role only |
+| re-bodies | `delete_installation_data` — the 20261012 body plus the activity row                                                                                                             |
+| schedules | `recall-installation-inactivity-purge`, daily 09:30 UTC                                                                                                                          |
+
+**The activity signal.** The app calls `record_installation_activity` when
+it comes to the foreground, at most once per UTC day, only for an existing
+installation id (`src/lib/installation-checkin.ts`). Last activity is the
+latest of that date and the timestamps only the app's own RPCs write
+(preferences created/updated, push registered/last seen/enabled, sequence,
+shopper report). Worker writes (`disabled_*`, `last_token_error`),
+deliveries and events are excluded: a notification sent is not activity;
+the app opened from it is.
+
+**What a purge deletes.** Exactly what "Reset app and delete my data"
+deletes, by calling `delete_installation_data`: preference mirror, push
+subscription, its deliveries, sequence row, shopper reports, activity row.
+Never RevenueCat or Apple records, shared tables, or anything on a device.
+
+**Concurrency.** Per candidate: advisory lock (shared with the check-in
+RPC), row locks, re-compute, delete only if still stale.
+
+**A returning installation.** Its next check-in records activity, re-sends
+the preference mirror (`remirrorPreferences`; recreates a missing row, a
+strict no-op otherwise) and refreshes the push registration (fresh row, new
+`enabled_at`, no backfill; a client sequence above "no row" applies).
+
+**Known limits (checkpoint review, 2026-10-12).**
+
+- **Bad ids.** Only well-formed ids are candidates. A malformed id would make
+  `delete_installation_data` raise and roll back the whole run.
+- **Writers don't share the lock.** The app's other writer RPCs
+  (preferences, registration, shopper report) do not take the advisory lock.
+  A brand-new row inserted between the purge's re-check and its delete can
+  be removed with the rest. Preferences and registration heal at the next
+  daily check-in. A shopper report just submitted in that instant would be
+  lost; the feature is off. The window is milliseconds.
+- **Locks are held for the whole run.** The purge holds each processed id's
+  advisory lock until its run (up to 500 ids) commits. A check-in for a kept
+  candidate can wait that long, time out on the client and retry at the next
+  foreground.
+- **The re-send is gated.** The daily preference re-send runs only when a
+  stored record exists and reads cleanly. A fresh install mid-setup gets no
+  server row from it, and a keychain read error never sends empty
+  preferences.
+
+### Validation done (2026-10-12, isolated stack only)
+
+`recall-privacy-verify` stack (ports 568xx, refusing `supabase` shim);
+production and the shared `recall-app` stack untouched (Kong: 0 requests on
+every other stack; 13 on the isolated one). Script and output:
+`~/Desktop/Lotly-Privacy-Correctness-Review/inactivity/`.
+
+| Scenario ("old" = 13 months)                                                   | Result                                                                    |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Installation created before the migration                                      | seeded with today; kept                                                   |
+| Purge with the switch off                                                      | 0 deleted                                                                 |
+| Dry run (`preview_inactive_installation_purge`)                                | 2 candidates, matching the purge                                          |
+| A: everything old (prefs, sub, sequence, delivery, shopper report, activity)   | all 6 kinds deleted                                                       |
+| B: old data, check-in 1 month ago                                              | kept                                                                      |
+| C: no activity row, preferences 2 months old                                   | kept                                                                      |
+| D: old check-in, re-registered 7 days ago                                      | kept                                                                      |
+| E: old user activity; worker disabled it and a delivery was sent yesterday     | deleted (background ≠ activity)                                           |
+| G: old, shopper report edited 3 months ago                                     | kept                                                                      |
+| Shared recall and event rows; second purge                                     | untouched; 0 deleted                                                      |
+| Race 1: check-in uncommitted when the purge reaches it                         | purge waited, re-checked, kept                                            |
+| Race 2: purge holds the lock when the check-in arrives                         | check-in waited 1.5 s, then recorded                                      |
+| …then the app's repair (preferences + register at sequence 6)                  | rows recreated; fresh `enabled_at`; unchanged re-mirror kept `updated_at` |
+| Reset after that                                                               | activity row deleted too                                                  |
+| Purge / preview / last-activity / table through the Data API (publishable key) | 401                                                                       |
+
+### The rollout sequence (one order; steps marked ★ need their own authorization)
+
+The rule this sequence enforces: **no text anywhere describes cleanup before
+it is switched on, and every installation that exists when the promise is
+published gets a full 12 months after publication.** The grace date
+(`deletions_start_on`) carries the second half. The purge deletes nothing
+before it, whatever an installation's earlier activity.
+
+1. ★ **Apply the migrations:** `20261012000000`, then `20261013000000`.
+   - Run `supabase migration list --linked`, then
+     `supabase db push --linked --dry-run`, then `supabase db push --linked`.
+   - Effects: the check-in RPC exists, existing installations are seeded,
+     the job is scheduled, and `purge_enabled` is false.
+   - Builds already installed are unaffected. They never call the new RPC,
+     and the reset RPC keeps its signature.
+2. **Dry run (read-only):**
+   `select * from public.preview_inactive_installation_purge();`.
+   Expect `deleting_now = false`.
+3. ★ **Switch cleanup on, with the grace date:**
+   ```sql
+   update public.installation_retention_config
+      set purge_enabled = true,
+          deletions_start_on = ((now() at time zone 'utc')::date + interval '12 months')::date,
+          updated_at = now();
+   ```
+   From here the cleanup is operational: scheduled and switched on. Nothing
+   can be deleted for 12 months.
+4. ★ **Distribute the compatible app build.** It carries the daily check-in,
+   the preference re-send, the purchase identifier and the in-app retention
+   text. Distribute to TestFlight, then the App Store. **Activity collection
+   starts here.** No build carrying the retention text may be distributed
+   before step 3.
+5. ★ **Publish the retention promise:** the Privacy Policy on the website and
+   its App Store Connect link. Do this on or after the App Store release
+   day, never before step 3.
+6. ★ **On publication day, re-anchor the grace date:**
+   ```sql
+   update public.installation_retention_config
+      set deletions_start_on = greatest(
+            deletions_start_on,
+            ((now() at time zone 'utc')::date + interval '12 months')::date),
+          updated_at = now();
+   ```
+   This guarantees 12 months from publication, even if steps 3 and 5 were
+   days apart. It only ever moves the date later.
+7. **Before the grace date:** monthly dry runs (step 2). Check that recent
+   `installation_activity` dates appear, which shows check-ins are arriving.
+8. **On and after the grace date:** the daily job deletes installations
+   with no activity in the past 12 months. Run a dry run before and after
+   the first deletion day.
+
+**Limitation.** Activity collection depends on the app build.
+
+- An installation on a build **without** the check-in shows activity only
+  through its own writes: preference changes, and push refreshes when alerts
+  are on.
+- If such a user keeps using an old build without either for 12 months after
+  publication, their server rows are deleted even though they are using the
+  app.
+- That old build cannot re-send preferences. Its alerts would resume only
+  after they next change a choice.
+- No public build without the check-in has ever been released. This affects
+  only pre-launch TestFlight testers.
+- A minimum-supported-version check would close this. It is not built.
+
+### Rollback
+
+- Before the grace date, switching off is enough:
+  `update public.installation_retention_config set purge_enabled = false,
+deletions_start_on = null;`. The constraint allows `deletions_start_on` to
+  be cleared only together with switching off.
+- After deletions have begun, deleted rows are gone, as with a reset. Only
+  backups (§ policy) still hold them until they expire.
+
 ## Enforcement: weekly-gated
 
 The daily job reads the one-request openFDA bulk manifest and compares its

@@ -59,6 +59,13 @@ export interface PersistenceDeps {
   setDirty(dirty: boolean): Promise<void>;
   /** The server mirror; may be slow, may throw. */
   syncRemote(prefs: UserRecallPreferences): Promise<void>;
+  /**
+   * For `remirror` only: the stored record, read strictly — null when none
+   * was ever saved, a throw when it cannot be read. `readLocal` degrades both
+   * to empty preferences, which is right for screens but must never be
+   * re-sent over a good server copy.
+   */
+  readStoredStrict?(): Promise<UserRecallPreferences | null>;
 }
 
 export interface SaveResult {
@@ -85,6 +92,16 @@ export interface PreferencePersistence {
   settleMirror(): Promise<void>;
   /** Resolves when no mirror run is pending or in flight (QA and tests). */
   mirrorIdle(): Promise<void>;
+  /**
+   * Send the newest local value to the server again, even if this process
+   * already mirrored it (2026-10-12). The daily foreground check-in calls it
+   * so an installation whose server row was deleted for inactivity gets the
+   * row back; on an intact row the RPC is a strict no-op. Skipped when no
+   * record was ever saved (nothing to restore — a fresh install mid-setup
+   * gets no server row) or when the record cannot be read (never re-send
+   * empty preferences over a good server copy).
+   */
+  remirror(): Promise<void>;
 }
 
 const key = (prefs: UserRecallPreferences): string => JSON.stringify(prefs);
@@ -177,5 +194,20 @@ export function createPreferencePersistence(deps: PersistenceDeps): PreferencePe
     async mirrorIdle() {
       while (running !== null) await running;
     },
+    remirror: () =>
+      deps.enqueueLocal(async () => {
+        if (deps.readStoredStrict) {
+          let stored: UserRecallPreferences | null;
+          try {
+            stored = await deps.readStoredStrict();
+          } catch {
+            return; // unreadable: keep the server copy as it is
+          }
+          if (stored === null) return; // never saved: nothing to restore
+        }
+        // Forget what was confirmed, so the next run sends the local value.
+        synced = null;
+        requestMirror();
+      }),
   };
 }

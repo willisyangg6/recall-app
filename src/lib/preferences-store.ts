@@ -105,6 +105,10 @@ const persistence = createPreferencePersistence({
   isDirty: async () => (await SecureStore.getItemAsync(DIRTY_KEY)) === '1',
   setDirty: (dirty) =>
     dirty ? SecureStore.setItemAsync(DIRTY_KEY, '1') : SecureStore.deleteItemAsync(DIRTY_KEY),
+  readStoredStrict: async () => {
+    const raw = await SecureStore.getItemAsync(PREFS_KEY); // a read error throws
+    return raw === null ? null : sanitizePreferences(JSON.parse(raw)); // corrupt JSON throws
+  },
   syncRemote:
     __DEV__ && developmentMirror
       ? developmentMirror.wrapDevelopmentMirror(syncToServer)
@@ -163,6 +167,15 @@ persistence.onSaved((prefs) => {
  */
 export function flushPreferencesSync(): Promise<void> {
   return persistence.flush();
+}
+
+/**
+ * Re-send the newest local preferences to the server mirror, once (the
+ * daily foreground check-in, 2026-10-12): recreates a row deleted for
+ * inactivity; a no-op RPC when the row is intact. Queued like every write.
+ */
+export function remirrorPreferences(): Promise<void> {
+  return persistence.remirror();
 }
 
 /**
