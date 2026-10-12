@@ -23,33 +23,37 @@ memory.
 One topic, one authoritative home. Read the relevant document before changing that area, and update
 it in the same change rather than describing the new behavior somewhere else.
 
-| Topic                                              | Document                                                                       |
-| -------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Domain model, ingestion, lifecycle                 | [docs/recall-domain-architecture.md](docs/recall-domain-architecture.md)       |
-| Verified FDA/FSIS source behavior                  | [docs/recall-source-contract.md](docs/recall-source-contract.md)               |
-| Reported harms: illness, hospitalization, death    | [docs/recall-illness-status.md](docs/recall-illness-status.md)                 |
-| Lotly-authored copy: taxonomy and evidence rule    | [docs/recall-copy-contract.md](docs/recall-copy-contract.md)                   |
-| Scheduling, jobs, secrets, repairs                 | [docs/recall-operations.md](docs/recall-operations.md)                         |
-| Scheduler watchdog (permanent fallback)            | [docs/recall-scheduler-watchdog.md](docs/recall-scheduler-watchdog.md)         |
-| Runbook: failures, alerting, SLOs, cost            | [docs/recall-production-runbook.md](docs/recall-production-runbook.md)         |
-| Feed sync and cache                                | [docs/recall-feed-sync.md](docs/recall-feed-sync.md)                           |
-| Feed usability and filtering                       | [docs/recall-feed-usability.md](docs/recall-feed-usability.md)                 |
-| Feed ordering decision record; Ready preview plan  | [docs/recall-feed-ordering.md](docs/recall-feed-ordering.md)                   |
-| Product categories                                 | [docs/recall-food-categories.md](docs/recall-food-categories.md)               |
-| Personalization and Affects-Me                     | [docs/recall-personalization.md](docs/recall-personalization.md)               |
-| Community shopper reports                          | [docs/recall-shopper-reports.md](docs/recall-shopper-reports.md)               |
-| Design Preview (dev-only screenshot harness)       | [docs/recall-design-preview.md](docs/recall-design-preview.md)                 |
-| Development asset serving and the dev reset        | [docs/recall-development-assets.md](docs/recall-development-assets.md)         |
-| Design system: tokens, semantics, Figma mapping    | [DESIGN.md](DESIGN.md)                                                         |
-| Push delivery                                      | [docs/recall-push-delivery.md](docs/recall-push-delivery.md)                   |
-| Onboarding, hard paywall, purchase boundary        | [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md) |
-| Imagery                                            | [docs/recall-imagery.md](docs/recall-imagery.md)                               |
-| Data-flow audit                                    | [docs/recall-data-flow-audit.md](docs/recall-data-flow-audit.md)               |
-| App Store readiness                                | [docs/recall-app-store-readiness.md](docs/recall-app-store-readiness.md)       |
-| Release identity, EAS profiles, build numbers      | [docs/recall-release-readiness.md](docs/recall-release-readiness.md)           |
-| Launch blockers and founder inputs                 | [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md)               |
-| Privacy policy (draft, unpublished)                | [docs/recall-privacy-policy-draft.md](docs/recall-privacy-policy-draft.md)     |
-| Milestone prompts, reports, context, model routing | [docs/recall-agent-workflow.md](docs/recall-agent-workflow.md)                 |
+| Topic                                              | Document                                                                                             |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Domain model, ingestion, lifecycle                 | [docs/recall-domain-architecture.md](docs/recall-domain-architecture.md)                             |
+| Verified FDA/FSIS source behavior                  | [docs/recall-source-contract.md](docs/recall-source-contract.md)                                     |
+| Reported harms: illness, hospitalization, death    | [docs/recall-illness-status.md](docs/recall-illness-status.md)                                       |
+| Lotly-authored copy: taxonomy and evidence rule    | [docs/recall-copy-contract.md](docs/recall-copy-contract.md)                                         |
+| Scheduling, jobs, secrets, repairs                 | [docs/recall-operations.md](docs/recall-operations.md)                                               |
+| Scheduler watchdog (permanent fallback)            | [docs/recall-scheduler-watchdog.md](docs/recall-scheduler-watchdog.md)                               |
+| Runbook: failures, alerting, SLOs, cost            | [docs/recall-production-runbook.md](docs/recall-production-runbook.md)                               |
+| Feed sync and cache                                | [docs/recall-feed-sync.md](docs/recall-feed-sync.md)                                                 |
+| Feed usability and filtering                       | [docs/recall-feed-usability.md](docs/recall-feed-usability.md)                                       |
+| Feed ordering decision record; Ready preview plan  | [docs/recall-feed-ordering.md](docs/recall-feed-ordering.md)                                         |
+| Product categories                                 | [docs/recall-food-categories.md](docs/recall-food-categories.md)                                     |
+| Personalization and Affects-Me                     | [docs/recall-personalization.md](docs/recall-personalization.md)                                     |
+| Community shopper reports                          | [docs/recall-shopper-reports.md](docs/recall-shopper-reports.md)                                     |
+| Design Preview (dev-only screenshot harness)       | [docs/recall-design-preview.md](docs/recall-design-preview.md)                                       |
+| Development asset serving and the dev reset        | [docs/recall-development-assets.md](docs/recall-development-assets.md)                               |
+| Design system: tokens, semantics, Figma mapping    | [DESIGN.md](DESIGN.md)                                                                               |
+| Push delivery                                      | [docs/recall-push-delivery.md](docs/recall-push-delivery.md)                                         |
+| Onboarding, hard paywall, purchase boundary        | [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md)                       |
+| Imagery                                            | [docs/recall-imagery.md](docs/recall-imagery.md)                                                     |
+| Data-flow audit                                    | [docs/recall-data-flow-audit.md](docs/recall-data-flow-audit.md)                                     |
+| App Store readiness                                | [docs/recall-app-store-readiness.md](docs/recall-app-store-readiness.md)                             |
+| Release identity, EAS profiles, build numbers      | [docs/recall-release-readiness.md](docs/recall-release-readiness.md)                                 |
+| Launch blockers and founder inputs                 | [docs/recall-launch-blockers.md](docs/recall-launch-blockers.md)                                     |
+| Privacy policy (draft, unpublished)                | [docs/recall-privacy-policy-draft.md](docs/recall-privacy-policy-draft.md)                           |
+| Terms of Use (draft, unpublished)                  | [docs/recall-terms-draft.md](docs/recall-terms-draft.md)                                             |
+| Health-data and privacy-law applicability          | [docs/recall-health-data-applicability.md](docs/recall-health-data-applicability.md)                 |
+| Privacy program proposal (consent, rights, teens)  | [docs/recall-privacy-program-proposal.md](docs/recall-privacy-program-proposal.md)                   |
+| Consumer Health Data Policy (draft, unpublished)   | [docs/recall-consumer-health-data-policy-draft.md](docs/recall-consumer-health-data-policy-draft.md) |
+| Milestone prompts, reports, context, model routing | [docs/recall-agent-workflow.md](docs/recall-agent-workflow.md)                                       |
 
 ## Environment and commands
 
