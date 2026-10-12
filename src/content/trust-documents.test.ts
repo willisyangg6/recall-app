@@ -307,3 +307,18 @@ test('no document invents accounts, households, or child profiles', () => {
   assert.match(privacyText, /works without an account/i);
   assert.doesNotMatch(allText, /create an account|sign (in|up)|household member|child profile/i);
 });
+
+test('the privacy document names every data recipient and the limits of the reset', () => {
+  // Reconciled with the 2026-10-10 data-practices audit: the purchase
+  // provider receives the installation identifier, the preference mirror is
+  // sent whether or not alerts are on, server rows have no automatic expiry,
+  // and the reset does not reach subscription records.
+  const privacyText = documentPlainText(PRIVACY_DATA_CONTROLS);
+  for (const processor of ['Supabase', 'Expo', 'RevenueCat']) {
+    assert.match(privacyText, new RegExp(processor), `names ${processor}`);
+  }
+  assert.match(privacyText, /whether or not alerts are on/);
+  assert.match(privacyText, /no automatic expiry/i);
+  assert.match(privacyText, /Subscription records held by Apple and RevenueCat/);
+  assert.match(privacyText, /stores no purchase records/);
+});

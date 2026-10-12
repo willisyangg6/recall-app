@@ -202,7 +202,8 @@ const SHAPE: Record<string, [title: string | null, kinds: string][]> = {
   'privacy-data-controls': [
     [null, 'paragraph'],
     ['What stays on your device', 'bullets document-link'],
-    ['What Lotly’s server stores', 'bullets paragraph'],
+    ['What Lotly’s server stores', 'bullets paragraph paragraph'],
+    ['Subscriptions', 'bullets'],
     ['Community shopper reports', 'paragraph bullets'],
     ['What Lotly does not collect', 'bullets paragraph'],
     ['Who processes data', 'paragraph'],

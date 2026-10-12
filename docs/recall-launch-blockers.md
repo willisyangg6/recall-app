@@ -9,17 +9,26 @@ none of it is done by C7.
 
 ## 1. Founder-input checklist
 
-Identity & destinations (currently none of these exist — none were invented):
+Identity & destinations (founder-confirmed 2026-10-10 where marked; nothing
+else was invented):
 
-- [ ] Legal developer/entity name (also decides guideline 5.1.1(ix): apps in
-      highly regulated fields should be submitted by a legal entity).
-- [ ] Privacy contact email (real, monitored).
-- [ ] Support email / support destination (unlocks the App Store support
+- [x] Operator: **Willis Yang, personally operated** (no legal entity).
+      Counsel item kept open: guideline 5.1.1(ix) says apps in highly
+      regulated fields should be submitted by a legal entity (§2).
+- [x] Privacy contact email: **lotlysupport@gmail.com** (used in the policy
+      draft). The in-app documents still name no contact: the corrections
+      and privacy documents' tests forbid an email until the founder decides
+      to surface one in the app.
+- [ ] Support email / support destination — the email exists
+      (lotlysupport@gmail.com), but App Store Connect's support URL and
+      `RELEASE_DESTINATIONS.support` need an HTTPS page, which waits on the
+      domain (unlocks the App Store support
       URL, the Profile "Support" row, the Corrections Policy's
       report-a-problem path, and — since P2B7X.1 — the paywall's `Support`
       footer action, which reads `RELEASE_DESTINATIONS.support` in
       `src/lib/release-destinations.ts`).
-- [ ] Public domain/URL to host the Privacy Policy (and later the trust
+- [ ] Public domain/URL to host the Privacy Policy — **not purchased yet**
+      (2026-10-10) (and later the trust
       documents' web versions). **This is also what blocks native sharing**
       — the shared URL must be a Lotly Universal Link on that domain (§6) —
       and, since P2B7X.1, the paywall's `Privacy` and `Terms` footer actions
@@ -47,6 +56,16 @@ Product decisions with policy consequences:
       history — i.e. whether to ship an automatic retention/purge job (its
       own future migration). The consumer document states the current
       behavior honestly.
+- [ ] **Apply `20261012000000_installation_deletion_restore_shopper_reports`**
+      (prepared 2026-10-10, isolated-stack verified, not applied): since the
+      2026-10-04 apply, the reset has not deleted shopper reports
+      ([recall-operations.md](recall-operations.md)). Required before the
+      shopper-report gate is ever enabled and before any text promises it.
+- [ ] App Privacy and app-level manifest rows that need a founder answer:
+      push token (Device ID vs Other Data Types), stores (Other Data Types),
+      states (Coarse Location), RevenueCat's Analytics purpose; the prepared
+      `app.json` block is in
+      [recall-app-store-readiness.md](recall-app-store-readiness.md) §1.3.
 - [ ] Allergen-data architecture, after counsel input: keep the server
       mirror (and disclose as health data if so advised) or move allergen
       matching fully on-device and drop the column (changes push-eligibility
