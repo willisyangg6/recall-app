@@ -280,9 +280,10 @@ grep of the emitted JS/HTML):
   (proofs in `src/server/push/installation-deletion.test.ts` and
   `src/lib/installation-reset.test.ts`).
 - **Remaining residue after a reset** (stated honestly in the consumer
-  document): provider-controlled short-lived infrastructure logs (standard
-  connection metadata at Supabase/Expo/Apple/Google — outside the app's
-  reach, expiring on provider schedules); rows left by a pre-reinstall
+  document): provider-controlled infrastructure logs (standard connection
+  metadata at Supabase/Expo/Apple/Google/RevenueCat — outside the app's
+  reach; retention set by each provider and **not verified** — the
+  2026-10-10 reconciliation removed the earlier "short-lived" wording); rows left by a pre-reinstall
   installation under a different, credential-less id (disabled
   `token_reassigned` — not reachable by this RPC; retention remains a
   founder decision); and aggregate counts in past `ingest_runs.metrics`

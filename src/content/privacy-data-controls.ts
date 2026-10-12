@@ -9,7 +9,12 @@
  * push-api.ts / recall-feed.ts / installation-reset*.ts, the Supabase
  * migrations (RLS + RPCs + delete_installation_data), and the dependency
  * lock (no analytics/advertising/crash SDK exists — pinned by
- * trust-documents tests against package.json). The reset action label is
+ * trust-documents tests against package.json). Reconciled again on
+ * 2026-10-10 with the website data-practices audit: RevenueCat, the
+ * always-on preference mirror, the onboarding and subscription caches, the
+ * absence of automatic server expiry, and what the reset does not reach.
+ * The reset's shopper-report deletion depends on migration
+ * 20261012000000 being applied before shopper reports are enabled. The reset action label is
  * imported from the one copy contract the UI renders, so this document and
  * the control can never drift apart.
  */
@@ -35,9 +40,11 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'What stays on your device',
       blocks: [
         bullets([
-          'Your personalization choices (the states you shop in, allergens to watch, and stores), saved in the device’s secure storage. They work offline and are read locally to build Affects me.',
+          'Your personalization choices (the states you shop in, allergens to watch, and stores), saved in the device’s secure storage. They work offline and are read locally to build Affects me. A copy is also kept on Lotly’s server; see below.',
           'A random installation identifier, created on this device the first time it is needed. It contains nothing about you or your device. It is a random number the server uses to tell installations apart.',
           'Whether you turned recall alerts on.',
+          'Your place in the setup steps, so the app knows whether setup is finished.',
+          'The last subscription status this device confirmed with the App Store (which plan, and when it was checked and renews), so access keeps working if the store is briefly unreachable.',
           'The recalls you saved, kept as a list of recall identifiers on this device only. Saving is a private bookmark: it is never sent to Lotly’s server, is not part of your personalization, and changes nothing about which recalls you are alerted to.',
           'Search text and browsing filters are session state only: searching runs entirely on this device over already-loaded notices, and what you type is never stored or sent anywhere.',
         ]),
@@ -48,8 +55,8 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'What Lotly’s server stores',
       blocks: [
         bullets([
-          'A mirror of your personalization choices (states, allergens, stores), keyed by the random installation identifier, synced so alert delivery can apply the same relevance rules the app shows you.',
-          'When you enable alerts: a push registration holding the delivery token issued for this installation, the platform (iOS or Android), the app version, and timestamps for when alerts were enabled and last refreshed.',
+          'A mirror of your personalization choices (states, allergens, stores), keyed by the random installation identifier, so alert delivery can apply the same relevance rules the app shows you. It is sent every time you change a choice, including during setup, whether or not alerts are on.',
+          'When you enable alerts: a push registration holding the delivery token issued for this installation, the platform (iOS or Android), the app version, and timestamps for when alerts were enabled and last refreshed, plus a counter that keeps turning alerts on and off in the right order.',
           'Per-alert delivery records: which alert was sent to which registration and whether the delivery service accepted it.',
           'When community shopper reports are available for a recall, any report you choose to submit, keyed by the same random installation identifier. “Community shopper reports” below lists what one contains.',
         ]),
@@ -57,6 +64,23 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'Server records are keyed only by the random installation identifier. Lotly’s server ' +
             'has no name, email, account, or contact information to attach them to.',
         ),
+        paragraph(
+          'There is no automatic expiry for these records today: the preference mirror, the ' +
+            'push registration (including one that alerts were turned off for), and its delivery ' +
+            `records are kept until you use “${RESET_ACTION_LABEL}”. Shopper reports are the ` +
+            'exception; their 12-month limit is described below.',
+        ),
+      ],
+    },
+    {
+      title: 'Subscriptions',
+      blocks: [
+        bullets([
+          'Payment is handled by Apple through your Apple Account. Lotly never sees your payment details.',
+          'Lotly uses RevenueCat to check whether your subscription is active. The app gives RevenueCat the same random installation identifier as an anonymous customer ID, and RevenueCat keeps the subscription purchases made under it so they can be checked and restored.',
+          'Lotly’s own server stores no purchase records.',
+          'You can cancel or change a subscription in your Apple Account settings. Restore Purchases on the subscription screen finds an existing subscription for the same Apple Account.',
+        ]),
       ],
     },
     {
@@ -105,8 +129,9 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
         paragraph(
           'Lotly’s database and image storage are hosted on Supabase. Recall alerts are delivered ' +
             'through Expo’s push service and then Apple’s or Google’s notification infrastructure ' +
-            'for your device. These providers process the data described above to provide those ' +
-            'services; none of them receives it for advertising.',
+            'for your device. Subscriptions are sold by Apple and checked through RevenueCat. ' +
+            'These providers process the data described above to provide those services; none ' +
+            'of them receives it from Lotly for advertising.',
         ),
       ],
     },
@@ -130,12 +155,13 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'The reset asks for confirmation first, and cancelling changes nothing. If the deletion cannot reach the server, nothing is changed on this device either. You can try again.',
         ]),
         paragraph(
-          'Two limits: standard, short-lived infrastructure logs at our hosting providers ' +
-            '(routine connection details such as IP addresses) are outside what the app can delete ' +
-            'directly. They expire on the provider’s schedule. And if you reinstalled the app in ' +
-            'the past, a registration left by the earlier installation is kept under a different, ' +
-            'now-unused identifier; it is disabled and no longer receives anything, and it is not ' +
-            'reachable by this reset.',
+          'The reset does not reach three things. Infrastructure logs at our hosting providers ' +
+            '(routine connection details such as IP addresses) are kept and removed under each ' +
+            'provider’s own settings, which the app cannot change or delete. Subscription records held by Apple and RevenueCat, and the ' +
+            'subscription status saved on this device, are kept so a subscription you paid for ' +
+            'keeps working. And if you reinstalled the app in the past, a registration left by the ' +
+            'earlier installation is kept under a different, now-unused identifier; it is ' +
+            'disabled and no longer receives anything, and it is not reachable by this reset.',
         ),
       ],
     },

@@ -443,6 +443,26 @@ EAS `production`; it is **not** in the local `.env`, so every local export
 and compile recorded here ran with the key absent and exercised the
 fail-closed path, not the live store.
 
+#### Identity after a reset (finding, 2026-10-10 — not fixed)
+
+The adapter calls `configure({ appUserID })` once per process, with the
+installation id that exists at the first store call, and never calls
+`logIn` or `logOut`. "Reset app and delete my data" mints a new installation
+id but does not touch the provider. **Confirmed in code and with a fake SDK:**
+after a reset, every later read, purchase and restore in that same app
+session still goes to RevenueCat under the **old** id, while the app's own
+server rows use the new one. From the next launch, `configure` runs with the
+new id.
+
+**Not confirmed** (needs RevenueCat's backend and a device): whether a
+subscriber's new id shows the entitlement at that next launch without a
+Restore. If it does not, the launch read is a verified `inactive`, which
+clears the kept entitlement cache and shows the paywall until Restore
+(transfer) runs. The founder's sandbox QA reported that "restore after the
+data reset" succeeded; it did not record whether access lapsed before it.
+Either way, the old id stays linked to the Apple purchases at RevenueCat.
+The reset does not, and the privacy text says it does not, reach RevenueCat.
+
 ### 5.1 The development adapter, and why it cannot ship as a bypass
 
 `src/lib/purchases/development-scenarios.ts` is a fake store: a persisted

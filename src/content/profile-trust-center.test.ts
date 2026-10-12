@@ -172,7 +172,11 @@ test('the data-reset control the document describes actually ships, under its ex
   // Honest scope: what it deletes, what it cannot reach, and that uninstalling
   // alone is not a deletion request.
   assert.match(text, /preference mirror, the push registration, and its alert delivery records/);
-  assert.match(text, /outside what the app can delete directly/);
+  assert.match(text, /The reset does not reach three things/);
+  assert.match(text, /under each provider’s own settings, which the app cannot change or delete/);
+  // No retention period is claimed for provider logs: none has been verified.
+  assert.doesNotMatch(text, /short-lived|expire on the provider/);
+  assert.match(text, /Subscription records held by Apple and RevenueCat/);
   assert.match(text, /Uninstalling the app alone is not treated as a request to delete/);
   // Failure honesty: a failed deletion changes nothing and is retryable.
   assert.match(text, /nothing is changed on this device either/);

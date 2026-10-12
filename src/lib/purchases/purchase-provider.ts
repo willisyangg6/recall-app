@@ -22,9 +22,12 @@
  *
  * The anonymous purchase identity is the EXISTING installation id
  * (lib/installation-id.ts) — no account, no sign-in. A provider is
- * constructed with `appUserId`, which resolves it lazily so the identity is
- * minted only when a purchase surface actually needs one (reading an
- * offering does not). The RevenueCat adapter will hand it to `logIn`.
+ * constructed with `appUserId`, which resolves it lazily: constructing a
+ * provider mints nothing, and the RevenueCat adapter resolves it on its
+ * first store call — reading an offering included. It passes it to
+ * `configure`, once per process; it never calls `logIn`, so an identity
+ * change (the data reset) reaches RevenueCat only on the next launch
+ * (docs/recall-onboarding-and-paywall.md §5.2, "Identity after a reset").
  *
  * ## Fail closed
  *

@@ -259,6 +259,14 @@ Immediate deletion paths, unchanged:
   installation — live and expired — in the same atomic transaction as its
   preference mirror, push registrations, and delivery records. No client
   change was needed; the app keeps no local shopper-report state.
+  **Regression and fix (2026-10-10):** the 2026-10-04
+  `push_subscription_sequence` migration re-bodied the function from the
+  C7.1 text and dropped this statement, so production's reset has not
+  deleted shopper reports since that apply.
+  `20261012000000_installation_deletion_restore_shopper_reports.sql`
+  restores it (prepared, **not applied**). It must be applied before the
+  gate is ever enabled; `installation-deletion-effective.test.ts` now pins
+  the effective definition against every installation-keyed table.
 - **Uninstall alone** is not deletion, exactly as the existing privacy
   documents already state; an abandoned installation's reports now age out
   under the 12-month rule regardless. (The separate C7-era gap — stale

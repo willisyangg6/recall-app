@@ -2130,6 +2130,61 @@ against that stack. Scripts and output are kept with the review evidence
    A hosted RPC execution with `p_sequence` was NOT performed; the first real
    client registration will be the first hosted execution.
 
+## Installation deletion: restore shopper reports — a PREPARED schema migration (2026-10-10)
+
+**Status: PREPARED, NOT APPLIED.** Applying it needs explicit founder
+authorization (`supabase db push --linked`, which deploys and applies).
+
+`supabase/migrations/20261012000000_installation_deletion_restore_shopper_reports.sql`
+re-bodies `delete_installation_data` only: the 20261004 body plus
+`delete from public.shopper_reports where installation_id = …`. No table,
+column, row, policy or grant changes; the ACL is restated unchanged.
+
+Why: `delete_installation_data` was defined by 20260902 (C7.1), 20260910
+(+ shopper reports) and 20261004 (+ the sequence row). The 20261004 body was
+written from the 20260902 text, so the shopper-report delete was lost, and
+each migration's tests read only their own file. The effective definition in
+production since 2026-10-04 does not delete shopper reports. Impact is
+bounded while `shopper_report_config.reports_enabled` is false: submission is
+refused server-side. The number of existing rows was not queried.
+`src/server/push/installation-deletion-effective.test.ts` now reads the whole
+migration chain and fails if the last definition misses any table with an
+`installation_id` column.
+
+### Validation done (2026-10-10, isolated stack only)
+
+A separate local stack (`project_id = recall-privacy-verify`, ports 568xx, a
+`supabase` shim that refuses any other workdir; production and the shared
+`recall-app` stack untouched — Kong logs showed 0 RPC requests on every other
+stack during the run). Same harness on both schemas, through the Data API with
+the publishable key, two installations (A resets, B is a bystander), each
+with a subscription, sequence row, preferences, one delivery and one shopper
+report:
+
+| Check                                          | Through 20261010 (production today) | With 20261012 |
+| ---------------------------------------------- | ----------------------------------- | ------------- |
+| A's subscription / sequence / prefs / delivery | deleted                             | deleted       |
+| A's shopper report                             | **kept (bug)**                      | deleted       |
+| B's rows; shared recall and event rows         | untouched                           | untouched     |
+| Repeat delete; invalid id                      | 204; 400                            | 204; 400      |
+| Re-register A at sequence 1 after the reset    | applied                             | applied       |
+| B's stale sequence-1 disable                   | refused                             | refused       |
+| `reports_enabled`                              | false                               | false         |
+
+A single-transaction re-run of the file left the function definition and ACL
+byte-identical (repeat-safe). Evidence: `~/Desktop/Lotly-Privacy-Correctness-Review/`.
+
+### How to apply (when authorized)
+
+1. `supabase migration list --linked` shows exactly `20261012000000` pending
+   (plus `20261011000000` if the watchdog branch lands first; the two are
+   independent).
+2. `supabase db push --linked --dry-run` lists only the expected file(s).
+3. `supabase db push --linked`.
+4. Read-only check: `supabase db dump --linked --schema public` shows
+   `delete from public.shopper_reports` inside `delete_installation_data`
+   and the unchanged grants.
+
 ## Enforcement: weekly-gated
 
 The daily job reads the one-request openFDA bulk manifest and compares its
