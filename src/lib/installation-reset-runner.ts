@@ -14,6 +14,7 @@ import {
 import { enqueueInstallationMutation } from './installation-lifecycle';
 import { resetInstallationData, type InstallationResetResult } from './installation-reset';
 import { deleteLocalOnboardingState } from './onboarding-store';
+import { purchaseIdentity } from './purchases/provider';
 import { deleteLocalPreferenceState, settlePreferenceMirror } from './preferences-store';
 import { deleteInstallationData } from './push-api';
 import { clearLocalAlertState } from './push-registration';
@@ -28,6 +29,9 @@ export function runInstallationReset(): Promise<InstallationResetResult> {
   return resetInstallationData({
     enqueue: enqueueInstallationMutation,
     settleRemoteSync: settlePreferenceMirror,
+    // Never rotates the purchase id: resolving it first is what lets an
+    // upgraded subscriber's adopted id survive the installation id changing.
+    preservePurchaseIdentity: purchaseIdentity.appUserId,
     peekInstallationId,
     deleteServerData: deleteInstallationData,
     clearLocalPreferences: deleteLocalPreferenceState,

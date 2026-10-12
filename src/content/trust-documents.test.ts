@@ -322,3 +322,19 @@ test('the privacy document names every data recipient and the limits of the rese
   assert.match(privacyText, /Subscription records held by Apple and RevenueCat/);
   assert.match(privacyText, /stores no purchase records/);
 });
+
+test('the privacy document explains the separate purchase identifier and that the reset keeps it', () => {
+  // 2026-10-12: RevenueCat's app-user id is a separate purchase id the data
+  // reset does not rotate, so a subscription survives a reset.
+  const privacyText = documentPlainText(PRIVACY_DATA_CONTROLS);
+  assert.match(privacyText, /On a new installation it is a separate random identifier/);
+  assert.match(
+    privacyText,
+    /completed setup with an earlier version of Lotly, it is the installation identifier/,
+  );
+  assert.match(privacyText, /never sends it to Lotly’s server as a purchase identifier/);
+  assert.match(privacyText, /starts out equal to the installation identifier until a reset/);
+  assert.match(privacyText, /keeps the purchase identifier, so an active subscription continues/);
+  assert.match(privacyText, /use Restore Purchases/);
+  assert.doesNotMatch(privacyText, /RevenueCat the same random installation identifier/);
+});

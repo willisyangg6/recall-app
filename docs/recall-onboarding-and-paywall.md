@@ -365,9 +365,11 @@ interface PurchaseProvider {
   holds a price: `$29.99` and `$4.99` appear only in the development
   adapter's fixtures, and `purchase-provider.test.ts` scans every route and
   component for a dollar amount.
-- The anonymous purchase identity is the existing installation id
-  (`purchaseIdentity.appUserId` resolves `getOrCreateInstallationId` lazily).
-  No account, no sign-in.
+- The anonymous purchase identity is the **purchase id**
+  (`src/lib/purchases/purchase-identity.ts`, 2026-10-12): its own random
+  keychain id (`recall.purchase-id`), separate from the installation id,
+  sent only to RevenueCat and never rotated by the data reset (§5.2,
+  "Identity after a reset"). No account, no sign-in.
 - `unconfiguredPurchaseProvider()` answers `unavailable` to everything, which
   the gate resolves to inactive with no cache. It is what a release build runs
   whenever the real provider cannot be constructed (§5.2). **Production
@@ -443,25 +445,138 @@ EAS `production`; it is **not** in the local `.env`, so every local export
 and compile recorded here ran with the key absent and exercised the
 fail-closed path, not the live store.
 
-#### Identity after a reset (finding, 2026-10-10 — not fixed)
+#### Identity after a reset (fixed 2026-10-12: a separate purchase id)
 
-The adapter calls `configure({ appUserID })` once per process, with the
-installation id that exists at the first store call, and never calls
-`logIn` or `logOut`. "Reset app and delete my data" mints a new installation
-id but does not touch the provider. **Confirmed in code and with a fake SDK:**
-after a reset, every later read, purchase and restore in that same app
-session still goes to RevenueCat under the **old** id, while the app's own
-server rows use the new one. From the next launch, `configure` runs with the
-new id.
+**The problem (found 2026-10-10).** RevenueCat's app-user id was the
+installation id. The adapter configures the SDK once per process and never
+calls `logIn`, so after "Reset app and delete my data" every store call in
+that session still went out under the old id, and from the next launch the
+SDK was configured with the new id: a brand-new RevenueCat customer with no
+subscription. Whether a subscriber then met the paywall until Restore was
+never device-tested.
 
-**Not confirmed** (needs RevenueCat's backend and a device): whether a
-subscriber's new id shows the entitlement at that next launch without a
-Restore. If it does not, the launch read is a verified `inactive`, which
-clears the kept entitlement cache and shows the paywall until Restore
-(transfer) runs. The founder's sandbox QA reported that "restore after the
-data reset" succeeded; it did not record whether access lapsed before it.
-Either way, the old id stays linked to the Apple purchases at RevenueCat.
-The reset does not, and the privacy text says it does not, reach RevenueCat.
+**Options considered** (RevenueCat iOS 5.92 / react-native-purchases 10.11;
+sources in `~/Desktop/Lotly-Privacy-Correctness-Review/`):
+
+- `logIn(newId)` after the reset. From an identified id it "logs out" and
+  "No merge or purchase transfer occurs" (RevenueCat, Identifying
+  customers), so access would need a further store call.
+- `logIn` plus one `syncPurchases`. On StoreKit 2 sync posts the device's
+  transactions with `is_restore` false for an identified id; whether that
+  transfers a subscription from the old id is **not documented**.
+- A programmatic `restorePurchases`. RevenueCat says restore "should not be
+  triggered programmatically".
+- **Chosen: never change the purchase identity.** RevenueCat: "using the same
+  App User ID will ensure they still have access to subscriptions previously
+  started without requiring a restore." The purchase id is a separate random
+  UUID in the keychain that the reset does not rotate.
+
+**What this guarantees, by construction:**
+
+- No store call happens because of a reset: nothing can start a purchase,
+  show a sign-in prompt, or move a subscription between customers.
+- Access is still granted only by a verified active `premium` entitlement
+  from RevenueCat (§5.2 above); an expired subscription stays inactive.
+- The id is persisted and read back before first use; a keychain failure
+  fails closed (`unavailable`), never a purchase under an id a relaunch
+  would forget. Concurrent first callers share one id.
+- No Lotly server call carries the purchase id. A freshly minted id is unknown
+  to Lotly's server, so Supabase and RevenueCat hold no shared identifier. An
+  **adopted** id (see "Upgrading" below) is the exception: it equals the
+  installation id Lotly's rows are keyed by, until a reset.
+- Restore Purchases stays the fallback for what the keychain cannot carry: a
+  new device, a cleared keychain. It transfers under RevenueCat's default
+  restore behavior.
+
+**Upgrading existing installs without a Restore.** Earlier builds used the
+installation id as the RevenueCat app-user id. When no purchase id is stored,
+the resolver **adopts the current installation id** if this install
+demonstrably reached a purchase:
+
+- personalization completed — set in the same commit as a verified purchase
+  or restore;
+- or a verified entitlement is cached.
+
+Otherwise it mints a separate id. A fresh install has neither at its first
+store call, even though push upkeep has already minted an installation id at
+launch, so it gets a separate id. The rule is `legacyPurchaseId` in
+`purchase-identity.ts`.
+
+Adoption is persisted on the first store call, which is the launch
+entitlement read. "Reset app and delete my data" calls
+`preservePurchaseIdentity` **before** the server deletion and the
+installation-id rotation; if that cannot persist, the reset fails with
+nothing changed. Covered in `purchase-identity.test.ts`:
+
+- upgrade (each kind of evidence) → launch → relaunch;
+- upgrade → reset before any store call → relaunch;
+- a failed preservation;
+- fresh install;
+- offline;
+- an expired subscription.
+
+- **Trade-off.** An upgraded installation's purchase id equals the
+  installation id that keys its Lotly rows, until a reset rotates the
+  installation id or the inactivity purge removes the rows. New installs
+  never share an identifier.
+- **Unavoidable limitation.** A subscriber who used the reset on an
+  **older** build and has not restored since. That build moved RevenueCat to
+  the post-reset id at the next launch, so the subscription is still under
+  the pre-reset id, which the device no longer holds. They see the paywall
+  once and recover with Restore Purchases (RevenueCat's default transfer).
+  No reset, purchase or restore happens automatically.
+
+**RevenueCat settings this relies on** (Project settings → General).
+**Founder-confirmed from the dashboard on 2026-10-12:**
+
+- Restore behavior: **Transfer to new App User ID** (the default) —
+  confirmed. "Keep with original App User ID" would make the Restore
+  fallback fail on a new device; "Transfer if there are no active
+  subscriptions" would refuse exactly the active subscription Restore exists
+  to recover.
+- "Use a different restore behavior for sandbox": **off** — confirmed, so
+  sandbox tests match production.
+- "Track new purchases from server-to-server notifications": **off** —
+  confirmed. New purchases are recorded by the SDK under the configured
+  purchase id. (Either value would be safe here: the app never sets
+  `appAccountToken`.)
+
+**Proven in Node** (`purchase-identity.test.ts`, real adapter, fake SDK and
+keychain): mint once and persist first; concurrent callers; keychain failure
+fails closed and retries; reset → same session → relaunch keeps access with
+one `configure` per process and no restore; offline is `unavailable` (no
+grant, no revocation); an expired subscription stays inactive.
+
+**Physical-device sandbox test** (a `preview` build with the key, a sandbox
+Apple Account, Wi-Fi you can switch off):
+
+1. Fresh install: complete onboarding, buy Monthly. Expect access.
+2. Profile → Privacy & Data Controls → Reset app and delete my data →
+   Delete data. Go through onboarding again **without** tapping Restore.
+   Expect: past the paywall straight to the feed, no purchase sheet, no
+   Apple sign-in prompt.
+3. Force-quit and relaunch. Expect: still subscribed, no paywall.
+4. Airplane mode, force-quit, relaunch. Expect: access kept (verified
+   cache), no paywall, no error. Turn the network back on.
+5. Reset again while in airplane mode. Expect: "Could not delete your
+   data. Nothing was changed." and access unchanged.
+6. In Settings → Apple Account → Subscriptions (sandbox), cancel; wait for
+   the sandbox expiry (monthly ≈ 5 minutes). Relaunch. Expect: the paywall
+   (expired is never access), and Restore says no subscription was found.
+7. Delete the app, reinstall: expect access without Restore if the keychain
+   kept the purchase id; otherwise Restore Purchases recovers it.
+8. **Upgrade path.** On a second sandbox Apple Account:
+   1. Install the **current** TestFlight build (without this change),
+      complete onboarding and buy Monthly.
+   2. Install the new build **over** it (do not delete the app).
+   3. Expect: launch goes straight to the feed, with no paywall and no
+      Restore.
+   4. Then do step 2 above (reset, onboarding again). Expect: still no
+      paywall.
+9. **Limitation check (optional).** On the old build, reset and relaunch.
+   Expect the paywall, and do **not** Restore. Then install the new build.
+   Expect the paywall once; Restore Purchases recovers access.
+10. Record each result (and any prompt that appeared) in §10.
 
 ### 5.1 The development adapter, and why it cannot ship as a bypass
 
