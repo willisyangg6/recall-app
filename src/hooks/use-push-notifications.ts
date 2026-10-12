@@ -12,21 +12,25 @@
  * - Silent registration upkeep on launch and on Expo token rotation
  *   (idempotent server-side; no permission prompt is ever triggered here).
  *
- * ## The gate (P2B7X.1)
+ * ## The gate (P2B7X.1) and the waiting tap (2026-10-10)
  *
- * A tap navigates only when `canNavigate()` says the app phase is open.
- * Before onboarding is complete, or while the paywall stands, the tap is
- * consumed and goes nowhere: Recall Details is a protected route in those
- * phases and the navigator would refuse it anyway, but the hook does not
- * rely on that — it asks first, so a notification can never be the door
- * around the paywall.
+ * A tap navigates only once the access gate has settled, the phase is `app`
+ * (`pushNavigationAllowed`) and the navigator can take a route. Until then
+ * the tap WAITS in memory (lib/push-tap-intent.ts) instead of being consumed:
+ * on a cold launch the launch response is read at mount, before the gate has
+ * read onboarding and entitlement, and deciding then sent every cold-launch
+ * tap to the Feed. Before onboarding is complete, or while the paywall or
+ * the education stands, the waiting tap opens nothing — Recall Details is a
+ * protected route there and the hook does not rely on the navigator to
+ * refuse it — so a notification is never the door around the paywall.
  */
 
-import { useEffect, useRef } from 'react';
-import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigationContainerRef, useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 
-import { parseRecallPushPayload } from '@/lib/push-payload';
+import type { AccessPhase } from '@/lib/access-gate';
+import { createPushTapIntent } from '@/lib/push-tap-intent';
 import { refreshRegistrationIfEnabled } from '@/lib/push-registration';
 
 Notifications.setNotificationHandler({
@@ -38,9 +42,11 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export function usePushNotifications(canNavigate: () => boolean): void {
+export function usePushNotifications(accessReady: boolean, phase: AccessPhase): void {
   const router = useRouter();
-  const handledResponseId = useRef<string | null>(null);
+  const navigationRef = useNavigationContainerRef();
+  // One intent for the app's lifetime, created once (never read from a ref in render).
+  const [intent] = useState(createPushTapIntent);
   const response = Notifications.useLastNotificationResponse();
 
   useEffect(() => {
@@ -51,14 +57,35 @@ export function usePushNotifications(canNavigate: () => boolean): void {
     return () => subscription.remove();
   }, []);
 
+  // Open the waiting recall if, and only if, everything it needs is settled.
+  const openIfAllowed = useCallback(() => {
+    const recallCaseId = intent.take({
+      ready: accessReady,
+      phase,
+      navigatorReady: navigationRef.isReady(),
+    });
+    if (recallCaseId === null) return;
+    router.push({ pathname: '/recall/[id]', params: { id: recallCaseId } });
+  }, [intent, accessReady, phase, navigationRef, router]);
+
   useEffect(() => {
-    if (!response) return;
-    const identifier = response.notification.request.identifier;
-    if (identifier === handledResponseId.current) return;
-    handledResponseId.current = identifier;
-    const payload = parseRecallPushPayload(response.notification.request.content.data);
-    if (!payload) return; // Unknown/test/malformed payloads never navigate.
-    if (!canNavigate()) return; // The paywall and onboarding are never bypassed.
-    router.push({ pathname: '/recall/[id]', params: { id: payload.recallCaseId } });
-  }, [response, router, canNavigate]);
+    if (response) {
+      intent.offer(
+        response.notification.request.identifier,
+        response.notification.request.content.data,
+      );
+    }
+    openIfAllowed();
+  }, [response, intent, openIfAllowed]);
+
+  // The navigator can become ready after the gate settles (it mounts only
+  // then); its own events retry the waiting tap.
+  useEffect(() => {
+    const removeReady = navigationRef.addListener('ready', openIfAllowed);
+    const removeState = navigationRef.addListener('state', openIfAllowed);
+    return () => {
+      removeReady();
+      removeState();
+    };
+  }, [navigationRef, openIfAllowed]);
 }

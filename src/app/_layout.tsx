@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import { IBMPlexMono_500Medium, IBMPlexMono_600SemiBold } from '@expo-google-fonts/ibm-plex-mono';
 import {
   PublicSans_400Regular,
@@ -17,7 +17,7 @@ import { AccessProvider, useAccess } from '@/hooks/use-access';
 import { useInstallationCheckin } from '@/hooks/use-installation-checkin';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
-import { onboardingDeclarationOrder, pushNavigationAllowed } from '@/lib/access-gate';
+import { onboardingDeclarationOrder } from '@/lib/access-gate';
 import { EDIT_PREFERENCES_ROUTE, onboardingRoute } from '@/lib/onboarding-routes';
 import { flushPreferencesSync } from '@/lib/preferences-store';
 
@@ -118,9 +118,10 @@ function RootNavigator({ fontsSettled }: { fontsSettled: boolean }) {
   // Foreground presentation, tap → recall deep link, and silent registration
   // upkeep. Never triggers a permission prompt (that stays behind the
   // explicit controls on the Notifications screen and the education
-  // screen), and never navigates before the app phase.
+  // screen), and opens a tapped recall only once the gate has settled on
+  // the app phase — a cold-launch tap waits for that instead of being lost.
   const { phase } = access;
-  usePushNotifications(useCallback(() => pushNavigationAllowed(phase), [phase]));
+  usePushNotifications(access.ready, phase);
 
   const ready = fontsSettled && access.ready;
   useEffect(() => {

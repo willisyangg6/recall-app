@@ -47,13 +47,30 @@ considered, so the pre-C2 deliverable backlog (42 events as measured
 pre-activation event is excluded regardless of count) can never be
 broadcast. Until activation the worker runs as a no-send no-op.
 `--deactivate --confirm` is the emergency off switch; reactivating records a
-NEW horizon, so nothing from a dark period is sent as catch-up.
+NEW horizon, so nothing from a dark period is sent as catch-up — and nothing
+queued BEFORE the deactivation either (2026-10-10, "Queued rows" below).
 
 **Subscription horizon (per device).** Each subscription carries
 `enabled_at`; eligibility requires the event to postdate
 `max(push_enabled_at, enabled_at)`. A device that enables alerts on Sept 5
 never receives Sept 1 events. Idempotent re-registration keeps the horizon;
 re-enabling after a disable moves it forward.
+
+**Queued rows obey the current horizons (2026-10-10).** Delivery rows
+already queued — `pending`, `retryable_failure`, or `sending` left by a crash —
+are judged again before every send against the horizons as they stand NOW
+(`queuedRowHorizonFailure` in `worker.ts`): a row whose event predates the
+current `push_enabled_at` fails closed as `before_activation`, and one whose
+event predates its subscription's current `enabled_at` as
+`before_subscription`. Before this, the send pool ignored horizons: a
+deactivate → reactivate sent rows queued before the rollback hours late, a
+ticket stranded by a deactivation was re-sent as a duplicate once its receipt
+expired (>24 h, `ReceiptUnavailable` → retryable), and a disable + re-enable
+before the next tick revived a row from before the disable. Preference
+changes are deliberately not re-judged at send time — matching is decided
+once, when the row is created. A dry run reports these rows as
+`queuedBeforeHorizon` and excludes them from would-send. Tests: the "Queued
+rows obey the CURRENT horizons" block in `worker.test.ts`.
 
 **Preference horizon (Phase C3).** When an installation has stored
 preferences, `installation_preferences.updated_at` joins the max above, so
@@ -356,6 +373,20 @@ unchanged.
   foreground taps all route through `useLastNotificationResponse` →
   validated payload → `/recall/[id]`; unknown ids land on the detail
   screen's "not found" state.
+- **A tap waits for the gate (2026-10-10).** On a cold launch the launch
+  response is read at mount, before the access gate has read onboarding and
+  entitlement from secure storage, so the first answer is always "not ready,
+  phase onboarding". The hook used to decide the tap on that answer and mark
+  it handled, so every cold-launch tap opened the Feed. The tap is now held
+  in memory (`src/lib/push-tap-intent.ts`) and opened once the gate has
+  settled on the `app` phase AND the navigation container is ready (its
+  `ready` and `state` events retry it). While onboarding, the paywall or the
+  education stands it opens nothing — never a door around the gate — and if
+  that phase ends in `app` in the same session (a lapsed subscriber who buys
+  again), the tapped recall opens then. It is never persisted, the newest
+  tap wins, and a newer tap that names no recall cancels a waiting one.
+  Tests: `push-tap-intent.test.ts`; the wiring is pinned in
+  `access-gate.test.ts`.
 - Silent upkeep: on launch and on Expo token rotation the app first sends
   any disable it still owes the server (see "Write ordering" above), then
   re-registers (idempotent, sequenced) — only if a registration is confirmed
@@ -393,7 +424,16 @@ only. No analytics, ad identifiers, or fingerprinting.
 2. Commit + push C2 (the workflow step ships; it is a no-send no-op).
 3. On the dev-build device: Alerts → Enable recall alerts.
 4. `npm run push:test` (lists subscription ids) →
-   `npm run push:test -- --subscription <id>` → notification appears.
+   `npm run push:test -- --subscription <id>` → the labelled Lotly test
+   notification appears (tapping it opens nothing) →
+   `npm run push:test -- --subscription <id> --recall <active case id>` → a
+   notification titled `Test: Recall alert: …` with the real formatter copy
+   for that case; tapping it opens that recall, from the foreground, the
+   background and a cold launch. The message is built by
+   `src/server/push/test-message.ts` (pure, tested: one explicit
+   subscription, active canonical cases only, no ledger event or delivery
+   row, no notification event id, token never printed); `--dry-run` prints it
+   and sends nothing.
 5. `npm run jobs:push -- --dry-run` — confirm 0 would-send and the full
    pre-activation backlog excluded.
 6. `npm run push:activate` (review) → `npm run push:activate -- --confirm`.

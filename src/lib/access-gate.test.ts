@@ -287,20 +287,17 @@ test('the gate is read once, above the stack, and the splash waits for it', () =
   assert.ok(code.includes('const ready = fontsSettled && access.ready;'));
   assert.ok(code.includes('if (ready) void SplashScreen.hideAsync();'));
   assert.ok(code.includes('if (!ready) return null;'));
-  // The push hook is handed the phase predicate, never a bare router.
-  assert.ok(
-    code.includes(
-      'usePushNotifications(useCallback(() => pushNavigationAllowed(phase), [phase]));',
-    ),
-  );
+  // The push hook is handed the gate's settled flag and phase, never a bare
+  // router; a tap waits for both (push-tap-intent.test.ts proves the rule).
+  assert.ok(code.includes('usePushNotifications(access.ready, phase);'));
   const push = codeOnly(
     readFileSync(join(__dirname, '..', 'hooks', 'use-push-notifications.ts'), 'utf8'),
   );
-  assert.ok(push.includes('if (!canNavigate()) return;'));
-  assert.ok(
-    push.indexOf('if (!canNavigate()) return;') <
-      push.indexOf("router.push({ pathname: '/recall/[id]'"),
-  );
+  // The only navigation is the one the intent releases.
+  const navigate = "router.push({ pathname: '/recall/[id]'";
+  assert.equal(push.split(navigate).length, 2, 'exactly one recall navigation');
+  assert.ok(push.indexOf('intent.take({') < push.indexOf(navigate));
+  assert.ok(push.includes('if (recallCaseId === null) return;'));
 });
 
 test('a purchase or restore on the Ready step goes straight to education, never through the paywall phase', () => {

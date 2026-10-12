@@ -14,7 +14,12 @@ import { test } from 'node:test';
 
 import { MemoryPushStore } from './memory-push-store';
 import type { PushMessage, PushReceipt, PushTicket, PushTransport } from './types';
-import { eligibleSubscriptions, retryBackoffMs, runPushDelivery } from './worker';
+import {
+  eligibleSubscriptions,
+  queuedRowHorizonFailure,
+  retryBackoffMs,
+  runPushDelivery,
+} from './worker';
 
 const T0 = Date.parse('2026-09-01T00:00:00.000Z');
 const HOUR = 3_600_000;
@@ -519,6 +524,134 @@ test('disable + re-enable moves the horizon: dark-period events stay unsent', as
   addNationwideEvent(store, 5 * HOUR); // after re-enable: delivered
   const later = await runAt(6 * HOUR);
   assert.equal(later.metrics.deliveriesCreated, 1);
+});
+
+// ── Queued rows obey the CURRENT horizons (2026-10-10) ──────────────────────
+// Before this, the send pool sent any pending / retryable / crash-recovered
+// row regardless of horizon: a rollback + reactivation sent rows queued before
+// it hours late, a re-enable revived a row from before the disable, and a
+// ticket stranded by a deactivation was re-sent once its receipt expired.
+
+const A = 'a'.repeat(32);
+
+function onlyDelivery(store: MemoryPushStore) {
+  assert.equal(store.deliveries.size, 1);
+  return [...store.deliveries.values()][0];
+}
+
+test('rollback: a row that failed before deactivation is never sent after reactivation', async () => {
+  const { store, transport, runAt } = setup(0);
+  registerMatching(store, A, 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
+  transport.failSends = 1;
+  await runAt(HOUR + MINUTE);
+  assert.equal(onlyDelivery(store).status, 'retryable_failure');
+
+  store.pushEnabledAt = null; // push:activate --deactivate --confirm
+  await runAt(3 * HOUR);
+  store.pushEnabledAt = iso(48 * HOUR); // reactivated two days later: a NEW horizon
+  const result = await runAt(49 * HOUR);
+
+  assert.equal(result.metrics.sent, 0);
+  assert.equal(result.metrics.queuedBeforeHorizon, 1);
+  assert.equal(transport.sentMessages.length, 0);
+  const row = onlyDelivery(store);
+  assert.equal(row.status, 'permanent_failure');
+  assert.equal(row.failureCode, 'before_activation');
+  assert.equal(row.attempts, 1, 'no further attempt was made');
+  // And no historical event replays under the new horizon.
+  assert.equal(result.metrics.deliveriesCreated, 0);
+  assert.equal(result.metrics.skippedPreActivation, 1);
+});
+
+test('rollback: a ticket stranded by deactivation is not re-sent when its receipt has expired', async () => {
+  const { store, transport, runAt } = setup(0);
+  registerMatching(store, A, 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
+  await runAt(HOUR + MINUTE);
+  assert.equal(onlyDelivery(store).status, 'ticket_accepted');
+
+  store.pushEnabledAt = null; // receipts are not read while deactivated
+  store.pushEnabledAt = iso(30 * HOUR);
+  await runAt(30 * HOUR + MINUTE); // the receipt is gone (>24 h): outcome unknowable
+  await runAt(31 * HOUR + MINUTE);
+
+  assert.equal(transport.sentMessages.length, 1, 'the phone got it once — no duplicate');
+  const row = onlyDelivery(store);
+  assert.equal(row.status, 'permanent_failure');
+  assert.equal(row.failureCode, 'before_activation');
+});
+
+test('rollback: events from the dark period stay unsent; new events after reactivation deliver', async () => {
+  const { store, transport, runAt } = setup(0);
+  registerMatching(store, A, 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  store.pushEnabledAt = null;
+  addNationwideEvent(store, 2 * HOUR); // while deactivated
+  await runAt(3 * HOUR);
+  store.pushEnabledAt = iso(4 * HOUR);
+  addNationwideEvent(store, 5 * HOUR);
+  const result = await runAt(6 * HOUR);
+  assert.equal(result.metrics.deliveriesCreated, 1);
+  assert.equal(result.metrics.sent, 1);
+  assert.equal(result.metrics.queuedBeforeHorizon, 0);
+  assert.equal(transport.sentMessages.length, 1);
+});
+
+test('disable + re-enable before the next tick: the queued row fails closed', async () => {
+  const { store, transport, runAt } = setup(0);
+  registerMatching(store, A, 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
+  transport.failSends = 1;
+  await runAt(HOUR + MINUTE);
+  store.userDisable(A, iso(HOUR + 5 * MINUTE));
+  registerMatching(store, A, 'ExponentPushToken[a]', 'ios', iso(2 * HOUR)); // enabled_at moves forward
+
+  const result = await runAt(3 * HOUR);
+  assert.equal(result.metrics.sent, 0);
+  assert.equal(transport.sentMessages.length, 0);
+  assert.equal(onlyDelivery(store).failureCode, 'before_subscription');
+
+  addNationwideEvent(store, 4 * HOUR); // after the re-enable: delivered as usual
+  const later = await runAt(5 * HOUR);
+  assert.equal(later.metrics.sent, 1);
+});
+
+test('an ordinary retry under unchanged horizons is still retried and sent', async () => {
+  const { store, transport, runAt } = setup(0);
+  registerMatching(store, A, 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
+  transport.failSends = 1;
+  await runAt(HOUR + MINUTE);
+  const result = await runAt(2 * HOUR); // 30-minute backoff elapsed
+  assert.equal(result.metrics.queuedBeforeHorizon, 0);
+  assert.equal(result.metrics.sent, 1);
+  assert.equal(onlyDelivery(store).status, 'ticket_accepted');
+});
+
+test('dry run reports queued rows the horizons would fail, and writes nothing', async () => {
+  const { store, transport, runAt } = setup(0);
+  registerMatching(store, A, 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
+  transport.failSends = 1;
+  await runAt(HOUR + MINUTE);
+  store.pushEnabledAt = iso(48 * HOUR);
+  const before = JSON.stringify([...store.deliveries.values()]);
+
+  const result = await runAt(49 * HOUR, true);
+  assert.equal(result.metrics.queuedBeforeHorizon, 1);
+  assert.equal(result.metrics.sent, 0, 'would-send excludes the failed-closed row');
+  assert.equal(JSON.stringify([...store.deliveries.values()]), before);
+  assert.equal(transport.sentMessages.length, 0);
+});
+
+test('queuedRowHorizonFailure: activation first, then the subscription; equality passes', () => {
+  assert.equal(queuedRowHorizonFailure(iso(0), iso(0), iso(0)), null);
+  assert.equal(queuedRowHorizonFailure(iso(HOUR), iso(0), iso(2 * HOUR)), 'before_activation');
+  assert.equal(queuedRowHorizonFailure(iso(HOUR), iso(2 * HOUR), iso(0)), 'before_subscription');
+  assert.equal(
+    queuedRowHorizonFailure(iso(HOUR), iso(3 * HOUR), iso(2 * HOUR)),
+    'before_activation',
+  );
 });
 
 test('eligibility seam: the later of activation and enabled_at wins', () => {
