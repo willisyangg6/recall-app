@@ -47,6 +47,15 @@ export interface InstallationResetDeps {
   settleRemoteSync?: () => Promise<void>;
   /** The stored installation id, or null. MUST NOT create one. */
   peekInstallationId(): Promise<string | null>;
+  /**
+   * Resolve (and persist) the purchase id BEFORE anything is changed
+   * (2026-10-12): an upgraded subscriber's purchase id is adopted from the
+   * installation id this reset is about to rotate. A failure aborts the
+   * reset with nothing changed, so a subscriber is never left on a new
+   * identity. Read-only from the reset's point of view: it never rotates or
+   * deletes the purchase id.
+   */
+  preservePurchaseIdentity?: () => Promise<unknown>;
   /** The atomic, idempotent server-side deletion RPC for one id. */
   deleteServerData(installationId: string): Promise<void>;
   /** Remove locally persisted preferences + retry flag. */
@@ -86,6 +95,15 @@ export function resetInstallationData(
 ): Promise<InstallationResetResult> {
   return deps.enqueue(async () => {
     await deps.settleRemoteSync?.();
+    try {
+      await deps.preservePurchaseIdentity?.();
+    } catch (error) {
+      return {
+        status: 'failed',
+        message:
+          error instanceof Error ? error.message : 'Could not keep the subscription identity.',
+      };
+    }
     const installationId = await deps.peekInstallationId();
     if (installationId !== null) {
       try {

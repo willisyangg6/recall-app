@@ -315,8 +315,12 @@ test('the release resolver reaches the development adapter only through a __DEV_
     resolver.includes('resolved = revenueCatPurchaseProvider(purchaseIdentity);'),
     'the release path runs the RevenueCat provider',
   );
-  // The identity handed to a real adapter is the installation id.
-  assert.ok(resolver.includes('appUserId: getOrCreateInstallationId'));
+  // The identity handed to a real adapter is the separate purchase id —
+  // never the installation id, which the data reset rotates.
+  assert.ok(resolver.includes('appUserId: createPurchaseIdentity({'));
+  // It may PEEK the installation id (upgrade adoption), never mint one.
+  assert.ok(!resolver.includes('getOrCreateInstallationId'));
+  assert.ok(resolver.includes("import { peekInstallationId } from '../installation-id';"));
   // The RevenueCat wiring fails closed off iOS, without the public key, and
   // without the native module — each by returning the unconfigured provider —
   // and reads nothing from the environment but the one public key.

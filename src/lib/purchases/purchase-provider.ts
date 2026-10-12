@@ -20,13 +20,15 @@
  *
  * ## Identity
  *
- * The anonymous purchase identity is the EXISTING installation id
- * (lib/installation-id.ts) — no account, no sign-in. A provider is
+ * The anonymous purchase identity is the PURCHASE id (purchase-identity.ts,
+ * 2026-10-12) — its own random keychain id, separate from the installation
+ * id, never sent to Lotly's server — no account, no sign-in. A provider is
  * constructed with `appUserId`, which resolves it lazily: constructing a
  * provider mints nothing, and the RevenueCat adapter resolves it on its
  * first store call — reading an offering included. It passes it to
- * `configure`, once per process; it never calls `logIn`, so an identity
- * change (the data reset) reaches RevenueCat only on the next launch
+ * `configure`, once per process. "Reset app and delete my data" does not
+ * rotate it, so the configured identity never goes stale and a subscription
+ * survives a reset without a restore
  * (docs/recall-onboarding-and-paywall.md §5.2, "Identity after a reset").
  *
  * ## Fail closed
@@ -101,7 +103,7 @@ export interface PurchaseProvider {
 }
 
 export interface PurchaseIdentity {
-  /** The anonymous app-user id: the installation id, resolved lazily. */
+  /** The anonymous app-user id: the purchase id (purchase-identity.ts), resolved lazily. */
   appUserId: () => Promise<string>;
 }
 

@@ -45,6 +45,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'Whether you turned recall alerts on.',
           'Your place in the setup steps, so the app knows whether setup is finished.',
           'The last subscription status this device confirmed with the App Store (which plan, and when it was checked and renews), so access keeps working if the store is briefly unreachable.',
+          'A purchase identifier, used only to check your subscription with RevenueCat (see Subscriptions). The app never sends it to Lotly’s server as a purchase identifier (on a device that completed setup with an earlier version, it starts out equal to the installation identifier until a reset).',
           'The recalls you saved, kept as a list of recall identifiers on this device only. Saving is a private bookmark: it is never sent to Lotly’s server, is not part of your personalization, and changes nothing about which recalls you are alerted to.',
           'Search text and browsing filters are session state only: searching runs entirely on this device over already-loaded notices, and what you type is never stored or sent anywhere.',
         ]),
@@ -77,7 +78,8 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       blocks: [
         bullets([
           'Payment is handled by Apple through your Apple Account. Lotly never sees your payment details.',
-          'Lotly uses RevenueCat to check whether your subscription is active. The app gives RevenueCat the same random installation identifier as an anonymous customer ID, and RevenueCat keeps the subscription purchases made under it so they can be checked and restored.',
+          'Lotly uses RevenueCat to check whether your subscription is active. The app gives RevenueCat a purchase identifier as an anonymous customer ID, and RevenueCat keeps the subscription purchases made under it so they can be checked and restored. On a new installation it is a separate random identifier. If this device completed setup with an earlier version of Lotly, it is the installation identifier the device had then, so an existing subscription carries over; after a reset, the two no longer match.',
+          `“${RESET_ACTION_LABEL}” keeps the purchase identifier, so an active subscription continues after a reset without restoring it. On a new device, or if the device’s secure storage was cleared, use Restore Purchases.`,
           'Lotly’s own server stores no purchase records.',
           'You can cancel or change a subscription in your Apple Account settings. Restore Purchases on the subscription screen finds an existing subscription for the same Apple Account.',
         ]),
@@ -158,7 +160,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'The reset does not reach three things. Infrastructure logs at our hosting providers ' +
             '(routine connection details such as IP addresses) are kept and removed under each ' +
             'provider’s own settings, which the app cannot change or delete. Subscription records held by Apple and RevenueCat, and the ' +
-            'subscription status saved on this device, are kept so a subscription you paid for ' +
+            'subscription status and purchase identifier saved on this device, are kept so a subscription you paid for ' +
             'keeps working. And if you reinstalled the app in the past, a registration left by the ' +
             'earlier installation is kept under a different, now-unused identifier; it is ' +
             'disabled and no longer receives anything, and it is not reachable by this reset.',
