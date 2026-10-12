@@ -223,6 +223,7 @@ Service — but only after the founder explicitly activates delivery:
 ```bash
 npm run push:activate                       # show state; --confirm activates
 npm run push:test -- --subscription <id>    # ONE labeled test push to ONE device
+npm run push:test -- --subscription <id> --recall <case-id>  # …whose tap opens that recall (--dry-run prints it)
 ```
 
 Until `push:activate -- --confirm` runs, `jobs:push` is a no-send no-op, and

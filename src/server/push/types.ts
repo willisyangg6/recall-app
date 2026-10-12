@@ -176,6 +176,16 @@ export interface PushMessage {
   sound: 'default';
 }
 
+/**
+ * What `npm run push:test` sends (test-message.ts) — to one named
+ * subscription, never through the worker or the ledger. `kind: 'test'` opens
+ * nothing; the recall form carries the app's real payload kind so a tap
+ * opens that case, marked `test` and with no ledger event id.
+ */
+export interface TestPushMessage extends Omit<PushMessage, 'data'> {
+  data: { kind: 'test' } | { kind: 'recall'; recallCaseId: string; test: true };
+}
+
 /** Per-message ticket: Expo ACCEPTED the request — not device delivery. */
 export type PushTicket =
   { status: 'ok'; id: string } | { status: 'error'; message: string; details?: { error?: string } };

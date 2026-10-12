@@ -31,6 +31,13 @@
  * - Idempotency: the (event, subscription) unique row is created before any
  *   send; reruns and scheduler retries cannot re-enqueue, and a delivery that
  *   already holds a ticket is never re-sent.
+ * - Queued rows obey the horizons too (2026-10-10): a pending, retryable or
+ *   crash-recovered row whose event predates the CURRENT activation horizon
+ *   or its subscription's CURRENT enabled_at fails closed instead of sending
+ *   (queuedRowHorizonFailure). Without this, a reactivation after a rollback
+ *   — or a disable + re-enable before the next tick — sent rows queued before
+ *   it, hours late, and a ticket stranded by a deactivation was re-sent as a
+ *   duplicate once its receipt had expired.
  * - A ticket is Expo ACCEPTING the request; only a receipt marks the handoff
  *   to APNs/FCM successful (receipt_ok). The two are never conflated.
  *
@@ -248,6 +255,27 @@ export function eligibleSubscriptions(
   return classifySubscriptionsForEvent(event, subscriptions, pushEnabledAt, preferences).eligible;
 }
 
+/**
+ * Why a QUEUED delivery row may no longer be sent, judged against the
+ * horizons as they stand now rather than when the row was created:
+ * - `before_activation`: the event predates the current activation horizon,
+ *   so push was deactivated and reactivated since the row was queued;
+ * - `before_subscription`: the event predates the subscription's current
+ *   enabled_at, so alerts were turned off and on again since.
+ * A row created by a run under the current horizons always passes: creation
+ * required the event to postdate both. Preference changes are deliberately
+ * NOT re-judged here — matching is decided once, at creation, by the seam.
+ */
+export function queuedRowHorizonFailure(
+  eventCreatedAt: string,
+  subscriptionEnabledAt: string,
+  pushEnabledAt: string,
+): 'before_activation' | 'before_subscription' | null {
+  if (eventCreatedAt < pushEnabledAt) return 'before_activation';
+  if (eventCreatedAt < subscriptionEnabledAt) return 'before_subscription';
+  return null;
+}
+
 export interface PushWorkerOptions {
   transport: PushTransport;
   dryRun: boolean;
@@ -317,6 +345,8 @@ export async function runPushDelivery(
     retryableFailures: 0,
     permanentFailures: 0,
     tokensDisabled: 0,
+    /** Queued rows failed closed by queuedRowHorizonFailure (would-fail in a dry run). */
+    queuedBeforeHorizon: 0,
     cappedSends: 0,
   };
   const errors: string[] = [];
@@ -484,7 +514,41 @@ export async function runPushDelivery(
     maxSends * 2,
   );
   const sendPool: DeliveryRow[] = [];
+  // Ledger reads for rows whose event is not in this run's map, shared with
+  // the send loop below.
+  const ledgerReads = new Map<string, DeliverableEvent | null>();
+  const readLedgered = async (eventId: string): Promise<DeliverableEvent | null> => {
+    if (!ledgerReads.has(eventId)) ledgerReads.set(eventId, await store.getEvent(eventId));
+    return ledgerReads.get(eventId) ?? null;
+  };
   for (const delivery of candidates) {
+    // The horizons as they stand NOW, before backoff: a row queued before a
+    // deactivation or a re-enable is settled at once, never sent late. A
+    // missing event or subscription is left to the send loop's own checks.
+    const queuedEvent = eventById.get(delivery.eventId) ?? (await readLedgered(delivery.eventId));
+    const queuedSubscription =
+      subscriptionById.get(delivery.subscriptionId) ??
+      (await store.getSubscription(delivery.subscriptionId));
+    if (queuedEvent && queuedSubscription) {
+      const reason = queuedRowHorizonFailure(
+        queuedEvent.createdAt,
+        queuedSubscription.enabledAt,
+        pushEnabledAt,
+      );
+      if (reason !== null) {
+        metrics.queuedBeforeHorizon += 1;
+        if (!dryRun) {
+          metrics.permanentFailures += 1;
+          await store.updateDelivery(delivery.id, {
+            status: 'permanent_failure',
+            failureCode: reason,
+            lastError: `event predates the current ${reason === 'before_activation' ? 'activation' : 'subscription'} horizon`,
+            updatedAt: nowIso(),
+          });
+        }
+        continue;
+      }
+    }
     if (delivery.status === 'retryable_failure') {
       if (delivery.attempts >= MAX_SEND_ATTEMPTS) {
         if (!dryRun) {
@@ -555,7 +619,7 @@ export async function runPushDelivery(
           // A retry or crash-recovered row from an earlier run: the case may
           // have closed, been retracted or been merged since the row was
           // created, so the same per-event decision is made again now.
-          const ledgered = await store.getEvent(delivery.eventId);
+          const ledgered = await readLedgered(delivery.eventId);
           const decision = ledgered
             ? await resolveDeliverableEvent(store, ledgered, caseCache)
             : null;
@@ -671,7 +735,8 @@ export async function runPushDelivery(
   console.log(
     `  horizons: activation ${pushEnabledAt} — ${metrics.skippedPreActivation} pre-activation ` +
       `deliverable event(s) excluded, ${metrics.suppressedSkipped} suppressed excluded, ` +
-      `${metrics.subscriptionHorizonSkipped} subscription-horizon exclusion(s).`,
+      `${metrics.subscriptionHorizonSkipped} subscription-horizon exclusion(s), ` +
+      `${metrics.queuedBeforeHorizon} queued row(s) ${dryRun ? 'would be ' : ''}failed closed by the current horizons.`,
   );
   console.log(
     `  event eligibility: ${metrics.lifecycleSkipped} lifecycle exclusion(s), ` +

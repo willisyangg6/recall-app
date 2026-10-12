@@ -14,7 +14,7 @@
  * is sent as a Bearer token.
  */
 
-import type { PushMessage, PushReceipt, PushTicket, PushTransport } from './types';
+import type { PushMessage, PushReceipt, PushTicket, PushTransport, TestPushMessage } from './types';
 
 const SEND_URL = 'https://exp.host/--/api/v2/push/send';
 const RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts';
@@ -47,7 +47,8 @@ export class ExpoPushTransport implements PushTransport {
     return headers;
   }
 
-  async send(messages: PushMessage[]): Promise<PushTicket[]> {
+  /** The worker's messages, or push:test's (TestPushMessage) — the same HTTP call. */
+  async send(messages: readonly (PushMessage | TestPushMessage)[]): Promise<PushTicket[]> {
     if (messages.length === 0) return [];
     if (messages.length > MAX_MESSAGES_PER_REQUEST) {
       throw new Error(
