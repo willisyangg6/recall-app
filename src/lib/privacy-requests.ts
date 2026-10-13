@@ -74,15 +74,16 @@ export const SERVER_DATA_INTRO =
  * NRS 603A.510–.520, CT CGS 42-518). Each clause is the strictest of them:
  * an answer within 45 days of RECEIPT (WA and CT count from receipt; NV from
  * authentication, which is later); deletion within 30 days of checking the
- * code (NV 603A.515); one extension, explained inside the first 45 days (all
- * three). Shorter clocks for other request types (CT: stop using data after
+ * code (NV 603A.515), which has no extension; for other requests one
+ * extension of at most 45 days, explained inside the first 45 (all three). Shorter clocks for other request types (CT: stop using data after
  * consent is withdrawn within 15 days) and the appeal clocks are in the
  * operator runbook, docs/recall-operations.md, "Request deadlines".
  */
 export const REQUEST_TIMING_COPY =
   'Lotly answers within 45 days of receiving your request, and deletes within 30 days of ' +
-  'checking your code (usually the same day). If a request ever needs more time, Lotly tells ' +
-  'you why within those 45 days.';
+  'checking your code (usually the same day); a deletion is never extended. If another ' +
+  'request needs more time, Lotly can extend it once, by up to 45 more days, and tells you ' +
+  'why within the first 45 days.';
 
 export const SERVER_DATA_REDACTION_NOTE =
   'Left out on purpose: the installation identifier, which works like a password for this ' +

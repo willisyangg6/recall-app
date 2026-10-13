@@ -2548,15 +2548,17 @@ The export (the app's "Share as file" and the operator's file are the same
 Verified 2026-10-13 against the statute text: WA RCW 19.373.040, NV NRS
 603A.505–.520 and CT CGS 42-518 / 42-520. The public sentence
 (`REQUEST_TIMING_COPY`, shown in the app and the export) commits to the
-strictest clause of each: an answer within 45 days of **receipt**, deletion
-within 30 days of checking the code, and an explained extension inside the
-first 45 days. Count from the day the email arrives.
+strictest clause of each: an answer within 45 days of **receipt**; deletion
+within 30 days of checking the code, with **no extension for deletion**
+(Nevada allows none); and for any other request **at most one extension, of
+up to 45 days**, explained in writing inside the first 45 days. Count from
+the day the email arrives.
 
 | Request type                                 | Washington                                                                                       | Nevada                                                                                                      | Connecticut                                                                                 | Lotly's operating rule                                                                     |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | Access / copy / confirm / list third parties | 45 days from receipt; once +45 if reasonably necessary, noticed with reasons inside the first 45 | 45 days from authenticating; once +45, noticed with reasons inside 45 days from authenticating              | 45 days from receipt; +45 if reasonably necessary, noticed with reasons inside the first 45 | Answer within 45 days of receipt; any extension notice before day 45                       |
 | Deletion                                     | 45 days from receipt (+45 as above); backups may lag ≤ 6 months                                  | **30 days from authenticating** (no extension); notify processors, who also have 30 days; backups ≤ 2 years | 45 days from receipt (+45)                                                                  | Run the deletion the day the code is checked; **never later than 30 days** after the check |
-| Withdraw consent / stop using health data    | 45 days from receipt (+45)                                                                       | "cease collecting, sharing": 45 days from authenticating (+45)                                              | **Stop processing within 15 days** of a revocation (42-520)                                 | Act within 15 days; in the app the allergen toggle (consent branch) is immediate           |
+| Withdraw consent / stop using health data    | 45 days from receipt (+45)                                                                       | "cease collecting, sharing": 45 days from authenticating (+45)                                              | **Stop processing within 15 days** of a revocation (42-520)                                 | Act within 15 days; in the app, "Stop using allergens for alerts" is immediate             |
 | Correction                                   | no correction right in RCW 19.373.040                                                            | no correction right in NRS 603A.505                                                                         | 45 days from receipt (+45); 42-518(a)(2)                                                    | Done in the app (Personalization); by email, within 45 days                                |
 | Declining a request                          | an appeal process is required; no separate notice clock is stated (reply within the 45 days)     | if it cannot authenticate, may decline and ask for more information                                         | written reasons and appeal instructions within 45 days of receipt                           | Reply in writing within 45 days with the reason and how to appeal                          |
 | Appeal                                       | 45 days from receipt; a denial gives the AG complaint route                                      | 45 days; a denial gives the Attorney General's contact                                                      | **60 days**; a denial gives the AG complaint route                                          | Answer every appeal within 45 days; a denial names the AG route for the person's state     |
@@ -2592,9 +2594,13 @@ requests on it, 0 on every other local stack; production untouched.
 
 ### How to apply (when authorized)
 
-1. `supabase migration list --linked`: `20261016000000` pending (after
-   `20261014000000` if allergen consent lands first; the two are
-   independent, and the export picks up the consent columns automatically).
+1. `supabase migration list --linked`: only `20261016000000` pending.
+   `20261012`, `20261013` (00:03 UTC) and `20261014` (03:50 UTC) were applied
+   on 2026-10-13. The export reads the consent columns by name from its
+   explicit field list. The age-assurance branch's `20261017000000` applies
+   **after** this one, in its own authorized push (agreed 2026-10-13: no
+   rename, no shared functions); `supabase db push` refuses a local migration
+   older than the remote's latest, so 20261016 must not be left behind.
 2. `supabase db push --linked --dry-run`, then `supabase db push --linked`.
 3. Read-only check: `delete_installation_data` deletes from
    `installation_request_codes`; `lookup_privacy_request` and

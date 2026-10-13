@@ -207,7 +207,14 @@ test('the public timing is the strictest clause of every applicable request cloc
   // extension (all three). Shorter clocks live in the operator runbook.
   assert.match(REQUEST_TIMING_COPY, /within 45 days of receiving your request/);
   assert.match(REQUEST_TIMING_COPY, /deletes within 30 days of checking your code/);
-  assert.match(REQUEST_TIMING_COPY, /tells you why within those 45 days/);
+  assert.match(REQUEST_TIMING_COPY, /a deletion is never extended/);
+  assert.match(REQUEST_TIMING_COPY, /extend it once, by up to 45 more days/);
+  assert.match(REQUEST_TIMING_COPY, /tells you why within the first 45 days/);
+  // The runbook states the same operating rules.
+  const runbook = readFileSync(join(__dirname, '..', '..', 'docs', 'recall-operations.md'), 'utf8');
+  assert.match(runbook, /never later than 30 days\*\* after the check/);
+  assert.match(runbook, /no extension for deletion/);
+  assert.match(runbook, /at most one extension, of\s+up to 45 days/);
   const privacy = documentPlainText(documentBySlug('privacy-data-controls')!);
   assert.ok(privacy.includes(REQUEST_TIMING_COPY), 'the document uses the one timing sentence');
   assert.ok(!/answers within 45 days\./.test(privacy), 'no bare 45-day promise remains');
