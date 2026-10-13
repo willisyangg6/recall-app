@@ -1,7 +1,7 @@
 /**
- * The consent question as a sheet (2026-10-13): the onboarding Allergens
- * step's Continue and Edit preferences' Save open it when allergens are
- * chosen and no decision is recorded. The same transparent-Modal pattern as
+ * The consent question as a sheet (2026-10-13): Edit preferences' Save
+ * opens it when a save adds an allergen and no decision is recorded (the
+ * onboarding Allergens step asks in the compact allergen-consent-prompt). The same transparent-Modal pattern as
  * the choosers (allergen-chooser-sheet.tsx). Closing without choosing
  * records nothing and stays where the shopper was.
  */

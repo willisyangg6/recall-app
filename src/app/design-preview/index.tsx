@@ -2721,7 +2721,7 @@ function AllergenConsentGallery() {
   return (
     <View style={{ gap: 16 }}>
       <Text variant="caption" color="text/secondary">
-        {'Sheet — the onboarding Allergens step’s Continue and Edit preferences’ Save open it'}
+        {'Sheet — Edit preferences’ Save opens it (onboarding uses the compact prompt)'}
       </Text>
       <Button
         variant="secondary"

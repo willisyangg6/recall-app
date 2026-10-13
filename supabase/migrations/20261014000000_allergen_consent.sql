@@ -14,9 +14,13 @@
 --      null            → allergens are stored as '{}' (and the consent
 --                        columns cleared). Declining, withdrawing, and every
 --                        older client that sends no consent land here.
---      'allergens-v1'  → allergens are stored as sent; allergen_consent_at is
+--      'allergens-v1' or 'allergens-prompt-v1'
+--                      → allergens are stored as sent; allergen_consent_at is
 --                        set when consent is first given (or the version
---                        changes) and otherwise kept.
+--                        changes) and otherwise kept. The version records
+--                        WHICH disclosure was accepted: the long consent
+--                        sheet ('allergens-v1') or the compact onboarding
+--                        prompt ('allergens-prompt-v1').
 --      anything else   → 'invalid allergen consent' (a 4xx: the client treats
 --                        it as a definite rejection).
 --    Re-bodied from the LATEST definition (20260921000000) plus the consent
@@ -94,7 +98,8 @@ begin
   end if;
   -- The known consent texts. A new version is added here when the consent
   -- wording changes materially; an unknown one is refused, never stored.
-  if p_allergen_consent is not null and p_allergen_consent not in ('allergens-v1') then
+  if p_allergen_consent is not null
+     and p_allergen_consent not in ('allergens-v1', 'allergens-prompt-v1') then
     raise exception 'invalid allergen consent';
   end if;
   v_consent := p_allergen_consent;

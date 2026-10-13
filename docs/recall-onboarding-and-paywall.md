@@ -934,6 +934,34 @@ preferences object for an empty list, so an empty clear sets and saves
 nothing (the P2B7V rule). Back, Continue and the resume point are
 unchanged.
 
+**Allergen consent prompt (founder choice, 2026-10-13).** Continue, with
+allergens chosen and no consent decision recorded
+(`shouldAskAllergenConsent`), opens a compact bottom sheet
+(`components/allergen-consent/allergen-consent-prompt.tsx`). Otherwise
+Continue goes straight to Stores, as before.
+
+- Copy: "Get allergen recall alerts?"; "Let Lotly save your selected
+  allergens on its server to send matching alerts. Change this anytime in
+  Privacy & Data Controls."; **Enable allergen alerts** (primary),
+  **Continue without allergen alerts** (secondary), and the link "How your
+  data is used". When allergens are the only alert choice (no states, no
+  stores), the no-alerts consequence is said on the question itself, between
+  the explanation and the actions.
+- The decision is recorded under the prompt's own disclosure version,
+  `allergens-prompt-v1`, distinct from the long sheet's `allergens-v1`
+  ([recall-personalization.md](recall-personalization.md) "Allergen
+  consent").
+- Either action records its decision on this iPhone and then goes on to
+  Stores (`setAllergenConsentDecision`'s `onRecorded`), without waiting on
+  the network; the server mirror follows. Close, the backdrop or Android
+  back records nothing and returns to the step.
+- The link swaps the sheet's content for the full disclosure, with Back to
+  the question: one sheet, never a second modal, so the step and its
+  selections are untouched.
+- The sheet is anchored to the bottom and sized to its content, capped below
+  the top inset; it scrolls only at that cap (large text). No illustration,
+  toggle or checkbox.
+
 **The grid adapts deterministically.** `allergenGridColumns(width,
 fontScale)` answers two columns only while the widest label word
 (`Crustacean`, measured from the bundled Public Sans at 85.2pt in `body`;

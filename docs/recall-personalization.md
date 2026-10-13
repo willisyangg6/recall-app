@@ -538,11 +538,22 @@ empty list, which is the same answer it always gave.
 
 Allergens always work **on the device**: Affects Me and the allergen labels
 read local preferences, whatever the shopper decides. Lotly's server receives
-them **only** with the shopper's consent under the current text
-(`ALLERGEN_CONSENT_VERSION = 'allergens-v1'`, `src/lib/allergen-consent.ts`).
+them **only** with the shopper's consent under a disclosure the server
+accepts (`ALLERGEN_CONSENT_VERSIONS`, `src/lib/allergen-consent.ts`).
+
+- **Which disclosure was accepted** is recorded with every decision and sent
+  as the consent version: `allergens-v1` is the long disclosure (the Edit
+  preferences sheet, the Personalization card, the Privacy & Data Controls
+  opt-in); `allergens-prompt-v1` is the compact onboarding prompt
+  (2026-10-13). Both are consent, neither is re-asked, and withdrawal works
+  the same for each; a withdrawal keeps the version of the grant it
+  replaces. A grant under a retired text is not consent and is asked again.
 
 - **When it is asked.**
-  - The onboarding Allergens step asks on **Continue**.
+  - The onboarding Allergens step asks on **Continue**, in a compact prompt
+    (founder choice, 2026-10-13;
+    [recall-onboarding-and-paywall.md](recall-onboarding-and-paywall.md)
+    §6.2).
   - Edit preferences asks only when a **Save** adds an allergen that was not
     chosen before and no decision is recorded
     (`consentNewlyNeededBySave`). The sheet opens **after** the local save
@@ -550,8 +561,11 @@ them **only** with the shopper's consent under the current text
     exists yet. A later Save that adds nothing never re-opens it, even if the
     sheet was closed without an answer.
   - Settings → Personalization shows the same question inline.
-  - The two choices, **Use for alerts** and **Keep on this iPhone only**, are
-    the same component and variant, neither pre-selected (pinned by a test).
+  - In the Edit preferences sheet and the Personalization card, the two
+    choices, **Use for alerts** and **Keep on this iPhone only**, are the
+    same component and variant, neither pre-selected (pinned by a test).
+    The onboarding prompt's two actions are primary and secondary, by
+    founder choice.
   - An existing decision is reused, and a decline or withdrawal is never
     re-asked. Re-consent needs the explicit opt-in in Privacy & Data
     Controls, which also has the one-tap withdrawal.
@@ -575,8 +589,10 @@ them **only** with the shopper's consent under the current text
 - **Server** (`apply_installation_preferences`, the one implementation):
   - **No consent version:** stores `allergens = '{}'` and clears the consent
     columns.
-  - **`allergens-v1`:** stores the allergens. `allergen_consent_at` is set
-    when consent is first given and kept across edits.
+  - **`allergens-v1` or `allergens-prompt-v1`:** stores the allergens and
+    the version, so the row says which disclosure was accepted.
+    `allergen_consent_at` is set when consent is first given (or the version
+    changes) and kept across edits.
   - **An unknown version:** refused (400).
   - **Retries:** an identical retry is a strict no-op, consent included.
   - **Decision ordering.** The row is locked `for update`. Once a timed

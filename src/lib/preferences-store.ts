@@ -200,17 +200,34 @@ export function flushPreferencesSync(): Promise<void> {
  */
 export async function setAllergenConsentDecision(
   decision: AllergenConsentDecision,
+  options: {
+    /**
+     * The disclosure the shopper answered (`ALLERGEN_CONSENT_VERSIONS`). By
+     * default the long one; a withdrawal keeps the version of the decision
+     * it replaces, so the record still says which text was accepted.
+     */
+    version?: string;
+    /**
+     * Called once the decision is recorded on this iPhone, before the server
+     * mirror runs: onboarding advances here instead of waiting on the network.
+     */
+    onRecorded?: () => void;
+  } = {},
 ): Promise<SaveResult> {
   // Strict: a decision is never timed without the previous one, or a clock
   // behind it could make a withdrawal look older than the grant it replaces.
   const prior = await loadAllergenConsentStrict();
   await saveAllergenConsent({
     decision,
-    version: ALLERGEN_CONSENT_VERSION,
+    version:
+      options.version ??
+      (decision === 'withdrawn' ? prior?.version : undefined) ??
+      ALLERGEN_CONSENT_VERSION,
     // Strictly later than the previous decision, even if the clock moved
     // back: the server orders decisions by this time (20261014000000).
     at: nextDecisionTime(prior, new Date()),
   });
+  options.onRecorded?.();
   return persistence.touch();
 }
 

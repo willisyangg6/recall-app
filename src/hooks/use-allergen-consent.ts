@@ -21,7 +21,10 @@ export type AllergenConsentState =
 
 export function useAllergenConsent(): {
   consent: AllergenConsentState;
-  decide: (decision: AllergenConsentDecision) => Promise<void>;
+  decide: (
+    decision: AllergenConsentDecision,
+    options?: { version?: string; onRecorded?: () => void },
+  ) => Promise<void>;
 } {
   const [consent, setConsent] = useState<AllergenConsentState>({ status: 'loading' });
   useFocusEffect(
@@ -37,19 +40,25 @@ export function useAllergenConsent(): {
       };
     }, []),
   );
-  const decide = useCallback(async (decision: AllergenConsentDecision) => {
-    try {
-      const { synced } = await setAllergenConsentDecision(decision);
-      setConsent({ status: 'ready', record: await loadAllergenConsent(), pending: !synced });
-    } catch {
-      // The decision could not be recorded on this iPhone: show what is
-      // actually stored, never the choice that failed.
-      const [record, pending] = await Promise.all([
-        loadAllergenConsent(),
-        allergenServerSyncPending(),
-      ]);
-      setConsent({ status: 'ready', record, pending });
-    }
-  }, []);
+  const decide = useCallback(
+    async (
+      decision: AllergenConsentDecision,
+      options?: { version?: string; onRecorded?: () => void },
+    ) => {
+      try {
+        const { synced } = await setAllergenConsentDecision(decision, options);
+        setConsent({ status: 'ready', record: await loadAllergenConsent(), pending: !synced });
+      } catch {
+        // The decision could not be recorded on this iPhone: show what is
+        // actually stored, never the choice that failed.
+        const [record, pending] = await Promise.all([
+          loadAllergenConsent(),
+          allergenServerSyncPending(),
+        ]);
+        setConsent({ status: 'ready', record, pending });
+      }
+    },
+    [],
+  );
   return { consent, decide };
 }

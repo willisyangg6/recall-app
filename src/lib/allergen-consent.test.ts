@@ -12,7 +12,9 @@ import { test } from 'node:test';
 
 import { EMPTY_PREFERENCES, type UserRecallPreferences } from '@/domain/preferences';
 import {
+  ALLERGEN_CONSENT_PROMPT_VERSION,
   ALLERGEN_CONSENT_VERSION,
+  ALLERGEN_CONSENT_VERSIONS,
   type AllergenConsentRecord,
   allergensAreOnlyAlertChoice,
   allergensForServer,
@@ -361,10 +363,13 @@ function orderedDevice(server: ReturnType<typeof orderedServer>) {
   return {
     store,
     /** setAllergenConsentDecision, with the device clock at `now`. */
-    decide(decision: AllergenConsentRecord['decision'], now: string) {
+    decide(decision: AllergenConsentRecord['decision'], now: string, version?: string) {
       consent = {
         decision,
-        version: ALLERGEN_CONSENT_VERSION,
+        version:
+          version ??
+          (decision === 'withdrawn' ? consent?.version : undefined) ??
+          ALLERGEN_CONSENT_VERSION,
         at: nextDecisionTime(consent, new Date(now)),
       };
       return store.touch();
@@ -461,4 +466,38 @@ test('a server error or refusal leaves the withdrawal pending until the server c
   await phone.store.mirrorIdle();
   assert.equal(await phone.store.mirrorOwed(), false, 'confirmed only now');
   assert.deepEqual(server.row.allergens, []);
+});
+
+test('the record says which disclosure was accepted; both count as consent and both withdraw', async () => {
+  assert.deepEqual([...ALLERGEN_CONSENT_VERSIONS], ['allergens-v1', 'allergens-prompt-v1']);
+  const viaPrompt = { ...granted, version: ALLERGEN_CONSENT_PROMPT_VERSION };
+  // Distinguishable: the mirror sends the version actually accepted.
+  assert.equal(serverAllergenConsent(granted), 'allergens-v1');
+  assert.equal(serverAllergenConsent(viaPrompt), 'allergens-prompt-v1');
+  assert.deepEqual(allergensForServer(['peanut'], viaPrompt), ['peanut']);
+  // Neither is re-asked; a retired text is.
+  assert.equal(shouldAskAllergenConsent(['peanut'], viaPrompt), false);
+  assert.equal(shouldAskAllergenConsent(['peanut'], { ...granted, version: 'allergens-v0' }), true);
+  assert.equal(serverAllergenConsent({ ...granted, version: 'allergens-v0' }), null);
+  // Withdrawal works the same for a grant made in the prompt.
+  const server = orderedServer();
+  const phone = orderedDevice(server);
+  await phone.decide('granted', '2026-10-13T10:00:00Z', ALLERGEN_CONSENT_PROMPT_VERSION);
+  assert.equal(server.row.consent, 'allergens-prompt-v1');
+  assert.deepEqual(server.row.allergens, ['peanut']);
+  assert.deepEqual(await phone.decide('withdrawn', '2026-10-13T10:05:00Z'), { synced: true });
+  assert.deepEqual(server.row, {
+    allergens: [],
+    consent: null,
+    decidedAt: '2026-10-13T10:05:00.000Z',
+  });
+  assert.equal(
+    phone.record?.version,
+    'allergens-prompt-v1',
+    'the withdrawal keeps the accepted text',
+  );
+  assert.equal(
+    consentStatusLine(serverAllergenConsent(phone.record) !== null, false),
+    CONSENT_STATUS_NOT_GRANTED,
+  );
 });

@@ -6,8 +6,8 @@
  *
  * Allergens always work ON THIS iPHONE (Affects Me, labels): they are read
  * from local preferences and never depend on consent. Lotly's SERVER
- * receives them only when the shopper chose "Use for alerts" under the
- * current consent text (`ALLERGEN_CONSENT_VERSION`). Otherwise every mirror
+ * receives them only when the shopper granted consent under a disclosure
+ * the server accepts (`ALLERGEN_CONSENT_VERSIONS`). Otherwise every mirror
  * sends no allergens and no consent version, and the server keeps none
  * (supabase/migrations/20261014000000_allergen_consent.sql enforces the same
  * rule for every client, including older ones).
@@ -27,8 +27,23 @@
  * are allergens receives no alerts at all.
  */
 
-/** The consent text version the server accepts (apply_installation_preferences). */
+/**
+ * The disclosure a decision was made under, recorded with it and sent to the
+ * server, so a grant always shows which text the shopper saw (2026-10-13):
+ */
+/** The long disclosure: the consent sheet (Edit preferences) and the Personalization card. */
 export const ALLERGEN_CONSENT_VERSION = 'allergens-v1';
+/** The compact onboarding prompt, with its full text one tap away. */
+export const ALLERGEN_CONSENT_PROMPT_VERSION = 'allergens-prompt-v1';
+/**
+ * Every disclosure the server accepts consent under — the same list as
+ * apply_installation_preferences (pinned by allergen-consent-migration.test.ts).
+ * A grant under any of them is consent; a withdrawal works the same for each.
+ */
+export const ALLERGEN_CONSENT_VERSIONS: readonly string[] = [
+  ALLERGEN_CONSENT_VERSION,
+  ALLERGEN_CONSENT_PROMPT_VERSION,
+];
 
 export type AllergenConsentDecision = 'granted' | 'declined' | 'withdrawn';
 
@@ -77,13 +92,13 @@ export function serializeAllergenConsent(record: AllergenConsentRecord): string 
 }
 
 /**
- * The consent version to send with a mirror, or null. Consent counts only
- * when it was granted under the CURRENT text: a grant under an older text is
- * not consent to the current one.
+ * The consent version to send with a mirror — the disclosure the grant was
+ * made under — or null. Consent counts only under a disclosure the server
+ * accepts: a grant under a retired text is not consent to a current one.
  */
 export function serverAllergenConsent(record: AllergenConsentRecord | null): string | null {
-  return record?.decision === 'granted' && record.version === ALLERGEN_CONSENT_VERSION
-    ? ALLERGEN_CONSENT_VERSION
+  return record?.decision === 'granted' && ALLERGEN_CONSENT_VERSIONS.includes(record.version)
+    ? record.version
     : null;
 }
 
@@ -106,7 +121,7 @@ export function shouldAskAllergenConsent(
 ): boolean {
   if (allergens.length === 0) return false;
   if (record === null) return true;
-  return record.decision === 'granted' && record.version !== ALLERGEN_CONSENT_VERSION;
+  return record.decision === 'granted' && !ALLERGEN_CONSENT_VERSIONS.includes(record.version);
 }
 
 /**
@@ -151,6 +166,30 @@ export const CONSENT_ONLY_CHOICE_NOTE =
 export const CONSENT_GRANT_LABEL = 'Use for alerts';
 export const CONSENT_DECLINE_LABEL = 'Keep on this iPhone only';
 export const CONSENT_PRIVACY_LINK_LABEL = 'Privacy & Data Controls';
+
+// Onboarding Allergens step: the compact prompt after Continue (founder
+// choice, 2026-10-13). Short on purpose; the full disclosure is one tap away
+// ("How your data is used") inside the same sheet.
+export const PROMPT_TITLE = 'Get allergen recall alerts?';
+export const PROMPT_BODY =
+  'Let Lotly save your selected allergens on its server to send matching alerts. Change this anytime in Privacy & Data Controls.';
+export const PROMPT_ENABLE_LABEL = 'Enable allergen alerts';
+export const PROMPT_DECLINE_LABEL = 'Continue without allergen alerts';
+export const PROMPT_DETAILS_LINK = 'How your data is used';
+export const PROMPT_DETAILS_HINT = 'Shows how Lotly uses and stores your allergens.';
+export const PROMPT_DETAILS_BACK_HINT = 'Returns to the allergen alerts question.';
+
+/**
+ * The full disclosure behind "How your data is used": the consent text's
+ * purpose, recipients, ads/sale and withdrawal paragraphs, with the decline
+ * consequence named by the prompt's own decline label.
+ */
+export const PROMPT_DETAILS_PARAGRAPHS: readonly string[] = [
+  CONSENT_PARAGRAPHS[0],
+  CONSENT_PARAGRAPHS[1],
+  CONSENT_PARAGRAPHS[2],
+  'If you continue without allergen alerts, Lotly still uses your allergens on this iPhone to show which recalls may matter to you, but it won’t send alerts for recalls that only an allergen match would qualify, like allergen-only recalls.',
+];
 
 // Privacy & Data Controls status card.
 export const CONSENT_STATUS_TITLE = 'Allergens and alerts';

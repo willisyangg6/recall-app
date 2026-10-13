@@ -2,7 +2,7 @@
  * The allergen consent question (2026-10-13): the full disclosure and the
  * two EQUAL choices — same component, same `secondary` variant, the same
  * width, neither pre-selected (pinned by allergen-consent.test.ts). Used by
- * the sheet (onboarding, Edit preferences) and the inline card
+ * the sheet (Edit preferences) and the inline card
  * (Personalization). Never bundled with any other action.
  */
 

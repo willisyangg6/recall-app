@@ -12,6 +12,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { ALLERGEN_CONSENT_VERSIONS } from '@/lib/allergen-consent';
+
 const DIR = join(__dirname, '..', '..', '..', 'supabase', 'migrations');
 const CHAIN = readdirSync(DIR)
   .filter((name) => name.endsWith('.sql'))
@@ -45,7 +47,15 @@ test('the effective apply_installation_preferences stores no allergens without a
   const { name, body } = effective(APPLY);
   assert.match(body, /p_allergen_consent text/, `${name} takes the consent`);
   assert.match(body, /if v_consent is null then\s*v_allergens := '\{\}';/);
-  assert.match(body, /not in \('allergens-v1'\)/, 'only known consent versions are stored');
+  // Exactly the client's accepted disclosures: the long sheet and the compact prompt.
+  const listed = /not in \(([^)]*)\)/.exec(
+    body.slice(body.indexOf('p_allergen_consent is not null')),
+  );
+  assert.ok(listed, 'only known consent versions are stored');
+  assert.deepEqual(
+    listed[1].split(',').map((v) => v.trim().replace(/'/g, '')),
+    [...ALLERGEN_CONSENT_VERSIONS],
+  );
   assert.match(body, /raise exception 'invalid allergen consent'/);
   // The no-op check includes consent, so a consent change is never swallowed.
   assert.match(body, /allergen_consent_version is not distinct from v_consent/);

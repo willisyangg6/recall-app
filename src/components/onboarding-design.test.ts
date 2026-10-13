@@ -23,6 +23,15 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import {
+  CONSENT_PARAGRAPHS,
+  PROMPT_BODY,
+  PROMPT_DECLINE_LABEL,
+  PROMPT_DETAILS_LINK,
+  PROMPT_DETAILS_PARAGRAPHS,
+  PROMPT_ENABLE_LABEL,
+  PROMPT_TITLE,
+} from '@/lib/allergen-consent';
 import { TILE } from '@/lib/allergen-grid';
 import {
   ALLERGENS_BODY,
@@ -2781,6 +2790,68 @@ test('Allergens: Continue is always enabled, and Back, Continue and the resume p
     progressAccessibilityLabel(stepProgress('allergens')!),
     'Onboarding progress, step 4 of 5',
   );
+});
+
+test('Allergens: the compact consent prompt records either answer, then goes to Stores; closing records nothing', () => {
+  const route = codeOnly(ROUTES.allergens);
+  // The step itself is unchanged: ordinary Continue, which asks only with
+  // allergens chosen and no decision recorded.
+  const step = codeOnly(componentBody(ALLERGENS, 'AllergensStep'));
+  assert.ok(step.includes('footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}'));
+  assert.ok(route.includes('shouldAskAllergenConsent(prefs.allergens, consent.record)'));
+  assert.match(route, /<AllergenConsentPrompt\s+visible=\{asking\}/);
+  assert.ok(route.includes("onEnable={() => choose('granted')}"));
+  assert.ok(route.includes("onDecline={() => choose('declined')}"));
+  assert.ok(route.includes('onClose={() => setAsking(false)}'));
+  // Advance once the decision is recorded on this iPhone, not after the network.
+  assert.match(
+    route,
+    /void decide\(decision, \{[\s\S]*?onRecorded: \(\) => \{[\s\S]*?setAsking\(false\);\s*next\(\);/,
+  );
+  assert.ok(!route.includes('AllergenConsentSheet'), 'onboarding went back to the long sheet');
+  // The record says the compact disclosure is the one answered.
+  assert.match(
+    route,
+    /void decide\(decision, \{\s*(?:\/\/[^\n]*\s*)*version: ALLERGEN_CONSENT_PROMPT_VERSION,/,
+  );
+  // The prompt: the founder's copy, verbatim; primary then secondary; the
+  // details link swaps in the full disclosure inside the same sheet (no
+  // second modal), with Back to the question.
+  const prompt = codeOnly(read('components', 'allergen-consent', 'allergen-consent-prompt.tsx'));
+  assert.equal(PROMPT_TITLE, 'Get allergen recall alerts?');
+  assert.equal(
+    PROMPT_BODY,
+    'Let Lotly save your selected allergens on its server to send matching alerts. Change this anytime in Privacy & Data Controls.',
+  );
+  assert.equal(PROMPT_ENABLE_LABEL, 'Enable allergen alerts');
+  assert.equal(PROMPT_DECLINE_LABEL, 'Continue without allergen alerts');
+  assert.equal(PROMPT_DETAILS_LINK, 'How your data is used');
+  assert.match(
+    prompt,
+    /<Button label=\{PROMPT_ENABLE_LABEL\}[^>]*\/>\s*<Button\s+variant="secondary"\s+label=\{PROMPT_DECLINE_LABEL\}/,
+  );
+  assert.equal((prompt.match(/<Modal\b/g) ?? []).length, 1);
+  // Allergens as the only alert choice: the no-alerts consequence is on the
+  // question itself, between the explanation and the actions.
+  assert.match(
+    prompt,
+    /\{PROMPT_BODY\}\s*<\/Text>\s*\{onlyChoice \? \(\s*<Text variant="body-small-bold">\{CONSENT_ONLY_CHOICE_NOTE\}<\/Text>\s*\) : null\}\s*<View style=\{styles\.actions\}>/,
+  );
+  assert.ok(prompt.includes('onPress={() => setDetails(true)}'));
+  assert.ok(prompt.includes('onPress={() => setDetails(false)}'));
+  for (const banned of ['<Image', 'Switch', '"checkbox"', 'CheckIndicator']) {
+    assert.ok(!prompt.includes(banned), `the prompt draws ${banned}`);
+  }
+  // Compact: bottom-anchored and content-sized, capped below the top inset,
+  // scrolling only at that cap.
+  assert.ok(prompt.includes('maxHeight: height - chooserTop(insets.top)'));
+  assert.ok(prompt.includes('body: { flexGrow: 0, flexShrink: 1 }'));
+  // The full disclosure keeps the consent text's purpose, recipients,
+  // ads/sale and withdrawal paragraphs.
+  assert.deepEqual(PROMPT_DETAILS_PARAGRAPHS.slice(0, 3), CONSENT_PARAGRAPHS.slice(0, 3));
+  assert.match(PROMPT_DETAILS_PARAGRAPHS[3], /^If you continue without allergen alerts,/);
+  // Edit preferences keeps the full choice sheet.
+  assert.ok(read('app', 'onboarding', 'edit-preferences.tsx').includes('<AllergenConsentSheet'));
 });
 
 test('the approved Allergens mock-up is a design reference only: nothing bundles it', () => {
