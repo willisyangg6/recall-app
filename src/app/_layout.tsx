@@ -204,6 +204,11 @@ function RootNavigator({ fontsSettled }: { fontsSettled: boolean }) {
               gate is off; a direct deep link lands on the screen's own "not
               available" state rather than on a form. */}
           <Stack.Screen name="report/[id]" options={{ title: 'Share a shopper report' }} />
+          {/* Privacy requests (2026-10-13): what the server holds for this
+              installation, and a one-time code for an email request. Both are
+              reached from Privacy & Data Controls. */}
+          <Stack.Screen name="privacy/server-data" options={{ title: 'Server Data' }} />
+          <Stack.Screen name="privacy/request-code" options={{ title: 'Request Code' }} />
         </Stack.Protected>
 
         {/* 4. Onboarding: the resume step first. Each screen draws its own

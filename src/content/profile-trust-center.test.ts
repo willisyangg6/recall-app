@@ -14,6 +14,7 @@ import { test } from 'node:test';
 
 import { SHOPPER_REPORT_VISIBILITY_THRESHOLD } from '@/domain/shopper-report';
 import { RESET_ACTION_LABEL } from '@/lib/installation-reset';
+import { SUPPORT_EMAIL } from '@/lib/privacy-requests';
 import { PRIVACY_DOCUMENT_SLUG } from '@/lib/shopper-report-presentation';
 import { documentPlainText } from './document-model';
 import { documentBySlug, PROFILE_DOCUMENT_GROUPS, TRUST_DOCUMENTS } from './index';
@@ -108,9 +109,19 @@ test('no document contains unresolved placeholders or invented contact points', 
     for (const marker of ['TODO', 'TBD', 'PLACEHOLDER', 'FIXME', 'Lorem', 'example.com', '[[']) {
       assert.ok(!text.includes(marker), `${doc.slug} contains placeholder marker "${marker}"`);
     }
-    // No invented emails, phone numbers, or domains: no real contact
-    // destination exists yet, so none may be claimed.
-    assert.doesNotMatch(text, /@[a-z0-9-]+\.[a-z]{2,}/i, `${doc.slug} invents an email address`);
+    // No invented emails, phone numbers, or domains. The one real contact
+    // destination is the founder-confirmed support address (2026-10-13,
+    // privacy requests): it may appear, and only in Privacy & Data Controls,
+    // where the request code is explained. Any other address still fails.
+    const withoutSupport = text.split(SUPPORT_EMAIL).join('');
+    assert.doesNotMatch(
+      withoutSupport,
+      /@[a-z0-9-]+\.[a-z]{2,}/i,
+      `${doc.slug} invents an email address`,
+    );
+    if (doc.slug !== 'privacy-data-controls') {
+      assert.ok(!text.includes(SUPPORT_EMAIL), `${doc.slug} names the support address`);
+    }
     assert.doesNotMatch(text, /\b\d{3}-\d{3}-\d{4}\b/, `${doc.slug} invents a phone number`);
   }
 });

@@ -2421,6 +2421,187 @@ that device's installation.
 | 5   | **Reset:** Profile → Reset app and delete my data                                                                                                                                | The installation's row (consent columns included) is gone; on the device, the consent record is removed and onboarding starts over.                                                                                           |
 | 6   | **Older-build compatibility:** an installed build without the consent screens saves preferences                                                                                  | The save succeeds; its allergens are not stored on the server (`'{}'`, no consent version); its states and stores are.                                                                                                        |
 
+## Privacy requests: a PREPARED schema migration (2026-10-13)
+
+**Status: PREPARED, NOT APPLIED.** Applying it needs explicit founder
+authorization (`supabase db push --linked`, which deploys and applies). The
+design is the privacy program proposal, §3
+([recall-privacy-program-proposal.md](recall-privacy-program-proposal.md)).
+
+`supabase/migrations/20261016000000_privacy_requests.sql`:
+
+|           |                                                                                                                                                                  |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| adds      | `installation_request_codes (code_hash, installation_id, purpose, created_at, expires_at, used_at)`: RLS on, service role only; `expires_at` = created + 14 days |
+| adds      | `export_installation_data(text)`: the app's read of its own rows (no installation id; push token masked to 4 characters); anon/authenticated/service_role        |
+| adds      | `create_privacy_request_code(text, text)`: purpose `access` or `delete`; returns the code once; anon/authenticated/service_role                                  |
+| adds      | `installation_data_row_counts`, `lookup_privacy_request` (dry run), `redeem_privacy_request` (apply), `purge_spent_request_codes`: service role only             |
+| re-bodies | `delete_installation_data`: the 20261013 body plus the request codes                                                                                             |
+| schedules | `recall-request-code-cleanup`, daily 09:45 UTC: spent codes 30 days after use or expiry                                                                          |
+| enables   | `pgcrypto` in `extensions` (`create extension if not exists`; already present on Supabase projects)                                                              |
+
+**The request code.** 12 characters of Crockford base 32 (about 60 bits),
+drawn by `gen_random_bytes` on the server. Only `sha256(code)` is stored. At
+most 3 live codes per installation; a fourth revokes the oldest. Single use:
+redemption locks the code row and requires `used_at is null and expires_at >
+now()`. Only the service role can look a code up or redeem it, so the
+public key cannot test a guess. A code authorizes nothing by itself: it lets
+the operator find one installation for the one purpose chosen in the app.
+Every deletion path (the in-app reset, the inactivity purge, a redeemed
+deletion request) removes the installation's codes too.
+
+**Logs.** Raised errors are fixed strings. The create request carries no
+code (it is in the response); the operator CLI sends only the hash. The CLI
+prints counts and the installation id's first 4 characters, never the code,
+its hash, the full id or any preference contents.
+
+### Answering an emailed request
+
+1. **Dry run:** `npm run privacy:request`. Type the code at the hidden prompt
+   (never as an argument; the CLI refuses one). It prints the code's status,
+   the purpose chosen in the app, the 4-character hint, and row counts.
+   Nothing is written or consumed.
+   - `used` or `expired`, or no match: reply asking for a new code from the
+     app (Privacy & Data Controls → Your data → Get a request code).
+   - No code at all: follow the proposal, §3.2 "Without a code".
+2. **Apply:** `npm run privacy:request -- --apply --confirm --expect <n>`, with `<n>`
+   the total the dry run printed. One transaction consumes the code and:
+   - `access`: writes the export (the same JSON as the app's "Share as file")
+     to a 0600 file under `~/Lotly-Privacy-Requests/` (`--out <dir>` to
+     change). Attach it to the reply, then delete the file.
+   - `delete`: runs `delete_installation_data`. If the requester still uses
+     the app on that iPhone, it sends its choices again at the next launch;
+     the reply should point to "Reset app and delete my data" as well.
+   - If the rows changed since the dry run, the server refuses and consumes
+     nothing; run the dry run again.
+3. Each run appends `date,purpose,outcome` to `request-log.csv` in the same
+   folder. It holds no code and no installation id. Response dates and the
+   45-day clock are tracked in the support mailbox.
+
+### What the export leaves out, and asking for more
+
+The export (the app's "Share as file" and the operator's file are the same
+`lotly-server-data/2` document) carries its own `redactions`,
+`not_included` and `requesting_more` fields:
+
+- **An explicit list.** The export emits only the approved fields named in
+  `export_installation_data` and mirrored in `EXPORT_FIELDS`
+  (`src/lib/privacy-requests.ts`). A column a later migration adds is **not**
+  exported until someone adds it to both on purpose;
+  `privacy-requests-migration.test.ts` holds the lists equal and the live
+  suite proves an added column stays out.
+- **Redacted, with the reason given to the person:** the installation
+  identifier (a bearer credential: it can read and delete the data); the push
+  token beyond its last 4 characters, including inside stored delivery
+  errors (it can address notifications to the device); the request-code hash
+  (a scrambled form kept only to check a code someone sends; it cannot be
+  turned back into the code); and bookkeeping (internal row ids, the shopper
+  report edit counter, the legacy one-state copy `state_code`, the
+  never-set `user_id`). Neither credential is sent in answer to any request.
+- **Internal age and consent-revocation keys** (the age-assurance branch's
+  planned `push_subscriptions.app_transaction_hmac`, an HMAC of Apple's
+  app-transaction id used only to match a parent's withdrawal of consent to
+  this installation's alerts) are **not** exported: the column is not on the
+  list. If that branch lands, its plain-language line for the export is:
+  "A scrambled key, used only so Apple can tell Lotly when a parent withdraws
+  permission; it cannot be turned back into anything about you."
+- **Not included (held elsewhere):** device-only data, hosting connection
+  logs (7 days at the database host), Apple and RevenueCat subscription
+  records, and support emails.
+- **Asking for more:** email lotlysupport@gmail.com with a request code for
+  a copy, saying what is wanted. The operator answers within the deadlines
+  in "Request deadlines" below with
+  what Lotly can tie to that installation. Where a record cannot be tied to
+  it (RevenueCat's records are keyed by a purchase id that Lotly's server
+  never stores), the reply says so and gives that provider's privacy contact
+  from the processor list.
+- **Processors:** each entry carries the provider's privacy policy and the
+  privacy contact route it names, checked against the providers' own pages
+  on 2026-10-13 (`processors_checked_on`).
+
+### Retention: implemented versus proposed
+
+| Item                                                 | Rule                                                              | Status                                                                                                                                                                                                                                                                            |
+| ---------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Request code, unused                                 | expires 14 days after creation                                    | **Implemented** (database CHECK and the redemption predicate)                                                                                                                                                                                                                     |
+| Request code, spent                                  | deleted 30 days after use or expiry; at once on any deletion path | **Implemented** (daily `recall-request-code-cleanup`; `delete_installation_data`)                                                                                                                                                                                                 |
+| `request-log.csv` (date, purpose, outcome only)      | kept at most 24 months                                            | **Pruned only when the operator tool runs.** Each `privacy:request` run first removes lines older than 24 months. Nothing runs between uses, so the monthly review below covers months with no request. The 24 months is a **proposal** (privacy program proposal §8, decision 4) |
+| Support mailbox (requests, replies, codes in emails) | kept at most 24 months                                            | **Policy proposal, manual only.** Nothing deletes mail automatically and no automatic deletion is promised; the monthly review below does it                                                                                                                                      |
+| Operator export file                                 | deleted after the reply is sent                                   | **Manual step** in this procedure, checked in the monthly review                                                                                                                                                                                                                  |
+
+### Monthly privacy review (Willis, first working day of each month)
+
+1. **Request log.** Open `~/Lotly-Privacy-Requests/request-log.csv`. Delete
+   any line dated more than 24 months ago (a month with a request has already
+   done this automatically). Confirm every line is only `date,purpose,outcome`.
+2. **Export files.** That folder should hold no `lotly-data-*.json`; delete
+   any left after a reply was sent.
+3. **Mailbox.** In lotlysupport@gmail.com, delete request threads (and the
+   codes in them) whose last message is more than 24 months old, then empty
+   Trash. Gmail has no per-folder expiry, so this is manual.
+4. **Open requests.** For every request not yet answered, check its clock in
+   "Request deadlines" below; send any extension notice before day 45.
+5. Record the review date (a line in the mailbox's own notes is enough).
+
+### Request deadlines
+
+Verified 2026-10-13 against the statute text: WA RCW 19.373.040, NV NRS
+603A.505–.520 and CT CGS 42-518 / 42-520. The public sentence
+(`REQUEST_TIMING_COPY`, shown in the app and the export) commits to the
+strictest clause of each: an answer within 45 days of **receipt**, deletion
+within 30 days of checking the code, and an explained extension inside the
+first 45 days. Count from the day the email arrives.
+
+| Request type                                 | Washington                                                                                       | Nevada                                                                                                      | Connecticut                                                                                 | Lotly's operating rule                                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Access / copy / confirm / list third parties | 45 days from receipt; once +45 if reasonably necessary, noticed with reasons inside the first 45 | 45 days from authenticating; once +45, noticed with reasons inside 45 days from authenticating              | 45 days from receipt; +45 if reasonably necessary, noticed with reasons inside the first 45 | Answer within 45 days of receipt; any extension notice before day 45                       |
+| Deletion                                     | 45 days from receipt (+45 as above); backups may lag ≤ 6 months                                  | **30 days from authenticating** (no extension); notify processors, who also have 30 days; backups ≤ 2 years | 45 days from receipt (+45)                                                                  | Run the deletion the day the code is checked; **never later than 30 days** after the check |
+| Withdraw consent / stop using health data    | 45 days from receipt (+45)                                                                       | "cease collecting, sharing": 45 days from authenticating (+45)                                              | **Stop processing within 15 days** of a revocation (42-520)                                 | Act within 15 days; in the app the allergen toggle (consent branch) is immediate           |
+| Correction                                   | no correction right in RCW 19.373.040                                                            | no correction right in NRS 603A.505                                                                         | 45 days from receipt (+45); 42-518(a)(2)                                                    | Done in the app (Personalization); by email, within 45 days                                |
+| Declining a request                          | an appeal process is required; no separate notice clock is stated (reply within the 45 days)     | if it cannot authenticate, may decline and ask for more information                                         | written reasons and appeal instructions within 45 days of receipt                           | Reply in writing within 45 days with the reason and how to appeal                          |
+| Appeal                                       | 45 days from receipt; a denial gives the AG complaint route                                      | 45 days; a denial gives the Attorney General's contact                                                      | **60 days**; a denial gives the AG complaint route                                          | Answer every appeal within 45 days; a denial names the AG route for the person's state     |
+| Fees                                         | free up to twice a year                                                                          | free at least twice a year                                                                                  | not checked in this review                                                                  | Never charge                                                                               |
+
+Where the request cannot be authenticated (no code, and reinstalling did not
+restore the installation), all three allow declining with an explanation;
+the reply still goes out within 45 days of receipt.
+
+### Validation done (2026-10-13, isolated stack only)
+
+A separate stack (`project_id = recall-privacy-requests`, ports 571xx, a
+`supabase` shim that refuses any other workdir). Kong logs: 450 privacy RPC
+requests on it, 0 on every other local stack; production untouched.
+
+- `src/server/push/privacy-requests-live.test.ts`, 9/9: hash-only storage,
+  guessing (the public key gets 401/404 on the table and all four service
+  functions; 200 random codes match nothing and consume nothing), isolation
+  between installations, the 3-code cap, single use (including 6 racing
+  redemptions, exactly 1 succeeds), expiry at 14 days, the count gate,
+  deletion through reset and cleanup, fixed error messages. It is
+  **opt-in** and **skips** unless `PRIVACY_REQUESTS_LIVE=1` is set and
+  `SUPABASE_WORKDIR` names an isolated scratch stack, so `npm test` can never
+  write to the shared `recall-app` stack, nor run beside
+  `preference-states-live.test.ts` (which asserts the stack's push tables are
+  empty). Run it on its own:
+  `PRIVACY_REQUESTS_LIVE=1 SUPABASE_WORKDIR=<scratch> npx tsx --test src/server/push/privacy-requests-live.test.ts`.
+- The CLI end to end: dry run, a wrong `--expect` refused with the code
+  still live, access export (0600 file), reuse refused, deletion leaving 0
+  rows, malformed code refused before any lookup. A scan of the output, the
+  export file, the request log and the stack's Kong, PostgREST and Postgres
+  logs found no code, hash, full installation id or allergen value.
+
+### How to apply (when authorized)
+
+1. `supabase migration list --linked`: `20261016000000` pending (after
+   `20261014000000` if allergen consent lands first; the two are
+   independent, and the export picks up the consent columns automatically).
+2. `supabase db push --linked --dry-run`, then `supabase db push --linked`.
+3. Read-only check: `delete_installation_data` deletes from
+   `installation_request_codes`; `lookup_privacy_request` and
+   `redeem_privacy_request` are executable by `service_role` only.
+4. The app build with the Your data section must not ship before step 2: on
+   an older schema its two screens show the "could not be reached" state.
+
 ## Enforcement: weekly-gated
 
 The daily job reads the one-request openFDA bulk manifest and compares its

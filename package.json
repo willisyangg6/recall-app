@@ -61,6 +61,7 @@
     "jobs:push": "tsx scripts/run-job.ts push",
     "push:activate": "tsx scripts/push-activate.ts",
     "push:test": "tsx scripts/push-test.ts",
+    "privacy:request": "tsx scripts/privacy-request.ts",
     "ops:health": "tsx scripts/ops-health.ts",
     "ops:heartbeat": "tsx scripts/ops-heartbeat.ts",
     "scheduler:status": "tsx scripts/scheduler-status.ts",

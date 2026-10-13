@@ -89,6 +89,8 @@ export const ROUTE_GROUPS: Record<RouteGroup, readonly string[]> = {
     'settings/notifications',
     'document/[slug]',
     'report/[id]',
+    'privacy/server-data',
+    'privacy/request-code',
   ],
   onboarding: [
     'onboarding/welcome',

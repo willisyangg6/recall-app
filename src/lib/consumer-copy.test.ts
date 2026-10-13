@@ -38,6 +38,7 @@ import test from 'node:test';
 import { documentBySlug, TRUST_DOCUMENTS } from '@/content';
 import { documentPlainText, riskLevelText } from '@/content/document-model';
 import { DETAIL_ERROR_FALLBACK, EXTERNAL_LINK_HINT } from '@/lib/detail-copy';
+import { SUPPORT_EMAIL } from '@/lib/privacy-requests';
 import {
   FEED_EMPTY_CORPUS,
   FEED_EMPTY_PERSONALIZED,
@@ -470,7 +471,10 @@ test('the interim launch-placeholder corrections are applied, and nothing is inv
     /A way to report a suspected data problem from inside the app is not available yet\. The official source link on every notice is the authoritative reference for that recall\./,
   );
   for (const doc of TRUST_DOCUMENTS) {
-    const text = documentPlainText(doc);
+    // The founder-confirmed support address (2026-10-13) is the one contact
+    // point a document may name; it is removed before the invention checks,
+    // so any other address, domain or "support@" still fails.
+    const text = documentPlainText(doc).split(SUPPORT_EMAIL).join('');
     assert.doesNotMatch(text, /@[a-z0-9-]+\.[a-z]{2,}/i, `${doc.slug} invents an email`);
     assert.doesNotMatch(
       text,

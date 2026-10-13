@@ -55,12 +55,13 @@ function installationKeyedTables(): string[] {
   return [...tables].sort();
 }
 
-test('the installation-keyed tables are the five the reset must cover', () => {
+test('the installation-keyed tables are the six the reset must cover', () => {
   // A deliberate inventory: adding a table with an installation_id column
   // changes this list, and the next test then demands the reset covers it.
   assert.deepEqual(installationKeyedTables(), [
     'public.installation_activity',
     'public.installation_preferences',
+    'public.installation_request_codes',
     'public.push_installation_sequences',
     'public.push_subscriptions',
     'public.shopper_reports',
