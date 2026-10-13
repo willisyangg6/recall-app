@@ -12,15 +12,15 @@
  *   to a short explanation beneath Apple's sheet.
  * - **Under 13:** a stop screen with no way forward. Nothing beneath it
  *   ever mounts. If this device registered for alerts before (an earlier
- *   account on the same iPhone), it also unregisters from Apple's push
- *   service, locally — the device never contacts Lotly. That does NOT
- *   disable the server's subscription at once: the server learns only when
- *   a later alert is sent to the old token and Expo's receipt reports
- *   `DeviceNotRegistered` (at least 15 minutes later, read by the next
- *   worker run). Until then queued alerts are still handed to Expo; while
- *   delivery is not activated, nothing is sent and the row stays enabled.
- *   docs/recall-push-delivery.md, "When the server stops alerts", and
- *   src/server/push/disabled-subscription-timeline.test.ts.
+ *   account on the same iPhone), the stop makes ONE protective request:
+ *   the existing sequenced alert disable, carrying only the stored
+ *   installation id (lib/push-registration.ts `disableAlertsAfterAgeStop`;
+ *   lib/age-stop-alerts.ts). No age, no RevenueCat, no other launch sync.
+ *   Unconfirmed (offline) it stays owed in SecureStore and is sent again at
+ *   every launch until the server confirms. It also unregisters from
+ *   Apple's push service, locally. Until the disable is confirmed the server
+ *   row stays enabled, and an alert already handed to Expo cannot be
+ *   recalled — docs/recall-push-delivery.md, "When the server stops alerts".
  * - **Retry:** Apple's service did not answer and the account may be
  *   regulated: Try again, and nothing beneath it mounts meanwhile.
  *
@@ -49,6 +49,7 @@ import {
   AGE_UNDER13_TITLE,
 } from '@/lib/age-gate-copy';
 import { createAgeCheckPorts } from '@/lib/age-range-service';
+import { disableAlertsAfterAgeStop } from '@/lib/push-registration';
 
 type DevelopmentScenario = typeof import('@/lib/development-age-scenario');
 type DevelopmentProbe = typeof import('@/lib/development-revocation-probe');
@@ -112,8 +113,11 @@ export function AgeGate({
   }, [proceeding]);
   const under13 = state.kind === 'under13';
   useEffect(() => {
-    // Local only: no request to Lotly, RevenueCat or Expo.
-    if (under13) void Notifications.unregisterForNotificationsAsync().catch(() => {});
+    if (!under13) return;
+    // The one protective request (installation id only), then the local
+    // APNs unregister. Neither ever surfaces an error on the stop screen.
+    void disableAlertsAfterAgeStop().catch(() => {});
+    void Notifications.unregisterForNotificationsAsync().catch(() => {});
   }, [under13]);
 
   const retry = useCallback(() => {

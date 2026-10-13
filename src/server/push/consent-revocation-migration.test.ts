@@ -64,8 +64,17 @@ test('the receipts table holds no installation id and no Apple identifier', () =
 test('the client may only set or clear its own key; revocation is service_role only', () => {
   assert.match(
     SQL,
-    /grant execute on function public\.set_push_revocation_key\(text, text\) to anon, authenticated;/,
+    /grant execute on function public\.register_push_subscription_with_revocation_key\(text, text, text, text, bigint, text\)\s+to anon, authenticated;/,
   );
+  assert.match(
+    SQL,
+    /grant execute on function public\.clear_push_revocation_key\(text\) to anon, authenticated;/,
+  );
+  assert.match(
+    SQL,
+    /revoke execute on function public\.push_register_subscription\(text, text, text, text, bigint, boolean\)\s+from public, anon, authenticated;/,
+  );
+  assert.doesNotMatch(SQL, /set_push_revocation_key/);
   assert.match(
     SQL,
     /revoke execute on function public\.apply_consent_revocation\(uuid, text, text, timestamptz, text\)\s+from public, anon, authenticated;/,
@@ -100,14 +109,52 @@ test('a revocation is recorded before it acts, and a replay acts on nothing', ()
   assert.match(body, /where app_transaction_hmac = v_hmac\s+and enabled;/);
 });
 
-test('it disables, never deletes, and re-bodies no other function', () => {
+test('it disables, never deletes; it re-bodies only register_push_subscription', () => {
   assert.doesNotMatch(SQL, /delete from public\.push_subscriptions/);
   const defined = [...SQL.matchAll(/create or replace function (public\.[a-z_]+)/g)].map(
     (m) => m[1],
   );
   assert.deepEqual(defined, [
     'public.app_transaction_hmac',
-    'public.set_push_revocation_key',
+    'public.push_register_subscription',
+    'public.register_push_subscription',
+    'public.register_push_subscription_with_revocation_key',
+    'public.clear_push_revocation_key',
     'public.apply_consent_revocation',
   ]);
+  assert.doesNotMatch(SQL, /function public\.delete_installation_data/);
+});
+
+test('no silent revival: the plain registration keeps a revoked row disabled', () => {
+  const core = SQL.slice(
+    SQL.indexOf('create or replace function public.push_register_subscription'),
+    SQL.indexOf('create or replace function public.register_push_subscription('),
+  );
+  assert.match(
+    core,
+    /enabled = not \(public\.push_subscriptions\.disabled_reason is not distinct from 'consent_revoked'\s+and not p_allow_consent_renewal\)/,
+  );
+  const plain = SQL.slice(
+    SQL.indexOf('create or replace function public.register_push_subscription('),
+    SQL.indexOf('create or replace function public.register_push_subscription_with_revocation_key'),
+  );
+  assert.match(
+    plain,
+    /p_installation_id, p_expo_push_token, p_platform, p_app_version, p_sequence, false/,
+  );
+});
+
+test('the keyed registration is atomic and renews only for the same Apple Account', () => {
+  const keyed = SQL.slice(
+    SQL.indexOf('create or replace function public.register_push_subscription_with_revocation_key'),
+    SQL.indexOf('create or replace function public.clear_push_revocation_key'),
+  );
+  const hash = keyed.indexOf('v_hmac := public.app_transaction_hmac');
+  const guard = keyed.indexOf(
+    "if v_reason = 'consent_revoked' and v_stored is distinct from v_hmac",
+  );
+  const register = keyed.indexOf('v_result := public.push_register_subscription');
+  const store = keyed.indexOf('set app_transaction_hmac = v_hmac');
+  assert.ok(hash > 0 && hash < guard && guard < register && register < store);
+  assert.match(keyed, /if p_app_transaction_id is null/);
 });

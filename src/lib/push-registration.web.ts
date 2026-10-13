@@ -41,3 +41,8 @@ export async function disableRecallAlerts(): Promise<AlertStatus> {
 export async function refreshRegistrationIfEnabled(): Promise<void> {}
 
 export async function clearLocalAlertState(): Promise<void> {}
+
+/** Web: no alerts, so nothing to disable. */
+export async function disableAlertsAfterAgeStop(): Promise<'no-installation'> {
+  return 'no-installation';
+}

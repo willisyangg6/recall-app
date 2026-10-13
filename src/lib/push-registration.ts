@@ -52,7 +52,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import { alertStatus, type AlertStatus } from './alert-status';
-import { getOrCreateInstallationId } from './installation-id';
+import { getOrCreateInstallationId, peekInstallationId } from './installation-id';
 import { enqueueInstallationMutation } from './installation-lifecycle';
 import {
   alertIntent,
@@ -68,7 +68,47 @@ import {
   registerPushSubscription,
   RpcAbortedError,
 } from './push-api';
-import { syncRevocationKey } from './revocation-key-sync';
+import { getAppTransactionAsync } from '../../modules/app-transaction';
+import {
+  disableAlertsAfterAgeStop as disableAfterAgeStop,
+  type AgeStopAlertsOutcome,
+} from './age-stop-alerts';
+import { loadAgeRecord } from './age-record-store';
+import {
+  registrationRoute,
+  revocationKeyEligible,
+  routedRegistration,
+  type RegistrationRoute,
+} from './revocation-key';
+import {
+  clearPushRevocationKey,
+  registerPushSubscriptionWithRevocationKey,
+} from './revocation-key-api';
+
+/**
+ * '1' once a keyed registration (consent revocation) was confirmed on this
+ * device, until the key is cleared: such an installation keeps using the
+ * keyed path, the only one that can renew a row a parent's revocation
+ * disabled.
+ */
+const REVOCATION_KEY_HELD = 'recall.revocation-key-held';
+
+/**
+ * How this installation must register (lib/revocation-key.ts). StoreKit is
+ * asked for the app transaction only when a key is needed or held.
+ */
+async function resolveRegistrationRoute(): Promise<RegistrationRoute> {
+  const eligible = revocationKeyEligible(await loadAgeRecord());
+  const keyHeld = (await SecureStore.getItemAsync(REVOCATION_KEY_HELD)) === '1';
+  if (!eligible && !keyHeld) return { kind: 'plain', clearAfter: false };
+  let appTransactionId: string | null = null;
+  try {
+    appTransactionId = (await getAppTransactionAsync())?.appTransactionId ?? null;
+  } catch {
+    appTransactionId = null;
+  }
+  return registrationRoute({ eligible, keyHeld, appTransactionId });
+}
 
 /**
  * The flag as it was stored before the intent record (below) replaced it:
@@ -103,19 +143,33 @@ function installationIntent(installationId: string, token: string | null): Alert
     save: (state) => SecureStore.setItemAsync(INTENT_KEY, serializeAlertIntent(state)),
     async register(sequence, signal) {
       if (token === null) throw new Error('registration needs a push token');
-      const result = await registerPushSubscription({
+      const common = {
         installationId,
         expoPushToken: token,
-        platform: Platform.OS === 'ios' ? 'ios' : 'android',
+        platform: Platform.OS === 'ios' ? ('ios' as const) : ('android' as const),
         appVersion: Constants.expoConfig?.version ?? null,
-        sequence,
-        signal,
-      });
-      // Consent revocation (age assurance): keep the subscription's key in
-      // step with the age record. Not awaited — it must never slow or fail
-      // a registration (revocation-key-sync.ts).
-      if (result.applied) void syncRevocationKey(installationId);
-      return result;
+      };
+      // Consent revocation (age assurance): a regulated 13–17 user registers
+      // ONLY with the keyed RPC (row + mapping in one transaction); without
+      // Apple's id nothing is sent and the protocol's cleanup keeps alerts
+      // disabled (lib/revocation-key.ts).
+      return routedRegistration({
+        resolveRoute: resolveRegistrationRoute,
+        registerPlain: (seq, sig) =>
+          registerPushSubscription({ ...common, sequence: seq, signal: sig }),
+        registerKeyed: (seq, appTransactionId, sig) =>
+          registerPushSubscriptionWithRevocationKey({
+            ...common,
+            sequence: seq,
+            appTransactionId,
+            signal: sig,
+          }),
+        clearKey: () => clearPushRevocationKey(installationId),
+        setKeyHeld: (held) =>
+          held
+            ? SecureStore.setItemAsync(REVOCATION_KEY_HELD, '1')
+            : SecureStore.deleteItemAsync(REVOCATION_KEY_HELD),
+      })(sequence, signal);
     },
     disable: (sequence) => disablePushSubscription(installationId, sequence),
     isDefiniteRejection,
@@ -306,6 +360,14 @@ export function refreshRegistrationIfEnabled(): Promise<void> {
       const installationId = await getOrCreateInstallationId();
       await installationIntent(installationId, null).reconcile();
       if (!(await hasEnabledFlag())) return;
+      // A regulated 13–17 user whose Apple id cannot be read must not keep
+      // an enabled row without its revocation mapping: disable, persisted
+      // and retried like any disable. Alerts stay off until the user turns
+      // them on again with the id available.
+      if ((await resolveRegistrationRoute()).kind === 'blocked') {
+        await installationIntent(installationId, null).disable();
+        return;
+      }
       const permission = await Notifications.getPermissionsAsync();
       if (!permission.granted) return;
       await ensureAndroidChannel();
@@ -317,6 +379,22 @@ export function refreshRegistrationIfEnabled(): Promise<void> {
       // Best-effort: a failed silent refresh must never surface at launch.
     }
   });
+}
+
+/**
+ * The under-13 stop's protective request (components/age-gate.tsx;
+ * lib/age-stop-alerts.ts): disable this installation's alerts on Lotly's
+ * server with the existing sequenced disable. Sends only the stored
+ * installation id (never minted here) and the sequence; retried at every
+ * launch until confirmed. Queued like every installation mutation.
+ */
+export function disableAlertsAfterAgeStop(): Promise<AgeStopAlertsOutcome> {
+  return enqueueInstallationMutation(() =>
+    disableAfterAgeStop({
+      peekInstallationId,
+      intentFor: (installationId) => installationIntent(installationId, null),
+    }),
+  );
 }
 
 /**

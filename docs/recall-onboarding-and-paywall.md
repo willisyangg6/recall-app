@@ -303,17 +303,15 @@ The Terms set the minimum age at 13.
     offline.
   - Ages only rise, so a stored answer is never less restrictive than its
     owner. Apple itself answers "until the anniversary".
-- **Under 13 on a device that registered before.** The gate unregisters from
-  Apple's push service, locally; the device never contacts Lotly. This does
-  **not** disable the server subscription at once.
-  - The server learns only when a later alert is sent to the old token and
-    Expo reports `DeviceNotRegistered`. That is at least 15 minutes after the
-    send, at the next worker run, or at once if Expo's ticket already says
-    so.
-  - Queued alerts are still handed to Expo until then.
-  - While delivery is not activated, the row stays enabled until the
-    12-month inactivity purge.
-  - See docs/recall-push-delivery.md, "When the server stops alerts".
+- **Under 13 on a device that registered before.** The stop makes **one
+  protective request**: the existing sequenced alert disable, with only the
+  stored installation id. No age, no RevenueCat, no other launch sync.
+  - Unconfirmed (offline), it stays owed and is retried at every launch
+    until the server answers.
+  - The app also unregisters from Apple's push service, locally.
+  - **Limits:** until the disable is confirmed, the server row stays
+    enabled, and an alert already handed to Expo cannot be recalled. See
+    docs/recall-push-delivery.md, "When the server stops alerts".
 - **Regulated status** is `true` when `requiredRegulatoryFeatures`
   (iOS 26.4+) contains `declaredAgeRangeRequired` or `isEligibleForAgeFeatures`
   (iOS 26.2+) is true. It is `false` only when Apple says not eligible, and

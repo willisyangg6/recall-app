@@ -9,9 +9,10 @@
 -- The join key is Apple's appTransactionId (per Apple Account and app; the
 -- same across devices, reinstalls and "Reset app and delete my data"). It
 -- is sent by the app ONLY for a 13–17 user whom Apple reports as regulated,
--- and ONLY while alerts are on — the only installations a revocation can
--- concern (docs/recall-privacy-program-proposal.md §2.6). It is stored as a
--- keyed hash, never raw:
+-- and ONLY with an alert registration — the only installations a revocation
+-- can concern (docs/recall-privacy-program-proposal.md §2.6). It is stored as
+-- a keyed hash, never raw (pseudonymous personal data, not anonymous: Lotly
+-- holds the key and the row ties it to one installation):
 --
 --   push_subscriptions.app_transaction_hmac
 --     = hex(HMAC-SHA256(appTransactionId, Vault secret app_transaction_hmac_key))
@@ -25,15 +26,29 @@
 --   - "Reset app and delete my data", privacy-request deletion and the
 --     12-month inactivity purge all run delete_installation_data, which
 --     deletes the whole subscription row;
---   - the privacy-request export (20261016000000) emits every
---     push_subscriptions column it does not explicitly redact, so the
---     hash is exported as stored.
+--   - the privacy-request export (20261016000000) builds each group from an
+--     approved field list, so the hash is NOT in the ordinary export; the
+--     export's not_included list names it and its purpose (added at
+--     integration).
+--
+-- Atomic mapping (2026-10-13): a regulated teen's subscription is enabled
+-- ONLY by register_push_subscription_with_revocation_key, which stores the
+-- hash in the same transaction — the row is never enabled without its
+-- mapping. No key, no registration: the app does not register at all.
 --
 -- What a revocation does: the matching subscriptions are DISABLED with the
 -- reason 'consent_revoked' (the push worker sends only to enabled rows).
--- Nothing is deleted, and no block list is kept: if the parent restores
--- consent, Apple lets the app launch again and the app's own registration
--- upkeep re-enables the row, exactly as after any other disable.
+-- Nothing is deleted.
+--
+-- No silent revival (2026-10-13): register_push_subscription (re-bodied
+-- here from 20261004000000, otherwise unchanged) never re-enables a
+-- 'consent_revoked' row. Only the keyed registration can, and only when the
+-- presented appTransactionId hashes to the stored value — the same Apple
+-- Account's app. Lotly's server cannot see Apple's consent decision itself:
+-- its evidence is that the app is running (Apple blocks a revoked app from
+-- launching) and presents that account's id. Whether Apple really lets the
+-- app launch again after a parent restores consent, and keeps the same id,
+-- is Apple device behavior, proved only on a device (the sandbox runbook).
 --
 -- Replay protection: every RESCIND_CONSENT is recorded by Apple's
 -- notificationUUID before it acts, in the same transaction, so a retry, a
@@ -86,10 +101,139 @@ $$;
 
 revoke execute on function public.app_transaction_hmac(text) from public, anon, authenticated;
 
--- ── 3. The app's write: set or clear this installation's key ───────────────
+-- ── 3. Registration: no silent revival; the atomic keyed path ───────────────
 
-create or replace function public.set_push_revocation_key(
+-- 3a. The registration itself, unchanged from 20261004000000 except for the
+--     consent_revoked guard and the extra answer fields (`enabled`,
+--     `consent_revoked`; older clients read only `applied` and
+--     `last_sequence`). Internal: callable only through the two RPCs below.
+create or replace function public.push_register_subscription(
   p_installation_id text,
+  p_expo_push_token text,
+  p_platform text,
+  p_app_version text,
+  p_sequence bigint,
+  p_allow_consent_renewal boolean
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_applies boolean;
+  v_last bigint;
+  v_enabled boolean;
+begin
+  -- Shape validation: this endpoint is reachable with the publishable key.
+  if p_installation_id is null
+     or p_installation_id !~ '^[A-Za-z0-9-]{16,64}$' then
+    raise exception 'invalid installation id';
+  end if;
+  if p_expo_push_token is null
+     or p_expo_push_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{1,128}\]$' then
+    raise exception 'invalid Expo push token';
+  end if;
+  if p_platform not in ('ios', 'android') then
+    raise exception 'invalid platform';
+  end if;
+  if p_app_version is not null and length(p_app_version) > 40 then
+    raise exception 'invalid app version';
+  end if;
+
+  -- A registration the client has since outranked (its cleanup, a later
+  -- disable, or a newer registration) changes nothing — not even the token
+  -- reassignment below, which the newer write performed for itself.
+  select g.applies, g.last_sequence into v_applies, v_last
+    from public.push_sequence_gate(p_installation_id, p_sequence, 'register') g;
+  if not v_applies then
+    return jsonb_build_object('applied', false, 'last_sequence', v_last);
+  end if;
+
+  update public.push_subscriptions
+     set enabled = false,
+         disabled_at = now(),
+         disabled_reason = 'token_reassigned'
+   where expo_push_token = p_expo_push_token
+     and installation_id <> p_installation_id
+     and enabled;
+
+  insert into public.push_subscriptions
+    (installation_id, expo_push_token, platform, app_version)
+  values
+    (p_installation_id, p_expo_push_token, p_platform, p_app_version)
+  on conflict (installation_id) do update
+    set expo_push_token = excluded.expo_push_token,
+        platform = excluded.platform,
+        app_version = excluded.app_version,
+        last_seen_at = now(),
+        -- Re-enabling moves the horizon; staying enabled keeps it. A row a
+        -- parent's revocation disabled stays disabled, horizon untouched,
+        -- unless this is the keyed renewal (20261017000000).
+        enabled_at = case
+          when public.push_subscriptions.enabled then public.push_subscriptions.enabled_at
+          when public.push_subscriptions.disabled_reason is not distinct from 'consent_revoked'
+               and not p_allow_consent_renewal then public.push_subscriptions.enabled_at
+          else now()
+        end,
+        enabled = not (public.push_subscriptions.disabled_reason is not distinct from 'consent_revoked'
+                       and not p_allow_consent_renewal),
+        disabled_at = case
+          when public.push_subscriptions.disabled_reason is not distinct from 'consent_revoked'
+               and not p_allow_consent_renewal then public.push_subscriptions.disabled_at
+          else null
+        end,
+        disabled_reason = case
+          when public.push_subscriptions.disabled_reason is not distinct from 'consent_revoked'
+               and not p_allow_consent_renewal then 'consent_revoked'
+          else null
+        end,
+        last_token_error = null;
+  select enabled into v_enabled
+    from public.push_subscriptions
+   where installation_id = p_installation_id;
+  return jsonb_build_object(
+    'applied', true,
+    'last_sequence', v_last,
+    'enabled', v_enabled,
+    'consent_revoked', not v_enabled
+  );
+end;
+$$;
+
+
+revoke execute on function public.push_register_subscription(text, text, text, text, bigint, boolean)
+  from public, anon, authenticated;
+
+-- 3b. The public registration, same signature and grants as 20261004000000:
+--     it can never revive a revoked row.
+create or replace function public.register_push_subscription(
+  p_installation_id text,
+  p_expo_push_token text,
+  p_platform text,
+  p_app_version text,
+  p_sequence bigint default null
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  return public.push_register_subscription(
+    p_installation_id, p_expo_push_token, p_platform, p_app_version, p_sequence, false
+  );
+end;
+$$;
+
+-- 3c. The keyed registration: a regulated teen's ONLY way to enable alerts.
+--     The registration and the hash commit together or not at all; a missing
+--     Vault key, an invalid id or a revoked row of ANOTHER Apple Account
+--     raises before anything is written.
+create or replace function public.register_push_subscription_with_revocation_key(
+  p_installation_id text,
+  p_expo_push_token text,
+  p_platform text,
+  p_app_version text,
+  p_sequence bigint,
   p_app_transaction_id text
 ) returns jsonb
 language plpgsql
@@ -97,33 +241,78 @@ security definer
 set search_path = public
 as $$
 declare
-  v_updated integer;
+  v_hmac text;
+  v_reason text;
+  v_stored text;
+  v_result jsonb;
 begin
-  -- Shape validation: this endpoint is reachable with the publishable key.
   if p_installation_id is null
      or p_installation_id !~ '^[A-Za-z0-9-]{16,64}$' then
     raise exception 'invalid installation id';
   end if;
-  if p_app_transaction_id is not null
-     and p_app_transaction_id !~ '^[A-Za-z0-9-]{1,64}$' then
+  if p_app_transaction_id is null
+     or p_app_transaction_id !~ '^[A-Za-z0-9-]{1,64}$' then
     raise exception 'invalid app transaction id';
   end if;
+  v_hmac := public.app_transaction_hmac(p_app_transaction_id);
 
-  -- Only an existing subscription carries a key: there is nothing to stop
-  -- for an installation without alerts, so nothing is stored for it.
-  update public.push_subscriptions
-     set app_transaction_hmac = case
-           when p_app_transaction_id is null then null
-           else public.app_transaction_hmac(p_app_transaction_id)
-         end
-   where installation_id = p_installation_id;
-  get diagnostics v_updated = row_count;
-  return jsonb_build_object('updated', v_updated > 0);
+  select disabled_reason, app_transaction_hmac into v_reason, v_stored
+    from public.push_subscriptions
+   where installation_id = p_installation_id
+   for update;
+  if v_reason = 'consent_revoked' and v_stored is distinct from v_hmac then
+    -- Only the same Apple Account's app may renew a revoked registration.
+    raise exception 'consent revoked for this installation';
+  end if;
+
+  v_result := public.push_register_subscription(
+    p_installation_id, p_expo_push_token, p_platform, p_app_version, p_sequence, true
+  );
+  if (v_result ->> 'applied')::boolean then
+    update public.push_subscriptions
+       set app_transaction_hmac = v_hmac
+     where installation_id = p_installation_id;
+  end if;
+  return v_result || jsonb_build_object(
+    'renewed', coalesce(v_reason = 'consent_revoked', false) and (v_result ->> 'applied')::boolean
+  );
 end;
 $$;
 
-revoke execute on function public.set_push_revocation_key(text, text) from public;
-grant execute on function public.set_push_revocation_key(text, text) to anon, authenticated;
+revoke execute on function public.register_push_subscription_with_revocation_key(text, text, text, text, bigint, text)
+  from public;
+grant execute on function public.register_push_subscription_with_revocation_key(text, text, text, text, bigint, text)
+  to anon, authenticated;
+
+-- 3d. Clearing a key the installation no longer needs (the user is no longer
+--     a regulated 13–17 user). A revoked row keeps its hash: it is the only
+--     evidence a renewal can be checked against.
+create or replace function public.clear_push_revocation_key(
+  p_installation_id text
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cleared integer;
+begin
+  if p_installation_id is null
+     or p_installation_id !~ '^[A-Za-z0-9-]{16,64}$' then
+    raise exception 'invalid installation id';
+  end if;
+  update public.push_subscriptions
+     set app_transaction_hmac = null
+   where installation_id = p_installation_id
+     and app_transaction_hmac is not null
+     and disabled_reason is distinct from 'consent_revoked';
+  get diagnostics v_cleared = row_count;
+  return jsonb_build_object('cleared', v_cleared > 0);
+end;
+$$;
+
+revoke execute on function public.clear_push_revocation_key(text) from public;
+grant execute on function public.clear_push_revocation_key(text) to anon, authenticated;
 
 -- ── 4. Receipts (replay protection) ─────────────────────────────────────────
 

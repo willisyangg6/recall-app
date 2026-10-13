@@ -419,12 +419,24 @@ alerts are stopped on the server.
   - The key is the Vault secret `app_transaction_hmac_key`.
   - The migration generates it on the server. It is never in git, the app or
     the Edge Function.
-- **Who sends it.** The app sends StoreKit's `appTransactionId` through
-  `set_push_revocation_key`, but **only** for a stored 13–17 answer that
-  Apple reports as regulated (`src/lib/revocation-key.ts`).
-- **When.** Only after a confirmed alert registration
-  (`src/lib/revocation-key-sync.ts`).
-- **Clearing.** Once the user is no longer eligible, the key is cleared.
+- **Atomic for regulated teens.** For a stored 13–17 answer that Apple
+  reports as regulated, the app registers **only** through
+  `register_push_subscription_with_revocation_key`
+  (`src/lib/revocation-key.ts`, `routedRegistration`). That RPC enables the
+  row **and** stores the hash in one transaction.
+  - A regulated teen's alerts are therefore never eligible without the
+    mapping.
+  - An invalid id, or a missing Vault key, writes nothing.
+- **No key, no alerts.** If StoreKit cannot produce the id, nothing is sent.
+  - On a deliberate enable, the alert protocol's outranking cleanup disable
+    runs. On a silent refresh of an enabled row, the row is disabled.
+  - Both are persisted and retried like any disable.
+  - Alerts stay off until the user turns them on again with the id
+    available. Tested in `src/lib/alert-protection.test.ts`, including a
+    failed upload and its retry.
+- **Clearing.** An installation that held a key but is no longer eligible
+  registers keyed once more, so a revoked row can still renew. It then calls
+  `clear_push_revocation_key`. A revoked row always keeps its key.
 - **Coverage.**
   - Reset, privacy-request deletion and the inactivity purge delete the
     subscription row, and the key with it.
@@ -499,8 +511,22 @@ alerts are stopped on the server.
   - A replay is a no-op.
   - A missing key raises before anything is recorded, so the notification is
     retried, not consumed.
-  - Restored consent needs nothing: the app launches again, and its
-    registration upkeep re-enables the row.
+  - **No silent revival.** `register_push_subscription`, re-bodied from
+    `20261004000000` with only this guard added, never re-enables a
+    `consent_revoked` row.
+  - **Renewal.** Only the keyed registration renews a revoked row, and only
+    when the presented id hashes to the stored value. Renewal starts a new
+    `enabled_at` horizon, so nothing from the revoked period is backfilled.
+    Another account's id is refused (400).
+  - **What the server proves, and what needs an Apple device.** The server
+    verifies only that the same Apple Account's app presented its id. It
+    cannot see Apple's consent decision. Three things are Apple behavior and
+    are **proved only on a device** (sandbox runbook Phase 3):
+    - Apple blocks a revoked app from launching.
+    - Apple lets it launch again once a parent restores consent.
+    - StoreKit returns the same `appTransactionID` afterwards.
+
+    The rules above are verified on an isolated Postgres stack.
 
 **Configuration** (Edge Function secrets, none of them a credential)
 
@@ -541,14 +567,21 @@ The sandbox runbook in the review pack settles all three.
 
 ## When the server stops alerts (age assurance review, 2026-10-13)
 
-Two routes stop alerts to a device, and they behave differently. Both are
-pinned run by run in `src/server/push/disabled-subscription-timeline.test.ts`.
+Two routes stop alerts to a device, and they behave differently. The worker
+side is pinned run by run in
+`src/server/push/disabled-subscription-timeline.test.ts`. The under-13
+request and its retry are pinned in `src/lib/alert-protection.test.ts`.
 
-| Route                                                     | Server row disabled                                                                                                                                                                                                                                                                                | Queued alerts (`pending`, `retryable_failure`)                                | In-flight alerts (`ticket_accepted`)                                               |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| **Revoked consent** (`apply_consent_revocation`)          | **At once**, `consent_revoked`                                                                                                                                                                                                                                                                     | Failed closed at the next run (`subscription_disabled`), never sent           | Already handed to Expo, so they cannot be recalled; their receipts settle as usual |
-| **Under-13 stop** (the app unregisters from APNs locally) | **Not at once.** The server is told nothing. The row is disabled (`device_not_registered`) only when Expo reports `DeviceNotRegistered`: on the ticket (the same run) or on the receipt (a run at least `RECEIPT_DELAY_MINUTES` = 15 after that send). Runs are scheduled at :07 and :37 each hour | **Still handed to Expo** until the row is disabled. After that, failed closed | Settle by receipt                                                                  |
-| **Under-13 stop, delivery not activated** (today)         | **Never** by this route: nothing is sent, so nothing reveals the dead token. The row lasts until the 12-month inactivity purge, because an under-13 device never checks in                                                                                                                         | Not created                                                                   | None                                                                               |
+| Route                                                                | Server row disabled                                                                                                                                                                                                                                                                                                          | Queued alerts (`pending`, `retryable_failure`)                      | In-flight alerts (`ticket_accepted`)                                               |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **Revoked consent** (`apply_consent_revocation`)                     | **At once**, `consent_revoked`                                                                                                                                                                                                                                                                                               | Failed closed at the next run (`subscription_disabled`), never sent | Already handed to Expo, so they cannot be recalled; their receipts settle as usual |
+| **Under-13 stop** (2026-10-13: one protective request)               | **On the server's answer.** The stop sends the existing sequenced `disable_push_subscription` (`user_disabled`), carrying only the stored installation id and the write sequence. No age, no RevenueCat, no other launch sync. It also unregisters from APNs, locally                                                        | Failed closed at the next run once the disable has landed           | Already handed to Expo, so they cannot be recalled                                 |
+| **Under-13 stop, offline**                                           | **Not until it is confirmed.** The disable is owed in SecureStore and sent again at every launch, because the stop screen shows each launch, until the server answers. Meanwhile the row stays enabled: if delivery is activated, queued alerts can still be handed to Expo, and the APNs unregister is the only local guard | Still handed to Expo until then                                     | Cannot be recalled                                                                 |
+| **Under-13 stop, no stored installation id or alerts never enabled** | Nothing to disable, so **nothing is sent**                                                                                                                                                                                                                                                                                   | —                                                                   | —                                                                                  |
+
+The receipt route still applies on top: once delivery is active, a send to
+an unregistered token disables the row as `device_not_registered` after
+Expo's receipt (at least `RECEIPT_DELAY_MINUTES` = 15).
 
 **Unverified: what the iPhone displays.** Apple documents that an app that
 called `unregisterForRemoteNotifications` stops receiving remote

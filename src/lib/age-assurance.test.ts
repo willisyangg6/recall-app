@@ -355,26 +355,48 @@ test('the root layout mounts every server-facing launch task beneath the age gat
 });
 
 test('the age range never reaches a network client', () => {
-  // The record's only readers are the check and the revocation-key rule.
-  // No module that talks to a server imports either; the key sync sends
-  // StoreKit's appTransactionId or null — never a bound, class or flag.
+  // The record's readers are the check and the revocation-key rule. No
+  // module that talks to a server imports the age modules, except
+  // push-registration, which reads the record ONLY to choose how to
+  // register — the only value it ever sends is Apple's app id (keyed route).
   for (const file of [
     'push-api.ts',
-    'push-registration.ts',
     'installation-checkin-runner.ts',
     'preferences-store.ts',
     'revocation-key-api.ts',
+    'age-stop-alerts.ts',
   ]) {
     const source = readFileSync(join(__dirname, file), 'utf8');
     assert.doesNotMatch(source, /age-record|age-assurance|age-range-service/, file);
   }
-  const sync = readFileSync(join(__dirname, 'revocation-key-sync.ts'), 'utf8');
-  const sends = [...sync.matchAll(/setPushRevocationKey\(([^)]*)\)/g)].map((m) => m[1]);
-  assert.deepEqual(sends, ['installationId, null', 'installationId, id']);
-  assert.match(
-    sync,
-    /const id = \(await getAppTransactionAsync\(\)\)\?\.appTransactionId \?\? null;/,
+  const registration = readFileSync(join(__dirname, 'push-registration.ts'), 'utf8');
+  assert.equal(registration.match(/loadAgeRecord\(\)/g)?.length, 1);
+  assert.match(registration, /revocationKeyEligible\(await loadAgeRecord\(\)\)/);
+  assert.doesNotMatch(registration, /lowerBound|upperBound|ageClass|regulatoryFeatures/);
+  const api = readFileSync(join(__dirname, 'revocation-key-api.ts'), 'utf8');
+  assert.deepEqual([...api.matchAll(/p_[a-z_]+/g)].map((m) => m[0]).sort(), [
+    'p_app_transaction_id',
+    'p_app_version',
+    'p_expo_push_token',
+    'p_installation_id',
+    'p_installation_id',
+    'p_platform',
+    'p_sequence',
+  ]);
+});
+
+test('the under-13 stop sends only the existing disable, carrying the installation id', () => {
+  const gate = readFileSync(join(__dirname, '..', 'components', 'age-gate.tsx'), 'utf8');
+  assert.match(gate, /void disableAlertsAfterAgeStop\(\)\.catch\(\(\) => \{\}\);/);
+  const registration = readFileSync(join(__dirname, 'push-registration.ts'), 'utf8');
+  const block = registration.slice(
+    registration.indexOf('export function disableAlertsAfterAgeStop'),
   );
+  const body = block.slice(0, block.indexOf('\n}\n'));
+  // Never mints an id; intents built without a push token can only disable.
+  assert.match(body, /peekInstallationId,/);
+  assert.match(body, /installationIntent\(installationId, null\)/);
+  assert.doesNotMatch(body, /getOrCreateInstallationId|register|Purchases|refresh/);
 });
 
 test('only a regulated 13–17 answer is eligible to send the revocation key', () => {

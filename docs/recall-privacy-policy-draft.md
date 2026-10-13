@@ -393,11 +393,15 @@ you. Lotly is offered only in the United States.
     decline.
   - Elsewhere, sharing it is your choice.
   - The range stays on your iPhone. It is used only to apply these rules: if
-    you are under 13, the app stops; if you are 13 to 17, the app follows the
+    you are under 13, the app stops (and if recall alerts were turned on
+    earlier on that iPhone, it asks Lotly's server to turn them off, sending
+    only the app's installation identifier); if you are 13 to 17, the app follows the
     protections below. It is never sent to Lotly's server or to anyone else.
   - If Apple tells the app that you are 13 to 17 **and** that your state's
     law requires an age check, and you turn on recall alerts, the app sends
-    Lotly's server Apple's identifier for your download of Lotly. The server
+    Lotly's server Apple's identifier for your download of Lotly, and alerts
+    turn on only once the server has stored it. If the app cannot read that
+    identifier, alerts stay off. The server
     keeps it only as a keyed hash, with your alert registration. It is
     still information about you: Lotly can match it to your installation. It is used for one thing: if a parent or guardian
     withdraws consent through Apple, Lotly stops sending you alerts. It is
