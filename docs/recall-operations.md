@@ -2502,9 +2502,20 @@ The export (the app's "Share as file" and the operator's file are the same
   planned `push_subscriptions.app_transaction_hmac`, an HMAC of Apple's
   app-transaction id used only to match a parent's withdrawal of consent to
   this installation's alerts) are **not** exported: the column is not on the
-  list. If that branch lands, its plain-language line for the export is:
-  "A scrambled key, used only so Apple can tell Lotly when a parent withdraws
-  permission; it cannot be turned back into anything about you."
+  list. It is **pseudonymous personal data, not anonymous**: Lotly holds the
+  HMAC key, so it can match the hash to a known Apple identifier, and the row
+  ties it to one installation. Hashing is never described as anonymity. When
+  that branch lands, this line joins the export's `not_included` list (not
+  its data fields), worded with the age-assurance session:
+  "Consent-revocation key (only if Apple reported you as 13 to 17 in a state
+  whose law requires an age check, and you turned on alerts): a keyed hash of
+  Apple's identifier for your download of Lotly, kept with your alert
+  registration. It is used only to stop alerts if a parent or guardian
+  withdraws consent through Apple. It is not in this file because it has no
+  meaning outside that matching. It is still information about you, because
+  Lotly can match it to your installation. It is deleted with your alert
+  registration, and you can ask for it by email like anything else listed
+  here."
 - **Not included (held elsewhere):** device-only data, hosting connection
   logs (7 days at the database host), Apple and RevenueCat subscription
   records, and support emails.
