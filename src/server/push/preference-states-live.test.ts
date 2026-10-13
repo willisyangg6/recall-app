@@ -238,7 +238,9 @@ test(
     assert.ok(stored);
     assert.deepEqual(stored.state_codes, ['MT']);
     assert.equal(stored.state_code, 'MT');
-    assert.deepEqual(stored.allergens, ['peanut']);
+    // The singular RPC cannot carry an allergen consent version, so since
+    // 20261014 its allergens are withheld; states and stores still land.
+    assert.deepEqual(stored.allergens, []);
     assert.deepEqual(stored.retailer_ids, ['costco']);
 
     // Clearing through the legacy path clears both.
@@ -427,6 +429,10 @@ test(
       p_state_codes: ['CA'],
       p_allergens: [],
       p_retailer_ids: [],
+      // The full 20261014 signature, so PostgREST resolves the function and
+      // the refusal below is the grant's, not a missing-signature 404.
+      p_allergen_consent: null,
+      p_allergen_consent_decided_at: null,
     });
     assert.ok(!direct.ok, 'anon could call the internal implementation');
     // Postgres refuses it, not PostgREST's router: SQLSTATE 42501,
