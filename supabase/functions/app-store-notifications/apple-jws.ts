@@ -10,27 +10,49 @@
  * Runtime (edge-runtime 1.74.3, "compatible with Deno v2.1.4") does not
  * implement them: run there, the library refuses every payload, valid or
  * not (2026-10-13, review pack `revocation-evidence/edge-runtime-*.out`).
- * So this module performs the SAME checks the library performs offline,
- * and the Node suite runs both on every case and requires them to agree
- * (src/server/app-store-notifications/apple-jws.test.ts).
+ * So this module performs the checks the library performs in its OFFLINE
+ * mode (`enableOnlineChecks = false`), and the Node suite runs both on every
+ * case and requires them to agree
+ * (src/server/app-store-notifications/apple-jws.test.ts). It is NOT
+ * equivalent to the library's online mode: see "Not performed" below.
  *
  * ## The checks, in order (each failure throws)
  *
  *   1. The JWS header is `alg: ES256` with exactly three x5c certificates.
  *   2. The intermediate (x5c[1]) is signed by a PINNED root (Apple Root CA -
- *      G3), and its issuer name is that root's subject.
+ *      G3), and its issuer name is that root's subject. x5c[2] is ignored.
  *   3. The leaf (x5c[0]) is signed by the intermediate, and its issuer name
  *      is the intermediate's subject.
- *   4. The leaf carries Apple's marker OID 1.2.840.113635.100.6.11.1 and the
+ *   4. Each certificate's outer signature algorithm equals the algorithm
+ *      named inside its signed TBS (review R3, 2026-10-13).
+ *   5. The intermediate is a CA: basicConstraints cA = TRUE, as Apple's
+ *      library requires (`intermediate.ca`; review R1, 2026-10-13).
+ *   6. The leaf carries Apple's marker OID 1.2.840.113635.100.6.11.1 and the
  *      intermediate 1.2.840.113635.100.6.2.1.
- *   5. Every certificate is valid at the payload's own signing date (Apple's
- *      offline rule: `signedDate`, or `receiptCreationDate` for an app
- *      transaction).
- *   6. The ES256 signature over `header.payload` verifies with the leaf key.
+ *   7. The leaf, the intermediate AND the matched root are valid at the
+ *      payload's own signing date (Apple's offline rule: `signedDate`, or
+ *      `receiptCreationDate` for an app transaction; root added in review R2).
+ *   8. The ES256 signature over `header.payload` verifies with the leaf key.
  *
- * Not performed: OCSP revocation checks of Apple's certificates (the
- * library's optional "online checks"). Forging a payload would still need
- * Apple's private signing key.
+ * ## Deliberately stricter than Apple's library (both fail closed)
+ *
+ * - A payload without a usable signing date is refused (Apple's library
+ *   falls back to "now").
+ * - No clock-skew allowance is applied to certificate validity windows.
+ *
+ * ## Not performed: OCSP (the library's online mode) — a residual risk
+ *
+ * Certificates are judged at the payload's own signing date and never
+ * checked for revocation. If Apple ever revoked a compromised signing key,
+ * its holder could still sign payloads dated inside that certificate's
+ * validity, and this verifier would accept them. Both independent reviews
+ * (2026-10-13) judged the impact bounded — a forgery can only DISABLE alert
+ * subscriptions whose Apple id the forger already knows (regulated 13–17
+ * users with alerts on), never enable, read or delete anything — and
+ * recommended accepting it, with a trip-wire: on any Apple certificate-
+ * compromise or root-change notice, remove the function's accepted
+ * environments (APP_STORE_ENVIRONMENTS) until reviewed. No OCSP is
+ * implemented here.
  */
 
 // ── DER ─────────────────────────────────────────────────────────────────────
@@ -67,6 +89,7 @@ function children(bytes: Uint8Array, parent: Tlv): Tlv[] {
   const out: Tlv[] = [];
   for (let offset = parent.value; offset < parent.end;) {
     const child = readTlv(bytes, offset);
+    if (child.end > parent.end) throw new Error('DER: child overruns its parent');
     out.push(child);
     offset = child.end;
   }
@@ -138,6 +161,28 @@ interface Certificate {
   spki: Uint8Array;
   curve: { name: 'P-256' | 'P-384'; size: number };
   extensions: Set<string>;
+  /** The algorithm named INSIDE the signed TBS; must equal `signatureAlgorithm`. */
+  innerSignatureAlgorithm: string;
+  /** basicConstraints cA (false when the extension is absent). */
+  ca: boolean;
+}
+
+const BASIC_CONSTRAINTS = '2.5.29.19';
+
+/** basicConstraints extnValue: OCTET STRING { SEQUENCE { BOOLEAN cA DEFAULT FALSE, ... } }. */
+function basicConstraintsCa(der: Uint8Array, extnValue: Tlv): boolean {
+  if (extnValue.tag !== 0x04) throw new Error('X.509: basicConstraints shape');
+  const sequence = readTlv(der, extnValue.value);
+  if (sequence.tag !== 0x30 || sequence.end !== extnValue.end) {
+    throw new Error('X.509: basicConstraints shape');
+  }
+  const [first] = children(der, sequence);
+  return (
+    first !== undefined &&
+    first.tag === 0x01 &&
+    first.end - first.value === 1 &&
+    der[first.value] === 0xff
+  );
 }
 
 export function parseCertificate(der: Uint8Array): Certificate {
@@ -148,7 +193,7 @@ export function parseCertificate(der: Uint8Array): Certificate {
   const fields = children(der, tbs);
   let i = fields[0]?.tag === 0xa0 ? 1 : 0; // [0] version
   i += 1; // serialNumber
-  i += 1; // signature AlgorithmIdentifier (inner)
+  const innerAlgorithm = fields[i++];
   const issuer = fields[i++];
   const validity = fields[i++];
   const subject = fields[i++];
@@ -161,15 +206,23 @@ export function parseCertificate(der: Uint8Array): Certificate {
   if (!notBefore || !notAfter || !curve) throw new Error('X.509: unsupported key');
 
   const extensions = new Set<string>();
+  let ca = false;
   const explicit = fields.slice(i).find((field) => field.tag === 0xa3);
   if (explicit) {
     const [list] = children(der, explicit);
     for (const extension of list ? children(der, list) : []) {
-      const [id] = children(der, extension);
-      if (id) extensions.add(oid(der, id));
+      const parts = children(der, extension);
+      const id = parts[0] ? oid(der, parts[0]) : null;
+      if (id === null) continue;
+      if (extensions.has(id)) throw new Error('X.509: duplicate extension');
+      extensions.add(id);
+      // extnValue is the last part (an optional critical BOOLEAN precedes it).
+      if (id === BASIC_CONSTRAINTS) ca = basicConstraintsCa(der, parts[parts.length - 1]);
     }
   }
   const [algorithmOid] = children(der, algorithm);
+  const [innerAlgorithmOid] = innerAlgorithm ? children(der, innerAlgorithm) : [];
+  if (!innerAlgorithmOid) throw new Error('X.509: shape');
   // BIT STRING: first value byte is the unused-bit count (0 for signatures).
   if (der[signature.value] !== 0) throw new Error('X.509: signature padding');
   return {
@@ -183,6 +236,8 @@ export function parseCertificate(der: Uint8Array): Certificate {
     spki: der.subarray(spki.start, spki.end),
     curve,
     extensions,
+    innerSignatureAlgorithm: oid(der, innerAlgorithmOid),
+    ca,
   };
 }
 
@@ -216,6 +271,8 @@ async function importKey(cert: Certificate): Promise<CryptoKey> {
 /** Whether `child` is signed by `issuer` and names it as its issuer. */
 async function issuedBy(child: Certificate, issuer: Certificate): Promise<boolean> {
   if (!equalBytes(child.issuer, issuer.subject)) return false;
+  // The outer algorithm is outside the signature; it must repeat the signed one.
+  if (child.signatureAlgorithm !== child.innerSignatureAlgorithm) return false;
   const hash =
     child.signatureAlgorithm === ECDSA_SHA256
       ? 'SHA-256'
@@ -271,14 +328,16 @@ export async function verifyAppleJws(
   const leaf = parseCertificate(base64ToBytes(x5c[0]));
   const intermediate = parseCertificate(base64ToBytes(x5c[1]));
 
-  let anchored = false;
+  let root: Certificate | null = null;
   for (const der of roots) {
-    if (await issuedBy(intermediate, parseCertificate(der))) {
-      anchored = true;
+    const candidate = parseCertificate(der);
+    if (await issuedBy(intermediate, candidate)) {
+      root = candidate;
       break;
     }
   }
-  if (!anchored) throw new Error('chain: intermediate not issued by a pinned root');
+  if (root === null) throw new Error('chain: intermediate not issued by a pinned root');
+  if (!intermediate.ca) throw new Error('chain: intermediate is not a CA');
   if (!(await issuedBy(leaf, intermediate)))
     throw new Error('chain: leaf not issued by intermediate');
   if (!leaf.extensions.has(APPLE_LEAF_OID)) throw new Error('chain: leaf marker missing');
@@ -287,7 +346,7 @@ export async function verifyAppleJws(
   }
   const at = effectiveDate(payload);
   if (!Number.isFinite(at)) throw new Error('chain: no signing date');
-  for (const cert of [leaf, intermediate]) {
+  for (const cert of [leaf, intermediate, root]) {
     if (at < cert.notBefore || at > cert.notAfter) throw new Error('chain: certificate not valid');
   }
   if (leaf.curve.name !== 'P-256') throw new Error('JWS: ES256 needs a P-256 leaf');

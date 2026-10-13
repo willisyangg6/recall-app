@@ -92,23 +92,32 @@ async function party(cn: string, curve: 'P-256' | 'P-384'): Promise<Party> {
 
 let serial = 1;
 
+const ECDSA_SHA256 = '1.2.840.10045.4.3.2';
+
 async function certificate(options: {
   subject: Party;
   issuer: Party;
-  ca: boolean;
+  /** basicConstraints: cA TRUE, cA FALSE, or no extension at all. */
+  ca: boolean | 'absent';
   markers: string[];
   notBefore: Date;
   notAfter: Date;
+  /** Override the OUTER (unsigned) algorithm only; the signature stays ECDSA-SHA384. */
+  outerAlgorithm?: string;
+  /** Override the algorithm named INSIDE the signed TBS; the signature stays ECDSA-SHA384. */
+  innerAlgorithm?: string;
 }): Promise<Buffer> {
   const spki = Buffer.from(await subtle.exportKey('spki', options.subject.keys.publicKey));
   const extensions = [
-    sequence(oid('2.5.29.19'), TRUE, octets(options.ca ? sequence(TRUE) : sequence())),
+    ...(options.ca === 'absent'
+      ? []
+      : [sequence(oid('2.5.29.19'), TRUE, octets(options.ca ? sequence(TRUE) : sequence()))]),
     ...options.markers.map((marker) => sequence(oid(marker), octets(NULL))),
   ];
   const tbs = sequence(
     explicit(0, integer(Buffer.from([2]))),
     integer(Buffer.from([serial++])),
-    sequence(oid(ECDSA_SHA384)),
+    sequence(oid(options.innerAlgorithm ?? ECDSA_SHA384)),
     name(options.issuer.name),
     sequence(time(options.notBefore), time(options.notAfter)),
     name(options.subject.name),
@@ -118,7 +127,11 @@ async function certificate(options: {
   const raw = Buffer.from(
     await subtle.sign({ name: 'ECDSA', hash: 'SHA-384' }, options.issuer.keys.privateKey, tbs),
   );
-  return sequence(tbs, sequence(oid(ECDSA_SHA384)), bits(derSignature(raw)));
+  return sequence(
+    tbs,
+    sequence(oid(options.outerAlgorithm ?? ECDSA_SHA384)),
+    bits(derSignature(raw)),
+  );
 }
 
 export interface TestChain {
@@ -131,6 +144,22 @@ export interface TestChain {
   leafExpired: Buffer;
   /** The leaf's private key, for signing JWS payloads. */
   leafKey: KeyObject;
+  /** Review R1: the intermediate's key and markers, but basicConstraints cA FALSE. */
+  intermediateNotCa: Buffer;
+  /** Review R1: the intermediate's key and markers, with no basicConstraints. */
+  intermediateWithoutBasicConstraints: Buffer;
+  /** Review R3: `leaf`, but its outer algorithm says SHA-256 while the signed one says SHA-384. */
+  leafOuterAlgorithmMismatch: Buffer;
+  /**
+   * Review R3, the case the check exists for: the signed TBS names SHA-256,
+   * while the outer field (unsigned) says SHA-384 — the algorithm actually
+   * used, so the signature itself verifies.
+   */
+  leafInnerAlgorithmMismatch: Buffer;
+  /** Review R2: a second root valid only during 2019–2020, with its own CA intermediate and leaf (same leaf key). */
+  shortRoot: Buffer;
+  shortIntermediate: Buffer;
+  shortLeaf: Buffer;
 }
 
 let cached: Promise<TestChain> | null = null;
@@ -146,12 +175,40 @@ export function testChain(): Promise<TestChain> {
     const issue = (
       subject: Party,
       issuer: Party,
-      ca: boolean,
+      ca: boolean | 'absent',
       markers: string[],
       notBefore = from,
       notAfter = until,
-    ) => certificate({ subject, issuer, ca, markers, notBefore, notAfter });
+      outerAlgorithm?: string,
+    ) => certificate({ subject, issuer, ca, markers, notBefore, notAfter, outerAlgorithm });
+    const shortRoot = await party('Lotly TEST Short-Lived Root', 'P-384');
+    const shortIntermediate = await party('Lotly TEST Short-Root Intermediate', 'P-384');
     return {
+      intermediateNotCa: await issue(intermediate, root, false, [INTERMEDIATE_MARKER]),
+      intermediateWithoutBasicConstraints: await issue(intermediate, root, 'absent', [
+        INTERMEDIATE_MARKER,
+      ]),
+      leafOuterAlgorithmMismatch: await issue(
+        leaf,
+        intermediate,
+        false,
+        [LEAF_MARKER],
+        from,
+        until,
+        ECDSA_SHA256,
+      ),
+      leafInnerAlgorithmMismatch: await certificate({
+        subject: leaf,
+        issuer: intermediate,
+        ca: false,
+        markers: [LEAF_MARKER],
+        notBefore: from,
+        notAfter: until,
+        innerAlgorithm: ECDSA_SHA256,
+      }),
+      shortRoot: await issue(shortRoot, shortRoot, true, [], from, new Date(Date.UTC(2021, 0, 1))),
+      shortIntermediate: await issue(shortIntermediate, shortRoot, true, [INTERMEDIATE_MARKER]),
+      shortLeaf: await issue(leaf, shortIntermediate, false, [LEAF_MARKER]),
       root: await issue(root, root, true, []),
       intermediate: await issue(intermediate, root, true, [INTERMEDIATE_MARKER]),
       leaf: await issue(leaf, intermediate, false, [LEAF_MARKER]),

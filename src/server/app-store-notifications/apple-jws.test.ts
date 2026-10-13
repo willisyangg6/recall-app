@@ -1,6 +1,7 @@
 /**
- * The WebCrypto verifier for Apple-signed data (apple-jws.ts), held EQUAL to
- * Apple's own @apple/app-store-server-library, case by case. The library
+ * The WebCrypto verifier for Apple-signed data (apple-jws.ts), held equal,
+ * case by case, to Apple's own @apple/app-store-server-library in its OFFLINE
+ * mode (enableOnlineChecks = false; there is no OCSP here, see apple-jws.ts). The library
  * cannot run in Supabase's Edge Runtime (it needs X509Certificate methods
  * the runtime lacks), so the deployed function uses apple-jws.ts and this
  * suite is the proof the two decide alike. Plus real Apple data: the pinned
@@ -241,6 +242,53 @@ test('the WebCrypto verifier decides exactly as Apple’s library, case by case'
       { environment: 'Production', appAppleId: APP_APPLE_ID },
       true,
     ],
+    // Review R1 (2026-10-13): the intermediate must be a CA, as Apple requires.
+    [
+      'intermediate with basicConstraints cA FALSE (marker present, signed by the pinned root)',
+      'notification',
+      jws(notification(), { chain: [leaf, C.intermediateNotCa, root] }),
+      {},
+      false,
+    ],
+    [
+      'intermediate with no basicConstraints (marker present, signed by the pinned root)',
+      'notification',
+      jws(notification(), { chain: [leaf, C.intermediateWithoutBasicConstraints, root] }),
+      {},
+      false,
+    ],
+    // Review R3: the outer algorithm must equal the signed inner one.
+    [
+      'leaf whose outer algorithm disagrees with its signed algorithm',
+      'notification',
+      jws(notification(), { chain: [C.leafOuterAlgorithmMismatch, intermediate, root] }),
+      {},
+      false,
+    ],
+    [
+      'leaf whose signed algorithm field disagrees with the outer one (the signature itself verifies)',
+      'notification',
+      jws(notification(), { chain: [C.leafInnerAlgorithmMismatch, intermediate, root] }),
+      {},
+      false,
+    ],
+    // Review R2: the matched root must be valid at the signing date too.
+    [
+      'root expired at the signing date (chain otherwise valid)',
+      'notification',
+      jws(notification(), { chain: [C.shortLeaf, C.shortIntermediate, C.shortRoot] }),
+      { roots: [C.shortRoot] },
+      false,
+    ],
+    [
+      'the same short-lived root, signed while it was valid',
+      'notification',
+      jws(notification({}, { signedDate: Date.UTC(2020, 5, 1) }), {
+        chain: [C.shortLeaf, C.shortIntermediate, C.shortRoot],
+      }),
+      { roots: [C.shortRoot] },
+      true,
+    ],
     ['not a JWS', 'notification', 'garbage', {}, false],
     [
       'garbage certificates',
@@ -279,6 +327,15 @@ test('real Apple data: the pinned G3 root verifies Apple’s WWDR G6 intermediat
   assert.equal(
     parseCertificate(new Uint8Array(APPLE_G6)).extensions.has(APPLE_INTERMEDIATE_OID),
     true,
+  );
+  // Review R1: the CA requirement must hold for Apple's REAL intermediate,
+  // or production would refuse every genuine notification; and Apple's own
+  // root reads as a CA too.
+  assert.equal(parseCertificate(new Uint8Array(APPLE_G6)).ca, true);
+  assert.equal(parseCertificate(new Uint8Array(APPLE_ROOT)).ca, true);
+  assert.equal(
+    parseCertificate(new Uint8Array(APPLE_G6)).innerSignatureAlgorithm,
+    parseCertificate(new Uint8Array(APPLE_G6)).signatureAlgorithm,
   );
   // And a test root does not.
   assert.equal(await certificateIssuedBy(new Uint8Array(APPLE_G6), new Uint8Array(C.root)), false);

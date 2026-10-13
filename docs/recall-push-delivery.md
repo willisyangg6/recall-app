@@ -449,18 +449,45 @@ alerts are stopped on the server.
   Forwarding URL**. App Store Connect's URLs stay RevenueCat's.
 - **Verification.** It verifies every payload with `apple-jws.ts`, which uses
   WebCrypto and has no imports. It checks:
-  - the x5c chain to the pinned Apple Root CA - G3;
+  - the x5c chain to the pinned Apple Root CA - G3 (x5c[2] is never
+    trusted);
+  - that each certificate's outer signature algorithm equals the one inside
+    its signed data;
+  - that the intermediate is a CA (basicConstraints cA);
   - Apple's marker OIDs;
-  - validity at the payload's own signing date;
+  - that the leaf, intermediate **and root** are valid at the payload's own
+    signing date;
   - the ES256 signature;
   - the bundle id;
   - the environment, and the app's Apple id in Production.
+
+  The CA, root-date and algorithm checks were added after two independent
+  reviews (2026-10-13). Before them, a non-CA intermediate and an expired
+  root were accepted, though neither was exploitable without an
+  Apple-issued certificate's key.
+
 - **Why not Apple's library.** `@apple/app-store-server-library` cannot run
   in Supabase's Edge Runtime: edge-runtime 1.74.3 does not implement
   `X509Certificate.verify`, `checkIssued` or `toString`. So the library is a
   **test oracle** only. `apple-jws.test.ts` requires both verifiers to agree
   on every case.
-  - Not performed: OCSP revocation checks of Apple's certificates.
+  - The parity is with the library's **offline** mode
+    (`enableOnlineChecks = false`), not its online mode.
+  - Two deliberate differences, both stricter: a payload without a signing
+    date is refused, and no clock-skew allowance is applied.
+- **Residual risk: no OCSP.** Apple's certificates are judged at the
+  payload's signing date and never checked for revocation.
+  - **The exposure.** If Apple revoked a compromised signing key, its holder
+    could still sign backdated payloads, and they would be accepted.
+  - **Why it's bounded.** A forgery can only **disable** alert subscriptions
+    whose Apple id the forger already knows: regulated 13–17 users with
+    alerts on. It never enables, reads or deletes anything, and the app's
+    next registration upkeep re-enables the row.
+  - **The reviewers' recommendation**, accepted for launch by the founder
+    (2026-10-13): accept the risk, implement no OCSP, and keep a trip-wire.
+    On any Apple certificate-compromise or root-change notice, set
+    `APP_STORE_ENVIRONMENTS` to an empty value (the function then refuses
+    every payload) until it is reviewed.
 - **What it acts on.** It acts only on `RESCIND_CONSENT`, and logs nothing
   identifying.
 - **The RPC.** `apply_consent_revocation` (service_role only) works in one
