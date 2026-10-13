@@ -2343,9 +2343,13 @@ deletions_start_on = null;`. The constraint allows `deletions_start_on` to
 - After deletions have begun, deleted rows are gone, as with a reset. Only
   backups (§ policy) still hold them until they expire.
 
-## Allergen consent: a PREPARED schema migration (2026-10-13)
+## Allergen consent: schema migration (APPLIED 2026-10-13)
 
-**Status: PREPARED, NOT APPLIED.**
+**Status: APPLIED and verified in production** (`fytfiqduqlkaskaqegxx`),
+2026-10-13 03:50:29–03:50:39 UTC, by `supabase db push --linked --yes` from
+`master` = `origin/master` = `e32efe9`. Prepared and validated on an isolated
+stack earlier the same day (history below). Device checks with a build
+containing the consent screens are still **pending**.
 `supabase/migrations/20261014000000_allergen_consent.sql`:
 
 |           |                                                                                                                                                                                                        |
@@ -2354,6 +2358,7 @@ deletions_start_on = null;`. The constraint allows `deletions_start_on` to
 | replaces  | `apply_installation_preferences(text, text[], text[], text[])` → `(…, p_allergen_consent text, p_allergen_consent_decided_at timestamptz)`, service role only                                          |
 | replaces  | the plural `set_installation_preferences(text, text[], text[], text[])` → `(…, p_allergen_consent text default null, p_allergen_consent_decided_at timestamptz default null)`; one PostgREST candidate |
 | re-bodies | the legacy singular `set_installation_preferences`, which passes consent null                                                                                                                          |
+| accepts   | consent versions `allergens-v1` (the long disclosure) and `allergens-prompt-v1` (the compact onboarding prompt); anything else is refused                                                              |
 | does not  | clear any existing allergens, or change grants                                                                                                                                                         |
 
 **Order.**
@@ -2371,6 +2376,50 @@ deletions_start_on = null;`. The constraint allows `deletions_start_on` to
 
 **Validation (isolated stack, 2026-10-13):** see
 [recall-personalization.md](recall-personalization.md) "Allergen consent".
+The ordering rules (ties, stale writes, both lock orders of two concurrent
+transactions) were proven there; they are not re-exercised in production,
+which would need test consent records.
+
+**Production verification (read-only, 2026-10-13, after the apply).**
+
+- **Gates before applying:** the migration file matched the reviewed commit
+  (SHA-256 `a69fe37e…`); the linked project was `fytfiqduqlkaskaqegxx`,
+  `ACTIVE_HEALTHY`; 18 migrations matched with nothing remote-only; a fresh
+  dry run listed only this migration.
+- **History after:** 19 matched, nothing pending.
+- **Functions:** the deployed bodies of `apply_installation_preferences` and
+  both `set_installation_preferences` are byte-identical to the file. The
+  plural and legacy RPCs are executable by `anon`, `authenticated` and
+  `service_role`; `apply_installation_preferences` by `service_role` only;
+  the old 4-argument plural signature is gone. The deployed source carries
+  the accepted-version list, the row lock, the stale and tie rules, the
+  refusal of conflicting stale writes, and "no consent, no allergens".
+- **No-write probes** (a random installation id that was never stored; each
+  call fails validation before any write): both accepted versions pass the
+  version check; `allergens-v9` → `invalid allergen consent`; the older
+  4-argument call and the legacy call still resolve; `anon` cannot call
+  `apply_installation_preferences`.
+- **Data:** `installation_preferences` 10 rows before and after; the 9 rows
+  holding allergens stored before consent existed (19 tokens) are
+  **retained, unchanged** (identical fingerprint) and inert for alerts; 0 rows
+  carry a consent version.
+- **State left:** inactivity cleanup **off** (`purge_enabled = false`); push
+  **not activated**; `ops:health` and `qa:feed` healthy and unchanged.
+- **Not done, each a separate decision:** clearing the retained pre-consent
+  allergens; distributing a build; activating push.
+
+**Device checks (pending).** Each needs a build containing `e32efe9` on a test
+device against production; the first four create real consent records on
+that device's installation.
+
+| #   | Check                                                                                                                                                                            | Expected                                                                                                                                                                                                                      |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Popup grant:** onboarding Allergens with an allergen selected → Continue → **Enable allergen alerts**                                                                          | Goes straight to Stores. The installation's row has its allergens, `allergen_consent_version = 'allergens-prompt-v1'` and a decision time.                                                                                    |
+| 2   | **Long-disclosure grant:** Edit preferences on an installation with no decision yet (add an allergen, Save), or Profile → Privacy & Data Controls → **Use allergens for alerts** | The row has its allergens and `allergen_consent_version = 'allergens-v1'`.                                                                                                                                                    |
+| 3   | **Decline:** popup → **Continue without allergen alerts**                                                                                                                        | Goes straight to Stores. The row has `allergens = '{}'` and no consent version; Affects Me still matches allergens on the device. Continue later does not ask again.                                                          |
+| 4   | **Offline withdrawal and reconnect:** with a grant in place, go offline → Privacy & Data Controls → **Stop using allergens for alerts**, then reconnect and relaunch             | Offline, the screen says removal will finish when the iPhone is back online and the row is unchanged. After reconnecting: allergens `{}`, consent version null, a newer decision time, and the screen no longer says pending. |
+| 5   | **Reset:** Profile → Reset app and delete my data                                                                                                                                | The installation's row (consent columns included) is gone; on the device, the consent record is removed and onboarding starts over.                                                                                           |
+| 6   | **Older-build compatibility:** an installed build without the consent screens saves preferences                                                                                  | The save succeeds; its allergens are not stored on the server (`'{}'`, no consent version); its states and stores are.                                                                                                        |
 
 ## Enforcement: weekly-gated
 

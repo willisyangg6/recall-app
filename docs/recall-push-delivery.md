@@ -392,7 +392,7 @@ unchanged.
   re-registers (idempotent, sequenced) — only if a registration is confirmed
   here and nothing is owed.
 
-## Allergen consent in matching (2026-10-13; migration 20261014000000 not applied)
+## Allergen consent in matching (2026-10-13; migration 20261014000000 applied 2026-10-13)
 
 `toUserPreferences` (worker.ts) gives the relevance evaluation a row's
 allergens **only when it carries `allergen_consent_version`**. The relevance
@@ -410,9 +410,14 @@ recall with **no** selected allergens is a mismatch. So for those profiles:
 
 **Production rows written before consent existed** (`allergen_consent_version`
 null) are therefore matched without allergens from the moment this code
-runs.
+runs. At the apply (2026-10-13 03:50 UTC) that was 9 of 10 rows; their
+allergens are retained, not cleared. Push is still **not activated**, so no
+delivery has used this rule yet; checking it end to end is a device check in
+[recall-operations.md](recall-operations.md) "Allergen consent: schema
+migration", after a separate activation decision.
 
-**Safe before the migration.** If the column does not exist yet,
+**Safe before the migration** (the state until 2026-10-13 03:50 UTC). If the
+column does not exist yet,
 `listPreferences` reads without it, so allergens are ignored: never a
 broader match. Tests are in `worker.test.ts` ("consent: …").
 

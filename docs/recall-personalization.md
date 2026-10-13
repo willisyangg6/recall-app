@@ -534,7 +534,7 @@ the migration idempotent by construction and leaves no singular field for a
 second authority to grow out of. A legacy profile with no state becomes the
 empty list, which is the same answer it always gave.
 
-### Allergen consent (built 2026-10-13; migration 20261014000000 prepared, not applied)
+### Allergen consent (built 2026-10-13; migration 20261014000000 APPLIED 2026-10-13)
 
 Allergens always work **on the device**: Affects Me and the allergen labels
 read local preferences, whatever the shopper decides. Lotly's server receives
@@ -626,10 +626,15 @@ accepts (`ALLERGEN_CONSENT_VERSIONS`, `src/lib/allergen-consent.ts`).
   working and store no allergens.
 - **Rows written before the migration** keep their allergens with consent
   null. **They are not cleared.** The worker ignores them, and clearing them
-  is a later, separately authorized step.
+  is a later, separately authorized step. In production, 9 of 10 rows held
+  such allergens at the apply; they were retained unchanged.
 - **Reset** removes the local consent record. The server row goes with
   `delete_installation_data`.
 - **Isolated-stack evidence:** `~/Desktop/Lotly-Allergen-Consent-Review/server/`.
+- **Production:** applied 2026-10-13 03:50 UTC and verified read-only; device
+  checks with a consent-screen build are pending. Both are recorded in
+  [recall-operations.md](recall-operations.md) "Allergen consent: schema
+  migration".
 
 ### The mirror after an inactivity purge (prepared 2026-10-12)
 
