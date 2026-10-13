@@ -68,6 +68,7 @@ import {
   registerPushSubscription,
   RpcAbortedError,
 } from './push-api';
+import { syncRevocationKey } from './revocation-key-sync';
 
 /**
  * The flag as it was stored before the intent record (below) replaced it:
@@ -102,7 +103,7 @@ function installationIntent(installationId: string, token: string | null): Alert
     save: (state) => SecureStore.setItemAsync(INTENT_KEY, serializeAlertIntent(state)),
     async register(sequence, signal) {
       if (token === null) throw new Error('registration needs a push token');
-      return registerPushSubscription({
+      const result = await registerPushSubscription({
         installationId,
         expoPushToken: token,
         platform: Platform.OS === 'ios' ? 'ios' : 'android',
@@ -110,6 +111,11 @@ function installationIntent(installationId: string, token: string | null): Alert
         sequence,
         signal,
       });
+      // Consent revocation (age assurance): keep the subscription's key in
+      // step with the age record. Not awaited — it must never slow or fail
+      // a registration (revocation-key-sync.ts).
+      if (result.applied) void syncRevocationKey(installationId);
+      return result;
     },
     disable: (sequence) => disablePushSubscription(installationId, sequence),
     isDefiniteRejection,

@@ -10,7 +10,8 @@
       "distribution": "internal",
       "autoIncrement": false,
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "image": "macos-tahoe-26.5-xcode-26.6"
       }
     },
     "preview": {
@@ -19,7 +20,8 @@
       "distribution": "internal",
       "autoIncrement": true,
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "image": "macos-tahoe-26.5-xcode-26.6"
       }
     },
     "simulator": {
@@ -28,7 +30,8 @@
       "distribution": "internal",
       "autoIncrement": false,
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "image": "macos-tahoe-26.5-xcode-26.6"
       }
     },
     "production": {
@@ -37,7 +40,8 @@
       "distribution": "store",
       "autoIncrement": true,
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "image": "macos-tahoe-26.5-xcode-26.6"
       }
     }
   },

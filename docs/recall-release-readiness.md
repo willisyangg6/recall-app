@@ -88,6 +88,17 @@ true`, and it is boxed in for that reason: `internal`, no development
   most likely to be run casually — and a simulator binary can never be signed
   or shipped.
 
+**Build image (2026-10-13).** Every profile pins `ios.image:
+"macos-tahoe-26.5-xcode-26.6"` (Xcode 26.6, iOS 26.5 SDK). Expo SDK 57 already
+requires Xcode 26.4 or later. `expo-age-range` needs the iOS 26.4 SDK, and the
+26.5 SDK for its `confirmed` mapping. The pin makes the build SDK certain
+rather than whatever `auto` resolves to. The deployment target is
+unchanged at **16.4**. The `com.apple.developer.declared-age-range`
+entitlement is in `app.json`. The App ID needs the Declared Age Range
+capability, after which the profile is regenerated. EAS's capability sync may
+do this during the first credentialed build; check the build log
+(docs/recall-onboarding-and-paywall.md §3.3).
+
 ### Environment variables on EAS
 
 The app needs exactly three public variables, and **only** these three

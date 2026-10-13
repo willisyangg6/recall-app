@@ -11,5 +11,9 @@
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
   // The Edge Function entry is Deno-runtime code (Deno globals); its logic
   // lives in core.ts, which stays typechecked and Node-tested.
-  "exclude": ["node_modules", "supabase/functions/ingest-watchdog/index.ts"]
+  "exclude": [
+    "node_modules",
+    "supabase/functions/ingest-watchdog/index.ts",
+    "supabase/functions/app-store-notifications/index.ts"
+  ]
 }

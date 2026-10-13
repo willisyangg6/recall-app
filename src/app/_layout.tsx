@@ -11,6 +11,7 @@ import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 
+import { AgeGate } from '@/components/age-gate';
 import { AppErrorBoundary } from '@/components/app-error-boundary';
 import { color, textStyle } from '@/constants/design-tokens';
 import { AccessProvider, useAccess } from '@/hooks/use-access';
@@ -64,18 +65,31 @@ export default function RootLayout() {
     IBMPlexMono_600SemiBold,
   });
   useEffect(() => {
+    // A failed load is not a reason to stay blank: the app proceeds with the
+    // platform's fallback face for any name it cannot resolve, and the failure
+    // is named in development rather than hidden.
+    if (fontError && __DEV__) console.warn('Design-system fonts failed to load', fontError);
+  }, [fontError]);
+
+  // The launch age check runs first (components/age-gate.tsx): nothing that
+  // can reach Lotly's server, RevenueCat or Expo mounts until it has decided
+  // the launch may proceed.
+  return (
+    <AgeGate fontsSettled={fontsLoaded || fontError !== null}>
+      <LaunchedApp fontsSettled={fontsLoaded || fontError !== null} />
+    </AgeGate>
+  );
+}
+
+/** Everything beneath the age gate: the server-facing upkeep and the gated stack. */
+function LaunchedApp({ fontsSettled }: { fontsSettled: boolean }) {
+  useEffect(() => {
     // Retry a preference sync that failed offline. Silent, launch never blocks.
     void flushPreferencesSync();
   }, []);
   // The daily foreground check-in (inactivity retention): records that the
   // app was used today and repairs server rows a purge removed. Silent.
   useInstallationCheckin();
-  useEffect(() => {
-    // A failed load is not a reason to stay blank: the app proceeds with the
-    // platform's fallback face for any name it cannot resolve, and the failure
-    // is named in development rather than hidden.
-    if (fontError && __DEV__) console.warn('Design-system fonts failed to load', fontError);
-  }, [fontError]);
 
   // The access gate reads in parallel with the fonts (P2B7X.1); the
   // navigator below renders nothing, and the splash stays, until both have
@@ -83,7 +97,7 @@ export default function RootLayout() {
   // wrong screen.
   return (
     <AccessProvider>
-      <RootNavigator fontsSettled={fontsLoaded || fontError !== null} />
+      <RootNavigator fontsSettled={fontsSettled} />
     </AccessProvider>
   );
 }
