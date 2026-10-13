@@ -102,6 +102,11 @@ async function seed(installationId: string, states: string[], allergens: string[
         p_state_codes: states,
         p_allergens: allergens,
         p_retailer_ids: ['walmart'],
+        // Since 20261014 the server stores allergens only with a consent
+        // version; without one they would be dropped and the isolation
+        // check below could not see them.
+        p_allergen_consent: 'allergens-v1',
+        p_allergen_consent_decided_at: new Date().toISOString(),
       },
     ],
     [
@@ -240,6 +245,10 @@ test(
     const text = JSON.stringify(exportA);
     assert.ok(!text.includes(a) && !text.includes(b), 'no installation id in the export');
     assert.ok(text.includes('peanut') && !text.includes('sesame'));
+    // The consent record is exported by name from the explicit field list.
+    const preferences = exportA.preferences as Record<string, unknown>;
+    assert.equal(preferences.allergen_consent_version, 'allergens-v1');
+    assert.equal(typeof preferences.allergen_consent_decided_at, 'string');
     const registration = (exportA.push_registrations as Record<string, unknown>[])[0];
     assert.match(String(registration.push_token), /^…[0-9a-f]{4}$/, 'the token is masked');
     assert.ok(!('expo_push_token' in registration));
