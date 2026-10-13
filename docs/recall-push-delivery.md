@@ -392,7 +392,31 @@ unchanged.
   re-registers (idempotent, sequenced) — only if a registration is confirmed
   here and nothing is owed.
 
-## Inactivity retention (prepared 2026-10-12, not applied)
+## Allergen consent in matching (2026-10-13; migration 20261014000000 not applied)
+
+`toUserPreferences` (worker.ts) gives the relevance evaluation a row's
+allergens **only when it carries `allergen_consent_version`**. The relevance
+rules themselves are unchanged. Without consent a profile is judged exactly
+like one that chose no allergens.
+
+**What that means for delivery.** Under C5.2B, an identified allergen-only
+recall with **no** selected allergens is a mismatch. So for those profiles:
+
+- every allergen-only recall is withheld;
+- a recall with no stated distribution that only an allergen would qualify
+  is not sent;
+- state and store matches are untouched;
+- an allergens-only profile receives nothing.
+
+**Production rows written before consent existed** (`allergen_consent_version`
+null) are therefore matched without allergens from the moment this code
+runs.
+
+**Safe before the migration.** If the column does not exist yet,
+`listPreferences` reads without it, so allergens are ignored: never a
+broader match. Tests are in `worker.test.ts` ("consent: …").
+
+## Inactivity retention (APPLIED 2026-10-13; cleanup not enabled)
 
 `20261013000000_installation_inactivity_retention` deletes an installation's
 push subscription and its `notification_deliveries` (with its other rows)

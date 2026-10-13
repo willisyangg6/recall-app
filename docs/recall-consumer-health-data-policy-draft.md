@@ -74,7 +74,8 @@ is untested.⟧
 
 - **Withdraw consent at any time.** Use Profile → Privacy & Data Controls →
   "Use my allergens for alerts", or clear your allergens. The copy on our
-  server is removed immediately. ⟦PLANNED: proposal §1.3⟧
+  server is removed as soon as your iPhone is online; if it is offline, the
+  app shows that removal is pending. ⟦PLANNED: proposal §1.3⟧
 - **Delete.** "Reset app and delete my data" deletes everything our server
   holds for this installation, immediately. A deleted record can remain in
   a database backup for up to 7 days. If you stop using Lotly, our server

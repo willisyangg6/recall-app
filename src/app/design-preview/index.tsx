@@ -30,6 +30,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DocumentBlockView } from '@/components/document/document-blocks';
 import { DocumentSectionView, DocumentView } from '@/components/document/document-view';
+import { AllergenConsentChoice } from '@/components/allergen-consent/allergen-consent-choice';
+import { AllergenConsentSheet } from '@/components/allergen-consent/allergen-consent-sheet';
+import { AllergenConsentStatusPanel } from '@/components/allergen-consent/allergen-consent-status';
+import { CONSENT_NOTIFICATIONS_NOTE } from '@/lib/allergen-consent';
 import { ResetPanel } from '@/components/installation-reset-section';
 import { DevelopmentEntry } from '@/components/profile/development-entry';
 import { NavigationRow } from '@/components/profile/navigation-row';
@@ -398,10 +402,12 @@ export default function DesignPreviewScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [gateY, setGateY] = useState<number | null>(null);
   const [qaY, setQaY] = useState<number | null>(null);
+  const [consentY, setConsentY] = useState<number | null>(null);
   useEffect(() => {
-    const target = jump === 'gate' ? gateY : jump === 'qa' ? qaY : null;
+    const target =
+      jump === 'gate' ? gateY : jump === 'qa' ? qaY : jump === 'consent' ? consentY : null;
     if (target !== null) scrollRef.current?.scrollTo({ y: target, animated: false });
-  }, [jump, gateY, qaY]);
+  }, [jump, gateY, qaY, consentY]);
   const feed = useFeed();
   const [chosen, setChosen] = useState<Partial<Record<PreviewCaseRequirement, string>>>({});
   const [confirmed, setConfirmed] = useState<Record<string, ConfirmedSections>>({});
@@ -959,6 +965,17 @@ export default function DesignPreviewScreen() {
           NOTIFICATION STATES
         </ThemedText>
         <NotificationsGallery />
+
+        {/* 2026-10-13: allergen consent — the production components with
+            fixed inputs; every button below only changes this gallery's
+            memory. Nothing is saved, mirrored, or sent.
+            `lotly://design-preview?jump=consent` scrolls here. */}
+        <View onLayout={(event) => setConsentY(event.nativeEvent.layout.y)}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+            ALLERGEN CONSENT
+          </ThemedText>
+        </View>
+        <AllergenConsentGallery />
 
         {/* P2B7X.1: the first-launch screens, the hard paywall in every state,
             and the notification education — imported from production — with
@@ -2697,6 +2714,60 @@ function PersonalizationGallery() {
  * are handed in; the three callbacks do nothing, so no sample can request
  * permission, register a token, or open system settings.
  */
+function AllergenConsentGallery() {
+  const [sheet, setSheet] = useState<'none' | 'standard' | 'only-choice'>('none');
+  const [granted, setGranted] = useState(true);
+  const noop = () => {};
+  return (
+    <View style={{ gap: 16 }}>
+      <Text variant="caption" color="text/secondary">
+        {'Sheet — the onboarding Allergens step’s Continue and Edit preferences’ Save open it'}
+      </Text>
+      <Button
+        variant="secondary"
+        label="Open the consent sheet"
+        onPress={() => setSheet('standard')}
+      />
+      <Button
+        variant="secondary"
+        label="Open it for an allergens-only profile"
+        onPress={() => setSheet('only-choice')}
+      />
+      <AllergenConsentSheet
+        visible={sheet !== 'none'}
+        onlyChoice={sheet === 'only-choice'}
+        onGrant={() => setSheet('none')}
+        onDecline={() => setSheet('none')}
+        onClose={() => setSheet('none')}
+      />
+      <Text variant="caption" color="text/secondary">
+        Privacy & Data Controls — tap the button to switch the sample
+      </Text>
+      <AllergenConsentStatusPanel
+        granted={granted}
+        onWithdraw={() => setGranted(false)}
+        onOptIn={() => setGranted(true)}
+      />
+      <Text variant="caption" color="text/secondary">
+        Pending — a withdrawal made offline, not yet confirmed by the server
+      </Text>
+      <AllergenConsentStatusPanel granted={false} pending onWithdraw={noop} onOptIn={noop} />
+      <Text variant="caption" color="text/secondary">
+        Notifications screen — shown when allergens stay on this iPhone
+      </Text>
+      <Text variant="caption" color="text/secondary">
+        {CONSENT_NOTIFICATIONS_NOTE}
+      </Text>
+      <Text variant="caption" color="text/secondary">
+        Inline — Settings → Personalization, while allergens are chosen and nothing is decided
+      </Text>
+      <Surface radius={12} border="border/strong" style={{ padding: 16 }}>
+        <AllergenConsentChoice onlyChoice={false} onGrant={noop} onDecline={noop} />
+      </Surface>
+    </View>
+  );
+}
+
 function NotificationsGallery() {
   const noop = () => {};
   const ready = (

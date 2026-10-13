@@ -168,12 +168,27 @@ export async function setInstallationPreferences(input: {
   stateCodes: readonly string[];
   allergens: string[];
   retailerIds: string[];
+  /**
+   * The allergen consent version (2026-10-13), or null. Without it the
+   * server stores no allergens; the client also sends none (allergen-consent.ts).
+   */
+  allergenConsent?: string | null;
+  /**
+   * The device time of the latest consent decision (grant, decline or
+   * withdrawal), or null before any. The server keeps the latest decision,
+   * so a delayed older request cannot reverse a newer one.
+   */
+  allergenConsentDecidedAt?: string | null;
 }): Promise<void> {
   await rpcPost('set_installation_preferences', {
     p_installation_id: input.installationId,
     p_state_codes: [...input.stateCodes],
     p_allergens: input.allergens,
     p_retailer_ids: input.retailerIds,
+    ...(input.allergenConsent ? { p_allergen_consent: input.allergenConsent } : {}),
+    ...(input.allergenConsentDecidedAt
+      ? { p_allergen_consent_decided_at: input.allergenConsentDecidedAt }
+      : {}),
   });
 }
 

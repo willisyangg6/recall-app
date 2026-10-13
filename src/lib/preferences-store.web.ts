@@ -36,3 +36,11 @@ export function onPreferencesSaved(_listener: (prefs: UserRecallPreferences) => 
 export async function flushPreferencesSync(): Promise<void> {}
 
 export async function deleteLocalPreferenceState(): Promise<void> {}
+
+export async function setAllergenConsentDecision(_decision: string): Promise<SaveResult> {
+  return { synced: false };
+}
+
+export async function allergenServerSyncPending(): Promise<boolean> {
+  return false;
+}

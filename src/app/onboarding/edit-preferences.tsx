@@ -20,6 +20,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, BackHandler } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
+import { AllergenConsentSheet } from '@/components/allergen-consent/allergen-consent-sheet';
+import { useAllergenConsent } from '@/hooks/use-allergen-consent';
+import { allergensAreOnlyAlertChoice, consentNewlyNeededBySave } from '@/lib/allergen-consent';
+
 import {
   EditPreferencesPending,
   EditPreferencesStep,
@@ -86,6 +90,14 @@ export default function EditPreferencesScreen() {
       };
     }, []),
   );
+  // Allergen consent (2026-10-13). WHEN: after Save's local write has
+  // succeeded (the server mirror for that save already carries NO allergens,
+  // because nothing is decided), and only if this save ADDED an allergen while
+  // no decision is recorded. The page then waits on the sheet; either answer,
+  // or Close, leaves. A later save that adds nothing never asks again.
+  const { consent, decide } = useAllergenConsent();
+  const [askAfterSave, setAskAfterSave] = useState<{ onlyChoice: boolean } | null>(null);
+  const [deciding, setDeciding] = useState(false);
   const save = useCallback(() => {
     if (state === null || saving.current) return;
     const request = saveRequest(state);
@@ -93,7 +105,14 @@ export default function EditPreferencesScreen() {
     saving.current = true;
     dispatch({ type: 'save-started' });
     commitPreferences(request).then(
-      () => {
+      (saved) => {
+        if (
+          consent.status === 'ready' &&
+          consentNewlyNeededBySave(state.saved.allergens, saved.allergens, consent.record)
+        ) {
+          setAskAfterSave({ onlyChoice: allergensAreOnlyAlertChoice(saved) });
+          return;
+        }
         if (focused.current) router.back();
       },
       () => {
@@ -102,7 +121,19 @@ export default function EditPreferencesScreen() {
         AccessibilityInfo.announceForAccessibility(EDIT_SAVE_FAILED);
       },
     );
-  }, [dispatch, state]);
+  }, [consent, dispatch, state]);
+  const leaveAfterConsent = (decision: 'granted' | 'declined' | null) => {
+    const done = () => {
+      setAskAfterSave(null);
+      if (focused.current) router.back();
+    };
+    if (decision === null) return done();
+    setDeciding(true);
+    void decide(decision).finally(() => {
+      setDeciding(false);
+      done();
+    });
+  };
   // Cancel is locked while a save is in flight: the page stays until the
   // local write has answered (milliseconds), then leaves on its own.
   const cancel = useCallback(() => {
@@ -119,14 +150,24 @@ export default function EditPreferencesScreen() {
     );
   }
   return (
-    <EditPreferencesStep
-      state={state}
-      onToggleState={(code) => dispatch({ type: 'toggle-state', code })}
-      onToggleAllergen={(token) => dispatch({ type: 'toggle-allergen', token })}
-      onClearAllergens={() => dispatch({ type: 'clear-allergens' })}
-      onToggleStore={(id) => dispatch({ type: 'toggle-store', id })}
-      onSave={save}
-      onCancel={cancel}
-    />
+    <>
+      <EditPreferencesStep
+        state={state}
+        onToggleState={(code) => dispatch({ type: 'toggle-state', code })}
+        onToggleAllergen={(token) => dispatch({ type: 'toggle-allergen', token })}
+        onClearAllergens={() => dispatch({ type: 'clear-allergens' })}
+        onToggleStore={(id) => dispatch({ type: 'toggle-store', id })}
+        onSave={save}
+        onCancel={cancel}
+      />
+      <AllergenConsentSheet
+        visible={askAfterSave !== null}
+        onlyChoice={askAfterSave?.onlyChoice ?? false}
+        busy={deciding}
+        onGrant={() => leaveAfterConsent('granted')}
+        onDecline={() => leaveAfterConsent('declined')}
+        onClose={() => leaveAfterConsent(null)}
+      />
+    </>
   );
 }

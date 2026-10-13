@@ -66,6 +66,13 @@ export interface PersistenceDeps {
    * re-sent over a good server copy.
    */
   readStoredStrict?(): Promise<UserRecallPreferences | null>;
+  /**
+   * Anything besides the preferences that decides what a mirror sends
+   * (2026-10-13: the allergen consent version). Folded into the "already
+   * synced" comparison, so a change to it is mirrored even when the
+   * preferences are unchanged. Absent = preferences alone.
+   */
+  mirrorKey?(): Promise<string>;
 }
 
 export interface SaveResult {
@@ -92,6 +99,14 @@ export interface PreferencePersistence {
   settleMirror(): Promise<void>;
   /** Resolves when no mirror run is pending or in flight (QA and tests). */
   mirrorIdle(): Promise<void>;
+  /**
+   * Something `mirrorKey` reads changed (the allergen consent): mark the
+   * mirror owed — the dirty flag, so a failure is retried by the next save
+   * or launch flush exactly like a preference change — and request a run.
+   */
+  touch(): Promise<SaveResult>;
+  /** The mirror still owes the server the newest value (the dirty flag). */
+  mirrorOwed(): Promise<boolean>;
   /**
    * Send the newest local value to the server again, even if this process
    * already mirrored it (2026-10-12). The daily foreground check-in calls it
@@ -126,7 +141,7 @@ export function createPreferencePersistence(deps: PersistenceDeps): PreferencePe
     while (pending) {
       pending = false;
       const prefs = await deps.readLocal();
-      const value = key(prefs);
+      const value = key(prefs) + (deps.mirrorKey ? `|${await deps.mirrorKey()}` : '');
       latest ??= value;
       if (value === synced) {
         // Already mirrored (a request that found nothing new to send).
@@ -163,7 +178,7 @@ export function createPreferencePersistence(deps: PersistenceDeps): PreferencePe
       const cleaned = sanitizePreferences(prefs);
       await deps.writeLocal(cleaned);
       await deps.setDirty(true);
-      latest = key(cleaned);
+      latest = key(cleaned) + (deps.mirrorKey ? `|${await deps.mirrorKey()}` : '');
       for (const listener of listeners) listener(cleaned);
       requestMirror();
       return cleaned;
@@ -194,6 +209,18 @@ export function createPreferencePersistence(deps: PersistenceDeps): PreferencePe
     async mirrorIdle() {
       while (running !== null) await running;
     },
+    // Answers `{ synced }` once the mirror attempt covering this change has
+    // finished — false while offline — exactly like `save`.
+    async touch() {
+      const confirmed = new Promise<boolean>((resolve) => waiters.push(resolve));
+      await deps.enqueueLocal(async () => {
+        await deps.setDirty(true);
+        latest = key(await deps.readLocal()) + (deps.mirrorKey ? `|${await deps.mirrorKey()}` : '');
+        requestMirror();
+      });
+      return { synced: await confirmed };
+    },
+    mirrorOwed: () => deps.isDirty(),
     remirror: () =>
       deps.enqueueLocal(async () => {
         if (deps.readStoredStrict) {

@@ -341,3 +341,15 @@ test('the privacy document explains the separate purchase identifier and that th
   assert.match(privacyText, /use Restore Purchases/);
   assert.doesNotMatch(privacyText, /RevenueCat the same random installation identifier/);
 });
+
+test('the privacy document says allergens reach the server only with consent (2026-10-13)', () => {
+  const privacyText = documentPlainText(PRIVACY_DATA_CONTROLS);
+  assert.match(privacyText, /Your allergens, only if you choose “Use for alerts”/);
+  assert.match(privacyText, /Lotly’s server keeps none/);
+  assert.match(privacyText, /read locally to build Affects me, whatever you decide about alerts/);
+  assert.match(privacyText, /Allergens stored before this choice existed are not used for alerts/);
+  assert.doesNotMatch(
+    privacyText,
+    /A mirror of your personalization choices \(states, allergens, stores\)/,
+  );
+});

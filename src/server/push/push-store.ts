@@ -123,9 +123,20 @@ export class SupabasePushStore implements PushStore {
   }
 
   async listPreferences(): Promise<InstallationPreferences[]> {
-    const { data, error } = await this.client
+    let { data, error } = await this.client
       .from('installation_preferences')
-      .select('installation_id, state_codes, allergens, retailer_ids, updated_at');
+      .select(
+        'installation_id, state_codes, allergens, retailer_ids, updated_at, allergen_consent_version',
+      );
+    if (error && /allergen_consent_version/.test(error.message)) {
+      // The allergen-consent migration (20261014000000) is not applied yet.
+      // Read without it: every row then has no consent version, so allergens
+      // are ignored — the safe direction, never a broader match.
+      console.warn('listPreferences: allergen_consent_version missing; allergens ignored');
+      ({ data, error } = await this.client
+        .from('installation_preferences')
+        .select('installation_id, state_codes, allergens, retailer_ids, updated_at'));
+    }
     if (error || !data) {
       // The C3 migration may not be applied yet — degrade to "no preferences"
       // (pre-C3 delivery behavior) with a warning, exactly like the C2 reads.
@@ -138,6 +149,8 @@ export class SupabasePushStore implements PushStore {
       allergens: (row.allergens as string[] | null) ?? [],
       retailerIds: (row.retailer_ids as string[] | null) ?? [],
       updatedAt: row.updated_at as string,
+      allergenConsentVersion:
+        (row as { allergen_consent_version?: string | null }).allergen_consent_version ?? null,
     }));
   }
 

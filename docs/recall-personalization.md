@@ -534,6 +534,68 @@ the migration idempotent by construction and leaves no singular field for a
 second authority to grow out of. A legacy profile with no state becomes the
 empty list, which is the same answer it always gave.
 
+### Allergen consent (built 2026-10-13; migration 20261014000000 prepared, not applied)
+
+Allergens always work **on the device**: Affects Me and the allergen labels
+read local preferences, whatever the shopper decides. Lotly's server receives
+them **only** with the shopper's consent under the current text
+(`ALLERGEN_CONSENT_VERSION = 'allergens-v1'`, `src/lib/allergen-consent.ts`).
+
+- **When it is asked.**
+  - The onboarding Allergens step asks on **Continue**.
+  - Edit preferences asks only when a **Save** adds an allergen that was not
+    chosen before and no decision is recorded
+    (`consentNewlyNeededBySave`). The sheet opens **after** the local save
+    succeeds; that save's mirror carries no allergens, because no consent
+    exists yet. A later Save that adds nothing never re-opens it, even if the
+    sheet was closed without an answer.
+  - Settings → Personalization shows the same question inline.
+  - The two choices, **Use for alerts** and **Keep on this iPhone only**, are
+    the same component and variant, neither pre-selected (pinned by a test).
+  - An existing decision is reused, and a decline or withdrawal is never
+    re-asked. Re-consent needs the explicit opt-in in Privacy & Data
+    Controls, which also has the one-tap withdrawal.
+- **Mirror.** `syncToServer` sends `allergensForServer(...)`: the chosen
+  allergens with consent, none without. It also sends the consent version
+  (`p_allergen_consent`).
+  - The consent version is part of the mirror's "already synced" key
+    (`mirrorKey`).
+  - A decision calls `persistence.touch()`, which marks the mirror owed (the
+    dirty flag) and requests a run. A consent change with unchanged
+    preferences is therefore sent, and an offline one is retried by the next
+    save or launch flush.
+  - **Pending.** Until the server confirms the newest decision, Privacy &
+    Data Controls says so (`consentStatusLine`): a withdrawal reads "Removing
+    them from Lotly's server will finish when your iPhone is back online",
+    never "the server doesn't have them". The sheet promises removal "as soon
+    as your iPhone is online", not immediately.
+  - **Decision time.** Every decision records a device time that is strictly
+    after the previous one (`nextDecisionTime`), and the mirror sends it as
+    `p_allergen_consent_decided_at`.
+- **Server** (`apply_installation_preferences`, the one implementation):
+  - **No consent version:** stores `allergens = '{}'` and clears the consent
+    columns.
+  - **`allergens-v1`:** stores the allergens. `allergen_consent_at` is set
+    when consent is first given and kept across edits.
+  - **An unknown version:** refused (400).
+  - **Retries:** an identical retry is a strict no-op, consent included.
+  - **Decision ordering.** The row is locked `for update`. A write whose
+    decision time is older than the stored one, or that has none once a
+    timed decision exists, keeps the stored consent, decision time **and
+    allergens**; states and stores still apply. So a delayed grant can never
+    restore allergens after a newer withdrawal, and a delayed withdrawal
+    cannot undo a newer grant. Proven on real Postgres, including both
+    orders of two concurrent transactions on the row lock.
+- **Older clients.** The 4-argument plural call resolves to the new function
+  with consent null, and the legacy singular call passes null. Both keep
+  working and store no allergens.
+- **Rows written before the migration** keep their allergens with consent
+  null. **They are not cleared.** The worker ignores them, and clearing them
+  is a later, separately authorized step.
+- **Reset** removes the local consent record. The server row goes with
+  `delete_installation_data`.
+- **Isolated-stack evidence:** `~/Desktop/Lotly-Allergen-Consent-Review/server/`.
+
 ### The mirror after an inactivity purge (prepared 2026-10-12)
 
 The server row can now disappear while the device is untouched: the

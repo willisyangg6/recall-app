@@ -13,6 +13,7 @@ import {
 } from './installation-id';
 import { enqueueInstallationMutation } from './installation-lifecycle';
 import { resetInstallationData, type InstallationResetResult } from './installation-reset';
+import { deleteLocalAllergenConsent } from './allergen-consent-store';
 import { deleteLocalOnboardingState } from './onboarding-store';
 import { purchaseIdentity } from './purchases/provider';
 import { deleteLocalPreferenceState, settlePreferenceMirror } from './preferences-store';
@@ -36,6 +37,7 @@ export function runInstallationReset(): Promise<InstallationResetResult> {
     deleteServerData: deleteInstallationData,
     clearLocalPreferences: deleteLocalPreferenceState,
     clearLocalAlertState,
+    clearLocalAllergenConsent: deleteLocalAllergenConsent,
     clearLocalSavedRecalls: deleteLocalSavedRecalls,
     clearLocalOnboardingState: deleteLocalOnboardingState,
     clearInstallationId,

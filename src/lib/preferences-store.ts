@@ -31,6 +31,14 @@ import {
   sanitizePreferences,
   type UserRecallPreferences,
 } from '@/domain/preferences';
+import {
+  ALLERGEN_CONSENT_VERSION,
+  allergensForServer,
+  nextDecisionTime,
+  serverAllergenConsent,
+  type AllergenConsentDecision,
+} from './allergen-consent';
+import { loadAllergenConsent, saveAllergenConsent } from './allergen-consent-store';
 import { getOrCreateInstallationId } from './installation-id';
 import { enqueueInstallationMutation } from './installation-lifecycle';
 import { createPreferencePersistence, type SaveResult } from './preference-persistence';
@@ -74,11 +82,16 @@ export async function loadPreferences(): Promise<UserRecallPreferences> {
 }
 
 async function syncToServer(prefs: UserRecallPreferences): Promise<void> {
+  // Allergens leave this device only with consent (2026-10-13); states and
+  // stores mirror exactly as before.
+  const consent = await loadAllergenConsent();
   await setInstallationPreferences({
     installationId: await getOrCreateInstallationId(),
     stateCodes: prefs.states,
-    allergens: prefs.allergens,
+    allergens: allergensForServer(prefs.allergens, consent),
     retailerIds: prefs.retailers,
+    allergenConsent: serverAllergenConsent(consent),
+    allergenConsentDecidedAt: consent?.at ?? null,
   });
 }
 
@@ -105,6 +118,11 @@ const persistence = createPreferencePersistence({
   isDirty: async () => (await SecureStore.getItemAsync(DIRTY_KEY)) === '1',
   setDirty: (dirty) =>
     dirty ? SecureStore.setItemAsync(DIRTY_KEY, '1') : SecureStore.deleteItemAsync(DIRTY_KEY),
+  // The consent decides what a mirror carries, so it is part of "synced".
+  mirrorKey: async () => {
+    const consent = await loadAllergenConsent();
+    return `${serverAllergenConsent(consent) ?? 'none'}@${consent?.at ?? ''}`;
+  },
   readStoredStrict: async () => {
     const raw = await SecureStore.getItemAsync(PREFS_KEY); // a read error throws
     return raw === null ? null : sanitizePreferences(JSON.parse(raw)); // corrupt JSON throws
@@ -167,6 +185,34 @@ persistence.onSaved((prefs) => {
  */
 export function flushPreferencesSync(): Promise<void> {
   return persistence.flush();
+}
+
+/**
+ * Record the shopper's allergen consent decision (2026-10-13) and mirror its
+ * effect: a grant sends the allergens with the consent version; a decline or
+ * withdrawal sends none, which removes the server copy. The mirror is marked
+ * owed first, so an offline change is retried like any save.
+ */
+export async function setAllergenConsentDecision(
+  decision: AllergenConsentDecision,
+): Promise<SaveResult> {
+  const prior = await loadAllergenConsent();
+  await saveAllergenConsent({
+    decision,
+    version: ALLERGEN_CONSENT_VERSION,
+    // Strictly later than the previous decision, even if the clock moved
+    // back: the server orders decisions by this time (20261014000000).
+    at: nextDecisionTime(prior, new Date()),
+  });
+  return persistence.touch();
+}
+
+/**
+ * Whether the server has yet to receive the newest preferences or consent
+ * (2026-10-13): drives "removal pending" on Privacy & Data Controls.
+ */
+export function allergenServerSyncPending(): Promise<boolean> {
+  return persistence.mirrorOwed();
 }
 
 /**

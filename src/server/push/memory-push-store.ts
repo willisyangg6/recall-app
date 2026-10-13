@@ -225,16 +225,24 @@ export class MemoryPushStore implements PushStore {
     installationId: string,
     prefs: { stateCodes: string[]; allergens: string[]; retailerIds: string[] },
     nowIso: string,
+    /**
+     * The consent version sent with the write (2026-10-13). Defaults to the
+     * current version so existing tests keep their meaning; pass null to
+     * model an older client or a declined / withdrawn consent, which stores
+     * no allergens — exactly as apply_installation_preferences does.
+     */
+    allergenConsent: string | null = 'allergens-v1',
   ): void {
     const stateCodes = [...new Set(prefs.stateCodes)].sort();
-    const allergens = [...new Set(prefs.allergens)].sort();
+    const allergens = allergenConsent === null ? [] : [...new Set(prefs.allergens)].sort();
     const retailerIds = [...new Set(prefs.retailerIds)].sort();
     const existing = this.preferences.get(installationId);
     if (
       existing &&
       existing.stateCodes.join('|') === stateCodes.join('|') &&
       existing.allergens.join('|') === allergens.join('|') &&
-      existing.retailerIds.join('|') === retailerIds.join('|')
+      existing.retailerIds.join('|') === retailerIds.join('|') &&
+      existing.allergenConsentVersion === allergenConsent
     ) {
       return;
     }
@@ -244,6 +252,26 @@ export class MemoryPushStore implements PushStore {
       allergens,
       retailerIds,
       updatedAt: nowIso,
+      allergenConsentVersion: allergenConsent,
+    });
+  }
+
+  /**
+   * A row as it exists in production before 20261014000000: allergens
+   * stored with no consent version (written before consent existed).
+   */
+  seedLegacyPreferences(
+    installationId: string,
+    prefs: { stateCodes: string[]; allergens: string[]; retailerIds: string[] },
+    nowIso: string,
+  ): void {
+    this.preferences.set(installationId, {
+      installationId,
+      stateCodes: [...prefs.stateCodes],
+      allergens: [...prefs.allergens],
+      retailerIds: [...prefs.retailerIds],
+      updatedAt: nowIso,
+      allergenConsentVersion: null,
     });
   }
 

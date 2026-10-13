@@ -174,8 +174,19 @@ function relevanceInput(event: Pick<DeliverableEvent, 'projection'>): RelevanceI
   };
 }
 
+/**
+ * The preferences delivery may use (2026-10-13): allergens count ONLY when
+ * the row carries an allergen consent version. Rows written before consent
+ * existed, by older clients, or after a withdrawal are matched on states and
+ * stores alone. The relevance evaluation itself is unchanged; it is simply
+ * not given allergens the shopper has not agreed to use for alerts.
+ */
 function toUserPreferences(prefs: InstallationPreferences): UserRecallPreferences {
-  return { states: prefs.stateCodes, allergens: prefs.allergens, retailers: prefs.retailerIds };
+  return {
+    states: prefs.stateCodes,
+    allergens: prefs.allergenConsentVersion ? prefs.allergens : [],
+    retailers: prefs.retailerIds,
+  };
 }
 
 export interface EventEligibility {

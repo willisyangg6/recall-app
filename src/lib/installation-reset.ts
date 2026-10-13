@@ -70,6 +70,8 @@ export interface InstallationResetDeps {
   clearLocalSavedRecalls(): Promise<void>;
   /** Remove the locally persisted alerts-enabled flag. */
   clearLocalAlertState(): Promise<void>;
+  /** Remove the allergen consent decision (2026-10-13); local only. */
+  clearLocalAllergenConsent?(): Promise<void>;
   /**
    * Remove the onboarding record (P2B7X.1), so the next launch starts from
    * Welcome: the confirmation promises the app returns to its default state,
@@ -119,6 +121,7 @@ export function resetInstallationData(
     // every later retry (or ordinary use) handles: the server rows for the
     // old id are already gone, and each clear below is a no-op when re-run.
     await deps.clearLocalPreferences();
+    await deps.clearLocalAllergenConsent?.();
     await deps.clearLocalAlertState();
     await deps.clearLocalSavedRecalls();
     await deps.clearLocalOnboardingState();

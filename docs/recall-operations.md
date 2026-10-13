@@ -2136,7 +2136,7 @@ against that stack. Scripts and output are kept with the review evidence
 authorization (`supabase db push --linked`, which deploys and applies).
 
 `supabase/migrations/20261012000000_installation_deletion_restore_shopper_reports.sql`
-re-bodies `delete_installation_data` only: the 20261004 body plus
+re-bodies `delete_installation_data` only (**APPLIED in production 2026-10-13 00:03 UTC**): the 20261004 body plus
 `delete from public.shopper_reports where installation_id = …`. No table,
 column, row, policy or grant changes; the ACL is restated unchanged.
 
@@ -2187,7 +2187,7 @@ byte-identical (repeat-safe). Evidence: `~/Desktop/Lotly-Privacy-Correctness-Rev
 
 ## Installation inactivity retention: a PREPARED schema migration (2026-10-12)
 
-**Status: PREPARED, NOT APPLIED; purge NOT enabled.** Founder-approved
+**Status: APPLIED in production 2026-10-13 00:03 UTC; purge NOT enabled.** Founder-approved
 direction (2026-10-12): Lotly-held installation data is deleted after 12
 months without meaningful user activity. Roll out only in the sequence below.
 Applying the migration alone schedules a daily job that deletes nothing.
@@ -2342,6 +2342,35 @@ deletions_start_on = null;`. The constraint allows `deletions_start_on` to
   be cleared only together with switching off.
 - After deletions have begun, deleted rows are gone, as with a reset. Only
   backups (§ policy) still hold them until they expire.
+
+## Allergen consent: a PREPARED schema migration (2026-10-13)
+
+**Status: PREPARED, NOT APPLIED.**
+`supabase/migrations/20261014000000_allergen_consent.sql`:
+
+|           |                                                                                                                                                                                                        |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| adds      | `installation_preferences.allergen_consent_version`, `allergen_consent_at`, `allergen_consent_decided_at`                                                                                              |
+| replaces  | `apply_installation_preferences(text, text[], text[], text[])` → `(…, p_allergen_consent text, p_allergen_consent_decided_at timestamptz)`, service role only                                          |
+| replaces  | the plural `set_installation_preferences(text, text[], text[], text[])` → `(…, p_allergen_consent text default null, p_allergen_consent_decided_at timestamptz default null)`; one PostgREST candidate |
+| re-bodies | the legacy singular `set_installation_preferences`, which passes consent null                                                                                                                          |
+| does not  | clear any existing allergens, or change grants                                                                                                                                                         |
+
+**Order.**
+
+- It applies after `20261013000000` (applied 2026-10-13).
+- The worker change is safe before or after the apply; it degrades to
+  "allergens ignored".
+- A build carrying the consent UI must not be distributed before the apply.
+  The new client sends `p_allergen_consent` and
+  `p_allergen_consent_decided_at`, which an unmigrated server
+  rejects as an unknown argument.
+- **The watchdog branch's `20261011000000` must be re-timestamped** after the
+  last applied migration before it merges. `supabase db push` refuses local
+  migrations older than the remote's latest without `--include-all`.
+
+**Validation (isolated stack, 2026-10-13):** see
+[recall-personalization.md](recall-personalization.md) "Allergen consent".
 
 ## Enforcement: weekly-gated
 

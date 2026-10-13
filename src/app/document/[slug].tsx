@@ -21,6 +21,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DocumentView } from '@/components/document/document-view';
+import { AllergenConsentStatusSection } from '@/components/allergen-consent/allergen-consent-status';
 import { InstallationResetSection } from '@/components/installation-reset-section';
 import { StateMessage } from '@/components/state-message';
 import { Surface } from '@/components/ui/surface';
@@ -52,6 +53,7 @@ export default function DocumentScreen() {
         {/* C7.1: the one destructive data control lives at the bottom of
             Privacy & Data Controls — and only there (frozen product
             decision; pinned by the trust-center tests). */}
+        {doc.slug === 'privacy-data-controls' ? <AllergenConsentStatusSection /> : null}
         {doc.slug === 'privacy-data-controls' ? <InstallationResetSection /> : null}
       </ScrollView>
     </Surface>

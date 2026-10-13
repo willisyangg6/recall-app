@@ -40,7 +40,8 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'What stays on your device',
       blocks: [
         bullets([
-          'Your personalization choices (the states you shop in, allergens to watch, and stores), saved in the device’s secure storage. They work offline and are read locally to build Affects me. A copy is also kept on Lotly’s server; see below.',
+          'Your personalization choices (the states you shop in, allergens to watch, and stores), saved in the device’s secure storage. They work offline and are read locally to build Affects me, whatever you decide about alerts. A copy of your states and stores is also kept on Lotly’s server, and of your allergens only if you agree; see below.',
+          'Your answer to whether Lotly may use your allergens for alerts, and when you gave it.',
           'A random installation identifier, created on this device the first time it is needed. It contains nothing about you or your device. It is a random number the server uses to tell installations apart.',
           'Whether you turned recall alerts on.',
           'Your place in the setup steps, so the app knows whether setup is finished.',
@@ -57,7 +58,8 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       title: 'What Lotly’s server stores',
       blocks: [
         bullets([
-          'A mirror of your personalization choices (states, allergens, stores), keyed by the random installation identifier, so alert delivery can apply the same relevance rules the app shows you. It is sent every time you change a choice, including during setup, whether or not alerts are on, and again once a day when you open the app, so the server copy stays complete.',
+          'A mirror of your states and stores, keyed by the random installation identifier, so alert delivery can apply the same relevance rules the app shows you. It is sent every time you change a choice, including during setup, whether or not alerts are on, and again once a day when you open the app, so the server copy stays complete.',
+          'Your allergens, only if you choose “Use for alerts”, with the version and time of that consent. If you keep them on this iPhone only, or later turn it off, Lotly’s server keeps none, and alerts that only an allergen match would qualify are not sent. Allergens stored before this choice existed are not used for alerts.',
           'When you enable alerts: a push registration holding the delivery token issued for this installation, the platform (iOS or Android), the app version, and timestamps for when alerts were enabled and last refreshed, plus a counter that keeps turning alerts on and off in the right order.',
           'Per-alert delivery records: which alert was sent to which registration and whether the delivery service accepted it.',
           'The date you last opened the app (a date only, no time), sent at most once a day when the app comes to the screen. It is used only to delete inactive data, described below.',

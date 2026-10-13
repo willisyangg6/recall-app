@@ -29,6 +29,7 @@
  * root stack from the tokens; there is no second heading on the page.
  */
 
+import { AllergenConsentCard } from '@/components/allergen-consent/allergen-consent-card';
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { ScrollView, StyleSheet } from 'react-native';
@@ -102,6 +103,7 @@ export default function PersonalizationScreen() {
               {PERSONALIZATION_INTRO}
             </Text>
             <PersonalizationForm prefs={load.prefs} onChange={update} />
+            <AllergenConsentCard prefs={load.prefs} />
             <SaveStatusLine state={saveState} />
           </>
         ) : (

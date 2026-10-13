@@ -2765,7 +2765,13 @@ test('Allergens: Continue is always enabled, and Back, Continue and the resume p
   const route = codeOnly(ROUTES.allergens);
   assert.ok(route.includes("void access.recordShownStep('allergens');"));
   assert.ok(route.includes('onToggle={(token) => update(toggleAllergen(prefs, token))}'));
-  assert.ok(route.includes("onContinue={() => router.push(onboardingRoute('retailers'))}"));
+  // Continue still leads to Stores; since 2026-10-13 it first asks the
+  // allergen consent question when allergens are chosen with no decision
+  // (lib/allergen-consent.ts), and either answer then continues.
+  assert.ok(route.includes("const next = () => router.push(onboardingRoute('retailers'));"));
+  assert.ok(route.includes('shouldAskAllergenConsent(prefs.allergens, consent.record)'));
+  assert.ok(route.includes('setAsking(true);'));
+  assert.match(route, /\} else \{\s*next\(\);\s*\}/);
   assert.ok(route.includes("onBack={() => goBackFrom('allergens', router)}"));
   const step = codeOnly(componentBody(ALLERGENS, 'AllergensStep'));
   assert.ok(step.includes('footer={<Button label={CONTINUE_CTA} onPress={onContinue} />}'));

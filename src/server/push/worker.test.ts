@@ -684,7 +684,14 @@ test('eligibility seam: the later of activation and enabled_at wins', () => {
   const preferences = new Map(
     ['i1', 'i2', 'i3'].map((installationId) => [
       installationId,
-      { installationId, stateCodes: ['CA'], allergens: [], retailerIds: [], updatedAt: iso(-HOUR) },
+      {
+        installationId,
+        stateCodes: ['CA'],
+        allergens: [],
+        retailerIds: [],
+        updatedAt: iso(-HOUR),
+        allergenConsentVersion: null,
+      },
     ]),
   );
   const eligible = eligibleSubscriptions(
@@ -1346,4 +1353,92 @@ test('personalization respects the untouched C2 safety rails', async () => {
   assert.equal(result.metrics.subscriptionHorizonSkipped, 1);
   assert.equal(result.metrics.deliveriesCreated, 0);
   assert.equal(transport.sends.length, 0);
+});
+
+// ── Allergen consent (2026-10-13) ─────────────────────────────────────────
+// The worker is given allergens only for rows with a consent version. The
+// relevance evaluation is unchanged — without allergens a profile is judged
+// exactly like one that never chose any.
+
+test('consent: an allergen-only recall reaches a consenting peanut watcher, not one without consent', async () => {
+  const { store, transport, runAt } = setup(0);
+  const consented = 'a'.repeat(32);
+  const declined = 'b'.repeat(32);
+  const legacy = 'c'.repeat(32);
+  store.register(consented, 'ExponentPushToken[yes]', 'ios', iso(HOUR));
+  store.register(declined, 'ExponentPushToken[no]', 'ios', iso(HOUR));
+  store.register(legacy, 'ExponentPushToken[old]', 'ios', iso(HOUR));
+  const prefs = { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: [] };
+  store.setPreferences(consented, prefs, iso(HOUR)); // current client, consent given
+  store.setPreferences(declined, prefs, iso(HOUR), null); // declined: server keeps no allergens
+  store.seedLegacyPreferences(legacy, prefs, iso(HOUR)); // stored before consent existed
+  addEvent(store, 2 * HOUR, {
+    geography: { scope: 'nationwide', states: [] },
+    pathogenOrAllergen: 'undeclared peanuts',
+  });
+  const result = await runAt(3 * HOUR);
+  assert.deepEqual(
+    transport.sentMessages.map((m) => m.to),
+    ['ExponentPushToken[yes]'],
+  );
+  assert.equal(result.metrics.preferenceSkipped, 2);
+});
+
+test('consent: without it, state matching for a general hazard is unchanged', async () => {
+  const { store, transport, runAt } = setup(0);
+  const declined = 'b'.repeat(32);
+  const legacy = 'c'.repeat(32);
+  store.register(declined, 'ExponentPushToken[no]', 'ios', iso(HOUR));
+  store.register(legacy, 'ExponentPushToken[old]', 'ios', iso(HOUR));
+  const prefs = { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: [] };
+  store.setPreferences(declined, prefs, iso(HOUR), null);
+  store.seedLegacyPreferences(legacy, prefs, iso(HOUR));
+  addEvent(store, 2 * HOUR, {
+    geography: { scope: 'states', states: ['California'] },
+    pathogenOrAllergen: 'Listeria monocytogenes',
+    hazardCategory: 'pathogen',
+  });
+  await runAt(3 * HOUR);
+  assert.deepEqual(transport.sentMessages.map((m) => m.to).sort(), [
+    'ExponentPushToken[no]',
+    'ExponentPushToken[old]',
+  ]);
+});
+
+test('consent: an allergens-only profile without consent receives nothing (no other signal)', async () => {
+  const { store, transport, runAt } = setup(0);
+  const allergensOnly = 'd'.repeat(32);
+  store.register(allergensOnly, 'ExponentPushToken[ao]', 'ios', iso(HOUR));
+  store.setPreferences(
+    allergensOnly,
+    { stateCodes: [], allergens: ['peanut'], retailerIds: [] },
+    iso(HOUR),
+    null,
+  );
+  addEvent(store, 2 * HOUR, {
+    geography: { scope: 'nationwide', states: [] },
+    pathogenOrAllergen: 'undeclared peanuts',
+  });
+  addEvent(store, 2 * HOUR + 1, {
+    geography: { scope: 'nationwide', states: [] },
+    pathogenOrAllergen: 'Listeria monocytogenes',
+    hazardCategory: 'pathogen',
+  });
+  await runAt(3 * HOUR);
+  assert.deepEqual(transport.sentMessages, []);
+});
+
+test('consent: withdrawing it clears the server allergens and moves the preference horizon', async () => {
+  const { store } = setup(0);
+  const id = 'e'.repeat(32);
+  const prefs = { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: [] };
+  store.setPreferences(id, prefs, iso(HOUR));
+  store.setPreferences(id, prefs, iso(2 * HOUR), null); // the toggle turned off
+  const [row] = await store.listPreferences();
+  assert.deepEqual(row.allergens, []);
+  assert.equal(row.allergenConsentVersion, null);
+  assert.equal(row.updatedAt, iso(2 * HOUR));
+  // An identical re-send is a strict no-op: the horizon does not move again.
+  store.setPreferences(id, prefs, iso(3 * HOUR), null);
+  assert.equal((await store.listPreferences())[0].updatedAt, iso(2 * HOUR));
 });

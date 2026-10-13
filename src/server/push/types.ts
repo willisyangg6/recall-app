@@ -34,8 +34,15 @@ export interface InstallationPreferences {
   installationId: string;
   /** Two-letter codes (['CA','NY']); empty = no location preference. */
   stateCodes: string[];
-  /** Canonical allergen tokens. */
+  /** Canonical allergen tokens, as stored. */
   allergens: string[];
+  /**
+   * The allergen consent the row was written under (2026-10-13), or null.
+   * Allergens count for delivery ONLY with a consent version: rows written
+   * before consent existed, by older clients, or after a withdrawal carry
+   * none (worker.ts `toUserPreferences`).
+   */
+  allergenConsentVersion: string | null;
   /** Canonical retailer catalog ids. */
   retailerIds: string[];
   updatedAt: string;

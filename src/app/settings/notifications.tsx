@@ -24,6 +24,7 @@
  * root stack from the tokens; there is no second heading on the page.
  */
 
+import { AllergenConsentNotificationsNote } from '@/components/allergen-consent/allergen-consent-notifications-note';
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { Linking, Platform, ScrollView, StyleSheet } from 'react-native';
@@ -96,6 +97,7 @@ export default function NotificationsScreen() {
             {NOTIFICATIONS_FOOTNOTE}
           </Text>
         ) : null}
+        {view.status !== 'unsupported' ? <AllergenConsentNotificationsNote /> : null}
       </ScrollView>
     </Surface>
   );

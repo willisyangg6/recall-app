@@ -180,8 +180,8 @@ covers them in detail: ⟦FOUNDER: URL⟧. ⟦PLANNED: in-app link, proposal §7
   unless you consent. ⟦PLANNED: proposal §1.4; deleting them is a later,
   separate step⟧
 - **Withdraw any time:** Profile → Privacy & Data Controls → "Use my
-  allergens for alerts", or clear your allergens. The server copy is removed
-  immediately. ⟦PLANNED⟧
+  allergens for alerts", or clear your allergens. The server copy is removed as soon as your iPhone is online; the app
+  shows when removal is still pending. ⟦PLANNED⟧
 - **Never** for advertising, never sold, never shared beyond the service
   providers listed below.
 - **Deleted** with the rest of your data when you reset the app, and
