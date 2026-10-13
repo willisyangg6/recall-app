@@ -248,7 +248,7 @@ npm run privacy:request -- --apply --confirm --expect <n>   # consume the code; 
 The code is typed at a hidden prompt, never passed as an argument. Request-log
 lines older than 24 months (the proposed maximum) are removed when the tool
 runs, not continuously; the monthly review in the runbook covers the rest. Migration
-`20261016000000_privacy_requests.sql` is **prepared, not applied**. Procedure:
+`20261016000000_privacy_requests.sql` is **applied in production (2026-10-13)**. Procedure and verification:
 [docs/recall-operations.md](docs/recall-operations.md) "Privacy requests".
 
 ### Personalization (Phase C3)

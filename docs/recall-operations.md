@@ -2421,11 +2421,14 @@ that device's installation.
 | 5   | **Reset:** Profile → Reset app and delete my data                                                                                                                                | The installation's row (consent columns included) is gone; on the device, the consent record is removed and onboarding starts over.                                                                                           |
 | 6   | **Older-build compatibility:** an installed build without the consent screens saves preferences                                                                                  | The save succeeds; its allergens are not stored on the server (`'{}'`, no consent version); its states and stores are.                                                                                                        |
 
-## Privacy requests: a PREPARED schema migration (2026-10-13)
+## Privacy requests: schema migration (APPLIED 2026-10-13)
 
-**Status: PREPARED, NOT APPLIED.** Applying it needs explicit founder
-authorization (`supabase db push --linked`, which deploys and applies). The
-design is the privacy program proposal, §3
+**Status: APPLIED and verified in production** (`fytfiqduqlkaskaqegxx`),
+2026-10-13 04:30:30–04:30:41 UTC, by `supabase db push --linked --yes` from
+`master` = `origin/master` = `d5a7eb3`, the only migration in that push.
+Prepared and validated on an isolated stack earlier the same day (below).
+Device checks with a build containing the Your data screens are still
+**pending** (below). The design is the privacy program proposal, §3
 ([recall-privacy-program-proposal.md](recall-privacy-program-proposal.md)).
 
 `supabase/migrations/20261016000000_privacy_requests.sql`:
@@ -2603,21 +2606,46 @@ requests on it, 0 on every other local stack; production untouched.
   export file, the request log and the stack's Kong, PostgREST and Postgres
   logs found no code, hash, full installation id or allergen value.
 
-### How to apply (when authorized)
+### Production verification (read-only, 2026-10-13, after the apply)
 
-1. `supabase migration list --linked`: only `20261016000000` pending.
-   `20261012`, `20261013` (00:03 UTC) and `20261014` (03:50 UTC) were applied
-   on 2026-10-13. The export reads the consent columns by name from its
-   explicit field list. The age-assurance branch's `20261017000000` applies
-   **after** this one, in its own authorized push (agreed 2026-10-13: no
-   rename, no shared functions); `supabase db push` refuses a local migration
-   older than the remote's latest, so 20261016 must not be left behind.
-2. `supabase db push --linked --dry-run`, then `supabase db push --linked`.
-3. Read-only check: `delete_installation_data` deletes from
-   `installation_request_codes`; `lookup_privacy_request` and
-   `redeem_privacy_request` are executable by `service_role` only.
-4. The app build with the Your data section must not ship before step 2: on
-   an older schema its two screens show the "could not be reached" state.
+- **Gates before applying:** the migration file matched the reviewed commit
+  (SHA-256 `04f38d18…`); the linked project was `fytfiqduqlkaskaqegxx`,
+  `ACTIVE_HEALTHY`; 19 migrations matched with nothing remote-only; a fresh
+  dry run listed only this migration.
+- **History after:** 20 matched, nothing pending.
+- **Checks:** the 15 reviewed post-apply checks all true (RLS and no client
+  grants on the codes table; `anon` may export and create but not look up,
+  redeem, count or purge; the reset covers the codes; the explicit export
+  list; consent functions intact; cleanup job scheduled; inactivity purge
+  off). The 7 deployed function bodies are byte-identical to the file.
+- **No-write probes** (a random, never-stored installation id): export returns
+  an empty document; malformed ids and an invalid purpose are refused before
+  any write; lookup, redeem, row counts and the codes table are refused to
+  the publishable key (`42501`).
+- **Data:** every installation-keyed and shared table identical before and
+  after (counts and whole-row fingerprints); 0 request codes exist. The only
+  changes are the new table, the re-bodied `delete_installation_data` and
+  the new `recall-request-code-cleanup` job.
+- **State left:** inactivity cleanup **off**; push **not activated**;
+  `ops:health` and `qa:feed` healthy and unchanged. The age-assurance
+  `20261017000000` is **not** applied; it follows in its own authorized push.
+- **Evidence:** `~/Desktop/Lotly-Privacy-Requests-Review/APPLY-RESULT.md`.
+
+**Device checks (pending).** Each needs a build containing `d5a7eb3` on a test
+device against production, and each creates real rows for that device's own
+installation; reset the device afterwards. Never redeem a production code
+with `npm run privacy:request` as a test: redeeming exports or deletes real
+data.
+
+| #   | Check                                                                    | Expected                                                                                               |
+| --- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| 1   | Privacy & Data Controls → Your data → **Show what Lotly's server holds** | The installation's real rows, including the consent record                                             |
+| 2   | **Share as file**                                                        | `lotly-server-data-<date>.json`, format `lotly-server-data/2`, no installation id, token's last 4 only |
+| 3   | **Get a request code** (each purpose)                                    | The code is shown once; touch and hold offers Copy                                                     |
+| 4   | **Email the code** (real device with Mail)                               | A pre-filled message to lotlysupport@gmail.com; without Mail, the in-screen message                    |
+| 5   | Server Data after a code, then **Reset app and delete my data**          | The code is listed, then removed with everything else                                                  |
+| 6   | Offline                                                                  | "Could not be reached" with Try again                                                                  |
+| 7   | VoiceOver and large text on both screens                                 | Readable and operable (not yet verified)                                                               |
 
 ## Enforcement: weekly-gated
 
