@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DocumentView } from '@/components/document/document-view';
 import { InstallationResetSection } from '@/components/installation-reset-section';
+import { PrivacyRequestsSection } from '@/components/privacy-requests-section';
 import { StateMessage } from '@/components/state-message';
 import { Surface } from '@/components/ui/surface';
 import { layout, spacing } from '@/constants/design-tokens';
@@ -49,6 +50,7 @@ export default function DocumentScreen() {
         style={styles.scroll}
         contentContainerStyle={[styles.content, { paddingBottom: spacing[24] + insets.bottom }]}>
         <DocumentView doc={doc} />
+        {doc.slug === 'privacy-data-controls' ? <PrivacyRequestsSection /> : null}
         {/* C7.1: the one destructive data control lives at the bottom of
             Privacy & Data Controls — and only there (frozen product
             decision; pinned by the trust-center tests). */}

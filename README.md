@@ -233,6 +233,24 @@ Profile → Notifications → "Enable recall alerts" — the permission prompt n
 fires on launch, and opening the screen only reads the current status. Design, safety model, and device-setup steps:
 [docs/recall-push-delivery.md](docs/recall-push-delivery.md).
 
+### Privacy requests (2026-10-13)
+
+Privacy & Data Controls → **Your data** shows everything Lotly's server holds
+for the installation (with **Share as file**) and creates a one-time request
+code for an email request: a copy of the data, or its deletion. The operator
+carries out an emailed request with:
+
+```bash
+npm run privacy:request                                     # dry run; asks for the code, consumes nothing
+npm run privacy:request -- --apply --confirm --expect <n>   # consume the code; export or delete
+```
+
+The code is typed at a hidden prompt, never passed as an argument. Request-log
+lines older than 24 months (the proposed maximum) are removed when the tool
+runs, not continuously; the monthly review in the runbook covers the rest. Migration
+`20261016000000_privacy_requests.sql` is **prepared, not applied**. Procedure:
+[docs/recall-operations.md](docs/recall-operations.md) "Privacy requests".
+
 ### Personalization (Phase C3)
 
 Feed offers **Affects me** / **All recalls**: one home state, allergen

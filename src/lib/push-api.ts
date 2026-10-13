@@ -196,3 +196,37 @@ export async function recordInstallationActivity(installationId: string): Promis
 export async function deleteInstallationData(installationId: string): Promise<void> {
   await rpcPost('delete_installation_data', { p_installation_id: installationId });
 }
+
+/**
+ * Everything the server holds for this installation (2026-10-13, privacy
+ * requests): its preference mirror, push registration (token masked to four
+ * characters), alerts sent, alert-order counter, last-opened date, shopper
+ * reports and request codes, never the installation id itself. Read only.
+ */
+export async function exportInstallationData(installationId: string): Promise<unknown> {
+  return rpcPost('export_installation_data', { p_installation_id: installationId });
+}
+
+/**
+ * Create a one-time request code for an email request (2026-10-13). The
+ * server keeps only the code's SHA-256; the code is in this response and
+ * nowhere else, so the caller shows it once and never stores or logs it.
+ */
+export async function createPrivacyRequestCode(
+  installationId: string,
+  purpose: 'access' | 'delete',
+): Promise<{ code: string; purpose: 'access' | 'delete'; expiresAt: string }> {
+  const body = await rpcPost('create_privacy_request_code', {
+    p_installation_id: installationId,
+    p_purpose: purpose,
+  });
+  const record = (body ?? {}) as { code?: unknown; purpose?: unknown; expires_at?: unknown };
+  if (
+    typeof record.code !== 'string' ||
+    (record.purpose !== 'access' && record.purpose !== 'delete') ||
+    typeof record.expires_at !== 'string'
+  ) {
+    throw new Error('Unexpected request code response.');
+  }
+  return { code: record.code, purpose: record.purpose, expiresAt: record.expires_at };
+}

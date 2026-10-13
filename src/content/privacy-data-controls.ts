@@ -20,6 +20,14 @@
  */
 
 import { RESET_ACTION_LABEL } from '@/lib/installation-reset';
+import {
+  REQUEST_CODE_ACTION_LABEL,
+  REQUEST_CODE_LIFETIME_DAYS,
+  SERVER_DATA_ACTION_LABEL,
+  REQUEST_TIMING_COPY,
+  SERVER_DATA_SHARE_LABEL,
+  SUPPORT_EMAIL,
+} from '@/lib/privacy-requests';
 import { bullets, documentLink, paragraph, type TrustDocument } from './document-model';
 
 export const PRIVACY_DATA_CONTROLS: TrustDocument = {
@@ -62,6 +70,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'Per-alert delivery records: which alert was sent to which registration and whether the delivery service accepted it.',
           'The date you last opened the app (a date only, no time), sent at most once a day when the app comes to the screen. It is used only to delete inactive data, described below.',
           'When community shopper reports are available for a recall, any report you choose to submit, keyed by the same random installation identifier. “Community shopper reports” below lists what one contains.',
+          'If you create a request code (see “Seeing your data and making a request”), a scrambled form of the code that cannot be turned back into it, what it is for, and when it was created, expires and was used. A spent code is deleted 30 days after it was used or expired.',
         ]),
         paragraph(
           'Server records are keyed only by the random installation identifier. Lotly’s server ' +
@@ -135,8 +144,10 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       blocks: [
         paragraph(
           'Lotly’s database and image storage are hosted on Supabase. Recall alerts are delivered ' +
-            'through Expo’s push service and then Apple’s or Google’s notification infrastructure ' +
-            'for your device. Subscriptions are sold by Apple and checked through RevenueCat. ' +
+            'through Expo’s push service and then Apple’s notification service to your iPhone. ' +
+            'Subscriptions are sold by Apple and checked through RevenueCat. If you email Lotly, ' +
+            `Google hosts its support mailbox (${SUPPORT_EMAIL}) and so holds your email address, ` +
+            'your messages and any request code you send; the app itself sends Google nothing. ' +
             'These providers process the data described above to provide those services; none ' +
             'of them receives it from Lotly for advertising.',
         ),
@@ -151,6 +162,19 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
             'Your personalization choices are kept, and the disabled registration record itself is ' +
             `kept until “${RESET_ACTION_LABEL}” below or 12 months without using the app.`,
         ),
+      ],
+    },
+    {
+      title: 'Seeing your data and making a request',
+      blocks: [
+        bullets([
+          `“${SERVER_DATA_ACTION_LABEL}”, under Your data at the bottom of this screen, lists everything Lotly’s server keeps for this installation, read from the server when you open it, and the services that process it. “${SERVER_DATA_SHARE_LABEL}” saves the same list as a file you can keep or send. Looking changes nothing.`,
+          'Two things are left out of that list and file on purpose: the installation identifier, which works like a password for this data, and all but the last four characters of the push delivery token, which could be used to send this iPhone notifications. Lotly never shows, shares or emails either one, even in answer to a request.',
+          `The list covers Lotly’s server only. It does not include what is kept only on this iPhone, connection logs at Lotly’s hosting providers, subscription records at Apple and RevenueCat, or emails you sent to Lotly. To ask for any of those, or anything else you think Lotly holds about you, get a request code for a copy of your data and say what you want in your email to ${SUPPORT_EMAIL}. ${REQUEST_TIMING_COPY}`,
+          'You can correct your choices under Profile → Personalization, and delete everything with the reset below.',
+          `If you would rather ask by email, “${REQUEST_CODE_ACTION_LABEL}” creates a code for one request: a copy of your data, or its deletion. Email it to ${SUPPORT_EMAIL}. The code works once, expires after ${REQUEST_CODE_LIFETIME_DAYS} days, and only lets Lotly find this installation for the request you chose. It cannot change anything by itself, and Lotly keeps only a scrambled form of it.`,
+          'Lotly will never ask for your installation identifier. Do not send it to anyone.',
+        ]),
       ],
     },
     {

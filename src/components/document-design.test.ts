@@ -208,6 +208,7 @@ const SHAPE: Record<string, [title: string | null, kinds: string][]> = {
     ['What Lotly does not collect', 'bullets paragraph'],
     ['Who processes data', 'paragraph'],
     ['Turning alerts off', 'paragraph'],
+    ['Seeing your data and making a request', 'bullets'],
     ['Clearing and resetting', 'bullets paragraph'],
     ['Deleting the app', 'paragraph'],
   ],
