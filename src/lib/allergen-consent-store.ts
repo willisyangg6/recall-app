@@ -23,6 +23,21 @@ export async function loadAllergenConsent(): Promise<AllergenConsentRecord | nul
   }
 }
 
+/**
+ * The stored decision for anything that SENDS or ORDERS a decision: a
+ * keychain read error throws instead of reading as "no decision", so the
+ * mirror stays owed (shown pending) and a new decision is never timed
+ * without the previous one. A missing record is null; an unparsable one
+ * also throws.
+ */
+export async function loadAllergenConsentStrict(): Promise<AllergenConsentRecord | null> {
+  const raw = await SecureStore.getItemAsync(CONSENT_KEY);
+  if (raw === null) return null;
+  const record = parseAllergenConsent(raw);
+  if (record === null) throw new Error('The allergen consent record is unreadable.');
+  return record;
+}
+
 export async function saveAllergenConsent(record: AllergenConsentRecord): Promise<void> {
   await SecureStore.setItemAsync(CONSENT_KEY, serializeAllergenConsent(record));
 }

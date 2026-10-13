@@ -50,7 +50,9 @@ alter table public.installation_preferences
   -- decline or withdrawal). A write carrying an older decision time is
   -- stale — a delayed or retried request — and cannot change the stored
   -- decision, so an old grant can never restore allergens after a newer
-  -- withdrawal (and an old withdrawal can never undo a newer grant).
+  -- withdrawal (and an old withdrawal can never undo a newer grant). Such a
+  -- write is refused ('stale allergen consent decision'), so no client is
+  -- ever told a decision was stored when it was not.
   add column if not exists allergen_consent_decided_at timestamptz;
 
 -- ── The one implementation ──────────────────────────────────────────────────
@@ -144,16 +146,32 @@ begin
    where installation_id = p_installation_id
    for update;
 
-  -- Decision ordering. A write whose decision time is older than the stored
-  -- one (or that carries none, once a timed decision exists) keeps the
-  -- stored decision AND the stored allergens: it is a stale or legacy write
-  -- and must not move consent either way. States and stores still apply.
-  if found
-     and v_existing.allergen_consent_decided_at is not null
-     and (v_decided is null or v_decided < v_existing.allergen_consent_decided_at) then
-    v_consent := v_existing.allergen_consent_version;
-    v_decided := v_existing.allergen_consent_decided_at;
-    v_allergens := v_existing.allergens;
+  -- Decision ordering. Once a timed decision is stored:
+  --   * an untimed write (an older build) keeps the stored decision AND the
+  --     stored allergens; its states and stores still apply;
+  --   * a write whose decision time is older is stale, and so is a GRANT at
+  --     exactly the stored time of a withdrawal (a tie never restores
+  --     allergens; a withdrawal at the same time as a grant does apply);
+  --   * a stale write that would CHANGE the decision is refused, never
+  --     silently ignored: the client keeps it owed and shows it pending
+  --     instead of reporting a decision the server did not take. A stale
+  --     write that agrees with the stored decision keeps it (and its
+  --     allergens) and applies states and stores.
+  if found and v_existing.allergen_consent_decided_at is not null then
+    if v_decided is null then
+      v_consent := v_existing.allergen_consent_version;
+      v_decided := v_existing.allergen_consent_decided_at;
+      v_allergens := v_existing.allergens;
+    elsif v_decided < v_existing.allergen_consent_decided_at
+       or (v_decided = v_existing.allergen_consent_decided_at
+           and v_consent is not null
+           and v_existing.allergen_consent_version is null) then
+      if v_consent is distinct from v_existing.allergen_consent_version then
+        raise exception 'stale allergen consent decision';
+      end if;
+      v_decided := v_existing.allergen_consent_decided_at;
+      v_allergens := v_existing.allergens;
+    end if;
   end if;
 
   -- Strict no-op on identical values, consent included, so a retry or the

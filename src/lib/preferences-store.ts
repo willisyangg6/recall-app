@@ -38,7 +38,11 @@ import {
   serverAllergenConsent,
   type AllergenConsentDecision,
 } from './allergen-consent';
-import { loadAllergenConsent, saveAllergenConsent } from './allergen-consent-store';
+import {
+  loadAllergenConsent,
+  loadAllergenConsentStrict,
+  saveAllergenConsent,
+} from './allergen-consent-store';
 import { getOrCreateInstallationId } from './installation-id';
 import { enqueueInstallationMutation } from './installation-lifecycle';
 import { createPreferencePersistence, type SaveResult } from './preference-persistence';
@@ -83,8 +87,9 @@ export async function loadPreferences(): Promise<UserRecallPreferences> {
 
 async function syncToServer(prefs: UserRecallPreferences): Promise<void> {
   // Allergens leave this device only with consent (2026-10-13); states and
-  // stores mirror exactly as before.
-  const consent = await loadAllergenConsent();
+  // stores mirror exactly as before. A strict read: an unreadable record
+  // fails this run (still owed) rather than sending "no decision".
+  const consent = await loadAllergenConsentStrict();
   await setInstallationPreferences({
     installationId: await getOrCreateInstallationId(),
     stateCodes: prefs.states,
@@ -196,7 +201,9 @@ export function flushPreferencesSync(): Promise<void> {
 export async function setAllergenConsentDecision(
   decision: AllergenConsentDecision,
 ): Promise<SaveResult> {
-  const prior = await loadAllergenConsent();
+  // Strict: a decision is never timed without the previous one, or a clock
+  // behind it could make a withdrawal look older than the grant it replaces.
+  const prior = await loadAllergenConsentStrict();
   await saveAllergenConsent({
     decision,
     version: ALLERGEN_CONSENT_VERSION,

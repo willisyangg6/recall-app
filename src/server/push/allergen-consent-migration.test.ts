@@ -87,16 +87,30 @@ test('the old 4-argument plural and apply signatures are dropped, so PostgREST h
   assert.doesNotMatch(migration.sql, /update public\.installation_preferences/);
 });
 
-test('decision ordering: a stale or untimed write cannot reverse a newer consent decision', () => {
+test('decision ordering: a stale, tied or untimed write cannot reverse a newer consent decision', () => {
   const { body } = effective(APPLY);
   // The row is locked before the decision is compared.
   assert.match(body, /where installation_id = p_installation_id\s*for update;/);
-  const stale = body.indexOf('v_decided < v_existing.allergen_consent_decided_at');
-  assert.ok(stale > 0, 'an older decision time is stale');
-  assert.match(body, /v_decided is null or v_decided < v_existing\.allergen_consent_decided_at/);
-  // A stale write keeps the stored decision AND the stored allergens.
-  const keep = body.slice(stale, body.indexOf('end if;', stale));
-  assert.match(keep, /v_consent := v_existing\.allergen_consent_version;/);
-  assert.match(keep, /v_allergens := v_existing\.allergens;/);
+  // Untimed (older builds): keep the stored decision and allergens.
+  const untimed = body.slice(
+    body.indexOf('if v_decided is null then'),
+    body.indexOf('elsif v_decided <'),
+  );
+  assert.match(untimed, /v_consent := v_existing\.allergen_consent_version;/);
+  assert.match(untimed, /v_allergens := v_existing\.allergens;/);
+  // Older, or a grant tied with a stored withdrawal, is stale.
+  assert.match(body, /elsif v_decided < v_existing\.allergen_consent_decided_at/);
+  assert.match(
+    body,
+    /v_decided = v_existing\.allergen_consent_decided_at\s*and v_consent is not null\s*and v_existing\.allergen_consent_version is null/,
+  );
+  // A stale write that would change the decision is REFUSED, never silently
+  // ignored, so no client is told a decision was stored when it was not.
+  const stale = body.slice(body.indexOf('elsif v_decided <'));
+  assert.match(
+    stale,
+    /if v_consent is distinct from v_existing\.allergen_consent_version then\s*raise exception 'stale allergen consent decision';/,
+  );
+  assert.match(stale, /v_allergens := v_existing\.allergens;/);
   assert.match(body, /allergen_consent_decided_at = excluded\.allergen_consent_decided_at/);
 });

@@ -286,21 +286,52 @@ test('offline withdrawal reports pending, then confirms after reconnecting', asy
   assert.deepEqual(world.server, { allergens: [], consent: null });
 });
 
-test('withdrawing while a grant is in flight: the later withdrawal wins, even if the grant lands last', async () => {
-  // A fake server with the migration's decision ordering: a write whose
-  // decision time is older than the stored one keeps the stored decision.
-  const server = { allergens: [] as string[], consent: null as string | null, decidedAt: '' };
-  const apply = (body: { allergens: string[]; consent: string | null; decidedAt: string }) => {
-    if (server.decidedAt && body.decidedAt < server.decidedAt) return; // stale: keep
-    server.allergens = body.consent ? body.allergens : [];
-    server.consent = body.consent;
-    server.decidedAt = body.decidedAt;
+// ── Decision ordering against a server that applies the migration's rule ──
+
+type Body = { allergens: string[]; consent: string | null; decidedAt: string | null };
+
+/**
+ * A fake server with apply_installation_preferences' decision ordering
+ * (20261014000000), refusal included. The rule itself is proven on real
+ * Postgres (the handoff's ordering verification); this drives the CLIENT
+ * against it.
+ */
+function orderedServer() {
+  const row = {
+    allergens: [] as string[],
+    consent: null as string | null,
+    decidedAt: null as string | null,
   };
+  const ms = (iso: string) => Date.parse(iso);
+  return {
+    row,
+    fail: null as Error | null,
+    apply(body: Body) {
+      if (this.fail) throw this.fail;
+      let { consent, decidedAt } = body;
+      let allergens = consent ? body.allergens : [];
+      if (row.decidedAt !== null) {
+        if (decidedAt === null) {
+          ({ consent, decidedAt, allergens } = row);
+        } else if (
+          ms(decidedAt) < ms(row.decidedAt) ||
+          (ms(decidedAt) === ms(row.decidedAt) && consent !== null && row.consent === null)
+        ) {
+          if (consent !== row.consent) throw new Error('stale allergen consent decision');
+          ({ decidedAt, allergens } = row);
+        }
+      }
+      Object.assign(row, { allergens, consent, decidedAt });
+    },
+  };
+}
+
+/** A device whose decisions are timed exactly like setAllergenConsentDecision. */
+function orderedDevice(server: ReturnType<typeof orderedServer>) {
   let consent: AllergenConsentRecord | null = null;
-  const inFlight: (() => void)[] = [];
-  let holdNext = false;
   let local: UserRecallPreferences = PEANUT_CA;
   let dirty = false;
+  let hold: Body[] | null = null;
   const store = createPreferencePersistence({
     enqueueLocal: createSerialQueue(),
     readLocal: async () => local,
@@ -313,32 +344,121 @@ test('withdrawing while a grant is in flight: the later withdrawal wins, even if
     },
     mirrorKey: async () => `${serverAllergenConsent(consent) ?? 'none'}@${consent?.at ?? ''}`,
     syncRemote: async (prefs) => {
-      const body = {
+      const body: Body = {
         allergens: allergensForServer(prefs.allergens, consent),
         consent: serverAllergenConsent(consent),
-        decidedAt: consent?.at ?? '',
+        decidedAt: consent?.at ?? null,
       };
-      if (holdNext) {
-        // The grant reaches a slow server: the client gives up (timeout),
-        // but the server commits it LATER, after the withdrawal.
-        holdNext = false;
-        inFlight.push(() => apply(body));
+      if (hold) {
+        // Reaches a slow server: the client times out, the server commits later.
+        hold.push(body);
+        hold = null;
         throw new Error('timed out');
       }
-      apply(body);
+      server.apply(body);
     },
   });
-  consent = { ...granted, at: '2026-10-13T10:00:00.000Z' };
-  holdNext = true;
-  assert.deepEqual(await store.touch(), { synced: false });
-  consent = { ...withdrawn, at: '2026-10-13T10:00:05.000Z' };
-  assert.deepEqual(await store.touch(), { synced: true }, 'the withdrawal is confirmed');
-  assert.deepEqual(server.allergens, []);
-  // Now the delayed grant commits on the server.
-  for (const late of inFlight) late();
-  assert.deepEqual(server, {
+  return {
+    store,
+    /** setAllergenConsentDecision, with the device clock at `now`. */
+    decide(decision: AllergenConsentRecord['decision'], now: string) {
+      consent = {
+        decision,
+        version: ALLERGEN_CONSENT_VERSION,
+        at: nextDecisionTime(consent, new Date(now)),
+      };
+      return store.touch();
+    },
+    holdNextRequest(into: Body[]) {
+      hold = into;
+    },
+    get record() {
+      return consent;
+    },
+  };
+}
+
+test('withdrawing while a grant is in flight: the later withdrawal wins, even if the grant lands last', async () => {
+  const server = orderedServer();
+  const phone = orderedDevice(server);
+  const late: Body[] = [];
+  phone.holdNextRequest(late);
+  assert.deepEqual(await phone.decide('granted', '2026-10-13T10:00:00Z'), { synced: false });
+  assert.deepEqual(await phone.decide('withdrawn', '2026-10-13T10:00:05Z'), { synced: true });
+  assert.deepEqual(server.row.allergens, []);
+  // The delayed grant now commits: refused as stale, nothing restored.
+  assert.throws(() => server.apply(late[0]), /stale allergen consent decision/);
+  assert.deepEqual(server.row, {
     allergens: [],
     consent: null,
     decidedAt: '2026-10-13T10:00:05.000Z',
   });
+});
+
+test('equal decision times: a device never produces two, and a tie never restores allergens', async () => {
+  // Two decisions in the same millisecond still get distinct, increasing times.
+  const at = new Date('2026-10-13T10:00:00Z');
+  const first = nextDecisionTime(null, at);
+  const second = nextDecisionTime({ ...granted, at: first }, at);
+  assert.ok(Date.parse(second) > Date.parse(first));
+  // Even so, the server breaks a tie toward the withdrawal.
+  const server = orderedServer();
+  const t = '2026-10-13T10:00:00.000Z';
+  server.apply({ allergens: [], consent: null, decidedAt: t });
+  assert.throws(
+    () => server.apply({ allergens: ['peanut'], consent: ALLERGEN_CONSENT_VERSION, decidedAt: t }),
+    /stale allergen consent decision/,
+  );
+  assert.deepEqual(server.row.allergens, []);
+  const other = orderedServer();
+  other.apply({ allergens: ['peanut'], consent: ALLERGEN_CONSENT_VERSION, decidedAt: t });
+  other.apply({ allergens: [], consent: null, decidedAt: t });
+  assert.deepEqual(other.row, { allergens: [], consent: null, decidedAt: t });
+});
+
+test('a clock moved backwards or far forwards never stops a later withdrawal', async () => {
+  for (const [grantClock, withdrawClock] of [
+    ['2026-10-13T10:00:00Z', '2026-10-13T09:00:00Z'], // moved back an hour
+    ['2026-10-13T10:00:00Z', '2001-01-01T00:00:00Z'], // reset to a factory date
+    ['2031-06-01T00:00:00Z', '2026-10-13T10:00:00Z'], // granted far ahead, then corrected
+    ['2026-10-13T10:00:00Z', '2031-06-01T00:00:00Z'], // withdrawn far ahead
+  ]) {
+    const server = orderedServer();
+    const phone = orderedDevice(server);
+    assert.deepEqual(await phone.decide('granted', grantClock), { synced: true });
+    assert.deepEqual(server.row.allergens, ['peanut']);
+    assert.deepEqual(await phone.decide('withdrawn', withdrawClock), { synced: true });
+    assert.deepEqual(server.row.allergens, [], `${grantClock} then ${withdrawClock}`);
+    assert.equal(server.row.consent, null);
+    // And a re-consent after a far-ahead withdrawal is not stuck behind it.
+    assert.deepEqual(await phone.decide('granted', grantClock), { synced: true });
+    assert.equal(server.row.consent, ALLERGEN_CONSENT_VERSION);
+  }
+});
+
+test('a server error or refusal leaves the withdrawal pending until the server confirms it', async () => {
+  const server = orderedServer();
+  const phone = orderedDevice(server);
+  await phone.decide('granted', '2026-10-13T10:00:00Z');
+  for (const failure of [
+    new Error('HTTP 500'),
+    new Error('HTTP 503'),
+    new Error('stale allergen consent decision'),
+  ]) {
+    server.fail = failure;
+    const { synced } = await phone.decide('withdrawn', '2026-10-13T10:01:00Z');
+    assert.equal(synced, false, failure.message);
+    assert.equal(await phone.store.mirrorOwed(), true);
+    assert.equal(consentStatusLine(false, !synced), CONSENT_STATUS_WITHDRAW_PENDING);
+    assert.deepEqual(server.row.allergens, ['peanut'], 'the server still has them');
+    // Retried by the next launch: still failing, still pending.
+    await phone.store.flush();
+    await phone.store.mirrorIdle();
+    assert.equal(await phone.store.mirrorOwed(), true);
+  }
+  server.fail = null;
+  await phone.store.flush();
+  await phone.store.mirrorIdle();
+  assert.equal(await phone.store.mirrorOwed(), false, 'confirmed only now');
+  assert.deepEqual(server.row.allergens, []);
 });

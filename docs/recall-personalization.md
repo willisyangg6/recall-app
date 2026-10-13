@@ -579,13 +579,32 @@ them **only** with the shopper's consent under the current text
     when consent is first given and kept across edits.
   - **An unknown version:** refused (400).
   - **Retries:** an identical retry is a strict no-op, consent included.
-  - **Decision ordering.** The row is locked `for update`. A write whose
-    decision time is older than the stored one, or that has none once a
-    timed decision exists, keeps the stored consent, decision time **and
-    allergens**; states and stores still apply. So a delayed grant can never
-    restore allergens after a newer withdrawal, and a delayed withdrawal
-    cannot undo a newer grant. Proven on real Postgres, including both
-    orders of two concurrent transactions on the row lock.
+  - **Decision ordering.** The row is locked `for update`. Once a timed
+    decision is stored:
+    - an untimed write (an older build) keeps the stored consent, decision
+      time **and allergens**; its states and stores still apply;
+    - a write with an older decision time is stale, and so is a **grant at
+      exactly the time of a stored withdrawal**: a tie never restores
+      allergens, while a withdrawal tied with a grant applies;
+    - a stale write that would **change** the decision is **refused**
+      (`stale allergen consent decision`, HTTP 400), never silently
+      ignored. The client keeps it owed and shows it pending, so it can
+      never report a decision the server did not take. A stale write that
+      agrees with the stored decision keeps its allergens and applies states
+      and stores.
+
+    So a delayed grant can never restore allergens after a newer withdrawal,
+    and a delayed withdrawal cannot undo a newer grant. Proven on real
+    Postgres, including both orders of two concurrent transactions on the row
+    lock, ties, and clocks moved back or far ahead.
+
+  - **Clocks.** A device's decision times only increase
+    (`nextDecisionTime`: the clock, or 1 ms after the previous decision when
+    the clock is behind it), so a clock moved back or far ahead never makes a
+    later withdrawal look older. The previous decision is read strictly
+    (`loadAllergenConsentStrict`): a keychain read error fails the decision,
+    and fails the mirror run (still owed, shown pending), rather than reading
+    as "no decision".
 - **Older clients.** The 4-argument plural call resolves to the new function
   with consent null, and the legacy singular call passes null. Both keep
   working and store no allergens.

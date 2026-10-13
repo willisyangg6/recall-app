@@ -38,8 +38,18 @@ export function useAllergenConsent(): {
     }, []),
   );
   const decide = useCallback(async (decision: AllergenConsentDecision) => {
-    const { synced } = await setAllergenConsentDecision(decision);
-    setConsent({ status: 'ready', record: await loadAllergenConsent(), pending: !synced });
+    try {
+      const { synced } = await setAllergenConsentDecision(decision);
+      setConsent({ status: 'ready', record: await loadAllergenConsent(), pending: !synced });
+    } catch {
+      // The decision could not be recorded on this iPhone: show what is
+      // actually stored, never the choice that failed.
+      const [record, pending] = await Promise.all([
+        loadAllergenConsent(),
+        allergenServerSyncPending(),
+      ]);
+      setConsent({ status: 'ready', record, pending });
+    }
   }, []);
   return { consent, decide };
 }

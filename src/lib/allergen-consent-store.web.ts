@@ -9,6 +9,10 @@ export async function loadAllergenConsent(): Promise<AllergenConsentRecord | nul
   return null;
 }
 
+export async function loadAllergenConsentStrict(): Promise<AllergenConsentRecord | null> {
+  return null;
+}
+
 export async function saveAllergenConsent(_record: AllergenConsentRecord): Promise<void> {}
 
 export async function deleteLocalAllergenConsent(): Promise<void> {}
