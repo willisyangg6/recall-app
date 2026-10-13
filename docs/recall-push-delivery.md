@@ -107,7 +107,8 @@ cannot recreate any row.
   capability for its own row; no hardware identifiers). Carries the
   ExpoPushToken, platform, enabled/enabled_at/disabled_reason. When a token
   re-registers under a new installation (reinstall), the stale row is
-  disabled (`token_reassigned`) so one phone never gets doubles.
+  disabled (`token_reassigned`) so one phone never gets doubles. A parent's
+  revoked consent disables with `consent_revoked` (see "Consent revocation").
 - `notification_deliveries` — per (event, subscription) lifecycle:
   `pending → sending → ticket_accepted → receipt_ok`, with
   `retryable_failure` / `permanent_failure` exits, attempt counts, ticket id,
@@ -431,6 +432,191 @@ foreground check-in (`src/lib/installation-checkin.ts`) calls
 `refreshRegistrationIfEnabled`, which re-registers with a fresh `enabled_at`,
 so no pre-purge event can be backfilled. Details:
 [recall-operations.md](recall-operations.md).
+
+## Consent revocation (age assurance; prepared 2026-10-13, not applied or deployed)
+
+**Why.** When a parent revokes consent for a teen's use of Lotly, Apple
+blocks the app from launching and sends an App Store Server Notification
+`RESCIND_CONSENT`. Apple says: "To handle consent revocations, use the
+`RESCIND_CONSENT` value". The app can't act, because it can't launch, so
+alerts are stopped on the server.
+
+**The mapping** (migration `20261017000000_consent_revocation.sql`)
+
+- **The column.** `push_subscriptions.app_transaction_hmac` holds
+  `hex(HMAC-SHA256(appTransactionId, key))`.
+  - The key is the Vault secret `app_transaction_hmac_key`.
+  - The migration generates it on the server. It is never in git, the app or
+    the Edge Function.
+- **Atomic for regulated teens.** For a stored 13–17 answer that Apple
+  reports as regulated, the app registers **only** through
+  `register_push_subscription_with_revocation_key`
+  (`src/lib/revocation-key.ts`, `routedRegistration`). That RPC enables the
+  row **and** stores the hash in one transaction.
+  - A regulated teen's alerts are therefore never eligible without the
+    mapping.
+  - An invalid id, or a missing Vault key, writes nothing.
+- **No key, no alerts.** If StoreKit cannot produce the id, nothing is sent.
+  - On a deliberate enable, the alert protocol's outranking cleanup disable
+    runs. On a silent refresh of an enabled row, the row is disabled.
+  - Both are persisted and retried like any disable.
+  - Alerts stay off until the user turns them on again with the id
+    available. Tested in `src/lib/alert-protection.test.ts`, including a
+    failed upload and its retry.
+- **Clearing.** An installation that held a key but is no longer eligible
+  registers keyed once more, so a revoked row can still renew. It then calls
+  `clear_push_revocation_key`. A revoked row always keeps its key.
+- **Coverage.**
+  - Reset, privacy-request deletion and the inactivity purge delete the
+    subscription row, and the key with it.
+- **What the key is.** It is **pseudonymous personal data, not anonymous.**
+  - The keyed hash stops someone holding only the database from reading
+    Apple's id.
+  - But Lotly holds the key, so Lotly can match the hash to a known id. The
+    row ties it to one installation.
+  - Its presence also reveals that Apple reported a regulated 13–17 user.
+- **Export.**
+  - It is left out of the ordinary privacy-request export (the approved
+    field list in `20261016000000`).
+  - The export must still say that the key exists and what it is for. The
+    wording is agreed with the privacy-requests work, and it lands with the
+    integration. It does not claim that the key "cannot be turned back"
+    into anything.
+  - Asked for directly, it is provided like any other held data.
+
+**The receiver** (`supabase/functions/app-store-notifications`)
+
+- **Where it listens.** It is RevenueCat's **Apple Server Notification
+  Forwarding URL**. App Store Connect's URLs stay RevenueCat's.
+- **Verification.** It verifies every payload with `apple-jws.ts`, which uses
+  WebCrypto and has no imports. It checks:
+  - the x5c chain to the pinned Apple Root CA - G3 (x5c[2] is never
+    trusted);
+  - that each certificate's outer signature algorithm equals the one inside
+    its signed data;
+  - that the intermediate is a CA (basicConstraints cA);
+  - Apple's marker OIDs;
+  - that the leaf, intermediate **and root** are valid at the payload's own
+    signing date;
+  - the ES256 signature;
+  - the bundle id;
+  - the environment, and the app's Apple id in Production.
+
+  The CA, root-date and algorithm checks were added after two independent
+  reviews (2026-10-13). Before them, a non-CA intermediate and an expired
+  root were accepted, though neither was exploitable without an
+  Apple-issued certificate's key.
+
+- **Why not Apple's library.** `@apple/app-store-server-library` cannot run
+  in Supabase's Edge Runtime: edge-runtime 1.74.3 does not implement
+  `X509Certificate.verify`, `checkIssued` or `toString`. So the library is a
+  **test oracle** only. `apple-jws.test.ts` requires both verifiers to agree
+  on every case.
+  - The parity is with the library's **offline** mode
+    (`enableOnlineChecks = false`), not its online mode.
+  - Two deliberate differences, both stricter: a payload without a signing
+    date is refused, and no clock-skew allowance is applied.
+- **Residual risk: no OCSP.** Apple's certificates are judged at the
+  payload's signing date and never checked for revocation.
+  - **The exposure.** If Apple revoked a compromised signing key, its holder
+    could still sign backdated payloads, and they would be accepted.
+  - **Why it's bounded.** A forgery can only **disable** alert subscriptions
+    whose Apple id the forger already knows: regulated 13–17 users with
+    alerts on. It never enables, reads or deletes anything, and the app's
+    next registration upkeep re-enables the row.
+  - **The reviewers' recommendation**, accepted for launch by the founder
+    (2026-10-13): accept the risk, implement no OCSP, and keep a trip-wire.
+    On any Apple certificate-compromise or root-change notice, set
+    `APP_STORE_ENVIRONMENTS` to an empty value (the function then refuses
+    every payload) until it is reviewed.
+- **What it acts on.** It acts only on `RESCIND_CONSENT`, and logs nothing
+  identifying.
+- **The RPC.** `apply_consent_revocation` (service_role only) works in one
+  transaction:
+  1. It hashes the verified `appTransactionId`.
+  2. It records the notification UUID, which is the replay protection.
+  3. It disables the matching subscriptions with
+     `disabled_reason = 'consent_revoked'`.
+  - A replay is a no-op.
+  - A missing key raises before anything is recorded, so the notification is
+    retried, not consumed.
+  - **No silent revival.** `register_push_subscription`, re-bodied from
+    `20261004000000` with only this guard added, never re-enables a
+    `consent_revoked` row.
+  - **Renewal.** Only the keyed registration renews a revoked row, and only
+    when the presented id hashes to the stored value. Renewal starts a new
+    `enabled_at` horizon, so nothing from the revoked period is backfilled.
+    Another account's id is refused (400).
+  - **What the server proves, and what needs an Apple device.** The server
+    verifies only that the same Apple Account's app presented its id. It
+    cannot see Apple's consent decision. Three things are Apple behavior and
+    are **proved only on a device** (sandbox runbook Phase 3):
+    - Apple blocks a revoked app from launching.
+    - Apple lets it launch again once a parent restores consent.
+    - StoreKit returns the same `appTransactionID` afterwards.
+
+    The rules above are verified on an isolated Postgres stack.
+
+**Configuration** (Edge Function secrets, none of them a credential)
+
+- `APP_STORE_BUNDLE_ID`, default `com.willisyang.lotly`.
+- `APP_STORE_APP_APPLE_ID`, the numeric App Store Connect id. It is required
+  to accept Production.
+- `APP_STORE_ENVIRONMENTS`, default `Sandbox,Production`.
+- `verify_jwt = false` in `config.toml`, because the sender can't hold a
+  Supabase JWT.
+
+**Verified locally.** Evidence is in the age-assurance review pack.
+
+- **Node tests:**
+  - the endpoint, with a test chain shaped like Apple's;
+  - a differential suite against Apple's library;
+  - Apple's real G3 root verifying its real WWDR G6 intermediate.
+- **The Edge Runtime image** (edge-runtime 1.74.3): the verifier accepts a
+  correctly signed payload and refuses it under the Apple root. The adapter
+  boots and refuses unsigned payloads.
+- **An isolated Supabase stack** ran master's chain with the allergen-consent
+  and privacy-request migrations applied before this one. It confirmed:
+  - hashing, with no raw id stored;
+  - grants;
+  - replay;
+  - the missing-key refusal;
+  - re-enable on re-registration;
+  - reset;
+  - an end-to-end pass from `core.ts` to the real RPC.
+
+**Not verified.**
+
+- That RevenueCat forwards `RESCIND_CONSENT`.
+- That Apple's sandbox delivers it. Apple's forums report missed sandbox
+  deliveries in late 2025.
+- That the device's id equals the notification's.
+
+The sandbox runbook in the review pack settles all three.
+
+## When the server stops alerts (age assurance review, 2026-10-13)
+
+Two routes stop alerts to a device, and they behave differently. The worker
+side is pinned run by run in
+`src/server/push/disabled-subscription-timeline.test.ts`. The under-13
+request and its retry are pinned in `src/lib/alert-protection.test.ts`.
+
+| Route                                                                | Server row disabled                                                                                                                                                                                                                                                                                                          | Queued alerts (`pending`, `retryable_failure`)                      | In-flight alerts (`ticket_accepted`)                                               |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **Revoked consent** (`apply_consent_revocation`)                     | **At once**, `consent_revoked`                                                                                                                                                                                                                                                                                               | Failed closed at the next run (`subscription_disabled`), never sent | Already handed to Expo, so they cannot be recalled; their receipts settle as usual |
+| **Under-13 stop** (2026-10-13: one protective request)               | **On the server's answer.** The stop sends the existing sequenced `disable_push_subscription` (`user_disabled`), carrying only the stored installation id and the write sequence. No age, no RevenueCat, no other launch sync. It also unregisters from APNs, locally                                                        | Failed closed at the next run once the disable has landed           | Already handed to Expo, so they cannot be recalled                                 |
+| **Under-13 stop, offline**                                           | **Not until it is confirmed.** The disable is owed in SecureStore and sent again at every launch, because the stop screen shows each launch, until the server answers. Meanwhile the row stays enabled: if delivery is activated, queued alerts can still be handed to Expo, and the APNs unregister is the only local guard | Still handed to Expo until then                                     | Cannot be recalled                                                                 |
+| **Under-13 stop, no stored installation id or alerts never enabled** | Nothing to disable, so **nothing is sent**                                                                                                                                                                                                                                                                                   | —                                                                   | —                                                                                  |
+
+The receipt route still applies on top: once delivery is active, a send to
+an unregistered token disables the row as `device_not_registered` after
+Expo's receipt (at least `RECEIPT_DELAY_MINUTES` = 15).
+
+**Unverified: what the iPhone displays.** Apple documents that an app that
+called `unregisterForRemoteNotifications` stops receiving remote
+notifications. Whether an alert sent between the stop and the disable is
+shown has **not** been tested on a device. It needs an activated send or
+`push:test`, which require separate authorization.
 
 ## Secrets and privacy
 

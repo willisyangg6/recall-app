@@ -392,6 +392,14 @@ deno_version = 2
 enabled = true
 verify_jwt = false
 
+# Consent revocation (age assurance, 2026-10-13). verify_jwt is off because
+# RevenueCat's notification forwarder and Apple cannot send a Supabase JWT;
+# every request is authenticated by Apple's JWS signature instead
+# (see supabase/functions/app-store-notifications).
+[functions.app-store-notifications]
+enabled = true
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

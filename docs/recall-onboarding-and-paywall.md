@@ -262,6 +262,101 @@ The web build has no purchases and no personalization; it answers as already
 onboarded and lands on the paywall's unconfigured state, which is its
 existing "available in the app" posture.
 
+### 3.3 The launch age check (age assurance, 2026-10-13)
+
+The age check runs **before** the access gate. The root layout renders the
+preference mirror flush, the daily check-in, push upkeep and the
+`AccessProvider` (which configures RevenueCat) as children of `AgeGate`
+(`src/components/age-gate.tsx`). None of them mounts until the check
+decides that the launch may proceed. This is why the age check is not an
+access phase: an access phase is computed after the entitlement read, and
+the entitlement read is what starts RevenueCat.
+
+**Why.** Texas SB 2420 has applied to new Texas Apple Accounts since
+2026-06-04. Apple's rule for developers is: "In those regions, you must check
+the age of the people using your app"
+([developer.apple.com/support/age-assurance](https://developer.apple.com/support/age-assurance/)).
+The Terms set the minimum age at 13.
+
+**The decision** (`src/lib/age-assurance.ts`, pure, Node-tested):
+
+| Situation                                                  | Outcome                                                                                                                                                                                   |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Not iOS                                                    | Proceed. Lotly ships on iOS only                                                                                                                                                          |
+| iOS below 26                                               | Proceed **without calling** the API. It does not exist there, and `expo-age-range` answers `lowerBound: 18` (a fabricated adult). The 13+ rule rests on the Terms: a stated residual risk |
+| Range shared, upper bound ≤ 12                             | **Stop**: "Lotly is for ages 13 and up". Nothing beneath the gate ever mounts                                                                                                             |
+| Range shared, 13–17 or 18+                                 | Proceed                                                                                                                                                                                   |
+| Declined                                                   | Proceed, unless Apple says the account is regulated (where it "can't decline"); then Try again                                                                                            |
+| The service failed, or a shared range had no usable bounds | Proceed only if Apple says **not** regulated. An under-13 range stored in the last 365 days keeps the stop. Otherwise Try again; "not signed in" says so                                  |
+
+- **Gates.** Lotly asks for 13, 16 and 18, which are SB 2420's categories.
+- **Classification (review, 2026-10-13).**
+  - A range is 13–17 only when its lower bound is 13 or more. "16 or older"
+    therefore counts as a minor.
+  - A range that reaches below 13, such as "under 18", is unknown. It is
+    never treated as 13 or older.
+- **A stored answer only restricts.**
+  - The record is per device, not per Apple Account. So after a failure, a
+    stored adult or teen answer never lets the launch proceed. It could
+    belong to another account, or to nobody now signed in.
+  - Only a stored under-13 answer is reused, to keep the stop in place
+    offline.
+  - Ages only rise, so a stored answer is never less restrictive than its
+    owner. Apple itself answers "until the anniversary".
+- **Under 13 on a device that registered before.** The stop makes **one
+  protective request**: the existing sequenced alert disable, with only the
+  stored installation id. No age, no RevenueCat, no other launch sync.
+  - Unconfirmed (offline), it stays owed and is retried at every launch
+    until the server answers.
+  - The app also unregisters from Apple's push service, locally.
+  - **Limits:** until the disable is confirmed, the server row stays
+    enabled, and an alert already handed to Expo cannot be recalled. See
+    docs/recall-push-delivery.md, "When the server stops alerts".
+- **Regulated status** is `true` when `requiredRegulatoryFeatures`
+  (iOS 26.4+) contains `declaredAgeRangeRequired` or `isEligibleForAgeFeatures`
+  (iOS 26.2+) is true. It is `false` only when Apple says not eligible, and
+  unknown otherwise. A failure is never read as an adult or as "not
+  regulated".
+- **Storage.** The whole answer is kept in SecureStore under
+  `recall.age-range`: bounds, declaration, parental controls, regulatory
+  flags and time. It is **never sent** to Lotly's server, RevenueCat or Expo,
+  and a test pins that no network module imports it. A failure never
+  overwrites it. It is not cleared by "Reset app and delete my data", for the
+  same reason as the entitlement cache: the range belongs to the Apple
+  Account, and Apple answers again without a prompt.
+- **Re-check.** The check runs at every launch. Apple returns its cached
+  range "until the anniversary", so an ordinary launch shows no prompt.
+- **The splash** holds for up to 1.5 s for that cached answer. After that
+  (on the first launch, where Apple shows its own sheet) the gate shows
+  "Checking your age range" beneath the sheet.
+- **A binary without the native module** (an older dev client) looks the
+  module up optionally and fails **closed**: it shows Try again, never the
+  app.
+- **Teen handling.** A 13–17 result proceeds. The age class is in the
+  stored record for later consumers: the consent sheet's ordering for teens
+  (owned by the allergen-consent work) and the revocation mapping.
+
+**Development.** `EXPO_PUBLIC_DEV_AGE_SCENARIO`, read only under `__DEV__`,
+forces an outcome: `pending`, `under13`, `retry`, `not-signed-in` or `adult`.
+Start Metro with it set (`--clear`).
+
+**Not built yet** (`docs/recall-privacy-program-proposal.md` §2.5–2.6):
+
+- **Significant-update consent** (PermissionKit) and `AppStore.ageRatingCode`.
+  The first release has no earlier version to change from.
+- **Revocation handling** (`RESCIND_CONSENT`) is **prepared, not applied or
+  deployed**. See docs/recall-push-delivery.md, "Consent revocation". It is
+  not launch-ready until the sandbox runbook passes. The development-only
+  probe (`EXPO_PUBLIC_DEV_REVOCATION_PROBE=1`) shows the device's
+  `AppTransaction.appTransactionID` for that runbook.
+
+**Build requirement.** `expo-age-range` 57.0.5 calls iOS 26.4 SDK symbols,
+guarded only at runtime. It therefore needs Xcode 26.4 or later, and 26.5
+or later for the `confirmed` declaration. The local iOS 26.2 SDK (Xcode 26.3)
+lacks those symbols, so a local native build that includes it fails.
+`eas.json` pins `macos-tahoe-26.5-xcode-26.6` on every profile. The
+entitlement `com.apple.developer.declared-age-range` is in `app.json`.
+
 ## 4. Entitlement resolution
 
 `src/lib/entitlement.ts` turns the provider's reading and this device's

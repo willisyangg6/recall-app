@@ -1,0 +1,10 @@
+{
+  "name": "app-transaction",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reads StoreKit's AppTransaction id for the revocation sandbox tests (Lotly, local module)",
+  "license": "UNLICENSED",
+  "author": "Willis Yang",
+  "homepage": "https://lotly.app",
+  "main": "index.ts"
+}

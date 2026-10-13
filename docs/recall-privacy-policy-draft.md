@@ -386,20 +386,32 @@ if you are **13 or older**. If you are under 18, you may use it only with
 the permission of a parent or guardian, who should review this policy with
 you. Lotly is offered only in the United States.
 
-- **We never ask for your date of birth.** ⟦PLANNED: before setup, the app
-  asks Apple for your age range (for example "13 to 15" or "18 or older")
-  through Apple's age-range feature.
+- **We never ask for your date of birth.** Before setup, on iOS 26 or
+  later, the app asks Apple for your age range (for example "13 to 15" or
+  "18 or older") through Apple's age-range feature.
   - Where state law requires it, Apple provides the range and you cannot
     decline.
   - Elsewhere, sharing it is your choice.
-  - The range stays on your iPhone and is used only to apply these rules:
-    under 13, the app stops; for 13 to 17, the app follows the protections
-    below and asks a parent through Apple when a law requires their
-    approval for a significant update. It is never sent to Lotly's server
-    or to anyone else.
-
-  Until this ships, the rules above rest only on our Terms of Use, which you
-  agree to by using Lotly.⟧
+  - The range stays on your iPhone. It is used only to apply these rules: if
+    you are under 13, the app stops (and if recall alerts were turned on
+    earlier on that iPhone, it asks Lotly's server to turn them off, sending
+    only the app's installation identifier); if you are 13 to 17, the app follows the
+    protections below. It is never sent to Lotly's server or to anyone else.
+  - If Apple tells the app that you are 13 to 17 **and** that your state's
+    law requires an age check, and you turn on recall alerts, the app sends
+    Lotly's server Apple's identifier for your download of Lotly, and alerts
+    turn on only once the server has stored it. If the app cannot read that
+    identifier, alerts stay off. The server
+    keeps it only as a keyed hash, with your alert registration. It is
+    still information about you: Lotly can match it to your installation. It is used for one thing: if a parent or guardian
+    withdraws consent through Apple, Lotly stops sending you alerts. It is
+    deleted with your alert registration, for example by "Reset app and
+    delete my data".
+  - On iPhones running a version of iOS earlier than 26, Apple's feature
+    does not exist. There, these rules rest on our Terms of Use, which you
+    agree to by using Lotly.
+  - ⟦PLANNED: when a law requires a parent's approval for a significant
+    update, the app asks the parent through Apple.⟧
 
 - **Children under 13.** Lotly is not directed to children under 13, and we
   do not knowingly collect personal information from them. If you believe a

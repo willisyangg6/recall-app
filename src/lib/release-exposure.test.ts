@@ -91,7 +91,14 @@ const REQUIRED_PUBLIC_ENV = [
  * requires and folded out of a release bundle. They are never release
  * configuration and are never set on EAS.
  */
-const DEVELOPMENT_ONLY_ENV = ['EXPO_PUBLIC_QA_BOARD_ART', 'EXPO_PUBLIC_QA_PHOTOS'] as const;
+const DEVELOPMENT_ONLY_ENV = [
+  'EXPO_PUBLIC_QA_BOARD_ART',
+  'EXPO_PUBLIC_QA_PHOTOS',
+  // Age assurance (2026-10-13): a forced age-gate outcome, and the
+  // revocation sandbox probe.
+  'EXPO_PUBLIC_DEV_AGE_SCENARIO',
+  'EXPO_PUBLIC_DEV_REVOCATION_PROBE',
+] as const;
 
 test('every environment variable the client reads is an EXPO_PUBLIC_ one', () => {
   const found = new Set<string>();
@@ -176,7 +183,7 @@ test('each module reading the public config refuses to call out without it', () 
   // a request to `undefined/rest/v1/...` carrying an `undefined` key.
   const feed = readFileSync(join(SRC, 'lib', 'recall-feed.ts'), 'utf8');
   assert.match(feed, /export function isFeedConfigured\(\): boolean \{\s*\n\s*return Boolean\(/);
-  for (const name of ['push-api.ts', 'report-api.ts']) {
+  for (const name of ['push-api.ts', 'report-api.ts', 'revocation-key-api.ts']) {
     const source = readFileSync(join(SRC, 'lib', name), 'utf8');
     assert.match(
       source,
@@ -280,7 +287,12 @@ test('the developer wording of the not-configured screens is behind __DEV__', ()
 test('the development-only fixture modules are reachable only through __DEV__ requires (2026-10-06)', () => {
   // A release bundle folds `__DEV__ ? require(...) : null` away, so neither
   // module — nor the QA variables only they read — can reach production.
-  for (const name of ['development-board-art', 'development-photo-probe']) {
+  for (const name of [
+    'development-board-art',
+    'development-photo-probe',
+    'development-age-scenario',
+    'development-revocation-probe',
+  ]) {
     for (const { path, source } of CLIENT) {
       if (path.endsWith(`lib/${name}.ts`)) continue;
       const uses = source.split(`@/lib/${name}`).length - 1;
