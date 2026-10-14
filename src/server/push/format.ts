@@ -41,7 +41,50 @@ export interface PushContent {
   body: string;
 }
 
-export function formatPushContent(event: FormattableEvent): PushContent {
+/**
+ * Late-alert dating (founder decision D4, 2026-10-14). A NEW recall's alert
+ * sent this many New York calendar days or more after the agency's
+ * announcement date says when it was announced, instead of reading as news.
+ * The age is measured at SEND time, so the overnight hold can never make an
+ * alert look fresher than it is. Anything over 30 days old is never sent
+ * (`suppressed: backfill`), so the dated body covers 3 to 30 days.
+ */
+export const LATE_ALERT_DAYS = 3;
+
+const NEW_YORK_DATE = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * "Oct 9", or "Dec 30, 2025" when the announcement was in another year than
+ * the send; null when the alert is not late, or either date is unreadable
+ * (then the body is the ordinary one: never a guessed date).
+ */
+export function lateAnnouncementDate(publishedAt: string, sentAt: string): string | null {
+  const published = /^(\d{4})-(\d{2})-(\d{2})/.exec(publishedAt);
+  const sentInstant = new Date(sentAt);
+  if (!published || Number.isNaN(sentInstant.getTime())) return null;
+  const sent = /^(\d{4})-(\d{2})-(\d{2})$/.exec(NEW_YORK_DATE.format(sentInstant));
+  if (!sent) return null;
+  const [, py, pm, pd] = published.map(Number);
+  const [, sy, sm, sd] = sent.map(Number);
+  const days = (Date.UTC(sy, sm - 1, sd) - Date.UTC(py, pm - 1, pd)) / 86_400_000;
+  if (!(days >= LATE_ALERT_DAYS)) return null;
+  return `${MONTHS[pm - 1]} ${pd}${py === sy ? '' : `, ${py}`}`;
+}
+
+/**
+ * `sentAt` is the moment the delivery worker hands the alert to Expo. Without
+ * it (tests, QA scripts, previews), no late-alert dating is applied.
+ */
+export function formatPushContent(
+  event: FormattableEvent,
+  options: { sentAt?: string } = {},
+): PushContent {
   const projection = event.projection;
   // One short product name for every event kind, rendered at delivery time,
   // never stored in the ledger; delivery stays dormant until push is
@@ -71,6 +114,18 @@ export function formatPushContent(event: FormattableEvent): PushContent {
         title: projection.title,
       }),
     );
+    // D4: a late-discovered recall says when the agency announced it.
+    const announced = options.sentAt
+      ? lateAnnouncementDate(projection.publishedAt, options.sentAt)
+      : null;
+    if (announced) {
+      return {
+        title,
+        body: reason
+          ? `${reason}. ${agency} announced this ${announced}. Check your package.`
+          : `${agency} announced this ${announced}. Check your package for details.`,
+      };
+    }
     return {
       title,
       body: reason ? `${reason}. Check your package.` : 'Check your package for details.',
@@ -154,8 +209,13 @@ export function formatPushContent(event: FormattableEvent): PushContent {
 }
 
 /** The complete Expo message for one delivery. Data stays small and typed. */
-export function buildPushMessage(event: FormattableEvent, expoPushToken: string): PushMessage {
-  const content = formatPushContent(event);
+export function buildPushMessage(
+  event: FormattableEvent,
+  expoPushToken: string,
+  /** The send moment, for late-alert dating (D4); the worker always passes it. */
+  sentAt?: string,
+): PushMessage {
+  const content = formatPushContent(event, { sentAt });
   return {
     to: expoPushToken,
     title: content.title,

@@ -790,7 +790,10 @@ export async function runPushDelivery(
           });
           continue;
         }
-        prepared.push({ delivery, message: buildPushMessage(event, subscription.expoPushToken) });
+        prepared.push({
+          delivery,
+          message: buildPushMessage(event, subscription.expoPushToken, nowIso()),
+        });
       }
       if (prepared.length === 0) continue;
 

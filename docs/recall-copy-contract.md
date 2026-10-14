@@ -65,7 +65,7 @@ Specifically forbidden, each with a test in
 | Category tag             | `recall-presentation.cardCategoryLabel`                     | derived status            | Feed, Saved                      |
 | Consumer action          | `consumer-projection.buildConsumerAction`                   | verbatim **or** app voice | _built, not rendered_            |
 | Share message            | `lib/share-message.buildShareMessage`                       | composed from the above   | _built, not rendered_            |
-| Push copy                | `server/push/format.formatPushContent`                      | paraphrase + rule facts   | push (inactive)                  |
+| Push copy                | `server/push/format.formatPushContent` (+ D4 late dating)   | paraphrase + rule facts   | push (inactive)                  |
 | Feed / Detail states     | `lib/feed-copy`, `lib/detail-copy`                          | interface copy            | Feed, Saved, Detail              |
 
 **Built but rendered nowhere today** (measured P2B7Q — stated so nobody assumes
@@ -209,6 +209,18 @@ so the activity line, the risk label, the category tag and the location verdict
 are the same string by construction. Push reads the **same** reason sentence as the card (P2B7Q):
 before that it built its own, and the two disagreed on 534 of 898 active cases,
 including the certainty word.
+
+**Late-alert dating in push (D4, 2026-10-14, founder-approved).** A
+new-recall alert sent 3 or more New York calendar days after the agency's
+announcement date adds one sentence: "{reason}. {Agency} announced this
+{Mon D}. Check your package." The sentence is derived factual status from two
+stored facts, `publishedAt` and `sourceAgency` (`FDA` / `USDA FSIS` via
+`agencyLabel`).
+
+- **When it's judged:** at the send, never at ledger time.
+- **Otherwise:** no date at all, never a guessed one. The year is named only
+  when it differs from the send's.
+- **Unchanged:** titles, updates and retractions.
 
 **Card-only shorter reason (2026-10-14, founder-approved).** The Feed and
 Saved card render that shared sentence through `lib/recall-card-reason.ts`

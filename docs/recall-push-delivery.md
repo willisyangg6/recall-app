@@ -687,6 +687,33 @@ left queued).
 - Tests about other behavior switch the hold off (`NEVER_HELD`), because
   their fixed UTC clocks would fall inside it.
 
+## Late-alert dating (D4; founder-approved 2026-10-14)
+
+A new-recall alert sent **3 or more New York calendar days** after the
+agency's announcement date (`publishedAt`) says when it was announced:
+
+- **Body:** `{reason}. {Agency} announced this {Mon D}. Check your package.`
+- **Without a reason line:** `{Agency} announced this {Mon D}. Check your
+package for details.`
+- **Agency:** `FDA` or `USDA FSIS`.
+- **Year:** named only when it differs from the send's.
+
+**Rules** (`lateAnnouncementDate` / `LATE_ALERT_DAYS` in
+`src/server/push/format.ts`):
+
+- **Measured at the send:** the worker passes the send moment, so the
+  overnight hold can never make an alert look fresher than it is.
+- **Range:** anything over 30 days old is never sent (`suppressed: backfill`),
+  so the dated body covers 3 to 30 days.
+- **Unchanged:** titles, updates and retractions.
+- **Unreadable dates:** fall back to the ordinary body, never a guessed date.
+- **`push:test --recall`:** previews the same wording at its own moment.
+
+**Tests:** `format.test.ts` covers the boundaries, the New York day, the year,
+both agencies, the no-reason body, and that updates are never dated.
+`sending-hold.test.ts` covers an alert held overnight past day 3, which is
+dated when sent.
+
 ## Alert entitlement gate (2026-10-14; migration applied and verified 2026-10-14; push not activated)
 
 **Rule (founder decision D2, 2026-10-14):** recall alerts stop when a

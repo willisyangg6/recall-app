@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { CaseProjection, OfficialClass } from '../../domain/recall-types';
-import { buildPushMessage, formatPushContent } from './format';
+import { buildPushMessage, formatPushContent, lateAnnouncementDate } from './format';
 import type { FormattableEvent } from './format';
 
 function makeProjection(overrides: Partial<CaseProjection> = {}): CaseProjection {
@@ -293,4 +293,79 @@ test('P3D: push un-shouts an ALL-CAPS product name exactly as the app cards do',
   // The cards' own name: un-shouted, and the description's trailing size
   // moved to package evidence, exactly as Home and Detail show it.
   assert.equal(content.title, 'Recall alert: Top Sirloin Butt');
+});
+
+// ── Late-alert dating (founder decision D4, 2026-10-14) ──────────────────────
+
+test('late alert: 3 or more New York calendar days after the announcement, measured at send', () => {
+  // Announced Oct 9. Two days later: not late. Three days later: late.
+  assert.equal(lateAnnouncementDate('2026-10-09', '2026-10-11T15:00:00.000Z'), null);
+  assert.equal(lateAnnouncementDate('2026-10-09', '2026-10-12T15:00:00.000Z'), 'Oct 9');
+  // The day is New York's: 23:00 EDT on Oct 11 is still two days.
+  assert.equal(lateAnnouncementDate('2026-10-09', '2026-10-12T03:00:00.000Z'), null);
+  // Another year is named; unreadable dates never produce a guess.
+  assert.equal(lateAnnouncementDate('2025-12-30', '2026-01-02T16:00:00.000Z'), 'Dec 30, 2025');
+  assert.equal(lateAnnouncementDate('unknown', '2026-10-12T15:00:00.000Z'), null);
+  assert.equal(lateAnnouncementDate('2026-10-09', 'not a time'), null);
+});
+
+test('a late new recall says when the agency announced it; an on-time one is unchanged', () => {
+  const projection = makeProjection({ publishedAt: '2026-10-09' });
+  const event = makeEvent('initial', 'new_case', projection);
+  const onTime = formatPushContent(event, { sentAt: '2026-10-10T16:00:00.000Z' });
+  const late = formatPushContent(event, { sentAt: '2026-10-14T16:00:00.000Z' });
+  assert.equal(onTime.body, formatPushContent(event).body);
+  assert.equal(late.title, onTime.title);
+  assert.equal(
+    late.body,
+    onTime.body.replace(/ Check your package\.$/, ' FDA announced this Oct 9. Check your package.'),
+  );
+  assert.match(late.body, /\. FDA announced this Oct 9\. Check your package\.$/);
+
+  const fsis = formatPushContent(
+    makeEvent(
+      'initial',
+      'new_case',
+      makeProjection({ sourceAgency: 'FSIS', publishedAt: '2026-10-09' }),
+    ),
+    { sentAt: '2026-10-14T16:00:00.000Z' },
+  );
+  assert.match(fsis.body, /USDA FSIS announced this Oct 9\. Check your package\.$/);
+});
+
+test('with no reason line, the dated body still names the agency and the date', () => {
+  const bare = makeProjection({
+    publishedAt: '2026-10-09',
+    hazardCategory: 'unknown',
+    pathogenOrAllergen: null,
+    reasonText: null,
+  });
+  const event = makeEvent('initial', 'new_case', bare);
+  assert.equal(formatPushContent(event).body, 'Check your package for details.');
+  assert.equal(
+    formatPushContent(event, { sentAt: '2026-10-14T16:00:00.000Z' }).body,
+    'FDA announced this Oct 9. Check your package for details.',
+  );
+});
+
+test('updates and retractions are never re-dated, however old the recall', () => {
+  const old = makeProjection({ publishedAt: '2026-09-01' });
+  for (const [kind, rule] of [
+    ['material_update', 'expansion_products'],
+    ['material_update', 'retraction'],
+  ] as const) {
+    const event = makeEvent(kind, rule, old);
+    assert.equal(
+      formatPushContent(event, { sentAt: '2026-10-14T16:00:00.000Z' }).body,
+      formatPushContent(event).body,
+      rule,
+    );
+  }
+});
+
+test('buildPushMessage carries the send moment through to the body', () => {
+  const event = makeEvent('initial', 'new_case', makeProjection({ publishedAt: '2026-10-09' }));
+  const message = buildPushMessage(event, 'ExponentPushToken[abc123]', '2026-10-14T16:00:00.000Z');
+  assert.match(message.body, /FDA announced this Oct 9\./);
+  assert.doesNotMatch(buildPushMessage(event, 'ExponentPushToken[abc123]').body, /announced this/);
 });

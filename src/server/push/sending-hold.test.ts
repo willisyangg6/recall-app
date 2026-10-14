@@ -68,6 +68,7 @@ function addEvent(
   store: MemoryPushStore,
   createdAt: string,
   retraction = false,
+  publishedAt = '2026-10-13',
 ): { id: string; caseId: string } {
   seq += 1;
   const id = `${String(seq).padStart(8, '0')}-0000-4000-8000-0000000000aa`;
@@ -107,8 +108,8 @@ function addEvent(
       officialUrl: 'https://example.gov',
       otherOfficialUrls: [],
       sourceIdentifiers: [],
-      publishedAt: '2026-10-13',
-      lastPublicActivityAt: '2026-10-13',
+      publishedAt,
+      lastPublicActivityAt: publishedAt,
     } as never,
   });
   if (retraction)
@@ -226,4 +227,16 @@ test('a dry run during the hold reports zero would-send and what it would hold',
   assert.equal(dry.metrics.sendingHoldDeferred, 1);
   assert.equal(store.deliveries.size, 0);
   assert.equal(transport.sent.length, 0);
+});
+
+test('late-alert dating (D4) is judged at the send: a recall held overnight past day 3 is dated', async () => {
+  const { store, transport, runAt } = setup();
+  // Announced Oct 11; ledgered at 23:00 EDT on Oct 13 (two days: not late).
+  addEvent(store, '2026-10-14T03:00:00.000Z', false, '2026-10-11');
+  await runAt('2026-10-14T03:07:00.000Z');
+  assert.equal(transport.sent.length, 0);
+  // Released at 10:07 EDT on Oct 14: three days after the announcement.
+  await runAt('2026-10-14T14:07:00.000Z');
+  assert.equal(transport.sent.length, 1);
+  assert.match(transport.sent[0].body, /FDA announced this Oct 11\. Check your package/);
 });

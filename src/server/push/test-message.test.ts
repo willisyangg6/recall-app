@@ -118,15 +118,18 @@ test('recall test: the app would open exactly this case, with the real copy mark
     recallCaseId: CASE,
     notificationEventId: null,
   });
-  const real = formatPushContent({
-    id: 'x',
-    recallCaseId: CASE,
-    kind: 'initial',
-    triggerRuleId: 'new_case',
-    payloadSummary: '',
-    createdAt: NOW.toISOString(),
-    projection: projection(),
-  });
+  const real = formatPushContent(
+    {
+      id: 'x',
+      recallCaseId: CASE,
+      kind: 'initial',
+      triggerRuleId: 'new_case',
+      payloadSummary: '',
+      createdAt: NOW.toISOString(),
+      projection: projection(),
+    },
+    { sentAt: NOW.toISOString() },
+  );
   assert.equal(message.title, `${RECALL_TEST_TITLE_PREFIX}${real.title}`);
   assert.equal(message.body, real.body);
   assert.ok(message.title.startsWith('Test: Recall alert: '));

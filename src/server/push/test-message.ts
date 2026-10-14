@@ -92,15 +92,19 @@ export function buildRecallTestMessage(
   if (recallCase.state !== 'active') {
     return { ok: false, reason: `that case is ${recallCase.state}; pick an active recall` };
   }
-  const content = formatPushContent({
-    id: 'push-test',
-    recallCaseId: recallCase.id,
-    kind: 'initial',
-    triggerRuleId: 'new_case',
-    payloadSummary: recallCase.projection.title,
-    createdAt: now.toISOString(),
-    projection: recallCase.projection,
-  });
+  const content = formatPushContent(
+    {
+      id: 'push-test',
+      recallCaseId: recallCase.id,
+      kind: 'initial',
+      triggerRuleId: 'new_case',
+      payloadSummary: recallCase.projection.title,
+      createdAt: now.toISOString(),
+      projection: recallCase.projection,
+      // The worker's own wording at this moment, late-alert dating (D4) included.
+    },
+    { sentAt: now.toISOString() },
+  );
   const data = { kind: 'recall' as const, recallCaseId: recallCase.id, test: true as const };
   // The same validator the app runs on a tap must accept it, for this case.
   if (parseRecallPushPayload(data)?.recallCaseId !== recallCase.id) {
