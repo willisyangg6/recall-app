@@ -284,8 +284,24 @@ test('the reset only resolves the purchase id; nothing rotates, deletes or sends
   const provider = readFileSync(join(LIB, 'purchases', 'provider.ts'), 'utf8');
   assert.match(provider, /const PURCHASE_ID_KEY = 'recall\.purchase-id';/);
   assert.doesNotMatch(provider, /deleteItemAsync\(PURCHASE_ID_KEY\)/, 'nothing deletes it');
-  for (const file of ['push-api.ts', 'report-api.ts', 'recall-feed.ts']) {
+  for (const file of ['report-api.ts', 'recall-feed.ts', 'installation-reset-runner.ts']) {
     const source = readFileSync(join(LIB, file), 'utf8');
-    assert.ok(!/purchase-?id|purchaseIdentity/i.test(source), `${file} never sends it`);
+    assert.ok(!/p_purchase_id|purchaseId\b/.test(source), `${file} never sends it`);
   }
+  // The ONE approved exception (alert entitlement gate, founder 2026-10-14):
+  // the alert registrations carry it, so the server can stop alerts when the
+  // subscription ends. Nothing else in the client sends it to Lotly's server.
+  const api = readFileSync(join(LIB, 'push-api.ts'), 'utf8');
+  assert.equal(api.match(/p_purchase_id/g)?.length, 1, 'push-api sends it in one place');
+  const registerBody = api.slice(api.indexOf('export async function registerPushSubscription('));
+  assert.ok(
+    registerBody.indexOf('p_purchase_id') <
+      registerBody.indexOf('export async function disablePushSubscription'),
+    'only the registration carries it, never the disable',
+  );
+  const registration = readFileSync(join(LIB, 'push-registration.ts'), 'utf8');
+  assert.match(
+    registration,
+    /purchaseId: await purchaseIdentity\.appUserId\(\)\.catch\(\(\) => null\)/,
+  );
 });

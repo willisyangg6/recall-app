@@ -133,7 +133,7 @@ test('an access apply writes a private export file and logs date, purpose and ou
   const file = result.exportPath as string;
   assert.equal(statSync(file).mode & 0o777, 0o600, 'the export is readable by the operator only');
   const written = JSON.parse(readFileSync(file, 'utf8'));
-  assert.equal(written.format, 'lotly-server-data/2');
+  assert.equal(written.format, 'lotly-server-data/3');
   assert.deepEqual(written.server_data.preferences.allergens, [ALLERGEN]);
   // The data is in the file for the requester, and nowhere else.
   assertClean(h.printed.join('\n'));

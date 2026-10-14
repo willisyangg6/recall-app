@@ -160,10 +160,11 @@ test('the allergen consent record appears once the consent columns exist', () =>
 
 test('the export file names its processors and carries no installation id', () => {
   const document = buildExportDocument(FULL);
-  assert.equal(document.format, 'lotly-server-data/2');
+  assert.equal(document.format, 'lotly-server-data/3');
   // What is left out, what is elsewhere, and how to ask for it: all in the file.
-  assert.equal(document.redactions.length, 4);
-  assert.match(document.redactions[2], /scrambled form .* left out/);
+  assert.equal(document.redactions.length, 5);
+  assert.match(document.redactions[2], /purchase identifier .* last four characters/);
+  assert.match(document.redactions[3], /scrambled form .* left out/);
   assert.match(document.redactions[0], /installation identifier.*never shows, shares or emails/);
   assert.match(document.redactions[1], /last four characters/);
   assert.ok(document.not_included.some((item) => /hosting providers/.test(item)));

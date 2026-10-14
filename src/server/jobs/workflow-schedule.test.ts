@@ -306,16 +306,34 @@ test('npm ci, checkout and setup-node receive no production secret at all', () =
   }
 });
 
+/** The push step's RevenueCat read for the alert entitlement gate; nowhere else. */
+const REVENUECAT_SECRETS = [
+  'REVENUECAT_PREMIUM_ENTITLEMENT_ID',
+  'REVENUECAT_PROJECT_ID',
+  'REVENUECAT_SECRET_KEY',
+];
+
 test('every step that reaches production declares its own secrets, and only what it needs', () => {
   for (const name of PRODUCTION_WORKFLOWS) {
     for (const step of parseSteps(workflow(name))) {
       const command = step.run ?? '';
-      if (/^npm run jobs:/.test(command)) {
+      if (/^npm run jobs:push\b/.test(command)) {
+        // The alert entitlement gate's RevenueCat read (2026-10-14): push only.
+        assert.deepEqual(
+          [...step.secrets].sort(),
+          [...REVENUECAT_SECRETS, 'SUPABASE_SECRET_KEY', 'SUPABASE_URL'].sort(),
+          `${name}: "${step.label}" needs the Supabase pair and the RevenueCat read`,
+        );
+      } else if (/^npm run jobs:/.test(command)) {
         assert.deepEqual(
           [...step.secrets].sort(),
           ['SUPABASE_SECRET_KEY', 'SUPABASE_URL'],
           `${name}: "${step.label}" needs exactly the Supabase pair`,
         );
+      } else {
+        for (const secret of REVENUECAT_SECRETS) {
+          assert.ok(!step.secrets.includes(secret), `${name}: "${step.label}" holds ${secret}`);
+        }
       }
       if (/^npm run ops:heartbeat/.test(command)) {
         // The only step that may see a heartbeat URL.

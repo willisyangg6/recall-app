@@ -128,6 +128,13 @@ export async function registerPushSubscription(input: {
    * already outranked. Omitted only by code paths that predate it.
    */
   sequence?: number;
+  /**
+   * The RevenueCat purchase id (2026-10-14, push_entitlement migration): the
+   * server checks the same `premium` entitlement the app unlocks with, so
+   * alerts stop when the subscription ends. null sends none, and the server
+   * then holds every alert for this registration.
+   */
+  purchaseId?: string | null;
   /** The caller's cancellation; see `rpcPost`. */
   signal?: AbortSignal;
 }): Promise<SequencedWriteResult> {
@@ -139,6 +146,7 @@ export async function registerPushSubscription(input: {
       p_platform: input.platform,
       p_app_version: input.appVersion,
       ...(input.sequence === undefined ? {} : { p_sequence: input.sequence }),
+      ...(input.purchaseId ? { p_purchase_id: input.purchaseId } : {}),
     },
     input.signal,
   );

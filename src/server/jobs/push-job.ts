@@ -9,6 +9,7 @@
  * scheduled ahead of activation without ever sending.
  */
 
+import type { EntitlementSource } from '../push/revenuecat-entitlement';
 import type { PushStore, PushTransport } from '../push/types';
 import { runPushDelivery } from '../push/worker';
 import { runJob, type JobContext, type JobReport, type JobSpec } from './runner';
@@ -24,6 +25,8 @@ export const PUSH_JOB: JobSpec = {
 export interface PushJobOptions {
   pushStore: PushStore;
   transport: PushTransport;
+  /** null = the entitlement check is not configured: every alert is held. */
+  entitlements: EntitlementSource | null;
   dryRun: boolean;
 }
 
@@ -34,6 +37,7 @@ export async function runPushJob(ctx: JobContext, options: PushJobOptions): Prom
     );
     const result = await runPushDelivery(options.pushStore, {
       transport: options.transport,
+      entitlements: options.entitlements,
       dryRun: options.dryRun,
       now: ctx.now,
     });

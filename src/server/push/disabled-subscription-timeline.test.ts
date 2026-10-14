@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { MemoryPushStore } from './memory-push-store';
+import { ACTIVE_SOURCE, registerEntitled } from './test-entitlement';
 import type { PushMessage, PushReceipt, PushTicket, PushTransport } from './types';
 import { RECEIPT_DELAY_MINUTES, runPushDelivery } from './worker';
 
@@ -105,14 +106,19 @@ function setup(activated: boolean) {
   const store = new MemoryPushStore();
   if (activated) store.pushEnabledAt = iso(0);
   const transport = new FakeTransport();
-  store.register(INSTALLATION, TOKEN, 'ios', iso(-HOUR));
+  registerEntitled(store, INSTALLATION, TOKEN, 'ios', iso(-HOUR));
   store.setPreferences(
     INSTALLATION,
     { stateCodes: ['TX'], allergens: [], retailerIds: [] },
     iso(-HOUR),
   );
   const runAt = (ms: number) =>
-    runPushDelivery(store, { transport, dryRun: false, now: () => new Date(T0 + ms) });
+    runPushDelivery(store, {
+      transport,
+      entitlements: ACTIVE_SOURCE,
+      dryRun: false,
+      now: () => new Date(T0 + ms),
+    });
   const subscription = () => store.subscriptionOf(INSTALLATION);
   const deliveryFor = (eventId: string) =>
     [...store.deliveries.values()].find((delivery) => delivery.eventId === eventId);

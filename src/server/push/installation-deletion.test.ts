@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { MemoryPushStore } from './memory-push-store';
+import { ACTIVE_SOURCE, registerEntitled } from './test-entitlement';
 import type { PushMessage, PushReceipt, PushTicket, PushTransport } from './types';
 import { runPushDelivery } from './worker';
 
@@ -118,8 +119,8 @@ async function seededStore(): Promise<{ store: MemoryPushStore; transport: FakeT
   const store = new MemoryPushStore();
   store.pushEnabledAt = iso(0);
   const transport = new FakeTransport();
-  store.register(INSTALL_A, 'ExpoPushToken[AAAA]', 'ios', iso(0));
-  store.register(INSTALL_B, 'ExpoPushToken[BBBB]', 'android', iso(0));
+  registerEntitled(store, INSTALL_A, 'ExpoPushToken[AAAA]', 'ios', iso(0));
+  registerEntitled(store, INSTALL_B, 'ExpoPushToken[BBBB]', 'android', iso(0));
   store.setPreferences(
     INSTALL_A,
     { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: ['costco'] },
@@ -128,11 +129,17 @@ async function seededStore(): Promise<{ store: MemoryPushStore; transport: FakeT
   store.setPreferences(INSTALL_B, { stateCodes: ['TX'], allergens: [], retailerIds: [] }, iso(0));
   addEvent(store, 1 * HOUR);
   // Sent + ticketed for both installations.
-  await runPushDelivery(store, { transport, dryRun: false, now: () => new Date(T0 + 2 * HOUR) });
+  await runPushDelivery(store, {
+    transport,
+    entitlements: ACTIVE_SOURCE,
+    dryRun: false,
+    now: () => new Date(T0 + 2 * HOUR),
+  });
   // A second event left PENDING (created but not sent: maxSends 0).
   addEvent(store, 3 * HOUR);
   await runPushDelivery(store, {
     transport,
+    entitlements: ACTIVE_SOURCE,
     dryRun: false,
     now: () => new Date(T0 + 3 * HOUR),
     maxSendsPerRun: 0,
@@ -210,8 +217,9 @@ test('NO BACKFILL: a re-registration after deletion never receives pre-deletion 
   // but a FRESH subscription row (the old row is gone, so the RPC takes its
   // insert path) with enabledAt = now. A brand-new installation id behaves
   // identically; both are covered.
-  store.register(INSTALL_A, 'ExpoPushToken[AAAA]', 'ios', iso(6 * HOUR));
-  store.register(
+  registerEntitled(store, INSTALL_A, 'ExpoPushToken[AAAA]', 'ios', iso(6 * HOUR));
+  registerEntitled(
+    store,
     'cccccccc-0000-4000-8000-000000000003',
     'ExpoPushToken[CCCC]',
     'ios',
@@ -220,6 +228,7 @@ test('NO BACKFILL: a re-registration after deletion never receives pre-deletion 
 
   const result = await runPushDelivery(store, {
     transport,
+    entitlements: ACTIVE_SOURCE,
     dryRun: false,
     now: () => new Date(T0 + 7 * HOUR),
   });
@@ -256,6 +265,7 @@ test('a deletion between delivery creation and send leaves the worker sane and s
   const sentBefore = transport.sentMessages.length;
   const result = await runPushDelivery(store, {
     transport,
+    entitlements: ACTIVE_SOURCE,
     dryRun: false,
     now: () => new Date(T0 + 4 * HOUR),
   });

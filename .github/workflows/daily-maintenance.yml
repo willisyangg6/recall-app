@@ -126,3 +126,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          # Alert entitlement gate (2026-10-14): RevenueCat REST API v2, a
+          # read-only key (customer_information:customers:read). This step only.
+          REVENUECAT_SECRET_KEY: ${{ secrets.REVENUECAT_SECRET_KEY }}
+          REVENUECAT_PROJECT_ID: ${{ secrets.REVENUECAT_PROJECT_ID }}
+          REVENUECAT_PREMIUM_ENTITLEMENT_ID: ${{ secrets.REVENUECAT_PREMIUM_ENTITLEMENT_ID }}

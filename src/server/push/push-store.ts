@@ -10,12 +10,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { CaseProjection, LifecycleState } from '../../domain/recall-types';
+import type { SubscriptionEntitlement } from './entitlement';
 import type {
   CaseLink,
   DeliverableEvent,
   DeliveryPatch,
   DeliveryRow,
   DeliveryStatus,
+  EntitlementRefreshRow,
   InstallationPreferences,
   PushStore,
   PushSubscription,
@@ -63,6 +65,22 @@ interface EventRow {
   recall_cases: Omit<CaseRow, 'id'> | null;
 }
 
+/** The four stored entitlement fields (20261018000000). */
+const ENTITLEMENT_COLUMNS =
+  'entitlement_status, entitlement_expires_at, entitlement_checked_at, entitled_since';
+/** A subscription as the worker reads it: never the purchase id. */
+const SUBSCRIPTION_COLUMNS = `id, installation_id, expo_push_token, platform, enabled, enabled_at, ${ENTITLEMENT_COLUMNS}`;
+
+function toEntitlement(row: Record<string, unknown>): SubscriptionEntitlement {
+  const status = row.entitlement_status;
+  return {
+    status: status === 'active' || status === 'inactive' ? status : 'unknown',
+    expiresAt: (row.entitlement_expires_at as string | null) ?? null,
+    checkedAt: (row.entitlement_checked_at as string | null) ?? null,
+    entitledSince: (row.entitled_since as string | null) ?? null,
+  };
+}
+
 export class SupabasePushStore implements PushStore {
   constructor(private readonly client: SupabaseClient) {}
 
@@ -76,11 +94,13 @@ export class SupabasePushStore implements PushStore {
     // `state_codes` COLUMN means the P2B7U expand phase has not run, which is
     // a different fix from a missing table — and this warning is the only
     // place a scheduled run says so.
-    const migration = /state_codes/.test(message)
-      ? '20260921000000_installation_preference_states_expand.sql'
-      : /installation_preferences/.test(message)
-        ? '20260830000000_installation_preferences.sql'
-        : '20260828000000_push_delivery.sql';
+    const migration = /entitle|purchase_id/.test(message)
+      ? '20261018000000_push_entitlement.sql'
+      : /state_codes/.test(message)
+        ? '20260921000000_installation_preference_states_expand.sql'
+        : /installation_preferences/.test(message)
+          ? '20260830000000_installation_preferences.sql'
+          : '20260828000000_push_delivery.sql';
     console.warn(
       `  ${operation}: migration pending — treating as empty (apply supabase/migrations/${migration}).`,
     );
@@ -107,13 +127,14 @@ export class SupabasePushStore implements PushStore {
       platform: row.platform as PushSubscription['platform'],
       enabled: row.enabled as boolean,
       enabledAt: row.enabled_at as string,
+      entitlement: toEntitlement(row),
     };
   }
 
   async listEnabledSubscriptions(): Promise<PushSubscription[]> {
     const { data, error } = await this.client
       .from('push_subscriptions')
-      .select('id, installation_id, expo_push_token, platform, enabled, enabled_at')
+      .select(SUBSCRIPTION_COLUMNS)
       .eq('enabled', true);
     if (error || !data) {
       if (error && this.migrationPending('listEnabledSubscriptions', error.message)) return [];
@@ -152,6 +173,47 @@ export class SupabasePushStore implements PushStore {
       allergenConsentVersion:
         (row as { allergen_consent_version?: string | null }).allergen_consent_version ?? null,
     }));
+  }
+
+  async listEntitlementRefreshRows(): Promise<EntitlementRefreshRow[]> {
+    const { data, error } = await this.client
+      .from('push_subscriptions')
+      .select(`id, purchase_id, ${ENTITLEMENT_COLUMNS}`)
+      .eq('enabled', true)
+      .not('purchase_id', 'is', null)
+      .order('entitlement_checked_at', { ascending: true, nullsFirst: true });
+    if (error || !data) {
+      if (error && this.migrationPending('listEntitlementRefreshRows', error.message)) return [];
+      this.fail('listEntitlementRefreshRows', error);
+    }
+    return data.map((row) => ({
+      subscriptionId: row.id as string,
+      purchaseId: row.purchase_id as string,
+      entitlement: toEntitlement(row),
+    }));
+  }
+
+  async recordEntitlement(
+    subscriptionId: string,
+    purchaseId: string,
+    entitlement: SubscriptionEntitlement,
+  ): Promise<boolean> {
+    // Conditional on the row still being enabled under the same purchase id.
+    // The id is only a filter value: PostgREST error MESSAGES carry no values.
+    const { data, error } = await this.client
+      .from('push_subscriptions')
+      .update({
+        entitlement_status: entitlement.status,
+        entitlement_expires_at: entitlement.expiresAt,
+        entitlement_checked_at: entitlement.checkedAt,
+        entitled_since: entitlement.entitledSince,
+      })
+      .eq('id', subscriptionId)
+      .eq('enabled', true)
+      .eq('purchase_id', purchaseId)
+      .select('id');
+    if (error) this.fail('recordEntitlement', error);
+    return (data ?? []).length === 1;
   }
 
   async disableSubscription(id: string, reason: string, at: string): Promise<void> {
@@ -330,7 +392,7 @@ export class SupabasePushStore implements PushStore {
   async getSubscription(id: string): Promise<PushSubscription | null> {
     const { data, error } = await this.client
       .from('push_subscriptions')
-      .select('id, installation_id, expo_push_token, platform, enabled, enabled_at')
+      .select(SUBSCRIPTION_COLUMNS)
       .eq('id', id)
       .maybeSingle();
     if (error) this.fail('getSubscription', error);

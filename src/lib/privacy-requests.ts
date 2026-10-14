@@ -275,6 +275,7 @@ export function serverDataSections(data: ServerDataExport): ServerDataSection[] 
           ...(dateOf(registration.disabled_at)
             ? [`Turned off: ${dateOf(registration.disabled_at)}`]
             : []),
+          ...(registration.enabled === true ? [subscriptionForAlertsLine(registration)] : []),
         ])
       : ['None'];
 
@@ -363,7 +364,7 @@ export const DATA_PROCESSORS = [
   },
   {
     name: 'RevenueCat',
-    role: 'Checks and restores subscriptions under a separate purchase identifier',
+    role: 'Checks and restores subscriptions under a separate purchase identifier. While alerts are on, Lotly’s server also uses that identifier to ask whether a subscription is active, so alerts stop when it ends',
     privacy: 'https://www.revenuecat.com/privacy',
     contact: 'compliance@revenuecat.com',
   },
@@ -379,6 +380,16 @@ export const DATA_PROCESSORS = [
     contact: 'https://support.google.com/policies/answer/9581826',
   },
 ] as const;
+
+/** The alert entitlement gate's status, as the Server Data screen shows it. */
+function subscriptionForAlertsLine(registration: Record<string, unknown>): string {
+  const status = registration.entitlement_status;
+  const expires = dateOf(registration.entitlement_expires_at);
+  if (status === 'active' && expires)
+    return `Subscription status for alerts: Active until ${expires}`;
+  if (status === 'inactive') return 'Subscription status for alerts: Ended';
+  return 'Subscription status for alerts: Not checked yet';
+}
 
 /**
  * The approved export fields, group by group (2026-10-13). This is the same
@@ -410,6 +421,11 @@ export const EXPORT_FIELDS = {
     'disabled_reason',
     'push_token',
     'last_token_error',
+    'purchase_id_last4',
+    'entitlement_status',
+    'entitlement_expires_at',
+    'entitlement_checked_at',
+    'entitled_since',
   ],
   alert_order: ['last_sequence', 'last_operation', 'updated_at'],
   alerts_sent: ['recall_id', 'kind', 'created_at', 'sent_at', 'status', 'failure_code'],
@@ -436,6 +452,7 @@ export const EXPORT_FIELDS = {
 export const EXPORT_REDACTIONS = [
   'The installation identifier, the random number that ties these records together, is left out everywhere. It works like a password for this data, so Lotly never shows, shares or emails it.',
   'The push delivery token is shortened to its last four characters, in its own field and inside any stored delivery error, because the full token can be used to send this iPhone notifications.',
+  'The purchase identifier kept with an alert registration is shortened to its last four characters, because the full identifier can be used to look up and restore the subscription.',
   'Request codes are listed by what they are for and their dates. The code itself is never stored: Lotly keeps only a scrambled form of it, used only to check a code you send, which cannot be turned back into the code. That scrambled form is left out.',
   'Lotly’s internal bookkeeping is left out: row numbers that link its tables, an edit counter on shopper reports, an older one-state copy of the first state in your list, and an account field that is never filled in. None of it says anything new about you.',
 ] as const;
@@ -444,7 +461,7 @@ export const EXPORT_REDACTIONS = [
 export const EXPORT_NOT_INCLUDED = [
   'What is kept only on this iPhone: your choices as the app holds them, saved recalls, the alerts setting and setup progress. Lotly’s server does not have them; you can see them in the app.',
   'Connection logs at Lotly’s hosting providers (such as IP addresses), kept under each provider’s own settings; Lotly’s database host keeps them for 7 days.',
-  'Subscription records held by Apple and RevenueCat, under a separate purchase identifier.',
+  'Subscription records held by Apple and RevenueCat. Lotly’s server keeps only the subscription status for alerts shown in this file.',
   'Consent-revocation key (only if Apple reported you as 13 to 17 in a state whose law requires an age check, and you turned on alerts): a keyed hash of Apple’s identifier for your download of Lotly, kept with your alert registration. It is used only to stop alerts if a parent or guardian withdraws consent through Apple. It is not in this file because it has no meaning outside that matching. It is still information about you, because Lotly can match it to your installation. It is deleted with your alert registration, and you can ask for it by email like anything else listed here.',
   `Emails you sent to ${SUPPORT_EMAIL}, and Lotly’s replies.`,
 ] as const;
@@ -456,7 +473,7 @@ export const EXPORT_REQUEST_MORE =
   `${REQUEST_TIMING_COPY} ` +
   'Lotly will still not send the installation identifier or the full push token, for the reasons above.';
 
-export const EXPORT_FORMAT = 'lotly-server-data/2';
+export const EXPORT_FORMAT = 'lotly-server-data/3';
 
 /** The file shared from the app and emailed by the operator: one shape. */
 export function buildExportDocument(data: ServerDataExport) {

@@ -2925,8 +2925,14 @@ followed by a success.
 ## Secrets
 
 Production jobs use two environment variables — `SUPABASE_URL` and
-`SUPABASE_SECRET_KEY` — supplied as GitHub Actions repo secrets (Settings →
-Secrets and variables → Actions), locally via `.env` (gitignored). A third,
+`SUPABASE_SECRET_KEY` — supplied as GitHub Actions secrets of the
+`production` environment (both workflows run with `environment: production`,
+and each step declares only what it needs), locally via `.env` (gitignored).
+The push steps alone also receive the alert entitlement gate's RevenueCat
+read: `REVENUECAT_SECRET_KEY` (a v2 secret key scoped to
+`customer_information:customers:read`), `REVENUECAT_PROJECT_ID` and
+`REVENUECAT_PREMIUM_ENTITLEMENT_ID`. Unset, every alert is held
+(docs/recall-push-delivery.md, "Alert entitlement gate"). Another,
 `EXPO_ACCESS_TOKEN`, is optional and only needed if enhanced push security is
 enabled on the Expo account (docs/recall-push-delivery.md). All are
 server-only, never in any `EXPO_PUBLIC_*` variable, never printed by any job,

@@ -5,7 +5,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -25,6 +25,25 @@ const SQL = readFileSync(
 );
 /** Statements only: the header explains the design in prose that names things. */
 const CODE = SQL.replace(/--.*$/gm, '');
+
+const MIGRATIONS = join(__dirname, '..', '..', '..', 'supabase', 'migrations');
+
+/**
+ * The CURRENT definition of a function: the last migration (in apply order)
+ * that defines it. The export is re-bodied by later migrations (the alert
+ * entitlement gate, 20261018000000), and what ships is the latest body.
+ */
+function latestBody(fn: string): string {
+  const files = readdirSync(MIGRATIONS)
+    .filter((name) => name.endsWith('.sql'))
+    .sort();
+  for (const file of files.reverse()) {
+    const code = readFileSync(join(MIGRATIONS, file), 'utf8').replace(/--.*$/gm, '');
+    const start = code.indexOf(`create or replace function public.${fn}(`);
+    if (start >= 0) return code.slice(start, code.indexOf('$$;', start));
+  }
+  throw new Error(`${fn} is not defined by any migration`);
+}
 
 function body(fn: string): string {
   const start = CODE.indexOf(`create or replace function public.${fn}(`);
@@ -121,7 +140,7 @@ test('errors are fixed strings: no code, hash, id or contents can reach a log', 
 });
 
 test('the export is an explicit list of approved fields, identical to EXPORT_FIELDS', () => {
-  const exported = body('export_installation_data');
+  const exported = latestBody('export_installation_data');
   // No whole-row export: a column added by a later migration (an age or
   // consent-revocation key, a hash) must never flow out automatically.
   assert.ok(!/to_jsonb\([a-z]+\)\s*-\s*'/.test(exported), 'no to_jsonb(row) - … subtraction');
@@ -152,7 +171,7 @@ test('the export is an explicit list of approved fields, identical to EXPORT_FIE
     }
     const inner = exported.slice(open + 'jsonb_build_object('.length, end);
     // Top-level keys only: a key sits at the start of a line inside the object.
-    return [...inner.matchAll(/^\s*'([a-z_]+)',/gm)].map((m) => m[1]);
+    return [...inner.matchAll(/^\s*'([a-z0-9_]+)',/gm)].map((m) => m[1]);
   };
   for (const [group, fields] of Object.entries(EXPORT_FIELDS)) {
     assert.deepEqual(groupKeys(group), [...fields], `${group} fields`);
@@ -162,6 +181,8 @@ test('the export is an explicit list of approved fields, identical to EXPORT_FIE
   for (const never of [
     'installation_id',
     'expo_push_token',
+    'purchase_id',
+    'app_transaction_hmac',
     'code_hash',
     'user_id',
     'version',
@@ -174,7 +195,10 @@ test('the export is an explicit list of approved fields, identical to EXPORT_FIE
 });
 
 test('the export masks the push token and the operator never sees the whole id', () => {
-  const exported = body('export_installation_data');
+  const exported = latestBody('export_installation_data');
+  // The purchase id unlocks the subscription in RevenueCat's SDK: last 4 only.
+  assert.match(exported, /'purchase_id_last4', right\(s\.purchase_id, 4\)/);
+  assert.equal((exported.match(/s\.purchase_id\b/g) ?? []).length, 1);
   assert.match(exported, /'push_token', '…' \|\| right\(rtrim\(s\.expo_push_token, '\]'\), 4\)/);
   assert.match(exported, /ExponentPushToken\[…\]/);
   assert.match(exported, /\bstable\b/);

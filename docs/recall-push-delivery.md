@@ -643,10 +643,145 @@ notifications. Whether an alert sent between the stop and the disable is
 shown has **not** been tested on a device. It needs an activated send or
 `push:test`, which require separate authorization.
 
+## Alert entitlement gate (2026-10-14; prepared, NOT applied or deployed)
+
+**Rule (founder decision D2, 2026-10-14):** recall alerts stop when a
+subscription ends. The server gates alerts on the same RevenueCat `premium`
+entitlement, under the same purchase id, that unlocks the app
+(`src/lib/purchases/revenuecat-adapter.ts`). Migration
+`20261018000000_push_entitlement.sql` is prepared, not applied.
+
+**How it works.**
+
+1. **Registration.** Every alert registration (plain or keyed) also sends
+   the purchase id (`p_purchase_id`), from the provider's memoized resolver
+   (`purchaseIdentity`). That's the keychain UUID that reset never rotates.
+2. **Refresh (`src/server/push/entitlement-refresh.ts`).** It is the first step
+   of every **activated** push run, before any matching. It checks each
+   enabled row that carries a purchase id and is due: never checked, checked
+   at least `REFRESH_INTERVAL` (1 h) ago, or expiring within the next hour.
+   - **The call:** RevenueCat REST API v2,
+     `GET /v2/projects/{project}/customers/{purchase id}/active_entitlements`.
+   - **Never triggered by a recall match.** A match-triggered check would let
+     RevenueCat infer when a customer's alerts matched (health-adjacent for
+     allergens). RevenueCat learns only that alerts are on.
+   - **Budget:** at most 400 checks per run (RevenueCat allows 480/min for
+     customer information). Rows beyond the budget wait for the next run, and
+     a 429 ends the run's checking at once.
+   - **Before `push:activate`:** nothing is checked. The purchase id is stored
+     but unused.
+3. **Gate (`src/server/push/entitlement.ts`).** It is applied in the
+   eligibility seam, in the send pool and again at the send. A delivery needs
+   all four:
+
+   | Gate           | Rule                                                                                                     | On failure                                                                                          |
+   | -------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+   | Status         | `entitlement_status = 'active'` (RevenueCat counts billing grace as active)                              | not entitled                                                                                        |
+   | **Clock**      | `entitlement_expires_at > now()`. A null expiry (a non-expiring grant) is refused, as the app refuses it | not entitled: the known expiry stops alerts at that instant, with no refresh, however old the check |
+   | **Staleness**  | last successful check within `MAX_STALENESS` (3 h)                                                       | **held**: unverified, retried next run (fail closed)                                                |
+   | **No backlog** | event created at or after `entitled_since`                                                               | not entitled                                                                                        |
+
+   `entitled_since` moves to the check time whenever a check finds the
+   subscription active and the stored state was not continuously entitled
+   (unknown, inactive, or past its known expiry). A renewal seen before
+   expiry keeps it.
+
+4. **Outcomes.** A definitive failure is never sent later:
+   - at matching, no row is created;
+   - for a queued row, `permanent_failure` with `not_entitled`.
+
+   A held row stays queued.
+
+**Maximum delays.** Run gaps were measured from GitHub's API, 2026-10-06 to
+14: median 45.0 min, maximum 52.4 min.
+
+| Change in RevenueCat                                                                              | The server acts within                                                                                                  |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Expiry                                                                                            | 0: the clock gate                                                                                                       |
+| Refund; subscription moved to another purchase id (restore elsewhere); promotional access removed | the next due check: about 1 h 53 min at the worst measured gap, **never more than 3 h** (the staleness gate)            |
+| Renewal                                                                                           | seen hourly, and every run in the last hour before expiry. One seen only after the old expiry restarts `entitled_since` |
+| Re-subscribe after a lapse                                                                        | the next due check. Recalls announced before that check are not sent                                                    |
+| A new registration, including after a reset                                                       | its first check, at most one run. Recalls announced before that check are not sent                                      |
+| RevenueCat unreachable                                                                            | alerts held once the status is 3 h old. The run is `partial` with a payload-free reason                                 |
+
+**Outside Lotly's control:**
+
+- RevenueCat learns of refunds from Apple, so it lags Apple; the app sees the
+  same lag.
+- During an outage, the app honours a cached entitlement for up to 3 days
+  past expiry (`CACHED_ACCESS_GRACE_MS`). The server is stricter.
+
+**Stored fields** (all on `push_subscriptions`; no other table):
+`purchase_id`, `entitlement_status` (unknown | active | inactive),
+`entitlement_expires_at`, `entitlement_checked_at`, `entitled_since`. No
+product, price, transaction id or other RevenueCat data.
+
+**Redaction.**
+
+- The purchase id is **bearer-sensitive**: it unlocks the entitlement in
+  RevenueCat's SDK. So no RPC returns it, raised errors are fixed strings,
+  and the worker reads it only through `listEntitlementRefreshRows`, never on
+  `PushSubscription`.
+- No log line, metric, delivery row or error carries it. That is pinned in
+  `entitlement-gate.test.ts`.
+- The export shows `purchase_id_last4` only.
+- **Before activation:** after one sandbox registration, search Supabase
+  `postgres_logs` for that purchase id and record the result. Gateway logs
+  carry no request body, but database logs can carry statement text.
+
+**Retention.** One trigger (`push_subscription_entitlement_guard`) clears the
+purchase id and every entitlement field when a row is disabled for **any**
+reason, and resets the entitlement when the purchase id changes. Reset,
+privacy deletion and the 12-month purge delete the row. No purchase-id to
+old-installation mapping survives a reset. After a reset the same purchase id
+returns with the new registration, which is disclosed in the privacy text.
+
+**Reset continuity.** The purchase id survives "Reset app and delete my
+data". Re-enabling alerts registers it again, and the first check finds the
+same entitlement.
+
+**Deployment order (each step its own approval):**
+
+1. Apply `20261018000000`. It's backward compatible: older builds register
+   without an id and are held.
+2. Distribute any build that sends `p_purchase_id` only **after** step 1.
+   Without the migration, PostgREST finds no matching function and turning
+   alerts on fails.
+3. Before `push:activate`:
+   - create the RevenueCat v2 secret key (`customer_information:customers:read`
+     only);
+   - set `REVENUECAT_SECRET_KEY`, `REVENUECAT_PROJECT_ID` and
+     `REVENUECAT_PREMIUM_ENTITLEMENT_ID` in the GitHub `production`
+     environment;
+   - run the `postgres_logs` check.
+
+   Unset settings hold every alert.
+
+**Metrics** (job run):
+
+- `entitlementSource` (`revenuecat` | `unconfigured`);
+- `entitlementRowsDue`, `entitlementChecks`, `entitlementActive`,
+  `entitlementInactive`;
+- `entitlementCheckFailures`, `entitlementDeferred`, `entitlementNotLanded`;
+- `entitlementSkipped`, `entitlementUnverified`;
+- `queuedEntitlementHeld`, `queuedNotEntitled`.
+
+**Tests:**
+
+- `entitlement.test.ts` (rules);
+- `revenuecat-entitlement.test.ts` (request, reading, payload-free failures);
+- `entitlement-gate.test.ts` (end to end);
+- `push-entitlement-migration.test.ts` (SQL text);
+- `push-api-purchase-id.test.ts` (client bodies).
+
+**Not yet run:** a live run of the migration on an isolated stack.
+
 ## Secrets and privacy
 
-Server env (GitHub repo secrets): `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and
-optionally `EXPO_ACCESS_TOKEN` (only if enhanced push security is enabled on
+Server env (GitHub `production` environment secrets, declared per step):
+`SUPABASE_URL`, `SUPABASE_SECRET_KEY`; on the `jobs:push` steps only, the
+entitlement gate's `REVENUECAT_SECRET_KEY`, `REVENUECAT_PROJECT_ID` and
+`REVENUECAT_PREMIUM_ENTITLEMENT_ID`; and optionally `EXPO_ACCESS_TOKEN` (only if enhanced push security is enabled on
 the Expo account — recommended eventually, not required for MVP). Nothing
 new in the client bundle. ExpoPushTokens are private operational data: no
 policy exposes them to clients, jobs never print them, `push:test` lists ids

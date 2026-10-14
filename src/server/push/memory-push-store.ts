@@ -9,12 +9,14 @@
 
 import { randomUUID } from 'node:crypto';
 
+import { UNKNOWN_ENTITLEMENT, type SubscriptionEntitlement } from './entitlement';
 import type {
   CaseLink,
   DeliverableEvent,
   DeliveryPatch,
   DeliveryRow,
   DeliveryStatus,
+  EntitlementRefreshRow,
   InstallationPreferences,
   PushStore,
   PushSubscription,
@@ -29,6 +31,19 @@ export interface SequencedWriteResult {
 interface SubscriptionRow extends PushSubscription {
   disabledAt: string | null;
   disabledReason: string | null;
+  purchaseId: string | null;
+}
+
+/**
+ * The push_subscriptions_entitlement_guard trigger (20261018000000), mirrored:
+ * a disabled row loses its purchase id and entitlement, and a changed purchase
+ * id resets the entitlement to unknown.
+ */
+function guardEntitlement(row: SubscriptionRow, previousPurchaseId: string | null): void {
+  if (!row.enabled) row.purchaseId = null;
+  if (!row.enabled || row.purchaseId !== previousPurchaseId) {
+    row.entitlement = { ...UNKNOWN_ENTITLEMENT };
+  }
 }
 
 /**
@@ -141,7 +156,12 @@ export class MemoryPushStore implements PushStore {
     platform: 'ios' | 'android',
     nowIso: string,
     sequence?: number,
+    /** Sent by current clients with every registration (20261018000000); null from older ones. */
+    purchaseId: string | null = null,
   ): SequencedWriteResult {
+    if (purchaseId !== null && !/^[A-Za-z0-9-]{16,64}$/.test(purchaseId)) {
+      throw new Error('invalid purchase id');
+    }
     const decision = this.gate(installationId, sequence, 'register');
     if (!decision.applied) return decision;
     for (const row of this.subscriptions.values()) {
@@ -150,21 +170,26 @@ export class MemoryPushStore implements PushStore {
         row.installationId !== installationId &&
         row.enabled
       ) {
+        const previous = row.purchaseId;
         row.enabled = false;
         row.disabledAt = nowIso;
         row.disabledReason = 'token_reassigned';
+        guardEntitlement(row, previous);
       }
     }
     const existing = [...this.subscriptions.values()].find(
       (row) => row.installationId === installationId,
     );
     if (existing) {
+      const previous = existing.purchaseId;
       existing.expoPushToken = expoPushToken;
       existing.platform = platform;
+      existing.purchaseId = purchaseId;
       if (!existing.enabled) existing.enabledAt = nowIso;
       existing.enabled = true;
       existing.disabledAt = null;
       existing.disabledReason = null;
+      guardEntitlement(existing, previous);
       return decision;
     }
     const id = randomUUID();
@@ -177,8 +202,17 @@ export class MemoryPushStore implements PushStore {
       enabledAt: nowIso,
       disabledAt: null,
       disabledReason: null,
+      purchaseId,
+      entitlement: { ...UNKNOWN_ENTITLEMENT },
     });
     return decision;
+  }
+
+  /** Test setup: the entitlement the worker's refresh would have stored. */
+  seedEntitlement(installationId: string, entitlement: SubscriptionEntitlement): void {
+    const row = this.subscriptionOf(installationId);
+    if (!row) throw new Error(`no subscription for ${installationId}`);
+    row.entitlement = { ...entitlement };
   }
 
   /** The disable_push_subscription RPC's semantics, mirrored. */
@@ -187,9 +221,11 @@ export class MemoryPushStore implements PushStore {
     if (!decision.applied) return decision;
     for (const row of this.subscriptions.values()) {
       if (row.installationId === installationId && row.enabled) {
+        const previous = row.purchaseId;
         row.enabled = false;
         row.disabledAt = nowIso;
         row.disabledReason = 'user_disabled';
+        guardEntitlement(row, previous);
       }
     }
     return decision;
@@ -279,9 +315,11 @@ export class MemoryPushStore implements PushStore {
   userDisable(installationId: string, nowIso: string): void {
     for (const row of this.subscriptions.values()) {
       if (row.installationId === installationId && row.enabled) {
+        const previous = row.purchaseId;
         row.enabled = false;
         row.disabledAt = nowIso;
         row.disabledReason = 'user_disabled';
+        guardEntitlement(row, previous);
       }
     }
   }
@@ -317,16 +355,55 @@ export class MemoryPushStore implements PushStore {
     return this.pushEnabledAt;
   }
 
+  /** A row as the SQL store returns it: a copy, and never the purchase id. */
+  private asSubscription(row: SubscriptionRow): PushSubscription {
+    return {
+      id: row.id,
+      installationId: row.installationId,
+      expoPushToken: row.expoPushToken,
+      platform: row.platform,
+      enabled: row.enabled,
+      enabledAt: row.enabledAt,
+      entitlement: { ...row.entitlement },
+    };
+  }
+
   async listEnabledSubscriptions(): Promise<PushSubscription[]> {
-    return [...this.subscriptions.values()].filter((row) => row.enabled);
+    return [...this.subscriptions.values()]
+      .filter((row) => row.enabled)
+      .map((row) => this.asSubscription(row));
   }
 
   async disableSubscription(id: string, reason: string, at: string): Promise<void> {
     const row = this.subscriptions.get(id);
     if (!row) throw new Error(`unknown subscription ${id}`);
+    const previous = row.purchaseId;
     row.enabled = false;
     row.disabledAt = at;
     row.disabledReason = reason;
+    guardEntitlement(row, previous);
+  }
+
+  async listEntitlementRefreshRows(): Promise<EntitlementRefreshRow[]> {
+    return [...this.subscriptions.values()]
+      .filter((row) => row.enabled && row.purchaseId !== null)
+      .sort((a, b) => (a.entitlement.checkedAt ?? '').localeCompare(b.entitlement.checkedAt ?? ''))
+      .map((row) => ({
+        subscriptionId: row.id,
+        purchaseId: row.purchaseId as string,
+        entitlement: { ...row.entitlement },
+      }));
+  }
+
+  async recordEntitlement(
+    subscriptionId: string,
+    purchaseId: string,
+    entitlement: SubscriptionEntitlement,
+  ): Promise<boolean> {
+    const row = this.subscriptions.get(subscriptionId);
+    if (!row || !row.enabled || row.purchaseId !== purchaseId) return false;
+    row.entitlement = { ...entitlement };
+    return true;
   }
 
   async listPreferences(): Promise<InstallationPreferences[]> {
@@ -397,7 +474,8 @@ export class MemoryPushStore implements PushStore {
   }
 
   async getSubscription(id: string): Promise<PushSubscription | null> {
-    return this.subscriptions.get(id) ?? null;
+    const row = this.subscriptions.get(id);
+    return row ? this.asSubscription(row) : null;
   }
 
   async getEvent(eventId: string): Promise<DeliverableEvent | null> {

@@ -381,6 +381,7 @@ test('the age range never reaches a network client', () => {
     'p_installation_id',
     'p_installation_id',
     'p_platform',
+    'p_purchase_id',
     'p_sequence',
   ]);
 });

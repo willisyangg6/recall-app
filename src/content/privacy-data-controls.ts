@@ -55,7 +55,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'Your place in the setup steps, so the app knows whether setup is finished.',
           'The date the app last told Lotly’s server it was opened, so it does so at most once a day.',
           'The last subscription status this device confirmed with the App Store (which plan, and when it was checked and renews), so access keeps working if the store is briefly unreachable.',
-          'A purchase identifier, used only to check your subscription with RevenueCat (see Subscriptions). The app never sends it to Lotly’s server as a purchase identifier (on a device that completed setup with an earlier version, it starts out equal to the installation identifier until a reset).',
+          'A purchase identifier, used to check your subscription with RevenueCat (see Subscriptions). If you turn on recall alerts, the app also sends it to Lotly’s server with your alert registration, so alerts stop when your subscription ends; it is removed from Lotly’s server when you turn alerts off. (On a device that completed setup with an earlier version, it starts out equal to the installation identifier until a reset.)',
           'The recalls you saved, kept as a list of recall identifiers on this device only. Saving is a private bookmark: it is never sent to Lotly’s server, is not part of your personalization, and changes nothing about which recalls you are alerted to.',
           'Search text and browsing filters are session state only: searching runs entirely on this device over already-loaded notices, and what you type is never stored or sent anywhere.',
         ]),
@@ -68,7 +68,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
         bullets([
           'A mirror of your states and stores, keyed by the random installation identifier, so alert delivery can apply the same relevance rules the app shows you. It is sent every time you change a choice, including during setup, whether or not alerts are on, and again once a day when you open the app, so the server copy stays complete.',
           'Your allergens, only if you choose “Use for alerts”, with the version and time of that consent. If you keep them on this iPhone only, or later turn it off, Lotly’s server keeps none, and alerts that only an allergen match would qualify are not sent. Allergens stored before this choice existed are not used for alerts.',
-          'When you enable alerts: a push registration holding the delivery token issued for this installation, the platform (iOS or Android), the app version, and timestamps for when alerts were enabled and last refreshed, plus a counter that keeps turning alerts on and off in the right order.',
+          'When you enable alerts: a push registration holding the delivery token issued for this installation, the platform (iOS or Android), the app version, and timestamps for when alerts were enabled and last refreshed, plus a counter that keeps turning alerts on and off in the right order. While alerts are on, it also holds your purchase identifier and your subscription status for alerts (active or not, its expiry date, the time of the most recent check, and since when it has been active). These are cleared when you turn alerts off.',
           'Per-alert delivery records: which alert was sent to which registration and whether the delivery service accepted it.',
           'The date you last opened the app (a date only, no time), sent at most once a day when the app comes to the screen. It is used only to delete inactive data, described below.',
           'When community shopper reports are available for a recall, any report you choose to submit, keyed by the same random installation identifier. “Community shopper reports” below lists what one contains.',
@@ -96,7 +96,7 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'Payment is handled by Apple through your Apple Account. Lotly never sees your payment details.',
           'Lotly uses RevenueCat to check whether your subscription is active. The app gives RevenueCat a purchase identifier as an anonymous customer ID, and RevenueCat keeps the subscription purchases made under it so they can be checked and restored. On a new installation it is a separate random identifier. If this device completed setup with an earlier version of Lotly, it is the installation identifier the device had then, so an existing subscription carries over; after a reset, the two no longer match.',
           `“${RESET_ACTION_LABEL}” keeps the purchase identifier, so an active subscription continues after a reset without restoring it. On a new device, or if the device’s secure storage was cleared, use Restore Purchases.`,
-          'Lotly’s own server stores no purchase records.',
+          'Lotly’s own server keeps no purchase records, except the subscription status for alerts described above. While Lotly is sending recall alerts and yours are on, it asks RevenueCat about once an hour whether your subscription is active; RevenueCat learns that you have alerts on, never which recalls matched.',
           'You can cancel or change a subscription in your Apple Account settings. Restore Purchases on the subscription screen finds an existing subscription for the same Apple Account.',
         ]),
       ],
@@ -162,7 +162,8 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
           'Turning off recall alerts stops delivery immediately: the app clears its local ' +
             'alerts-on flag and marks this installation’s push registration disabled on the server. ' +
             'Your personalization choices are kept, and the disabled registration record itself is ' +
-            `kept until “${RESET_ACTION_LABEL}” below or 12 months without using the app.`,
+            `kept until “${RESET_ACTION_LABEL}” below or 12 months without using the app. ` +
+            'It also clears the purchase identifier and subscription status kept with that registration.',
         ),
       ],
     },

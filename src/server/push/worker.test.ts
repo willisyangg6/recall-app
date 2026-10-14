@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { MemoryPushStore } from './memory-push-store';
+import { ACTIVE_SOURCE, FAR_FUTURE, registerEntitled } from './test-entitlement';
 import type { PushMessage, PushReceipt, PushTicket, PushTransport } from './types';
 import {
   eligibleSubscriptions,
@@ -24,6 +25,14 @@ import {
 const T0 = Date.parse('2026-09-01T00:00:00.000Z');
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
+
+/** An entitlement that passes every gate for the fixtures below. */
+const ENTITLED = {
+  status: 'active' as const,
+  expiresAt: FAR_FUTURE,
+  checkedAt: '2026-09-01T02:00:00.000Z',
+  entitledSince: '2026-08-31T00:00:00.000Z',
+};
 
 function iso(offsetMs: number): string {
   return new Date(T0 + offsetMs).toISOString();
@@ -159,7 +168,7 @@ function subscribe(
   prefs: { stateCodes: string[]; allergens: string[]; retailerIds: string[] } | null,
   enabledAtMs = HOUR,
 ): void {
-  store.register(installation, token, 'ios', iso(enabledAtMs));
+  registerEntitled(store, installation, token, 'ios', iso(enabledAtMs));
   if (prefs) store.setPreferences(installation, prefs, iso(enabledAtMs));
 }
 
@@ -177,7 +186,7 @@ function registerMatching(
   platform: 'ios' | 'android',
   enabledAtIso: string,
 ): void {
-  store.register(installationId, token, platform, enabledAtIso);
+  registerEntitled(store, installationId, token, platform, enabledAtIso);
   store.setPreferences(
     installationId,
     { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: [] },
@@ -215,7 +224,12 @@ function setup(activatedAtMs: number | null = 0): {
     store,
     transport,
     runAt: (ms, dryRun = false) =>
-      runPushDelivery(store, { transport, dryRun, now: () => new Date(T0 + ms) }),
+      runPushDelivery(store, {
+        transport,
+        entitlements: ACTIVE_SOURCE,
+        dryRun,
+        now: () => new Date(T0 + ms),
+      }),
   };
 }
 
@@ -663,6 +677,7 @@ test('eligibility seam: the later of activation and enabled_at wins', () => {
       platform: 'ios' as const,
       enabled: true,
       enabledAt: iso(-HOUR),
+      entitlement: ENTITLED,
     },
     {
       id: 's2',
@@ -671,6 +686,7 @@ test('eligibility seam: the later of activation and enabled_at wins', () => {
       platform: 'ios' as const,
       enabled: true,
       enabledAt: iso(2 * HOUR),
+      entitlement: ENTITLED,
     },
     {
       id: 's3',
@@ -679,6 +695,7 @@ test('eligibility seam: the later of activation and enabled_at wins', () => {
       platform: 'ios' as const,
       enabled: false,
       enabledAt: iso(-HOUR),
+      entitlement: ENTITLED,
     },
   ];
   const preferences = new Map(
@@ -706,6 +723,7 @@ test('eligibility seam: the later of activation and enabled_at wins', () => {
     subscriptions,
     iso(0),
     preferences,
+    iso(3 * HOUR),
   );
   assert.deepEqual(
     eligible.map((s) => s.id),
@@ -732,8 +750,8 @@ test('personalized: a state-matching event delivers to the matching state only',
   const { store, transport, runAt } = setup(0);
   const ca = 'a'.repeat(32);
   const tx = 'b'.repeat(32);
-  store.register(ca, 'ExponentPushToken[ca]', 'ios', iso(HOUR));
-  store.register(tx, 'ExponentPushToken[tx]', 'ios', iso(HOUR));
+  registerEntitled(store, ca, 'ExponentPushToken[ca]', 'ios', iso(HOUR));
+  registerEntitled(store, tx, 'ExponentPushToken[tx]', 'ios', iso(HOUR));
   store.setPreferences(ca, { stateCodes: ['CA'], allergens: [], retailerIds: [] }, iso(HOUR));
   store.setPreferences(tx, { stateCodes: ['TX'], allergens: [], retailerIds: [] }, iso(HOUR));
   addEvent(store, 2 * HOUR, { geography: { scope: 'states', states: ['California'] } });
@@ -758,8 +776,8 @@ test('personalized: two matching users get one delivery candidate each', async (
   const { store, runAt } = setup(0);
   const one = 'a'.repeat(32);
   const two = 'b'.repeat(32);
-  store.register(one, 'ExponentPushToken[a]', 'ios', iso(HOUR));
-  store.register(two, 'ExponentPushToken[b]', 'android', iso(HOUR));
+  registerEntitled(store, one, 'ExponentPushToken[a]', 'ios', iso(HOUR));
+  registerEntitled(store, two, 'ExponentPushToken[b]', 'android', iso(HOUR));
   store.setPreferences(one, { stateCodes: ['CA'], allergens: [], retailerIds: [] }, iso(HOUR));
   store.setPreferences(two, { stateCodes: ['CA'], allergens: [], retailerIds: [] }, iso(HOUR));
   addEvent(store, 2 * HOUR, { geography: { scope: 'nationwide', states: [] } });
@@ -784,7 +802,7 @@ test('personalized: unknown geography delivers only with an allergen/retailer si
     [stateOnly, 'ExponentPushToken[s]'],
     [withAllergen, 'ExponentPushToken[al]'],
   ] as const) {
-    store.register(installation, token, 'ios', iso(HOUR));
+    registerEntitled(store, installation, token, 'ios', iso(HOUR));
   }
   store.setPreferences(
     withRetailer,
@@ -821,8 +839,8 @@ test('personalized: a GENERAL hazard with no location still reaches the retailer
   const { store, transport, runAt } = setup(0);
   const withRetailer = 'a'.repeat(32);
   const stateOnly = 'b'.repeat(32);
-  store.register(withRetailer, 'ExponentPushToken[r]', 'ios', iso(HOUR));
-  store.register(stateOnly, 'ExponentPushToken[s]', 'ios', iso(HOUR));
+  registerEntitled(store, withRetailer, 'ExponentPushToken[r]', 'ios', iso(HOUR));
+  registerEntitled(store, stateOnly, 'ExponentPushToken[s]', 'ios', iso(HOUR));
   store.setPreferences(
     withRetailer,
     { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: ['costco'] },
@@ -1215,7 +1233,7 @@ test('no backlog: a retraction or update created before activation or before the
 test('changing state never backfills: old events stay behind the preference horizon', async () => {
   const { store, transport, runAt } = setup(0);
   const installation = 'a'.repeat(32);
-  store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
+  registerEntitled(store, installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
   store.setPreferences(
     installation,
     { stateCodes: ['CA'], allergens: [], retailerIds: [] },
@@ -1249,7 +1267,7 @@ test('changing state never backfills: old events stay behind the preference hori
 test('adding an allergen never backfills; future matching events deliver', async () => {
   const { store, runAt } = setup(0);
   const installation = 'a'.repeat(32);
-  store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
+  registerEntitled(store, installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
   store.setPreferences(
     installation,
     { stateCodes: ['CA'], allergens: [], retailerIds: [] },
@@ -1282,7 +1300,7 @@ test('adding an allergen never backfills; future matching events deliver', async
 test('removing a retailer stops the positive signal for future events', async () => {
   const { store, runAt } = setup(0);
   const installation = 'a'.repeat(32);
-  store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
+  registerEntitled(store, installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
   store.setPreferences(
     installation,
     { stateCodes: ['CA'], allergens: [], retailerIds: ['costco'] },
@@ -1312,7 +1330,7 @@ test('removing a retailer stops the positive signal for future events', async ()
 test('re-syncing identical preferences keeps the horizon: pending eligibility unaffected', async () => {
   const { store, runAt } = setup(0);
   const installation = 'a'.repeat(32);
-  store.register(installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
+  registerEntitled(store, installation, 'ExponentPushToken[a]', 'ios', iso(HOUR));
   store.setPreferences(
     installation,
     { stateCodes: ['CA'], allergens: [], retailerIds: [] },
@@ -1339,7 +1357,7 @@ test('personalization respects the untouched C2 safety rails', async () => {
     { stateCodes: ['CA'], allergens: [], retailerIds: [] },
     iso(-HOUR),
   );
-  store.register(installation, 'ExponentPushToken[a]', 'ios', iso(4 * HOUR));
+  registerEntitled(store, installation, 'ExponentPushToken[a]', 'ios', iso(4 * HOUR));
 
   addEvent(store, HOUR, { geography: { scope: 'states', states: ['California'] } }); // pre-activation
   addEvent(store, 3 * HOUR, { geography: { scope: 'states', states: ['California'] } }); // pre-enable
@@ -1365,9 +1383,9 @@ test('consent: an allergen-only recall reaches a consenting peanut watcher, not 
   const consented = 'a'.repeat(32);
   const declined = 'b'.repeat(32);
   const legacy = 'c'.repeat(32);
-  store.register(consented, 'ExponentPushToken[yes]', 'ios', iso(HOUR));
-  store.register(declined, 'ExponentPushToken[no]', 'ios', iso(HOUR));
-  store.register(legacy, 'ExponentPushToken[old]', 'ios', iso(HOUR));
+  registerEntitled(store, consented, 'ExponentPushToken[yes]', 'ios', iso(HOUR));
+  registerEntitled(store, declined, 'ExponentPushToken[no]', 'ios', iso(HOUR));
+  registerEntitled(store, legacy, 'ExponentPushToken[old]', 'ios', iso(HOUR));
   const prefs = { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: [] };
   store.setPreferences(consented, prefs, iso(HOUR)); // current client, consent given
   store.setPreferences(declined, prefs, iso(HOUR), null); // declined: server keeps no allergens
@@ -1388,8 +1406,8 @@ test('consent: without it, state matching for a general hazard is unchanged', as
   const { store, transport, runAt } = setup(0);
   const declined = 'b'.repeat(32);
   const legacy = 'c'.repeat(32);
-  store.register(declined, 'ExponentPushToken[no]', 'ios', iso(HOUR));
-  store.register(legacy, 'ExponentPushToken[old]', 'ios', iso(HOUR));
+  registerEntitled(store, declined, 'ExponentPushToken[no]', 'ios', iso(HOUR));
+  registerEntitled(store, legacy, 'ExponentPushToken[old]', 'ios', iso(HOUR));
   const prefs = { stateCodes: ['CA'], allergens: ['peanut'], retailerIds: [] };
   store.setPreferences(declined, prefs, iso(HOUR), null);
   store.seedLegacyPreferences(legacy, prefs, iso(HOUR));
@@ -1408,7 +1426,7 @@ test('consent: without it, state matching for a general hazard is unchanged', as
 test('consent: an allergens-only profile without consent receives nothing (no other signal)', async () => {
   const { store, transport, runAt } = setup(0);
   const allergensOnly = 'd'.repeat(32);
-  store.register(allergensOnly, 'ExponentPushToken[ao]', 'ios', iso(HOUR));
+  registerEntitled(store, allergensOnly, 'ExponentPushToken[ao]', 'ios', iso(HOUR));
   store.setPreferences(
     allergensOnly,
     { stateCodes: [], allergens: ['peanut'], retailerIds: [] },

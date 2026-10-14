@@ -38,6 +38,14 @@
  *   — or a disable + re-enable before the next tick — sent rows queued before
  *   it, hours late, and a ticket stranded by a deactivation was re-sent as a
  *   duplicate once its receipt had expired.
+ * - Entitlement (2026-10-14, entitlement.ts): alerts stop when a subscription
+ *   ends. Each ACTIVATED run first refreshes the cached RevenueCat
+ *   entitlement on its fixed schedule (entitlement-refresh.ts). The seam, the
+ *   send pool and the send itself then require an active entitlement whose
+ *   known expiry is still ahead (the clock gate), whose last check is recent
+ *   (the staleness gate, fail closed), and that began before the event (the
+ *   no-backlog horizon). An unverified status HOLDS a delivery. A definitive
+ *   one fails it, so a lapsed period is never sent later.
  * - A ticket is Expo ACCEPTING the request; only a receipt marks the handoff
  *   to APNs/FCM successful (receipt_ok). The two are never conflated.
  *
@@ -50,6 +58,9 @@
  */
 
 import type { UserRecallPreferences } from '../../domain/preferences';
+import { entitlementVerdict } from './entitlement';
+import { refreshEntitlements } from './entitlement-refresh';
+import type { EntitlementSource } from './revenuecat-entitlement';
 import { pushEligible, type RelevanceInput } from '../../lib/relevance';
 import type { JobRunOutcome } from '../store/types';
 import { decideDelivery, type DeliveryDecision } from './event-eligibility';
@@ -193,6 +204,10 @@ export interface EventEligibility {
   eligible: PushSubscription[];
   /** Excluded by the C2 horizons (activation / subscription enabled_at). */
   horizonSkipped: number;
+  /** Excluded by a definitive entitlement verdict (inactive, expired, before the horizon). */
+  entitlementSkipped: number;
+  /** Held: the entitlement is unverified (never checked, or stale). Re-examined next run. */
+  entitlementUnverified: number;
   /**
    * Excluded because the event predates the installation's last preference
    * change — the no-retroactive-blast guarantee: adding an allergen or
@@ -214,7 +229,11 @@ export interface EventEligibility {
  *    preferences' updated_at. The last one makes preference changes safe:
  *    events older than the change were already decided under the previous
  *    preferences (or never qualified), and never become newly deliverable.
- * 2. Preference matching (src/lib/relevance `pushEligible` — the Affects
+ * 2. Entitlement (entitlement.ts `entitlementVerdict`): an active
+ *    subscription whose known expiry is still ahead, checked recently, and
+ *    entitled since before the event. Nothing is created otherwise; the event
+ *    is re-examined next run, when only a passing verdict can create a row.
+ * 3. Preference matching (src/lib/relevance `pushEligible` — the Affects
  *    You verdict the app renders): with any jurisdiction chosen, deliver on
  *    geographic match (nationwide always matches, and one chosen jurisdiction
  *    in the source's own state list is enough) or unknown geography with an
@@ -228,10 +247,13 @@ export function classifySubscriptionsForEvent(
   subscriptions: PushSubscription[],
   pushEnabledAt: string,
   preferences: Map<string, InstallationPreferences>,
+  nowIso: string,
 ): EventEligibility {
   const result: EventEligibility = {
     eligible: [],
     horizonSkipped: 0,
+    entitlementSkipped: 0,
+    entitlementUnverified: 0,
     preferenceHorizonSkipped: 0,
     preferenceSkipped: 0,
   };
@@ -245,6 +267,15 @@ export function classifySubscriptionsForEvent(
     if (event.createdAt < horizon) {
       if (event.createdAt >= c2Horizon) result.preferenceHorizonSkipped += 1;
       else result.horizonSkipped += 1;
+      continue;
+    }
+    const verdict = entitlementVerdict(subscription.entitlement, event.createdAt, nowIso);
+    if (verdict === 'unverified') {
+      result.entitlementUnverified += 1;
+      continue;
+    }
+    if (verdict !== 'entitled') {
+      result.entitlementSkipped += 1;
       continue;
     }
     if (!pushEligible(input, prefs ? toUserPreferences(prefs) : null)) {
@@ -261,9 +292,26 @@ export function eligibleSubscriptions(
   event: Pick<DeliverableEvent, 'createdAt' | 'projection'>,
   subscriptions: PushSubscription[],
   pushEnabledAt: string,
-  preferences: Map<string, InstallationPreferences> = new Map(),
+  preferences: Map<string, InstallationPreferences>,
+  nowIso: string,
 ): PushSubscription[] {
-  return classifySubscriptionsForEvent(event, subscriptions, pushEnabledAt, preferences).eligible;
+  return classifySubscriptionsForEvent(event, subscriptions, pushEnabledAt, preferences, nowIso)
+    .eligible;
+}
+
+/**
+ * The entitlement check for a QUEUED row, at the send pool and again at the
+ * send itself: `hold` leaves the row untouched for a later run (the status
+ * is unverified), `not_entitled` fails it for good (no backlog), null sends.
+ */
+export function queuedRowEntitlement(
+  subscription: Pick<PushSubscription, 'entitlement'>,
+  eventCreatedAt: string,
+  nowIso: string,
+): 'hold' | 'not_entitled' | null {
+  const verdict = entitlementVerdict(subscription.entitlement, eventCreatedAt, nowIso);
+  if (verdict === 'entitled') return null;
+  return verdict === 'unverified' ? 'hold' : 'not_entitled';
 }
 
 /**
@@ -289,6 +337,11 @@ export function queuedRowHorizonFailure(
 
 export interface PushWorkerOptions {
   transport: PushTransport;
+  /**
+   * RevenueCat's view of the `premium` entitlement. null = not configured:
+   * every alert is held (fail closed), and the run reports it.
+   */
+  entitlements: EntitlementSource | null;
   dryRun: boolean;
   now: () => Date;
   maxEventsPerRun?: number;
@@ -328,6 +381,16 @@ export async function runPushDelivery(
     };
   }
 
+  // ── Entitlement refresh (fixed schedule, before any matching) ─────────────
+  const refresh = await refreshEntitlements(store, options.entitlements, {
+    nowIso: nowIso(),
+    dryRun,
+  });
+  for (const subscription of subscriptions) {
+    const updated = refresh.updated.get(subscription.id);
+    if (updated) subscription.entitlement = updated;
+  }
+
   const preferences = await store.listPreferences();
   const preferencesByInstallation = new Map(preferences.map((p) => [p.installationId, p]));
 
@@ -342,6 +405,13 @@ export async function runPushDelivery(
     subscriptionHorizonSkipped: 0,
     preferenceHorizonSkipped: 0,
     preferenceSkipped: 0,
+    ...refresh.metrics,
+    /** Per (event, subscription) pair, at matching. */
+    entitlementSkipped: 0,
+    entitlementUnverified: 0,
+    /** Queued rows held (unverified) or failed (not entitled) at the pool or the send. */
+    queuedEntitlementHeld: 0,
+    queuedNotEntitled: 0,
     /** Event-type eligibility (event-eligibility.ts), counted per event. */
     lifecycleSkipped: 0,
     mergedDuplicateSkipped: 0,
@@ -360,7 +430,9 @@ export async function runPushDelivery(
     queuedBeforeHorizon: 0,
     cappedSends: 0,
   };
-  const errors: string[] = [];
+  const errors: string[] = [...refresh.errors];
+  if (options.entitlements === null)
+    errors.push('entitlement check not configured: all alerts held');
   const subscriptionById = new Map(subscriptions.map((s) => [s.id, s]));
 
   // ── Receipts for earlier sends (before new work: a DeviceNotRegistered
@@ -506,8 +578,11 @@ export async function runPushDelivery(
       subscriptions,
       pushEnabledAt,
       preferencesByInstallation,
+      nowIso(),
     );
     metrics.subscriptionHorizonSkipped += classified.horizonSkipped;
+    metrics.entitlementSkipped += classified.entitlementSkipped;
+    metrics.entitlementUnverified += classified.entitlementUnverified;
     metrics.preferenceHorizonSkipped += classified.preferenceHorizonSkipped;
     metrics.preferenceSkipped += classified.preferenceSkipped;
     for (const subscription of classified.eligible) {
@@ -554,6 +629,27 @@ export async function runPushDelivery(
             status: 'permanent_failure',
             failureCode: reason,
             lastError: `event predates the current ${reason === 'before_activation' ? 'activation' : 'subscription'} horizon`,
+            updatedAt: nowIso(),
+          });
+        }
+        continue;
+      }
+      // A disabled subscription is settled by the send loop (subscription_disabled).
+      const entitlement = queuedSubscription.enabled
+        ? queuedRowEntitlement(queuedSubscription, queuedEvent.createdAt, nowIso())
+        : null;
+      if (entitlement === 'hold') {
+        metrics.queuedEntitlementHeld += 1;
+        continue;
+      }
+      if (entitlement === 'not_entitled') {
+        metrics.queuedNotEntitled += 1;
+        if (!dryRun) {
+          metrics.permanentFailures += 1;
+          await store.updateDelivery(delivery.id, {
+            status: 'permanent_failure',
+            failureCode: 'not_entitled',
+            lastError: 'subscription not entitled for this event',
             updatedAt: nowIso(),
           });
         }
@@ -649,6 +745,23 @@ export async function runPushDelivery(
             });
             continue;
           }
+        }
+        // The clock moves during a run: known expiry is enforced at the send.
+        const entitlement = queuedRowEntitlement(subscription, event.createdAt, nowIso());
+        if (entitlement === 'hold') {
+          metrics.queuedEntitlementHeld += 1;
+          continue;
+        }
+        if (entitlement === 'not_entitled') {
+          metrics.queuedNotEntitled += 1;
+          metrics.permanentFailures += 1;
+          await store.updateDelivery(delivery.id, {
+            status: 'permanent_failure',
+            failureCode: 'not_entitled',
+            lastError: 'subscription not entitled for this event',
+            updatedAt: nowIso(),
+          });
+          continue;
         }
         prepared.push({ delivery, message: buildPushMessage(event, subscription.expoPushToken) });
       }

@@ -31,6 +31,7 @@ import { runPushJob } from '../src/server/jobs/push-job';
 import type { JobContext, JobReport } from '../src/server/jobs/runner';
 import { SupabaseLabelStore } from '../src/server/fsis/label-store';
 import { ExpoPushTransport } from '../src/server/push/expo-transport';
+import { entitlementSourceFromEnv } from '../src/server/push/revenuecat-entitlement';
 import { SupabasePushStore } from '../src/server/push/push-store';
 import { MemoryStore } from '../src/server/store/memory-store';
 import { withReadRetry } from '../src/server/store/read-retry';
@@ -127,6 +128,9 @@ async function main(): Promise<void> {
               // EXPO_ACCESS_TOKEN is optional (enhanced push security);
               // server-only, never printed, never in the app bundle.
               transport: new ExpoPushTransport({ accessToken: process.env.EXPO_ACCESS_TOKEN }),
+              // The alert entitlement gate's RevenueCat read (server-only,
+              // read-only key, never printed). Unconfigured holds every alert.
+              entitlements: entitlementSourceFromEnv(process.env),
             })
           : await runEnforcementJob(ctx, {
               dryRun,

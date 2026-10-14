@@ -412,11 +412,14 @@ test(
     const a = newInstallation();
     await seed(a, ['CA'], ['milk']);
     await createCode(a, 'access');
-    const SECRET = `hmac-${randomBytes(8).toString('hex')}`;
-    // The shape of what later branches add: an age/consent-revocation key on
-    // the registration, and new columns on the other exported tables.
+    // 64 hex characters, so it also satisfies the real app_transaction_hmac
+    // check (20261017 added that column; it is never exported).
+    const SECRET = randomBytes(32).toString('hex');
+    // The alert entitlement gate's purchase id (20261018): only its last 4 leave.
+    const PURCHASE = `${randomBytes(8).toString('hex')}-${randomBytes(4).toString('hex')}`;
+    // The shape of what later branches add: new columns on every exported table.
     ownerSql(`
-    alter table public.push_subscriptions add column app_transaction_hmac text;
+    alter table public.push_subscriptions add column future_internal text;
     alter table public.installation_preferences add column future_internal text;
     alter table public.shopper_reports add column future_internal text;
     alter table public.push_installation_sequences add column future_internal text;
@@ -425,7 +428,9 @@ test(
       values ('cccccccc-a110-4000-8000-cccccccccccc', '{}'::jsonb, now()) on conflict do nothing;
     insert into public.shopper_reports (recall_case_id, installation_id, state_code, purchase_window)
       values ('cccccccc-a110-4000-8000-cccccccccccc', '${a}', 'CA', 'past_week');
-    update public.push_subscriptions set app_transaction_hmac = '${SECRET}' where installation_id = '${a}';
+    update public.push_subscriptions
+       set app_transaction_hmac = '${SECRET}', future_internal = '${SECRET}', purchase_id = '${PURCHASE}'
+     where installation_id = '${a}';
     update public.installation_preferences set future_internal = '${SECRET}' where installation_id = '${a}';
     update public.shopper_reports set future_internal = '${SECRET}' where installation_id = '${a}';
     update public.push_installation_sequences set future_internal = '${SECRET}' where installation_id = '${a}';
@@ -437,6 +442,10 @@ test(
       const text = JSON.stringify(exported);
       assert.ok(!text.includes(SECRET), 'no value from an unapproved column is exported');
       assert.ok(!text.includes('app_transaction_hmac') && !text.includes('future_internal'));
+      assert.ok(!text.includes(PURCHASE), 'the full purchase id is never exported');
+      const registration = (exported.push_registrations as Record<string, unknown>[])[0];
+      assert.equal(registration.purchase_id_last4, PURCHASE.slice(-4));
+      assert.equal(registration.entitlement_status, 'unknown');
       const keys = (value: unknown) => Object.keys(value as Record<string, unknown>).sort();
       assert.deepEqual(keys(exported.preferences), [...EXPORT_FIELDS.preferences].sort());
       assert.deepEqual(keys(exported.alert_order), [...EXPORT_FIELDS.alert_order].sort());
@@ -450,7 +459,7 @@ test(
       ownerSql(`
       delete from public.shopper_reports where installation_id = '${a}';
       delete from public.recall_cases where id = 'cccccccc-a110-4000-8000-cccccccccccc';
-      alter table public.push_subscriptions drop column app_transaction_hmac;
+      alter table public.push_subscriptions drop column future_internal;
       alter table public.installation_preferences drop column future_internal;
       alter table public.shopper_reports drop column future_internal;
       alter table public.push_installation_sequences drop column future_internal;

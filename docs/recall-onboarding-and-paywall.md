@@ -468,8 +468,9 @@ interface PurchaseProvider {
 - The anonymous purchase identity is the **purchase id**
   (`src/lib/purchases/purchase-identity.ts`, 2026-10-12): its own random
   keychain id (`recall.purchase-id`), separate from the installation id,
-  sent only to RevenueCat and never rotated by the data reset (§5.2,
-  "Identity after a reset"). No account, no sign-in.
+  sent to RevenueCat and, since the alert entitlement gate (2026-10-14), with
+  every alert registration to Lotly's server. It is never rotated by the
+  data reset (§5.2, "Identity after a reset"). No account, no sign-in.
 - `unconfiguredPurchaseProvider()` answers `unavailable` to everything, which
   the gate resolves to inactive with no cache. It is what a release build runs
   whenever the real provider cannot be constructed (§5.2). **Production
@@ -580,10 +581,15 @@ sources in `~/Desktop/Lotly-Privacy-Correctness-Review/`):
 - The id is persisted and read back before first use; a keychain failure
   fails closed (`unavailable`), never a purchase under an id a relaunch
   would forget. Concurrent first callers share one id.
-- No Lotly server call carries the purchase id. A freshly minted id is unknown
-  to Lotly's server, so Supabase and RevenueCat hold no shared identifier. An
-  **adopted** id (see "Upgrading" below) is the exception: it equals the
-  installation id Lotly's rows are keyed by, until a reset.
+- Only the alert registration carries the purchase id to Lotly's server
+  (2026-10-14, docs/recall-push-delivery.md "Alert entitlement gate"). The
+  server checks the same `premium` entitlement with it, so alerts stop when
+  the subscription ends. It is stored only on the alert registration, cleared
+  when alerts are turned off, and deleted by a reset. A reset therefore does
+  not give the server a fresh purchase identity: re-enabling alerts sends the
+  same id. Without alerts, Lotly's server never sees it. An **adopted** id (see
+  "Upgrading" below) equals the installation id Lotly's rows are keyed by,
+  until a reset.
 - Restore Purchases stays the fallback for what the keychain cannot carry: a
   new device, a cleared keychain. It transfers under RevenueCat's default
   restore behavior.

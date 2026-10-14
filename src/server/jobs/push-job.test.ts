@@ -38,6 +38,7 @@ test('every push job execution ends as exactly one annotated run row', async () 
   const report = await runPushJob(ctx, {
     pushStore: new MemoryPushStore(),
     transport: new NullTransport(),
+    entitlements: null,
     dryRun: false,
   });
   assert.equal(report.outcome, 'succeeded');
@@ -58,6 +59,7 @@ test('a held lease skips the run safely; a stale lease is recovered', async () =
   const skipped = await runPushJob(ctx, {
     pushStore: new MemoryPushStore(),
     transport: new NullTransport(),
+    entitlements: null,
     dryRun: false,
   });
   assert.equal(skipped.outcome, 'skipped_lease');
@@ -75,6 +77,7 @@ test('a held lease skips the run safely; a stale lease is recovered', async () =
   const recovered = await runPushJob(ctx, {
     pushStore: new MemoryPushStore(),
     transport: new NullTransport(),
+    entitlements: null,
     dryRun: false,
   });
   assert.equal(recovered.outcome, 'succeeded');
@@ -89,6 +92,7 @@ test('a throwing push store records a loud failed run', async () => {
   const report = await runPushJob(ctx, {
     pushStore: broken,
     transport: new NullTransport(),
+    entitlements: null,
     dryRun: false,
   });
   assert.equal(report.outcome, 'failed');

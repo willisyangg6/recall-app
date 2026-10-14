@@ -323,7 +323,8 @@ test('the privacy document names every data recipient and the limits of the rese
   assert.match(privacyText, /Your subscription is not affected/);
   assert.doesNotMatch(privacyText, /no automatic expiry/i);
   assert.match(privacyText, /Subscription records held by Apple and RevenueCat/);
-  assert.match(privacyText, /stores no purchase records/);
+  assert.match(privacyText, /keeps no purchase records, except the subscription status for alerts/);
+  assert.doesNotMatch(privacyText, /stores no purchase records/);
 });
 
 test('the privacy document explains the separate purchase identifier and that the reset keeps it', () => {
@@ -335,7 +336,14 @@ test('the privacy document explains the separate purchase identifier and that th
     privacyText,
     /completed setup with an earlier version of Lotly, it is the installation identifier/,
   );
-  assert.match(privacyText, /never sends it to Lotly’s server as a purchase identifier/);
+  // 2026-10-14 (alert entitlement gate): sent with an alert registration only.
+  assert.match(privacyText, /also sends it to Lotly’s server with your alert registration/);
+  assert.match(privacyText, /removed from Lotly’s server when you turn alerts off/);
+  assert.match(
+    privacyText,
+    /RevenueCat learns that you have alerts on, never which recalls matched/,
+  );
+  assert.doesNotMatch(privacyText, /never sends it to Lotly’s server/);
   assert.match(privacyText, /starts out equal to the installation identifier until a reset/);
   assert.match(privacyText, /keeps the purchase identifier, so an active subscription continues/);
   assert.match(privacyText, /use Restore Purchases/);

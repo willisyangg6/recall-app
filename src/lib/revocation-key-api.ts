@@ -80,6 +80,8 @@ export async function registerPushSubscriptionWithRevocationKey(input: {
   appVersion: string | null;
   sequence: number;
   appTransactionId: string;
+  /** The RevenueCat purchase id for the alert entitlement gate; see push-api.ts. */
+  purchaseId?: string | null;
   signal?: AbortSignal;
 }): Promise<SequencedWriteResult> {
   const body = await rpc(
@@ -91,6 +93,7 @@ export async function registerPushSubscriptionWithRevocationKey(input: {
       p_app_version: input.appVersion,
       p_sequence: input.sequence,
       p_app_transaction_id: input.appTransactionId,
+      ...(input.purchaseId ? { p_purchase_id: input.purchaseId } : {}),
     },
     input.signal,
   );

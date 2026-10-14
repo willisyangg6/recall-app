@@ -54,6 +54,7 @@ import { Platform } from 'react-native';
 import { alertStatus, type AlertStatus } from './alert-status';
 import { getOrCreateInstallationId, peekInstallationId } from './installation-id';
 import { enqueueInstallationMutation } from './installation-lifecycle';
+import { purchaseIdentity } from './purchases/provider';
 import {
   alertIntent,
   INITIAL_ALERT_INTENT,
@@ -152,6 +153,12 @@ function installationIntent(installationId: string, token: string | null): Alert
         expoPushToken: token,
         platform: Platform.OS === 'ios' ? ('ios' as const) : ('android' as const),
         appVersion: Constants.expoConfig?.version ?? null,
+        // The alert entitlement gate: the SAME purchase id RevenueCat is
+        // configured with (the provider's memoized resolver), so the server
+        // checks exactly the entitlement that unlocks the app. A keychain
+        // failure sends none; the server then holds this registration's
+        // alerts, and the next registration retries.
+        purchaseId: await purchaseIdentity.appUserId().catch(() => null),
       };
       // Consent revocation (age assurance): a regulated 13–17 user registers
       // ONLY with the keyed RPC (row + mapping in one transaction); without

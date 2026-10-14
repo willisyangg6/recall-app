@@ -12,6 +12,7 @@
  */
 
 import type { CaseProjection, LifecycleState, NotificationKind } from '../../domain/recall-types';
+import type { SubscriptionEntitlement } from './entitlement';
 
 /** One app installation that opted into recall alerts. */
 export interface PushSubscription {
@@ -22,6 +23,20 @@ export interface PushSubscription {
   enabled: boolean;
   /** Per-subscription horizon: when alerts were (re-)enabled. */
   enabledAt: string;
+  /**
+   * The cached RevenueCat `premium` entitlement (entitlement.ts). The purchase
+   * id it was read under is deliberately NOT on this type: it is bearer-
+   * sensitive, and only the refresh step (listEntitlementRefreshRows) sees it.
+   */
+  entitlement: SubscriptionEntitlement;
+}
+
+/** One enabled registration as the entitlement refresh sees it. */
+export interface EntitlementRefreshRow {
+  subscriptionId: string;
+  /** BEARER-SENSITIVE: never logged, never put in a metric or an error. */
+  purchaseId: string;
+  entitlement: SubscriptionEntitlement;
 }
 
 /**
@@ -126,6 +141,19 @@ export interface PushStore {
   getPushEnabledAt(): Promise<string | null>;
 
   listEnabledSubscriptions(): Promise<PushSubscription[]>;
+  /** Enabled registrations that carry a purchase id, oldest-checked first. */
+  listEntitlementRefreshRows(): Promise<EntitlementRefreshRow[]>;
+  /**
+   * Store one successful check. Lands only while the row is still enabled and
+   * still carries `purchaseId`, so a status read under one purchase id can
+   * never be written onto a registration that has since changed it. Returns
+   * false when it did not land.
+   */
+  recordEntitlement(
+    subscriptionId: string,
+    purchaseId: string,
+    entitlement: SubscriptionEntitlement,
+  ): Promise<boolean>;
   /** DeviceNotRegistered / operational disable. Historical deliveries stay. */
   disableSubscription(id: string, reason: string, at: string): Promise<void>;
 
