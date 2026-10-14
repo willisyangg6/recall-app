@@ -31,8 +31,12 @@ import { hitTarget, layout, spacing } from '@/constants/design-tokens';
 import { documentBySlug, PROFILE_DOCUMENT_GROUPS, TRUST_DOCUMENTS } from '@/content';
 import { RESET_ACTION_LABEL } from '@/lib/installation-reset';
 import {
+  APP_VERSION_ICON,
   compactList,
+  DOCUMENT_ICONS,
+  NOTIFICATIONS_ICON,
   NOTIFICATIONS_SUMMARY,
+  showsRowGlyph,
   summaryAccessibilityLabel,
   summaryLines,
   summarizePreferences,
@@ -170,9 +174,11 @@ test('no route or document disappeared: the registry and every route file are in
   // support destination.
   assert.ok(PROFILE.includes('<ProfileSection title="App">'));
   assert.ok(!/title="Help"|>Help</.test(PROFILE));
-  assert.ok(
-    PROFILE.includes('<ValueRow label={APP_VERSION_LABEL} value={versionLine(version, build)} />'),
+  assert.match(
+    PROFILE,
+    /<ValueRow\s+label=\{APP_VERSION_LABEL\}\s+value=\{versionLine\(version, build\)\}\s+icon=\{APP_VERSION_ICON\}\s+\/>/,
   );
+  assert.equal(count(PROFILE, '<ValueRow'), 1);
 });
 
 // ── 3–4. Nothing invented; unfinished legal documents hidden ───────────────
@@ -366,6 +372,36 @@ test('a visibly abbreviated summary keeps its complete accessible label', () => 
 });
 
 // ── 11–12. Shared rows, the canonical chevron, the minimum target ───────────
+
+test('every product row leads with an approved glyph in the card flag’s column', () => {
+  // Every document the hub lists has exactly one glyph, and no glyph names a
+  // document the hub does not list.
+  const grouped = PROFILE_DOCUMENT_GROUPS.flatMap((group) => [...group.slugs]);
+  assert.deepEqual(Object.keys(DOCUMENT_ICONS).sort(), [...grouped].sort());
+  // Each glyph is one the shared set already ships — nothing new was drawn.
+  for (const name of [...Object.values(DOCUMENT_ICONS), NOTIFICATIONS_ICON, APP_VERSION_ICON]) {
+    assert.ok(ICON.includes(`  '${name}': require(`) || ICON.includes(`  ${name}: require(`), name);
+  }
+  // Notifications, every document row and the version line pass their glyph.
+  assert.ok(PROFILE.includes('icon={NOTIFICATIONS_ICON}'));
+  assert.ok(PROFILE.includes('icon={DOCUMENT_ICONS[doc.slug]}'));
+  assert.ok(PROFILE.includes('icon={APP_VERSION_ICON}'));
+  // The same size and colour as the Personalization card's flag.
+  for (const row of [NAV_ROW, VALUE_ROW]) {
+    assert.ok(row.includes('<Icon name={icon} size={20} color="icon/primary" />'));
+  }
+  // Separators start at the label column, not the surface edge.
+  assert.ok(SECTION.includes('marginStart: spacing[16] + iconSize[20] + spacing[12]'));
+  // From the accessibility sizes the glyphs give their width back to the
+  // words, and the separators return to the text's own edge.
+  assert.equal(showsRowGlyph(1), true);
+  assert.equal(showsRowGlyph(1.35), true);
+  assert.equal(showsRowGlyph(1.5), false);
+  assert.equal(showsRowGlyph(3.571), false);
+  for (const source of [NAV_ROW, VALUE_ROW, SECTION]) {
+    assert.ok(source.includes('showsRowGlyph(fontScale)'));
+  }
+});
 
 test('every navigation row is the shared primitive carrying the canonical chevron', () => {
   assert.ok(NAV_ROW.includes('<Icon name="chevron-right" size={20} color="icon/secondary" />'));

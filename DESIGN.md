@@ -874,14 +874,26 @@ loading.
 Beneath the card, **Notifications** is one boxed `NavigationRow` with its
 supporting line. Each remaining group is a `ProfileSection`: a `caption`
 heading in capitals over a white `radius/16` surface with `border/subtle`,
-rows parted by hairlines in `border/subtle`, and an optional `caption`
-footnote beneath (About & Safety carries the sources sentence). A
-`NavigationRow` is `body` label, optional `body-small` supporting line,
+rows parted by hairlines in `border/subtle` inset to the label column, and
+an optional `caption` footnote beneath (About & Safety carries the sources
+sentence). A `NavigationRow` is an optional leading glyph at 20 in
+`icon/primary`, the `body` label, an optional `body-small` supporting line,
 and the `chevron-right` glyph at 20 in `icon/secondary` at the trailing
 edge, at least 44pt tall with `spacing/16` × `spacing/12` padding; it is
-one link that speaks its label and a hint naming what it opens, and the
-chevron is decorative. A `ValueRow` is the same geometry with a value in
-place of the chevron and no interaction — one spoken element. The
+one link that speaks its label and a hint naming what it opens, and both
+glyphs are decorative. A `ValueRow` is the same geometry with a value in
+place of the chevron and no interaction — one spoken element. Every
+product row carries a leading glyph from the approved set, in the same
+column as the Personalization card's flag (final polish, 2026-10-13):
+Notifications `bell`; Privacy & Data Controls `lock`; Sources & Methodology
+`file-search`; How Affects Me Works `flag`; Risk Levels Explained
+`warning`; Safety Disclaimer `shield-check`; Corrections Policy `check`;
+Attributions `list`; App version `info` (`lib/profile-hub.ts`). The
+separator is a hairline top border on a box three hairlines tall: a hairline
+border on a view no taller than the border was dropped at a fractional row
+offset on a 3x screen. From the accessibility text sizes (scale 1.5) the
+decorative glyphs leave the rows and the separators return to the text edge,
+so labels never break mid-word to make room for an icon. The
 **development entry** (`DevelopmentEntry`) is set apart from the consumer
 groups: a `DEVELOPMENT BUILDS ONLY` heading over a `radius/8` surface in
 the page colour with `border/strong`, its row's hint saying the same; it

@@ -432,11 +432,17 @@ test('no share, bell, retailer, or helper-callout control was copied from Figma'
   // benefit row: drawing beside the words `Get matching recall alerts`, in a
   // row that is not a control. Figma's bell CONTROL is still nowhere: the
   // glyph is named by the paywall's benefit list and by no other source.
+  // Profile's Notifications row (final polish, 2026-10-13) draws the same
+  // glyph beside a working navigation row, not as a control of its own.
   const bellUsers = clientSourceFiles()
     .filter(({ source }) => /['"]?\bbell['"]?:|['"]bell['"]/.test(codeOnly(source)))
     .map(({ path }) => path)
     .sort();
-  assert.deepEqual(bellUsers, ['components/ui/icon.tsx', 'lib/onboarding-paywall-presentation.ts']);
+  assert.deepEqual(bellUsers, [
+    'components/ui/icon.tsx',
+    'lib/onboarding-paywall-presentation.ts',
+    'lib/profile-hub.ts',
+  ]);
   // The pressables the screen adds are its external links — the official
   // notice, the Health Risk guide source, and (decision E) each guide's own
   // source in a multi-hazard section — the title's disclosure, and the one

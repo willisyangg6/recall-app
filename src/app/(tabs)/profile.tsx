@@ -72,8 +72,11 @@ import { layout, spacing } from '@/constants/design-tokens';
 import { documentBySlug, PROFILE_DOCUMENT_GROUPS, PROFILE_PRIMARY_DOCUMENT_SLUG } from '@/content';
 import { loadPreferences, preferencesAvailable } from '@/lib/preferences-store';
 import {
+  APP_VERSION_ICON,
   APP_VERSION_LABEL,
   DOCUMENT_HINT,
+  DOCUMENT_ICONS,
+  NOTIFICATIONS_ICON,
   NOTIFICATIONS_HINT,
   NOTIFICATIONS_SUMMARY,
   summarizePreferences,
@@ -136,6 +139,7 @@ export default function ProfileScreen() {
               summary={NOTIFICATIONS_SUMMARY}
               href="/settings/notifications"
               hint={NOTIFICATIONS_HINT}
+              icon={NOTIFICATIONS_ICON}
             />
           </Surface>
         </View>
@@ -152,6 +156,7 @@ export default function ProfileScreen() {
                   summary={doc.slug === PROFILE_PRIMARY_DOCUMENT_SLUG ? doc.summary : undefined}
                   href={{ pathname: '/document/[slug]', params: { slug: doc.slug } }}
                   hint={DOCUMENT_HINT}
+                  icon={DOCUMENT_ICONS[doc.slug]}
                 />
               );
             })}
@@ -159,7 +164,11 @@ export default function ProfileScreen() {
         ))}
 
         <ProfileSection title="App">
-          <ValueRow label={APP_VERSION_LABEL} value={versionLine(version, build)} />
+          <ValueRow
+            label={APP_VERSION_LABEL}
+            value={versionLine(version, build)}
+            icon={APP_VERSION_ICON}
+          />
         </ProfileSection>
 
         {/* Development builds only — eliminated from release bundles with

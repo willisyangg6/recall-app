@@ -22,11 +22,12 @@
  */
 
 import { Children, isValidElement, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
-import { color, spacing } from '@/constants/design-tokens';
+import { color, iconSize, spacing } from '@/constants/design-tokens';
+import { showsRowGlyph } from '@/lib/profile-hub';
 
 export function ProfileSection({
   title,
@@ -39,6 +40,9 @@ export function ProfileSection({
   children: ReactNode;
 }) {
   const rows = Children.toArray(children);
+  // Without the glyphs (accessibility sizes) the label starts at the padding.
+  const { fontScale } = useWindowDimensions();
+  const separator = showsRowGlyph(fontScale) ? styles.hairline : [styles.hairline, styles.flush];
   return (
     <View style={styles.section}>
       <Text
@@ -50,9 +54,8 @@ export function ProfileSection({
       </Text>
       <Surface radius={16} border="border/subtle" style={styles.surface}>
         {rows.map((row, index) => (
-          <View
-            key={isValidElement(row) && row.key !== null ? row.key : index}
-            style={index > 0 && styles.hairline}>
+          <View key={isValidElement(row) && row.key !== null ? row.key : index}>
+            {index > 0 ? <View style={separator} /> : null}
             {row}
           </View>
         ))}
@@ -81,8 +84,18 @@ const styles = StyleSheet.create({
   surface: {
     overflow: 'hidden',
   },
+  // Inset to the label column (row padding, the 20pt glyph, its gap), so the
+  // glyphs read as one column and the separators part the words, as on iOS.
+  // A box taller than its own line (three hairlines: one point on a 3x
+  // screen): a hairline top border on a view no taller than the border was
+  // dropped at a fractional offset there.
   hairline: {
+    minHeight: StyleSheet.hairlineWidth * 3,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: color['border/subtle'],
+    marginStart: spacing[16] + iconSize[20] + spacing[12],
+  },
+  flush: {
+    marginStart: spacing[16],
   },
 });

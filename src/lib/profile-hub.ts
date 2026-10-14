@@ -29,6 +29,7 @@ import {
   type UserRecallPreferences,
 } from '@/domain/preferences';
 import { retailerById } from '@/domain/retailer-catalog';
+import type { IconName } from '@/components/ui/icon';
 
 // ── The summary ─────────────────────────────────────────────────────────────
 
@@ -202,6 +203,37 @@ export const APP_VERSION_LABEL = 'App version';
 /** The development entry's heading; the row beneath it is the harness. */
 export const DEVELOPMENT_HEADING = 'Development builds only';
 export const DEVELOPMENT_HINT = 'Development builds only. Not part of the product.';
+
+// ── The rows' glyphs ────────────────────────────────────────────────────────
+
+/**
+ * Each Profile row's leading glyph (final polish, 2026-10-13), from the
+ * approved icon set only. Every document the hub lists has one, so a row can
+ * never sit in the column without its icon; the tests pin both directions.
+ */
+export const NOTIFICATIONS_ICON: IconName = 'bell';
+export const APP_VERSION_ICON: IconName = 'info';
+/**
+ * From this text scale (where iOS's accessibility sizes begin) the decorative
+ * glyphs leave the rows: at AX5 the 32pt column broke "Methodology" mid-word,
+ * and the words need the width more than the row needs its icon.
+ */
+export const ROW_GLYPH_HIDDEN_AT_SCALE = 1.5;
+
+export function showsRowGlyph(fontScale: number): boolean {
+  return fontScale < ROW_GLYPH_HIDDEN_AT_SCALE;
+}
+
+export const DOCUMENT_ICONS: Readonly<Record<string, IconName>> = {
+  'privacy-data-controls': 'lock',
+  'sources-methodology': 'file-search',
+  // The same flag the Affects you label carries — this document explains it.
+  'how-affects-me-works': 'flag',
+  'risk-levels': 'warning',
+  'safety-disclaimer': 'shield-check',
+  'corrections-policy': 'check',
+  attributions: 'list',
+};
 
 /** What the version line reads when no native version exists (Expo Go, web, dev). */
 export const VERSION_FALLBACK = 'Development build';
