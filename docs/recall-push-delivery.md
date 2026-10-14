@@ -433,7 +433,24 @@ foreground check-in (`src/lib/installation-checkin.ts`) calls
 so no pre-purge event can be backfilled. Details:
 [recall-operations.md](recall-operations.md).
 
-## Consent revocation (age assurance; prepared 2026-10-13, not applied or deployed)
+## Consent revocation (age assurance; migration applied, receiver deployed for Sandbox, 2026-10-13)
+
+**Status (2026-10-13).**
+
+- **Migration applied.** `20261017000000_consent_revocation.sql` was applied
+  in production at 06:31 UTC from `eeed810`; all 17 post-apply checks
+  passed.
+- **Receiver deployed, Sandbox only.** The `app-store-notifications` Edge
+  Function was deployed at 21:13 UTC (v1, `APP_STORE_ENVIRONMENTS=Sandbox`).
+  A Production-claim notification is still refused.
+- **Production waits for TestFlight.** Production is enabled only after the
+  TestFlight revocation chain passes, by setting
+  `APP_STORE_ENVIRONMENTS=Sandbox,Production`; `APP_STORE_APP_APPLE_ID` is
+  already set.
+- **Forwarding configured, not yet proven.** The founder configured
+  RevenueCat's forwarding URL. End-to-end forwarding of `RESCIND_CONSENT`
+  stays unproven until that chain passes.
+- **Bounded read.** The app's StoreKit read is bounded (`d71430c`).
 
 **Why.** When a parent revokes consent for a teen's use of Lotly, Apple
 blocks the app from launching and sends an App Store Server Notification

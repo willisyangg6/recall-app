@@ -344,11 +344,16 @@ Start Metro with it set (`--clear`).
 
 - **Significant-update consent** (PermissionKit) and `AppStore.ageRatingCode`.
   The first release has no earlier version to change from.
-- **Revocation handling** (`RESCIND_CONSENT`) is **prepared, not applied or
-  deployed**. See docs/recall-push-delivery.md, "Consent revocation". It is
-  not launch-ready until the sandbox runbook passes. The development-only
-  probe (`EXPO_PUBLIC_DEV_REVOCATION_PROBE=1`) shows the device's
-  `AppTransaction.appTransactionID` for that runbook.
+
+**Revocation handling** (`RESCIND_CONSENT`) **is built**:
+
+- **Database:** the migration is applied (2026-10-13).
+- **Receiver:** deployed for Sandbox only (2026-10-13).
+- **Details:** docs/recall-push-delivery.md, "Consent revocation".
+- **Not launch-ready yet:** that needs the TestFlight revocation chain to
+  pass, and Production enabled on the receiver.
+- **Development probe:** with `EXPO_PUBLIC_DEV_REVOCATION_PROBE=1`, it
+  shows the device's `AppTransaction.appTransactionID` for that runbook.
 
 **Build requirement.** `expo-age-range` 57.0.5 calls iOS 26.4 SDK symbols,
 guarded only at runtime. It therefore needs Xcode 26.4 or later, and 26.5

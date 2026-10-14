@@ -445,6 +445,7 @@ export const EXPORT_NOT_INCLUDED = [
   'What is kept only on this iPhone: your choices as the app holds them, saved recalls, the alerts setting and setup progress. Lotly’s server does not have them; you can see them in the app.',
   'Connection logs at Lotly’s hosting providers (such as IP addresses), kept under each provider’s own settings; Lotly’s database host keeps them for 7 days.',
   'Subscription records held by Apple and RevenueCat, under a separate purchase identifier.',
+  'Consent-revocation key (only if Apple reported you as 13 to 17 in a state whose law requires an age check, and you turned on alerts): a keyed hash of Apple’s identifier for your download of Lotly, kept with your alert registration. It is used only to stop alerts if a parent or guardian withdraws consent through Apple. It is not in this file because it has no meaning outside that matching. It is still information about you, because Lotly can match it to your installation. It is deleted with your alert registration, and you can ask for it by email like anything else listed here.',
   `Emails you sent to ${SUPPORT_EMAIL}, and Lotly’s replies.`,
 ] as const;
 

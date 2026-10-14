@@ -2501,15 +2501,17 @@ The export (the app's "Share as file" and the operator's file are the same
   turned back into the code); and bookkeeping (internal row ids, the shopper
   report edit counter, the legacy one-state copy `state_code`, the
   never-set `user_id`). Neither credential is sent in answer to any request.
-- **Internal age and consent-revocation keys** (the age-assurance branch's
-  planned `push_subscriptions.app_transaction_hmac`, an HMAC of Apple's
-  app-transaction id used only to match a parent's withdrawal of consent to
-  this installation's alerts) are **not** exported: the column is not on the
-  list. It is **pseudonymous personal data, not anonymous**: Lotly holds the
-  HMAC key, so it can match the hash to a known Apple identifier, and the row
-  ties it to one installation. Hashing is never described as anonymity. When
-  that branch lands, this line joins the export's `not_included` list (not
-  its data fields), worded with the age-assurance session:
+- **Internal age and consent-revocation keys**
+  (`push_subscriptions.app_transaction_hmac`, added by migration `20261017`,
+  applied 2026-10-13: an HMAC of Apple's app-transaction id used only to
+  match a parent's withdrawal of consent to this installation's alerts) are
+  **not** exported: the column is not on the list. It is **pseudonymous
+  personal data, not anonymous**: Lotly holds the HMAC key, so it can match
+  the hash to a known Apple identifier, and the row ties it to one
+  installation. Hashing is never described as anonymity. Its explanation is
+  in the export's `not_included` list (not its data fields),
+  `EXPORT_NOT_INCLUDED` in `src/lib/privacy-requests.ts`, worded with the
+  age-assurance session:
   "Consent-revocation key (only if Apple reported you as 13 to 17 in a state
   whose law requires an age check, and you turned on alerts): a keyed hash of
   Apple's identifier for your download of Lotly, kept with your alert
@@ -2545,14 +2547,23 @@ The export (the app's "Share as file" and the operator's file are the same
 
 ### Monthly privacy review (Willis, first working day of each month)
 
+The published retention is a **strict maximum of 24 months** for the request
+log and the support mailbox (founder decision 2026-10-14, option A). A
+monthly check can only guarantee that by deleting anything **more than 23
+months old**: whatever survives a check is at most 23 months old, and the
+next check (at most a month later) removes it before it reaches 24. **Never
+skip a month.** If a review is missed, do it the same day it is noticed, and
+record the late date.
+
 1. **Request log.** Open `~/Lotly-Privacy-Requests/request-log.csv`. Delete
-   any line dated more than 24 months ago (a month with a request has already
-   done this automatically). Confirm every line is only `date,purpose,outcome`.
+   any line dated more than **23 months** ago. The operator tool's own pruning
+   (24 months, only when it runs) is a backstop, not the control. Confirm
+   every line is only `date,purpose,outcome`.
 2. **Export files.** That folder should hold no `lotly-data-*.json`; delete
    any left after a reply was sent.
 3. **Mailbox.** In lotlysupport@gmail.com, delete request threads (and the
-   codes in them) whose last message is more than 24 months old, then empty
-   Trash. Gmail has no per-folder expiry, so this is manual.
+   codes in them) whose last message is more than **23 months** old, then
+   empty Trash. Gmail has no per-folder expiry, so this is manual.
 4. **Open requests.** For every request not yet answered, check its clock in
    "Request deadlines" below; send any extension notice before day 45.
 5. Record the review date (a line in the mailbox's own notes is enough).

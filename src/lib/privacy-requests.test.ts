@@ -12,6 +12,7 @@ import { test } from 'node:test';
 import {
   buildExportDocument,
   DATA_PROCESSORS,
+  EXPORT_FIELDS,
   exportFileName,
   formatRequestCode,
   normalizeRequestCode,
@@ -167,6 +168,16 @@ test('the export file names its processors and carries no installation id', () =
   assert.match(document.redactions[1], /last four characters/);
   assert.ok(document.not_included.some((item) => /hosting providers/.test(item)));
   assert.ok(document.not_included.some((item) => /Apple and RevenueCat/.test(item)));
+  // The consent-revocation key is explained, never exported, and never called
+  // anonymous: Lotly holds the HMAC key, so it is pseudonymous personal data.
+  const revocationKey = document.not_included.find((item) => /^Consent-revocation key/.test(item));
+  assert.ok(revocationKey, 'the export explains the consent-revocation key');
+  assert.match(revocationKey, /keyed hash of Apple’s identifier/);
+  assert.match(revocationKey, /still information about you, because Lotly can match it/);
+  assert.doesNotMatch(revocationKey, /anonym/i);
+  for (const fields of Object.values(EXPORT_FIELDS)) {
+    assert.ok(!(fields as readonly string[]).includes('app_transaction_hmac'));
+  }
   assert.match(document.requesting_more, new RegExp(SUPPORT_EMAIL.replace('.', '\\.')));
   assert.match(document.requesting_more, /request code for a copy of your data/);
   assert.equal(document.processors_checked_on, '2026-10-13');
