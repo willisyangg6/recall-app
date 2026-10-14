@@ -74,9 +74,16 @@ export function onboardingEntryStep(inputs: AccessInputs): OnboardingStep {
 
 /**
  * Which phase each route group belongs to. A route is reachable in exactly
- * one phase; the development hub is the documented exception (see above).
+ * one phase, with two documented exceptions: the development hub (see
+ * above), and the privacy controls (B8, 2026-10-14), which a lapsed
+ * subscriber reaches from the paywall as well as from the app. They are the
+ * existing Privacy & Data Controls and the two screens it opens (see what the
+ * server holds, request codes); reset, export and allergen-consent
+ * withdrawal must never require resubscribing. No recall content is in this
+ * group: the feed, recall details, settings and the other documents stay in
+ * `app`.
  */
-export type RouteGroup = 'onboarding' | 'paywall' | 'education' | 'app' | 'development';
+export type RouteGroup = 'onboarding' | 'paywall' | 'education' | 'app' | 'privacy' | 'development';
 
 export const ROUTE_GROUPS: Record<RouteGroup, readonly string[]> = {
   paywall: ['paywall'],
@@ -89,9 +96,8 @@ export const ROUTE_GROUPS: Record<RouteGroup, readonly string[]> = {
     'settings/notifications',
     'document/[slug]',
     'report/[id]',
-    'privacy/server-data',
-    'privacy/request-code',
   ],
+  privacy: ['privacy/controls', 'privacy/server-data', 'privacy/request-code'],
   onboarding: [
     'onboarding/welcome',
     'onboarding/problem-scale',
@@ -117,6 +123,7 @@ export function routeGroupAllowed(
   developmentBuild: boolean,
 ): boolean {
   if (group === 'development') return developmentBuild || phase === 'app';
+  if (group === 'privacy') return phase === 'app' || phase === 'paywall';
   return group === phase;
 }
 

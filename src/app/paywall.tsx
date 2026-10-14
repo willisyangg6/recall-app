@@ -31,6 +31,7 @@
  */
 
 import { OnboardingPaywallPanel } from '@/components/paywall/onboarding-paywall-panel';
+import { PaywallPrivacyLink } from '@/components/paywall/paywall-privacy-link';
 import { useAccess } from '@/hooks/use-access';
 import { usePurchaseFlow } from '@/hooks/use-purchase-flow';
 
@@ -40,6 +41,7 @@ export default function PaywallScreen() {
   return (
     <OnboardingPaywallPanel purchase={purchase} onBack={access.reviewPreview}>
       {developmentControls}
+      <PaywallPrivacyLink />
     </OnboardingPaywallPanel>
   );
 }

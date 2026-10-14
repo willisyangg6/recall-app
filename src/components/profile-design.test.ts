@@ -253,8 +253,10 @@ test('reset and deletion live inside Privacy & Data Controls only — the hub ca
     assert.ok(!source.includes('deleteLocalPreferenceState'), `${name} deletes preferences`);
     assert.ok(!source.includes('Alert.alert'), `${name} raises a confirmation`);
   }
+  // The composition lives in the shared DocumentPage (B8), rendered by the
+  // document route and by the privacy-controls route.
   assert.match(
-    read('app', 'document', '[slug].tsx'),
+    read('components', 'document', 'document-page.tsx'),
     /doc\.slug === 'privacy-data-controls' \? <InstallationResetSection \/> : null/,
   );
   // Nothing on the hub is distinguished by the risk palette or a red of its own.

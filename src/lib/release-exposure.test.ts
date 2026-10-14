@@ -227,6 +227,7 @@ const ROUTES = [
   'onboarding/states.tsx',
   'onboarding/welcome.tsx',
   'paywall.tsx',
+  'privacy/controls.tsx',
   'privacy/request-code.tsx',
   'privacy/server-data.tsx',
   'recall/[id].tsx',

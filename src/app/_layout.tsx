@@ -220,9 +220,16 @@ function RootNavigator({ fontsSettled }: { fontsSettled: boolean }) {
               gate is off; a direct deep link lands on the screen's own "not
               available" state rather than on a form. */}
           <Stack.Screen name="report/[id]" options={{ title: 'Share a shopper report' }} />
-          {/* Privacy requests (2026-10-13): what the server holds for this
-              installation, and a one-time code for an email request. Both are
-              reached from Privacy & Data Controls. */}
+        </Stack.Protected>
+
+        {/* 3b. The privacy controls (B8, 2026-10-14): Privacy & Data Controls
+            and the two screens it opens (what the server holds; a one-time
+            request code), in the app AND the paywall phase, so a lapsed
+            subscriber can see, export or delete their data without
+            resubscribing. Declared after the app group, so neither phase's
+            landing screen changes. No recall content is in this group. */}
+        <Stack.Protected guard={phase === 'app' || phase === 'paywall'}>
+          <Stack.Screen name="privacy/controls" options={{ title: 'Privacy & Data' }} />
           <Stack.Screen name="privacy/server-data" options={{ title: 'Server Data' }} />
           <Stack.Screen name="privacy/request-code" options={{ title: 'Request Code' }} />
         </Stack.Protected>

@@ -196,7 +196,12 @@ test('the data-reset control the document describes actually ships, under its ex
 test('exactly one deletion action exists — on Privacy & Data Controls, nowhere else (C7.1)', () => {
   // The document screen mounts the destructive section for the privacy slug
   // and only that slug.
-  const documentScreen = read('document', '[slug].tsx');
+  // The composition lives in the shared DocumentPage (B8), which both the
+  // document route and the privacy-controls route render.
+  const documentScreen = readFileSync(
+    join(ROOT, 'src', 'components', 'document', 'document-page.tsx'),
+    'utf8',
+  );
   assert.match(
     documentScreen,
     /doc\.slug === 'privacy-data-controls' \? <InstallationResetSection \/> : null/,

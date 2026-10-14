@@ -53,7 +53,11 @@ import { PRIVACY_DOCUMENT_SLUG } from '@/lib/shopper-report-presentation';
 const SRC = join(__dirname, '..');
 const read = (...parts: string[]): string => readFileSync(join(SRC, ...parts), 'utf8');
 
-const ROUTE = read('app', 'document', '[slug].tsx');
+// The page composition lives in the shared DocumentPage (B8): the document
+// route and the privacy-controls route both render it.
+const ROUTE = read('components', 'document', 'document-page.tsx');
+const SLUG_ROUTE = read('app', 'document', '[slug].tsx');
+const CONTROLS_ROUTE = read('app', 'privacy', 'controls.tsx');
 const ROOT_LAYOUT = read('app', '_layout.tsx');
 const PROFILE = read('app', '(tabs)', 'profile.tsx');
 const QUESTIONNAIRE = read('app', 'report', '[id].tsx');
@@ -111,8 +115,12 @@ test('every document is reachable: the route, the stack registration, Profile an
   assert.ok(
     ROOT_LAYOUT.includes('<Stack.Screen name="document/[slug]" options={{ title: \'About\' }} />'),
   );
-  assert.ok(ROUTE.includes('useLocalSearchParams<{ slug: string }>()'));
-  assert.ok(ROUTE.includes('const doc = documentBySlug(slug);'));
+  assert.ok(SLUG_ROUTE.includes('useLocalSearchParams<{ slug: string }>()'));
+  assert.ok(SLUG_ROUTE.includes('const doc = documentBySlug(slug);'));
+  assert.ok(SLUG_ROUTE.includes('<DocumentPage doc={doc}'));
+  // B8: the privacy-controls route renders the same page for the privacy slug.
+  assert.ok(CONTROLS_ROUTE.includes('documentBySlug(PRIVACY_CONTROLS_SLUG)'));
+  assert.ok(CONTROLS_ROUTE.includes('<DocumentPage doc={doc}'));
   // Profile lists the registry's grouping, once per document.
   assert.ok(PROFILE.includes('PROFILE_DOCUMENT_GROUPS'));
   assert.equal(count(PROFILE, "pathname: '/document/[slug]'"), 1);
@@ -571,7 +579,10 @@ test('one title treatment: the navigator names the Profile group, the page names
     ],
   );
   assert.equal(DEFAULT_NAVIGATOR_TITLE, 'About');
-  assert.ok(ROUTE.includes('<Stack.Screen options={{ title: navigatorTitle(doc) }} />'));
+  assert.ok(ROUTE.includes('<Stack.Screen options={{ title }} />'));
+  // Both routes pass the Profile group's name, never the document's own title.
+  assert.ok(SLUG_ROUTE.includes("title={doc ? navigatorTitle(doc) : ''}"));
+  assert.ok(CONTROLS_ROUTE.includes("title={doc ? navigatorTitle(doc) : ''}"));
   // The page: the full title as heading-1, the summary as the standfirst,
   // then content section headings in heading-3 — never uppercased.
   assert.ok(VIEW.includes('<Text variant="heading-1" accessibilityRole="header" selectable>'));

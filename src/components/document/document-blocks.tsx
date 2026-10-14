@@ -132,7 +132,7 @@ function RiskLevelList({ items }: { items: readonly RiskLevelItem[] }) {
 }
 
 /** The visible part of either link: label, then the glyph that says what kind. */
-function LinkRow({ label, icon }: { label: string; icon: IconName }) {
+export function LinkRow({ label, icon }: { label: string; icon: IconName }) {
   return (
     <View style={styles.linkRow}>
       <Text variant="body" color="action/secondary" style={styles.linkText}>

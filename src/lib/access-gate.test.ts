@@ -174,12 +174,60 @@ test('every product route group is mounted in exactly its own phase', () => {
       );
     }
   }
-  // The one exception: the development hub, in every phase of a development
-  // build and only the app phase of a release build.
+  // The exceptions: the development hub, in every phase of a development
+  // build and only the app phase of a release build; and the privacy
+  // controls (B8), in the app and paywall phases only, in any build.
   for (const phase of ACCESS_PHASES) {
     assert.equal(routeGroupAllowed('development', phase, true), true);
     assert.equal(routeGroupAllowed('development', phase, false), phase === 'app');
+    for (const developmentBuild of [false, true]) {
+      assert.equal(
+        routeGroupAllowed('privacy', phase, developmentBuild),
+        phase === 'app' || phase === 'paywall',
+        `privacy in ${phase}`,
+      );
+    }
   }
+});
+
+test('a lapsed subscriber reaches the privacy controls from the paywall, and never recall content (B8)', () => {
+  const reachable = (phase: AccessPhase) =>
+    (Object.keys(ROUTE_GROUPS) as RouteGroup[])
+      .filter((group) => routeGroupAllowed(group, phase, false))
+      .flatMap((group) => [...ROUTE_GROUPS[group]]);
+  assert.deepEqual(reachable('paywall').sort(), [
+    'paywall',
+    'privacy/controls',
+    'privacy/request-code',
+    'privacy/server-data',
+  ]);
+  for (const gated of [
+    '(tabs)',
+    'recall/[id]',
+    'settings/index',
+    'settings/personalization',
+    'settings/notifications',
+    'document/[slug]',
+    'report/[id]',
+  ]) {
+    assert.ok(!reachable('paywall').includes(gated), `${gated} is reachable while lapsed`);
+    assert.ok(reachable('app').includes(gated), `${gated} left the app`);
+  }
+  // The privacy controls stay out of onboarding and education.
+  for (const phase of ['onboarding', 'education'] as const) {
+    assert.ok(!reachable(phase).some((route) => route.startsWith('privacy/')), phase);
+  }
+  // The landing screens are unchanged.
+  assert.equal(entryRoute('paywall', 'welcome'), 'paywall');
+  assert.equal(entryRoute('app', 'welcome'), '(tabs)');
+  // The standalone (lapsed) paywall links to it; the onboarding paywall does not.
+  const paywall = codeOnly(read('paywall.tsx'));
+  assert.ok(paywall.includes('<PaywallPrivacyLink />'));
+  assert.ok(!codeOnly(read('onboarding', 'paywall.tsx')).includes('PaywallPrivacyLink'));
+  // The new route renders the same document as Profile's link does.
+  const controls = codeOnly(read('privacy', 'controls.tsx'));
+  assert.ok(controls.includes("PRIVACY_CONTROLS_SLUG = 'privacy-data-controls'"));
+  assert.ok(controls.includes('<DocumentPage'));
 });
 
 test('the route matrix covers every route file under src/app exactly once', () => {
@@ -240,21 +288,31 @@ function protectedBlocks(): { guard: string; screens: string[] }[] {
 
 test('every screen the root layout declares sits inside a protected group guarded by its own phase', () => {
   const blocks = protectedBlocks();
-  assert.equal(blocks.length, 5, 'five groups: paywall, education, app, onboarding, development');
+  assert.equal(
+    blocks.length,
+    6,
+    'six groups: paywall, education, app, privacy, onboarding, development',
+  );
   assert.deepEqual(blocks[0], { guard: "phase === 'paywall'", screens: ['paywall'] });
   assert.deepEqual(blocks[1], {
     guard: "phase === 'education'",
     screens: ['onboarding/notifications'],
   });
   assert.deepEqual(blocks[2], { guard: "phase === 'app'", screens: [...ROUTE_GROUPS.app] });
+  // The privacy controls (B8): after the app group, so no phase's landing
+  // screen changes.
+  assert.deepEqual(blocks[3], {
+    guard: "phase === 'app' || phase === 'paywall'",
+    screens: [...ROUTE_GROUPS.privacy],
+  });
   // Onboarding is declared from the gate's own ordering function, so the
   // resume step is first by construction.
-  assert.equal(blocks[3].guard, "phase === 'onboarding'");
-  assert.deepEqual(blocks[3].screens, ['{name}']);
+  assert.equal(blocks[4].guard, "phase === 'onboarding'");
+  assert.deepEqual(blocks[4].screens, ['{name}']);
   assert.ok(
     codeOnly(LAYOUT).includes('onboardingDeclarationOrder(access.entryStep).map((name) =>'),
   );
-  assert.deepEqual(blocks[4], {
+  assert.deepEqual(blocks[5], {
     guard: "__DEV__ || phase === 'app'",
     screens: ['design-preview/index'],
   });
