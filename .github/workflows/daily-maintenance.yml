@@ -131,3 +131,7 @@ jobs:
           REVENUECAT_SECRET_KEY: ${{ secrets.REVENUECAT_SECRET_KEY }}
           REVENUECAT_PROJECT_ID: ${{ secrets.REVENUECAT_PROJECT_ID }}
           REVENUECAT_PREMIUM_ENTITLEMENT_ID: ${{ secrets.REVENUECAT_PREMIUM_ENTITLEMENT_ID }}
+          # Expo enhanced push security (D5, 2026-10-14): a robot access token.
+          # Unset, it is empty and no Authorization header is sent, which works
+          # until the Expo switch is turned on. This step only.
+          EXPO_ACCESS_TOKEN: ${{ secrets.EXPO_ACCESS_TOKEN }}

@@ -941,9 +941,33 @@ a real recall after expiry. The clock gate that stops it is proven by
 Server env (GitHub `production` environment secrets, declared per step):
 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`; on the `jobs:push` steps only, the
 entitlement gate's `REVENUECAT_SECRET_KEY`, `REVENUECAT_PROJECT_ID` and
-`REVENUECAT_PREMIUM_ENTITLEMENT_ID`; and optionally `EXPO_ACCESS_TOKEN` (only if enhanced push security is enabled on
-the Expo account — recommended eventually, not required for MVP). Nothing
-new in the client bundle. ExpoPushTokens are private operational data: no
+`REVENUECAT_PREMIUM_ENTITLEMENT_ID`, and Expo's `EXPO_ACCESS_TOKEN`. Nothing
+new in the client bundle.
+
+**Expo enhanced push security (D5, founder-approved 2026-10-14).** With it
+on, Expo refuses any push request without a valid access token
+(`UNAUTHORIZED`).
+
+- **How it's passed:** `ExpoPushTransport` sends `Authorization: Bearer`
+  whenever `EXPO_ACCESS_TOKEN` is set. The workflows pass it to the
+  `jobs:push` steps only (`workflow-schedule.test.ts` pins that).
+- **Before the secret exists:** it is empty and no header is sent, which works
+  until the switch is on.
+- **If a token is missing or revoked once the switch is on:** every send
+  fails retryably and nothing is lost silently. But nothing is sent either.
+- **Never** in EAS or the app (`release-exposure.test.ts`).
+
+Founder steps, each a separate go-ahead, none done yet:
+
+1. Create a **robot** access token on the Expo account, with the smallest role
+   that can send. Not a personal token.
+2. Add it as the GitHub `production` environment secret `EXPO_ACCESS_TOKEN`.
+3. With the workflow change on master, turn on enhanced push security in the
+   Expo dashboard.
+4. Confirm with the first approved `push:test`. That needs the token in the
+   local `.env`, server-only.
+
+Rotate by adding the new token before revoking the old one. ExpoPushTokens are private operational data: no
 policy exposes them to clients, jobs never print them, `push:test` lists ids
 only. No analytics, ad identifiers, or fingerprinting.
 

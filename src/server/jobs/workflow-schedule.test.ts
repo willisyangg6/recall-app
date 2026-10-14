@@ -306,8 +306,12 @@ test('npm ci, checkout and setup-node receive no production secret at all', () =
   }
 });
 
-/** The push step's RevenueCat read for the alert entitlement gate; nowhere else. */
+/**
+ * The push step's own secrets, nowhere else: the alert entitlement gate's
+ * RevenueCat read, and Expo's access token for enhanced push security (D5).
+ */
 const REVENUECAT_SECRETS = [
+  'EXPO_ACCESS_TOKEN',
   'REVENUECAT_PREMIUM_ENTITLEMENT_ID',
   'REVENUECAT_PROJECT_ID',
   'REVENUECAT_SECRET_KEY',
@@ -322,7 +326,7 @@ test('every step that reaches production declares its own secrets, and only what
         assert.deepEqual(
           [...step.secrets].sort(),
           [...REVENUECAT_SECRETS, 'SUPABASE_SECRET_KEY', 'SUPABASE_URL'].sort(),
-          `${name}: "${step.label}" needs the Supabase pair and the RevenueCat read`,
+          `${name}: "${step.label}" needs the Supabase pair, the RevenueCat read and the Expo token`,
         );
       } else if (/^npm run jobs:/.test(command)) {
         assert.deepEqual(
