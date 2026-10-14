@@ -2205,25 +2205,48 @@ and Ready deck keep `RecallCardSurface` exactly as described under "Recall
 Card" below — those screens are finalized — and both surfaces read the same
 presentation model.
 
-**Card.** White, 1pt `#D1D7D9` border, radius 14, padding 12, no lift.
-Metadata row: the risk label (or PUBLIC HEALTH ALERT), the activity date
-(14/20, secondary) and AFFECTS YOU at the trailing edge when the
-personalization verdict is genuinely positive; the row wraps, a label moves
-to the next line whole before it is squeezed. 12pt below, the photo (112pt
-box, radius 6, contained, through the guarded `MediaTile` — no photo, no
-tile) beside the text column: product name 20/26 bold (the existing
-three-line bound; the whole name when stacked), company 16/22 secondary,
-category label 8pt below, reason 16/22 secondary 8pt below that. The photo
-stacks above the text from 1.5× text scale, or when the column beside it
-would be under 180pt. A full-width 1pt `#E1E5E6` divider (12pt above and
-below), then the location (18pt pin, 14/20) and the save control (24pt
-bookmark, 44pt target).
+**Card (replacement, 2026-10-14).** The founder-selected card direction,
+supplied as native components (`docs/lotly-recall-card-source-kit/`) and
+used directly: `components/feed/feed-card-surface.tsx`, its parts in
+`components/feed/recall-card-parts.tsx`, geometry in
+`constants/recall-card-design.ts`, and the spoken label in
+`lib/recall-card-accessibility.ts`. White, 1pt `#D1D7D9` border, radius 14,
+padding 12, no lift.
+
+- **Header row:** the risk label (or PUBLIC HEALTH ALERT) and the activity
+  date (14/20, secondary), wrapping whole. At the trailing edge are the
+  Affects You flag and the save control. The flag is the navy outline `flag`
+  in a 28pt lime square (radius 7), shown only when the personalization
+  verdict is positive, informational and never pressable. The save control
+  is the 24pt bookmark in a 44pt slot. There is no written AFFECTS YOU pill.
+- **Identity:** 12pt below, the 112pt contained photo (radius 6, guarded
+  `MediaTile`; no photo, no tile) beside the product name (20/26 bold, three
+  lines with a tail ellipsis), the company (16/22 secondary) and the
+  category. The category is quiet: its glyph at 16pt and its name in 14/20
+  brand navy, with no pill.
+- **Reason and location:** a full-width 1pt `#E1E5E6` divider (12pt above
+  and below), then the reason row. An 18pt amber `warning` sits beside the
+  model's reason (15/20 Public Sans, text colour, scaling with Dynamic Type).
+  The location follows after a 1pt rule (18pt pin, 14/20, 12pt left and 8pt
+  right padding); it sizes to its text and is capped at 132pt, wrapping by
+  words inside that cap. Neither the reason nor the location is truncated or
+  line-capped. A card with no reason has no warning and no spacer. From 1.15×
+  text (founder-approved, 2026-10-14) the location moves below the reason, so
+  a word like "Nationwide" is never squeezed into the slot.
+- **Stacking:** from 1.5× text scale, or when under 140pt would remain
+  beside the photo, the photo stacks above the text, the whole name shows,
+  and the location moves beneath the reason.
+- **Spoken label:** to VoiceOver the card is one element with an explicit
+  label: risk (when shown), notice, date, Affects you, the product name
+  exactly once, company, category, reason, location, and the saved state.
+  The photo is `decorative`, so it no longer repeats the title.
 
 **Labels** share one shape: radius 5, at least 28pt, 8/6 padding, Public
 Sans 12/16 bold (the category's 14/20), a 1pt border. Risk and PUBLIC HEALTH
 ALERT render through the shared `RiskLabel` and `NoticeLabel` in the label
-kit's palette (2026-10-09; see "Risk Label" and "Recall Card"). AFFECTS YOU
-is the existing lime with a 16pt flag.
+kit's palette (2026-10-09; see "Risk Label" and "Recall Card"). On the live
+card, Affects You is the lime flag square above, and the category is quiet
+text. The category tints below remain the Filters sheet's and Detail's.
 
 **Categories.** All nine launch categories, each with its tint, ink, border
 and pinned glyph (lucide-static 0.468.0); every pairing is at least 4.5:1:

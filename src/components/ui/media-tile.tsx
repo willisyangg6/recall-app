@@ -70,6 +70,7 @@ export function MediaTile({
   positionLabel = null,
   onLoadFailed,
   cornerRadius,
+  decorative = false,
 }: {
   uri: string | null;
   /** The spoken description of the image — the model's product name. */
@@ -94,6 +95,8 @@ export function MediaTile({
    * tile keeps `radius/8`.
    */
   cornerRadius?: number;
+  /** Hide a redundant image inside an already-labelled card. */
+  decorative?: boolean;
 }) {
   // The URL that failed under THIS mount, so the tile re-renders into its
   // absent shape the moment the platform reports the failure. The session
@@ -113,9 +116,11 @@ export function MediaTile({
         typeof size === 'number' ? { width: size, height: size } : size,
         cornerRadius !== undefined && { borderRadius: cornerRadius },
       ]}
-      accessible
-      accessibilityRole="image"
-      accessibilityLabel={alt}
+      accessible={!decorative}
+      accessibilityElementsHidden={decorative}
+      importantForAccessibility={decorative ? 'no-hide-descendants' : 'auto'}
+      accessibilityRole={decorative ? undefined : 'image'}
+      accessibilityLabel={decorative ? undefined : alt}
       accessibilityValue={positionLabel !== null ? { text: positionLabel } : undefined}>
       <GuardedImage
         source={{ uri }}

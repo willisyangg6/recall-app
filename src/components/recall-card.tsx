@@ -100,8 +100,10 @@ import { RelevanceLabel } from '@/components/ui/relevance-label';
 import { RiskLabel } from '@/components/ui/risk-label';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
-import { layout, spacing } from '@/constants/design-tokens';
+import { spacing } from '@/constants/design-tokens';
 import { feedGeometry } from '@/constants/feed-design';
+import { recallCardGeometry } from '@/constants/recall-card-design';
+import { recallCardAccessibilityLabel } from '@/lib/recall-card-accessibility';
 import { useSavedRecalls } from '@/hooks/use-saved-recalls';
 import {
   PREVIEW_BRAND_LINES,
@@ -127,6 +129,8 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
   return (
     <Link href={{ pathname: '/recall/[id]', params: { id: model.id } }} asChild>
       <Pressable
+        accessible
+        accessibilityLabel={recallCardAccessibilityLabel(model, save.selected)}
         accessibilityRole="button"
         accessibilityHint={CARD_ACCESSIBILITY_HINT}
         accessibilityActions={
@@ -143,16 +147,18 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
           if (event.nativeEvent.actionName === SAVE_ACTION) void savedRecalls.toggle(model.id);
         }}
         style={({ pressed }) => pressed && styles.pressed}>
-        {/* The Feed + Filters design (2026-10-06): the live Feed and Saved
-            card draws `FeedCardSurface`. `RecallCardSurface` below stays the
-            onboarding example's and Ready deck's, unchanged. */}
+        {/* Feed/Saved draw the replacement surface; onboarding below is unchanged. */}
         <FeedCardSurface
           model={model}
           media={
             <MediaTile
               uri={model.heroImageUrl}
               alt={model.productName}
-              size={layout.cardMediaSize}
+              size={{
+                width: recallCardGeometry.photoSide,
+                height: recallCardGeometry.photoSide,
+              }}
+              decorative
               cornerRadius={feedGeometry.photoRadius}
             />
           }

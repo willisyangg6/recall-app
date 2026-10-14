@@ -510,8 +510,21 @@ test('the callout, media tile and notice label are token-only primitives with th
       'if (uri === null || failedUri === uri || hasImageFailed(uri)) return null;',
     ),
   );
-  assert.ok(MEDIA_TILE.includes('accessibilityRole="image"'));
-  assert.ok(!MEDIA_TILE.includes('no-hide-descendants'), 'a hidden placeholder survives');
+  // An image element by default. The approved replacement card (2026-10-14)
+  // may mark its photo `decorative`, because the card's own label already
+  // speaks the title once; that hides a REAL image only — an absent or failed
+  // one still returns null above, so no hidden placeholder can survive.
+  assert.ok(MEDIA_TILE.includes('decorative = false,'));
+  assert.ok(MEDIA_TILE.includes("accessibilityRole={decorative ? undefined : 'image'}"));
+  assert.ok(MEDIA_TILE.includes('accessibilityLabel={decorative ? undefined : alt}'));
+  assert.equal(
+    (MEDIA_TILE.match(/no-hide-descendants/g) ?? []).length,
+    1,
+    'a hidden placeholder survives',
+  );
+  assert.ok(
+    MEDIA_TILE.includes("importantForAccessibility={decorative ? 'no-hide-descendants' : 'auto'}"),
+  );
   assert.ok(MEDIA_TILE.includes('resizeMode="contain"'));
   // AMENDED FOR P2B7C. Detail used to render the hero tile directly, gated
   // on `model.heroImageUrl`. The founder decision moved the header's imagery

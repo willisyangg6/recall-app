@@ -47,6 +47,9 @@ const FEED_COPY = read('lib', 'feed-copy.ts');
 /** Every file that renders Feed consumer text. */
 const FEED_CARD_SURFACE = read('components', 'feed', 'feed-card-surface.tsx');
 const FEED_LABELS = read('components', 'feed', 'feed-labels.tsx');
+const RECALL_CARD_DESIGN = read('constants', 'recall-card-design.ts');
+/** The approved replacement card's parts (2026-10-14). */
+const CARD_PARTS = read('components', 'feed', 'recall-card-parts.tsx');
 const FILTERS_SHEET = read('components', 'feed', 'filters-sheet.tsx');
 
 const FEED_SURFACES: Record<string, string> = {
@@ -120,15 +123,17 @@ test('the card renders relevance and media as two independent, upstream-decided 
   // and Saved surface (FeedCardSurface, 2026-10-06), once each.
   assert.ok(CARD.includes('{model.affectsYou ? <RelevanceLabel /> : null}'));
   assert.equal((CARD.match(/<RelevanceLabel \/>/g) ?? []).length, 1);
-  assert.ok(FEED_CARD_SURFACE.includes('{model.affectsYou ? <FeedRelevanceLabel /> : null}'));
-  assert.equal((FEED_CARD_SURFACE.match(/<FeedRelevanceLabel \/>/g) ?? []).length, 1);
+  // The approved replacement (2026-10-14) draws relevance as the lime flag
+  // square, gated on the same verdict and nothing else, exactly once.
+  assert.ok(FEED_CARD_SURFACE.includes('{model.affectsYou ? <CardAffectsYouFlag /> : null}'));
+  assert.equal((FEED_CARD_SURFACE.match(/<CardAffectsYouFlag \/>/g) ?? []).length, 1);
   // Media: the card hands the tile every state unconditionally and the
   // shared primitive (P2B2 extracted it for Detail) decides what renders —
   // since P2B7I, nothing at all for an absent or failed image — so the card
   // holds no media rule of its own that Saved could drift from.
   assert.match(
     CARD,
-    /<MediaTile\s+uri=\{model\.heroImageUrl\}\s+alt=\{model\.productName\}\s+size=\{layout\.cardMediaSize\}\s+cornerRadius=\{feedGeometry\.photoRadius\}\s*\/>/,
+    /<MediaTile\s+uri=\{model\.heroImageUrl\}\s+alt=\{model\.productName\}\s+size=\{\{\s*width: recallCardGeometry\.photoSide,\s*height: recallCardGeometry\.photoSide,\s*\}\}\s+decorative\s+cornerRadius=\{feedGeometry\.photoRadius\}\s*\/>/,
   );
   assert.ok(!/heroImageUrl \?/.test(codeOnly(CARD)), 'the media tile must not be conditional');
   assert.ok(!/heroImageUrl \?/.test(codeOnly(FEED_CARD_SURFACE)));
@@ -257,8 +262,11 @@ test('the media column exists only for a usable image — no placeholder square 
   // "failed" — the persistent grey rectangle on no-image cards. Now the
   // square exists only for a real image; the placeholder colour shows only
   // around a contained photo and while its request is active.
+  // The live card's square is the approved card's own 112pt photo side,
+  // the same size the shared token gives the onboarding surface.
   assert.equal(layout.cardMediaSize, 112);
-  assert.ok(CARD.includes('size={layout.cardMediaSize}'));
+  assert.ok(RECALL_CARD_DESIGN.includes('photoSide: 112,'));
+  assert.ok(CARD.includes('width: recallCardGeometry.photoSide,'));
   assert.ok(MEDIA_TILE.includes('{ width: size, height: size }'));
   assert.ok(MEDIA_TILE.includes('background="background/media-placeholder"'));
   assert.ok(
@@ -449,10 +457,19 @@ test('the product name is the ONE clamped element on Feed and Saved: three lines
 
 test('nothing else on the card truncates or fixes a height around real product text', () => {
   assert.ok(!CARD.includes('maxFontSizeMultiplier'));
-  // The card fixes no height at all; the media tile's square is the shared
-  // primitive's, sized by the token the card passes it.
+  // The only fixed height is the photo tile's own square, which the live
+  // card hands the shared primitive; no box around text has one.
   const heights = codeOnly(CARD).match(/\bheight: [^,]+/g) ?? [];
-  assert.deepEqual(heights, []);
+  assert.deepEqual(heights, ['height: recallCardGeometry.photoSide']);
+  // The surface and its parts fix no height around text either. The only two
+  // fixed boxes hold no text: the 1pt divider rule, and the Affects You
+  // flag's 28pt square around its glyph.
+  assert.deepEqual(codeOnly(FEED_CARD_SURFACE).match(/(?<![A-Za-z])height: [^,]+/g) ?? [], [
+    'height: 1',
+  ]);
+  assert.deepEqual(codeOnly(CARD_PARTS).match(/(?<![A-Za-z])height: [^,]+/g) ?? [], [
+    'height: geometry.relevanceSide',
+  ]);
   // The text column takes the remaining width and may shrink below its content.
   assert.ok(/identity: \{[^}]*flex: 1[^}]*minWidth: 0/s.test(CARD));
 });
@@ -779,8 +796,17 @@ test('P2B7F: every Feed-content glyph renders independently of the mode', () => 
   assert.ok(CARD.includes('<Icon name="map-pin" size={12} color="icon/primary" />'));
   assert.ok(RELEVANCE_LABEL.includes('<Icon name="flag" size={12} tint={palette.foreground} />'));
   // The live Feed and Saved surface (2026-10-06) draws the same two outright.
-  assert.match(FEED_CARD_SURFACE, /<Icon name="map-pin" points=\{feedGeometry\.locationIconSide\}/);
-  assert.match(FEED_LABELS, /<Icon name="flag" points=\{feedGeometry\.badgeIconSide\}/);
+  // The approved replacement (2026-10-14) draws them in its parts, outright.
+  assert.ok(CARD_PARTS.includes('<Icon name="map-pin" points={18} color="icon/primary" />'));
+  assert.ok(
+    CARD_PARTS.includes(
+      '<Icon name="flag" points={geometry.relevanceIconSide} tint={palette.foreground} />',
+    ),
+  );
+  assert.ok(
+    !/\b(tab|mode|personalized)\b/.test(codeOnly(CARD_PARTS)),
+    'a card glyph depends on the feed mode',
+  );
 
   // The save control's glyph comes from the save state alone — never from a
   // feed mode, a filter, or a loading flag.

@@ -613,7 +613,20 @@ test('the PHA status row still wraps rather than shrinking, clipping or fixing a
   ]) {
     assert.ok(!CARD_CODE.includes(forbidden), `the card bounds its own size: ${forbidden}`);
   }
-  assert.deepEqual(CARD_CODE.match(/\bheight:/g) ?? [], [], 'the card fixes a height');
+  // The one fixed height is the live card's 112pt photo square; no box
+  // around a label or text has one.
+  assert.deepEqual(
+    CARD_CODE.match(/\bheight: [^,]+/g) ?? [],
+    ['height: recallCardGeometry.photoSide'],
+    'the card fixes a height',
+  );
+  // The live Feed/Saved surface (the approved replacement, 2026-10-14) wraps
+  // its risk, notice and date row the same way, and fixes no height there.
+  const SURFACE = read('components', 'feed', 'feed-card-surface.tsx');
+  assert.match(SURFACE, /metadata: \{[^}]*flexWrap: 'wrap'/s);
+  for (const forbidden of ['maxHeight', 'adjustsFontSizeToFit', 'maxFontSizeMultiplier']) {
+    assert.ok(!SURFACE.includes(forbidden), `the surface bounds its own size: ${forbidden}`);
+  }
   // The onboarding deck's opt-in uniform variant RESERVES slots (min
   // heights that grow, never clip); every one is gated on `uniform`, which
   // no Feed or Saved card receives (feed-design.test.ts pins the callers).

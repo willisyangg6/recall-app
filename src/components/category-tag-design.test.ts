@@ -77,8 +77,16 @@ test('the tag is written once, in the shared card, so Feed and Saved cannot disa
   // The live Feed and Saved card draws its category exactly once, from the
   // model's own label and id, through the shared card surface.
   const SURFACE = read('components', 'feed', 'feed-card-surface.tsx');
-  assert.equal((SURFACE.match(/<FeedCategoryLabel\b/g) ?? []).length, 1);
-  assert.ok(SURFACE.includes('label={model.categoryLabel}'));
+  // Since the approved replacement card (2026-10-14) that is `CardCategory`
+  // (components/feed/recall-card-parts.tsx): the same model label and id,
+  // the same category glyph, quiet text instead of a pill.
+  assert.equal((SURFACE.match(/<CardCategory\b/g) ?? []).length, 1);
+  assert.ok(SURFACE.includes('<CardCategory model={model} />'));
+  const PARTS = read('components', 'feed', 'recall-card-parts.tsx');
+  assert.ok(PARTS.includes('const category = categoryStyle(model.categoryId ?? null);'));
+  assert.ok(PARTS.includes('if (!model.categoryLabel || !category) return null;'));
+  assert.ok(PARTS.includes('{model.categoryLabel}</Text>'));
+  assert.ok(!codeOnly(PARTS).includes('foodCategoryLabel'), 'the card spells a label of its own');
   // Both screens reach the card through the same builder with the same
   // arguments, so the same recall carries the same word on both. Since
   // P2B7N.1 the two call sites are BYTE-IDENTICAL — there is no longer a
@@ -266,7 +274,11 @@ test('Dynamic Type is honoured, and long labels wrap instead of clipping', () =>
   );
   assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_BRAND_LINES : undefined}'));
   assert.ok(CARD.includes('numberOfLines={uniform ? PREVIEW_REASON_LINES : undefined}'));
-  assert.deepEqual(codeOnly(CARD).match(/\bheight: [^,]+/g) ?? [], []);
+  // The one height is the Feed photo tile's own fixed square (the approved
+  // 112pt contained photo), never a box around text.
+  assert.deepEqual(codeOnly(CARD).match(/\bheight: [^,]+/g) ?? [], [
+    'height: recallCardGeometry.photoSide',
+  ]);
 });
 
 // ── 5. Accessibility ────────────────────────────────────────────────────────

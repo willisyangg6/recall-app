@@ -210,6 +210,28 @@ are the same string by construction. Push reads the **same** reason sentence as 
 before that it built its own, and the two disagreed on 534 of 898 active cases,
 including the certainty word.
 
+**Card-only shorter reason (2026-10-14, founder-approved).** The Feed and
+Saved card render that shared sentence through `lib/recall-card-reason.ts`
+(`cardReasonText`), which changes exactly two known shapes:
+
+- an allergen line drops its redundant trailing "allergen(s)" ("Undeclared
+  sesame allergen" → "Undeclared sesame"), keeping every named allergen and
+  any uncertainty qualifier;
+- "Potential Salmonella contamination" → "Possible Salmonella" and
+  "Potential Listeria contamination" → "Possible Listeria".
+
+Everything else, confirmed contamination wording included, is shown as
+given. Push and Detail are unchanged.
+
+**This is an intentional difference, not drift (founder decision,
+2026-10-14).** The card's wording is a compact summary of the same reason. It
+preserves the uncertainty: "Possible Salmonella" still says the contamination
+is not confirmed, as push's "Potential Salmonella contamination" does, and
+an allergen line keeps every named allergen. Only the redundant words go.
+It is not a second reason sentence, and it must never turn an uncertain
+reason into a confirmed one or drop a named hazard. The card's spoken label
+uses the same shorter wording as its visible text.
+
 **Intentionally different.** Detail states more than a card, because it has
 room: the complete jurisdiction list against the card's `CT, IL +4`; the full
 What Happened paragraph against the card's compact reason; and **retailers,

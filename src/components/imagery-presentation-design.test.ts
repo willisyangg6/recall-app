@@ -115,7 +115,7 @@ test('P2B7I: an absent image renders no media column — no footprint, no placeh
   // tile still decides presence alone.)
   assert.match(
     CARD,
-    /<MediaTile\s+uri=\{model\.heroImageUrl\}\s+alt=\{model\.productName\}\s+size=\{layout\.cardMediaSize\}\s+cornerRadius=\{feedGeometry\.photoRadius\}\s*\/>/,
+    /<MediaTile\s+uri=\{model\.heroImageUrl\}\s+alt=\{model\.productName\}\s+size=\{\{\s*width: recallCardGeometry\.photoSide,\s*height: recallCardGeometry\.photoSide,\s*\}\}\s+decorative\s+cornerRadius=\{feedGeometry\.photoRadius\}\s*\/>/,
   );
   assert.ok(!/heroImageUrl \?/.test(CARD_CODE), 'the card decides the media itself');
   assert.ok(!CARD.includes('media-placeholder'));
@@ -402,8 +402,11 @@ test('P2B7I: the spoken position counts reachable pages, and repeats no total', 
       'accessibilityValue={positionLabel !== null ? { text: positionLabel } : undefined}',
     ),
   );
-  assert.ok(MEDIA_TILE.includes('accessibilityLabel={alt}'));
-  assert.ok(MEDIA_TILE.includes('accessibilityRole="image"'));
+  // A tile is an image that speaks its label, unless a caller marks it
+  // decorative because its own label already names the product (the
+  // replacement Feed card, 2026-10-14, which speaks the title once).
+  assert.ok(MEDIA_TILE.includes('accessibilityLabel={decorative ? undefined : alt}'));
+  assert.ok(MEDIA_TILE.includes("accessibilityRole={decorative ? undefined : 'image'}"));
 });
 
 // ── 5. Failed pages ─────────────────────────────────────────────────────────
