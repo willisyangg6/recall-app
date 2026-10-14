@@ -2932,7 +2932,11 @@ The push steps alone also receive the alert entitlement gate's RevenueCat
 read: `REVENUECAT_SECRET_KEY` (a v2 secret key scoped to
 `customer_information:customers:read`), `REVENUECAT_PROJECT_ID` and
 `REVENUECAT_PREMIUM_ENTITLEMENT_ID`. Unset, every alert is held
-(docs/recall-push-delivery.md, "Alert entitlement gate"). Another,
+(docs/recall-push-delivery.md, "Alert entitlement gate"). The gate's migration
+`20261018000000_push_entitlement.sql` was **applied to production on
+2026-10-14** and verified read-only; push stayed inactive. After
+`push:activate`, the gate's live entitlement check (pass criteria and
+rollback in docs/recall-push-delivery.md) must pass before public release. Another,
 `EXPO_ACCESS_TOKEN`, is optional and only needed if enhanced push security is
 enabled on the Expo account (docs/recall-push-delivery.md). All are
 server-only, never in any `EXPO_PUBLIC_*` variable, never printed by any job,

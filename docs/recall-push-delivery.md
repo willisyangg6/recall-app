@@ -643,13 +643,26 @@ notifications. Whether an alert sent between the stop and the disable is
 shown has **not** been tested on a device. It needs an activated send or
 `push:test`, which require separate authorization.
 
-## Alert entitlement gate (2026-10-14; prepared, NOT applied or deployed)
+## Alert entitlement gate (2026-10-14; migration applied and verified 2026-10-14; push not activated)
 
 **Rule (founder decision D2, 2026-10-14):** recall alerts stop when a
 subscription ends. The server gates alerts on the same RevenueCat `premium`
 entitlement, under the same purchase id, that unlocks the app
 (`src/lib/purchases/revenuecat-adapter.ts`). Migration
-`20261018000000_push_entitlement.sql` is prepared, not applied.
+`20261018000000_push_entitlement.sql` was **applied to production on
+2026-10-14** and verified read-only:
+
+- 22/22 migrations match, and the dry run is up to date;
+- the five columns, the trigger and the index are present;
+- all three registrations take `p_purchase_id`;
+- grants are as reviewed;
+- the export carries `purchase_id_last4`;
+- the 4 existing rows are `unknown` with no purchase id.
+
+Push remained inactive (`push_delivery_config` has no row). The code is on
+master as `a6c16a4`. The evidence, with the reviewed checksum
+`e561f7858a14d6a7aeff95fb81c2bdcbc611dfd3a3ca4093e980495e49933bb9`, is in
+the founder's review folder (`migration-20261018-preflight/`).
 
 **How it works.**
 
@@ -742,8 +755,8 @@ same entitlement.
 
 **Deployment order (each step its own approval):**
 
-1. Apply `20261018000000`. It's backward compatible: older builds register
-   without an id and are held.
+1. ~~Apply `20261018000000`~~: **done 2026-10-14**. It's backward
+   compatible: older builds register without an id and are held.
 2. Distribute any build that sends `p_purchase_id` only **after** step 1.
    Without the migration, PostgREST finds no matching function and turning
    alerts on fails.
@@ -774,7 +787,83 @@ same entitlement.
 - `push-entitlement-migration.test.ts` (SQL text);
 - `push-api-purchase-id.test.ts` (client bodies).
 
-**Not yet run:** a live run of the migration on an isolated stack.
+**Isolated-stack verification (2026-10-14).** On a disposable stack the
+migration applied cleanly, both live suites passed, and 15 database checks
+passed. The upgrade from `20261017` with existing rows kept every row
+`unknown`.
+
+### Live entitlement check (REQUIRED after activation, before public release)
+
+Founder decision A5 (2026-10-14): **option 2.** There is no diagnostic
+command. The first live RevenueCat lookup happens in the first activated push
+run, so this check follows `push:activate` and **must pass before public
+release**. It uses existing tooling only: a TestFlight device's Server Data
+screen, the RevenueCat dashboard, and one read-only query.
+
+**Read-only query** (`supabase db query --linked`, aggregate only, no row
+content):
+
+```sql
+select json_build_object(
+  'runs', (select json_agg(r order by r.started_at desc) from (
+      select started_at, outcome, error,
+             metrics ->> 'entitlementSource' as source,
+             (metrics ->> 'entitlementRowsDue')::int as due,
+             (metrics ->> 'entitlementChecks')::int as checks,
+             (metrics ->> 'entitlementCheckFailures')::int as failures,
+             (metrics ->> 'entitlementNotLanded')::int as not_landed,
+             (metrics ->> 'entitlementDeferred')::int as deferred
+        from public.ingest_runs
+       where source_system = 'push_delivery'
+         and started_at > (select push_enabled_at from public.push_delivery_config limit 1)
+       order by started_at desc limit 5) r),
+  'enabled_with_id', (select count(*) from public.push_subscriptions where enabled and purchase_id is not null),
+  'enabled_without_id', (select count(*) from public.push_subscriptions where enabled and purchase_id is null),
+  'status_counts', (select json_object_agg(entitlement_status, n) from (
+      select entitlement_status, count(*) as n from public.push_subscriptions
+       where enabled and purchase_id is not null group by 1) s),
+  'unchecked_or_stale', (select count(*) from public.push_subscriptions
+       where enabled and purchase_id is not null
+         and (entitlement_checked_at is null or entitlement_checked_at < now() - interval '3 hours'))
+) as live_check;
+```
+
+**Pass criteria.** All must hold, judged within 2 hours of activation. That
+is one refresh interval plus the worst measured run gap. The overnight
+sending hold does not delay the refresh.
+
+| #   | Criterion                                                                                                                                                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1  | At least one push run after `push_enabled_at`, with `source = 'revenuecat'` (never `unconfigured`)                                                                                                                                                                  |
+| P2  | In every such run, `failures = 0`, `not_landed = 0`, `deferred = 0`, and `error` mentions no entitlement check                                                                                                                                                      |
+| P3  | `checks` ≥ the `enabled_with_id` count at the first run, so every registration carrying an id was checked                                                                                                                                                           |
+| P4  | `unchecked_or_stale = 0`, and `status_counts` has no `unknown`                                                                                                                                                                                                      |
+| P5  | A TestFlight tester with an active sandbox subscription and alerts on sees **"Subscription status for alerts: Active until …"** on Server Data. The date matches that customer's `premium` expiry in the RevenueCat dashboard (Sandbox), within one sandbox renewal |
+| P6  | After that tester turns off auto-renew and the sandbox subscription expires, within 3 hours Server Data shows **"Subscription status for alerts: Ended"**, and `status_counts` shows one more `inactive`                                                            |
+
+Not a pass criterion: whether an alert actually arrives or stops. That needs
+a real recall after expiry. The clock gate that stops it is proven by
+`entitlement-gate.test.ts` and the isolated stack.
+
+**Rollback (existing tooling only).**
+
+- **Fail-closed problem:** P1–P4 fail because of `unconfigured`, check
+  failures or unchecked rows.
+  - Nobody receives alerts through the gate: unverified status is held.
+  - Fix the `REVENUECAT_*` settings in the GitHub `production` environment
+    and re-judge at the next run.
+  - If it cannot be fixed the same day, deactivate (below) to keep runs clean.
+- **Fail-open problem:** a registration shows `active` while RevenueCat shows
+  no active `premium`, or P5/P6 disagree with the dashboard.
+  - **Immediately** run `npm run push:activate -- --deactivate --confirm`
+    (the emergency off switch). The worker then stops before any refresh or
+    send.
+  - Rows queued before deactivation are never sent after a later
+    reactivation (`before_activation`).
+  - Investigate; reactivating is a new decision.
+- **Never** edit entitlement fields by hand, delete rows, or reverse the
+  migration as a rollback.
+- **Public release** waits until P1–P6 pass.
 
 ## Secrets and privacy
 
