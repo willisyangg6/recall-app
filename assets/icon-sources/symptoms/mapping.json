@@ -1,0 +1,376 @@
+[
+  {
+    "slug": "fever",
+    "label": "Fever",
+    "design": "Upright thermometer with heat marks",
+    "file": "originals/symptom-fever.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "6a2fe8e5a575006b65c56b16b62a036d7973cce459332221103accfd97ff78cd"
+  },
+  {
+    "slug": "low-fever",
+    "label": "A low fever",
+    "design": "Upright thermometer with a short mercury line and two tiny horizontal heat ticks.",
+    "file": "originals/symptom-low-fever.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "8ea2a7cb5fd31966cc507520193556ab0e2fc017eea0f85a38024736629954b4"
+  },
+  {
+    "slug": "coughing-wheezing",
+    "label": "Coughing or wheezing",
+    "design": "Simple human side-profile head and neck with two short curved airflow lines leaving the mouth.",
+    "file": "originals/symptom-coughing-wheezing.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "0400ceac356f9896d3f16c88f605dd8a0edaa01115afd582bee7bc8e33636688"
+  },
+  {
+    "slug": "dark-urine-pale-stools",
+    "label": "Dark urine or clay-colored stools",
+    "design": "Two clean symbolic shapes: a navy outlined urine droplet with solid small center, beside a simple rounded stool outline; restrained medical shorthand, not graphic.",
+    "file": "originals/symptom-dark-urine-pale-stools.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "cb1ee0903e5e5be512970e555a7501d36661de5111fa29660ad417de4be4c6fb"
+  },
+  {
+    "slug": "diarrhea-vomiting",
+    "label": "Diarrhea or vomiting",
+    "design": "Simple stomach outline with a downward flow arrow and one small upward curved flow cue; one unified digestive glyph.",
+    "file": "originals/symptom-diarrhea-vomiting.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "f406db1939d83c37cd424e7258eb8810847acbbb675ebc18bdd66575c731c719"
+  },
+  {
+    "slug": "bloody-diarrhea",
+    "label": "Diarrhea, which may be bloody",
+    "design": "Simple intestine-loop outline with a downward flow arrow and one small droplet; monochrome, no graphic blood.",
+    "file": "originals/symptom-bloody-diarrhea.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "9aba2065668c9d608a9a9f560a20c964ca69816d439190bb5d634ba4d7af79ad"
+  },
+  {
+    "slug": "difficulty-breathing",
+    "label": "Difficulty breathing",
+    "design": "Paired lung outline, central trachea, two short broken airflow curves beside one lung.",
+    "file": "originals/symptom-difficulty-breathing.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "a5138ca4f20bf5b4c797804dcb913d8e872bec4da64f479efcb351fada822b3f"
+  },
+  {
+    "slug": "difficulty-swallowing",
+    "label": "Difficulty swallowing",
+    "design": "Minimal side-profile head and neck, small throat dot, downward arrow interrupted by one short crossbar.",
+    "file": "originals/symptom-difficulty-swallowing.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "6d42e12b745de2d3ef916bd15e78acf15adc6c9ccb350b2fc3ee22c37b01270f"
+  },
+  {
+    "slug": "dizziness-fainting",
+    "label": "Dizziness or fainting",
+    "design": "Simple tilted human head with one small curved spiral arc above it.",
+    "file": "originals/symptom-dizziness-fainting.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "285d8990b877825cb67e85d762191034f0cc0a24c43331cfdcb32259fa8acc9d"
+  },
+  {
+    "slug": "double-blurred-vision",
+    "label": "Double or blurred vision",
+    "design": "Simple eye outline, two slightly offset pupil outlines suggesting double vision without a crossed-out eye.",
+    "file": "originals/symptom-double-blurred-vision.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "a26929ed502784b621c080a472cf28270bd07999fb470735fd1d6356407bc294"
+  },
+  {
+    "slug": "drooping-eyelids",
+    "label": "Drooping eyelids",
+    "design": "Simple eye with a visibly lowered upper eyelid and partial iris; no crossed-out eye.",
+    "file": "originals/symptom-drooping-eyelids.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "0728352ec6138bb677e371075f57b99c0d40faced8a269285df16e60970bd968"
+  },
+  {
+    "slug": "feeling-tired",
+    "label": "Feeling tired",
+    "design": "Minimal human head and slumped shoulder silhouette, small two-line rest cue.",
+    "file": "originals/symptom-feeling-tired.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "ebaf340159e165e71d5582f61814e114c2a837ff6c267c5c96b2b7840c32a0b5"
+  },
+  {
+    "slug": "feeling-very-tired",
+    "label": "Feeling very tired",
+    "design": "Minimal human head bent slightly forward and slumped shoulders, small two-line rest cue.",
+    "file": "originals/symptom-feeling-very-tired.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "2c12238238abf35aeca3ba41ffa4a7bbd2c79ffd1c1ccdd4b119131ef7526542"
+  },
+  {
+    "slug": "headache",
+    "label": "Headache",
+    "design": "Simple side-profile head with a small three-ray pain mark at temple.",
+    "file": "originals/symptom-headache.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "b18a49906ae93338a130feb8d00ae190ef1245b5d588581a9e90b663e7477e39"
+  },
+  {
+    "slug": "headache-neck-confusion",
+    "label": "Headache, stiff neck, or confusion",
+    "design": "Minimal side-profile head and neck, tiny pain rays at temple and one small interrupted curve at neck; no question mark text.",
+    "file": "originals/symptom-headache-neck-confusion.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "b38d669355978ba5f37a6e465a70c52624bf8b6418deacc26ac99aac194e1eff"
+  },
+  {
+    "slug": "hives-flushed-skin",
+    "label": "Hives or flushed skin",
+    "design": "Simple forearm and hand outline with three circular raised spots on forearm.",
+    "file": "originals/symptom-hives-flushed-skin.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "0baec2358886c4411ad17208357bb305b1cb5388bbd9b6eb4bf9b22f1a7e2650"
+  },
+  {
+    "slug": "increased-gas",
+    "label": "Increased gas",
+    "design": "Simple stomach outline containing two small bubbles with one outward curved air cue.",
+    "file": "originals/symptom-increased-gas.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "f9614c037593b88947bd6d38f4923b9aeaafb6dad92f3cb825f0c1adcff20bfe"
+  },
+  {
+    "slug": "joint-pain",
+    "label": "Joint pain",
+    "design": "Simple bent knee joint outline with a small three-ray pain mark at hinge.",
+    "file": "originals/symptom-joint-pain.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "b0720f63ca5545cb0ca5c71af4d1dad0586b593817dbc47fb53081c663d877fb"
+  },
+  {
+    "slug": "loss-appetite",
+    "label": "Loss of appetite",
+    "design": "Simple plate with fork beside it and one small horizontal minus mark; no weight scale.",
+    "file": "originals/symptom-loss-appetite.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "b5482c011982269d2ecca1836d363f18005b197aa633aafe81758454aaeb92d0"
+  },
+  {
+    "slug": "appetite-weight-loss",
+    "label": "Loss of appetite and weight loss",
+    "design": "Small simple plate and fork with a restrained downward arrow, one cohesive icon.",
+    "file": "originals/symptom-appetite-weight-loss.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "0a69f815bd9d3185f0cfec679a2d4582a03d925a2e94aacaf27984685227319b"
+  },
+  {
+    "slug": "muscle-aches-fatigue",
+    "label": "Muscle aches or fatigue",
+    "design": "Simple bent upper arm muscle outline with small pain rays and a relaxed drooping angle.",
+    "file": "originals/symptom-muscle-aches-fatigue.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "2d4481349887062dcf7658ba190c0ec8fc17b7aa280c08de1e372a6319008ce1"
+  },
+  {
+    "slug": "muscle-weakness",
+    "label": "Muscle weakness",
+    "design": "Simple bent arm outline with a short downward arrow beside it; no pain rays.",
+    "file": "originals/symptom-muscle-weakness.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "4c30580bf77dc80ef57068ec262efea43463d2369076d4e0cf973fc99f9215fb"
+  },
+  {
+    "slug": "nausea",
+    "label": "Nausea",
+    "design": "Simple stomach outline with two small wavy lines inside.",
+    "file": "originals/symptom-nausea.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "344649b73630cb46054be7653bc606cd8347b57166de5c35cde0625c975c22d8"
+  },
+  {
+    "slug": "nausea-vomiting",
+    "label": "Nausea or vomiting",
+    "design": "Simple stomach outline with one wavy line inside and a small upward curved arrow.",
+    "file": "originals/symptom-nausea-vomiting.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "485c502d24ca78dc0c2f43f653cab0c7cd9303a234b49bb4f8769e2c6f6dbfca"
+  },
+  {
+    "slug": "nausea-vomiting-pain",
+    "label": "Nausea, vomiting, or stomach pain",
+    "design": "Simple stomach outline with a small upward flow cue and tiny lightning pain mark.",
+    "file": "originals/symptom-nausea-vomiting-pain.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "b889f4f753aeb51673a1a17d50d0e28900c3ea3a090c1b69aa192858763b6417"
+  },
+  {
+    "slug": "slurred-speech",
+    "label": "Slurred speech",
+    "design": "Simple side-profile mouth and small speech bubble containing two gently wavering lines, no letters.",
+    "file": "originals/symptom-slurred-speech.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "4a8e4758409365a257133b3edd44e2efc4e3b1834cbfcf2ec45980375b8c9b35"
+  },
+  {
+    "slug": "cramps-bloating",
+    "label": "Stomach cramps or bloating",
+    "design": "Simple stomach outline with tiny lightning mark and one outward expansion curve.",
+    "file": "originals/symptom-cramps-bloating.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "9dd54df38a59350235e4afaaf9dc229aaafc21b3bb76fdaf13f5f9546255f440"
+  },
+  {
+    "slug": "severe-cramps",
+    "label": "Stomach cramps, which can be severe",
+    "design": "Simple stomach outline with one prominent small lightning pain mark.",
+    "file": "originals/symptom-severe-cramps.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "d0ab90023529f287efa035ce5b7f38e4a7c0e1f84e0515e07eb06fe557e61bbc"
+  },
+  {
+    "slug": "mouth-face-throat-swelling",
+    "label": "Tingling or swelling of the mouth, face, or throat",
+    "design": "Simple side-profile face and throat with three tiny sensory rays near lips and one curved swelling contour.",
+    "file": "originals/symptom-mouth-face-throat-swelling.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "05af8c9e7cc5d9f58ad6403c8889172b6161778d9b59ff15cc4760d2c705d5ab"
+  },
+  {
+    "slug": "trouble-breathing",
+    "label": "Trouble breathing",
+    "design": "Paired lung outline, central trachea, two short broken airflow curves beside one lung.",
+    "file": "originals/symptom-trouble-breathing.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "7b44f10b562bf4ad2be052515598725265105ffe9dcc0bc49cca4c59b53ae0aa"
+  },
+  {
+    "slug": "vomiting",
+    "label": "Vomiting",
+    "design": "Simple side-profile head, mouth angled slightly downward with short outward downward flow arrow; not graphic, no actual vomit.",
+    "file": "originals/symptom-vomiting.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "0221357e4eeb829683fdf9c823d33ab3408375d5f45cbb00d9c98f6deef29ace"
+  },
+  {
+    "slug": "vomiting-diarrhea-cramps",
+    "label": "Vomiting, diarrhea, or stomach cramps",
+    "design": "Simple stomach outline with small upward and downward flow cues and restrained tiny lightning mark, uncluttered.",
+    "file": "originals/symptom-vomiting-diarrhea-cramps.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "dc553ece16edb5172bfef8f109dc5a573e8e067bb07aab0f36b6f1f84d4cdd6e"
+  },
+  {
+    "slug": "watery-diarrhea",
+    "label": "Watery diarrhea",
+    "design": "Simple intestine loop outline with downward arrow ending beside two tiny water drops.",
+    "file": "originals/symptom-watery-diarrhea.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "fec9941a265bef4c9c0c4b72dd51e4dd0257b566f8575fa7daeb6bcf286bee7e"
+  },
+  {
+    "slug": "yellow-skin-eyes",
+    "label": "Yellow skin or eyes",
+    "design": "Simple eye outline with an iris surrounded by three short radiating marks to suggest a visible change; monochrome navy, no yellow color.",
+    "file": "originals/symptom-yellow-skin-eyes.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "sha256": "bddcb90cf647c457b979e373e5829d77054998a9cdd5a7d75eab431ab069103d"
+  }
+]

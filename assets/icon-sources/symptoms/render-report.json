@@ -1,0 +1,1056 @@
+[
+  {
+    "label": "Fever",
+    "slug": "fever",
+    "masterBounds": [
+      441,
+      257,
+      485,
+      845
+    ],
+    "artworkUnits": [
+      12.63,
+      22.0
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-fever.png",
+        "px": 24,
+        "sha256": "094e235be93db75d7e918c5db213f3d86ab1c592964b20ad98ea541bb2a6aba8"
+      },
+      {
+        "path": "assets/icons/symptom-fever@2x.png",
+        "px": 48,
+        "sha256": "64dd1d6109f1b504a741150a1112aa77b0f088f5eda3323917e481d5fe882bef"
+      },
+      {
+        "path": "assets/icons/symptom-fever@3x.png",
+        "px": 72,
+        "sha256": "d2101c5d0d968d59641fdd13ea42e30501a94b6fe3cb735a1cedf66fda6072fb"
+      }
+    ]
+  },
+  {
+    "label": "A low fever",
+    "slug": "low-fever",
+    "masterBounds": [
+      433,
+      195,
+      466,
+      897
+    ],
+    "artworkUnits": [
+      11.43,
+      22.0
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-low-fever.png",
+        "px": 24,
+        "sha256": "e1fb75621ca58cea215c1b69609894d72b8a8b8bfca1fd5c2edba943195f4e1a"
+      },
+      {
+        "path": "assets/icons/symptom-low-fever@2x.png",
+        "px": 48,
+        "sha256": "322001ca406d7c467dedb70e7ac88415f5c18941df8c71c3230b587d017d2f6a"
+      },
+      {
+        "path": "assets/icons/symptom-low-fever@3x.png",
+        "px": 72,
+        "sha256": "99ccdd30f837626a01b5a5fb81b47f62d47eda7d432d98eace8897919fae2b6e"
+      }
+    ]
+  },
+  {
+    "label": "Coughing or wheezing",
+    "slug": "coughing-wheezing",
+    "masterBounds": [
+      199,
+      225,
+      887,
+      797
+    ],
+    "artworkUnits": [
+      21.1,
+      18.96
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-coughing-wheezing.png",
+        "px": 24,
+        "sha256": "54014d76dfccf8da7d63436c649f4e49032f7b30997d0a70a1c64c9448a68041"
+      },
+      {
+        "path": "assets/icons/symptom-coughing-wheezing@2x.png",
+        "px": 48,
+        "sha256": "407f2b1c65401673f49832edafe802741ff328c6f5b0842d77482ae1a220babc"
+      },
+      {
+        "path": "assets/icons/symptom-coughing-wheezing@3x.png",
+        "px": 72,
+        "sha256": "48da94799cb335054640562e8de8c03c8ce7cae8e5029b48bb97bc18acf5f08c"
+      }
+    ]
+  },
+  {
+    "label": "Dark urine or clay-colored stools",
+    "slug": "dark-urine-pale-stools",
+    "masterBounds": [
+      248,
+      396,
+      763,
+      519
+    ],
+    "artworkUnits": [
+      22.0,
+      14.96
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-dark-urine-pale-stools.png",
+        "px": 24,
+        "sha256": "10cab858cdeee6df887c5c499a8b514a6ac3a5f300aeefd625a02b087c48b663"
+      },
+      {
+        "path": "assets/icons/symptom-dark-urine-pale-stools@2x.png",
+        "px": 48,
+        "sha256": "9127de75f5d8efc6af4f6a1ac2df647ffa78e91d94822dc663735c258f5d803d"
+      },
+      {
+        "path": "assets/icons/symptom-dark-urine-pale-stools@3x.png",
+        "px": 72,
+        "sha256": "dbc16c4467741fc57c8c8dcfeb338ba03fa62d66d545c633e3ccc80bdf0cda0e"
+      }
+    ]
+  },
+  {
+    "label": "Diarrhea or vomiting",
+    "slug": "diarrhea-vomiting",
+    "masterBounds": [
+      287,
+      184,
+      712,
+      879
+    ],
+    "artworkUnits": [
+      17.82,
+      22.0
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-diarrhea-vomiting.png",
+        "px": 24,
+        "sha256": "69d8ec28568b44730d031214aee50f67f2739c626a253fbc5151c6eb577f8f85"
+      },
+      {
+        "path": "assets/icons/symptom-diarrhea-vomiting@2x.png",
+        "px": 48,
+        "sha256": "f86d3caa2f88b957b00a70994536937810d03b7504480642b014fea140f22f0b"
+      },
+      {
+        "path": "assets/icons/symptom-diarrhea-vomiting@3x.png",
+        "px": 72,
+        "sha256": "60ace63556b691dff1e267b7968cff608d95ad68e0873dfb115f3a3270100c6f"
+      }
+    ]
+  },
+  {
+    "label": "Diarrhea, which may be bloody",
+    "slug": "bloody-diarrhea",
+    "masterBounds": [
+      288,
+      117,
+      680,
+      1050
+    ],
+    "artworkUnits": [
+      14.25,
+      22.0
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-bloody-diarrhea.png",
+        "px": 24,
+        "sha256": "ee64edeeb33b3e6063ea40a0082bcdb4e30f618da9be4a3c6f9af7e34b599f54"
+      },
+      {
+        "path": "assets/icons/symptom-bloody-diarrhea@2x.png",
+        "px": 48,
+        "sha256": "3ef51cce2a2820ba030323b1a444161c21aaf448fd7f26e7b93dc611fa1264c5"
+      },
+      {
+        "path": "assets/icons/symptom-bloody-diarrhea@3x.png",
+        "px": 72,
+        "sha256": "29112825ac9686dbb4316cbebb0a1e4586261ba31c0c186bbc302b3b56a57cbf"
+      }
+    ]
+  },
+  {
+    "label": "Difficulty breathing",
+    "slug": "difficulty-breathing",
+    "masterBounds": [
+      202,
+      220,
+      932,
+      839
+    ],
+    "artworkUnits": [
+      21.08,
+      18.98
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-difficulty-breathing.png",
+        "px": 24,
+        "sha256": "ad285891e7328de6888366105a35c86ad5722a6544a8b1dbe7bdbb18426eaa52"
+      },
+      {
+        "path": "assets/icons/symptom-difficulty-breathing@2x.png",
+        "px": 48,
+        "sha256": "c3d24d2bebc4886de2b55358ff2fb6a638f13ef5db432d51ea7ed02b4fd4f045"
+      },
+      {
+        "path": "assets/icons/symptom-difficulty-breathing@3x.png",
+        "px": 72,
+        "sha256": "e6ee22ea56adcc8335ebb033248f4ecc418a87b7a24e21b962be75e08f3c9608"
+      }
+    ]
+  },
+  {
+    "label": "Difficulty swallowing",
+    "slug": "difficulty-swallowing",
+    "masterBounds": [
+      239,
+      165,
+      776,
+      918
+    ],
+    "artworkUnits": [
+      18.39,
+      21.75
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-difficulty-swallowing.png",
+        "px": 24,
+        "sha256": "79333a0b5e2ea54bab9c399ded53c6fd001eb964d30183e8ee80ae87b5f7f640"
+      },
+      {
+        "path": "assets/icons/symptom-difficulty-swallowing@2x.png",
+        "px": 48,
+        "sha256": "74421d019643ef4938a277f92cc14933c6c311efe0bc2710a81304bffa8071d7"
+      },
+      {
+        "path": "assets/icons/symptom-difficulty-swallowing@3x.png",
+        "px": 72,
+        "sha256": "8d1d284396cdedf6764bbec09851b81e280244aca7581a7460f9b29ca401c7a2"
+      }
+    ]
+  },
+  {
+    "label": "Dizziness or fainting",
+    "slug": "dizziness-fainting",
+    "masterBounds": [
+      237,
+      211,
+      780,
+      880
+    ],
+    "artworkUnits": [
+      18.83,
+      21.24
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-dizziness-fainting.png",
+        "px": 24,
+        "sha256": "8f112ed459717bd82d82e40665470557081e8c67947e4cd4cdc8354aeb53ed55"
+      },
+      {
+        "path": "assets/icons/symptom-dizziness-fainting@2x.png",
+        "px": 48,
+        "sha256": "4494b26ddb5712748280784209f6f3b6db8604c240c3bcd4d3e49aeba8494198"
+      },
+      {
+        "path": "assets/icons/symptom-dizziness-fainting@3x.png",
+        "px": 72,
+        "sha256": "7095615c21d26759fef50b95a9f8450a3ae1ed1c9d49f700aa800e554dede0db"
+      }
+    ]
+  },
+  {
+    "label": "Double or blurred vision",
+    "slug": "double-blurred-vision",
+    "masterBounds": [
+      193,
+      394,
+      866,
+      504
+    ],
+    "artworkUnits": [
+      22.0,
+      12.8
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-double-blurred-vision.png",
+        "px": 24,
+        "sha256": "867ded863b7d47f219d8d38d1e07e9d078efd1d2c853456eb657ec305301fec8"
+      },
+      {
+        "path": "assets/icons/symptom-double-blurred-vision@2x.png",
+        "px": 48,
+        "sha256": "0e4addd4b2b712874f0d2c2b71881fb0201e72dcb91258821a0de58359dd9b7b"
+      },
+      {
+        "path": "assets/icons/symptom-double-blurred-vision@3x.png",
+        "px": 72,
+        "sha256": "1f7fac74c1140cdf6a9658ef198aec51fd0716927e68f0ece84c8ac433d08156"
+      }
+    ]
+  },
+  {
+    "label": "Drooping eyelids",
+    "slug": "drooping-eyelids",
+    "masterBounds": [
+      195,
+      417,
+      864,
+      459
+    ],
+    "artworkUnits": [
+      22.0,
+      11.69
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-drooping-eyelids.png",
+        "px": 24,
+        "sha256": "3539e7467ac2f9e42b5c9f3b7f6a5eb7209bf7909e2c0a3876499f38a94ddf75"
+      },
+      {
+        "path": "assets/icons/symptom-drooping-eyelids@2x.png",
+        "px": 48,
+        "sha256": "63577bd9ab13030ba6dd8a3bc95095edc754f2bf4db0d96d225d06020bf3cc55"
+      },
+      {
+        "path": "assets/icons/symptom-drooping-eyelids@3x.png",
+        "px": 72,
+        "sha256": "71e9bf561c8330bb2426667010b2ca26d0011720f011a0bb47a4f66d5b5be79b"
+      }
+    ]
+  },
+  {
+    "label": "Feeling tired",
+    "slug": "feeling-tired",
+    "masterBounds": [
+      299,
+      257,
+      679,
+      732
+    ],
+    "artworkUnits": [
+      19.26,
+      20.77
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-feeling-tired.png",
+        "px": 24,
+        "sha256": "ef9e151ba13a94b668334538f5abd3bfd791955f0f6be1c80c26b99c4e48d9ac"
+      },
+      {
+        "path": "assets/icons/symptom-feeling-tired@2x.png",
+        "px": 48,
+        "sha256": "2855f9a132fc56db4335c3e7722d638b3a38d372eb92355850969cd843200918"
+      },
+      {
+        "path": "assets/icons/symptom-feeling-tired@3x.png",
+        "px": 72,
+        "sha256": "6480dd5813ba992c812f34dc0839ea3bcbb1db145e47bdebebb678035565e442"
+      }
+    ]
+  },
+  {
+    "label": "Feeling very tired",
+    "slug": "feeling-very-tired",
+    "masterBounds": [
+      262,
+      242,
+      789,
+      777
+    ],
+    "artworkUnits": [
+      20.15,
+      19.85
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-feeling-very-tired.png",
+        "px": 24,
+        "sha256": "732b045fb290ac52823bafa6ff332c14769d8bb93b22240e5cb506b061d020e2"
+      },
+      {
+        "path": "assets/icons/symptom-feeling-very-tired@2x.png",
+        "px": 48,
+        "sha256": "391cb95704419f53a178a01a859da54887cd28585db096ac4c21b0ee0817f045"
+      },
+      {
+        "path": "assets/icons/symptom-feeling-very-tired@3x.png",
+        "px": 72,
+        "sha256": "b49083725e3e260e0245c9c76ec5d71e26f031a28b2ede13d0d0a70078c66161"
+      }
+    ]
+  },
+  {
+    "label": "Headache",
+    "slug": "headache",
+    "masterBounds": [
+      312,
+      254,
+      666,
+      766
+    ],
+    "artworkUnits": [
+      18.65,
+      21.45
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-headache.png",
+        "px": 24,
+        "sha256": "a09d7eb553dc8e5bdf2335f69f86b2f5d32c22e8eaa6eb867082cab0aea4665a"
+      },
+      {
+        "path": "assets/icons/symptom-headache@2x.png",
+        "px": 48,
+        "sha256": "ef6a6dd7a5da0f372f325d9f99d9ad6a09602eca78f479adb984cf2cd10948d8"
+      },
+      {
+        "path": "assets/icons/symptom-headache@3x.png",
+        "px": 72,
+        "sha256": "8e0f693505ad4da37172efcd5070310ea0b5afef0e05a9fec83726ea1f22b7f2"
+      }
+    ]
+  },
+  {
+    "label": "Headache, stiff neck, or confusion",
+    "slug": "headache-neck-confusion",
+    "masterBounds": [
+      267,
+      227,
+      807,
+      853
+    ],
+    "artworkUnits": [
+      19.45,
+      20.56
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-headache-neck-confusion.png",
+        "px": 24,
+        "sha256": "94d84eeb34e8083cd466434987e6e3298b72285f3d669645cfd738cc81324ccb"
+      },
+      {
+        "path": "assets/icons/symptom-headache-neck-confusion@2x.png",
+        "px": 48,
+        "sha256": "cab00e0464c802f45a5616f96c6f01eb7d258fee233fb7eef9f6a7da46cfd2a0"
+      },
+      {
+        "path": "assets/icons/symptom-headache-neck-confusion@3x.png",
+        "px": 72,
+        "sha256": "9de9b9deeebd633e171cc7a35a2f7f3dc92a73def7e0b6a7daab1130dc0a5e7b"
+      }
+    ]
+  },
+  {
+    "label": "Hives or flushed skin",
+    "slug": "hives-flushed-skin",
+    "masterBounds": [
+      184,
+      234,
+      934,
+      835
+    ],
+    "artworkUnits": [
+      21.15,
+      18.91
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-hives-flushed-skin.png",
+        "px": 24,
+        "sha256": "2384aaabf718b17b0d18a1d24b3987cad57b73d1773c34442629d809f24f451e"
+      },
+      {
+        "path": "assets/icons/symptom-hives-flushed-skin@2x.png",
+        "px": 48,
+        "sha256": "cb67e366b7f9598f91a41385966214851d78b1ead8dec61eea95485c1227af13"
+      },
+      {
+        "path": "assets/icons/symptom-hives-flushed-skin@3x.png",
+        "px": 72,
+        "sha256": "2c3beae1e9cef162d346226ef60ce58315eb9183a92e55ae0c1a5f82f58b7a33"
+      }
+    ]
+  },
+  {
+    "label": "Increased gas",
+    "slug": "increased-gas",
+    "masterBounds": [
+      211,
+      239,
+      896,
+      780
+    ],
+    "artworkUnits": [
+      21.44,
+      18.66
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-increased-gas.png",
+        "px": 24,
+        "sha256": "a9d3532571bda4930e0692c00ba130895787e7ee71057cee2c12bbfd48e56032"
+      },
+      {
+        "path": "assets/icons/symptom-increased-gas@2x.png",
+        "px": 48,
+        "sha256": "a1861bd1e0364f78d684702c88a9f1e7d02388945beee8599321f544867706c7"
+      },
+      {
+        "path": "assets/icons/symptom-increased-gas@3x.png",
+        "px": 72,
+        "sha256": "968f04cf93cce3fc5620c926f3c186c1149d73f0e350f642d25e159af15e8136"
+      }
+    ]
+  },
+  {
+    "label": "Joint pain",
+    "slug": "joint-pain",
+    "masterBounds": [
+      328,
+      223,
+      650,
+      801
+    ],
+    "artworkUnits": [
+      17.85,
+      22.0
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-joint-pain.png",
+        "px": 24,
+        "sha256": "fd532e1573756ebcc9e359740c2942ef2de52fceccc5ac99e16a97135ed8d788"
+      },
+      {
+        "path": "assets/icons/symptom-joint-pain@2x.png",
+        "px": 48,
+        "sha256": "dca85f8b2a7b4de40645a95c31e2e70012f44dbbeb6f963e953a89984dfea223"
+      },
+      {
+        "path": "assets/icons/symptom-joint-pain@3x.png",
+        "px": 72,
+        "sha256": "413b280d711fccbd9496f94cf5da30c3baa698c7a79d8c1a417e37070228015d"
+      }
+    ]
+  },
+  {
+    "label": "Loss of appetite",
+    "slug": "loss-appetite",
+    "masterBounds": [
+      234,
+      318,
+      811,
+      651
+    ],
+    "artworkUnits": [
+      22.0,
+      17.66
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-loss-appetite.png",
+        "px": 24,
+        "sha256": "7e2a926aac49da4311f00320358c49a92b59cac1f750f077af8b7b03e582df2e"
+      },
+      {
+        "path": "assets/icons/symptom-loss-appetite@2x.png",
+        "px": 48,
+        "sha256": "74ecc9a4a8c764f7dccaa120581f2e205405698a01bcfcf1aabbfb7bfb779fd9"
+      },
+      {
+        "path": "assets/icons/symptom-loss-appetite@3x.png",
+        "px": 72,
+        "sha256": "b5bcde4d824a458d2e2baaa53ff67b72b438c3326a094f0038ec4f4352eef5d8"
+      }
+    ]
+  },
+  {
+    "label": "Loss of appetite and weight loss",
+    "slug": "appetite-weight-loss",
+    "masterBounds": [
+      161,
+      362,
+      958,
+      582
+    ],
+    "artworkUnits": [
+      22.0,
+      13.37
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-appetite-weight-loss.png",
+        "px": 24,
+        "sha256": "efe04cd9f405c04e276ee8010348015a1481ac92d134ba34c9f29441e07544b4"
+      },
+      {
+        "path": "assets/icons/symptom-appetite-weight-loss@2x.png",
+        "px": 48,
+        "sha256": "2f42249933769a84b02000d6288d83b8245c14f7a709416a4dfcd385cf8c1de0"
+      },
+      {
+        "path": "assets/icons/symptom-appetite-weight-loss@3x.png",
+        "px": 72,
+        "sha256": "d9d9174b643440b688f5370c609e93ff314b3ba27f7411b74c60444a0cc6c6bb"
+      }
+    ]
+  },
+  {
+    "label": "Muscle aches or fatigue",
+    "slug": "muscle-aches-fatigue",
+    "masterBounds": [
+      307,
+      237,
+      691,
+      836
+    ],
+    "artworkUnits": [
+      18.18,
+      22.0
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-muscle-aches-fatigue.png",
+        "px": 24,
+        "sha256": "7efb28e5cc78bbaf76d3abc0e7dbf30f72de0bda28f166af566798c135627280"
+      },
+      {
+        "path": "assets/icons/symptom-muscle-aches-fatigue@2x.png",
+        "px": 48,
+        "sha256": "7951d032899514960499d606dadb8a3fc9fbcf32b3c92c4657e6caeaf6df2653"
+      },
+      {
+        "path": "assets/icons/symptom-muscle-aches-fatigue@3x.png",
+        "px": 72,
+        "sha256": "b46cd49e651db7cf0a383cf72524e68fa77807e71fb36e0a891612aee0b1fc35"
+      }
+    ]
+  },
+  {
+    "label": "Muscle weakness",
+    "slug": "muscle-weakness",
+    "masterBounds": [
+      273,
+      260,
+      728,
+      739
+    ],
+    "artworkUnits": [
+      19.85,
+      20.15
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-muscle-weakness.png",
+        "px": 24,
+        "sha256": "1be203b9ac924fa4e40a80dc499ae04b3bfda88e1db3bcbf4a527f0145edd081"
+      },
+      {
+        "path": "assets/icons/symptom-muscle-weakness@2x.png",
+        "px": 48,
+        "sha256": "f0b188b3a1d45ba10f7cd58be9fb943586b7ad08524b7f92ee9ef75ae95445b5"
+      },
+      {
+        "path": "assets/icons/symptom-muscle-weakness@3x.png",
+        "px": 72,
+        "sha256": "c21473e36b10b3aef1c66490e56552b80a23a6a0179eec1089f24c4323d91907"
+      }
+    ]
+  },
+  {
+    "label": "Nausea",
+    "slug": "nausea",
+    "masterBounds": [
+      253,
+      247,
+      748,
+      780
+    ],
+    "artworkUnits": [
+      19.59,
+      20.42
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-nausea.png",
+        "px": 24,
+        "sha256": "42f03c1132ae25f62b6f4fb69bf1d3b5d601c24defb3759afa488982182e267a"
+      },
+      {
+        "path": "assets/icons/symptom-nausea@2x.png",
+        "px": 48,
+        "sha256": "9a5985bc3440d17846d4f8af3183cd05d6f1d4c61239aba34b602c2e97762931"
+      },
+      {
+        "path": "assets/icons/symptom-nausea@3x.png",
+        "px": 72,
+        "sha256": "1c42f737946d84311cabcdb72ab19da079c3ff736f451d532b69ec1e9eb68efd"
+      }
+    ]
+  },
+  {
+    "label": "Nausea or vomiting",
+    "slug": "nausea-vomiting",
+    "masterBounds": [
+      224,
+      200,
+      807,
+      860
+    ],
+    "artworkUnits": [
+      19.37,
+      20.65
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-nausea-vomiting.png",
+        "px": 24,
+        "sha256": "28df014bd36be77a5ce1709b7b98c2da9bba30ecc5968a1799ece0b3bfb3d6c0"
+      },
+      {
+        "path": "assets/icons/symptom-nausea-vomiting@2x.png",
+        "px": 48,
+        "sha256": "b1844388c315a2125e719ca54ca59303521d10f87162cc9ecbaa3f80e9099876"
+      },
+      {
+        "path": "assets/icons/symptom-nausea-vomiting@3x.png",
+        "px": 72,
+        "sha256": "6059cb4c27a10c406d6ff0ffc6c28d95832e3c2107c7e0a5cd3bcb2bd35675b6"
+      }
+    ]
+  },
+  {
+    "label": "Nausea, vomiting, or stomach pain",
+    "slug": "nausea-vomiting-pain",
+    "masterBounds": [
+      227,
+      190,
+      874,
+      869
+    ],
+    "artworkUnits": [
+      20.06,
+      19.94
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-nausea-vomiting-pain.png",
+        "px": 24,
+        "sha256": "ed1f5ce5996473d26e9e9be9344451282f833c52679f90e6bdece053cb435f0b"
+      },
+      {
+        "path": "assets/icons/symptom-nausea-vomiting-pain@2x.png",
+        "px": 48,
+        "sha256": "85d378a97eef21d0b93fd60f6471ffe95bbcb38e5960c9eb0d0b758eecc70403"
+      },
+      {
+        "path": "assets/icons/symptom-nausea-vomiting-pain@3x.png",
+        "px": 72,
+        "sha256": "917820a5dc1a3dee09ac465c5c7383e8553c152e2ca4501b374d3ffd20861a44"
+      }
+    ]
+  },
+  {
+    "label": "Slurred speech",
+    "slug": "slurred-speech",
+    "masterBounds": [
+      265,
+      211,
+      830,
+      774
+    ],
+    "artworkUnits": [
+      20.71,
+      19.31
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-slurred-speech.png",
+        "px": 24,
+        "sha256": "4036f20b17e22ee77531b1fc996785f261dc154b06532cf9385453791d9c6e72"
+      },
+      {
+        "path": "assets/icons/symptom-slurred-speech@2x.png",
+        "px": 48,
+        "sha256": "905daa8563f00f60d4092f55c107d4259e52711ed48fa92bce80d414285da0ee"
+      },
+      {
+        "path": "assets/icons/symptom-slurred-speech@3x.png",
+        "px": 72,
+        "sha256": "ce3a2c00ba5a2790bbdb03fb33bebb87dc3df8b4dcf682ac1ea497b64ca6d638"
+      }
+    ]
+  },
+  {
+    "label": "Stomach cramps or bloating",
+    "slug": "cramps-bloating",
+    "masterBounds": [
+      308,
+      260,
+      713,
+      734
+    ],
+    "artworkUnits": [
+      19.71,
+      20.29
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-cramps-bloating.png",
+        "px": 24,
+        "sha256": "bc802697dbd298df756486f83cbc0d7fc518130e4305e527a349c96de958db87"
+      },
+      {
+        "path": "assets/icons/symptom-cramps-bloating@2x.png",
+        "px": 48,
+        "sha256": "f3d1bdd9bac9f17a91d92d0bf02508423aa0e75187bd541a55b551d759b45f80"
+      },
+      {
+        "path": "assets/icons/symptom-cramps-bloating@3x.png",
+        "px": 72,
+        "sha256": "4102c1b65466b8928dae63a901f7bd3086384c19b6f6652d79c0ed4ce289c25c"
+      }
+    ]
+  },
+  {
+    "label": "Stomach cramps, which can be severe",
+    "slug": "severe-cramps",
+    "masterBounds": [
+      227,
+      205,
+      819,
+      843
+    ],
+    "artworkUnits": [
+      19.71,
+      20.29
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-severe-cramps.png",
+        "px": 24,
+        "sha256": "27dae0c85a139d6297b1683ecbd0d46d4e7c26eff4eed5121ec4acad42679334"
+      },
+      {
+        "path": "assets/icons/symptom-severe-cramps@2x.png",
+        "px": 48,
+        "sha256": "1d4a44e6fa8a41f0eeb086d68da1020695938546754f82feead49a88d59db02e"
+      },
+      {
+        "path": "assets/icons/symptom-severe-cramps@3x.png",
+        "px": 72,
+        "sha256": "879b03b12d53c1e7cf44a9fc1f5e113c1a13e14d3a1e93f48e117637793c4db0"
+      }
+    ]
+  },
+  {
+    "label": "Tingling or swelling of the mouth, face, or throat",
+    "slug": "mouth-face-throat-swelling",
+    "masterBounds": [
+      242,
+      250,
+      783,
+      777
+    ],
+    "artworkUnits": [
+      20.08,
+      19.92
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-mouth-face-throat-swelling.png",
+        "px": 24,
+        "sha256": "bfe466ce0905cff3c34ad110e7ed1a1c4c64f54f72421dd0dd8308d57ca3b445"
+      },
+      {
+        "path": "assets/icons/symptom-mouth-face-throat-swelling@2x.png",
+        "px": 48,
+        "sha256": "c266dc9f7603ccf4a03163875219c3ac8a5603e73374260c02d45442ec3e9e7c"
+      },
+      {
+        "path": "assets/icons/symptom-mouth-face-throat-swelling@3x.png",
+        "px": 72,
+        "sha256": "4b2af9197dd9d43b4229ea211c20826de99a25565b54455b26dc7f8690c6f7d5"
+      }
+    ]
+  },
+  {
+    "label": "Trouble breathing",
+    "slug": "trouble-breathing",
+    "masterBounds": [
+      229,
+      259,
+      893,
+      738
+    ],
+    "artworkUnits": [
+      22.0,
+      18.18
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-trouble-breathing.png",
+        "px": 24,
+        "sha256": "bbd9d807e0816fbb44730f3aac7dcc00468bc4b95cad10f8331c1bf0100a5021"
+      },
+      {
+        "path": "assets/icons/symptom-trouble-breathing@2x.png",
+        "px": 48,
+        "sha256": "1cfe1d59c7e03dd71ee8b8f21cc6bc793cbb09adfdab68332ec91bf0fe7b64fb"
+      },
+      {
+        "path": "assets/icons/symptom-trouble-breathing@3x.png",
+        "px": 72,
+        "sha256": "aacbf2d776d531dd0001d1d6716e7b6c0525fc11dd7ddc8b174c40de6caac27a"
+      }
+    ]
+  },
+  {
+    "label": "Vomiting",
+    "slug": "vomiting",
+    "masterBounds": [
+      211,
+      236,
+      832,
+      797
+    ],
+    "artworkUnits": [
+      20.43,
+      19.57
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-vomiting.png",
+        "px": 24,
+        "sha256": "20ad6bd57e215c4d3cde3e8325f3cca3bc1b4df66f180e40d465d824751adf45"
+      },
+      {
+        "path": "assets/icons/symptom-vomiting@2x.png",
+        "px": 48,
+        "sha256": "fe0fea8f880931ecb7a020d4b8c23361a48b68a604f9f1a09c89ac3fcaaa9614"
+      },
+      {
+        "path": "assets/icons/symptom-vomiting@3x.png",
+        "px": 72,
+        "sha256": "d2d765c26482eb7aef486c147f1d2608bc10a013841527acfe9398a78cb06b00"
+      }
+    ]
+  },
+  {
+    "label": "Vomiting, diarrhea, or stomach cramps",
+    "slug": "vomiting-diarrhea-cramps",
+    "masterBounds": [
+      325,
+      145,
+      640,
+      970
+    ],
+    "artworkUnits": [
+      14.52,
+      22.0
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-vomiting-diarrhea-cramps.png",
+        "px": 24,
+        "sha256": "0babafeba442b61e3d5dae3068faaa12b8bd4a1348d230020888d0174eb1dade"
+      },
+      {
+        "path": "assets/icons/symptom-vomiting-diarrhea-cramps@2x.png",
+        "px": 48,
+        "sha256": "3be0126b549666da0d395ee0552ec1f8fe102168e1b5cd002df5d714f0c68e81"
+      },
+      {
+        "path": "assets/icons/symptom-vomiting-diarrhea-cramps@3x.png",
+        "px": 72,
+        "sha256": "5a0759615f2b3161f589b34bf51ccbca60d17376c8a500c594ca23d9bbd07f94"
+      }
+    ]
+  },
+  {
+    "label": "Watery diarrhea",
+    "slug": "watery-diarrhea",
+    "masterBounds": [
+      313,
+      186,
+      706,
+      899
+    ],
+    "artworkUnits": [
+      17.28,
+      22.0
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-watery-diarrhea.png",
+        "px": 24,
+        "sha256": "dfb32c47ee83b433c0fca2ad76fe9a7226650b16179579a808414acb3699f974"
+      },
+      {
+        "path": "assets/icons/symptom-watery-diarrhea@2x.png",
+        "px": 48,
+        "sha256": "e1cb663efed237018f9dc2dc12f6ccd66cde20b3136087271d4f59dcb9145a72"
+      },
+      {
+        "path": "assets/icons/symptom-watery-diarrhea@3x.png",
+        "px": 72,
+        "sha256": "0385c42fe8b603ffad0e0e0eb3fed2ff7d13475609a0350c57664eb81c6e8f3e"
+      }
+    ]
+  },
+  {
+    "label": "Yellow skin or eyes",
+    "slug": "yellow-skin-eyes",
+    "masterBounds": [
+      177,
+      278,
+      900,
+      747
+    ],
+    "artworkUnits": [
+      21.95,
+      18.22
+    ],
+    "files": [
+      {
+        "path": "assets/icons/symptom-yellow-skin-eyes.png",
+        "px": 24,
+        "sha256": "1e980b5a284767f3c262643d243ec4e6cb283fe8bd49b2c657de4223ff3daf25"
+      },
+      {
+        "path": "assets/icons/symptom-yellow-skin-eyes@2x.png",
+        "px": 48,
+        "sha256": "cb6b56ec33586abf132b73f71947b3a49af7b1a6df93ed4acbd1652b317a4e25"
+      },
+      {
+        "path": "assets/icons/symptom-yellow-skin-eyes@3x.png",
+        "px": 72,
+        "sha256": "0ecc4a9eae948f5db5e8cddb9c5fdb9cfd781347db3ef0bb0a88b1d9c5a6c4b4"
+      }
+    ]
+  }
+]

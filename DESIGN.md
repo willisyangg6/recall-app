@@ -2622,7 +2622,8 @@ untouched.
   `Retailers: …`. More than five states: `Show all (N)` / `Show less`.
 - **Health Risk.** The reviewed paragraph, then `Common symptoms` (18/24,
   no divider before it). Each symptom row: a 36pt `#EDF4FA` disc holding a
-  22pt decorative glyph (`src/lib/symptom-icons.ts`), 12pt from the exact
+  22pt decorative `symptom-*` glyph in `icon/primary`, one per exact string
+  (`src/lib/symptom-icons.ts`), 12pt from the exact
   reviewed wording in body type, light dividers between rows only. Several
   supported hazards (decision E): one heading and one subheading, each
   guide's explanation and link and then its symptom group beneath a small
@@ -2749,7 +2750,7 @@ Lucide-style outline the design uses, unchanged in shape.
 | `shopping-cart`   | Lucide, vendored SVG source (native scale) | `shopping-cart`      | the Ready summary's Stores row (2026-09-26)      |
 | `chevron-up`      | the `chevron-down` export, a half turn     | `chevron-up`         | Detail's `Show less` controls (2026-10-07)       |
 | `store`           | lucide-static 0.468.0 (Detail kit)         | `store`              | Detail's retailer line (2026-10-07)              |
-| symptom glyphs    | lucide-static 0.468.0 (Detail kit)         | see below            | Health Risk symptom bubbles (2026-10-07)         |
+| `symptom-*` (34)  | approved Lotly raster masters              | see below            | Health Risk symptom bubbles (2026-10-12)         |
 | `label-*` (four)  | lucide-static 0.468.0 (label kit)          | see below            | harm notices, PHA label (2026-10-09)             |
 
 Figma exports each glyph cropped to its path bounds at some scale; each was
@@ -2823,16 +2824,32 @@ a touch lighter than the P2B1 set's 2.4; the existing `map-pin`, `flag`,
 
 **The Recall Detail glyphs (2026-10-07).** The Detail kit's pinned
 `lucide-static` 0.468.0 sources join the same vendored folder: `store` for
-the retailer line, and nine decorative symptom glyphs — `activity`, `brain`,
-`circle` (the fallback for an unmapped symptom), `droplets`, `eye`, `hand`,
-`thermometer`, `utensils-crossed` and `wind` — each scale rendered directly
-from its SVG at stroke 2. The symptom mapping is
-`src/lib/symptom-icons.ts`, keyed by the guides' exact strings and pinned so
-every reviewed symptom is mapped deliberately; a glyph is shorthand, never a
-diagnosis, and never spoken. `chevron-up` is the set's own `chevron-down`
+the retailer line, and `circle`, the fallback for a symptom with no glyph
+of its own, each scale rendered directly from its SVG at stroke 2. The kit's
+eight shared symptom stand-ins were retired on 2026-10-12 (below).
+`chevron-up` is the set's own `chevron-down`
 turned half a turn, so the title's `Show full title` / `Show less` pair
 shares one stroke. Existing equivalents (`map-pin`, `external-link`, `info`,
 `warning`, `bookmark`, `chevron-down`/`left`) are reused, not duplicated.
+
+**The Health Risk symptom glyphs (2026-10-12).** Thirty-four founder-approved
+Lotly glyphs, one for each exact symptom string the reviewed hazard guides
+state, used only in Recall Detail → Health Risk → Common symptoms. The
+approved 1254px raster masters are kept unchanged, each pinned by SHA-256, in
+`assets/icon-sources/symptoms/` with `mapping.json` (string → master).
+`render.py` renders each scale (24, 48, 72px) directly from its master on the
+shared 24-unit box, with one size rule for the whole set: the artwork's
+`sqrt(width × height)` is 20 units, unless that would push its longer side
+past the 22-unit envelope the Lucide glyphs fill. That rule is what brings
+the corrected Fever master, which fills far more of its canvas than the
+others, to the same visible size. The near-transparent generation haze is
+cleared and the glyph is written navy on transparent; the bubble stays a
+native view and the app tints the glyph `icon/primary`. The masters' line
+weight is lighter than the stroke-2 Lucide set, and Fever's heavier than the
+other 33. Both are carried from the approved artwork, not changed in
+rendering. `src/lib/symptom-icons.test.ts` pins the masters, the rendered
+bytes, one distinct glyph per string, and that no other surface names a
+symptom glyph. A glyph is shorthand, never a diagnosis, and never spoken.
 
 **The risk and harm label glyphs (2026-10-09).** The label kit's four pinned
 `lucide-static` 0.468.0 rasters, copied unchanged from the kit (each scale

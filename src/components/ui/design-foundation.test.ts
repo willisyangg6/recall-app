@@ -322,7 +322,7 @@ test('every declared icon name resolves to a real, non-empty asset at 1x, 2x and
   // primitive's own `GLYPHS` map as text — the same technique this suite uses
   // for every other component contract.
   const icon = read('components/ui/icon.tsx');
-  const ICON_NAMES = [...icon.matchAll(/^\s{2}'?([a-z-]+)'?: require\(/gm)].map((m) => m[1]);
+  const ICON_NAMES = [...icon.matchAll(/^\s{2}'?([a-z-]+)'?:\s*require\(/gm)].map((m) => m[1]);
   assert.ok(ICON_NAMES.length >= 12, `only ${ICON_NAMES.length} icons are declared`);
   for (const name of ICON_NAMES) {
     for (const suffix of ['', '@2x', '@3x']) {

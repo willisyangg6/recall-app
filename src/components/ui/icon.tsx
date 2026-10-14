@@ -109,21 +109,79 @@ const GLYPHS = {
   'category-baby': require('@/assets/icons/category-baby.png') as ImageSourcePropType,
   // The Recall Detail source kit (2026-10-07): the same pinned lucide-static
   // 0.468.0 family, each scale rendered directly from its SVG. `store` marks
-  // the retailer line; the nine symptom glyphs are decorative shorthand in
-  // the Health Risk bubbles (the mapping is src/lib/symptom-icons.ts).
+  // the retailer line; `circle` is the Health Risk fallback for a symptom
+  // with no glyph of its own (the mapping is src/lib/symptom-icons.ts).
   // `chevron-up` is the set's own `chevron-down` rasters turned half a turn,
   // so the title's Show full title / Show less pair shares one stroke.
   'chevron-up': require('@/assets/icons/chevron-up.png') as ImageSourcePropType,
   store: require('@/assets/icons/store.png') as ImageSourcePropType,
-  activity: require('@/assets/icons/activity.png') as ImageSourcePropType,
-  brain: require('@/assets/icons/brain.png') as ImageSourcePropType,
   circle: require('@/assets/icons/circle.png') as ImageSourcePropType,
-  droplets: require('@/assets/icons/droplets.png') as ImageSourcePropType,
-  eye: require('@/assets/icons/eye.png') as ImageSourcePropType,
-  hand: require('@/assets/icons/hand.png') as ImageSourcePropType,
-  thermometer: require('@/assets/icons/thermometer.png') as ImageSourcePropType,
-  'utensils-crossed': require('@/assets/icons/utensils-crossed.png') as ImageSourcePropType,
-  wind: require('@/assets/icons/wind.png') as ImageSourcePropType,
+  // The Health Risk symptom glyphs (2026-10-12): one approved Lotly glyph per
+  // reviewed symptom string, rendered at each scale directly from its master
+  // in assets/icon-sources/symptoms/ (render.py). Decorative shorthand only;
+  // which glyph stands for which exact string is src/lib/symptom-icons.ts.
+  'symptom-appetite-weight-loss':
+    require('@/assets/icons/symptom-appetite-weight-loss.png') as ImageSourcePropType,
+  'symptom-bloody-diarrhea':
+    require('@/assets/icons/symptom-bloody-diarrhea.png') as ImageSourcePropType,
+  'symptom-coughing-wheezing':
+    require('@/assets/icons/symptom-coughing-wheezing.png') as ImageSourcePropType,
+  'symptom-cramps-bloating':
+    require('@/assets/icons/symptom-cramps-bloating.png') as ImageSourcePropType,
+  'symptom-dark-urine-pale-stools':
+    require('@/assets/icons/symptom-dark-urine-pale-stools.png') as ImageSourcePropType,
+  'symptom-diarrhea-vomiting':
+    require('@/assets/icons/symptom-diarrhea-vomiting.png') as ImageSourcePropType,
+  'symptom-difficulty-breathing':
+    require('@/assets/icons/symptom-difficulty-breathing.png') as ImageSourcePropType,
+  'symptom-difficulty-swallowing':
+    require('@/assets/icons/symptom-difficulty-swallowing.png') as ImageSourcePropType,
+  'symptom-dizziness-fainting':
+    require('@/assets/icons/symptom-dizziness-fainting.png') as ImageSourcePropType,
+  'symptom-double-blurred-vision':
+    require('@/assets/icons/symptom-double-blurred-vision.png') as ImageSourcePropType,
+  'symptom-drooping-eyelids':
+    require('@/assets/icons/symptom-drooping-eyelids.png') as ImageSourcePropType,
+  'symptom-feeling-tired':
+    require('@/assets/icons/symptom-feeling-tired.png') as ImageSourcePropType,
+  'symptom-feeling-very-tired':
+    require('@/assets/icons/symptom-feeling-very-tired.png') as ImageSourcePropType,
+  'symptom-fever': require('@/assets/icons/symptom-fever.png') as ImageSourcePropType,
+  'symptom-headache': require('@/assets/icons/symptom-headache.png') as ImageSourcePropType,
+  'symptom-headache-neck-confusion':
+    require('@/assets/icons/symptom-headache-neck-confusion.png') as ImageSourcePropType,
+  'symptom-hives-flushed-skin':
+    require('@/assets/icons/symptom-hives-flushed-skin.png') as ImageSourcePropType,
+  'symptom-increased-gas':
+    require('@/assets/icons/symptom-increased-gas.png') as ImageSourcePropType,
+  'symptom-joint-pain': require('@/assets/icons/symptom-joint-pain.png') as ImageSourcePropType,
+  'symptom-loss-appetite':
+    require('@/assets/icons/symptom-loss-appetite.png') as ImageSourcePropType,
+  'symptom-low-fever': require('@/assets/icons/symptom-low-fever.png') as ImageSourcePropType,
+  'symptom-mouth-face-throat-swelling':
+    require('@/assets/icons/symptom-mouth-face-throat-swelling.png') as ImageSourcePropType,
+  'symptom-muscle-aches-fatigue':
+    require('@/assets/icons/symptom-muscle-aches-fatigue.png') as ImageSourcePropType,
+  'symptom-muscle-weakness':
+    require('@/assets/icons/symptom-muscle-weakness.png') as ImageSourcePropType,
+  'symptom-nausea': require('@/assets/icons/symptom-nausea.png') as ImageSourcePropType,
+  'symptom-nausea-vomiting':
+    require('@/assets/icons/symptom-nausea-vomiting.png') as ImageSourcePropType,
+  'symptom-nausea-vomiting-pain':
+    require('@/assets/icons/symptom-nausea-vomiting-pain.png') as ImageSourcePropType,
+  'symptom-severe-cramps':
+    require('@/assets/icons/symptom-severe-cramps.png') as ImageSourcePropType,
+  'symptom-slurred-speech':
+    require('@/assets/icons/symptom-slurred-speech.png') as ImageSourcePropType,
+  'symptom-trouble-breathing':
+    require('@/assets/icons/symptom-trouble-breathing.png') as ImageSourcePropType,
+  'symptom-vomiting': require('@/assets/icons/symptom-vomiting.png') as ImageSourcePropType,
+  'symptom-vomiting-diarrhea-cramps':
+    require('@/assets/icons/symptom-vomiting-diarrhea-cramps.png') as ImageSourcePropType,
+  'symptom-watery-diarrhea':
+    require('@/assets/icons/symptom-watery-diarrhea.png') as ImageSourcePropType,
+  'symptom-yellow-skin-eyes':
+    require('@/assets/icons/symptom-yellow-skin-eyes.png') as ImageSourcePropType,
   // The risk and harm label kit (2026-10-09): the kit's own pinned
   // lucide-static 0.468.0 rasters, each scale rendered directly from its SVG
   // at stroke 2. `label-info` and `label-triangle-alert` are the same Lucide

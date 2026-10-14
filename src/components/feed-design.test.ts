@@ -620,7 +620,7 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     }
   }
   // The icon set is exactly what a shipped control uses.
-  const glyphs = [...ICON.matchAll(/^\s+'?([a-z-]+)'?: require\(/gm)].map((m) => m[1]).sort();
+  const glyphs = [...ICON.matchAll(/^\s+'?([a-z-]+)'?:\s*require\(/gm)].map((m) => m[1]).sort();
   // P2B2 added the Detail frame's external-link, warning and info glyphs,
   // P2B5 the chevron-right that Profile's navigation rows carry, P2B7X.1 the
   // chevron-left of the onboarding back control and the nine allergen glyphs
@@ -637,12 +637,12 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
   // opens the Filters sheet), the sheet's `close`, `tick` and `categories`,
   // and the nine category glyphs (constants/feed-design.ts). The Recall
   // Detail kit (2026-10-07) added the title control's `chevron-up`, the
-  // retailer line's `store`, and nine decorative symptom glyphs
-  // (lib/symptom-icons.ts). The risk and harm label kit (2026-10-09) added
+  // retailer line's `store`, and the `circle` symptom fallback; the 34
+  // approved `symptom-*` glyphs (2026-10-12) replaced its eight shared
+  // stand-ins (lib/symptom-icons.ts). The risk and harm label kit (2026-10-09) added
   // the four stroke-2 label glyphs (constants/label-design.ts). There is
   // still no share glyph, and no bell control anywhere (detail-design.test.ts).
   assert.deepEqual(glyphs, [
-    'activity',
     'allergen-egg',
     'allergen-fish',
     'allergen-milk',
@@ -655,7 +655,6 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'bell',
     'bookmark',
     'bookmark-filled',
-    'brain',
     'categories',
     'category-baby',
     'category-bakery',
@@ -673,13 +672,10 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'chevron-up',
     'circle',
     'close',
-    'droplets',
     'external-link',
-    'eye',
     'file-search',
     'filters',
     'flag',
-    'hand',
     'home',
     'info',
     'label-circle-alert',
@@ -694,12 +690,43 @@ test('no bell, no Urgency, no filter glyph, no dead control was added from Figma
     'shield-check',
     'shopping-cart',
     'store',
-    'thermometer',
+    'symptom-appetite-weight-loss',
+    'symptom-bloody-diarrhea',
+    'symptom-coughing-wheezing',
+    'symptom-cramps-bloating',
+    'symptom-dark-urine-pale-stools',
+    'symptom-diarrhea-vomiting',
+    'symptom-difficulty-breathing',
+    'symptom-difficulty-swallowing',
+    'symptom-dizziness-fainting',
+    'symptom-double-blurred-vision',
+    'symptom-drooping-eyelids',
+    'symptom-feeling-tired',
+    'symptom-feeling-very-tired',
+    'symptom-fever',
+    'symptom-headache',
+    'symptom-headache-neck-confusion',
+    'symptom-hives-flushed-skin',
+    'symptom-increased-gas',
+    'symptom-joint-pain',
+    'symptom-loss-appetite',
+    'symptom-low-fever',
+    'symptom-mouth-face-throat-swelling',
+    'symptom-muscle-aches-fatigue',
+    'symptom-muscle-weakness',
+    'symptom-nausea',
+    'symptom-nausea-vomiting',
+    'symptom-nausea-vomiting-pain',
+    'symptom-severe-cramps',
+    'symptom-slurred-speech',
+    'symptom-trouble-breathing',
+    'symptom-vomiting',
+    'symptom-vomiting-diarrhea-cramps',
+    'symptom-watery-diarrhea',
+    'symptom-yellow-skin-eyes',
     'tick',
     'user',
-    'utensils-crossed',
     'warning',
-    'wind',
     'x',
     'zoom-in',
     'zoom-out',
