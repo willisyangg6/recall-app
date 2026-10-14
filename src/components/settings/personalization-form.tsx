@@ -72,7 +72,7 @@
  * first launch and one edited later under Profile are the same rows, the
  * same search and the same `Clear selection`. Two things came with that
  * sharing and therefore reach this screen too: every allergen row carries
- * its glyph (`AllergenGlyph`, one Lucide family — lib/allergen-icons.ts),
+ * its picture (`AllergenPictogram`: the approved Lotly pictogram — lib/allergen-assets.ts),
  * and every store row carries its mark or the `home` fallback
  * (`RetailerLogo`). Recall cards and Detail are untouched by either.
  *
@@ -97,12 +97,11 @@ import { SettingsSection } from '@/components/settings/settings-section';
 import { StateMessage } from '@/components/state-message';
 import { Button } from '@/components/ui/button';
 import { CheckRow } from '@/components/ui/check-row';
-import { Icon } from '@/components/ui/icon';
+import { AllergenPictogram } from '@/components/ui/allergen-pictogram';
 import { RetailerLogo } from '@/components/ui/retailer-logo';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Text } from '@/components/ui/text';
 import { spacing } from '@/constants/design-tokens';
-import { allergenIconName } from '@/lib/allergen-icons';
 import {
   CONSUMER_ALLERGENS,
   stateNamesForCodes,
@@ -433,26 +432,12 @@ export function AllergenSection({
             label={option.label}
             checked={selected.includes(option.token)}
             onPress={() => onToggle(option.token)}
-            leading={
-              <AllergenGlyph token={option.token} checked={selected.includes(option.token)} />
-            }
+            leading={<AllergenPictogram token={option.token} />}
           />
         ))}
       </View>
     </SettingsSection>
   );
-}
-
-/**
- * One allergen's glyph (P2B7X.1): the family's icon for the token, in the
- * same 20pt box on every row, `icon/primary` when the row is checked and
- * `icon/secondary` otherwise — one treatment for all nine, with the
- * checkbox still carrying the state. Decorative: the row speaks its label.
- */
-export function AllergenGlyph({ token, checked }: { token: string; checked: boolean }) {
-  const name = allergenIconName(token);
-  if (name === null) return null;
-  return <Icon name={name} size={20} color={checked ? 'icon/primary' : 'icon/secondary'} />;
 }
 
 // ── Stores ──────────────────────────────────────────────────────────────────

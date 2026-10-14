@@ -1228,8 +1228,10 @@ or not, never dimmed or animated. It is decorative: hidden from
 accessibility and untouchable. The box's transparent sides overhang the
 tile's padding and the gap beside it by 4pt (under the art's 6.5pt
 transparent margin), which keeps the tile's row chrome at the 80pt the
-column rule measures against. The Lucide allergen glyphs ("Iconography")
-were not replaced globally — Profile's rows still draw them. Tree nuts
+column rule measures against. Since 2026-10-13 Profile → Personalization's
+allergen rows draw these pictograms too, untinted, at 28pt overhanging their
+unchanged 20pt slot by 4pt (`PROFILE_PICTOGRAM`), so the Lucide allergen
+glyphs ("Iconography") are drawn nowhere. Tree nuts
 also carries a founder-approved fill of one keyed-out pinhole in its outline.
 The pack's contact sheet, its source-pack asset report and the production
 asset report of the final files (`assets/brand/reference/allergens/`) are
@@ -2804,10 +2806,10 @@ No permissively licensed outline family publishes a peanut, a tree-nut or a
 sesame glyph (Lucide, Lucide Lab, Phosphor, Tabler, Iconoir and Font Awesome
 were checked), so those three rows use the family's nearest honest concept
 and the label carries the meaning. Every glyph is decorative and hidden from
-assistive technology; every one of Profile's allergen rows uses one treatment
-(20pt, `icon/secondary` unchecked, `icon/primary` checked). The onboarding
-Allergens grid draws the Lotly pictograms instead ("Onboarding and
-paywall"); this set is unchanged and still serves Profile. The onboarding
+assistive technology. Since 2026-10-13 no screen draws them: the onboarding
+Allergens grid and Profile's allergen rows both draw the approved Lotly
+pictograms ("Onboarding and paywall"). The files and their provenance are
+unchanged. The onboarding
 paywall's benefit rows (2026-10-01) added `file-search` (Lucide's
 `file-search-corner`) and `bell` from the same vendored family, commit, box
 and stroke; the bell is drawing in a row that is not a control, and the

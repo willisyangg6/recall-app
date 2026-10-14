@@ -1109,8 +1109,9 @@ static `require`. Each is drawn whole (`contain`), untinted, in a fixed
 44pt box where the art is about 31pt, so every label starts at one x; the
 same picture chosen or not, never dimmed or animated — the surface and
 checkbox carry the state. No halo, background circle or shadow behind it.
-The Lucide allergen glyphs (§9) were not replaced globally: Profile's
-allergen rows still draw them, and their sources and rasters are unchanged.
+Since 2026-10-13 Profile's allergen rows draw these pictograms too (§9), so
+the Lucide allergen glyphs are drawn nowhere; their sources and rasters are
+unchanged.
 
 To fit the 44pt box without moving a breakpoint, the box's sides overhang
 the tile's padding and the gap beside it by 4pt — less than the 6.5pt of
@@ -2774,7 +2775,25 @@ substituted.
 
 ## 9. Allergen icons
 
-One family for all nine of Profile's allergen rows — the onboarding
+**Since 2026-10-13 Profile → Personalization's allergen rows draw the approved
+Lotly allergen pictograms** (§6.2, `src/lib/allergen-assets.ts`), replacing the
+Lucide glyphs below. The row keeps its 20 pt leading slot, so no row, gap or
+height moves. The pictogram is drawn at 28 pt and overhangs the slot by 4 pt,
+the tiles' overhang (`PROFILE_PICTOGRAM`, drawn by
+`src/components/ui/allergen-pictogram.tsx` with an explicit width and height
+and through `GuardedImage`; an `Image` sized by `aspectRatio` or absolute
+insets drew at its 1024 pt intrinsic size on the simulator). That puts its artwork, about 63% of
+the canvas, at about 18 pt, the visible size of the outline glyph it replaced;
+inside the slot it would be about 13 pt. It is untinted and the same whether
+or not the row is checked; the checkbox carries the state. It is decorative,
+so a screen reader still hears the allergen's name and the checkbox state
+alone. Every screen scale draws the one 1024 px master, which has no @2x or @3x
+variant and covers a 3× draw many times over. `allergen-assets.test.ts` pins
+all of this.
+
+The Lucide set below is kept as history; no screen draws it.
+
+One family for all nine of Profile's allergen rows (until 2026-10-13) — the onboarding
 Allergens tiles draw the Lotly pictograms instead (§6.2): **Lucide** (ISC), the outline language the
 app's icon set already uses. The nine SVG sources are vendored under
 `assets/icon-sources/lucide/` beside the license, from

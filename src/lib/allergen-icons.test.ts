@@ -345,19 +345,31 @@ test('every raster exists at 1x, 2x and 3x on the set’s 24pt box — one visua
   }
 });
 
-test('Profile’s allergen rows render the family through the one icon primitive — no emoji, no second family, no inline drawing', () => {
+test('both allergen surfaces draw the Lotly pictograms and never the Lucide glyphs — no emoji, no second family, no inline drawing', () => {
   const form = codeOnly(
     readFileSync(join(ROOT, 'src', 'components', 'settings', 'personalization-form.tsx'), 'utf8'),
   );
   const step = codeOnly(
     readFileSync(join(ROOT, 'src', 'components', 'onboarding', 'allergens-step.tsx'), 'utf8'),
   );
-  // The onboarding grid draws the Lotly pictograms instead
-  // (lib/allergen-assets.ts); this family stays Profile's.
-  assert.ok(form.includes('AllergenGlyph'), 'Profile does not render the glyph');
+  // Since 2026-10-13 Profile draws the Lotly pictograms too
+  // (lib/allergen-assets.ts), so this Lucide family is drawn nowhere.
+  assert.ok(
+    form.includes('<AllergenPictogram token={option.token} />'),
+    'Profile has no pictogram',
+  );
   assert.ok(!step.includes('AllergenGlyph'), 'the onboarding grid still draws the Lucide glyph');
-  assert.ok(!/allergen-(peanut|tree-nut|shellfish)['.]/.test(step), 'a Lucide raster in the step');
   assert.ok(step.includes('allergenPictogram(option.token)'));
+  for (const [name, source] of [
+    ['form', form],
+    ['step', step],
+  ]) {
+    assert.ok(!source.includes('allergenIconName'), `${name} draws the Lucide glyph`);
+    assert.ok(
+      !/allergen-(peanut|tree-nut|shellfish)['.]/.test(source),
+      `a Lucide raster in ${name}`,
+    );
+  }
   for (const [name, source] of [
     ['form', form],
     ['step', step],
@@ -375,11 +387,6 @@ test('Profile’s allergen rows render the family through the one icon primitive
       assert.ok(!source.includes(foreign), `${name} mixes in ${foreign}`);
     }
   }
-  // One glyph component, one size, one treatment for every row.
-  assert.ok(
-    form.includes(
-      "<Icon name={name} size={20} color={checked ? 'icon/primary' : 'icon/secondary'} />",
-    ),
-  );
-  assert.equal((form.match(/<AllergenGlyph /g) ?? []).length, 1);
+  // One picture component, one treatment for every row.
+  assert.equal((form.match(/<AllergenPictogram /g) ?? []).length, 1);
 });

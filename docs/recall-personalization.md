@@ -792,7 +792,8 @@ Whether onboarding is COMPLETE is a separate versioned record
 (`src/lib/onboarding-state.ts`), never inferred from the preference values,
 because an empty optional selection is a complete answer. Two things came
 with the sharing and therefore reach Profile's editor too: every allergen row
-carries its glyph from one Lucide family, and every store row carries its
+carries its picture (since 2026-10-13 the approved Lotly allergen pictogram,
+the same one the onboarding Allergens tiles draw), and every store row carries its
 mark or the `home` fallback (no mark is bundled today). The onboarding
 selector steps also keep `Clear selection` permanently allocated and inert
 when empty, extending the P2B7V rule to the optional lists. Contract:

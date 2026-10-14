@@ -17,7 +17,6 @@ import { inflateSync } from 'node:zlib';
 
 import { CONSUMER_ALLERGENS } from '@/domain/preferences';
 import { TILE } from '@/lib/allergen-grid';
-import { ALLERGEN_ICONS } from '@/lib/allergen-icons';
 
 const ROOT = join(__dirname, '..', '..');
 const ICONS = join(ROOT, 'assets', 'icons');
@@ -51,6 +50,7 @@ const REVIEW_ARTIFACTS = [
 function loadPictograms(): {
   map: Readonly<Record<string, unknown>>;
   lookup: (token: string) => unknown;
+  profile: { slot: number; side: number };
   requested: string[];
 } {
   const requested: string[] = [];
@@ -66,7 +66,12 @@ function loadPictograms(): {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const loaded = require(MODULE) as typeof import('./allergen-assets');
-    return { map: loaded.ALLERGEN_PICTOGRAMS, lookup: loaded.allergenPictogram, requested };
+    return {
+      map: loaded.ALLERGEN_PICTOGRAMS,
+      lookup: loaded.allergenPictogram,
+      profile: loaded.PROFILE_PICTOGRAM,
+      requested,
+    };
   } finally {
     if (prior === undefined) delete extensions['.png'];
     else extensions['.png'] = prior;
@@ -533,20 +538,53 @@ test('the production report describes the files in the repository, byte for byte
   }
 });
 
-test('the Lucide allergen glyphs are untouched and still serve Profile', () => {
-  const icon = readFileSync(join(ROOT, 'src', 'components', 'ui', 'icon.tsx'), 'utf8');
-  for (const name of Object.values(ALLERGEN_ICONS)) {
-    assert.ok(icon.includes(`'${name}': require('@/assets/icons/${name}.png')`), name);
-    for (const suffix of ['', '@2x', '@3x']) {
-      assert.ok(existsSync(join(ICONS, `${name}${suffix}.png`)), `${name}${suffix}.png is gone`);
-    }
-  }
+test('Profile draws the approved pictograms, untinted, in its unchanged 20pt slot (2026-10-13)', () => {
   const form = readFileSync(
     join(ROOT, 'src', 'components', 'settings', 'personalization-form.tsx'),
     'utf8',
   );
-  assert.ok(form.includes('<AllergenGlyph token={option.token}'));
-  assert.ok(!form.includes('allergen-assets'), 'Profile switched to the pictograms');
+  const component = readFileSync(
+    join(ROOT, 'src', 'components', 'ui', 'allergen-pictogram.tsx'),
+    'utf8',
+  );
+  // One picture per row, from the approved family, never the Lucide one.
+  assert.equal(
+    (form.match(/leading=\{<AllergenPictogram token=\{option\.token\} \/>\}/g) ?? []).length,
+    1,
+  );
+  assert.ok(!form.includes('allergenIconName') && !form.includes("'@/lib/allergen-icons'"));
+  assert.ok(component.includes('const source = allergenPictogram(token);'));
+  // Untinted, decorative, and the same whether or not the row is checked.
+  assert.ok(!component.includes('tintColor'));
+  assert.ok(component.includes('export function AllergenPictogram({ token }: { token: string })'));
+  assert.ok(component.includes('importantForAccessibility="no-hide-descendants"'));
+  // Through the guard against recycled iOS image views, like the icons
+  // before, and in boxes with an explicit width AND height: sized any other
+  // way, the 1024px file drew at its intrinsic size on the simulator.
+  assert.ok(component.includes('<GuardedImage') && !/<Image\b/.test(component));
+  assert.ok(
+    component.includes('width: PROFILE_PICTOGRAM.side,\n    height: PROFILE_PICTOGRAM.side,'),
+  );
+  assert.ok(
+    component.includes('width: PROFILE_PICTOGRAM.slot,\n    height: PROFILE_PICTOGRAM.slot,'),
+  );
+  const styles = component.slice(component.indexOf('StyleSheet.create('));
+  assert.ok(!/aspectRatio|position: 'absolute'/.test(styles));
+  // The row's slot is unchanged; the picture overhangs it like the tiles do.
+  const { profile } = loadPictograms();
+  assert.equal(profile.slot, 20, 'the leading slot moved');
+  assert.equal((profile.side - profile.slot) / 2, TILE.pictogramOverhang);
+  // Every screen scale draws from the master, never an enlarged raster: the
+  // pictograms have no @2x/@3x variants, so React Native registers the one
+  // 1024px file for every density, and it covers the 3x draw many times over.
+  for (const file of Object.values(APPROVED)) {
+    const base = file.replace(/\.png$/, '');
+    for (const suffix of ['@2x', '@3x']) {
+      assert.ok(!existsSync(join(ICONS, `${base}${suffix}.png`)), `${base}${suffix}.png exists`);
+    }
+    const width = readFileSync(join(ICONS, file)).readUInt32BE(16);
+    assert.ok(width >= profile.side * 3, `${file} is too small for a 3x draw`);
+  }
 });
 
 test('the contact sheet and both asset reports are reference material, never runtime', () => {

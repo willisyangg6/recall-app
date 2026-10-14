@@ -20,9 +20,10 @@
  * asset report of these final files are review material only, kept in
  * `assets/brand/reference/allergens/` and bundled by nothing.
  *
- * The Lucide allergen glyphs (lib/allergen-icons.ts) are unchanged and
- * still draw Profile's allergen rows; this family replaces them on the
- * onboarding grid alone.
+ * Since 2026-10-13 this family also draws Profile → Personalization's
+ * allergen rows (`PROFILE_PICTOGRAM`), so every allergen picture in the app
+ * is the approved one. The Lucide allergen glyphs (lib/allergen-icons.ts)
+ * are no longer drawn anywhere.
  *
  * Static `require`s only, one per file, so Metro can see and bundle each
  * asset. `allergen-assets.test.ts` loads this module and proves the map
@@ -43,6 +44,17 @@ export const ALLERGEN_PICTOGRAMS: Readonly<Record<string, ImageSourcePropType>> 
   shellfish:
     require('@/assets/icons/allergen-crustacean-shellfish-1024.png') as ImageSourcePropType,
 };
+
+/**
+ * Profile → Personalization's allergen rows (2026-10-13). The row keeps its
+ * 20pt leading slot, so no row, gap or height moves. The pictogram is drawn
+ * at 28pt and overhangs that slot by 4pt on every side, the same overhang
+ * the onboarding tiles use. That makes its artwork (about 63% of the
+ * canvas) about 18pt, the visible size of the outline glyph it replaced;
+ * drawn inside the slot it would be about 13pt. Untinted, like every use of
+ * these files.
+ */
+export const PROFILE_PICTOGRAM = { slot: 20, side: 28 } as const;
 
 /** The pictogram for a canonical allergen token, or null for any other token. */
 export function allergenPictogram(token: string): ImageSourcePropType | null {
