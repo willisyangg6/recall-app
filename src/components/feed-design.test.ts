@@ -871,3 +871,23 @@ test('the default size keeps its one-line row and its hitSlop-grown Edit target'
   assert.match(FEED, /hitSlop=\{largeText \? undefined : CAPTION_HIT_SLOP\}/);
   assert.match(FEED, /accessibilityLabel="Edit personalization"/);
 });
+
+test('re-tapping the Feed tab scrolls to the top and refreshes, and changes nothing else', () => {
+  const start = FEED.indexOf('── RE-TAPPING THE FEED TAB');
+  const end = FEED.indexOf('── END RE-TAPPING THE FEED TAB');
+  assert.ok(start > 0 && end > start, 'the re-tap block is missing');
+  const block = FEED.slice(start, end);
+  // Only a press on the tab that is ALREADY showing counts as a re-tap.
+  assert.ok(block.includes("navigation.addListener(\n        'tabPress' as never,"));
+  assert.ok(block.includes('if (!navigation.isFocused()) return;'));
+  // The same scroll responder the filter change uses, and pull-to-refresh's
+  // own refresh — whose failure over a loaded corpus is silent (use-feed).
+  assert.ok(
+    block.includes('listRef.current?.getScrollResponder()?.scrollTo({ y: 0, animated: true });'),
+  );
+  assert.ok(block.includes('void refresh();'));
+  // Tab, search, filters and the older reveal are left exactly as they were.
+  for (const setter of ['setTab(', 'setQuery(', 'setFiltersByTab(', 'setShowOlder(']) {
+    assert.ok(!block.includes(setter), `re-tap resets state: ${setter}`);
+  }
+});

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   findNodeHandle,
@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { Link, useFocusEffect } from 'expo-router';
+import { Link, useFocusEffect, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FiltersSheet } from '@/components/feed/filters-sheet';
@@ -346,6 +346,31 @@ export default function HomeScreen() {
     [filters, tab, scrollFeedToTop],
   );
   // ── END SCROLL POSITION ON FILTER CHANGE ────────────────────────────────
+
+  // ── RE-TAPPING THE FEED TAB (final polish, 2026-10-13) ──────────────────
+  //
+  // Tapping Feed while already on Feed is the platform's "take me back to
+  // the top": the list scrolls up and starts the same refresh that
+  // pull-to-refresh runs. Nothing else moves — the chosen feed, the search text, each
+  // feed's filters and the older-notices reveal are all state this screen
+  // keeps, and none of it is touched here. A refresh that fails (offline)
+  // keeps the corpus on screen silently, exactly as pull-to-refresh does
+  // (hooks/use-feed). `tabPress` reaches this screen before the tab changes,
+  // so `isFocused()` is true only for a re-tap, never for arriving here.
+  const navigation = useNavigation();
+  useEffect(
+    () =>
+      navigation.addListener(
+        'tabPress' as never,
+        (() => {
+          if (!navigation.isFocused()) return;
+          listRef.current?.getScrollResponder()?.scrollTo({ y: 0, animated: true });
+          void refresh();
+        }) as never,
+      ),
+    [navigation, refresh],
+  );
+  // ── END RE-TAPPING THE FEED TAB ─────────────────────────────────────────
 
   if (!isFeedConfigured()) {
     return (

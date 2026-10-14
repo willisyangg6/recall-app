@@ -201,7 +201,11 @@ this milestone. Web export verified.
 immediately on mount; a background reconciliation replaces it (the cache
 only ever fills a not-yet-ready state, so a faster network result is never
 overwritten by older cached items). Pull-to-refresh runs a real
-reconciliation. A module-level session coalesces concurrent syncs (mount +
+reconciliation, and so does re-tapping the Feed tab while Feed is already
+showing (2026-10-13): the list scrolls to the top and calls the same
+`refresh`, leaving the chosen feed, search text and each feed's filters
+untouched. Offline, either one fails silently and the cached corpus stays on
+screen. A module-level session coalesces concurrent syncs (mount +
 remount + pull-to-refresh + a tab switch share one in-flight
 reconciliation). P2A moved the session and the hook out of the Feed screen
 so Saved resolves its ids against the SAME corpus rather than opening a
