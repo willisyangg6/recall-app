@@ -114,3 +114,24 @@ export function routedRegistration(deps: RoutedRegistrationDeps) {
     return result;
   };
 }
+
+/**
+ * Resolve the route from its three inputs (push-registration.ts wires them
+ * natively). StoreKit is asked only when a key is needed or held, and
+ * `readAppTransactionId` must answer within its own time limit
+ * (lib/app-transaction-read.ts): null keeps a regulated teen `blocked`.
+ */
+export async function resolveRegistrationRoute(deps: {
+  isEligible(): Promise<boolean>;
+  isKeyHeld(): Promise<boolean>;
+  readAppTransactionId(): Promise<string | null>;
+}): Promise<RegistrationRoute> {
+  const eligible = await deps.isEligible();
+  const keyHeld = await deps.isKeyHeld();
+  if (!eligible && !keyHeld) return { kind: 'plain', clearAfter: false };
+  return registrationRoute({
+    eligible,
+    keyHeld,
+    appTransactionId: await deps.readAppTransactionId(),
+  });
+}

@@ -74,8 +74,9 @@ import {
   type AgeStopAlertsOutcome,
 } from './age-stop-alerts';
 import { loadAgeRecord } from './age-record-store';
+import { boundedAppTransactionRead } from './app-transaction-read';
 import {
-  registrationRoute,
+  resolveRegistrationRoute as resolveRoute,
   revocationKeyEligible,
   routedRegistration,
   type RegistrationRoute,
@@ -94,20 +95,23 @@ import {
 const REVOCATION_KEY_HELD = 'recall.revocation-key-held';
 
 /**
+ * StoreKit's appTransactionId, bounded (lib/app-transaction-read.ts): one
+ * shared reader for the app's lifetime, so a stalled native call is shared
+ * by retries rather than repeated, and every read answers within its time
+ * limit — null on timeout or failure, which keeps a regulated teen blocked.
+ */
+const readAppTransactionId = boundedAppTransactionRead({ read: getAppTransactionAsync });
+
+/**
  * How this installation must register (lib/revocation-key.ts). StoreKit is
  * asked for the app transaction only when a key is needed or held.
  */
-async function resolveRegistrationRoute(): Promise<RegistrationRoute> {
-  const eligible = revocationKeyEligible(await loadAgeRecord());
-  const keyHeld = (await SecureStore.getItemAsync(REVOCATION_KEY_HELD)) === '1';
-  if (!eligible && !keyHeld) return { kind: 'plain', clearAfter: false };
-  let appTransactionId: string | null = null;
-  try {
-    appTransactionId = (await getAppTransactionAsync())?.appTransactionId ?? null;
-  } catch {
-    appTransactionId = null;
-  }
-  return registrationRoute({ eligible, keyHeld, appTransactionId });
+function resolveRegistrationRoute(): Promise<RegistrationRoute> {
+  return resolveRoute({
+    isEligible: async () => revocationKeyEligible(await loadAgeRecord()),
+    isKeyHeld: async () => (await SecureStore.getItemAsync(REVOCATION_KEY_HELD)) === '1',
+    readAppTransactionId,
+  });
 }
 
 /**

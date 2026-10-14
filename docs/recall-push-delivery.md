@@ -463,6 +463,14 @@ alerts are stopped on the server.
   - Alerts stay off until the user turns them on again with the id
     available. Tested in `src/lib/alert-protection.test.ts`, including a
     failed upload and its retry.
+  - **A stalled StoreKit read cannot hang anything** (2026-10-13). The read
+    has a 5-second limit (`src/lib/app-transaction-read.ts`). A timeout or
+    rejection counts as "no id", so the user stays blocked with alerts off.
+    The registration, and the preference saves and reset queued behind it,
+    then proceed. One native call is shared by retries while it is stalled;
+    a late completion is ignored, and the next attempt reads afresh. Tested
+    in `src/lib/app-transaction-read.test.ts`, with a control that shows the
+    unbounded wait blocking saves and reset.
 - **Clearing.** An installation that held a key but is no longer eligible
   registers keyed once more, so a revoked row can still renew. It then calls
   `clear_push_revocation_key`. A revoked row always keeps its key.
