@@ -496,6 +496,11 @@ test('the root layout loads exactly the six required faces before the first scre
   // the access gate has read which phase the launch is in — and a font
   // failure never leaves the app blank: a failed load counts as settled.
   assert.match(layout, /^void SplashScreen\.preventAutoHideAsync\(\);$/m);
+  // It leaves with a brief fade (2026-10-13) and nothing else: the fade is
+  // configured once at module scope, and no timer holds the splash.
+  assert.match(layout, /^SplashScreen\.setOptions\(\{ fade: true, duration: 250 \}\);$/m);
+  assert.equal((layout.match(/SplashScreen\.setOptions\(/g) ?? []).length, 1);
+  assert.ok(!layout.includes('setTimeout'), 'a timer in the root layout');
   assert.match(layout, /fontsSettled=\{fontsLoaded \|\| fontError !== null\}/);
   assert.match(layout, /const ready = fontsSettled && access\.ready;/);
   assert.match(layout, /if \(ready\) void SplashScreen\.hideAsync\(\);/);

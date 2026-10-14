@@ -673,6 +673,11 @@ failure is named in development, and React Native's own fallback face stands
 in for any name it cannot resolve. That is a degraded state to fix, never a
 design.
 
+When the splash hides, it fades out over 250 ms on iOS
+(`SplashScreen.setOptions({ fade: true, duration: 250 })`, 2026-10-13). This
+changes only how it leaves, not when: nothing holds it longer, and the gates
+above are unchanged.
+
 ## Layout
 
 Lotly is designed mobile-first around a **393px-wide iPhone frame**.

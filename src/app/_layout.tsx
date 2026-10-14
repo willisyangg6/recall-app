@@ -19,12 +19,11 @@ import { useInstallationCheckin } from '@/hooks/use-installation-checkin';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
 import { onboardingDeclarationOrder } from '@/lib/access-gate';
-import { EDIT_PREFERENCES_ROUTE, onboardingRoute } from '@/lib/onboarding-routes';
+import { EDIT_PREFERENCES_ROUTE } from '@/lib/onboarding-routes';
 import { flushPreferencesSync } from '@/lib/preferences-store';
 
 /** The navigator's name for the one-page Edit preferences. */
 const EDIT_PREFERENCES_SCREEN = EDIT_PREFERENCES_ROUTE.slice(1);
-const BUILDING_SCREEN = onboardingRoute('building').slice(1);
 
 /**
  * The app-wide error boundary (P3C1). Expo Router looks for this exact export
@@ -39,6 +38,9 @@ export { AppErrorBoundary as ErrorBoundary };
 // module scope, as expo-splash-screen recommends — inside a component it can
 // run after the splash has already gone.
 void SplashScreen.preventAutoHideAsync();
+// When it does hide, it fades out briefly (iOS only; 2026-10-13). This
+// changes only how it leaves: it is held no longer, and nothing waits on it.
+SplashScreen.setOptions({ fade: true, duration: 250 });
 
 /**
  * The spoken name of every pushed screen's back control (P2B2). The screens
@@ -233,16 +235,17 @@ function RootNavigator({ fontsSettled }: { fontsSettled: boolean }) {
             <Stack.Screen
               key={name}
               name={name}
-              // Edit preferences covers Ready whole and is left only by its own
-              // Cancel or Save changes, so no swipe can discard an edit by accident.
-              // The Building step has no back control and is left only by its own
-              // completion or Continue, so no swipe can cancel it half-presented.
+              // No onboarding screen can be left by a swipe (2026-10-13): each is
+              // left only by its own explicit controls — a step's Back arrow,
+              // Building's completion or Continue, Edit preferences' Cancel or
+              // Save changes. A screen-level swipe-back also fired from the
+              // horizontal drags inside the screens (Ready's preview deck
+              // returned to Stores), so it is off for every step. Gestures
+              // inside a screen — carousels, scrolling — are untouched.
               options={
                 name === EDIT_PREFERENCES_SCREEN
                   ? { headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }
-                  : name === BUILDING_SCREEN
-                    ? { headerShown: false, gestureEnabled: false }
-                    : { headerShown: false }
+                  : { headerShown: false, gestureEnabled: false }
               }
             />
           ))}

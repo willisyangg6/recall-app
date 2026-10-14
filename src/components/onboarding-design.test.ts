@@ -1032,6 +1032,24 @@ test('the editor route reads once, commits once through the canonical store, and
   }
 });
 
+test('no onboarding screen can be left by a swipe: every one turns the screen-level gesture off', () => {
+  // A screen-level swipe-back fired from the drags inside onboarding screens
+  // (Ready's preview deck returned to Stores, 2026-10-13). Every screen the
+  // onboarding phase declares is left only by its own explicit controls.
+  const layout = codeOnly(read('app', '_layout.tsx'));
+  const start = layout.indexOf("guard={phase === 'onboarding'}");
+  assert.ok(start > 0, 'the onboarding group is missing');
+  const group = layout.slice(start, layout.indexOf('</Stack.Protected>', start));
+  assert.ok(group.includes('onboardingDeclarationOrder(access.entryStep).map('));
+  const optionObjects = group.match(/\{ headerShown: false[^}]*\}/g) ?? [];
+  assert.equal(optionObjects.length, 2, 'the editor and every step, nothing else');
+  for (const options of optionObjects) {
+    assert.ok(options.includes('gestureEnabled: false'), `swipe-back left on: ${options}`);
+  }
+  assert.ok(!group.includes('gestureEnabled: true'));
+  assert.ok(!/fullScreenGestureEnabled|gestureResponseDistance/.test(group));
+});
+
 test('the editor is a full-screen modal over Ready in the onboarding group, never a step', () => {
   const layout = codeOnly(read('app', '_layout.tsx'));
   assert.ok(layout.includes("presentation: 'fullScreenModal', gestureEnabled: false"));
@@ -2037,10 +2055,10 @@ test('Building: real data presented once, replaced by Ready, never trapped, swip
   assert.ok(nav.includes("else navigator.push(onboardingRoute('building'));"));
   assert.ok(nav.includes("if (previewBeneath) navigator.dismissTo(onboardingRoute('preview'));"));
   assert.ok(nav.includes("else if (watchBuilt) navigator.push(onboardingRoute('preview'));"));
-  // No interactive swipe back from Building.
+  // No interactive swipe back from Building (nor from any onboarding step:
+  // see "no onboarding screen can be left by a swipe").
   const layout = codeOnly(read('app', '_layout.tsx'));
-  assert.ok(layout.includes("const BUILDING_SCREEN = onboardingRoute('building').slice(1);"));
-  assert.ok(layout.includes('? { headerShown: false, gestureEnabled: false }'));
+  assert.ok(layout.includes(': { headerShown: false, gestureEnabled: false }'));
   // Visibility: the stack's transitionEnd, a cold-resume fallback, AppState
   // pause/resume, and everything torn down on departure.
   const hook = codeOnly(read('hooks', 'use-building-sequence.ts'));

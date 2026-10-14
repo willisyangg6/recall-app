@@ -739,6 +739,19 @@ reachable. (The building interstitial is the one screen outside the frame:
 it has no headline, footer or back control by design, §6.6.)
 Compositions are in [../DESIGN.md](../DESIGN.md) "Onboarding and paywall".
 
+**No swipe-back anywhere in onboarding (2026-10-13).** Every onboarding
+screen is left only by its own explicit controls: a step's back control,
+Building's completion or Continue, Edit preferences' Cancel or Save changes.
+The root stack declares every screen of the onboarding phase with
+`gestureEnabled: false` (`src/app/_layout.tsx`), because the screen-level
+swipe-back also fired from the horizontal drags inside the screens: on the
+founder's iPhone, swiping Ready's preview deck at the locked card returned to
+Stores. Turning it off changes no gesture inside a screen. Ready's deck
+still swipes, the pages still scroll, and each back control navigates
+exactly as before (`goBackFrom`, which pops or replaces imperatively and
+never relies on the gesture). Native verification:
+[§6.12](#612-native-verification-no-swipe-back-in-onboarding-2026-10-13).
+
 The copy is the founder's, verbatim, in `src/lib/onboarding-copy.ts` and
 `src/lib/paywall-screen.ts`; `onboarding-design.test.ts` and
 `paywall-screen.test.ts` pin every string.
@@ -1003,8 +1016,8 @@ itself: onboarding's pushes still slid with the setting on. The root stack
 'fade'` whenever the setting is on, for every route in every phase, and the
 platform default otherwise. Recorded on device: with Reduce Motion on,
 Welcome → States and Back are cross-dissolves with no lateral movement; with
-it off, the normal slide is unchanged; the interactive swipe back still
-follows the finger. Until the setting has been read (it is read when the
+it off, the normal slide is unchanged. Outside onboarding, the interactive
+swipe back still follows the finger; onboarding has none (§6). Until the setting has been read (it is read when the
 app starts, well before the first navigation) the default applies.
 
 ### 6.2 The Allergens step: a two-column grid (P2B7Z)
@@ -2252,8 +2265,8 @@ Back from Ready pops to Stores and Stores' Continue then goes straight to
 Ready. `watchBuilt` records that the one-time presentation was spent —
 never that data succeeded. Onboarding is not completed here. A kill during
 the presentation resumes on Building, which presents again from the real
-state; a relaunch after it resumes on Ready. Interactive swipe-back is
-disabled on this route (`gestureEnabled: false`). An unreadable preference
+state; a relaunch after it resumes on Ready. As on every onboarding route,
+interactive swipe-back is off (`gestureEnabled: false`, §6). An unreadable preference
 store routes straight to Ready, unspent.
 
 **Motion** (core `Animated`, native driver, opacity and transform only;
