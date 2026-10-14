@@ -21,7 +21,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { MemoryPushStore } from './memory-push-store';
-import { ACTIVE_SOURCE, registerEntitled } from './test-entitlement';
+import { ACTIVE_SOURCE, NEVER_HELD, registerEntitled } from './test-entitlement';
 import type { PushMessage, PushReceipt, PushTicket, PushTransport } from './types';
 import { RECEIPT_DELAY_MINUTES, runPushDelivery } from './worker';
 
@@ -116,6 +116,7 @@ function setup(activated: boolean) {
     runPushDelivery(store, {
       transport,
       entitlements: ACTIVE_SOURCE,
+      sendingHold: NEVER_HELD,
       dryRun: false,
       now: () => new Date(T0 + ms),
     });

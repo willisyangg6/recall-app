@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { MemoryPushStore } from './memory-push-store';
-import { ACTIVE_SOURCE, registerEntitled } from './test-entitlement';
+import { ACTIVE_SOURCE, NEVER_HELD, registerEntitled } from './test-entitlement';
 import type { PushMessage, PushReceipt, PushTicket, PushTransport } from './types';
 import { runPushDelivery } from './worker';
 
@@ -132,6 +132,7 @@ async function seededStore(): Promise<{ store: MemoryPushStore; transport: FakeT
   await runPushDelivery(store, {
     transport,
     entitlements: ACTIVE_SOURCE,
+    sendingHold: NEVER_HELD,
     dryRun: false,
     now: () => new Date(T0 + 2 * HOUR),
   });
@@ -140,6 +141,7 @@ async function seededStore(): Promise<{ store: MemoryPushStore; transport: FakeT
   await runPushDelivery(store, {
     transport,
     entitlements: ACTIVE_SOURCE,
+    sendingHold: NEVER_HELD,
     dryRun: false,
     now: () => new Date(T0 + 3 * HOUR),
     maxSendsPerRun: 0,
@@ -229,6 +231,7 @@ test('NO BACKFILL: a re-registration after deletion never receives pre-deletion 
   const result = await runPushDelivery(store, {
     transport,
     entitlements: ACTIVE_SOURCE,
+    sendingHold: NEVER_HELD,
     dryRun: false,
     now: () => new Date(T0 + 7 * HOUR),
   });
@@ -266,6 +269,7 @@ test('a deletion between delivery creation and send leaves the worker sane and s
   const result = await runPushDelivery(store, {
     transport,
     entitlements: ACTIVE_SOURCE,
+    sendingHold: NEVER_HELD,
     dryRun: false,
     now: () => new Date(T0 + 4 * HOUR),
   });

@@ -26,6 +26,7 @@ import type { EntitlementSource } from './revenuecat-entitlement';
 import { RevenueCatUnavailableError } from './revenuecat-entitlement';
 import type { PushMessage, PushReceipt, PushTicket, PushTransport } from './types';
 import { runPushDelivery } from './worker';
+import { NEVER_HELD } from './test-entitlement';
 
 const T0 = Date.parse('2026-10-14T00:00:00.000Z');
 const HOUR = 3_600_000;
@@ -139,6 +140,7 @@ function setup() {
     runPushDelivery(store, {
       transport,
       entitlements: extra.source === undefined ? rc : extra.source,
+      sendingHold: NEVER_HELD,
       dryRun: extra.dryRun ?? false,
       now: () => new Date(T0 + ms),
     });

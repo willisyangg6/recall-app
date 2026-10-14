@@ -480,13 +480,16 @@ must remain structurally unreachable (it is, by the activation horizon, but
 this deserves one explicit pre-activation verification); the allergen-data
 architecture question in
 [recall-launch-blockers.md](recall-launch-blockers.md) §2 is unresolved and
-push eligibility reads the server-side allergen mirror; and quiet hours do not
-exist, so an activated system can notify at 3 a.m.
+push eligibility reads the server-side allergen mirror. Quiet hours now exist:
+the overnight sending hold (22:00–09:59 America/New_York, 2026-10-14;
+docs/recall-push-delivery.md "Overnight sending hold") keeps an activated
+system from sending at night.
 
 **The activation milestone is separate and must not be folded into other
 work.** It should: verify the horizon against the live ledger read-only;
-confirm the App Privacy label and counsel answers; add quiet hours or an
-explicit decision not to; run `push:test` to a founder device; then
+confirm the App Privacy label and counsel answers; confirm the overnight
+sending hold is on master (every activated push run then reports `sendingHeld`); run
+`push:test` to a founder device; then
 `push:activate -- --confirm` with `--deactivate --confirm` rehearsed as the
 documented off switch.
 

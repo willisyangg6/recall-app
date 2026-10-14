@@ -10,6 +10,13 @@ import type { EntitlementSource } from './revenuecat-entitlement';
 
 export const FAR_FUTURE = '2099-01-01T00:00:00.000Z';
 
+/**
+ * The overnight sending hold switched off, for tests about everything else:
+ * their fixed UTC clocks would otherwise land inside 22:00–10:00 New York
+ * time. The hold itself is tested with the real rule (sending-hold.test.ts).
+ */
+export const NEVER_HELD = () => false;
+
 /** A RevenueCat that reports every purchase id as subscribed until FAR_FUTURE. */
 export const ACTIVE_SOURCE: EntitlementSource = {
   async check() {

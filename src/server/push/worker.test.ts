@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { MemoryPushStore } from './memory-push-store';
-import { ACTIVE_SOURCE, FAR_FUTURE, registerEntitled } from './test-entitlement';
+import { ACTIVE_SOURCE, NEVER_HELD, FAR_FUTURE, registerEntitled } from './test-entitlement';
 import type { PushMessage, PushReceipt, PushTicket, PushTransport } from './types';
 import {
   eligibleSubscriptions,
@@ -227,6 +227,7 @@ function setup(activatedAtMs: number | null = 0): {
       runPushDelivery(store, {
         transport,
         entitlements: ACTIVE_SOURCE,
+        sendingHold: NEVER_HELD,
         dryRun,
         now: () => new Date(T0 + ms),
       }),

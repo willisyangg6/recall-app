@@ -643,6 +643,50 @@ notifications. Whether an alert sent between the stop and the disable is
 shown has **not** been tested on a device. It needs an activated send or
 `push:test`, which require separate authorization.
 
+## Overnight sending hold (D1; founder-approved 2026-10-14)
+
+**Rule:** Lotly sends no alert while it is **22:00–09:59 in
+America/New_York**. An alert that becomes due in those hours is sent by the
+first push run after 10:00 New York time.
+
+- **No exemptions.** Retractions are held too.
+- **Public wording** (Terms §6) describes sending, never arrival.
+
+**Time zone, not offset** (`src/server/push/sending-hold.ts`). The hour is
+read in the IANA zone, so daylight saving comes from the zone database.
+
+- **Daylight time:** the hold is 02:00–13:59 UTC.
+- **Standard time:** 03:00–14:59 UTC.
+- **The night the clocks fall back:** both 01:xx hours are held.
+- **Unreadable clock:** holds (fail closed).
+
+**What it changes:** only _when_ a due delivery is handed to Expo.
+
+- **Unchanged:** matching, the activation, subscription and preference
+  horizons, event-type eligibility and the entitlement gate all decide
+  exactly as before, and deliveries are still created during the hold.
+- **The entitlement refresh** runs on its own schedule, hold or not.
+- **A held row stays queued** and is judged again at the morning send, clock
+  gate included. A subscription that expired overnight receives nothing.
+- **The morning release** is bounded by the existing 1,000-send cap per run.
+- **`push:test`** sends directly and is not held. It is a manual test tool.
+
+**Worst delay:** about 12 h 53 min, for an alert due just after 22:00. That's
+12 hours of hold plus the worst measured run gap.
+
+**Metrics** (job run): `sendingHeld` (the hold applied to this run's sends)
+and `sendingHoldDeferred` (due deliveries left queued; in a dry run, would be
+left queued).
+
+**Tests:** `sending-hold.test.ts` uses the real rule.
+
+- It covers the boundaries in daylight and standard time, and both
+  clock-change nights.
+- It covers the worker holding overnight and sending after 10:00, unchanged
+  eligibility, an overnight expiry, retractions, and the dry run.
+- Tests about other behavior switch the hold off (`NEVER_HELD`), because
+  their fixed UTC clocks would fall inside it.
+
 ## Alert entitlement gate (2026-10-14; migration applied and verified 2026-10-14; push not activated)
 
 **Rule (founder decision D2, 2026-10-14):** recall alerts stop when a

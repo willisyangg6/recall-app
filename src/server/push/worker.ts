@@ -46,6 +46,10 @@
  *   (the staleness gate, fail closed), and that began before the event (the
  *   no-backlog horizon). An unverified status HOLDS a delivery. A definitive
  *   one fails it, so a lapsed period is never sent later.
+ * - Overnight sending hold (D1, 2026-10-14; sending-hold.ts): no send while it
+ *   is 22:00–09:59 in America/New_York. Deliveries are still created and
+ *   judged as before; due rows wait in the queue for the first run after
+ *   10:00, and are judged again at that send.
  * - A ticket is Expo ACCEPTING the request; only a receipt marks the handoff
  *   to APNs/FCM successful (receipt_ok). The two are never conflated.
  *
@@ -65,6 +69,7 @@ import { pushEligible, type RelevanceInput } from '../../lib/relevance';
 import type { JobRunOutcome } from '../store/types';
 import { decideDelivery, type DeliveryDecision } from './event-eligibility';
 import { buildPushMessage } from './format';
+import { HOLD_TIME_ZONE, isSendingHeld } from './sending-hold';
 import { MAX_MESSAGES_PER_REQUEST, MAX_RECEIPT_IDS_PER_REQUEST } from './expo-transport';
 import type {
   CaseLink,
@@ -342,6 +347,12 @@ export interface PushWorkerOptions {
    * every alert is held (fail closed), and the run reports it.
    */
   entitlements: EntitlementSource | null;
+  /**
+   * The overnight sending hold. Production never sets it, so it is always
+   * the real rule (sending-hold.ts); tests about other behavior pass a clock
+   * that is never held.
+   */
+  sendingHold?: (instant: Date) => boolean;
   dryRun: boolean;
   now: () => Date;
   maxEventsPerRun?: number;
@@ -429,6 +440,10 @@ export async function runPushDelivery(
     /** Queued rows failed closed by queuedRowHorizonFailure (would-fail in a dry run). */
     queuedBeforeHorizon: 0,
     cappedSends: 0,
+    /** The overnight sending hold (sending-hold.ts) was in force for this run's sends. */
+    sendingHeld: false,
+    /** Due deliveries left queued by the hold (in a dry run: would be left queued). */
+    sendingHoldDeferred: 0,
   };
   const errors: string[] = [...refresh.errors];
   if (options.entitlements === null)
@@ -688,6 +703,18 @@ export async function runPushDelivery(
     }
     sendPool.push(delivery);
   }
+  // ── Overnight sending hold (D1): 22:00–09:59 America/New_York ─────────────
+  // Every row above was judged exactly as before; the hold only decides WHEN
+  // the due ones are handed to Expo. Held rows stay queued and are judged
+  // again at the next run's send, entitlement and clock gates included.
+  if ((options.sendingHold ?? isSendingHeld)(now())) {
+    metrics.sendingHeld = true;
+    metrics.sendingHoldDeferred = sendPool.length + (dryRun ? metrics.deliveriesCreated : 0);
+    console.log(
+      `  overnight hold (22:00–10:00 ${HOLD_TIME_ZONE}): ${metrics.sendingHoldDeferred} deliveries wait for 10:00.`,
+    );
+    sendPool.length = 0;
+  }
   if (sendPool.length > maxSends) {
     metrics.cappedSends = sendPool.length - maxSends;
     console.log(`  send cap: deferring ${metrics.cappedSends} deliveries to the next run.`);
@@ -697,7 +724,7 @@ export async function runPushDelivery(
   if (dryRun) {
     // Would-send = new pairs this run would create + the existing pool
     // (pending / elapsed retryable / crashed-sending rows) already due.
-    metrics.sent = metrics.deliveriesCreated + sendPool.length;
+    metrics.sent = metrics.sendingHeld ? 0 : metrics.deliveriesCreated + sendPool.length;
   }
 
   if (!dryRun) {
