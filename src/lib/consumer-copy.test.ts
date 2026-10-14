@@ -23,8 +23,8 @@
  *  9. Shopper-report explanations are conditional while the gate is off.
  * 10. The push bodies carry the approved sentences, on the same trigger facts.
  * 11. Frozen and protected copy is still present, word for word.
- * 12. The Privacy Policy and Support destinations stay tracked as unresolved
- *     launch blockers, never fabricated.
+ * 12. The Privacy Policy and Support destinations are recorded as supplied
+ *     (2026-10-14), never fabricated.
  *
  * Source-text pins read the files with comments removed, so a module may
  * still document what it does not do.
@@ -37,6 +37,7 @@ import test from 'node:test';
 
 import { documentBySlug, TRUST_DOCUMENTS } from '@/content';
 import { documentPlainText, riskLevelText } from '@/content/document-model';
+import { POLICY_LINKS } from '@/lib/release-destinations';
 import { DETAIL_ERROR_FALLBACK, EXTERNAL_LINK_HINT } from '@/lib/detail-copy';
 import { SUPPORT_EMAIL } from '@/lib/privacy-requests';
 import {
@@ -474,7 +475,13 @@ test('the interim launch-placeholder corrections are applied, and nothing is inv
     // The founder-confirmed support address (2026-10-13) is the one contact
     // point a document may name; it is removed before the invention checks,
     // so any other address, domain or "support@" still fails.
-    const text = documentPlainText(doc).split(SUPPORT_EMAIL).join('');
+    let text = documentPlainText(doc).split(SUPPORT_EMAIL).join('');
+    // Privacy & Data Controls links Lotly's three published policies
+    // (2026-10-14); only those exact URLs and the Terms link label are removed.
+    if (doc.slug === 'privacy-data-controls') {
+      for (const url of Object.values(POLICY_LINKS)) text = text.split(url).join('');
+      text = text.split('Terms of Use').join('');
+    }
     assert.doesNotMatch(text, /@[a-z0-9-]+\.[a-z]{2,}/i, `${doc.slug} invents an email`);
     assert.doesNotMatch(
       text,
@@ -671,12 +678,12 @@ test('authored hints end with a full stop, and the Feed’s Edit action names wh
   );
 });
 
-// ── 12. Launch blockers stay tracked, never fabricated ─────────────────────
+// ── 12. Launch destinations are recorded, never fabricated ─────────────────
 
-test('the Privacy Policy and Support destinations remain tracked as unresolved launch blockers', () => {
+test('the Privacy Policy and Support destinations are recorded as supplied, never invented', () => {
   const blockers = readDoc('recall-launch-blockers.md');
-  assert.match(blockers, /- \[ \] Support email \/ support destination/);
-  assert.match(blockers, /- \[ \] Public domain\/URL to host the Privacy Policy/);
+  assert.match(blockers, /- \[x\] Support email \/ support destination — \*\*supplied 2026-10-14/);
+  assert.match(blockers, /- \[x\] Public URL to host the Privacy Policy — \*\*supplied 2026-10-14/);
   assert.match(blockers, /Expo display name/);
   assert.match(blockers, /push delivery itself remains not activated/);
   // The app links neither, and the registry holds neither.

@@ -882,12 +882,13 @@ could-not-confirm notice when the gate failed closed. Restore Purchases,
 Terms, Privacy and Support are always rendered before a purchase.
 
 **Terms, Privacy, Support** open the typed `RELEASE_DESTINATIONS`
-(`src/lib/release-destinations.ts`), all `null` today. An unconfigured
-destination shows `This link is not available yet.` on press — never
+(`src/lib/release-destinations.ts`): since 2026-10-14 the website pages
+`https://lotly.pages.dev/terms/`, `/privacy/` and `/support/`
+([recall-launch-blockers.md](recall-launch-blockers.md) §1). An unconfigured
+destination would show `This link is not available yet.` on press — never
 `example.com`, never a dead link. `npm run qa:launch-readiness` exits
-non-zero while any destination is absent or not a valid HTTPS URL on a real
-host; the founder supplies them in a commit once they exist
-([recall-launch-blockers.md](recall-launch-blockers.md) §1).
+non-zero if any destination is absent or not a valid HTTPS URL on a real
+host.
 
 **Notification education** is reachable only in the education phase. Its
 primary action calls `enableRecallAlerts` — the same single path the

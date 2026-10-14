@@ -3,12 +3,10 @@
  * footer opens — Terms, Privacy, Support — as TYPED configuration with no
  * value invented.
  *
- * None exists yet. The founder's checklist in docs/recall-launch-blockers.md
- * owns all three (a legal entity, a public domain, a support destination),
- * so every entry below is `null` until a real HTTPS destination is supplied,
- * and `launchReadinessFailures` names each absent one. `npm run
- * qa:launch-readiness` exits non-zero while any is missing, so a release
- * cannot be prepared with a dead footer. The paywall renders the four
+ * Supplied 2026-10-14: Lotly's website on Cloudflare Pages (project `lotly`,
+ * docs/recall-launch-blockers.md §1). `launchReadinessFailures` still names
+ * any entry that is absent or invalid, and `npm run qa:launch-readiness`
+ * exits non-zero then, so a release cannot be prepared with a dead footer. The paywall renders the four
  * actions regardless: an unconfigured destination shows one honest sentence
  * on press (`DESTINATION_UNCONFIGURED`), never `example.com` and never a link
  * that goes nowhere.
@@ -27,10 +25,23 @@ export type ReleaseDestinations = Record<ReleaseDestinationKey, string | null>;
  * third `EXPO_PUBLIC_` value that could be absent on one EAS environment and
  * present on another (release-exposure.test.ts freezes that set).
  */
+const WEBSITE = 'https://lotly.pages.dev';
+
+/**
+ * The website's policy pages, linked from Privacy & Data Controls. The
+ * Consumer Health Data Policy has no paywall footer action, so it is not a
+ * release destination.
+ */
+export const POLICY_LINKS = {
+  privacy: `${WEBSITE}/privacy/`,
+  consumerHealthData: `${WEBSITE}/consumer-health-data/`,
+  terms: `${WEBSITE}/terms/`,
+} as const;
+
 export const RELEASE_DESTINATIONS: ReleaseDestinations = {
-  terms: null,
-  privacy: null,
-  support: null,
+  terms: POLICY_LINKS.terms,
+  privacy: POLICY_LINKS.privacy,
+  support: `${WEBSITE}/support/`,
 };
 
 export const DESTINATION_LABELS: Record<ReleaseDestinationKey, string> = {

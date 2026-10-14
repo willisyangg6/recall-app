@@ -1,6 +1,6 @@
 /**
- * Release destinations (P2B7X.1): typed, absent until supplied, and a
- * launch-readiness failure while any is absent or invalid.
+ * Release destinations (P2B7X.1): typed, a launch-readiness failure while
+ * any is absent or invalid, and (2026-10-14) supplied as Lotly's website.
  */
 
 import assert from 'node:assert/strict';
@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import {
+  POLICY_LINKS,
   destinationAction,
   isValidHttpsDestination,
   launchReadinessFailures,
@@ -18,7 +19,7 @@ import {
 
 const ROOT = join(__dirname, '..', '..');
 
-test('no destination is invented: every entry is null until the founder supplies a real one', () => {
+test('every destination is a real HTTPS URL on the published website, never invented', () => {
   assert.deepEqual(Object.keys(RELEASE_DESTINATIONS).sort(), ['privacy', 'support', 'terms']);
   for (const [key, value] of Object.entries(RELEASE_DESTINATIONS)) {
     assert.ok(value === null || isValidHttpsDestination(value), `${key} is set to an invalid URL`);
@@ -44,9 +45,24 @@ test('a valid destination is HTTPS on a real host; placeholders and plain HTTP a
   }
 });
 
+test('the supplied destinations are the website pages, and launch readiness passes', () => {
+  assert.deepEqual(RELEASE_DESTINATIONS, {
+    terms: 'https://lotly.pages.dev/terms/',
+    privacy: 'https://lotly.pages.dev/privacy/',
+    support: 'https://lotly.pages.dev/support/',
+  });
+  assert.deepEqual(POLICY_LINKS, {
+    privacy: 'https://lotly.pages.dev/privacy/',
+    consumerHealthData: 'https://lotly.pages.dev/consumer-health-data/',
+    terms: 'https://lotly.pages.dev/terms/',
+  });
+  for (const url of Object.values(POLICY_LINKS)) assert.equal(isValidHttpsDestination(url), true);
+  assert.deepEqual(launchReadinessFailures(), []);
+});
+
 test('launch readiness fails while any destination is absent, and names each one', () => {
-  const failures = launchReadinessFailures();
-  assert.equal(failures.length, 3, 'all three are absent today');
+  const failures = launchReadinessFailures({ terms: null, privacy: null, support: null });
+  assert.equal(failures.length, 3);
   assert.match(failures[0], /^Terms destination is not configured/);
   assert.match(failures[1], /^Privacy destination is not configured/);
   assert.match(failures[2], /^Support destination is not configured/);
@@ -70,7 +86,13 @@ test('launch readiness fails while any destination is absent, and names each one
 });
 
 test('the paywall opens a configured destination and reports an unconfigured one — never a dead link', () => {
-  assert.deepEqual(destinationAction('terms'), { kind: 'unconfigured' });
+  assert.deepEqual(destinationAction('terms'), {
+    kind: 'open',
+    url: 'https://lotly.pages.dev/terms/',
+  });
+  assert.deepEqual(destinationAction('terms', { terms: null, privacy: null, support: null }), {
+    kind: 'unconfigured',
+  });
   assert.deepEqual(
     destinationAction('terms', { terms: 'https://lotly.app/terms', privacy: null, support: null }),
     { kind: 'open', url: 'https://lotly.app/terms' },

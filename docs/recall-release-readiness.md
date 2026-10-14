@@ -427,10 +427,12 @@ preview`.
      then may the paywall be described as working.
 
 - **Terms, Privacy and Support destinations.** The paywall's footer reads
-  them from `src/lib/release-destinations.ts`, where all three are `null`.
-  `npm run qa:launch-readiness` is the offline gate: it exits non-zero while
-  any is absent or not a valid HTTPS URL on a real host, and it fails today
-  with three blockers by design.
+  them from `src/lib/release-destinations.ts`: the `lotly.pages.dev` terms,
+  privacy and support pages (supplied 2026-10-14). `npm run
+qa:launch-readiness` is the offline gate: it exits non-zero if any is
+  absent or not a valid HTTPS URL on a real host. It does not check that the
+  pages are live; the build waits for the deployed pages (device-build
+  handoff `CLOSEOUT.md` C2 before C6).
 - **Push activation** — built, deliberately inactive, and activated only by
   `npm run push:activate` when the founder decides.
 - **Shopper reports** — the server gate stays off.

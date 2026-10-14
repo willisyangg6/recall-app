@@ -16,6 +16,8 @@ import { SHOPPER_REPORT_VISIBILITY_THRESHOLD } from '@/domain/shopper-report';
 import { RESET_ACTION_LABEL } from '@/lib/installation-reset';
 import { SUPPORT_EMAIL } from '@/lib/privacy-requests';
 import { PRIVACY_DOCUMENT_SLUG } from '@/lib/shopper-report-presentation';
+import { POLICY_LINKS } from '@/lib/release-destinations';
+
 import { documentPlainText } from './document-model';
 import { documentBySlug, PROFILE_DOCUMENT_GROUPS, TRUST_DOCUMENTS } from './index';
 
@@ -127,10 +129,14 @@ test('no document contains unresolved placeholders or invented contact points', 
 });
 
 test('external links in documents point only at official government sources', () => {
+  // The one exception: Privacy & Data Controls links Lotly's own published
+  // policies (2026-10-14), and only those three pages.
+  const policyUrls: readonly string[] = Object.values(POLICY_LINKS);
   for (const doc of TRUST_DOCUMENTS) {
     for (const section of doc.sections) {
       for (const block of section.blocks) {
         if (block.kind !== 'link') continue;
+        if (doc.slug === 'privacy-data-controls' && policyUrls.includes(block.url)) continue;
         assert.match(
           block.url,
           /^https:\/\/(www\.)?(fda\.gov|open\.fda\.gov|fsis\.usda\.gov|usda\.gov)\//,
@@ -182,7 +188,10 @@ test('the data-reset control the document describes actually ships, under its ex
   assert.ok(text.includes(RESET_ACTION_LABEL));
   // Honest scope: what it deletes, what it cannot reach, and that uninstalling
   // alone is not a deletion request.
-  assert.match(text, /preference mirror, the push registration, and its alert delivery records/);
+  assert.match(
+    text,
+    /the preference mirror and your allergen-alerts decision, the push registration and its alert delivery records, the alert ordering counter, the last-opened date, and any request codes/,
+  );
   assert.match(text, /The reset does not reach three things/);
   assert.match(text, /under each provider’s own settings, which the app cannot change or delete/);
   // No retention period is claimed for provider logs: none has been verified.

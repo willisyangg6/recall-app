@@ -219,6 +219,7 @@ const SHAPE: Record<string, [title: string | null, kinds: string][]> = {
     ['Seeing your data and making a request', 'bullets'],
     ['Clearing and resetting', 'bullets paragraph'],
     ['Deleting the app', 'paragraph'],
+    ['Lotly’s policies', 'link link link'],
   ],
   attributions: [
     ['Recall data', 'bullets link link'],
@@ -277,6 +278,13 @@ test('external links keep their exact destinations, and document links resolve t
       'https://www.fsis.usda.gov/recalls',
     ],
     ['sources-methodology', 'openFDA', 'https://open.fda.gov/'],
+    ['privacy-data-controls', 'Privacy Policy', 'https://lotly.pages.dev/privacy/'],
+    [
+      'privacy-data-controls',
+      'Consumer Health Data Policy',
+      'https://lotly.pages.dev/consumer-health-data/',
+    ],
+    ['privacy-data-controls', 'Terms of Use', 'https://lotly.pages.dev/terms/'],
     ['attributions', 'openFDA', 'https://open.fda.gov/'],
     ['attributions', 'USDA FSIS', 'https://www.fsis.usda.gov/recalls'],
   ]);
@@ -485,16 +493,17 @@ test('the reset behaviour and confirmation are unchanged beneath the new appeara
   );
 });
 
-// ── 12. Unfinished legal documents stay hidden ──────────────────────────────
+// ── 12. Legal documents are linked on the website, never hosted in the app ──
 
-test('the unfinished Privacy Policy and Terms remain hidden', () => {
+test('the Privacy Policy and Terms are website links, never in-app documents', () => {
   assert.equal(documentBySlug('privacy-policy'), undefined);
   assert.equal(documentBySlug('terms'), undefined);
   for (const doc of TRUST_DOCUMENTS) assert.ok(!/^(privacy policy|terms)/i.test(doc.title));
   assert.ok(!PROFILE.includes('privacy-policy') && !PROFILE.includes("'terms'"));
   assert.ok(!ROUTE.includes('privacy-policy'));
+  // The one mention is the link label on Privacy & Data Controls (2026-10-14).
   const all = TRUST_DOCUMENTS.map(documentPlainText).join('\n');
-  assert.doesNotMatch(all, /Terms of (Service|Use)|End User License/i);
+  assert.deepEqual(all.match(/Terms of (Service|Use)|End User License/gi), ['Terms of Use']);
 });
 
 // ── 13. Tokens and the heading hierarchy ────────────────────────────────────

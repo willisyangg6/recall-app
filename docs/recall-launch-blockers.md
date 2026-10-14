@@ -19,24 +19,19 @@ else was invented):
       draft). The in-app documents still name no contact: the corrections
       and privacy documents' tests forbid an email until the founder decides
       to surface one in the app.
-- [ ] Support email / support destination — the email exists
-      (lotlysupport@gmail.com), but App Store Connect's support URL and
-      `RELEASE_DESTINATIONS.support` need an HTTPS page, which waits on the
-      domain (unlocks the App Store support
-      URL, the Profile "Support" row, the Corrections Policy's
-      report-a-problem path, and — since P2B7X.1 — the paywall's `Support`
-      footer action, which reads `RELEASE_DESTINATIONS.support` in
-      `src/lib/release-destinations.ts`).
-- [ ] Public domain/URL to host the Privacy Policy — **not purchased yet**
-      (2026-10-10) (and later the trust
-      documents' web versions). **This is also what blocks native sharing**
-      — the shared URL must be a Lotly Universal Link on that domain (§6) —
-      and, since P2B7X.1, the paywall's `Privacy` and `Terms` footer actions
-      (`RELEASE_DESTINATIONS.privacy` / `.terms`). All three destinations are
-      `null` in the repository; `npm run qa:launch-readiness` exits non-zero
-      until each is a real HTTPS URL, and the paywall shows its
-      unconfigured-link sentence for each in the meantime. Nothing was
-      invented.
+- [x] Support email / support destination — **supplied 2026-10-14:** the
+      email is lotlysupport@gmail.com and the support page is
+      `https://lotly.pages.dev/support/` (`RELEASE_DESTINATIONS.support`,
+      the paywall's `Support` footer action and App Store Connect's support
+      URL). The Profile "Support" row and the Corrections Policy's
+      report-a-problem path are still not built.
+- [x] Public URL to host the Privacy Policy — **supplied 2026-10-14:** the
+      website is Cloudflare Pages project `lotly` at `https://lotly.pages.dev`
+      (no custom domain). `src/lib/release-destinations.ts` holds the terms,
+      privacy and support pages, and `POLICY_LINKS` adds the Consumer Health
+      Data Policy; Privacy & Data Controls links all three policies, and
+      `npm run qa:launch-readiness` passes. Native sharing still waits on its
+      own decision (§6).
 - [ ] Privacy Policy effective date (set at publication).
 
 Product decisions with policy consequences:
