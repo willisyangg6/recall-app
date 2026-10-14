@@ -36,9 +36,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#FDFCF6",
+          "image": "./assets/brand/production/lotly-mascot-transparent.png",
+          "imageWidth": 160
         }
       ],
       "expo-secure-store",

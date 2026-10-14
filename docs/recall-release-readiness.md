@@ -367,9 +367,17 @@ has been recorded.
 ## 7. Still pending, not blocked by Apple
 
 - **Remaining brand artwork.** The approved Lotly iOS icon is installed and
-  verified natively (§11). Still deferred, and still the Expo template or
-  earlier assets: the Android adaptive icon (`assets/images/android-icon-*`),
-  the splash artwork (`assets/images/splash-icon.png`) and the web favicon
+  verified natively (§11). The launch splash is now Lotly too (2026-10-13):
+  the approved transparent mark
+  (`assets/brand/production/lotly-mascot-transparent.png`) at 160pt, centred
+  on the page cream `#FDFCF6`, through the existing `expo-splash-screen`
+  plugin block in `app.json`. A clean prebuild was checked to generate that
+  colour set and a 160pt storyboard image; the launch itself is verified on
+  the next RC build. The splash fades out over 250 ms when it hides, with no
+  added delay, through `SplashScreen.setOptions({ fade: true, duration: 250 })`
+  in `src/app/_layout.tsx` (landed separately, in 14ec6e5). Still deferred,
+  and still the Expo template or earlier assets: the Android adaptive icon
+  (`assets/images/android-icon-*`) and the web favicon
   (`assets/images/favicon.png`). None blocks an iOS TestFlight build.
 - **Support URL and Privacy Policy URL.** Both are App Store Connect
   requirements with no real destination yet
