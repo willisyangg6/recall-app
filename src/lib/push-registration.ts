@@ -74,11 +74,13 @@ import {
   disableAlertsAfterAgeStop as disableAfterAgeStop,
   type AgeStopAlertsOutcome,
 } from './age-stop-alerts';
+import { runAgeCheck } from './age-assurance';
 import { loadAgeRecord } from './age-record-store';
+import { createAgeCheckPorts } from './age-range-service';
 import { boundedAppTransactionRead } from './app-transaction-read';
 import {
+  registrationEligibility,
   resolveRegistrationRoute as resolveRoute,
-  revocationKeyEligible,
   routedRegistration,
   type RegistrationRoute,
 } from './revocation-key';
@@ -105,11 +107,17 @@ const readAppTransactionId = boundedAppTransactionRead({ read: getAppTransaction
 
 /**
  * How this installation must register (lib/revocation-key.ts). StoreKit is
- * asked for the app transaction only when a key is needed or held.
+ * asked for the app transaction only when a key is needed or held. With no
+ * usable age record, the launch age check runs again and its decision is
+ * used directly (`registrationEligibility`).
  */
 function resolveRegistrationRoute(): Promise<RegistrationRoute> {
   return resolveRoute({
-    isEligible: async () => revocationKeyEligible(await loadAgeRecord()),
+    isEligible: () =>
+      registrationEligibility({
+        loadRecord: loadAgeRecord,
+        checkAge: () => runAgeCheck(createAgeCheckPorts()),
+      }),
     isKeyHeld: async () => (await SecureStore.getItemAsync(REVOCATION_KEY_HELD)) === '1',
     readAppTransactionId,
   });

@@ -357,8 +357,9 @@ test('the root layout mounts every server-facing launch task beneath the age gat
 test('the age range never reaches a network client', () => {
   // The record's readers are the check and the revocation-key rule. No
   // module that talks to a server imports the age modules, except
-  // push-registration, which reads the record ONLY to choose how to
-  // register — the only value it ever sends is Apple's app id (keyed route).
+  // push-registration, which reads the record (or, without a usable one,
+  // re-runs the launch check; 2026-10-16) ONLY to choose how to register —
+  // the only value it ever sends is Apple's app id (keyed route).
   for (const file of [
     'push-api.ts',
     'installation-checkin-runner.ts',
@@ -370,8 +371,13 @@ test('the age range never reaches a network client', () => {
     assert.doesNotMatch(source, /age-record|age-assurance|age-range-service/, file);
   }
   const registration = readFileSync(join(__dirname, 'push-registration.ts'), 'utf8');
-  assert.equal(registration.match(/loadAgeRecord\(\)/g)?.length, 1);
-  assert.match(registration, /revocationKeyEligible\(await loadAgeRecord\(\)\)/);
+  assert.equal(registration.match(/loadAgeRecord/g)?.length, 2, 'the import and one use');
+  assert.match(registration, /loadRecord: loadAgeRecord,/);
+  assert.equal(registration.match(/runAgeCheck\(/g)?.length, 1);
+  assert.match(registration, /checkAge: \(\) => runAgeCheck\(createAgeCheckPorts\(\)\)/);
+  // The route rule lives in revocation-key.ts, which reaches no network client.
+  const rule = readFileSync(join(__dirname, 'revocation-key.ts'), 'utf8');
+  assert.doesNotMatch(rule, /from '\.\/(push-api|revocation-key-api|supabase|feed)/);
   assert.doesNotMatch(registration, /lowerBound|upperBound|ageClass|regulatoryFeatures/);
   const api = readFileSync(join(__dirname, 'revocation-key-api.ts'), 'utf8');
   assert.deepEqual([...api.matchAll(/p_[a-z_]+/g)].map((m) => m[0]).sort(), [

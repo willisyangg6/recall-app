@@ -473,6 +473,18 @@ alerts are stopped on the server.
   - A regulated teen's alerts are therefore never eligible without the
     mapping.
   - An invalid id, or a missing Vault key, writes nothing.
+  - **No usable age record** (2026-10-16). If the stored record is missing or
+    unreadable when a registration runs, a missing record no longer means
+    "not eligible". The launch age check runs again and its decision is used
+    directly (`registrationEligibility`), never a re-read of what it saved:
+    - a regulated minor goes keyed (or blocked without the id);
+    - an adult, an unregulated user, or iOS before 26 goes plain;
+    - a check that does not proceed, or throws, is `undetermined`, which
+      is `blocked` (no key, no alerts, below).
+
+    That check can show Apple's age-range sheet in the same cases the launch
+    check can. It runs only when the record is unusable. Tested in
+    `src/lib/age-record-fallback.test.ts`.
 - **No key, no alerts.** If StoreKit cannot produce the id, nothing is sent.
   - On a deliberate enable, the alert protocol's outranking cleanup disable
     runs. On a silent refresh of an enabled row, the row is disabled.

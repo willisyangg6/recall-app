@@ -10,7 +10,12 @@
  * (20261017000000_consent_revocation).
  */
 
-import { classifyAgeRange, regulatedStatus, type AgeRecord } from './age-assurance';
+import {
+  classifyAgeRange,
+  regulatedStatus,
+  type AgeDecision,
+  type AgeRecord,
+} from './age-assurance';
 
 export function revocationKeyEligible(record: AgeRecord | null): boolean {
   if (record === null || record.answer.kind !== 'shared') return false;
@@ -18,6 +23,33 @@ export function revocationKeyEligible(record: AgeRecord | null): boolean {
     return false;
   }
   return regulatedStatus(record.eligible, record.regulatoryFeatures) === true;
+}
+
+/** `undetermined`: neither the stored record nor a fresh check could say. */
+export type RegistrationEligibility = boolean | 'undetermined';
+
+/**
+ * Whether a registration needs the key (2026-10-16). The stored age record
+ * when it is usable, exactly as before. When it is missing or unreadable,
+ * a missing record must not silently mean "not eligible" (that registered a
+ * regulated 13–17 user without the mapping): the launch age check runs
+ * again and ITS decision is used directly, never a re-read of what it saved.
+ * A check that does not proceed, or throws, is `undetermined`.
+ */
+export async function registrationEligibility(deps: {
+  loadRecord(): Promise<AgeRecord | null>;
+  checkAge(): Promise<AgeDecision>;
+}): Promise<RegistrationEligibility> {
+  const record = await deps.loadRecord().catch(() => null);
+  if (record !== null) return revocationKeyEligible(record);
+  let decision: AgeDecision;
+  try {
+    decision = await deps.checkAge();
+  } catch {
+    return 'undetermined';
+  }
+  if (decision.kind !== 'proceed') return 'undetermined';
+  return decision.ageClass === 'minor' && decision.regulated === true;
 }
 
 /**
@@ -29,8 +61,9 @@ export function revocationKeyEligible(record: AgeRecord | null): boolean {
  *   longer eligible but whose earlier key may still be held — the keyed path
  *   is the only one that can renew a row a parent's revocation disabled.
  * - `plain`: the ordinary registration (never revives a revoked row).
- * - `blocked`: a regulated 13–17 user without an Apple id to present —
- *   alerts must stay DISABLED; no registration is sent.
+ * - `blocked`: a regulated 13–17 user without an Apple id to present, or an
+ *   installation whose eligibility is `undetermined` — alerts must stay
+ *   DISABLED; no registration is sent.
  */
 export type RegistrationRoute =
   | { kind: 'keyed'; appTransactionId: string; clearAfter: boolean }
@@ -122,11 +155,12 @@ export function routedRegistration(deps: RoutedRegistrationDeps) {
  * (lib/app-transaction-read.ts): null keeps a regulated teen `blocked`.
  */
 export async function resolveRegistrationRoute(deps: {
-  isEligible(): Promise<boolean>;
+  isEligible(): Promise<RegistrationEligibility>;
   isKeyHeld(): Promise<boolean>;
   readAppTransactionId(): Promise<string | null>;
 }): Promise<RegistrationRoute> {
   const eligible = await deps.isEligible();
+  if (eligible === 'undetermined') return { kind: 'blocked' };
   const keyHeld = await deps.isKeyHeld();
   if (!eligible && !keyHeld) return { kind: 'plain', clearAfter: false };
   return registrationRoute({
