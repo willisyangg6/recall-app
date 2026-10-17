@@ -222,18 +222,31 @@ stored facts, `publishedAt` and `sourceAgency` (`FDA` / `USDA FSIS` via
   when it differs from the send's.
 - **Unchanged:** titles, updates and retractions.
 
-**Card-only shorter reason (2026-10-14, founder-approved).** The Feed and
-Saved card render that shared sentence through `lib/recall-card-reason.ts`
-(`cardReasonText`), which changes exactly two known shapes:
+**Card-only shorter reason (2026-10-14, founder-approved; widened
+2026-10-16 from an audit of every formatter input in the bundled and live
+corpora).** The Feed and Saved card render that shared sentence through
+`lib/recall-card-reason.ts` (`cardReasonText`). Only recognised shapes
+change, each by a fixed rule:
 
-- an allergen line drops its redundant trailing "allergen(s)" ("Undeclared
-  sesame allergen" → "Undeclared sesame"), keeping every named allergen and
-  any uncertainty qualifier;
-- "Potential Salmonella contamination" → "Possible Salmonella" and
-  "Potential Listeria contamination" → "Possible Listeria".
+- **Allergens:** an allergen line drops its redundant trailing
+  "allergen(s)" ("Undeclared sesame allergen" → "Undeclared sesame"),
+  keeping every named allergen and any uncertainty qualifier. "Undeclared
+  allergen" keeps its word.
+- **Pathogens:** "Potential <organisms> contamination" and "Potential to be
+  contaminated with <organisms>" read "Possible <organisms>" when every named
+  agent is a known pathogen (Salmonella, Listeria, E. coli, Clostridium
+  botulinum, Bacillus cereus, Hepatitis A, Cyclospora, Cronobacter). The
+  connective is kept: "Possible E. coli and/or Salmonella" and "Possible
+  E. coli or Salmonella" stay distinct.
+- **Other "Potential …" lines:** they read "Possible …" with every other word
+  kept ("Possible lead contamination", "Possible choking hazard for babies
+  and young children"). "Potential presence of X" and "Potential for X" read
+  "Possible X". "Potential Foodborne Illness – X" drops only the heading
+  ("Possible botulism").
 
-Everything else, confirmed contamination wording included, is shown as
-given. Push and Detail are unchanged.
+Everything else is shown as given: confirmed contamination wording
+("Cronobacter spp. contamination") and unfamiliar lines. Push and Detail are
+unchanged.
 
 **This is an intentional difference, not drift (founder decision,
 2026-10-14).** The card's wording is a compact summary of the same reason. It
