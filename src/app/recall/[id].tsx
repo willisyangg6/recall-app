@@ -395,9 +395,10 @@ function AffectedProductCardView({
         ) : null;
         if (group.pairs !== null) {
           // A verified pair group (founder Granola review, 2026-10-08): no
-          // outer label; each pair is a compact block — its code under the
-          // code's own label, its date under the source's date type — read
-          // by VoiceOver as one element, with clear space between blocks.
+          // outer label; each entry is a compact block — its codes under the
+          // codes' own label, one per line, then the date they share under the
+          // source's date type, shown once (2026-10-18) — read by VoiceOver
+          // as one element, with clear space between blocks.
           const entries = (open ? group.pairs : group.collapsedPairs) ?? [];
           return (
             <View key={group.id}>
@@ -408,7 +409,11 @@ function AffectedProductCardView({
                   accessible
                   accessibilityRole="text"
                   accessibilityLabel={lines[index]}>
-                  <FieldRow label={entry.code.label} value={entry.code.value} stacked={stacked} />
+                  <FieldRow
+                    label={entry.codes.label}
+                    value={entry.codes.values.join('\n')}
+                    stacked={stacked}
+                  />
                   {entry.date ? (
                     <FieldRow label={entry.date.label} value={entry.date.value} stacked={stacked} />
                   ) : null}

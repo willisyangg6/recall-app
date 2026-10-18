@@ -363,11 +363,21 @@ test('verified pairs render as whole labelled entries, expanded and collapsed as
   assert.ok(DETAIL.includes('const open = openGroups.has(stateId);'));
   assert.ok(DETAIL.includes('visibleCellState('));
   assert.ok(DETAIL.includes('const entries = (open ? group.pairs : group.collapsedPairs) ?? [];'));
-  assert.ok(DETAIL.includes('<FieldRow label={entry.code.label} value={entry.code.value}'));
+  // Grouped by date (2026-10-18): an entry's codes under one label, one per
+  // line, then the date they share once.
+  assert.ok(DETAIL.includes('label={entry.codes.label}'));
+  assert.ok(DETAIL.includes("value={entry.codes.values.join('\\n')}"));
   // An undated code is an entry with no date row — never a borrowed date,
   // never a dropped code.
   assert.ok(DETAIL.includes('{entry.date ? ('));
-  assert.ok(PRESENTATION.includes("date: date === '' ? null : { label: dateLabel, value: date },"));
+  assert.ok(
+    PRESENTATION.includes("const bucket = date === '' ? undated : (byDate.get(date) ?? []);"),
+  );
+  assert.ok(
+    PRESENTATION.includes(
+      'date: entry.date === null ? null : { label: dateLabel, value: entry.date },',
+    ),
+  );
 });
 
 // ── 5. Production and business logic ────────────────────────────────────────

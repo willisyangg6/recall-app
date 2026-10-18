@@ -1670,13 +1670,62 @@ export interface AffectedProductFieldGroup {
   collapsedPairs: AffectedProductPairEntry[] | null;
 }
 
-/** One verified pair — or a code the source stated with no date. */
+/**
+ * One date and the codes the source paired with it — or the codes the source
+ * stated with no date (2026-10-18). A date shared by many codes renders once,
+ * with exactly its own codes beneath one label, instead of once per code. A
+ * code the source paired with several dates appears under each of them; no
+ * code is ever listed under a date it was not paired with.
+ */
 export interface AffectedProductPairEntry {
-  code: { label: string; value: string };
+  /** The codes in source order; the label is singular for one code. */
+  codes: { label: string; values: string[] };
   date: { label: string; value: string } | null;
 }
 
-/** A code column's label for ONE code ("Lot code"), inside a pair entry. */
+/**
+ * Group a verified pair group's index-aligned lines by date (2026-10-18).
+ * Dates keep the order they first appear in; within a date, codes keep source
+ * order and an identical code/date line is listed once. Undated codes form
+ * their own final entry. Pure regrouping: every line becomes exactly one code
+ * under exactly its own date.
+ */
+function groupPairLines(
+  codeValues: readonly string[],
+  dateValues: readonly string[],
+): { date: string | null; codes: string[] }[] {
+  const byDate = new Map<string, string[]>();
+  const undated: string[] = [];
+  codeValues.forEach((code, line) => {
+    const date = dateValues[line] ?? '';
+    const bucket = date === '' ? undated : (byDate.get(date) ?? []);
+    if (date !== '' && !byDate.has(date)) byDate.set(date, bucket);
+    if (!bucket.includes(code)) bucket.push(code);
+  });
+  return [
+    ...[...byDate].map(([date, codes]) => ({ date, codes })),
+    ...(undated.length > 0 ? [{ date: null, codes: undated }] : []),
+  ];
+}
+
+/** The first `budget` codes of the grouped entries, whole groups kept together. */
+function firstCodes(
+  entries: readonly AffectedProductPairEntry[],
+  budget: number,
+): AffectedProductPairEntry[] {
+  const shown: AffectedProductPairEntry[] = [];
+  let left = budget;
+  for (const entry of entries) {
+    if (left <= 0) break;
+    const values = entry.codes.values.slice(0, left);
+    left -= values.length;
+    shown.push({ ...entry, codes: { ...entry.codes, values } });
+  }
+  return shown;
+}
+
+/** A code column's label for ONE code ("Lot code"), inside a pair entry; several
+ * codes under one date take the column's own plural label ("Lot codes"). */
 const PAIR_CODE_LABEL: Partial<Record<AffectedProductsTableColumnKey, string>> = {
   lotCodes: 'Lot code',
   batchCodes: 'Batch code',
@@ -1721,33 +1770,41 @@ export function affectedProductCards(view: AffectedProductsTableViewModel): Affe
         const dateLabel = PAIR_DATE_LABEL[dateHalf.key] ?? TABLE_COLUMN_LABEL[dateHalf.key];
         // Index-aligned only because the source verified these halves as one
         // pair group; an empty date half means the code was stated undated.
-        const pairs: AffectedProductPairEntry[] = codeHalf.values.map((code, line) => {
-          const date = dateHalf.values[line] ?? '';
-          return {
-            code: { label: codeLabel, value: code },
-            date: date === '' ? null : { label: dateLabel, value: date },
-          };
-        });
-        const lines = pairs.map((entry) =>
+        // Grouped by date so a date shared by many codes renders once.
+        const label = (count: number) =>
+          count === 1 ? codeLabel : TABLE_COLUMN_LABEL[codeHalf.key];
+        const pairs: AffectedProductPairEntry[] = groupPairLines(
+          codeHalf.values,
+          dateHalf.values,
+        ).map((entry) => ({
+          codes: { label: label(entry.codes.length), values: entry.codes },
+          date: entry.date === null ? null : { label: dateLabel, value: entry.date },
+        }));
+        const spoken = (entry: AffectedProductPairEntry) =>
           entry.date === null
-            ? `${entry.code.label} ${entry.code.value}`
-            : `${entry.code.label} ${entry.code.value}, ${entry.date.label} ${entry.date.value}`,
-        );
+            ? `${label(entry.codes.values.length)} ${entry.codes.values.join(', ')}`
+            : `${label(entry.codes.values.length)} ${entry.codes.values.join(', ')}, ${entry.date.label} ${entry.date.value}`;
+        // The disclosure still counts every code under every date it was
+        // paired with (the lines the source stated), never the groups.
+        const total = pairs.reduce((sum, entry) => sum + entry.codes.values.length, 0);
+        const paired = pairs
+          .filter((entry) => entry.date !== null)
+          .reduce((sum, entry) => sum + entry.codes.values.length, 0);
+        const collapsedPairs =
+          total > CARD_FIELD_INLINE_VALUES ? firstCodes(pairs, CARD_FIELD_INLINE_VALUES) : pairs;
+        const lines = pairs.map(spoken);
         groups.push({
           id: cell.pairGroup,
           label: TABLE_COLUMN_LABEL[codeHalf.key],
           lines,
-          collapsedLines: lines.slice(0, CARD_FIELD_INLINE_VALUES),
+          collapsedLines: collapsedPairs.map(spoken),
           disclosure:
-            lines.length > CARD_FIELD_INLINE_VALUES
-              ? fieldDisclosureControl(
-                  lines.length,
-                  pairGroupNoun(lines.length, pairs.filter((entry) => entry.date !== null).length),
-                )
+            total > CARD_FIELD_INLINE_VALUES
+              ? fieldDisclosureControl(total, pairGroupNoun(total, paired))
               : null,
           paired: true,
           pairs,
-          collapsedPairs: pairs.slice(0, CARD_FIELD_INLINE_VALUES),
+          collapsedPairs,
         });
         return;
       }

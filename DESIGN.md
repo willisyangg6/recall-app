@@ -3040,11 +3040,16 @@ Multi-value fields (product cards, Recall Detail kit):
 
 - Show the first two values.
 - More than two uses that field's own independent `Show more` / `Show less`.
-- An explicit identifier/date pair is one indivisible entry: a labelled code
-  row over its labelled date row (`Lot code` / `Expiration`), with no outer
-  group label; an undated code is an entry with no date.
-- A pair group expands and collapses together, two whole entries first; an
-  entry's two halves can never move apart.
+- Explicit identifier/date pairs are grouped by date. Each date with its codes
+  is one indivisible entry: a labelled code row listing exactly the codes the
+  source paired with it, over its labelled date row (`Lot code` or `Lot codes` /
+  `Expiration`), with no outer group label. A date shared by many codes shows
+  once, never once per code. A code paired with several dates appears under
+  each; an identical code/date line is listed once. Undated codes form a final
+  entry with no date. Separate products never share an entry.
+- A pair group expands and collapses together and counts every code: collapsed
+  shows the first two codes, each under its own date; a date and its codes can
+  never move apart.
 - Never reconstruct pairs by array position. A pair exists only where the
   source stated it.
 

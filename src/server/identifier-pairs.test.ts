@@ -23,7 +23,7 @@ import { gunzipSync } from 'node:zlib';
 import { projectCase } from '../domain/projection';
 import type { CaseProjection } from '../domain/recall-types';
 import { buildConsumerCase } from '../lib/consumer-projection';
-import { buildDetailModel } from '../lib/recall-presentation';
+import { affectedProductCards, buildDetailModel } from '../lib/recall-presentation';
 import { parseFdaAnnouncement, slugFromPath, type FdaListingItem } from './fda/parse';
 import { parseFsisRecord, type FsisRawRecord } from './fsis/parse';
 
@@ -256,4 +256,49 @@ test("King Arthur: codes all sharing their row's ONE date stay plain, never a re
   assert.ok(multi, JSON.stringify(rows.map((row) => row.lotCodes.text)));
   assert.equal(multi!.bestBy.text, 'December 5, 2019');
   assert.equal(multi!.lotCodes.pairGroup, null);
+});
+
+// ── Date-grouped Detail entries (2026-10-18) ────────────────────────────────
+
+test('Outshine: each variant shows each best-by date once, over exactly its own batch codes', () => {
+  const projection = fdaCase(
+    'dreyers-grand-ice-cream-inc-issues-voluntary-recall-select-outshine-fruit-bars',
+  );
+  const model = buildDetailModel(
+    {
+      id: 'test',
+      projection,
+      timeline: [],
+      affectedProducts: projection.affectedProducts,
+      visuals: [],
+    },
+    { today: '2026-10-18', affectsYou: false },
+  );
+  const view = model.sections.affectedProducts!.table.expanded;
+  const cards = affectedProductCards(view);
+  assert.equal(cards.length, view.rows.length);
+  let grouped = 0;
+  cards.forEach((card, index) => {
+    const [codes, dates] = ['batchCodes', 'bestBy'].map((key) =>
+      view.rows[index].cells.find((cell) => cell.key === key && cell.pairGroup !== null)!,
+    );
+    const group = card.groups.find((g) => g.pairs !== null);
+    if (!codes || !group) return;
+    grouped++;
+    const source = codes.values.map((code, line) => `${code} @ ${dates.values[line]}`);
+    const shown = group.pairs!.flatMap((entry) =>
+      entry.codes.values.map((code) => `${code} @ ${entry.date?.value ?? ''}`),
+    );
+    assert.deepEqual([...shown].sort(), [...new Set(source)].sort(), String(card.name));
+    const heads = group.pairs!.map((entry) => entry.date?.value);
+    assert.equal(heads.length, new Set(heads).size, `${card.name}: a date repeats`);
+  });
+  assert.ok(grouped >= 5, `expected the five verbose variants, saw ${grouped}`);
+  const strawberry = cards.find((card) => /Strawberry/.test(card.name ?? ''))!;
+  const entries = strawberry.groups.find((g) => g.pairs !== null)!.pairs!;
+  assert.equal(entries.length, 3);
+  assert.equal(
+    entries.reduce((sum, entry) => sum + entry.codes.values.length, 0),
+    22,
+  );
 });
