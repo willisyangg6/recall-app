@@ -321,13 +321,15 @@ test('every disclosure threshold is the contract’s, and the screen re-derives 
     expandAccessibilityLabel: 'See all 10 states',
     collapseAccessibilityLabel: 'Show less',
   });
-  // The kit's per-field control: "Show more", spoken with the whole count.
+  // The kit's per-field control names its field and whole count in both
+  // states (2026-10-19).
   assert.deepEqual(fieldDisclosureControl(4, 'lot codes'), {
-    expandLabel: 'Show more',
+    expandLabel: 'Show all 4 lot codes',
     collapseLabel: 'Show less',
     expandAccessibilityLabel: 'Show all 4 lot codes',
-    collapseAccessibilityLabel: 'Show less',
+    collapseAccessibilityLabel: 'Show less, 4 lot codes',
   });
+
   // The screen renders the model's collapsed/expanded views and its
   // controls; it slices, counts and thresholds nothing itself.
   for (const forbidden of [
@@ -350,34 +352,40 @@ test('every disclosure threshold is the contract’s, and the screen re-derives 
   assert.equal((DETAIL.match(/<DetailDisclosure\b/g) ?? []).length, 3);
 });
 
-test('verified pairs render as whole labelled entries, expanded and collapsed as one group', () => {
-  // AMENDED FOR THE FOUNDER'S GRANOLA REVIEW (2026-10-08). The table's two
-  // aligned half-columns were retired by the kit, and its "code · date" tuple
-  // line is now retired too: each verified pair is ONE structured entry the
-  // model built — the code under its own label, its date under the source's
-  // date type — rendered as a compact block with no outer "Lot codes" label.
-  // The halves still cannot be truncated, sorted or expanded apart, and no
-  // display string is ever re-split (dates carry commas).
+test('a card renders exactly one labelled row per field, its control beneath the values', () => {
+  // One row per field (2026-10-19): the per-pair and per-date renderings are
+  // retired. Every row is the model's field group — its label, its lines
+  // (open or collapsed), then its own control — keyed by product row and
+  // field. No display string is ever re-split (dates carry commas), and no
+  // code/date relationship is drawn by position.
   assert.ok(!DETAIL.includes(".split('"), 'the screen re-splits a display string');
   assert.ok(DETAIL.includes('const stateId = cardGroupStateId(card.id, group.id);'));
   assert.ok(DETAIL.includes('const open = openGroups.has(stateId);'));
   assert.ok(DETAIL.includes('visibleCellState('));
-  assert.ok(DETAIL.includes('const entries = (open ? group.pairs : group.collapsedPairs) ?? [];'));
-  // Grouped by date (2026-10-18): an entry's codes under one label, one per
-  // line, then the date they share once.
-  assert.ok(DETAIL.includes('label={entry.codes.label}'));
-  assert.ok(DETAIL.includes("value={entry.codes.values.join('\\n')}"));
-  // An undated code is an entry with no date row — never a borrowed date,
-  // never a dropped code.
-  assert.ok(DETAIL.includes('{entry.date ? ('));
-  assert.ok(
-    PRESENTATION.includes("const bucket = date === '' ? undated : (byDate.get(date) ?? []);"),
+  for (const retired of [
+    'group.pairs',
+    'pairCodeState',
+    'cardPairStateId',
+    'FieldRow',
+    'entry.date',
+  ]) {
+    assert.ok(!DETAIL.includes(retired), `retired per-pair rendering returned: ${retired}`);
+  }
+  const cardBlock = DETAIL.slice(
+    DETAIL.indexOf('function AffectedProductCardView('),
+    DETAIL.indexOf('function SymptomRow('),
   );
+  assert.equal((cardBlock.match(/<DetailDisclosure\b/g) ?? []).length, 1);
+  assert.ok(cardBlock.includes('{group.label}'));
+  // Values one per line at natural height, then the control, inside the
+  // value column.
+  assert.ok(cardBlock.indexOf('{lines.map((line, index) => (') < cardBlock.indexOf('{disclosure}'));
+  // The model: one group per column key, in the fixed order, distinct values.
+  assert.ok(PRESENTATION.includes('for (const key of CARD_FIELD_ORDER) {'));
   assert.ok(
-    PRESENTATION.includes(
-      'date: entry.date === null ? null : { label: dateLabel, value: entry.date },',
-    ),
+    PRESENTATION.includes("[...new Set(values.get(key) ?? [])].filter((line) => line !== '')"),
   );
+  assert.ok(!PRESENTATION.includes('groupPairLines'));
 });
 
 // ── 5. Production and business logic ────────────────────────────────────────

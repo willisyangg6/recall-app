@@ -44,6 +44,9 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
+  type LayoutChangeEvent,
+  type NativeSyntheticEvent,
+  type TextLayoutEventData,
   type TextLayoutLine,
 } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
@@ -152,6 +155,7 @@ const LABEL_ON_VALUE_LINE = PixelRatio.roundToNearestPixel(
 );
 /** A product card title's unscaled line height. */
 const TITLE_LINE_HEIGHT = detailType.productCardTitle.lineHeight ?? 24;
+const BODY_LINE_HEIGHT = detailType.body.lineHeight ?? 23;
 /** The width a card title leaves for the image beside it. */
 const TITLE_IMAGE_RESERVE = detailGeometry.productThumbnail + detailGeometry.fieldColumnGap;
 
@@ -252,7 +256,7 @@ function DetailDisclosure({
       onPress={onPress}>
       {({ pressed }) => (
         <View style={[styles.disclosureInner, pressed ? styles.pressedControl : null]}>
-          <Text style={[detailType.action, styles.linkColor]}>
+          <Text style={[detailType.action, styles.linkColor, styles.linkText]}>
             {expanded ? control.collapseLabel : control.expandLabel}
           </Text>
           <Icon
@@ -285,53 +289,88 @@ function DetailDisclosure({
  * minimum height, so the next layout draws every line. A title that drew
  * every line is never touched, and the correction is keyed to the window
  * and text size, so a Dynamic Type change measures afresh.
+ *
+ * The same loss can strike any wrapped text in the card: on the simulator at
+ * the largest text size a card's third `Best by` value, "November 30, 2027",
+ * drew as one clipped line in a two-line frame (2026-10-19). The repair is
+ * therefore one hook, `useDroppedLineRepair`, which the title and every
+ * field value line share.
  */
-function CardTitle({ name, besideImage }: { name: string; besideImage: boolean }) {
+function useDroppedLineRepair(expectedLineHeight: number, ownMinHeight: number) {
   const { width, fontScale } = useWindowDimensions();
   const layoutKey = `${width}|${fontScale}`;
   const [correction, setCorrection] = useState<{ key: string; minHeight: number } | null>(null);
   const frameHeight = useRef(0);
   const drawn = useRef<{ total: number; perLine: number } | null>(null);
   const repairMinHeight = correction?.key === layoutKey ? correction.minHeight : 0;
-  const ownMinHeight = Math.max(besideImage ? detailGeometry.productThumbnail : 0, repairMinHeight);
+  const minHeight = Math.max(ownMinHeight, repairMinHeight);
 
   const checkForDroppedLine = () => {
     const lines = drawn.current;
     const frame = frameHeight.current;
     if (lines === null || frame === 0) return;
-    if (Math.abs(frame - ownMinHeight) < 0.01) return;
+    if (Math.abs(frame - minHeight) < 0.01) return;
     // Drawn at the current text size, or this is a stale text layout.
-    if (Math.abs(lines.perLine - TITLE_LINE_HEIGHT * fontScale) > 1) return;
+    if (Math.abs(lines.perLine - expectedLineHeight * fontScale) > 1) return;
     const excess = frame - lines.total;
     if (excess <= lines.perLine / 2 || excess > lines.perLine + 1) return;
     setCorrection({ key: layoutKey, minHeight: PixelRatio.roundToNearestPixel(frame) + 1 });
   };
 
+  return {
+    repairMinHeight,
+    onLayout: (event: LayoutChangeEvent) => {
+      frameHeight.current = event.nativeEvent.layout.height;
+      checkForDroppedLine();
+    },
+    onTextLayout: (event: NativeSyntheticEvent<TextLayoutEventData>) => {
+      const { lines } = event.nativeEvent;
+      drawn.current =
+        lines.length === 0
+          ? null
+          : {
+              total: lines.reduce((sum, line) => sum + line.height, 0),
+              perLine: lines[0].height,
+            };
+      checkForDroppedLine();
+    },
+  };
+}
+
+function CardTitle({ name, besideImage }: { name: string; besideImage: boolean }) {
+  const repair = useDroppedLineRepair(
+    TITLE_LINE_HEIGHT,
+    besideImage ? detailGeometry.productThumbnail : 0,
+  );
   return (
     <Text
       style={[
         detailType.productCardTitle,
         styles.textColor,
         besideImage ? styles.cardTitleBesideImage : null,
-        repairMinHeight > 0 ? { minHeight: repairMinHeight } : null,
+        repair.repairMinHeight > 0 ? { minHeight: repair.repairMinHeight } : null,
       ]}
       accessibilityRole="header"
-      onLayout={(event) => {
-        frameHeight.current = event.nativeEvent.layout.height;
-        checkForDroppedLine();
-      }}
-      onTextLayout={(event) => {
-        const { lines } = event.nativeEvent;
-        drawn.current =
-          lines.length === 0
-            ? null
-            : {
-                total: lines.reduce((sum, line) => sum + line.height, 0),
-                perLine: lines[0].height,
-              };
-        checkForDroppedLine();
-      }}>
+      onLayout={repair.onLayout}
+      onTextLayout={repair.onTextLayout}>
       {name}
+    </Text>
+  );
+}
+
+/** One field value on its own line, at natural height, with the dropped-line repair. */
+function ValueLine({ text }: { text: string }) {
+  const repair = useDroppedLineRepair(BODY_LINE_HEIGHT, 0);
+  return (
+    <Text
+      style={[
+        detailType.body,
+        styles.textColor,
+        repair.repairMinHeight > 0 ? { minHeight: repair.repairMinHeight } : null,
+      ]}
+      onLayout={repair.onLayout}
+      onTextLayout={repair.onTextLayout}>
+      {text}
     </Text>
   );
 }
@@ -339,10 +378,11 @@ function CardTitle({ name, besideImage }: { name: string; besideImage: boolean }
 /**
  * One affected product as a vertical card (Recall Detail kit, 2026-10-07):
  * the product name, the strictly allocated row image top-right when there is
- * one (no reserved space otherwise), then each field group in the closed
- * column order. A group shows its first two lines and its OWN Show more; a
- * verified pair group shows its first two whole pair entries, each a labelled
- * code over its own labelled date, and reveals the rest whole.
+ * one (no reserved space otherwise), then exactly one labelled row per field
+ * the product holds, in the model's fixed field order (2026-10-19). A row
+ * lists its values one per line at natural height, shows the model's first
+ * two, and reveals the rest with its OWN control directly beneath the
+ * values; expanding one field never moves another field or product.
  * At large text sizes, or when the value column would be too narrow, the
  * labels stack above their values and the image sits above the name, so no
  * word is broken to fit beside anything.
@@ -382,7 +422,11 @@ function AffectedProductCardView({
           {!imageAbove && image ? <View style={styles.cardImage}>{image}</View> : null}
         </View>
       ) : null}
-      {card.groups.map((group, groupIndex) => {
+      {card.groups.map((group) => {
+        // The expansion identity is the product row and the field, so one
+        // product's Batch codes never opens another's, and a hidden
+        // product's state is dropped by visibleCellState when See all
+        // collapses.
         const stateId = cardGroupStateId(card.id, group.id);
         const open = openGroups.has(stateId);
         const lines = open ? group.lines : group.collapsedLines;
@@ -393,77 +437,21 @@ function AffectedProductCardView({
             onPress={() => onToggleGroup(stateId)}
           />
         ) : null;
-        if (group.pairs !== null) {
-          // A verified pair group (founder Granola review, 2026-10-08): no
-          // outer label; each entry is a compact block — its codes under the
-          // codes' own label, one per line, then the date they share under the
-          // source's date type, shown once (2026-10-18) — read by VoiceOver
-          // as one element, with clear space between blocks.
-          const entries = (open ? group.pairs : group.collapsedPairs) ?? [];
-          return (
-            <View key={group.id}>
-              {entries.map((entry, index) => (
-                <View
-                  key={`${group.id}-${index}`}
-                  style={styles.pairEntry}
-                  accessible
-                  accessibilityRole="text"
-                  accessibilityLabel={lines[index]}>
-                  <FieldRow
-                    label={entry.codes.label}
-                    value={entry.codes.values.join('\n')}
-                    stacked={stacked}
-                  />
-                  {entry.date ? (
-                    <FieldRow label={entry.date.label} value={entry.date.value} stacked={stacked} />
-                  ) : null}
-                </View>
-              ))}
-              {disclosure ? (
-                <View style={stacked ? styles.pairDisclosure : styles.pairDisclosureInValueColumn}>
-                  {disclosure}
-                </View>
-              ) : null}
-            </View>
-          );
-        }
-        // A field directly after a pair group keeps the pairs' own spacing,
-        // so it never reads as part of the last pair.
-        const afterPairs = groupIndex > 0 && card.groups[groupIndex - 1].pairs !== null;
         return (
-          <View
-            key={group.id}
-            style={[
-              stacked ? styles.fieldStacked : styles.field,
-              afterPairs ? styles.fieldAfterPairs : null,
-            ]}>
+          <View key={group.id} style={stacked ? styles.fieldStacked : styles.field}>
             <Text
               style={[detailType.metadata, styles.secondaryColor, !stacked && styles.fieldLabel]}>
               {group.label}
             </Text>
             <View style={styles.fieldValues}>
               {lines.map((line, index) => (
-                <Text key={`${group.id}-${index}`} style={[detailType.body, styles.textColor]}>
-                  {line}
-                </Text>
+                <ValueLine key={`${group.id}-${index}`} text={line} />
               ))}
               {disclosure}
             </View>
           </View>
         );
       })}
-    </View>
-  );
-}
-
-/** One labelled line of a pair entry: the label column and its value. */
-function FieldRow({ label, value, stacked }: { label: string; value: string; stacked: boolean }) {
-  return (
-    <View style={stacked ? styles.pairRowStacked : styles.pairRow}>
-      <Text style={[detailType.metadata, styles.secondaryColor, !stacked && styles.fieldLabel]}>
-        {label}
-      </Text>
-      <Text style={[detailType.body, styles.textColor, styles.fieldValues]}>{value}</Text>
     </View>
   );
 }
@@ -1059,6 +1047,7 @@ const styles = StyleSheet.create({
   // A text action (disclosure or title control): its words then a chevron.
   disclosure: {
     alignSelf: 'flex-start',
+    maxWidth: '100%',
   },
   disclosureInner: {
     flexDirection: 'row',
@@ -1203,31 +1192,5 @@ const styles = StyleSheet.create({
   fieldValues: {
     flex: 1,
     minWidth: 0,
-  },
-  // A pair entry: its code and date rows 4pt apart, so they read as one
-  // unit, and 16pt above each entry — clearly more than the 10pt between
-  // ordinary fields — so neighbouring pairs never run together.
-  pairEntry: {
-    marginTop: spacing[16],
-    gap: spacing[4],
-  },
-  fieldAfterPairs: {
-    marginTop: spacing[16],
-  },
-  pairRow: {
-    flexDirection: 'row',
-    gap: detailGeometry.fieldColumnGap,
-  },
-  pairRowStacked: {
-    gap: spacing[4],
-  },
-  // The pair group's Show more / Show less sits where every field's does: in
-  // the value column, beneath the last entry shown.
-  pairDisclosureInValueColumn: {
-    marginTop: spacing[4],
-    marginLeft: detailGeometry.fieldLabelWidth + detailGeometry.fieldColumnGap,
-  },
-  pairDisclosure: {
-    marginTop: spacing[4],
   },
 });

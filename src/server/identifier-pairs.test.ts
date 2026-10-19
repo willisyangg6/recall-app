@@ -258,9 +258,9 @@ test("King Arthur: codes all sharing their row's ONE date stay plain, never a re
   assert.equal(multi!.lotCodes.pairGroup, null);
 });
 
-// ── Date-grouped Detail entries (2026-10-18) ────────────────────────────────
+// ── One row per field in the rendered cards (2026-10-19) ───────────────────
 
-test('Outshine: each variant shows each best-by date once, over exactly its own batch codes', () => {
+test('Outshine: every variant renders one row per field — its distinct dates, then its distinct codes', () => {
   const projection = fdaCase(
     'dreyers-grand-ice-cream-inc-issues-voluntary-recall-select-outshine-fruit-bars',
   );
@@ -277,28 +277,41 @@ test('Outshine: each variant shows each best-by date once, over exactly its own 
   const view = model.sections.affectedProducts!.table.expanded;
   const cards = affectedProductCards(view);
   assert.equal(cards.length, view.rows.length);
-  let grouped = 0;
   cards.forEach((card, index) => {
-    const [codes, dates] = ['batchCodes', 'bestBy'].map((key) =>
-      view.rows[index].cells.find((cell) => cell.key === key && cell.pairGroup !== null)!,
+    // Exactly one row per field the table row holds, in the fixed order, and
+    // each row's values are exactly the distinct values of that column.
+    const labels = card.groups.map((g) => g.label);
+    assert.deepEqual(
+      labels,
+      ['Package Size', 'Best by', 'Barcode (UPC)', 'Batch codes'],
+      card.name ?? '',
     );
-    const group = card.groups.find((g) => g.pairs !== null);
-    if (!codes || !group) return;
-    grouped++;
-    const source = codes.values.map((code, line) => `${code} @ ${dates.values[line]}`);
-    const shown = group.pairs!.flatMap((entry) =>
-      entry.codes.values.map((code) => `${code} @ ${entry.date?.value ?? ''}`),
-    );
-    assert.deepEqual([...shown].sort(), [...new Set(source)].sort(), String(card.name));
-    const heads = group.pairs!.map((entry) => entry.date?.value);
-    assert.equal(heads.length, new Set(heads).size, `${card.name}: a date repeats`);
+    for (const group of card.groups) {
+      const column = view.rows[index].cells.find((c) => c.key === group.id)!;
+      assert.deepEqual(
+        group.lines,
+        [...new Set(column.values)].filter((v) => v !== ''),
+        `${card.name}: ${group.label}`,
+      );
+      assert.deepEqual(group.collapsedLines, group.lines.slice(0, 2));
+    }
   });
-  assert.ok(grouped >= 5, `expected the five verbose variants, saw ${grouped}`);
   const strawberry = cards.find((card) => /Strawberry/.test(card.name ?? ''))!;
-  const entries = strawberry.groups.find((g) => g.pairs !== null)!.pairs!;
-  assert.equal(entries.length, 3);
-  assert.equal(
-    entries.reduce((sum, entry) => sum + entry.codes.values.length, 0),
-    22,
+  const [, dates, , codes] = strawberry.groups;
+  assert.deepEqual(dates.lines, ['September 30, 2027', 'October 31, 2027', 'November 30, 2027']);
+  assert.equal(dates.disclosure?.expandLabel, 'Show all 3 best by dates');
+  assert.equal(codes.lines.length, 22);
+  assert.equal(new Set(codes.lines).size, 22);
+  assert.equal(codes.disclosure?.expandLabel, 'Show all 22 batch codes');
+  assert.deepEqual(codes.collapsedLines, ['LLA616903', 'LLA617003']);
+  const tangerine = cards.find((card) => /Tangerine/.test(card.name ?? ''))!;
+  assert.deepEqual(
+    tangerine.groups.map((g) => [g.label, g.lines, g.disclosure]),
+    [
+      ['Package Size', ['6 Bars'], null],
+      ['Best by', ['October 31, 2027'], null],
+      ['Barcode (UPC)', ['041548612041'], null],
+      ['Batch codes', ['LLA619603', 'LLA619703'], null],
+    ],
   );
 });

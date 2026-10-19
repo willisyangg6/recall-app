@@ -1625,17 +1625,16 @@ function emptyCell(key: AffectedProductsTableColumnKey): AffectedProductsTableCe
  * repeated into each row, the same strict per-row image — so nothing about
  * which facts exist, or which row owns them, is decided here.
  *
- * Two kinds of field group, in the table's closed column order:
- *
- *  - an INDEPENDENT field (Package Size, Best by, Barcode (UPC), Lot codes…):
- *    its structured `values`, first two shown, then its OWN Show more;
- *  - a verified PAIR group: each code/date pair the source stated is ONE
- *    indivisible entry — the code under its singular label ("Lot code") and
- *    its own date under the source's date type ("Expiration", "Best by") —
- *    first two entries shown, then the group's own Show more (founder
- *    Granola review, 2026-10-08). The two halves are never truncated, sorted
- *    or expanded apart; an undated code is an entry of its own with no date,
- *    and no pair is ever inferred.
+ * Within a card there is exactly ONE field group per column the row holds
+ * (2026-10-19), in `CARD_FIELD_ORDER`: Package Size, the identifying dates
+ * under their source-specific labels, Barcode (UPC), the printed codes, then
+ * Packaging. Each group collects every value the row's cell holds for that
+ * column — a verified pair group's two halves contribute to their own
+ * columns, so dates and codes are two separate lists — drops exact duplicate
+ * display values while keeping source order, shows its first two values and
+ * reveals the rest with its OWN control. The code/date relationships the
+ * source stated stay in the table model (and the projection); the card's
+ * separate lists never imply that values at matching positions are paired.
  *
  * Values are never re-split from display text: a date carries its own comma.
  * Empty fields are omitted — never "Not available".
@@ -1651,180 +1650,73 @@ export interface AffectedProductCard {
 }
 
 export interface AffectedProductFieldGroup {
-  /** Stable within the card: the column key, or the pair group's identity —
-   * the key a group's expansion state lives under. */
-  id: string;
+  /** The column key — stable within the card, and the key the group's
+   * expansion state lives under (see cardGroupStateId). */
+  id: Exclude<AffectedProductsTableColumnKey, 'product'>;
   label: string;
-  /** Every line this group holds, in source order. */
+  /** Every distinct value this field holds, in source order. */
   lines: string[];
-  /** The lines shown while collapsed: the first two, or all of them. */
+  /** The values shown while collapsed: the first two, or all of them. */
   collapsedLines: string[];
-  /** The group's own Show more / Show less, or null at two lines or fewer. */
+  /** The field's own control, or null at two values or fewer. */
   disclosure: DisclosureControl | null;
-  /** True for a verified code/date pair group. */
-  paired: boolean;
-  /** A pair group's entries in source order (every one, and the first two
-   * shown while collapsed); null for an independent field. Each entry's
-   * spoken text is the matching item of `lines`. */
-  pairs: AffectedProductPairEntry[] | null;
-  collapsedPairs: AffectedProductPairEntry[] | null;
 }
 
 /**
- * One date and the codes the source paired with it — or the codes the source
- * stated with no date (2026-10-18). A date shared by many codes renders once,
- * with exactly its own codes beneath one label, instead of once per code. A
- * code the source paired with several dates appears under each of them; no
- * code is ever listed under a date it was not paired with.
+ * The fixed display order of a card's fields (2026-10-19): the table's frozen
+ * column order, minus Product (the card's title). Package Size; then the
+ * dates — Best by, Use by, Sell by, Expiration, Production dates; then
+ * Barcode (UPC); then the codes — Lot codes, Batch codes, Production codes;
+ * then Packaging. The order never depends on the order a source stated
+ * fields in, or on whether the table paired any of them.
  */
-export interface AffectedProductPairEntry {
-  /** The codes in source order; the label is singular for one code. */
-  codes: { label: string; values: string[] };
-  date: { label: string; value: string } | null;
-}
+export const CARD_FIELD_ORDER: readonly Exclude<AffectedProductsTableColumnKey, 'product'>[] =
+  TABLE_COLUMN_ORDER;
 
-/**
- * Group a verified pair group's index-aligned lines by date (2026-10-18).
- * Dates keep the order they first appear in; within a date, codes keep source
- * order and an identical code/date line is listed once. Undated codes form
- * their own final entry. Pure regrouping: every line becomes exactly one code
- * under exactly its own date.
- */
-function groupPairLines(
-  codeValues: readonly string[],
-  dateValues: readonly string[],
-): { date: string | null; codes: string[] }[] {
-  const byDate = new Map<string, string[]>();
-  const undated: string[] = [];
-  codeValues.forEach((code, line) => {
-    const date = dateValues[line] ?? '';
-    const bucket = date === '' ? undated : (byDate.get(date) ?? []);
-    if (date !== '' && !byDate.has(date)) byDate.set(date, bucket);
-    if (!bucket.includes(code)) bucket.push(code);
-  });
-  return [
-    ...[...byDate].map(([date, codes]) => ({ date, codes })),
-    ...(undated.length > 0 ? [{ date: null, codes: undated }] : []),
-  ];
-}
-
-/** The first `budget` codes of the grouped entries, whole groups kept together. */
-function firstCodes(
-  entries: readonly AffectedProductPairEntry[],
-  budget: number,
-): AffectedProductPairEntry[] {
-  const shown: AffectedProductPairEntry[] = [];
-  let left = budget;
-  for (const entry of entries) {
-    if (left <= 0) break;
-    const values = entry.codes.values.slice(0, left);
-    left -= values.length;
-    shown.push({ ...entry, codes: { ...entry.codes, values } });
-  }
-  return shown;
-}
-
-/** A code column's label for ONE code ("Lot code"), inside a pair entry; several
- * codes under one date take the column's own plural label ("Lot codes"). */
-const PAIR_CODE_LABEL: Partial<Record<AffectedProductsTableColumnKey, string>> = {
-  lotCodes: 'Lot code',
-  batchCodes: 'Batch code',
-  productionCodes: 'Production code',
-};
-
-/** A date column's label for ONE date, inside a pair entry. */
-const PAIR_DATE_LABEL: Partial<Record<AffectedProductsTableColumnKey, string>> = {
-  productionDates: 'Production date',
-};
-
-/** How many lines a card field shows before its own Show more. */
+/** How many values a card field shows before its own control. */
 export const CARD_FIELD_INLINE_VALUES = 2;
 
-/** "Show more" / "Show less", spoken with the complete total and noun. */
+/**
+ * A card field's own reveal: "Show all 22 batch codes" / "Show less". Both
+ * states name the field and its complete count, so the spoken control is
+ * never just "more" of something unnamed.
+ */
 export function fieldDisclosureControl(total: number, noun: string): DisclosureControl {
   return {
-    expandLabel: 'Show more',
+    expandLabel: `Show all ${total} ${noun}`,
     collapseLabel: SHOW_LESS_LABEL,
     expandAccessibilityLabel: `Show all ${total} ${noun}`,
-    collapseAccessibilityLabel: SHOW_LESS_LABEL,
+    collapseAccessibilityLabel: `${SHOW_LESS_LABEL}, ${total} ${noun}`,
   };
 }
 
-/** One rendered view of the table as cards: the same rows, field groups instead of cells. */
+/** One rendered view of the table as cards: the same rows, one field group per column. */
 export function affectedProductCards(view: AffectedProductsTableViewModel): AffectedProductCard[] {
   return view.rows.map((row) => {
-    const groups: AffectedProductFieldGroup[] = [];
-    const seenPairs = new Set<string>();
+    // Every value each column holds in this row. A cell's position in the
+    // row decides nothing: the key does, and the emitted order is fixed.
+    const values = new Map<AffectedProductsTableColumnKey, string[]>();
     row.cells.forEach((cell, index) => {
       const key = view.columns[index]?.key ?? cell.key;
-      if (key === 'product') return;
-      if (cell.pairGroup !== null) {
-        if (seenPairs.has(cell.pairGroup)) return;
-        seenPairs.add(cell.pairGroup);
-        // The group's two halves, wherever they sit in the row.
-        const halves = row.cells.filter((other) => other.pairGroup === cell.pairGroup);
-        const codeHalf = halves.find((half) => CODE_COLUMNS.has(half.key));
-        const dateHalf = halves.find((half) => !CODE_COLUMNS.has(half.key));
-        if (codeHalf === undefined || dateHalf === undefined) return;
-        const codeLabel = PAIR_CODE_LABEL[codeHalf.key] ?? TABLE_COLUMN_LABEL[codeHalf.key];
-        const dateLabel = PAIR_DATE_LABEL[dateHalf.key] ?? TABLE_COLUMN_LABEL[dateHalf.key];
-        // Index-aligned only because the source verified these halves as one
-        // pair group; an empty date half means the code was stated undated.
-        // Grouped by date so a date shared by many codes renders once.
-        const label = (count: number) =>
-          count === 1 ? codeLabel : TABLE_COLUMN_LABEL[codeHalf.key];
-        const pairs: AffectedProductPairEntry[] = groupPairLines(
-          codeHalf.values,
-          dateHalf.values,
-        ).map((entry) => ({
-          codes: { label: label(entry.codes.length), values: entry.codes },
-          date: entry.date === null ? null : { label: dateLabel, value: entry.date },
-        }));
-        const spoken = (entry: AffectedProductPairEntry) =>
-          entry.date === null
-            ? `${label(entry.codes.values.length)} ${entry.codes.values.join(', ')}`
-            : `${label(entry.codes.values.length)} ${entry.codes.values.join(', ')}, ${entry.date.label} ${entry.date.value}`;
-        // The disclosure still counts every code under every date it was
-        // paired with (the lines the source stated), never the groups.
-        const total = pairs.reduce((sum, entry) => sum + entry.codes.values.length, 0);
-        const paired = pairs
-          .filter((entry) => entry.date !== null)
-          .reduce((sum, entry) => sum + entry.codes.values.length, 0);
-        const collapsedPairs =
-          total > CARD_FIELD_INLINE_VALUES ? firstCodes(pairs, CARD_FIELD_INLINE_VALUES) : pairs;
-        const lines = pairs.map(spoken);
-        groups.push({
-          id: cell.pairGroup,
-          label: TABLE_COLUMN_LABEL[codeHalf.key],
-          lines,
-          collapsedLines: collapsedPairs.map(spoken),
-          disclosure:
-            total > CARD_FIELD_INLINE_VALUES
-              ? fieldDisclosureControl(total, pairGroupNoun(total, paired))
-              : null,
-          paired: true,
-          pairs,
-          collapsedPairs,
-        });
-        return;
-      }
-      if (cell.values.length === 0) return;
+      values.set(key, [...(values.get(key) ?? []), ...cell.values]);
+    });
+    const groups: AffectedProductFieldGroup[] = [];
+    for (const key of CARD_FIELD_ORDER) {
+      // Exact duplicate display values once, in first-seen order; an empty
+      // line (a pair group's undated code has an empty date) is no value.
+      const lines = [...new Set(values.get(key) ?? [])].filter((line) => line !== '');
+      if (lines.length === 0) continue;
       groups.push({
         id: key,
         label: TABLE_COLUMN_LABEL[key],
-        lines: [...cell.values],
-        collapsedLines: cell.values.slice(0, CARD_FIELD_INLINE_VALUES),
+        lines,
+        collapsedLines: lines.slice(0, CARD_FIELD_INLINE_VALUES),
         disclosure:
-          cell.values.length > CARD_FIELD_INLINE_VALUES
-            ? fieldDisclosureControl(cell.values.length, CARD_FIELD_NOUN[key])
+          lines.length > CARD_FIELD_INLINE_VALUES
+            ? fieldDisclosureControl(lines.length, CARD_FIELD_NOUN[key])
             : null,
-        paired: false,
-        pairs: null,
-        collapsedPairs: null,
       });
-    });
-    // Groups follow the table's frozen column order; a pair group sits where
-    // its first half's column does.
+    }
     return { id: row.id, name: row.name, image: row.image, groups };
   });
 }
@@ -1844,13 +1736,6 @@ const CARD_FIELD_NOUN: Record<AffectedProductsTableColumnKey, string> = {
   batchCodes: 'batch codes',
   productionCodes: 'production codes',
 };
-
-/** The columns that hold printed codes — the code half of a pair group. */
-const CODE_COLUMNS = new Set<AffectedProductsTableColumnKey>([
-  'lotCodes',
-  'batchCodes',
-  'productionCodes',
-]);
 
 /** The expansion-state identity of one card field group. */
 export function cardGroupStateId(cardId: string, groupId: string): string {

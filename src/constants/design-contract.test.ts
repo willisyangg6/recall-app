@@ -222,14 +222,16 @@ test('jurisdiction, product-row and cell disclosures are recorded with the shipp
   assert.ok(body.includes('Initially show the first product row.'));
   assert.ok(body.includes('show `See all (N)` beside the section heading'));
   assert.ok(body.includes('Show the first two values.'));
-  // Card fields (Recall Detail kit): each field's own Show more / Show less,
-  // and a verified pair is one indivisible labelled entry (founder Granola
-  // review, 2026-10-08).
+  // Card fields (2026-10-19): exactly one row per field, in the fixed order,
+  // each with its own field-named control; dates and codes are separate rows.
+  assert.ok(body.includes('Exactly one row per field within a product'));
   assert.ok(
-    body.includes("More than two uses that field's own independent `Show more` / `Show less`."),
+    body.includes("More than two uses that field's own independent `Show all N <field>` /"),
   );
-  assert.ok(body.includes('is one indivisible entry'));
-  assert.ok(body.includes('A pair group expands and collapses together'));
+  assert.ok(body.includes('Dates and codes are separate rows'));
+  assert.ok(!body.includes('is one indivisible entry'));
+  assert.ok(!body.includes('Every date entry stays visible.'));
+  assert.ok(!body.includes('A pair group expands and collapses together'));
   assert.ok(body.includes('Never reconstruct pairs by array position.'));
   assert.ok(body.includes('Do not reorder values'));
   assert.equal(

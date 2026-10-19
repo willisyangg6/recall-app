@@ -2674,21 +2674,23 @@ untouched.
   `border/default`, radius 12, padding 14) through `affectedProductCards`:
   the product name, the strictly allocated row image top-right at 64pt (no
   reserved space without one), then each field group in the closed column
-  order with a 104pt label column. Each group shows two lines, then its own
-  `Show more` / `Show less`. Labels stack above values at accessibility sizes
-  or in a narrow card. The first card shows before `See all (N)`, as before.
-- **Verified pairs (founder Granola review, 2026-10-08).** A verified
-  code/date pair group has no outer label (no `Lot codes` around it). Each
-  pair is a compact entry: the code on its own row under the singular code
-  label (`Lot code`, `Batch code`, `Production code`), then its date under
-  the source's own date type (`Expiration`, `Best by`, `Production date`…),
-  the two rows 4pt apart; 16pt separates one entry from the next and from
-  the field after the group. VoiceOver reads each entry as one element
-  (`Lot code HGLC-102125, Expiration October 21, 2026`). An undated code in
-  a verified group is an entry with its code row alone. Two whole entries
-  show, then the group's own `Show more` / `Show less` in the value column;
-  an entry is never split. Unpaired codes and dates stay ordinary labelled
-  fields (`Lot codes`), and no pair is ever inferred.
+  order with a 104pt label column. Exactly one labelled row per field the
+  product holds, in the fixed field order: `Package Size`; the dates (`Best
+by`, `Use by`, `Sell by`, `Expiration`, `Production dates`); `Barcode
+(UPC)`; the codes (`Lot codes`, `Batch codes`, `Production codes`); then
+  `Packaging`. A row lists its distinct values one per line at natural
+  height, the first two, then its own `Show all N batch codes` (the field's
+  own noun and count) / `Show less` directly beneath the values. Labels
+  stack above values at accessibility sizes or in a narrow card. The first
+  card shows before `See all (N)`, as before.
+- **Dates and codes are separate rows (2026-10-19).** A code/date pairing
+  the source stated stays in the table model and the projection; the card
+  renders the dates as one date row and the codes as one code row, each
+  with its own control, and never implies that values at matching positions
+  are paired. Exact duplicate values show once, in source order; a code or
+  date is never dropped, renamed or reformatted. Each control names its
+  field and count and is spoken with its expanded state; expanding one field
+  never moves another field or product.
 - **Card titles never lose a line.** React Native can lay a text frame out a
   pixel short of its text (React Native #57920), and iOS then draws one line
   fewer — on device a two-line name showed as one clipped line. A title
@@ -3038,18 +3040,21 @@ Affected products:
 
 Multi-value fields (product cards, Recall Detail kit):
 
+- Exactly one row per field within a product, in the fixed order: Package
+  Size; Best by, Use by, Sell by, Expiration, Production dates; Barcode (UPC);
+  Lot codes, Batch codes, Production codes; Packaging. Absent fields are
+  omitted. The source's own field type is kept — a Use by is never relabeled
+  Best by, a Lot code never Batch code.
 - Show the first two values.
-- More than two uses that field's own independent `Show more` / `Show less`.
-- Explicit identifier/date pairs are grouped by date. Each date with its codes
-  is one indivisible entry: a labelled code row listing exactly the codes the
-  source paired with it, over its labelled date row (`Lot code` or `Lot codes` /
-  `Expiration`), with no outer group label. A date shared by many codes shows
-  once, never once per code. A code paired with several dates appears under
-  each; an identical code/date line is listed once. Undated codes form a final
-  entry with no date. Separate products never share an entry.
-- A pair group expands and collapses together and counts every code: collapsed
-  shows the first two codes, each under its own date; a date and its codes can
-  never move apart.
+- More than two uses that field's own independent `Show all N <field>` /
+  `Show less`, directly beneath the values. Expanding a field never expands or
+  collapses another field or product: the expansion identity is the product
+  row and the field.
+- Dates and codes are separate rows. Exact duplicate display values show
+  once, in source order; no value is dropped, renamed or reformatted. A
+  code/date pairing the source stated lives in the table model and the
+  projection, and the card's separate lists never imply that values at
+  matching positions are paired.
 - Never reconstruct pairs by array position. A pair exists only where the
   source stated it.
 
