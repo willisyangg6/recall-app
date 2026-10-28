@@ -128,6 +128,7 @@ export async function runFsisJob(
         itemsSeen: summary.itemsSeen,
         parsed: summary.itemsParsed,
         unchanged: summary.unchanged,
+        presentationOnly: summary.presentationOnly,
         newCases: summary.newCases,
         changedCases: summary.changedCases,
         quarantined: summary.quarantined.length,

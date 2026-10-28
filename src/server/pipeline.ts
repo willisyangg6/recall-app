@@ -32,6 +32,7 @@ import type {
   TimelineKind,
 } from '../domain/recall-types';
 import type { NormalizedSourceRecord } from '../domain/source-record';
+import { fsisPresentationKey } from './fsis/contact-rendering';
 import { FsisParseError, parseFsisRecord, type FsisRawRecord } from './fsis/parse';
 import type {
   AppliedMarker,
@@ -79,6 +80,8 @@ export interface IngestSummary {
   itemsParsed: number;
   quarantined: { rawNativeId: string | null; reason: string }[];
   unchanged: number;
+  /** Of `unchanged`: raw bytes differed, but only by presentation (SourceIngestInput.presentationKey). */
+  presentationOnly: number;
   newCases: number;
   changedCases: number;
   /** O3: adapter-deferred items (required evidence unavailable this run) — retried next tick. */
@@ -166,6 +169,14 @@ export interface SourceIngestInput {
   /** Raw items seen before parsing/filtering, for run bookkeeping. */
   itemsSeen: number;
   fetchedAt: string;
+  /**
+   * Source-declared presentation equivalence, consulted only when an
+   * already-applied record's raw hash differs from its latest snapshot: if
+   * both payloads map to the same key, the difference is a re-rendering of
+   * identical content and the record is unchanged. Never stored or hashed into
+   * `content_hash`. FSIS passes fsisPresentationKey; FDA passes none.
+   */
+  presentationKey?: (raw: unknown) => unknown;
 }
 
 /** Run the shared pipeline over one adapter's parsed output. */
@@ -185,6 +196,7 @@ export async function runSourceIngest(
     itemsParsed: input.items.length,
     quarantined: [...input.quarantined],
     unchanged: 0,
+    presentationOnly: 0,
     newCases: 0,
     changedCases: 0,
     deferred: input.deferred ?? 0,
@@ -301,6 +313,7 @@ export async function runFsisIngest(
       quarantined,
       itemsSeen: input.records.length,
       fetchedAt: input.fetchedAt,
+      presentationKey: fsisPresentationKey,
     },
     options,
   );
@@ -378,6 +391,38 @@ async function ingestExisting(
     await store.updateSourceRecord(gate.id, { lastSeenAt: nowIso });
     summary.unchanged += 1;
     return;
+  }
+
+  // Presentation-only re-rendering of an already-applied version (FSIS
+  // contact headings, 2026-10-27): same outcome as the unchanged path above —
+  // no snapshot, no normalized write, no case transition, no event. Stored
+  // hashes are untouched, so this needs no migration and causes no one-time
+  // reprocessing. Pending, degraded, and FDA content-keyed records never take
+  // it, and anything the key does not prove equivalent falls through to the
+  // normal changed path below.
+  const appliedAtLatest =
+    meta !== null &&
+    (isLegacy ||
+      (gate.applyState === 'applied' &&
+        gate.appliedSnapshotSeq === meta.seq &&
+        gate.appliedContentHash === meta.contentHash));
+  if (
+    !sameAsLatest &&
+    appliedAtLatest &&
+    input.presentationKey &&
+    item.contentKey === undefined &&
+    completeness === 'complete'
+  ) {
+    const archived = await store.getLatestSnapshotPayload(gate.id);
+    if (
+      archived !== null &&
+      contentHash(input.presentationKey(raw)) === contentHash(input.presentationKey(archived))
+    ) {
+      await store.updateSourceRecord(gate.id, { lastSeenAt: nowIso });
+      summary.unchanged += 1;
+      summary.presentationOnly += 1;
+      return;
+    }
   }
 
   // A degraded record whose required evidence has now been fetched: the
