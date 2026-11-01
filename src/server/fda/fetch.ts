@@ -12,9 +12,9 @@
  *   press-release body, product tables, photos). Fetched per record, verified
  *   byte-stable across fetches, so content hashing is meaningful.
  *
- * www.fda.gov historically 404'd non-browser user agents (contract §3.1); the
- * gate was not enforced at re-verification but browser-like headers are still
- * sent for robustness.
+ * Request profile: see FDA_REQUEST_HEADERS below. www.fda.gov historically
+ * 404'd non-browser user agents (contract §3.1); from 2026-10-28 the reverse
+ * held on GitHub-hosted runners.
  */
 
 import {
@@ -32,12 +32,39 @@ export const FDA_LISTING_URL =
 export const FDA_FOOD_RSS_URL =
   'https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/food-safety-recalls/rss.xml';
 
-const BROWSER_HEADERS: Record<string, string> = {
-  'User-Agent':
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36',
-  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7',
-  'Accept-Language': 'en-US,en;q=0.9',
-};
+/**
+ * Headers for every www.fda.gov read: the listing, the food RSS, and each
+ * announcement detail page (all go through fetchSource). api.fda.gov
+ * (enforcement) and FSIS have their own request paths and are unaffected.
+ *
+ * WHY (2026-11-01, three diagnostics-only runner probes): from 2026-10-28 the
+ * previous browser profile — a Chrome User-Agent with Accept
+ * "text/html,…,application/json;q=0.8,*\/*;q=0.7" and Accept-Language
+ * "en-US,en;q=0.9" — was answered on GitHub-hosted runners with a 302 to
+ * www.fda.gov/apology_objects/abuse-detection-apology.html, which then 404'd
+ * (243 of 266 FDA runs failed). It failed the same way with Node fetch, Node
+ * https, and curl, over HTTP/1.1 and HTTP/2. On a runner, the SAME Node fetch
+ * client sending only a non-browser User-Agent got direct 200s with valid
+ * content: `curl/8` through these production functions (listing 1,098 valid
+ * records, RSS 20 items, a valid detail page), and this accurate application
+ * identity, sent alone, for the same listing, RSS, and detail page.
+ *
+ * On the wire, Node fetch (undici) fills in the rest, so the outgoing profile
+ * changes from the old one as follows:
+ *   User-Agent       Chrome 139 string        → lotly-recall-ingest/1.0
+ *   Accept           text/html,…;q=0.7        → *\/*   (fetch default)
+ *   Accept-Language  en-US,en;q=0.9           → *     (fetch default)
+ *   sec-fetch-mode   cors                     (unchanged, fetch default)
+ *   Accept-Encoding  gzip, deflate            (unchanged, fetch default)
+ * The whole profile changed, so the evidence does not isolate the User-Agent
+ * as the sole deciding header. Keep it minimal: restoring the browser Accept
+ * or Accept-Language is untested against the edge rule. No endpoint sent a
+ * specific Accept before, and there are no conditional requests, so neither
+ * is lost.
+ */
+export const FDA_REQUEST_HEADERS: Readonly<Record<string, string>> = Object.freeze({
+  'User-Agent': 'lotly-recall-ingest/1.0',
+});
 
 /**
  * ── RESPONSE BOUNDARY (hardened 2026-09-09) ─────────────────────────────────
@@ -112,9 +139,64 @@ function classifySourceError(error: unknown): ErrorClassification {
 
 /** A bot-gate status, retryable for this source only. */
 class BotGateError extends Error {
-  constructor(readonly status: number) {
-    super(`HTTP ${status}`);
+  constructor(
+    readonly status: number,
+    detail = '',
+  ) {
+    super(`HTTP ${status}${detail ? ` (${detail})` : ''}`);
     this.name = 'BotGateError';
+  }
+}
+
+/**
+ * What a 403/404 response looked like, without its body (2026-10-31): from
+ * 2026-10-28 the listing answered GitHub runners with 404 on ~9 in 10 runs
+ * while the same request, client, and Node major got 200 from elsewhere, and
+ * "HTTP 404" alone could not say whether that was an edge deny page or a
+ * genuinely missing resource. Content type, size, server, page title, and an
+ * Akamai reference number (an opaque request id) can.
+ *
+ * Redirects come first (2026-11-01): a runner probe showed the runner's 404
+ * was not www.fda.gov's — fetch had followed a redirect and the 10-byte 404
+ * came from AkamaiNetStorage. Redirects are still followed (legitimate ones
+ * must keep working); the error now names where the request ended up, as
+ * scheme, host and a clipped path only — never a query string.
+ */
+async function describeGateResponse(response: Response): Promise<string> {
+  const parts: string[] = [];
+  if (response.redirected && response.url) {
+    try {
+      const final = new URL(response.url);
+      parts.push(`redirected to ${final.protocol}//${final.host}${final.pathname.slice(0, 60)}`);
+    } catch {
+      parts.push('redirected');
+    }
+  }
+  const contentType = response.headers.get('content-type')?.split(';')[0]?.trim();
+  if (contentType) parts.push(contentType);
+  let body = '';
+  try {
+    body = await response.text();
+  } catch {
+    // An unreadable error body is still an error; describe what we have.
+  }
+  parts.push(`${body.length} B`);
+  const server = response.headers.get('server');
+  if (server) parts.push(`server ${server.slice(0, 40)}`);
+  const title = /<title[^>]*>\s*([^<]{1,80})/i.exec(body)?.[1]?.replace(/\s+/g, ' ').trim();
+  if (title) parts.push(`title "${title.slice(0, 60)}"`);
+  const reference = /Reference\s*#\s*([0-9a-f.]{6,64})/i.exec(body)?.[1];
+  if (reference) parts.push(`ref #${reference}`);
+  return parts.join(', ');
+}
+
+/** The request ended on FDA's abuse-detection apology page (any host, any status). */
+function isApologyRedirect(response: Response): boolean {
+  if (!response.url) return false;
+  try {
+    return new URL(response.url).pathname.startsWith('/apology_objects/');
+  } catch {
+    return false;
   }
 }
 
@@ -154,12 +236,21 @@ async function fetchSource<T>(
     return await retryTransientRead(
       `fda.fetch ${url}`,
       async () => {
-        const response = await fetchImpl(url, { headers: BROWSER_HEADERS });
+        const response = await fetchImpl(url, { headers: { ...FDA_REQUEST_HEADERS } });
+        // FDA's abuse-detection redirect target. It is never source content,
+        // whatever its status: a detail page is HTML too, so the HTML check
+        // alone could not keep a 200 apology page out of ingestion. Other
+        // redirects are still followed and judged on their content.
+        if (isApologyRedirect(response)) {
+          throw new BotGateError(response.status, await describeGateResponse(response));
+        }
         if (!response.ok) {
           if (FAIL_FAST_STATUS.has(response.status)) {
             throw new FdaSourceUnavailableError(url, `HTTP ${response.status}`);
           }
-          if (BOT_GATE_STATUS.has(response.status)) throw new BotGateError(response.status);
+          if (BOT_GATE_STATUS.has(response.status)) {
+            throw new BotGateError(response.status, await describeGateResponse(response));
+          }
           // Gateway statuses: classified transient, bounded retry.
           throw Object.assign(new Error(`HTTP ${response.status}`), {
             status: response.status,
@@ -174,7 +265,18 @@ async function fetchSource<T>(
         return parse(body, contentType);
       },
       policy,
-      { classify: classifySourceError, ...options.hooks },
+      {
+        classify: classifySourceError,
+        // Built here rather than by the generic exhausted error so the final
+        // message carries the last response's description instead of
+        // repeating the URL inside the shared 200-character diagnostic cap.
+        onExhausted: (_operation, attempts, cause) =>
+          new FdaSourceUnavailableError(
+            url,
+            `failed after ${attempts} attempt(s) [${classifySourceError(cause).errorClass}]: ${clipDiagnostic(cause)}`,
+          ),
+        ...options.hooks,
+      },
     );
   } catch (error) {
     if (error instanceof FdaSourceContractError || error instanceof FdaSourceUnavailableError) {
