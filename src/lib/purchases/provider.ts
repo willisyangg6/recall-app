@@ -31,6 +31,11 @@ import { loadOnboardingRecord } from '../onboarding-store';
 import { createPurchaseIdentity, legacyPurchaseId } from './purchase-identity';
 import type { PurchaseIdentity, PurchaseProvider } from './purchase-provider';
 import { revenueCatPurchaseProvider } from './revenuecat-provider';
+import {
+  SANDBOX_TEST_IDENTITY,
+  SANDBOX_TEST_PURCHASE_ID_FILE,
+  sandboxTestFile,
+} from './sandbox-test-identity';
 
 /**
  * The purchase id's keychain entry. Owned here alone; the data reset never
@@ -38,8 +43,27 @@ import { revenueCatPurchaseProvider } from './revenuecat-provider';
  */
 const PURCHASE_ID_KEY = 'recall.purchase-id';
 
+/**
+ * The `sandbox-test` build's separate identity (sandbox-test-identity.ts):
+ * its own file, no adoption, never the keychain entry. False, and folded
+ * away, in every other build.
+ */
+const sandboxTestIdentity: PurchaseIdentity | null = SANDBOX_TEST_IDENTITY
+  ? (() => {
+      const stored = sandboxTestFile(SANDBOX_TEST_PURCHASE_ID_FILE);
+      return {
+        appUserId: createPurchaseIdentity({
+          readStored: stored.read,
+          writeStored: stored.write,
+          randomId: () => Crypto.randomUUID(),
+          adoptableLegacyId: async () => null,
+        }),
+      };
+    })()
+  : null;
+
 /** The anonymous purchase identity: its own id, kept across a data reset. */
-export const purchaseIdentity: PurchaseIdentity = {
+export const purchaseIdentity: PurchaseIdentity = sandboxTestIdentity ?? {
   appUserId: createPurchaseIdentity({
     readStored: () => SecureStore.getItemAsync(PURCHASE_ID_KEY),
     writeStored: (id) => SecureStore.setItemAsync(PURCHASE_ID_KEY, id),

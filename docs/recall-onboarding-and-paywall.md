@@ -3097,6 +3097,16 @@ What exists, and what still stands between it and a verified purchase:
      change can make the old adapter accept the product. Support should
      expect this case while build 9 is in use on a buyer's second device. The server alert gate reads the shared `premium`
      entitlement and does accept it, whichever binary registered.
+   - _Same-phone sandbox testing (2026-11-09):_ the `sandbox-test` EAS
+     profile (`preview` plus `EXPO_PUBLIC_SANDBOX_TEST_IDENTITY=1`) keeps a
+     separate RevenueCat identity and access cache in the app's own files
+     (`src/lib/purchases/sandbox-test-identity.ts`), never the keychain
+     entries a real install uses, so a phone whose own customer is already
+     entitled can buy lifetime access as a fresh sandbox customer. Same bundle
+     id, key, offering and Apple sandbox; no simulated store. Deleting the
+     app removes those files, so a reinstall is a new test customer — the
+     meaningful Restore test. Every other profile, `production` included,
+     leaves the flag unset and the path disabled (`release-exposure.test.ts`).
    - _Copy and legal:_ the Terms, the App Store description and the
      website still describe an auto-renewing subscription and must be
      updated for a one-time purchase before review.

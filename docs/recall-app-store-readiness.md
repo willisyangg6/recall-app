@@ -161,6 +161,62 @@ Questions for counsel **[LEGAL]**:
 | Push notifications (2.5.4 / 4.5.4)                         | [REQUIRED]               | **Done by design**                                       | Push is opt-in via an explicit control, safety-relevant only, no marketing; permission prompt only from the user's action.                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Data collected matches label at review                     | [REQUIRED]               | **Pending**                                              | Re-verify §1 against the shipped build during submission prep; the dependency-lock test keeps the "no tracking" row honest.                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
+### 3.1 Lifetime release 1.1.0 — metadata prepared (2026-11-08, not submitted)
+
+Branch `lifetime-paywall` (checkpoint `6ea05c7`; app version `1.1.0`). Nothing
+here has been entered in App Store Connect.
+
+**In-app purchase (already created by the founder, US availability):**
+`com.willisyang.lotly.lifetime`, Non-Consumable, US $19.99, in RevenueCat
+offering `lifetime` (`$rc_lifetime`) on entitlement `premium`. Submit it
+**with** the 1.1.0 build (a first non-consumable is reviewed with a binary).
+
+- Display name: `Lifetime access`
+- Description: `Pay once for lifetime access to Lotly's recall watch.`
+- Review screenshot: the paywall from
+  `~/Desktop/Lotly-Lifetime-Paywall-Final/02-iphone17-default-standalone-paywall.png`
+  re-captured from a release build showing Apple's own price.
+
+**What's New in 1.1.0:**
+
+> Lotly is now a one-time purchase. Pay once for lifetime access to your
+> household's recall watch, with no subscription. If you already subscribe,
+> nothing changes: your subscription keeps working until it ends, and you can
+> cancel it anytime in Settings.
+
+**Description:** replace any sentence that says Lotly requires a monthly or
+annual subscription with: `Lotly is a one-time purchase: pay once for lifetime
+access.` Keep the Terms and Privacy links (Schedule 2 §3.8(b) still applies to
+the remaining subscribers and to any in-app purchase).
+
+**App Review notes (add):** `Lotly now sells one non-consumable, Lifetime
+access (com.willisyang.lotly.lifetime). The two auto-renewing subscriptions
+from 1.0 remain in the subscription group for existing subscribers and are
+not offered in 1.1.0. To reach the paywall, complete onboarding (any state,
+then Continue) and tap See my plan. Restore Purchases is at the foot of the
+paywall.`
+
+**Subscriptions in App Store Connect:** leave the annual and monthly
+products and their group exactly as they are until 1.1.0 has wide adoption;
+build 9 still sells them from the RevenueCat `default` offering
+(`docs/recall-onboarding-and-paywall.md` §10 item 7). Removing them from sale
+is a separate later decision.
+
+**App Privacy:** no change needed. Purchase History is already declared; the
+lifetime purchase is the same category. (Row 1.2's "Subscription purchases"
+wording becomes "In-app purchases" at the next review of this worksheet.)
+
+**Website (owned by the website session; text only, not edited here):**
+replace "Coming soon to iPhone" with the App Store link, and any monthly or
+annual pricing with: `One-time purchase. Pay once for lifetime access — no
+subscription.` Publish the revised Terms §7 (`docs/recall-terms-draft.md`)
+once the founder resolves its new ⟦FOUNDER⟧ marks.
+
+**Blocking before submission:** the server's lifetime alert gate is not
+deployed (production runs `origin/master`, which refuses a missing expiry,
+and push delivery has been active since 2026-10-16), so a lifetime buyer
+would receive no recall alerts until the server change ships.
+
 ## 4. Withheld on purpose
 
 - No App Store Connect record was created or modified in C7.

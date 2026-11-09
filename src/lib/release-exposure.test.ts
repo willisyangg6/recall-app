@@ -100,6 +100,26 @@ const DEVELOPMENT_ONLY_ENV = [
   'EXPO_PUBLIC_DEV_REVOCATION_PROBE',
 ] as const;
 
+/**
+ * The sandbox test identity (2026-11-09): read only by
+ * `lib/purchases/sandbox-test-identity.ts`, set only by the `sandbox-test`
+ * EAS profile in eas.json — never on EAS, never by `production`.
+ */
+const SANDBOX_TEST_ENV = 'EXPO_PUBLIC_SANDBOX_TEST_IDENTITY';
+
+test('the sandbox test identity is set by the sandbox-test profile alone, never production', () => {
+  const eas = JSON.parse(readFileSync(join(__dirname, '..', '..', 'eas.json'), 'utf8')) as {
+    build: Record<string, { env?: Record<string, string>; extends?: string }>;
+  };
+  for (const [name, profile] of Object.entries(eas.build)) {
+    if (name === 'sandbox-test') continue;
+    assert.ok(!(SANDBOX_TEST_ENV in (profile.env ?? {})), `${name} sets ${SANDBOX_TEST_ENV}`);
+  }
+  assert.equal(eas.build['sandbox-test'].env?.[SANDBOX_TEST_ENV], '1');
+  assert.equal(eas.build['sandbox-test'].extends, 'preview');
+  assert.ok(!eas.build.production.extends, 'production inherits another profile');
+});
+
 test('every environment variable the client reads is an EXPO_PUBLIC_ one', () => {
   const found = new Set<string>();
   for (const { path, source } of CLIENT) {
@@ -109,6 +129,14 @@ test('every environment variable the client reads is an EXPO_PUBLIC_ one', () =>
         name.startsWith('EXPO_PUBLIC_'),
         `${path} reads process.env.${name}, which Metro would not inline and which may be a secret`,
       );
+      if (name === SANDBOX_TEST_ENV) {
+        assert.match(
+          path,
+          /lib\/purchases\/sandbox-test-identity\.ts$/,
+          `${path} reads ${SANDBOX_TEST_ENV} outside the sandbox test module`,
+        );
+        continue;
+      }
       if ((DEVELOPMENT_ONLY_ENV as readonly string[]).includes(name)) {
         assert.match(
           path,

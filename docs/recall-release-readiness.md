@@ -150,8 +150,10 @@ any of them would inline it into the shipped bundle.
 ## 3. Versions and build numbers
 
 `expo.version` in `app.json` is the **marketing version**
-(`CFBundleShortVersionString`), currently `1.0.0`. It is edited by hand, in a
-commit, when a release's user-visible version changes.
+(`CFBundleShortVersionString`). It is edited by hand, in a commit, when a
+release's user-visible version changes. `1.0.0` shipped as build 9
+(2026-11-02); the lifetime-paywall release is `1.1.0` (prepared 2026-11-08
+on branch `lifetime-paywall`; preview build 10 still reported `1.0.0`).
 
 The **build number** (`CFBundleVersion`) is not in `app.json` at all.
 `cli.appVersionSource` is `remote`, so EAS holds the current build number for

@@ -15,7 +15,9 @@
 
 ## Part 1 — Evaluation: which licence structure
 
-**Requirement.** Lotly sells auto-renewing subscriptions. Apple's Developer
+**Requirement.** Lotly sells a one-time lifetime purchase (from version 1.1;
+earlier versions sold auto-renewing subscriptions, which existing
+subscribers keep). Apple's Developer
 Program License Agreement, Schedule 2 §3.8(b), requires: "Links to Your
 Privacy Policy and Terms of Use must be accessible within Your Licensed
 Application." App Store Review Guideline 3.1.2(c) requires communicating
@@ -97,7 +99,7 @@ information. These Terms also cover the Lotly website.
 - You must be **13 or older**.
 - If you are **under 18**, you may use Lotly only with the permission of a
   parent or guardian. They should review these Terms and the Privacy Policy
-  with you. If you buy a subscription, the purchase is made through an
+  with you. If you make a purchase, it is made through an
   Apple Account and is subject to Apple's rules for that account, including
   any Family Sharing or Ask to Buy settings.
 - Lotly is offered only in the United States.
@@ -170,35 +172,38 @@ Recall alerts are optional.
   notice. Check the app and the official notice regularly whether or not you
   receive alerts.
 
-### 7. Subscriptions
+### 7. Purchases
 
-- **What you pay for.** Lotly requires a paid, auto-renewing subscription
-  (monthly or annual). The price, length and renewal terms are shown in the
-  app before you buy, and on the App Store. Prices come from the App Store
-  and may vary by region and taxes.
-- **Who sells it.** Apple sells and bills the subscription through your
-  Apple Account. Apple's payment terms apply.
-- **Auto-renewal.** The subscription renews automatically at the end of each
-  period until you cancel. ⟦UNCERTAIN: confirm the renewal and cancellation
-  disclosures required by the California Automatic Renewal Law (as amended
-  effective July 1, 2025) and the federal ROSCA. Decide whether Apple's
-  purchase flow and notices satisfy them, or whether Lotly must add its own,
-  for example an annual reminder. Verify Apple's current wording on when
-  cancellation must happen before renewal.⟧
-- **Cancelling.** iOS Settings → your name → Subscriptions → Lotly → Cancel
-  Subscription. Cancelling stops future renewals. ⟦verify against Apple's
-  current terms: access continuing to the end of the period already paid⟧
+- **What you pay for.** Lotly requires a one-time purchase, **Lifetime
+  access**. You pay once; there is no subscription and nothing renews. The
+  price is shown in the app before you buy, and on the App Store. Prices
+  come from the App Store and may vary by region and taxes.
+- **What "lifetime" means.** Access for as long as Lotly is offered, on
+  any device signed in to the same Apple Account. It is not a promise to run
+  the service forever (see "Ending service" below). ⟦FOUNDER: confirm this
+  definition before publication.⟧
+- **Who sells it.** Apple sells and bills the purchase through your Apple
+  Account. Apple's payment terms apply.
+- **Existing subscriptions.** If you subscribed in an earlier version
+  (monthly or annual), your subscription continues and keeps unlocking Lotly
+  until it ends. It renews automatically until you cancel it in iOS Settings
+  → your name → Subscriptions → Lotly → Cancel Subscription. ⟦UNCERTAIN: the
+  California Automatic Renewal Law and ROSCA questions recorded in earlier
+  drafts still apply to these existing subscriptions.⟧ If you buy Lifetime
+  access while a subscription is active, Apple does not cancel the
+  subscription for you; cancel it yourself to stop being charged.
 - **Refunds.** Apple handles them. Request one at reportaproblem.apple.com.
-  We cannot issue refunds for App Store purchases ourselves. We do not send
-  Apple information about your use of the app for refund decisions.
-  ⟦FOUNDER: keep that last sentence only if you will not use Apple's
-  consumption-information feature, which requires your consent.⟧
+  We cannot issue refunds for App Store purchases ourselves. If a purchase is
+  refunded, access it granted ends. We do not send Apple information about
+  your use of the app for refund decisions. ⟦FOUNDER: keep that last
+  sentence only if you will not use Apple's consumption-information feature,
+  which requires your consent.⟧
 - **Restoring.** Use Restore Purchases in the app, for example on a new
-  device. Resetting the app's data does not end your subscription.
-- **When a subscription ends.** You lose access to the app's recall
-  features. Your choices stay on your iPhone. Server data follows the
-  Privacy Policy's retention rules.
-- **Price changes** are communicated through Apple under its rules.
+  device. Resetting the app's data does not remove your purchase.
+- **When access ends** (a subscription ends or a purchase is refunded): you
+  lose access to the app's recall features. Your choices stay on your
+  iPhone. Server data follows the Privacy Policy's retention rules.
+- **Price changes** apply to future purchases only.
 
 ### 8. Acceptable use
 
@@ -242,11 +247,13 @@ waived or limited by contract.
   will give notice in the app before they take effect. ⟦UNCERTAIN: the effect of
   continued use.⟧
 - **Ending service.** We may suspend or discontinue Lotly. ⟦FOUNDER:
-  what subscribers are told, and how refunds work, if the service ends
-  during a paid period.⟧
-- **Leaving.** You can stop using Lotly at any time. Cancel the subscription
-  in iOS Settings, and use "Reset app and delete my data" before deleting
-  the app (see the Privacy Policy).
+  what Lifetime access holders and remaining subscribers are told, how much
+  notice they get, and whether any refund is offered if the service ends.
+  This now matters more: "lifetime" invites the question.⟧
+- **Leaving.** You can stop using Lotly at any time. If you still have a
+  subscription from an earlier version, cancel it in iOS Settings. Use
+  "Reset app and delete my data" before deleting the app (see the Privacy
+  Policy).
 
 ### 13. Governing law and disputes
 

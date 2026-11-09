@@ -24,6 +24,12 @@
         "image": "macos-tahoe-26.5-xcode-26.6"
       }
     },
+    "sandbox-test": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_SANDBOX_TEST_IDENTITY": "1"
+      }
+    },
     "simulator": {
       "environment": "development",
       "developmentClient": false,
