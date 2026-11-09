@@ -39,11 +39,47 @@ test('the clock gate: a known expiry stops alerts at that instant, with no refre
   const expiring = { ...active, expiresAt: iso(2 * HOUR) };
   assert.equal(entitlementVerdict(expiring, iso(-HOUR), iso(2 * HOUR - 1)), 'entitled');
   assert.equal(entitlementVerdict(expiring, iso(-HOUR), iso(2 * HOUR)), 'expired');
-  // A non-expiring grant is refused, as the app refuses it.
+});
+
+test('a lifetime (non-expiring) entitlement has no clock, but is still held to a fresh check and the horizon', () => {
+  const lifetime = { ...active, expiresAt: null };
+  assert.equal(entitlementVerdict(lifetime, iso(-HOUR), iso(HOUR)), 'entitled');
+  // Years later, still entitled while the hourly checks keep finding it.
+  const later = 5 * 365 * 24 * HOUR;
   assert.equal(
-    entitlementVerdict({ ...active, expiresAt: null }, iso(-HOUR), iso(HOUR)),
-    'expired',
+    entitlementVerdict(
+      { ...lifetime, checkedAt: iso(later) },
+      iso(later - HOUR),
+      iso(later + HOUR),
+    ),
+    'entitled',
   );
+  // Never trusted without a fresh check: no lifetime row outlives staleness.
+  assert.equal(entitlementVerdict(lifetime, iso(-HOUR), iso(MAX_STALENESS_MS + 1)), 'unverified');
+  // No backlog either.
+  assert.equal(entitlementVerdict(lifetime, iso(-25 * HOUR), iso(HOUR)), 'before_entitlement');
+  // A refund or revocation: the next check finds nothing, and that is definitive.
+  const refunded = nextEntitlement(lifetime, { active: false, expiresAt: null }, iso(HOUR));
+  assert.deepEqual(refunded, {
+    status: 'inactive',
+    expiresAt: null,
+    checkedAt: iso(HOUR),
+    entitledSince: null,
+  });
+  assert.equal(entitlementVerdict(refunded, iso(HOUR), iso(2 * HOUR)), 'inactive');
+  // Refreshed on the ordinary interval: no near-expiry rush for a lifetime row.
+  assert.equal(needsRefresh(lifetime, iso(REFRESH_INTERVAL_MS - 1)), false);
+  assert.equal(needsRefresh(lifetime, iso(REFRESH_INTERVAL_MS)), true);
+});
+
+test('a lifetime entitlement seen active again keeps its horizon; one bought after a subscription lapsed restarts it', () => {
+  const lifetime = { ...active, expiresAt: null };
+  const again = nextEntitlement(lifetime, { active: true, expiresAt: null }, iso(HOUR));
+  assert.equal(again.entitledSince, active.entitledSince);
+  assert.equal(again.expiresAt, null);
+  const lapsed = { ...active, expiresAt: iso(-HOUR) };
+  const bought = nextEntitlement(lapsed, { active: true, expiresAt: null }, iso(HOUR));
+  assert.equal(bought.entitledSince, iso(HOUR));
 });
 
 test('the staleness gate: an old or missing check is unverified, never trusted', () => {

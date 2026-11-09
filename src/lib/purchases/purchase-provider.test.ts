@@ -1,8 +1,8 @@
 /**
- * The purchase boundary (P2B7X.1): the fail-closed release provider, the
- * development adapter's scenario matrix and its containment, the price
- * arithmetic, and the source pins that keep the adapter out of a release
- * build.
+ * The purchase boundary (P2B7X.1; one lifetime purchase since 2026-11-06):
+ * the fail-closed release provider, the development adapter's scenario
+ * matrix and its containment, and the source pins that keep the adapter out
+ * of a release build.
  */
 
 import assert from 'node:assert/strict';
@@ -26,13 +26,7 @@ import {
   type DevelopmentPurchaseScenarioId,
   type DevelopmentPurchaseStorage,
 } from './development-scenarios';
-import {
-  annualSavingsPercent,
-  monthlyEquivalentAmount,
-  MONTHS_PER_YEAR,
-  unconfiguredPurchaseProvider,
-  type Offering,
-} from './purchase-provider';
+import { unconfiguredPurchaseProvider } from './purchase-provider';
 
 const NOW = '2026-09-23T12:00:00.000Z';
 const ROOT = join(__dirname, '..', '..', '..');
@@ -88,7 +82,7 @@ test('the unconfigured release provider fails closed on every call', async () =>
   assert.equal(provider.id, 'unconfigured');
   assert.deepEqual(await provider.loadOfferings(), { kind: 'unavailable' });
   assert.deepEqual(await provider.readEntitlement(), { kind: 'unavailable' });
-  assert.deepEqual(await provider.purchase(DEVELOPMENT_OFFERING.annual), { kind: 'unavailable' });
+  assert.deepEqual(await provider.purchase(DEVELOPMENT_OFFERING.lifetime), { kind: 'unavailable' });
   assert.deepEqual(await provider.restore(), { kind: 'unavailable' });
 });
 
@@ -97,7 +91,9 @@ test('the development adapter is inert outside a development build, whatever its
   for (const scenario of DEVELOPMENT_PURCHASE_SCENARIOS) {
     const { provider } = devProvider(scenario.id, storage, () => false);
     assert.deepEqual(await provider.readEntitlement(), { kind: 'unavailable' }, scenario.id);
-    assert.deepEqual(await provider.purchase(DEVELOPMENT_OFFERING.annual), { kind: 'unavailable' });
+    assert.deepEqual(await provider.purchase(DEVELOPMENT_OFFERING.lifetime), {
+      kind: 'unavailable',
+    });
     assert.deepEqual(await provider.restore(), { kind: 'unavailable' });
     assert.deepEqual(await provider.loadOfferings(), { kind: 'unavailable' });
   }
@@ -107,17 +103,17 @@ test('the development adapter is inert outside a development build, whatever its
 
 // ── The ten scenarios ───────────────────────────────────────────────────────
 
-test('the ten scenarios the brief names exist, in order, each with an expectation', () => {
+test('the ten scenarios exist, in order, each with an expectation', () => {
   assert.deepEqual(
     DEVELOPMENT_PURCHASE_SCENARIOS.map((s) => s.id),
     [
       'inactive',
       'loading',
-      'annual_purchase_success',
-      'monthly_purchase_success',
+      'purchase_success',
       'user_cancelled',
       'purchase_error',
-      'restore_success',
+      'restore_lifetime',
+      'restore_subscription',
       'restore_nothing',
       'unavailable_cached_active',
       'unavailable_unverified',
@@ -129,39 +125,55 @@ test('the ten scenarios the brief names exist, in order, each with an expectatio
   assert.equal(developmentPurchaseScenario(), 'inactive', 'the default scenario is inactive');
 });
 
-test('inactive: no subscription, a purchase succeeds and persists, a restore finds nothing', async () => {
+test('the fixture offering is one lifetime package at the proposed price', () => {
+  assert.deepEqual(DEVELOPMENT_OFFERING, {
+    lifetime: {
+      id: 'lotly_lifetime',
+      period: 'lifetime',
+      price: { amount: 19.99, currencyCode: 'USD', formatted: '$19.99' },
+    },
+  });
+});
+
+test('inactive: nothing bought, a lifetime purchase succeeds with no expiry and persists, a restore finds nothing', async () => {
   const { provider, storage } = devProvider('inactive');
   assert.deepEqual(await provider.readEntitlement(), { kind: 'inactive', asOf: NOW });
   assert.deepEqual(await provider.restore(), { kind: 'nothing_to_restore' });
-  const outcome = await provider.purchase(DEVELOPMENT_OFFERING.monthly);
-  assert.equal(outcome.kind, 'success');
-  if (outcome.kind !== 'success') return;
-  assert.equal(outcome.entitlement.period, 'monthly');
-  assert.equal(outcome.entitlement.productId, 'lotly_monthly');
-  assert.equal(outcome.entitlement.verifiedAt, NOW);
-  assert.equal(outcome.entitlement.expiresAt, simulatedExpiry(NOW, 'monthly'));
-  // Persisted: a relaunch reads active, as a real subscriber's would.
+  const outcome = await provider.purchase(DEVELOPMENT_OFFERING.lifetime);
+  assert.deepEqual(outcome, {
+    kind: 'success',
+    entitlement: {
+      productId: 'lotly_lifetime',
+      period: 'lifetime',
+      verifiedAt: NOW,
+      expiresAt: null,
+    },
+  });
+  assert.equal(simulatedExpiry(NOW, 'lifetime'), null);
+  // Persisted: a relaunch reads active, as a real customer's would.
   assert.deepEqual(parseSimulatedSubscription(storage.value), {
-    period: 'monthly',
+    period: 'lifetime',
     purchasedAt: NOW,
   });
   const reading = await provider.readEntitlement();
   assert.equal(reading.kind, 'active');
+  if (reading.kind === 'active') assert.equal(reading.entitlement.expiresAt, null);
 });
 
-test('annual and monthly purchase success preselect their plan and succeed for the package bought', async () => {
-  const annual = DEVELOPMENT_PURCHASE_SCENARIOS.find((s) => s.id === 'annual_purchase_success');
-  const monthly = DEVELOPMENT_PURCHASE_SCENARIOS.find((s) => s.id === 'monthly_purchase_success');
-  assert.equal(annual?.initialPlan, 'annual');
-  assert.equal(monthly?.initialPlan, 'monthly');
-  const a = await devProvider('annual_purchase_success').provider.purchase(
-    DEVELOPMENT_OFFERING.annual,
-  );
-  assert.equal(a.kind, 'success');
-  const m = await devProvider('monthly_purchase_success').provider.purchase(
-    DEVELOPMENT_OFFERING.monthly,
-  );
-  assert.equal(m.kind, 'success');
+test('an earlier build’s subscription on the simulated account still reads active, with its expiry', async () => {
+  for (const period of ['annual', 'monthly'] as const) {
+    const storage = memoryStorage(JSON.stringify({ period, purchasedAt: NOW }));
+    const reading = await devProvider('inactive', storage).provider.readEntitlement();
+    assert.deepEqual(reading, {
+      kind: 'active',
+      entitlement: {
+        productId: `lotly_${period}`,
+        period,
+        verifiedAt: NOW,
+        expiresAt: simulatedExpiry(NOW, period),
+      },
+    });
+  }
 });
 
 test('loading: the offering never resolves while the entitlement still answers', async () => {
@@ -180,18 +192,23 @@ test('user cancellation and a purchase error change nothing', async () => {
     ['purchase_error', 'error'],
   ] as const) {
     const { provider, storage } = devProvider(id);
-    assert.deepEqual(await provider.purchase(DEVELOPMENT_OFFERING.annual), { kind });
+    assert.deepEqual(await provider.purchase(DEVELOPMENT_OFFERING.lifetime), { kind });
     assert.equal(storage.value, null, `${id} wrote a subscription`);
     assert.deepEqual(await provider.readEntitlement(), { kind: 'inactive', asOf: NOW });
   }
 });
 
-test('restore success finds an annual subscription and persists it; restore-nothing finds nothing', async () => {
-  const found = devProvider('restore_success');
-  const restored = await found.provider.restore();
-  assert.equal(restored.kind, 'restored');
-  if (restored.kind === 'restored') assert.equal(restored.entitlement.period, 'annual');
-  assert.equal(parseSimulatedSubscription(found.storage.value)?.period, 'annual');
+test('restore finds a lifetime purchase, or an earlier build’s subscription, and persists it; restore-nothing finds nothing', async () => {
+  for (const [id, period] of [
+    ['restore_lifetime', 'lifetime'],
+    ['restore_subscription', 'annual'],
+  ] as const) {
+    const found = devProvider(id);
+    const restored = await found.provider.restore();
+    assert.equal(restored.kind, 'restored', id);
+    if (restored.kind === 'restored') assert.equal(restored.entitlement.period, period, id);
+    assert.equal(parseSimulatedSubscription(found.storage.value)?.period, period, id);
+  }
   const nothing = devProvider('restore_nothing');
   assert.deepEqual(await nothing.provider.restore(), { kind: 'nothing_to_restore' });
   assert.equal(nothing.storage.value, null);
@@ -206,7 +223,9 @@ test('unavailable: every call answers unavailable, whether or not a simulated su
     const { provider } = devProvider(id, storage);
     assert.deepEqual(await provider.readEntitlement(), { kind: 'unavailable' }, id);
     assert.deepEqual(await provider.loadOfferings(), { kind: 'unavailable' }, id);
-    assert.deepEqual(await provider.purchase(DEVELOPMENT_OFFERING.annual), { kind: 'unavailable' });
+    assert.deepEqual(await provider.purchase(DEVELOPMENT_OFFERING.lifetime), {
+      kind: 'unavailable',
+    });
     assert.deepEqual(await provider.restore(), { kind: 'unavailable' });
   }
 });
@@ -220,9 +239,9 @@ test('the scenario is live: switching it changes the next call without a new pro
     now: () => NOW,
     scenario: () => current,
   });
-  assert.deepEqual(await provider.purchase(DEVELOPMENT_OFFERING.annual), { kind: 'cancelled' });
+  assert.deepEqual(await provider.purchase(DEVELOPMENT_OFFERING.lifetime), { kind: 'cancelled' });
   current = 'inactive';
-  assert.equal((await provider.purchase(DEVELOPMENT_OFFERING.annual)).kind, 'success');
+  assert.equal((await provider.purchase(DEVELOPMENT_OFFERING.lifetime)).kind, 'success');
   // The module-level scenario used by the app follows the same setter.
   setDevelopmentPurchaseScenario('purchase_error');
   assert.equal(developmentPurchaseScenario(), 'purchase_error');
@@ -231,6 +250,11 @@ test('the scenario is live: switching it changes the next call without a new pro
 
 test('the development controls clear and seed the simulated account', async () => {
   const storage = memoryStorage();
+  await seedSimulatedSubscription(storage, 'lifetime', NOW);
+  assert.deepEqual(parseSimulatedSubscription(storage.value), {
+    period: 'lifetime',
+    purchasedAt: NOW,
+  });
   await seedSimulatedSubscription(storage, 'annual', NOW);
   assert.deepEqual(parseSimulatedSubscription(storage.value), {
     period: 'annual',
@@ -243,39 +267,6 @@ test('the development controls clear and seed the simulated account', async () =
     parseSimulatedSubscription(JSON.stringify({ period: 'weekly', purchasedAt: NOW })),
     null,
   );
-});
-
-// ── Price arithmetic ────────────────────────────────────────────────────────
-
-test('the annual saving is computed from the store prices: $29.99 against 12 × $4.99 is 50%', () => {
-  assert.equal(MONTHS_PER_YEAR, 12);
-  assert.equal(annualSavingsPercent(DEVELOPMENT_OFFERING), 50);
-  assert.equal(monthlyEquivalentAmount(DEVELOPMENT_OFFERING.annual), 29.99 / 12);
-});
-
-test('the saving follows the prices, never a typed number', () => {
-  const priced = (annual: number, monthly: number, currency = 'USD'): Offering => ({
-    annual: {
-      id: 'a',
-      period: 'annual',
-      price: { amount: annual, currencyCode: currency, formatted: '' },
-    },
-    monthly: {
-      id: 'm',
-      period: 'monthly',
-      price: { amount: monthly, currencyCode: currency, formatted: '' },
-    },
-  });
-  assert.equal(annualSavingsPercent(priced(39.99, 4.99)), 33);
-  assert.equal(annualSavingsPercent(priced(59.88, 4.99)), null, 'no saving');
-  assert.equal(annualSavingsPercent(priced(70, 4.99)), null, 'annual costs more');
-  assert.equal(annualSavingsPercent(priced(29.99, 0)), null, 'no monthly price');
-  assert.equal(
-    annualSavingsPercent({ ...priced(29.99, 4.99), monthly: priced(1, 4.99, 'EUR').monthly }),
-    null,
-    'currency mismatch',
-  );
-  assert.equal(monthlyEquivalentAmount(priced(0, 4.99).annual), null);
 });
 
 // ── Containment: the adapter cannot ship as a bypass ────────────────────────

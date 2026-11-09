@@ -1,15 +1,14 @@
 /**
- * The purchase flow (2026-09-27): the ONE owner of everything a plan choice
- * needs, shared by the two places a shopper can subscribe — the Ready step,
- * where the plans follow the personalized summary, and the standalone
- * `/paywall`, which a lapsed subscriber meets. Neither route holds purchase
- * state of its own.
+ * The purchase flow (2026-09-27; one lifetime purchase since 2026-11-06):
+ * the ONE owner of everything a purchase needs, shared by the two paywall
+ * routes — `/onboarding/paywall` from Ready, and the standalone `/paywall`
+ * a lapsed subscriber meets. Neither route holds purchase state of its own.
  *
  * ## What it owns
  *
  * The view (`lib/paywall-screen.ts` maps it to what is drawn): the offering,
- * loaded through the purchase boundary when the screen mounts; the selected
- * plan; the operation in flight; and the last outcome's notice. It runs a
+ * loaded through the purchase boundary when the screen mounts; the operation
+ * in flight; and the last outcome's notice. It runs a
  * purchase or a restore and hands a verified success to the gate
  * (`applyEntitlement`), which completes personalization in the same commit
  * and moves the app to notification education or the Feed on its own — no
@@ -38,7 +37,6 @@ import { AccessibilityInfo, Linking } from 'react-native';
 
 import type { PurchaseProps } from '@/components/paywall/paywall-panel';
 import { useAccess } from '@/hooks/use-access';
-import type { PlanPeriod } from '@/lib/entitlement';
 import {
   DESTINATION_UNCONFIGURED,
   initialPaywallView,
@@ -71,14 +69,6 @@ const developmentScenarios = __DEV__
     (require('@/lib/purchases/development-scenarios') as ScenariosModule)
   : null;
 
-/** The scenario's preselected plan in development; Annual otherwise. */
-function initialPlanFor(id: string): PlanPeriod {
-  return (
-    developmentScenarios?.DEVELOPMENT_PURCHASE_SCENARIOS.find((scenario) => scenario.id === id)
-      ?.initialPlan ?? 'annual'
-  );
-}
-
 /**
  * Whether the paywall development controls are hidden for a clean capture
  * (development-scenarios.ts). Behind the bare `__DEV__` identifier, so a
@@ -99,7 +89,7 @@ function announce(notice: PaywallNoticeKind) {
 }
 
 export interface PurchaseFlow {
-  /** Everything the shared plan and footer pieces draw, and their handlers. */
+  /** Everything the shared offer and footer pieces draw, and their handlers. */
   purchase: PurchaseProps;
   /** The simulated store's controls in a development build; null in a release. */
   developmentControls: ReactNode;
@@ -109,7 +99,7 @@ export function usePurchaseFlow(): PurchaseFlow {
   const access = useAccess();
   const unconfirmed =
     access.entitlement.kind === 'inactive' && access.entitlement.reason === 'unconfirmed';
-  const [view, setView] = useState<PaywallView>(() => initialPaywallView('annual', unconfirmed));
+  const [view, setView] = useState<PaywallView>(() => initialPaywallView(unconfirmed));
   const [destinationNotice, setDestinationNotice] = useState<string | null>(null);
   const controlsHidden = useSyncExternalStore(
     controlsHiddenStore.subscribe,
@@ -132,9 +122,9 @@ export function usePurchaseFlow(): PurchaseFlow {
     void Promise.resolve().then(() => loadOfferings(access.provider));
   }, [access.provider, loadOfferings]);
 
-  const subscribe = async () => {
+  const buy = async () => {
     if (view.offerings.kind !== 'ready' || view.operation !== 'idle') return;
-    const pkg = view.offerings.offering[view.selectedPlan];
+    const pkg = view.offerings.offering.lifetime;
     setView((prior) => ({ ...prior, operation: 'purchasing', notice: null }));
     // Under the store guard: a return to the foreground (the StoreKit sheet
     // backgrounds the app) cannot start a refresh until the purchase AND its
@@ -199,19 +189,17 @@ export function usePurchaseFlow(): PurchaseFlow {
     purchase: {
       // The gate's confirmation state is derived at render, never copied.
       view: view.unconfirmed === unconfirmed ? view : { ...view, unconfirmed },
-      onSelectPlan: (period) => setView((prior) => ({ ...prior, selectedPlan: period })),
-      onSubscribe: () => void subscribe(),
+      onPurchase: () => void buy(),
       onFooterAction: footerAction,
       destinationNotice,
     },
     developmentControls:
       DevelopmentControls && !controlsHidden ? (
         <DevelopmentControls
-          onScenarioApplied={(id) => {
+          onScenarioApplied={() => {
             setView((prior) => ({
               ...prior,
               offerings: { kind: 'loading' },
-              selectedPlan: initialPlanFor(id),
               notice: null,
               operation: 'idle',
             }));

@@ -6,18 +6,37 @@
  * module, the platform and the public key is revenuecat-provider.ts; this
  * file imports no native code.
  *
- * ## What the store is configured as (founder setup, 2026-10-04)
+ * ## What the store is configured as
  *
- *   entitlement   `premium`, attached to both Apple products
- *   offering      the CURRENT offering, expected to be `default`
- *   packages      `$rc_annual` → com.willisyang.lotly.annual
- *                 `$rc_monthly` → com.willisyang.lotly.monthly
+ *   entitlement   `premium`, attached to all three Apple products
+ *   products      com.willisyang.lotly.lifetime   non-consumable (2026-11-06)
+ *                 com.willisyang.lotly.annual     auto-renewing (earlier builds)
+ *                 com.willisyang.lotly.monthly    auto-renewing (earlier builds)
+ *   offering      `lifetime`, fetched BY IDENTIFIER, never the project's
+ *                 current offering: its `$rc_lifetime` package →
+ *                 com.willisyang.lotly.lifetime
  *
- * The adapter VALIDATES that configuration on every read: an offering that
- * lacks either built-in package, a package whose product is not the expected
- * Apple product, or a product without a usable localized price is
+ * Why by identifier (2026-11-06): build 9 and earlier read the CURRENT
+ * offering and require its `$rc_annual` and `$rc_monthly` packages. Reading
+ * a separate `lifetime` offering lets this build sell lifetime access while
+ * the current offering keeps serving the older binaries unchanged, so
+ * neither binary's paywall depends on the other's configuration.
+ *
+ * The adapter VALIDATES that configuration on every read: a missing
+ * `lifetime` offering or package, a package whose product is not the
+ * expected Apple product, or a product without a usable localized price is
  * `unavailable` — never a guess, never a price typed here.
  *
+ * ## Which entitlements grant access
+ *
+ * An active `premium` entitlement for any of the three products. The two
+ * subscriptions always carry an expiry, and one without is not trusted
+ * (`unavailable`), exactly as before. The lifetime product carries none:
+ * active with `expiresAt: null` — never an invented date. Only the store
+ * ends it, by no longer listing it active (a refund or revocation), which
+ * reads as a verified `inactive`. Subscription offer codes redeem the
+ * subscription products themselves, so they keep working unchanged.
+
  * ## Fail closed, dated by the store
  *
  * Every reading is dated by `CustomerInfo.requestDate`, the instant the
@@ -26,9 +45,8 @@
  * answers from a cache minutes old, and dating a cached answer with the
  * device clock would turn pre-purchase data into a fresh revocation
  * (lib/entitlement.ts `reconcileReading`). A customer info whose request
- * date, product or expiry cannot be read is `unavailable`. An active premium
- * entitlement for these subscription products always carries an expiry; one
- * without is not trusted — nothing here grants lifetime access.
+ * date, product or (for a subscription) expiry cannot be read is
+ * `unavailable`.
  *
  * A resolved SDK call is not proof of access: a purchase or restore succeeds
  * only when the customer info it returns holds an active, valid `premium`
@@ -62,10 +80,12 @@ import type {
 } from './purchase-provider';
 
 export const REVENUECAT_ENTITLEMENT = 'premium';
-export const REVENUECAT_OFFERING = 'default';
+/** The offering this build sells from, fetched by identifier (see above). */
+export const REVENUECAT_OFFERING = 'lifetime';
 export const APPLE_PRODUCT_IDS: Readonly<Record<PlanPeriod, string>> = {
   annual: 'com.willisyang.lotly.annual',
   monthly: 'com.willisyang.lotly.monthly',
+  lifetime: 'com.willisyang.lotly.lifetime',
 };
 
 /** The subset of the SDK the adapter uses, so a test can stand in for it. */
@@ -99,6 +119,7 @@ class ConfigurationFailure extends Error {
 function periodForProduct(productId: string): PlanPeriod | null {
   if (productId === APPLE_PRODUCT_IDS.annual) return 'annual';
   if (productId === APPLE_PRODUCT_IDS.monthly) return 'monthly';
+  if (productId === APPLE_PRODUCT_IDS.lifetime) return 'lifetime';
   return null;
 }
 
@@ -110,8 +131,9 @@ function isoInstant(value: unknown): string | null {
 }
 
 /**
- * The reading a customer info amounts to. Undatable, or active for a product
- * or without the expiry these products always carry: `unavailable`.
+ * The reading a customer info amounts to. Undatable, active for an unknown
+ * product, or a subscription without the expiry it always carries:
+ * `unavailable`. A lifetime purchase is active with no expiry.
  */
 export function readingFromCustomerInfo(info: CustomerInfo | null | undefined): EntitlementReading {
   if (typeof info !== 'object' || info === null) return { kind: 'unavailable' };
@@ -123,7 +145,9 @@ export function readingFromCustomerInfo(info: CustomerInfo | null | undefined): 
   const period = periodForProduct(active.productIdentifier);
   if (period === null) return { kind: 'unavailable' };
   const expiresAt = isoInstant(active.expirationDate);
-  if (expiresAt === null) return { kind: 'unavailable' };
+  // A subscription without an expiry is not trusted. A lifetime purchase has
+  // none, and an expiry the store did give it is kept, never dropped.
+  if (expiresAt === null && period !== 'lifetime') return { kind: 'unavailable' };
   const entitlement: ActiveEntitlement = {
     productId: active.productIdentifier,
     period,
@@ -155,22 +179,18 @@ function planPackage(
   return { id: pkg.identifier, period, price };
 }
 
-/** The current offering as the paywall's two packages, or null when misconfigured. */
+/**
+ * The `lifetime` offering as the paywall's one package, or null when it is
+ * missing or misconfigured. Never the current offering (see above).
+ */
 export function offeringFromOfferings(
   offerings: PurchasesOfferings | null | undefined,
-): { offering: Offering; packages: Record<PlanPeriod, PurchasesPackage> } | null {
-  const current = offerings?.current;
-  if (typeof current !== 'object' || current === null) return null;
-  const annual = planPackage(current.annual, 'annual');
-  const monthly = planPackage(current.monthly, 'monthly');
-  if (annual === null || monthly === null) return null;
-  return {
-    offering: { annual, monthly },
-    packages: {
-      annual: current.annual as PurchasesPackage,
-      monthly: current.monthly as PurchasesPackage,
-    },
-  };
+): { offering: Offering; package: PurchasesPackage } | null {
+  const sold = offerings?.all?.[REVENUECAT_OFFERING];
+  if (typeof sold !== 'object' || sold === null) return null;
+  const lifetime = planPackage(sold.lifetime, 'lifetime');
+  if (lifetime === null) return null;
+  return { offering: { lifetime }, package: sold.lifetime as PurchasesPackage };
 }
 
 /**
@@ -205,7 +225,7 @@ export function classifySdkFailure(error: unknown): SdkFailure {
 
 export function createRevenueCatAdapter(deps: RevenueCatAdapterDeps): PurchaseProvider {
   let configuring: Promise<void> | null = null;
-  let resolvedPackages: Record<PlanPeriod, PurchasesPackage> | null = null;
+  let resolvedPackage: PurchasesPackage | null = null;
 
   /** Configure once; concurrent callers share the attempt, a failure is retried next time. */
   const ensureConfigured = (): Promise<void> => {
@@ -224,10 +244,10 @@ export function createRevenueCatAdapter(deps: RevenueCatAdapterDeps): PurchasePr
     return configuring;
   };
 
-  const loadPackages = async (): Promise<Record<PlanPeriod, PurchasesPackage> | null> => {
+  const loadPackage = async (): Promise<PurchasesPackage | null> => {
     const mapped = offeringFromOfferings(await deps.sdk.getOfferings());
-    resolvedPackages = mapped?.packages ?? null;
-    return resolvedPackages;
+    resolvedPackage = mapped?.package ?? null;
+    return resolvedPackage;
   };
 
   return {
@@ -238,7 +258,7 @@ export function createRevenueCatAdapter(deps: RevenueCatAdapterDeps): PurchasePr
         await ensureConfigured();
         const mapped = offeringFromOfferings(await deps.sdk.getOfferings());
         if (mapped === null) return { kind: 'unavailable' };
-        resolvedPackages = mapped.packages;
+        resolvedPackage = mapped.package;
         return { kind: 'ready', offering: mapped.offering };
       } catch (error) {
         return classifySdkFailure(error) === 'unavailable'
@@ -262,14 +282,10 @@ export function createRevenueCatAdapter(deps: RevenueCatAdapterDeps): PurchasePr
         // The ACTUAL store package the offering resolved, never one rebuilt
         // from the plan; re-resolved when the paywall's offering predates
         // this adapter instance.
-        let packages = resolvedPackages;
-        if (packages === null || packages[pkg.period].identifier !== pkg.id) {
-          packages = await loadPackages();
-        }
-        if (packages === null || packages[pkg.period].identifier !== pkg.id) {
-          return { kind: 'unavailable' };
-        }
-        const result = await deps.sdk.purchasePackage(packages[pkg.period]);
+        let resolved = resolvedPackage;
+        if (resolved === null || resolved.identifier !== pkg.id) resolved = await loadPackage();
+        if (resolved === null || resolved.identifier !== pkg.id) return { kind: 'unavailable' };
+        const result = await deps.sdk.purchasePackage(resolved);
         const reading = readingFromCustomerInfo(result?.customerInfo);
         if (reading.kind === 'active') return { kind: 'success', entitlement: reading.entitlement };
         // The sheet completed but the store does not show an active premium

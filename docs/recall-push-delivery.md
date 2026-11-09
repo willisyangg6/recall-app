@@ -770,17 +770,18 @@ the founder's review folder (`migration-20261018-preflight/`).
    eligibility seam, in the send pool and again at the send. A delivery needs
    all four:
 
-   | Gate           | Rule                                                                                                     | On failure                                                                                          |
-   | -------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-   | Status         | `entitlement_status = 'active'` (RevenueCat counts billing grace as active)                              | not entitled                                                                                        |
-   | **Clock**      | `entitlement_expires_at > now()`. A null expiry (a non-expiring grant) is refused, as the app refuses it | not entitled: the known expiry stops alerts at that instant, with no refresh, however old the check |
-   | **Staleness**  | last successful check within `MAX_STALENESS` (3 h)                                                       | **held**: unverified, retried next run (fail closed)                                                |
-   | **No backlog** | event created at or after `entitled_since`                                                               | not entitled                                                                                        |
+   | Gate           | Rule                                                                                                                                                                                                                   | On failure                                                                                          |
+   | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+   | Status         | `entitlement_status = 'active'` (RevenueCat counts billing grace as active)                                                                                                                                            | not entitled                                                                                        |
+   | **Clock**      | `entitlement_expires_at > now()`. A null expiry (the lifetime purchase, 2026-11-06) has no clock and passes; it is still held to the staleness and no-backlog gates, so a refund reaches it through the hourly refresh | not entitled: the known expiry stops alerts at that instant, with no refresh, however old the check |
+   | **Staleness**  | last successful check within `MAX_STALENESS` (3 h)                                                                                                                                                                     | **held**: unverified, retried next run (fail closed)                                                |
+   | **No backlog** | event created at or after `entitled_since`                                                                                                                                                                             | not entitled                                                                                        |
 
    `entitled_since` moves to the check time whenever a check finds the
    subscription active and the stored state was not continuously entitled
    (unknown, inactive, or past its known expiry). A renewal seen before
-   expiry keeps it.
+   expiry keeps it, as does a non-expiring (lifetime) entitlement seen active
+   again.
 
 4. **Outcomes.** A definitive failure is never sent later:
    - at matching, no row is created;

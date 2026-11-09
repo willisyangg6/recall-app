@@ -6,7 +6,8 @@
  *
  * ## What a provider does
  *
- *   loadOfferings     the two packages the store is selling, with the
+ *   loadOfferings     the one package the store is selling (lifetime access,
+ *                     2026-11-06), with the
  *                     STORE'S OWN localized price strings — Lotly never
  *                     writes a price into product code
  *   readEntitlement   whether this device is entitled right now; a provider
@@ -52,7 +53,7 @@ export interface StorePrice {
   amount: number;
   /** ISO 4217 code, e.g. `USD`. */
   currencyCode: string;
-  /** The store's own localized rendering, e.g. `$29.99`. Displayed verbatim. */
+  /** The store's own localized rendering, e.g. `$19.99`. Displayed verbatim. */
   formatted: string;
 }
 
@@ -63,10 +64,13 @@ export interface PlanPackage {
   price: StorePrice;
 }
 
-/** The current offering: exactly one annual and one monthly package. */
+/**
+ * What the paywall sells (2026-11-06): exactly one non-consumable lifetime
+ * package. The subscriptions earlier builds sold are no longer offered here;
+ * an active one still grants access (lib/entitlement.ts).
+ */
 export interface Offering {
-  annual: PlanPackage;
-  monthly: PlanPackage;
+  lifetime: PlanPackage;
 }
 
 export type OfferingsResult =
@@ -87,7 +91,7 @@ export type PurchaseOutcome =
 
 export type RestoreOutcome =
   | { kind: 'restored'; entitlement: ActiveEntitlement }
-  /** The store account holds no Lotly subscription. */
+  /** The store account holds no Lotly purchase or subscription. */
   | { kind: 'nothing_to_restore' }
   | { kind: 'error' }
   | { kind: 'unavailable' };
@@ -116,29 +120,4 @@ export function unconfiguredPurchaseProvider(): PurchaseProvider {
     purchase: async () => ({ kind: 'unavailable' }),
     restore: async () => ({ kind: 'unavailable' }),
   };
-}
-
-/** How many monthly payments one annual term replaces. */
-export const MONTHS_PER_YEAR = 12;
-
-/**
- * The saving an annual package offers against twelve monthly payments, as a
- * whole percentage, computed from the STORE'S prices — never a number typed
- * into product code. Null when the two prices cannot be compared: different
- * currencies, a non-positive monthly price, or an annual price that saves
- * nothing.
- */
-export function annualSavingsPercent(offering: Offering): number | null {
-  const { annual, monthly } = offering;
-  if (annual.price.currencyCode !== monthly.price.currencyCode) return null;
-  if (!(monthly.price.amount > 0) || !(annual.price.amount > 0)) return null;
-  const yearOfMonthly = monthly.price.amount * MONTHS_PER_YEAR;
-  if (annual.price.amount >= yearOfMonthly) return null;
-  return Math.round(((yearOfMonthly - annual.price.amount) / yearOfMonthly) * 100);
-}
-
-/** The annual price spread over twelve months, in the store's currency. */
-export function monthlyEquivalentAmount(annual: PlanPackage): number | null {
-  if (!(annual.price.amount > 0)) return null;
-  return annual.price.amount / MONTHS_PER_YEAR;
 }

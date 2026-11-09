@@ -1,6 +1,7 @@
 /**
  * The alert entitlement gate (D2, founder-approved 2026-10-14): recall alerts
- * stop when a subscription ends.
+ * stop when access ends — a subscription's expiry, or a refund or revocation
+ * of either a subscription or the lifetime purchase (2026-11-06).
  *
  * The server holds a CACHED copy of RevenueCat's `premium` entitlement for each
  * alert registration, refreshed on a fixed schedule (entitlement-refresh.ts).
@@ -10,10 +11,13 @@
  *
  * A delivery is allowed only when ALL of these hold:
  *   1. status is 'active';
- *   2. the known expiry is still in the future. This is the CLOCK gate:
+ *   2. a known expiry is still in the future. This is the CLOCK gate:
  *      expiry stops alerts at expires_at with no refresh, no webhook and no
- *      app open. A missing expiry (a non-expiring grant) is refused, as the
- *      app refuses it (lib/purchases/revenuecat-adapter.ts).
+ *      app open. An active entitlement with NO expiry is a non-expiring
+ *      grant — the lifetime purchase (2026-11-06) — and has no clock to
+ *      pass; it is still held to gates 3 and 4, so a refund or revocation
+ *      reaches it through the hourly refresh exactly as it reaches a
+ *      subscription. No expiry is ever invented for it.
  *   3. the last successful check is no older than MAX_STALENESS. This is the
  *      STALENESS gate: an unverifiable status is refused, never trusted (fail
  *      closed).
@@ -65,7 +69,7 @@ export type EntitlementVerdict =
   | 'entitled'
   /** RevenueCat reported no active entitlement. Definitive. */
   | 'inactive'
-  /** The known expiry has passed, or there is none. Definitive for this event. */
+  /** The known expiry has passed. Definitive for this event. */
   | 'expired'
   /** The event predates entitled_since. Definitive: no backlog. */
   | 'before_entitlement'
@@ -83,9 +87,11 @@ export function entitlementVerdict(
   const now = at(nowIso);
   // A KNOWN expiry is definitive however old the check: the clock gate needs
   // no refresh, so a passed expiry fails the delivery rather than holding it.
+  // No expiry (lifetime) has no clock; the staleness gate still applies.
   if (
     entitlement.status === 'active' &&
-    (entitlement.expiresAt === null || at(entitlement.expiresAt) <= now)
+    entitlement.expiresAt !== null &&
+    at(entitlement.expiresAt) <= now
   ) {
     return 'expired';
   }
@@ -126,7 +132,8 @@ export function needsRefresh(entitlement: SubscriptionEntitlement, nowIso: strin
  * whenever the check finds the subscription active and the stored state was
  * NOT continuously entitled: unknown, inactive, or already past its known
  * expiry. A renewal seen before expiry keeps it, because the entitlement never
- * lapsed. Recalls announced between a re-subscription and the refresh that
+ * lapsed, and so does a non-expiring (lifetime) entitlement seen active
+ * again. Recalls announced between a re-subscription and the refresh that
  * sees it are not sent either: the conservative side of no backlog.
  */
 export function nextEntitlement(
@@ -140,8 +147,7 @@ export function nextEntitlement(
   const continuous =
     previous.status === 'active' &&
     previous.entitledSince !== null &&
-    previous.expiresAt !== null &&
-    at(previous.expiresAt) > at(nowIso);
+    (previous.expiresAt === null || at(previous.expiresAt) > at(nowIso));
   return {
     status: 'active',
     expiresAt: observation.expiresAt,

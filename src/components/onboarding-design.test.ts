@@ -1665,35 +1665,57 @@ test('the paywall keeps its sticky/inline terms rule, and Ready carries no terms
   const slots = codeOnly(componentBody(PANEL, 'usePurchaseFooterSlots'));
   // The reader's text scale is an input, read so a change moves the block
   // rather than waiting for a cold launch — the settings selector's technique.
-  assert.ok(slots.includes('const { fontScale } = useWindowDimensions();'));
-  assert.ok(slots.includes('const placement = paywallFooterPlacement(fontScale);'));
+  // The reader's text scale AND the window's height decide (revision 2).
+  assert.ok(slots.includes('const { fontScale, height } = useWindowDimensions();'));
+  assert.ok(slots.includes('const placement = paywallFooterPlacement(fontScale, height);'));
   // One terms block, drawn once (inside PurchaseTerms), in exactly one of
-  // the two slots; the CTA stays sticky at every size.
+  // the two slots; it carries no disclosure sentence any more.
   const terms = codeOnly(componentBody(PANEL, 'PurchaseTerms'));
   assert.equal(terms.split('accessibilityRole="toolbar"').length, 2, 'the toolbar is drawn once');
-  // The standalone paywall's period-neutral disclosure is the default; the
-  // onboarding paywall passes the chosen plan's (2026-10-01).
-  assert.ok(terms.includes('disclosure = PAYWALL_DISCLOSURE,'));
-  assert.ok(terms.includes('{disclosure}'));
+  assert.ok(!terms.includes('disclosure'));
+  assert.ok(slots.includes('<PurchaseTerms purchase={purchase} />'));
+  // Sticky: the offer above the notice and action, the terms below them.
+  // Inline: the offer, then the terms; only the action stays pinned.
+  // Scrolling: nothing pinned; the action follows the offer in the page.
+  const cta = 'const cta = <PurchaseCta purchase={purchase} appearance={options.appearance} />;';
+  assert.ok(slots.includes(cta));
+  const footer = slots.slice(slots.indexOf('footer:'), slots.indexOf('inlineTerms: sticky'));
+  assert.ok(footer.includes("placement === 'scrolling' ? null : ("));
+  const offer = '{sticky ? (options.offer ?? null) : null}';
   assert.ok(
-    slots.includes(
-      'const terms = <PurchaseTerms purchase={purchase} disclosure={options.disclosure} />;',
-    ),
+    footer.indexOf(offer) > 0 &&
+      footer.indexOf(offer) < footer.indexOf('{cta}') &&
+      footer.indexOf('{cta}') < footer.indexOf('{sticky ? terms : null}'),
+    'the footer is out of order',
   );
-  assert.ok(slots.includes("{placement === 'sticky' ? terms : null}"));
-  assert.ok(slots.includes("inlineTerms: placement === 'inline' ? terms : null,"));
-  const cta = '<PurchaseCta purchase={purchase} appearance={options.appearance} />';
+  // The offer always sits next to the action (2026-11-08). Nothing pinned:
+  // offer, action, terms. Action pinned: terms, then the offer last, right
+  // above it.
+  const inline = slots.slice(slots.indexOf('inlineTerms: sticky'));
+  assert.ok(inline.includes("inlineTerms: sticky ? null : placement === 'scrolling' ? ("));
+  const [scrolling, pinned] = inline.split(') : (');
   assert.ok(
-    slots.indexOf(cta) > 0 &&
-      slots.indexOf(cta) < slots.indexOf("{placement === 'sticky' ? terms : null}"),
-    'the primary action stays in the sticky footer',
+    scrolling.indexOf('{options.offer ?? null}') < scrolling.indexOf('{cta}') &&
+      scrolling.indexOf('{cta}') < scrolling.indexOf('{terms}'),
+    'with nothing pinned the order is offer, action, terms',
   );
+  assert.ok(
+    pinned.indexOf('{terms}') >= 0 &&
+      pinned.indexOf('{terms}') < pinned.indexOf('{options.offer ?? null}') &&
+      !pinned.includes('{cta}'),
+    'with the action pinned the offer comes last, above it',
+  );
+  // Nothing pinned draws no footer bar, and the page clears the home indicator.
+  const page = codeOnly(componentBody(ONBOARDING_PANEL, 'PaywallPage'));
+  assert.ok(page.includes('{footer === null ? null : ('));
+  assert.ok(page.includes('footer === null && { paddingBottom: insets.bottom + spacing[16] },'));
   // Both paywall routes compose the one panel, which uses the one rule with
-  // its explicit appearance and disclosure.
+  // its explicit appearance, its offer and its closing note.
   const onboarding = codeOnly(componentBody(ONBOARDING_PANEL, 'OnboardingPaywallPanel'));
   assert.ok(onboarding.includes("appearance: 'onboarding',"));
-  assert.ok(onboarding.includes('disclosure: renewalDisclosure(purchase.view),'));
-  assert.ok(onboarding.includes('footer={slots.footer}>'));
+  assert.ok(onboarding.includes('offer: <Offer purchase={purchase} />,'));
+  assert.ok(onboarding.includes('{PAYWALL_INDEPENDENCE_NOTE}'));
+  assert.ok(onboarding.includes('footer={slots.footer}'));
   assert.ok(onboarding.indexOf('{children}') < onboarding.indexOf('{slots.inlineTerms}'));
   // The split (2026-09-28): Ready draws no terms, disclosure or legal links.
   for (const gone of ['PurchaseTerms', 'PAYWALL_DISCLOSURE', 'usePurchaseFooterSlots']) {
@@ -1820,13 +1842,13 @@ test('the deck is one adjustable element: the active card’s whole content, nex
   assert.ok(deck.includes('if (target !== active) settle(target);'));
 });
 
-test('the standalone paywall composes the grocery-watch panel: no second composition, no mascot, no check rows', () => {
-  // 2026-10-04: an expired subscriber meets the same approved design as a
-  // first-time one. The route hands the panel its own wiring (Back is
-  // `reviewPreview`), and nothing else differs.
+test('the standalone paywall composes the one paywall panel: no second composition, no check rows', () => {
+  // 2026-10-04 (and the Fridge Note since 2026-11-06): an expired subscriber
+  // meets the same approved design as a first-time one. The route hands the
+  // panel its own wiring (Back is `reviewPreview`), and nothing else differs.
   assert.ok(
-    codeOnly(ROUTES.paywall).includes(
-      '<OnboardingPaywallPanel purchase={purchase} onBack={access.reviewPreview}>',
+    /<OnboardingPaywallPanel\s+purchase={purchase}\s+onBack={access.reviewPreview}\s+benefitLift={STANDALONE_BENEFIT_LIFT}>/.test(
+      codeOnly(ROUTES.paywall),
     ),
   );
   assert.ok(codeOnly(ROUTES.paywall).includes('usePurchaseFlow()'));
@@ -1858,15 +1880,15 @@ test('the standalone paywall composes the grocery-watch panel: no second composi
   }
 });
 
-test('the onboarding paywall: the grocery-watch composition over the shared purchase pieces', () => {
+test('the paywall: the Fridge Note composition over the shared purchase pieces', () => {
   const page = codeOnly(componentBody(ONBOARDING_PANEL, 'PaywallPage'));
-  // The frame's own top bar (Back, no progress), the headline above the
-  // hero, then the content column; the footer pinned over the bottom inset.
+  // The frame's own top bar (Back, no progress), the headline, the note,
+  // then the content column; the footer pinned over the bottom inset.
   const order = [
     '<OnboardingTopBar',
     '{ONBOARDING_PAYWALL_HEADLINE}',
-    '<Image source={HERO} resizeMode="contain" style={styles.fill} />',
-    '<View style={styles.column}>{children}</View>',
+    '<FridgeNote width={width} />',
+    '{children}',
     '{footer}',
   ].map((marker) => {
     const at = page.indexOf(marker);
@@ -1882,85 +1904,108 @@ test('the onboarding paywall: the grocery-watch composition over the shared purc
     page.includes('back={{ label: PAYWALL_BACK_LABEL, hint: PAYWALL_BACK_HINT, onPress: onBack }}'),
   );
   assert.ok(page.includes('progress={null}'));
-  // The headline is native text, a header, at the screen's measured size and
-  // measure; it is drawn above the hero (zIndex), and the hero is drawn up
-  // under it by the measured overlap.
+  // Revision 2: the compact top bar, so the heading sits closer to Back.
+  assert.ok(page.includes('compact'));
+  // The headline is native text, a header, at the screen's measured size.
   assert.ok(page.includes('accessibilityRole="header"'));
-  assert.ok(page.includes('headlineType(fontScale),'));
-  assert.ok(page.includes('maxWidth: headlineMeasure(fontScale),'));
-  assert.ok(page.includes('paddingTop: headlineTopClearance(fontScale),'));
-  assert.ok(/headline: \{[^}]*zIndex: 1/s.test(ONBOARDING_PANEL));
-  assert.ok(page.includes('style={[styles.hero, { marginTop: -heroOverlap(width, fontScale) }]}>'));
-  // The hero: decorative, untouchable, whole, static.
-  assert.ok(page.includes('{...DECORATIVE}'));
-  assert.ok(page.includes('pointerEvents="none"'));
+  assert.ok(page.includes('style={headlineType(fontScale)}'));
+  // The note: the stationery drawn as three clipped instances of the ONE
+  // image, decorative and untouchable, sized from the letter's own layout —
+  // the letter is never sized to the art.
+  const note = codeOnly(componentBody(ONBOARDING_PANEL, 'FridgeNote'));
+  assert.ok(note.includes('const { height, slices } = backdropSlices(art, letterHeight);'));
+  assert.ok(note.includes('{slices.map((slice, index) => ('));
+  assert.ok(note.includes('source={BACKDROP}'));
+  assert.ok(note.includes('{...DECORATIVE}'));
+  assert.ok(note.includes('pointerEvents="none"'));
+  assert.ok(note.includes('setLetterHeight((prior) => (prior === next ? prior : next));'));
   assert.ok(
-    ONBOARDING_PANEL.includes(
-      "require('@/assets/brand/production/lotly-paywall-grocery-watch-scene.png')",
+    ONBOARDING_PANEL.includes("require('@/assets/paywall/fridge-note/fridge-note-backdrop.png')"),
+  );
+  // The letter is native, horizontal text; the signature is an image spoken
+  // as Willis, and the only sign-off.
+  for (const marker of [
+    '{LETTER_OPENING}',
+    '<EmphasisParagraph />',
+    '{LETTER_CLOSING}',
+    'accessibilityLabel={SIGNATURE_ACCESSIBILITY_LABEL}',
+  ]) {
+    assert.ok(note.includes(marker), `the note lacks ${marker}`);
+  }
+  assert.ok(!codeOnly(ONBOARDING_PANEL).includes('rotate'), 'the letter is rotated');
+  // The emphasis: the lime stroke placed from the paragraph's own text
+  // layout, or the native lime underline when the phrase wraps.
+  const opening = codeOnly(componentBody(ONBOARDING_PANEL, 'EmphasisParagraph'));
+  assert.ok(opening.includes('onTextLayout={(event) => {'));
+  assert.ok(
+    opening.includes('lastLine.text.trimEnd().endsWith(LETTER_EMPHASIS_PARAGRAPH.emphasis)'),
+  );
+  // No greeting and no thank-you paragraph (revision 2).
+  assert.ok(!ONBOARDING_PANEL.includes('LETTER_GREETING'));
+  // The phrase is a bare native span, so it inherits the paragraph's face,
+  // size, line height and Dynamic Type; the app's Text would re-apply its
+  // 16pt body variant and set it larger (2026-11-08).
+  assert.ok(opening.includes('<NativeText style={whole ? null : styles.emphasis}>'));
+  assert.ok(!/<Text style=\{whole/.test(opening));
+  assert.ok(
+    /emphasis: \{\s*textDecorationLine: 'underline',\s*textDecorationStyle: 'solid',\s*textDecorationColor: color\['onboarding\/letter-emphasis'\],\s*\}/.test(
+      ONBOARDING_PANEL,
+    ),
+    'the emphasis carries only its underline',
+  );
+  assert.ok(opening.includes("stroke={color['onboarding/letter-emphasis']}"));
+  assert.ok(
+    /emphasis: \{[^}]*textDecorationColor: color\['onboarding\/letter-emphasis'\]/s.test(
+      ONBOARDING_PANEL,
     ),
   );
-  assert.ok(/hero: \{[^}]*aspectRatio: HERO_PX\.width \/ HERO_PX\.height/s.test(ONBOARDING_PANEL));
   for (const motion of ['Animated', 'useReduceMotion', 'Easing', 'withTiming', 'setInterval']) {
-    assert.ok(
-      !codeOnly(ONBOARDING_PANEL).includes(motion),
-      `the onboarding paywall animates: ${motion}`,
-    );
+    assert.ok(!codeOnly(ONBOARDING_PANEL).includes(motion), `the paywall animates: ${motion}`);
   }
-  // The purchase panel's order: benefits, plans, the route's controls, the
-  // independence note, and (from the accessibility sizes) the terms.
+  // The purchase panel's order: benefits, the route's additions, and (from
+  // the accessibility sizes) the offer and terms.
   const panel = codeOnly(componentBody(ONBOARDING_PANEL, 'OnboardingPaywallPanel'));
-  const parts = [
-    '<BenefitRows />',
-    '<OnboardingPlans purchase={purchase} />',
-    '{children}',
-    '{INDEPENDENCE_NOTE}',
-    '{slots.inlineTerms}',
-  ].map((marker) => {
+  const parts = ['<BenefitRows />', '{children}', '{slots.inlineTerms}'].map((marker) => {
     const at = panel.indexOf(marker);
-    assert.ok(at > 0, `the onboarding paywall lacks ${marker}`);
+    assert.ok(at > 0, `the paywall lacks ${marker}`);
     return at;
   });
   assert.deepEqual(
     parts,
     [...parts].sort((a, b) => a - b),
-    'the onboarding paywall is out of order',
+    'the paywall is out of order',
   );
   // Each benefit is ONE spoken element; its icon is drawing on the plate token.
   const benefits = codeOnly(componentBody(ONBOARDING_PANEL, 'BenefitRows'));
   assert.ok(benefits.includes('accessibilityLabel={`${benefit.title}. ${benefit.body}`}'));
-  assert.ok(benefits.includes('<Icon name={benefit.icon} size={20} color="icon/primary" />'));
-  assert.ok(ONBOARDING_PANEL.includes("backgroundColor: color['onboarding/benefit-plate'],"));
-  // The plans: a real radio group of cards whose radios speak the full
-  // charge; the badge is drawing; the selection is the ring, the dot and
-  // the 2px navy border as well as the announced state.
-  const plans = codeOnly(componentBody(ONBOARDING_PANEL, 'OnboardingPlans'));
-  assert.ok(plans.includes('<ChoiceGroup label={PLAN_GROUP_LABEL} style={styles.plans}>'));
-  assert.ok(plans.includes('onPress={() => purchase.onSelectPlan(plan.period)}'));
-  assert.ok(plans.includes('{paywallPresentation(purchase.view).offeringMessage}'));
-  const card = codeOnly(componentBody(ONBOARDING_PANEL, 'PlanCard'));
-  assert.ok(card.includes('accessibilityRole="radio"'));
-  assert.ok(card.includes('accessibilityLabel={plan.accessibilityLabel}'));
   assert.ok(
-    card.includes('accessibilityState={{ checked: plan.selected, selected: plan.selected }}'),
+    benefits.includes('<Icon name={benefit.icon} points={BENEFIT_GLYPH} color="icon/primary" />'),
   );
-  assert.ok(card.includes('<View style={styles.badge} {...DECORATIVE}>'));
-  assert.ok(/planSelected: \{[^}]*borderWidth: 2/s.test(ONBOARDING_PANEL));
-  // No purchase state or handler of its own, no mascot, no close or skip.
+  assert.ok(ONBOARDING_PANEL.includes("backgroundColor: color['onboarding/benefit-plate'],"));
+  // The offer: one spoken element with the store's price on the lime
+  // capsule, or the one line that says why there is no price.
+  const offer = codeOnly(componentBody(ONBOARDING_PANEL, 'Offer'));
+  assert.ok(offer.includes('accessibilityLabel={shown.offer.accessibilityLabel}'));
+  assert.ok(offer.includes('{shown.offer.price}'));
+  assert.ok(offer.includes('{shown.offeringMessage}'));
+  assert.ok(/price: \{[^}]*backgroundColor: color\['background\/accent'\]/s.test(ONBOARDING_PANEL));
+  // No purchase state or handler of its own, no plan choice, no close or skip.
   for (const gone of [
     'useState<PaywallView',
     'provider.',
     'onSubscribe',
-    'lotly-mascot-',
-    'WatchfulMascot',
+    'onSelectPlan',
+    'ChoiceGroup',
+    'accessibilityRole="radio"',
     'BEST_VALUE',
-    'PAYWALL_BODY',
+    'lotly-paywall-grocery-watch-scene',
     'onRequestClose',
     'Maybe later',
     'progress={stepProgress',
   ]) {
-    assert.ok(!codeOnly(ONBOARDING_PANEL).includes(gone), `the onboarding paywall draws ${gone}`);
+    assert.ok(!codeOnly(ONBOARDING_PANEL).includes(gone), `the paywall draws ${gone}`);
   }
-  // The entitled panel: no plans, no store, the active subscription, and a Continue.
+  // The entitled panel: no offer, no store, the active access, and a Continue.
   const entitled = codeOnly(componentBody(ONBOARDING_PANEL, 'OnboardingEntitledPanel'));
   assert.ok(entitled.includes('{EDUCATION_SUCCESS}'));
   assert.ok(
@@ -1968,7 +2013,7 @@ test('the onboarding paywall: the grocery-watch composition over the shared purc
       'footer={<OnboardingActionPill label={CONTINUE_CTA} onPress={onContinue} />}>',
     ),
   );
-  assert.ok(!entitled.includes('OnboardingPlans') && !entitled.includes('slots'));
+  assert.ok(!entitled.includes('Offer') && !entitled.includes('slots'));
   // The 51pt pill is the shared Button's primary treatment, busy word included.
   const pill = codeOnly(componentBody(PANEL, 'OnboardingActionPill'));
   assert.ok(pill.includes('accessibilityState={{ disabled: inert, busy }}'));

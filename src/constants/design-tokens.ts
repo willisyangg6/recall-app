@@ -81,6 +81,11 @@ export const color = {
   // mark is a recorded decision (DESIGN.md, "Onboarding and paywall"). Never
   // a surface for text, a relevance signal or a severity.
   'onboarding/benefit-plate': '#E1F0FE',
+  // The paywall letter's one emphasis (2026-11-06): the lime underline under
+  // `people you love.` in the founder's note, measured from the approved
+  // Fridge Note target. Its own name so the one mark is a recorded decision;
+  // never a fill for text, a relevance signal or a severity.
+  'onboarding/letter-emphasis': '#D3E52B',
 } as const satisfies Record<string, HexColor>;
 
 export type ColorToken = keyof typeof color;

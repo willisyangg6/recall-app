@@ -8,42 +8,37 @@
  * owns):
  *
  *   PurchaseCta     the last outcome's notice and the one primary action
- *                   that names the selected commitment with the store price
- *   PurchaseTerms   the renewal disclosure and the four footer actions
+ *   PurchaseTerms   the four footer actions
  *                   (Restore Purchases, Terms, Privacy, Support) as text
  *                   buttons at the 44pt target, always present
  *   usePurchaseFooterSlots
  *                   the paywall's placement rule: the CTA is sticky, and the
- *                   terms join it there at ordinary text sizes or move
- *                   inline from the accessibility sizes
+ *                   offer and terms join it there at ordinary text sizes or
+ *                   move inline from the accessibility sizes
  *   PaywallNotice   an outcome on the surface its tone asks for; also the
  *                   notification education's
  *
  * One composition draws them, `OnboardingPaywallPanel`
- * (onboarding-paywall-panel.tsx): the founder-approved grocery-watch paywall,
- * which since 2026-10-04 is BOTH paywall routes — `/onboarding/paywall`
- * from Ready's `See my plan`, and the standalone `/paywall` a lapsed
- * subscriber meets. The routes differ only in the wiring they hand it
- * (Back, and what the gate does after a success); the panel, the plan
- * cards, the CTA in its `onboarding` appearance and the terms are one
- * implementation. The earlier standalone composition (`PaywallPanel`: the
- * frame, M04 beside the heading, check-row benefits, the corner `BEST
- * VALUE` tab) was retired that day so an expired subscriber meets the same
- * approved design as a first-time one.
+ * (onboarding-paywall-panel.tsx): the founder-selected Fridge Note paywall
+ * (2026-11-06), which is BOTH paywall routes — `/onboarding/paywall` from
+ * Ready's `See my plan`, and the standalone `/paywall` a lapsed subscriber
+ * meets. The routes differ only in the wiring they hand it (Back, and what
+ * the gate does after a success); the panel, the offer, the CTA in its
+ * `onboarding` appearance and the terms are one implementation.
  *
  * None holds purchase state, and none duplicates a handler.
  *
  * ## What is not here
  *
- * No close, skip, dismiss or free route. No trial, lifetime, countdown,
- * crossed-out price or scarcity. A price is the store's `formatted` string;
- * nothing here writes one.
+ * No close, skip, dismiss or free route. No trial, countdown, crossed-out
+ * price or scarcity. The one price is the store's `formatted` string for the
+ * lifetime product; nothing here writes one.
  *
  * ## States
  *
  * All from `paywallPresentation` (lib/paywall-screen.ts): the offering
- * loading, unavailable or errored (one line where the plans would be, the
- * primary action inert); a plan selected; a purchase or restore in progress
+ * loading, unavailable or errored (one line where the price would be, the
+ * primary action inert); a purchase or restore in progress
  * (the action busy with its progress word, the other inert); and the
  * notices — cancelled and restore-found-nothing on the calm information
  * surface, recoverable and unavailable errors on the bordered alert
@@ -59,10 +54,8 @@ import { Callout } from '@/components/ui/callout';
 import { Surface } from '@/components/ui/surface';
 import { Text } from '@/components/ui/text';
 import { color, hitSlopToMinimum, radius, spacing, typography } from '@/constants/design-tokens';
-import type { PlanPeriod } from '@/lib/entitlement';
 import { CTA_MIN_HEIGHT, PAYWALL_TYPE } from '@/lib/onboarding-paywall-presentation';
 import {
-  PAYWALL_DISCLOSURE,
   paywallFooterPlacement,
   paywallPresentation,
   type PaywallFooterActionKey,
@@ -80,8 +73,7 @@ const FOOTER_HIT_SLOP = hitSlopToMinimum(typography.caption.lineHeight);
  */
 export interface PurchaseProps {
   view: PaywallView;
-  onSelectPlan: (period: PlanPeriod) => void;
-  onSubscribe: () => void;
+  onPurchase: () => void;
   /** Restore, Terms, Privacy, Support — the flow decides what each does. */
   onFooterAction: (key: PaywallFooterActionKey) => void;
   /** A footer destination with no configured URL was pressed. */
@@ -89,17 +81,16 @@ export interface PurchaseProps {
 }
 
 /**
- * How the shared purchase pieces are drawn. `onboarding` is the grocery-watch
- * paywall's 51pt pill, which both routes use; `standard` keeps the shared
+ * How the shared purchase pieces are drawn. `onboarding` is the paywall's
+ * 51pt pill, which both routes use; `standard` keeps the shared
  * Button for any future surface. The state, the words and the handlers are
  * the same in both.
  */
 export type PurchaseAppearance = 'standard' | 'onboarding';
 
 /**
- * The last outcome's notice and the one primary action that names the
- * selected commitment with the store's price — the only thing the screen
- * ever pins.
+ * The last outcome's notice and the one primary action — the only things
+ * the screen pins at every text size.
  */
 export function PurchaseCta({
   purchase,
@@ -114,7 +105,7 @@ export function PurchaseCta({
     disabled: !shown.cta.enabled,
     busy: shown.cta.busy,
     busyLabel: shown.cta.busyLabel,
-    onPress: purchase.onSubscribe,
+    onPress: purchase.onPurchase,
   };
   return (
     <>
@@ -132,8 +123,8 @@ export function PurchaseCta({
  * The onboarding's 51pt pill: the shared Button's primary treatment — its
  * fill and disabled fill, label colours, face, pressed opacity, role,
  * disabled and busy state, and its busy word — at the States and Stores
- * height with Ready's 16pt purchase-path label. The shared Button itself has
- * no size override and is unchanged. The paywall's purchase action and the
+ * height with the paywall's 17pt label. The shared Button itself has no
+ * size override and is unchanged. The paywall's purchase action and the
  * entitled `Continue`.
  */
 export function OnboardingActionPill({
@@ -178,25 +169,14 @@ export function OnboardingActionPill({
 }
 
 /**
- * The renewal disclosure, the four footer actions and the
- * unconfigured-destination notice: one block, always present before a
- * purchase, wherever the screen puts it.
+ * The four footer actions and the unconfigured-destination notice: one
+ * block, always present before a purchase, wherever the screen puts it.
  */
-export function PurchaseTerms({
-  purchase,
-  disclosure = PAYWALL_DISCLOSURE,
-}: {
-  purchase: PurchaseProps;
-  /** The renewal sentence; the period-neutral one by default. */
-  disclosure?: string;
-}) {
+export function PurchaseTerms({ purchase }: { purchase: PurchaseProps }) {
   const shown = paywallPresentation(purchase.view);
   const { onFooterAction, destinationNotice } = purchase;
   return (
     <View style={styles.terms}>
-      <Text variant="caption" color="text/secondary" style={styles.disclosure}>
-        {disclosure}
-      </Text>
       <View style={styles.footerActions} accessibilityRole="toolbar">
         {shown.footer.map((action) => {
           const restore = action.key === 'restore';
@@ -226,7 +206,7 @@ export function PurchaseTerms({
         <Text
           variant="caption"
           color="text/secondary"
-          style={styles.disclosure}
+          style={styles.centered}
           accessibilityLiveRegion="polite">
           {destinationNotice}
         </Text>
@@ -236,35 +216,68 @@ export function PurchaseTerms({
 }
 
 /**
- * The paywall's footer placement. The sticky footer always holds the CTA;
- * the terms join it at ordinary text sizes, and from the accessibility sizes
- * they are handed back as `inlineTerms` for the end of the scrolling
- * content, directly above the primary action (`paywallFooterPlacement`),
- * because pinned they would take the whole screen and leave the plans
- * unreachable. The reader's text scale is read through
+ * The paywall's footer placement. The sticky footer always holds the notice
+ * and the CTA; the offer joins it above them and the terms (with the
+ * screen's closing note) below them at ordinary text sizes. From the
+ * accessibility sizes, or wherever the sticky footer would take too much
+ * of a short screen (`paywallFooterPlacement`), the offer, terms and note
+ * are handed back as `inlineTerms` for the end of the scrolling content —
+ * the terms, then the offer directly above the pinned action — so the letter
+ * stays reachable; where even the action would crowd the screen, it follows
+ * the offer into the page (offer, action, terms) and `footer` is null. The
+ * reader's text scale and the window's height are read through
  * `useWindowDimensions`, so a change to the setting moves them rather than
- * the next cold launch. The block is drawn in exactly one of the two slots.
- * (The Ready step does not use the slots: its terms are always scroll
- * content and its CTA pins itself by scroll position.)
+ * the next cold launch. Each block is drawn in
+ * exactly one of the two slots.
  */
 export function usePurchaseFooterSlots(
   purchase: PurchaseProps,
-  options: { appearance?: PurchaseAppearance; disclosure?: string } = {},
+  options: {
+    appearance?: PurchaseAppearance;
+    /** Drawn above the notice and the action: what is being bought, at what price. */
+    offer?: ReactNode;
+    /** Drawn after the terms. */
+    note?: ReactNode;
+  } = {},
 ): {
+  /** Null when nothing is pinned. */
   footer: ReactNode;
   inlineTerms: ReactNode;
 } {
-  const { fontScale } = useWindowDimensions();
-  const placement = paywallFooterPlacement(fontScale);
-  const terms = <PurchaseTerms purchase={purchase} disclosure={options.disclosure} />;
+  const { fontScale, height } = useWindowDimensions();
+  const placement = paywallFooterPlacement(fontScale, height);
+  const sticky = placement === 'sticky';
+  const cta = <PurchaseCta purchase={purchase} appearance={options.appearance} />;
+  const terms = (
+    <>
+      <PurchaseTerms purchase={purchase} />
+      {options.note ?? null}
+    </>
+  );
   return {
-    footer: (
+    footer:
+      placement === 'scrolling' ? null : (
+        <>
+          {sticky ? (options.offer ?? null) : null}
+          {cta}
+          {sticky ? terms : null}
+        </>
+      ),
+    // The offer always sits next to the action (2026-11-08): with the action
+    // pinned, the terms come first and the offer last, directly above it;
+    // with nothing pinned, the offer, then the action, then the terms.
+    inlineTerms: sticky ? null : placement === 'scrolling' ? (
       <>
-        <PurchaseCta purchase={purchase} appearance={options.appearance} />
-        {placement === 'sticky' ? terms : null}
+        {options.offer ?? null}
+        {cta}
+        {terms}
+      </>
+    ) : (
+      <>
+        {terms}
+        {options.offer ?? null}
       </>
     ),
-    inlineTerms: placement === 'inline' ? terms : null,
   };
 }
 
@@ -314,7 +327,7 @@ export function PaywallNotice({
 }
 
 const styles = StyleSheet.create({
-  disclosure: {
+  centered: {
     textAlign: 'center',
   },
   // The terms keep the footer's own rhythm wherever they sit.

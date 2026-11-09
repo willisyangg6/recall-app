@@ -114,8 +114,8 @@ export function revenueCatEntitlementSource(
       if (!premium) return { active: false, expiresAt: null };
       const expiresMs = premium.expires_at;
       if (expiresMs === null || expiresMs === undefined) {
-        // A non-expiring grant: active, with no known expiry, which the gate
-        // refuses (as the app does).
+        // A non-expiring grant (the lifetime purchase): active with no expiry.
+        // The gate has no clock for it and still requires a fresh check.
         return { active: true, expiresAt: null };
       }
       if (typeof expiresMs !== 'number' || !Number.isFinite(expiresMs)) {

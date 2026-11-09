@@ -1,11 +1,13 @@
 /**
- * The onboarding paywall's one production image (the grocery-watch hero,
- * 2026-10-01), pinned as a file: the founder-approved bytes are identical to
- * the asset report, the layout rule measures the size the file carries, and
- * only the onboarding paywall draws it. The approved target, its manifest,
- * the exact and derived source crops, the operation map, the report, the
- * comparison sheet and the source kit are review material that no app code
- * may import.
+ * The grocery-watch paywall's production image (2026-10-01), pinned as a
+ * file: the founder-approved bytes are identical to the asset report. Since
+ * 2026-11-06 the Fridge Note paywall replaced that composition, and the hero
+ * stays in the approved set referenced by NO app code (the M04 precedent),
+ * so it never ships in the bundle. The Fridge Note's own artwork is pinned
+ * in paywall-fridge-note-assets.test.ts. The grocery-watch target, its
+ * manifest, the source crops, the operation map, the report, the comparison
+ * sheet and the source kits are review material that no app code may
+ * import.
  */
 
 import assert from 'node:assert/strict';
@@ -14,7 +16,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { test } from 'node:test';
 
-import { HERO_PX, REFERENCE_WIDTH } from '@/lib/onboarding-paywall-presentation';
+/** The approved target's width, in pixels: the hero is a crop of it at 1:1. */
+const REFERENCE_WIDTH = 934;
+/** The hero: target rows 152–771, full width. */
+const HERO_PX = { width: 934, height: 620, top: 152 } as const;
 
 const ROOT = join(__dirname, '..', '..');
 const REPORT =
@@ -83,7 +88,7 @@ test('the asset report describes the installed bytes, the approved target and th
   ]);
 });
 
-test('only the onboarding paywall draws the hero, and no app code imports reference or source material', () => {
+test('no app code draws the retired hero, and none imports reference or source material', () => {
   const sources: [string, string][] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -99,7 +104,7 @@ test('only the onboarding paywall draws the hero, and no app code imports refere
     sources
       .filter(([, source]) => source.includes('lotly-paywall-grocery-watch-scene.png'))
       .map(([path]) => path),
-    ['src/components/paywall/onboarding-paywall-panel.tsx'],
+    [],
   );
   for (const [path, source] of sources) {
     for (const forbidden of [
@@ -112,6 +117,7 @@ test('only the onboarding paywall draws the hero, and no app code imports refere
       'lotly-paywall-grocery-watch-asset-report',
       'lotly-paywall-grocery-watch-asset-comparison',
       'lotly-paywall-source-kit',
+      'lotly-lifetime-paywall-source-kit',
     ]) {
       assert.ok(!source.includes(forbidden), `${path} references ${forbidden}`);
     }

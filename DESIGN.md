@@ -32,6 +32,7 @@ colors:
 
   onboarding/progress: '#E2EE57'
   onboarding/benefit-plate: '#E1F0FE'
+  onboarding/letter-emphasis: '#D3E52B'
 
   # Risk labels: the approved label kit (2026-10-09). Each border is its own
   # fill, so the label reads flat.
@@ -489,6 +490,12 @@ progress, step 3 of 5`) is the channel that does not depend on colour —
   name, like `onboarding/progress`, so the one mark is a recorded decision.
   It holds only an `icon/primary` glyph; it is never a surface for text, a
   relevance signal or a severity.
+- **Paywall letter emphasis (`onboarding/letter-emphasis`, `#D3E52B`)** is
+  the lime underline beneath `people you love.` in the founder's note on the
+  Fridge Note paywall (2026-11-06), measured from the approved target. Its
+  own name so the one mark is a recorded decision. It is only ever an
+  underline under the letter's words: never a fill for text, a relevance
+  signal or a severity.
 
 Use semantic colors rather than reaching directly for palette primitives.
 Components should conceptually resolve as:

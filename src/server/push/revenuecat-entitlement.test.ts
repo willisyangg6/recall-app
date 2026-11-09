@@ -70,7 +70,7 @@ test('premium listed: active until its expiry; other entitlements do not count',
   assert.deepEqual(await other.check(PURCHASE_ID), { active: false, expiresAt: null });
 });
 
-test('a non-expiring grant reads as active with no expiry (the gate refuses it)', async () => {
+test('a non-expiring grant (the lifetime purchase) reads as active with no expiry', async () => {
   const { source: rc } = source(() =>
     json({ items: [{ entitlement_id: PREMIUM, expires_at: null }] }),
   );

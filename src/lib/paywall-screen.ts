@@ -1,86 +1,93 @@
 /**
- * The hard paywall's copy and its state → presentation mapping (P2B7X.1),
- * kept out of the screen so every state is one tested contract.
+ * The hard paywall's copy and its state → presentation mapping (P2B7X.1;
+ * one lifetime purchase since 2026-11-06), kept out of the screen so every
+ * state is one tested contract.
  *
  * ## What the screen shows
  *
- * The headline, body and three benefits; two plans (Annual preselected, with
- * the store-derived monthly equivalent, `BEST VALUE`, and the saving against
- * twelve monthly payments computed from the store's prices); one primary
- * action that names the selected commitment with the store's own localized
- * price; the renewal disclosure; and four footer actions that are ALWAYS
- * available before a purchase — Restore Purchases, Terms, Privacy, Support.
+ * The founder's note and two benefits (lib/onboarding-paywall-presentation.ts);
+ * the one offer — `Lifetime access`, `Pay once. No subscription.` and the
+ * store's own localized price on the lime capsule; one primary action, `Get
+ * lifetime access`; and four footer actions
+ * that are ALWAYS available before a purchase — Restore Purchases, Terms,
+ * Privacy, Support.
  *
  * ## What it never shows
  *
- * No close, skip, dismiss or "continue free" route; no trial, lifetime plan,
- * countdown, crossed-out price or scarcity. There is one way past the
- * paywall — a verified purchase or restore — and one way back, to the
- * Preview. `consumer-copy` and `paywall-screen.test.ts` pin the words.
+ * No close, skip, dismiss or "continue free" route; no trial, countdown,
+ * crossed-out price or scarcity. There is one way past the paywall — a
+ * verified purchase or restore — and one way back, to the Preview.
+ * `paywall-screen.test.ts` pins the words.
  *
  * ## Prices
  *
- * Every price a shopper reads is the store's own `formatted` string, passed
- * through verbatim. The only derived figures are the monthly equivalent of
- * the annual price and the percentage saving, both computed from the store's
- * numeric amounts (`purchase-provider.ts`) and formatted in the store's
- * currency. No product module holds a literal price.
+ * The one price a shopper reads is the store's own `formatted` string for
+ * the lifetime product, passed through verbatim. Nothing derives a figure
+ * from it, and no product module holds a literal price. While the store has
+ * not answered, or cannot, there is no price and the action is inert: no
+ * placeholder price is ever purchasable.
  *
  * A leaf: copy, types and pure functions.
  */
 
-import type { PlanPeriod } from './entitlement';
-import {
-  annualSavingsPercent,
-  monthlyEquivalentAmount,
-  type Offering,
-  type OfferingsResult,
-  type PlanPackage,
-} from './purchases/purchase-provider';
+import type { OfferingsResult } from './purchases/purchase-provider';
 
-// ── Copy (founder-approved, P2B7X.1) ────────────────────────────────────────
+// ── Copy (founder-approved, 2026-11-06: the Fridge Note kit's copy.json) ────
 
-// The headline, body and check-row benefits of the earlier standalone
-// composition were retired on 2026-10-04: both paywall routes now draw the
-// grocery-watch panel, whose copy lives in onboarding-paywall-presentation.ts.
+export const OFFER_TITLE = 'Lifetime access';
+export const OFFER_SUBTITLE = 'Pay once. No subscription.';
+export const PURCHASE_CTA_LABEL = 'Get lifetime access';
 
-export const PLAN_TITLES: Record<PlanPeriod, string> = {
-  annual: 'Annual',
-  monthly: 'Monthly',
-};
-
-/** The per-period suffix after a store price: `$29.99/year`. */
-export const PERIOD_SUFFIX: Record<PlanPeriod, string> = {
-  annual: '/year',
-  monthly: '/month',
-};
-
-export const BEST_VALUE_LABEL = 'BEST VALUE';
-export const BEST_VALUE_ACCESSIBILITY_LABEL = 'Best value';
-
-/** The spoken name of the plan group. */
-export const PLAN_GROUP_LABEL = 'Choose a plan';
-
-export const SUBSCRIBE_BUSY_LABEL = 'Subscribing…';
+export const PURCHASE_BUSY_LABEL = 'Purchasing…';
 export const RESTORE_BUSY_LABEL = 'Restoring…';
 
-export const PAYWALL_DISCLOSURE = 'Renews automatically. Cancel anytime in Apple Account settings.';
-
 /**
- * Where the disclosure and the four footer actions sit. In the sticky
- * footer at ordinary text sizes; from the accessibility sizes (a text scale
- * of 1.5, the threshold the settings selector row stacks at) they move into
- * the scrolling content directly above the primary action, because a
- * footer holding a four-line disclosure and four wrapped links would
- * otherwise take the whole screen and leave the plans unreachable. The
- * notice and the primary action stay sticky at every size.
+ * Where the offer and the four footer actions sit. In the sticky footer
+ * while it stays a modest share of the screen; otherwise they move into the
+ * scrolling content directly above the primary action, so the letter stays
+ * comfortably readable. Two rules, either of which moves them:
+ *
+ *   - from the accessibility sizes (a text scale of 1.5, the threshold the
+ *     settings selector row stacks at), on any screen;
+ *   - when the sticky footer would take more than `MAX_STICKY_FOOTER_SHARE`
+ *     of the window's height (revision 2, 2026-11-07: on an iPhone SE at
+ *     xxxLarge it took over half the screen). Its height is estimated from
+ *     `STICKY_FOOTER_POINTS` — measured on the iPhone 17 at the default size
+ *     (offer, action, links and closing note, without the bottom inset) —
+ *     scaled by the reader's text size, so the rule is pure and cannot
+ *     oscillate the way a measured layout would.
+ *
+ * The notice and the primary action stay pinned (`inline`) — unless even
+ * they would take more than `MAX_PINNED_ACTION_SHARE` of the window, as at
+ * the largest accessibility sizes, where the three-line 51pt pill took 30%
+ * of an iPhone 17 and 42% of an SE (revision 2). Then nothing is pinned
+ * (`scrolling`): the notice and the action follow the price in the page,
+ * one scroll away, in the same reading order. `PINNED_ACTION_POINTS` is the
+ * pinned action's measured share per unit of text scale (264pt at AX5,
+ * text scale 3.1, without the bottom inset).
+ *
+ * (The `One-time payment. No recurring charges.` disclosure was removed in
+ * revision 2: `Pay once. No subscription.` already says it.)
  */
 export const INLINE_FOOTER_AT_SCALE = 1.5;
+export const STICKY_FOOTER_POINTS = 200;
+export const MAX_STICKY_FOOTER_SHARE = 0.4;
+export const PINNED_ACTION_POINTS = 85;
+export const MAX_PINNED_ACTION_SHARE = 0.25;
 
-export type PaywallFooterPlacement = 'sticky' | 'inline';
+export type PaywallFooterPlacement = 'sticky' | 'inline' | 'scrolling';
 
-export function paywallFooterPlacement(fontScale: number): PaywallFooterPlacement {
-  return fontScale >= INLINE_FOOTER_AT_SCALE ? 'inline' : 'sticky';
+export function paywallFooterPlacement(
+  fontScale: number,
+  windowHeight: number = Number.POSITIVE_INFINITY,
+): PaywallFooterPlacement {
+  if (PINNED_ACTION_POINTS * fontScale > MAX_PINNED_ACTION_SHARE * windowHeight) {
+    return 'scrolling';
+  }
+  if (fontScale >= INLINE_FOOTER_AT_SCALE) return 'inline';
+  return STICKY_FOOTER_POINTS * fontScale > MAX_STICKY_FOOTER_SHARE * windowHeight
+    ? 'inline'
+    : 'sticky';
 }
 
 /** The paywall's one way back. */
@@ -102,15 +109,13 @@ export const PAYWALL_FOOTER_ACTIONS: readonly PaywallFooterAction[] = [
   { key: 'support', label: 'Support' },
 ];
 
-/** While the offering loads. */
-export const OFFERING_LOADING = 'Loading plans…';
-/** The store could not be reached, or no store is configured. */
+/** While the offering loads: where the price would be. */
+export const OFFERING_LOADING = 'Loading the price…';
+/** The store could not be reached, or no lifetime product is configured. */
 export const OFFERING_UNAVAILABLE =
-  'Plans are temporarily unavailable. Check your connection and try again.';
+  'Lifetime access is temporarily unavailable. Check your connection and try again.';
 /** The store answered with a retryable error. */
-export const OFFERING_ERROR = 'Lotly couldn’t load the plans. Check your connection and try again.';
-/** The subscribe action while no package can be bought. */
-export const SUBSCRIBE_UNAVAILABLE_LABEL = 'Subscribe';
+export const OFFERING_ERROR = 'Lotly couldn’t load the price. Check your connection and try again.';
 
 export type PaywallNoticeKind =
   | 'cancelled'
@@ -127,7 +132,7 @@ export type PaywallNoticeTone = 'calm' | 'alert' | 'success';
 export const PAYWALL_NOTICES: Record<PaywallNoticeKind, { text: string; tone: PaywallNoticeTone }> =
   {
     cancelled: {
-      text: 'Purchase cancelled. Nothing was charged. Choose a plan whenever you’re ready.',
+      text: 'Purchase cancelled. Nothing was charged.',
       tone: 'calm',
     },
     purchase_error: {
@@ -147,66 +152,24 @@ export const PAYWALL_NOTICES: Record<PaywallNoticeKind, { text: string; tone: Pa
       tone: 'alert',
     },
     restore_nothing: {
-      text: 'No Lotly subscription was found for this Apple Account.',
+      text: 'No Lotly purchase or subscription was found for this Apple Account.',
       tone: 'calm',
     },
     restore_success: {
-      text: 'Subscription restored.',
+      text: 'Your Lotly access was restored.',
       tone: 'success',
     },
     unconfirmed: {
-      text: 'Lotly couldn’t confirm your subscription. Check your connection and try again.',
+      text: 'Lotly couldn’t confirm your access. Check your connection and try again.',
       tone: 'alert',
     },
   };
 
+/** The paywall's closing line (the kit's copy; the app's longer note says the same elsewhere). */
+export const PAYWALL_INDEPENDENCE_NOTE = 'Independent of the FDA and USDA.';
+
 /** A footer destination that has no configured URL in this build. */
 export const DESTINATION_UNCONFIGURED = 'This link is not available yet.';
-
-// ── Derived price text ──────────────────────────────────────────────────────
-
-/**
- * A derived amount in the store's currency, formatted for the device's
- * locale. Null when the platform cannot format the currency, in which case
- * the equivalent line is simply omitted — never a wrong symbol.
- */
-export function formatDerivedPrice(
-  amount: number,
-  currencyCode: string,
-  locale?: string,
-): string | null {
-  try {
-    return new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode }).format(
-      amount,
-    );
-  } catch {
-    return null;
-  }
-}
-
-/** `$2.50/month` for an annual package, or null when it cannot be derived. */
-export function monthlyEquivalentLine(annual: PlanPackage, locale?: string): string | null {
-  const amount = monthlyEquivalentAmount(annual);
-  if (amount === null) return null;
-  const formatted = formatDerivedPrice(amount, annual.price.currencyCode, locale);
-  return formatted === null ? null : `${formatted}${PERIOD_SUFFIX.monthly}`;
-}
-
-/** `Save 50%`, or null when the store's prices show no saving. */
-export function savingsLine(offering: Offering): string | null {
-  const percent = annualSavingsPercent(offering);
-  return percent === null || percent <= 0 ? null : `Save ${percent}%`;
-}
-
-/** `$29.99/year` — the store's string, the contract's suffix. */
-export function priceLine(pkg: PlanPackage): string {
-  return `${pkg.price.formatted}${PERIOD_SUFFIX[pkg.period]}`;
-}
-
-/** The primary action names the selected commitment: `Subscribe for $29.99/year`. */
-export function subscribeLabel(pkg: PlanPackage): string {
-  return `Subscribe for ${priceLine(pkg)}`;
-}
 
 // ── The view and its presentation ───────────────────────────────────────────
 
@@ -214,30 +177,26 @@ export type PaywallOperation = 'idle' | 'purchasing' | 'restoring';
 
 export interface PaywallView {
   offerings: OfferingsResult | { kind: 'loading' };
-  selectedPlan: PlanPeriod;
   operation: PaywallOperation;
   notice: PaywallNoticeKind | null;
   /** The gate could not confirm the entitlement (lib/entitlement.ts). */
   unconfirmed: boolean;
 }
 
-export interface PlanCardPresentation {
-  period: PlanPeriod;
+/** The one offer, once the store has priced it. */
+export interface OfferPresentation {
   title: string;
-  priceLine: string;
-  /** The monthly equivalent for the annual plan; null for monthly or when underivable. */
-  equivalentLine: string | null;
-  badge: string | null;
-  savings: string | null;
-  selected: boolean;
-  /** Spoken: everything the card shows, in one sentence. */
+  subtitle: string;
+  /** The store's own localized string, verbatim. */
+  price: string;
+  /** Spoken as one element: the offer, its terms and its price. */
   accessibilityLabel: string;
 }
 
 export interface PaywallPresentation {
-  /** The two cards, or null while there is no offering to show. */
-  plans: PlanCardPresentation[] | null;
-  /** The line shown in place of the plans while loading, unavailable or errored. */
+  /** The offer, or null while there is no price to show. */
+  offer: OfferPresentation | null;
+  /** The line shown in place of the price while loading, unavailable or errored. */
   offeringMessage: string | null;
   cta: { label: string; enabled: boolean; busy: boolean; busyLabel: string };
   restore: { label: string; enabled: boolean; busy: boolean; busyLabel: string };
@@ -245,41 +204,9 @@ export interface PaywallPresentation {
   footer: readonly PaywallFooterAction[];
 }
 
-export function planCard(
-  offering: Offering,
-  period: PlanPeriod,
-  selected: boolean,
-  locale?: string,
-): PlanCardPresentation {
-  const pkg = offering[period];
-  const price = priceLine(pkg);
-  const equivalentLine = period === 'annual' ? monthlyEquivalentLine(pkg, locale) : null;
-  const badge = period === 'annual' ? BEST_VALUE_LABEL : null;
-  const savings = period === 'annual' ? savingsLine(offering) : null;
-  const spoken = [
-    `${PLAN_TITLES[period]}, ${price}`,
-    equivalentLine,
-    badge === null ? null : BEST_VALUE_ACCESSIBILITY_LABEL,
-    savings,
-  ]
-    .filter((part): part is string => part !== null)
-    .join('. ');
-  return {
-    period,
-    title: PLAN_TITLES[period],
-    priceLine: price,
-    equivalentLine,
-    badge,
-    savings,
-    selected,
-    accessibilityLabel: `${spoken}.`,
-  };
-}
-
-export function paywallPresentation(view: PaywallView, locale?: string): PaywallPresentation {
+export function paywallPresentation(view: PaywallView): PaywallPresentation {
   const busy = view.operation !== 'idle';
-  const offering = view.offerings.kind === 'ready' ? view.offerings.offering : null;
-  const selected = offering === null ? null : offering[view.selectedPlan];
+  const lifetime = view.offerings.kind === 'ready' ? view.offerings.offering.lifetime : null;
 
   const offeringMessage =
     view.offerings.kind === 'loading'
@@ -296,18 +223,21 @@ export function paywallPresentation(view: PaywallView, locale?: string): Paywall
     view.notice ?? (view.unconfirmed ? 'unconfirmed' : null);
 
   return {
-    plans:
-      offering === null
+    offer:
+      lifetime === null
         ? null
-        : (['annual', 'monthly'] as const).map((period) =>
-            planCard(offering, period, period === view.selectedPlan, locale),
-          ),
+        : {
+            title: OFFER_TITLE,
+            subtitle: OFFER_SUBTITLE,
+            price: lifetime.price.formatted,
+            accessibilityLabel: `${OFFER_TITLE}, ${lifetime.price.formatted}. ${OFFER_SUBTITLE}`,
+          },
     offeringMessage,
     cta: {
-      label: selected === null ? SUBSCRIBE_UNAVAILABLE_LABEL : subscribeLabel(selected),
-      enabled: selected !== null && !busy,
+      label: PURCHASE_CTA_LABEL,
+      enabled: lifetime !== null && !busy,
       busy: view.operation === 'purchasing',
-      busyLabel: SUBSCRIBE_BUSY_LABEL,
+      busyLabel: PURCHASE_BUSY_LABEL,
     },
     restore: {
       label: PAYWALL_FOOTER_ACTIONS[0].label,
@@ -320,14 +250,10 @@ export function paywallPresentation(view: PaywallView, locale?: string): Paywall
   };
 }
 
-/** The opening view: offering loading, Annual preselected, nothing in flight. */
-export function initialPaywallView(
-  selectedPlan: PlanPeriod = 'annual',
-  unconfirmed = false,
-): PaywallView {
+/** The opening view: offering loading, nothing in flight. */
+export function initialPaywallView(unconfirmed = false): PaywallView {
   return {
     offerings: { kind: 'loading' },
-    selectedPlan,
     operation: 'idle',
     notice: null,
     unconfirmed,

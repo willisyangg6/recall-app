@@ -33,7 +33,13 @@
  * gate.
  */
 
-export type PlanPeriod = 'annual' | 'monthly';
+/**
+ * What grants access. `lifetime` (2026-11-06) is the one-time, non-consumable
+ * purchase the paywall now sells; `annual` and `monthly` are the
+ * subscriptions earlier builds sold, still honoured for as long as the store
+ * reports them active (including their offer codes).
+ */
+export type PlanPeriod = 'annual' | 'monthly' | 'lifetime';
 
 /** One verified entitlement, as the store reported it. */
 export interface ActiveEntitlement {
@@ -42,7 +48,11 @@ export interface ActiveEntitlement {
   period: PlanPeriod;
   /** ISO instant of the verification that produced this record. */
   verifiedAt: string;
-  /** ISO instant the store reported the current period ends, when known. */
+  /**
+   * ISO instant the store reported the current period ends. Null for a
+   * lifetime purchase, which never expires: only the store's verified
+   * `inactive` (a refund or revocation) ends it.
+   */
   expiresAt: string | null;
 }
 

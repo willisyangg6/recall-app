@@ -24,7 +24,8 @@ function sanitize(raw: unknown): ActiveEntitlement | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const value = raw as Record<string, unknown>;
   if (typeof value.productId !== 'string') return null;
-  if (value.period !== 'annual' && value.period !== 'monthly') return null;
+  if (value.period !== 'annual' && value.period !== 'monthly' && value.period !== 'lifetime')
+    return null;
   if (typeof value.verifiedAt !== 'string') return null;
   if (value.expiresAt !== null && typeof value.expiresAt !== 'string') return null;
   return {

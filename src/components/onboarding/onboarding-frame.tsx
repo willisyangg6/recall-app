@@ -148,19 +148,23 @@ export function OnboardingFrame({
  * The frame's top: the back control's bar under the status bar, then the
  * progress bar's own row on a counted step. Exported for the States step,
  * which draws its own page (its scene bleeds to both edges) but keeps this
- * chrome exactly as every other step has it.
+ * chrome exactly as every other step has it. `compact` (the paywall,
+ * 2026-11-07) drops only the 8pt gap under the safe area: Back keeps its
+ * 44pt target and stays below the status bar.
  */
 export function OnboardingTopBar({
   back,
   progress,
+  compact = false,
 }: {
   back: { label: string; hint: string; onPress: () => void } | null;
   progress: StepProgress | null;
+  compact?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   return (
     <>
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing[8] }]}>
+      <View style={[styles.topBar, { paddingTop: insets.top + (compact ? 0 : spacing[8]) }]}>
         <View style={styles.backSlot}>
           {back ? (
             <Pressable

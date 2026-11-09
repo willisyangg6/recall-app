@@ -1,7 +1,8 @@
 /**
- * The paywall's copy and presentation (P2B7X.1): the words the founder
- * fixed, the store-price rendering, the savings and monthly equivalent, the
- * state matrix, and the absence of every route the brief forbids.
+ * The paywall's copy and presentation (P2B7X.1; one lifetime purchase since
+ * 2026-11-06): the words the founder fixed, the store's own price passed
+ * through verbatim, the state matrix, and the absence of every route the
+ * brief forbids.
  */
 
 import assert from 'node:assert/strict';
@@ -10,22 +11,19 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import {
-  BEST_VALUE_LABEL,
   DESTINATION_UNCONFIGURED,
-  formatDerivedPrice,
   initialPaywallView,
-  monthlyEquivalentLine,
+  OFFER_SUBTITLE,
+  OFFER_TITLE,
+  OFFERING_ERROR,
   OFFERING_LOADING,
   OFFERING_UNAVAILABLE,
-  PAYWALL_DISCLOSURE,
   PAYWALL_FOOTER_ACTIONS,
+  PAYWALL_INDEPENDENCE_NOTE,
   PAYWALL_NOTICES,
   paywallFooterPlacement,
   paywallPresentation,
-  planCard,
-  priceLine,
-  savingsLine,
-  subscribeLabel,
+  PURCHASE_CTA_LABEL,
   type PaywallView,
 } from './paywall-screen';
 import { DEVELOPMENT_OFFERING, LONG_PRICE_OFFERING } from './purchases/development-scenarios';
@@ -44,7 +42,6 @@ function codeOnly(source: string): string {
 
 const ready = (overrides: Partial<PaywallView> = {}): PaywallView => ({
   offerings: { kind: 'ready', offering: DEVELOPMENT_OFFERING },
-  selectedPlan: 'annual',
   operation: 'idle',
   notice: null,
   unconfirmed: false,
@@ -53,33 +50,30 @@ const ready = (overrides: Partial<PaywallView> = {}): PaywallView => ({
 
 // ── Copy ────────────────────────────────────────────────────────────────────
 
-test('the founder’s paywall copy, verbatim', () => {
-  // The standalone headline, body and check-row benefits were retired on
-  // 2026-10-04: both routes draw the grocery-watch panel, whose copy is
-  // pinned in onboarding-paywall-presentation.test.ts.
-  assert.ok(!read('lib', 'paywall-screen.ts').includes('Stay ahead of recalls'));
-  assert.equal(BEST_VALUE_LABEL, 'BEST VALUE');
-  assert.equal(
-    PAYWALL_DISCLOSURE,
-    'Renews automatically. Cancel anytime in Apple Account settings.',
-  );
+test('the founder’s purchase copy, verbatim from the kit', () => {
+  assert.equal(OFFER_TITLE, 'Lifetime access');
+  assert.equal(OFFER_SUBTITLE, 'Pay once. No subscription.');
+  assert.equal(PURCHASE_CTA_LABEL, 'Get lifetime access');
+  assert.equal(PAYWALL_INDEPENDENCE_NOTE, 'Independent of the FDA and USDA.');
   assert.deepEqual(
     PAYWALL_FOOTER_ACTIONS.map((a) => a.label),
     ['Restore Purchases', 'Terms', 'Privacy', 'Support'],
   );
 });
 
-test('no notice, label or action offers a trial, a lifetime plan, a free route, a countdown or fake scarcity', () => {
+test('no notice, label or action offers a trial, a free route, a countdown, fake scarcity or a renewal', () => {
   const words = [
     ...Object.values(PAYWALL_NOTICES).map((n) => n.text),
-    PAYWALL_DISCLOSURE,
     OFFERING_LOADING,
     OFFERING_UNAVAILABLE,
+    OFFERING_ERROR,
+    OFFER_TITLE,
+    OFFER_SUBTITLE,
+    PURCHASE_CTA_LABEL,
     ...PAYWALL_FOOTER_ACTIONS.map((a) => a.label),
   ].join('\n');
   for (const forbidden of [
     /\btrial\b/i,
-    /\blifetime\b/i,
     /\bfree\b/i,
     /\bonly \d+ left\b/i,
     /\bexpires in\b/i,
@@ -88,106 +82,87 @@ test('no notice, label or action offers a trial, a lifetime plan, a free route, 
     /\bskip\b/i,
     /\bmaybe later\b/i,
     /\bcontinue without\b/i,
+    // A one-time purchase: nothing renews, and nothing is cancelled in settings.
+    /\brenews?\b/i,
+    /\bcancel anytime\b/i,
+    /\bper (year|month)\b/i,
+    /\/(year|month)\b/i,
   ]) {
     assert.doesNotMatch(words, forbidden);
   }
   for (const text of words.split('\n')) assert.ok(!text.includes('—'), text);
 });
 
-// ── Prices ──────────────────────────────────────────────────────────────────
+// ── The price ───────────────────────────────────────────────────────────────
 
-test('the primary action names the selected commitment with the store’s own price string', () => {
-  assert.equal(priceLine(DEVELOPMENT_OFFERING.annual), '$29.99/year');
-  assert.equal(priceLine(DEVELOPMENT_OFFERING.monthly), '$4.99/month');
-  assert.equal(subscribeLabel(DEVELOPMENT_OFFERING.annual), 'Subscribe for $29.99/year');
-  assert.equal(subscribeLabel(DEVELOPMENT_OFFERING.monthly), 'Subscribe for $4.99/month');
+test('the offer shows the store’s own localized price, verbatim, and speaks it with its terms', () => {
+  const shown = paywallPresentation(ready());
+  assert.deepEqual(shown.offer, {
+    title: 'Lifetime access',
+    subtitle: 'Pay once. No subscription.',
+    price: '$19.99',
+    accessibilityLabel: 'Lifetime access, $19.99. Pay once. No subscription.',
+  });
   // A long localized price passes through untouched.
-  assert.equal(subscribeLabel(LONG_PRICE_OFFERING.annual), 'Subscribe for Rp 499.000,00/year');
+  assert.equal(
+    paywallPresentation(ready({ offerings: { kind: 'ready', offering: LONG_PRICE_OFFERING } }))
+      .offer?.price,
+    'Rp 329.000,00',
+  );
+  // The action never carries a price of its own.
+  assert.equal(shown.cta.label, 'Get lifetime access');
 });
 
-test('the monthly equivalent and the saving are derived from the store prices in the store currency', () => {
-  assert.equal(formatDerivedPrice(29.99 / 12, 'USD', 'en-US'), '$2.50');
-  assert.equal(monthlyEquivalentLine(DEVELOPMENT_OFFERING.annual, 'en-US'), '$2.50/month');
-  assert.equal(savingsLine(DEVELOPMENT_OFFERING), 'Save 50%');
-  // Another currency, another saving — nothing here knows "50".
-  assert.equal(savingsLine(LONG_PRICE_OFFERING), 'Save 47%');
+test('no placeholder price is ever purchasable: without the store’s answer there is no price and the action is inert', () => {
+  for (const offerings of [
+    { kind: 'loading' as const },
+    { kind: 'unavailable' as const },
+    { kind: 'error' as const },
+  ]) {
+    const shown = paywallPresentation(ready({ offerings }));
+    assert.equal(shown.offer, null, offerings.kind);
+    assert.equal(shown.cta.enabled, false, offerings.kind);
+    assert.equal(shown.footer.length, 4, offerings.kind);
+  }
   assert.equal(
-    formatDerivedPrice(1, 'NOT_A_CURRENCY'),
-    null,
-    'an unformattable currency omits the line',
+    paywallPresentation(ready({ offerings: { kind: 'loading' } })).offeringMessage,
+    OFFERING_LOADING,
   );
-});
-
-test('the two cards: Annual first with BEST VALUE, the equivalent and the saving; Monthly plain', () => {
-  const annual = planCard(DEVELOPMENT_OFFERING, 'annual', true, 'en-US');
-  assert.equal(annual.title, 'Annual');
-  assert.equal(annual.priceLine, '$29.99/year');
-  assert.equal(annual.equivalentLine, '$2.50/month');
-  assert.equal(annual.badge, 'BEST VALUE');
-  assert.equal(annual.savings, 'Save 50%');
-  assert.equal(annual.selected, true);
   assert.equal(
-    annual.accessibilityLabel,
-    'Annual, $29.99/year. $2.50/month. Best value. Save 50%.',
+    paywallPresentation(ready({ offerings: { kind: 'unavailable' } })).offeringMessage,
+    OFFERING_UNAVAILABLE,
   );
-  const monthly = planCard(DEVELOPMENT_OFFERING, 'monthly', false, 'en-US');
-  assert.equal(monthly.title, 'Monthly');
-  assert.equal(monthly.priceLine, '$4.99/month');
-  assert.equal(monthly.equivalentLine, null);
-  assert.equal(monthly.badge, null);
-  assert.equal(monthly.savings, null);
-  assert.equal(monthly.accessibilityLabel, 'Monthly, $4.99/month.');
+  assert.equal(
+    paywallPresentation(ready({ offerings: { kind: 'error' } })).offeringMessage,
+    OFFERING_ERROR,
+  );
 });
 
 // ── The state matrix ────────────────────────────────────────────────────────
 
-test('the opening view loads with Annual preselected', () => {
+test('the opening view loads with nothing in flight and the footer present', () => {
   assert.deepEqual(initialPaywallView(), {
     offerings: { kind: 'loading' },
-    selectedPlan: 'annual',
     operation: 'idle',
     notice: null,
     unconfirmed: false,
   });
   const shown = paywallPresentation(initialPaywallView());
-  assert.equal(shown.plans, null);
-  assert.equal(shown.offeringMessage, OFFERING_LOADING);
+  assert.equal(shown.offer, null);
   assert.equal(shown.cta.enabled, false);
-  assert.equal(shown.cta.label, 'Subscribe');
-  // The four footer actions are present before anything is bought, even while loading.
+  assert.equal(shown.cta.label, 'Get lifetime access');
   assert.deepEqual(
     shown.footer.map((a) => a.key),
     ['restore', 'terms', 'privacy', 'support'],
   );
   assert.equal(shown.restore.enabled, true);
-});
-
-test('annual and monthly selected: the CTA follows the selection, both cards render, one is checked', () => {
-  const annual = paywallPresentation(ready(), 'en-US');
-  assert.equal(annual.cta.label, 'Subscribe for $29.99/year');
-  assert.equal(annual.cta.enabled, true);
-  assert.deepEqual(
-    annual.plans?.map((p) => [p.period, p.selected]),
-    [
-      ['annual', true],
-      ['monthly', false],
-    ],
-  );
-  const monthly = paywallPresentation(ready({ selectedPlan: 'monthly' }), 'en-US');
-  assert.equal(monthly.cta.label, 'Subscribe for $4.99/month');
-  assert.deepEqual(
-    monthly.plans?.map((p) => [p.period, p.selected]),
-    [
-      ['annual', false],
-      ['monthly', true],
-    ],
-  );
+  assert.equal(initialPaywallView(true).unconfirmed, true);
 });
 
 test('purchase in progress: the CTA is busy with its word and Restore is inert; restoring is the mirror', () => {
   const purchasing = paywallPresentation(ready({ operation: 'purchasing' }));
   assert.equal(purchasing.cta.busy, true);
-  assert.equal(purchasing.cta.busyLabel, 'Subscribing…');
+  assert.equal(purchasing.cta.busyLabel, 'Purchasing…');
   assert.equal(purchasing.cta.enabled, false);
   assert.equal(purchasing.restore.enabled, false);
   const restoring = paywallPresentation(ready({ operation: 'restoring' }));
@@ -213,22 +188,15 @@ test('every outcome has its notice and tone: calm for a cancellation and an empt
     restore_success: 'success',
     unconfirmed: 'alert',
   });
-  assert.equal(
-    paywallPresentation(ready({ notice: 'cancelled' })).notice?.text,
-    PAYWALL_NOTICES.cancelled.text,
-  );
   assert.match(PAYWALL_NOTICES.cancelled.text, /Nothing was charged/);
   assert.match(PAYWALL_NOTICES.purchase_error.text, /try again/);
-  // A cancellation leaves the plans selectable and the CTA enabled.
+  // Restore finds a lifetime purchase OR an earlier subscription.
+  assert.equal(
+    PAYWALL_NOTICES.restore_nothing.text,
+    'No Lotly purchase or subscription was found for this Apple Account.',
+  );
+  // A cancellation leaves the action enabled.
   assert.equal(paywallPresentation(ready({ notice: 'cancelled' })).cta.enabled, true);
-});
-
-test('provider temporarily unavailable: one honest line where the plans would be, Subscribe inert, the footer intact', () => {
-  const shown = paywallPresentation(ready({ offerings: { kind: 'unavailable' } }));
-  assert.equal(shown.plans, null);
-  assert.equal(shown.offeringMessage, OFFERING_UNAVAILABLE);
-  assert.equal(shown.cta.enabled, false);
-  assert.equal(shown.footer.length, 4);
 });
 
 test('an unconfirmed entitlement shows the could-not-confirm notice until an outcome replaces it', () => {
@@ -240,21 +208,41 @@ test('an unconfirmed entitlement shows the could-not-confirm notice until an out
 
 // ── The screen ──────────────────────────────────────────────────────────────
 
-test('the disclosure and footer actions stay sticky at ordinary text sizes and move inline from the accessibility sizes', () => {
-  // iOS text scales: Large (the default) through xxxLarge stay sticky;
-  // AX Medium (about 1.6) and above go inline. 1.5 is the shared threshold.
+test('the footer: sticky while it stays a modest share of the screen, then inline, then nothing pinned', () => {
+  // iOS text scales: Large (the default) 1, xxxLarge about 1.35, AX Medium
+  // about 1.6, AX5 about 3.1. 402×874 is an iPhone 17, 375×667 an SE.
+  const IPHONE_17 = 874;
+  const SE = 667;
+  // iPhone 17: sticky through xxxLarge; the offer and terms go inline from
+  // the accessibility sizes; at AX4–AX5 the action follows them.
   for (const scale of [0.85, 1, 1.12, 1.23, 1.35, 1.49]) {
-    assert.equal(paywallFooterPlacement(scale), 'sticky', `scale ${scale}`);
+    assert.equal(paywallFooterPlacement(scale, IPHONE_17), 'sticky', `17 at ${scale}`);
   }
-  for (const scale of [1.5, 1.6, 1.9, 2.35, 2.75, 3.1]) {
-    assert.equal(paywallFooterPlacement(scale), 'inline', `scale ${scale}`);
+  for (const scale of [1.5, 1.6, 1.9, 2.35]) {
+    assert.equal(paywallFooterPlacement(scale, IPHONE_17), 'inline', `17 at ${scale}`);
   }
+  for (const scale of [2.75, 3.1]) {
+    assert.equal(paywallFooterPlacement(scale, IPHONE_17), 'scrolling', `17 at ${scale}`);
+  }
+  // SE: the sticky footer would take over 40% of the screen at xxxLarge, so
+  // the offer and terms go inline already there (it took over half before);
+  // from AX3 even the pinned action would crowd it.
+  for (const scale of [1, 1.12, 1.23]) {
+    assert.equal(paywallFooterPlacement(scale, SE), 'sticky', `SE at ${scale}`);
+  }
+  for (const scale of [1.35, 1.6, 1.9]) {
+    assert.equal(paywallFooterPlacement(scale, SE), 'inline', `SE at ${scale}`);
+  }
+  for (const scale of [2.35, 3.1]) {
+    assert.equal(paywallFooterPlacement(scale, SE), 'scrolling', `SE at ${scale}`);
+  }
+  // With no height known, the text-scale threshold alone decides.
+  assert.equal(paywallFooterPlacement(1.49), 'sticky');
+  assert.equal(paywallFooterPlacement(1.5), 'inline');
 });
 
 test('the paywall panel has no close, skip or dismiss control and renders all four footer actions', () => {
   const panel = codeOnly(read('components', 'paywall', 'paywall-panel.tsx'));
-  // The onboarding (grocery-watch) panel draws the same footer through the
-  // same pieces (2026-10-01) and is held to the same rule.
   const onboarding = codeOnly(read('components', 'paywall', 'onboarding-paywall-panel.tsx'));
   for (const forbidden of [
     'Close',
@@ -266,44 +254,39 @@ test('the paywall panel has no close, skip or dismiss control and renders all fo
     'x-icon',
     'onRequestClose',
   ]) {
-    assert.ok(!onboarding.includes(forbidden), `the onboarding paywall offers ${forbidden}`);
+    assert.ok(!onboarding.includes(forbidden), `the paywall offers ${forbidden}`);
+    assert.ok(!panel.includes(forbidden), `the purchase pieces offer ${forbidden}`);
   }
+  assert.ok(!panel.includes('close'));
   assert.ok(onboarding.includes('usePurchaseFooterSlots(purchase, {'));
   assert.ok(
     onboarding.includes(
       'back={{ label: PAYWALL_BACK_LABEL, hint: PAYWALL_BACK_HINT, onPress: onBack }}',
     ),
   );
-  for (const forbidden of [
-    'close',
-    'Close',
-    'dismiss',
-    'Dismiss',
-    'skip',
-    'Skip',
-    'Maybe later',
-    'x-icon',
-    'onRequestClose',
-  ]) {
-    assert.ok(!panel.includes(forbidden), `the paywall offers ${forbidden}`);
-  }
   assert.ok(panel.includes('shown.footer.map((action) =>'));
-  assert.ok(panel.includes('disclosure = PAYWALL_DISCLOSURE,'));
-  assert.ok(panel.includes('{disclosure}'));
-  // The standalone route composes the SAME grocery-watch panel (2026-10-04);
-  // Back exists, and it is the ONE way back: to the Preview, through the gate.
+  // The one-time-payment line was removed beneath the action (revision 2):
+  // `Pay once. No subscription.` says it once, in the offer.
+  assert.ok(!panel.includes('PAYWALL_DISCLOSURE'));
+  assert.ok(!panel.includes('No recurring charges'));
+  // The standalone route composes the SAME panel; Back exists, and it is the
+  // ONE way back: to the Preview, through the gate.
   const route = codeOnly(read('app', 'paywall.tsx'));
   assert.ok(
-    route.includes('<OnboardingPaywallPanel purchase={purchase} onBack={access.reviewPreview}>'),
+    /<OnboardingPaywallPanel\s+purchase={purchase}\s+onBack={access.reviewPreview}\s+benefitLift={STANDALONE_BENEFIT_LIFT}>/.test(
+      route,
+    ),
   );
   assert.ok(!/<PaywallPanel\b/.test(route), 'the retired standalone panel is back');
   // Terms, Privacy and Support open a configured HTTPS destination or say so,
-  // in the one purchase flow both the paywall and the Ready step use.
+  // in the one purchase flow both paywall routes use.
   const flow = codeOnly(read('hooks', 'use-purchase-flow.tsx'));
   assert.ok(flow.includes('destinationAction(key)'));
   assert.ok(flow.includes('setDestinationNotice(DESTINATION_UNCONFIGURED)'));
   assert.equal(DESTINATION_UNCONFIGURED, 'This link is not available yet.');
   assert.ok(!flow.includes('example.com'));
+  // The flow buys the one lifetime package the store priced, nothing else.
+  assert.ok(flow.includes('const pkg = view.offerings.offering.lifetime;'));
 });
 
 test('the paywall draws from the tokens: no raw hex, no capped type, no fixed height around text', () => {
@@ -312,6 +295,7 @@ test('the paywall draws from the tokens: no raw hex, no capped type, no fixed he
     assert.doesNotMatch(panel, /#[0-9A-Fa-f]{6}\b/, file);
     assert.ok(!panel.includes('maxFontSizeMultiplier'), file);
     assert.ok(!panel.includes('numberOfLines'), file);
+    assert.ok(!panel.includes('adjustsFontSizeToFit'), file);
     assert.doesNotMatch(panel, /\n\s+height: \d+,/, file);
   }
 });

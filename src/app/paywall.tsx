@@ -34,12 +34,16 @@ import { OnboardingPaywallPanel } from '@/components/paywall/onboarding-paywall-
 import { PaywallPrivacyLink } from '@/components/paywall/paywall-privacy-link';
 import { useAccess } from '@/hooks/use-access';
 import { usePurchaseFlow } from '@/hooks/use-purchase-flow';
+import { STANDALONE_BENEFIT_LIFT } from '@/lib/onboarding-paywall-presentation';
 
 export default function PaywallScreen() {
   const access = useAccess();
   const { purchase, developmentControls } = usePurchaseFlow();
   return (
-    <OnboardingPaywallPanel purchase={purchase} onBack={access.reviewPreview}>
+    <OnboardingPaywallPanel
+      purchase={purchase}
+      onBack={access.reviewPreview}
+      benefitLift={STANDALONE_BENEFIT_LIFT}>
       {developmentControls}
       <PaywallPrivacyLink />
     </OnboardingPaywallPanel>

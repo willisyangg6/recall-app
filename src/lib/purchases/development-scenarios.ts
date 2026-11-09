@@ -21,10 +21,12 @@
  * 3. Its persisted state lives under its own dev-only storage key, which
  *    production code never reads.
  *
- * The prices here are FIXTURES ($29.99/year, $4.99/month, the expected US
- * product prices). They are the only US dollar amounts in the client and
- * they exist so the paywall can be rendered; production prices come from
- * the store through the real adapter.
+ * The price here is a FIXTURE ($19.99, the proposed US lifetime price,
+ * 2026-11-06). It is the only US dollar amount in the client and it exists
+ * so the paywall can be rendered; the production price comes from the store
+ * through the real adapter. The simulated account can also hold an annual
+ * or monthly subscription, as a customer of an earlier build would, so a
+ * legacy subscriber's access can be walked without a store.
  *
  * Pure: storage and the clock are injected, so the whole scenario matrix is
  * driven in Node. The native wiring is development-provider.ts.
@@ -46,11 +48,11 @@ import type {
 export type DevelopmentPurchaseScenarioId =
   | 'inactive'
   | 'loading'
-  | 'annual_purchase_success'
-  | 'monthly_purchase_success'
+  | 'purchase_success'
   | 'user_cancelled'
   | 'purchase_error'
-  | 'restore_success'
+  | 'restore_lifetime'
+  | 'restore_subscription'
   | 'restore_nothing'
   | 'unavailable_cached_active'
   | 'unavailable_unverified';
@@ -65,9 +67,10 @@ export interface DevelopmentPurchaseScenario {
   /** `pending` never resolves, which is what a loading paywall looks like. */
   offerings: 'ready' | 'pending' | 'error';
   purchase: 'success' | 'cancelled' | 'error';
+  /** `found` restores what the simulated account holds, or `restoredPeriod` when it holds nothing. */
   restore: 'found' | 'nothing' | 'error';
-  /** The plan the paywall preselects for this scenario. */
-  initialPlan: PlanPeriod;
+  /** What a `found` restore finds on an empty simulated account. */
+  restoredPeriod: PlanPeriod;
 }
 
 export const DEVELOPMENT_PURCHASE_SCENARIOS: readonly DevelopmentPurchaseScenario[] = [
@@ -75,93 +78,95 @@ export const DEVELOPMENT_PURCHASE_SCENARIOS: readonly DevelopmentPurchaseScenari
     id: 'inactive',
     title: 'Inactive',
     expectation:
-      'No subscription on the simulated account. The paywall shows both plans with Annual ' +
-      'preselected; subscribing succeeds.',
+      'No purchase on the simulated account. The paywall shows lifetime access at the fixture ' +
+      'price; buying succeeds.',
     available: true,
     offerings: 'ready',
     purchase: 'success',
     restore: 'nothing',
-    initialPlan: 'annual',
+    restoredPeriod: 'lifetime',
   },
   {
     id: 'loading',
     title: 'Loading',
     expectation:
-      'The offering never arrives: the paywall stays in its loading state with the ' +
-      'subscribe action unavailable and Restore, Terms, Privacy and Support still present.',
+      'The offering never arrives: the paywall stays in its loading state with the purchase ' +
+      'action unavailable and Restore, Terms, Privacy and Support still present.',
     available: true,
     offerings: 'pending',
     purchase: 'success',
     restore: 'nothing',
-    initialPlan: 'annual',
+    restoredPeriod: 'lifetime',
   },
   {
-    id: 'annual_purchase_success',
-    title: 'Annual purchase success',
+    id: 'purchase_success',
+    title: 'Lifetime purchase success',
     expectation:
-      'Annual preselected. Subscribe shows the in-progress state, then succeeds: the gate ' +
+      'Get lifetime access shows the in-progress state, then succeeds with no expiry: the gate ' +
       'moves to notification education (or straight to Feed once educated).',
     available: true,
     offerings: 'ready',
     purchase: 'success',
     restore: 'nothing',
-    initialPlan: 'annual',
-  },
-  {
-    id: 'monthly_purchase_success',
-    title: 'Monthly purchase success',
-    expectation: 'Monthly preselected; the same success path with the monthly package.',
-    available: true,
-    offerings: 'ready',
-    purchase: 'success',
-    restore: 'nothing',
-    initialPlan: 'monthly',
+    restoredPeriod: 'lifetime',
   },
   {
     id: 'user_cancelled',
     title: 'User cancellation',
     expectation:
-      'Subscribe is dismissed the way a shopper cancels the store sheet: a calm inline ' +
-      'sentence, both plans still selectable, nothing else changes.',
+      'The purchase is dismissed the way a shopper cancels the store sheet: a calm inline ' +
+      'sentence, the action still available, nothing else changes.',
     available: true,
     offerings: 'ready',
     purchase: 'cancelled',
     restore: 'nothing',
-    initialPlan: 'annual',
+    restoredPeriod: 'lifetime',
   },
   {
     id: 'purchase_error',
     title: 'Purchase error',
     expectation:
-      'Subscribe fails recoverably: the error sentence renders beneath the action and the ' +
+      'The purchase fails recoverably: the error sentence renders above the action and the ' +
       'shopper can try again.',
     available: true,
     offerings: 'ready',
     purchase: 'error',
     restore: 'nothing',
-    initialPlan: 'annual',
+    restoredPeriod: 'lifetime',
   },
   {
-    id: 'restore_success',
-    title: 'Restore success',
+    id: 'restore_lifetime',
+    title: 'Restore lifetime access',
     expectation:
-      'Restore Purchases finds an annual subscription on the simulated account: the ' +
-      'restored sentence, then the gate moves on exactly as a purchase would.',
+      'Restore Purchases finds a lifetime purchase on the simulated account: the restored ' +
+      'sentence, then the gate moves on exactly as a purchase would.',
     available: true,
     offerings: 'ready',
     purchase: 'success',
     restore: 'found',
-    initialPlan: 'annual',
+    restoredPeriod: 'lifetime',
+  },
+  {
+    id: 'restore_subscription',
+    title: 'Restore an earlier subscription',
+    expectation:
+      'Restore Purchases finds an annual subscription bought in an earlier build: it unlocks ' +
+      'Lotly with its expiry, and the shopper is not asked to pay again.',
+    available: true,
+    offerings: 'ready',
+    purchase: 'success',
+    restore: 'found',
+    restoredPeriod: 'annual',
   },
   {
     id: 'restore_nothing',
     title: 'Restore finds nothing',
-    expectation: 'Restore Purchases finds no subscription: the honest sentence, still inactive.',
+    expectation: 'Restore Purchases finds no purchase: the honest sentence, still inactive.',
     available: true,
     offerings: 'ready',
     purchase: 'success',
     restore: 'nothing',
-    initialPlan: 'annual',
+    restoredPeriod: 'lifetime',
   },
   {
     id: 'unavailable_cached_active',
@@ -173,19 +178,19 @@ export const DEVELOPMENT_PURCHASE_SCENARIOS: readonly DevelopmentPurchaseScenari
     offerings: 'ready',
     purchase: 'success',
     restore: 'nothing',
-    initialPlan: 'annual',
+    restoredPeriod: 'lifetime',
   },
   {
     id: 'unavailable_unverified',
     title: 'Unavailable, no prior entitlement',
     expectation:
       'The store cannot be reached and nothing was ever verified: the paywall shows the ' +
-      'could-not-confirm state and fails closed; Subscribe and Restore report unavailable.',
+      'could-not-confirm state and fails closed; the purchase and Restore report unavailable.',
     available: false,
     offerings: 'ready',
     purchase: 'success',
     restore: 'nothing',
-    initialPlan: 'annual',
+    restoredPeriod: 'lifetime',
   },
 ];
 
@@ -195,34 +200,24 @@ export function developmentScenario(id: string): DevelopmentPurchaseScenario | n
 
 // ── The fixture offering ────────────────────────────────────────────────────
 
-/** The store's expected US prices, as fixtures for development only. */
+/** The proposed US lifetime price, as a fixture for development only. */
 export const DEVELOPMENT_OFFERING: Offering = {
-  annual: {
-    id: 'lotly_annual',
-    period: 'annual',
-    price: { amount: 29.99, currencyCode: 'USD', formatted: '$29.99' },
-  },
-  monthly: {
-    id: 'lotly_monthly',
-    period: 'monthly',
-    price: { amount: 4.99, currencyCode: 'USD', formatted: '$4.99' },
+  lifetime: {
+    id: 'lotly_lifetime',
+    period: 'lifetime',
+    price: { amount: 19.99, currencyCode: 'USD', formatted: '$19.99' },
   },
 };
 
 /**
- * A long localized price pair for the Design Preview: what the paywall has
- * to survive when a store renders a wide currency string. Not a real price.
+ * A long localized price for the Design Preview: what the offer has to
+ * survive when a store renders a wide currency string. Not a real price.
  */
 export const LONG_PRICE_OFFERING: Offering = {
-  annual: {
-    id: 'lotly_annual',
-    period: 'annual',
-    price: { amount: 499000, currencyCode: 'IDR', formatted: 'Rp 499.000,00' },
-  },
-  monthly: {
-    id: 'lotly_monthly',
-    period: 'monthly',
-    price: { amount: 79000, currencyCode: 'IDR', formatted: 'Rp 79.000,00' },
+  lifetime: {
+    id: 'lotly_lifetime',
+    period: 'lifetime',
+    price: { amount: 329000, currencyCode: 'IDR', formatted: 'Rp 329.000,00' },
   },
 };
 
@@ -245,7 +240,7 @@ export function parseSimulatedSubscription(raw: string | null): SimulatedSubscri
   try {
     const value = JSON.parse(raw) as { period?: unknown; purchasedAt?: unknown };
     if (
-      (value.period === 'annual' || value.period === 'monthly') &&
+      (value.period === 'annual' || value.period === 'monthly' || value.period === 'lifetime') &&
       typeof value.purchasedAt === 'string'
     ) {
       return { period: value.period, purchasedAt: value.purchasedAt };
@@ -256,8 +251,12 @@ export function parseSimulatedSubscription(raw: string | null): SimulatedSubscri
   return null;
 }
 
-/** One simulated year or month of access from the purchase instant. */
-export function simulatedExpiry(purchasedAtIso: string, period: PlanPeriod): string {
+/**
+ * One simulated year or month of access from the purchase instant; none for
+ * a lifetime purchase, which never expires.
+ */
+export function simulatedExpiry(purchasedAtIso: string, period: PlanPeriod): string | null {
+  if (period === 'lifetime') return null;
   const at = new Date(purchasedAtIso);
   if (period === 'annual') at.setUTCFullYear(at.getUTCFullYear() + 1);
   else at.setUTCMonth(at.getUTCMonth() + 1);
@@ -269,7 +268,7 @@ function entitlementFor(
   verifiedAt: string,
 ): ActiveEntitlement {
   return {
-    productId: subscription.period === 'annual' ? 'lotly_annual' : 'lotly_monthly',
+    productId: `lotly_${subscription.period}`,
     period: subscription.period,
     verifiedAt,
     expiresAt: simulatedExpiry(subscription.purchasedAt, subscription.period),
@@ -336,22 +335,25 @@ export function createDevelopmentPurchaseProvider(deps: DevelopmentProviderDeps)
         return { kind: 'restored', entitlement: entitlementFor(existing, deps.now()) };
       }
       if (scenario.restore === 'nothing') return { kind: 'nothing_to_restore' };
-      // `found`: the simulated account already held an annual subscription.
-      const subscription: SimulatedSubscription = { period: 'annual', purchasedAt: deps.now() };
+      // `found`: the simulated account already held this purchase.
+      const subscription: SimulatedSubscription = {
+        period: scenario.restoredPeriod,
+        purchasedAt: deps.now(),
+      };
       await deps.storage.write(JSON.stringify(subscription));
       return { kind: 'restored', entitlement: entitlementFor(subscription, deps.now()) };
     },
   };
 }
 
-/** Forget the simulated subscription (a development control). */
+/** Forget the simulated purchase or subscription (a development control). */
 export async function clearSimulatedSubscription(
   storage: DevelopmentPurchaseStorage,
 ): Promise<void> {
   await storage.remove();
 }
 
-/** Grant a simulated subscription without a purchase (a development control). */
+/** Grant simulated access without a purchase (a development control). */
 export async function seedSimulatedSubscription(
   storage: DevelopmentPurchaseStorage,
   period: PlanPeriod,

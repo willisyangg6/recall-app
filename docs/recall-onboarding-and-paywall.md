@@ -457,14 +457,16 @@ interface PurchaseProvider {
 }
 ```
 
-- An `Offering` is exactly one annual and one monthly `PlanPackage`, each
-  carrying a `StorePrice` — the numeric amount, the ISO currency code, and
-  the store's own localized `formatted` string, which is displayed verbatim.
-- `annualSavingsPercent` and `monthlyEquivalentAmount` derive the saving and
-  the monthly equivalent from the store's amounts. Nothing in product code
-  holds a price: `$29.99` and `$4.99` appear only in the development
-  adapter's fixtures, and `purchase-provider.test.ts` scans every route and
-  component for a dollar amount.
+- An `Offering` is exactly one lifetime `PlanPackage` (since 2026-11-06,
+  §6.7.2; it was one annual and one monthly package before), carrying a
+  `StorePrice` — the numeric amount, the ISO currency code, and the store's
+  own localized `formatted` string, which is displayed verbatim. `PlanPeriod`
+  (`annual` | `monthly` | `lifetime`) names what grants access, so an earlier
+  build's subscription still reads as one.
+- Nothing in product code holds a price: `$19.99` appears only in the
+  development adapter's fixture, and `purchase-provider.test.ts` scans every
+  route and component for a dollar amount. (The savings and monthly-equivalent
+  derivations were deleted with the subscription plans.)
 - The anonymous purchase identity is the **purchase id**
   (`src/lib/purchases/purchase-identity.ts`, 2026-10-12): its own random
   keychain id (`recall.purchase-id`), separate from the installation id,
@@ -494,22 +496,29 @@ Two modules split the work so the mapping is provable in Node:
     concurrent callers share the one in-flight promise, so the SDK is never
     configured twice. A failed configuration (no identity, SDK refusal) is
     forgotten so the next call retries, and classifies as `unavailable`.
-  - **The store's configuration is validated, never assumed.** The CURRENT
-    offering (expected `default`) must carry the built-in `annual` and
-    `monthly` packages, each selling exactly its Apple product
-    (`com.willisyang.lotly.annual`, `com.willisyang.lotly.monthly`) with a
-    finite positive `price`, a non-empty `priceString` and a `currencyCode`.
-    Anything else is `unavailable`. The paywall receives `priceString`
-    verbatim; no price lives in product code.
+  - **The store's configuration is validated, never assumed.** Since
+    2026-11-06 the adapter sells from the offering **`lifetime`**, fetched
+    from `offerings.all` BY IDENTIFIER — never `offerings.current`, which
+    build 9 and earlier read and which keeps its `$rc_annual` and
+    `$rc_monthly` packages for them. Its built-in `lifetime` package must
+    sell exactly `com.willisyang.lotly.lifetime` with a finite positive
+    `price`, a non-empty `priceString` and a `currencyCode`. Anything else
+    — no `lifetime` offering, no package, another product — is
+    `unavailable`. The paywall receives `priceString` verbatim; no price
+    lives in product code. (Until 2026-11-06 it validated the current
+    offering's annual and monthly packages.)
   - **Readings are dated by the store.** `CustomerInfo.requestDate` becomes
     `verifiedAt` for an active `premium` entitlement and `asOf` for an
     inactive one — **never `Date.now()`**, because the SDK answers from a
     cache up to five minutes old and dating that with the device clock would
     make pre-purchase data look like a fresh revocation (§4.1). A customer
     info with no parseable `requestDate` is `unavailable`. An active
-    entitlement for an unknown product, or without a parseable
-    `expirationDate`, is `unavailable` too: these are subscriptions, and
-    nothing here invents an expiry or grants lifetime access.
+    entitlement for an unknown product is `unavailable`. For the two
+    subscription products a missing or unparseable `expirationDate` is
+    `unavailable` too. For the lifetime product it is expected: the reading
+    is active with `expiresAt: null`, never an invented date, and only the
+    store ending the entitlement (a refund or revocation, read as a verified
+    `inactive`) ends access (§6.7.2).
   - **A resolved SDK call is not proof of access.** `purchase` buys the
     actual `PurchasesPackage` the offering resolved (re-resolved from the
     store if the plan predates this adapter, `unavailable` if the store no
@@ -2398,6 +2407,10 @@ the benefits, and a 51pt `Continue` that completes personalization — never
 a second purchase ask. The lapsed subscriber's standalone `/paywall` draws
 the same panel over the same flow; its Back is still `reviewingPreview` (§3).
 
+_Superseded 2026-11-06: the composition and offer described in §6.7 and
+§6.7.1 were replaced by the Fridge Note paywall and its one lifetime
+purchase (§6.7.2). They are kept as the record of the earlier build._
+
 #### 6.7.1 One paywall design for both routes (2026-10-04)
 
 Physical-device QA of the real store found the inconsistency: after a
@@ -2505,6 +2518,167 @@ adapter markers, `Simulated store`, the capture switch's names and the long
 fixture absent; `Keep a closer watch.`, both renewal sentences, `Subscribe
 for`, `Restore Purchases` and `recall.entitlement` present; M04 still bundled
 for the standalone paywall.
+
+#### 6.7.2 The Fridge Note paywall and lifetime access (2026-11-06; IMPLEMENTED on branch `lifetime-paywall`, uncommitted, not shipped)
+
+**This supersedes the composition and the offer in §6.7 and §6.7.1** (the
+grocery-watch hero, three benefits, Annual/Monthly cards, savings pill and
+renewal disclosure). What §6.7.1 established still holds: ONE panel,
+`OnboardingPaywallPanel`, draws both routes over the one purchase flow, and
+the routes differ only in wiring.
+
+**Revision 2 (2026-11-07, same branch, uncommitted).** The founder replaced
+the letter and tightened the layout; where this paragraph and the
+description below disagree, this paragraph is current.
+
+- **The letter** is now three paragraphs and the signature alone, no
+  greeting and no thank-you: `Life is busy. Keeping up with food recalls
+shouldn’t be another thing on your plate.` / `I built Lotly to make
+staying informed easier, so you can make safer choices for yourself and
+the people you love.` (the lime stroke still under `people you love.`) /
+  `Your one-time purchase gives you lifetime access and helps me keep Lotly
+running as a solo founder.` It has no em dash, so the copy rule's
+  exemption was removed with it.
+- **The paper fits the letter.** The blank middle band may now also
+  shorten, down to half its source height (`MIN_MIDDLE_FRACTION`); the
+  mascot, magnet, curl and signature keep their proportions. The first line
+  starts at 25.5% of the art (was 22.2%), clear of the mascot's leg now
+  that no indented greeting steps around it.
+- **Above the heading**, the paywall's top bar is `compact`: it drops only
+  the 8pt gap under the safe area (Back keeps its 44pt target, below the
+  status bar). No other screen's top bar changed.
+- **The disclosure** `One-time payment. No recurring charges.` beneath the
+  action is removed; `Pay once. No subscription.` stays under `Lifetime
+access`.
+- **The footer adapts to the screen, not only to the text size**
+  (`paywallFooterPlacement(fontScale, windowHeight)`): sticky while the
+  offer, action and links stay within 40% of the window (estimated from
+  their measured 200pt at the default size, scaled by the text size);
+  otherwise the offer and links move into the page and only the action is
+  pinned (from the accessibility sizes, as before, and now also on an SE
+  from xxxLarge); and when even the pinned action would take more than a
+  quarter of the window (measured 85pt per unit of text scale: AX4–AX5 on
+  an iPhone 17, AX3 and up on an SE), nothing is pinned and the action
+  follows the price in the page.
+- **Verified (development store, own simulators, Metro 8097, dead-port
+  backend).** iPhone 17 (402×874) at the default size: the whole note,
+  signature, both benefits, price and action are visible without
+  scrolling, with about 90pt to spare above the footer. iPhone SE
+  (375×667) at the default size: everything above is visible except the
+  second benefit, one short scroll away. xxxLarge on both, AX1 and AX5 on
+  both: nothing shrunk, clipped or truncated. Screenshots:
+  `~/Desktop/Lotly-Lifetime-Paywall-Revision-2/`.
+- **Final refinements (2026-11-08).** `people you love.` was set larger
+  than the letter: its nested span used the app's `Text`, which re-applies
+  the 16pt `body` variant. It is now a bare native span that inherits the
+  paragraph's face, size, line height and Dynamic Type; only the lime
+  underline marks it. With the action pinned, the in-page order is now the
+  terms, then the offer directly above the action; with nothing pinned it is
+  offer, price, action, terms, disclaimer. Dynamic Type is applied once:
+  at AX5 (×3.571) the heading's 34pt lines measure 121pt and the action's
+  22pt label lines 78.6pt, exactly one scaling. React Native applies the
+  body ratio to every size, so headings grow more than iOS's own large-title
+  curve would; that is the platform's behaviour, not a defect, and no cap was
+  added. Clean captures (development controls and the dev-client button
+  hidden): `~/Desktop/Lotly-Lifetime-Paywall-Final/`.
+- **Benefit spacing (2026-11-08).** When the page fits at the default text
+  size, its spare height is shared around the benefits
+  (`benefitSpacing`): on a 402pt iPhone's onboarding route, about 28pt
+  from the note to the first benefit and 27pt between the two, where 83pt
+  of blank page sat under them. On the standalone `/paywall` the Privacy &
+  Data Controls entry takes that spare, so the route lifts
+  `STANDALONE_BENEFIT_LIFT` (14pt) from the page's bottom padding to above
+  the first benefit; the total height, the footer position and the entry's
+  44pt target are unchanged. An SE (whose page scrolls) and every larger
+  text size keep the compact spacing.
+
+**Composition (founder-selected direction #2 of the lifetime-paywall kit,
+`docs/lotly-lifetime-paywall-source-kit/`, with only its sign-off replaced
+by the handwritten signature).** Top to bottom: Back; `A note from me.`
+(30pt Bold, no subtitle); the founder's letter as native, horizontal Public
+Sans text on the supplied stationery — the hanging, waving mascot, the lime
+magnet, the powder-blue wavy backing and the curled paper — signed with the
+handwritten `Willis` image alone (no printed name, founder line or heart;
+spoken as `Willis`); two benefits, `Know what may affect you` / `Official
+FDA & USDA notices, personalized.` and `Let the alerts come to you` /
+`Matching recalls and important updates.`; the route's additions (the
+standalone route's Privacy & Data Controls entry, the development controls);
+then the footer under an 8pt-inset hairline: `Lifetime access` / `Pay once.
+No subscription.` with the store's price on the lime capsule, the notice,
+the 51pt navy `Get lifetime access`, Restore Purchases / Terms / Privacy / Support (44pt targets) and
+`Independent of the FDA and USDA.` Copy is the kit's `copy.json` verbatim,
+except the letter, replaced in revision 2;
+rules, measurements and the copy constants are in
+`src/lib/onboarding-paywall-presentation.ts` and `src/lib/paywall-screen.ts`.
+
+- **Artwork.** `assets/paywall/fridge-note/fridge-note-backdrop.png`
+  (1254×1254 RGBA) and `willis-signature.png` (2164×727 RGBA), the kit's
+  bytes unaltered (`paywall-fridge-note-assets.test.ts` pins the hashes).
+  The stationery is drawn 1.4% wider than the page, centred, as three
+  clipped instances of the one image: the mascot band (top 32%) and the
+  curl band (bottom 24%) at the image's own scale, the blank paper between
+  them stretched vertically to the letter's natural height. The letter is
+  laid out first and the art follows it, so text is never shrunk, truncated
+  or clipped; no seam is visible at native resolution. The grocery-watch
+  hero stays in the approved set, referenced by no code.
+- **The emphasis.** `people you love.` is underlined by the kit's
+  hand-drawn lime stroke (`onboarding/letter-emphasis`, `#D3E52B`), redrawn
+  with `react-native-svg` at the phrase's measured width and placed from the
+  paragraph's own `onTextLayout`. When the phrase does not sit whole on the
+  last line (it wraps at the accessibility sizes) the native lime underline
+  is drawn instead, which wraps with the words.
+- **Measured against the target, not the kit's starting spec, where they
+  differ:** letter 14pt on a 17.8pt pitch (spec 18.6); benefit plates 43pt
+  with 23pt glyphs (spec 39); the signature 126pt wide so its ink is the
+  target's 110pt (spec 100×33); the greeting indented 5% of the width, clear
+  of the mascot's leg. The disclosure, links and independence line keep the
+  shared `caption` (12pt) instead of the target's 10–11pt: the paywall's
+  type floor (§6.7). The real safe area and the shared Back row put the page
+  about 17pt lower than the mock, whose chevron sits in the status bar, so
+  on a 402pt iPhone the second benefit starts under the pinned footer and
+  the page scrolls a little; nothing is shrunk to avoid it.
+
+**The offer and the entitlement.** The paywall sells exactly one
+non-consumable product, `com.willisyang.lotly.lifetime`, from the RevenueCat
+offering **`lifetime`**, fetched by identifier — never the project's current
+offering, which build 9 and earlier still read for `$rc_annual` and
+`$rc_monthly` (§5.2). The price shown is the store's localized `priceString`;
+while it is loading, unavailable or errored there is no price and the action
+is inert, so no placeholder price is ever purchasable. An active `premium`
+entitlement for the lifetime product reads as active with **`expiresAt:
+null`** — no invented expiry. Only the store ends it: a refund or revocation
+removes it from the active entitlements, which is a verified `inactive`
+(the cache is cleared). The cached lifetime entitlement is honoured through
+an outage with no grace bound, because it has no expiry to lapse
+(`cacheGrantsAccess`, §4). An earlier build's active annual or monthly
+subscription — including one redeemed through an offer code, which grants
+the same subscription product — still unlocks Lotly with its expiry, and a
+subscription without an expiry is still refused. The alert gate on the
+server applies the same rule (docs/recall-push-delivery.md, "Alert
+entitlement gate"). A shopper who is already entitled never reaches a
+purchase ask (`OnboardingEntitledPanel`, and the gate keeps `/paywall` out
+of an entitled session). Restore finds either kind: `No Lotly purchase or
+subscription was found for this Apple Account.` when it finds neither.
+
+**Development store.** The fixture is one lifetime package at `$19.99`
+(development only). Scenarios: inactive, loading, lifetime purchase success,
+cancellation, purchase error, restore lifetime, restore an earlier
+subscription, restore nothing, and the two unavailable states; the controls
+can also seed lifetime access or an earlier annual subscription.
+
+**Native verification (2026-11-06, development store only, no production
+service).** Own simulators `Lotly Lifetime Paywall iPhone 17` (402pt) and
+`… iPhone SE` (375pt), own Metro on 8097 with a dead-port Supabase URL; the
+gate scenario `Completed onboarding, inactive entitlement` opens the real
+`/paywall`. Compared side by side and overlaid with the target at the
+default size, then checked on the SE at the default size and xxxLarge, and
+on the iPhone 17 at AX5: the letter, signature, benefits, offer and links
+render whole, the price wraps beneath its title, the underline falls back
+to the native one when the phrase wraps, and the action stays pinned. On
+the SE at xxxLarge (below the 1.5 inline threshold) the sticky offer and
+terms take over half the screen; the page still scrolls and nothing is
+clipped. Not verified: a real lifetime purchase, restore or refund against
+the App Store, which need the product configured (§10, item 7).
 
 ### 6.8 Native verification of the restructure (2026-09-28)
 
@@ -2889,6 +3063,43 @@ What exists, and what still stands between it and a verified purchase:
 6. Update the App Privacy answers (Purchases: collected, linked to the
    installation identifier) and the EULA decision for a subscription
    ([recall-app-store-readiness.md](recall-app-store-readiness.md)).
+7. **Lifetime access (2026-11-06) — code on branch `lifetime-paywall`; the
+   store side is founder setup, NOT done.** Nothing in App Store Connect or
+   RevenueCat was changed by the implementation.
+   - _App Store Connect:_ a **Non-Consumable** in-app purchase, product ID
+     `com.willisyang.lotly.lifetime`, price tier USD 19.99 (Apple localizes
+     the rest), display name and description, the review screenshot, and
+     availability; submit it with the new binary (a first in-app purchase
+     for a new type is reviewed with a build).
+   - _RevenueCat:_ import the product into the iOS app; attach it to the
+     EXISTING `premium` entitlement (so the server's
+     `REVENUECAT_PREMIUM_ENTITLEMENT_ID` is unchanged); create a NEW
+     offering with identifier `lifetime` holding one package of the
+     built-in Lifetime type (`$rc_lifetime`) for that product. Do **not**
+     make it the current offering, and leave `default` (`$rc_annual`,
+     `$rc_monthly`) exactly as it is: build 9 reads it.
+   - _Rollout order:_ (1) configure both of the above; (2) a sandbox
+     purchase, restore and refund-equivalent check on a `preview` build of
+     this branch; (3) ship the new binary — old binaries keep selling the
+     subscriptions from `default`, new ones sell lifetime from `lifetime`;
+     (4) only after the new build has adoption, decide separately whether to
+     remove the subscriptions from sale. Removing them, or changing
+     `default`, before then breaks build 9's paywall (it shows plans
+     unavailable). Existing subscribers keep access in both binaries until
+     their subscription ends. Lifetime access is recognised by the new
+     binary only (next bullet).
+   - _Build 9 and a lifetime buyer:_ build 9's adapter knows only the two
+     subscription product ids, so it reads an active lifetime entitlement
+     as `unavailable`: on build 9 a lifetime buyer meets the paywall's
+     could-not-confirm state and Restore answers unavailable — and build 9's
+     paywall still offers the subscriptions, so such a shopper could buy one
+     by mistake. The fix is updating to the new binary; no server or store
+     change can make the old adapter accept the product. Support should
+     expect this case while build 9 is in use on a buyer's second device. The server alert gate reads the shared `premium`
+     entitlement and does accept it, whichever binary registered.
+   - _Copy and legal:_ the Terms, the App Store description and the
+     website still describe an auto-renewing subscription and must be
+     updated for a one-time purchase before review.
 
 ## 11. Tests
 
@@ -2900,7 +3111,7 @@ What exists, and what still stands between it and a verified purchase:
 | Entitlement session: a stale refresh is discarded whole, foreground waits for a store operation, post-success stale data cannot revoke, cache writes in order, later expiry honoured                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `src/lib/entitlement-session.test.ts`                                                                              |
 | Unconfigured provider, adapter scenarios and containment, savings math, no USD in product code, the RevenueCat wiring fails closed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `src/lib/purchases/purchase-provider.test.ts`                                                                      |
 | RevenueCat adapter: customer-info and offering mapping, requestDate dating, undatable/unknown/expiry-less fail closed, localized prices, configure-once, purchase/restore/cancel/error outcomes, the races through its readings                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `src/lib/purchases/revenuecat-adapter.test.ts`                                                                     |
-| Paywall copy, prices, cards, state matrix, no close/free/trial/lifetime                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `src/lib/paywall-screen.test.ts`                                                                                   |
+| Paywall copy, store price, state matrix, no close/free/trial/renewal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `src/lib/paywall-screen.test.ts`                                                                                   |
 | Release destinations and the readiness failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `src/lib/release-destinations.test.ts`                                                                             |
 | Allergen icons: coverage, one family, provenance, assets                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `src/lib/allergen-icons.test.ts`                                                                                   |
 | Retailer logos: manifest parity, local-only, containment, fallback, a11y name                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `src/lib/retailer-logos.test.ts`                                                                                   |

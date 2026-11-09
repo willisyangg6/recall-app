@@ -1,94 +1,84 @@
 /**
- * The onboarding paywall's presentation (the grocery-watch paywall,
- * 2026-10-01): its approved copy, how the one approved image and the native
- * text are sized and placed, and what each plan card says. Numbers, copy and
+ * The paywall's presentation (the Fridge Note paywall, 2026-11-06): its
+ * approved copy, how the supplied stationery artwork and the native letter
+ * are sized and placed, and the type of every native word. Numbers, copy and
  * pure functions only, so all of it is testable under Node; the component
  * (components/paywall/onboarding-paywall-panel.tsx) maps it onto React
  * Native. A leaf.
  *
- * Since 2026-10-04 the standalone `/paywall` a lapsed subscriber meets draws
- * this same presentation; the shared state rules (notices, CTA, footer
- * placement) stay in lib/paywall-screen.ts. Both routes draw the SAME
- * purchase state from the one purchase flow.
+ * Both paywall routes draw it: `/onboarding/paywall` from Ready, and the
+ * standalone `/paywall` a lapsed subscriber meets. The shared state rules
+ * (notices, CTA, footer placement, the offer) stay in lib/paywall-screen.ts.
  *
- * ## Measured from the approved target
+ * ## The approved target
  *
- * The founder-approved composition
- * (assets/brand/reference/lotly-onboarding-paywall-grocery-watch-target.png,
- * 934×1683, app content without system chrome) scales by `width / 934`: at
- * 402pt (iPhone 17) one target pixel is 0.4304pt. The production hero is a
- * crop of it at its own pixels (0,152 to 934,772), so it spans the page:
- * 402×266.9pt at 402pt. Every number below was measured from the target's
- * pixels (asset report:
- * assets/brand/reference/paywall-grocery-watch/lotly-paywall-grocery-watch-asset-report.json).
+ * Direction #2 of the lifetime-paywall kit (founder-selected 2026-11-06,
+ * with only its sign-off replaced by the handwritten signature):
+ * `reference/final-direction-02-signature.png`, 851×1848, a 402pt-wide
+ * iPhone screen at 2.117 px/pt. Every number below was measured from its
+ * pixels and checked against simulator captures of this screen. Where the
+ * kit's LAYOUT-SPEC starting measurement and the target disagree, the
+ * target wins and the difference is named.
  *
- * ## The native text
+ * ## The stationery
  *
- * The headline `Keep a closer / watch.` is Public Sans Bold at 41pt: the
- * target's capitals are 69px (29.7pt) tall, and Bold's 0.723 cap height
- * gives 40.7pt; the ink of `Keep a closer` (596px) fits Bold at 40.8pt. Its
- * baselines are 87px (37.4pt) apart, so the leading is 38pt. The break
- * after `closer` is a measure, never a newline: wider than `Keep a closer`
- * (about 262pt at 41pt) and narrower than the whole line (about 413pt), and
- * it grows with the reader's text size.
+ * One RGBA image (assets/paywall/fridge-note/fridge-note-backdrop.png,
+ * 1254×1254) holds the hanging mascot, the lime magnet, the powder-blue
+ * wavy backing, the paper with its curl and the shadow — and no words. In
+ * the target it is drawn 863px wide on an 851px screen, centred: 1.4% wider
+ * than the page, its transparent margins running off both edges. Only its
+ * blank middle band (32%–76% of its height) stretches, vertically, when the
+ * letter needs more room than the square gives it; the mascot and magnet
+ * band above and the curl band below keep the image's own scale, so nothing
+ * recognisable is ever distorted. In the target the middle is already
+ * stretched by 16pt at 402pt. Since the shorter letter (2026-11-07) it may
+ * also COMPRESS, down to `MIN_MIDDLE_FRACTION` of its source height, so the
+ * paper ends just below the signature instead of leaving blank paper.
  *
- * Where the target's type is smaller than the app's shared scale, the shared
- * scale's floor is kept rather than the mock's size, so nothing is less
- * legible than the rest of the app: the benefit explanations, the monthly
- * equivalent and the savings badge are 13pt (the target's ≈11pt, 10.7pt
- * and 12.8pt), and the renewal disclosure and the four footer actions stay
- * the shared `caption` (the target's ≈10pt). The benefit headings are 15pt
- * Bold (the target's 13.3–14.2pt), keeping the target's step above their
- * explanations. The plan prices are Bold 18pt (the target's 16.2–17.7pt).
- * The purchase action is the onboarding's 51pt pill with Ready's 16pt label.
- * All of these are this screen's own sizes: the shared type scale and the
- * shared Button are unchanged.
+ * ## The letter
  *
- * ## The hero and the headline
- *
- * The hero's top band is transparent page above the blue wave, which rises
- * beside the headline on the right. The headline is drawn OVER that band:
- * the hero's top edge sits `HERO_TOP_ABOVE_LAST_BASELINE_PX` target pixels
- * above the headline's last baseline, as in the target, less the
- * `HEADLINE_HERO_GAP` of breathing room beneath `watch.` (spacing pass), so
- * the wave keeps its place beside the words at any width. As the reader's text grows
- * the headline grows upward away from the art. From the accessibility sizes
- * (text scale 1.5, the app's shared threshold) the headline takes the
- * standard `display` base, 33pt (still scaled), and the hero follows it
- * instead of sitting under it: the art is decorative and gives way.
- *
- * ## Glyph provenance
- *
- * The benefit icons are the app's line family: `bookmark` from the set, and
- * two glyphs added for this screen from the same vendored Lucide source
- * (lucide-icons/lucide at the allergen set's pinned commit `f06ac67e…`,
- * release 1.47.0, ISC; lib/allergen-icons.ts): `file-search` is Lucide's
- * `file-search-corner` and `bell` is Lucide's `bell`, both byte-identical to
- * the files at that commit, vendored in assets/icon-sources/lucide/ on
- * 2026-10-01 and rasterised natively by scripts/render-onboarding-assets.mjs
- * on the set's box and stroke. allergen-icons.test.ts pins the sources.
+ * Native, horizontal and left-aligned: the paper's irregular silhouette
+ * makes the tilt, never a rotated container. Public Sans Regular 14pt on
+ * the target's measured 17.8pt pitch (the kit's spec said 18.6) with 9pt
+ * between paragraphs; the signature follows the last line directly, as in
+ * the target, where its box starts 3pt below the last baseline. The text
+ * column starts 16.5% of the page width in from the left and stops 8% from
+ * the right; from the accessibility sizes it widens to 13% on the left.
+ * `people you love.` is underlined by the kit's lime stroke (or the native
+ * lime underline when the phrase wraps). The handwritten signature is an image spoken as `Willis`,
+ * sized from the target's ink (110pt wide), and is the only sign-off: no
+ * printed name, no heart.
  */
 
 import { typography } from '@/constants/design-tokens';
 
-import type { PlanPeriod } from './entitlement';
-import {
-  formatDerivedPrice,
-  PAYWALL_DISCLOSURE,
-  PLAN_TITLES,
-  savingsLine,
-  type PaywallView,
-} from './paywall-screen';
-import { monthlyEquivalentAmount, type Offering } from './purchases/purchase-provider';
+// ── Copy (founder-approved; the shorter letter, revision 2, 2026-11-07) ─────
 
-// ── Copy (founder-approved, 2026-10-01) ─────────────────────────────────────
+export const ONBOARDING_PAYWALL_HEADLINE = 'A note from me.';
 
-/** One line in the source; it breaks after `closer` by measure (see above). */
-export const ONBOARDING_PAYWALL_HEADLINE = 'Keep a closer watch.';
+/** The letter's first paragraph. No greeting precedes it (revision 2). */
+export const LETTER_OPENING =
+  'Life is busy. Keeping up with food recalls shouldn’t be another thing on your plate.';
+
+/**
+ * The second paragraph, split where the underlined emphasis begins so the
+ * component can nest it; joined, it is the approved sentence exactly.
+ */
+export const LETTER_EMPHASIS_PARAGRAPH = {
+  lead: 'I built Lotly to make staying informed easier, so you can make safer choices for yourself and the ',
+  emphasis: 'people you love.',
+} as const;
+
+/** The last paragraph; the handwritten signature follows it, nothing else. */
+export const LETTER_CLOSING =
+  'Your one-time purchase gives you lifetime access and helps me keep Lotly running as a solo founder.';
+
+/** The handwritten signature's spoken name. */
+export const SIGNATURE_ACCESSIBILITY_LABEL = 'Willis';
 
 export interface PaywallBenefit {
   /** A glyph of the app's icon set (components/ui/icon.tsx). */
-  icon: 'file-search' | 'bell' | 'bookmark';
+  icon: 'file-search' | 'bell';
   title: string;
   body: string;
 }
@@ -96,95 +86,50 @@ export interface PaywallBenefit {
 export const ONBOARDING_PAYWALL_BENEFITS: readonly PaywallBenefit[] = [
   {
     icon: 'file-search',
-    title: 'See recalls that match you',
-    body: 'Based on your states, allergens and stores.',
+    title: 'Know what may affect you',
+    body: 'Official FDA & USDA notices, personalized.',
   },
   {
     icon: 'bell',
-    title: 'Get matching recall alerts',
-    body: 'Notifications tailored to your preferences.',
-  },
-  {
-    icon: 'bookmark',
-    title: 'Know what to check',
-    body: 'Search, save and view full recall details.',
+    title: 'Let the alerts come to you',
+    body: 'Matching recalls and important updates.',
   },
 ];
 
-/** The renewal disclosure for the plan the shopper has chosen. */
-export const RENEWAL_DISCLOSURE: Record<PlanPeriod, string> = {
-  annual: 'Renews yearly. Cancel anytime in Apple Account settings.',
-  monthly: 'Renews monthly. Cancel anytime in Apple Account settings.',
-};
-
-/**
- * The disclosure beneath the purchase action: the chosen plan's renewal
- * period once there is a plan to buy, and the shared period-neutral sentence
- * while the offering loads, is unavailable or errored.
- */
-export function renewalDisclosure(view: PaywallView): string {
-  return view.offerings.kind === 'ready'
-    ? RENEWAL_DISCLOSURE[view.selectedPlan]
-    : PAYWALL_DISCLOSURE;
-}
-
 // ── The glyphs this screen adds to the icon set ─────────────────────────────
 
+/**
+ * The benefit glyphs (2026-10-01, kept for this design): `file-search` is
+ * Lucide's `file-search-corner` and `bell` is Lucide's `bell`, both
+ * byte-identical to lucide-icons/lucide at the allergen set's pinned commit
+ * `f06ac67e…` (release 1.47.0, ISC; lib/allergen-icons.ts), vendored in
+ * assets/icon-sources/lucide/ and rasterised natively by
+ * scripts/render-onboarding-assets.mjs. The kit's copies of the two rasters
+ * are byte-identical to the app's. allergen-icons.test.ts pins the sources.
+ */
 export const PAYWALL_ICON_SOURCES = [
   { icon: 'file-search', lucideName: 'file-search-corner' },
   { icon: 'bell', lucideName: 'bell' },
 ] as const;
 export const PAYWALL_ICONS_VENDORED_ON = '2026-10-01';
 
-// ── The hero (asset report) ─────────────────────────────────────────────────
-
-/** The approved target's width, in pixels: the hero is a crop of it at 1:1. */
-export const REFERENCE_WIDTH = 934;
-
-/** lotly-paywall-grocery-watch-scene.png: target rows 152–771, full width. */
-export const HERO_PX = { width: 934, height: 620, top: 152 } as const;
-
-/** The target's headline: capitals from row 118; baselines at rows 187 and 274. */
-export const HEADLINE_PX = { capTop: 118, baselines: [187, 274] } as const;
-
-/** How far the hero's top edge sits above the headline's last baseline, in target pixels. */
-export const HERO_TOP_ABOVE_LAST_BASELINE_PX = HEADLINE_PX.baselines[1] - HERO_PX.top;
-
-/** The hero's height, in points, for a page `width` points wide (it spans the width). */
-export function heroHeight(width: number): number {
-  return (HERO_PX.height * width) / REFERENCE_WIDTH;
-}
-
 // ── The native type ─────────────────────────────────────────────────────────
 
-/** The screen's own text sizes and leading, in points (see "The native text"). */
+/** The screen's own text sizes and leading, in points (measured; see above). */
 export const PAYWALL_TYPE = {
-  headline: { fontSize: 41, lineHeight: 38 },
-  benefitTitle: { fontSize: 15, lineHeight: 20 },
+  headline: { fontSize: 30, lineHeight: 36 },
+  letter: { fontSize: 14, lineHeight: 17.8 },
+  benefitTitle: { fontSize: 16, lineHeight: 21 },
   benefitBody: { fontSize: 13, lineHeight: 18 },
-  planTitle: { fontSize: 14, lineHeight: 19 },
-  planPrice: { fontSize: 18, lineHeight: 23 },
-  planEquivalent: { fontSize: 13, lineHeight: 17 },
-  badge: { fontSize: 13, lineHeight: 17 },
-  /** Ready's purchase-path label on the 51pt pill. */
-  cta: { fontSize: 16, lineHeight: 22 },
+  offerTitle: { fontSize: 21, lineHeight: 27 },
+  offerSubtitle: { fontSize: 13, lineHeight: 19 },
+  price: { fontSize: 24, lineHeight: 29 },
+  /** The 51pt pill's label: the target's 17pt semibold. */
+  cta: { fontSize: 17, lineHeight: 22 },
 } as const;
-
-/**
- * Where iOS puts the headline's glyphs in its tight 38pt lines (shorter than
- * Public Sans' natural 48.2pt at 41pt: hhea ascender 1900, descender −450 on
- * a 2000 unit em). Measured on the iPhone 17 simulator (2026-10-01), it
- * keeps the font's DESCENT at the bottom of every line box and lets the
- * extra height go from the top: the last baseline sits `descent × size`
- * (9.2pt) above the block's bottom, and Bold's ascenders (`l`, `k`, `h`
- * reach 31pt above the baseline at 41pt; capitals 30pt) rise above the first
- * line box. Centring the glyphs instead would put the hero 5pt low, as the
- * first native pass measured.
- */
-export const PUBLIC_SANS_METRICS = { descent: 0.225, boldAscender: 31 / 41 } as const;
-
-/** The headline's measure at the default text size, in points (see "The native text"). */
-export const HEADLINE_MEASURE = 300;
+// The target’s links and independence line (10–12pt) keep the
+// shared `caption` (12pt) instead: nothing on the paywall is smaller than
+// the rest of the app (the floor the grocery-watch paywall set, 2026-10-01).
 
 /** From this text scale the screen takes its accessibility layout. */
 export const ACCESSIBILITY_SCALE = 1.5;
@@ -193,131 +138,219 @@ export function atAccessibilitySize(fontScale: number): boolean {
   return fontScale >= ACCESSIBILITY_SCALE;
 }
 
-/** The headline's base size and leading, before the reader's text scale. */
+/**
+ * The headline's base size and leading. From the accessibility sizes it
+ * takes the shared `heading-1` base (still scaled by the reader's setting).
+ */
 export function headlineType(fontScale: number): { fontSize: number; lineHeight: number } {
   return atAccessibilitySize(fontScale)
-    ? { fontSize: typography.display.fontSize, lineHeight: typography.display.lineHeight }
+    ? {
+        fontSize: typography['heading-1'].fontSize,
+        lineHeight: typography['heading-1'].lineHeight,
+      }
     : PAYWALL_TYPE.headline;
 }
 
-/** The headline's measure, in points, at the reader's text scale. */
-export function headlineMeasure(fontScale: number): number {
-  return HEADLINE_MEASURE * fontScale;
+/**
+ * The font's descent (Public Sans: −450 on a 2000 unit em): iOS keeps it at
+ * the bottom of each line box, so a block's last baseline sits this
+ * fraction of the size above the block's bottom edge.
+ */
+export const PUBLIC_SANS_DESCENT = 0.225;
+
+/**
+ * How far the stage is drawn up under the headline, in points: the target's
+ * artwork top sits 3pt below the headline's baseline, and the headline
+ * block ends `PUBLIC_SANS_DESCENT × size` below its baseline.
+ */
+export function stageOverlap(fontScale: number): number {
+  const { fontSize } = headlineType(fontScale);
+  return fontScale * PUBLIC_SANS_DESCENT * fontSize - 3;
+}
+
+// ── The stationery (measured from the target and the 1254px artwork) ───────
+
+/** How much wider than the page the artwork is drawn (863px on 851px). */
+export const BACKDROP_WIDTH_RATIO = 863 / 851;
+
+/**
+ * The artwork's three vertical bands, as fractions of its height: the
+ * mascot and magnet above `top`, the curl and shadow below `bottom`. Only
+ * the blank paper between them ever stretches.
+ */
+export const BACKDROP_BANDS = { top: 0.32, bottom: 0.76 } as const;
+
+export interface BackdropSlice {
+  /** Where the slice's clip sits in the stage, from its top. */
+  offset: number;
+  /** The clip's height. */
+  height: number;
+  /** Where the whole image is drawn inside the clip, from the clip's top. */
+  imageTop: number;
+  /** The whole image's drawn height (its width is the artwork's). */
+  imageHeight: number;
 }
 
 /**
- * Breathing room added beneath `watch.` (spacing pass, 2026-10-01), in
- * points. At the target's placement the wave came within 7pt of the
- * headline's last baseline on iPhone 17 (where it rises at the left edge)
- * and 5.5pt on an SE, measured on the simulators; the hero now sits this
- * much lower, so the closest approach is about 14pt and 12.5pt. The wave
- * still rises beside the headline on the right.
+ * The shortest the blank middle band is ever drawn, as a fraction of its
+ * source height: enough paper that the backing's wavy edges read as the
+ * same shapes, squashed no further than half (checked on the simulators).
  */
-export const HEADLINE_HERO_GAP = 7;
+export const MIN_MIDDLE_FRACTION = 0.5;
 
 /**
- * How far the hero is drawn UP under the headline block, in points: the
- * distance from the block's last baseline to its bottom (the font's descent,
- * see `PUBLIC_SANS_METRICS`) plus the target's hero-top-to-baseline distance
- * at this page width, less the added `HEADLINE_HERO_GAP`. Zero from the
- * accessibility sizes, where the hero follows the headline.
+ * The three clipped draws of the one image, in points, for artwork `width`
+ * wide and the letter's `height`. The middle band is the same band of the
+ * source drawn taller or shorter (never below `MIN_MIDDLE_FRACTION`); the
+ * others keep the source's own scale, so their seams meet the middle's edges
+ * exactly.
  */
-export function heroOverlap(width: number, fontScale: number): number {
-  if (atAccessibilitySize(fontScale)) return 0;
-  const belowBaseline = fontScale * PUBLIC_SANS_METRICS.descent * PAYWALL_TYPE.headline.fontSize;
-  const targetPlacement = (HERO_TOP_ABOVE_LAST_BASELINE_PX * width) / REFERENCE_WIDTH;
-  return belowBaseline + targetPlacement - HEADLINE_HERO_GAP;
-}
-
-/**
- * The room above the headline's first line box, in points, that its
- * ascenders rise into (`PUBLIC_SANS_METRICS`), applied as the Text's own top
- * padding: without it the Text's bounds shaved 1–2pt off `K` and `l`
- * (measured on the first native pass; padding outside the Text did not help).
- * It grows with the reader's text. From the accessibility sizes the `display`
- * leading (40pt on 33pt) is taller than the font's natural height, the
- * glyphs sit inside their line boxes, and no room is needed.
- */
-export function headlineTopClearance(fontScale: number): number {
-  if (atAccessibilitySize(fontScale)) return 0;
-  const { fontSize, lineHeight } = PAYWALL_TYPE.headline;
-  const aboveFirstBaseline = lineHeight - PUBLIC_SANS_METRICS.descent * fontSize;
-  return Math.ceil(fontScale * (PUBLIC_SANS_METRICS.boldAscender * fontSize - aboveFirstBaseline));
-}
-
-// ── Geometry (points; measured at 402pt) ────────────────────────────────────
-
-/** The benefit icon's plate: the target's 35.3pt powder-blue circle. */
-export const BENEFIT_PLATE = 36;
-
-/** The purchase action's minimum height, in points: the onboarding's 51pt pill. */
-export const CTA_MIN_HEIGHT = 51;
-
-/** A plan card's radio: the target's 20pt ring. */
-export const RADIO_SIZE = 20;
-
-// ── The plan cards ──────────────────────────────────────────────────────────
-
-const PERIOD_UNIT: Record<PlanPeriod, string> = { annual: 'year', monthly: 'month' };
-
-export interface OnboardingPlanCard {
-  period: PlanPeriod;
-  title: string;
-  /** `$29.99 / year`: the store's own string, then the period. */
-  priceText: string;
-  /** `$2.50/month equivalent` for the annual plan; null for monthly or when underivable. */
-  equivalentLine: string | null;
-  /** `Save 50%` on the annual plan when the store's prices show a saving; otherwise null. */
-  savingsBadge: string | null;
-  selected: boolean;
-  /**
-   * Spoken: the plan, its full charge and billing period, then the
-   * explanatory equivalent and the saving. The radio's state carries the
-   * selection, and the badge is drawing, so nothing is said twice.
-   */
-  accessibilityLabel: string;
-}
-
-export function onboardingPlanCard(
-  offering: Offering,
-  period: PlanPeriod,
-  selected: boolean,
-  locale?: string,
-): OnboardingPlanCard {
-  const pkg = offering[period];
-  const unit = PERIOD_UNIT[period];
-  const equivalentAmount = period === 'annual' ? monthlyEquivalentAmount(pkg) : null;
-  const equivalent =
-    equivalentAmount === null
-      ? null
-      : formatDerivedPrice(equivalentAmount, pkg.price.currencyCode, locale);
-  const savingsBadge = period === 'annual' ? savingsLine(offering) : null;
-  const spoken = [
-    `${PLAN_TITLES[period]}, ${pkg.price.formatted} per ${unit}`,
-    equivalent === null ? null : `${equivalent} per month equivalent`,
-    savingsBadge,
-  ]
-    .filter((part): part is string => part !== null)
-    .join('. ');
+export function backdropSlices(
+  width: number,
+  height: number,
+): { height: number; slices: [BackdropSlice, BackdropSlice, BackdropSlice] } {
+  const top = width * BACKDROP_BANDS.top;
+  const bottom = width * (1 - BACKDROP_BANDS.bottom);
+  const minimum = top + bottom + MIN_MIDDLE_FRACTION * (width - top - bottom);
+  const drawn = Math.max(minimum, height);
+  const middle = drawn - top - bottom;
+  const stretch = middle / (width - top - bottom);
   return {
-    period,
-    title: PLAN_TITLES[period],
-    priceText: `${pkg.price.formatted} / ${unit}`,
-    equivalentLine: equivalent === null ? null : `${equivalent}/month equivalent`,
-    savingsBadge,
-    selected,
-    accessibilityLabel: `${spoken}.`,
+    height: drawn,
+    slices: [
+      { offset: 0, height: top, imageTop: 0, imageHeight: width },
+      {
+        offset: top,
+        height: middle,
+        imageTop: -top * stretch,
+        imageHeight: width * stretch,
+      },
+      { offset: drawn - bottom, height: bottom, imageTop: -(width - bottom), imageHeight: width },
+    ],
   };
 }
 
-/** Both cards, Annual first, or null while there is no offering to show. */
-export function onboardingPlanCards(
-  view: PaywallView,
-  locale?: string,
-): OnboardingPlanCard[] | null {
-  if (view.offerings.kind !== 'ready') return null;
-  const { offering } = view.offerings;
-  return (['annual', 'monthly'] as const).map((period) =>
-    onboardingPlanCard(offering, period, period === view.selectedPlan, locale),
-  );
+/**
+ * Where the letter sits. `top` and `bottom` are fractions of the artwork's
+ * drawn width (below the mascot and magnet, clear of the curl); `left` and
+ * `right` are fractions of the PAGE width (the kit's spec, which the
+ * target's lines bear out).
+ */
+export const LETTER_INSETS = {
+  /**
+   * From the artwork's top to the first line box: below the mascot's leg
+   * (revision 2 has no indented greeting to step around it; 0.222 before).
+   */
+  top: 0.255,
+  /** From the signature's box to the artwork's bottom edge. */
+  bottom: 0.098,
+  left: 0.165,
+  leftAtAccessibilitySize: 0.13,
+  right: 0.08,
+} as const;
+
+/** The left inset of the letter column for this text scale, as a fraction of the page width. */
+export function letterLeftInset(fontScale: number): number {
+  return atAccessibilitySize(fontScale)
+    ? LETTER_INSETS.leftAtAccessibilitySize
+    : LETTER_INSETS.left;
 }
+
+/** Between the letter's paragraphs, in points. */
+export const LETTER_PARAGRAPH_GAP = 9;
+
+/**
+ * The handwritten signature, 2164×727 RGBA: its ink spans 87.3% of the
+ * image's width, so a 126pt image draws the target's 110pt of ink. Its box
+ * steps left of the text column by the ink's own margin and the paper's
+ * tilt (the target's ink starts 8pt left of the last paragraph).
+ */
+export const SIGNATURE = {
+  aspectRatio: 2164 / 727,
+  width: 126,
+  marginLeft: -22,
+} as const;
+
+/**
+ * The lime stroke under `people you love.` (the kit's
+ * people-you-love-underline.svg, `M3 6 Q84 -1 173 5` on a 176×9 box, stroke
+ * 3): redrawn at the phrase's measured width, in points. Its box starts
+ * `rise` points above the bottom of the phrase's line box, which is where
+ * the target's stroke begins, just under the descenders.
+ */
+export const UNDERLINE = { height: 7, rise: 1, stroke: 2.4 } as const;
+
+/** The stroke's path for a phrase `width` points wide: the kit's curve, scaled. */
+export function underlinePath(width: number): string {
+  const h = UNDERLINE.height / 9;
+  const r = (n: number) => Math.round(n * 100) / 100;
+  return `M${r(width * (3 / 176))} ${r(6 * h)} Q${r(width * (84 / 176))} ${r(-1 * h)} ${r(width * (173 / 176))} ${r(5 * h)}`;
+}
+
+/**
+ * How far the benefits are drawn up into the artwork's transparent bottom
+ * margin, as a fraction of its drawn width (the target's first plate starts
+ * 16pt above the square's bottom edge at 408pt).
+ */
+export const BENEFITS_OVERLAP = 0.039;
+
+// ── Geometry (points; measured at 402pt) ────────────────────────────────────
+
+/** The benefit icon's plate: the target's 43pt powder-blue circle. */
+export const BENEFIT_PLATE = 43;
+
+/** The plate's glyph (the target's 23pt line glyph). */
+export const BENEFIT_GLYPH = 23;
+
+/** The purchase action's minimum height, in points. */
+export const CTA_MIN_HEIGHT = 51;
+
+// ── Spare height (2026-11-08) ───────────────────────────────────────────────
+
+/**
+ * How the page's spare height is shared when everything already fits with
+ * room left over (a 402pt iPhone at the default text size had 83pt of blank
+ * page under the benefits, while the first benefit touched the note). The
+ * spare beyond `below` is shared out: a quarter between the two benefits (up
+ * to `maxBetween`, the brief's +8–12pt) and the rest above the first (up to
+ * `maxTop`), so the benefits sit about evenly between the note and the
+ * purchase section. `below` plus the page's 16pt bottom padding is what
+ * stays under the last benefit — or the standalone route's Privacy & Data
+ * Controls, whose height the measurement includes: about 24pt, the low end
+ * of the brief's 24–32pt, which leaves the standalone route (where the
+ * link takes most of the room) a few points to give the first benefit.
+ *
+ * Only at the default text size or smaller (`fontScale <= 1`) and only when
+ * there is spare: an iPhone SE, whose page scrolls, and every larger text
+ * size keep the compact spacing.
+ */
+export const SPARE_SPACING = { below: 8, betweenShare: 0.25, maxTop: 44, maxBetween: 12 } as const;
+
+export function benefitSpacing(
+  spare: number,
+  fontScale: number,
+  lift = 0,
+): { top: number; between: number; lift: number } {
+  if (fontScale > 1 || !(spare >= 0)) return { top: 0, between: 0, lift: 0 };
+  const extra = spare - SPARE_SPACING.below;
+  const between =
+    extra > 0
+      ? Math.round(Math.min(SPARE_SPACING.maxBetween, extra * SPARE_SPACING.betweenShare))
+      : 0;
+  const top = extra > 0 ? Math.round(Math.min(SPARE_SPACING.maxTop, extra - between)) : 0;
+  const lent = Math.min(lift, PAGE_BOTTOM_PADDING);
+  return { top: top + lent, between, lift: lent };
+}
+
+/** The page's own bottom padding, in points: what a `lift` may borrow from. */
+export const PAGE_BOTTOM_PADDING = 16;
+
+/**
+ * The standalone `/paywall` (2026-11-08): its Privacy & Data Controls entry
+ * takes the spare the onboarding route gives the benefits, which left the
+ * first benefit against the note. When the page fits at the default text
+ * size, it moves this much from below that entry to above the first benefit
+ * (`benefitSpacing`'s `lift`): the page's total height, the fit and the
+ * footer's position are unchanged, and the entry keeps its 44pt target.
+ */
+export const STANDALONE_BENEFIT_LIFT = 14;

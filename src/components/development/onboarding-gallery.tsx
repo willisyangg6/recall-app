@@ -63,7 +63,6 @@ import {
 import { RETAILER_CATALOG } from '@/domain/retailer-catalog';
 import { useAccess } from '@/hooks/use-access';
 import { entryRoute } from '@/lib/access-gate';
-import type { PlanPeriod } from '@/lib/entitlement';
 import {
   completeNotificationEducation,
   completePersonalization,
@@ -276,25 +275,16 @@ function LiveRetailers({ initial }: { initial: string[] }) {
 }
 
 /**
- * A simulated purchase: the view held in this sample's memory, so choosing a
- * plan changes only the sample; subscribing, restoring and the links do
- * nothing.
+ * A simulated purchase: the sample's fixed view; buying, restoring and the
+ * links do nothing.
  */
-function useSamplePurchase(view: PaywallView): PurchaseProps {
-  const [current, setCurrent] = useState(view);
+function samplePurchase(view: PaywallView): PurchaseProps {
   return {
-    view: current,
-    onSelectPlan: (period) => setCurrent((prior) => ({ ...prior, selectedPlan: period })),
-    onSubscribe: noop,
+    view,
+    onPurchase: noop,
     onFooterAction: noop,
     destinationNotice: null,
   };
-}
-
-/** The onboarding (grocery-watch) paywall with a view handed in. */
-function LiveOnboardingPaywall({ view }: { view: PaywallView }) {
-  const purchase = useSamplePurchase(view);
-  return <OnboardingPaywallPanel purchase={purchase} onBack={noop} />;
 }
 
 /**
@@ -333,12 +323,10 @@ function CaptureControlsToggle() {
 }
 
 /**
- * The standalone paywall with a view handed in: since 2026-10-04 the same
- * grocery-watch panel the onboarding paywall draws, over the lapsed
- * subscriber's route wiring.
+ * The paywall with a view handed in: the one panel both routes draw.
  */
 function LivePaywall({ view, children }: { view: PaywallView; children?: React.ReactNode }) {
-  const purchase = useSamplePurchase(view);
+  const purchase = samplePurchase(view);
   return (
     <OnboardingPaywallPanel purchase={purchase} onBack={noop}>
       {children}
@@ -407,13 +395,9 @@ function samplePreview(count: number, total: number): ReadyPreviewState {
   };
 }
 
-function paywallView(
-  offering: Offering | null,
-  overrides: Partial<PaywallView> = {},
-  selectedPlan: PlanPeriod = 'annual',
-): PaywallView {
+function paywallView(offering: Offering | null, overrides: Partial<PaywallView> = {}): PaywallView {
   return {
-    ...initialPaywallView(selectedPlan),
+    ...initialPaywallView(),
     offerings: offering === null ? { kind: 'loading' } : { kind: 'ready', offering },
     ...overrides,
   };
@@ -641,31 +625,27 @@ export function PaywallGallery() {
   const long = devScenarios?.LONG_PRICE_OFFERING ?? null;
   const views: [caption: string, view: PaywallView][] = [
     [
-      'Annual selected — simulated: the fixture offering; Annual preselected with the value badge, the monthly equivalent and the saving',
+      'Lifetime access — simulated: the development adapter’s fixture price, not a store answer',
       paywallView(offering),
     ],
     [
-      'Monthly selected — simulated: the same offering with Monthly chosen; the action names the monthly commitment',
-      paywallView(offering, {}, 'monthly'),
-    ],
-    [
-      'Offering loading — simulated: the store has not answered; plans absent, Subscribe inert, the footer intact',
+      'Offering loading — simulated: the store has not answered; no price, the action inert, the footer intact',
       paywallView(null),
     ],
     [
-      'Purchase in progress — simulated: Subscribing…, Restore inert',
+      'Purchase in progress — simulated: Purchasing…, Restore inert',
       paywallView(offering, { operation: 'purchasing' }),
     ],
     [
-      'User cancelled — simulated: the calm sentence; plans still selectable',
+      'User cancelled — simulated: the calm sentence; the action still available',
       paywallView(offering, { notice: 'cancelled' }),
     ],
     [
-      'Recoverable purchase error — simulated: the alert surface beneath the action',
+      'Recoverable purchase error — simulated: the alert surface above the action',
       paywallView(offering, { notice: 'purchase_error' }),
     ],
     [
-      'Restore in progress — simulated: Restoring… in the footer, Subscribe inert',
+      'Restore in progress — simulated: Restoring… in the footer, the action inert',
       paywallView(offering, { operation: 'restoring' }),
     ],
     [
@@ -677,7 +657,7 @@ export function PaywallGallery() {
       paywallView(offering, { notice: 'restore_nothing' }),
     ],
     [
-      'Provider temporarily unavailable — simulated: plans unavailable; Subscribe inert; Restore still offered',
+      'Provider temporarily unavailable — simulated: no price; the action inert; Restore still offered',
       paywallView(offering, { offerings: { kind: 'unavailable' } }),
     ],
     [
@@ -685,37 +665,7 @@ export function PaywallGallery() {
       paywallView(offering, { offerings: { kind: 'unavailable' }, unconfirmed: true }),
     ],
     [
-      'Long localized prices — simulated: a wide currency pair (not a real price); nothing truncates',
-      paywallView(long),
-    ],
-  ];
-  const onboardingViews: [caption: string, view: PaywallView][] = [
-    [
-      'Onboarding paywall, Annual selected — simulated: the fixture offering; Save from the store prices, the monthly equivalent, Renews yearly',
-      paywallView(offering),
-    ],
-    [
-      'Onboarding paywall, Monthly selected — simulated: the action and the disclosure name the monthly commitment',
-      paywallView(offering, {}, 'monthly'),
-    ],
-    [
-      'Onboarding paywall, offering loading — simulated: one line where the plans would be, Subscribe inert, the period-neutral disclosure',
-      paywallView(null),
-    ],
-    [
-      'Onboarding paywall, purchase in progress — simulated: Subscribing…, Restore inert',
-      paywallView(offering, { operation: 'purchasing' }),
-    ],
-    [
-      'Onboarding paywall, user cancelled — simulated: the calm sentence; plans still selectable',
-      paywallView(offering, { notice: 'cancelled' }),
-    ],
-    [
-      'Onboarding paywall, recoverable purchase error — simulated: the alert surface above the action',
-      paywallView(offering, { notice: 'purchase_error' }),
-    ],
-    [
-      'Onboarding paywall, long localized prices — simulated: a wide currency pair (not a real price); nothing truncates',
+      'Long localized price — simulated: a wide currency string (not a real price); it wraps, never truncates',
       paywallView(long),
     ],
   ];
@@ -723,29 +673,13 @@ export function PaywallGallery() {
     <Surface background="background/page" radius={16} border="border/subtle" style={styles.gallery}>
       <CaptureControlsToggle />
       <Text variant="caption" color="text/secondary">
-        The onboarding paywall (components/paywall/onboarding-paywall-panel.tsx, the grocery-watch
-        composition), imported from production, over the same simulated views as the standalone
-        paywall below.
-      </Text>
-      {onboardingViews.map(([caption, view]) => (
-        <GallerySample key={caption} caption={caption}>
-          <Screen>
-            <LiveOnboardingPaywall view={view} />
-          </Screen>
-        </GallerySample>
-      ))}
-      <GallerySample caption="Onboarding paywall, small device height — simulated: a 568pt viewport; the content scrolls above the pinned footer">
-        <Screen height={SMALL_DEVICE_HEIGHT}>
-          <LiveOnboardingPaywall view={paywallView(offering)} />
-        </Screen>
-      </GallerySample>
-      <Text variant="caption" color="text/secondary">
-        The standalone hard paywall a lapsed subscriber meets (/paywall), which since 2026-10-04
-        composes the same grocery-watch panel as the onboarding paywall. Every view below is
-        simulated: the offering is the development adapter’s fixture (the expected US prices) or a
-        deliberately long localized pair, and Subscribe, Restore, Terms, Privacy, Support and Back
-        are wired to nothing. Cached active entitlement is a gate state, not a paywall state: with a
-        verified cache the paywall is never shown, which the gate scenarios below demonstrate.
+        The paywall (components/paywall/onboarding-paywall-panel.tsx, the Fridge Note composition),
+        imported from production. Both routes draw it: the onboarding paywall from Ready, and the
+        standalone /paywall a lapsed subscriber meets. Every view below is simulated: the offering
+        is the development adapter’s fixture price or a deliberately long localized string, and the
+        purchase, Restore, Terms, Privacy, Support and Back are wired to nothing. Cached active
+        entitlement is a gate state, not a paywall state: with a verified cache the paywall is never
+        shown, which the gate scenarios below demonstrate.
       </Text>
       {views.map(([caption, view]) => (
         <GallerySample key={caption} caption={caption}>
@@ -754,7 +688,7 @@ export function PaywallGallery() {
           </Screen>
         </GallerySample>
       ))}
-      <GallerySample caption="Small device height — simulated: the paywall in a 568pt viewport">
+      <GallerySample caption="Small device height — simulated: a 568pt viewport; the content scrolls above the pinned footer">
         <Screen height={SMALL_DEVICE_HEIGHT}>
           <LivePaywall view={paywallView(offering)} />
         </Screen>

@@ -42,7 +42,7 @@ import {
 export function PaywallDevelopmentControls({
   onScenarioApplied,
 }: {
-  /** The route reloads its offering and preselects the scenario's plan. */
+  /** The route reloads its offering. */
   onScenarioApplied: (id: DevelopmentPurchaseScenarioId) => void;
 }) {
   const access = useAccess();
@@ -99,14 +99,21 @@ export function PaywallDevelopmentControls({
         ) : null}
         <Button label="Apply scenario" variant="secondary" onPress={() => void apply()} />
         <Button
-          label="Simulate an active subscription"
+          label="Simulate lifetime access"
+          variant="secondary"
+          onPress={() => {
+            void seedDevelopmentSubscription('lifetime').then(() => access.refreshEntitlement());
+          }}
+        />
+        <Button
+          label="Simulate an earlier annual subscription"
           variant="secondary"
           onPress={() => {
             void seedDevelopmentSubscription('annual').then(() => access.refreshEntitlement());
           }}
         />
         <Button
-          label="Clear simulated subscription"
+          label="Clear simulated purchase"
           variant="secondary"
           onPress={() => {
             void clearDevelopmentSubscription().then(() => access.refreshEntitlement());
