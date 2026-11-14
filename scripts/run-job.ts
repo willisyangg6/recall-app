@@ -9,11 +9,12 @@
  *   npm run jobs:labels -- --full          # daily full sweep + failure retries
  *   npm run jobs:enforcement               # openFDA reconcile (weekly-gated)
  *   npm run jobs:push                      # push delivery + receipt processing
+ *   npm run jobs:retailer-costco           # Costco notices → private tables only
  *
  * Flags:
  *   --dry-run   fda/fsis: full pipeline in memory, nothing persisted.
- *               labels/enforcement/push: read the live DB, write nothing
- *               (push additionally sends nothing to Expo).
+ *               labels/enforcement/push/retailer-costco: read the live DB,
+ *               write nothing (push additionally sends nothing to Expo).
  *   --force     ignore the unchanged-source skip gate.
  *
  * Persistent modes need SUPABASE_URL and SUPABASE_SECRET_KEY in .env locally,
@@ -28,16 +29,19 @@ import { runFdaJob } from '../src/server/jobs/fda-job';
 import { runFsisJob } from '../src/server/jobs/fsis-job';
 import { runLabelsJob } from '../src/server/jobs/labels-job';
 import { runPushJob } from '../src/server/jobs/push-job';
+import { runRetailerCostcoJob } from '../src/server/jobs/retailer-costco-job';
 import type { JobContext, JobReport } from '../src/server/jobs/runner';
 import { SupabaseLabelStore } from '../src/server/fsis/label-store';
 import { ExpoPushTransport } from '../src/server/push/expo-transport';
 import { entitlementSourceFromEnv } from '../src/server/push/revenuecat-entitlement';
 import { SupabasePushStore } from '../src/server/push/push-store';
+import { liveCostcoSource } from '../src/server/retailer/costco-monitor';
+import { SupabaseRetailerNoticeStore } from '../src/server/retailer/store';
 import { MemoryStore } from '../src/server/store/memory-store';
 import { withReadRetry } from '../src/server/store/read-retry';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
 
-const JOB_NAMES = ['fda', 'fsis', 'labels', 'enforcement', 'push'] as const;
+const JOB_NAMES = ['fda', 'fsis', 'labels', 'enforcement', 'push', 'retailer-costco'] as const;
 type JobArg = (typeof JOB_NAMES)[number];
 
 function loadDotEnv(): void {
@@ -121,23 +125,29 @@ async function main(): Promise<void> {
             dryRun,
             labelStore: new SupabaseLabelStore(client),
           })
-        : job === 'push'
-          ? await runPushJob(ctx, {
+        : job === 'retailer-costco'
+          ? await runRetailerCostcoJob(ctx, {
               dryRun,
-              pushStore: new SupabasePushStore(client),
-              // EXPO_ACCESS_TOKEN is optional (enhanced push security);
-              // server-only, never printed, never in the app bundle.
-              transport: new ExpoPushTransport({ accessToken: process.env.EXPO_ACCESS_TOKEN }),
-              // The alert entitlement gate's RevenueCat read (server-only,
-              // read-only key, never printed). Unconfigured holds every alert.
-              entitlements: entitlementSourceFromEnv(process.env),
+              store: new SupabaseRetailerNoticeStore(client),
+              source: liveCostcoSource(),
             })
-          : await runEnforcementJob(ctx, {
-              dryRun,
-              force,
-              client,
-              dataStore: supabaseStore,
-            });
+          : job === 'push'
+            ? await runPushJob(ctx, {
+                dryRun,
+                pushStore: new SupabasePushStore(client),
+                // EXPO_ACCESS_TOKEN is optional (enhanced push security);
+                // server-only, never printed, never in the app bundle.
+                transport: new ExpoPushTransport({ accessToken: process.env.EXPO_ACCESS_TOKEN }),
+                // The alert entitlement gate's RevenueCat read (server-only,
+                // read-only key, never printed). Unconfigured holds every alert.
+                entitlements: entitlementSourceFromEnv(process.env),
+              })
+            : await runEnforcementJob(ctx, {
+                dryRun,
+                force,
+                client,
+                dataStore: supabaseStore,
+              });
   }
 
   console.log(

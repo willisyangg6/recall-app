@@ -187,6 +187,14 @@ later steps still run (`if: ${{ !cancelled() }}`).
 Both workflows are identical in shape; only their triggers, steps, and
 timeouts differ.
 
+A third workflow, `retailer-notices.yml`, has the same shape (`production`
+environment, per-step secrets, SHA-pinned actions, `contents: read`, its own
+non-cancelling concurrency group) and runs one step, `jobs:retailer-costco`,
+every two hours at `:23`. It writes only the private Costco notice tables, is
+not watched or dispatched by the watchdog, and never touches agency
+ingestion. Its failures, the review queue and how to disable it are in
+[recall-retailer-notices.md](recall-retailer-notices.md#scheduled-runs).
+
 |                         | `scheduled-ingest.yml`                                                        | `daily-maintenance.yml`                                  |
 | ----------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------- |
 | Purpose                 | Fast channel: FDA + FSIS + labels + push                                      | openFDA enforcement + full label sweep                   |

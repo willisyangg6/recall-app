@@ -25,7 +25,13 @@ import { canonicalJson, contentHash } from '../pipeline';
 import type { IngestRunSource, JobRunOutcome, RecallStore } from '../store/types';
 
 export type JobName =
-  'fda_announcements' | 'fsis_ingest' | 'fsis_labels' | 'fda_enforcement' | 'push_delivery';
+  | 'fda_announcements'
+  | 'fsis_ingest'
+  | 'fsis_labels'
+  | 'fda_enforcement'
+  | 'push_delivery'
+  // Private Costco notice monitor: writes only the retailer_notices tables.
+  | 'retailer_costco';
 
 export interface JobSpec {
   jobName: JobName;

@@ -283,7 +283,7 @@ export interface IngestRunPatch {
  * and push-delivery jobs produce no source records, but their runs live in
  * the same ledger.
  */
-export type IngestRunSource = SourceSystem | 'fsis_labels' | 'push_delivery';
+export type IngestRunSource = SourceSystem | 'fsis_labels' | 'push_delivery' | 'retailer_costco';
 
 export type JobRunOutcome = 'succeeded' | 'partial' | 'failed';
 

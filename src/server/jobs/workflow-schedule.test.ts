@@ -50,7 +50,7 @@ test('the old congested schedule is gone', () => {
 
 test('manual workflow_dispatch remains available on both workflows', () => {
   // The recovery path for a missed tick, and the only way to run CI on demand.
-  for (const name of ['scheduled-ingest.yml', 'daily-maintenance.yml']) {
+  for (const name of PRODUCTION_WORKFLOWS) {
     assert.match(workflow(name), /^\s*workflow_dispatch:/m, `${name} lost workflow_dispatch`);
   }
 });
@@ -98,7 +98,7 @@ test('third-party actions are SHA-pinned, never floating tags', () => {
   // A tag is a mutable pointer the action's owner can move at any time;
   // a commit SHA is not. This is GitHub's own documented hardening
   // guidance and the documented supply-chain vector.
-  for (const name of ['scheduled-ingest.yml', 'daily-maintenance.yml']) {
+  for (const name of PRODUCTION_WORKFLOWS) {
     const yaml = workflow(name);
     const uses = [...yaml.matchAll(/^\s*-?\s*uses:\s*(\S+)/gm)].map((match) => match[1]);
     assert.deepEqual(
@@ -120,7 +120,7 @@ test('every pinned action carries the human-readable release beside its SHA', ()
   // A bare 40-character hex string is unreviewable. The trailing comment is
   // what lets a reader tell v7.0.1 from an attacker's commit at a glance,
   // and what makes the update procedure auditable.
-  for (const name of ['scheduled-ingest.yml', 'daily-maintenance.yml']) {
+  for (const name of PRODUCTION_WORKFLOWS) {
     const yaml = workflow(name);
     for (const { uses, release } of PINNED_ACTIONS) {
       assert.ok(
@@ -176,6 +176,21 @@ test('daily maintenance still runs exactly its three job steps', () => {
   ]);
 });
 
+test('the Costco monitor runs every two hours, off the congested slots, in its own workflow', () => {
+  const yaml = workflow('retailer-notices.yml');
+  assert.deepEqual(crons(yaml), ['23 */2 * * *']);
+  const invoked = [...yaml.matchAll(/^\s*run:\s*(npm run .+)$/gm)].map((match) => match[1].trim());
+  // The job runner (lease + ingest_runs row), never the human-gated CLI.
+  assert.deepEqual(invoked, ['npm run jobs:retailer-costco']);
+  assert.ok(!/retailer:costco/.test(yaml), 'the schedule must not invoke the manual CLI');
+  // Agency ingestion is untouched: neither agency workflow runs the monitor.
+  for (const name of ['scheduled-ingest.yml', 'daily-maintenance.yml']) {
+    assert.ok(!/retailer/.test(workflow(name)), `${name} gained a retailer step`);
+  }
+  // And the watchdog never dispatches it.
+  assert.notEqual(WATCHDOG_TARGET.workflow, 'retailer-notices.yml');
+});
+
 test('the scheduled label steps are the job runner, never the manual backfill', () => {
   const scripts = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts as Record<
     string,
@@ -197,7 +212,11 @@ test('the scheduled label steps are the job runner, never the manual backfill', 
 
 // ── Secret scope (P2B7S) ────────────────────────────────────────────────────
 
-const PRODUCTION_WORKFLOWS = ['scheduled-ingest.yml', 'daily-maintenance.yml'] as const;
+const PRODUCTION_WORKFLOWS = [
+  'scheduled-ingest.yml',
+  'daily-maintenance.yml',
+  'retailer-notices.yml',
+] as const;
 
 /**
  * Every production secret this repository holds, by NAME (runbook §4). A new
@@ -608,6 +627,7 @@ test('no document presents the YAML ref check as the security boundary', () => {
   const sources = [
     join('.github', 'workflows', 'scheduled-ingest.yml'),
     join('.github', 'workflows', 'daily-maintenance.yml'),
+    join('.github', 'workflows', 'retailer-notices.yml'),
     join('docs', 'recall-production-runbook.md'),
     join('docs', 'recall-operations.md'),
   ];

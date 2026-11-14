@@ -1,9 +1,10 @@
 # Retailer recall notices (Costco first)
 
-Status (2026-11-13): **private monitoring slice, prepared, not deployed.** The migration
-`20261113000000_retailer_notices.sql` is not applied in production, nothing is scheduled, and no
-app build reads retailer notices. The live feed, the case tables and the notification ledger are
-untouched by design, not by omission.
+Status (2026-11-14): **private monitoring, live and scheduled.** The migration
+`20261113000000_retailer_notices.sql` is applied in production, two manual runs stored the 21
+notices on the index, and `retailer-notices.yml` runs the monitor every two hours. No app build
+reads retailer notices. The live feed, the case tables and the notification ledger are untouched by
+design, not by omission.
 
 This document is the authoritative home for retailer-published notices: what the sources actually
 do, how the monitor reads them, what it is allowed to write, and what a client release would need.
@@ -131,7 +132,8 @@ writes no notification event.
 ## Boundary
 
 - The store writes only `retailer_notices` and `retailer_notice_documents`, and only SELECTs
-  `recall_cases`. [store.test.ts](../src/server/retailer/store.test.ts) drives a full plan and apply
+  `recall_cases`. The scheduled job adds only the shared job runner's own bookkeeping: its
+  `job_leases` lease and one `ingest_runs` row per run. [store.test.ts](../src/server/retailer/store.test.ts) drives a full plan and apply
   through a recording client. It also fails if any retailer module names a ledger or case table,
   calls an RPC, or imports the pipeline or push code.
 - The migration revokes all privileges from `public`, `anon` and `authenticated`, enables RLS with
@@ -157,18 +159,58 @@ writes: rows upserted plus documents archived. A rerun over unchanged sources pl
 `last_seen_on_index_at` touches and archives nothing. A dry run against a database without the
 migration plans as a first run and says so; an apply there is refused.
 
-Rollout, each step a separate approval:
+Rollout, each step a separate approval (all done):
 
-1. Apply the migration (`supabase db push`).
-2. Run `retailer:costco` once by hand: dry run, then apply with the dry run's count.
+1. Apply the migration. **Done 2026-11-14** (`supabase db push --linked`). Afterwards both tables
+   had RLS with no policies and no `anon` or `authenticated` privilege, and the app's publishable
+   key received `42501 permission denied` for every read and write on both.
+2. Run `retailer:costco` twice by hand. **Done 2026-11-14:** the first apply wrote 42 (21 notices,
+   21 documents); the second wrote 21 last-seen updates and archived nothing. No other table
+   changed.
 3. Confirm Costco answers the scheduler's network. **Done 2026-11-14:** GitHub run `43624894238`
    on the diagnostic branch `diag/costco-runner-probe` (a no-secret, push-triggered probe from a
    hosted `ubuntu-latest` runner with Node 24 and the production User-Agent) succeeded. The job
-   fails unless all three attempts read the index, find notice documents and receive a real PDF.
-   Delete the branch once it is no longer needed. It is never merged.
-4. Only then schedule it, through `scripts/run-job.ts` with a lease and an `ingest_runs` row, like
-   every other unattended job. That integration is not built in this slice: it changes shared job
-   types and the workflow, which is deployment.
+   failed unless all three attempts read the index, found notice documents and received a real
+   PDF. The branch was never merged and **has been deleted**, locally and on GitHub.
+4. Schedule it. **Done 2026-11-14:** see [Scheduled runs](#scheduled-runs).
+
+## Scheduled runs
+
+`.github/workflows/retailer-notices.yml` runs `npm run jobs:retailer-costco` every two hours at
+`:23` UTC (and on `workflow_dispatch`). That is the shared job runner
+([scripts/run-job.ts](../scripts/run-job.ts),
+[retailer-costco-job.ts](../src/server/jobs/retailer-costco-job.ts)): the same plan and apply as the
+manual command, under a `retailer_costco` lease, recording one `ingest_runs` row whose metrics hold
+the decision tally, the notices that are new or changed this run, and the review queue. The
+schedule never runs the human-gated `retailer:costco` CLI.
+
+It is a separate workflow so agency ingestion is unaffected: `scheduled-ingest.yml` and
+`daily-maintenance.yml` are unchanged, a Costco failure cannot fail or delay an agency tick, and
+the scheduler watchdog neither watches nor dispatches it. GitHub cron is best-effort, so a missed
+tick is simply picked up by the next one.
+
+How a failure shows:
+
+- **failed** (red workflow; GitHub emails on a failed scheduled run): the index could not be
+  fetched, parsed to no entries, or a database read or write failed. Nothing stored is changed or
+  removed.
+- **partial**: a letter could not be fetched. That notice is skipped this run and retried on the
+  next; a warning annotation names it on the run page.
+- `npm run ops:health` lists the job as "Costco notices (private)". It warns after 12 hours and is
+  stale after 24 hours without a successful run.
+- New or changed notices and the manual-review queue appear as notice annotations on the run page
+  and in the run's `ingest_runs.metrics` (`newOrChanged`, `reviewQueue`).
+
+To disable the schedule:
+
+```bash
+gh workflow disable retailer-notices.yml   # or Actions → retailer-notices → Disable workflow
+gh workflow enable retailer-notices.yml    # to resume
+```
+
+Disabling stops new runs and leaves every stored notice as it is. A run already in progress
+finishes, or can be cancelled from the Actions page; it holds only its own lease, which expires
+after 30 minutes.
 
 ## Showing verified notices in the app: the smallest safe client change
 

@@ -87,6 +87,15 @@ const JOBS: JobHealthSpec[] = [
     warnAfterHours: 30,
     exportStaleDays: 10,
   },
+  {
+    // Private Costco monitor (docs/recall-retailer-notices.md): scheduled every
+    // two hours, best-effort GitHub cron with no watchdog, so stale only after
+    // a full day without a run.
+    jobName: 'retailer_costco',
+    label: 'Costco notices (private)',
+    staleAfterHours: 24,
+    warnAfterHours: 12,
+  },
 ];
 
 function loadDotEnv(): void {

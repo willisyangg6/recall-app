@@ -1,0 +1,87 @@
+# Private Costco notice monitor, every two hours at :23 (UTC), off the
+# :00/:30 boundaries and the :07/:37 agency ticks.
+#
+# It reads Costco's public recall index and member letters and writes ONLY the
+# private retailer_notices and retailer_notice_documents tables (plus the job
+# runner's lease and ingest_runs row). It never writes the feed, the case
+# tables or the notification ledger, so it cannot change what shoppers see or
+# send an alert. docs/recall-retailer-notices.md is the authoritative home,
+# including how to disable this schedule.
+#
+# A separate workflow on purpose: FDA/FSIS ingestion (scheduled-ingest.yml) is
+# unchanged, a Costco failure can never fail or delay an agency tick, and the
+# scheduler watchdog neither watches nor dispatches this file. The schedule is
+# best-effort like every GitHub cron (scheduled-ingest.yml has the measured
+# delivery rates); a missed tick is picked up by the next one.
+#
+# Failures are visible: a failed run exits non-zero, so the workflow goes red
+# (GitHub emails on scheduled-workflow failure) and ops:health reports it. A
+# letter that cannot be fetched marks the run `partial` and adds a warning
+# annotation; new or changed notices and the manual-review queue are added as
+# notice annotations on the run page.
+#
+# To disable: `gh workflow disable retailer-notices.yml` (or Actions →
+# retailer-notices → Disable workflow). Stored notices are left as they are.
+#
+# Secrets (production environment): SUPABASE_URL, SUPABASE_SECRET_KEY.
+
+# ── Supply-chain and secret hardening (P2B7S), as scheduled-ingest.yml ──────
+#
+# 1. SUPABASE_SECRET_KEY is set PER STEP, never at job level, so checkout,
+#    setup-node and npm ci run with no production secret in scope.
+#
+# 2. Third-party actions are pinned to a full commit SHA with the release in
+#    a trailing comment, the same commits as the other production workflows.
+#
+# 3. The secret-consuming job runs in the `production` GitHub Environment,
+#    whose deployment-branch rule allows `master` alone. That rule is the
+#    security boundary. The `Assert production ref` step is a tripwire for
+#    misconfiguration and is NOT the security boundary, because branch code
+#    could delete it.
+#
+# All three rules are enforced by src/server/jobs/workflow-schedule.test.ts.
+
+name: retailer-notices
+
+on:
+  schedule:
+    - cron: '23 */2 * * *' # UTC — every two hours, off the congested slots
+  workflow_dispatch: {}
+
+concurrency:
+  group: retailer-notices
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  costco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    # No job-level `env:` on purpose (hardening note 1).
+    steps:
+      # Tripwire, NOT the security boundary (hardening note 3). The ref
+      # reaches the shell only through `env:`.
+      - name: Assert production ref
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          echo "event=$GITHUB_EVENT_NAME ref=$WORKFLOW_REF"
+          if [ "$WORKFLOW_REF" != "refs/heads/master" ]; then
+            echo "::error::Refusing to run the Costco monitor from $WORKFLOW_REF"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      # Receives NO secret: this step runs third-party lifecycle scripts.
+      - run: npm ci
+      - name: Costco notices (private tables only)
+        run: npm run jobs:retailer-costco
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
