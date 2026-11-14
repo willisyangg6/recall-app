@@ -26,6 +26,7 @@ it in the same change rather than describing the new behavior somewhere else.
 | Topic                                              | Document                                                                                             |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Domain model, ingestion, lifecycle                 | [docs/recall-domain-architecture.md](docs/recall-domain-architecture.md)                             |
+| Retailer notices (Costco): private monitoring      | [docs/recall-retailer-notices.md](docs/recall-retailer-notices.md)                                   |
 | Verified FDA/FSIS source behavior                  | [docs/recall-source-contract.md](docs/recall-source-contract.md)                                     |
 | Reported harms: illness, hospitalization, death    | [docs/recall-illness-status.md](docs/recall-illness-status.md)                                       |
 | Lotly-authored copy: taxonomy and evidence rule    | [docs/recall-copy-contract.md](docs/recall-copy-contract.md)                                         |

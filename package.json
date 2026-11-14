@@ -61,6 +61,7 @@
     "jobs:labels": "tsx scripts/run-job.ts labels",
     "jobs:enforcement": "tsx scripts/run-job.ts enforcement",
     "jobs:push": "tsx scripts/run-job.ts push",
+    "retailer:costco": "tsx scripts/retailer-costco.ts",
     "push:activate": "tsx scripts/push-activate.ts",
     "push:test": "tsx scripts/push-test.ts",
     "privacy:request": "tsx scripts/privacy-request.ts",

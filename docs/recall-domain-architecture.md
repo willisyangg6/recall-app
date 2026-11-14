@@ -169,6 +169,8 @@ An unlinked SourceRecord is **never orphaned**: ingestion always creates a Recal
 
 Non-food agencies (CPSC/NHTSA, §1) fit without rewrite: `sourceAgency` is already a first-class dimension, SourceRecord admits new `sourceSystem` values, and nothing in the model assumes food semantics except the optional hazard taxonomy values. FSIS Spanish records (`langcode`, §4.1) attach as additional SourceRecords on the same case later.
 
+Retailer-published notices (Costco's member letters) are deliberately **not** SourceRecords yet: they live in private tables, never touch a case, and cannot raise a notification event, because shipped clients attribute every case to an agency. See [recall-retailer-notices.md](recall-retailer-notices.md).
+
 ---
 
 ## Part 4 — Canonical field specification

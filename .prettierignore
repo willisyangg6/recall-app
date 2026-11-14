@@ -16,3 +16,8 @@ src/content/baseline-recalls.json
 # HISTORICAL TEST DATA: the 2026-10-04 baseline, recovered verbatim from Git
 # (src/content/historical/README.md); never hand-edit or reformat
 src/content/historical/*.json
+# Recorded real Costco index chunks, letters and agency cases (verbatim source
+# bytes; see src/server/retailer/fixtures/costco/README.md; never reformat)
+src/server/retailer/fixtures/costco/*.html
+src/server/retailer/fixtures/costco/*.json
+src/server/retailer/fixtures/costco/letters/
