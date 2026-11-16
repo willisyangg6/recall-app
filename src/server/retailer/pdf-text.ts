@@ -79,3 +79,37 @@ export async function extractPdfText(bytes: Uint8Array): Promise<ExtractedPdfTex
     };
   }
 }
+
+/**
+ * The text of each page, in page order (index 0 is PDF page 1), read the same
+ * way as `extractPdfText`. Used by the approval step to check that every
+ * approved excerpt is printed on the page the reviewer cited. Null when the
+ * bytes are not a readable PDF.
+ */
+export async function extractPdfPageTexts(bytes: Uint8Array): Promise<string[] | null> {
+  if (bytes.byteLength > MAX_NOTICE_PDF_BYTES || !isPdf(bytes)) return null;
+  try {
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const loadingTask = pdfjs.getDocument({
+      data: bytes.slice(),
+      useSystemFonts: false,
+      verbosity: 0,
+    });
+    const document = await loadingTask.promise;
+    const pages: string[] = [];
+    for (let pageNumber = 1; pageNumber <= Math.min(document.numPages, MAX_PAGES); pageNumber++) {
+      const content = await (await document.getPage(pageNumber)).getTextContent();
+      let text = '';
+      for (const item of content.items) {
+        if (!('str' in item)) continue;
+        text += item.str;
+        if (item.hasEOL) text += '\n';
+      }
+      pages.push(text);
+    }
+    await loadingTask.destroy();
+    return pages;
+  } catch {
+    return null;
+  }
+}

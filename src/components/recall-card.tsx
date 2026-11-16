@@ -125,6 +125,8 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
   // The card's custom accessibility action reads the SAME save contract the
   // visible control does, so the two can never announce different actions.
   const save = saveControlState(isSavedId(savedRecalls.ids, model.id));
+  // Absent means saveable: only a retailer notice opts out (see HomeCardModel).
+  const saveable = model.saveable !== false;
 
   return (
     <Link href={{ pathname: '/recall/[id]', params: { id: model.id } }} asChild>
@@ -134,7 +136,7 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
         accessibilityRole="button"
         accessibilityHint={CARD_ACCESSIBILITY_HINT}
         accessibilityActions={
-          savedRecalls.available
+          savedRecalls.available && saveable
             ? [
                 {
                   name: SAVE_ACTION,
@@ -162,7 +164,7 @@ export function RecallCard({ model }: { model: HomeCardModel }) {
               cornerRadius={feedGeometry.photoRadius}
             />
           }
-          trailing={<SaveRecallButton caseId={model.id} glyphSize={24} />}
+          trailing={saveable ? <SaveRecallButton caseId={model.id} glyphSize={24} /> : null}
         />
       </Pressable>
     </Link>

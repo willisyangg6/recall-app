@@ -3,8 +3,9 @@
 Status (2026-11-14): **private monitoring, live and scheduled.** The migration
 `20261113000000_retailer_notices.sql` is applied in production, two manual runs stored the 21
 notices on the index, and `retailer-notices.yml` runs the monitor every two hours. No app build
-reads retailer notices. The live feed, the case tables and the notification ledger are untouched by
-design, not by omission.
+reads retailer notices yet: the approval step and the new client are built on a branch
+([Approval and the client read path](#approval-and-the-client-read-path)). The live feed, the case
+tables and the notification ledger are untouched by design, not by omission.
 
 This document is the authoritative home for retailer-published notices: what the sources actually
 do, how the monitor reads them, what it is allowed to write, and what a client release would need.
@@ -212,32 +213,188 @@ Disabling stops new runs and leaves every stored notice as it is. A run already 
 finishes, or can be cancelled from the Actions page; it holds only its own lease, which expires
 after 30 minutes.
 
-## Showing verified notices in the app: the smallest safe client change
+## Approval and the client read path
 
-Not built. This is the minimum a release needs, because old builds must never see a retailer
-notice:
+Status (2026-11-15): **built on branch `retailer-notice-feed`, not deployed.** The migration
+`20261115000000_retailer_notice_approvals.sql` is not applied in production, nothing has been
+approved in production, and no build with the new client has shipped.
 
-1. **Server: a reviewed, separate read path.** Add `verified_at` and `verified_by` to
-   `retailer_notices`, set only by a human review of a `new_candidate`. Add one view,
-   `consumer_retailer_notices`, exposing only verified rows and only display-safe columns: id,
-   publisher, index title, stated notice date, document URL, retailer item numbers, the
-   retailer/state pairs, and `link_case_id`. Grant SELECT on the view to `anon` and add it to
-   `FEED_RELATIONS` on purpose. Nothing is ever written to `recall_cases`, so installed builds keep
-   reading exactly what they read today.
-2. **Client: a second item kind, never an agency item.** In
-   [recall-feed.ts](../src/lib/recall-feed.ts), fetch the view alongside the feed and give
-   `FeedItem` a `kind: 'agency' | 'retailer_notice'` discriminant. Bump
-   `FEED_CACHE_SCHEMA_VERSION` ([feed-cache.ts](../src/lib/feed-cache.ts), currently 4), since
-   the cached shape changes. A retailer item:
-   - renders a "Costco notice" label and no risk badge (it has no classification);
-   - opens a retailer detail whose only official link is "View Costco's notice" (the PDF);
-   - never passes through `agencyLabel`, `riskView`, `officialSourceLink` or
-     `sourceOrganization`;
-   - matches the Stores filter and Affects You only through its retailer/state pairs.
-3. **Linked notices** (`link_candidate`, after review) add nothing to an agency card in the first
-   release. A later release can show an "Also announced by Costco on {date}" row on the agency
-   detail, read from the same view, without touching the case projection, so no material change
-   or second alert can result.
-4. **Alerts stay off** for retailer items in that release. Alerting needs its own decision, ledger
-   rows keyed so a retailer notice and an agency case for the same recall cannot both send an
-   initial alert, and agency-free push wording.
+### The approval step (private)
+
+`retailer_notice_approvals` (service role only: RLS, no policies, no client grant, no DELETE)
+records a reviewer's approval of ONE archived letter:
+
+- the letter's exact SHA-256 (`document_content_hash`);
+- the shopper-facing fields they approved (version 1,
+  [retailer-notice-fields.ts](../src/lib/retailer-notice-fields.ts));
+- the verbatim excerpt and PDF page behind every field (`field_evidence`), and their notes. Both
+  stay private.
+
+A unique index allows one live approval per notice, so a notice can appear once, never twice.
+
+`npm run retailer:review` is the only writer
+([approval.ts](../src/server/retailer/approval.ts)), on the shared three-flag contract:
+
+```bash
+npm run retailer:review -- approve <request.json>                       # dry run: checks + plan
+npm run retailer:review -- approve <request.json> --apply --confirm --expect <n>
+npm run retailer:review -- withdraw <native-id> --reason <text>
+npm run retailer:review -- confirm-agency-match <native-id> --case <agency-case-uuid>
+```
+
+An approval is refused unless:
+
+- the reviewed hash is the notice's current letter, and that letter is archived and readable;
+- the monitor classes the notice a standalone `new_candidate` food recall, read as text, with a
+  stated date;
+- every shown field has an excerpt printed on the cited page;
+- identifiers, sizes, names and states appear verbatim in their excerpts, and every number, date
+  or email in reviewer prose appears in its excerpt;
+- item numbers, UPCs and states are ones the letter itself states.
+
+The field shape has no consumer pack size. The package identifiers are separate lists, never
+merged: retailer item numbers, supplier codes, lots, best-by dates, can timestamps and UPCs.
+
+The reviewed Kirkland whipped cream letter is the staging fixture:
+[kirkland-whipped-cream.json](../src/server/retailer/fixtures/approvals/kirkland-whipped-cream.json).
+It omits the ambiguous "case pack 8CT/3PK" and shows the contact email only as printed.
+
+### The read path (clients)
+
+`consumer_retailer_notices()` is a read-only `SECURITY DEFINER` function with a pinned
+`search_path`, executable by `anon`. It returns only `id`, `publisher`, `document_url`,
+`notice_date`, `approved_at` and the approved `fields`, and only while ALL of these hold, checked on
+every read:
+
+- the approval is live (not withdrawn);
+- no agency case has been confirmed as the same recall (`confirm-agency-match`);
+- the approval's hash equals the notice's current letter. A revised letter therefore disappears the
+  moment the monitor archives it, until it is approved again;
+- the monitor still classes it a standalone food recall read from a text letter. A later agency
+  match that turns it into a `link_candidate` or `review` hides it too.
+
+Clients gain no table privilege, and `FEED_RELATIONS` is unchanged. Retailer notices never enter
+`recall_cases`, so installed builds keep reading exactly what they read today and can never
+mislabel one as an FDA recall.
+
+### The new client
+
+- **Read path:** [retailer-notices.ts](../src/lib/retailer-notices.ts) calls the function
+  separately from the agency feed.
+  - It never touches `recall_cases`, `FeedItem` or the feed cache, so there is no cache version to
+    bump.
+  - It is fault tolerant: any failure reads as no notices.
+  - [use-retailer-notices.ts](../src/hooks/use-retailer-notices.ts) keeps the list in memory only
+    and fails closed, so a withdrawn notice is gone on the next load.
+- **All recalls only:** notices are placed by the letter's date under the same 60-day boundary.
+  - They are hidden while a browsing filter is active, because they have no category, risk or
+    agency to filter on.
+  - Search narrows them like any card.
+  - Affects me never includes them in this release.
+- **The same card and the same Recall Details.** There is no retailer layout:
+  [retailer-notice-presentation.ts](../src/lib/retailer-notice-presentation.ts) adapts an approved
+  notice into the shared `HomeCardModel` (rendered by `RecallCard`) and the shared `DetailModel`
+  (rendered by the Recall Details screen at `/recall/retailer:<id>`). It builds them through the
+  same shared builders (`whereSoldModel`, `affectedProductsModel`, `activityDisplay`,
+  `homeLocationSummary`), and it decides only this:
+  - **Risk:** the existing Unknown treatment in the normal badge position
+    (`unclassifiedRiskView`). It is never Pending, whose note promises an agency classification
+    later, and never a severity tier.
+  - **The one source link:** "View Costco's letter", which opens the letter.
+  - **Where It Was Sold:** the letter's states, then Costco as the stated retailer.
+  - **Affected Products:** the approved identifiers become the same typed facts the agency
+    extractors emit (`package_size`, `best_by`, `lot`, `upc`, `item_number`). They pass through
+    the same gate (`aggregateFacts` → `toPackageFields`), so they inherit the agency labels,
+    order, date formatter, validation, de-duplication and omission rules. No row is added:
+    - Best by "APR/02/27" shows as "April 2, 2027", with the raw marking kept;
+    - the lot shows exactly as the letter prints it, "04/02/2027", never reformatted;
+    - the Costco item number and supplier code reach the gate as `item_number` and are dropped by
+      it, exactly as an agency notice's item code is;
+    - can timestamps have no concept.
+  - **Product photo:** the approved `fields.image` reaches the existing image slot: the card's
+    112-point tile and Detail's 112×144 header photo, both `contain` (never cropped or stretched).
+    It's served from the existing public `product-visuals` bucket. With no approved photo, both
+    keep the approved no-image shape, with no tile and no placeholder.
+    - The photo is one JPEG embedded in the approved letter, stored unaltered at
+      `retailer-notices/<letter sha256>/<image sha256>.jpg`.
+    - The approval step re-reads the archived letter's embedded JPEGs
+      ([pdf-images.ts](../src/server/retailer/pdf-images.ts); unencrypted PDFs, or AES-128 with an
+      empty user password) and refuses unless the PDF object, size, hash and path all match.
+    - A revised letter has a new hash, so the old path cannot be re-approved for it, and the old
+      approval stops being shown the moment the letter changes.
+    - For the Kirkland letter it is PDF object 11, 763×2046, SHA-256 `8a1a80cb…`.
+  - **Card reason:** the shared `conciseReasonLine`, fed the reviewer-approved structured reason
+    (`fields.reason`: an agency `hazardCategory` and an agent printed in its excerpt). For the
+    Kirkland letter the card reads "Possible cleaning chemical contamination". What Happened stays
+    the approved prose.
+  - **Not shown:** the purchase window, the instructions and the contact line. The screen has no
+    slot for them, so they stay in the approved fields (`RETAILER_FIELDS_WITHOUT_A_SLOT`).
+  - **Absent:** no Affects You verdict, no save control (`saveable: false`; Saved cannot load a
+    notice), no Health Risk, no community reports and no illness notice. The agency evidence those
+    read does not exist for a retailer notice.
+  - **Read path for the detail:** the screen reads a `retailer:` id only from the approved read
+    path, never as a case. After one reload, an id that is not approved shows "Recall not found".
+
+- **Alerts stay off:** retailer notices write nothing to the notification ledger.
+
+### Verification
+
+- [approval.test.ts](../src/server/retailer/approval.test.ts) and
+  [approval-migration.test.ts](../src/server/retailer/approval-migration.test.ts) cover the checks
+  and the SQL contract.
+- [retailer-notice-presentation.test.ts](../src/lib/retailer-notice-presentation.test.ts) covers
+  the adapted card and detail models (same keys as an agency card, Unknown risk, only existing
+  sections, identifiers never relabeled), and the agency sections being unchanged with no notice.
+- [retailer-notice-live.test.ts](../src/server/retailer/retailer-notice-live.test.ts) runs the
+  whole flow on an isolated staging stack. It is opt-in (`LOTLY_RETAILER_STAGING=1` and a
+  `verify-stack` workdir) and covers:
+  - hidden before approval, and every private table refusing the app's key;
+  - shown exactly once after approval, with display-safe columns only;
+  - hidden when the letter is revised, and shown once after re-approval;
+  - hidden after a confirmed agency match;
+  - the shipped agency feed loader, the manifest and every case and ledger count identical
+    throughout.
+
+### Release preflight (2026-11-15, staging)
+
+- **Second letter:** Traditional Madeleines (real PDF `c7b0b8e6…`, no photo) has a warehouse list,
+  an allergen reason and no package codes. It approved and rendered through the shared card and
+  Recall Details.
+  - Warehouse states are proved by their "City, ST" postal code.
+  - Affected Products is omitted, because no approved field has a value.
+- **Caesar Salad cannot be approved:** its letter states no states, and Where It Was Sold requires
+  at least one.
+- **Disappearance:** unapproved, withdrawn, superseded (a re-approval replaces the old row; a
+  revised letter hides it) and agency-matched notices are absent from the read path. After the
+  next load, the feed card, Recall Details ("Recall not found") and the photo all disappear.
+- **No push:** approving creates no `notification_events` row, and the push job's dry run is
+  identical before and after.
+- **Shared-stack tests:** the two `preference-states-live` failures were an outdated shared stack.
+  On a current isolated stack, all 14 pass.
+
+#### The photo's public URL after withdrawal
+
+Withdrawal hides the notice everywhere in the app, but the photo object stays in the public
+`product-visuals` bucket. Its direct URL still returns 200 for anyone who has it. This is the same
+lifetime as FSIS label images. The path contains two SHA-256 values, so it is not guessable. It
+names only a photo the retailer itself published in its letter. Removing it requires deleting the
+object (see the rollback steps).
+
+### Rollout, each step a separate approval
+
+1. Apply `20261115000000_retailer_notice_approvals.sql`. It's additive; installed builds are
+   unaffected.
+2. Approve the Kirkland letter in production with `retailer:review`. That is invisible to every
+   installed build.
+3. Ship the client build.
+
+To stop at any point: withdraw the approval (`retailer:review -- withdraw`). The notice disappears
+from the new client on its next load, and older builds never saw it.
+
+### Linked notices (later)
+
+Linked notices (`link_candidate`) add nothing to an agency card in this release. A later release
+can show an "Also announced by Costco on {date}" row on the agency detail from the same kind of
+read path, without touching the case projection, so no material change or second alert can result.
+Retailer alerting needs its own decision, ledger keys that stop a retailer notice and an agency
+case for the same recall from both sending an initial alert, and agency-free push wording.

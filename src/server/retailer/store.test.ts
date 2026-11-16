@@ -137,11 +137,12 @@ test('no retailer module names a consumer or ledger table, an RPC, or the pipeli
     for (const pattern of forbidden)
       assert.doesNotMatch(text, pattern, `${name} matches ${pattern}`);
   }
-  // recall_cases appears only in the read path.
+  // recall_cases is only ever READ: the monitor's agency-case read path, and
+  // the approval step confirming an agency case exists before a match.
   const recallCaseUses = sources.flatMap(({ name, text }) =>
     [...text.matchAll(/from\('recall_cases'\)\s*\.(\w+)/g)].map((m) => `${name}:${m[1]}`),
   );
-  assert.deepEqual(recallCaseUses, ['store.ts:select']);
+  assert.deepEqual(recallCaseUses.sort(), ['approval-store.ts:select', 'store.ts:select']);
 });
 
 const MIGRATION = readFileSync(

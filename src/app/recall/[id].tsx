@@ -102,6 +102,12 @@ import {
 } from '@/lib/recall-presentation';
 import { symptomIcon } from '@/lib/symptom-icons';
 import { usePreferences } from '@/hooks/use-preferences';
+import { reloadRetailerNotices, retailerNoticeById } from '@/hooks/use-retailer-notices';
+import {
+  buildRetailerDetailModel,
+  retailerNoticeIdFromRoute,
+} from '@/lib/retailer-notice-presentation';
+import type { RetailerNotice } from '@/lib/retailer-notices';
 import { affectsYouVerdict } from '@/lib/relevance';
 
 /**
@@ -121,7 +127,10 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'missing' }
-  | { status: 'ready'; detail: CaseDetail };
+  | { status: 'ready'; detail: CaseDetail }
+  // An approved retailer notice (docs/recall-retailer-notices.md), rendered
+  // by this same screen from the retailer adapter's DetailModel.
+  | { status: 'retailer'; notice: RetailerNotice };
 
 /**
  * Every link and disclosure is one action line (16/22). `hitSlop` grows the
@@ -542,6 +551,17 @@ export default function RecallDetailScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // A retailer notice is read ONLY from the approved retailer read path,
+      // never fetched as a case and never shown from a stale copy: an id that
+      // is not in the approved list after one reload is "not found".
+      const retailerId = retailerNoticeIdFromRoute(id);
+      if (retailerId !== null) {
+        if (!retailerNoticeById(retailerId)) await reloadRetailerNotices();
+        if (cancelled) return;
+        const notice = retailerNoticeById(retailerId);
+        setState(notice ? { status: 'retailer', notice } : { status: 'missing' });
+        return;
+      }
       // A recall shown from the bundled baseline (lib/baseline-recalls.ts,
       // 2026-10-04) always opens: when the live row cannot be fetched, or no
       // longer exists, its bundled detail is rendered instead.
@@ -572,7 +592,7 @@ export default function RecallDetailScreen() {
     };
   }, [id]);
 
-  if (state.status !== 'ready') {
+  if (state.status !== 'ready' && state.status !== 'retailer') {
     return (
       <Page>
         {state.status === 'loading' ? (
@@ -586,21 +606,29 @@ export default function RecallDetailScreen() {
     );
   }
 
-  const { projection } = state.detail;
-  // The one deterministic mapping shared with the Feed (lib/recall-presentation):
-  // the screen renders the model and derives no recall wording of its own.
-  // Same predicate as Affects me membership — matching logic unchanged.
-  const affectsYou = affectsYouVerdict(
-    {
-      geography: projection.geography,
-      pathogenOrAllergen: projection.pathogenOrAllergen,
-      retailerNames: projection.retailerNames ?? [],
-      hazardCategory: projection.hazardCategory,
-      reasonText: projection.reasonText,
-    },
-    prefs,
-  );
-  const model: DetailModel = buildDetailModel(state.detail, { today: todayIso(), affectsYou });
+  let model: DetailModel;
+  if (state.status === 'retailer') {
+    // An approved retailer notice, adapted into the same DetailModel
+    // (lib/retailer-notice-presentation.ts): this screen renders it exactly
+    // as it renders an agency recall.
+    model = buildRetailerDetailModel(state.notice, todayIso());
+  } else {
+    const { projection } = state.detail;
+    // The one deterministic mapping shared with the Feed (lib/recall-presentation):
+    // the screen renders the model and derives no recall wording of its own.
+    // Same predicate as Affects me membership — matching logic unchanged.
+    const affectsYou = affectsYouVerdict(
+      {
+        geography: projection.geography,
+        pathogenOrAllergen: projection.pathogenOrAllergen,
+        retailerNames: projection.retailerNames ?? [],
+        hazardCategory: projection.hazardCategory,
+        reasonText: projection.reasonText,
+      },
+      prefs,
+    );
+    model = buildDetailModel(state.detail, { today: todayIso(), affectsYou });
+  }
   // Optional sections are DECIDED by the shared contract (P3A). The screen
   // renders a section when the model gives it one and renders nothing at all
   // otherwise — no heading, no container, no divider, no spacing. It never

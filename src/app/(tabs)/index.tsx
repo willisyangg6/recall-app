@@ -34,6 +34,7 @@ import { hasAnyPreference, type UserRecallPreferences } from '@/domain/preferenc
 import { useAccess } from '@/hooks/use-access';
 import { useFeed } from '@/hooks/use-feed';
 import { usePreferences } from '@/hooks/use-preferences';
+import { useRetailerNotices } from '@/hooks/use-retailer-notices';
 import { buildAffectsMeSections } from '@/lib/affects-me-ranking';
 import {
   FEED_EMPTY_CORPUS,
@@ -64,6 +65,13 @@ import { buildFeedSections } from '@/lib/feed-relevance';
 import { knownPreferences, preferencesAvailable } from '@/lib/preferences-store';
 import { isFeedConfigured, type FeedItem } from '@/lib/recall-feed';
 import { buildHomeCardModel, todayIso } from '@/lib/recall-presentation';
+import {
+  buildRetailerHomeCardModel,
+  homeRowKey,
+  mergeSectionRows,
+  retailerNoticesForAll,
+  type HomeRow,
+} from '@/lib/retailer-notice-presentation';
 import { useCalendarClock } from '@/hooks/use-calendar-clock';
 import { evaluatePersonalRelevance, type PersonalRelevance } from '@/lib/relevance';
 
@@ -227,14 +235,30 @@ function TitleOnly() {
 interface HomeSection {
   key: 'affects' | 'recent' | 'older';
   title: string;
-  data: FeedItem[];
+  /**
+   * Agency rows, plus approved retailer notices in All recalls only
+   * (lib/retailer-notice-presentation.ts). With no retailer notice, every row
+   * is an agency row wrapping the same item in the same order as before.
+   */
+  data: HomeRow[];
 }
+
+const agencyRows = (items: FeedItem[]): HomeRow[] =>
+  items.map((item) => ({ kind: 'agency', item }));
 
 export default function HomeScreen() {
   // After onboarding the session has already served the complete corpus
   // Building and Ready showed; the Feed starts from it rather than from
   // `Loading recalls…`, and revalidates on mount as it always did.
-  const { state, refreshing, refresh } = useFeed({ startFromServed: true });
+  const { state, refreshing, refresh: refreshFeed } = useFeed({ startFromServed: true });
+  // Approved retailer notices: a separate read path, never the agency feed,
+  // refreshed together with it. A failure reads as none (fail closed).
+  const retailer = useRetailerNotices();
+  const reloadRetailer = retailer.reload;
+  const refresh = useCallback(() => {
+    void reloadRetailer();
+    return refreshFeed();
+  }, [refreshFeed, reloadRetailer]);
   // The one clock for sections, evidence expiry and card dates: it moves at
   // each calendar boundary and on resume, not only when a sync lands.
   const now = useCalendarClock();
@@ -326,7 +350,7 @@ export default function HomeScreen() {
   // mechanism that fits: offset 0 resolves no index, so it is safe when the
   // new result set is empty and it cannot hit `scrollToLocation`'s
   // render-window caveat from far down an 800-row feed.
-  const listRef = useRef<SectionList<FeedItem, HomeSection>>(null);
+  const listRef = useRef<SectionList<HomeRow, HomeSection>>(null);
   const scrollFeedToTop = useCallback(() => {
     listRef.current?.getScrollResponder()?.scrollTo({ y: 0, animated: false });
   }, []);
@@ -447,6 +471,7 @@ export default function HomeScreen() {
 
   let sections: HomeSection[];
   let affectsCounts = { affects: 0, older: 0 };
+  let allOlderCount = olderActive.length;
   if (personalized) {
     // One deterministic ranking for the whole tab (lib/affects-me-ranking.ts).
     // Two sections only (C5.2B): a notice that says nothing about this user
@@ -461,15 +486,26 @@ export default function HomeScreen() {
     const ranked = buildAffectsMeSections(state.items, (item) => relevanceById.get(item.id)!, {
       now,
     });
-    const affects = filterBySearch(applyFeedFilters(ranked.affects, filters), query, entryOf);
-    const older = filterBySearch(applyFeedFilters(ranked.older, filters), query, entryOf);
+    // Agency rows only: Affects you never includes a retailer notice.
+    const affects = agencyRows(
+      filterBySearch(applyFeedFilters(ranked.affects, filters), query, entryOf),
+    );
+    const older = agencyRows(
+      filterBySearch(applyFeedFilters(ranked.older, filters), query, entryOf),
+    );
     affectsCounts = { affects: affects.length, older: older.length };
     sections = [
       ...(affects.length > 0
         ? [{ key: 'affects' as const, title: 'Affects you', data: affects }]
         : []),
       ...(older.length > 0
-        ? [{ key: 'older' as const, title: OLDER_NOTICES_TITLE, data: showOlder ? older : [] }]
+        ? [
+            {
+              key: 'older' as const,
+              title: OLDER_NOTICES_TITLE,
+              data: showOlder ? older : [],
+            },
+          ]
         : []),
     ];
   } else if (tab === 'affects_me') {
@@ -477,16 +513,27 @@ export default function HomeScreen() {
     // national feed under an "Affects me" heading would misstate relevance.
     sections = [];
   } else {
+    // All recalls: approved retailer notices sit among the agency recalls by
+    // the letter's date, under the same 60-day boundary. They are hidden while
+    // a browsing filter is active (they carry no category, risk or agency to
+    // filter on); search narrows them like any card.
+    const notices = retailerNoticesForAll(retailer.notices, now, {
+      filtersActive: hasActiveFilters(filtersByTab.all),
+      query,
+    });
+    const recentRows = mergeSectionRows(recent, notices.recent);
+    const olderRows = mergeSectionRows(olderActive, notices.older);
+    allOlderCount = olderRows.length;
     sections = [
-      ...(recent.length > 0
-        ? [{ key: 'recent' as const, title: 'Recent activity', data: recent }]
+      ...(recentRows.length > 0
+        ? [{ key: 'recent' as const, title: 'Recent activity', data: recentRows }]
         : []),
-      ...(olderActive.length > 0
+      ...(olderRows.length > 0
         ? [
             {
               key: 'older' as const,
               title: OLDER_NOTICES_TITLE,
-              data: showOlder ? olderActive : [],
+              data: showOlder ? olderRows : [],
             },
           ]
         : []),
@@ -496,7 +543,7 @@ export default function HomeScreen() {
   const showTabs = preferencesAvailable() && prefs !== null;
   const filtersActive = hasActiveFilters(filters);
   const searchActive = query.trim() !== '';
-  const olderCount = personalized ? affectsCounts.older : olderActive.length;
+  const olderCount = personalized ? affectsCounts.older : allOlderCount;
   // Filters serve a list: All always, Affects me once personalization exists
   // (with nothing configured it shows only the invitation, nothing to narrow).
   const filtersAvailable = tab === 'all' || personalized;
@@ -586,8 +633,17 @@ export default function HomeScreen() {
         // the card beneath it (founder review, 2026-10-06). Filters stays
         // reachable at the top of its section; Dynamic Type is not capped.
         stickySectionHeadersEnabled={!largeText}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <RecallCard model={buildHomeCardModel(item, { today, prefs })} />}
+        keyExtractor={homeRowKey}
+        renderItem={({ item: row }) => {
+          // An approved retailer notice: the SAME card, from the retailer
+          // adapter (lib/retailer-notice-presentation.ts).
+          if (row.kind === 'retailer') {
+            return <RecallCard model={buildRetailerHomeCardModel(row.notice, today)} />;
+          }
+          // Agency rows: the exact shared call Saved makes (feed-saved parity).
+          const { item } = row;
+          return <RecallCard model={buildHomeCardModel(item, { today, prefs })} />;
+        }}
         // The heading words are the presentation contract's (Recent activity,
         // Older notices, Affects you). The FIRST section's heading row
         // carries the Filters control (2026-10-06), so it stays at hand while

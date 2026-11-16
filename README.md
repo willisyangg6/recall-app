@@ -152,6 +152,7 @@ npm run jobs:fsis           # FSIS recalls/PHAs (ingest:fsis is an alias)
 npm run jobs:labels         # FSIS label visuals, recent window (incremental)
 npm run jobs:labels -- --full   # daily full sweep + failure retries
 npm run retailer:costco     # Costco notices → private tables only; dry run by default (docs/recall-retailer-notices.md)
+npm run retailer:review     # approve / withdraw / agency-match a retailer notice; dry run by default
 npm run jobs:enforcement    # openFDA reconcile, gated on the weekly export date
 npm run open-evidence:sync  # FDA open evidence (recall_cases.fda_ongoing_as_of) — dry run by
                             # default; the enforcement job runs the same sync after each

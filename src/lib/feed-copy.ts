@@ -109,9 +109,12 @@ export const FEED_EMPTY_CORPUS: FeedStateCopy = {
  */
 export const OLDER_NOTICES_TITLE = 'Older notices';
 
-/** All recalls: the section is date-only — no update in the window. */
-export const OLDER_NOTICES_EXPLANATION_ALL =
-  'No announcement or update from the agency in the last 60 days.';
+/**
+ * All recalls: the section is date-only — no update in the window. It names
+ * no source because the section holds agency recalls and approved retailer
+ * notices alike (docs/recall-retailer-notices.md).
+ */
+export const OLDER_NOTICES_EXPLANATION_ALL = 'No announcement or update in the last 60 days.';
 
 /**
  * Affects you: the matches outside the window that no agency currently

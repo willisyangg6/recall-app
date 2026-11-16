@@ -159,6 +159,26 @@ export function riskLabelSuppressed(noticeType: NoticeType, tier: ConsumerRiskTi
   return noticeType === 'public_health_alert' && tier === 'unknown';
 }
 
+/**
+ * The risk view for a notice no agency has classified and none is expected
+ * to: a retailer's own recall notice (docs/recall-retailer-notices.md). It is
+ * the existing `unknown` treatment, never `pending` (whose note promises an
+ * agency classification later) and never a severity tier. Same label, same
+ * spoken label and same (absent) note as any other Unknown, and no official
+ * classification block, because there is no official classification.
+ */
+export function unclassifiedRiskView(): RiskView {
+  const label = riskTierLabel('unknown');
+  return {
+    tier: 'unknown',
+    badgeLabel: label.text,
+    headlineLabel: label.text,
+    accessibilityLabel: label.accessibilityLabel,
+    note: TIER_NOTE.unknown,
+    official: null,
+  };
+}
+
 export function riskView(
   classification: Classification,
   sourceAgency: SourceAgency,
