@@ -14,7 +14,8 @@ export function recallCardAccessibilityLabel(model: HomeCardModel, saved: boolea
     // The same shorter card wording the reason row shows.
     cardReasonText(model.reasonLine),
     model.locationSummary,
-    saved ? 'Saved' : 'Not saved',
+    // A card with no save control announces no save state.
+    model.saveable === false ? null : saved ? 'Saved' : 'Not saved',
   ]
     .filter((part): part is string => typeof part === 'string' && part.length > 0)
     .join('. ');

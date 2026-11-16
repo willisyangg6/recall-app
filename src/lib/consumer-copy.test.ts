@@ -598,10 +598,7 @@ test('frozen and protected copy is still present, word for word', () => {
   // 2026-10-06: the older section claims only what dates and agency
   // evidence prove — never "active" (Lotly receives no FDA closures).
   assert.equal(OLDER_NOTICES_TITLE, 'Older notices');
-  assert.equal(
-    OLDER_NOTICES_EXPLANATION_ALL,
-    'No announcement or update from the agency in the last 60 days.',
-  );
+  assert.equal(OLDER_NOTICES_EXPLANATION_ALL, 'No announcement or update in the last 60 days.');
   assert.equal(
     OLDER_NOTICES_EXPLANATION_AFFECTS,
     'These match your choices but have had no announcement or update in the last 60 days, and the agency hasn’t confirmed they’re still open.',

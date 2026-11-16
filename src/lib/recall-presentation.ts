@@ -2488,6 +2488,12 @@ export interface HomeCardModel {
   categoryId?: FoodCategoryId | null;
   heroImageUrl: string | null;
   locationSummary: string;
+  /**
+   * False only for a card Saved cannot reopen: an approved retailer notice
+   * (lib/retailer-notice-presentation.ts), which Saved does not load. Absent
+   * means saveable, so every agency card is exactly as before.
+   */
+  saveable?: boolean;
 }
 
 export interface HomeCardContext {

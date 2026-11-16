@@ -295,6 +295,7 @@ const AUDITED_FIELDS: Record<keyof HomeCardModel, string> = {
   locationSummary: 'geography',
   heroImageUrl: 'imagery, and therefore the image / no-image card shape',
   activity: 'the one activity date',
+  saveable: 'whether the card shows the save control (absent on every agency card)',
 };
 
 /**
@@ -349,7 +350,16 @@ function screenContractViolations(feedSource: string, savedSource: string): stri
 test('every field of the card model is covered by the parity audit', () => {
   // Driven off a real model, so the audit cannot fall behind the type.
   const model = buildHomeCardModel(SK_PHA, { today: TODAY, prefs: CALIFORNIA });
-  assert.deepEqual(Object.keys(model).sort(), Object.keys(AUDITED_FIELDS).sort());
+  // `saveable` is optional and never set by `buildHomeCardModel`, so it is
+  // absent from every agency card on BOTH screens (only a retailer notice's
+  // card sets it, and Saved never lists one).
+  assert.deepEqual(
+    Object.keys(model).sort(),
+    Object.keys(AUDITED_FIELDS)
+      .filter((key) => key !== 'saveable')
+      .sort(),
+  );
+  assert.equal('saveable' in model, false);
   assert.deepEqual(DOCUMENTED_DIFFERENCES, []);
 });
 

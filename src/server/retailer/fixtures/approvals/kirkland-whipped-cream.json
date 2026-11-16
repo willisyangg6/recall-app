@@ -1,0 +1,155 @@
+{
+  "publisher": "costco",
+  "noticeNativeId": "bltdc8f3dbbb7e4b836",
+  "documentContentHash": "df0f1de807300e7c05e523d558d9e19912553e9723f5a63d1eaca421502b8ae9",
+  "approvedBy": "staging fixture (not a production approval)",
+  "reviewNotes": "Staging fixture from the 2026-11-15 editorial review. Consumer pack size omitted: the letter prints a case pack (8CT/3PK) without saying what a member bought. The contact email is shown exactly as printed (alamancefood.com, singular). Product photo: the front-of-can JPEG embedded in the letter (PDF object 11, 763×2046), unaltered.",
+  "fields": {
+    "retailer": "Costco",
+    "productName": "Kirkland Signature Real Heavy Whipped Cream",
+    "size": "15 oz (425 g)",
+    "image": {
+      "path": "retailer-notices/df0f1de807300e7c05e523d558d9e19912553e9723f5a63d1eaca421502b8ae9/8a1a80cbf85e3eb73d837f371c6272bde0a65e73147bb98ffc45cec4fa6cd1e9.jpg",
+      "width": 763,
+      "height": 2046,
+      "pdfObject": 11
+    },
+    "firmName": "Alamance Foods",
+    "whatHappened": "Alamance Foods is voluntarily recalling Kirkland Signature Real Heavy Whipped Cream sold at Costco. Members reported a chemical smell and taste. No serious adverse effects requiring medical care have been reported. The affected cans have timestamps from 00:35 to 02:45.",
+    "whyRecalled": "One batch may contain a small amount of a cleaning chemical.",
+    "reason": {
+      "hazardCategory": "chemical_contamination",
+      "agent": "cleaning chemical"
+    },
+    "whereSold": {
+      "states": [
+        "Alabama",
+        "Florida",
+        "Georgia",
+        "Iowa",
+        "Illinois",
+        "Indiana",
+        "Missouri",
+        "Mississippi",
+        "North Carolina",
+        "South Carolina",
+        "Tennessee",
+        "Wisconsin"
+      ],
+      "purchaseWindow": "Bought between 10/11/2026 and 10/31/2026"
+    },
+    "packageChecks": {
+      "retailerItemNumbers": ["1777000"],
+      "supplierCodes": ["AC50"],
+      "lotCodes": ["04/02/2027"],
+      "bestByDates": ["APR/02/27"],
+      "canTimestamps": ["00:35 – 02:45"],
+      "upcs": []
+    },
+    "instructions": [
+      "If you still have the product, stop using it.",
+      "Return it to your local Costco for a full refund."
+    ],
+    "contact": "Email Alamance Foods at customer.care@alamancefood.com"
+  },
+  "evidence": {
+    "productName": [
+      {
+        "excerpt": "Product: Kirkland Signature Real Heavy Whipped Cream, 15 oz (425 g), case pack 8CT/3PK, item code AC50",
+        "page": 1
+      }
+    ],
+    "size": [
+      {
+        "excerpt": "Product: Kirkland Signature Real Heavy Whipped Cream, 15 oz (425 g), case pack 8CT/3PK, item code AC50",
+        "page": 1
+      }
+    ],
+    "firmName": [
+      {
+        "excerpt": "Alamance Foods, out of an abundance of caution, is voluntarily recalling this product due to the issue stated below.",
+        "page": 1
+      }
+    ],
+    "whatHappened": [
+      {
+        "excerpt": "Alamance Foods, out of an abundance of caution, is voluntarily recalling this product due to the issue stated below.",
+        "page": 1
+      },
+      {
+        "excerpt": "Members have reported a chemical smell and taste, but no serious adverse effects requiring medical care have been reported.",
+        "page": 1
+      },
+      {
+        "excerpt": "The timestamps on the affected cans are 00:35 – 02:45.",
+        "page": 1
+      }
+    ],
+    "whyRecalled": [
+      {
+        "excerpt": "We have learned that one batch of Kirkland Signature Whipped Cream may contain a small amount of a cleaning chemical.",
+        "page": 1
+      }
+    ],
+    "reason.agent": [
+      {
+        "excerpt": "We have learned that one batch of Kirkland Signature Whipped Cream may contain a small amount of a cleaning chemical.",
+        "page": 1
+      }
+    ],
+    "whereSold.states": [
+      {
+        "excerpt": "The item was sold in the following states: Alabama, Florida, Georgia, Iowa, Illinois, Indiana, Missouri, Mississippi, North Carolina, South Carolina, Tennessee, and Wisconsin.",
+        "page": 1
+      }
+    ],
+    "whereSold.purchaseWindow": [
+      {
+        "excerpt": "have purchased Item #1777000 Kirkland Signature Real Heavy Whipped Cream between 10/11/2026 10/31/2026.",
+        "page": 1
+      }
+    ],
+    "packageChecks.retailerItemNumbers": [
+      {
+        "excerpt": "have purchased Item #1777000 Kirkland Signature Real Heavy Whipped Cream between 10/11/2026 10/31/2026.",
+        "page": 1
+      }
+    ],
+    "packageChecks.supplierCodes": [
+      {
+        "excerpt": "Product: Kirkland Signature Real Heavy Whipped Cream, 15 oz (425 g), case pack 8CT/3PK, item code AC50",
+        "page": 1
+      }
+    ],
+    "packageChecks.lotCodes": [
+      {
+        "excerpt": "Lot: 04/02/2027 (Best If Used By APR/02/27)",
+        "page": 1
+      }
+    ],
+    "packageChecks.bestByDates": [
+      {
+        "excerpt": "Lot: 04/02/2027 (Best If Used By APR/02/27)",
+        "page": 1
+      }
+    ],
+    "packageChecks.canTimestamps": [
+      {
+        "excerpt": "Timestamps affected on can: 00:35 – 02:45",
+        "page": 1
+      }
+    ],
+    "instructions": [
+      {
+        "excerpt": "If you still have the affected product please stop using it and please return the item to your local Costco for a full refund.",
+        "page": 1
+      }
+    ],
+    "contact": [
+      {
+        "excerpt": "Please email Alamance foods at customer.care@alamancefood.com if you have any issues or concerns regarding this product.",
+        "page": 1
+      }
+    ]
+  }
+}

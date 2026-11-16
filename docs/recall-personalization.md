@@ -430,7 +430,8 @@ within 60 days, **or** that an agency confirms is still open
 - **Copy.** The second section is "Older notices". In Affects me it explains:
   "These match your choices but have had no announcement or update in the last
   60 days, and the agency hasn’t confirmed they’re still open." In All Recalls:
-  "No announcement or update from the agency in the last 60 days." Neither
+  "No announcement or update in the last 60 days." (it names no source, because the section also
+  holds approved retailer notices). Neither
   calls a notice active or closed.
 - **Measured (production, 2026-10-06, exact links):** California 18 → 39, New
   York 24 → 47, Texas 24 → 45, Alabama + Arizona 18 → 38 once the evidence is
