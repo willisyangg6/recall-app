@@ -61,7 +61,12 @@ export interface RetailerNoticeFields {
     agent: string | null;
   };
   whereSold: {
-    /** Full state names the letter lists, in the letter's order. */
+    /**
+     * Full state names the letter lists, in the letter's order. Empty when
+     * the letter states none: the notice then renders the shared
+     * "Distribution not specified" treatment, and no state is ever inferred
+     * from a region name, a warehouse or the index title.
+     */
     states: string[];
     /** The purchase window as the letter states it, or null. */
     purchaseWindow: string | null;
@@ -191,7 +196,7 @@ export function readRetailerNoticeFields(value: unknown): RetailerNoticeFields |
   const firmName = text(top.firmName);
   const whatHappened = text(top.whatHappened);
   const whyRecalled = text(top.whyRecalled);
-  const states = list(where.states, { nonEmpty: true });
+  const states = list(where.states, { nonEmpty: false });
   const purchaseWindow = optionalText(where.purchaseWindow);
   const instructions = list(top.instructions, { nonEmpty: true });
   const contact = optionalText(top.contact);

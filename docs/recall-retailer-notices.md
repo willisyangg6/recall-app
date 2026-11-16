@@ -215,9 +215,12 @@ after 30 minutes.
 
 ## Approval and the client read path
 
-Status (2026-11-15): **built on branch `retailer-notice-feed`, not deployed.** The migration
-`20261115000000_retailer_notice_approvals.sql` is not applied in production, nothing has been
-approved in production, and no build with the new client has shipped.
+Status (2026-11-16): **merged to `master` (`5085966`).** The migration
+`20261115000000_retailer_notice_approvals.sql` is **applied in production** (2026-11-16; the app's
+key gets `42501` on the approvals table and `consumer_retailer_notices()` returns `[]`). Nothing has
+been approved in production, and no build with the new client has shipped. The launch scope is every
+verified standalone Costco food recall that fits the existing UI
+([Launch batch](#launch-batch-2026-11-16)).
 
 ### The approval step (private)
 
@@ -252,12 +255,15 @@ An approval is refused unless:
   or email in reviewer prose appears in its excerpt;
 - item numbers, UPCs and states are ones the letter itself states.
 
+The state list may be empty when the letter states none. No state is then approved or inferred:
+Costco's region names and the index title never become states.
+
 The field shape has no consumer pack size. The package identifiers are separate lists, never
 merged: retailer item numbers, supplier codes, lots, best-by dates, can timestamps and UPCs.
 
-The reviewed Kirkland whipped cream letter is the staging fixture:
-[kirkland-whipped-cream.json](../src/server/retailer/fixtures/approvals/kirkland-whipped-cream.json).
-It omits the ambiguous "case pack 8CT/3PK" and shows the contact email only as printed.
+The reviewed requests live in [fixtures/approvals/](../src/server/retailer/fixtures/approvals/).
+The Kirkland whipped cream request omits the ambiguous "case pack 8CT/3PK" and shows the contact
+email only as printed.
 
 ### The read path (clients)
 
@@ -301,7 +307,9 @@ mislabel one as an FDA recall.
     (`unclassifiedRiskView`). It is never Pending, whose note promises an agency classification
     later, and never a severity tier.
   - **The one source link:** "View Costco's letter", which opens the letter.
-  - **Where It Was Sold:** the letter's states, then Costco as the stated retailer.
+  - **Where It Was Sold:** the letter's states, then Costco as the stated retailer. A letter that
+    states no state is the agency contract's unspecified distribution that names a retailer: the
+    card and the section read "Distribution not specified", and Costco stays the stated retailer.
   - **Affected Products:** the approved identifiers become the same typed facts the agency
     extractors emit (`package_size`, `best_by`, `lot`, `upc`, `item_number`). They pass through
     the same gate (`aggregateFacts` → `toPackageFields`), so they inherit the agency labels,
@@ -362,8 +370,8 @@ mislabel one as an FDA recall.
   Recall Details.
   - Warehouse states are proved by their "City, ST" postal code.
   - Affected Products is omitted, because no approved field has a value.
-- **Caesar Salad cannot be approved:** its letter states no states, and Where It Was Sold requires
-  at least one.
+- **Caesar Salad** could not be approved then: its letter states no states, and the field reader
+  required at least one. That rule was removed on 2026-11-16 (see the launch batch below).
 - **Disappearance:** unapproved, withdrawn, superseded (a re-approval replaces the old row; a
   revised letter hides it) and agency-matched notices are absent from the read path. After the
   next load, the feed card, Recall Details ("Recall not found") and the photo all disappear.
@@ -380,12 +388,32 @@ lifetime as FSIS label images. The path contains two SHA-256 values, so it is no
 names only a photo the retailer itself published in its letter. Removing it requires deleting the
 object (see the rollback steps).
 
+### Launch batch (2026-11-16)
+
+Reviewed against each letter's latest version (the monitor's production dry run that day:
+unchanged, still `new_candidate`, no agency match) and against the agency record, including FDA's
+Enforcement Report through 2026-11-04:
+
+| Notice                            | Letter      | Where It Was Sold          | Agency record                                                                 |
+| --------------------------------- | ----------- | -------------------------- | ----------------------------------------------------------------------------- |
+| Kirkland Heavy Whipped Cream      | `df0f1de8…` | 12 stated states           | none found (the newest report predates the 11-07 letter)                      |
+| Traditional Madeleines            | `c7b0b8e6…` | 9, from the warehouse list | FDA `H-0682-2026`, Class I, Terminated; no Lotly agency case                  |
+| Caesar Salad (+ Chicken Sandwich) | `7f1b51a4…` | Distribution not specified | FDA `H-0224-2026` / `H-0225-2026`, Class II, Terminated; no Lotly agency case |
+
+Enforcement records are not Lotly agency cases, so neither notice can appear twice; the record is
+kept in the approval's private review notes. Caesar's letter names two items under one product
+slot: the card names "Caesar Salad", What Happened names both items, and the Sell By range stays in
+What Happened (there is no sell-by field, and it is never relabeled Best By).
+
+On staging, all three approved with no problems and read back through the app's key. The card,
+Where It Was Sold, every case, ledger and push table count, and the shipped agency feed and manifest
+were checked; the counts and the feed were identical before and after approval.
+
 ### Rollout, each step a separate approval
 
-1. Apply `20261115000000_retailer_notice_approvals.sql`. It's additive; installed builds are
-   unaffected.
-2. Approve the Kirkland letter in production with `retailer:review`. That is invisible to every
-   installed build.
+1. Apply `20261115000000_retailer_notice_approvals.sql`. **Done 2026-11-16.**
+2. Approve the launch batch in production with `retailer:review` (set `approvedBy` first). That is
+   invisible to every installed build.
 3. Ship the client build.
 
 To stop at any point: withdraw the approval (`retailer:review -- withdraw`). The notice disappears

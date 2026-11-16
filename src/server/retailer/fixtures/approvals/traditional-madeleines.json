@@ -1,0 +1,113 @@
+{
+  "publisher": "costco",
+  "noticeNativeId": "blt7638368fd294fc99",
+  "documentContentHash": "c7b0b8e67f555639f57dcfd3af4442d5780de8f302a2f8799386f9bcae4fff16",
+  "approvedBy": "staging batch 2026-11-16 (not a production approval)",
+  "reviewNotes": "Initial launch batch, reviewed 2026-11-16 against the archived letter (unchanged on Costco's index that day). States are proved by the warehouse list's 'City, ST' postal codes. No photo and no package codes in the letter, so Affected Products is omitted. FDA Enforcement Report records the same recall as H-0682-2026 (Kirkland Signature Traditional Madeleines, item 2000012), firm Costco Wholesale Corporation, Class I, Terminated; Lotly holds no agency case for it.",
+  "fields": {
+    "retailer": "Costco",
+    "productName": "Traditional Madeleines",
+    "size": null,
+    "image": null,
+    "firmName": "Costco Wholesale",
+    "whatHappened": "Traditional Madeleines sold at Costco were packaged with Madeleines filled with Chocolate Hazelnut. The mislabeled units contain undeclared tree nuts (hazelnut/filbert) and soy.",
+    "whyRecalled": "Undeclared tree nuts (hazelnut/filbert) and soy.",
+    "reason": {
+      "hazardCategory": "allergen",
+      "agent": "undeclared Tree Nuts (Hazelnut/Filbert) and soy"
+    },
+    "whereSold": {
+      "states": [
+        "Montana",
+        "Washington",
+        "Illinois",
+        "Wisconsin",
+        "California",
+        "Colorado",
+        "Puerto Rico",
+        "Florida",
+        "Virginia"
+      ],
+      "purchaseWindow": "Distributed between 3/30/2026 and 4/6/2026"
+    },
+    "packageChecks": {
+      "retailerItemNumbers": ["2000012"],
+      "supplierCodes": [],
+      "lotCodes": [],
+      "bestByDates": [],
+      "canTimestamps": [],
+      "upcs": []
+    },
+    "instructions": [
+      "If you are allergic to hazelnuts/filberts or soy, do not eat this product.",
+      "Return it to Costco for a full refund."
+    ],
+    "contact": "Visit https://customerservice.costco.com with your questions."
+  },
+  "evidence": {
+    "productName": [
+      {
+        "excerpt": "Our records indicate that you or one of your add on members may have purchased item # 2000012 Traditional Madeleines, which was inadvertently packaged with Madeleines filled with Chocolate Hazelnut.",
+        "page": 1
+      }
+    ],
+    "firmName": [
+      {
+        "excerpt": "Sincerely, Costco Wholesale",
+        "page": 1
+      }
+    ],
+    "whatHappened": [
+      {
+        "excerpt": "Our records indicate that you or one of your add on members may have purchased item # 2000012 Traditional Madeleines, which was inadvertently packaged with Madeleines filled with Chocolate Hazelnut.",
+        "page": 1
+      },
+      {
+        "excerpt": "The mislabeled units contain undeclared Tree Nuts (Hazelnut/Filbert) and soy.",
+        "page": 1
+      }
+    ],
+    "whyRecalled": [
+      {
+        "excerpt": "The mislabeled units contain undeclared Tree Nuts (Hazelnut/Filbert) and soy.",
+        "page": 1
+      }
+    ],
+    "reason.agent": [
+      {
+        "excerpt": "The mislabeled units contain undeclared Tree Nuts (Hazelnut/Filbert) and soy.",
+        "page": 1
+      }
+    ],
+    "whereSold.states": [
+      {
+        "excerpt": "Missoula, MT Burlington, WA East Peoria, IL Bellevue, WI Pleasant Prairie, WI Chico, CA Thornton, CO Gilroy, CA Bayamon, PR Pembroke Pines, FL Fairfax, VA",
+        "page": 1
+      }
+    ],
+    "whereSold.purchaseWindow": [
+      {
+        "excerpt": "Affected products were distributed between 3/30/2026 and 4/6/2026 at the following Costco warehouses:",
+        "page": 1
+      }
+    ],
+    "packageChecks.retailerItemNumbers": [
+      {
+        "excerpt": "Our records indicate that you or one of your add on members may have purchased item # 2000012 Traditional Madeleines, which was inadvertently packaged with Madeleines filled with Chocolate Hazelnut.",
+        "page": 1
+      }
+    ],
+    "instructions": [
+      {
+        "excerpt": "If you are allergic to Hazelnuts/Filberts or soy, do not consume this product. Please return it to Costco for a full refund.",
+        "page": 1
+      }
+    ],
+    "contact": [
+      {
+        "excerpt": "You can visit https://customerservice.costco.com with your questions.",
+        "page": 1
+      }
+    ]
+  }
+}
