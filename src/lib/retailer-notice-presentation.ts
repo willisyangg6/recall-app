@@ -32,6 +32,8 @@
  * shared contract already owns. Nothing here is written to recall_cases.
  */
 
+import type { Geography } from '@/domain/recall-types';
+
 import {
   aggregateFacts,
   toPackageFields,
@@ -103,13 +105,17 @@ export const RETAILER_FIELDS_WITHOUT_A_SLOT = [
   'contact',
 ] as const;
 
-function geographyOf(fields: RetailerNoticeFields) {
-  return {
-    scope: 'states' as const,
-    states: fields.whereSold.states,
-    confidence: 'stated' as const,
-    sourceText: null,
-  };
+/**
+ * The canonical tri-state geography. A letter that states no state is
+ * `unknown`, exactly as an agency notice that names no place is, so the card
+ * reads the shared "Distribution not specified" line. Costco's own region
+ * names ("Select Locations in the Midwest") are never mapped to states.
+ */
+function geographyOf(fields: RetailerNoticeFields): Geography {
+  const { states } = fields.whereSold;
+  return states.length > 0
+    ? { scope: 'states', states, confidence: 'stated', sourceText: null }
+    : { scope: 'unknown', states: [], confidence: 'stated', sourceText: null };
 }
 
 /** The Feed card model, for the shared `RecallCard`. */
@@ -192,12 +198,16 @@ function packageCheckOf(fields: RetailerNoticeFields): ConsumerPackageCheck {
 
 function distributionOf(fields: RetailerNoticeFields): ConsumerDistribution {
   const { states } = fields.whereSold;
+  // With no stated state this is the agency projection's own shape for an
+  // unspecified distribution that still names a retailer: an empty lead,
+  // which the shared `whereSoldModel` renders as "Distribution not
+  // specified", with Costco kept as the stated retailer.
   return {
-    scopeType: 'states',
+    scopeType: states.length > 0 ? 'states' : 'unspecified',
     areaText: '',
     states,
     areas: [],
-    coverage: [{ retailer: fields.retailer, states, areas: [] }],
+    coverage: states.length > 0 ? [{ retailer: fields.retailer, states, areas: [] }] : [],
     retailers: [fields.retailer],
     statedRetailers: [fields.retailer],
     retailersShown: [fields.retailer],

@@ -1,0 +1,91 @@
+{
+  "publisher": "costco",
+  "noticeNativeId": "blt9c542d42e8aaf313",
+  "documentContentHash": "7f1b51a40de76848a9df0fa647ce0e9df9520964626b1cdf6ae3e39943cdd067",
+  "approvedBy": "staging batch 2026-11-16 (not a production approval)",
+  "reviewNotes": "Initial launch batch, reviewed 2026-11-16 against the archived letter (unchanged on Costco's index that day). The letter states no states, so Where It Was Sold shows the shared 'Distribution not specified'; Costco's index scope ('Midwest, Northeast, and Southeast') is never mapped to states. One letter, two items: the card names 'Caesar Salad'; What Happened names both items and their item numbers. The Sell By range has no field and stays in What Happened rather than being relabeled Best By. No photo in the letter. FDA Enforcement Report records the same recall as H-0224-2026 (item 19927) and H-0225-2026 (item 11444), firm Costco Wholesale Corporation, Class II, Terminated; Lotly holds no agency case for it.",
+  "fields": {
+    "retailer": "Costco",
+    "productName": "Caesar Salad",
+    "size": null,
+    "image": null,
+    "firmName": "Costco and Ventura foods",
+    "whatHappened": "Costco and Ventura foods are recalling select Sell By dates of Item# 19927 Caesar Salad and Item# 11444 Chicken Sandwich w/ Caesar Salad. Affected products are labeled with Sell By Dates between 10/17/25 and 11/9/25.",
+    "whyRecalled": "Possible presence of plastic foreign material in the salad dressing of the items.",
+    "reason": {
+      "hazardCategory": "foreign_material",
+      "agent": "plastic foreign material"
+    },
+    "whereSold": {
+      "states": [],
+      "purchaseWindow": null
+    },
+    "packageChecks": {
+      "retailerItemNumbers": ["19927", "11444"],
+      "supplierCodes": [],
+      "lotCodes": [],
+      "bestByDates": [],
+      "canTimestamps": [],
+      "upcs": []
+    },
+    "instructions": [
+      "Stop eating the product.",
+      "Return it to your local Costco for a full refund."
+    ],
+    "contact": "Go to https://customerservice.costco.com/ with your questions."
+  },
+  "evidence": {
+    "productName": [
+      {
+        "excerpt": "Costco and Ventura foods are announcing the recall of select Sell By dates of Item# 19927 Caesar Salad and Item# 11444 Chicken Sandwich w/ Caesar Salad",
+        "page": 1
+      }
+    ],
+    "firmName": [
+      {
+        "excerpt": "Costco and Ventura foods are announcing the recall of select Sell By dates",
+        "page": 1
+      }
+    ],
+    "whatHappened": [
+      {
+        "excerpt": "Costco and Ventura foods are announcing the recall of select Sell By dates of Item# 19927 Caesar Salad and Item# 11444 Chicken Sandwich w/ Caesar Salad",
+        "page": 1
+      },
+      {
+        "excerpt": "Affected products are labeled with Sell By Dates between 10/17/25 and 11/9/25.",
+        "page": 1
+      }
+    ],
+    "whyRecalled": [
+      {
+        "excerpt": "due to the possible presence of plastic foreign material in the salad dressing of the items.",
+        "page": 1
+      }
+    ],
+    "reason.agent": [
+      {
+        "excerpt": "due to the possible presence of plastic foreign material in the salad dressing of the items.",
+        "page": 1
+      }
+    ],
+    "packageChecks.retailerItemNumbers": [
+      {
+        "excerpt": "Item# 19927 Caesar Salad and Item# 11444 Chicken Sandwich w/ Caesar Salad",
+        "page": 1
+      }
+    ],
+    "instructions": [
+      {
+        "excerpt": "Please stop eating the product and return the item to your local Costco for a full refund.",
+        "page": 1
+      }
+    ],
+    "contact": [
+      {
+        "excerpt": "You can go to https://customerservice.costco.com/ with your questions.",
+        "page": 1
+      }
+    ]
+  }
+}

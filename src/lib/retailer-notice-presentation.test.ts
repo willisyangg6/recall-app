@@ -7,7 +7,11 @@ import { BASELINE_RECALLS } from './baseline-recalls';
 import { buildFeedSections } from './feed-relevance';
 import { recallCardAccessibilityLabel } from './recall-card-accessibility';
 import { cardReasonText } from './recall-card-reason';
-import { affectedProductCards, buildHomeCardModel } from './recall-presentation';
+import {
+  affectedProductCards,
+  buildHomeCardModel,
+  UNSPECIFIED_DISTRIBUTION,
+} from './recall-presentation';
 import { readRetailerNoticeFields } from './retailer-notice-fields';
 import {
   buildRetailerDetailModel,
@@ -267,4 +271,67 @@ test('the field reader rejects a pack size smuggled into the identifiers shape',
   const tampered = structuredClone(APPROVED) as { packageChecks: Record<string, unknown> };
   tampered.packageChecks.packSize = ['3PK'];
   assert.equal(readRetailerNoticeFields(tampered), null);
+});
+
+/** An approved batch request's fields, as the read path would return them. */
+function batchNotice(file: string, noticeDate: string, documentUrl: string): RetailerNotice {
+  const fields = JSON.parse(
+    readFileSync(
+      join(__dirname, '..', 'server', 'retailer', 'fixtures', 'approvals', file),
+      'utf8',
+    ),
+  ).fields as unknown;
+  return notice({ fields, notice_date: noticeDate, document_url: documentUrl });
+}
+
+const CAESAR_URL =
+  'https://gdx-assets.costco.com/adobe/assets/urn%3Aaaid%3Aaem%3Acbfef661-76fc-40b0-b1e1-537279dd41da/original/as/PLEASEPOST11-7-25MemberLetter-CaesarDressingRecall-ServiceDeliItems.pdf';
+
+test('a letter that states no state renders the shared "Distribution not specified"', () => {
+  const caesar = batchNotice('caesar-salad.json', '2025-11-07', CAESAR_URL);
+  assert.deepEqual(caesar.fields.whereSold.states, []);
+
+  const card = buildRetailerHomeCardModel(caesar, TODAY);
+  assert.equal(card.locationSummary, UNSPECIFIED_DISTRIBUTION);
+  assert.equal(card.productName, 'Caesar Salad');
+  assert.equal(card.brand.text, 'Costco and Ventura foods');
+  assert.equal(card.risk.tier, 'unknown');
+  assert.equal(card.affectsYou, false);
+
+  const detail = buildRetailerDetailModel(caesar, TODAY);
+  const sold = detail.sections.whereSold;
+  // The agency contract's unspecified state, word for word, never a blank lead.
+  assert.equal(sold.locationState, 'unspecified');
+  assert.equal(sold.lead, UNSPECIFIED_DISTRIBUTION);
+  assert.equal(sold.leadCollapsed, UNSPECIFIED_DISTRIBUTION);
+  assert.deepEqual(sold.states, []);
+  assert.equal(sold.statesDisclosure, null);
+  assert.equal(sold.retailersNamed, 'Costco');
+  // No region from Costco's index title becomes a place.
+  assert.doesNotMatch(JSON.stringify(detail), /Midwest|Northeast|Southeast/);
+  // No package field has a value (a Sell By range has no field), so the
+  // section is omitted exactly as for any notice with nothing to check.
+  assert.equal(detail.sections.affectedProducts, null);
+  assert.deepEqual(detail.officialSource, { label: 'View Costco’s letter', url: CAESAR_URL });
+  assert.equal(detail.whatHappened.text, caesar.fields.whatHappened);
+  // One letter, two items: the detail names both, and keeps the Sell By range.
+  assert.match(detail.whatHappened.text, /Item# 19927 Caesar Salad/);
+  assert.match(detail.whatHappened.text, /Item# 11444 Chicken Sandwich w\/ Caesar Salad/);
+  assert.match(detail.whatHappened.text, /Sell By Dates between 10\/17\/25 and 11\/9\/25/);
+});
+
+test('a notice with stated states keeps its state list (Madeleines)', () => {
+  const madeleines = batchNotice(
+    'traditional-madeleines.json',
+    '2026-04-07',
+    'https://gdx-assets.costco.com/adobe/assets/urn%3Aaaid%3Aaem%3A45614e14-d5b7-4475-8c47-528b245fc97f/original/as/MemberRecallLetterMadeleines2.pdf',
+  );
+  const card = buildRetailerHomeCardModel(madeleines, TODAY);
+  assert.equal(card.locationSummary, 'MT, WA +7');
+  const sold = buildRetailerDetailModel(madeleines, TODAY).sections.whereSold;
+  assert.equal(sold.locationState, 'states');
+  assert.equal(sold.states.length, 9);
+  assert.equal(sold.retailersNamed, 'Costco');
+  // The whipped cream fixture is unchanged by the empty-list rule.
+  assert.equal(buildRetailerHomeCardModel(notice(), TODAY).locationSummary, 'AL, FL +10');
 });

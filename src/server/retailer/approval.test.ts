@@ -21,7 +21,7 @@ import {
   fixtureExtract,
   fixtureSource,
 } from './fixtures/costco-fixtures';
-import { extractPdfPageTexts } from './pdf-text';
+import { extractPdfPageTexts, isPdf as isPdfBytes } from './pdf-text';
 import { MemoryRetailerNoticeStore } from './store';
 
 const REQUEST_PATH = join(__dirname, 'fixtures', 'approvals', 'kirkland-whipped-cream.json');
@@ -276,4 +276,72 @@ test('the approval modules write only the approval table', () => {
     for (const [, table] of written) assert.equal(table, 'retailer_notice_approvals', file);
     assert.doesNotMatch(source, /\.rpc\(|notification_events|source_records/, file);
   }
+});
+
+/**
+ * The initial launch batch: each request checked against the monitor's own
+ * row for its letter and the letter's recorded text. The production letters'
+ * hashes were read on 2026-11-16 (the text fixtures carry no PDF hash).
+ */
+test('the launch batch passes every check, including a letter that states no state', async () => {
+  const plan = await planCostcoRun(
+    new MemoryRetailerNoticeStore(fixtureAgencyCases()),
+    fixtureSource(),
+    now,
+    fixtureExtract,
+  );
+  const batch: [string, string][] = [
+    [FIXTURE_IDS.whippedCream, 'kirkland-whipped-cream.json'],
+    [FIXTURE_IDS.madeleines, 'traditional-madeleines.json'],
+    [FIXTURE_IDS.caesar, 'caesar-salad.json'],
+  ];
+  for (const [nativeId, file] of batch) {
+    const parsed = readApprovalRequest(
+      JSON.parse(readFileSync(join(__dirname, 'fixtures', 'approvals', file), 'utf8')),
+    );
+    assert.ok(!('error' in parsed), `${file}: ${JSON.stringify(parsed)}`);
+    const row = plan.planned.find((item) => item.row.nativeId === nativeId)!.row;
+    const notice = {
+      ...noticeForReview(`notice-${nativeId}`, row),
+      documentContentHash: parsed.documentContentHash,
+    };
+    const text = (await fixtureExtract(fixtureDocument(nativeId))).text;
+    const pages = isPdfBytes(fixtureDocument(nativeId))
+      ? await extractPdfPageTexts(fixtureDocument(nativeId))
+      : [text];
+    assert.deepEqual(checkApproval(parsed, notice, pages), [], file);
+  }
+  // Caesar Salad states no state, and none is approved or inferred for it.
+  const caesar = plan.planned.find((item) => item.row.nativeId === FIXTURE_IDS.caesar)!.row;
+  assert.deepEqual(caesar.stateClaims, []);
+});
+
+test('an empty state list is approved with no evidence, but a stated state still needs it', async () => {
+  const base = readApprovalRequest(
+    JSON.parse(readFileSync(join(__dirname, 'fixtures', 'approvals', 'caesar-salad.json'), 'utf8')),
+  );
+  assert.ok(!('error' in base));
+  assert.deepEqual(base.fields.whereSold.states, []);
+  assert.equal(base.evidence['whereSold.states'], undefined);
+  const text = (await fixtureExtract(fixtureDocument(FIXTURE_IDS.caesar))).text;
+  const notice = {
+    id: 'n',
+    publisher: 'costco' as const,
+    nativeId: FIXTURE_IDS.caesar,
+    documentContentHash: base.documentContentHash,
+    decision: 'new_candidate',
+    noticeKind: 'recall',
+    foodStatus: 'food',
+    documentExtraction: 'text',
+    statedNoticeDate: '2025-11-07',
+    retailerItemNumbers: ['19927', '11444'],
+    upcs: [],
+    statedStates: [],
+  };
+  // A region name from Costco's index is never a state.
+  const invented = structuredClone(base);
+  invented.fields.whereSold.states = ['Ohio'];
+  assert.ok(
+    checkApproval(invented, notice, [text]).some((p) => /"Ohio" is not one the letter/.test(p)),
+  );
 });
