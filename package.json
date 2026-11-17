@@ -97,6 +97,8 @@
     "rederive:historical": "tsx scripts/rederive-historical.ts",
     "backfill:fda-images:dry": "tsx scripts/backfill-fda-images.ts",
     "backfill:fda-images": "tsx scripts/backfill-fda-images.ts",
+    "backfill:fsis-attachments:dry": "tsx scripts/backfill-fsis-attachments.ts",
+    "backfill:fsis-attachments": "tsx scripts/backfill-fsis-attachments.ts",
     "backfill:retailers:dry": "tsx scripts/backfill-retailers.ts",
     "backfill:retailers": "tsx scripts/backfill-retailers.ts",
     "backfill:product-categories:dry": "tsx scripts/backfill-product-categories.ts",

@@ -112,6 +112,12 @@ export interface CaseVisual {
   height: number | null;
   /** The official document this image was rendered from. */
   sourceUrl: string;
+  /**
+   * The page's own printed caption ("Bami Rolls (Pork)"), read from the
+   * PDF's text layer at ingestion; null when the page has none. The only
+   * evidence that may tie a label page to an affected-product row.
+   */
+  caption: string | null;
 }
 
 export interface CaseDetail {
@@ -359,6 +365,7 @@ interface VisualRow {
   width: number | null;
   height: number | null;
   source_url: string;
+  caption?: string | null;
 }
 
 /**
@@ -370,7 +377,7 @@ interface VisualRow {
 async function fetchCaseVisuals(id: string): Promise<CaseVisual[]> {
   try {
     const rows = await restGet<VisualRow[]>(
-      `product_visuals?select=url,role,page,width,height,source_url` +
+      `product_visuals?select=url,role,page,width,height,source_url,caption` +
         `&recall_case_id=eq.${encodeURIComponent(id)}&order=page.asc`,
     );
     return rows.map((row) => ({
@@ -380,6 +387,7 @@ async function fetchCaseVisuals(id: string): Promise<CaseVisual[]> {
       width: row.width,
       height: row.height,
       sourceUrl: row.source_url,
+      caption: row.caption ?? null,
     }));
   } catch {
     return [];

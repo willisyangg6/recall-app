@@ -60,8 +60,22 @@ function candidate(url: string, publishedAt = '2026-08-20'): LabelCandidate {
 const fakeRender = async (): Promise<RenderedLabelPdf> => ({
   numPages: 2,
   pages: [
-    { page: 1, bytes: Buffer.from('page1'), width: 1024, height: 768, contentHash: 'h1' },
-    { page: 2, bytes: Buffer.from('page2'), width: 1024, height: 768, contentHash: 'h2' },
+    {
+      page: 1,
+      bytes: Buffer.from('page1'),
+      width: 1024,
+      height: 768,
+      contentHash: 'h1',
+      caption: null,
+    },
+    {
+      page: 2,
+      bytes: Buffer.from('page2'),
+      width: 1024,
+      height: 768,
+      contentHash: 'h2',
+      caption: null,
+    },
   ],
 });
 

@@ -20,6 +20,7 @@
  * product names. Orientation is therefore detected explicitly, never assumed.
  */
 
+import type { AttachmentTable } from '@/domain/recall-types';
 import { decodeEntities, stripHtml } from '@/domain/text';
 import { conceptForLabel, isLayoutArtifactValue, type ConsumerConcept } from './consumer-concepts';
 
@@ -464,5 +465,32 @@ export function interpretTables(summaryHtml: string | null): InterpretedTable[] 
     const interpreted = interpretTable(table[0], tableIndex++);
     if (interpreted && interpreted.variants.length > 0) out.push(interpreted);
   }
+  return out;
+}
+
+/** Minimal HTML escaping for attachment cell text re-entering the table reader. */
+function escapeCell(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Product tables verified from official FSIS attachment PDFs
+ * (`projection.attachmentTables`), read by the SAME table interpreter as an
+ * announcement's own HTML tables — one routing of headings to concepts, one
+ * code/date pairing, one variant-identity contract. Scopes are offset past
+ * any inline table so the two can never collide.
+ */
+export function interpretAttachmentTables(
+  tables: readonly AttachmentTable[] | undefined,
+): InterpretedTable[] {
+  const out: InterpretedTable[] = [];
+  (tables ?? []).forEach((table, index) => {
+    const head = `<tr>${table.headers.map((h) => `<th>${escapeCell(h)}</th>`).join('')}</tr>`;
+    const body = table.rows
+      .map((row) => `<tr>${row.cells.map((c) => `<td>${escapeCell(c)}</td>`).join('')}</tr>`)
+      .join('');
+    const interpreted = interpretTable(`<table>${head}${body}</table>`, 1000 + index);
+    if (interpreted && interpreted.variants.length > 0) out.push(interpreted);
+  });
   return out;
 }

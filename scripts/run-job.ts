@@ -32,6 +32,7 @@ import { runPushJob } from '../src/server/jobs/push-job';
 import { runRetailerCostcoJob } from '../src/server/jobs/retailer-costco-job';
 import type { JobContext, JobReport } from '../src/server/jobs/runner';
 import { SupabaseLabelStore } from '../src/server/fsis/label-store';
+import { SupabaseAttachmentStore } from '../src/server/fsis/attachment-store';
 import { ExpoPushTransport } from '../src/server/push/expo-transport';
 import { entitlementSourceFromEnv } from '../src/server/push/revenuecat-entitlement';
 import { SupabasePushStore } from '../src/server/push/push-store';
@@ -124,6 +125,7 @@ async function main(): Promise<void> {
             mode: labelsMode,
             dryRun,
             labelStore: new SupabaseLabelStore(client),
+            attachmentStore: new SupabaseAttachmentStore(client),
           })
         : job === 'retailer-costco'
           ? await runRetailerCostcoJob(ctx, {

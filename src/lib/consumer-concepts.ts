@@ -201,6 +201,8 @@ const EXACT_LABEL_ROUTES: Record<string, ConsumerConcept> = {
   'product codes': 'product_code',
   sku: 'item_number',
   'establishment number': 'establishment_number',
+  // FSIS product-list PDFs head the column "EST Number".
+  'est number': 'establishment_number',
   'best by': 'best_by',
   'best-by': 'best_by',
   'best before': 'best_by',

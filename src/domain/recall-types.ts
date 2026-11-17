@@ -116,6 +116,25 @@ export interface TimelineEntry {
 }
 
 /**
+ * A product table printed in an official FSIS attachment PDF (the
+ * "View the list of products…" document), read at ingestion and verified
+ * before it is kept. Cells are the PDF's own text, column by column under
+ * the PDF's own headings; nothing is renamed, merged across rows, or
+ * inferred. `sourceUrl` + `sha256` + `page` trace every value to the printed
+ * page it came from.
+ */
+export interface AttachmentTable {
+  /** The official attachment URL the table was read from. */
+  sourceUrl: string;
+  /** sha256 of the attachment bytes the table was read from. */
+  sha256: string;
+  /** Column headings exactly as printed, in printed order. */
+  headers: string[];
+  /** One entry per printed product row, in printed order. */
+  rows: { page: number; cells: string[] }[];
+}
+
+/**
  * The canonical consumer projection of a recall case — the fields users see,
  * recomputed as a pure function of the case's linked source records
  * (architecture Part 8.4). Material-change detection diffs exactly this shape.
@@ -171,6 +190,13 @@ export interface CaseProjection {
    * unfiltered feed — see docs/recall-food-categories.md.
    */
   productCategories?: FoodCategoryId[];
+  /**
+   * Product tables verified from the notice's official FSIS attachment PDFs
+   * (src/server/fsis/attachments.ts). OPTIONAL ON PURPOSE: absent on every
+   * projection without one, so those projections stay byte-identical. Never
+   * diffed by material-change detection — a table can never notify.
+   */
+  attachmentTables?: AttachmentTable[];
   geography: Geography;
   affectedProducts: AffectedProduct[];
   quantityText: string | null;

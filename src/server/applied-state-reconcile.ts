@@ -64,6 +64,7 @@
  *    captured separately as the CAS token, never compared as content.
  */
 
+import { applyAttachmentEnrichment } from '../domain/source-record';
 import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -375,7 +376,15 @@ export function rederiveNormalized(
   try {
     switch (record.sourceSystem) {
       case 'fsis_api':
-        return { normalized: parseFsisRecord(payload as FsisRawRecord) };
+        // The attachment block is not in the agency payload: it is written
+        // by the attachment sync and re-attached here, exactly as the
+        // enforcement match block is below.
+        return {
+          normalized: applyAttachmentEnrichment(
+            parseFsisRecord(payload as FsisRawRecord),
+            record.normalized.attachmentEnrichment,
+          ),
+        };
       case 'fda_announcement': {
         const raw = payload as {
           listing?: unknown;
