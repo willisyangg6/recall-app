@@ -5,6 +5,8 @@
  *   npm run retailer:review -- approve <request.json>              # dry run
  *   npm run retailer:review -- withdraw <native-id> --reason <text>
  *   npm run retailer:review -- confirm-agency-match <native-id> --case <uuid>
+ *   ... withdraw and confirm-agency-match take --publisher aldi for an ALDI
+ *   notice (default costco); an approval file names its own publisher.
  *   ... add --apply --confirm --expect <n> to write, with <n> from the dry run.
  *
  * Writes (apply only): retailer_notice_approvals. Nothing else: an approval
@@ -34,6 +36,7 @@ import {
   type ApprovalPlan,
 } from '../src/server/retailer/approval';
 import { SupabaseApprovalStore } from '../src/server/retailer/approval-store';
+import { isRetailerPublisher, RETAILER_SOURCES } from '../src/server/retailer/sources';
 import { extractPdfPageTexts } from '../src/server/retailer/pdf-text';
 import { createSupabaseServerClient } from '../src/server/store/supabase-store';
 
@@ -44,6 +47,9 @@ const HELP = `Retailer notice review (writes only retailer_notice_approvals).
   npm run retailer:review -- approve <request.json>
   npm run retailer:review -- withdraw <native-id> --reason <text>
   npm run retailer:review -- confirm-agency-match <native-id> --case <agency-case-uuid>
+
+withdraw and confirm-agency-match act on Costco notices unless given
+--publisher aldi. An approval request names its own publisher.
 
 Each is a dry run that prints its plan. To write, add the three flags:
   ${applyCommandLine(FORM)}
@@ -69,14 +75,22 @@ async function main(): Promise<void> {
   const auth = resolveRepairAuthorization(argv, FORM);
   const reason = resolveFlagValue(argv, '--reason');
   const caseFlag = resolveFlagValue(argv, '--case');
-  const refusal = auth.error ?? reason.error ?? caseFlag.error;
+  const publisherFlag = resolveFlagValue(argv, '--publisher');
+  const publisher = publisherFlag.value ?? 'costco';
+  const publisherError =
+    publisherFlag.error ??
+    (isRetailerPublisher(publisher)
+      ? null
+      : `--publisher must be one of ${Object.keys(RETAILER_SOURCES).join(', ')}.\nNothing was written.`);
+  const refusal = auth.error ?? reason.error ?? caseFlag.error ?? publisherError;
   if (refusal) {
     console.error(refusal);
     process.exit(1);
   }
   const bare = argv.filter(
     (arg, index) =>
-      !arg.startsWith('-') && !['--reason', '--case', '--expect'].includes(argv[index - 1] ?? ''),
+      !arg.startsWith('-') &&
+      !['--reason', '--case', '--expect', '--publisher'].includes(argv[index - 1] ?? ''),
   );
   const [commandArg, target] = bare;
   if (!COMMANDS.includes(commandArg as Command) || !target) {
@@ -126,9 +140,21 @@ async function main(): Promise<void> {
   if (command === 'approve' && request && !('error' in request)) {
     plan = await planApproval(store, request, now, extractPdfPageTexts);
   } else if (command === 'withdraw') {
-    plan = await planWithdrawal(store, 'costco', target, reason.value ?? '', now);
+    plan = await planWithdrawal(
+      store,
+      publisher as keyof typeof RETAILER_SOURCES,
+      target,
+      reason.value ?? '',
+      now,
+    );
   } else {
-    plan = await planAgencyMatch(store, 'costco', target, caseFlag.value ?? '', now);
+    plan = await planAgencyMatch(
+      store,
+      publisher as keyof typeof RETAILER_SOURCES,
+      target,
+      caseFlag.value ?? '',
+      now,
+    );
   }
 
   console.log(`\nRetailer notice review — ${command} — ${auth.apply ? 'APPLY' : 'dry run'}`);

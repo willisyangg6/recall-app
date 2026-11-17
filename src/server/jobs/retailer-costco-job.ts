@@ -1,7 +1,8 @@
 /**
- * Scheduled Costco notice monitor (docs/recall-retailer-notices.md).
+ * Scheduled retailer notice monitors, Costco and ALDI
+ * (docs/recall-retailer-notices.md).
  *
- * The same plan and apply as the manual `retailer:costco` command, run
+ * The same plan and apply as the manual `retailer:monitor` command, run
  * unattended through the job runner: one lease, one ingest_runs row, and a
  * non-zero exit when the run fails. It writes only the private
  * retailer_notices and retailer_notice_documents tables (plus the runner's
@@ -20,13 +21,14 @@
  */
 
 import {
-  applyCostcoPlan,
-  planCostcoRun,
+  applyRetailerPlan,
+  planRetailerRun,
   type CostcoPlan,
   type CostcoSource,
   type TextExtractor,
 } from '../retailer/costco-monitor';
 import { extractPdfText } from '../retailer/pdf-text';
+import { ALDI_SOURCE, COSTCO_SOURCE, type RetailerSourceSpec } from '../retailer/sources';
 import type { RetailerNoticeStore } from '../retailer/store';
 import { runJob, type JobContext, type JobReport, type JobSpec } from './runner';
 
@@ -87,39 +89,66 @@ export function retailerRunMetrics(
   };
 }
 
-export async function runRetailerCostcoJob(
+/** The scheduled ALDI monitor: the same job on the ALDI spec. */
+export const RETAILER_ALDI_JOB: JobSpec = {
+  jobName: 'retailer_aldi',
+  sourceSystem: 'retailer_aldi',
+  leaseTtlSeconds: 1800,
+};
+
+/** One retailer's monitor as a scheduled job (Costco, ALDI). */
+export async function runRetailerNoticeJob(
+  job: JobSpec,
+  spec: RetailerSourceSpec,
   ctx: JobContext,
   options: RetailerCostcoJobOptions,
 ): Promise<JobReport> {
-  return runJob(RETAILER_COSTCO_JOB, ctx, async () => {
-    const plan = await planCostcoRun(
+  return runJob(job, ctx, async () => {
+    const plan = await planRetailerRun(
+      spec,
       options.store,
       options.source,
       ctx.now,
       options.extract ?? extractPdfText,
     );
-    const written = options.dryRun ? null : await applyCostcoPlan(options.store, plan);
+    const written = options.dryRun ? null : await applyRetailerPlan(options.store, plan);
     const metrics = retailerRunMetrics(plan, written);
+    const name = spec.displayName;
+    const noun = spec.publisher === 'costco' ? 'letter' : 'document';
 
-    console.log(`[retailer_costco] ${JSON.stringify(metrics)}`);
+    console.log(`[${job.jobName}] ${JSON.stringify(metrics)}`);
     // GitHub annotations: visible on the run page without opening the log.
     for (const failure of plan.failures) {
-      console.log(`::warning::Costco letter not fetched (${failure.nativeId}): ${failure.error}`);
+      console.log(`::warning::${name} ${noun} not fetched (${failure.nativeId}): ${failure.error}`);
     }
     const newOrChanged = (metrics.newOrChanged as unknown[]).length;
     const review = (metrics.reviewQueue as unknown[]).length;
     if (newOrChanged > 0) {
-      console.log(`::notice::Costco notices new or changed this run: ${newOrChanged}`);
+      console.log(`::notice::${name} notices new or changed this run: ${newOrChanged}`);
     }
-    if (review > 0) console.log(`::notice::Costco notices awaiting manual review: ${review}`);
+    if (review > 0) console.log(`::notice::${name} notices awaiting manual review: ${review}`);
 
     return {
       pipelineRunId: null,
       outcome: plan.failures.length > 0 ? 'partial' : 'succeeded',
       metrics,
       ...(plan.failures.length > 0
-        ? { error: `${plan.failures.length} Costco letter(s) could not be fetched` }
+        ? { error: `${plan.failures.length} ${name} ${noun}(s) could not be fetched` }
         : {}),
     };
   });
+}
+
+export function runRetailerCostcoJob(
+  ctx: JobContext,
+  options: RetailerCostcoJobOptions,
+): Promise<JobReport> {
+  return runRetailerNoticeJob(RETAILER_COSTCO_JOB, COSTCO_SOURCE, ctx, options);
+}
+
+export function runRetailerAldiJob(
+  ctx: JobContext,
+  options: RetailerCostcoJobOptions,
+): Promise<JobReport> {
+  return runRetailerNoticeJob(RETAILER_ALDI_JOB, ALDI_SOURCE, ctx, options);
 }

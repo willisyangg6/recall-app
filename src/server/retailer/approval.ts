@@ -29,6 +29,7 @@ import {
 import { STATE_TO_POSTAL } from '../../domain/us-geography';
 import { stableJson } from './costco-monitor';
 import { embeddedJpegImages, type PdfEmbeddedJpeg } from './pdf-images';
+import { isRetailerPublisher, RETAILER_SOURCES } from './sources';
 import type { RetailerPublisher } from './types';
 
 /** One verbatim excerpt and the PDF page (1-based) it is printed on. */
@@ -208,7 +209,10 @@ export function fieldValues(fields: RetailerNoticeFields, key: EvidenceKey): str
 export function readApprovalRequest(value: unknown): ApprovalRequest | { error: string } {
   if (typeof value !== 'object' || value === null) return { error: 'not a JSON object' };
   const raw = value as Record<string, unknown>;
-  if (raw.publisher !== 'costco') return { error: 'publisher must be "costco"' };
+  if (typeof raw.publisher !== 'string' || !isRetailerPublisher(raw.publisher)) {
+    return { error: `publisher must be one of ${Object.keys(RETAILER_SOURCES).join(', ')}` };
+  }
+  const publisher = raw.publisher;
   if (typeof raw.noticeNativeId !== 'string' || raw.noticeNativeId === '') {
     return { error: 'noticeNativeId is required' };
   }
@@ -221,6 +225,11 @@ export function readApprovalRequest(value: unknown): ApprovalRequest | { error: 
   const fields = readRetailerNoticeFields(raw.fields);
   if (!fields || stableJson(fields) !== stableJson(raw.fields)) {
     return { error: 'fields do not match the version-1 shape exactly' };
+  }
+  if (fields.retailer !== RETAILER_SOURCES[publisher].displayName) {
+    return {
+      error: `fields.retailer must be "${RETAILER_SOURCES[publisher].displayName}" for ${publisher}`,
+    };
   }
   if (typeof raw.evidence !== 'object' || raw.evidence === null || Array.isArray(raw.evidence)) {
     return { error: 'evidence must be an object keyed by field' };
@@ -250,7 +259,7 @@ export function readApprovalRequest(value: unknown): ApprovalRequest | { error: 
     return { error: 'reviewNotes must be a string or null' };
   }
   return {
-    publisher: 'costco',
+    publisher,
     noticeNativeId: raw.noticeNativeId,
     documentContentHash: raw.documentContentHash,
     approvedBy: raw.approvedBy.trim(),

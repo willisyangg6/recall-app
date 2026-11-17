@@ -3,16 +3,17 @@
  * the same Feed card model (`HomeCardModel`) the agency recalls build, and the
  * same Recall Details model (`DetailModel`), built through the same shared
  * builders (`whereSoldModel`, `affectedProductsModel`, `activityDisplay`, …).
- * The card and the detail screen render a Costco recall exactly as they
- * render an FDA or FSIS one; no retailer layout exists.
+ * The card and the detail screen render a retailer's recall (Costco, ALDI)
+ * exactly as they render an FDA or FSIS one; no retailer layout exists.
  *
  * What the adapter decides, and only this:
  *
  * - Risk: the existing neutral Unknown treatment (`unclassifiedRiskView`) in
  *   the normal badge position. Never Pending (its note promises an agency
  *   classification) and never a severity tier.
- * - The one source link reads "View Costco's letter" and opens the letter.
- * - Costco is the stated retailer under Where It Was Sold.
+ * - The one source link names the retailer's own document ("View Costco's
+ *   letter", "View ALDI's recall notice") and opens it.
+ * - The publishing retailer is the stated retailer under Where It Was Sold.
  * - Package identifiers become the SAME typed facts the agency extractors
  *   produce (package_size, best_by, lot, upc, item_number) and go through the
  *   SAME gate, `aggregateFacts` → `toPackageFields`: the same date formatter
@@ -85,9 +86,19 @@ export function retailerNoticeIdFromRoute(routeId: string): string | null {
 
 // ── The shared models ───────────────────────────────────────────────────────
 
-/** "View Costco’s letter": the only source link a retailer notice has. */
+/** What each retailer calls the document it publishes. */
+const DOCUMENT_NOUN: Record<RetailerNoticeFields['retailer'], string> = {
+  Costco: 'letter',
+  ALDI: 'recall notice',
+  'H-E-B': 'recall notice',
+};
+
+/**
+ * "View Costco’s letter", "View ALDI’s recall notice": the only source link a
+ * retailer notice has, named for the document that retailer publishes.
+ */
 export function retailerLetterLinkLabel(fields: RetailerNoticeFields): string {
-  return `View ${fields.retailer}’s letter`;
+  return `View ${fields.retailer}’s ${DOCUMENT_NOUN[fields.retailer]}`;
 }
 
 /**

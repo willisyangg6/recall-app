@@ -1,11 +1,21 @@
-# Retailer recall notices (Costco first)
+# Retailer recall notices
 
-Status (2026-11-14): **private monitoring, live and scheduled.** The migration
-`20261113000000_retailer_notices.sql` is applied in production, two manual runs stored the 21
-notices on the index, and `retailer-notices.yml` runs the monitor every two hours. No app build
-reads retailer notices yet: the approval step and the new client are built on a branch
-([Approval and the client read path](#approval-and-the-client-read-path)). The live feed, the case
-tables and the notification ledger are untouched by design, not by omission.
+Status (2026-11-16): **first launch cohort built and verified on staging; nothing applied in
+production beyond the two Costco migrations.** See [Launch cohort](#launch-cohort-2026-11-16) for
+the store-by-store readiness table and the exact rollout order.
+
+- **Costco:** private monitoring, live and scheduled in production. Nothing approved yet.
+- **ALDI:** the same pipeline ([sources.ts](../src/server/retailer/sources.ts)) and a scheduled job
+  that stays off until its migration is applied.
+- **Walmart + Sam's Club, Target, Whole Foods Market, Publix:** [store listings](#store-listings)
+  attached to existing agency recalls, never a card of their own.
+- **H-E-B:** [manual intake](#manual-intake-h-e-b-kroger-albertsons) of a saved official notice.
+- Build 1.2.0 (14) shows none of this beyond Costco notices
+  ([Build 14](#build-14-and-a-second-retailer)).
+- The full retailer inventory is under [Coverage of Lotly's 77 stores](#coverage-of-lotlys-77-stores).
+
+The live feed, the case tables and the notification ledger are untouched by design, not by
+omission. Retailer notices never create push alerts.
 
 This document is the authoritative home for retailer-published notices: what the sources actually
 do, how the monitor reads them, what it is allowed to write, and what a client release would need.
@@ -56,11 +66,74 @@ can see or be alerted about.
 - Scope phrases ("Select Locations in the Midwest and Southeast", "MW, NW, SD Regions Only") are
   Costco's own region names. They are kept as printed and never mapped to states.
 
-### Trader Joe's and Kroger — manual only
+### ALDI — automated, permitted (verified 2026-11-16)
 
-Both refuse an honestly identified client: Trader Joe's answers 403 (even for `robots.txt`) and
-Kroger resets the connection. They are not fetched automatically, and the monitor does not imitate a
-browser to get past bot protection. Any Trader Joe's or Kroger notice enters only by manual intake.
+- Index: <https://corporate.aldi.us/newsroom/product-recalls>. It is server-rendered HTML that
+  answers the honest client, and its `robots.txt` disallows only four named crawlers.
+- Each entry is one paragraph under a "<year> Recalls" heading, with a date and one link:
+  `<b>November 16, 2026:</b> <a href="https://dm.cms.aldi.cx/…">Title</a>`. The native id is
+  the document's path on ALDI's asset host.
+- Only ALDI's own documents become notices. On 2026-11-16 the index listed 80 entries: 75 ALDI
+  PDFs back to 2018, 4 CPSC pages and 1 FSIS page. The agency pages are skipped: the agency
+  adapters already read FSIS, and CPSC is not food.
+- **Unlike Costco, the index dates every entry.** ALDI's notices are press releases. Some print a
+  dateline ("Batavia, Ill. (May 9, 2024) –") or "Effective: February 23, 2026"; others print no
+  date. Their product tables carry whole-line code dates ("10/30/26" under Best By). A notice is
+  therefore dated by that dateline when it prints one, and otherwise by ALDI's own index date. A
+  code-date line never dates it ([Date rule](#what-is-stored)).
+- The tables print UPCs under a "UPC Code" column, and lots and Best if Used By dates instead of
+  a store item number.
+
+### Trader Joe's, Kroger and others — manual only
+
+Many retailers refuse an honestly identified client. Trader Joe's answers 403 (even for
+`robots.txt`), Kroger's banners reset the connection, and H-E-B serves a bot challenge. They are
+not fetched automatically, and the monitor never imitates a browser to get past bot protection.
+Their notices enter only by manual intake. The full list is in
+[Coverage of Lotly's 77 stores](#coverage-of-lotlys-77-stores).
+
+### Coverage of Lotly's 77 stores
+
+Measured 2026-11-16 with the monitor's own client identity, against every entry in
+[retailer-catalog.ts](../src/domain/retailer-catalog.ts). Chains that share a recall page are
+grouped. "Automated" means the page answered `lotly-recall-ingest/1.0` with its entries in the
+HTML.
+
+| Status                                 | Count | Stores (shared page)                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------- | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Automated: own notices (this pipeline) |     3 | Costco (live), ALDI (staging), Lidl (`lidl.com/c/product-recalls`, not built)                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Automated: agency-linked lists         |    12 | Walmart + Sam's Club (`corporate.walmart.com/recalls`), Target (help articles), Whole Foods Market, Winn-Dixie, Schnucks, Dierbergs, Smart & Final, FoodMaxx + Lucky (`thesavemartcompanies.com`), Publix (own recalls only; none listed), The Fresh Market (own recalls only; none listed)                                                                                                                                                                                                    |
+| Manual intake: public page refuses us  |    39 | Kroger family (19: Kroger, Harris Teeter, Fred Meyer, QFC, Ralphs, King Soopers, Smith's, Fry's, Dillons, Mariano's, Pick 'n Save, Gerbes, Jay C, Pay Less, Owen's, Ruler Foods, Baker's, Food 4 Less, City Market); Albertsons Companies (8: Albertsons, Safeway, Vons, Jewel-Osco, Acme, Randalls, Tom Thumb, Shaw's); Hannaford; Trader Joe's; H-E-B; Wegmans (list loads through in-browser search); ShopRite; BJ's; Weis; Big Y; WinCo; PCC; Save A Lot; Hy-Vee (newsroom press releases) |
+| No verified public source              |    23 | Stop & Shop, Giant Food, The Giant Company, Food Lion, Meijer, Sprouts, Price Chopper, Tops, Giant Eagle + Market District, Fareway, Lunds & Byerlys, Market of Choice, Grocery Outlet, Raley's, H Mart, Dollar General, Dollar Tree, Family Dollar, 7-Eleven, Wawa, Kwik Trip, Piggly Wiggly                                                                                                                                                                                                  |
+
+Notes on the table:
+
+- The Kroger banners share an `/i/recall-alerts` page. Search confirmed the page on Fred Meyer,
+  Ralphs, City Market and Harris Teeter (`/i/product-recalls`), and our client was refused on
+  each banner probed. The other banners are assumed to follow the pattern.
+- "No verified public source" means our probes and a web search found no recall page. These
+  chains' recalls reach Lotly only when an agency publishes them.
+
+What each automated source adds, checked against Lotly's production records for the year to
+2026-11-16:
+
+| Source          | Last year | Already a Lotly agency case             | Not in Lotly                                                                                |
+| --------------- | --------: | --------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Costco          |        21 | 2 food (link candidates)                | Kirkland whipped cream; Madeleines and Caesar (both in FDA's Enforcement Report)            |
+| ALDI            |         4 | 3                                       | Priano Protein Tortelloni (published 2026-11-16; no agency notice yet)                      |
+| Lidl            |         6 | 6                                       | none                                                                                        |
+| Walmart + Sam's |        11 | 11                                      | none. Adds per-state store distribution, e.g. "Sold at select Walmart stores in … CT, MA …" |
+| Target          |         5 | 5 food (+5 non-food)                    | none. Adds Target item numbers and "Target Stores & Target.com"                             |
+| Whole Foods     |        27 | 22 (+4 Canadian notices, 1 nasal spray) | none in the US                                                                              |
+
+- **Most retailer value is distribution, not new recalls.** Outside Costco, a retailer's own US
+  food notices from the last year were almost all also agency notices. The gain is where a
+  product was sold: for example, Lotly's Tractor Wheels case names no retailer, while Walmart,
+  Target, Whole Foods and Costco each list it.
+- **Attaching that distribution is not built.** Adding a retailer's states to an agency case is a
+  material change (`expansion_geography`) that would send a second alert
+  ([Why a separate, private slice](#why-a-separate-private-slice)). It needs the linked-notice
+  design in [Linked notices (later)](#linked-notices-later).
 
 ## What is stored
 
@@ -73,11 +146,17 @@ Two private tables (service role only; see [Boundary](#boundary)):
 
 Field rules. Each is pinned by a test in [src/server/retailer/](../src/server/retailer/):
 
-- **Stated versus measured.** `stated_notice_date` is only a whole-line date near the top of the
-  letter. It is never a date inside a sentence, and never a filename (the undated meatloaf letter is
-  named `…_31426.pdf` and stays undated). `first_seen_at` and `last_seen_on_index_at` are our own
-  measurements. The two families are never mixed.
-- **Item numbers never become UPCs.** UPCs are read only after an explicit "UPC" label.
+- **Stated versus measured.** `stated_notice_date` comes only from the retailer.
+  - For a source whose index carries no dates (Costco), it is a whole-line date near the top of
+    the letter.
+  - For a source whose index dates every entry (ALDI), it is the document's explicit dateline
+    ("(May 9, 2024) –" or "Effective: February 23, 2026") when it prints one, and otherwise the
+    retailer's index date.
+  - It is never a date inside a sentence, a code-date line or a filename (the undated meatloaf
+    letter is named `…_31426.pdf` and stays undated). `first_seen_at` and `last_seen_on_index_at` are our own
+    measurements. The two families are never mixed.
+- **Item numbers never become UPCs.** UPCs are read only after an explicit "UPC" label, or as
+  12- or 13-digit codes under a "UPC" / "UPC Code" table column. With no label, nothing is read.
 - **States only as retailer pairs.** A state is recorded as `{retailer, state, basis, evidence}`
   and only from a sentence saying the item was sold or distributed there: a stated list
   (`stated_state_list`) or a list of named warehouses (`named_store_locations`). Nationwide scope is
@@ -106,6 +185,7 @@ own.
 | Letter says the product is safe (label/quality notice)  | `excluded`       |
 | Notice kind unclear                                     | `review`         |
 | No stated date                                          | `review`         |
+| No match, dated before 2024-01-01                       | `review`         |
 | No agency case matches                                  | `new_candidate`  |
 | Two or more agency cases match                          | `review`         |
 | One match, but codes or states conflict with the agency | `review`         |
@@ -113,7 +193,13 @@ own.
 
 A match needs the agency case's firm or brand named in the notice and at least one shared product
 word, within ±45 days of the notice's stated date. Costco's own names (Costco, Kirkland Signature)
-appear in every Costco letter, so a match on them needs two shared product words. A code conflict
+appear in every Costco letter, so a match on them needs two shared product words. ALDI is treated
+the same way. Headline boilerplate ("Because of Possible Health Risk") is never a product word.
+
+Before 2024 the agency corpus can't answer for a notice. FDA keeps announcements online for three
+years, and Lotly holds 56 from 2023 against 234 from 2024. An older notice with no match may be an
+agency recall Lotly never ingested, so it goes to review (`predates_agency_coverage`) and is never
+proposed as standalone. A code conflict
 means the letter's code dates (Best By, Sell By, lot dates) share no date with the agency notice.
 Flags: `retailer_notice_dated_before_agency`, `package_claim_unverified`,
 `retailer_label_differs_from_agency_status`.
@@ -149,6 +235,7 @@ writes no notification event.
 ## Operating it
 
 ```bash
+npm run retailer:monitor -- --publisher aldi     # the same dry run for ALDI (default: costco)
 npm run retailer:costco                          # dry run: fetch, read, decide, write nothing
 npm run retailer:costco -- --report <file.json>  # dry run plus a JSON report
 npm run retailer:costco -- --apply --confirm --expect <n>
@@ -219,8 +306,8 @@ Status (2026-11-16): **merged to `master` (`5085966`).** The migration
 `20261115000000_retailer_notice_approvals.sql` is **applied in production** (2026-11-16; the app's
 key gets `42501` on the approvals table and `consumer_retailer_notices()` returns `[]`). Nothing has
 been approved in production, and no build with the new client has shipped. The launch scope is every
-verified standalone Costco food recall that fits the existing UI
-([Launch batch](#launch-batch-2026-11-16)).
+verified standalone retailer food recall that fits the existing UI, starting with Costco and ALDI
+([Reconciled queues](#reconciled-queues-2026-11-16)).
 
 ### The approval step (private)
 
@@ -243,6 +330,7 @@ npm run retailer:review -- approve <request.json>                       # dry ru
 npm run retailer:review -- approve <request.json> --apply --confirm --expect <n>
 npm run retailer:review -- withdraw <native-id> --reason <text>
 npm run retailer:review -- confirm-agency-match <native-id> --case <agency-case-uuid>
+# withdraw and confirm-agency-match take --publisher aldi for an ALDI notice (default costco)
 ```
 
 An approval is refused unless:
@@ -255,11 +343,15 @@ An approval is refused unless:
   or email in reviewer prose appears in its excerpt;
 - item numbers, UPCs and states are ones the letter itself states.
 
+The approved retailer name must be the publisher's own ("Costco" for `costco`, "ALDI" for `aldi`).
+
 The state list may be empty when the letter states none. No state is then approved or inferred:
 Costco's region names and the index title never become states.
 
 The field shape has no consumer pack size. The package identifiers are separate lists, never
-merged: retailer item numbers, supplier codes, lots, best-by dates, can timestamps and UPCs.
+merged: retailer item numbers, supplier codes, lots, best-by dates, can timestamps and UPCs. At
+least one identifier, of any kind, is required. Costco identifies a package by its own item number;
+ALDI prints lots, Best if Used By dates and UPCs instead.
 
 The reviewed requests live in [fixtures/approvals/](../src/server/retailer/fixtures/approvals/).
 The Kirkland whipped cream request omits the ambiguous "case pack 8CT/3PK" and shows the contact
@@ -306,7 +398,11 @@ mislabel one as an FDA recall.
   - **Risk:** the existing Unknown treatment in the normal badge position
     (`unclassifiedRiskView`). It is never Pending, whose note promises an agency classification
     later, and never a severity tier.
-  - **The one source link:** "View Costco's letter", which opens the letter.
+  - **The one source link:** named for the document the retailer publishes: "View Costco's
+    letter" or "View ALDI's recall notice". It opens that document.
+  - **Publisher, name and host must agree.** A row is read only when its publisher, its approved
+    retailer name and its document host all match: `costco`, "Costco" and `costco.com`, or
+    `aldi`, "ALDI" and `dm.cms.aldi.cx`. Any other row is dropped whole.
   - **Where It Was Sold:** the letter's states, then Costco as the stated retailer. A letter that
     states no state is the agency contract's unspecified distribution that names a retailer: the
     card and the section read "Distribution not specified", and Costco stays the stated retailer.
@@ -388,6 +484,31 @@ lifetime as FSIS label images. The path contains two SHA-256 values, so it is no
 names only a photo the retailer itself published in its letter. Removing it requires deleting the
 object (see the rollback steps).
 
+### Reconciled queues (2026-11-16)
+
+Every entry on both indexes, from the production dry runs that day. Costco: unchanged, no new or
+revised letter. ALDI: first run, all 75 documents read.
+
+| Outcome                    | Costco (21)                                                                                                        | ALDI (75)                                                                                                                                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ready for approval         | Kirkland Heavy Whipped Cream                                                                                       | Priano Protein Tortelloni                                                                                                                                                                                                                |
+| Ready, historical          | Traditional Madeleines (2026-04-07), Caesar Salad (2025-11-07)                                                     | Happy Farms Cream Cheese Spread (2024-05-09), Nature's Nectar 100% Apple Juice (2024-09-05)                                                                                                                                              |
+| Linked to an existing case | Tractor Wheels → FDA `38c00154`; Motor City 5 Cheese Bread → FDA `c4bc0caa`                                        | 19 link candidates (e.g. Rosina meatballs → FSIS 2026-02-22). Also Bunny Luv carrots: the matcher proposed it as new, but it is FDA's "Grimmway Farms Recalls Organic … Baby Carrots" (2024-11-17), named "Grimmway Enterprises" by ALDI |
+| Needs manual review        | Punahele (scanned, no text), Meatloaf (undated), Ajinomoto Yakitori and Shoyu Ramen (codes not in FSIS `9c9edbd7`) | 49: 32 dated before 2024, 8 with several possible matches, 7 food status unclear, 1 notice kind unclear, 1 with codes the agency notice lacks                                                                                            |
+| Excluded                   | 12 (11 not food, 1 quality notice)                                                                                 | 3 (not food)                                                                                                                                                                                                                             |
+
+"Historical" notices show accurately: the card and Recall Details state only "Announced <date>"
+and file them under Older notices. They never claim a recall is ongoing. They do carry the Unknown
+risk badge even where FDA has since classified the recall, and FDA's Enforcement Report marks
+these terminated:
+
+| Notice                      | FDA Enforcement Report                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------- |
+| Traditional Madeleines      | `H-0682-2026`, Class I, Terminated                                                                |
+| Caesar Salad                | `H-0224-2026` / `H-0225-2026`, Class II, Terminated                                               |
+| Happy Farms Cream Cheese    | `F-1289-2024` to `F-1295-2024` (Schreiber Foods), Class II, Terminated                            |
+| Nature's Nectar Apple Juice | Refresco `F-1746-2024` / `F-1795-2024` (Class II, Terminated); coverage of this brand unconfirmed |
+
 ### Launch batch (2026-11-16)
 
 Reviewed against each letter's latest version (the monitor's production dry run that day:
@@ -409,15 +530,184 @@ On staging, all three approved with no problems and read back through the app's 
 Where It Was Sold, every case, ledger and push table count, and the shipped agency feed and manifest
 were checked; the counts and the feed were identical before and after approval.
 
+### ALDI batch (2026-11-16, staging)
+
+Requests are in [fixtures/approvals/](../src/server/retailer/fixtures/approvals/) (`aldi-*.json`).
+On staging, with `20261116000000_retailer_notice_publishers.sql` applied, the ALDI monitor ran live
+(75 documents, no failures). All three approved with no problems. The app's key then read six
+notices: three Costco, three ALDI.
+
+| Notice                      | Card                                                                 | Affected Products              |
+| --------------------------- | -------------------------------------------------------------------- | ------------------------------ |
+| Priano Protein Tortelloni   | Potential Clostridium botulinum contamination · AL, GA +2 · Today    | Best by, lot `T9101926`, 9 oz. |
+| Happy Farms Cream Cheese    | Potential Salmonella contamination · AL, AZ +27 · May 9, 2024        | 4 UPCs, 8 oz.                  |
+| Nature's Nectar Apple Juice | Potential inorganic arsenic contamination · AL, FL +14 · Sep 5, 2024 | 1 UPC, 64 fl oz.               |
+
+- Each Where It Was Sold names ALDI, and each source link reads "View ALDI's recall notice" on
+  `dm.cms.aldi.cx`.
+- Agency cases, source records, notification events, deliveries, every push table, and the agency
+  feed and manifest were identical before and after.
+- The private tables still answered the app's key with 401.
+
+The Priano card and What Happened name two items under one product slot, as Caesar's do. The Sell
+By dates on Happy Farms and the Best By codes on Nature's Nectar ("MAR2625 CT89-4", a date and a
+plant code together) are not approved as fields.
+
+### Build 14 and a second retailer
+
+Build 1.2.0 (14, `7a965ce`) reads only Costco notices and has no store-listing read path. Its read path drops any row whose publisher
+is not `costco`, whose retailer name is not "Costco", or whose document is not on `costco.com`. On
+staging, with the same six rows, build 14's exact client code read three, the Costco ones. It
+fails closed: an ALDI notice is never shown wrongly, it is simply absent. Showing ALDI needs a new
+binary with this read path.
+
 ### Rollout, each step a separate approval
 
-1. Apply `20261115000000_retailer_notice_approvals.sql`. **Done 2026-11-16.**
-2. Approve the launch batch in production with `retailer:review` (set `approvedBy` first). That is
-   invisible to every installed build.
-3. Ship the client build.
+The exact order is under [Rollout order](#rollout-order). Step 1 is done:
+`20261115000000_retailer_notice_approvals.sql` was applied 2026-11-16.
 
 To stop at any point: withdraw the approval (`retailer:review -- withdraw`). The notice disappears
 from the new client on its next load, and older builds never saw it.
+
+## Launch cohort (2026-11-16)
+
+The first release covers Costco, ALDI, Walmart + Sam's Club, Target, H-E-B, Publix and Whole Foods
+Market. Everything below was run on the isolated staging stack. That stack has the same migrations
+as production plus the two new ones, and the 57 production agency cases these sources link,
+copied in with a read-only production query.
+
+| Store           | Path                                  | Coverage  | Staging result (2026-11-16)                                                                                            | Ready?                                                                         |
+| --------------- | ------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Costco          | Own notices, automated (live)         | Automated | 21 entries, unchanged. Kirkland whipped cream approved and read back                                                   | Yes: approve Kirkland in production                                            |
+| ALDI            | Own notices, automated                | Automated | Scheduled job run: 75 read, succeeded, lease released. Priano approved and read back                                   | After its migration; enable the job                                            |
+| Walmart + Sam's | Store listings                        | Automated | 11 entries: 10 linked (9 by agency URL, 1 by reviewer), 1 review                                                       | After the listings migration                                                   |
+| Target          | Store listings (5 newest Grocery/OTC) | Automated | 5 entries, all linked by agency URL                                                                                    | After the listings migration                                                   |
+| Whole Foods     | Store listings                        | Automated | 108 rows: 47 linked, 41 review (older FDA pages Lotly does not hold), 17 excluded (Canadian notices)                   | After the listings migration                                                   |
+| Publix          | Store listings (empty-state verified) | Automated | Empty run: 0 entries, succeeded. A non-empty list stops the run for a person                                           | Yes for the empty state; the first real entry needs manual intake and a parser |
+| H-E-B           | Manual intake                         | Manual    | Real H-E-B notice intaken: dated 2024-04-27, food, Texas; duplicate check found two agency cases, so it went to review | Needs an owner and cadence (below)                                             |
+
+- **Tractor Wheels:** Recall Details for this one FDA recall now lists three stores, each as that
+  store stated it, each linking its own page. The agency's own distribution ("nationwide") and
+  its retailer line are unchanged.
+  - "Target: In stores and online", linked by the FDA URL.
+  - "Whole Foods Market: In stores", linked by the FDA URL.
+  - "Walmart: In stores and online". Walmart linked FDA's advisory page, which Lotly does not hold,
+    so it went to review and a reviewer confirmed it.
+- **States stay with their store.** Flowers Hawaiian Bread shows Walmart in Oklahoma and Texas,
+  and Sam's Club in Louisiana and Texas, exactly as Walmart's line splits them.
+- **No duplicate card, no second push.** Across the run, `recall_cases`, `source_records`,
+  `notification_events`, `notification_deliveries`, every push table, and the agency feed and
+  manifest were identical before and after. The private tables answered the app's key with 401.
+- **Review batch: current notices only.** Kirkland (Costco) and Priano (ALDI) are prepared and
+  were rechecked on 2026-11-16: no Lotly agency case and no FDA Enforcement Report record (reports
+  through 2026-11-11). Madeleines, Caesar, Happy Farms and Nature's Nectar are ended (FDA:
+  Terminated). They were withdrawn on staging and stay out until Lotly can show a recall's status.
+  Their request files remain for that later release.
+- **Finding:** Lotly holds two agency cases for the same H-E-B Creamy Creations recall
+  (`261c3408…` and `b35ed0e7…`, both dated 2024-04-29).
+
+## Store listings
+
+Walmart (with Sam's Club), Target, Whole Foods Market and Publix each publish a list of the recalls
+they sold, linking the FDA or FSIS notice. For the year to 2026-11-16, every US food entry on
+those lists was already a Lotly agency case. A listing is therefore never a new card: it adds the
+store's own statement to the agency recall it names.
+
+- **Private until linked.** `retailer_store_listings`
+  ([migration](../supabase/migrations/20261116100000_retailer_store_listings.sql)) is service-role
+  only. `consumer_store_listings()` returns one row per store, and only for a listing linked to an
+  existing case.
+- **Linked only when certain.** The agency link must be a source URL of exactly one Lotly case. A
+  reviewer can link a listing in review (`retailer:listings -- confirm`), and that choice survives
+  every later run while the store's link is unchanged. Everything else goes to review and is never
+  shown: no agency link, a link Lotly does not hold, several cases, or a sold-at line not read
+  completely. Canadian notices are excluded.
+- **One store, its own facts.** Each store keeps its own scope, states and channels
+  ([store-listings.ts](../src/server/retailer/store-listings.ts)). Nothing is merged into the
+  agency's distribution, and one store's states are never given to another.
+- **Never a case write.** A listing reads `source_records` and `recall_cases` (SELECT) and writes
+  only its own table. No case changes, so no material change is detected and no alert is sent.
+- **On screen:** under Where It Was Sold, after the agency's lines, the heading "Also listed by
+  these stores". One row per store follows, such as "Walmart: Oklahoma and Texas" (more than four
+  states read as "N states") or "Target: In stores and online", each with a link to that store's
+  page ([store-listings-block.tsx](../src/components/store-listings-block.tsx)). This is new
+  Lotly-authored copy for founder review.
+
+```bash
+npm run retailer:listings -- --publisher walmart     # dry run (walmart, target, wholefoods, publix)
+npm run retailer:listings -- --publisher walmart --apply --confirm --expect <n>
+npm run retailer:listings -- confirm <native-id> --publisher walmart --case <agency-case-uuid> --by <name>
+```
+
+Source notes, verified 2026-11-16 with the honest client:
+
+- Walmart: <https://corporate.walmart.com/recalls>, "Food Recalls" section. About three months of
+  entries, each with a "Sold at …" line. Proofpoint-wrapped links are unwrapped.
+- Target: <https://www.target.com/help/articles/news-safety/product-recalls> highlights the five
+  newest Grocery/OTC articles. Each article says "Sold at: Target Stores & Target.com" and links
+  FDA or FSIS. Older articles are reachable only through Target's search, so only the newest five
+  are read.
+- Whole Foods: <https://www.wholefoodsmarket.com/legal/product-recalls>, a table of date, product,
+  reason and link.
+- Publix: <https://corporate.publix.com/newsroom/recalls> renders `<recall-list :item-list="…">`.
+  Only the empty state (`null`) has been observed, so any other value fails the run with a named
+  reason and a person reviews the page.
+
+Listing runs are manual in this release. A schedule is a later step (see
+[Rollout order](#rollout-order)).
+
+## Manual intake: H-E-B, Kroger, Albertsons
+
+H-E-B has no source the monitor can read. Every endpoint, including newsroom posts, the RSS feeds,
+the WordPress API and heb.com's recall page, answers the honest client with an Incapsula bot
+challenge, and the monitor never gets past one. An archive copy was not used either.
+
+The repeatable process:
+
+1. **Source:** the official notice at <https://newsroom.heb.com/heb-news/recalls/>, opened in a
+   browser. Save the post (File → Save As, or Print → Save as PDF).
+2. **Intake (dry run):**
+   `npm run retailer:monitor -- --publisher heb --intake <saved file> --url <the post's URL> --title "<its headline>"`.
+   The saved file is archived by SHA-256 and read like any letter. A saved page is dated by its
+   labelled date ("(Month D, YYYY) –", "Effective: …" or "Company Announcement Date: …"), never by
+   site navigation.
+3. **Duplicate check:** the shared decision runs against every agency case. A match makes it a
+   link or review candidate, never a card. Only a standalone, dated food recall can be approved.
+4. **Apply** with the dry run's count, then approve with `retailer:review` like any notice.
+
+Proposed owner and cadence: the founder (or a named delegate) checks H-E-B's newsroom recalls page
+**every weekday morning, plus same day when an agency recall names H-E-B**, and records each new
+notice through the intake. Most H-E-B recalls are also FDA announcements, so the duplicate check
+will usually route them to review.
+
+Staging proof (2026-11-16): H-E-B's own announcement of its Creamy Creations ice cream recall, in
+the copy FDA republishes at
+<https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/h-e-b-issues-voluntary-recall-3-ounce-cups-creamy-creations-ice-cream-select-flavors>.
+The newsroom copy is unreachable by design. It read as text, dated 2024-04-27, a food recall in
+Texas. The duplicate check found two agency cases for it, so it went to review.
+
+**Kroger and Albertsons** have no parent-level source either. `thekrogerco.com/product-recalls/`
+returns 404, the banner pages (`kroger.com/i/recall-alerts`) reset the connection, and
+`albertsonscompanies.com/product-recalls.html` returns 403. Each would use the same manual
+intake. They are not in this release, and their banners are not expanded.
+
+## Rollout order
+
+Each step needs its own approval, in this order:
+
+1. Apply `20261116000000_retailer_notice_publishers.sql` (publisher check: costco, aldi, heb).
+2. Apply `20261116100000_retailer_store_listings.sql` (listings table and read function).
+3. Approve Kirkland in production (`retailer:review`, real `approvedBy`).
+4. ALDI: `npm run retailer:monitor -- --publisher aldi` dry run, apply with its count, then approve
+   Priano. Merge this branch, set the repository variable `RETAILER_ALDI_ENABLED=true`, and add
+   ALDI to `ops:health` once its first scheduled run succeeds.
+5. Listings: `npm run retailer:listings -- --publisher <p>` dry run then apply, for walmart,
+   target, wholefoods, publix. Confirm the Walmart Tractor Wheels listing by hand. Scheduling
+   listings is a later job.
+6. Build and ship the client with the multi-publisher read path and store listings.
+
+Before step 6, every installed build is unaffected: build 14 drops non-Costco notices and has no
+listing read path.
 
 ### Linked notices (later)
 

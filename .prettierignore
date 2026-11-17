@@ -21,3 +21,8 @@ src/content/historical/*.json
 src/server/retailer/fixtures/costco/*.html
 src/server/retailer/fixtures/costco/*.json
 src/server/retailer/fixtures/costco/letters/
+# Recorded real ALDI index and recall notice (verbatim source bytes; see
+# src/server/retailer/fixtures/aldi/README.md; never reformat)
+src/server/retailer/fixtures/aldi/*.html
+# Recorded real retailer recall lists (verbatim pages fetched 2026-11-16; never reformat)
+src/server/retailer/fixtures/listings/*.html

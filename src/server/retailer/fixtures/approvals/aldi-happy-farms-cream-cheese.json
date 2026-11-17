@@ -1,0 +1,140 @@
+{
+  "publisher": "aldi",
+  "noticeNativeId": "prod1amer/In_Association_with_Schreiber_Foods__Inc.__ALDI_Recalls_Happy_Farms_Cream_Cheese_Spread_Products_Due_to_Potentia-eJaHEV2uvUpdf",
+  "documentContentHash": "848f7843d3590cc93a7a6b9fc2fb521f2bfd39b1a492db722094701861b80656",
+  "approvedBy": "staging batch 2026-11-16 (not a production approval)",
+  "reviewNotes": "Historical (2024). ALDI launch batch, reviewed 2026-11-16 against the archived notice (dateline May 9, 2024; ALDI's index says May 7). No Lotly agency case. FDA Enforcement Report has the same recall as F-1289-2024 through F-1295-2024, firm Schreiber Foods Inc, Class II, Terminated: verify how a terminated recall is shown before production. Sell By dates have no field and stay out of the card (never relabeled Best By).",
+  "fields": {
+    "retailer": "ALDI",
+    "productName": "Happy Farms Cream Cheese Spread",
+    "size": "8 oz.",
+    "image": null,
+    "firmName": "Schreiber Foods, Inc.",
+    "whatHappened": "In cooperation with Schreiber Foods, Inc., ALDI recalled its Happy Farms Whipped Cream Cheese Spread, Chive & Onion Cream Cheese Spread, Cream Cheese Spread, and Strawberry Cream Cheese Spread products.",
+    "whyRecalled": "The products were recalled due to potential salmonella.",
+    "reason": {
+      "hazardCategory": "microbial_contamination",
+      "agent": "salmonella"
+    },
+    "whereSold": {
+      "states": [
+        "Alabama",
+        "Arizona",
+        "Arkansas",
+        "California",
+        "Delaware",
+        "District of Columbia",
+        "Florida",
+        "Georgia",
+        "Illinois",
+        "Indiana",
+        "Iowa",
+        "Kentucky",
+        "Maryland",
+        "Michigan",
+        "Minnesota",
+        "Missouri",
+        "New Jersey",
+        "New York",
+        "North Carolina",
+        "North Dakota",
+        "Ohio",
+        "Pennsylvania",
+        "South Carolina",
+        "South Dakota",
+        "Tennessee",
+        "Texas",
+        "Virginia",
+        "West Virginia",
+        "Wisconsin"
+      ],
+      "purchaseWindow": null
+    },
+    "packageChecks": {
+      "retailerItemNumbers": [],
+      "supplierCodes": [],
+      "lotCodes": [],
+      "bestByDates": [],
+      "canTimestamps": [],
+      "upcs": ["4099100101881", "4099100101751", "4099100101737", "4099100101744"]
+    },
+    "instructions": [
+      "Throw the product away or return it to your local ALDI store for a full refund."
+    ],
+    "contact": "Call Schreiber Foods, Inc. at 1-800-644-5473 or email consumer.relations@schreiberfoods.com."
+  },
+  "evidence": {
+    "productName": [
+      {
+        "excerpt": "In Association with Schreiber Foods, Inc., ALDI Recalls Happy Farms Cream Cheese Spread Products Due to Potential Salmonella",
+        "page": 1
+      }
+    ],
+    "size": [
+      {
+        "excerpt": "Whipped Cream Cheese Spread 8 oz. cup 4099100101881",
+        "page": 1
+      }
+    ],
+    "firmName": [
+      {
+        "excerpt": "In cooperation with Schreiber Foods, Inc., and out of an abundance of caution, ALDI Inc., (“ALDI”) recalls its Happy Farms Whipped Cream Cheese Spread, Chive & Onion Cream Cheese Spread, Cream Cheese Spread, and Strawberry Cream Cheese Spread products.",
+        "page": 1
+      }
+    ],
+    "whatHappened": [
+      {
+        "excerpt": "In cooperation with Schreiber Foods, Inc., and out of an abundance of caution, ALDI Inc., (“ALDI”) recalls its Happy Farms Whipped Cream Cheese Spread, Chive & Onion Cream Cheese Spread, Cream Cheese Spread, and Strawberry Cream Cheese Spread products.",
+        "page": 1
+      }
+    ],
+    "whyRecalled": [
+      {
+        "excerpt": "The affected products are recalled due to potential salmonella.",
+        "page": 1
+      }
+    ],
+    "reason.agent": [
+      {
+        "excerpt": "The affected products are recalled due to potential salmonella.",
+        "page": 1
+      }
+    ],
+    "whereSold.states": [
+      {
+        "excerpt": "The affected products were sold at select ALDI stores in Alabama, Arizona, Arkansas, California, Delaware, District of Columbia, Florida, Georgia, Illinois, Indiana, Iowa, Kentucky, Maryland, Michigan, Minnesota, Missouri, New Jersey, New York, North Carolina, North Dakota, Ohio, Pennsylvania, South Carolina, South Dakota, Tennessee, Texas, Virginia, West Virginia, and Wisconsin.",
+        "page": 1
+      }
+    ],
+    "packageChecks.upcs": [
+      {
+        "excerpt": "Product Name Package Description/Size UPC Code Sell By Date Whipped Cream Cheese Spread 8 oz. cup 4099100101881",
+        "page": 1
+      },
+      {
+        "excerpt": "8 oz. cup 4099100101751",
+        "page": 1
+      },
+      {
+        "excerpt": "Cream Cheese Spread 8 oz. cup 4099100101737",
+        "page": 1
+      },
+      {
+        "excerpt": "Strawberry Cream Cheese Spread 8 oz. cup 4099100101744",
+        "page": 1
+      }
+    ],
+    "instructions": [
+      {
+        "excerpt": "If customers have products affected by this recall, they are advised to discard it immediately or return it to their local store for a full refund.",
+        "page": 1
+      }
+    ],
+    "contact": [
+      {
+        "excerpt": "call Schreiber Foods, Inc., at 1-800-644-5473 or email consumer.relations@schreiberfoods.com.",
+        "page": 1
+      }
+    ]
+  }
+}

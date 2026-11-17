@@ -79,3 +79,10 @@ export const DETAIL_TITLE_COLLAPSE_HINT = 'Shortens the product name to two line
  * rule 4): personalization calls the same choice "Retailers".
  */
 export const RETAILERS_SPOKEN_PREFIX = 'Retailers:';
+
+/**
+ * Heads the stores that listed an agency recall on their own recall pages
+ * (lib/store-listings.ts). Scoped to what each store published, never a
+ * claim of where the product was sold beyond that.
+ */
+export const STORE_LISTINGS_HEADING = 'Also listed by these stores';

@@ -1,7 +1,8 @@
 /**
  * Retailer notice monitoring — the private, server-only shapes.
  *
- * A retailer notice is a NOTICE a store published (Costco's member letters),
+ * A retailer notice is a NOTICE a store published (Costco's member letters,
+ * ALDI's recall notices),
  * not a government record and not a recall case. In this slice it is stored
  * in its own private table and never projected into `recall_cases`, the feed,
  * or the notification ledger (docs/recall-retailer-notices.md).
@@ -12,17 +13,28 @@
  * product type, no closure from a notice leaving the index.
  */
 
-export type RetailerPublisher = 'costco';
+export type RetailerPublisher = 'costco' | 'aldi' | 'heb';
 
 /** One entry on the retailer's public index, exactly as published. */
 export interface RetailerIndexEntry {
   publisher: RetailerPublisher;
-  /** Stable CMS id of the index entry (Costco: the `blt…` text_builder uid). */
+  /**
+   * Stable id of the index entry (Costco: the `blt…` text_builder uid; ALDI:
+   * the document's path on its asset host).
+   */
   nativeId: string;
   /** The label the retailer printed, e.g. "Recall Notice". Not a status. */
   indexLabel: string | null;
   indexTitle: string;
   documentUrl: string;
+  /**
+   * The date the retailer printed beside this entry on its own index, ISO
+   * (ALDI: "November 16, 2026:"). Absent when the index prints none (Costco).
+   * Used only when the document itself states no date.
+   */
+  indexDate?: string | null;
+  /** The index text that date was read from, verbatim. */
+  indexDateText?: string | null;
 }
 
 /** How the document's text was obtained. */
@@ -111,6 +123,7 @@ export type DecisionReason =
   | 'quality_notice_not_recall'
   | 'notice_kind_unclear'
   | 'undated'
+  | 'predates_agency_coverage'
   | 'no_agency_match'
   | 'single_agency_match'
   | 'multiple_agency_candidates'

@@ -40,11 +40,24 @@ import type {
 
 export const MATCH_WINDOW_DAYS = 45;
 
+/**
+ * The earliest stated date the agency corpus can answer for. FDA keeps
+ * company announcements online for three years, and Lotly's corpus holds 56
+ * from 2023 against 234 from 2024 (measured 2026-11-16). An older notice with
+ * no match may be an agency recall Lotly never ingested, so it is never
+ * proposed as standalone.
+ */
+export const AGENCY_COVERAGE_FROM = '2024-01-01';
+
 const RETAILER_OWNED_NAMES = new Set([
   'costco',
   'costco wholesale',
   'kirkland',
   'kirkland signature',
+  'aldi',
+  'aldi inc',
+  'h e b',
+  'heb',
 ]);
 
 const PRODUCT_STOPWORDS = new Set([
@@ -77,6 +90,21 @@ const PRODUCT_STOPWORDS = new Set([
   'signature',
   'kirkland',
   'costco',
+  'aldi',
+  // Headline boilerplate ALDI and agency titles share ("… Because of
+  // Possible Health Risk"): never product evidence.
+  'because',
+  'possible',
+  'health',
+  'risk',
+  'voluntarily',
+  'recalling',
+  'potential',
+  'contamination',
+  'undeclared',
+  'allergen',
+  'allergens',
+  'association',
   'hawaii',
   'style',
   'flavor',
@@ -194,7 +222,11 @@ export function decideNotice(
     return decided('review', ['notice_kind_unclear'], { candidateCaseIds });
   if (!parsed.statedNoticeDate) return decided('review', ['undated'], { candidateCaseIds });
 
-  if (candidates.length === 0) return decided('new_candidate', ['no_agency_match']);
+  if (candidates.length === 0) {
+    return parsed.statedNoticeDate < AGENCY_COVERAGE_FROM
+      ? decided('review', ['predates_agency_coverage'])
+      : decided('new_candidate', ['no_agency_match']);
+  }
   if (candidates.length > 1) {
     return decided('review', ['multiple_agency_candidates'], { candidateCaseIds });
   }

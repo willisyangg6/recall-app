@@ -335,3 +335,67 @@ test('a notice with stated states keeps its state list (Madeleines)', () => {
   // The whipped cream fixture is unchanged by the empty-list rule.
   assert.equal(buildRetailerHomeCardModel(notice(), TODAY).locationSummary, 'AL, FL +10');
 });
+
+// ── A second retailer: ALDI ─────────────────────────────────────────────────
+
+const PRIANO_URL =
+  'https://dm.cms.aldi.cx/is/content/prod1amer/ALDI%20Recalls%20Priano%20Protein%20Carbonara%20Tortelloni%20and%20Priano%20Protein%20Herb%20Cheese%20Tortelloni%20Because%20Of%20Possible%20Health%20Riskpdf';
+
+function aldiRow(file: string, noticeDate: string) {
+  return {
+    ...ROW,
+    id: '1f0c2a9e-5b7d-4e1a-9c3f-2d6b8e4a7c10',
+    publisher: 'aldi',
+    document_url: PRIANO_URL,
+    notice_date: noticeDate,
+    fields: JSON.parse(
+      readFileSync(
+        join(__dirname, '..', 'server', 'retailer', 'fixtures', 'approvals', file),
+        'utf8',
+      ),
+    ).fields as unknown,
+  };
+}
+
+test('an ALDI notice renders through the same card and detail, named for ALDI', () => {
+  const [priano] = readRetailerNoticeRows([aldiRow('aldi-priano-tortelloni.json', '2026-11-16')]);
+  assert.ok(priano, 'an approved ALDI row reads');
+  assert.equal(priano.publisher, 'aldi');
+
+  const card = buildRetailerHomeCardModel(priano, TODAY);
+  assert.equal(card.productName, 'Priano Protein Carbonara Tortelloni');
+  assert.equal(card.risk.tier, 'unknown');
+  assert.equal(card.affectsYou, false);
+
+  const detail = buildRetailerDetailModel(priano, TODAY);
+  assert.equal(detail.sections.whereSold.retailersNamed, 'ALDI');
+  assert.deepEqual(detail.officialSource, { label: 'View ALDI’s recall notice', url: PRIANO_URL });
+  // Lot and Best if Used By are package identifiers, so a notice with no
+  // store item number still has a package to check.
+  assert.ok(detail.sections.affectedProducts, 'Affected Products shows the lot and date');
+  assert.doesNotMatch(JSON.stringify(detail), /Costco/);
+});
+
+test('publisher, name and document host must all agree, or the row is dropped', () => {
+  const good = aldiRow('aldi-priano-tortelloni.json', '2026-11-16');
+  assert.equal(readRetailerNoticeRows([good]).length, 1);
+  // An ALDI-named notice under Costco, a Costco notice under ALDI, and an
+  // ALDI notice linking off ALDI's host are each dropped whole.
+  assert.deepEqual(readRetailerNoticeRows([{ ...good, publisher: 'costco' }]), []);
+  assert.deepEqual(readRetailerNoticeRows([{ ...ROW, publisher: 'aldi' }]), []);
+  assert.deepEqual(readRetailerNoticeRows([{ ...good, document_url: ROW.document_url }]), []);
+  assert.deepEqual(
+    readRetailerNoticeRows([{ ...good, document_url: 'https://dm.cms.aldi.cx.example.com/x.pdf' }]),
+    [],
+  );
+  assert.deepEqual(readRetailerNoticeRows([{ ...good, publisher: 'walmart' }]), []);
+});
+
+test('a notice with no package identifier at all is still refused', () => {
+  const fields = JSON.parse(
+    JSON.stringify(aldiRow('aldi-priano-tortelloni.json', '2026-11-16').fields),
+  );
+  fields.packageChecks.lotCodes = [];
+  fields.packageChecks.bestByDates = [];
+  assert.equal(readRetailerNoticeFields(fields), null);
+});

@@ -1,0 +1,113 @@
+{
+  "publisher": "aldi",
+  "noticeNativeId": "prod1amer/ALDI Recalls Priano Protein Carbonara Tortelloni and Priano Protein Herb Cheese Tortelloni Because Of Possible Health Riskpdf",
+  "documentContentHash": "0e4e739cd55dd283c26ee99de5d1ec52a0f1e275d51bbb0c5228e6da01bb9b58",
+  "approvedBy": "staging batch 2026-11-16 (not a production approval)",
+  "reviewNotes": "ALDI launch batch, reviewed 2026-11-16 against the notice ALDI's index dated November 16, 2026 (the notice prints no date of its own). No FDA or FSIS counterpart in Lotly's agency corpus or FDA's Enforcement Report that day; when one is published the monitor re-decides the notice as a link candidate and the read path hides it. One notice, two items under one lot and date: the card names the carbonara item; What Happened names both. Botulism risk comes from possible temperature abuse, not a confirmed contamination: whyRecalled says so in the notice's own words.",
+  "fields": {
+    "retailer": "ALDI",
+    "productName": "Priano Protein Carbonara Tortelloni",
+    "size": "9 oz.",
+    "image": null,
+    "firmName": "ALDI",
+    "whatHappened": "ALDI is recalling Priano Protein Carbonara Tortelloni and Priano Protein Herb & Cheese Tortelloni sold at select stores. The products may not have been stored, distributed or sold at appropriate temperatures. No illnesses have been reported.",
+    "whyRecalled": "The products may not have been stored at appropriate temperatures, which may allow growth of pathogens including Clostridium botulinum.",
+    "reason": {
+      "hazardCategory": "microbial_contamination",
+      "agent": "Clostridium botulinum"
+    },
+    "whereSold": {
+      "states": ["Alabama", "Georgia", "North Carolina", "South Carolina"],
+      "purchaseWindow": null
+    },
+    "packageChecks": {
+      "retailerItemNumbers": [],
+      "supplierCodes": [],
+      "lotCodes": ["T9101926"],
+      "bestByDates": ["12/18/2026"],
+      "canTimestamps": [],
+      "upcs": []
+    },
+    "instructions": [
+      "Do not prepare or eat the product, even if it does not look or smell spoiled.",
+      "Throw it away or return it to your local ALDI store for a full refund."
+    ],
+    "contact": "Call ALDI at 844-484-0332, Monday through Friday, from 9:00 a.m. to 5:00 p.m. EST."
+  },
+  "evidence": {
+    "productName": [
+      {
+        "excerpt": "Priano Protein Carbonara Tortelloni T9101926 12/18/2026 9 oz. plastic unit",
+        "page": 1
+      }
+    ],
+    "size": [
+      {
+        "excerpt": "Priano Protein Carbonara Tortelloni T9101926 12/18/2026 9 oz. plastic unit",
+        "page": 1
+      }
+    ],
+    "firmName": [
+      {
+        "excerpt": "ALDI of Batavia, IL, is recalling Priano Protein Carbonara Tortelloni and Priano Protein Herb & Cheese Tortelloni sold at select stores because the products may not have been stored, distributed or sold at appropriate temperatures, which may allow growth of pathogens including Clostridium botulinum",
+        "page": 1
+      }
+    ],
+    "whatHappened": [
+      {
+        "excerpt": "ALDI of Batavia, IL, is recalling Priano Protein Carbonara Tortelloni and Priano Protein Herb & Cheese Tortelloni sold at select stores because the products may not have been stored, distributed or sold at appropriate temperatures, which may allow growth of pathogens including Clostridium botulinum",
+        "page": 1
+      },
+      {
+        "excerpt": "No illnesses have been reported to date in connection with this recall to date.",
+        "page": 2
+      }
+    ],
+    "whyRecalled": [
+      {
+        "excerpt": "ALDI of Batavia, IL, is recalling Priano Protein Carbonara Tortelloni and Priano Protein Herb & Cheese Tortelloni sold at select stores because the products may not have been stored, distributed or sold at appropriate temperatures, which may allow growth of pathogens including Clostridium botulinum",
+        "page": 1
+      }
+    ],
+    "reason.agent": [
+      {
+        "excerpt": "ALDI of Batavia, IL, is recalling Priano Protein Carbonara Tortelloni and Priano Protein Herb & Cheese Tortelloni sold at select stores because the products may not have been stored, distributed or sold at appropriate temperatures, which may allow growth of pathogens including Clostridium botulinum",
+        "page": 1
+      }
+    ],
+    "whereSold.states": [
+      {
+        "excerpt": "The recalled products were sold at select ALDI stores in Alabama, Georgia, North Carolina and South Carolina",
+        "page": 1
+      }
+    ],
+    "packageChecks.lotCodes": [
+      {
+        "excerpt": "Priano Protein Carbonara Tortelloni T9101926 12/18/2026 9 oz. plastic unit",
+        "page": 1
+      }
+    ],
+    "packageChecks.bestByDates": [
+      {
+        "excerpt": "Product Lot Number Best if Used By Packaging Priano Protein Carbonara Tortelloni T9101926 12/18/2026",
+        "page": 1
+      }
+    ],
+    "instructions": [
+      {
+        "excerpt": "Consumers are warned not to prepare or consume the affected products from the impacted states, even if they do not look or smell spoiled.",
+        "page": 1
+      },
+      {
+        "excerpt": "should discard the products immediately or return them to their local ALDI store for a full refund.",
+        "page": 2
+      }
+    ],
+    "contact": [
+      {
+        "excerpt": "Consumers with questions may contact ALDI at 844-484-0332, Monday through Friday, from 9:00 a.m. to 5:00 p.m. EST.",
+        "page": 2
+      }
+    ]
+  }
+}

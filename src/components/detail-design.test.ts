@@ -1060,6 +1060,21 @@ test('the retailers a notice named render under the geography, never instead of 
   }
 });
 
+test('store listings render once, after the agency rows, as their own block', () => {
+  // The stores that listed an agency recall (lib/store-listings.ts) are links
+  // to each store's own page, in their own component, so the agency's pinned
+  // rows and link count above stay exactly as they were.
+  const section = DETAIL.slice(
+    DETAIL.indexOf('<Section\n          title="Where It Was Sold"'),
+    DETAIL.indexOf('{/* Health Risk (P1B)'),
+  );
+  assert.equal((section.match(/<StoreListingsBlock\b/g) ?? []).length, 1);
+  assert.ok(
+    section.indexOf('whereSold.retailersNamed') < section.indexOf('<StoreListingsBlock'),
+    'the store listings moved above the agency lines',
+  );
+});
+
 test('the retailer row is quiet metadata: no chips, no scroller, no control', () => {
   const block = DETAIL.slice(
     DETAIL.indexOf('{whereSold.retailersNamed ?'),

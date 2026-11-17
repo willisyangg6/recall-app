@@ -85,3 +85,37 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+
+  aldi:
+    # Off until rollout: set the repository variable RETAILER_ALDI_ENABLED to
+    # "true" only after 20261116000000_retailer_notice_publishers.sql is
+    # applied (an ALDI row is refused by the publisher check before that).
+    if: vars.RETAILER_ALDI_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    # No job-level `env:` on purpose (hardening note 1).
+    steps:
+      # Tripwire, NOT the security boundary (hardening note 3). The ref
+      # reaches the shell only through `env:`.
+      - name: Assert production ref
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          echo "event=$GITHUB_EVENT_NAME ref=$WORKFLOW_REF"
+          if [ "$WORKFLOW_REF" != "refs/heads/master" ]; then
+            echo "::error::Refusing to run the ALDI monitor from $WORKFLOW_REF"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      # Receives NO secret: this step runs third-party lifecycle scripts.
+      - run: npm ci
+      - name: ALDI notices (private tables only)
+        run: npm run jobs:retailer-aldi
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
