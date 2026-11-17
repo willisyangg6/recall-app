@@ -99,7 +99,7 @@ export class SupabaseAttachmentStore implements AttachmentSyncStore {
         .in('source_record_id', sourceRecordIds.slice(i, i + 100));
       if (error) {
         // Pre-migration tolerance (reads only), as in listFailures: before
-        // 20261116000000 lands there are no stored attachments. Writes stay
+        // 20261117000000 lands there are no stored attachments. Writes stay
         // loud — upsertAttachment fails the run if the table is missing.
         if (/fsis_attachments/.test(error.message)) return [];
         this.fail('listAttachments', error);

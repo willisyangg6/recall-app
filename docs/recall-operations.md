@@ -1083,7 +1083,7 @@ scheduler watchdog also dispatches `scheduled-ingest`. So the first `:07`
 or `:37` UTC tick after a merge runs the new code, with no further step. No
 workflow applies migrations.
 
-1. **Apply migration `20261116000000_fsis_attachments.sql` to production.**
+1. **Apply migration `20261117000000_fsis_attachments.sql` to production.**
    It is purely additive: a new service-role-only table plus a nullable
    `product_visuals.caption` column. Verify it with:
    - `select count(*) from fsis_attachments` (= 0);
@@ -1092,6 +1092,21 @@ workflow applies migrations.
 
    The app tolerates the new column either way: it reads
    `product_visuals` through a request that degrades to "no visuals".
+
+   **Combined order with retailer PR #5.** That PR adds
+   `20261116000000_retailer_notice_publishers.sql` and
+   `20261116100000_retailer_store_listings.sql`. This migration was
+   renumbered from `20261116000000` to `20261117000000` (still unapplied)
+   so versions stay unique, and it sorts after both. On 2026-11-17 the full
+   chain (`master` + PR #5 + this) applied cleanly from scratch, in order:
+   …13 → …15 → …16000000 → …16100000 → …17000000.
+   At that time production had neither `fsis_attachments` nor PR #5's
+   `retailer_store_listings`. PR #5's publisher-constraint change cannot be
+   read through the Data API. If PR #5's migrations are
+   still pending when this one ships, apply them first. Otherwise
+   `supabase db push` treats them as older than the newest applied version
+   and refuses them without `--include-all`. This migration does not
+   depend on them.
 
 2. **Merge the PR**, and only after step 1 is verified. If the code ran
    first, the read paths would degrade to "nothing stored", but the first
