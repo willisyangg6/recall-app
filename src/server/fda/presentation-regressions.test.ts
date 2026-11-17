@@ -765,6 +765,10 @@ const PINNED_ROW_IMAGE_CENSUS = [
   '4earth-farms-llc-recalls-organic-and-con|t0r5|image_6_5.png|source_row',
   '4earth-farms-llc-recalls-organic-and-con|t0r7|image_8_3.png|source_row',
   '4earth-farms-llc-recalls-organic-and-con|t0r8|image_9_3.png|source_row',
+  // The 24 oz item's name now ends before its ", 24 oz can, UPC: …" tail
+  // (package-date identifiers), so it is a row and its own "24 oz tub" photo
+  // is assigned to it.
+  'byheart-updates-information-regarding-vo|list0i0|image_1_206.jpg|source_row',
   'conagra-brands-issues-voluntary-allergy-|t0r2|WB Thousand Island 24.jpeg|source_row',
   'conagra-brands-issues-voluntary-allergy-|t0r3|WB Blue Cheese 24.jpeg|source_row',
   'direct-source-seafood-llc-recalling-froz|t0r1|image_2_168.jpg|source_row',

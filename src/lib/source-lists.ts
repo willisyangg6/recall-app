@@ -133,11 +133,14 @@ const LEAD_IN_SIZE = /\bfollowing\s+(\d+[\s-]?(?:count|ct|pack|pk))\b/i;
 
 /**
  * Boundaries after which an item stops being the product's name. "with" cuts
- * only when an identifier label follows — "Mushroom Spinach & Salsa with Two
+ * only when an identifier label follows, and so does a comma: "Brad's Crunchy
+ * Kale, Original, 2 oz (57g) bag, UPC 813104021679, Lots …" is a name plus its
+ * markings, and read whole the closed identity gate rejects it as a raw row,
+ * pooling four products' codes into one — "Mushroom Spinach & Salsa with Two
  * Cheeses" is a name, "… with lot code 088594-2-1" is a name plus its code.
  */
 const NAME_BOUNDARY =
-  /(?:,\s*|\s+)(?:containing|sold|available|distributed|packaged|produced|with\s+(?:lot|batch|UPC|a\s+lot|best[-\s]|use[-\s]|sell[-\s]|expiration))\b|\.\s|\s+The\s+affected\b/i;
+  /(?:,\s*|\s+)(?:containing|sold|available|distributed|packaged|produced|with\s+(?:lot|batch|UPC|a\s+lot|best[-\s]|use[-\s]|sell[-\s]|expiration))\b|,\s*(?:UPC|U\.P\.C\.?|Lots?|Best[-\s]|Use[-\s]|Sell[-\s]|Exp(?:iration|iry)?\b|Item\s+(?:No|Number|Code))|\.\s|\s+The\s+affected\b/i;
 
 /**
  * A stated net weight closing a name: "… EZ Peel Shrimp net wt. 2lbs.",

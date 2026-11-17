@@ -835,12 +835,45 @@ or is omitted rather than rendered wrongly.
   component above 12 is rejected rather than guessed. Ranges standardize to
   `July 13–August 11, 2026`, stating the year twice only when it changes.
   Qualifiers are meaning, not formatting, so `through February 27, 2026` becomes
-  `Through February 27, 2026` rather than collapsing to a single day. Lists
+  `Through February 27, 2026` rather than collapsing to a single day. A
+  qualifier on either side of the date survives (package-date identifiers,
+  2026-11-16): `10/16/27 and prior` → `October 16, 2027 or earlier`,
+  `and after` → `or later`, `including and prior to` → `On or before`. The
+  inclusive forms share one canonical identity (`on or before|date:…`) whichever
+  side they are written on; exclusive `before`/`prior to` stay distinct. A date
+  found inside a longer value keeps a qualifier directly beside it, a list never
+  splits on the `and`/`or` that joins a date to its cutoff, and a qualified date
+  sorts at its own date. Lists
   split into one date each, sorted, and **each renders complete** —
   `July 11, 2026, July 15, 2026, July 16, 2026, July 18, 2026, July 22, 2026`.
   Dates sharing a month once collapsed into `July 11, 15, 16, 18, and 22, 2026`;
   P3C-1 removed that, because a shopper compares one printed marking at a time
   and a shared month with a bare day is not a value they can match.
+- **One marking, one field; lots keep their dates** (package-date identifiers,
+  2026-11-16; regressions Family Farmstead 2026-11-10 and Brad's Raw Chips
+  2026-11-03, pinned in `src/server/fda/package-date-identifiers.test.ts`):
+  - A prose sentence that restates a table's cutoff under another date name
+    ("expiration date of 10/16/27 and prior" beside a `Lot Code/Best By Date`
+    column of "… 10/16/27 and prior") collapses into the table's field — only
+    when the value is a _qualified_ cutoff or span, the table states it under a
+    different card date, and no table states the prose's own date concept. Two
+    columns the table distinguishes stay two markings, and a bare date that
+    merely matches is never merged: the date string alone is not evidence.
+  - Table text the FDA flattener glues onto the start or end of a prose line is
+    removed before prose extraction, so a row is never read again as
+    recall-wide prose. `dated 10/16/27` describes codes by their date and is
+    never a lot code; a code that merely looks like a date (`101627`) stays one.
+  - A list item's product name ends at a comma followed by an identifier label
+    (`, UPC …`, `, Lots …`, `, Best By …`). Read whole, a bullet fails the
+    closed identity gate as a raw source row and every product's codes pool at
+    recall scope — how Brad's four bags became one row.
+  - `Lot(s) A, B and C (Best By D)` is an explicit pair clause: the
+    parenthetical dates exactly the codes of its own clause. Separate code and
+    date lists with no stated binding are never paired.
+  - A code–date pair needs date evidence: a real month name or a numeric date
+    that normalizes. A hyphen inside a code (`33525-1`) is never the code–date
+    separator. Before this, `2 and 3352` — the seam of `33525-2 and 33525-3` —
+    read as day/"month"/year and rendered as a Best By date.
 - **Code location as a model, not a phrase**: surface, position, relationship,
   and appearance are recognized separately and the sentence is composed from
   them, so the same physical arrangement always reads the same way

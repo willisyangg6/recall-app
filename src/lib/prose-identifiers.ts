@@ -75,7 +75,7 @@ const FILLER = String.raw`(?:(?:the|a|any|all|following|these|listed|with|dates?
  * which is exactly how an expiration range once rendered as "between
  * November 2028 through".
  */
-const VALUE = String.raw`([^;():\n]{1,90}?)(?=\s*[;():\n]|\.\s|\.$|,?\s+(?:and\s+)?(?:the\s+)?(?:UPC|Lot|Batch|Best|Use|Sell|Expiration|Item|Case)\b|,?\s+(?:which|that|can be|may\s+(?:be|contain|have|include|not)|located|printed|stamped|marked|found|on the|because|due|after|with|are|is)\b|\s*$)`;
+const VALUE = String.raw`([^;():\n]{1,90}?)(?=\s*[;():\n]|\.\s|\.$|,?\s+(?:and\s+)?(?:the\s+)?(?:UPC|Lots?|Batch|Best|Use|Sell|Expiration|Item|Case)\b|,?\s+(?:which|that|can be|may\s+(?:be|contain|have|include|not)|located|printed|stamped|marked|found|on the|because|due|after|with|are|is)\b|\s*$)`;
 
 /**
  * A label separated from its values by a subordinate clause, which real
@@ -121,6 +121,14 @@ const UNSPECIFIED_CODES_STATEMENT =
  * and not the source's own wording; anything else is kept verbatim.
  */
 function withoutTrailingDateWord(value: string): string {
+  // A quoted date followed by its cutoff — `“2024 JL 11” or later` (Al'Fez
+  // Tahini) — leaves the closing quote between the two; the quote is the
+  // source's punctuation, the cutoff is its meaning.
+  const unquoted = value.replace(
+    /["“”'’]\s+(?=(?:and|or|&)\s+(?:prior|earlier|before|older|sooner|after|later|newer)\b)/i,
+    ' ',
+  );
+  if (unquoted !== value) return withoutTrailingDateWord(unquoted);
   const trimmed = value.replace(/[\s,]+dates?$/i, '').trim();
   if (trimmed === value || trimmed === '') return value;
   return normalizeDateValue(trimmed).canonical !== undefined ? trimmed : value;
@@ -466,6 +474,18 @@ const CORRESPONDING_LISTS = new RegExp(
   'gi',
 );
 
+/**
+ * Brad's Raw Chips (2026-11-03): "Lots 33525-1, 33525-2 and 33525-3 (Best By
+ * February 1, 2027), Lot 34525-1 (Best By February 11, 2027) and …". The
+ * parenthetical is the source's own binding: it closes ONE "Lot(s)" clause and
+ * dates exactly the codes that clause lists — never a code from another
+ * clause, and never by position across separate lists.
+ */
+const GROUPED_LOT_DATE = new RegExp(
+  String.raw`\b(Lots?|Batch(?:es)?)\s*(?:#|No\.?|Numbers?|Codes?)?\s*:?\s*(${PAIR_CODE.slice(1, -1)}(?:\s*(?:,|&|\band\b)\s*${PAIR_CODE.slice(1, -1)})*)\s*\(\s*(Best\s+If\s+Used\s+By|Best\s+By|Best\s+Before|Use\s+By|Sell\s+By|Exp(?:iration)?(?:\s+Date)?)\s*:?\s*${PAIR_DATE}\s*\)`,
+  'gi',
+);
+
 /** Each explicitly bound code with its date, in source order. */
 function extractExplicitPairs(
   summaryText: string,
@@ -485,6 +505,19 @@ function extractExplicitPairs(
         date: match[clause.date].trim(),
         label: match[clause.label].replace(/\s+/g, ' ').trim(),
         codeLabel: 'Lot',
+        raw: match[0],
+        at: match.index,
+      });
+    }
+  }
+  for (const match of summaryText.matchAll(GROUPED_LOT_DATE)) {
+    const codes = match[2].split(/\s*(?:,|&|\band\b)\s*/i).filter((code) => /\d/.test(code));
+    for (const code of codes) {
+      out.push({
+        code: code.trim(),
+        date: match[4].trim(),
+        label: match[3].replace(/\s+/g, ' ').trim(),
+        codeLabel: /batch/i.test(match[1]) ? 'Batch' : 'Lot',
         raw: match[0],
         at: match.index,
       });
@@ -741,7 +774,7 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
         // ("…lot codes Lot HGLC-102125") — the Hampton Grocer's notice. Only a
         // single digit-bearing token loses it, so prose is never trimmed.
         const value = isDateList
-          ? withoutTrailingDateWord(cleaned.replace(/^on\s+/i, ''))
+          ? withoutTrailingDateWord(cleaned.replace(/^on\s+(?!or\s+(?:before|after)\b)/i, ''))
           : concept === 'lot'
             ? cleaned.replace(/^Lot\s+(?=[A-Z0-9-]*\d[A-Z0-9-]*$)/i, '')
             : cleaned;

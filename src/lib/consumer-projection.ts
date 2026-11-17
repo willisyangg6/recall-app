@@ -891,7 +891,41 @@ function proseOutsideTables(summaryHtml: string | null, summaryText: string | nu
       // coincide with table text without having come from it.
       return normalized.length < 8 || !tableText.includes(normalized);
     })
+    .map((line) => withoutGluedTableText(line, tableText))
     .join('\n');
+}
+
+/**
+ * A line the flattener glued onto the table: FDA's text rendering can run the
+ * last table rows and the paragraph after them into ONE line ("Raw Mild
+ * Cheddar, 8oz … All lot codes dated 10/16/27 and prior No other products are
+ * included …"). The whole-line test above cannot see that, so the rows were
+ * read a second time as recall-wide prose — "lot codes dated 10/16/27" became
+ * a lot code no package carries (Family Farmstead, 2026-11-10).
+ *
+ * Only table text at the very START or END of a line is removed, and only a
+ * run long enough to identify: a mid-sentence mention is the author's prose,
+ * and stays.
+ */
+function withoutGluedTableText(line: string, tableText: string): string {
+  const words = line.split(/\s+/).filter((word) => word !== '');
+  const inTable = (slice: string[]) => {
+    const normalized = normalizeForContains(slice.join(' '));
+    return normalized.length >= 24 && tableText.includes(normalized);
+  };
+  let start = 0;
+  while (
+    start < words.length &&
+    tableText.includes(normalizeForContains(words.slice(0, start + 1).join(' ')))
+  )
+    start += 1;
+  if (!inTable(words.slice(0, start))) start = 0;
+  let end = words.length;
+  while (end > start && tableText.includes(normalizeForContains(words.slice(end - 1).join(' '))))
+    end -= 1;
+  if (!inTable(words.slice(end))) end = words.length;
+  if (start === 0 && end === words.length) return line;
+  return words.slice(start, end).join(' ');
 }
 
 /** Whitespace/punctuation-insensitive form, for substring containment tests. */
@@ -2895,12 +2929,15 @@ export function buildConsumerCase(
   ).facts.map((fact) => ({ ...fact, evidence: 'caption' as const }));
   // Labeled block lines ("Brand: Momchipz") plus inline label-driven prose,
   // plus facts from rows the identity contract widened to recall scope.
-  const proseFacts = [
-    ...parseProseFacts(proseText),
-    ...prose.facts.map((fact) => ({ ...fact, evidence: 'prose' as const })),
-    ...captionFacts,
-    ...unassignedFacts,
-  ];
+  const proseFacts = withoutRestatedCutoffs(
+    [
+      ...parseProseFacts(proseText),
+      ...prose.facts.map((fact) => ({ ...fact, evidence: 'prose' as const })),
+      ...captionFacts,
+      ...unassignedFacts,
+    ],
+    tableFacts,
+  );
 
   const packageCheck = buildPackageCheck(
     projection,
@@ -2928,6 +2965,68 @@ export function buildConsumerCase(
     variantNames: summarizeVariantNames(variants),
     quantityText: recallQuantity(projection, [...tableFacts, ...proseFacts]),
   };
+}
+
+/** Date concepts a package card renders as a field (production dates do not). */
+const CARD_DATE_CONCEPTS = new Set<ConsumerConcept>(['best_by', 'use_by', 'sell_by', 'expiration']);
+
+/** The canonical identity of every date a value states. */
+function dateCanonicals(value: string): string[] {
+  const whole = normalizeDateValue(value);
+  if (whole.canonical !== undefined) return [whole.canonical];
+  return splitDateList(value)
+    .map((part) => (extractDate(part) ?? normalizeDateValue(part)).canonical)
+    .filter((canonical): canonical is string => canonical !== undefined);
+}
+
+/**
+ * Drop a prose sentence that only RESTATES a table's cutoff under another
+ * date name.
+ *
+ * Family Farmstead (2026-11-10) tables "Lot Code/Best By Date: All lot codes
+ * dated 10/16/27 and prior" and then says, in prose, "all Cheddar products
+ * with an expiration date of 10/16/27 and prior". That is one cutoff written
+ * twice, not a best-by AND an expiration marking — rendering both tells a
+ * shopper to look for two dates their package does not carry.
+ *
+ * The source must support the collapse, so every condition is required:
+ *
+ *   - the prose value is a QUALIFIED cutoff or span ("or earlier", "through",
+ *     a range) — a bare date matching a bare date is the date string alone,
+ *     and two markings can genuinely share one;
+ *   - a table states the identical cutoff under a different card date;
+ *   - no table states the prose's own date concept at all — a table that
+ *     carries both columns has told us they are distinct markings.
+ *
+ * Only prose evidence is ever dropped; the table, which knows which product
+ * row a value belongs to, always wins. The sentence stays on the case.
+ */
+function withoutRestatedCutoffs(
+  proseFacts: SemanticFact[],
+  tableFacts: SemanticFact[],
+): SemanticFact[] {
+  const tableConcepts = new Set(tableFacts.map((fact) => fact.concept));
+  const tableCutoffs = new Map<string, Set<ConsumerConcept>>();
+  for (const fact of tableFacts) {
+    if (!CARD_DATE_CONCEPTS.has(fact.concept)) continue;
+    for (const canonical of dateCanonicals(fact.value)) {
+      const concepts = tableCutoffs.get(canonical) ?? new Set<ConsumerConcept>();
+      concepts.add(fact.concept);
+      tableCutoffs.set(canonical, concepts);
+    }
+  }
+  if (tableCutoffs.size === 0) return proseFacts;
+  return proseFacts.filter((fact) => {
+    if (fact.evidence !== 'prose' || !CARD_DATE_CONCEPTS.has(fact.concept)) return true;
+    if (tableConcepts.has(fact.concept)) return true;
+    const canonicals = dateCanonicals(fact.value);
+    if (canonicals.length === 0) return true;
+    return !canonicals.every(
+      (canonical) =>
+        !/^(?:date|month):/.test(canonical) &&
+        [...(tableCutoffs.get(canonical) ?? [])].some((concept) => concept !== fact.concept),
+    );
+  });
 }
 
 /**

@@ -74,7 +74,11 @@ export function splitIdentifierList(value: string): string[] {
  */
 const DATE_LIST_SEPARATOR = new RegExp(
   [
-    String.raw`\s*(?:,(?!\s*\d{4}\b(?![./-]\d))|;|&|•|·|\n|\band\b|\bor\b|(?<=\s)\+|\+(?=\s))\s*`,
+    // "and"/"or"/"&" before a cutoff word ("10/16/27 and prior") joins a date
+    // to its qualifier, not two list entries; splitting there drops the
+    // qualifier and turns "every date up to" into one day. Likewise the "or"
+    // of "on or before" belongs to the qualifier, not to a list.
+    String.raw`\s*(?:,(?!\s*\d{4}\b(?![./-]\d))|;|(?:&|\band\b|(?<!\bon\s)\bor\b)(?!\s+(?:prior|earlier|before|older|sooner|after|later|newer)\b(?!\s*\d))|•|·|\n|(?<=\s)\+|\+(?=\s))\s*`,
     String.raw`\s{2,}`,
     // "2025.07.07 2025.07.12" — one date ending where the next begins.
     String.raw`(?<=\d{2,4})\s+(?=\d{1,2}[/.-]\d)`,
