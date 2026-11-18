@@ -1642,6 +1642,33 @@ exclusively, and FSIS under-reports allergens in it.
     [recall-operations.md](recall-operations.md), "FDA contaminant category: a
     historical correction (P3B)", for the applied result and the durable
     ledgers.
+  - **Thallium follow-up (2026-11-17, prepared, NOT applied).** Brad's Raw
+    Chips (2026-11-03, reason "Product may contain thallium") was stored
+    `foreign_material` / null. Recall Details then said "may contain pieces of
+    metal", and Health Risk showed a foreign-object injury warning. The cause
+    was in the shared evidence owner: the background sentence "Thallium (Tl)
+    is a naturally occurring metal found in the soil" satisfied the
+    "`<material>` … found in" discovery construction. Two rules close it in
+    `domain/hazard.ts`:
+    - "heavy metal" is chemistry, never a fragment;
+    - an indefinite description ("a … metal found in") is background, not a
+      discovery.
+
+    Thallium joins `EVIDENCE_GATED_CHEMICAL_AGENTS`, and the gated agents gain
+    the "may contain `<agent>`" construction (modal plus finite verb, as for
+    foreign material). With the category corrected:
+    - What Happened reads "may be contaminated with thallium";
+    - the feed reason reads "Potential thallium contamination.";
+    - Health Risk is omitted. No reviewed thallium guidance exists, so none is
+      invented.
+
+    Because the category is stored, the existing repair carries the
+    correction. It gains one reviewed agent move (`null → thallium`), and its
+    population guard becomes per round: a run is admitted only when it
+    matches one reviewed round's size AND that round's agents. A read-only
+    production dry run (2026-11-17) found 14 governed records and planned
+    exactly 1 record and 1 case (Brad's), with 0 notifications. Applying it
+    needs separate authorization: `--apply --confirm --expect 1`.
 - **Affected-product data on the same notices is a separate milestone (P3C),
   and both halves are now built.** P3B settled the hazard category and agent for
   the AquaStar and Dynarex notices; nothing in this bullet is claimed fixed by

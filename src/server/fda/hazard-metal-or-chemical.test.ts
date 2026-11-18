@@ -28,7 +28,9 @@ import { conciseReasonLine } from '../../lib/recall-presentation';
 import { interpretReason } from '../../lib/recall-reason';
 import { buildWhatHappened } from '../../lib/what-happened';
 import { deriveHazardCategory } from '../fsis/parse';
-import { deriveFdaHazard } from './parse';
+import { projectCase } from '../../domain/projection';
+import { healthRiskSummary } from '../../lib/recall-display';
+import { deriveFdaHazard, parseFdaAnnouncement } from './parse';
 
 /** The one disjunctive FDA category this milestone governs. */
 const METAL_OR_CHEMICAL = 'Potential Metal or Chemical Contaminant';
@@ -429,5 +431,112 @@ test('the stored (defective) values are exactly what the corrected ones replace'
       hazardCategory: 'chemical_contamination',
       pathogenOrAllergen: 'Cesium-137',
     }),
+  );
+});
+
+// ── Thallium: an element, not metal pieces (Brad's Raw Chips, 2026-11-03) ───
+
+interface RecordedAnnouncement {
+  path: string;
+  listing: Parameters<typeof parseFdaAnnouncement>[0]['listing'];
+  mainHtml: string;
+}
+
+function bradsRawChips() {
+  const recorded: RecordedAnnouncement = JSON.parse(
+    readFileSync(
+      'src/server/fda/fixtures/announcement-brads-raw-chips-kale-veggie-chips.json',
+      'utf8',
+    ),
+  );
+  return projectCase([
+    parseFdaAnnouncement({
+      listing: recorded.listing,
+      detailMainHtml: recorded.mainHtml,
+      path: recorded.path,
+    }),
+  ]);
+}
+
+test("Brad's: thallium is chemical contamination with its agent, never metal pieces", () => {
+  // The notice explains, as background, that "Thallium (Tl) is a naturally
+  // occurring metal found in the soil". That sentence once satisfied the
+  // "<material> found in" discovery construction and turned the recall into
+  // a foreign-object hazard.
+  const projection = bradsRawChips();
+  assert.equal(projection.reasonText, 'Product may contain thallium.');
+  assert.equal(projection.hazardCategory, 'chemical_contamination');
+  assert.equal(projection.pathogenOrAllergen, 'thallium');
+});
+
+test("Brad's: What Happened, the feed reason and Health Risk say only what the source supports", () => {
+  const projection = bradsRawChips();
+  const happened = buildWhatHappened({
+    title: projection.title,
+    noticeType: projection.noticeType,
+    reasonText: projection.reasonText,
+    hazardCategory: projection.hazardCategory,
+    pathogenOrAllergen: projection.pathogenOrAllergen,
+    firmDisplayName: projection.recallingFirm.displayName,
+    summaryText: projection.summaryText,
+    productDescription: projection.productDescription,
+    consumerBrand: "Brad's",
+  });
+  assert.match(happened.text, /may be contaminated with thallium\.$/);
+  assert.doesNotMatch(happened.text, /pieces|metal|foreign/i);
+  const reason = conciseReasonLine({
+    reasonText: projection.reasonText,
+    hazardCategory: projection.hazardCategory,
+    pathogenOrAllergen: projection.pathogenOrAllergen,
+    summaryText: projection.summaryText,
+    title: projection.title,
+  } as Parameters<typeof conciseReasonLine>[0]);
+  assert.equal(reason, 'Potential thallium contamination.');
+  // No reviewed thallium guidance exists, so the Health Risk section is
+  // omitted rather than filled with a foreign-object injury warning or any
+  // other advice the notice does not support.
+  assert.equal(
+    healthRiskSummary(
+      projection.hazardCategory,
+      projection.pathogenOrAllergen,
+      projection.reasonText,
+    ),
+    null,
+  );
+});
+
+test('a material word in its chemistry sense, or in background, is never fragment evidence', () => {
+  for (const text of [
+    'Thallium (Tl) is a naturally occurring metal found in the soil and in sulfur-based minerals.',
+    'Lead is a toxic metal found in older paint and soil.',
+    'The product may contain heavy metals.',
+    'Testing found elevated heavy metal levels in the product.',
+    'Potential heavy metal contamination.',
+  ]) {
+    assert.equal(extractForeignMaterialEvidence(text).stated, false, text);
+  }
+  // A real discovery or fragment statement is still evidence.
+  for (const text of [
+    'Metal found in the product during inspection.',
+    'A consumer found metal pieces in the bag.',
+    'The product may contain small pieces of metal.',
+  ]) {
+    assert.deepEqual(
+      extractForeignMaterialEvidence(text),
+      { stated: true, material: 'metal' },
+      text,
+    );
+  }
+});
+
+test('thallium is named only where the source states the product may contain it', () => {
+  assert.deepEqual(deriveFdaHazard(METAL_OR_CHEMICAL, 'Product may contain thallium.'), {
+    hazardCategory: 'chemical_contamination',
+    pathogenOrAllergen: 'thallium',
+  });
+  // A background mention alone names no agent.
+  assert.deepEqual(
+    deriveFdaHazard(METAL_OR_CHEMICAL, 'Thallium is a naturally occurring metal found in soil.'),
+    { hazardCategory: 'chemical_contamination', pathogenOrAllergen: null },
   );
 });
