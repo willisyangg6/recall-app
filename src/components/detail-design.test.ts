@@ -208,7 +208,12 @@ test('Detail draws every word from a type scale and every colour from the tokens
   assert.ok(code.includes('const [stackedHeader, setStackedHeader] = useState(false);'));
   assert.ok(code.includes('const largeText = fontScale >= DETAIL_STACK_SCALE;'));
   assert.equal((code.match(/fontScale >= DETAIL_STACK_SCALE/g) ?? []).length, 2);
-  assert.ok(code.includes('fieldStacks(contentWidth, fontScale)'));
+  // Field stacking reads the one shared threshold; a row beside the card's
+  // thumbnail measures its value column net of the image reserve (2026-11-17).
+  assert.match(
+    code,
+    /fieldStacks\(\s*contentWidth - \(reserved \? TITLE_IMAGE_RESERVE : 0\),\s*fontScale,?\s*\)/,
+  );
   assert.ok(!/fontScale\s*[<>]=?\s*\d/.test(code), 'Detail compares the text scale to a number');
   assert.ok(!code.includes('variant="label'));
   // The page is the warm surface; each affected product is a white bordered card.
@@ -353,22 +358,19 @@ test('every disclosure threshold is the contract’s, and the screen re-derives 
 });
 
 test('a card renders exactly one labelled row per field, its control beneath the values', () => {
-  // One row per field (2026-10-19): the per-pair and per-date renderings are
-  // retired. Every row is the model's field group — its label, its lines
-  // (open or collapsed), then its own control — keyed by product row and
-  // field. No display string is ever re-split (dates carry commas), and no
-  // code/date relationship is drawn by position.
+  // One row per field (2026-10-19): every row is the model's field group —
+  // its label, its lines (open or collapsed), then its own control — keyed by
+  // product row and field. No display string is ever re-split (dates carry
+  // commas). A STATED pair (2026-11-17) renders from the model's structured
+  // `pairs`, aligned with `lines` by the model itself — never by the screen
+  // pairing two lists by position — and is read as one statement.
   assert.ok(!DETAIL.includes(".split('"), 'the screen re-splits a display string');
   assert.ok(DETAIL.includes('const stateId = cardGroupStateId(card.id, group.id);'));
   assert.ok(DETAIL.includes('const open = openGroups.has(stateId);'));
   assert.ok(DETAIL.includes('visibleCellState('));
-  for (const retired of [
-    'group.pairs',
-    'pairCodeState',
-    'cardPairStateId',
-    'FieldRow',
-    'entry.date',
-  ]) {
+  assert.ok(DETAIL.includes('pair={group.pairs[index]}'));
+  assert.ok(DETAIL.includes('accessibilityLabel={line}>'));
+  for (const retired of ['pairCodeState', 'cardPairStateId', 'FieldRow', 'entry.date']) {
     assert.ok(!DETAIL.includes(retired), `retired per-pair rendering returned: ${retired}`);
   }
   const cardBlock = DETAIL.slice(
@@ -379,7 +381,7 @@ test('a card renders exactly one labelled row per field, its control beneath the
   assert.ok(cardBlock.includes('{group.label}'));
   // Values one per line at natural height, then the control, inside the
   // value column.
-  assert.ok(cardBlock.indexOf('{lines.map((line, index) => (') < cardBlock.indexOf('{disclosure}'));
+  assert.ok(cardBlock.indexOf('{lines.map((line, index) =>') < cardBlock.indexOf('{disclosure}'));
   // The model: one group per column key, in the fixed order, distinct values.
   assert.ok(PRESENTATION.includes('for (const key of CARD_FIELD_ORDER) {'));
   assert.ok(
