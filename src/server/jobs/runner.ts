@@ -31,7 +31,9 @@ export type JobName =
   | 'fda_enforcement'
   | 'push_delivery'
   // Private Costco notice monitor: writes only the retailer_notices tables.
-  | 'retailer_costco';
+  | 'retailer_costco'
+  // Private ALDI notice monitor: the same tables, the same boundary.
+  | 'retailer_aldi';
 
 export interface JobSpec {
   jobName: JobName;

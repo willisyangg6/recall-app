@@ -10,6 +10,7 @@
  *   npm run jobs:enforcement               # openFDA reconcile (weekly-gated)
  *   npm run jobs:push                      # push delivery + receipt processing
  *   npm run jobs:retailer-costco           # Costco notices → private tables only
+ *   npm run jobs:retailer-aldi             # ALDI notices → private tables only
  *
  * Flags:
  *   --dry-run   fda/fsis: full pipeline in memory, nothing persisted.
@@ -29,20 +30,29 @@ import { runFdaJob } from '../src/server/jobs/fda-job';
 import { runFsisJob } from '../src/server/jobs/fsis-job';
 import { runLabelsJob } from '../src/server/jobs/labels-job';
 import { runPushJob } from '../src/server/jobs/push-job';
-import { runRetailerCostcoJob } from '../src/server/jobs/retailer-costco-job';
+import { runRetailerAldiJob, runRetailerCostcoJob } from '../src/server/jobs/retailer-costco-job';
 import type { JobContext, JobReport } from '../src/server/jobs/runner';
 import { SupabaseLabelStore } from '../src/server/fsis/label-store';
 import { SupabaseAttachmentStore } from '../src/server/fsis/attachment-store';
 import { ExpoPushTransport } from '../src/server/push/expo-transport';
 import { entitlementSourceFromEnv } from '../src/server/push/revenuecat-entitlement';
 import { SupabasePushStore } from '../src/server/push/push-store';
-import { liveCostcoSource } from '../src/server/retailer/costco-monitor';
+import { liveCostcoSource, liveRetailerSource } from '../src/server/retailer/costco-monitor';
+import { ALDI_SOURCE } from '../src/server/retailer/sources';
 import { SupabaseRetailerNoticeStore } from '../src/server/retailer/store';
 import { MemoryStore } from '../src/server/store/memory-store';
 import { withReadRetry } from '../src/server/store/read-retry';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
 
-const JOB_NAMES = ['fda', 'fsis', 'labels', 'enforcement', 'push', 'retailer-costco'] as const;
+const JOB_NAMES = [
+  'fda',
+  'fsis',
+  'labels',
+  'enforcement',
+  'push',
+  'retailer-costco',
+  'retailer-aldi',
+] as const;
 type JobArg = (typeof JOB_NAMES)[number];
 
 function loadDotEnv(): void {
@@ -133,23 +143,29 @@ async function main(): Promise<void> {
               store: new SupabaseRetailerNoticeStore(client),
               source: liveCostcoSource(),
             })
-          : job === 'push'
-            ? await runPushJob(ctx, {
+          : job === 'retailer-aldi'
+            ? await runRetailerAldiJob(ctx, {
                 dryRun,
-                pushStore: new SupabasePushStore(client),
-                // EXPO_ACCESS_TOKEN is optional (enhanced push security);
-                // server-only, never printed, never in the app bundle.
-                transport: new ExpoPushTransport({ accessToken: process.env.EXPO_ACCESS_TOKEN }),
-                // The alert entitlement gate's RevenueCat read (server-only,
-                // read-only key, never printed). Unconfigured holds every alert.
-                entitlements: entitlementSourceFromEnv(process.env),
+                store: new SupabaseRetailerNoticeStore(client),
+                source: liveRetailerSource(ALDI_SOURCE),
               })
-            : await runEnforcementJob(ctx, {
-                dryRun,
-                force,
-                client,
-                dataStore: supabaseStore,
-              });
+            : job === 'push'
+              ? await runPushJob(ctx, {
+                  dryRun,
+                  pushStore: new SupabasePushStore(client),
+                  // EXPO_ACCESS_TOKEN is optional (enhanced push security);
+                  // server-only, never printed, never in the app bundle.
+                  transport: new ExpoPushTransport({ accessToken: process.env.EXPO_ACCESS_TOKEN }),
+                  // The alert entitlement gate's RevenueCat read (server-only,
+                  // read-only key, never printed). Unconfigured holds every alert.
+                  entitlements: entitlementSourceFromEnv(process.env),
+                })
+              : await runEnforcementJob(ctx, {
+                  dryRun,
+                  force,
+                  client,
+                  dataStore: supabaseStore,
+                });
   }
 
   console.log(

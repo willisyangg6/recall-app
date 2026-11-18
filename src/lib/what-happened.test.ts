@@ -206,3 +206,76 @@ test('summaries end with punctuation and respect the length budget', () => {
   assert.match(gangothri.text, /[.!?]$/);
   assert.ok(gangothri.text.split(/\s+/).length <= 70);
 });
+
+// ── Source-stated temperature lapse; count-noun chemical agents ─────────────
+
+const PRIANO: WhatHappenedInput = {
+  title:
+    'ALDI Recalls Priano Protein Carbonara Tortelloni and Priano Protein Herb & Cheese Tortelloni Because Of Possible Health Risk',
+  noticeType: 'recall',
+  reasonText: 'Potential to be contaminated with Clostridium botulinum',
+  hazardCategory: 'microbial_contamination',
+  pathogenOrAllergen: 'Clostridium botulinum',
+  firmDisplayName: 'ALDI',
+  // FDA's own sentence, as published 2026-11-17.
+  summaryText:
+    'ALDI of Batavia, IL, is recalling Priano Protein Carbonara Tortelloni and Priano Protein Herb & Cheese Tortelloni sold at select stores because the products may not have been stored, distributed or sold at appropriate temperatures, which may allow growth of pathogens including Clostridium botulinum.',
+  productDescription: null,
+  consumerBrand: 'Priano',
+};
+
+test('a stated temperature lapse is the cause of the pathogen risk, not dropped', () => {
+  const { text } = buildWhatHappened(PRIANO);
+  assert.match(
+    text,
+    /because the products may not have been stored at appropriate temperatures, which may allow the growth of Clostridium botulinum\.$/,
+  );
+  // Without the source statement, the pathogen sentence is unchanged.
+  assert.match(
+    buildWhatHappened({ ...PRIANO, summaryText: null }).text,
+    /because the products may be contaminated with Clostridium botulinum\.$/,
+  );
+  // A storage DIRECTION is not a lapse.
+  assert.doesNotMatch(
+    buildWhatHappened({ ...PRIANO, summaryText: 'Keep refrigerated at appropriate temperatures.' })
+      .text,
+    /stored at appropriate/,
+  );
+});
+
+test('a lapse beside an allergen reason is its own context sentence', () => {
+  const { text } = buildWhatHappened({
+    ...PRIANO,
+    title: 'Fry Pie Factory Issues Voluntary Recall of Pepperoni Rolls for Undeclared Milk',
+    reasonText: 'Potential or Undeclared Allergen - Milk',
+    hazardCategory: 'allergen',
+    pathogenOrAllergen: 'undeclared milk',
+    firmDisplayName: 'Fry Pie Factory',
+    consumerBrand: null,
+    productDescription: 'Pepperoni Rolls, 5 oz',
+    summaryText:
+      'The company said the Pepperoni Rolls were not stored, distributed or sold at appropriate temperatures.',
+  });
+  assert.equal(
+    text,
+    'Fry Pie Factory recalled Pepperoni Rolls, 5 oz because the products may contain milk, an allergen that is not declared on the label. The products also may not have been stored at appropriate temperatures.',
+  );
+});
+
+test('a count-noun chemical agent takes its article; a mass noun never does', () => {
+  const chemical = (agent: string) =>
+    buildWhatHappened({
+      ...PRIANO,
+      title: 'Whipped Cream',
+      productDescription: 'Kirkland Signature Real Heavy Whipped Cream',
+      reasonText: 'One batch may contain a small amount of a cleaning chemical.',
+      hazardCategory: 'chemical_contamination',
+      pathogenOrAllergen: agent,
+      summaryText: null,
+      consumerBrand: null,
+      firmDisplayName: 'Alamance Foods',
+    }).text;
+  assert.match(chemical('cleaning chemical'), /contaminated with a cleaning chemical\.$/);
+  assert.match(chemical('lead'), /contaminated with lead\.$/);
+  assert.match(chemical('inorganic arsenic'), /contaminated with inorganic arsenic\.$/);
+});

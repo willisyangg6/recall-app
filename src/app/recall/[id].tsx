@@ -103,6 +103,8 @@ import {
 import { symptomIcon } from '@/lib/symptom-icons';
 import { usePreferences } from '@/hooks/use-preferences';
 import { reloadRetailerNotices, retailerNoticeById } from '@/hooks/use-retailer-notices';
+import { useStoreListings } from '@/hooks/use-store-listings';
+import { listedStoreNames } from '@/lib/store-listings';
 import {
   buildRetailerDetailModel,
   retailerNoticeIdFromRoute,
@@ -529,6 +531,8 @@ export default function RecallDetailScreen() {
   // Save, in the navigation bar, for the recall this screen shows — and only
   // once it has loaded. Called before any early return (rules of hooks).
   const saveItems = useSaveHeaderItems(state.status === 'ready' ? state.detail.id : null);
+  // Stores that publicly listed this agency recall (lib/store-listings.ts).
+  const storeListings = useStoreListings();
 
   // Every per-recall disclosure resets when the route points at a DIFFERENT
   // recall, so a title left expanded, a jurisdiction list left open or a
@@ -627,7 +631,14 @@ export default function RecallDetailScreen() {
       },
       prefs,
     );
-    model = buildDetailModel(state.detail, { today: todayIso(), affectsYou });
+    // Stores that listed this case join the existing store row, named once.
+    // Their own states stay in the listing data, never the agency's lines,
+    // and the verdict above never reads them.
+    model = buildDetailModel(state.detail, {
+      today: todayIso(),
+      affectsYou,
+      listedStores: listedStoreNames(storeListings, state.detail.id),
+    });
   }
   // Optional sections are DECIDED by the shared contract (P3A). The screen
   // renders a section when the model gives it one and renders nothing at all

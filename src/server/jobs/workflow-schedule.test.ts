@@ -101,8 +101,10 @@ test('third-party actions are SHA-pinned, never floating tags', () => {
   for (const name of PRODUCTION_WORKFLOWS) {
     const yaml = workflow(name);
     const uses = [...yaml.matchAll(/^\s*-?\s*uses:\s*(\S+)/gm)].map((match) => match[1]);
+    // A workflow with several jobs (retailer-notices: Costco and ALDI) uses
+    // the same pinned pair in each job.
     assert.deepEqual(
-      uses,
+      [...new Set(uses)],
       PINNED_ACTIONS.map((action) => action.uses),
       name,
     );
@@ -176,13 +178,17 @@ test('daily maintenance still runs exactly its three job steps', () => {
   ]);
 });
 
-test('the Costco monitor runs every two hours, off the congested slots, in its own workflow', () => {
+test('the retailer monitors run every two hours, off the congested slots, in their own workflow', () => {
   const yaml = workflow('retailer-notices.yml');
   assert.deepEqual(crons(yaml), ['23 */2 * * *']);
   const invoked = [...yaml.matchAll(/^\s*run:\s*(npm run .+)$/gm)].map((match) => match[1].trim());
   // The job runner (lease + ingest_runs row), never the human-gated CLI.
-  assert.deepEqual(invoked, ['npm run jobs:retailer-costco']);
-  assert.ok(!/retailer:costco/.test(yaml), 'the schedule must not invoke the manual CLI');
+  assert.deepEqual(invoked, ['npm run jobs:retailer-costco', 'npm run jobs:retailer-aldi']);
+  assert.ok(!/retailer:(costco|monitor)/.test(yaml), 'the schedule must not invoke the manual CLI');
+  // ALDI stays off until its migration is applied: gated by a repository variable.
+  const aldi = yaml.slice(yaml.indexOf('\n  aldi:'));
+  assert.match(aldi, /^\s*if: vars\.RETAILER_ALDI_ENABLED == 'true'$/m);
+  assert.doesNotMatch(yaml.slice(0, yaml.indexOf('\n  aldi:')), /RETAILER_ALDI_ENABLED/);
   // Agency ingestion is untouched: neither agency workflow runs the monitor.
   for (const name of ['scheduled-ingest.yml', 'daily-maintenance.yml']) {
     assert.ok(!/retailer/.test(workflow(name)), `${name} gained a retailer step`);

@@ -4,6 +4,7 @@
  * and recall_cases (to confirm an agency case exists).
  */
 
+import { readStoredProductCategories } from '../../domain/product-categories-stored';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type {
@@ -111,6 +112,7 @@ interface ApprovalDbRow {
   fields_version: number;
   fields: unknown;
   field_evidence: unknown;
+  product_categories: unknown;
   review_notes: string | null;
   approved_by: string;
   approved_at: string;
@@ -128,6 +130,7 @@ function fromDb(row: ApprovalDbRow): ApprovalRow {
     fieldsVersion: row.fields_version,
     fields: row.fields,
     fieldEvidence: row.field_evidence,
+    productCategories: readStoredProductCategories(row.product_categories),
     reviewNotes: row.review_notes,
     approvedBy: row.approved_by,
     approvedAt: row.approved_at,
@@ -219,6 +222,7 @@ export class SupabaseApprovalStore implements RetailerApprovalStore {
         fields_version: row.fieldsVersion,
         fields: row.fields,
         field_evidence: row.fieldEvidence,
+        product_categories: row.productCategories,
         review_notes: row.reviewNotes,
         approved_by: row.approvedBy,
         approved_at: row.approvedAt,

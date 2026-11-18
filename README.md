@@ -160,6 +160,9 @@ npm run open-evidence:sync  # FDA open evidence (recall_cases.fda_ongoing_as_of)
                             # reconcile. Writes need -- --apply --confirm --expect <n>
 npm run jobs:push           # push delivery + Expo receipt processing
 npm run jobs:retailer-costco    # Costco notices → private tables only (every 2 h, retailer-notices.yml)
+npm run jobs:retailer-aldi      # ALDI notices → private tables only (same workflow; off until RETAILER_ALDI_ENABLED)
+npm run retailer:monitor        # any notice source, dry run by default (--publisher aldi)
+npm run retailer:listings       # store listings (Walmart, Target, Whole Foods, Publix) → agency cases; dry run by default
 npm run ops:health          # source/job health from the database, non-zero when unhealthy
 npm run ops:heartbeat       # dead-man heartbeat (P2B7S) — read-only, pings the external
                             # monitor only when BOTH agency channels satisfy the 90-minute

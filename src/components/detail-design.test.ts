@@ -391,7 +391,11 @@ test('a card renders exactly one labelled row per field, its control beneath the
 // ── 5. Production and business logic ────────────────────────────────────────
 
 test('no gate, store, or contract moved: the screen and block read the same seams as before', () => {
-  assert.ok(DETAIL.includes('buildDetailModel(state.detail, { today: todayIso(), affectsYou })'));
+  assert.ok(
+    DETAIL.includes(
+      'model = buildDetailModel(state.detail, {\n      today: todayIso(),\n      affectsYou,',
+    ),
+  );
   // P2B7N.1: Detail reaches the SAME matcher through the shared verdict the
   // card surfaces use, rather than calling `evaluatePersonalRelevance` with
   // its own hand-listed facts — one relevance answer for all three screens.
@@ -1058,6 +1062,18 @@ test('the retailers a notice named render under the geography, never instead of 
   for (const forbidden of ['Sold at', 'You bought', 'Purchased', 'Available at', 'Only at']) {
     assert.ok(!section.includes(forbidden), `the retailer block overclaims: "${forbidden}"`);
   }
+});
+
+test('store listings add no block of their own: the existing store row names them', () => {
+  // Listed stores join `whereSold.retailersNamed` through the shared model
+  // (recall-presentation `withListedStores`); the section renders no second
+  // heading, no per-store link and no channel phrase.
+  const section = DETAIL.slice(
+    DETAIL.indexOf('<Section\n          title="Where It Was Sold"'),
+    DETAIL.indexOf('{/* Health Risk (P1B)'),
+  );
+  assert.doesNotMatch(section, /StoreListings|Also listed|In stores and online/);
+  assert.match(DETAIL, /listedStores: listedStoreNames\(storeListings, state\.detail\.id\)/);
 });
 
 test('the retailer row is quiet metadata: no chips, no scroller, no control', () => {

@@ -1,13 +1,16 @@
 /**
- * Costco notice monitor — private retailer_notices tables only
- * (docs/recall-retailer-notices.md).
+ * Retailer notice monitor — private retailer_notices tables only
+ * (docs/recall-retailer-notices.md). Costco by default; any configured source
+ * with `--publisher` (src/server/retailer/sources.ts).
  *
  *   npm run retailer:costco                              # dry run (default)
  *   npm run retailer:costco -- --report <file.json>      # dry run + JSON report
  *   npm run retailer:costco -- --apply --confirm --expect <n>
+ *   npm run retailer:monitor -- --publisher aldi         # dry run, ALDI
  *
- * Reads: Costco's public index and member letters (one request each,
- * sequential), and recall_cases (SELECT only) to propose matches.
+ * Reads: the retailer's public index and its own notice documents (one
+ * request each, sequential), and recall_cases (SELECT only) to propose
+ * matches.
  * Writes (apply only): retailer_notices and retailer_notice_documents.
  * Never writes recall_cases, affected_products, source_records or
  * notification_events — a retailer notice cannot change the feed or send an
@@ -30,10 +33,11 @@ import {
 } from '../src/server/repair-authorization';
 import {
   applyCostcoPlan,
-  liveCostcoSource,
-  planCostcoRun,
+  liveRetailerSource,
+  planRetailerRun,
   type CostcoPlan,
 } from '../src/server/retailer/costco-monitor';
+import { isRetailerPublisher, RETAILER_SOURCES } from '../src/server/retailer/sources';
 import {
   SupabaseRetailerNoticeStore,
   type RetailerNoticeStore,
@@ -43,10 +47,11 @@ import { createSupabaseServerClient } from '../src/server/store/supabase-store';
 
 const FORM: MutationCommandForm = { script: 'retailer:costco' };
 
-const HELP = `Costco notice monitor (private retailer tables only).
+const HELP = `Retailer notice monitor (private retailer tables only).
 
   npm run retailer:costco                          dry run: fetch, read, decide, write nothing
   npm run retailer:costco -- --report <file>       also write the dry-run report as JSON
+  npm run retailer:monitor -- --publisher aldi     the same, for another source (costco, aldi)
   ${applyCommandLine(FORM)}
 
 Writes only retailer_notices and retailer_notice_documents. Never the feed,
@@ -136,7 +141,14 @@ async function main(): Promise<void> {
   // Authorization resolves from argv alone, before any credential or network.
   const auth = resolveRepairAuthorization(argv, FORM);
   const reportFlag = resolveFlagValue(argv, '--report');
-  const refusal = auth.error ?? reportFlag.error;
+  const publisherFlag = resolveFlagValue(argv, '--publisher');
+  const publisher = publisherFlag.value ?? 'costco';
+  const publisherError =
+    publisherFlag.error ??
+    (isRetailerPublisher(publisher)
+      ? null
+      : `--publisher must be one of ${Object.keys(RETAILER_SOURCES).join(', ')}.\nNothing was written.`);
+  const refusal = auth.error ?? reportFlag.error ?? publisherError;
   if (refusal) {
     console.error(refusal);
     process.exit(1);
@@ -157,10 +169,16 @@ async function main(): Promise<void> {
   const wrapped = tolerateMissingNoticeTables(
     new SupabaseRetailerNoticeStore(createSupabaseServerClient(url, secretKey)),
   );
-  const plan = await planCostcoRun(wrapped.store, liveCostcoSource(), () => new Date());
+  const spec = RETAILER_SOURCES[publisher as keyof typeof RETAILER_SOURCES];
+  const plan = await planRetailerRun(
+    spec,
+    wrapped.store,
+    liveRetailerSource(spec),
+    () => new Date(),
+  );
   const summary = summarize(plan);
 
-  console.log(`\nCostco notice monitor — ${auth.apply ? 'APPLY' : 'dry run'}`);
+  console.log(`\n${spec.displayName} notice monitor — ${auth.apply ? 'APPLY' : 'dry run'}`);
   if (wrapped.missing()) {
     if (auth.apply) {
       console.error(

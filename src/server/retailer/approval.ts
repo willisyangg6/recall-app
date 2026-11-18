@@ -26,9 +26,12 @@ import {
   readRetailerNoticeFields,
   type RetailerNoticeFields,
 } from '../../lib/retailer-notice-fields';
+import type { FoodCategoryId } from '../../domain/food-category';
+import { categoriesForCase } from '../../domain/food-category-matcher';
 import { STATE_TO_POSTAL } from '../../domain/us-geography';
 import { stableJson } from './costco-monitor';
 import { embeddedJpegImages, type PdfEmbeddedJpeg } from './pdf-images';
+import { isRetailerPublisher, RETAILER_SOURCES } from './sources';
 import type { RetailerPublisher } from './types';
 
 /** One verbatim excerpt and the PDF page (1-based) it is printed on. */
@@ -88,6 +91,12 @@ export interface ApprovalRow {
   fieldsVersion: number;
   fields: unknown;
   fieldEvidence: unknown;
+  /**
+   * The shared server-side classifier's categories for the approved product
+   * (`categoriesForCase`, the same derivation agency cases store), or null
+   * for an approval written before it existed. Derived, never reviewed.
+   */
+  productCategories: FoodCategoryId[] | null;
   reviewNotes: string | null;
   approvedBy: string;
   approvedAt: string;
@@ -208,7 +217,10 @@ export function fieldValues(fields: RetailerNoticeFields, key: EvidenceKey): str
 export function readApprovalRequest(value: unknown): ApprovalRequest | { error: string } {
   if (typeof value !== 'object' || value === null) return { error: 'not a JSON object' };
   const raw = value as Record<string, unknown>;
-  if (raw.publisher !== 'costco') return { error: 'publisher must be "costco"' };
+  if (typeof raw.publisher !== 'string' || !isRetailerPublisher(raw.publisher)) {
+    return { error: `publisher must be one of ${Object.keys(RETAILER_SOURCES).join(', ')}` };
+  }
+  const publisher = raw.publisher;
   if (typeof raw.noticeNativeId !== 'string' || raw.noticeNativeId === '') {
     return { error: 'noticeNativeId is required' };
   }
@@ -221,6 +233,11 @@ export function readApprovalRequest(value: unknown): ApprovalRequest | { error: 
   const fields = readRetailerNoticeFields(raw.fields);
   if (!fields || stableJson(fields) !== stableJson(raw.fields)) {
     return { error: 'fields do not match the version-1 shape exactly' };
+  }
+  if (fields.retailer !== RETAILER_SOURCES[publisher].displayName) {
+    return {
+      error: `fields.retailer must be "${RETAILER_SOURCES[publisher].displayName}" for ${publisher}`,
+    };
   }
   if (typeof raw.evidence !== 'object' || raw.evidence === null || Array.isArray(raw.evidence)) {
     return { error: 'evidence must be an object keyed by field' };
@@ -250,7 +267,7 @@ export function readApprovalRequest(value: unknown): ApprovalRequest | { error: 
     return { error: 'reviewNotes must be a string or null' };
   }
   return {
-    publisher: 'costco',
+    publisher,
     noticeNativeId: raw.noticeNativeId,
     documentContentHash: raw.documentContentHash,
     approvedBy: raw.approvedBy.trim(),
@@ -406,6 +423,20 @@ async function noticeOrProblem(
 }
 
 /** Plan an approval: at most one withdrawal of a superseded approval, then one insert. */
+/**
+ * The approved product through the SAME category derivation an agency case
+ * gets (domain/food-category-matcher). The approved product name is the
+ * structured product description, the path FDA's own description takes; no
+ * category is chosen by hand and no product name is special-cased.
+ */
+export function retailerProductCategories(fields: RetailerNoticeFields): FoodCategoryId[] {
+  return categoriesForCase({
+    sourceAgency: 'FDA',
+    title: fields.productName,
+    productDescription: fields.productName,
+  }).categories;
+}
+
 export async function planApproval(
   store: RetailerApprovalStore,
   request: ApprovalRequest,
@@ -429,6 +460,7 @@ export async function planApproval(
     fieldsVersion: RETAILER_NOTICE_FIELDS_VERSION,
     fields: request.fields,
     fieldEvidence: request.evidence,
+    productCategories: retailerProductCategories(request.fields),
     reviewNotes: request.reviewNotes,
     approvedBy: request.approvedBy,
     approvedAt: at,
@@ -439,6 +471,7 @@ export async function planApproval(
     live.documentContentHash === row.documentContentHash &&
     stableJson(live.fields) === stableJson(row.fields) &&
     stableJson(live.fieldEvidence) === stableJson(row.fieldEvidence) &&
+    stableJson(live.productCategories) === stableJson(row.productCategories) &&
     live.reviewNotes === row.reviewNotes
   ) {
     return { problems: [], writes: [], summary: ['already approved exactly as requested'] };

@@ -315,6 +315,7 @@ export function statesUndeclaredAllergen(text: string): boolean {
 //   E. "contaminated with <material>", "<material> contamination"
 //   F. "<material> found in …", "found <material> in …"
 //   G. "may contain <material>"   (modal + finite verb, never "containing")
+//   H. "<material> foreign material"  (the material modifies the generic phrase)
 
 /** Materials observed named as contaminants in official notices. */
 export const FOREIGN_MATERIALS = ['metal', 'plastic', 'glass', 'wood', 'rubber', 'bone'];
@@ -353,6 +354,10 @@ function materialStatedAsContaminant(text: string, material: string): boolean {
     // participle instead ("packages containing a plastic bag"), so package
     // contents can never be read as a contaminant.
     new RegExp(`\\b(?:may|might|could|possibly)\\s+contains?\\s+(?:\\w+\\s+){0,2}${m}\\b`, 'i'),
+    // H. "plastic foreign material", "metal foreign objects" — the material
+    // modifies the generic foreign-material phrase itself, so it can only be
+    // the contaminant (Costco's Caesar Salad letter, 2026).
+    new RegExp(`\\b${m}\\s+${GENERIC_FOREIGN_MATERIAL.source.replace(/^\\b/, '')}`, 'i'),
     // B. "extraneous materials, specifically clear flexible and hard plastic"
     new RegExp(
       `${GENERIC_FOREIGN_MATERIAL.source}[^.]{0,40}?\\bspecifically\\b[^.]{0,60}?\\b${m}\\b`,

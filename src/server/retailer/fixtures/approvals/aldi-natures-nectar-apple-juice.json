@@ -1,0 +1,115 @@
+{
+  "publisher": "aldi",
+  "noticeNativeId": "prod1amer/In_Association_with_Refresco_Beverages_US_Inc._ALDI_Recalls_Natures_Nectar_100__Apple_Juicepdf-1",
+  "documentContentHash": "72368270d790f1db08749b8840e9b85f0818ac53a007730d47378d49d35e2d67",
+  "approvedBy": "staging batch 2026-11-16 (not a production approval)",
+  "reviewNotes": "Historical (2024). ALDI launch batch, reviewed 2026-11-16 against the archived notice (dateline September 5, 2024). No Lotly agency case. FDA Enforcement Report lists Refresco Beverages US Inc apple juice recalls F-1746-2024 and F-1795-2024 (Class II, Terminated) for Great Value; whether either covers Nature's Nectar is not confirmed. The Best By column prints a date and a plant code together (MAR2625 CT89-4), so no Best By is approved.",
+  "fields": {
+    "retailer": "ALDI",
+    "productName": "Nature’s Nectar 100% Apple Juice",
+    "size": "64 fl oz.",
+    "image": null,
+    "firmName": "Refresco Beverages US Inc.",
+    "whatHappened": "In cooperation with Refresco Beverages US Inc., ALDI recalled Nature’s Nectar 100% Apple Juice in select states.",
+    "whyRecalled": "The juice was recalled due to potential elevated levels of inorganic arsenic.",
+    "reason": {
+      "hazardCategory": "chemical_contamination",
+      "agent": "inorganic arsenic"
+    },
+    "whereSold": {
+      "states": [
+        "Alabama",
+        "Florida",
+        "Georgia",
+        "Illinois",
+        "Indiana",
+        "Iowa",
+        "Kentucky",
+        "Maryland",
+        "Michigan",
+        "New York",
+        "North Carolina",
+        "Ohio",
+        "Pennsylvania",
+        "South Carolina",
+        "West Virginia",
+        "Wisconsin"
+      ],
+      "purchaseWindow": null
+    },
+    "packageChecks": {
+      "retailerItemNumbers": [],
+      "supplierCodes": [],
+      "lotCodes": [],
+      "bestByDates": [],
+      "canTimestamps": [],
+      "upcs": ["4099100036381"]
+    },
+    "instructions": [
+      "Throw the product away or return it to your local ALDI store for a full refund."
+    ],
+    "contact": "Call Refresco Beverages US Inc. at 1-888-260-3776."
+  },
+  "evidence": {
+    "productName": [
+      {
+        "excerpt": "In cooperation with Refresco Beverages US Inc., and out of an abundance of caution, ALDI Inc., (“ALDI”) recalls Nature’s Nectar 100% Apple Juice in select states.",
+        "page": 1
+      }
+    ],
+    "size": [
+      {
+        "excerpt": "Nature’s Nectar 100% Apple Juice 64 fl oz. plastic bottle 4099100036381 MAR2625 CT89-4 MAR2725 CT89-4",
+        "page": 1
+      }
+    ],
+    "firmName": [
+      {
+        "excerpt": "In cooperation with Refresco Beverages US Inc., and out of an abundance of caution, ALDI Inc., (“ALDI”) recalls Nature’s Nectar 100% Apple Juice in select states.",
+        "page": 1
+      }
+    ],
+    "whatHappened": [
+      {
+        "excerpt": "In cooperation with Refresco Beverages US Inc., and out of an abundance of caution, ALDI Inc., (“ALDI”) recalls Nature’s Nectar 100% Apple Juice in select states.",
+        "page": 1
+      }
+    ],
+    "whyRecalled": [
+      {
+        "excerpt": "The affected product from Refresco Beverages US Inc. is being recalled due to potential elevated levels of inorganic arsenic.",
+        "page": 1
+      }
+    ],
+    "reason.agent": [
+      {
+        "excerpt": "The affected product from Refresco Beverages US Inc. is being recalled due to potential elevated levels of inorganic arsenic.",
+        "page": 1
+      }
+    ],
+    "whereSold.states": [
+      {
+        "excerpt": "The affected product was sold at select ALDI stores in Alabama, Florida, Georgia, Illinois, Indiana, Iowa, Kentucky, Maryland, Michigan, New York, North Carolina, Ohio, Pennsylvania, South Carolina, West Virginia, Wisconsin.",
+        "page": 1
+      }
+    ],
+    "packageChecks.upcs": [
+      {
+        "excerpt": "Product Name Package Description UPC Code Best By Nature’s Nectar 100% Apple Juice 64 fl oz. plastic bottle 4099100036381 MAR2625 CT89-4 MAR2725 CT89-4",
+        "page": 1
+      }
+    ],
+    "instructions": [
+      {
+        "excerpt": "If customers have products affected by this recall, they are advised to discard it immediately or return it to their local store for a full refund.",
+        "page": 1
+      }
+    ],
+    "contact": [
+      {
+        "excerpt": "contact Refresco Beverages US Inc by calling 1-888-260-3776.",
+        "page": 1
+      }
+    ]
+  }
+}
