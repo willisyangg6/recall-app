@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { readStoreListingRows, storeListingRows } from './store-listings';
+import { listedStoreNames, readStoreListingRows } from './store-listings';
 
 const CASE = '38c00154-1d2e-4f5a-9b8c-7d6e5f4a3b2c';
 const OTHER = '11111111-2222-4333-8444-555555555555';
@@ -59,41 +59,25 @@ const ROWS = [
   },
 ];
 
-test('Tractor Wheels: three stores, one row each, each linking its own page', () => {
-  const rows = storeListingRows(readStoreListingRows(ROWS), CASE);
-  assert.deepEqual(rows, [
-    {
-      store: 'Target',
-      detail: 'In stores and online',
-      sourceLabel: 'Target’s recall notice',
-      url: 'https://www.target.com/help/article/000233827',
-    },
-    {
-      store: 'Walmart',
-      detail: 'In stores and online',
-      sourceLabel: 'Walmart’s recall list',
-      url: 'https://corporate.walmart.com/recalls',
-    },
-    {
-      store: 'Whole Foods Market',
-      detail: 'In stores',
-      sourceLabel: 'Whole Foods Market’s recall list',
-      url: 'https://www.wholefoodsmarket.com/legal/product-recalls',
-    },
+test('Tractor Wheels: three verified store names, each once, in name order', () => {
+  assert.deepEqual(listedStoreNames(readStoreListingRows([...ROWS, ...ROWS]), CASE), [
+    'Target',
+    'Walmart',
+    'Whole Foods Market',
   ]);
 });
 
-test("each store keeps its own states: Walmart's are never Sam's Club's", () => {
-  const rows = storeListingRows(readStoreListingRows(ROWS), OTHER);
+test("each store keeps its own states in the data: Walmart's are never Sam's Club's", () => {
+  const listings = readStoreListingRows(ROWS).filter((listing) => listing.caseId === OTHER);
   assert.deepEqual(
-    rows.map((row) => [row.store, row.detail]),
+    listings.map((listing) => [listing.store, listing.states]),
     [
-      ["Sam's Club", 'Louisiana and Texas'],
-      ['Walmart', 'Oklahoma and Texas'],
+      ["Sam's Club", ['Louisiana', 'Texas']],
+      ['Walmart', ['Oklahoma', 'Texas']],
     ],
   );
-  // Sam's Club's facts link Walmart's list, where Walmart published them.
-  assert.equal(rows[0].sourceLabel, 'Walmart’s recall list');
+  // Only the names reach the screen.
+  assert.deepEqual(listedStoreNames(listings, OTHER), ["Sam's Club", 'Walmart']);
 });
 
 test('a row whose publisher, store or page disagree is dropped whole', () => {
@@ -114,9 +98,9 @@ test('a row whose publisher, store or page disagree is dropped whole', () => {
   assert.deepEqual(readStoreListingRows(null), []);
 });
 
-test('a recall no store listed has no rows', () => {
+test('a recall no store listed adds no name', () => {
   assert.deepEqual(
-    storeListingRows(readStoreListingRows(ROWS), '99999999-2222-4333-8444-555555555555'),
+    listedStoreNames(readStoreListingRows(ROWS), '99999999-2222-4333-8444-555555555555'),
     [],
   );
 });

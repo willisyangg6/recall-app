@@ -14,6 +14,9 @@
  * break or empty the agency feed beside it.
  */
 
+import { readStoredProductCategories } from '@/domain/product-categories-stored';
+import type { FoodCategoryId } from '@/domain/food-category';
+
 import {
   readRetailerNoticeFields,
   type RetailerNoticeFields,
@@ -59,6 +62,11 @@ export interface RetailerNotice {
    * approved or the backend is not configured.
    */
   imageUrl: string | null;
+  /**
+   * The shared server-side classifier's answer for the approved product,
+   * stored with the approval; undefined when none is stored (never `other`).
+   */
+  productCategories?: FoodCategoryId[];
 }
 
 /** The public product-visuals URL for an approved image path. */
@@ -117,6 +125,7 @@ export function readRetailerNoticeRows(
       noticeDate: row.notice_date,
       fields,
       imageUrl: fields.image ? retailerImageUrl(baseUrl, fields.image.path) : null,
+      productCategories: readStoredProductCategories(row.product_categories) ?? undefined,
     });
   }
   return out;
@@ -128,7 +137,7 @@ export async function fetchRetailerNotices(): Promise<RetailerNotice[]> {
   try {
     const response = await fetch(
       `${supabaseUrl}/rest/v1/rpc/consumer_retailer_notices` +
-        '?select=id,publisher,document_url,notice_date,fields',
+        '?select=id,publisher,document_url,notice_date,fields,product_categories',
       {
         headers: {
           apikey: publishableKey,

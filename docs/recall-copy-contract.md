@@ -78,6 +78,23 @@ retired the "What should I do?" concept rather than the wiring, so
 `buildConsumerAction` and `consumerActionDisplay` are deleted and no dormant
 generator is left for a future screen to pick up.
 
+### 3.0 Temperature lapse and count-noun agents (2026-11-17)
+
+Two cause-sentence shapes, earned by source wording and shared by agency and
+retailer notices (docs/recall-retailer-notices.md, "One presentation path"):
+
+- **A stated temperature lapse.** Only when the reason or source prose says the
+  product "may not have been stored … at appropriate temperatures" (or "were
+  not stored …"): a pathogen cause reads "…because the products may not have
+  been stored at appropriate temperatures, which may allow the growth of
+  Clostridium botulinum."; any other cause gains the sentence "The products
+  also may not have been stored at appropriate temperatures." A storage
+  direction ("Keep refrigerated") never matches. Measured over 935 production
+  cases: 2 change (Priano tortelloni, Fry Pie pepperoni rolls).
+- **Count-noun chemical agents** take their article ("contaminated with a
+  cleaning chemical"); mass nouns ("lead", "inorganic arsenic") never do.
+  No agency case changes.
+
 ### 3.1 The recall-scope paragraph (P2B7V)
 
 How much a recall covers is a different fact from why it happened, and until

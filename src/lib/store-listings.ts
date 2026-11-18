@@ -3,11 +3,13 @@
  * stores that publicly listed an agency recall they sold, read from
  * `consumer_store_listings()` and shown on that recall's Recall Details.
  *
- * A listing never creates a card and never changes the agency's own
- * distribution. Each store is shown as that store stated it, with a link to
- * the store's own page. Strict: a row whose publisher, store name or page
- * host do not agree is dropped whole. Fault tolerant: any failure reads as no
- * listings.
+ * A listing never creates a card, never changes the agency's own
+ * distribution and never reaches the alert verdict. Its store name joins the
+ * case's existing store row on Recall Details, named once; its own states,
+ * channels and page link are kept in the data (and privately with the
+ * evidence) and are not rendered. Strict: a row whose publisher, store name
+ * or page host do not agree is dropped whole. Fault tolerant: any failure
+ * reads as no listings.
  */
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -15,22 +17,11 @@ const publishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 export type StoreListingPublisher = 'walmart' | 'target' | 'wholefoods' | 'publix';
 
-const PUBLISHERS: Record<
-  StoreListingPublisher,
-  { stores: readonly string[]; host: string; page: string }
-> = {
-  walmart: {
-    stores: ['Walmart', "Sam's Club"],
-    host: 'corporate.walmart.com',
-    page: 'recall list',
-  },
-  target: { stores: ['Target'], host: 'www.target.com', page: 'recall notice' },
-  wholefoods: {
-    stores: ['Whole Foods Market'],
-    host: 'www.wholefoodsmarket.com',
-    page: 'recall list',
-  },
-  publix: { stores: ['Publix'], host: 'corporate.publix.com', page: 'recall list' },
+const PUBLISHERS: Record<StoreListingPublisher, { stores: readonly string[]; host: string }> = {
+  walmart: { stores: ['Walmart', "Sam's Club"], host: 'corporate.walmart.com' },
+  target: { stores: ['Target'], host: 'www.target.com' },
+  wholefoods: { stores: ['Whole Foods Market'], host: 'www.wholefoodsmarket.com' },
+  publix: { stores: ['Publix'], host: 'corporate.publix.com' },
 };
 
 export interface StoreListing {
@@ -126,49 +117,15 @@ export async function fetchStoreListings(): Promise<StoreListing[]> {
   }
 }
 
-// ── The Recall Details rows ─────────────────────────────────────────────────
+// ── The store row ───────────────────────────────────────────────────────────
 
-export interface StoreListingRow {
-  store: string;
-  /** What THAT store stated: its states, "Nationwide", or its channels. */
-  detail: string;
-  /** "Walmart’s recall list": the store's own page, never the agency's. */
-  sourceLabel: string;
-  url: string;
-}
-
-function joinNames(names: readonly string[]): string {
-  if (names.length <= 1) return names.join('');
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
-}
-
-const INLINE_STATES = 4;
-
-function detailOf(listing: StoreListing): string {
-  if (listing.scope === 'nationwide') return 'Nationwide';
-  if (listing.scope === 'states') {
-    return listing.states.length <= INLINE_STATES
-      ? joinNames(listing.states)
-      : `${listing.states.length} states`;
-  }
-  const stores = listing.channels.includes('stores');
-  const online = listing.channels.includes('online');
-  return stores && online ? 'In stores and online' : online ? 'Online' : 'In stores';
-}
-
-/** One row per store for this case, in store-name order. Never merged. */
-export function storeListingRows(
-  listings: readonly StoreListing[],
-  caseId: string,
-): StoreListingRow[] {
-  return listings
-    .filter((listing) => listing.caseId === caseId)
-    .sort((a, b) => a.store.localeCompare(b.store))
-    .map((listing) => ({
-      store: listing.store,
-      detail: detailOf(listing),
-      sourceLabel: `${PUBLISHERS[listing.publisher].stores[0]}’s ${PUBLISHERS[listing.publisher].page}`,
-      url: listing.listingUrl,
-    }));
+/**
+ * The verified store names that listed this case, in store-name order, each
+ * once — what the existing Where It Was Sold store row adds. Nothing else of
+ * a listing is shown.
+ */
+export function listedStoreNames(listings: readonly StoreListing[], caseId: string): string[] {
+  return [
+    ...new Set(listings.filter((listing) => listing.caseId === caseId).map((l) => l.store)),
+  ].sort((a, b) => a.localeCompare(b));
 }

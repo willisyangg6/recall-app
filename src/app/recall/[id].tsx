@@ -58,7 +58,6 @@ import { useSaveHeaderItems } from '@/components/save-recall-button';
 import { StateMessage } from '@/components/state-message';
 import { Callout } from '@/components/ui/callout';
 import { IllnessNotice } from '@/components/ui/illness-notice';
-import { StoreListingsBlock } from '@/components/store-listings-block';
 import { Icon } from '@/components/ui/icon';
 import { MediaTile } from '@/components/ui/media-tile';
 import { NoticeLabel } from '@/components/ui/notice-label';
@@ -105,7 +104,7 @@ import { symptomIcon } from '@/lib/symptom-icons';
 import { usePreferences } from '@/hooks/use-preferences';
 import { reloadRetailerNotices, retailerNoticeById } from '@/hooks/use-retailer-notices';
 import { useStoreListings } from '@/hooks/use-store-listings';
-import { storeListingRows } from '@/lib/store-listings';
+import { listedStoreNames } from '@/lib/store-listings';
 import {
   buildRetailerDetailModel,
   retailerNoticeIdFromRoute,
@@ -632,12 +631,15 @@ export default function RecallDetailScreen() {
       },
       prefs,
     );
-    model = buildDetailModel(state.detail, { today: todayIso(), affectsYou });
+    // Stores that listed this case join the existing store row, named once.
+    // Their own states stay in the listing data, never the agency's lines,
+    // and the verdict above never reads them.
+    model = buildDetailModel(state.detail, {
+      today: todayIso(),
+      affectsYou,
+      listedStores: listedStoreNames(storeListings, state.detail.id),
+    });
   }
-  // Each store as that store stated it, beneath the agency's own lines and
-  // never merged into them. A retailer notice has none.
-  const storeRows =
-    state.status === 'ready' ? storeListingRows(storeListings, state.detail.id) : [];
   // Optional sections are DECIDED by the shared contract (P3A). The screen
   // renders a section when the model gives it one and renders nothing at all
   // otherwise — no heading, no container, no divider, no spacing. It never
@@ -852,9 +854,6 @@ export default function RecallDetailScreen() {
           {/* Community shopper reports (P1D) sit UNDER the official
               statement; silent while the server gate is off. */}
           {communityReports ? <CommunityReportsBlock section={communityReports} /> : null}
-          {/* Stores that listed this recall on their own pages, beneath the
-              agency's lines and never merged into them. */}
-          <StoreListingsBlock rows={storeRows} LinkLabel={ExternalLinkLabel} />
         </Section>
 
         {/* Health Risk (P1B): standardized, reviewed hazard education. The

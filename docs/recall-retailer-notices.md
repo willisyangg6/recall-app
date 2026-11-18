@@ -1,7 +1,8 @@
 # Retailer recall notices
 
-Status (2026-11-16): **first launch cohort built and verified on staging; nothing applied in
-production beyond the two Costco migrations.** See [Launch cohort](#launch-cohort-2026-11-16) for
+Status (2026-11-17): **first launch cohort built and verified on staging; nothing applied in
+production beyond the two Costco migrations.** Retailer notices now reach the screen through
+[one presentation path](#one-presentation-path) shared with agency recalls. See [Launch cohort](#launch-cohort-2026-11-16) for
 the store-by-store readiness table and the exact rollout order.
 
 - **Costco:** private monitoring, live and scheduled in production. Nothing approved yet.
@@ -9,8 +10,9 @@ the store-by-store readiness table and the exact rollout order.
   that stays off until its migration is applied.
 - **Walmart + Sam's Club, Target, Whole Foods Market:** [store listings](#store-listings) attached
   to existing agency recalls, never a card of their own.
-- **Publix:** a store-listing reader built from Publix's own page component, but **not ready**: no
-  populated Publix list has been observed ([Publix gap](#publix-gap)).
+- **Publix:** a store-listing reader built from Publix's own page component and tested against
+  its field shape, but **not ready**: live coverage is unverified because no populated Publix list
+  has been observed ([Publix gap](#publix-gap)).
 - **Manual intake: none.** No source in this launch depends on a person
   ([Not in this launch](#not-in-this-launch-h-e-b-kroger-albertsons)).
 - Build 1.2.0 (14) shows none of this beyond Costco notices
@@ -388,16 +390,15 @@ mislabel one as an FDA recall.
   - [use-retailer-notices.ts](../src/hooks/use-retailer-notices.ts) keeps the list in memory only
     and fails closed, so a withdrawn notice is gone on the next load.
 - **All recalls only:** notices are placed by the letter's date under the same 60-day boundary.
-  - They are hidden while a browsing filter is active, because they have no category, risk or
-    agency to filter on.
+  - They are hidden while a browsing filter is active, because they have no risk tier or agency
+    to filter on.
   - Search narrows them like any card.
   - Affects me never includes them in this release.
 - **The same card and the same Recall Details.** There is no retailer layout:
-  [retailer-notice-presentation.ts](../src/lib/retailer-notice-presentation.ts) adapts an approved
-  notice into the shared `HomeCardModel` (rendered by `RecallCard`) and the shared `DetailModel`
-  (rendered by the Recall Details screen at `/recall/retailer:<id>`). It builds them through the
-  same shared builders (`whereSoldModel`, `affectedProductsModel`, `activityDisplay`,
-  `homeLocationSummary`), and it decides only this:
+  [retailer-notice-presentation.ts](../src/lib/retailer-notice-presentation.ts) builds the shared
+  `HomeCardModel` (rendered by `RecallCard`) and the shared `DetailModel` (rendered by the Recall
+  Details screen at `/recall/retailer:<id>`) through the [one presentation
+  path](#one-presentation-path) below, and it decides only this:
   - **Risk:** the existing Unknown treatment in the normal badge position
     (`unclassifiedRiskView`). It is never Pending, whose note promises an agency classification
     later, and never a severity tier.
@@ -432,17 +433,44 @@ mislabel one as an FDA recall.
     - For the Kirkland letter it is PDF object 11, 763×2046, SHA-256 `8a1a80cb…`.
   - **Card reason:** the shared `conciseReasonLine`, fed the reviewer-approved structured reason
     (`fields.reason`: an agency `hazardCategory` and an agent printed in its excerpt). For the
-    Kirkland letter the card reads "Possible cleaning chemical contamination". What Happened stays
-    the approved prose.
+    Kirkland letter the card reads "Possible cleaning chemical contamination".
   - **Not shown:** the purchase window, the instructions and the contact line. The screen has no
     slot for them, so they stay in the approved fields (`RETAILER_FIELDS_WITHOUT_A_SLOT`).
   - **Absent:** no Affects You verdict, no save control (`saveable: false`; Saved cannot load a
-    notice), no Health Risk, no community reports and no illness notice. The agency evidence those
-    read does not exist for a retailer notice.
+    notice) and no community reports.
   - **Read path for the detail:** the screen reads a `retailer:` id only from the approved read
     path, never as a case. After one reload, an id that is not approved shows "Recall not found".
 
 - **Alerts stay off:** retailer notices write nothing to the notification ledger.
+
+### One presentation path
+
+Source-specific extraction ends at the approved fields. From there a retailer notice takes the
+same steps an agency case takes, and nothing below is written per retailer, per product or per
+notice:
+
+| Step                | Agency case                                | Approved retailer notice                                                                                                                                                                                              |
+| ------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| What Happened       | `recallNarrative` over the projection      | `recallNarrative` over the structured reason, with the letter's own prose (`whatHappened`, `whyRecalled`) as the source text. The prose is evidence, never the paragraph                                              |
+| Illness notice      | `deriveIllnessStatus(summaryText)`         | The same, over the letter's prose. "No illnesses have been reported" gets the badge; "no serious adverse effects requiring medical care" is not an illness status and gets none                                       |
+| Health Risk         | `selectHazardGuides` + `healthRiskSummary` | The same, over the structured reason                                                                                                                                                                                  |
+| Agent spelling      | The FDA/FSIS parsers' extractors           | The same extractors (`extractPathogen`, `extractChemicalAgent`), only where they respell the approved agent ("salmonella" → "Salmonella"); an answer that drops a word ("inorganic arsenic" → "arsenic") is not taken |
+| Category            | `categoriesForCase`, stored on the case    | `categoriesForCase` over the approved product name, stored on the approval (`product_categories`) by the approval step; read and launch-filtered by the same `cardCategoryLabel` / `detailCategory`                   |
+| Package identifiers | `aggregateFacts` → `toPackageFields`       | The same gate. Retailer item numbers, supplier codes and can timestamps have no field and stay privately in the approved fields                                                                                       |
+| Image               | `allocateRecallImages`                     | The same, with the approved embedded photo as the hero                                                                                                                                                                |
+
+Three shared-generator gaps the retailer letters exposed were fixed in the shared code, so they
+apply to agency cases too. Measured over all 935 production cases (read-only, 2026-11-17), only
+the first changes any agency text, in two cases:
+
+- A stated temperature lapse ("may not have been stored, distributed or sold at appropriate
+  temperatures") is the cause of a pathogen risk: "…because the products may not have been stored
+  at appropriate temperatures, which may allow the growth of Clostridium botulinum." Beside any
+  other reason it is a second sentence. Changed: FDA Priano and Fry Pie Factory.
+- A count-noun chemical agent takes its article ("a cleaning chemical"); mass nouns ("lead") never
+  do. No agency case changes.
+- "Plastic foreign material" names plastic as the contaminant (construction H in
+  [hazard.ts](../src/domain/hazard.ts)). No agency case's text changes.
 
 ### Verification
 
@@ -588,28 +616,39 @@ copied in with a read-only production query.
 | Whole Foods     | Store listings                        | Automated | 108 rows: 47 linked, 41 review (older FDA pages Lotly does not hold), 17 excluded (Canadian notices)        | After the listings migration          |
 | Publix          | Store listings                        | Automated | Empty run: 0 entries, succeeded. Populated reader built from Publix's component; every entry goes to review | **No**: see [Publix gap](#publix-gap) |
 
-- **Tractor Wheels:** Recall Details for this one FDA recall now lists three stores, each as that
-  store stated it, each linking its own page. The agency's own distribution ("nationwide") and
-  its retailer line are unchanged.
-  - "Target: In stores and online", linked by the FDA URL.
-  - "Whole Foods Market: In stores", linked by the FDA URL.
-  - "Walmart: In stores and online". Walmart linked FDA's advisory page, which Lotly does not hold,
-    so it went to review and a reviewer confirmed it.
-- **States stay with their store.** Flowers Hawaiian Bread shows Walmart in Oklahoma and Texas,
-  and Sam's Club in Louisiana and Texas, exactly as Walmart's line splits them.
+- **Tractor Wheels:** Recall Details for this one FDA recall names Target, Walmart and Whole Foods
+  Market once each, in the existing store row. The agency's own distribution ("Nationwide") is
+  unchanged. Target and Whole Foods linked by the FDA URL; Walmart linked FDA's advisory page,
+  which Lotly does not hold, so it went to review and a reviewer confirmed it.
+- **States stay with their store, in the data.** For Flowers Hawaiian Bread, Walmart's line gives
+  Walmart Oklahoma and Texas and Sam's Club Louisiana and Texas. Those are kept per store in
+  `retailer_store_listings`; the screen names the stores, and the agency's five states stay the
+  distribution and the alert input.
 - **No duplicate card, no second push.** Across the run, `recall_cases`, `source_records`,
   `notification_events`, `notification_deliveries`, every push table, and the agency feed and
   manifest were identical before and after. The private tables answered the app's key with 401.
-- **Review batch: current notices only.** Kirkland (Costco) and Priano (ALDI) are prepared and
-  were rechecked on 2026-11-16: no Lotly agency case and no FDA Enforcement Report record (reports
-  through 2026-11-11). Madeleines, Caesar, Happy Farms and Nature's Nectar are ended (FDA:
+- **Review batch: current notices only.** Kirkland (Costco) is prepared: no Lotly agency case and
+  no FDA Enforcement Report record. Priano (ALDI) is no longer standalone: FDA published "ALDI
+  Recalls Priano Protein Carbonara Tortelloni and Priano Protein Herb & Cheese Tortelloni" on
+  2026-11-17 (production case `f06111ba…`: both varieties, lot T9101926, Best if Used By
+  12/18/2026, Alabama, Georgia, North Carolina and South Carolina, with FDA's product photos). On
+  staging the next ALDI run re-decided the notice as `link_candidate` for that case, the read path
+  stopped returning it, and a reviewer confirmed the match (`confirm-agency-match`), so FDA's case
+  is the one card. Madeleines, Caesar, Happy Farms and Nature's Nectar are ended (FDA:
   Terminated). They were withdrawn on staging and stay out until Lotly can show a recall's status.
   Their request files remain for that later release.
 - **Finding:** Lotly holds two agency cases for one H-E-B Creamy Creations recall (`261c3408…`
   and `b35ed0e7…`, both 2024-04-29). It surfaced in an H-E-B trial that is not part of this launch.
-- **Simulator captures** (2026-11-17, this branch's Metro on the staging stack): the Feed with the
-  Priano card, Priano's Recall Details, Tractor Wheels with three stores, Flowers bread with
-  Walmart, Sam's Club and Target each showing their own facts, and Kirkland for comparison.
+- **Duplicate-looking cards on staging (2026-11-17).** Brad's Crunchy Kale and Tractor Wheels each
+  showed twice. Each pair was two different case ids for one FDA URL: the staging stack's own
+  ingested case (with its source record) and a production copy the staging seed script added
+  (`38c00154…`, `81f864e2…`). The seed inserted source records with ignore-duplicates, so the
+  copies kept no source record. 30 such orphan copies were found, each with exactly one twin and
+  nothing referencing it, and were removed from staging only. Production holds one case per FDA
+  URL (935 cases, 935 ids, 0 shared URLs, read through the public feed path). No title-based
+  de-duplication was added.
+- **Simulator captures** (2026-11-17, this branch's Metro on the staging stack): see
+  `~/Desktop/Lotly-Retailer-Review/final/`.
 
 ## Store listings
 
@@ -627,16 +666,17 @@ store's own statement to the agency recall it names.
   every later run while the store's link is unchanged. Everything else goes to review and is never
   shown: no agency link, a link Lotly does not hold, several cases, or a sold-at line not read
   completely. Canadian notices are excluded.
-- **One store, its own facts.** Each store keeps its own scope, states and channels
-  ([store-listings.ts](../src/server/retailer/store-listings.ts)). Nothing is merged into the
-  agency's distribution, and one store's states are never given to another.
+- **One store, its own facts, kept in the data.** Each store keeps its own scope, states and
+  channels ([store-listings.ts](../src/server/retailer/store-listings.ts)). Nothing is merged into
+  the agency's distribution or the alert verdict, and one store's states are never given to
+  another.
 - **Never a case write.** A listing reads `source_records` and `recall_cases` (SELECT) and writes
   only its own table. No case changes, so no material change is detected and no alert is sent.
-- **On screen:** under Where It Was Sold, after the agency's lines, the heading "Also listed by
-  these stores". One row per store follows, such as "Walmart: Oklahoma and Texas" (more than four
-  states read as "N states") or "Target: In stores and online", each with a link to that store's
-  page ([store-listings-block.tsx](../src/components/store-listings-block.tsx)). This is new
-  Lotly-authored copy for founder review.
+- **On screen:** only the store's verified name, once, in Where It Was Sold's existing store row
+  (`withListedStores` in [recall-presentation.ts](../src/lib/recall-presentation.ts)). A name the
+  agency already stated, alone or inside a run such as "Costco and Sam's Club", is not repeated.
+  No heading, no per-store link and no channel phrase is added; the official agency report link is
+  the screen's one source link.
 
 ```bash
 npm run retailer:listings -- --publisher walmart     # dry run (walmart, target, wholefoods, publix)
@@ -696,19 +736,34 @@ migrations were renumbered to `20261118…` so versions stay in apply order whic
 first. On the staging stack they were recorded under their earlier `20261116…` numbers; the SQL is
 identical.
 
-1. Apply `20261118000000_retailer_notice_publishers.sql` (publisher check: costco, aldi).
+1. Apply `20261118000000_retailer_notice_publishers.sql`: publisher check (costco, aldi), the
+   `product_categories` column, and the read function recreated to return it. On staging this
+   delta was applied by hand on top of the earlier `20261116000000` record.
 2. Apply `20261118100000_retailer_store_listings.sql` (listings table and read function).
-3. Approve Kirkland in production (`retailer:review`, real `approvedBy`).
-4. ALDI: `npm run retailer:monitor -- --publisher aldi` dry run, apply with its count, then approve
-   Priano. Merge this branch, set the repository variable `RETAILER_ALDI_ENABLED=true`, and add
+3. Approve Kirkland in production (`retailer:review`, real `approvedBy`); the approval stores its
+   category.
+4. ALDI: `npm run retailer:monitor -- --publisher aldi` dry run, apply with its count. Do not
+   approve Priano: FDA now publishes it (`f06111ba…`), so the run should decide it
+   `link_candidate`; confirm with `retailer:review -- confirm-agency-match … --publisher aldi
+--case f06111ba-84ba-41aa-a3fc-8da900b770a5`. Bunny Luv carrots is decided `new_candidate` but
+   is FDA's Grimmway Farms recall; confirm that match too rather than approving it. Merge this
+   branch, set the repository variable `RETAILER_ALDI_ENABLED=true`, and add
    ALDI to `ops:health` once its first scheduled run succeeds.
 5. Listings: `npm run retailer:listings -- --publisher <p>` dry run then apply, for walmart,
    target and wholefoods. Publix is not ready ([Publix gap](#publix-gap)). Confirm the Walmart Tractor Wheels listing by hand. Scheduling
    listings is a later job.
-6. Build and ship the client with the multi-publisher read path and store listings.
+6. Build and ship the client with the multi-publisher read path and store listings. It requests
+   `product_categories`, so it needs step 1 first; on a backend without it the client reads no
+   retailer notices (fail closed).
 
-Before step 6, every installed build is unaffected: build 14 drops non-Costco notices and has no
-listing read path.
+Before step 6, every installed build is unaffected: build 14 requests only its own columns, drops
+non-Costco notices and has no listing read path.
+
+A notice that becomes an agency recall leaves one card. The monitor re-decides every notice on
+each run, a consistent single match becomes `link_candidate`, and the read path returns only
+`new_candidate` notices. Between FDA's publication and the next monitor run (at most one schedule
+interval) both can show; the reviewer's confirmation then makes the link permanent. No retailer
+step writes the notification ledger, so the agency case's own alert is the only one.
 
 ### Linked notices (later)
 

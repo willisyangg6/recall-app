@@ -3,10 +3,10 @@
   "noticeNativeId": "prod1amer/ALDI Recalls Priano Protein Carbonara Tortelloni and Priano Protein Herb Cheese Tortelloni Because Of Possible Health Riskpdf",
   "documentContentHash": "0e4e739cd55dd283c26ee99de5d1ec52a0f1e275d51bbb0c5228e6da01bb9b58",
   "approvedBy": "staging batch 2026-11-16 (not a production approval)",
-  "reviewNotes": "ALDI launch batch, reviewed 2026-11-16 against the notice ALDI's index dated November 16, 2026 (the notice prints no date of its own). No FDA or FSIS counterpart in Lotly's agency corpus or FDA's Enforcement Report that day; when one is published the monitor re-decides the notice as a link candidate and the read path hides it. One notice, two items under one lot and date: the card names the carbonara item; What Happened names both. Botulism risk comes from possible temperature abuse, not a confirmed contamination: whyRecalled says so in the notice's own words.",
+  "reviewNotes": "ALDI launch batch, reviewed 2026-11-16 against the notice ALDI's index dated November 16, 2026 (the notice prints no date of its own). No FDA or FSIS counterpart in Lotly's agency corpus or FDA's Enforcement Report that day; when one is published the monitor re-decides the notice as a link candidate and the read path hides it. One notice, two items under one lot and date: the product name names both, as the notice does. Botulism risk comes from possible temperature abuse, not a confirmed contamination: whyRecalled says so in the notice's own words.",
   "fields": {
     "retailer": "ALDI",
-    "productName": "Priano Protein Carbonara Tortelloni",
+    "productName": "Priano Protein Carbonara Tortelloni and Priano Protein Herb & Cheese Tortelloni",
     "size": "9 oz.",
     "image": null,
     "firmName": "ALDI",
@@ -37,7 +37,7 @@
   "evidence": {
     "productName": [
       {
-        "excerpt": "Priano Protein Carbonara Tortelloni T9101926 12/18/2026 9 oz. plastic unit",
+        "excerpt": "ALDI of Batavia, IL, is recalling Priano Protein Carbonara Tortelloni and Priano Protein Herb & Cheese Tortelloni sold at select stores",
         "page": 1
       }
     ],

@@ -1,36 +1,29 @@
 /**
- * Approved retailer notices, ADAPTED into the shared presentation contract:
- * the same Feed card model (`HomeCardModel`) the agency recalls build, and the
- * same Recall Details model (`DetailModel`), built through the same shared
- * builders (`whereSoldModel`, `affectedProductsModel`, `activityDisplay`, …).
- * The card and the detail screen render a retailer's recall (Costco, ALDI)
- * exactly as they render an FDA or FSIS one; no retailer layout exists.
+ * Approved retailer notices through the SAME presentation steps an agency
+ * recall takes (docs/recall-retailer-notices.md, "One presentation path").
  *
- * What the adapter decides, and only this:
+ * Source-specific extraction ends at the approved fields: a reviewer-checked
+ * product name, firm, structured reason (hazard family + agent, the terms an
+ * agency case carries), the retailer's own prose as evidence, states, package
+ * identifiers and photo. From there nothing is retailer-specific:
  *
- * - Risk: the existing neutral Unknown treatment (`unclassifiedRiskView`) in
- *   the normal badge position. Never Pending (its note promises an agency
- *   classification) and never a severity tier.
- * - The one source link names the retailer's own document ("View Costco's
- *   letter", "View ALDI's recall notice") and opens it.
- * - The publishing retailer is the stated retailer under Where It Was Sold.
- * - Package identifiers become the SAME typed facts the agency extractors
- *   produce (package_size, best_by, lot, upc, item_number) and go through the
- *   SAME gate, `aggregateFacts` → `toPackageFields`: the same date formatter
- *   ("APR/02/27" → "April 2, 2027", raw kept), the same code validation and
- *   de-duplication, the same closed field vocabulary and display order. An
- *   item number or supplier code has no approved field, so that gate drops
- *   it exactly as it drops an agency notice's item code; can timestamps have
- *   no concept at all. No row is added to Affected Products.
- * - The card's reason comes from the shared `conciseReasonLine`, fed the
- *   reviewer-approved structured reason (`fields.reason`) in the same terms an
- *   agency case carries; What Happened stays the approved prose.
- * - No Affects You verdict, no save control, no community reports, no health
- *   guidance, no illness notice: the agency evidence those read does not exist
- *   for a retailer notice.
+ * - What Happened, the illness notice and Health Risk come from the shared
+ *   `recallNarrative` over that structured reason and the letter's prose,
+ *   exactly as an agency case's come from its projection. The letter's prose
+ *   is EVIDENCE (illness status, temperature context), never the paragraph.
+ * - The category is the stored answer of the shared server-side classifier,
+ *   read and launch-filtered by the same card/Detail functions.
+ * - Package identifiers become the same typed facts the agency extractors
+ *   emit and pass the same `aggregateFacts` → `toPackageFields` gate; an item
+ *   number, supplier code or can timestamp has no approved field and is
+ *   dropped there, kept privately in the approved fields.
+ * - The photo goes through the shared image allocation.
+ * - The card's reason is the shared `conciseReasonLine`.
  *
- * Every visible string is an approved field read verbatim, or a label the
- * shared contract already owns. Nothing here is written to recall_cases.
+ * What stays the retailer's own: the neutral Unknown risk treatment (no agency
+ * classification exists), the one source link naming the retailer's document,
+ * the publishing retailer in the existing store row, and no Affects You, save,
+ * or community reports. Nothing here is written to recall_cases.
  */
 
 import type { Geography } from '@/domain/recall-types';
@@ -44,19 +37,26 @@ import {
 import { tierForActivityDate } from './feed-relevance';
 import type { FeedItem } from './recall-feed';
 import { allocateRecallImages } from './recall-images';
+import { extractChemicalAgent, extractPathogen } from '@/domain/hazard';
+import { narrativeWithoutIllness } from '@/domain/illness-status';
 import {
   activityDisplay,
   affectedProductsModel,
   affectedProductsSection,
+  cardCategoryId,
+  cardCategoryLabel,
   cardSummaryText,
   conciseReasonLine,
+  detailCategory,
   detailImageSet,
   homeLocationSummary,
   productImagery,
+  recallNarrative,
   whereSoldModel,
   whereSoldSection,
   type DetailModel,
   type HomeCardModel,
+  type NarrativeEvidence,
 } from './recall-presentation';
 import { compareRecencyKeys, recencyKey, type RecencyKey } from './recency-order';
 import type { RetailerNoticeFields } from './retailer-notice-fields';
@@ -148,12 +148,13 @@ export function buildRetailerHomeCardModel(notice: RetailerNotice, today: string
       conciseReasonLine({
         reasonText: fields.whyRecalled,
         hazardCategory: fields.reason.hazardCategory,
-        pathogenOrAllergen: fields.reason.agent,
+        pathogenOrAllergen: canonicalAgent(fields),
         title: null,
       }),
     ),
-    categoryLabel: null,
-    categoryId: null,
+    // The shared classifier's stored answer, through the same display gate.
+    categoryLabel: cardCategoryLabel(notice.productCategories),
+    categoryId: cardCategoryId(notice.productCategories),
     // The approved photo through the shared image slot; null keeps the
     // approved no-image card shape, exactly as for an agency recall.
     heroImageUrl: notice.imageUrl,
@@ -229,9 +230,49 @@ function distributionOf(fields: RetailerNoticeFields): ConsumerDistribution {
   };
 }
 
+/**
+ * The approved fields as the shared narrative's evidence: the structured
+ * reason in agency terms, and the letter's own prose (what happened and why)
+ * as the source text the illness and context rules read.
+ */
+/**
+ * The approved agent in the canonical spelling agency ingestion stores
+ * ("salmonella" → "Salmonella"), through the same domain extractors the FDA
+ * and FSIS parsers use. Only a respelling is taken: an extractor answer that
+ * drops a word ("inorganic arsenic" → "arsenic") would lose a stated
+ * specific, so the approved agent stays as approved.
+ */
+export function canonicalAgent(fields: RetailerNoticeFields): string | null {
+  const { agent, hazardCategory } = fields.reason;
+  if (agent === null) return null;
+  const canonical =
+    hazardCategory === 'microbial_contamination'
+      ? extractPathogen(agent)
+      : hazardCategory === 'chemical_contamination'
+        ? extractChemicalAgent(agent)
+        : null;
+  return canonical !== null && canonical.toLowerCase() === agent.toLowerCase() ? canonical : agent;
+}
+
+export function retailerNarrativeEvidence(fields: RetailerNoticeFields): NarrativeEvidence {
+  return {
+    title: fields.productName,
+    noticeType: 'recall',
+    reasonText: fields.whyRecalled,
+    hazardCategory: fields.reason.hazardCategory,
+    pathogenOrAllergen: canonicalAgent(fields),
+    firmDisplayName: fields.firmName,
+    summaryText: `${fields.whatHappened}\n${fields.whyRecalled}`,
+    productDescription: fields.productName,
+    consumerBrand: null,
+    retracted: false,
+  };
+}
+
 /** The Recall Details model, for the shared Recall Details screen. */
 export function buildRetailerDetailModel(notice: RetailerNotice, today: string): DetailModel {
   const { fields } = notice;
+  const narrative = recallNarrative(retailerNarrativeEvidence(fields));
   const sold = whereSoldModel(distributionOf(fields));
   const products = affectedProductsModel(packageCheckOf(fields), fields.productName);
   const images = allocateRecallImages({
@@ -251,20 +292,23 @@ export function buildRetailerDetailModel(notice: RetailerNotice, today: string):
     officialSource: { url: notice.documentUrl, label: retailerLetterLinkLabel(fields) },
     heroImageUrl: images.hero?.url ?? null,
     productImages: detailImageSet(productImagery(images), fields.productName),
-    category: null,
+    category: detailCategory(notice.productCategories),
     affectsYou: false,
     affectsYouBanner: 'Warning: This recall affects you.',
-    whatHappened: { text: fields.whatHappened, scope: null },
-    illnessNotice: null,
+    whatHappened: {
+      text: narrativeWithoutIllness(narrative.happened.text, narrative.illnessStatus),
+      scope: narrative.happened.scope,
+    },
+    illnessNotice: narrative.illnessNotice,
     whereSold: sold,
     affectedProducts: products,
     sections: {
       whereSold: whereSoldSection(sold),
       communityReports: null,
-      healthRisk: null,
+      healthRisk: narrative.healthRiskSection,
       affectedProducts: affectedProductsSection(products, images.rowImages),
     },
-    healthRisk: null,
+    healthRisk: narrative.standardizedRisk,
     attachments: [],
     images,
     officialTitle: null,

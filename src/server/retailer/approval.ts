@@ -26,6 +26,8 @@ import {
   readRetailerNoticeFields,
   type RetailerNoticeFields,
 } from '../../lib/retailer-notice-fields';
+import type { FoodCategoryId } from '../../domain/food-category';
+import { categoriesForCase } from '../../domain/food-category-matcher';
 import { STATE_TO_POSTAL } from '../../domain/us-geography';
 import { stableJson } from './costco-monitor';
 import { embeddedJpegImages, type PdfEmbeddedJpeg } from './pdf-images';
@@ -89,6 +91,12 @@ export interface ApprovalRow {
   fieldsVersion: number;
   fields: unknown;
   fieldEvidence: unknown;
+  /**
+   * The shared server-side classifier's categories for the approved product
+   * (`categoriesForCase`, the same derivation agency cases store), or null
+   * for an approval written before it existed. Derived, never reviewed.
+   */
+  productCategories: FoodCategoryId[] | null;
   reviewNotes: string | null;
   approvedBy: string;
   approvedAt: string;
@@ -415,6 +423,20 @@ async function noticeOrProblem(
 }
 
 /** Plan an approval: at most one withdrawal of a superseded approval, then one insert. */
+/**
+ * The approved product through the SAME category derivation an agency case
+ * gets (domain/food-category-matcher). The approved product name is the
+ * structured product description, the path FDA's own description takes; no
+ * category is chosen by hand and no product name is special-cased.
+ */
+export function retailerProductCategories(fields: RetailerNoticeFields): FoodCategoryId[] {
+  return categoriesForCase({
+    sourceAgency: 'FDA',
+    title: fields.productName,
+    productDescription: fields.productName,
+  }).categories;
+}
+
 export async function planApproval(
   store: RetailerApprovalStore,
   request: ApprovalRequest,
@@ -438,6 +460,7 @@ export async function planApproval(
     fieldsVersion: RETAILER_NOTICE_FIELDS_VERSION,
     fields: request.fields,
     fieldEvidence: request.evidence,
+    productCategories: retailerProductCategories(request.fields),
     reviewNotes: request.reviewNotes,
     approvedBy: request.approvedBy,
     approvedAt: at,
@@ -448,6 +471,7 @@ export async function planApproval(
     live.documentContentHash === row.documentContentHash &&
     stableJson(live.fields) === stableJson(row.fields) &&
     stableJson(live.fieldEvidence) === stableJson(row.fieldEvidence) &&
+    stableJson(live.productCategories) === stableJson(row.productCategories) &&
     live.reviewNotes === row.reviewNotes
   ) {
     return { problems: [], writes: [], summary: ['already approved exactly as requested'] };

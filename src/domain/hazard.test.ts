@@ -438,3 +438,17 @@ test('asbestos is never invented from a mention that does not state contaminatio
     null,
   );
 });
+
+test('a material that modifies "foreign material" names the contaminant (construction H)', () => {
+  assert.deepEqual(
+    extractForeignMaterialEvidence(
+      'due to the possible presence of plastic foreign material in the salad dressing of the items.',
+    ),
+    { stated: true, material: 'plastic' },
+  );
+  // Packaging is still not evidence.
+  assert.deepEqual(
+    extractForeignMaterialEvidence('Sold in 10-oz. plastic bowl packages. Foreign matter found.'),
+    { stated: true, material: null },
+  );
+});

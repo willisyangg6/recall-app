@@ -2384,7 +2384,7 @@ export function cardCategoryId(productCategories: unknown): FoodCategoryId | nul
 }
 
 /** The Detail header's category: the card's own id and label, or null. */
-function detailCategory(productCategories: unknown): DetailModel['category'] {
+export function detailCategory(productCategories: unknown): DetailModel['category'] {
   const id = cardCategoryId(productCategories);
   return id === null ? null : { id, label: foodCategoryLabel(id) };
 }
@@ -2661,6 +2661,100 @@ export interface DetailModel {
 export interface DetailContext {
   today: string;
   affectsYou: boolean;
+  /**
+   * Stores that publicly listed THIS case on their own recall pages
+   * (lib/store-listings.ts). They join the existing store row, named once;
+   * their own states never become the agency's distribution and never reach
+   * the alert verdict, which reads the feed row alone.
+   */
+  listedStores?: readonly string[];
+}
+
+/** The shared evidence the narrative, illness and health steps read. */
+export interface NarrativeEvidence {
+  title: string;
+  noticeType: string;
+  reasonText: string | null;
+  hazardCategory: string;
+  pathogenOrAllergen: string | null;
+  firmDisplayName: string | null;
+  /** Source prose: the agency announcement, or the retailer's own letter text. */
+  summaryText: string | null;
+  productDescription: string | null;
+  consumerBrand: string | null;
+  retracted: boolean;
+}
+
+/**
+ * What Happened, the illness notice and Health Risk, decided ONCE for every
+ * source. An agency case and an approved retailer notice both reach the
+ * screen through here, so the same structured reason yields the same cause
+ * sentence, the same illness status and the same hazard guidance, and the
+ * hazard is interpreted in exactly one place.
+ */
+export function recallNarrative(evidence: NarrativeEvidence) {
+  const happened = buildWhatHappened(evidence);
+  // The standardized health guide (P1B) is selected from the SAME typed
+  // reason What Happened rendered — `interpretReason` is pure, so the hazard
+  // is interpreted in exactly one place. The guide's own organism lookup then
+  // reads only the canonical structured reason (never the source prose).
+  const hazardGuides: HazardGuidance[] = selectHazardGuides(
+    interpretReason({
+      reasonText: evidence.reasonText,
+      hazardCategory: evidence.hazardCategory,
+      pathogenOrAllergen: evidence.pathogenOrAllergen,
+      summaryText: evidence.summaryText,
+      title: evidence.title,
+    }),
+    { pathogenOrAllergen: evidence.pathogenOrAllergen, reasonText: evidence.reasonText },
+  );
+  const standardizedRisk = healthRiskSummary(
+    evidence.hazardCategory,
+    evidence.pathogenOrAllergen,
+    evidence.reasonText,
+  );
+  // Derived once and used twice: the notice renders it, and the What Happened
+  // narrative is de-duplicated against the very sentences it came from. A
+  // qualified statement ("no serious adverse effects requiring medical care")
+  // is not an illness status and derives none.
+  const illnessStatus = deriveIllnessStatus(evidence.summaryText);
+  return {
+    happened,
+    illnessStatus,
+    illnessNotice: illnessNoticeCopy(illnessStatus),
+    standardizedRisk,
+    healthRiskSection: healthRiskSection(hazardGuides, standardizedRisk, {
+      retracted: evidence.retracted,
+    }),
+  };
+}
+
+/**
+ * The distribution with listed stores added to the stated retailers, each
+ * named once. A store already named (alone or inside a run the source kept
+ * whole, "Costco and Sam's Club") is not repeated. States are untouched.
+ */
+export function withListedStores(
+  distribution: ConsumerDistribution,
+  stores: readonly string[],
+): ConsumerDistribution {
+  const key = (name: string) =>
+    name.toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').trim();
+  const named = new Set(
+    distribution.statedRetailers.flatMap((name) => [
+      key(name),
+      ...name.split(/\s*,\s*|\s+and\s+|\s*&\s*/i).map(key),
+    ]),
+  );
+  const added: string[] = [];
+  for (const store of stores) {
+    if (named.has(key(store))) continue;
+    named.add(key(store));
+    added.push(store);
+  }
+  return added.length === 0
+    ? distribution
+    : { ...distribution, statedRetailers: [...distribution.statedRetailers, ...added] };
 }
 
 export function buildDetailModel(detail: CaseDetail, context: DetailContext): DetailModel {
@@ -2678,7 +2772,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     displayedBrands: brand.brands,
     packageEvidence: affectedProducts.map((product) => product.name),
   });
-  const happened = buildWhatHappened({
+  const narrative = recallNarrative({
     title: projection.title,
     noticeType: projection.noticeType,
     reasonText: projection.reasonText,
@@ -2688,7 +2782,9 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     summaryText: projection.summaryText,
     productDescription: projection.productDescription ?? null,
     consumerBrand: identity.whatHappenedSubject,
+    retracted: projection.state === 'retracted',
   });
+  const happened = narrative.happened;
 
   // Official label renders join the photo evidence exactly as before.
   const labelVisuals: ProductPhoto[] = detail.visuals.map((visual, index) => ({
@@ -2740,36 +2836,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
   // deduplicates nothing of its own.
   const productImages = detailImageSet(productImagery(images), productName);
   const productsSection = affectedProductsSection(affectedProductsView, images.rowImages);
-  const sold = whereSoldModel(consumer.distribution);
-  // The standardized health guide (P1B) is selected from the SAME typed
-  // reason What Happened rendered — `interpretReason` is pure, so calling it
-  // with Detail's identical evidence cannot produce a different family, and
-  // the hazard is interpreted in exactly one place. The guide's own organism
-  // lookup then reads only the canonical structured reason (never the
-  // announcement body), so the same hazard yields the same copy everywhere.
-  const hazardGuides: HazardGuidance[] = selectHazardGuides(
-    interpretReason({
-      reasonText: projection.reasonText,
-      hazardCategory: projection.hazardCategory,
-      pathogenOrAllergen: projection.pathogenOrAllergen,
-      summaryText: projection.summaryText,
-      title: projection.title,
-    }),
-    {
-      pathogenOrAllergen: projection.pathogenOrAllergen,
-      reasonText: projection.reasonText,
-    },
-  );
-  const standardizedRisk = healthRiskSummary(
-    projection.hazardCategory,
-    projection.pathogenOrAllergen,
-    projection.reasonText,
-  );
-
-  // Derived once and used twice: the notice renders it, and the What Happened
-  // narrative is de-duplicated against the very sentences it came from.
-  const illnessStatus = deriveIllnessStatus(projection.summaryText);
-
+  const sold = whereSoldModel(withListedStores(consumer.distribution, context.listedStores ?? []));
   // Decided once: the community block nests under this section, so both
   // read the same verdict rather than recomputing it.
   const whereSoldDecision = whereSoldSection(sold);
@@ -2782,7 +2849,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
   const combinedNarrative = [happened.text, happened.scope]
     .filter((part) => part !== null)
     .join(' ');
-  const narrative = detailNarrative(
+  const paragraphs = detailNarrative(
     happened.text,
     happened.scope,
     recallQuantitySentence(projection.sourceAgency, consumer.quantityText, combinedNarrative),
@@ -2808,7 +2875,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     affectsYou: context.affectsYou,
     affectsYouBanner: 'Warning: This recall affects you.',
     whatHappened: {
-      ...narrative,
+      ...paragraphs,
       // The illness sentence is removed from the CAUSE paragraph only when
       // the notice completely represents it (P2B7K). The scope paragraph is
       // never a candidate: it is one derived sentence about how much was
@@ -2828,20 +2895,18 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
       // to a narrative that was never going to carry them. Injuries and
       // adverse reactions still have no status anywhere — see
       // docs/recall-illness-status.md §1.2.
-      text: narrativeWithoutIllness(narrative.text, illnessStatus),
+      text: narrativeWithoutIllness(paragraphs.text, narrative.illnessStatus),
     },
-    illnessNotice: illnessNoticeCopy(illnessStatus),
+    illnessNotice: narrative.illnessNotice,
     whereSold: sold,
     affectedProducts: affectedProductsView,
     sections: {
       whereSold: whereSoldDecision,
       communityReports: communityReportsSection(detail.id, projection),
-      healthRisk: healthRiskSection(hazardGuides, standardizedRisk, {
-        retracted: projection.state === 'retracted',
-      }),
+      healthRisk: narrative.healthRiskSection,
       affectedProducts: productsSection,
     },
-    healthRisk: standardizedRisk,
+    healthRisk: narrative.standardizedRisk,
     attachments: extractAttachmentLinks(projection.summaryHtml),
     images,
     officialTitle: productName !== projection.title ? projection.title : null,
