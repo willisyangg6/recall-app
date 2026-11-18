@@ -58,8 +58,17 @@ const LABEL_PATTERNS: [string, ConsumerConcept, 'explicit'?][] = [
   ['item[- ]?(?:numbers?|codes?)', 'item_number'],
 ];
 
-/** Connectors between a label and its value, including the observed "is-". */
-const CONNECTOR = String.raw`(?:[”"’']?\s*(?:date)?\s*(?::|=|#|–|—)\s*|[”"’']?\s+(?:date\s+)?(?:of|is|are|is-|:-)\s*|\s+)`;
+/**
+ * Connectors between a label and its value, including the observed "is-".
+ * A label the source set in quotes may hand off with nothing but its closing
+ * quote: `with “BEST BY” October 2027 and lot code …` (recorded FSIS
+ * PHA-11062026-01). The closing quote counts only when the same label opened
+ * with a quote, so a stray quote after an unquoted word never makes a label,
+ * and only when a date starts directly after it. A quoted label followed by
+ * words ("“Sell By” dates from … to …") or by another quoted value stays with
+ * the range and quoted-value rules that already own those shapes.
+ */
+const CONNECTOR = String.raw`(?:[”"’']?\s*(?:date)?\s*(?::|=|#|–|—)\s*|[”"’']?\s+(?:date\s+)?(?:of|is|are|is-|:-)\s*|(?<=[“"][^“”"\n]{2,30})[”"]\s+(?=(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d|\d)|\s+)`;
 
 /** Connector for labels that are also ordinary words: punctuation or a verb. */
 const EXPLICIT_CONNECTOR = String.raw`(?:[”"’']?\s*(?::|=|#|–|—)\s*|[”"’']?\s+(?:is|are|is-|:-)\s+)`;
