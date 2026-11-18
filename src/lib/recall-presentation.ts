@@ -2693,7 +2693,9 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
   // Official label renders join the photo evidence exactly as before.
   const labelVisuals: ProductPhoto[] = detail.visuals.map((visual, index) => ({
     url: visual.url,
-    alt: OFFICIAL_LABEL_ALT,
+    // The page's own printed caption is row-matching evidence; a page
+    // without one has no alt and can never be assigned to a row.
+    alt: visual.caption ?? null,
     order: consumer.photos.length + index,
     role: visual.role as ProductPhoto['role'],
     width: visual.width,

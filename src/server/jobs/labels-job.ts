@@ -15,6 +15,7 @@
 
 import type { LabelSyncOptions, LabelSyncStore } from '../fsis/label-sync';
 import { syncFsisLabels } from '../fsis/label-sync';
+import { syncFsisAttachments, type AttachmentSyncStore } from '../fsis/attachment-sync';
 import { runJob, type JobContext, type JobReport, type JobSpec } from './runner';
 
 export function labelsJobSpec(mode: 'recent' | 'full'): JobSpec {
@@ -28,6 +29,8 @@ export function labelsJobSpec(mode: 'recent' | 'full'): JobSpec {
 
 export interface LabelsJobOptions extends Omit<LabelSyncOptions, 'now'> {
   labelStore: LabelSyncStore;
+  /** Absent = attachments are not read this run (tests of the label sync alone). */
+  attachmentStore?: AttachmentSyncStore;
 }
 
 export async function runLabelsJob(ctx: JobContext, options: LabelsJobOptions): Promise<JobReport> {
@@ -42,10 +45,33 @@ export async function runLabelsJob(ctx: JobContext, options: LabelsJobOptions): 
         `${metrics.rendered} rendered (${metrics.pagesStored} pages), ${metrics.unchanged} unchanged, ` +
         `${metrics.failures} failed, ${metrics.deferredByBackoff} deferred, ${metrics.capped} capped.`,
     );
+    // Attachments read AFTER rendering, so a new label PDF's pages (and
+    // their printed captions) exist before products are matched to them.
+    const { attachmentStore } = options;
+    const attachments = attachmentStore
+      ? await syncFsisAttachments(attachmentStore, {
+          mode: options.mode,
+          dryRun: options.dryRun,
+          now: ctx.now,
+        })
+      : null;
+    if (attachments) {
+      console.log(
+        `  attachment sync: ${attachments.candidates} notice(s), ${attachments.fetched} fetched, ` +
+          `${attachments.revised} revised, ${attachments.enrichmentsApplied} applied, ` +
+          `${attachments.needsReview} need review, ${attachments.unreadable} unreadable.`,
+      );
+    }
+    const { plan: _plan, ...attachmentMetrics } = attachments ?? { plan: [] };
+    void _plan;
     return {
       pipelineRunId: null,
       outcome: metrics.failures > 0 ? 'partial' : 'succeeded',
-      metrics: { ...metrics, itemsSeen: metrics.candidateUrls },
+      metrics: {
+        ...metrics,
+        itemsSeen: metrics.candidateUrls,
+        ...(attachments ? { attachments: attachmentMetrics } : {}),
+      },
     };
   });
 }

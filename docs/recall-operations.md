@@ -1028,10 +1028,161 @@ content-type + magic-byte checks) with the per-document cap raised
 15 → 64 MB (five real 21–52 MB scanned label sheets were failing on size
 alone). Of the eight ledgered failures, seven recover on the next `--full`
 sweep; 047-2023 is a dead link at FSIS itself. Rendered pages are
-DETAIL-SCREEN EVIDENCE only: under the C9 frozen policy the sync never
-touches `projection.heroImageUrl` — professional card-hero sourcing was
+DETAIL-SCREEN EVIDENCE: the label sync itself never touches
+`projection.heroImageUrl` (since 2026-11-16 only the attachment sync may, for
+a caption-verified one-product notice — next section) — professional card-hero sourcing was
 researched by C9.1 (2026-08-30) and **deferred**; no provider is integrated
 (docs/recall-imagery.md §12).
+
+## FSIS attachments: the second half of the labels job (2026-11-16)
+
+After the label sync, `jobs:labels` runs the attachment sync
+(`src/server/fsis/attachment-sync.ts`). For FSIS notices in the **recent
+window only** (45 days, in both `recent` and `--full` mode), it reads the
+PDFs a notice links:
+
+- **Product lists** are fetched once. The daily `--full` sweep re-fetches
+  them to catch a same-URL revision.
+- **Label documents** are not re-rendered here. Pages rendered before
+  captions existed are captioned once, from the same PDF revision.
+
+What verifies is written to two places:
+
+- The source record's `normalized.attachmentEnrichment` block. Re-derivation
+  re-attaches it, as it does for the enforcement match block.
+- The case's attachment-owned projection keys: `productDescription`,
+  `brands` and `attachmentTables`. The write is compare-and-set on
+  `last_changed_at` and never touches the timeline, affected products,
+  `last_changed_at`, `heroImageUrl` or `productCategories`.
+  `enrichedProjection` throws if the result would be material. **This step
+  cannot notify.**
+
+Categories stay exactly what the notice supports: an attachment-supplied
+product name is not category input (`projectCase`). A label page is never
+written as a card photo. A label page reaches the app only as
+`product_visuals.caption`, which Detail uses to put the page on the product
+row it names.
+
+Ingestion rewrites `normalized` and the projection from the agency payload
+alone, so the step reconciles on every run. A changed notice loses its
+enrichment for the seconds between the `jobs:fsis` and `jobs:labels` steps
+of the same workflow tick.
+
+Per-attachment state lives in `fsis_attachments`: one row per (record,
+URL), with sha256, previous sha256, verdict and reasons. Rows marked
+`needs_review` or `unreadable` contribute nothing, and the notice itself is
+unaffected. Fetch failures share `product_visual_failures` and its backoff.
+The run metrics carry `attachments.needsReview` and `attachments.unreadable`.
+
+### Server rollout order
+
+**Merging IS deploying.** No workflow runs on push or merge. All three
+(`scheduled-ingest`, `daily-maintenance`, `retailer-notices`) are `schedule` plus
+`workflow_dispatch`, and both triggers run the default branch's HEAD; the
+scheduler watchdog also dispatches `scheduled-ingest`. So the first `:07`
+or `:37` UTC tick after a merge runs the new code, with no further step. No
+workflow applies migrations.
+
+1. **Apply migration `20261117000000_fsis_attachments.sql` to production.**
+   It is purely additive: a new service-role-only table plus a nullable
+   `product_visuals.caption` column. Verify it with:
+   - `select count(*) from fsis_attachments` (= 0);
+   - `select column_name from information_schema.columns where table_name = 'product_visuals' and column_name = 'caption'`;
+   - the migration's own grant check passing.
+
+   The app tolerates the new column either way: it reads
+   `product_visuals` through a request that degrades to "no visuals".
+
+   **Combined order with retailer PR #5.** The agreed order is this
+   migration first, then PR #5's
+   `20261118000000_retailer_notice_publishers.sql` and
+   `20261118100000_retailer_store_listings.sql`. Versions are unique across
+   `master`, PR #5 and this PR, so the order holds whichever PR merges
+   first. On 2026-11-17 production had neither `fsis_attachments` nor PR #5's
+   `retailer_store_listings`. PR #5's publisher-constraint change cannot be
+   read through the Data API. Apply this migration before PR #5's: if PR #5's
+   are applied first, `supabase db push` treats `20261117000000` as older
+   than the newest applied version and refuses it without `--include-all`.
+   The migrations do not depend on each other.
+
+2. **Merge the PR**, and only after step 1 is verified. If the code ran
+   first, the read paths would degrade to "nothing stored", but the first
+   enrichment write would fail the labels run loudly.
+3. **Wait for the next scheduled tick.** `jobs:fsis` then `jobs:labels`
+   apply the recent window, which includes both regression notices. Do not
+   dispatch the workflow by hand unless you choose to. Do not run
+   `backfill:fsis-attachments`: older notices are out of this rollout.
+
+### What to check after the first scheduled run
+
+Read-only; the baseline below was recorded on 2026-11-16 before any change.
+
+| Check                              | PHA-11142026 (case `ffff445e…`)        | PHA-11062026-01 (case `ceb38696…`)                                              |
+| ---------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------- |
+| Same recall IDs (no new case)      | one source record → same case id       | one source record → same case id                                                |
+| `projection.productDescription`    | `Biscuit & Sausage Gravy`              | still `null`                                                                    |
+| `projection.brands`                | `["Mmm! Meals Made in Minutes"]`       | still `[]`                                                                      |
+| `projection.attachmentTables`      | 1 table, 1 row, sha `2acf8c81…`        | absent                                                                          |
+| `projection.heroImageUrl`          | still `null`                           | still `null`                                                                    |
+| `projection.productCategories`     | still `["meat_poultry"]`               | still `["meat_poultry"]`                                                        |
+| `product_visuals.caption`          | p1 `Mmm! BISCUIT & SAUSAGE GRAVY`      | p1 `Bitterballen (Beef)`, p2 `Saté Kroketten (Chicken)`, p3 `Bami Rolls (Pork)` |
+| `fsis_attachments`                 | product_list + labels, both `verified` | labels `verified`                                                               |
+| `timeline` (unchanged)             | 1 entry: `published@2026-11-14`        | 13 entries: `published` + 12 `source_updated`, all 2026-11-06                   |
+| `last_changed_at` (unchanged)      | `2026-11-14T23:13:15.458Z`             | `2026-11-13T22:47:55.596Z`                                                      |
+| `notification_events` for the case | still **1**                            | still **1**                                                                     |
+
+Also check that the labels run's `attachments.enrichmentsApplied` is 1, its
+`needsReview` and `unreadable` are 0 for these two notices, and the next
+tick reports 0 applied. The rerun must be a no-op.
+
+The same reads exist as a dry run, which writes nothing:
+
+```bash
+npm run backfill:fsis-attachments:dry -- --native-id PHA-11142026,PHA-11062026-01
+```
+
+Refreshed 2026-11-17 against production:
+
+- PHA-11142026 would gain the name, the brand and the table, plus 1
+  caption.
+- PHA-11062026-01 would gain 3 captions and no field change.
+- Both attachments verify.
+
+**Older notices** are reached only by the gated CLI, and they are outside
+this rollout:
+
+```bash
+npm run backfill:fsis-attachments -- --apply --confirm --expect <n> --native-id <ids>
+```
+
+### Server rollout vs. a new app binary
+
+The shipped app has no over-the-air update channel: there is no
+`expo-updates` and no `updates`/`runtimeVersion` config. So **every client
+change needs a new binary**, and the server rollout delivers exactly what
+today's binary already reads.
+
+**After the server rollout alone (shipped app):**
+
+- PHA-11142026's Feed/Saved card and Detail title read **Biscuit & Sausage
+  Gravy**.
+- Its brand line reads **Mmm! Meals Made in Minutes**.
+- What Happened names the product.
+- The card still reads Public Health Alert.
+
+These are `projection.productDescription`/`brands`, which the binary already
+reads; the feed cache refreshes through the manifest hash.
+
+**Needs a new binary:**
+
+- Per-product **size and Use by dates** in Detail (the binary does not read
+  `attachmentTables`).
+- **Label images on product rows**, including all three Betterballen
+  assignments (the binary neither selects `caption` nor admits label pages
+  to rows).
+- The fallback title that drops a trailing "Recalled".
+
+Until that binary ships, Detail shows the shipped behaviour for those parts.
 
 ## Product categories: derived, accepted, backfilled (C10B)
 

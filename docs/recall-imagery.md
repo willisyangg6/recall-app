@@ -48,16 +48,19 @@ Two official image sources exist, and only two:
 - **FSIS label-PDF renders** — official label PDFs rasterized server-side
   (`src/server/fsis/labels.ts`) into the public `product-visuals` storage
   bucket and recorded in `product_visuals` (content-addressed, deduplicated,
-  ≤ 6 pages per document). They are retained evidence: allocated, available
-  to the pipeline, and **rendered on no screen** (§14 — founder decision).
-  **They are never automatically promoted to `heroImageUrl`** — the frozen
-  interim policy below.
+  ≤ 6 pages per document). Each page carries its own printed **caption**
+  (`product_visuals.caption`, read from the PDF's text layer — null for a
+  scanned page). An uncaptioned page is retained evidence only and is
+  rendered on no screen. A captioned page reaches exactly one place: the
+  image of the affected-product row its caption names (§15). It is never a
+  card hero and never enters the Detail header.
 
-### Frozen interim policy (unchanged by C9.1)
+### Frozen interim policy (unchanged by C9.1; item 2 amended 2026-11-16, §15)
 
 1. Existing FDA `heroImageUrl` behavior stays byte-identical.
-2. FSIS rendered label pages remain in `product_visuals`, and remain
-   unrendered on every consumer surface (§14).
+2. FSIS rendered label pages remain in `product_visuals`. An uncaptioned
+   page stays unrendered on every consumer surface (§14); a captioned page
+   appears only on the product row its caption names (§15).
 3. An FSIS label page is not automatically a card hero. No pipeline,
    job, or repair path promotes one; `src/server/imagery-guards.test.ts`
    keeps every such path removed, and `qa:imagery` gates on zero
@@ -258,10 +261,11 @@ Run `npx expo start --go --ios` (never `npm run ios`):
 1. Home: FDA cases show their photo thumbnails exactly as before; FSIS
    cases show no thumbnail (frozen policy — unchanged from pre-C9). Feed
    imagery is one tile per card and stays that way (§14).
-2. Open an FSIS case with label renders: **nothing** shows them — no gallery
-   above the Affected Products table, no standalone section, nothing in the
-   header. Only an image matched to an exact product row appears, inside
-   that row.
+2. Open an FSIS case with label renders: no gallery above the Affected
+   Products table, no standalone section, nothing in the header. A label
+   page appears inside a product row only when its printed caption names
+   that row (§15 — PHA-11062026-01: Bami Rolls → page 3, Saté Kroketten →
+   page 2, Bitterballen → page 1; PHA-11142026: its one row).
 
    _History._ Before P2B7C this step read "the detail gallery still shows the
    rendered label pages", which had been untrue since P2a — the allocated
@@ -557,7 +561,9 @@ through the same guard.
 | Affected Products, inside a row | the image the allocator matched to that exact row (§13) |
 | anywhere else                   | **nothing**                                             |
 
-**FSIS label renders are rendered nowhere.** They stay in `product_visuals`,
+Since 2026-11-16 (§15) a label page whose printed caption names a product
+row is that row's image. **Every other FSIS label render is rendered
+nowhere** — the paragraph below still describes them. They stay in `product_visuals`,
 they stay in the allocation's gallery, and the evidence pipeline keeps them —
 but no screen shows them. The header takes the `fda_announcement` partition
 only (by SOURCE, not by position, so even a stored hero pointing at a label
@@ -765,3 +771,41 @@ cap, no prose, failure removes a page, no auto-advance, no arrows, no press targ
 single-image and that the card draws no placeholder of its own.
 `src/components/ui/design-foundation.test.ts` pins that every declared icon
 name resolves to a real, non-empty asset at 1x, 2x and 3x.
+
+## 15. FSIS attachment evidence: captioned label pages (2026-11-16)
+
+**Why.** Two live notices showed the gap. PHA-11142026 named its product
+only in two PDFs: a product list and a label document. Lotly showed the
+agency headline ("…Containing Biscuits Recalled") and no photo. For
+PHA-11062026-01 (Betterballen), the three label pages were already rendered,
+but nothing could show them: no rule tied a page to a product. The pages
+are also printed in the REVERSE of the notice's own list, so any
+position-based pairing would have given each product another product's
+label.
+
+**The evidence rule.** A label page belongs to a product only when its own
+printed caption (the PDF text layer: "Bami Rolls (Pork)") contains that
+product's name and no other product's name. Two pages naming one product
+are ambiguous, and neither is used. A page with no text layer has no
+caption and is never matched. No OCR or model reads an image. Page order is
+never evidence.
+
+- **Rows.** Captioned label renders join the allocator's row pool (§13) and
+  go through its existing caption passes and contradiction veto. Those
+  passes still run only for tables with two or more rows, with ONE
+  exception: in a one-row table with no stored hero, a captioned label page
+  may back that row when its caption names it (PHA-11142026). Announcement
+  photos never use the exception.
+- **Never the card, never the header.** Checked on 2026-11-16 at the card's
+  112 pt tile: a full letter-size label page shrinks the package photo to
+  about a third of the tile, so it cannot identify a product. Ingestion
+  never writes a label page as `heroImageUrl`, and the header stays
+  FDA-only (`productImagery`, unchanged). Card imagery for FSIS would need a
+  crop of the photo embedded in the PDF — not built.
+- **Doubt is flagged.** A page with no match, an ambiguous page, or a
+  product no page names marks the label attachment `needs_review` in
+  `fsis_attachments`, with its reasons. It contributes nothing.
+
+Pinned by `src/server/fsis/attachments.test.ts` against the recorded PDFs.
+Source behavior and the product-list side are in
+[recall-source-contract.md](recall-source-contract.md) §4.3.

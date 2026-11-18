@@ -156,6 +156,7 @@ export class SupabaseLabelStore implements LabelSyncStore {
           width: page.width,
           height: page.height,
           content_hash: page.contentHash,
+          caption: page.caption,
         },
         { onConflict: 'source_url,source_sha256,page' },
       );

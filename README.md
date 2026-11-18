@@ -151,6 +151,7 @@ npm run jobs:fda            # FDA announcements (ingest:fda is an alias)
 npm run jobs:fsis           # FSIS recalls/PHAs (ingest:fsis is an alias)
 npm run jobs:labels         # FSIS label visuals, recent window (incremental)
 npm run jobs:labels -- --full   # daily full sweep + failure retries
+                               # (both also read FSIS attachment PDFs — docs/recall-operations.md)
 npm run retailer:costco     # Costco notices → private tables only; dry run by default (docs/recall-retailer-notices.md)
 npm run retailer:review     # approve / withdraw / agency-match a retailer notice; dry run by default
 npm run jobs:enforcement    # openFDA reconcile, gated on the weekly export date
@@ -547,6 +548,16 @@ Veterinary` co-tags) is deliberately deferred, not silently included.
   Photos gallery; the PDF link remains as provenance. The scheduled work is
   `npm run jobs:labels` (the job runner, with its Postgres lease);
   `npm run labels:fsis:dry` is the separate manual historical backfill's plan.
+- **FSIS attachments.** The same job reads a notice's linked product-list
+  and label PDFs (link text such as "View the list of products" and "View
+  labels"). It keeps only what verifies: a product table with page
+  provenance, and label pages tied to a product by their own printed
+  caption, never by page order. That gives cards a real product name, and
+  Detail gets per-product size, dates and label images on their rows (never
+  a card photo). Anything doubtful is flagged in `fsis_attachments` and the
+  notice stays as it is. Older notices go through the gated
+  `npm run backfill:fsis-attachments:dry`
+  ([docs/recall-operations.md](docs/recall-operations.md)).
 - **Maintenance backfills are explicit, never folded into ingestion.** Fields
   derived at parse time only reach older records when something re-parses
   them, and incremental ingestion deliberately skips unchanged pages. A

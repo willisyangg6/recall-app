@@ -172,7 +172,8 @@ export function allocateRecallImages(input: {
   heroImageUrl: string | null;
   /** The complete extracted official announcement photo set. */
   photos: ProductPhoto[];
-  /** Official FSIS label-PDF renders (detail evidence, never heroes). */
+  /** Official FSIS label-PDF renders. `alt` is the page's own printed
+   * caption, or null when the page has none. */
   labelVisuals: ProductPhoto[];
   /** The affected-product rows, in presentation order. */
   rows: RowImageCandidate[];
@@ -206,15 +207,21 @@ export function allocateRecallImages(input: {
       })
     : null;
 
-  // Row-assignable pool: strictly recognizable announcement images. Identifier
-  // close-ups, supplementary shots, and label renders are never row imagery.
+  // Row-assignable pool: recognizable announcement images, plus label renders
+  // that carry their own printed caption. Identifier close-ups, supplementary
+  // shots, and uncaptioned label renders are never row imagery.
   // The hero is row-assignable ONLY in a multi-version table — there it may
   // back exactly the row it provably depicts (controlled reuse across two
   // contexts), through the same evidence gates as any other image. In a
   // single-row table it stays hero-only: repeating the same image
   // immediately below the title adds nothing.
   const heroRowEligible = input.rows.length >= 2;
-  const pool = input.photos.filter(
+  // A label render joins the pool only with its OWN printed caption (read
+  // from the PDF's text layer at ingestion, `alt` here): then the same
+  // caption passes below decide which row, if any, it depicts — by name,
+  // never by page order. An uncaptioned render never decorates a row.
+  const captionedLabels = input.labelVisuals.filter((visual) => visual.alt !== null);
+  const pool = [...input.photos, ...captionedLabels].filter(
     (photo) => RECOGNITION_ROLES.has(photo.role) && (heroRowEligible || photo.url !== hero?.url),
   );
   const used = new Set<string>();
@@ -253,11 +260,23 @@ export function allocateRecallImages(input: {
     assign(row, photo, 'source_row');
   }
 
-  // Caption matching exists to tell VERSIONS apart, so it only runs when
-  // there are versions to tell apart. A single-row model's product is already
-  // identified by the hero; decorating its one row adds nothing but risk.
+  // Caption matching exists to tell VERSIONS apart, so for announcement
+  // photos it only runs when there are versions to tell apart: a single-row
+  // model's product is already identified by the hero. ONE exception: a
+  // captioned FSIS label page in a single-row model with NO hero. The label
+  // is then the only picture of the product, and its own printed caption
+  // naming the row is the same evidence the multi-row passes require
+  // (PHA-11142026 — a full label page is too small to identify a product on
+  // the card, so it lives on its product row instead).
+  const captionedLabelUrls = new Set(captionedLabels.map((label) => label.url));
+  const matchPool =
+    input.rows.length >= 2
+      ? pool
+      : hero === null
+        ? pool.filter((photo) => captionedLabelUrls.has(photo.url))
+        : [];
   const matchable = input.rows.filter((row) => !rowImages.has(row.rowId));
-  if (input.rows.length >= 2) {
+  if (matchPool.length > 0) {
     // Pass 2 — caption name + exact size: for sibling rows that share a name
     // and differ by package size (the Crystal Temptations shape), a caption
     // stating both the product identity and this row's exact size identifies
@@ -276,7 +295,7 @@ export function allocateRecallImages(input: {
     for (const row of sized) {
       const nameKey = measurementKey(row.name!);
       const rowSizes = captionSizeKeys(row.size!);
-      for (const photo of pool) {
+      for (const photo of matchPool) {
         if (used.has(photo.url) || !photo.alt) continue;
         if (!captionContainsName(photo.alt, nameKey)) continue;
         const captionSizes = captionSizeKeys(photo.alt);
@@ -320,7 +339,7 @@ export function allocateRecallImages(input: {
       .sort((a, b) => measurementKey(b.name!).length - measurementKey(a.name!).length);
     for (const row of uniquelyNamed) {
       const nameKey = measurementKey(row.name!);
-      const candidates = pool
+      const candidates = matchPool
         .filter(
           (photo) =>
             !used.has(photo.url) &&

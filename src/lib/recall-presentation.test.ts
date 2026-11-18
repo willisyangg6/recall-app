@@ -856,6 +856,7 @@ test('absent imagery is a null model field, and the detail gallery deduplicates 
             width: 1024,
             height: 768,
             sourceUrl: 'https://www.fsis.usda.gov/label.pdf',
+            caption: null,
           },
         ],
       },
@@ -918,6 +919,7 @@ function labelVisuals(count: number): CaseVisual[] {
     width: 1024,
     height: 768,
     sourceUrl: 'https://www.fsis.usda.gov/label.pdf',
+    caption: null,
   }));
 }
 

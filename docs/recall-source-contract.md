@@ -262,6 +262,41 @@ See [recall-feed-usability.md](recall-feed-usability.md), "A. Row-owned lot and 
 - **Name resolution [OBSERVED 2026-10-27]:** from about 21:55 UTC `www.fsis.usda.gov` stopped resolving — public resolvers answered SERVFAIL for `usda.gov` and `ns1`/`ns2.usda.gov` did not answer — and every FSIS fetch failed. A failed fetch now reports the transport cause and the result of a separate DNS lookup; that lookup is an observation from the runner, not proof of where the fault lies.
 - **Attribution [VERIFIED]:** USDA ([Policies and Links](https://www.usda.gov/about-usda/policies-and-links)): "Most information presented on the USDA Web site is considered public domain information. Public domain information may be freely distributed or copied, but use of appropriate byline/photo/image credits is requested. Attribution may be cited as follows: 'U.S. Department of Agriculture.'" **[INFERENCE]** Recall records are agency work product within that public-domain bucket; credit USDA in the app.
 
+### 4.3 FSIS notice attachments (product lists and labels) [VERIFIED 2026-11-16]
+
+Many PHAs name their products only in linked PDFs. Three findings shape the
+reader (`src/server/fsis/attachments.ts`):
+
+- **The link text carries the meaning, not the URL.** The product list for
+  PHA-11142026 sits at `/sites/default/files/media_file/documents/PHA-11142026-Product-List_0.pdf`,
+  outside every label/distribution URL pattern. Its anchor reads "View the
+  list of products subject to the public health alert". Label anchors vary:
+  "View product labels.", "view labels]" (the bracket inside the anchor),
+  and "View Labels" (2017). Discovery classifies by anchor text first and
+  falls back to the URL. Only FSIS-hosted PDFs qualify.
+- **Product lists are text-layer tables.** The PHA-11142026 list is one
+  landscape page with seven columns: Size | Brand Name | Product Name |
+  Lot Codes and/or Use By Dates | EST Number | States Affected | Media and
+  Consumer Contact. Headings wrap over two or three lines, and so do cells.
+  Columns come from the printed header. Rows start where the Product Name
+  column starts a new cell. A table is kept only when every row has a
+  product name and every run of text falls inside a column. Its per-row
+  states must also agree with the notice's `field_states`; anything else is
+  `needs_review`.
+- **Label pages carry a printed caption in the text layer** ("Bitterballen
+  (Beef)") above the photograph. Older label PDFs are often scans with no
+  text, and those pages get no caption. Page order does NOT follow the
+  notice: PHA-11062026-01 lists Bami Rolls, Saté Kroketten, Bitterballen,
+  but its PDF prints them in the reverse order.
+- **Revisions keep the URL.** FSIS edits notices in place (§4.1), so a
+  revised attachment can reuse its URL. The reader keys on (record, URL)
+  plus a sha256 of the bytes, and keeps the previous hash on revision.
+
+Census at implementation (read-only, production, 2026-11-16), excluding the
+two regression notices: 965 FSIS notices link a product-list or label PDF
+(125 active); 45 link a product list (6 active); 956 link labels; 36 link
+both.
+
 ### 4.2 FSIS website and annual summaries
 
 - **[VERIFIED]** <https://www.fsis.usda.gov/recalls> is a faceted listing driven by the **same Drupal taxonomy IDs as the API** (facet counts matched API counts within one). Detail pages (`field_recall_url`) show the release, a "Closed" status marker, Editor's Notes, and the real PDF hrefs.

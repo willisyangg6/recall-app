@@ -66,7 +66,7 @@ import {
 } from './product-photos';
 import { extractProseIdentifiers, extractProseVariantLines } from './prose-identifiers';
 import { extractAffectedProductLists, extractIdentifierListOwners } from './source-lists';
-import { interpretTables, type SemanticFact } from './source-tables';
+import { interpretAttachmentTables, interpretTables, type SemanticFact } from './source-tables';
 import {
   captionContradictsPackage,
   containsPackagingContainer,
@@ -2805,7 +2805,11 @@ export function buildConsumerCase(
   projection: CaseProjection,
   affectedProducts: AffectedProduct[],
 ): ConsumerCase {
-  const tables = interpretTables(projection.summaryHtml);
+  const tables = [
+    ...interpretTables(projection.summaryHtml),
+    // Verified product tables from the notice's official PDFs (FSIS).
+    ...interpretAttachmentTables(projection.attachmentTables),
+  ];
   const tableFacts = tables.flatMap((t) => t.variants.flatMap((v) => v.facts));
   // Prose reads only what the tables did not already scope to a product row.
   const proseText = proseOutsideTables(projection.summaryHtml, projection.summaryText);
@@ -2937,7 +2941,11 @@ export function buildConsumerCase(
  * something someone has to notice by eye.
  */
 export function collectSourceFacts(projection: CaseProjection): SemanticFact[] {
-  const tables = interpretTables(projection.summaryHtml);
+  const tables = [
+    ...interpretTables(projection.summaryHtml),
+    // Verified product tables from the notice's official PDFs (FSIS).
+    ...interpretAttachmentTables(projection.attachmentTables),
+  ];
   const photos = extractProductPhotos(projection.summaryHtml);
   const proseText = proseOutsideTables(projection.summaryHtml, projection.summaryText);
   return [
