@@ -56,8 +56,6 @@ const RETAILER_OWNED_NAMES = new Set([
   'kirkland signature',
   'aldi',
   'aldi inc',
-  'h e b',
-  'heb',
 ]);
 
 const PRODUCT_STOPWORDS = new Set([

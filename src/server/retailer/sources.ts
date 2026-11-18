@@ -51,37 +51,10 @@ export const ALDI_SOURCE: RetailerSourceSpec = {
   parseIndex: parseAldiIndex,
 };
 
-/**
- * H-E-B: MANUAL INTAKE ONLY. Every H-E-B endpoint (newsroom.heb.com posts,
- * its RSS feeds, its WordPress API and heb.com's recall page) answers the
- * honest client with a bot challenge (verified 2026-11-16), and the monitor
- * never gets past one. A person saves the official notice from a browser and
- * hands the file to `retailer:monitor -- --publisher heb --intake …`; its
- * "index" is that one intake entry, serialized as JSON.
- */
-export const HEB_SOURCE: RetailerSourceSpec = {
-  publisher: 'heb',
-  displayName: 'H-E-B',
-  indexUrl: 'https://newsroom.heb.com/heb-news/recalls/',
-  indexHosts: [],
-  documentHosts: [],
-  parserVersion: 'heb-intake/1',
-  parseIndex: parseIntakeIndex,
-};
-
-/** A manual intake's one-entry index (see `intake.ts`). */
-export function parseIntakeIndex(json: string): RetailerIndexEntry[] {
-  return JSON.parse(json) as RetailerIndexEntry[];
-}
-
 export const RETAILER_SOURCES: Readonly<Record<RetailerPublisher, RetailerSourceSpec>> = {
   costco: COSTCO_SOURCE,
   aldi: ALDI_SOURCE,
-  heb: HEB_SOURCE,
 };
-
-/** Sources whose notices enter only through a person's saved copy. */
-export const MANUAL_INTAKE_PUBLISHERS: readonly RetailerPublisher[] = ['heb'];
 
 export function isRetailerPublisher(value: string): value is RetailerPublisher {
   return Object.prototype.hasOwnProperty.call(RETAILER_SOURCES, value);

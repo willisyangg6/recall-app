@@ -90,7 +90,6 @@ export function retailerNoticeIdFromRoute(routeId: string): string | null {
 const DOCUMENT_NOUN: Record<RetailerNoticeFields['retailer'], string> = {
   Costco: 'letter',
   ALDI: 'recall notice',
-  'H-E-B': 'recall notice',
 };
 
 /**

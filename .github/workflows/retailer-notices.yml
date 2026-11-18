@@ -88,7 +88,7 @@ jobs:
 
   aldi:
     # Off until rollout: set the repository variable RETAILER_ALDI_ENABLED to
-    # "true" only after 20261116000000_retailer_notice_publishers.sql is
+    # "true" only after 20261118000000_retailer_notice_publishers.sql is
     # applied (an ALDI row is refused by the publisher check before that).
     if: vars.RETAILER_ALDI_ENABLED == 'true'
     runs-on: ubuntu-latest

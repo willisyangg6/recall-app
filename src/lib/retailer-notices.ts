@@ -23,7 +23,7 @@ import {
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-export type RetailerNoticePublisher = 'costco' | 'aldi' | 'heb';
+export type RetailerNoticePublisher = 'costco' | 'aldi';
 
 /**
  * Each publisher, the name its notices must carry, and the only hosts its
@@ -39,10 +39,6 @@ const PUBLISHERS: Record<
     hostOk: (hostname) => hostname === 'costco.com' || hostname.endsWith('.costco.com'),
   },
   aldi: { name: 'ALDI', hostOk: (hostname) => hostname === 'dm.cms.aldi.cx' },
-  heb: {
-    name: 'H-E-B',
-    hostOk: (hostname) => hostname === 'newsroom.heb.com' || hostname === 'www.heb.com',
-  },
 };
 
 function isPublisher(value: unknown): value is RetailerNoticePublisher {

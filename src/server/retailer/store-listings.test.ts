@@ -106,12 +106,44 @@ test('Whole Foods: US agency links are listings; Canadian notices are excluded',
   assert.deepEqual(tractor.agencyUrls, [TRACTOR_FDA]);
 });
 
-test('Publix: the verified empty list is an empty run; any other shape stops for a person', () => {
+test('Publix: the verified empty list is an empty run; a broken page stops the run', () => {
   assert.deepEqual(parsePublixListings(page('publix-2026-11-16.html')), []);
-  const listed = page('publix-2026-11-16.html')
-    .replace(':item-list="null"', ':item-list="[{&quot;title&quot;:&quot;x&quot;}]"')
+  const noSentence = page('publix-2026-11-16.html').replace(
+    'There are no Publix recalls at this time.',
+    '',
+  );
+  assert.throws(() => parsePublixListings(noSentence), /empty-state sentence/);
+  assert.throws(() => parsePublixListings('<html></html>'), /no recall list/);
+});
+
+test("Publix: a populated list in Publix's own four fields is read, and every entry goes to review", () => {
+  // SHAPE ONLY: the field names come from Publix's RecallList component;
+  // no populated Publix list has been observed, so these values are a test
+  // input, not a recorded recall.
+  const items = [
+    {
+      RecallDateText: '10/7/2025',
+      Title: 'Example Item',
+      RecallDetailsUrl: '/newsroom/recalls/example-item',
+      SoldAtPublixText: 'Yes',
+    },
+  ];
+  const html = page('publix-2026-11-16.html')
+    .replace(':item-list="null"', `:item-list="${JSON.stringify(items).replace(/"/g, '&quot;')}"`)
     .replace('There are no Publix recalls at this time.', '');
-  assert.throws(() => parsePublixListings(listed), /not yet verified/);
+  const [entry] = parsePublixListings(html);
+  assert.equal(entry.listedOn, '2025-10-07');
+  assert.equal(entry.listingUrl, 'https://corporate.publix.com/newsroom/recalls/example-item');
+  assert.equal(entry.soldAtText, 'Yes');
+  assert.deepEqual(decideListing(entry, new Map()), {
+    decision: 'review',
+    reasons: ['no_agency_link'],
+    caseId: null,
+  });
+  const extraField = html.replace('&quot;Title&quot;', '&quot;Headline&quot;');
+  assert.throws(() => parsePublixListings(extraField), /not the verified four/);
+  const offSite = html.replace('/newsroom/recalls/example-item', 'https://example.com/x');
+  assert.throws(() => parsePublixListings(offSite), /links off Publix/);
 });
 
 test('Publix historical sample: a past Publix recall links by its FDA notice', () => {

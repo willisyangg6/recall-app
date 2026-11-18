@@ -20,7 +20,7 @@
  * as a first run (every notice an insert) and says so.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 
 import {
   DRY_RUN_DESPITE_ACKNOWLEDGMENTS,
@@ -37,12 +37,7 @@ import {
   planRetailerRun,
   type CostcoPlan,
 } from '../src/server/retailer/costco-monitor';
-import { intakeEntry, intakeExtract, intakeSource } from '../src/server/retailer/intake';
-import {
-  isRetailerPublisher,
-  MANUAL_INTAKE_PUBLISHERS,
-  RETAILER_SOURCES,
-} from '../src/server/retailer/sources';
+import { isRetailerPublisher, RETAILER_SOURCES } from '../src/server/retailer/sources';
 import {
   SupabaseRetailerNoticeStore,
   type RetailerNoticeStore,
@@ -57,8 +52,6 @@ const HELP = `Retailer notice monitor (private retailer tables only).
   npm run retailer:costco                          dry run: fetch, read, decide, write nothing
   npm run retailer:costco -- --report <file>       also write the dry-run report as JSON
   npm run retailer:monitor -- --publisher aldi     the same, for another source (costco, aldi)
-  npm run retailer:monitor -- --publisher heb --intake <saved file> --url <official https URL> --title <text>
-                                                   manual intake of one saved notice (H-E-B)
   ${applyCommandLine(FORM)}
 
 Writes only retailer_notices and retailer_notice_documents. Never the feed,
@@ -155,20 +148,7 @@ async function main(): Promise<void> {
     (isRetailerPublisher(publisher)
       ? null
       : `--publisher must be one of ${Object.keys(RETAILER_SOURCES).join(', ')}.\nNothing was written.`);
-  const intakeFlag = resolveFlagValue(argv, '--intake');
-  const urlFlag = resolveFlagValue(argv, '--url');
-  const titleFlag = resolveFlagValue(argv, '--title');
-  const manual = MANUAL_INTAKE_PUBLISHERS.includes(publisher as never);
-  const intakeError =
-    intakeFlag.error ??
-    urlFlag.error ??
-    titleFlag.error ??
-    (manual && !(intakeFlag.value && urlFlag.value && titleFlag.value)
-      ? `${publisher} is manual intake only: give --intake <saved file> --url <official URL> --title <text>.\nNothing was written.`
-      : !manual && (intakeFlag.value || urlFlag.value || titleFlag.value)
-        ? `${publisher} is fetched automatically; --intake, --url and --title are for manual sources.\nNothing was written.`
-        : null);
-  const refusal = auth.error ?? reportFlag.error ?? publisherError ?? intakeError;
+  const refusal = auth.error ?? reportFlag.error ?? publisherError;
   if (refusal) {
     console.error(refusal);
     process.exit(1);
@@ -190,18 +170,12 @@ async function main(): Promise<void> {
     new SupabaseRetailerNoticeStore(createSupabaseServerClient(url, secretKey)),
   );
   const spec = RETAILER_SOURCES[publisher as keyof typeof RETAILER_SOURCES];
-  let source = liveRetailerSource(spec);
-  let extract: Parameters<typeof planRetailerRun>[4];
-  if (manual) {
-    const entry = intakeEntry(spec.publisher, urlFlag.value!, titleFlag.value!);
-    const bytes = new Uint8Array(readFileSync(intakeFlag.value!));
-    source = intakeSource(entry, bytes, null);
-    extract = intakeExtract;
-    console.log(
-      `  Manual intake: ${entry.nativeId} (${bytes.length} bytes from ${intakeFlag.value})`,
-    );
-  }
-  const plan = await planRetailerRun(spec, wrapped.store, source, () => new Date(), extract);
+  const plan = await planRetailerRun(
+    spec,
+    wrapped.store,
+    liveRetailerSource(spec),
+    () => new Date(),
+  );
   const summary = summarize(plan);
 
   console.log(`\n${spec.displayName} notice monitor — ${auth.apply ? 'APPLY' : 'dry run'}`);

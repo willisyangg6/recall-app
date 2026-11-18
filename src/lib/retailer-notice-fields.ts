@@ -18,7 +18,7 @@
 export const RETAILER_NOTICE_FIELDS_VERSION = 1;
 
 /** The retailers a notice can be attributed to, as each writes its own name. */
-export const RETAILER_NOTICE_PUBLISHER_NAMES = ['Costco', 'ALDI', 'H-E-B'] as const;
+export const RETAILER_NOTICE_PUBLISHER_NAMES = ['Costco', 'ALDI'] as const;
 export type RetailerNoticePublisherName = (typeof RETAILER_NOTICE_PUBLISHER_NAMES)[number];
 
 /** The agency hazard categories (domain/recall-types.ts `HazardCategory`), mirrored for this leaf. */

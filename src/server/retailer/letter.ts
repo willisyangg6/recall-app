@@ -19,7 +19,7 @@
 import { upcDigitsIn } from '../duplicates';
 import { POSTAL_TO_STATE, statesInText } from '../../domain/us-geography';
 
-import { MANUAL_INTAKE_PUBLISHERS, RETAILER_SOURCES } from './sources';
+import { RETAILER_SOURCES } from './sources';
 
 import type {
   DocumentExtraction,
@@ -103,17 +103,15 @@ export function statedLetterDate(text: string): { iso: string | null; text: stri
 
 /**
  * An explicitly labelled publication date in a press-style notice: the
- * dateline "Batavia, Ill. (May 9, 2024) –", "Effective: February 23, 2026",
- * or an announcement's own "Company Announcement Date: April 26, 2024". Only
- * these shapes; a bare date line in a product table (a Best By "10/30/26")
- * is never one.
+ * dateline "Batavia, Ill. (May 9, 2024) –" or "Effective: February 23,
+ * 2026". Only these two shapes; a bare date line in a product table (a Best
+ * By "10/30/26") is never one.
  */
 export function statedDateline(text: string): { iso: string | null; text: string | null } {
   const flat = text.replace(/\s+/g, ' ');
   const patterns = [
     /\(\s*([A-Za-z]+\.?\s+\d{1,2},\s+\d{4})\s*\)\s*[–—-]/,
     /\bEffective:\s*([A-Za-z]+\.?\s+\d{1,2},\s+\d{4})/,
-    /\bCompany Announcement Date:\s*([A-Za-z]+\.?\s+\d{1,2},\s+\d{4})/,
   ];
   for (const pattern of patterns) {
     const match = pattern.exec(flat);
@@ -387,17 +385,12 @@ export function parseLetter(
   // a letterhead rule would misread. A retailer whose index carries no date
   // (Costco) is dated by the letter's own letterhead line. Never a filename,
   // a code date or our own fetch time.
-  // A manual intake (a saved web page) is dated by its labelled dateline
-  // alone: a saved page opens with site navigation, not a letterhead.
-  const manual = MANUAL_INTAKE_PUBLISHERS.includes(entry.publisher);
-  const dateline = entry.indexDate || manual ? statedDateline(text) : null;
-  const date = manual
-    ? dateline!
-    : !entry.indexDate
-      ? statedLetterDate(text)
-      : dateline?.iso
-        ? dateline
-        : { iso: entry.indexDate, text: entry.indexDateText ?? null };
+  const dateline = entry.indexDate ? statedDateline(text) : null;
+  const date = !entry.indexDate
+    ? statedLetterDate(text)
+    : dateline?.iso
+      ? dateline
+      : { iso: entry.indexDate, text: entry.indexDateText ?? null };
   const firm = recallingFirm(sentences);
   const kind = noticeKind(sentences);
   // The index title names the product ("… Cleaners") even when the letter doesn't.

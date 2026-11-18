@@ -13,7 +13,7 @@
  * product type, no closure from a notice leaving the index.
  */
 
-export type RetailerPublisher = 'costco' | 'aldi' | 'heb';
+export type RetailerPublisher = 'costco' | 'aldi';
 
 /** One entry on the retailer's public index, exactly as published. */
 export interface RetailerIndexEntry {

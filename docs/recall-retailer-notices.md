@@ -7,9 +7,12 @@ the store-by-store readiness table and the exact rollout order.
 - **Costco:** private monitoring, live and scheduled in production. Nothing approved yet.
 - **ALDI:** the same pipeline ([sources.ts](../src/server/retailer/sources.ts)) and a scheduled job
   that stays off until its migration is applied.
-- **Walmart + Sam's Club, Target, Whole Foods Market, Publix:** [store listings](#store-listings)
-  attached to existing agency recalls, never a card of their own.
-- **H-E-B:** [manual intake](#manual-intake-h-e-b-kroger-albertsons) of a saved official notice.
+- **Walmart + Sam's Club, Target, Whole Foods Market:** [store listings](#store-listings) attached
+  to existing agency recalls, never a card of their own.
+- **Publix:** a store-listing reader built from Publix's own page component, but **not ready**: no
+  populated Publix list has been observed ([Publix gap](#publix-gap)).
+- **Manual intake: none.** No source in this launch depends on a person
+  ([Not in this launch](#not-in-this-launch-h-e-b-kroger-albertsons)).
 - Build 1.2.0 (14) shows none of this beyond Costco notices
   ([Build 14](#build-14-and-a-second-retailer)).
 - The full retailer inventory is under [Coverage of Lotly's 77 stores](#coverage-of-lotlys-77-stores).
@@ -89,7 +92,7 @@ can see or be alerted about.
 Many retailers refuse an honestly identified client. Trader Joe's answers 403 (even for
 `robots.txt`), Kroger's banners reset the connection, and H-E-B serves a bot challenge. They are
 not fetched automatically, and the monitor never imitates a browser to get past bot protection.
-Their notices enter only by manual intake. The full list is in
+None of them is in this launch. The full list is in
 [Coverage of Lotly's 77 stores](#coverage-of-lotlys-77-stores).
 
 ### Coverage of Lotly's 77 stores
@@ -103,7 +106,7 @@ HTML.
 | -------------------------------------- | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Automated: own notices (this pipeline) |     3 | Costco (live), ALDI (staging), Lidl (`lidl.com/c/product-recalls`, not built)                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Automated: agency-linked lists         |    12 | Walmart + Sam's Club (`corporate.walmart.com/recalls`), Target (help articles), Whole Foods Market, Winn-Dixie, Schnucks, Dierbergs, Smart & Final, FoodMaxx + Lucky (`thesavemartcompanies.com`), Publix (own recalls only; none listed), The Fresh Market (own recalls only; none listed)                                                                                                                                                                                                    |
-| Manual intake: public page refuses us  |    39 | Kroger family (19: Kroger, Harris Teeter, Fred Meyer, QFC, Ralphs, King Soopers, Smith's, Fry's, Dillons, Mariano's, Pick 'n Save, Gerbes, Jay C, Pay Less, Owen's, Ruler Foods, Baker's, Food 4 Less, City Market); Albertsons Companies (8: Albertsons, Safeway, Vons, Jewel-Osco, Acme, Randalls, Tom Thumb, Shaw's); Hannaford; Trader Joe's; H-E-B; Wegmans (list loads through in-browser search); ShopRite; BJ's; Weis; Big Y; WinCo; PCC; Save A Lot; Hy-Vee (newsroom press releases) |
+| No automated source: page refuses us   |    39 | Kroger family (19: Kroger, Harris Teeter, Fred Meyer, QFC, Ralphs, King Soopers, Smith's, Fry's, Dillons, Mariano's, Pick 'n Save, Gerbes, Jay C, Pay Less, Owen's, Ruler Foods, Baker's, Food 4 Less, City Market); Albertsons Companies (8: Albertsons, Safeway, Vons, Jewel-Osco, Acme, Randalls, Tom Thumb, Shaw's); Hannaford; Trader Joe's; H-E-B; Wegmans (list loads through in-browser search); ShopRite; BJ's; Weis; Big Y; WinCo; PCC; Save A Lot; Hy-Vee (newsroom press releases) |
 | No verified public source              |    23 | Stop & Shop, Giant Food, The Giant Company, Food Lion, Meijer, Sprouts, Price Chopper, Tops, Giant Eagle + Market District, Fareway, Lunds & Byerlys, Market of Choice, Grocery Outlet, Raley's, H Mart, Dollar General, Dollar Tree, Family Dollar, 7-Eleven, Wawa, Kwik Trip, Piggly Wiggly                                                                                                                                                                                                  |
 
 Notes on the table:
@@ -533,7 +536,7 @@ were checked; the counts and the feed were identical before and after approval.
 ### ALDI batch (2026-11-16, staging)
 
 Requests are in [fixtures/approvals/](../src/server/retailer/fixtures/approvals/) (`aldi-*.json`).
-On staging, with `20261116000000_retailer_notice_publishers.sql` applied, the ALDI monitor ran live
+On staging, with `20261118000000_retailer_notice_publishers.sql` applied, the ALDI monitor ran live
 (75 documents, no failures). All three approved with no problems. The app's key then read six
 notices: three Costco, three ALDI.
 
@@ -571,20 +574,19 @@ from the new client on its next load, and older builds never saw it.
 
 ## Launch cohort (2026-11-16)
 
-The first release covers Costco, ALDI, Walmart + Sam's Club, Target, H-E-B, Publix and Whole Foods
-Market. Everything below was run on the isolated staging stack. That stack has the same migrations
+The first release covers Costco, ALDI, Walmart + Sam's Club, Target, Whole Foods Market and
+Publix. Every source is automated; none needs manual intake. Everything below was run on the isolated staging stack. That stack has the same migrations
 as production plus the two new ones, and the 57 production agency cases these sources link,
 copied in with a read-only production query.
 
-| Store           | Path                                  | Coverage  | Staging result (2026-11-16)                                                                                            | Ready?                                                                         |
-| --------------- | ------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Costco          | Own notices, automated (live)         | Automated | 21 entries, unchanged. Kirkland whipped cream approved and read back                                                   | Yes: approve Kirkland in production                                            |
-| ALDI            | Own notices, automated                | Automated | Scheduled job run: 75 read, succeeded, lease released. Priano approved and read back                                   | After its migration; enable the job                                            |
-| Walmart + Sam's | Store listings                        | Automated | 11 entries: 10 linked (9 by agency URL, 1 by reviewer), 1 review                                                       | After the listings migration                                                   |
-| Target          | Store listings (5 newest Grocery/OTC) | Automated | 5 entries, all linked by agency URL                                                                                    | After the listings migration                                                   |
-| Whole Foods     | Store listings                        | Automated | 108 rows: 47 linked, 41 review (older FDA pages Lotly does not hold), 17 excluded (Canadian notices)                   | After the listings migration                                                   |
-| Publix          | Store listings (empty-state verified) | Automated | Empty run: 0 entries, succeeded. A non-empty list stops the run for a person                                           | Yes for the empty state; the first real entry needs manual intake and a parser |
-| H-E-B           | Manual intake                         | Manual    | Real H-E-B notice intaken: dated 2024-04-27, food, Texas; duplicate check found two agency cases, so it went to review | Needs an owner and cadence (below)                                             |
+| Store           | Path                                  | Coverage  | Staging result (2026-11-16)                                                                                 | Ready?                                |
+| --------------- | ------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Costco          | Own notices, automated (live)         | Automated | 21 entries, unchanged. Kirkland whipped cream approved and read back                                        | Yes: approve Kirkland in production   |
+| ALDI            | Own notices, automated                | Automated | Scheduled job run: 75 read, succeeded, lease released. Priano approved and read back                        | After its migration; enable the job   |
+| Walmart + Sam's | Store listings                        | Automated | 11 entries: 10 linked (9 by agency URL, 1 by reviewer), 1 review                                            | After the listings migration          |
+| Target          | Store listings (5 newest Grocery/OTC) | Automated | 5 entries, all linked by agency URL                                                                         | After the listings migration          |
+| Whole Foods     | Store listings                        | Automated | 108 rows: 47 linked, 41 review (older FDA pages Lotly does not hold), 17 excluded (Canadian notices)        | After the listings migration          |
+| Publix          | Store listings                        | Automated | Empty run: 0 entries, succeeded. Populated reader built from Publix's component; every entry goes to review | **No**: see [Publix gap](#publix-gap) |
 
 - **Tractor Wheels:** Recall Details for this one FDA recall now lists three stores, each as that
   store stated it, each linking its own page. The agency's own distribution ("nationwide") and
@@ -603,8 +605,11 @@ copied in with a read-only production query.
   through 2026-11-11). Madeleines, Caesar, Happy Farms and Nature's Nectar are ended (FDA:
   Terminated). They were withdrawn on staging and stay out until Lotly can show a recall's status.
   Their request files remain for that later release.
-- **Finding:** Lotly holds two agency cases for the same H-E-B Creamy Creations recall
-  (`261c3408…` and `b35ed0e7…`, both dated 2024-04-29).
+- **Finding:** Lotly holds two agency cases for one H-E-B Creamy Creations recall (`261c3408…`
+  and `b35ed0e7…`, both 2024-04-29). It surfaced in an H-E-B trial that is not part of this launch.
+- **Simulator captures** (2026-11-17, this branch's Metro on the staging stack): the Feed with the
+  Priano card, Priano's Recall Details, Tractor Wheels with three stores, Flowers bread with
+  Walmart, Sam's Club and Target each showing their own facts, and Kirkland for comparison.
 
 ## Store listings
 
@@ -614,7 +619,7 @@ those lists was already a Lotly agency case. A listing is therefore never a new 
 store's own statement to the agency recall it names.
 
 - **Private until linked.** `retailer_store_listings`
-  ([migration](../supabase/migrations/20261116100000_retailer_store_listings.sql)) is service-role
+  ([migration](../supabase/migrations/20261118100000_retailer_store_listings.sql)) is service-role
   only. `consumer_store_listings()` returns one row per store, and only for a listing linked to an
   existing case.
 - **Linked only when certain.** The agency link must be a source URL of exactly one Lotly case. A
@@ -650,59 +655,55 @@ Source notes, verified 2026-11-16 with the honest client:
 - Whole Foods: <https://www.wholefoodsmarket.com/legal/product-recalls>, a table of date, product,
   reason and link.
 - Publix: <https://corporate.publix.com/newsroom/recalls> renders `<recall-list :item-list="…">`.
-  Only the empty state (`null`) has been observed, so any other value fails the run with a named
-  reason and a person reviews the page.
+  See [Publix gap](#publix-gap).
 
 Listing runs are manual in this release. A schedule is a later step (see
 [Rollout order](#rollout-order)).
 
-## Manual intake: H-E-B, Kroger, Albertsons
+### Publix gap
 
-H-E-B has no source the monitor can read. Every endpoint, including newsroom posts, the RSS feeds,
-the WordPress API and heb.com's recall page, answers the honest client with an Incapsula bot
-challenge, and the monitor never gets past one. An archive copy was not used either.
+What is verified: the page answers the honest client, and its empty state (`:item-list="null"` with
+"There are no Publix recalls at this time.") runs as an empty run. Publix's own `RecallList`
+component (`cp_RecallList.js` on `assets.publixcdn.com`, read 2026-11-17) defines each entry as
+`RecallDateText`, `Title`, `RecallDetailsUrl` and `SoldAtPublixText`. The reader accepts exactly
+those four text fields and refuses anything else.
 
-The repeatable process:
+What is not verified, and why Publix is not ready:
 
-1. **Source:** the official notice at <https://newsroom.heb.com/heb-news/recalls/>, opened in a
-   browser. Save the post (File → Save As, or Print → Save as PDF).
-2. **Intake (dry run):**
-   `npm run retailer:monitor -- --publisher heb --intake <saved file> --url <the post's URL> --title "<its headline>"`.
-   The saved file is archived by SHA-256 and read like any letter. A saved page is dated by its
-   labelled date ("(Month D, YYYY) –", "Effective: …" or "Company Announcement Date: …"), never by
-   site navigation.
-3. **Duplicate check:** the shared decision runs against every agency case. A match makes it a
-   link or review candidate, never a card. Only a standalone, dated food recall can be approved.
-4. **Apply** with the dry run's count, then approve with `retailer:review` like any notice.
+- **No populated list has been observed.** The page has been empty on every read since
+  2026-11-16. The old recall detail pages now show "page not found", there is no recall feed (the
+  RSS-looking paths are the site's not-found page), and archive copies are off-limits.
+- **No agency link.** An entry links a Publix page, not an FDA or FSIS notice, so it cannot link to
+  a case by URL. Every Publix entry goes to review. Linking automatically would need the detail
+  page's format, which has not been seen.
 
-Proposed owner and cadence: the founder (or a named delegate) checks H-E-B's newsroom recalls page
-**every weekday morning, plus same day when an agency recall names H-E-B**, and records each new
-notice through the intake. Most H-E-B recalls are also FDA announcements, so the duplicate check
-will usually route them to review.
+Publix becomes ready when a real populated list (and one detail page) can be recorded and tested.
 
-Staging proof (2026-11-16): H-E-B's own announcement of its Creamy Creations ice cream recall, in
-the copy FDA republishes at
-<https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/h-e-b-issues-voluntary-recall-3-ounce-cups-creamy-creations-ice-cream-select-flavors>.
-The newsroom copy is unreachable by design. It read as text, dated 2024-04-27, a food recall in
-Texas. The duplicate check found two agency cases for it, so it went to review.
+## Not in this launch: H-E-B, Kroger, Albertsons
 
-**Kroger and Albertsons** have no parent-level source either. `thekrogerco.com/product-recalls/`
-returns 404, the banner pages (`kroger.com/i/recall-alerts`) reset the connection, and
-`albertsonscompanies.com/product-recalls.html` returns 403. Each would use the same manual
-intake. They are not in this release, and their banners are not expanded.
+No source in this launch depends on manual intake, and none of these three has a source the
+monitor can read. H-E-B answers every endpoint (newsroom posts, its RSS feeds, its WordPress API and
+heb.com's recall page) with an Incapsula bot challenge. `thekrogerco.com/product-recalls/` returns
+404 and Kroger's banner pages reset the connection. `albertsonscompanies.com/product-recalls.html`
+returns 403. The monitor never gets past bot protection. Their recalls reach Lotly only when an
+agency publishes them.
 
 ## Rollout order
 
-Each step needs its own approval, in this order:
+Each step needs its own approval, in this order. The FSIS attachments migration
+(`20261117000000_fsis_attachments.sql`, draft PR #6) applies **before** these: the retailer
+migrations were renumbered to `20261118…` so versions stay in apply order whichever PR merges
+first. On the staging stack they were recorded under their earlier `20261116…` numbers; the SQL is
+identical.
 
-1. Apply `20261116000000_retailer_notice_publishers.sql` (publisher check: costco, aldi, heb).
-2. Apply `20261116100000_retailer_store_listings.sql` (listings table and read function).
+1. Apply `20261118000000_retailer_notice_publishers.sql` (publisher check: costco, aldi).
+2. Apply `20261118100000_retailer_store_listings.sql` (listings table and read function).
 3. Approve Kirkland in production (`retailer:review`, real `approvedBy`).
 4. ALDI: `npm run retailer:monitor -- --publisher aldi` dry run, apply with its count, then approve
    Priano. Merge this branch, set the repository variable `RETAILER_ALDI_ENABLED=true`, and add
    ALDI to `ops:health` once its first scheduled run succeeds.
 5. Listings: `npm run retailer:listings -- --publisher <p>` dry run then apply, for walmart,
-   target, wholefoods, publix. Confirm the Walmart Tractor Wheels listing by hand. Scheduling
+   target and wholefoods. Publix is not ready ([Publix gap](#publix-gap)). Confirm the Walmart Tractor Wheels listing by hand. Scheduling
    listings is a later job.
 6. Build and ship the client with the multi-publisher read path and store listings.
 

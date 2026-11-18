@@ -337,19 +337,72 @@ export function parseWholeFoodsListings(html: string): ListingEntry[] {
 
 /**
  * Publix's recall page renders its list from an inline component property,
- * `<recall-list :item-list="…">`. Verified only empty (2026-11-16: `null`,
- * with "There are no Publix recalls at this time."). A non-empty list's shape
- * has never been observed, so it stops the run for a person rather than
- * being read by guesswork.
+ * `<recall-list :item-list="…">`. The entry shape is Publix's own: its
+ * `RecallList` component (cp_RecallList.js on assets.publixcdn.com, read
+ * 2026-11-17) renders each item's `RecallDateText`, `Title` (linking
+ * `RecallDetailsUrl`) and `SoldAtPublixText`. Observed values: only the
+ * empty list (`null`, with "There are no Publix recalls at this time.").
+ *
+ * An entry links a Publix page, not an agency notice, so it can never link
+ * to a case on its own: every entry goes to review. Anything that is not
+ * the empty state or an array of exactly those four text fields stops the
+ * run for a person rather than being read by guesswork.
  */
+const PUBLIX_FIELDS = ['RecallDateText', 'RecallDetailsUrl', 'SoldAtPublixText', 'Title'];
+
 export function parsePublixListings(html: string): ListingEntry[] {
-  const empty =
-    /<recall-list\b[^>]*:item-list="null"/.test(html) &&
-    /There are no Publix recalls at this time\./.test(html);
-  if (empty) return [];
-  throw new Error(
-    'Publix lists recalls in a format not yet verified: review the page by hand (manual intake)',
-  );
+  const attribute = /<recall-list\b[^>]*:item-list="([^"]*)"/.exec(html)?.[1];
+  if (attribute === undefined) throw new Error('Publix page has no recall list: shape changed');
+  if (attribute === 'null') {
+    if (!/There are no Publix recalls at this time\./.test(html)) {
+      throw new Error('Publix list is null without its empty-state sentence: shape changed');
+    }
+    return [];
+  }
+  let items: unknown;
+  try {
+    items = JSON.parse(decode(attribute).replace(/&quot;/g, '"'));
+  } catch {
+    throw new Error('Publix list is not readable JSON: review the page by hand');
+  }
+  if (!Array.isArray(items))
+    throw new Error('Publix list is not an array: review the page by hand');
+  return items.map((raw) => {
+    const item = raw as Record<string, unknown>;
+    const keys = Object.keys(item ?? {}).sort();
+    if (
+      keys.length !== PUBLIX_FIELDS.length ||
+      !keys.every((key, i) => key === PUBLIX_FIELDS[i] && typeof item[key] === 'string')
+    ) {
+      throw new Error(
+        `Publix entry fields ${keys.join(',')} are not the verified four: review by hand`,
+      );
+    }
+    const detail = new URL(item.RecallDetailsUrl as string, LISTING_SOURCES.publix.indexUrl);
+    if (detail.protocol !== 'https:' || detail.hostname !== 'corporate.publix.com') {
+      throw new Error(`Publix entry links off Publix (${detail.hostname}): review by hand`);
+    }
+    const dateText = item.RecallDateText as string;
+    return {
+      publisher: 'publix' as const,
+      nativeId: normalizeUrl(detail.toString()),
+      title: plain(item.Title as string),
+      listedOn: isoFromWords(dateText) ?? isoFromSlashes(dateText),
+      listingUrl: detail.toString(),
+      agencyUrls: [],
+      soldAtText: plain(item.SoldAtPublixText as string),
+      stores: [
+        {
+          store: 'Publix',
+          scope: 'unspecified' as const,
+          states: [],
+          channels: ['stores' as const],
+        },
+      ],
+      unparsed: false,
+      foreign: false,
+    };
+  });
 }
 
 /** The decision for one listing, from Lotly's agency source URLs. */
