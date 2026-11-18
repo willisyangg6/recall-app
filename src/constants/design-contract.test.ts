@@ -223,12 +223,16 @@ test('jurisdiction, product-row and cell disclosures are recorded with the shipp
   assert.ok(body.includes('show `See all (N)` beside the section heading'));
   assert.ok(body.includes('Show the first two values.'));
   // Card fields (2026-10-19): exactly one row per field, in the fixed order,
-  // each with its own field-named control; dates and codes are separate rows.
+  // each with its own field-named control. Stated code/date pairs read
+  // together inside the code field (2026-11-17, superseding separate rows for
+  // stated pairs); independent lists stay separate rows.
   assert.ok(body.includes('Exactly one row per field within a product'));
   assert.ok(
     body.includes("More than two uses that field's own independent `Show all N <field>` /"),
   );
-  assert.ok(body.includes('Dates and codes are separate rows'));
+  assert.ok(body.includes('A code/date pairing the source stated reads together inside the code'));
+  assert.ok(body.includes('independent lists stay'));
+  assert.ok(!body.includes('Dates and codes are separate rows'));
   assert.ok(!body.includes('is one indivisible entry'));
   assert.ok(!body.includes('Every date entry stays visible.'));
   assert.ok(!body.includes('A pair group expands and collapses together'));

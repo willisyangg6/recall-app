@@ -1654,6 +1654,20 @@ export interface AffectedProductFieldGroup {
    * expansion state lives under (see cardGroupStateId). */
   id: Exclude<AffectedProductsTableColumnKey, 'product'>;
   label: string;
+  /**
+   * The date field this code field carries line by line, when the source
+   * stated each code WITH its date (an explicit pair group); null otherwise.
+   * A paired field's lines read "33525-1 (Best by February 1, 2027)" and the
+   * date field does not render separately.
+   */
+  pairedWith: Exclude<AffectedProductsTableColumnKey, 'product'> | null;
+  /**
+   * For a paired field, line n's halves — the code, its date's label and the
+   * date ('' when the source left that code undated) — so a screen can set
+   * each pair as one block without re-parsing display text. Null for an
+   * unpaired field. Always the same length and order as `lines`.
+   */
+  pairs: CardPair[] | null;
   /** Every distinct value this field holds, in source order. */
   lines: string[];
   /** The values shown while collapsed: the first two, or all of them. */
@@ -1668,7 +1682,8 @@ export interface AffectedProductFieldGroup {
  * dates — Best by, Use by, Sell by, Expiration, Production dates; then
  * Barcode (UPC); then the codes — Lot codes, Batch codes, Production codes;
  * then Packaging. The order never depends on the order a source stated
- * fields in, or on whether the table paired any of them.
+ * fields in. A paired code field keeps the CODE's slot; its date field,
+ * shown inside it, takes no slot of its own (2026-11-17).
  */
 export const CARD_FIELD_ORDER: readonly Exclude<AffectedProductsTableColumnKey, 'product'>[] =
   TABLE_COLUMN_ORDER;
@@ -1690,7 +1705,76 @@ export function fieldDisclosureControl(total: number, noun: string): DisclosureC
   };
 }
 
-/** One rendered view of the table as cards: the same rows, one field group per column. */
+/**
+ * One code with the date the source stated beside it, as a card line:
+ * "33525-1 (Best by February 1, 2027)" — the notice's own shape ("Lot
+ * 33525-1 (Best By February 1, 2027)"), read and spoken as one statement. A
+ * code the source left undated is the code alone, so no line ever implies a
+ * date the source did not give it.
+ */
+export function pairedCardLine(code: string, dateLabel: string, date: string): string {
+  return date === '' ? code : `${code} (${dateLabel} ${date})`;
+}
+
+/** One stated code with its date, as a paired card field carries it. */
+export interface CardPair {
+  code: string;
+  dateLabel: string;
+  /** '' when the source left this code undated. */
+  date: string;
+}
+
+/** A row's paired code field: its date field, display lines and pairs. */
+interface RowPairGroup {
+  dateKey: AffectedProductsTableColumnKey;
+  lines: string[];
+  pairs: CardPair[];
+}
+
+/**
+ * The explicit pair groups in one table row, keyed by their code field. Only
+ * a cell the table model marked as one half of a pair group qualifies, and
+ * the table model marks a group ONLY where the projection holds pairs the
+ * source stated (`LotCodeSet.pairs`): separate code and date lists are never
+ * a pair group, so nothing here can align two independent lists by position.
+ */
+function rowPairGroups(
+  row: AffectedProductsTableViewModel['rows'][number],
+): Map<AffectedProductsTableColumnKey, RowPairGroup> {
+  const out = new Map<AffectedProductsTableColumnKey, RowPairGroup>();
+  const pairCells = row.cells.filter((cell) => cell.pairGroup !== null);
+  for (const group of new Set(pairCells.map((cell) => cell.pairGroup as string))) {
+    const [dateKey, codeKey] = group.split('+') as [
+      AffectedProductsTableColumnKey,
+      AffectedProductsTableColumnKey,
+    ];
+    const dates = pairCells.find((cell) => cell.pairGroup === group && cell.key === dateKey);
+    const codes = pairCells.find((cell) => cell.pairGroup === group && cell.key === codeKey);
+    // Both halves, aligned line for line, or no pairing is claimed at all.
+    if (!dates || !codes || dates.values.length !== codes.values.length) continue;
+    const dateLabel = TABLE_COLUMN_LABEL[dateKey];
+    // One entry per distinct statement, in source order; the display line
+    // and the structured pair are built together so they can never drift.
+    const lines: string[] = [];
+    const pairs: CardPair[] = [];
+    codes.values.forEach((code, index) => {
+      const date = dates.values[index];
+      const line = pairedCardLine(code, dateLabel, date);
+      if (line === '' || lines.includes(line)) return;
+      lines.push(line);
+      pairs.push({ code, dateLabel, date });
+    });
+    out.set(codeKey, { dateKey, lines, pairs });
+  }
+  return out;
+}
+
+/**
+ * One rendered view of the table as cards: the same rows, one field group per
+ * column — except that where the source PAIRED codes with dates, the codes
+ * carry their dates line by line (2026-11-17, founder decision, replacing the
+ * 2026-10-19 "dates and codes are separate rows" rule for stated pairs only).
+ */
 export function affectedProductCards(view: AffectedProductsTableViewModel): AffectedProductCard[] {
   return view.rows.map((row) => {
     // Every value each column holds in this row. A cell's position in the
@@ -1700,15 +1784,23 @@ export function affectedProductCards(view: AffectedProductsTableViewModel): Affe
       const key = view.columns[index]?.key ?? cell.key;
       values.set(key, [...(values.get(key) ?? []), ...cell.values]);
     });
+    const pairs = rowPairGroups(row);
+    const pairedDates = new Set([...pairs.values()].map((pair) => pair.dateKey));
     const groups: AffectedProductFieldGroup[] = [];
     for (const key of CARD_FIELD_ORDER) {
+      // A date field shown inside its paired code field takes no row.
+      if (pairedDates.has(key)) continue;
+      const pair = pairs.get(key) ?? null;
       // Exact duplicate display values once, in first-seen order; an empty
       // line (a pair group's undated code has an empty date) is no value.
-      const lines = [...new Set(values.get(key) ?? [])].filter((line) => line !== '');
+      const lines =
+        pair?.lines ?? [...new Set(values.get(key) ?? [])].filter((line) => line !== '');
       if (lines.length === 0) continue;
       groups.push({
         id: key,
         label: TABLE_COLUMN_LABEL[key],
+        pairedWith: (pair?.dateKey ?? null) as AffectedProductFieldGroup['pairedWith'],
+        pairs: pair?.pairs ?? null,
         lines,
         collapsedLines: lines.slice(0, CARD_FIELD_INLINE_VALUES),
         disclosure:

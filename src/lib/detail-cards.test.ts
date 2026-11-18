@@ -3,10 +3,12 @@
  * pure model: the cards are the table model's rows re-presented, so the row
  * count, order, shared values and strict images are the table's. Within a
  * card there is exactly ONE row per field (2026-10-19), in the fixed field
- * order, holding every distinct value the row has for that field — dates and
- * codes as separate rows — showing two values before the field's own control.
- * Independent lists are never aligned into pairs, and the card's separate
- * lists never imply that values at matching positions are paired.
+ * order, holding every distinct value the row has for that field, showing two
+ * values before the field's own control. Where the SOURCE paired each code
+ * with its date (a table pair group), the code field reads each code with its
+ * own date — "33525-1 (Best by February 1, 2027)" — and the date takes no
+ * separate row (2026-11-17, replacing the 2026-10-19 separate-rows rule for
+ * stated pairs only). Independent lists are never aligned into pairs.
  */
 
 import assert from 'node:assert/strict';
@@ -80,7 +82,7 @@ const summary = (card: ReturnType<typeof affectedProductCards>[number]) =>
 
 // ── One row per field, in the fixed order ───────────────────────────────────
 
-test('a verified pair group renders as two separate rows — the dates and the codes — never per pair', () => {
+test('a verified pair group reads each code with its own date, inside the code field', () => {
   const [card] = affectedProductCards(
     viewOf([
       pairRow(
@@ -96,13 +98,6 @@ test('a verified pair group renders as two separate rows — the dates and the c
   assert.equal(card.name, 'Deluxe Mixed Nuts');
   assert.deepEqual(summary(card), [
     [
-      'bestBy',
-      'Best by',
-      ['July 28, 2026', 'August 10, 2026'],
-      ['July 28, 2026', 'August 10, 2026'],
-      undefined,
-    ],
-    [
       'upc',
       'Barcode (UPC)',
       ['077890421314', '077890421352', '077890421369'],
@@ -112,15 +107,24 @@ test('a verified pair group renders as two separate rows — the dates and the c
     [
       'lotCodes',
       'Lot codes',
-      ['58041', '58999', '58171'],
-      ['58041', '58999'],
+      // The undated code stands alone: no line implies a date the source
+      // never gave it.
+      ['58041 (Best by July 28, 2026)', '58999', '58171 (Best by August 10, 2026)'],
+      ['58041 (Best by July 28, 2026)', '58999'],
       'Show all 3 lot codes',
     ],
   ]);
-  // The undated code's empty date line is no date value; no "Lot code" /
-  // "Batch code" per-pair entries exist any more.
+  assert.equal(card.groups.find((g) => g.id === 'lotCodes')!.pairedWith, 'bestBy');
+  // The structured halves the screen sets as blocks: aligned with `lines`.
+  assert.deepEqual(card.groups.find((g) => g.id === 'lotCodes')!.pairs, [
+    { code: '58041', dateLabel: 'Best by', date: 'July 28, 2026' },
+    { code: '58999', dateLabel: 'Best by', date: '' },
+    { code: '58171', dateLabel: 'Best by', date: 'August 10, 2026' },
+  ]);
+  assert.equal(card.groups.find((g) => g.id === 'upc')!.pairs, null);
+  // The date lives inside its code's line, so it takes no row of its own.
+  assert.ok(!card.groups.some((g) => g.id === 'bestBy'));
   assert.ok(card.groups.every((g) => g.lines.every((line) => line !== '')));
-  assert.ok(card.groups.every((g) => !/^(Lot|Batch|Production) code$/.test(g.label)));
 });
 
 test('exactly one row per field within each product, whatever the cells and representation', () => {
@@ -147,7 +151,18 @@ test('exactly one row per field within each product, whatever the cells and repr
     columns: [...asPairs.columns].reverse(),
     rows: asPairs.rows.map((row) => ({ ...row, cells: [...row.cells].reverse() })),
   };
-  const expected = [
+  const paired = [
+    ['upc', 'Barcode (UPC)', ['0415'], ['0415'], undefined],
+    [
+      'batchCodes',
+      'Batch codes',
+      ['A1 (Best by Sep 30, 2027)', 'A2 (Best by Sep 30, 2027)', 'A3 (Best by Oct 31, 2027)'],
+      ['A1 (Best by Sep 30, 2027)', 'A2 (Best by Sep 30, 2027)'],
+      'Show all 3 batch codes',
+    ],
+  ];
+  // Independent lists are never paired by position: they stay two rows.
+  const unpaired = [
     [
       'bestBy',
       'Best by',
@@ -158,7 +173,11 @@ test('exactly one row per field within each product, whatever the cells and repr
     ['upc', 'Barcode (UPC)', ['0415'], ['0415'], undefined],
     ['batchCodes', 'Batch codes', codes, ['A1', 'A2'], 'Show all 3 batch codes'],
   ];
-  for (const view of [asPairs, asLists, shuffled]) {
+  for (const [view, expected] of [
+    [asPairs, paired],
+    [shuffled, paired],
+    [asLists, unpaired],
+  ] as const) {
     const [card] = affectedProductCards(view);
     assert.deepEqual(summary(card), expected);
     assert.equal(new Set(card.groups.map((g) => g.id)).size, card.groups.length);
@@ -229,12 +248,21 @@ test('missing and additional supported fields follow the documented order; the p
 test('dates and codes each show two values first, with their own correctly named controls', () => {
   const codes = ['LLA616903', 'LLA617003', 'LLA617103', 'LLA620303', 'LLA621303'];
   const dates = ['Sep 30, 2027', 'Sep 30, 2027', 'Sep 30, 2027', 'Oct 31, 2027', 'Nov 30, 2027'];
+  // Independent lists (no stated pairing): each field keeps its own control.
   const [card] = affectedProductCards(
     viewOf([
-      pairRow('r0', 'Strawberry', codes, dates, [
-        cell('size', ['6 Bars']),
-        cell('upc', ['041548610047']),
-      ]),
+      {
+        id: 'r0',
+        name: 'Strawberry',
+        image: null,
+        cells: [
+          cell('product', ['Strawberry']),
+          cell('bestBy', dates),
+          cell('batchCodes', codes),
+          cell('size', ['6 Bars']),
+          cell('upc', ['041548610047']),
+        ],
+      },
     ]),
   );
   const [size, bestBy, upc, batch] = card.groups;
@@ -263,12 +291,12 @@ test('expansion reveals every value and collapse restores exactly the same first
   const codes = ['007', '0101', '0101', '0102', '0103', 'Z-9'];
   const [card] = affectedProductCards(
     viewOf([
-      pairRow(
-        'r0',
-        'Brownies',
-        codes,
-        codes.map(() => 'Jan 5, 2027'),
-      ),
+      {
+        id: 'r0',
+        name: 'Brownies',
+        image: null,
+        cells: [cell('product', ['Brownies']), cell('batchCodes', codes)],
+      },
     ]),
   );
   const batch = card.groups.find((g) => g.id === 'batchCodes')!;
@@ -286,13 +314,17 @@ test('expansion reveals every value and collapse restores exactly the same first
 test('exact duplicate values disappear without losing distinct codes or dates', () => {
   const [card] = affectedProductCards(
     viewOf([
-      pairRow(
-        'r0',
-        'Bars',
-        ['Q1', 'Q1', 'Q2', 'X9', 'X9'],
-        ['Feb 2, 2027', 'Feb 2, 2027', 'Feb 2, 2027', 'May 1, 2027', 'June 1, 2027'],
-        [cell('upc', ['123', '123'])],
-      ),
+      {
+        id: 'r0',
+        name: 'Bars',
+        image: null,
+        cells: [
+          cell('product', ['Bars']),
+          cell('bestBy', ['Feb 2, 2027', 'Feb 2, 2027', 'May 1, 2027', 'June 1, 2027']),
+          cell('batchCodes', ['Q1', 'Q1', 'Q2', 'X9', 'X9']),
+          cell('upc', ['123', '123']),
+        ],
+      },
     ]),
   );
   assert.deepEqual(
@@ -303,12 +335,29 @@ test('exact duplicate values disappear without losing distinct codes or dates', 
       ['batchCodes', ['Q1', 'Q2', 'X9']],
     ],
   );
+  // A pair the source repeated renders once; a code paired with two
+  // different dates is two statements and keeps both.
+  const [pairs] = affectedProductCards(
+    viewOf([
+      pairRow(
+        'r1',
+        'Bars',
+        ['Q1', 'Q1', 'X9', 'X9'],
+        ['Feb 2, 2027', 'Feb 2, 2027', 'May 1, 2027', 'June 1, 2027'],
+      ),
+    ]),
+  );
+  assert.deepEqual(pairs.groups.find((g) => g.id === 'batchCodes')!.lines, [
+    'Q1 (Best by Feb 2, 2027)',
+    'X9 (Best by May 1, 2027)',
+    'X9 (Best by June 1, 2027)',
+  ]);
   // Date ranges and source wording are values, not something to normalise.
   const [ranged] = affectedProductCards(
-    viewOf([pairRow('r1', 'Soup', ['190A26184'], ['July 13–August 11, 2026'])]),
+    viewOf([pairRow('r2', 'Soup', ['190A26184'], ['July 13–August 11, 2026'])]),
   );
-  assert.deepEqual(ranged.groups.find((g) => g.id === 'bestBy')!.lines, [
-    'July 13–August 11, 2026',
+  assert.deepEqual(ranged.groups.find((g) => g.id === 'batchCodes')!.lines, [
+    '190A26184 (Best by July 13–August 11, 2026)',
   ]);
 });
 
@@ -354,20 +403,23 @@ test('fields and variants expand independently, and hidden products drop their s
     ]),
   );
   const ids = cards.flatMap((card) => card.groups.map((g) => cardGroupStateId(card.id, g.id)));
-  // Five groups (Grape's three codes share one date), five distinct
-  // identities: the same field on two products, and two fields on one
-  // product, never share a state.
-  assert.equal(ids.length, 5);
-  assert.equal(new Set(ids).size, 5);
+  // Three groups (each product's dates ride inside its paired codes), three
+  // distinct identities: the same field on two products, and two fields on
+  // one product, never share a state.
+  assert.equal(ids.length, 3);
+  assert.equal(new Set(ids).size, 3);
   const open = new Set([cardGroupStateId('r0', 'batchCodes')]);
   const shown = (cardId: string, groupId: string) => {
     const group = cards.find((c) => c.id === cardId)!.groups.find((g) => g.id === groupId)!;
     return open.has(cardGroupStateId(cardId, groupId)) ? group.lines : group.collapsedLines;
   };
-  assert.deepEqual(shown('r0', 'batchCodes'), ['A1', 'A2', 'A3']);
-  assert.deepEqual(shown('r0', 'bestBy'), ['Sep', 'Oct']);
+  assert.deepEqual(shown('r0', 'batchCodes'), [
+    'A1 (Best by Sep)',
+    'A2 (Best by Oct)',
+    'A3 (Best by Nov)',
+  ]);
   assert.deepEqual(shown('r0', 'upc'), ['1', '2']);
-  assert.deepEqual(shown('r1', 'batchCodes'), ['A1', 'A2']);
+  assert.deepEqual(shown('r1', 'batchCodes'), ['A1 (Best by Sep)', 'A2 (Best by Sep)']);
   // Collapsing See all keeps the still-visible product's states only.
   const all = new Set(ids);
   assert.deepEqual(
@@ -401,15 +453,25 @@ test('separate variants with identical dates or codes stay separate, each with i
     [
       [
         ['size', 'Package Size', ['6 Bars'], ['6 Bars'], undefined],
-        ['bestBy', 'Best by', ['Oct 31, 2027'], ['Oct 31, 2027'], undefined],
         ['upc', 'Barcode (UPC)', ['041548000114'], ['041548000114'], undefined],
-        ['batchCodes', 'Batch codes', ['G1', 'G2', 'S1'], ['G1', 'G2'], 'Show all 3 batch codes'],
+        [
+          'batchCodes',
+          'Batch codes',
+          ['G1 (Best by Oct 31, 2027)', 'G2 (Best by Oct 31, 2027)', 'S1 (Best by Oct 31, 2027)'],
+          ['G1 (Best by Oct 31, 2027)', 'G2 (Best by Oct 31, 2027)'],
+          'Show all 3 batch codes',
+        ],
       ],
       [
         ['size', 'Package Size', ['12 Bars'], ['12 Bars'], undefined],
-        ['bestBy', 'Best by', ['Oct 31, 2027'], ['Oct 31, 2027'], undefined],
         ['upc', 'Barcode (UPC)', ['041548612041'], ['041548612041'], undefined],
-        ['batchCodes', 'Batch codes', ['T1', 'S1'], ['T1', 'S1'], undefined],
+        [
+          'batchCodes',
+          'Batch codes',
+          ['T1 (Best by Oct 31, 2027)', 'S1 (Best by Oct 31, 2027)'],
+          ['T1 (Best by Oct 31, 2027)', 'S1 (Best by Oct 31, 2027)'],
+          undefined,
+        ],
       ],
     ],
   );
@@ -476,7 +538,7 @@ test('recorded cases: cards keep the table row count and order, one row per fiel
   }
 });
 
-test('recorded Hampton granola: its two lot codes and two expiration dates, complete, as two rows', () => {
+test('recorded Hampton granola: each lot reads with the expiration date its notice states for it', () => {
   const projection = baselineCase('6c54040d');
   const model = buildDetailModel(
     {
@@ -488,14 +550,20 @@ test('recorded Hampton granola: its two lot codes and two expiration dates, comp
     },
     { today: '2026-10-08', affectsYou: false },
   );
+  // "Lot HGLC-102125 with expiration date of 21OCT2026 / Lot HGLC-021326
+  // with expiration date of 13FEB2027" — two explicit pairs.
   const [card] = affectedProductCards(model.sections.affectedProducts!.table.expanded);
   assert.deepEqual(
     card.groups.map((g) => [g.id, g.label, g.lines, g.disclosure]),
     [
-      ['expiration', 'Expiration', ['October 21, 2026', 'February 13, 2027'], null],
-      ['upc', 'Barcode (UPC)', card.groups[1].lines, null],
-      ['lotCodes', 'Lot codes', ['HGLC-102125', 'HGLC-021326'], null],
+      ['upc', 'Barcode (UPC)', card.groups[0].lines, null],
+      [
+        'lotCodes',
+        'Lot codes',
+        ['HGLC-102125 (Expiration October 21, 2026)', 'HGLC-021326 (Expiration February 13, 2027)'],
+        null,
+      ],
     ],
   );
-  assert.equal(card.groups[1].lines.length, 1);
+  assert.equal(card.groups[0].lines.length, 1);
 });

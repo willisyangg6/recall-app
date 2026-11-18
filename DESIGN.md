@@ -2679,8 +2679,8 @@ untouched.
   14/20 bold organism label.
 - **Affected Products.** One white card per existing row (border
   `border/default`, radius 12, padding 14) through `affectedProductCards`:
-  the product name, the strictly allocated row image top-right at 64pt (no
-  reserved space without one), then each field group in the closed column
+  the product name, the strictly allocated row image pinned top-right at
+  its own 64pt square (no reserved space without one), then each field group in the closed column
   order with a 104pt label column. Exactly one labelled row per field the
   product holds, in the fixed field order: `Package Size`; the dates (`Best
 by`, `Use by`, `Sell by`, `Expiration`, `Production dates`); `Barcode
@@ -2690,22 +2690,35 @@ by`, `Use by`, `Sell by`, `Expiration`, `Production dates`); `Barcode
   own noun and count) / `Show less` directly beneath the values. Labels
   stack above values at accessibility sizes or in a narrow card. The first
   card shows before `See all (N)`, as before.
-- **Dates and codes are separate rows (2026-10-19).** A code/date pairing
-  the source stated stays in the table model and the projection; the card
-  renders the dates as one date row and the codes as one code row, each
-  with its own control, and never implies that values at matching positions
-  are paired. Exact duplicate values show once, in source order; a code or
-  date is never dropped, renamed or reformatted. Each control names its
-  field and count and is spoken with its expanded state; expanding one field
-  never moves another field or product.
+- **Stated pairs read together (2026-11-17, founder decision; supersedes the
+  2026-10-19 "dates and codes are separate rows" rule for stated pairs).**
+  Where the source stated each code WITH its date (the table model's pair
+  group, built only from `LotCodeSet.pairs`), the code field reads one code
+  and its own date per line, in the notice's own shape —
+  `33525-1 (Best by February 1, 2027)` — and the date field takes no row of
+  its own. The field keeps the code's slot in the fixed order. A code the
+  source left undated reads as the code alone. Where every code shares one
+  date (Outshine Tangerine, Brad's Cheeze It Up), the single date row
+  already covers every code, and the card keeps the two plain rows. Independent code and date
+  lists are never paired: they stay two rows, and nothing aligns them by
+  position. Exact duplicate values show once, in source order; a code or date
+  is never dropped, renamed or reformatted. Each control names its field and
+  count and is spoken with its expanded state; expanding one field never
+  moves another field or product.
 - **Card titles never lose a line.** React Native can lay a text frame out a
   pixel short of its text (React Native #57920), and iOS then draws one line
-  fewer — on device a two-line name showed as one clipped line. A title
-  beside a card image is at least the image's 64pt tall, which covers one-
-  and two-line names, and every card title (`CardTitle`) checks the lines
-  iOS drew against its frame: the exact signature of one dropped line, at
-  the current text size, sets a minimum height of that frame plus 1pt, so a
-  name of any length is drawn whole.
+  fewer — on device a two-line name showed as one clipped line. Every card
+  title (`CardTitle`) checks the lines iOS drew against its frame: the exact
+  signature of one dropped line, at the current text size, sets a minimum
+  height of that frame plus 1pt, so a name of any length is drawn whole.
+- **No gap under a short title (2026-11-17).** The title is its own text
+  height, never the thumbnail's. Field rows that start beside the thumbnail
+  keep clear of it (their value column measured net of the image reserve,
+  stacking under the shared narrow-column rule); rows that start below it
+  take the full card width. Rows start reserved and are released only once
+  measured below the image, so nothing draws under it. At accessibility
+  sizes the image still sits above the name. The image is read after the
+  name.
 - **Save.** In the navigation bar, opposite Back (superseding P2A's place
   in the product header). It is the shared save contract — the same glyph
   pair, spoken action, selected state and toggle — as a native bar item
@@ -3057,11 +3070,10 @@ Multi-value fields (product cards, Recall Detail kit):
   `Show less`, directly beneath the values. Expanding a field never expands or
   collapses another field or product: the expansion identity is the product
   row and the field.
-- Dates and codes are separate rows. Exact duplicate display values show
-  once, in source order; no value is dropped, renamed or reformatted. A
-  code/date pairing the source stated lives in the table model and the
-  projection, and the card's separate lists never imply that values at
-  matching positions are paired.
+- A code/date pairing the source stated reads together inside the code
+  field (`33525-1 (Best by February 1, 2027)`); independent lists stay
+  separate rows. Exact duplicate display values show once, in source order;
+  no value is dropped, renamed or reformatted.
 - Never reconstruct pairs by array position. A pair exists only where the
   source stated it.
 

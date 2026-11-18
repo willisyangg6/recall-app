@@ -133,11 +133,14 @@ const LEAD_IN_SIZE = /\bfollowing\s+(\d+[\s-]?(?:count|ct|pack|pk))\b/i;
 
 /**
  * Boundaries after which an item stops being the product's name. "with" cuts
- * only when an identifier label follows — "Mushroom Spinach & Salsa with Two
+ * only when an identifier label follows, and so does a comma: "Brad's Crunchy
+ * Kale, Original, 2 oz (57g) bag, UPC 813104021679, Lots …" is a name plus its
+ * markings, and read whole the closed identity gate rejects it as a raw row,
+ * pooling four products' codes into one — "Mushroom Spinach & Salsa with Two
  * Cheeses" is a name, "… with lot code 088594-2-1" is a name plus its code.
  */
 const NAME_BOUNDARY =
-  /(?:,\s*|\s+)(?:containing|sold|available|distributed|packaged|produced|with\s+(?:lot|batch|UPC|a\s+lot|best[-\s]|use[-\s]|sell[-\s]|expiration))\b|\.\s|\s+The\s+affected\b/i;
+  /(?:,\s*|\s+)(?:containing|sold|available|distributed|packaged|produced|with\s+(?:lot|batch|UPC|a\s+lot|best[-\s]|use[-\s]|sell[-\s]|expiration))\b|,\s*(?:UPC|U\.P\.C\.?|Lots?|Best[-\s]|Use[-\s]|Sell[-\s]|Exp(?:iration|iry)?\b|Item\s+(?:No|Number|Code))|\.\s|\s+The\s+affected\b/i;
 
 /**
  * A stated net weight closing a name: "… EZ Peel Shrimp net wt. 2lbs.",
@@ -175,9 +178,25 @@ const PACKAGE_PREFIX =
  * the product. The captured phrase must itself pass the closed packaging
  * vocabulary, so a product name that merely ends in a container word ("Gift
  * Baskets containing …") never loses its head.
+ *
+ * The count may also be stated as an adjective on the product itself:
+ * "Clear vacuum-packed packages of 6-piece “Bami Rolls” …" (recorded FSIS
+ * PHA-11062026-01). There the container takes "of", and "6-piece" is that
+ * item's own package size: each item keeps the count its own bullet states.
+ * An adjectival count is read only when the source's quoted product name
+ * follows it directly, so ordinary prose ("packages of 2-piece and 4-piece
+ * …") never yields a size. A container with no count ("Plastic trays of
+ * “Plain Pierogi” …") likewise yields to the quoted name after "of".
  */
 const CONTAINER_PREFIX =
-  /^\s*((?:[A-Za-z]+\s+){0,2}?(?:box(?:es)?|bags?|jars?|cartons?|cases?|containers?|tubs?|bottles?|cans?|pouch(?:es)?|trays?|packages?|packs?|sleeves?|wrappers?))\s+(?:containing|holding)\s+(?:(\d[\d,]*)[\s-]*(pieces?|units?|bars?|packets?|pouches?|links?|patties?|count|ct)\s+of\s+)?/i;
+  /^\s*((?:[A-Za-z][A-Za-z-]*\s+){0,2}?(?:box(?:es)?|bags?|jars?|cartons?|cases?|containers?|tubs?|bottles?|cans?|pouch(?:es)?|trays?|packages?|packs?|sleeves?|wrappers?))\s+(?:(?:containing|holding|of)\s+(\d[\d,]*)[\s-](pieces?|pcs?|count|ct)\s+(?=[“"])|(?:containing|holding)\s+(?:(\d[\d,]*)[\s-]*(pieces?|units?|bars?|packets?|pouches?|links?|patties?|count|ct)\s+of\s+)?|of\s+(?=[“"]))/i;
+
+/** An adjectival count's unit, as a package size reads it: "6-piece" → "6 pieces". */
+function countSize(count: string, unit: string): string {
+  const lower = unit.toLowerCase();
+  if (/^(?:pieces?|pcs?)$/.test(lower)) return `${count} ${count === '1' ? 'piece' : 'pieces'}`;
+  return `${count} ${lower}`;
+}
 
 function fact(
   concept: SemanticFact['concept'],
@@ -227,7 +246,9 @@ function itemName(text: string): {
     if (container && packagingOnlyName(container[1])) {
       packaging = container[1].trim();
       if (container[2] && container[3]) {
-        size = `${container[2]} ${container[3].toLowerCase()}`;
+        size = countSize(container[2], container[3]);
+      } else if (container[4] && container[5]) {
+        size = `${container[4]} ${container[5].toLowerCase()}`;
       }
       working = working.slice(container[0].length);
     }

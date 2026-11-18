@@ -47,8 +47,12 @@ export const CHEMICAL_AGENTS = ['lead', 'cadmium', 'arsenic', 'mercury', 'Cesium
  * sentence earlier; a bare scan cannot tell the two apart). Asbestos is the
  * first member — add future evidence-gated agents here rather than growing a
  * second implementation.
+ *
+ * Thallium (Brad's Raw Chips, 2026-11-03: "Product may contain thallium")
+ * is gated for the same reason: its notice also explains, in background,
+ * that thallium "is a naturally occurring metal found in the soil".
  */
-const EVIDENCE_GATED_CHEMICAL_AGENTS = ['asbestos'];
+const EVIDENCE_GATED_CHEMICAL_AGENTS = ['asbestos', 'thallium'];
 
 /** Is this substance stated as the contaminant (not mentioned in passing)? */
 function chemicalAgentStatedAsContaminant(text: string, agent: string): boolean {
@@ -62,6 +66,13 @@ function chemicalAgentStatedAsContaminant(text: string, agent: string): boolean 
     // gap; "or"/"and" end it, so a disjunctive label ("asbestos or lead
     // contamination") states neither on its own.
     new RegExp(`\\b${agent}\\s+(?:(?!(?:or|and)\\b)\\w+\\s+){0,2}contamin`, 'i'),
+    // "Product may contain thallium", "may contain elevated levels of
+    // thallium" — a modal plus the FINITE verb states the hazard; the
+    // participle ("containing") never does, exactly as for foreign material.
+    new RegExp(
+      `\\b(?:may|might|could|possibly)\\s+contains?\\s+(?:[\\w-]+\\s+){0,3}${agent}\\b`,
+      'i',
+    ),
   ].some((pattern) => pattern.test(text));
 }
 
@@ -331,7 +342,9 @@ const GENERIC_FOREIGN_MATERIAL =
 
 /** Is this material named as the contaminant (not as the packaging)? */
 function materialStatedAsContaminant(text: string, material: string): boolean {
-  const m = material.replace(/[.]/g, '\\.');
+  // "Heavy metal" is chemistry (lead, cadmium, thallium), never a fragment:
+  // the material word preceded by "heavy" is not this material at all.
+  const m = `(?<!\\bheavy[\\s-])${material.replace(/[.]/g, '\\.')}`;
   return [
     // C. "pieces of glass", "fragments of hard plastic"
     new RegExp(`\\b(?:${FRAGMENT_NOUNS})\\s+of\\s+(?:\\w+\\s+){0,2}${m}\\b`, 'i'),
@@ -346,8 +359,15 @@ function materialStatedAsContaminant(text: string, material: string): boolean {
     new RegExp(`\\b${m}\\s+(?:(?!(?:or|and)\\b)\\w+\\s+){0,2}contamin`, 'i'),
     // F. "glass found in product". Bounded to the discovery construction so
     // an ordinary product word cannot reach a nearby "found" ("bone-in
-    // chicken … found at retail").
-    new RegExp(`\\b${m}\\b[^.]{0,15}\\bfound\\s+in\\b`, 'i'),
+    // chicken … found at retail"). An INDEFINITE description is background,
+    // not a discovery: "Thallium (Tl) is a naturally occurring metal found in
+    // the soil" (Brad's Raw Chips, 2026-11-03) explains what an element is,
+    // and reading it as metal pieces turned a thallium recall into a
+    // foreign-object injury warning.
+    new RegExp(
+      `(?<!\\b(?:a|an)\\s+(?:[\\w-]+\\s+){0,3})\\b${m}\\b[^.]{0,15}\\bfound\\s+in\\b`,
+      'i',
+    ),
     new RegExp(`\\bfound\\s+(?:\\w+\\s+){0,2}${m}\\b`, 'i'),
     // G. "the salad dressing may contain hard plastic" — the hazard is stated
     // with a modal + the FINITE verb. FSIS product listings use the

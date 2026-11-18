@@ -1929,6 +1929,42 @@ this document — it is in no way covered by the completed P3B authorization
 above. See [recall-feed-usability.md](recall-feed-usability.md), "P3C —
 affected-product data and presentation correctness".
 
+### Second round: thallium (prepared 2026-11-17, NOT applied)
+
+The same command now also governs one reviewed round beyond P3B. Brad's Raw
+Chips (2026-11-03) is stored `foreign_material` / null because a background
+sentence about thallium ("a naturally occurring metal found in the soil") was
+read as metal pieces. The shared evidence rule is fixed in `domain/hazard.ts`,
+and the repair gains the reviewed agent move `null → thallium`.
+
+The population guard is now per round. A run is admitted only when it
+matches one reviewed round's record and case counts AND that round's agents:
+
+- P3B: 3/3, asbestos and Cesium-137;
+- thallium: 1/1, thallium.
+
+A single leftover P3B record is therefore never admitted as the thallium
+round.
+
+Read-only production dry run, 2026-11-17: 768 FDA records examined (768/768
+snapshots), 14 in the governed category. It planned 1 source record and 1
+case projection (`foreign_material → chemical_contamination`, agent
+`(null) → thallium`), with 0 refusals, 0 notifications, 0 timeline or date
+changes, and 0 network requests.
+
+Applying it needs its own explicit authorization:
+
+```bash
+npm run repair:fda-contaminants:dry                                   # re-check: expect 1 / 1
+npm run repair:fda-contaminants -- --apply --confirm --expect 1       # APPLY (authorized separately)
+npm run repair:fda-contaminants:dry                                   # verify: settled
+```
+
+Until it is applied, the shipped app keeps showing Brad's stored hazard: "may
+contain pieces of metal" and the foreign-object Health Risk. The hazard
+copy is derived from the stored category, so the repair alone corrects it.
+No client update is needed.
+
 ## Illness flag: a PREPARED historical correction (P2B7L)
 
 **Status: prepared and measured, NOT applied.** The tooling exists, its dry

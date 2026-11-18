@@ -149,6 +149,10 @@ function isCodeLike(value: string): boolean {
   // codes in the same list are unaffected.
   if (hasProseWordRun(trimmed)) return false;
   if (/["“”]/.test(trimmed)) return false;
+  // "dated 10/16/27" describes codes BY their date — it is the date, not a
+  // code printed on the package. A bare date-shaped code ("10/16/27",
+  // "101627") is untouched: some lots genuinely are printed that way.
+  if (/^dated\b/i.test(trimmed)) return false;
   // A list bullet inside a "code" means the cell was a serialized source row,
   // not a code; the row should have been split upstream.
   if (/[•·]/.test(trimmed)) return false;

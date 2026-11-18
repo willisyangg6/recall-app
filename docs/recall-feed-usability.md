@@ -612,7 +612,19 @@ PAN … containing "Ukrop's Baked Spaghetti"" names the quoted product with the
 size as its Size field, and — P2b — "Cardboard boxes containing 100 pieces of
 "BUFFALO CHICKEN RANGOON"" names the quoted product with the container as
 Packaging and the stated piece count as Package Size, recorded FSIS
-018-2026). Any residual measurement-only or packaging-only name is demoted by
+018-2026). The count may instead be an adjective on the quoted product, after
+"of": "Clear vacuum-packed packages of 6-piece “Bami Rolls” with “BEST BY”
+October 2027 …" gives that item Package Size `6 pieces`, Packaging `Clear
+vacuum-packed packages`, and Best by `October 2027` at the month precision the
+source states, with no day or weight invented (recorded FSIS PHA-11062026-01,
+2026-11-17). An adjectival count is read only when the quoted name follows it
+directly; a container without a count ("Plastic-wrapped packages of “FANCY
+BOLOGNA” …") yields to the quoted name the same way, and hyphenated package
+materials (`vacuum-packed`, `plastic-wrapped`, `shrink-wrapped`) are packaging
+vocabulary. A quoted date label may hand off with only its closing quote
+(`“BEST BY” October 2027`) when a date starts directly after it; a quoted label
+followed by words ("“Sell By” dates from …") stays with the range rules. Any
+residual measurement-only or packaging-only name is demoted by
 the presentation model into the row's Size or Packaging field — the row keeps
 its own identifying facts and renders with an empty Product cell, and no
 product name is ever invented. Both recognizers (`measurementOnlyName`,

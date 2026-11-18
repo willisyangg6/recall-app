@@ -184,7 +184,16 @@ test('Al’Fez Tahini: a semicolon-delimited list keeps every date, in source or
     'ab-world-foods-us-inc-recalls-alfez-natural-tahini-because-possible-health-risk',
   );
   const bestBy = values(summary, 'best_by');
-  assert.deepEqual(bestBy, ['2024 JL 11', '2024 JL 31', '2024 SE 09', '2025 MR 27', '2025 AL 04']);
+  // The first marking is the notice's own cutoff — `a “BEST BEFORE” of “2024
+  // JL 11” or later` — and keeps its "or later" (package-date identifiers,
+  // 2026-11-16); reading it as the bare day misstated the affected range.
+  assert.deepEqual(bestBy, [
+    '2024 JL 11 or later',
+    '2024 JL 31',
+    '2024 SE 09',
+    '2025 MR 27',
+    '2025 AL 04',
+  ]);
   // The four quoted lot numbers stay lot numbers, and the date that follows
   // the "with corresponding BEST BEFORE:" bridge never joins them.
   assert.deepEqual(values(summary, 'lot'), ['3031', '3080', '3270', '3297']);

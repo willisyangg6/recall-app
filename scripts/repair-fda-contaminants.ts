@@ -43,8 +43,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import {
-  APPROVED_CASE_CORRECTIONS,
-  APPROVED_RECORD_CORRECTIONS,
+  approvedPopulationsText,
   TARGET_FDA_CATEGORY,
   repairFdaContaminants,
   CONTAMINANT_REPAIR_COMMAND,
@@ -336,8 +335,7 @@ async function main(): Promise<void> {
   if (report.applyBlockedReason !== null) {
     console.error(
       `\n  REVIEW REQUIRED — no row was written: ${report.applyBlockedReason}` +
-        `\n  P3B approved exactly ${APPROVED_RECORD_CORRECTIONS} record and ` +
-        `${APPROVED_CASE_CORRECTIONS} case corrections. Review the ledger above before any apply.`,
+        `\n  Reviewed populations: ${approvedPopulationsText()}. Review the ledger above before any apply.`,
     );
     process.exit(1);
   }

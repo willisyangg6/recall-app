@@ -97,6 +97,7 @@ import {
   todayIso,
   visibleCellState,
   type AffectedProductCard,
+  type CardPair,
   type DetailModel,
   type DisclosureControl as DisclosureControlModel,
 } from '@/lib/recall-presentation';
@@ -167,6 +168,7 @@ const LABEL_ON_VALUE_LINE = PixelRatio.roundToNearestPixel(
 /** A product card title's unscaled line height. */
 const TITLE_LINE_HEIGHT = detailType.productCardTitle.lineHeight ?? 24;
 const BODY_LINE_HEIGHT = detailType.body.lineHeight ?? 23;
+const METADATA_LINE_HEIGHT = detailType.metadata.lineHeight ?? 20;
 /** The width a card title leaves for the image beside it. */
 const TITLE_IMAGE_RESERVE = detailGeometry.productThumbnail + detailGeometry.fieldColumnGap;
 
@@ -309,10 +311,18 @@ function DetailDisclosure({
  */
 function useDroppedLineRepair(expectedLineHeight: number, ownMinHeight: number) {
   const { width, fontScale } = useWindowDimensions();
-  const layoutKey = `${width}|${fontScale}`;
   const [correction, setCorrection] = useState<{ key: string; minHeight: number } | null>(null);
   const frameHeight = useRef(0);
-  const drawn = useRef<{ total: number; perLine: number } | null>(null);
+  // The element's OWN width, not just the window's (2026-11-17): a field row
+  // beside a card thumbnail lays out narrow, then wide once it measures below
+  // the image. Text and frame events for those two widths can interleave —
+  // a one-line text layout read against the earlier two-line frame looked
+  // exactly like a dropped line and pinned a blank extra line under every
+  // date. A correction belongs to the width it was measured at.
+  const [frameWidth, setFrameWidth] = useState(0);
+  const frameWidthRef = useRef(0);
+  const layoutKey = `${width}|${fontScale}|${Math.round(frameWidth)}`;
+  const drawn = useRef<{ total: number; perLine: number; widest: number } | null>(null);
   const repairMinHeight = correction?.key === layoutKey ? correction.minHeight : 0;
   const minHeight = Math.max(ownMinHeight, repairMinHeight);
 
@@ -323,6 +333,9 @@ function useDroppedLineRepair(expectedLineHeight: number, ownMinHeight: number) 
     if (Math.abs(frame - minHeight) < 0.01) return;
     // Drawn at the current text size, or this is a stale text layout.
     if (Math.abs(lines.perLine - expectedLineHeight * fontScale) > 1) return;
+    // Drawn for THIS frame's width: a line wider than the frame was laid out
+    // for a different width, and comparing the two would invent a drop.
+    if (lines.widest > frameWidthRef.current + 1) return;
     const excess = frame - lines.total;
     if (excess <= lines.perLine / 2 || excess > lines.perLine + 1) return;
     setCorrection({ key: layoutKey, minHeight: PixelRatio.roundToNearestPixel(frame) + 1 });
@@ -331,7 +344,10 @@ function useDroppedLineRepair(expectedLineHeight: number, ownMinHeight: number) 
   return {
     repairMinHeight,
     onLayout: (event: LayoutChangeEvent) => {
-      frameHeight.current = event.nativeEvent.layout.height;
+      const { height, width: elementWidth } = event.nativeEvent.layout;
+      frameHeight.current = height;
+      frameWidthRef.current = elementWidth;
+      if (Math.round(elementWidth) !== Math.round(frameWidth)) setFrameWidth(elementWidth);
       checkForDroppedLine();
     },
     onTextLayout: (event: NativeSyntheticEvent<TextLayoutEventData>) => {
@@ -342,23 +358,22 @@ function useDroppedLineRepair(expectedLineHeight: number, ownMinHeight: number) 
           : {
               total: lines.reduce((sum, line) => sum + line.height, 0),
               perLine: lines[0].height,
+              widest: Math.max(...lines.map((line) => line.width)),
             };
       checkForDroppedLine();
     },
   };
 }
 
-function CardTitle({ name, besideImage }: { name: string; besideImage: boolean }) {
-  const repair = useDroppedLineRepair(
-    TITLE_LINE_HEIGHT,
-    besideImage ? detailGeometry.productThumbnail : 0,
-  );
+function CardTitle({ name }: { name: string }) {
+  // The title is its own text height, never the thumbnail's (2026-11-17): a
+  // short name beside the image no longer pushes the fields below it.
+  const repair = useDroppedLineRepair(TITLE_LINE_HEIGHT, 0);
   return (
     <Text
       style={[
         detailType.productCardTitle,
         styles.textColor,
-        besideImage ? styles.cardTitleBesideImage : null,
         repair.repairMinHeight > 0 ? { minHeight: repair.repairMinHeight } : null,
       ]}
       accessibilityRole="header"
@@ -370,19 +385,39 @@ function CardTitle({ name, besideImage }: { name: string; besideImage: boolean }
 }
 
 /** One field value on its own line, at natural height, with the dropped-line repair. */
-function ValueLine({ text }: { text: string }) {
-  const repair = useDroppedLineRepair(BODY_LINE_HEIGHT, 0);
+function ValueLine({ text, secondary = false }: { text: string; secondary?: boolean }) {
+  const repair = useDroppedLineRepair(secondary ? METADATA_LINE_HEIGHT : BODY_LINE_HEIGHT, 0);
   return (
     <Text
       style={[
-        detailType.body,
-        styles.textColor,
+        secondary ? detailType.metadata : detailType.body,
+        secondary ? styles.secondaryColor : styles.textColor,
         repair.repairMinHeight > 0 ? { minHeight: repair.repairMinHeight } : null,
       ]}
       onLayout={repair.onLayout}
       onTextLayout={repair.onTextLayout}>
       {text}
     </Text>
+  );
+}
+
+/**
+ * One code with the date the source stated beside it (2026-11-17): the code
+ * on its own line, its date directly beneath in the secondary style, so a
+ * pair reads as one block however narrow the column — a wrapped
+ * "33525-1 (Best by February / 1, 2027)" left a list of pairs ragged and
+ * hard to match. VoiceOver reads the block as the one statement it is.
+ */
+function PairEntry({ pair, line, first }: { pair: CardPair; line: string; first: boolean }) {
+  return (
+    <View
+      style={first ? null : styles.pairEntry}
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={line}>
+      <ValueLine text={pair.code} />
+      {pair.date !== '' ? <ValueLine text={`${pair.dateLabel} ${pair.date}`} secondary /> : null}
+    </View>
   );
 }
 
@@ -410,7 +445,6 @@ function AffectedProductCardView({
   fontScale: number;
 }) {
   const [contentWidth, setContentWidth] = useState(0);
-  const stacked = fieldStacks(contentWidth, fontScale);
   const imageAbove = fontScale >= DETAIL_STACK_SCALE;
   const image = card.image ? (
     <MediaTile
@@ -420,49 +454,96 @@ function AffectedProductCardView({
       cornerRadius={detailGeometry.headerPhotoRadius}
     />
   ) : null;
+  const imageBeside = !imageAbove && image !== null;
+  // Rows that START below the thumbnail take the card's full width; rows
+  // beside it keep clear of it. Every row starts reserved and is released
+  // only once it measures below the image, so nothing ever draws under the
+  // thumbnail, not even for a frame. A row's top depends only on the rows
+  // above it, so each decision settles top-down in one pass and never
+  // oscillates; a collapse that lifts a row back beside the image reserves
+  // it again (2026-11-17 — a short title no longer leaves a 64pt gap).
+  // Not keyed to the card's measured width: rows report their positions
+  // before the card's own width arrives, and a key that changed then would
+  // discard those releases while the rows, unmoved, never report again. A
+  // real width change re-lays out every row, and each reports afresh.
+  const [releasedIds, setReleasedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const onFieldLayout = (id: string, top: number) => {
+    const below = top >= detailGeometry.productThumbnail;
+    // Several rows report in the same frame: each update starts from the
+    // LATEST set, or the last row to report would erase the others' release.
+    setReleasedIds((current) => {
+      if (below === current.has(id)) return current;
+      const next = new Set(current);
+      if (below) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
   return (
     <View
       style={styles.card}
       onLayout={(event) => setContentWidth(event.nativeEvent.layout.width - CARD_PADDING_X)}>
       {imageAbove && image ? <View style={styles.cardImageAbove}>{image}</View> : null}
-      {card.name !== null || (image && !imageAbove) ? (
-        <View style={!imageAbove && image ? styles.cardHeaderWithImage : null}>
-          {card.name !== null ? (
-            <CardTitle name={card.name} besideImage={!imageAbove && image !== null} />
-          ) : null}
-          {!imageAbove && image ? <View style={styles.cardImage}>{image}</View> : null}
-        </View>
-      ) : null}
-      {card.groups.map((group) => {
-        // The expansion identity is the product row and the field, so one
-        // product's Batch codes never opens another's, and a hidden
-        // product's state is dropped by visibleCellState when See all
-        // collapses.
-        const stateId = cardGroupStateId(card.id, group.id);
-        const open = openGroups.has(stateId);
-        const lines = open ? group.lines : group.collapsedLines;
-        const disclosure = group.disclosure ? (
-          <DetailDisclosure
-            control={group.disclosure}
-            expanded={open}
-            onPress={() => onToggleGroup(stateId)}
-          />
-        ) : null;
-        return (
-          <View key={group.id} style={stacked ? styles.fieldStacked : styles.field}>
-            <Text
-              style={[detailType.metadata, styles.secondaryColor, !stacked && styles.fieldLabel]}>
-              {group.label}
-            </Text>
-            <View style={styles.fieldValues}>
-              {lines.map((line, index) => (
-                <ValueLine key={`${group.id}-${index}`} text={line} />
-              ))}
-              {disclosure}
-            </View>
+      <View style={imageBeside ? styles.cardBodyWithImage : null}>
+        {card.name !== null ? (
+          <View style={imageBeside ? styles.besideImage : null}>
+            <CardTitle name={card.name} />
           </View>
-        );
-      })}
+        ) : null}
+        {card.groups.map((group) => {
+          // The expansion identity is the product row and the field, so one
+          // product's Batch codes never opens another's, and a hidden
+          // product's state is dropped by visibleCellState when See all
+          // collapses.
+          const stateId = cardGroupStateId(card.id, group.id);
+          const open = openGroups.has(stateId);
+          const lines = open ? group.lines : group.collapsedLines;
+          const disclosure = group.disclosure ? (
+            <DetailDisclosure
+              control={group.disclosure}
+              expanded={open}
+              onPress={() => onToggleGroup(stateId)}
+            />
+          ) : null;
+          const reserved = imageBeside && !releasedIds.has(group.id);
+          const stacked = fieldStacks(
+            contentWidth - (reserved ? TITLE_IMAGE_RESERVE : 0),
+            fontScale,
+          );
+          return (
+            <View
+              key={group.id}
+              style={[stacked ? styles.fieldStacked : styles.field, reserved && styles.besideImage]}
+              onLayout={
+                imageBeside
+                  ? (event) => onFieldLayout(group.id, event.nativeEvent.layout.y)
+                  : undefined
+              }>
+              <Text
+                style={[detailType.metadata, styles.secondaryColor, !stacked && styles.fieldLabel]}>
+                {group.label}
+              </Text>
+              <View style={styles.fieldValues}>
+                {lines.map((line, index) =>
+                  group.pairs ? (
+                    <PairEntry
+                      key={`${group.id}-${index}`}
+                      pair={group.pairs[index]}
+                      line={line}
+                      first={index === 0}
+                    />
+                  ) : (
+                    <ValueLine key={`${group.id}-${index}`} text={line} />
+                  ),
+                )}
+                {disclosure}
+              </View>
+            </View>
+          );
+        })}
+        {/* Last in reading order: the name is read first, as before. */}
+        {imageBeside ? <View style={styles.cardImage}>{image}</View> : null}
+      </View>
     </View>
   );
 }
@@ -1192,18 +1273,14 @@ const styles = StyleSheet.create({
     borderRadius: detailGeometry.productCardRadius,
     padding: detailGeometry.productCardPadding,
   },
-  // The image sits top-right, pinned; the title takes the card's width minus
-  // the image and its gap.
-  cardHeaderWithImage: {
+  // The image sits top-right, pinned at its own 64pt square. The card body
+  // is at least that tall so a nearly empty card still contains it; the
+  // title and every field row that starts beside it keep clear of it.
+  cardBodyWithImage: {
     minHeight: detailGeometry.productThumbnail,
-    paddingRight: TITLE_IMAGE_RESERVE,
   },
-  // A title beside the image is at least as tall as the image — the header
-  // already is, so nothing moves. The slack means a one- or two-line name
-  // can never lose a line to the pixel rounding `CardTitle` corrects, so the
-  // common case never needs that correction at all.
-  cardTitleBesideImage: {
-    minHeight: detailGeometry.productThumbnail,
+  besideImage: {
+    paddingRight: TITLE_IMAGE_RESERVE,
   },
   cardImage: {
     position: 'absolute',
@@ -1227,6 +1304,10 @@ const styles = StyleSheet.create({
   fieldLabel: {
     width: detailGeometry.fieldLabelWidth,
     paddingTop: LABEL_ON_VALUE_LINE,
+  },
+  // Space between two stated pairs, so each code-and-date block reads as one.
+  pairEntry: {
+    marginTop: spacing[8],
   },
   fieldValues: {
     flex: 1,

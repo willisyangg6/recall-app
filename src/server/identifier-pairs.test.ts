@@ -23,7 +23,7 @@ import { gunzipSync } from 'node:zlib';
 import { projectCase } from '../domain/projection';
 import type { CaseProjection } from '../domain/recall-types';
 import { buildConsumerCase } from '../lib/consumer-projection';
-import { affectedProductCards, buildDetailModel } from '../lib/recall-presentation';
+import { affectedProductCards, buildDetailModel, pairedCardLine } from '../lib/recall-presentation';
 import { parseFdaAnnouncement, slugFromPath, type FdaListingItem } from './fda/parse';
 import { parseFsisRecord, type FsisRawRecord } from './fsis/parse';
 
@@ -260,7 +260,9 @@ test("King Arthur: codes all sharing their row's ONE date stay plain, never a re
 
 // ── One row per field in the rendered cards (2026-10-19) ───────────────────
 
-test('Outshine: every variant renders one row per field — its distinct dates, then its distinct codes', () => {
+test('Outshine: every variant reads each batch code with the best-by date the notice prints beside it', () => {
+  // "LLA616903 – 30 SEP 2027": the notice binds each code to its own date,
+  // so the card reads them together (2026-11-17) instead of as two lists.
   const projection = fdaCase(
     'dreyers-grand-ice-cream-inc-issues-voluntary-recall-select-outshine-fruit-bars',
   );
@@ -278,32 +280,52 @@ test('Outshine: every variant renders one row per field — its distinct dates, 
   const cards = affectedProductCards(view);
   assert.equal(cards.length, view.rows.length);
   cards.forEach((card, index) => {
-    // Exactly one row per field the table row holds, in the fixed order, and
-    // each row's values are exactly the distinct values of that column.
-    const labels = card.groups.map((g) => g.label);
+    const batch = card.groups.find((g) => g.id === 'batchCodes')!;
+    if (batch.pairedWith === null) {
+      // A variant whose codes all share ONE date (Tangerine) has nothing to
+      // mismatch: the single date row covers every code.
+      assert.deepEqual(
+        card.groups.map((g) => g.label),
+        ['Package Size', 'Best by', 'Barcode (UPC)', 'Batch codes'],
+        card.name ?? '',
+      );
+      assert.equal(card.groups.find((g) => g.id === 'bestBy')!.lines.length, 1, card.name ?? '');
+      return;
+    }
+    // Several dates: the dates ride inside the codes, one pair per line.
     assert.deepEqual(
-      labels,
-      ['Package Size', 'Best by', 'Barcode (UPC)', 'Batch codes'],
+      card.groups.map((g) => g.label),
+      ['Package Size', 'Barcode (UPC)', 'Batch codes'],
       card.name ?? '',
     );
-    for (const group of card.groups) {
-      const column = view.rows[index].cells.find((c) => c.key === group.id)!;
-      assert.deepEqual(
-        group.lines,
-        [...new Set(column.values)].filter((v) => v !== ''),
-        `${card.name}: ${group.label}`,
-      );
-      assert.deepEqual(group.collapsedLines, group.lines.slice(0, 2));
-    }
+    assert.equal(batch.pairedWith, 'bestBy');
+    // Line n is exactly the table's aligned pair n: the same code, the same date.
+    const cells = view.rows[index].cells;
+    const codes = cells.find((c) => c.key === 'batchCodes')!.values;
+    const dates = cells.find((c) => c.key === 'bestBy')!.values;
+    assert.deepEqual(
+      batch.lines,
+      [...new Set(codes.map((code, i) => pairedCardLine(code, 'Best by', dates[i])))],
+      card.name ?? '',
+    );
+    assert.deepEqual(batch.collapsedLines, batch.lines.slice(0, 2));
   });
   const strawberry = cards.find((card) => /Strawberry/.test(card.name ?? ''))!;
-  const [, dates, , codes] = strawberry.groups;
-  assert.deepEqual(dates.lines, ['September 30, 2027', 'October 31, 2027', 'November 30, 2027']);
-  assert.equal(dates.disclosure?.expandLabel, 'Show all 3 best by dates');
+  const codes = strawberry.groups.find((g) => g.id === 'batchCodes')!;
   assert.equal(codes.lines.length, 22);
   assert.equal(new Set(codes.lines).size, 22);
   assert.equal(codes.disclosure?.expandLabel, 'Show all 22 batch codes');
-  assert.deepEqual(codes.collapsedLines, ['LLA616903', 'LLA617003']);
+  assert.deepEqual(codes.collapsedLines, [
+    'LLA616903 (Best by September 30, 2027)',
+    'LLA617003 (Best by September 30, 2027)',
+  ]);
+  // All three of Strawberry's dates are still reachable, each beside its codes.
+  for (const date of ['September 30, 2027', 'October 31, 2027', 'November 30, 2027']) {
+    assert.ok(
+      codes.lines.some((line) => line.endsWith(`(Best by ${date})`)),
+      date,
+    );
+  }
   const tangerine = cards.find((card) => /Tangerine/.test(card.name ?? ''))!;
   assert.deepEqual(
     tangerine.groups.map((g) => [g.label, g.lines, g.disclosure]),

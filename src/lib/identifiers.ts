@@ -328,8 +328,12 @@ function canonicalMonthYear({ year, month }: { year: number; month: number }): s
 }
 
 /** Qualifiers that change what a date means and must survive normalization. */
-const DATE_QUALIFIER =
-  /^(through|thru|before|on or before|on or after|after|up to and including|up to|no later than|beginning|starting)\s+/i;
+const DATE_QUALIFIER_WORDS =
+  'through|thru|including and prior to|on and prior to|prior to|before|on or before|on or after|after|up to and including|up to|no later than|beginning|starting';
+const DATE_QUALIFIER = new RegExp(`^(${DATE_QUALIFIER_WORDS})\\s+`, 'i');
+
+/** A leading qualifier directly before a date found inside a longer value. */
+const LEADING_QUALIFIER_TAIL = new RegExp(`(?:^|\\s)(${DATE_QUALIFIER_WORDS})\\s+$`, 'i');
 
 /** How a qualifier reads once it opens the displayed value. */
 const QUALIFIER_DISPLAY: Record<string, string> = {
@@ -337,6 +341,9 @@ const QUALIFIER_DISPLAY: Record<string, string> = {
   thru: 'Through',
   before: 'Before',
   'on or before': 'On or before',
+  'including and prior to': 'On or before',
+  'on and prior to': 'On or before',
+  'prior to': 'Before',
   'on or after': 'On or after',
   after: 'After',
   'up to and including': 'Through',
@@ -345,6 +352,33 @@ const QUALIFIER_DISPLAY: Record<string, string> = {
   beginning: 'Beginning',
   starting: 'Beginning',
 };
+
+/**
+ * Qualifiers a source puts AFTER the date: "10/16/27 and prior", "best by
+ * 3/1/27 or earlier", "dated 5/2/26 and after". Each is inclusive of the date
+ * itself, so it shares the canonical identity of the leading "on or before" /
+ * "on or after" form — the same cutoff written either way is one cutoff.
+ */
+const TRAILING_DATE_QUALIFIER =
+  /\s*,?\s*(?:and|or|&)\s+(prior|earlier|before|older|sooner|after|later|newer)(?:\s+dates?)?\s*\.?\s*$/i;
+
+/**
+ * The trailing qualifier at the very end of `text`, or null. Exported so a
+ * list splitter can tell "10/16/27 and prior" (one cutoff) from
+ * "10/16/27 and 10/20/27" (two dates).
+ */
+export function matchTrailingDateQualifier(
+  text: string,
+): { index: number; display: string; canonicalPrefix: string } | null {
+  const match = text.match(TRAILING_DATE_QUALIFIER);
+  if (!match || match.index === undefined) return null;
+  const later = /^(?:after|later|newer)$/i.test(match[1]);
+  return {
+    index: match.index,
+    display: later ? 'or later' : 'or earlier',
+    canonicalPrefix: later ? 'on or after' : 'on or before',
+  };
+}
 
 /** Separators a source uses between the two ends of a date range. */
 const RANGE_SEPARATOR = /\s*(?:–|—|-|\bto\b|\bthrough\b|\bthru\b)\s*/i;
@@ -378,6 +412,20 @@ export function normalizeDateValue(raw: string): NormalizedValue {
       display: `${word} ${rest.display}`,
       raw: trimmed,
       canonical: `${word.toLowerCase()}|${rest.canonical}`,
+    };
+  }
+
+  // A trailing qualifier ("10/16/27 and prior") is the same meaning on the
+  // other side of the date. Only a SINGLE date or month may carry one: a
+  // qualified range or an already-qualified date is left exactly as written.
+  const trailing = matchTrailingDateQualifier(trimmed);
+  if (trailing) {
+    const rest = normalizeDateValue(trimmed.slice(0, trailing.index));
+    if (rest.canonical === undefined || !/^(?:date|month):/.test(rest.canonical)) return unchanged;
+    return {
+      display: `${rest.display} ${trailing.display}`,
+      raw: trimmed,
+      canonical: `${trailing.canonicalPrefix}|${rest.canonical}`,
     };
   }
 
@@ -477,10 +525,30 @@ export function extractDate(value: string): NormalizedValue | null {
   const found = stripped.match(
     /\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b|\b[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{2,4}\b|\b\d{1,2}\s*[A-Za-z]{3,9}\.?\s*\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b/,
   );
-  if (!found) return null;
+  if (!found || found.index === undefined) return null;
   const parsed = normalizeDateValue(found[0]);
-  return parsed.canonical ? { ...parsed, raw: value.trim() } : null;
+  if (!parsed.canonical) return null;
+  // The words around the date can be meaning, not wrapping: in "All lot codes
+  // dated 10/16/27 and prior" the cutoff is "10/16/27 and prior", and reading
+  // only the date tells a shopper holding a 9/1/27 package that it is safe.
+  // A qualifier directly beside the date travels with it; anything further
+  // away is the noise this function exists to strip.
+  const before = stripped.slice(0, found.index);
+  const after = stripped.slice(found.index + found[0].length);
+  const lead = before.match(LEADING_QUALIFIER_TAIL);
+  const tail = after.match(TRAILING_QUALIFIER_HEAD);
+  if (lead || tail) {
+    const qualified = normalizeDateValue(
+      `${lead ? `${lead[1]} ` : ''}${found[0]}${tail ? tail[0] : ''}`,
+    );
+    if (qualified.canonical) return { ...qualified, raw: value.trim() };
+  }
+  return { ...parsed, raw: value.trim() };
 }
+
+/** A trailing qualifier opening the text after a date (not necessarily at its end). */
+const TRAILING_QUALIFIER_HEAD =
+  /^\s*,?\s*(?:and|or|&)\s+(?:prior|earlier|before|older|sooner|after|later|newer)(?:\s+dates?)?\b(?!\s*\d)/i;
 
 /**
  * Resolve an ambiguous numeric date using the printed code the source paired
@@ -540,6 +608,9 @@ export function dateSortKey(value: NormalizedValue): string {
   if (value.canonical?.startsWith('month:')) return value.canonical.slice(6);
   // A range sorts by where it begins.
   if (value.canonical?.startsWith('range:')) return value.canonical.split(':')[2] ?? '￿';
+  // A qualified date ("on or after|date:2024-07-11") sorts at its own date.
+  const qualified = value.canonical?.match(/\|(?:date|month):(.+)$/);
+  if (qualified) return qualified[1];
   return '￿';
 }
 
@@ -620,7 +691,31 @@ export function splitCompoundCell(raw: string): CompoundCell {
 }
 
 /** A printed date, in the shapes announcements actually use. */
-const DATE_TOKEN = String.raw`\d{1,2}\s+[A-Za-z]{3,9}\.?\s+\d{2,4}|[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{2,4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}`;
+/**
+ * A month WORD. Any three-to-nine letters used to qualify, so "2 and 3352" —
+ * the seam of "33525-2 and 33525-3" — read as day, "month", year, and a lot
+ * fragment rendered as a Best By date (Brad's Raw Chips, 2026-11-03). A date
+ * needs date evidence: a real month name or its abbreviation.
+ */
+const MONTH_WORD_TOKEN = `(?:${[
+  'jan(?:uary)?',
+  'feb(?:ruary)?',
+  'mar(?:ch)?',
+  'apr(?:il)?',
+  'may',
+  'june?',
+  'july?',
+  'aug(?:ust)?',
+  'sept?(?:ember)?',
+  'oct(?:ober)?',
+  'nov(?:ember)?',
+  'dec(?:ember)?',
+]
+  // Case-tolerant month words inside an otherwise case-SENSITIVE pattern:
+  // the code half must stay upper-case/digits.
+  .map((word) => word.replace(/[a-z]/g, (c) => `[${c.toUpperCase()}${c}]`))
+  .join('|')})\\b`;
+const DATE_TOKEN = String.raw`\d{1,2}\s+${MONTH_WORD_TOKEN}\.?\s+\d{2,4}|${MONTH_WORD_TOKEN}\.?\s+\d{1,2},?\s+\d{2,4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}`;
 
 /**
  * Codes the source printed together with the calendar date they stand for, in
@@ -637,7 +732,13 @@ export function extractCodeDatePairs(text: string): { code: string; date: string
   const pairs: { code: string; date: string }[] = [];
   const seen = new Set<string>();
   const patterns = [
-    new RegExp(String.raw`\b([A-Z0-9][A-Z0-9-]{3,20})\s*[–—-]\s*(${DATE_TOKEN})`, 'g'),
+    // A hyphen with no space around it is part of a code ("33525-1"), never
+    // the separator between a code and its date; only a spaced hyphen or a
+    // dash is.
+    new RegExp(
+      String.raw`\b([A-Z0-9][A-Z0-9-]{3,20}?)(?:\s+-\s*|\s*-\s+|\s*[–—]\s*)(${DATE_TOKEN})`,
+      'g',
+    ),
     new RegExp(String.raw`\b([A-Z0-9][A-Z0-9-]{2,20})\s*\(\s*(${DATE_TOKEN})\s*\)`, 'g'),
   ];
   for (const pattern of patterns) {
@@ -645,6 +746,8 @@ export function extractCodeDatePairs(text: string): { code: string; date: string
       const code = match[1].trim();
       // A date must never be mistaken for the code standing beside it.
       if (new RegExp(`^(?:${DATE_TOKEN})$`).test(code)) continue;
+      // The date half must actually be a date.
+      if (normalizeDateValue(match[2]).canonical === undefined) continue;
       if (seen.has(code)) continue;
       seen.add(code);
       pairs.push({ code, date: match[2].trim() });
