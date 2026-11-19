@@ -70,7 +70,13 @@ import type { JobRunOutcome } from '../store/types';
 import { decideDelivery, type DeliveryDecision } from './event-eligibility';
 import { buildPushMessage } from './format';
 import { HOLD_TIME_ZONE, isSendingHeld } from './sending-hold';
-import { MAX_MESSAGES_PER_REQUEST, MAX_RECEIPT_IDS_PER_REQUEST } from './expo-transport';
+import {
+  ExpoAuthMissingError,
+  ExpoRequestError,
+  MAX_MESSAGES_PER_REQUEST,
+  MAX_RECEIPT_IDS_PER_REQUEST,
+  redactPushTokens,
+} from './expo-transport';
 import type {
   CaseLink,
   DeliverableEvent,
@@ -444,8 +450,26 @@ export async function runPushDelivery(
     sendingHeld: false,
     /** Due deliveries left queued by the hold (in a dry run: would be left queued). */
     sendingHoldDeferred: 0,
+    /** Messages handed to the provider this run (each one attempt). */
+    sendAttempted: 0,
+    /** Whole requests the provider rejected or that never completed. */
+    requestFailures: 0,
+    /**
+     * Due deliveries and receipt checks NOT attempted because the transport
+     * cannot authenticate (no access token). Their attempts are not spent.
+     */
+    authBlocked: 0,
   };
   const errors: string[] = [...refresh.errors];
+  // A failure no retry of the same request can fix (no credential, an
+  // authentication refusal). Any such failure makes the run FAILED, so the
+  // workflow fails visibly instead of recording a routine partial.
+  let systemicFailure: string | null = null;
+  const authProblem = transport.authProblem?.() ?? null;
+  // Per-recipient ticket/receipt errors other than DeviceNotRegistered (a
+  // normal uninstall outcome). Decides whether a run with sends but no
+  // accepted ticket failed.
+  let recipientFailures = 0;
   if (options.entitlements === null)
     errors.push('entitlement check not configured: all alerts held');
   const subscriptionById = new Map(subscriptions.map((s) => [s.id, s]));
@@ -460,6 +484,10 @@ export async function runPushDelivery(
   );
   if (dryRun) {
     metrics.receiptsQueried = receiptDue.length;
+  } else if (authProblem !== null && receiptDue.length > 0) {
+    // Receipts wait as ticket_accepted; the run fails below.
+    metrics.authBlocked += receiptDue.length;
+    systemicFailure = authProblem;
   } else {
     for (let i = 0; i < receiptDue.length; i += MAX_RECEIPT_IDS_PER_REQUEST) {
       const chunk = receiptDue.slice(i, i + MAX_RECEIPT_IDS_PER_REQUEST);
@@ -467,9 +495,13 @@ export async function runPushDelivery(
       try {
         receipts = await transport.getReceipts(chunk.map((d) => d.ticketId as string));
       } catch (error) {
-        errors.push(
-          `receipt fetch failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`receipt fetch failed: ${message}`);
+        metrics.requestFailures += 1;
+        if (isSystemic(error)) {
+          systemicFailure = message;
+          break; // the same credential fails every chunk
+        }
         continue; // tickets stay ticket_accepted; retried next run.
       }
       metrics.receiptsQueried += chunk.length;
@@ -507,7 +539,7 @@ export async function runPushDelivery(
           await store.updateDelivery(delivery.id, {
             status: 'permanent_failure',
             failureCode: code,
-            lastError: receipt.message.slice(0, 200),
+            lastError: redactPushTokens(receipt.message).slice(0, 200),
             receiptCheckedAt: nowIso(),
             updatedAt: nowIso(),
           });
@@ -521,7 +553,7 @@ export async function runPushDelivery(
           await store.updateDelivery(delivery.id, {
             status: 'permanent_failure',
             failureCode: code ?? 'unknown',
-            lastError: receipt.message.slice(0, 200),
+            lastError: redactPushTokens(receipt.message).slice(0, 200),
             receiptCheckedAt: nowIso(),
             updatedAt: nowIso(),
           });
@@ -530,7 +562,7 @@ export async function runPushDelivery(
           await store.updateDelivery(delivery.id, {
             status: 'retryable_failure',
             failureCode: code ?? 'unknown',
-            lastError: receipt.message.slice(0, 200),
+            lastError: redactPushTokens(receipt.message).slice(0, 200),
             receiptCheckedAt: nowIso(),
             updatedAt: nowIso(),
           });
@@ -721,6 +753,18 @@ export async function runPushDelivery(
     sendPool.length = maxSends;
   }
 
+  // ── Authentication preflight: never spend an attempt on a request the
+  //    provider must refuse. The due rows stay exactly as they are. ─────────
+  if (authProblem !== null) {
+    const due = sendPool.length + (dryRun && !metrics.sendingHeld ? metrics.deliveriesCreated : 0);
+    if (due > 0) {
+      metrics.authBlocked += due;
+      systemicFailure = authProblem;
+      console.log(`  push transport cannot authenticate: ${due} due deliveries left queued.`);
+      if (!dryRun) sendPool.length = 0;
+    }
+  }
+
   if (dryRun) {
     // Would-send = new pairs this run would create + the existing pool
     // (pending / elapsed retryable / crashed-sending rows) already due.
@@ -809,19 +853,27 @@ export async function runPushDelivery(
       }
 
       let tickets: PushTicket[];
+      metrics.sendAttempted += prepared.length;
       try {
         tickets = await transport.send(prepared.map((item) => item.message));
       } catch (error) {
         const message = (error instanceof Error ? error.message : String(error)).slice(0, 200);
         errors.push(`push send failed: ${message}`);
+        metrics.requestFailures += 1;
         for (const item of prepared) {
           metrics.retryableFailures += 1;
           await store.updateDelivery(item.delivery.id, {
             status: 'retryable_failure',
-            failureCode: 'network',
+            failureCode: requestFailureCode(error),
             lastError: message,
             updatedAt: nowIso(),
           });
+        }
+        if (isSystemic(error)) {
+          // Every later chunk carries the same credential: stop here, and
+          // leave the remaining due rows queued with their attempts unspent.
+          systemicFailure = message;
+          break;
         }
         continue;
       }
@@ -849,7 +901,7 @@ export async function runPushDelivery(
           await store.updateDelivery(delivery.id, {
             status: 'permanent_failure',
             failureCode: code,
-            lastError: ticket.message.slice(0, 200),
+            lastError: redactPushTokens(ticket.message).slice(0, 200),
             updatedAt: nowIso(),
           });
           const subscription = subscriptionById.get(delivery.subscriptionId);
@@ -858,19 +910,21 @@ export async function runPushDelivery(
             await store.disableSubscription(subscription.id, 'device_not_registered', nowIso());
           }
         } else if (isPermanentPushError(code)) {
+          recipientFailures += 1;
           metrics.permanentFailures += 1;
           await store.updateDelivery(delivery.id, {
             status: 'permanent_failure',
             failureCode: code ?? 'unknown',
-            lastError: ticket.message.slice(0, 200),
+            lastError: redactPushTokens(ticket.message).slice(0, 200),
             updatedAt: nowIso(),
           });
         } else {
+          recipientFailures += 1;
           metrics.retryableFailures += 1;
           await store.updateDelivery(delivery.id, {
             status: 'retryable_failure',
             failureCode: code ?? 'unknown',
-            lastError: ticket.message.slice(0, 200),
+            lastError: redactPushTokens(ticket.message).slice(0, 200),
             updatedAt: nowIso(),
           });
         }
@@ -905,9 +959,37 @@ export async function runPushDelivery(
       `${metrics.preferenceHorizonSkipped} preference-horizon exclusion(s).`,
   );
 
+  // FAILED when delivery is broken as a whole: a systemic failure, or this
+  // run handed messages to Expo and not one was accepted (DeviceNotRegistered
+  // alone is a normal outcome, not a failure). A run with nothing to send
+  // stays succeeded; isolated failures beside accepted sends stay partial.
+  const nothingAccepted =
+    metrics.sendAttempted > 0 &&
+    metrics.ticketsAccepted === 0 &&
+    (metrics.requestFailures > 0 || recipientFailures > 0);
+  if (systemicFailure !== null && !errors.some((e) => e.includes(systemicFailure as string))) {
+    errors.unshift(`push delivery blocked: ${systemicFailure}`);
+  } else if (nothingAccepted && systemicFailure === null) {
+    errors.unshift(`push delivery failed: 0 of ${metrics.sendAttempted} message(s) accepted`);
+  }
+  const failed = systemicFailure !== null || nothingAccepted;
   return {
-    outcome: errors.length > 0 ? 'partial' : 'succeeded',
+    outcome: failed ? 'failed' : errors.length > 0 ? 'partial' : 'succeeded',
     metrics,
     error: errors.length > 0 ? errors.join('; ').slice(0, 400) : undefined,
   };
+}
+
+/** A provider failure no retry of the same request can fix (see expo-transport.ts). */
+function isSystemic(error: unknown): boolean {
+  return (
+    (error instanceof ExpoRequestError || error instanceof ExpoAuthMissingError) && error.systemic
+  );
+}
+
+/** A delivery row's code for a whole-request failure: Expo's sanitized code where known. */
+function requestFailureCode(error: unknown): string {
+  if (error instanceof ExpoRequestError) return error.failureCode;
+  if (error instanceof ExpoAuthMissingError) return 'auth_missing';
+  return 'network';
 }

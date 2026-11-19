@@ -233,4 +233,11 @@ export interface PushTransport {
   send(messages: PushMessage[]): Promise<PushTicket[]>;
   /** Fetch receipts for ticket ids (≤1000); missing ids are still in flight. */
   getReceipts(ticketIds: string[]): Promise<Record<string, PushReceipt>>;
+  /**
+   * Why this transport cannot authenticate to its provider, or null when it
+   * can. The worker asks BEFORE contacting the provider, so a missing
+   * credential fails the run without spending any delivery's attempts.
+   * Optional: transports without credentials (tests) omit it.
+   */
+  authProblem?(): string | null;
 }
