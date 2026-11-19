@@ -428,3 +428,149 @@ test('separate lot and date lists with no stated pairing are never paired', () =
   // Both lists are shown, but as two independent lists: no pairing invented.
   assert.deepEqual(pairedCells(source), [false]);
 });
+
+// ── Yellow Dock Root: a headed lot column and a stated container size ───────
+//
+// Larbi Inc.'s 2026-11-17 notice states its package and lots in prose and one
+// HTML list: "Herb To Body Yellow Dock Root C/S 4oz comes in a 4 oz pouch",
+// then "The recalled lots are:" over HB02223, HB02474 and HB02848. Lotly
+// showed only "can't be shown reliably here yet": the plural "lots" was no
+// label, a heading-led column kept at most its first code, and the size
+// sentence had no reader.
+
+function yellowDock(): CaseProjection {
+  const recorded: RecordedAnnouncement = JSON.parse(
+    readFileSync('src/server/fda/fixtures/announcement-larbi-yellow-dock-root.json', 'utf8'),
+  );
+  return projectCase([
+    parseFdaAnnouncement({
+      listing: recorded.listing,
+      detailMainHtml: recorded.mainHtml,
+      path: recorded.path,
+    }),
+  ]);
+}
+
+test('Yellow Dock Root: the 4 oz pouch and all three recalled lots, from the source', () => {
+  const source = yellowDock();
+  assert.match(source.summaryText, /comes in a 4 oz pouch/);
+  assert.match(source.summaryText, /The recalled lots are:\nHB02223\nHB02474\nHB02848\n/);
+  const rows = renderedRows(source);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].name, 'Herb To Body Yellow Dock Root C/S');
+  assert.equal(rows[0].cells['Package Size'], '4 oz');
+  assert.equal(rows[0].cells['Lot codes'], 'HB02223, HB02474, HB02848');
+});
+
+test('a heading-led column keeps every code and stops at the first line that is not one', () => {
+  const text =
+    'Lot codes:\nAB1234\nAB1235\nEX 0225\n90 CAPSULES\nAB9999\nNo other lots or products are affected.';
+  const rows = renderedRows(projection(`<p>${text}</p>`, text));
+  assert.equal(rows[0].cells['Lot codes'], 'AB1234, AB1235, EX 0225');
+});
+
+test('the plural "lots" is a label only when a colon hands it off', () => {
+  for (const text of [
+    'No other lots or products are affected. Lot code: AB1234.',
+    'The recalled lots of this product are contained in 127 boxes. Lot code: AB1234.',
+    'Additional lots of the beans that have already been recalled include: 24330, 24297. Lot code: AB1234.',
+  ]) {
+    const rows = renderedRows(projection(`<p>${text}</p>`, text));
+    assert.equal(rows[0].cells['Lot codes'], 'AB1234', text);
+  }
+  const inline = 'The recalled lots are: HB02223, HB02474.';
+  assert.equal(
+    renderedRows(projection(`<p>${inline}</p>`, inline))[0].cells['Lot codes'],
+    'HB02223, HB02474',
+  );
+});
+
+test('a container sentence states the size only when nothing names another size', () => {
+  const sized = (text: string, title = 'Acme Recalls Cheese') => {
+    const source = { ...projection(`<p>${text}</p>`, text), title, productDescription: 'Cheese' };
+    const consumer = buildConsumerCase(source, source.affectedProducts);
+    return affectedProductsModel(consumer.packageCheck, 'Cheese')
+      .items.flatMap((item) => item.fields)
+      .filter((field) => field.key === 'size')
+      .map((field) => field.value);
+  };
+  assert.deepEqual(sized('The cheese comes in a 4 oz pouch. Lot code: AB1234.'), ['4 oz']);
+  // Two different stated containers: the notice has not said which one.
+  assert.deepEqual(
+    sized('The cheese comes in a 4 oz pouch and is also sold in a 16 oz jar. Lot code: AB1234.'),
+    [],
+  );
+  // The headline names another size, so the recall covers more than one.
+  assert.deepEqual(
+    sized(
+      'The spinach is packaged in a 35 lb bag. Lot code: AB1234.',
+      'Sno Pac Recalls 35 LB Bulk Frozen Spinach and 10 oz Organic Spinach',
+    ),
+    [],
+  );
+  // Not a container: no size.
+  assert.deepEqual(sized('The cheese comes in a variety of flavors. Lot code: AB1234.'), []);
+});
+
+// ── Ownership: a size or a lot list never spreads to another product ───────
+
+/** The summaryText FDA's flattener produces: one line per paragraph or list item. */
+function htmlCase(html: string, title: string, productDescription: string | null): CaseProjection {
+  const text = html
+    .replace(/<\/(p|li)>/g, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n+/g, '\n');
+  return { ...projection(html, text), title, productDescription };
+}
+
+test('two described products each keep their own size and lots', () => {
+  const rows = renderedRows(
+    htmlCase(
+      '<p>Acme Basil comes in a 2 oz jar.</p><p>The recalled lots are:</p><ul><li>AB100</li><li>AB101</li></ul>' +
+        '<p>Acme Thyme comes in a 3 oz jar.</p><p>The recalled lots are:</p><ul><li>TH200</li></ul>',
+      'Acme Recalls Basil and Thyme',
+      'Basil and Thyme',
+    ),
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.name, row.cells['Package Size'], row.cells['Lot codes']]),
+    [
+      ['Acme Basil', '2 oz', 'AB100, AB101'],
+      ['Acme Thyme', '3 oz', 'TH200'],
+    ],
+  );
+});
+
+test('one container sentence never sizes a notice that covers several products', () => {
+  const rows = renderedRows(
+    htmlCase(
+      '<p>Acme is recalling Basil and Thyme. The basil comes in a 4 oz pouch.</p><p>Lot code: AB100</p>',
+      'Acme Recalls Basil and Thyme',
+      'Basil and Thyme',
+    ),
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].cells['Package Size'], undefined);
+});
+
+test('several headed lot columns are not pooled into one product', () => {
+  const rows = renderedRows(
+    htmlCase(
+      '<p>Acme Basil 2 oz jar. Lot codes:</p><ul><li>AB100</li><li>AB101</li></ul>' +
+        '<p>Acme Thyme 3 oz jar. Lot codes:</p><ul><li>TH200</li><li>TH201</li></ul>',
+      'Acme Recalls Spices',
+      'Spices',
+    ),
+  );
+  // Each column belongs to a different product; neither is read down past its
+  // first line (the shipped behaviour), so no product gains the other's codes.
+  assert.ok(!(rows[0]?.cells['Lot codes'] ?? '').includes('AB101'));
+  assert.ok(!(rows[0]?.cells['Lot codes'] ?? '').includes('TH201'));
+});
+
+test('a lot list read by the list reader is never read again by the prose reader', () => {
+  const rows = renderedRows(yellowDock());
+  const lots = (rows[0].cells['Lot codes'] ?? '').split(', ');
+  assert.deepEqual(lots, [...new Set(lots)]);
+  assert.equal(rows.length, 1);
+});

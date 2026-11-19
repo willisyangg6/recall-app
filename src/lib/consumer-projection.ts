@@ -65,7 +65,11 @@ import {
   type ProductPhoto,
 } from './product-photos';
 import { extractProseIdentifiers, extractProseVariantLines } from './prose-identifiers';
-import { extractAffectedProductLists, extractIdentifierListOwners } from './source-lists';
+import {
+  extractAffectedProductLists,
+  extractDescribedLotLists,
+  extractIdentifierListOwners,
+} from './source-lists';
 import { interpretAttachmentTables, interpretTables, type SemanticFact } from './source-tables';
 import {
   captionContradictsPackage,
@@ -926,6 +930,16 @@ function withoutGluedTableText(line: string, tableText: string): string {
   if (!inTable(words.slice(end))) end = words.length;
   if (start === 0 && end === words.length) return line;
   return words.slice(start, end).join(' ');
+}
+
+/** Prose without the lines a list reader already consumed (each `<li>` is one line). */
+function withoutListedItems(text: string, items: string[]): string {
+  if (items.length === 0) return text;
+  const listed = new Set(items);
+  return text
+    .split('\n')
+    .filter((line) => !listed.has(line.trim()))
+    .join('\n');
 }
 
 /** Whitespace/punctuation-insensitive form, for substring containment tests. */
@@ -2434,6 +2448,56 @@ function codeLocationFrom(facts: SemanticFact[], projectionText: string): CodeLo
   return best;
 }
 
+/**
+ * The source's own sentence that the product comes in one sized container:
+ * "Herb To Body Yellow Dock Root C/S 4oz comes in a 4 oz pouch" (Larbi,
+ * 2026-11-17). Closed vocabularies on both sides — a measurement unit, then a
+ * container noun — so "comes in a variety of flavors" or "packed in a
+ * facility" never qualifies. Every such statement must agree: two different
+ * sizes name different packages, and then the notice has not said which one a
+ * shopper holds, so nothing is stated.
+ */
+const CONTAINER_SIZE_STATEMENT =
+  /\b(?:comes|is)\s+(?:also\s+)?(?:(?:packaged|packed|sold|supplied|bottled|offered)\s+)?in\s+(?:an?|one)\s+(\d[\d./]*\s*-?\s*(?:oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|fl\.?\s*oz))\.?\s+(?:[a-z-]+\s+){0,2}?(?:pouch(?:es)?|bags?|jars?|bottles?|boxe?s?|cans?|cartons?|tubs?|containers?|packages?|packets?|tins?|trays?|cups?|pails?|sachets?)\b/gi;
+
+/** Any package measurement, for the agreement check below. */
+const ANY_MEASUREMENT =
+  /\b(\d[\d./]*\s*-?\s*(?:oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|fl\.?\s*oz))\b/gi;
+
+/** A structured product description naming more than one product. */
+const SEVERAL_PRODUCTS = /,|;|&|\band\b|\bor\b/i;
+
+function statedContainerSize(
+  summaryText: string,
+  headline: string,
+  productDescription: string | null,
+): SemanticFact | null {
+  // Ownership: the case-level row IS the product only when FDA's own
+  // structured description names exactly one. With none, or with several
+  // ("Basil and Thyme"), a container sentence cannot be tied to every product
+  // the row stands for, so nothing is stated.
+  if (!productDescription || SEVERAL_PRODUCTS.test(productDescription)) return null;
+  const statements = [...summaryText.matchAll(CONTAINER_SIZE_STATEMENT)];
+  if (statements.length === 0) return null;
+  const sizes = new Set(statements.map((match) => measurementKey(match[1])));
+  if (sizes.size !== 1) return null;
+  // The headline and product description name the recalled packages. A
+  // measurement there that differs ("35 LB Bulk … and 10 oz Organic …") means
+  // the recall covers other sizes, and one container sentence cannot speak for
+  // all of them.
+  for (const match of headline.matchAll(ANY_MEASUREMENT)) {
+    if (!sizes.has(measurementKey(match[1]))) return null;
+  }
+  const [first] = statements;
+  return {
+    concept: 'package_size',
+    sourceLabel: 'Package statement',
+    value: first[1].replace(/\s+/g, ' ').trim(),
+    raw: first[0],
+    evidence: 'prose',
+  };
+}
+
 function buildPackageCheck(
   projection: CaseProjection,
   affectedProducts: AffectedProduct[],
@@ -2477,6 +2541,15 @@ function buildPackageCheck(
         evidence: named.evidence,
         scope: named.scope,
       });
+    } else if (!splitTrailingMeasurements(projection.productDescription ?? '')) {
+      // Last, and only when the description states no size of its own: the
+      // source's sentence that the product comes in one sized container.
+      const stated = statedContainerSize(
+        summary,
+        `${projection.title ?? ''} ${projection.productDescription ?? ''}`,
+        projection.productDescription,
+      );
+      if (stated) proseFacts.push(stated);
     }
   }
 
@@ -2845,10 +2918,8 @@ export function buildConsumerCase(
     ...interpretAttachmentTables(projection.attachmentTables),
   ];
   const tableFacts = tables.flatMap((t) => t.variants.flatMap((v) => v.facts));
-  // Prose reads only what the tables did not already scope to a product row.
-  const proseText = proseOutsideTables(projection.summaryHtml, projection.summaryText);
-  const prose = extractProseIdentifiers(proseText);
   const photos = extractProductPhotos(projection.summaryHtml);
+  const describedLots = extractDescribedLotLists(projection.summaryHtml);
   // Official photo captions frequently carry the barcode when the table cell
   // says only "See Image Below" (verified: Outshine). The caption is source
   // text like any other, and the same label-driven rules apply to it.
@@ -2865,19 +2936,32 @@ export function buildConsumerCase(
   // Facts from rows whose name failed the identity contract widen to the
   // recall scope, whichever structural path proposed them.
   const unassignedFacts: SemanticFact[] = [...built.unassigned];
+  let listsRead = false;
   if (built.variants.length === 0) {
     // A source-declared bullet list is structural evidence on par with a
     // table: each item is one product owning the identifiers stated in it.
     // A declared list of MARKINGS is the same evidence read the other way
     // round (P3C-2): the lead-in paragraph names the product, and the list
     // beneath it holds that product's own codes — one row per list, never
-    // one pooled row across every list on the page.
+    // one pooled row across every list on the page. A bare "The recalled
+    // lots are:" list belongs to the one product the prose directly above it
+    // describes; when that is ambiguous its codes stay recall-wide.
+    listsRead = true;
     built = buildVariants([
       ...extractAffectedProductLists(projection.summaryHtml),
       ...extractIdentifierListOwners(projection.summaryHtml),
+      ...describedLots.owned,
     ]);
-    unassignedFacts.push(...built.unassigned);
+    unassignedFacts.push(...built.unassigned, ...describedLots.recallWide);
   }
+  // Prose reads only what the tables did not already scope to a product row,
+  // and never a lot list the list reader above already read: one path per
+  // list, so no lot is counted twice.
+  const baseProse = proseOutsideTables(projection.summaryHtml, projection.summaryText);
+  const proseText = listsRead
+    ? withoutListedItems(baseProse, describedLots.consumedItems)
+    : baseProse;
+  const prose = extractProseIdentifiers(proseText);
   if (built.variants.length === 0) {
     // Product lines carrying their own inline identifiers are the richest
     // fallback: each version keeps the codes that identify it.
@@ -3046,7 +3130,11 @@ export function collectSourceFacts(projection: CaseProjection): SemanticFact[] {
     ...interpretAttachmentTables(projection.attachmentTables),
   ];
   const photos = extractProductPhotos(projection.summaryHtml);
-  const proseText = proseOutsideTables(projection.summaryHtml, projection.summaryText);
+  const describedLots = extractDescribedLotLists(projection.summaryHtml);
+  const proseText = withoutListedItems(
+    proseOutsideTables(projection.summaryHtml, projection.summaryText),
+    describedLots.consumedItems,
+  );
   return [
     ...tables.flatMap((table) =>
       attachDeferredImages(table, photos).flatMap((variant) =>
@@ -3055,6 +3143,8 @@ export function collectSourceFacts(projection: CaseProjection): SemanticFact[] {
     ),
     ...extractAffectedProductLists(projection.summaryHtml).flatMap((item) => item.facts),
     ...extractIdentifierListOwners(projection.summaryHtml).flatMap((item) => item.facts),
+    ...describedLots.owned.flatMap((item) => item.facts),
+    ...describedLots.recallWide,
     ...parseProseFacts(proseText),
     ...extractProseIdentifiers(proseText).facts.map((fact) => ({
       ...fact,

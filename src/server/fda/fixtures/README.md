@@ -60,6 +60,14 @@ Code/Best By Date` column states one cutoff ("All lot codes dated 10/16/27
   cutoff renders once, with its "or earlier", per product. Recorded 2026-11-16
   from its latest production `source_snapshots` payload (captured 2026-11-11),
   verbatim and unedited.
+- `announcement-larbi-yellow-dock-root.json` — the 2026-11-17
+  Larbi Inc. / Herb To Body Yellow Dock Root C/S recall, backing
+  `src/server/fda/described-lot-lists.test.ts`. One sentence describes the
+  product ("… comes in a 4 oz pouch …") and a separate "The recalled lots
+  are:" list holds three bare lot codes; it pins that the list belongs to that
+  product, with its 4 oz size and pouch packaging. Recorded 2026-11-18 from its
+  latest production `source_snapshots` payload (captured 2026-11-18), verbatim
+  and unedited.
 
 ## Pinned production notices (P3B)
 

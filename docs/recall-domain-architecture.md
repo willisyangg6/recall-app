@@ -1084,6 +1084,30 @@ name a version, or occupy two roles at once. This pass closes those.
   states; identifier lists and property lists flow through prose extraction to
   case-level fields (property rows split on "•" bullets, so "Lot code : 5 265
   • Best-If-Used-By date: MAR 24, 2027" is two clean facts).
+- **A product described in prose over a separate lot list**
+  (`extractDescribedLotLists` in `src/lib/source-lists.ts`, 2026-11-18). A
+  bare hand-off ("The recalled lots are:", "Affected lot numbers include:")
+  declares an identifier list even with one item. Its bare codes belong to a
+  product only when the sentence directly above the hand-off describes exactly
+  one product in the singular ("Herb To Body Yellow Dock Root C/S 4oz comes in
+  a 4 oz pouch") and no other sentence since the previous list describes one.
+  That sentence supplies the size and packaging, with packaging gated by the
+  closed vocabulary, and a trailing name measurement is removed only when it
+  restates that size. Two described products, a plural subject, or an
+  intervening sentence leave the codes recall-wide, never assigned to a guessed
+  product. The shape yields no UPC and no date. Display-time only. A list this
+  reader consumes is removed from the prose text, so the prose reader never
+  reads the same codes a second time.
+- **Plural "lots:", headed code columns and stated container sizes**
+  (`src/lib/prose-identifiers.ts`, `src/lib/consumer-projection.ts`,
+  2026-11-18). "lots" is a lot label only when a colon hands it off ("Lots:",
+  "lots are:"), never across a clause. A heading that ends in its colon at a
+  line break is read down its column, one code-shaped line at a time, only when
+  the notice holds exactly ONE such column; several columns belong to several
+  products and are never pooled. "comes in / is packaged in a <size>
+  <container>" is case-level Package Size only when no product rows exist,
+  FDA's structured product description names a single product, every such
+  sentence agrees, and the headline and description name no other size.
 - **Package field VALUE contracts.** A supported key with an invalid value
   renders nothing: dates require a digit and semantic completeness (a bound
   that dangles — "between November 2028 through" — is rejected outright, while
