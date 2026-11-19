@@ -20,12 +20,18 @@
  * - The photo goes through the shared image allocation.
  * - The card's reason is the shared `conciseReasonLine`.
  *
+ * - Affects You is the SAME `affectsYouVerdict` over `retailerRelevanceInput`
+ *   (docs/recall-personalization.md, "Retailer-only notices"): the approved
+ *   states (or unknown), the publishing retailer as the store signal, and the
+ *   approved structured reason. Push eligibility is that verdict too.
+ *
  * What stays the retailer's own: the neutral Unknown risk treatment (no agency
  * classification exists), the one source link naming the retailer's document,
- * the publishing retailer in the existing store row, and no Affects You, save,
- * or community reports. Nothing here is written to recall_cases.
+ * the publishing retailer in the existing store row, and no save or community
+ * reports. Nothing here is written to recall_cases.
  */
 
+import type { UserRecallPreferences } from '@/domain/preferences';
 import type { Geography } from '@/domain/recall-types';
 
 import {
@@ -37,7 +43,14 @@ import {
 import { tierForActivityDate } from './feed-relevance';
 import type { FeedItem } from './recall-feed';
 import { allocateRecallImages } from './recall-images';
-import { extractChemicalAgent, extractPathogen } from '@/domain/hazard';
+import { affectsYouVerdict, evaluatePersonalRelevance, type RelevanceInput } from './relevance';
+import {
+  extractAllergenEvidence,
+  extractChemicalAgent,
+  extractPathogen,
+  formatAllergenList,
+  normalizedAllergenTokens,
+} from '@/domain/hazard';
 import { narrativeWithoutIllness } from '@/domain/illness-status';
 import {
   activityDisplay,
@@ -121,22 +134,69 @@ export const RETAILER_FIELDS_WITHOUT_A_SLOT = [
  * reads the shared "Distribution not specified" line. Costco's own region
  * names ("Select Locations in the Midwest") are never mapped to states.
  */
-function geographyOf(fields: RetailerNoticeFields): Geography {
+export function geographyOf(fields: RetailerNoticeFields): Geography {
   const { states } = fields.whereSold;
   return states.length > 0
     ? { scope: 'states', states, confidence: 'stated', sourceText: null }
     : { scope: 'unknown', states: [], confidence: 'stated', sourceText: null };
 }
 
+/**
+ * The reviewer's approved allergen agent as the canonical "undeclared …"
+ * statement relevance reads, naming EVERY allergen either shared reading
+ * finds. Each reading alone can miss one ("undeclared Tree Nuts
+ * (Hazelnut/Filbert) and soy": the evidence extractor stops at the
+ * parenthesis and keeps tree nuts; the token normalizer keeps only soy). A
+ * missed allergen is dangerous here, because the known allergen-only
+ * mismatch would then WITHHOLD the recall from a shopper allergic to it; the
+ * union only adds allergens the approved text names.
+ */
+function allergenStatement(agent: string | null): string | null {
+  if (agent === null) return null;
+  const words = new Map<string, string>();
+  for (const word of extractAllergenEvidence(agent)) {
+    for (const token of normalizedAllergenTokens(`undeclared ${word}`)) words.set(token, word);
+  }
+  for (const token of normalizedAllergenTokens(agent)) {
+    if (!words.has(token)) words.set(token, token);
+  }
+  return words.size > 0 ? `undeclared ${formatAllergenList([...words.values()])}` : agent;
+}
+
+/**
+ * The facts the ONE relevance evaluation reads, from the approved fields
+ * (docs/recall-personalization.md, "Retailer-only notices"). The publishing
+ * retailer is the store signal; a letter that states no state is `unknown`,
+ * never nationwide; the agent and hazard are the reviewer's structured reason.
+ */
+export function retailerRelevanceInput(notice: Pick<RetailerNotice, 'fields'>): RelevanceInput {
+  const { fields } = notice;
+  return {
+    geography: geographyOf(fields),
+    retailerNames: [fields.retailer],
+    pathogenOrAllergen:
+      fields.reason.hazardCategory === 'allergen'
+        ? allergenStatement(fields.reason.agent)
+        : canonicalAgent(fields),
+    hazardCategory: fields.reason.hazardCategory,
+    reasonText: fields.whyRecalled,
+  };
+}
+
 /** The Feed card model, for the shared `RecallCard`. */
-export function buildRetailerHomeCardModel(notice: RetailerNotice, today: string): HomeCardModel {
+export function buildRetailerHomeCardModel(
+  notice: RetailerNotice,
+  today: string,
+  prefs: UserRecallPreferences | null = null,
+): HomeCardModel {
   const { fields } = notice;
   return {
     id: retailerRouteId(notice),
     noticeLabel: null,
     risk: unclassifiedRiskView(),
     activity: activityDisplay(notice.noticeDate, [], today),
-    affectsYou: false,
+    // The same verdict an agency card renders, from the same preferences.
+    affectsYou: affectsYouVerdict(retailerRelevanceInput(notice), prefs),
     productName: fields.productName,
     // The company line, exactly as an agency card falls back to the firm
     // when no consumer brand is stated separately.
@@ -270,7 +330,11 @@ export function retailerNarrativeEvidence(fields: RetailerNoticeFields): Narrati
 }
 
 /** The Recall Details model, for the shared Recall Details screen. */
-export function buildRetailerDetailModel(notice: RetailerNotice, today: string): DetailModel {
+export function buildRetailerDetailModel(
+  notice: RetailerNotice,
+  today: string,
+  prefs: UserRecallPreferences | null = null,
+): DetailModel {
   const { fields } = notice;
   const narrative = recallNarrative(retailerNarrativeEvidence(fields));
   const sold = whereSoldModel(distributionOf(fields));
@@ -293,7 +357,7 @@ export function buildRetailerDetailModel(notice: RetailerNotice, today: string):
     heroImageUrl: images.hero?.url ?? null,
     productImages: detailImageSet(productImagery(images), fields.productName),
     category: detailCategory(notice.productCategories),
-    affectsYou: false,
+    affectsYou: affectsYouVerdict(retailerRelevanceInput(notice), prefs),
     affectsYouBanner: 'Warning: This recall affects you.',
     whatHappened: {
       text: narrativeWithoutIllness(narrative.happened.text, narrative.illnessStatus),
@@ -383,7 +447,7 @@ export function retailerNoticeMatches(notice: RetailerNotice, query: string): bo
  * agency sections use, applied to the letter's date. Notices are hidden
  * whenever a browsing filter is active: they carry no category, risk tier or
  * agency, so no filter can place them honestly. Search narrows them like any
- * card. Affects you never includes them in this release.
+ * card.
  */
 export function retailerNoticesForAll(
   notices: RetailerNotice[],
@@ -398,4 +462,23 @@ export function retailerNoticesForAll(
     (tierForActivityDate(notice.noticeDate, now) === 'recent' ? recent : older).push(notice);
   }
   return { recent, older };
+}
+
+/**
+ * Which notices Affects you shows: exactly those the shared relevance
+ * evaluation says affect this user, split by the same 60-day boundary on the
+ * letter's date, with the same filter and search rules as All recalls. A
+ * notice with no confirmed-open evidence (retailers publish none) is counted
+ * only while recent, as an agency recall without that evidence is.
+ */
+export function retailerNoticesForAffects(
+  notices: RetailerNotice[],
+  now: Date,
+  prefs: UserRecallPreferences,
+  options: { filtersActive: boolean; query: string },
+): { recent: RetailerNotice[]; older: RetailerNotice[] } {
+  const affecting = notices.filter(
+    (notice) => evaluatePersonalRelevance(retailerRelevanceInput(notice), prefs).affectsMe,
+  );
+  return retailerNoticesForAll(affecting, now, options);
 }

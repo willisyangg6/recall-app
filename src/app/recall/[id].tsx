@@ -696,7 +696,7 @@ export default function RecallDetailScreen() {
     // An approved retailer notice, adapted into the same DetailModel
     // (lib/retailer-notice-presentation.ts): this screen renders it exactly
     // as it renders an agency recall.
-    model = buildRetailerDetailModel(state.notice, todayIso());
+    model = buildRetailerDetailModel(state.notice, todayIso(), prefs);
   } else {
     const { projection } = state.detail;
     // The one deterministic mapping shared with the Feed (lib/recall-presentation):
