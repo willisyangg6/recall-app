@@ -9,11 +9,12 @@
  *   notice (default costco); an approval file names its own publisher.
  *   ... add --apply --confirm --expect <n> to write, with <n> from the dry run.
  *
- * Writes (apply only): retailer_notice_approvals. Nothing else: an approval
- * never touches recall_cases, source records or the notification ledger, so it
- * cannot change the agency feed or send an alert. A notice reaches shoppers
- * only through consumer_retailer_notices(), and only while its approval's
- * document hash equals the notice's current letter.
+ * Writes (apply only): retailer_notice_approvals, and the notice's alert row in
+ * notification_events (retailer_notice_id, never a case; notice-events.ts).
+ * An approval never touches recall_cases or source records, so it cannot
+ * change the agency feed. A notice reaches shoppers only through
+ * consumer_retailer_notices(), and only while its approval's document hash
+ * equals the notice's current letter — the alert is held to the same rule.
  */
 
 import { readFileSync } from 'node:fs';

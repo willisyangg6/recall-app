@@ -138,6 +138,10 @@ test('no retailer module names a consumer or ledger table, an RPC, or the pipeli
       // Store listings map an agency link to its case through source_records,
       // READ only (asserted below); no other retailer module names it.
       if (name === 'listing-run.ts' && pattern.source.includes('source_records')) continue;
+      // The approval store alone writes the alert ledger, rows naming the
+      // notice (approval.test.ts pins the shape); the monitor, listings and
+      // read paths never do.
+      if (name === 'approval-store.ts' && pattern.source.includes('notification_events')) continue;
       assert.doesNotMatch(text, pattern, `${name} matches ${pattern}`);
     }
   }

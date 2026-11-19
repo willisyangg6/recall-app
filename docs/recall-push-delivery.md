@@ -949,6 +949,61 @@ a real recall after expiry. The clock gate that stops it is proven by
   migration as a rollback.
 - **Public release** waits until P1–P6 pass.
 
+## Retailer-only notices (prepared 2026-11-19; migration `20261119000000` NOT applied)
+
+An approved, standalone retailer notice (Costco, ALDI; `consumer_retailer_notices()`) alerts the
+same shoppers its Affects You shows, through the same worker, seam, entitlement gate, horizons,
+overnight hold and idempotency. Code: [notice-events.ts](../src/server/retailer/notice-events.ts)
+(the rules), [event-eligibility.ts](../src/server/push/event-eligibility.ts)
+(`decideRetailerDelivery`), [worker.ts](../src/server/push/worker.ts).
+
+**Ledger.** `notification_events` names exactly one subject: an agency case (`recall_case_id`)
+or a retailer notice (`retailer_notice_id`, check `notification_events_one_subject`). The
+approval step (`retailer:review approve`) writes the event in the same plan as the approval
+(`--expect` counts it):
+
+| Approval                                  | Event                                                                                                                                                                                                 |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| first approval of a notice                | `initial`, dedup `retailer_notice:<id>` (one per notice, ever — withdraw and re-approve never re-alerts)                                                                                              |
+| letter dated more than 30 days ago        | the same `initial`, suppressed `backfill`: publishing old intake alerts nobody (the agency horizon)                                                                                                   |
+| re-approval of a revised letter           | the shared `detectChanges` over the approved fields as a projection: only a material change (products, geography, illness, instructions) is a `material_update`, coalesced to one per notice per 24 h |
+| re-approval, nothing material changed     | nothing                                                                                                                                                                                               |
+| an agency case is already the same recall | refused: confirm the agency match instead (the monitor's own matcher, `agencyCandidates`)                                                                                                             |
+
+**Delivery** (`decideRetailerDelivery`, decided when the event is read AND again for every
+queued row at send):
+
+| Notice now                                                                             | Decision                                                                            |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| returned by `consumer_retailer_notices()` (approved, letter current, standalone)       | deliver, formatted from the CURRENT approval                                        |
+| withdrawn, letter revised since approval, agency match confirmed, no longer standalone | `retailer_not_visible`: never sends; a queued row fails `case_retailer_not_visible` |
+| an agency case the matcher calls the same recall (before the monitor re-decides)       | `agency_duplicate`: the agency's alert is the one alert                             |
+
+Per subscription, in the seam: the shared `pushEligible` over `retailerRelevanceInput`
+(docs/recall-personalization.md, "Retailer-only notices"); and only app versions ≥ `1.2.0`
+(`RETAILER_ALERTS_MIN_APP_VERSION`) — 1.0.0 and 1.1.0 cannot show a retailer notice. Build 14
+also reports 1.2.0; it was never released and ignores the payload kind (no navigation).
+
+**One recall, one new-recall alert, both orders.** Retailer first, agency later: the agency
+`initial` is not delivered to a subscription that already has a sent or queued delivery for a
+retailer notice the matcher calls the same recall (`duplicateAlertSkipped`); everyone else gets
+it. Agency first: the approval is refused, and a retailer event whose agency twin appears before
+it sends is skipped (`agency_duplicate`). A material update on the agency case follows the agency
+policy unchanged.
+
+**Copy and tap.** The same formatter: "Recall alert: <product>", the shared reason line, and the
+retailer as announcer ("Costco announced this Nov 7."), never an agency. Payload
+`{ kind: 'retailer_notice', retailerNoticeId, notificationEventId }`; the app opens
+`/recall/retailer:<uuid>` (lib/push-payload.ts, UUID-validated).
+
+**Rollout constraint.** The scheduled worker before this change requires a joined case for every
+event, so: apply `20261119000000` → merge this worker → only then approve a retailer notice. The
+new worker queries `retailer_notice_id`, so it must not be merged before the migration.
+
+**Privacy export (finding, unchanged).** `export_installation_data` lists every alert row; a
+retailer alert appears with `recall_id: null` (kind, times and status are complete). Adding the
+notice id to the export is a privacy-contract change left for a separate decision.
+
 ## Secrets and privacy
 
 Server env (GitHub `production` environment secrets, declared per step):

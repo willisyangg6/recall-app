@@ -20,7 +20,16 @@ import type {
   InstallationPreferences,
   PushStore,
   PushSubscription,
+  RetailerAlertRecipients,
+  RetailerNoticeLink,
 } from './types';
+import {
+  retailerAttribution,
+  retailerCaseProjection,
+  type RetailerMatchEvidence,
+  type RetailerNoticeSubject,
+} from '../retailer/notice-events';
+import type { AgencyCaseView } from '../retailer/types';
 
 /** What the sequenced RPCs return: the gate's decision and the sequence now recorded. */
 export interface SequencedWriteResult {
@@ -68,6 +77,22 @@ export class MemoryPushStore implements PushStore {
   preferences = new Map<string, InstallationPreferences>();
   /** The recall_cases rows the events join: lifecycle, tombstone, projection. */
   cases = new Map<string, CaseLink>();
+  /**
+   * Retailer notices as the worker reads them: `visible` mirrors
+   * consumer_retailer_notices(); `subject` is the live approval (null when
+   * withdrawn or never approved); `lastSubject` the latest approval of any kind.
+   */
+  retailerNotices = new Map<
+    string,
+    {
+      visible: boolean;
+      subject: RetailerNoticeSubject | null;
+      lastSubject: RetailerNoticeSubject;
+      matchEvidence: RetailerMatchEvidence | null;
+    }
+  >();
+  /** The agency cases the retailer matcher compares against (the monitor's view). */
+  agencyCaseViews: AgencyCaseView[] = [];
 
   // ── Test setup helpers ─────────────────────────────────────────────────────
 
@@ -107,7 +132,53 @@ export class MemoryPushStore implements PushStore {
     });
   }
 
+  /** Publish (or change) a retailer notice as the read path would show it. */
+  setRetailerNotice(
+    subject: RetailerNoticeSubject,
+    state: { visible?: boolean; live?: boolean; matchEvidence?: RetailerMatchEvidence | null } = {},
+  ): void {
+    this.retailerNotices.set(subject.noticeId, {
+      visible: state.visible ?? true,
+      subject: state.live === false ? null : subject,
+      lastSubject: subject,
+      matchEvidence: state.matchEvidence ?? null,
+    });
+  }
+
+  /** Ledger a retailer-notice event (the approval step's write). */
+  addRetailerEvent(event: {
+    id: string;
+    retailerNoticeId: string;
+    kind: DeliverableEvent['kind'];
+    triggerRuleId: string;
+    payloadSummary: string;
+    createdAt: string;
+    suppressed?: string | null;
+    materialChangeRef?: string | null;
+  }): void {
+    this.events.push({
+      ...event,
+      recallCaseId: '',
+      suppressed: event.suppressed ?? null,
+      materialChangeRef: event.materialChangeRef ?? null,
+    });
+  }
+
   private join(event: StoredEvent): DeliverableEvent {
+    if (event.retailerNoticeId) {
+      const notice = this.retailerNotices.get(event.retailerNoticeId);
+      if (!notice) throw new Error(`retailer event ${event.id} has no notice`);
+      const subject = notice.subject ?? notice.lastSubject;
+      const { suppressed: _s, ...rest } = event;
+      return {
+        ...rest,
+        recallCaseId: '',
+        attribution: retailerAttribution(subject.fields),
+        caseState: 'active',
+        mergedInto: null,
+        projection: retailerCaseProjection(subject),
+      };
+    }
     const link = this.cases.get(event.recallCaseId);
     if (!link) throw new Error(`notification event ${event.id} has no joined recall case`);
     const { suppressed: _suppressed, ...rest } = event;
@@ -365,6 +436,7 @@ export class MemoryPushStore implements PushStore {
       enabled: row.enabled,
       enabledAt: row.enabledAt,
       entitlement: { ...row.entitlement },
+      appVersion: row.appVersion ?? null,
     };
   }
 
@@ -412,7 +484,10 @@ export class MemoryPushStore implements PushStore {
 
   async listDeliverableEventsSince(sinceIso: string, limit: number): Promise<DeliverableEvent[]> {
     return this.events
-      .filter((event) => event.suppressed === null && event.createdAt >= sinceIso)
+      .filter(
+        (event) =>
+          !event.retailerNoticeId && event.suppressed === null && event.createdAt >= sinceIso,
+      )
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .slice(0, limit)
       .map((event) => this.join(event));
@@ -481,6 +556,47 @@ export class MemoryPushStore implements PushStore {
   async getEvent(eventId: string): Promise<DeliverableEvent | null> {
     const found = this.events.find((e) => e.id === eventId);
     return found ? this.join(found) : null;
+  }
+
+  async listDeliverableRetailerEventsSince(
+    sinceIso: string,
+    limit: number,
+  ): Promise<DeliverableEvent[]> {
+    return this.events
+      .filter(
+        (event) =>
+          !!event.retailerNoticeId && event.suppressed === null && event.createdAt >= sinceIso,
+      )
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(0, limit)
+      .map((event) => this.join(event));
+  }
+
+  async getRetailerNotice(noticeId: string): Promise<RetailerNoticeLink> {
+    const notice = this.retailerNotices.get(noticeId);
+    return {
+      noticeId,
+      visible: notice?.visible ?? false,
+      subject: notice?.subject ?? null,
+      matchEvidence: notice?.matchEvidence ?? null,
+    };
+  }
+
+  async listAgencyCaseViews(fromIso: string): Promise<AgencyCaseView[]> {
+    return this.agencyCaseViews.filter((view) => view.publishedAt >= fromIso.slice(0, 10));
+  }
+
+  async listRetailerAlertRecipients(sinceIso: string): Promise<RetailerAlertRecipients[]> {
+    const byNotice = new Map<string, Set<string>>();
+    for (const event of this.events) {
+      if (!event.retailerNoticeId || event.createdAt < sinceIso) continue;
+      for (const delivery of this.deliveries.values()) {
+        if (delivery.eventId !== event.id || delivery.status === 'permanent_failure') continue;
+        if (!byNotice.has(event.retailerNoticeId)) byNotice.set(event.retailerNoticeId, new Set());
+        byNotice.get(event.retailerNoticeId)!.add(delivery.subscriptionId);
+      }
+    }
+    return [...byNotice].map(([noticeId, ids]) => ({ noticeId, subscriptionIds: [...ids] }));
   }
 
   async getCase(caseId: string): Promise<CaseLink | null> {

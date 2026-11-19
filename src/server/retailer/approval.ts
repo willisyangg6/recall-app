@@ -32,7 +32,15 @@ import { STATE_TO_POSTAL } from '../../domain/us-geography';
 import { stableJson } from './costco-monitor';
 import { embeddedJpegImages, type PdfEmbeddedJpeg } from './pdf-images';
 import { isRetailerPublisher, RETAILER_SOURCES } from './sources';
-import type { RetailerPublisher } from './types';
+import {
+  planRetailerNoticeEvents,
+  sameRecallAgencyCases,
+  type LedgeredNoticeEvent,
+  type RetailerMatchEvidence,
+  type RetailerNoticeEventInput,
+  type RetailerNoticeSubject,
+} from './notice-events';
+import type { AgencyCaseView, RetailerPublisher } from './types';
 
 /** One verbatim excerpt and the PDF page (1-based) it is printed on. */
 export interface FieldEvidence {
@@ -116,7 +124,9 @@ export type ApprovalWrite =
   | { kind: 'insert'; row: NewApprovalRow }
   | { kind: 'confirm_agency_match'; approvalId: string; agencyCaseId: string; at: string }
   /** The verified photo bytes, to their content-addressed product-visuals key. */
-  | { kind: 'upload_image'; path: string; bytes: Uint8Array };
+  | { kind: 'upload_image'; path: string; bytes: Uint8Array }
+  /** The alert ledger row the approval publishes (notice-events.ts). */
+  | { kind: 'notification_event'; event: RetailerNoticeEventInput };
 
 export interface ApprovalPlan {
   /** Why the request cannot be applied. Non-empty means nothing is written. */
@@ -133,6 +143,17 @@ export interface RetailerApprovalStore {
   ): Promise<NoticeForReview | null>;
   /** The archived letter's bytes for this exact hash, or null if none is archived. */
   getDocumentBytes(noticeId: string, contentHash: string): Promise<Uint8Array | null>;
+  /**
+   * What the monitor matched this letter on — its index entry and extracted
+   * text — or null when no text was archived for this hash.
+   */
+  getMatchEvidence(noticeId: string, contentHash: string): Promise<RetailerMatchEvidence | null>;
+  /** Agency cases published on or after `fromIso`, in the monitor's own view (read-only). */
+  listAgencyCases(fromIso: string): Promise<AgencyCaseView[]>;
+  /** The notice's ledgered notification events, oldest first. */
+  listNoticeEvents(noticeId: string): Promise<LedgeredNoticeEvent[]>;
+  /** Ledger one event; a dedup key already present is a no-op. */
+  insertNoticeEvent(event: RetailerNoticeEventInput): Promise<void>;
   listApprovals(noticeId: string): Promise<ApprovalRow[]>;
   insertApproval(row: NewApprovalRow): Promise<string>;
   withdrawApproval(id: string, reason: string, at: string): Promise<void>;
@@ -141,6 +162,9 @@ export interface RetailerApprovalStore {
   /** Store a verified photo at its content-addressed key (idempotent). */
   uploadImage(path: string, bytes: Uint8Array): Promise<void>;
 }
+
+/** The monitor's same-recall window around a letter's date (decide.ts MATCH_WINDOW_DAYS). */
+const AGENCY_MATCH_LOOKBACK_DAYS = 60;
 
 const HASH = /^[0-9a-f]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -452,8 +476,30 @@ export async function planApproval(
   const problems = [...checkApproval(request, notice, pageTexts), ...photo.problems];
   if (problems.length > 0) return { problems, writes: [], summary: [] };
 
+  // One recall, one card, one new-recall alert: an agency case the monitor's
+  // own matcher calls the same recall means the notice is no longer
+  // standalone, even if the stored decision predates that case.
+  const evidence = await store.getMatchEvidence(notice.id, request.documentContentHash);
+  if (evidence) {
+    const from = new Date(
+      Date.parse(`${evidence.statedNoticeDate}T00:00:00Z`) -
+        AGENCY_MATCH_LOOKBACK_DAYS * 86_400_000,
+    ).toISOString();
+    const same = sameRecallAgencyCases(evidence, await store.listAgencyCases(from));
+    if (same.length > 0) {
+      return {
+        problems: [
+          `agency case ${same.map((c) => c.id).join(', ')} is the same recall: confirm the agency match instead of approving`,
+        ],
+        writes: [],
+        summary: [],
+      };
+    }
+  }
+
   const at = now().toISOString();
-  const live = liveApproval(await store.listApprovals(notice.id));
+  const approvals = await store.listApprovals(notice.id);
+  const live = liveApproval(approvals);
   const row: NewApprovalRow = {
     noticeId: notice.id,
     documentContentHash: request.documentContentHash,
@@ -500,6 +546,31 @@ export async function planApproval(
   summary.push(
     `approve ${request.noticeNativeId} for letter ${row.documentContentHash} by ${row.approvedBy}`,
   );
+
+  // The alert ledger (notice-events.ts): one initial per notice ever, old
+  // letters suppressed as backfill, and a revised letter diffed against the
+  // approval it supersedes by the shared material-change rules.
+  const subjectOf = (fields: RetailerNoticeFields): RetailerNoticeSubject => ({
+    noticeId: notice.id,
+    documentUrl: '',
+    statedNoticeDate: notice.statedNoticeDate ?? at.slice(0, 10),
+    fields,
+  });
+  const previousRow =
+    [...approvals].sort((a, b) => b.approvedAt.localeCompare(a.approvedAt))[0] ?? null;
+  const previousFields = previousRow ? readRetailerNoticeFields(previousRow.fields) : null;
+  const events = planRetailerNoticeEvents({
+    subject: subjectOf(request.fields),
+    previous: previousFields ? subjectOf(previousFields) : null,
+    history: await store.listNoticeEvents(notice.id),
+    now: now(),
+  });
+  for (const event of events) {
+    writes.push({ kind: 'notification_event', event });
+    summary.push(
+      `ledger ${event.kind} alert (${event.triggerRuleId})${event.suppressed ? `, suppressed: ${event.suppressed}` : ', deliverable to matching shoppers'}`,
+    );
+  }
   return { problems: [], writes, summary };
 }
 
@@ -583,6 +654,7 @@ export async function applyApprovalPlan(
       await store.withdrawApproval(write.approvalId, write.reason, write.at);
     else if (write.kind === 'insert') await store.insertApproval(write.row);
     else if (write.kind === 'upload_image') await store.uploadImage(write.path, write.bytes);
+    else if (write.kind === 'notification_event') await store.insertNoticeEvent(write.event);
     else await store.confirmAgencyMatch(write.approvalId, write.agencyCaseId, write.at);
   }
   return plan.writes.length;

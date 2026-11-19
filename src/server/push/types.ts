@@ -11,6 +11,8 @@
  *   PushTransport — the Expo Push Service HTTP surface (fake in tests)
  */
 
+import type { RetailerMatchEvidence, RetailerNoticeSubject } from '../retailer/notice-events';
+import type { AgencyCaseView } from '../retailer/types';
 import type { CaseProjection, LifecycleState, NotificationKind } from '../../domain/recall-types';
 import type { SubscriptionEntitlement } from './entitlement';
 
@@ -29,6 +31,12 @@ export interface PushSubscription {
    * sensitive, and only the refresh step (listEntitlementRefreshRows) sees it.
    */
   entitlement: SubscriptionEntitlement;
+  /**
+   * The app version the installation registered with ("1.2.0"); null when
+   * unknown. Retailer-notice alerts reach only versions that can open them
+   * (notice-events.ts `RETAILER_ALERTS_MIN_APP_VERSION`).
+   */
+  appVersion?: string | null;
 }
 
 /** One enabled registration as the entitlement refresh sees it. */
@@ -100,6 +108,37 @@ export interface DeliverableEvent {
   /** The ledgered case's merge tombstone at read time. */
   mergedInto: string | null;
   projection: CaseProjection;
+  /**
+   * Set when the event announces an approved retailer-only notice instead of
+   * an agency case (migration 20261119000000). `recallCaseId` is then empty,
+   * `projection` is the notice's approved fields as a projection
+   * (notice-events.ts `retailerCaseProjection`), and the worker decides it by
+   * the retailer rule (event-eligibility.ts `decideRetailerDelivery`).
+   */
+  retailerNoticeId?: string | null;
+  /** Who the alert says announced it: the retailer, for a retailer notice. */
+  attribution?: string | null;
+}
+
+/** An approved retailer notice as the worker reads it, at read time. */
+export interface RetailerNoticeLink {
+  noticeId: string;
+  /**
+   * Returned by `consumer_retailer_notices()` right now — approved, the
+   * approval's letter still current, no agency match, still a standalone
+   * food recall. Exactly what the app shows; anything else never sends.
+   */
+  visible: boolean;
+  /** The CURRENT live approval's subject; null when none is live. */
+  subject: RetailerNoticeSubject | null;
+  /** The monitor's evidence for the current letter; null when no text is archived. */
+  matchEvidence: RetailerMatchEvidence | null;
+}
+
+/** Subscriptions already sent (or queued) a retailer notice's alert. */
+export interface RetailerAlertRecipients {
+  noticeId: string;
+  subscriptionIds: string[];
 }
 
 export type DeliveryStatus =
@@ -186,6 +225,17 @@ export interface PushStore {
 
   getSubscription(id: string): Promise<PushSubscription | null>;
   getEvent(eventId: string): Promise<DeliverableEvent | null>;
+  /** Deliverable (unsuppressed) retailer-notice events created on/after `sinceIso`, oldest first. */
+  listDeliverableRetailerEventsSince(sinceIso: string, limit: number): Promise<DeliverableEvent[]>;
+  /** One retailer notice's visibility, current approval and match evidence. */
+  getRetailerNotice(noticeId: string): Promise<RetailerNoticeLink>;
+  /** Agency cases published on/after `fromIso`, in the retailer monitor's own view. */
+  listAgencyCaseViews(fromIso: string): Promise<AgencyCaseView[]>;
+  /**
+   * Per retailer notice with an event created on/after `sinceIso`: the
+   * subscriptions whose delivery was sent or is still queued (not failed).
+   */
+  listRetailerAlertRecipients(sinceIso: string): Promise<RetailerAlertRecipients[]>;
 
   /** One case's current lifecycle, merge tombstone and projection; null when unknown. */
   getCase(caseId: string): Promise<CaseLink | null>;
@@ -207,7 +257,9 @@ export interface PushMessage {
   to: string;
   title: string;
   body: string;
-  data: { kind: 'recall'; recallCaseId: string; notificationEventId: string };
+  data:
+    | { kind: 'recall'; recallCaseId: string; notificationEventId: string }
+    | { kind: 'retailer_notice'; retailerNoticeId: string; notificationEventId: string };
   sound: 'default';
 }
 

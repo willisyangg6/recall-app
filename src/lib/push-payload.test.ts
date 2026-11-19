@@ -49,3 +49,18 @@ test('a bad event id degrades to null but a valid case still navigates', () => {
   });
   assert.deepEqual(parsed, { recallCaseId: CASE_ID, notificationEventId: null });
 });
+
+test('a retailer-notice alert opens that notice’s own Detail route, UUID-validated', () => {
+  const id = '9f735b5d-a15d-4d12-b993-94e89ac3edc8';
+  assert.deepEqual(
+    parseRecallPushPayload({
+      kind: 'retailer_notice',
+      retailerNoticeId: id,
+      notificationEventId: id,
+    }),
+    { recallCaseId: `retailer:${id}`, notificationEventId: id },
+  );
+  for (const bad of ['retailer:x', '../evil', '', 42]) {
+    assert.equal(parseRecallPushPayload({ kind: 'retailer_notice', retailerNoticeId: bad }), null);
+  }
+});

@@ -53,7 +53,8 @@
  * event type whose destination is, by definition, not active.
  */
 
-import type { CaseLink, DeliverableEvent } from './types';
+import { retailerAttribution, retailerCaseProjection } from '../retailer/notice-events';
+import type { CaseLink, DeliverableEvent, RetailerNoticeLink } from './types';
 
 /** The material-change rule that announces a retraction (domain/material-change). */
 export const RETRACTION_RULE_ID = 'retraction';
@@ -64,7 +65,15 @@ export type DeliverySkipReason =
   /** The event sits on an absorbed duplicate and the survivor already carries it. */
   | 'merged_duplicate'
   /** The merge chain could not be followed to a canonical case. */
-  | 'unresolved';
+  | 'unresolved'
+  /**
+   * A retailer notice the app no longer shows: withdrawn, its letter revised
+   * since approval, matched to an agency case, or no longer a standalone
+   * food recall (consumer_retailer_notices() does not return it).
+   */
+  | 'retailer_not_visible'
+  /** A current agency case is the same recall: its own alert is the one alert. */
+  | 'agency_duplicate';
 
 export type DeliveryDecision =
   | {
@@ -119,5 +128,41 @@ export function decideDelivery(event: DeliverableEvent, facts: DestinationFacts)
     event: merged
       ? { ...event, recallCaseId: destination.id, projection: destination.projection }
       : event,
+  };
+}
+
+/**
+ * The retailer-notice rule (docs/recall-push-delivery.md, "Retailer-only
+ * notices"), judged at ledger read AND again for every queued row at send:
+ *
+ * | Notice now                                                | Decision                       |
+ * | --------------------------------------------------------- | ------------------------------ |
+ * | returned by `consumer_retailer_notices()`, no agency twin | deliver, from the CURRENT      |
+ * |                                                           | approval's fields              |
+ * | withdrawn, letter revised, agency match confirmed, or no  | skip `retailer_not_visible`:   |
+ * | longer a standalone food recall                           | unapproved content never sends |
+ * | an agency case the monitor's matcher calls the same       | skip `agency_duplicate`: the   |
+ * | recall (even before the monitor re-decides the notice)    | agency's alert is THE alert    |
+ *
+ * Every event type follows the same rule: a retailer notice has no
+ * retraction or merge lifecycle of its own — withdrawal is how it ends.
+ */
+export function decideRetailerDelivery(
+  event: DeliverableEvent,
+  facts: { notice: RetailerNoticeLink; sameRecallCaseIds: string[] },
+): DeliveryDecision {
+  const { notice } = facts;
+  if (!notice.visible || notice.subject === null) {
+    return { kind: 'skip', reason: 'retailer_not_visible' };
+  }
+  if (facts.sameRecallCaseIds.length > 0) return { kind: 'skip', reason: 'agency_duplicate' };
+  return {
+    kind: 'deliver',
+    rerouted: false,
+    event: {
+      ...event,
+      attribution: retailerAttribution(notice.subject.fields),
+      projection: retailerCaseProjection(notice.subject),
+    },
   };
 }

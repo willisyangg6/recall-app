@@ -1,7 +1,9 @@
 /**
- * Storage for the approval step (approval.ts). Writes only
- * retailer_notice_approvals; reads retailer_notices, retailer_notice_documents
- * and recall_cases (to confirm an agency case exists).
+ * Storage for the approval step (approval.ts). Writes
+ * retailer_notice_approvals and, for the alert ledger, notification_events
+ * rows naming the notice (never a case); reads retailer_notices,
+ * retailer_notice_documents and recall_cases (to confirm an agency case
+ * exists, and to recognize the same recall).
  */
 
 import { readStoredProductCategories } from '../../domain/product-categories-stored';
@@ -13,9 +15,20 @@ import type {
   NoticeForReview,
   RetailerApprovalStore,
 } from './approval';
-import type { RetailerNoticeRow, RetailerPublisher } from './types';
+import type {
+  LedgeredNoticeEvent,
+  RetailerMatchEvidence,
+  RetailerNoticeEventInput,
+} from './notice-events';
+import { SupabaseRetailerNoticeStore } from './store';
+import type {
+  AgencyCaseView,
+  RetailerIndexEntry,
+  RetailerNoticeRow,
+  RetailerPublisher,
+} from './types';
 
-export const APPROVAL_WRITE_TABLES = ['retailer_notice_approvals'] as const;
+export const APPROVAL_WRITE_TABLES = ['retailer_notice_approvals', 'notification_events'] as const;
 
 /** The existing public bucket product images are served from (FSIS labels use it too). */
 export const PRODUCT_VISUALS_BUCKET = 'product-visuals';
@@ -45,6 +58,9 @@ export class MemoryApprovalStore implements RetailerApprovalStore {
   readonly approvals: ApprovalRow[] = [];
   readonly agencyCases = new Set<string>();
   readonly uploads = new Map<string, Uint8Array>();
+  readonly matchEvidence = new Map<string, RetailerMatchEvidence>();
+  readonly agencyCaseViews: AgencyCaseView[] = [];
+  readonly events: RetailerNoticeEventInput[] = [];
   private nextId = 1;
 
   seedNotice(notice: NoticeForReview, documents: { hash: string; bytes: Uint8Array }[]): void {
@@ -102,6 +118,24 @@ export class MemoryApprovalStore implements RetailerApprovalStore {
 
   async uploadImage(path: string, bytes: Uint8Array) {
     this.uploads.set(path, bytes);
+  }
+
+  async getMatchEvidence(noticeId: string, contentHash: string) {
+    return this.matchEvidence.get(`${noticeId}:${contentHash}`) ?? null;
+  }
+
+  async listAgencyCases(fromIso: string) {
+    return this.agencyCaseViews.filter((c) => c.publishedAt >= fromIso.slice(0, 10));
+  }
+
+  async listNoticeEvents(noticeId: string): Promise<LedgeredNoticeEvent[]> {
+    return this.events
+      .filter((event) => event.retailerNoticeId === noticeId)
+      .map(({ kind, suppressed, createdAt }) => ({ kind, suppressed, createdAt }));
+  }
+
+  async insertNoticeEvent(event: RetailerNoticeEventInput) {
+    if (!this.events.some((e) => e.dedupKey === event.dedupKey)) this.events.push(event);
   }
 }
 
@@ -271,5 +305,72 @@ export class SupabaseApprovalStore implements RetailerApprovalStore {
     if (error && !/already exists|duplicate/i.test(error.message)) {
       throw new Error(`photo upload failed: ${error.message}`);
     }
+  }
+
+  async getMatchEvidence(
+    noticeId: string,
+    contentHash: string,
+  ): Promise<RetailerMatchEvidence | null> {
+    const [document, notice] = await Promise.all([
+      this.client
+        .from('retailer_notice_documents')
+        .select('index_entry, extracted_text')
+        .eq('notice_id', noticeId)
+        .eq('content_hash', contentHash)
+        .maybeSingle(),
+      this.client
+        .from('retailer_notices')
+        .select('stated_notice_date')
+        .eq('id', noticeId)
+        .maybeSingle(),
+    ]);
+    if (document.error)
+      throw new Error(`retailer_notice_documents read failed: ${document.error.message}`);
+    if (notice.error) throw new Error(`retailer_notices read failed: ${notice.error.message}`);
+    const doc = document.data as {
+      index_entry: RetailerIndexEntry;
+      extracted_text: string | null;
+    } | null;
+    const stated = (notice.data as { stated_notice_date: string | null } | null)
+      ?.stated_notice_date;
+    if (!doc?.extracted_text || !stated) return null;
+    return { indexEntry: doc.index_entry, statedNoticeDate: stated, text: doc.extracted_text };
+  }
+
+  async listAgencyCases(fromIso: string): Promise<AgencyCaseView[]> {
+    return new SupabaseRetailerNoticeStore(this.client).listAgencyCases(fromIso);
+  }
+
+  async listNoticeEvents(noticeId: string): Promise<LedgeredNoticeEvent[]> {
+    const { data, error } = await this.client
+      .from('notification_events')
+      .select('kind, suppressed, created_at')
+      .eq('retailer_notice_id', noticeId)
+      .order('created_at', { ascending: true });
+    if (error) throw new Error(`notification_events read failed: ${error.message}`);
+    return (
+      (data ?? []) as {
+        kind: LedgeredNoticeEvent['kind'];
+        suppressed: LedgeredNoticeEvent['suppressed'];
+        created_at: string;
+      }[]
+    ).map((row) => ({ kind: row.kind, suppressed: row.suppressed, createdAt: row.created_at }));
+  }
+
+  async insertNoticeEvent(event: RetailerNoticeEventInput): Promise<void> {
+    const { error } = await this.client.from('notification_events').upsert(
+      {
+        retailer_notice_id: event.retailerNoticeId,
+        kind: event.kind,
+        trigger_rule_id: event.triggerRuleId,
+        dedup_key: event.dedupKey,
+        material_change_ref: event.materialChangeRef,
+        payload_summary: event.payloadSummary,
+        suppressed: event.suppressed,
+        created_at: event.createdAt,
+      },
+      { onConflict: 'dedup_key', ignoreDuplicates: true },
+    );
+    if (error) throw new Error(`notification_events write failed: ${error.message}`);
   }
 }

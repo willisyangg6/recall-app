@@ -11,6 +11,11 @@
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface RecallPushPayload {
+  /**
+   * The Recall Details route id: an agency case's UUID, or `retailer:<uuid>`
+   * for an approved retailer-only notice (lib/retailer-notice-presentation
+   * `retailerRouteId`) — the same id the Feed card opens.
+   */
   recallCaseId: string;
   notificationEventId: string | null;
 }
@@ -19,12 +24,21 @@ export interface RecallPushPayload {
 export function parseRecallPushPayload(data: unknown): RecallPushPayload | null {
   if (typeof data !== 'object' || data === null) return null;
   const record = data as Record<string, unknown>;
-  if (record.kind !== 'recall') return null;
-  const recallCaseId = record.recallCaseId;
-  if (typeof recallCaseId !== 'string' || !UUID_PATTERN.test(recallCaseId)) return null;
+  let routeId: string;
+  if (record.kind === 'recall') {
+    const recallCaseId = record.recallCaseId;
+    if (typeof recallCaseId !== 'string' || !UUID_PATTERN.test(recallCaseId)) return null;
+    routeId = recallCaseId;
+  } else if (record.kind === 'retailer_notice') {
+    const noticeId = record.retailerNoticeId;
+    if (typeof noticeId !== 'string' || !UUID_PATTERN.test(noticeId)) return null;
+    routeId = `retailer:${noticeId}`;
+  } else {
+    return null;
+  }
   const eventId = record.notificationEventId;
   return {
-    recallCaseId,
+    recallCaseId: routeId,
     notificationEventId: typeof eventId === 'string' && UUID_PATTERN.test(eventId) ? eventId : null,
   };
 }

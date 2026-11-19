@@ -763,6 +763,8 @@ export class SupabaseStore implements RecallStore {
       .from('notification_events')
       .select('recall_case_id')
       .eq('kind', 'initial')
+      // Agency cases only: a retailer-notice event (20261119000000) names no case.
+      .not('recall_case_id', 'is', null)
       .order('recall_case_id')
       .range(from, from + pageSize - 1);
     if (error || !data) this.fail('listInitialEventCasePage', error);

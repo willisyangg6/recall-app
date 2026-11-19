@@ -60,9 +60,15 @@ test('the reviewed fixture passes every check and plans exactly one approval', a
   assert.deepEqual(plan.problems, []);
   assert.deepEqual(
     plan.writes.map((write) => write.kind),
-    ['upload_image', 'insert'],
+    ['upload_image', 'insert', 'notification_event'],
   );
-  assert.equal(await applyApprovalPlan(store, plan), 2);
+  assert.equal(await applyApprovalPlan(store, plan), 3);
+  // Publication ledgers exactly one new-recall alert for the notice: an
+  // 8-day-old letter is deliverable (within the 30-day backfill horizon).
+  assert.deepEqual(
+    store.events.map((event) => [event.kind, event.dedupKey, event.suppressed]),
+    [['initial', 'retailer_notice:notice-whipped', null]],
+  );
   // The stored photo is byte-identical to PDF object 11 of the approved letter.
   const [[path, stored]] = [...store.uploads];
   assert.equal(path, request().fields.image!.path);
@@ -167,7 +173,7 @@ test('a photo must be exactly an image embedded in the approved letter', async (
   const plan = await planApproval(store, without, now, extractPdfPageTexts);
   assert.deepEqual(
     plan.writes.map((write) => write.kind),
-    ['insert'],
+    ['insert', 'notification_event'],
   );
 });
 
@@ -266,16 +272,26 @@ test('confirming an agency match needs a real case and hides the live approval',
   assert.equal(store.approvals[0].agencyCaseId, caseId);
 });
 
-test('the approval modules write only the approval table', () => {
+test('the approval modules write only approvals and alert rows naming the notice', () => {
   for (const file of ['approval.ts', 'approval-store.ts']) {
     const source = readFileSync(join(__dirname, file), 'utf8').replace(
       /\/\*[\s\S]*?\*\/|\/\/.*$/gm,
       '',
     );
     const written = [...source.matchAll(/from\('([a-z_]+)'\)\s*\.(insert|update|upsert|delete)/g)];
-    for (const [, table] of written) assert.equal(table, 'retailer_notice_approvals', file);
-    assert.doesNotMatch(source, /\.rpc\(|notification_events|source_records/, file);
+    for (const [, table, op] of written) {
+      if (table === 'notification_events') {
+        // The alert ledger: append-only, idempotent on dedup_key.
+        assert.equal(op, 'upsert', file);
+        continue;
+      }
+      assert.equal(table, 'retailer_notice_approvals', file);
+    }
+    assert.doesNotMatch(source, /\.rpc\(|source_records|recall_case_id/, file);
   }
+  // Every ledger row the approval store writes names the notice, never a case.
+  const store = readFileSync(join(__dirname, 'approval-store.ts'), 'utf8');
+  assert.match(store, /retailer_notice_id: event\.retailerNoticeId/);
 });
 
 /**
@@ -344,4 +360,29 @@ test('an empty state list is approved with no evidence, but a stated state still
   assert.ok(
     checkApproval(invented, notice, [text]).some((p) => /"Ohio" is not one the letter/.test(p)),
   );
+});
+
+test('approval is refused once an agency case is the same recall: one card, one alert', async () => {
+  const store = await seededStore();
+  store.matchEvidence.set(`notice-whipped:${LETTER_HASH}`, {
+    indexEntry: { indexTitle: 'Kirkland Signature Heavy Whipped Cream (Item #1777000)' } as never,
+    statedNoticeDate: '2026-11-07',
+    text: 'Alamance Foods is voluntarily recalling Kirkland Signature Real Heavy Whipped Cream.',
+  });
+  store.agencyCaseViews.push({
+    id: 'aaaaaaaa-0000-4000-8000-00000000a001',
+    sourceAgency: 'FDA',
+    noticeType: 'recall',
+    state: 'active',
+    publishedAt: '2026-11-10',
+    title: 'Alamance Foods Recalls Kirkland Signature Heavy Whipped Cream',
+    firm: 'Alamance Foods',
+    brands: [],
+    text: 'Kirkland Signature Real Heavy Whipped Cream',
+    retailerNames: ['Costco'],
+    geography: { scope: 'states', states: ['Alabama'] },
+  });
+  const plan = await planApproval(store, request(), now, extractPdfPageTexts);
+  assert.deepEqual(plan.writes, []);
+  assert.match(plan.problems.join(' '), /is the same recall: confirm the agency match instead/);
 });

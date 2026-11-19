@@ -23,6 +23,11 @@ import {
   runPushDelivery,
 } from './worker';
 
+/** The agency case a sent alert names (retailer alerts name none). */
+function recallCaseIdOf(message: { data: { kind: string } & Record<string, unknown> }): unknown {
+  return message.data.kind === 'recall' ? message.data.recallCaseId : null;
+}
+
 const T0 = Date.parse('2026-09-01T00:00:00.000Z');
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
@@ -1006,7 +1011,7 @@ test('a new recall on a case that has since closed or been retracted never alert
   const result = await runAt(3 * HOUR);
   assert.equal(result.metrics.lifecycleSkipped, 2);
   assert.equal(result.metrics.deliveriesCreated, 1);
-  assert.equal(transport.sentMessages[0].data.recallCaseId, caseId(903));
+  assert.equal(recallCaseIdOf(transport.sentMessages[0]), caseId(903));
 });
 
 test('a retraction alerts for the retracted case — the one update whose case is not active', async () => {
@@ -1036,7 +1041,7 @@ test('a retraction alerts for the retracted case — the one update whose case i
   assert.equal(result.metrics.deliveriesCreated, 1);
   assert.equal(result.metrics.lifecycleSkipped, 1);
   assert.equal(transport.sentMessages.length, 1);
-  assert.equal(transport.sentMessages[0].data.recallCaseId, caseId(910));
+  assert.equal(recallCaseIdOf(transport.sentMessages[0]), caseId(910));
   assert.match(transport.sentMessages[0].title, /retract/i);
 });
 
@@ -1076,7 +1081,7 @@ test('important updates alert on an active case and not on a closed one', async 
   const result = await runAt(3 * HOUR);
   assert.equal(result.metrics.deliveriesCreated, rules.length);
   assert.equal(result.metrics.lifecycleSkipped, 1);
-  assert.ok(transport.sentMessages.every((m) => m.data.recallCaseId === caseId(920)));
+  assert.ok(transport.sentMessages.every((m) => recallCaseIdOf(m) === caseId(920)));
 });
 
 test('merged cases: the duplicate initial is dropped; an update is re-pointed at the survivor, once', async () => {
@@ -1133,7 +1138,7 @@ test('merged cases: the duplicate initial is dropped; an update is re-pointed at
   assert.equal(transport.sentMessages.length, 3);
   // Every alert opens the surviving case — the card the Feed lists — and the
   // re-pointed expansion is formatted from the survivor's projection.
-  assert.ok(transport.sentMessages.every((m) => m.data.recallCaseId === survivor));
+  assert.ok(transport.sentMessages.every((m) => recallCaseIdOf(m) === survivor));
   assert.ok(
     transport.sentMessages.every((m) => m.title.includes('Survivor')),
     transport.sentMessages.map((m) => m.title).join(' | '),
@@ -1189,7 +1194,7 @@ test('a merge chain is followed to the canonical case; a broken or circular chai
   const result = await runAt(3 * HOUR);
   assert.equal(result.metrics.deliveriesCreated, 1);
   assert.equal(result.metrics.destinationUnresolved, 2);
-  assert.equal(transport.sentMessages[0].data.recallCaseId, c);
+  assert.equal(recallCaseIdOf(transport.sentMessages[0]), c);
 });
 
 test('a retry row whose case was merged or closed after the row was created fails closed instead of sending', async () => {
@@ -1238,7 +1243,7 @@ test('no backlog: a retraction or update created before activation or before the
   const result = await runAt(4 * HOUR);
   assert.equal(result.metrics.skippedPreActivation, 2);
   assert.equal(result.metrics.deliveriesCreated, 1);
-  assert.equal(transport.sentMessages[0].data.recallCaseId, caseId(962));
+  assert.equal(recallCaseIdOf(transport.sentMessages[0]), caseId(962));
 });
 
 test('changing state never backfills: old events stay behind the preference horizon', async () => {

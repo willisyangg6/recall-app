@@ -67,7 +67,13 @@ import { refreshEntitlements } from './entitlement-refresh';
 import type { EntitlementSource } from './revenuecat-entitlement';
 import { pushEligible, type RelevanceInput } from '../../lib/relevance';
 import type { JobRunOutcome } from '../store/types';
-import { decideDelivery, type DeliveryDecision } from './event-eligibility';
+import { decideDelivery, decideRetailerDelivery, type DeliveryDecision } from './event-eligibility';
+import {
+  appVersionAtLeast,
+  RETAILER_ALERTS_MIN_APP_VERSION,
+  sameRecallAgencyCases,
+} from '../retailer/notice-events';
+import type { AgencyCaseView } from '../retailer/types';
 import { buildPushMessage } from './format';
 import { HOLD_TIME_ZONE, isSendingHeld } from './sending-hold';
 import {
@@ -164,11 +170,53 @@ export async function resolveCanonicalCase(
  * store: the canonical destination, and — for an event on an absorbed case —
  * whether the survivor already carries the same change.
  */
+/** How far back an agency case can be the same recall as a retailer notice. */
+const SAME_RECALL_LOOKBACK_DAYS = 180;
+
+/**
+ * Per-run reads the retailer rule needs, cached: each notice's current state
+ * and the agency cases it could be the same recall as (the retailer
+ * monitor's own view and matcher, notice-events.ts).
+ */
+export class RetailerRunContext {
+  private agencyViews: Promise<AgencyCaseView[]> | null = null;
+  private readonly notices = new Map<string, ReturnType<PushStore['getRetailerNotice']>>();
+
+  constructor(
+    private readonly store: Pick<PushStore, 'getRetailerNotice' | 'listAgencyCaseViews'>,
+    private readonly nowIso: string,
+  ) {}
+
+  notice(noticeId: string) {
+    if (!this.notices.has(noticeId))
+      this.notices.set(noticeId, this.store.getRetailerNotice(noticeId));
+    return this.notices.get(noticeId)!;
+  }
+
+  agencyCases(): Promise<AgencyCaseView[]> {
+    this.agencyViews ??= this.store.listAgencyCaseViews(
+      new Date(Date.parse(this.nowIso) - SAME_RECALL_LOOKBACK_DAYS * 86_400_000).toISOString(),
+    );
+    return this.agencyViews;
+  }
+}
+
 export async function resolveDeliverableEvent(
   store: Pick<PushStore, 'getCase' | 'hasDeliverableEvent'>,
   event: DeliverableEvent,
   cache: Map<string, CaseLink | null>,
+  retailer?: RetailerRunContext,
 ): Promise<DeliveryDecision> {
+  if (event.retailerNoticeId) {
+    // A retailer event is never decided by the case rule. Without the
+    // context (a caller that predates retailer events) it fails closed.
+    if (!retailer) return { kind: 'skip', reason: 'retailer_not_visible' };
+    const notice = await retailer.notice(event.retailerNoticeId);
+    const sameRecallCaseIds = notice.matchEvidence
+      ? sameRecallAgencyCases(notice.matchEvidence, await retailer.agencyCases()).map((c) => c.id)
+      : [];
+    return decideRetailerDelivery(event, { notice, sameRecallCaseIds });
+  }
   const destination = await resolveCanonicalCase(store, event, cache);
   const merged = destination !== null && destination.id !== event.recallCaseId;
   const survivorHasTwin =
@@ -227,6 +275,10 @@ export interface EventEligibility {
   preferenceHorizonSkipped: number;
   /** Excluded by personalized matching (state / allergen / retailer). */
   preferenceSkipped: number;
+  /** A retailer-notice alert, for an app version that cannot open one. */
+  clientUnsupportedSkipped: number;
+  /** An agency new-recall alert for a recall this subscription was already alerted to. */
+  duplicateAlertSkipped: number;
 }
 
 /**
@@ -254,11 +306,18 @@ export interface EventEligibility {
  *    is delivered (2026-10-04 — formerly deliver-all).
  */
 export function classifySubscriptionsForEvent(
-  event: Pick<DeliverableEvent, 'createdAt' | 'projection'>,
+  event: Pick<DeliverableEvent, 'createdAt' | 'projection' | 'retailerNoticeId'>,
   subscriptions: PushSubscription[],
   pushEnabledAt: string,
   preferences: Map<string, InstallationPreferences>,
   nowIso: string,
+  options: {
+    /**
+     * Subscriptions already alerted to this same recall through a retailer
+     * notice: an agency `initial` for it would be a second new-recall alert.
+     */
+    alreadyAlerted?: ReadonlySet<string>;
+  } = {},
 ): EventEligibility {
   const result: EventEligibility = {
     eligible: [],
@@ -267,10 +326,24 @@ export function classifySubscriptionsForEvent(
     entitlementUnverified: 0,
     preferenceHorizonSkipped: 0,
     preferenceSkipped: 0,
+    clientUnsupportedSkipped: 0,
+    duplicateAlertSkipped: 0,
   };
   const input = relevanceInput(event);
   for (const subscription of subscriptions) {
     if (!subscription.enabled) continue;
+    // A retailer notice opens only in an app that can show it.
+    if (
+      event.retailerNoticeId &&
+      !appVersionAtLeast(subscription.appVersion, RETAILER_ALERTS_MIN_APP_VERSION)
+    ) {
+      result.clientUnsupportedSkipped += 1;
+      continue;
+    }
+    if (options.alreadyAlerted?.has(subscription.id)) {
+      result.duplicateAlertSkipped += 1;
+      continue;
+    }
     const prefs = preferences.get(subscription.installationId) ?? null;
     const c2Horizon =
       subscription.enabledAt > pushEnabledAt ? subscription.enabledAt : pushEnabledAt;
@@ -433,6 +506,14 @@ export async function runPushDelivery(
     lifecycleSkipped: 0,
     mergedDuplicateSkipped: 0,
     destinationUnresolved: 0,
+    /** Retailer-notice events no longer shown by the app (withdrawn, revised, matched). */
+    retailerNotVisibleSkipped: 0,
+    /** Retailer-notice events an agency case now announces as the same recall. */
+    agencyDuplicateSkipped: 0,
+    /** Per pair: retailer alerts not created for app versions that cannot open them. */
+    clientUnsupportedSkipped: 0,
+    /** Per pair: agency new-recall alerts a retailer alert already announced. */
+    duplicateAlertSkipped: 0,
     reroutedToSurvivor: 0,
     deliveriesCreated: 0,
     sent: 0,
@@ -574,8 +655,14 @@ export async function runPushDelivery(
   // ── New deliveries from the ledger (bounded window, oldest first) ──────────
   const lookbackFloor = new Date(now().getTime() - LOOKBACK_DAYS * 86_400_000).toISOString();
   const sinceIso = pushEnabledAt > lookbackFloor ? pushEnabledAt : lookbackFloor;
-  const events = await store.listDeliverableEventsSince(sinceIso, maxEvents);
+  const events = [
+    ...(await store.listDeliverableEventsSince(sinceIso, maxEvents)),
+    ...(await store.listDeliverableRetailerEventsSince(sinceIso, maxEvents)),
+  ]
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .slice(0, maxEvents);
   metrics.eventsExamined = events.length;
+  const retailerRun = new RetailerRunContext(store, nowIso());
   metrics.skippedPreActivation = await store.countDeliverableEventsBefore(pushEnabledAt);
   metrics.suppressedSkipped = await store.countSuppressedEventsSince(sinceIso);
 
@@ -606,11 +693,13 @@ export async function runPushDelivery(
     lifecycle: 'lifecycleSkipped',
     merged_duplicate: 'mergedDuplicateSkipped',
     unresolved: 'destinationUnresolved',
+    retailer_not_visible: 'retailerNotVisibleSkipped',
+    agency_duplicate: 'agencyDuplicateSkipped',
   } as const;
   const eventById = new Map<string, DeliverableEvent>();
   const deliverable: DeliverableEvent[] = [];
   for (const event of events) {
-    const decision = await resolveDeliverableEvent(store, event, caseCache);
+    const decision = await resolveDeliverableEvent(store, event, caseCache, retailerRun);
     if (decision.kind === 'skip') {
       metrics[skipReasons[decision.reason]] += 1;
       continue;
@@ -619,6 +708,27 @@ export async function runPushDelivery(
     eventById.set(decision.event.id, decision.event);
     deliverable.push(decision.event);
   }
+  // One recall, one new-recall alert: a subscription already alerted through
+  // a retailer notice is not alerted again by the agency case for the same
+  // recall (the monitor's own matcher decides "same").
+  let retailerRecipients: Awaited<ReturnType<PushStore['listRetailerAlertRecipients']>> | null =
+    null;
+  const alreadyAlertedFor = async (event: DeliverableEvent): Promise<Set<string>> => {
+    if (event.retailerNoticeId || event.kind !== 'initial') return new Set();
+    retailerRecipients ??= await store.listRetailerAlertRecipients(
+      new Date(now().getTime() - SAME_RECALL_LOOKBACK_DAYS * 86_400_000).toISOString(),
+    );
+    const view = (await retailerRun.agencyCases()).find((c) => c.id === event.recallCaseId);
+    const alerted = new Set<string>();
+    if (!view) return alerted;
+    for (const { noticeId, subscriptionIds } of retailerRecipients) {
+      const notice = await retailerRun.notice(noticeId);
+      if (!notice.matchEvidence) continue;
+      if (sameRecallAgencyCases(notice.matchEvidence, [view]).length === 0) continue;
+      for (const id of subscriptionIds) alerted.add(id);
+    }
+    return alerted;
+  };
   for (const event of deliverable) {
     const classified = classifySubscriptionsForEvent(
       event,
@@ -626,7 +736,10 @@ export async function runPushDelivery(
       pushEnabledAt,
       preferencesByInstallation,
       nowIso(),
+      { alreadyAlerted: await alreadyAlertedFor(event) },
     );
+    metrics.clientUnsupportedSkipped += classified.clientUnsupportedSkipped;
+    metrics.duplicateAlertSkipped += classified.duplicateAlertSkipped;
     metrics.subscriptionHorizonSkipped += classified.horizonSkipped;
     metrics.entitlementSkipped += classified.entitlementSkipped;
     metrics.entitlementUnverified += classified.entitlementUnverified;
@@ -799,7 +912,7 @@ export async function runPushDelivery(
           // created, so the same per-event decision is made again now.
           const ledgered = await readLedgered(delivery.eventId);
           const decision = ledgered
-            ? await resolveDeliverableEvent(store, ledgered, caseCache)
+            ? await resolveDeliverableEvent(store, ledgered, caseCache, retailerRun)
             : null;
           if (decision?.kind === 'deliver') {
             event = decision.event;

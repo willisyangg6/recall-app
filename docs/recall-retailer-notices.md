@@ -451,12 +451,18 @@ mislabel one as an FDA recall.
     Kirkland letter the card reads "Possible cleaning chemical contamination".
   - **Not shown:** the purchase window, the instructions and the contact line. The screen has no
     slot for them, so they stay in the approved fields (`RETAILER_FIELDS_WITHOUT_A_SLOT`).
-  - **Absent:** no Affects You verdict, no save control (`saveable: false`; Saved cannot load a
-    notice) and no community reports.
+  - **Affects You:** the shared verdict over `retailerRelevanceInput` (approved states or
+    unknown, the publishing retailer as the store signal, the approved reason) — card label,
+    Detail banner and Affects you membership
+    ([recall-personalization.md](recall-personalization.md), "Retailer-only notices").
+  - **Absent:** no save control (`saveable: false`; Saved cannot load a notice) and no community
+    reports.
   - **Read path for the detail:** the screen reads a `retailer:` id only from the approved read
     path, never as a case. After one reload, an id that is not approved shows "Recall not found".
 
-- **Alerts stay off:** retailer notices write nothing to the notification ledger.
+- **Alerts:** the approval ledgers the notice's alert; delivery follows the agency rules
+  ([recall-push-delivery.md](recall-push-delivery.md), "Retailer-only notices"). Prepared
+  2026-11-19, migration `20261119000000` not applied.
 
 ### One presentation path
 
@@ -665,6 +671,26 @@ copied in with a read-only production query.
 - **Simulator captures** (2026-11-17, this branch's Metro on the staging stack): see
   `~/Desktop/Lotly-Retailer-Review/final/`.
 
+## Standalone coverage by retailer (2026-11-19)
+
+Whether an unmatched notice can become a standalone Lotly recall, measured against production's
+agency URLs (read-only) and each retailer's live page on 2026-11-19. Linking support is not
+standalone coverage, and fixture-only support is not live-verified.
+
+| Retailer                  | Path                    | Unmatched notice → standalone?                                                                                                                                                             | Classification                                                            |
+| ------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Costco                    | own letters (live job)  | **Yes**: approval → card, Detail, Affects You, alert. Today 3 `new_candidate` (Kirkland current; Madeleines, Caesar ended), 4 review (scanned PHA, undated, 2 code conflicts)              | Built                                                                     |
+| ALDI                      | own notices (job gated) | **Yes** once migration 2 is applied and the job enabled: 75 read; 3 `new_candidate` (Bunny Luv = FDA Grimmway, unconfirmed; 2 ended), 49 review (predates coverage, several candidates)    | Built, not live                                                           |
+| Walmart + Sam's           | store listing           | **No**: 11 entries, 9 linked; the 2 unmatched (Tractor Wheels advisory URL, Gias press release) are agency recalls Lotly holds → reviewer link                                             | Insufficient source facts (title, date, agency link, sold-at only)        |
+| Target                    | store listing           | **No**: 5 of 5 linked                                                                                                                                                                      | Insufficient source facts                                                 |
+| Whole Foods               | store listing           | **No**: 109 entries, 48 linked, 17 Canadian (excluded), 41 review — 2024+ ones are Lotly agency cases at another URL (Grand Central `2237e14f`) or a drug; 2022–23 predate agency coverage | Insufficient source facts; unmatched = agency coverage, not retailer-only |
+| Publix                    | store listing           | **No**: live list empty since 2026-11-16; reader fixture-only                                                                                                                              | Unverified (live-unverified)                                              |
+| H-E-B, Kroger, Albertsons | none                    | No                                                                                                                                                                                         | Unsupported access (bot protection, 404/403)                              |
+
+A listing states a product title, a date, an agency link and where it was sold. It names no
+hazard, no lot, no date code and no package, so it can never stand alone: its facts are the
+linked agency notice's, and an unmatched one is an agency-coverage or link-confirmation task.
+
 ## Store listings
 
 Walmart (with Sam's Club), Target, Whole Foods Market and Publix each publish a list of the recalls
@@ -778,8 +804,10 @@ non-Costco notices and has no listing read path.
 
 A notice that becomes an agency recall leaves one card. The monitor re-decides every notice on
 each run, a consistent single match becomes `link_candidate`, and the read path returns only
-`new_candidate` notices. The reviewer's confirmation then makes the link permanent. No retailer
-step writes the notification ledger, so the agency case's own alert is the only one.
+`new_candidate` notices. The reviewer's confirmation then makes the link permanent. Alerts
+follow one recall, one new-recall alert: an agency `initial` skips shoppers already alerted
+through the matching notice, and a retailer alert whose agency twin exists is never sent
+([recall-push-delivery.md](recall-push-delivery.md), "Retailer-only notices").
 
 Until then both cards can show. That window has no fixed maximum; it is the sum of:
 
@@ -798,5 +826,5 @@ nowhere automatically, so check approved notices against new agency cases after 
 Linked notices (`link_candidate`) add nothing to an agency card in this release. A later release
 can show an "Also announced by Costco on {date}" row on the agency detail from the same kind of
 read path, without touching the case projection, so no material change or second alert can result.
-Retailer alerting needs its own decision, ledger keys that stop a retailer notice and an agency
-case for the same recall from both sending an initial alert, and agency-free push wording.
+(Retailer alerting for standalone notices is prepared; see
+[recall-push-delivery.md](recall-push-delivery.md), "Retailer-only notices".)
