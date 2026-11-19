@@ -270,9 +270,33 @@ test(
     // 4. Priano (ALDI; AL, GA, NC, SC), published before any agency case:
     //    reaches AL, GA and the NC ALDI shopper; never the 1.1.0 app.
     clock += 60_000;
-    await approve('aldi-priano-tortelloni.json');
+    const prianoPlan = await approve('aldi-priano-tortelloni.json');
     const priano = await run('priano: retailer first');
     assert.deepEqual(priano.recipients, ['al', 'ga', 'nc-aldi']);
+
+    // The shopper's privacy export names the notice the alert announced, and
+    // keeps every earlier field (recall_id is null for a retailer alert).
+    const prianoEvent = prianoPlan.writes.find((w) => w.kind === 'notification_event');
+    assert.ok(prianoEvent && prianoEvent.kind === 'notification_event');
+    const { data: exported, error: exportError } = await client.rpc('export_installation_data', {
+      p_installation_id: 'staging-al',
+    });
+    assert.equal(exportError, null, String(exportError?.message));
+    const sent = (exported as { alerts_sent: Record<string, unknown>[] }).alerts_sent;
+    const prianoRow = sent.find(
+      (row) => row.retailer_notice_id === prianoEvent.event.retailerNoticeId,
+    );
+    assert.ok(prianoRow, 'the retailer alert is in the export with its notice id');
+    assert.deepEqual(Object.keys(prianoRow).sort(), [
+      'created_at',
+      'failure_code',
+      'kind',
+      'recall_id',
+      'retailer_notice_id',
+      'sent_at',
+      'status',
+    ]);
+    assert.equal(prianoRow.recall_id, null);
 
     // 5. FDA then publishes the same recall. The operator copies production's
     //    case in; its new-recall alert reaches only shoppers not already alerted.

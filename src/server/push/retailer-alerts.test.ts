@@ -23,7 +23,7 @@ import {
 } from '../retailer/notice-events';
 import type { AgencyCaseView } from '../retailer/types';
 import { MemoryPushStore } from './memory-push-store';
-import { ACTIVE_SOURCE, NEVER_HELD, registerEntitled } from './test-entitlement';
+import { ACTIVE_SOURCE, FAR_FUTURE, NEVER_HELD, registerEntitled } from './test-entitlement';
 import type { PushMessage, PushReceipt, PushTicket, PushTransport } from './types';
 import { runPushDelivery } from './worker';
 
@@ -349,4 +349,244 @@ test('a genuine expansion reaches the newly affected state through the usual upd
     'Recall updated: Kirkland Signature Real Heavy Whipped Cream',
   );
   assert.equal(transport.sent[0].body, 'More areas are now affected by this recall.');
+});
+
+// ── With PR #8's overnight-hold scope (alert timing, 2026-11-19) ────────────
+// The REAL hold rule (22:00–09:59 New York) and the approved production scope
+// `except_new_recalls`: a retailer notice is held, exempted or dated by exactly
+// the rule an agency recall is, through the same worker. Clocks are absolute:
+// NIGHT is 23:00 EST on Nov 18 (04:00 UTC Nov 19), MORNING 10:07 EST Nov 19.
+
+const NIGHT = Date.parse('2026-11-19T04:00:00.000Z');
+const MORNING = Date.parse('2026-11-19T15:07:00.000Z');
+const MIN = 60_000;
+
+function scoped(
+  scope: 'all' | 'except_new_recalls' = 'except_new_recalls',
+  entitlements: typeof ACTIVE_SOURCE = ACTIVE_SOURCE,
+) {
+  const store = new MemoryPushStore();
+  store.pushEnabledAt = iso(-30 * 24 * HOUR);
+  const transport = new Transport();
+  const runAt = (at: number, dryRun = false) => {
+    transport.sent = [];
+    return runPushDelivery(store, {
+      transport,
+      entitlements,
+      sendingHoldScope: scope,
+      dryRun,
+      now: () => new Date(at),
+    });
+  };
+  return { store, transport, runAt };
+}
+
+const dated = (statedNoticeDate: string, fields = FIELDS): RetailerNoticeSubject => ({
+  ...subject(fields),
+  statedNoticeDate,
+});
+
+function ledger(
+  store: MemoryPushStore,
+  at: number,
+  kind: 'initial' | 'material_update' = 'initial',
+  id = 'e0000000-0000-4000-8000-0000000000d1',
+) {
+  store.addRetailerEvent({
+    id,
+    retailerNoticeId: NOTICE_ID,
+    kind,
+    triggerRuleId: kind === 'initial' ? 'new_retailer_notice' : 'expansion_geography',
+    payloadSummary: kind === 'initial' ? FIELDS.productName : 'Affected area widened (Texas).',
+    materialChangeRef: kind === 'initial' ? null : 'fp-geo',
+    createdAt: new Date(at).toISOString(),
+  });
+}
+
+test('timing: a fresh retailer notice approved at 23:00 sends at once, undated; `all` holds it', async () => {
+  for (const scope of ['except_new_recalls', 'all'] as const) {
+    const { store, transport, runAt } = scoped(scope);
+    store.setRetailerNotice(dated('2026-11-18'), { matchEvidence: EVIDENCE });
+    shopper(store, 'al', { stateCodes: ['AL'] });
+    ledger(store, NIGHT);
+    const night = await runAt(NIGHT + 7 * MIN);
+    assert.equal(night.metrics.sendingHeld, true, scope);
+    if (scope === 'except_new_recalls') {
+      assert.equal(night.metrics.sendingHoldExempted, 1);
+      assert.deepEqual(tokensOf(transport.sent), ['ExponentPushToken[al]']);
+      assert.doesNotMatch(transport.sent[0].body, /announced this/);
+    } else {
+      assert.equal(night.metrics.sendingHoldDeferred, 1);
+      assert.equal(transport.sent.length, 0);
+    }
+    // The morning sends what is still owed, and nothing twice.
+    await runAt(MORNING);
+    assert.equal(transport.sent.length, scope === 'all' ? 1 : 0, scope);
+  }
+});
+
+test('timing: the late-alert boundary — a letter 2 NY days old is fresh, 3 days waits and is dated', async () => {
+  for (const [letter, exempt] of [
+    ['2026-11-16', true],
+    ['2026-11-15', false],
+  ] as const) {
+    const { store, transport, runAt } = scoped();
+    store.setRetailerNotice(dated(letter), { matchEvidence: EVIDENCE });
+    shopper(store, 'al', { stateCodes: ['AL'] });
+    ledger(store, NIGHT);
+    await runAt(NIGHT + 7 * MIN);
+    assert.equal(transport.sent.length, exempt ? 1 : 0, letter);
+    await runAt(MORNING);
+    assert.equal(transport.sent.length, exempt ? 0 : 1, letter);
+    if (!exempt) assert.match(transport.sent[0].body, /Costco announced this Nov 15\./);
+  }
+});
+
+test('timing: old intake — a 30-day-old letter alerts (in the morning, dated); 31 days is backfill', async () => {
+  const at = new Date(NIGHT);
+  const plan = (statedNoticeDate: string) =>
+    planRetailerNoticeEvents({
+      subject: dated(statedNoticeDate),
+      previous: null,
+      history: [],
+      now: at,
+    })[0].suppressed;
+  // The agency rule exactly (pipeline.ts): older than 30 × 24 h, counted from
+  // the letter date's UTC midnight. At NIGHT (Nov 19 04:00 UTC) Oct 21 is
+  // 29 d 4 h old and alerts; Oct 20 is 30 d 4 h old and is backfill.
+  assert.equal(plan('2026-10-21'), null);
+  assert.equal(plan('2026-10-20'), 'backfill');
+
+  const { store, transport, runAt } = scoped();
+  store.setRetailerNotice(dated('2026-10-21'), { matchEvidence: EVIDENCE });
+  shopper(store, 'al', { stateCodes: ['AL'] });
+  ledger(store, NIGHT);
+  await runAt(NIGHT + 7 * MIN);
+  assert.equal(transport.sent.length, 0, 'an old letter is never urgent at night');
+  await runAt(MORNING);
+  assert.match(transport.sent[0].body, /Costco announced this Oct 21\./);
+});
+
+test('timing: an outage backlog is never released at night, even for a fresh letter', async () => {
+  const { store, transport, runAt } = scoped();
+  store.setRetailerNotice(dated('2026-11-18'), { matchEvidence: EVIDENCE });
+  shopper(store, 'al', { stateCodes: ['AL'] });
+  // Approved 10:30 EST; push was down all day and first runs at 23:07 EST.
+  ledger(store, Date.parse('2026-11-18T15:30:00.000Z'));
+  const night = await runAt(NIGHT + 7 * MIN);
+  assert.equal(night.metrics.sendingHoldDeferred, 1);
+  assert.equal(night.metrics.sendingHoldExempted, 0);
+  assert.equal(transport.sent.length, 0);
+  await runAt(MORNING);
+  assert.equal(transport.sent.length, 1);
+});
+
+test('timing: a revised letter (material update) approved at night waits for 10:00', async () => {
+  const { store, transport, runAt } = scoped();
+  const wider = structuredClone(FIELDS);
+  wider.whereSold.states = [...FIELDS.whereSold.states, 'Texas'];
+  store.setRetailerNotice(dated('2026-11-18', wider), { matchEvidence: EVIDENCE });
+  shopper(store, 'tx', { stateCodes: ['TX'] });
+  ledger(store, NIGHT, 'material_update');
+  const night = await runAt(NIGHT + 7 * MIN);
+  assert.equal(night.metrics.sendingHoldDeferred, 1);
+  assert.equal(transport.sent.length, 0);
+  await runAt(MORNING);
+  assert.deepEqual(tokensOf(transport.sent), ['ExponentPushToken[tx]']);
+  assert.match(transport.sent[0].title, /^Recall updated:/);
+});
+
+test('timing: a notice withdrawn overnight while its alert waits never sends in the morning', async () => {
+  const { store, transport, runAt } = scoped();
+  store.setRetailerNotice(dated('2026-11-07'), { matchEvidence: EVIDENCE }); // dated: held
+  shopper(store, 'al', { stateCodes: ['AL'] });
+  ledger(store, NIGHT);
+  await runAt(NIGHT + 7 * MIN);
+  assert.equal([...store.deliveries.values()][0].status, 'pending');
+  store.setRetailerNotice(dated('2026-11-07'), {
+    visible: false,
+    live: false,
+    matchEvidence: EVIDENCE,
+  });
+  const morning = await runAt(MORNING);
+  assert.equal(transport.sent.length, 0);
+  assert.equal([...store.deliveries.values()][0].failureCode, 'case_retailer_not_visible');
+  assert.equal(morning.metrics.retailerNotVisibleSkipped, 1);
+});
+
+test('timing: retailer at 23:00, agency for the same recall at 01:00 — one new-recall alert each', async () => {
+  const { store, transport, runAt } = scoped();
+  store.setRetailerNotice(dated('2026-11-18'), { matchEvidence: EVIDENCE });
+  shopper(store, 'al', { stateCodes: ['AL'] });
+  shopper(store, 'al-old-app', { stateCodes: ['AL'] }, '1.1.0');
+  ledger(store, NIGHT);
+  await runAt(NIGHT + 7 * MIN);
+  assert.deepEqual(tokensOf(transport.sent), ['ExponentPushToken[al]']);
+
+  // FDA publishes the same recall at 01:00 EST; a fresh agency initial is exempt too.
+  store.agencyCaseViews.push(AGENCY_VIEW);
+  const agencyAt = NIGHT + 2 * HOUR;
+  store.addEvent({
+    id: 'e0000000-0000-4000-8000-00000000a0e2',
+    recallCaseId: AGENCY_CASE,
+    kind: 'initial',
+    triggerRuleId: 'new_case',
+    materialChangeRef: null,
+    payloadSummary: AGENCY_VIEW.title,
+    createdAt: new Date(agencyAt).toISOString(),
+    projection: {
+      ...retailerCaseProjection(dated('2026-11-19')),
+      title: AGENCY_VIEW.title,
+      geography: { scope: 'states', states: ['Alabama'], confidence: 'stated', sourceText: null },
+    },
+  });
+  const agency = await runAt(agencyAt + 7 * MIN);
+  // The 1.2.0 shopper already had it; the 1.1.0 app never could, so it gets the agency alert.
+  assert.deepEqual(tokensOf(transport.sent), ['ExponentPushToken[al-old-app]']);
+  assert.equal(agency.metrics.duplicateAlertSkipped, 1);
+  assert.equal(agency.metrics.sendingHoldExempted, 1);
+  await runAt(MORNING);
+  assert.equal(transport.sent.length, 0, 'nothing is re-sent in the morning');
+});
+
+test('timing: the exemption never bypasses entitlement or the app-version gate', async () => {
+  const lapsed = 'p-lapsed'.padEnd(16, '0');
+  const source = {
+    async check(purchaseId: string) {
+      return purchaseId === lapsed
+        ? { active: false, expiresAt: null }
+        : { active: true, expiresAt: FAR_FUTURE };
+    },
+  } as typeof ACTIVE_SOURCE;
+  const { store, transport, runAt } = scoped('except_new_recalls', source);
+  store.setRetailerNotice(dated('2026-11-18'), { matchEvidence: EVIDENCE });
+  shopper(store, 'al', { stateCodes: ['AL'] });
+  shopper(store, 'al-old-app', { stateCodes: ['AL'] }, '1.1.0');
+  shopper(store, 'lapsed', { stateCodes: ['AL'] });
+  store.subscriptionOf('lapsed')!.purchaseId = lapsed;
+  store.seedEntitlement('lapsed', {
+    status: 'inactive',
+    expiresAt: null,
+    checkedAt: new Date(NIGHT - HOUR).toISOString(),
+    entitledSince: null,
+  });
+  ledger(store, NIGHT);
+  const night = await runAt(NIGHT + 7 * MIN);
+  assert.deepEqual(tokensOf(transport.sent), ['ExponentPushToken[al]']);
+  assert.equal(night.metrics.clientUnsupportedSkipped, 1);
+  assert.ok(Number(night.metrics.entitlementSkipped) >= 1);
+});
+
+test('timing: the dry run reports a fresh retailer alert as would-send and the rest as held', async () => {
+  const { store, transport, runAt } = scoped();
+  store.setRetailerNotice(dated('2026-11-18'), { matchEvidence: EVIDENCE });
+  shopper(store, 'al', { stateCodes: ['AL'] });
+  ledger(store, NIGHT);
+  ledger(store, NIGHT, 'material_update', 'e0000000-0000-4000-8000-0000000000d2');
+  const dry = await runAt(NIGHT + 7 * MIN, true);
+  assert.equal(dry.metrics.sendingHoldExempted, 1);
+  assert.equal(dry.metrics.sendingHoldDeferred, 1);
+  assert.equal(dry.metrics.sent, 1);
+  assert.equal(store.deliveries.size, 0);
+  assert.equal(transport.sent.length, 0);
 });
