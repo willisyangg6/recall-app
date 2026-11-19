@@ -12,6 +12,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { ExpoRequestError, MISSING_ACCESS_TOKEN } from './expo-transport';
 import { MemoryPushStore } from './memory-push-store';
 import { ACTIVE_SOURCE, NEVER_HELD, FAR_FUTURE, registerEntitled } from './test-entitlement';
 import type { PushMessage, PushReceipt, PushTicket, PushTransport } from './types';
@@ -21,6 +22,11 @@ import {
   retryBackoffMs,
   runPushDelivery,
 } from './worker';
+
+/** The agency case a sent alert names (retailer alerts name none). */
+function recallCaseIdOf(message: { data: { kind: string } & Record<string, unknown> }): unknown {
+  return message.data.kind === 'recall' ? message.data.recallCaseId : null;
+}
 
 const T0 = Date.parse('2026-09-01T00:00:00.000Z');
 const HOUR = 3_600_000;
@@ -43,6 +49,10 @@ class FakeTransport implements PushTransport {
   receiptRequests: string[][] = [];
   receipts: Record<string, PushReceipt> = {};
   failSends = 0;
+  /** What a failing send throws (default: a plain network error). */
+  sendError: () => Error = () => new Error('network down');
+  /** What authProblem() reports; null = authenticated. */
+  authProblemValue: string | null = null;
   ticketFor: (message: PushMessage) => PushTicket;
   private counter = 0;
 
@@ -57,10 +67,14 @@ class FakeTransport implements PushTransport {
   async send(messages: PushMessage[]): Promise<PushTicket[]> {
     if (this.failSends > 0) {
       this.failSends -= 1;
-      throw new Error('network down');
+      throw this.sendError();
     }
     this.sends.push(messages);
     return messages.map((message) => this.ticketFor(message));
+  }
+
+  authProblem(): string | null {
+    return this.authProblemValue;
   }
 
   async getReceipts(ticketIds: string[]): Promise<Record<string, PushReceipt>> {
@@ -417,13 +431,14 @@ test('permanent ticket errors stop retrying; transient ones retry after backoff'
   assert.equal([...rate.store.deliveries.values()][0].attempts, 2);
 });
 
-test('a network failure marks the chunk retryable and the run partial', async () => {
+test('a network failure marks the chunk retryable; nothing accepted fails the run', async () => {
   const { store, transport, runAt } = setup(0);
   registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
   addNationwideEvent(store, HOUR);
   transport.failSends = 1;
   const result = await runAt(2 * HOUR);
-  assert.equal(result.outcome, 'partial');
+  assert.equal(result.outcome, 'failed');
+  assert.match(result.error ?? '', /0 of 1 message\(s\) accepted/);
   const delivery = [...store.deliveries.values()][0];
   assert.equal(delivery.status, 'retryable_failure');
   assert.equal(delivery.failureCode, 'network');
@@ -996,7 +1011,7 @@ test('a new recall on a case that has since closed or been retracted never alert
   const result = await runAt(3 * HOUR);
   assert.equal(result.metrics.lifecycleSkipped, 2);
   assert.equal(result.metrics.deliveriesCreated, 1);
-  assert.equal(transport.sentMessages[0].data.recallCaseId, caseId(903));
+  assert.equal(recallCaseIdOf(transport.sentMessages[0]), caseId(903));
 });
 
 test('a retraction alerts for the retracted case — the one update whose case is not active', async () => {
@@ -1026,7 +1041,7 @@ test('a retraction alerts for the retracted case — the one update whose case i
   assert.equal(result.metrics.deliveriesCreated, 1);
   assert.equal(result.metrics.lifecycleSkipped, 1);
   assert.equal(transport.sentMessages.length, 1);
-  assert.equal(transport.sentMessages[0].data.recallCaseId, caseId(910));
+  assert.equal(recallCaseIdOf(transport.sentMessages[0]), caseId(910));
   assert.match(transport.sentMessages[0].title, /retract/i);
 });
 
@@ -1066,7 +1081,7 @@ test('important updates alert on an active case and not on a closed one', async 
   const result = await runAt(3 * HOUR);
   assert.equal(result.metrics.deliveriesCreated, rules.length);
   assert.equal(result.metrics.lifecycleSkipped, 1);
-  assert.ok(transport.sentMessages.every((m) => m.data.recallCaseId === caseId(920)));
+  assert.ok(transport.sentMessages.every((m) => recallCaseIdOf(m) === caseId(920)));
 });
 
 test('merged cases: the duplicate initial is dropped; an update is re-pointed at the survivor, once', async () => {
@@ -1123,7 +1138,7 @@ test('merged cases: the duplicate initial is dropped; an update is re-pointed at
   assert.equal(transport.sentMessages.length, 3);
   // Every alert opens the surviving case — the card the Feed lists — and the
   // re-pointed expansion is formatted from the survivor's projection.
-  assert.ok(transport.sentMessages.every((m) => m.data.recallCaseId === survivor));
+  assert.ok(transport.sentMessages.every((m) => recallCaseIdOf(m) === survivor));
   assert.ok(
     transport.sentMessages.every((m) => m.title.includes('Survivor')),
     transport.sentMessages.map((m) => m.title).join(' | '),
@@ -1179,7 +1194,7 @@ test('a merge chain is followed to the canonical case; a broken or circular chai
   const result = await runAt(3 * HOUR);
   assert.equal(result.metrics.deliveriesCreated, 1);
   assert.equal(result.metrics.destinationUnresolved, 2);
-  assert.equal(transport.sentMessages[0].data.recallCaseId, c);
+  assert.equal(recallCaseIdOf(transport.sentMessages[0]), c);
 });
 
 test('a retry row whose case was merged or closed after the row was created fails closed instead of sending', async () => {
@@ -1228,7 +1243,7 @@ test('no backlog: a retraction or update created before activation or before the
   const result = await runAt(4 * HOUR);
   assert.equal(result.metrics.skippedPreActivation, 2);
   assert.equal(result.metrics.deliveriesCreated, 1);
-  assert.equal(transport.sentMessages[0].data.recallCaseId, caseId(962));
+  assert.equal(recallCaseIdOf(transport.sentMessages[0]), caseId(962));
 });
 
 test('changing state never backfills: old events stay behind the preference horizon', async () => {
@@ -1460,4 +1475,143 @@ test('consent: withdrawing it clears the server allergens and moves the preferen
   // An identical re-send is a strict no-op: the horizon does not move again.
   store.setPreferences(id, prefs, iso(3 * HOUR), null);
   assert.equal((await store.listPreferences())[0].updatedAt, iso(2 * HOUR));
+});
+
+// ── Delivery failure visibility (2026-11-18: a misnamed GitHub secret left
+//    EXPO_ACCESS_TOKEN empty; Expo refused every send for a month while each
+//    run recorded only `partial` and the workflow reported success) ──────────
+
+test('no access token: due rows stay queued with attempts unspent, and the run FAILS', async () => {
+  const { store, transport, runAt } = setup(0);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
+  transport.authProblemValue = MISSING_ACCESS_TOKEN;
+  const result = await runAt(2 * HOUR);
+  assert.equal(result.outcome, 'failed');
+  assert.match(result.error ?? '', /EXPO_ACCESS_TOKEN is not set/);
+  assert.equal(result.metrics.authBlocked, 1);
+  assert.equal(result.metrics.sendAttempted, 0);
+  assert.equal(transport.sends.length, 0);
+  const delivery = [...store.deliveries.values()][0];
+  assert.equal(delivery.status, 'pending');
+  assert.equal(delivery.attempts, 0);
+
+  // Once the credential exists, the same row is delivered on the next run.
+  transport.authProblemValue = null;
+  const fixed = await runAt(2 * HOUR + 31 * MINUTE);
+  assert.equal(fixed.outcome, 'succeeded');
+  assert.equal([...store.deliveries.values()][0].status, 'ticket_accepted');
+  assert.equal([...store.deliveries.values()][0].attempts, 1);
+});
+
+test('no access token with nothing to send or check: a genuinely empty run succeeds', async () => {
+  const { store, transport, runAt } = setup(0);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  transport.authProblemValue = MISSING_ACCESS_TOKEN;
+  const result = await runAt(2 * HOUR);
+  assert.equal(result.outcome, 'succeeded');
+  assert.equal(result.metrics.authBlocked, 0);
+});
+
+test('no access token: due receipts are not fetched and the run fails', async () => {
+  const { store, transport, runAt } = setup(0);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
+  assert.equal((await runAt(2 * HOUR)).outcome, 'succeeded');
+  transport.authProblemValue = MISSING_ACCESS_TOKEN;
+  const result = await runAt(2 * HOUR + 20 * MINUTE);
+  assert.equal(result.outcome, 'failed');
+  assert.equal(transport.receiptRequests.length, 0);
+  assert.equal([...store.deliveries.values()][0].status, 'ticket_accepted');
+});
+
+test("an authentication refusal keeps Expo's code, stops later chunks, and fails the run", async () => {
+  const { store, transport, runAt } = setup(0);
+  // 101 matching devices = two chunks of the 100-message request cap.
+  for (let i = 0; i < 101; i += 1) {
+    const id = `install-${String(i).padStart(24, '0')}`;
+    registerMatching(store, id, `ExponentPushToken[t${i}]`, 'ios', iso(-HOUR));
+  }
+  addNationwideEvent(store, HOUR);
+  transport.failSends = 1;
+  transport.sendError = () => new ExpoRequestError('send', 403, 'UNAUTHORIZED');
+  const result = await runAt(2 * HOUR);
+  assert.equal(result.outcome, 'failed');
+  assert.match(result.error ?? '', /HTTP 403 UNAUTHORIZED/);
+  assert.equal(result.metrics.sendAttempted, 100);
+  assert.equal(result.metrics.requestFailures, 1);
+  const rows = [...store.deliveries.values()];
+  const refused = rows.filter((d) => d.status === 'retryable_failure');
+  assert.equal(refused.length, 100);
+  assert.ok(refused.every((d) => d.failureCode === 'UNAUTHORIZED' && d.attempts === 1));
+  // The second chunk was never sent: its row is untouched.
+  const untouched = rows.filter((d) => d.status === 'pending');
+  assert.equal(untouched.length, 1);
+  assert.equal(untouched[0].attempts, 0);
+});
+
+test('a whole-request failure without an Expo code records the HTTP status', async () => {
+  const { store, transport, runAt } = setup(0);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
+  transport.failSends = 1;
+  transport.sendError = () => new ExpoRequestError('send', 502, null);
+  const result = await runAt(2 * HOUR);
+  assert.equal(result.outcome, 'failed');
+  assert.equal([...store.deliveries.values()][0].failureCode, 'http_502');
+});
+
+test('per-recipient outcomes: one accepted beside one rejected stays a healthy run', async () => {
+  const { store, transport, runAt } = setup(0);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  registerMatching(store, 'b'.repeat(32), 'ExponentPushToken[b]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
+  transport.ticketFor = (message) =>
+    message.to === 'ExponentPushToken[a]'
+      ? { status: 'ok', id: 'ticket-a' }
+      : { status: 'error', message: 'slow down', details: { error: 'MessageRateExceeded' } };
+  const result = await runAt(2 * HOUR);
+  assert.equal(result.outcome, 'succeeded');
+  const codes = [...store.deliveries.values()].map((d) => d.failureCode).sort();
+  assert.deepEqual(codes, ['MessageRateExceeded', null]);
+});
+
+test('every ticket rejected fails the run; DeviceNotRegistered alone does not', async () => {
+  const rejected = setup(0);
+  registerMatching(rejected.store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(rejected.store, HOUR);
+  rejected.transport.ticketFor = () => ({
+    status: 'error',
+    message: 'slow down',
+    details: { error: 'MessageRateExceeded' },
+  });
+  assert.equal((await rejected.runAt(2 * HOUR)).outcome, 'failed');
+
+  const uninstalled = setup(0);
+  registerMatching(uninstalled.store, 'a'.repeat(32), 'ExponentPushToken[a]', 'ios', iso(-HOUR));
+  addNationwideEvent(uninstalled.store, HOUR);
+  uninstalled.transport.ticketFor = () => ({
+    status: 'error',
+    message: '"ExponentPushToken[a]" is not a registered push notification recipient',
+    details: { error: 'DeviceNotRegistered' },
+  });
+  const result = await uninstalled.runAt(2 * HOUR);
+  assert.equal(result.outcome, 'succeeded');
+  assert.equal(result.metrics.tokensDisabled, 1);
+});
+
+test('provider messages are stored with push tokens redacted', async () => {
+  const { store, transport, runAt } = setup(0);
+  registerMatching(store, 'a'.repeat(32), 'ExponentPushToken[secret-a]', 'ios', iso(-HOUR));
+  addNationwideEvent(store, HOUR);
+  transport.ticketFor = () => ({
+    status: 'error',
+    message: '"ExponentPushToken[secret-a]" is not a registered push notification recipient',
+    details: { error: 'DeviceNotRegistered' },
+  });
+  await runAt(2 * HOUR);
+  const row = [...store.deliveries.values()][0];
+  assert.equal(row.failureCode, 'DeviceNotRegistered');
+  assert.ok(!(row.lastError ?? '').includes('secret-a'));
+  assert.match(row.lastError ?? '', /ExpoPushToken\[redacted\]/);
 });

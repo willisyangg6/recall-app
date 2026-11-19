@@ -246,7 +246,7 @@ See [recall-feed-usability.md](recall-feed-usability.md), "A. Row-owned lot and 
   - `field_establishment` — array of establishment names (sometimes empty, sometimes duplicated). Establishment _numbers_ (e.g. "EST. 1234") appear only in summary prose.
   - `field_product_items` — free-text product lines (often empty on PHAs where the list is a PDF).
   - `field_summary` — the **full press release as HTML** (contains Editor's Notes, establishment number, links to label/product-list PDFs).
-    **Allergen reason wording [VERIFIED against the recorded corpus, 2026-09-02]:** titles of allergen notices usually say only "…Due to Misbranding and Undeclared Allergen(s)" without naming it; the standard statement naming the allergen is a summary sentence of the form "The product contains **egg**, a known allergen, which is not declared on the product label" (variants observed: plural "contains eggs", "may contain sesame", multiple "contains egg and milk, known allergens", parenthetical species "contains fish (anchovies)", component "produced using an egg wash, which contains egg", and "an undeclared allergen, specifically peanut residue"). 13 of 15 allergen records in the recorded set use this apposition family rather than "undeclared <allergen>". One further variant is **[VERIFIED against the archived production snapshot for 111-2015, 2026-09-02]** rather than the recorded corpus: an allergen-governed "including" list — "contained undeclared allergens, including eggs, milk, and wheat". Older notices can also state the same allergen twice in different grammatical number across two constructions ("undeclared peanut" in one sentence, "may contain peanuts, known allergens" in another).
+    **Allergen reason wording [VERIFIED against the recorded corpus, 2026-09-02]:** titles of allergen notices usually say only "…Due to Misbranding and Undeclared Allergen(s)" without naming it; the standard statement naming the allergen is a summary sentence of the form "The product contains **egg**, a known allergen, which is not declared on the product label" (variants observed: plural "contains eggs", "may contain sesame", multiple "contains egg and milk, known allergens", parenthetical species "contains fish (anchovies)", component "produced using an egg wash, which contains egg", and "an undeclared allergen, specifically peanut residue"). 13 of 15 allergen records in the recorded set use this apposition family rather than "undeclared <allergen>". One further variant is **[VERIFIED against the archived production snapshot for 111-2015, 2026-09-02]** rather than the recorded corpus: an allergen-governed "including" list — "contained undeclared allergens, including eggs, milk, and wheat". Older notices can also state the same allergen twice in different grammatical number across two constructions ("undeclared peanut" in one sentence, "may contain peanuts, known allergens" in another). **Parenthetical qualifiers [VERIFIED against the production corpus, 2026-11-19]:** a parenthetical qualifies the allergen before it ("fish (anchovies) and milk", "milk (casein)", "Tree Nuts (Hazelnut/Filbert) and soy") and never ends the list; before 2026-11-19 a non-vocabulary word inside it did, dropping every later allergen. Of 1,977 stored cases one reads differently (FSIS Taylor Farms meatloaf, "contain fish (anchovies) and milk": stored `undeclared milk`, now fish and milk); its stored value is unchanged until re-derived.
   - `field_labels` / `field_distro_list` — **bare PDF filenames without paths** (sometimes with trailing spaces). Real URLs follow `https://www.fsis.usda.gov/sites/default/files/food_label_pdf/{YYYY-MM}/{file}` where YYYY-MM is the _upload_ month — recoverable reliably only from the summary/detail-page HTML **[VERIFIED on live pages]**. Labels are PDFs; no image files.
   - `field_qty_recovered` — free text, dirty ("6,037,289 lbs", "0 (zero) pounds ", "0 Ibs" sic). Not parseable without normalization.
   - `field_company_media_contact` (free text with embedded newlines), `field_media_contact` (FSIS press officer), `langcode` ("English"/"Spanish"), `field_has_spanish`, `field_archive_recall`, `field_recall_url` (canonical detail-page link, **served as `http://`**, redirects to https; Spanish pages under `/es/retirada/`), `field_press_release`/`field_en_press_release` (always empty [UNRESOLVED]).
@@ -261,6 +261,41 @@ See [recall-feed-usability.md](recall-feed-usability.md), "A. Row-owned lot and 
 - **Contact-field rendering instability [VERIFIED against production snapshots, 2026-10-27]:** from 19:45 UTC the API alternated, fetch to fetch, between two renderings of `field_company_media_contact`. The historical one (every stored payload before then) puts a standalone `Company Contact` heading line above each contact block, sometimes twice; the other drops those lines and re-flows the whitespace. Across all 700 alternating pairs, dropping lines whose whole trimmed text is `Company Contact` and collapsing whitespace made the two identical, and no other field differed. Other headings (`Consumer Contact`, `Media Contact`) appear in both renderings. The pipeline treats this difference as presentation only (`src/server/fsis/contact-rendering.ts`); any other contact or field difference remains a change.
 - **Name resolution [OBSERVED 2026-10-27]:** from about 21:55 UTC `www.fsis.usda.gov` stopped resolving — public resolvers answered SERVFAIL for `usda.gov` and `ns1`/`ns2.usda.gov` did not answer — and every FSIS fetch failed. A failed fetch now reports the transport cause and the result of a separate DNS lookup; that lookup is an observation from the runner, not proof of where the fault lies.
 - **Attribution [VERIFIED]:** USDA ([Policies and Links](https://www.usda.gov/about-usda/policies-and-links)): "Most information presented on the USDA Web site is considered public domain information. Public domain information may be freely distributed or copied, but use of appropriate byline/photo/image credits is requested. Attribution may be cited as follows: 'U.S. Department of Agriculture.'" **[INFERENCE]** Recall records are agency work product within that public-domain bucket; credit USDA in the app.
+
+### 4.3 FSIS notice attachments (product lists and labels) [VERIFIED 2026-11-16]
+
+Many PHAs name their products only in linked PDFs. Three findings shape the
+reader (`src/server/fsis/attachments.ts`):
+
+- **The link text carries the meaning, not the URL.** The product list for
+  PHA-11142026 sits at `/sites/default/files/media_file/documents/PHA-11142026-Product-List_0.pdf`,
+  outside every label/distribution URL pattern. Its anchor reads "View the
+  list of products subject to the public health alert". Label anchors vary:
+  "View product labels.", "view labels]" (the bracket inside the anchor),
+  and "View Labels" (2017). Discovery classifies by anchor text first and
+  falls back to the URL. Only FSIS-hosted PDFs qualify.
+- **Product lists are text-layer tables.** The PHA-11142026 list is one
+  landscape page with seven columns: Size | Brand Name | Product Name |
+  Lot Codes and/or Use By Dates | EST Number | States Affected | Media and
+  Consumer Contact. Headings wrap over two or three lines, and so do cells.
+  Columns come from the printed header. Rows start where the Product Name
+  column starts a new cell. A table is kept only when every row has a
+  product name and every run of text falls inside a column. Its per-row
+  states must also agree with the notice's `field_states`; anything else is
+  `needs_review`.
+- **Label pages carry a printed caption in the text layer** ("Bitterballen
+  (Beef)") above the photograph. Older label PDFs are often scans with no
+  text, and those pages get no caption. Page order does NOT follow the
+  notice: PHA-11062026-01 lists Bami Rolls, Saté Kroketten, Bitterballen,
+  but its PDF prints them in the reverse order.
+- **Revisions keep the URL.** FSIS edits notices in place (§4.1), so a
+  revised attachment can reuse its URL. The reader keys on (record, URL)
+  plus a sha256 of the bytes, and keeps the previous hash on revision.
+
+Census at implementation (read-only, production, 2026-11-16), excluding the
+two regression notices: 965 FSIS notices link a product-list or label PDF
+(125 active); 45 link a product list (6 active); 956 link labels; 36 link
+both.
 
 ### 4.2 FSIS website and annual summaries
 

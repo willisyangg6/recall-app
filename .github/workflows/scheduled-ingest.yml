@@ -166,9 +166,16 @@ jobs:
           REVENUECAT_PROJECT_ID: ${{ secrets.REVENUECAT_PROJECT_ID }}
           REVENUECAT_PREMIUM_ENTITLEMENT_ID: ${{ secrets.REVENUECAT_PREMIUM_ENTITLEMENT_ID }}
           # Expo enhanced push security (D5, 2026-10-14): a robot access token.
-          # Unset, it is empty and no Authorization header is sent, which works
-          # until the Expo switch is turned on. This step only.
+          # REQUIRED: enhanced push security is on, so without it the worker
+          # sends nothing and the step FAILS (2026-11-18). The secret name must
+          # be exactly EXPO_ACCESS_TOKEN in the `production` environment. This
+          # step only.
           EXPO_ACCESS_TOKEN: ${{ secrets.EXPO_ACCESS_TOKEN }}
+          # Overnight hold scope (alert timing, 2026-11-19): the repository
+          # VARIABLE PUSH_OVERNIGHT_HOLD, not a secret. Unset = `all`, the D1
+          # rule; `except_new_recalls` sends fresh new-recall alerts at night.
+          # docs/recall-push-delivery.md owns the rule.
+          PUSH_OVERNIGHT_HOLD: ${{ vars.PUSH_OVERNIGHT_HOLD }}
       # Dead-man heartbeat (P2B7S). LAST on purpose, and it is the only step
       # that sees the heartbeat secrets. It re-reads freshness from the
       # database and pings the external monitor ONLY when both required
@@ -188,3 +195,88 @@ jobs:
           HEARTBEAT_URL: ${{ secrets.HEARTBEAT_URL }}
           HEARTBEAT_FDA_URL: ${{ secrets.HEARTBEAT_FDA_URL }}
           HEARTBEAT_FSIS_URL: ${{ secrets.HEARTBEAT_FSIS_URL }}
+
+  # ── Retailer monitors on the agency tick (alert timing, 2026-11-19) ────────
+  #
+  # GitHub delivered 12 of about 48 retailer-notices.yml cron ticks over
+  # 2026-11-15/18 (median gap 8 h, longest 11.6 h): every delivered run
+  # succeeded, none was cancelled, queued or lease-skipped, so the gaps were
+  # dropped schedule events and nothing else. This workflow runs about every
+  # 45 minutes because the scheduler watchdog dispatches it whenever agency
+  # ingestion goes stale, so the monitors ride it here and their own due gate
+  # (RETAILER_MIN_INTERVAL_MINUTES, 100 min since the last success) keeps the
+  # two-hour cadence. docs/recall-alert-timing.md has the evidence.
+  #
+  # OFF until the founder sets the repository variable RETAILER_ON_INGEST to
+  # "true". retailer-notices.yml keeps its own cron and manual dispatch either
+  # way; both paths share one lease and the due gate, so a run is never
+  # doubled.
+  #
+  # Separate jobs on their own runners: a retailer failure never stops or
+  # delays an agency step. They can only hold this run open for their
+  # timeout (normally they finish well before the agency job), and the
+  # watchdog reads agency freshness, never this run's conclusion. A retailer
+  # failure does turn this run red.
+  retailer-costco:
+    if: vars.RETAILER_ON_INGEST == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: production
+    # No job-level `env:` on purpose (hardening note 1).
+    steps:
+      # Tripwire, NOT the security boundary (hardening note 3). The ref
+      # reaches the shell only through `env:`.
+      - name: Assert production ref
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          echo "event=$GITHUB_EVENT_NAME ref=$WORKFLOW_REF"
+          if [ "$WORKFLOW_REF" != "refs/heads/master" ]; then
+            echo "::error::Refusing to run the Costco monitor from $WORKFLOW_REF"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      # Receives NO secret: this step runs third-party lifecycle scripts.
+      - run: npm ci
+      - name: Costco notices (private tables only; due-gated)
+        run: npm run jobs:retailer-costco
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+
+  retailer-aldi:
+    # Needs BOTH variables: RETAILER_ALDI_ENABLED is the ALDI rollout switch
+    # (after its migration), exactly as in retailer-notices.yml.
+    if: vars.RETAILER_ON_INGEST == 'true' && vars.RETAILER_ALDI_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: production
+    # No job-level `env:` on purpose (hardening note 1).
+    steps:
+      # Tripwire, NOT the security boundary (hardening note 3). The ref
+      # reaches the shell only through `env:`.
+      - name: Assert production ref
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          echo "event=$GITHUB_EVENT_NAME ref=$WORKFLOW_REF"
+          if [ "$WORKFLOW_REF" != "refs/heads/master" ]; then
+            echo "::error::Refusing to run the ALDI monitor from $WORKFLOW_REF"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      # Receives NO secret: this step runs third-party lifecycle scripts.
+      - run: npm ci
+      - name: ALDI notices (private tables only; due-gated)
+        run: npm run jobs:retailer-aldi
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}

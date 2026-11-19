@@ -835,12 +835,45 @@ or is omitted rather than rendered wrongly.
   component above 12 is rejected rather than guessed. Ranges standardize to
   `July 13–August 11, 2026`, stating the year twice only when it changes.
   Qualifiers are meaning, not formatting, so `through February 27, 2026` becomes
-  `Through February 27, 2026` rather than collapsing to a single day. Lists
+  `Through February 27, 2026` rather than collapsing to a single day. A
+  qualifier on either side of the date survives (package-date identifiers,
+  2026-11-16): `10/16/27 and prior` → `October 16, 2027 or earlier`,
+  `and after` → `or later`, `including and prior to` → `On or before`. The
+  inclusive forms share one canonical identity (`on or before|date:…`) whichever
+  side they are written on; exclusive `before`/`prior to` stay distinct. A date
+  found inside a longer value keeps a qualifier directly beside it, a list never
+  splits on the `and`/`or` that joins a date to its cutoff, and a qualified date
+  sorts at its own date. Lists
   split into one date each, sorted, and **each renders complete** —
   `July 11, 2026, July 15, 2026, July 16, 2026, July 18, 2026, July 22, 2026`.
   Dates sharing a month once collapsed into `July 11, 15, 16, 18, and 22, 2026`;
   P3C-1 removed that, because a shopper compares one printed marking at a time
   and a shared month with a bare day is not a value they can match.
+- **One marking, one field; lots keep their dates** (package-date identifiers,
+  2026-11-16; regressions Family Farmstead 2026-11-10 and Brad's Raw Chips
+  2026-11-03, pinned in `src/server/fda/package-date-identifiers.test.ts`):
+  - A prose sentence that restates a table's cutoff under another date name
+    ("expiration date of 10/16/27 and prior" beside a `Lot Code/Best By Date`
+    column of "… 10/16/27 and prior") collapses into the table's field — only
+    when the value is a _qualified_ cutoff or span, the table states it under a
+    different card date, and no table states the prose's own date concept. Two
+    columns the table distinguishes stay two markings, and a bare date that
+    merely matches is never merged: the date string alone is not evidence.
+  - Table text the FDA flattener glues onto the start or end of a prose line is
+    removed before prose extraction, so a row is never read again as
+    recall-wide prose. `dated 10/16/27` describes codes by their date and is
+    never a lot code; a code that merely looks like a date (`101627`) stays one.
+  - A list item's product name ends at a comma followed by an identifier label
+    (`, UPC …`, `, Lots …`, `, Best By …`). Read whole, a bullet fails the
+    closed identity gate as a raw source row and every product's codes pool at
+    recall scope — how Brad's four bags became one row.
+  - `Lot(s) A, B and C (Best By D)` is an explicit pair clause: the
+    parenthetical dates exactly the codes of its own clause. Separate code and
+    date lists with no stated binding are never paired.
+  - A code–date pair needs date evidence: a real month name or a numeric date
+    that normalizes. A hyphen inside a code (`33525-1`) is never the code–date
+    separator. Before this, `2 and 3352` — the seam of `33525-2 and 33525-3` —
+    read as day/"month"/year and rendered as a Best By date.
 - **Code location as a model, not a phrase**: surface, position, relationship,
   and appearance are recognized separately and the sentence is composed from
   them, so the same physical arrangement always reads the same way
@@ -1051,6 +1084,30 @@ name a version, or occupy two roles at once. This pass closes those.
   states; identifier lists and property lists flow through prose extraction to
   case-level fields (property rows split on "•" bullets, so "Lot code : 5 265
   • Best-If-Used-By date: MAR 24, 2027" is two clean facts).
+- **A product described in prose over a separate lot list**
+  (`extractDescribedLotLists` in `src/lib/source-lists.ts`, 2026-11-18). A
+  bare hand-off ("The recalled lots are:", "Affected lot numbers include:")
+  declares an identifier list even with one item. Its bare codes belong to a
+  product only when the sentence directly above the hand-off describes exactly
+  one product in the singular ("Herb To Body Yellow Dock Root C/S 4oz comes in
+  a 4 oz pouch") and no other sentence since the previous list describes one.
+  That sentence supplies the size and packaging, with packaging gated by the
+  closed vocabulary, and a trailing name measurement is removed only when it
+  restates that size. Two described products, a plural subject, or an
+  intervening sentence leave the codes recall-wide, never assigned to a guessed
+  product. The shape yields no UPC and no date. Display-time only. A list this
+  reader consumes is removed from the prose text, so the prose reader never
+  reads the same codes a second time.
+- **Plural "lots:", headed code columns and stated container sizes**
+  (`src/lib/prose-identifiers.ts`, `src/lib/consumer-projection.ts`,
+  2026-11-18). "lots" is a lot label only when a colon hands it off ("Lots:",
+  "lots are:"), never across a clause. A heading that ends in its colon at a
+  line break is read down its column, one code-shaped line at a time, only when
+  the notice holds exactly ONE such column; several columns belong to several
+  products and are never pooled. "comes in / is packaged in a <size>
+  <container>" is case-level Package Size only when no product rows exist,
+  FDA's structured product description names a single product, every such
+  sentence agrees, and the headline and description name no other size.
 - **Package field VALUE contracts.** A supported key with an invalid value
   renders nothing: dates require a digit and semantic completeness (a bound
   that dangles — "between November 2028 through" — is rejected outright, while
@@ -1609,6 +1666,33 @@ exclusively, and FSIS under-reports allergens in it.
     [recall-operations.md](recall-operations.md), "FDA contaminant category: a
     historical correction (P3B)", for the applied result and the durable
     ledgers.
+  - **Thallium follow-up (2026-11-17, prepared, NOT applied).** Brad's Raw
+    Chips (2026-11-03, reason "Product may contain thallium") was stored
+    `foreign_material` / null. Recall Details then said "may contain pieces of
+    metal", and Health Risk showed a foreign-object injury warning. The cause
+    was in the shared evidence owner: the background sentence "Thallium (Tl)
+    is a naturally occurring metal found in the soil" satisfied the
+    "`<material>` … found in" discovery construction. Two rules close it in
+    `domain/hazard.ts`:
+    - "heavy metal" is chemistry, never a fragment;
+    - an indefinite description ("a … metal found in") is background, not a
+      discovery.
+
+    Thallium joins `EVIDENCE_GATED_CHEMICAL_AGENTS`, and the gated agents gain
+    the "may contain `<agent>`" construction (modal plus finite verb, as for
+    foreign material). With the category corrected:
+    - What Happened reads "may be contaminated with thallium";
+    - the feed reason reads "Potential thallium contamination.";
+    - Health Risk is omitted. No reviewed thallium guidance exists, so none is
+      invented.
+
+    Because the category is stored, the existing repair carries the
+    correction. It gains one reviewed agent move (`null → thallium`), and its
+    population guard becomes per round: a run is admitted only when it
+    matches one reviewed round's size AND that round's agents. A read-only
+    production dry run (2026-11-17) found 14 governed records and planned
+    exactly 1 record and 1 case (Brad's), with 0 notifications. Applying it
+    needs separate authorization: `--apply --confirm --expect 1`.
 - **Affected-product data on the same notices is a separate milestone (P3C),
   and both halves are now built.** P3B settled the hazard category and agent for
   the AquaStar and Dynarex notices; nothing in this bullet is claimed fixed by

@@ -122,6 +122,42 @@ function productPhrase(title: string, productDescription?: string | null): strin
   return phrase;
 }
 
+/**
+ * The source's own statement that the product may not have been kept at a safe
+ * temperature ("may not have been stored, distributed or sold at appropriate
+ * temperatures"; "were not stored … at appropriate temperatures"). Read from
+ * the stated reason and the announcement prose, in exactly this shape; a
+ * notice that only names a temperature (a cooking instruction, a storage
+ * direction) never matches. Measured on the live corpus 2026-11-17: 2 of 935
+ * consumer-visible cases state it.
+ */
+const TEMPERATURE_LAPSE_STATED =
+  /\bnot (?:have )?been (?:properly )?stored\b[^.]{0,40}?\bat (?:the )?(?:appropriate|proper|correct|required) temperatures?\b|\b(?:were|was) not (?:properly )?stored\b[^.]{0,40}?\bat (?:the )?(?:appropriate|proper|correct|required) temperatures?\b/i;
+
+const TEMPERATURE_LAPSE = 'the products may not have been stored at appropriate temperatures';
+
+function statesTemperatureLapse(input: WhatHappenedInput): boolean {
+  return TEMPERATURE_LAPSE_STATED.test(`${input.reasonText ?? ''}\n${input.summaryText ?? ''}`);
+}
+
+/** The lapse as its own sentence, beside a cause that is not a pathogen. */
+function temperatureContext(stated: boolean): string | null {
+  return stated ? 'The products also may not have been stored at appropriate temperatures.' : null;
+}
+
+/**
+ * A chemical agent named by a singular count noun ("cleaning chemical",
+ * "sanitizing agent") takes its article, as the source prints it ("a small
+ * amount of a cleaning chemical"); mass nouns ("lead", "inorganic arsenic",
+ * "Cesium-137") never do. Measured 2026-11-17: no agency agent ends in one.
+ */
+function withCountArticle(agent: string): string {
+  return /^(?:an?|the)\s/i.test(agent) ||
+    !/\b(?:chemical|agent|sanitizer|solution|compound|substance|cleaner)$/i.test(agent)
+    ? agent
+    : `${/^[aeiou]/i.test(agent) ? 'an' : 'a'} ${agent}`;
+}
+
 interface ReasonClause {
   /** Clause completing "<frame> …", starting with "because"/"that". */
   clause: string;
@@ -149,8 +185,22 @@ function reasonClause(input: WhatHappenedInput, product: string): ReasonClause |
   // ingredient, so the neutral construction is used for pathogen families.
   const upstream = /\b(containing|made with)\b/i.test(product);
 
+  // A temperature lapse the source states is the CAUSE of a pathogen risk,
+  // not a second hazard: "may not have been stored … at appropriate
+  // temperatures, which may allow growth of … Clostridium botulinum".
+  const temperature = statesTemperatureLapse(input);
+
   switch (typed.family) {
     case 'pathogen':
+      if (temperature && !typed.hazards) {
+        return {
+          clause:
+            typed.pathogen === null
+              ? `because ${TEMPERATURE_LAPSE}`
+              : `because ${TEMPERATURE_LAPSE}, which may allow the growth of ${typed.pathogen}`,
+          context: null,
+        };
+      }
       // Several supported hazards: each is named, with the source's own
       // connective, under the same "may be" uncertainty (decision E).
       if (typed.hazards) {
@@ -181,7 +231,7 @@ function reasonClause(input: WhatHappenedInput, product: string): ReasonClause |
         clause: plural
           ? `because the products may contain ${allergen}, allergens that are not declared on the label`
           : `because the products may contain ${allergen}, an allergen that is not declared on the label`,
-        context: null,
+        context: temperatureContext(temperature),
       };
     }
     case 'foreign_material':
@@ -194,9 +244,9 @@ function reasonClause(input: WhatHappenedInput, product: string): ReasonClause |
     case 'chemical':
       return {
         clause: typed.agent
-          ? `because the products may be contaminated with ${typed.agent}`
+          ? `because the products may be contaminated with ${withCountArticle(typed.agent)}`
           : 'because the products may be contaminated with a chemical substance',
-        context: null,
+        context: temperatureContext(temperature),
       };
     case 'inspection':
       return {

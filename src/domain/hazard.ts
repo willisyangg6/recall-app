@@ -47,8 +47,12 @@ export const CHEMICAL_AGENTS = ['lead', 'cadmium', 'arsenic', 'mercury', 'Cesium
  * sentence earlier; a bare scan cannot tell the two apart). Asbestos is the
  * first member — add future evidence-gated agents here rather than growing a
  * second implementation.
+ *
+ * Thallium (Brad's Raw Chips, 2026-11-03: "Product may contain thallium")
+ * is gated for the same reason: its notice also explains, in background,
+ * that thallium "is a naturally occurring metal found in the soil".
  */
-const EVIDENCE_GATED_CHEMICAL_AGENTS = ['asbestos'];
+const EVIDENCE_GATED_CHEMICAL_AGENTS = ['asbestos', 'thallium'];
 
 /** Is this substance stated as the contaminant (not mentioned in passing)? */
 function chemicalAgentStatedAsContaminant(text: string, agent: string): boolean {
@@ -62,6 +66,13 @@ function chemicalAgentStatedAsContaminant(text: string, agent: string): boolean 
     // gap; "or"/"and" end it, so a disjunctive label ("asbestos or lead
     // contamination") states neither on its own.
     new RegExp(`\\b${agent}\\s+(?:(?!(?:or|and)\\b)\\w+\\s+){0,2}contamin`, 'i'),
+    // "Product may contain thallium", "may contain elevated levels of
+    // thallium" — a modal plus the FINITE verb states the hazard; the
+    // participle ("containing") never does, exactly as for foreign material.
+    new RegExp(
+      `\\b(?:may|might|could|possibly)\\s+contains?\\s+(?:[\\w-]+\\s+){0,3}${agent}\\b`,
+      'i',
+    ),
   ].some((pattern) => pattern.test(text));
 }
 
@@ -185,6 +196,32 @@ function collectWord(word: string, collected: string[]): void {
 }
 
 /**
+ * The allergens a parenthetical names. A parenthetical QUALIFIES the word
+ * before it ("milk (casein)", "tree nuts (hazelnut/filbert)", "fish
+ * (anchovy)"), so a word outside the vocabulary inside it never ends the
+ * list: before 2026-11-19 it did, and every allergen after it was lost
+ * ("undeclared milk (casein) and egg" read as milk only, so an egg-allergic
+ * shopper was told the recall did not match). Vocabulary inside still counts
+ * ("wheat (gluten)", "almonds (tree nuts)"), each half of a slash pair is
+ * read, and a negated parenthetical ("(does not contain egg)") names nothing.
+ */
+function parentheticalAllergens(inner: string[]): string[] {
+  if (inner.some((token) => ['no', 'not', 'without', 'free'].includes(token))) return [];
+  const words = inner.flatMap((token) => token.split('/'));
+  const found: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const pair = i + 1 < words.length ? `${words[i]} ${words[i + 1]}` : null;
+    if (pair && ALLERGEN_EVIDENCE_WORDS.includes(pair)) {
+      found.push(pair);
+      i++;
+    } else if (ALLERGEN_EVIDENCE_WORDS.includes(words[i])) {
+      found.push(words[i]);
+    }
+  }
+  return found;
+}
+
+/**
  * Walk tokens collecting vocabulary words (with two-token lookahead for
  * "crustacean shellfish" / "tree nuts") until a word that is neither
  * vocabulary, connector, nor glue ends the list. "including" bridges only an
@@ -196,6 +233,15 @@ function collectWord(word: string, collected: string[]): void {
 function collectAllergenRun(tokens: string[], collected: string[]): void {
   let allergenGoverned = false;
   for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === '(') {
+      const close = tokens.indexOf(')', i + 1);
+      const end = close < 0 ? tokens.length : close;
+      for (const word of parentheticalAllergens(tokens.slice(i + 1, end))) {
+        collectWord(word, collected);
+      }
+      i = end;
+      continue;
+    }
     const pair = i + 1 < tokens.length ? `${tokens[i]} ${tokens[i + 1]}` : null;
     if (pair && ALLERGEN_EVIDENCE_WORDS.includes(pair)) {
       collectWord(pair, collected);
@@ -223,6 +269,13 @@ function collectAllergenRun(tokens: string[], collected: string[]): void {
 function collectAllergenRunBackward(tokens: string[], collected: string[]): void {
   const found: string[] = [];
   for (let i = tokens.length - 1; i >= 0; i--) {
+    if (tokens[i] === ')') {
+      const open = tokens.lastIndexOf('(', i - 1);
+      const start = open < 0 ? 0 : open;
+      found.push(...parentheticalAllergens(tokens.slice(start + 1, i)).reverse());
+      i = start;
+      continue;
+    }
     const pair = i > 0 ? `${tokens[i - 1]} ${tokens[i]}` : null;
     if (pair && ALLERGEN_EVIDENCE_WORDS.includes(pair)) {
       found.push(pair);
@@ -315,6 +368,7 @@ export function statesUndeclaredAllergen(text: string): boolean {
 //   E. "contaminated with <material>", "<material> contamination"
 //   F. "<material> found in …", "found <material> in …"
 //   G. "may contain <material>"   (modal + finite verb, never "containing")
+//   H. "<material> foreign material"  (the material modifies the generic phrase)
 
 /** Materials observed named as contaminants in official notices. */
 export const FOREIGN_MATERIALS = ['metal', 'plastic', 'glass', 'wood', 'rubber', 'bone'];
@@ -330,7 +384,9 @@ const GENERIC_FOREIGN_MATERIAL =
 
 /** Is this material named as the contaminant (not as the packaging)? */
 function materialStatedAsContaminant(text: string, material: string): boolean {
-  const m = material.replace(/[.]/g, '\\.');
+  // "Heavy metal" is chemistry (lead, cadmium, thallium), never a fragment:
+  // the material word preceded by "heavy" is not this material at all.
+  const m = `(?<!\\bheavy[\\s-])${material.replace(/[.]/g, '\\.')}`;
   return [
     // C. "pieces of glass", "fragments of hard plastic"
     new RegExp(`\\b(?:${FRAGMENT_NOUNS})\\s+of\\s+(?:\\w+\\s+){0,2}${m}\\b`, 'i'),
@@ -345,14 +401,25 @@ function materialStatedAsContaminant(text: string, material: string): boolean {
     new RegExp(`\\b${m}\\s+(?:(?!(?:or|and)\\b)\\w+\\s+){0,2}contamin`, 'i'),
     // F. "glass found in product". Bounded to the discovery construction so
     // an ordinary product word cannot reach a nearby "found" ("bone-in
-    // chicken … found at retail").
-    new RegExp(`\\b${m}\\b[^.]{0,15}\\bfound\\s+in\\b`, 'i'),
+    // chicken … found at retail"). An INDEFINITE description is background,
+    // not a discovery: "Thallium (Tl) is a naturally occurring metal found in
+    // the soil" (Brad's Raw Chips, 2026-11-03) explains what an element is,
+    // and reading it as metal pieces turned a thallium recall into a
+    // foreign-object injury warning.
+    new RegExp(
+      `(?<!\\b(?:a|an)\\s+(?:[\\w-]+\\s+){0,3})\\b${m}\\b[^.]{0,15}\\bfound\\s+in\\b`,
+      'i',
+    ),
     new RegExp(`\\bfound\\s+(?:\\w+\\s+){0,2}${m}\\b`, 'i'),
     // G. "the salad dressing may contain hard plastic" — the hazard is stated
     // with a modal + the FINITE verb. FSIS product listings use the
     // participle instead ("packages containing a plastic bag"), so package
     // contents can never be read as a contaminant.
     new RegExp(`\\b(?:may|might|could|possibly)\\s+contains?\\s+(?:\\w+\\s+){0,2}${m}\\b`, 'i'),
+    // H. "plastic foreign material", "metal foreign objects" — the material
+    // modifies the generic foreign-material phrase itself, so it can only be
+    // the contaminant (Costco's Caesar Salad letter, 2026).
+    new RegExp(`\\b${m}\\s+${GENERIC_FOREIGN_MATERIAL.source.replace(/^\\b/, '')}`, 'i'),
     // B. "extraneous materials, specifically clear flexible and hard plastic"
     new RegExp(
       `${GENERIC_FOREIGN_MATERIAL.source}[^.]{0,40}?\\bspecifically\\b[^.]{0,60}?\\b${m}\\b`,

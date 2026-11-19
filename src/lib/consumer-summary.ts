@@ -42,6 +42,10 @@ const TITLE_TAIL =
 const UPSTREAM_RECALLED =
   /^(.*?\b(?:containing|made with)\s+)(.+?)\s+that\s+(?:have|has|were|was)(?:\s+been)?\s+(?:recalled|subject to a recall)\b.*$/i;
 
+/** "<products> containing <ingredient> Recalled" (upstream-ingredient PHAs). */
+const TRAILING_RECALLED_INGREDIENT =
+  /^(.*?\b(?:containing|made with)\s+)(?!recalled\b)(.+?)\s+recalled[\s.]*$/i;
+
 /**
  * Short consumer product phrase from an official headline, e.g.
  * "…Recalls Ready-To-Eat Pickled Goat and Chicken Products Produced Without
@@ -59,6 +63,13 @@ export function productSummaryFromTitle(title: string): string | null {
       phrase = `${upstream[1]}${already ? '' : 'Recalled '}${upstream[2]}`;
     } else {
       phrase = phrase.replace(TITLE_TAIL, '');
+      // "…Products Containing Biscuits Recalled": agency verb, not product.
+      // An upstream ingredient keeps its relationship in the documented
+      // form ("…Containing Recalled Biscuits"); anything else just loses the
+      // trailing word, so no display title ever ends in "Recalled".
+      const trailing = phrase.match(TRAILING_RECALLED_INGREDIENT);
+      if (trailing) phrase = `${trailing[1]}Recalled ${trailing[2]}`;
+      else phrase = phrase.replace(/\s+recalled[\s.]*$/i, '');
     }
     const summary = phrase
       .replace(/(^|\s+)products?$/i, '')

@@ -187,7 +187,7 @@ const PACKAGING_CONTAINER =
   /^(?:box(?:es)?|bags?|jars?|cartons?|cases?|trays?|tubs?|bottles?|cans?|pouch(?:es)?|packages?|packets?|packs?|containers?|cups?|sleeves?|wrappers?|wraps?|overwraps?|clamshells?|pails?|buckets?|sacks?|crates?|pans?|lids?|tubes?|liners?)$/i;
 
 const PACKAGING_MODIFIER =
-  /^(?:cardboard|plastic|glass|aluminum|aluminium|foil|paper|paperboard|styrofoam|foam|metal|tin|cellophane|shrink|vacuum|clear|corrugated|sealed|resealable|rigid|flexible|laminated|film|with|and|or|in|of|the|a|an)$/i;
+  /^(?:cardboard|plastic|glass|aluminum|aluminium|foil|paper|paperboard|styrofoam|foam|metal|tin|cellophane|shrink|vacuum|(?:vacuum|shrink|plastic|film|foil|paper)-(?:packed|sealed|wrapped)|clear|corrugated|sealed|resealable|rigid|flexible|laminated|film|with|and|or|in|of|the|a|an)$/i;
 
 /**
  * True when the entire candidate variant name describes only a package — a

@@ -25,6 +25,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { FSIS_HOSTS, resolveOfficialUrl } from '../../lib/official-urls';
+import { labelPageCaptions, type PdfTextItem } from './attachments';
 
 export interface RenderedLabelPage {
   /** 1-based page number in the source PDF (source order preserved). */
@@ -35,6 +36,12 @@ export interface RenderedLabelPage {
   height: number;
   /** sha256 of the rendered bytes — duplicate pages collapse on this. */
   contentHash: string;
+  /**
+   * The page's own printed caption from its text layer ("Bami Rolls
+   * (Pork)"), or null for a page with no text (a scan). Evidence for which
+   * product the page shows — never derived from page position.
+   */
+  caption: string | null;
 }
 
 /**
@@ -156,6 +163,16 @@ export async function renderLabelPdf(
       canvasContext: context as unknown as CanvasRenderingContext2D,
       viewport,
     }).promise;
+    const content = await page.getTextContent();
+    const items: PdfTextItem[] = [];
+    for (const item of content.items) {
+      if (!('str' in item)) continue;
+      const text = item.str.replace(/\s+/g, ' ').trim();
+      if (text !== '')
+        items.push({ text, x: item.transform[4], y: item.transform[5], width: item.width });
+    }
+    const caption = labelPageCaptions({ pages: [{ page: pageNumber, items }], numPages })[0]
+      .caption;
     const bytes = await canvas.encode('webp', 82);
     if (bytes.byteLength < MIN_ENCODED_BYTES) continue; // blank page
     const contentHash = sha256(bytes);
@@ -167,6 +184,7 @@ export async function renderLabelPdf(
       width: canvas.width,
       height: canvas.height,
       contentHash,
+      caption,
     });
   }
   await loadingTask.destroy();

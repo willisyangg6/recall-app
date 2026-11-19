@@ -34,7 +34,8 @@ import type { DeliverableEvent, PushMessage } from './types';
 export type FormattableEvent = Pick<
   DeliverableEvent,
   'id' | 'recallCaseId' | 'kind' | 'triggerRuleId' | 'payloadSummary' | 'createdAt' | 'projection'
->;
+> &
+  Partial<Pick<DeliverableEvent, 'retailerNoticeId' | 'attribution'>>;
 
 export interface PushContent {
   title: string;
@@ -90,7 +91,9 @@ export function formatPushContent(
   // never stored in the ledger; delivery stays dormant until push is
   // explicitly activated.
   const product = notificationProductName(projection);
-  const agency = agencyLabel(projection.sourceAgency);
+  // Who announced it: the agency, or for a retailer-only notice the retailer
+  // ("Costco announced this Nov 7.") — never an agency that did not.
+  const agency = event.attribution ?? agencyLabel(projection.sourceAgency);
 
   if (event.kind === 'initial') {
     const title =
@@ -220,7 +223,15 @@ export function buildPushMessage(
     to: expoPushToken,
     title: content.title,
     body: content.body,
-    data: { kind: 'recall', recallCaseId: event.recallCaseId, notificationEventId: event.id },
+    // A retailer-only notice opens its own Detail (route id `retailer:<uuid>`,
+    // lib/push-payload.ts); builds that cannot open one are never sent one.
+    data: event.retailerNoticeId
+      ? {
+          kind: 'retailer_notice',
+          retailerNoticeId: event.retailerNoticeId,
+          notificationEventId: event.id,
+        }
+      : { kind: 'recall', recallCaseId: event.recallCaseId, notificationEventId: event.id },
     sound: 'default',
   };
 }

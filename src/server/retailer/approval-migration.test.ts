@@ -108,3 +108,45 @@ test('the migration touches no existing table and never names the case or ledger
   );
   assert.doesNotMatch(SQL, /recall_cases|notification_events|source_records|affected_products/);
 });
+
+// ── 20261118000000: the read path recreated with the derived category ──────
+
+const PUBLISHERS_SQL = readFileSync(
+  join(
+    __dirname,
+    '..',
+    '..',
+    '..',
+    'supabase',
+    'migrations',
+    '20261118000000_retailer_notice_publishers.sql',
+  ),
+  'utf8',
+)
+  .replace(/--.*$/gm, '')
+  .replace(/\s+/g, ' ');
+
+const BODY = (sql: string) =>
+  sql
+    .slice(sql.indexOf(' as $$'), sql.indexOf('$$;', sql.indexOf(' as $$')))
+    .replace(/, a\.product_categories/, '');
+
+test('the recreated read path keeps every condition and adds only the derived category', () => {
+  const recreated = PUBLISHERS_SQL.slice(
+    PUBLISHERS_SQL.indexOf('create function public.consumer_retailer_notices()'),
+  );
+  assert.match(
+    recreated,
+    /returns table \( id uuid, publisher text, document_url text, notice_date date, approved_at timestamptz, fields jsonb, product_categories jsonb \)/,
+  );
+  // Same body as the applied read path, apart from the one added column.
+  assert.ok(BODY(READ_PATH).includes("n.decision = 'new_candidate'"));
+  assert.equal(BODY(recreated), BODY(READ_PATH));
+  assert.match(recreated, /security definer set search_path = ''/);
+  assert.match(
+    recreated,
+    /revoke execute on function public\.consumer_retailer_notices\(\) from public; grant execute on function public\.consumer_retailer_notices\(\) to anon, authenticated, service_role;/,
+  );
+  assert.match(PUBLISHERS_SQL, /add column product_categories jsonb;/);
+  assert.doesNotMatch(PUBLISHERS_SQL, /recall_cases|notification_|source_records/);
+});

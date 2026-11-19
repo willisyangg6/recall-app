@@ -1654,6 +1654,20 @@ export interface AffectedProductFieldGroup {
    * expansion state lives under (see cardGroupStateId). */
   id: Exclude<AffectedProductsTableColumnKey, 'product'>;
   label: string;
+  /**
+   * The date field this code field carries line by line, when the source
+   * stated each code WITH its date (an explicit pair group); null otherwise.
+   * A paired field's lines read "33525-1 (Best by February 1, 2027)" and the
+   * date field does not render separately.
+   */
+  pairedWith: Exclude<AffectedProductsTableColumnKey, 'product'> | null;
+  /**
+   * For a paired field, line n's halves — the code, its date's label and the
+   * date ('' when the source left that code undated) — so a screen can set
+   * each pair as one block without re-parsing display text. Null for an
+   * unpaired field. Always the same length and order as `lines`.
+   */
+  pairs: CardPair[] | null;
   /** Every distinct value this field holds, in source order. */
   lines: string[];
   /** The values shown while collapsed: the first two, or all of them. */
@@ -1668,7 +1682,8 @@ export interface AffectedProductFieldGroup {
  * dates — Best by, Use by, Sell by, Expiration, Production dates; then
  * Barcode (UPC); then the codes — Lot codes, Batch codes, Production codes;
  * then Packaging. The order never depends on the order a source stated
- * fields in, or on whether the table paired any of them.
+ * fields in. A paired code field keeps the CODE's slot; its date field,
+ * shown inside it, takes no slot of its own (2026-11-17).
  */
 export const CARD_FIELD_ORDER: readonly Exclude<AffectedProductsTableColumnKey, 'product'>[] =
   TABLE_COLUMN_ORDER;
@@ -1690,7 +1705,76 @@ export function fieldDisclosureControl(total: number, noun: string): DisclosureC
   };
 }
 
-/** One rendered view of the table as cards: the same rows, one field group per column. */
+/**
+ * One code with the date the source stated beside it, as a card line:
+ * "33525-1 (Best by February 1, 2027)" — the notice's own shape ("Lot
+ * 33525-1 (Best By February 1, 2027)"), read and spoken as one statement. A
+ * code the source left undated is the code alone, so no line ever implies a
+ * date the source did not give it.
+ */
+export function pairedCardLine(code: string, dateLabel: string, date: string): string {
+  return date === '' ? code : `${code} (${dateLabel} ${date})`;
+}
+
+/** One stated code with its date, as a paired card field carries it. */
+export interface CardPair {
+  code: string;
+  dateLabel: string;
+  /** '' when the source left this code undated. */
+  date: string;
+}
+
+/** A row's paired code field: its date field, display lines and pairs. */
+interface RowPairGroup {
+  dateKey: AffectedProductsTableColumnKey;
+  lines: string[];
+  pairs: CardPair[];
+}
+
+/**
+ * The explicit pair groups in one table row, keyed by their code field. Only
+ * a cell the table model marked as one half of a pair group qualifies, and
+ * the table model marks a group ONLY where the projection holds pairs the
+ * source stated (`LotCodeSet.pairs`): separate code and date lists are never
+ * a pair group, so nothing here can align two independent lists by position.
+ */
+function rowPairGroups(
+  row: AffectedProductsTableViewModel['rows'][number],
+): Map<AffectedProductsTableColumnKey, RowPairGroup> {
+  const out = new Map<AffectedProductsTableColumnKey, RowPairGroup>();
+  const pairCells = row.cells.filter((cell) => cell.pairGroup !== null);
+  for (const group of new Set(pairCells.map((cell) => cell.pairGroup as string))) {
+    const [dateKey, codeKey] = group.split('+') as [
+      AffectedProductsTableColumnKey,
+      AffectedProductsTableColumnKey,
+    ];
+    const dates = pairCells.find((cell) => cell.pairGroup === group && cell.key === dateKey);
+    const codes = pairCells.find((cell) => cell.pairGroup === group && cell.key === codeKey);
+    // Both halves, aligned line for line, or no pairing is claimed at all.
+    if (!dates || !codes || dates.values.length !== codes.values.length) continue;
+    const dateLabel = TABLE_COLUMN_LABEL[dateKey];
+    // One entry per distinct statement, in source order; the display line
+    // and the structured pair are built together so they can never drift.
+    const lines: string[] = [];
+    const pairs: CardPair[] = [];
+    codes.values.forEach((code, index) => {
+      const date = dates.values[index];
+      const line = pairedCardLine(code, dateLabel, date);
+      if (line === '' || lines.includes(line)) return;
+      lines.push(line);
+      pairs.push({ code, dateLabel, date });
+    });
+    out.set(codeKey, { dateKey, lines, pairs });
+  }
+  return out;
+}
+
+/**
+ * One rendered view of the table as cards: the same rows, one field group per
+ * column — except that where the source PAIRED codes with dates, the codes
+ * carry their dates line by line (2026-11-17, founder decision, replacing the
+ * 2026-10-19 "dates and codes are separate rows" rule for stated pairs only).
+ */
 export function affectedProductCards(view: AffectedProductsTableViewModel): AffectedProductCard[] {
   return view.rows.map((row) => {
     // Every value each column holds in this row. A cell's position in the
@@ -1700,15 +1784,23 @@ export function affectedProductCards(view: AffectedProductsTableViewModel): Affe
       const key = view.columns[index]?.key ?? cell.key;
       values.set(key, [...(values.get(key) ?? []), ...cell.values]);
     });
+    const pairs = rowPairGroups(row);
+    const pairedDates = new Set([...pairs.values()].map((pair) => pair.dateKey));
     const groups: AffectedProductFieldGroup[] = [];
     for (const key of CARD_FIELD_ORDER) {
+      // A date field shown inside its paired code field takes no row.
+      if (pairedDates.has(key)) continue;
+      const pair = pairs.get(key) ?? null;
       // Exact duplicate display values once, in first-seen order; an empty
       // line (a pair group's undated code has an empty date) is no value.
-      const lines = [...new Set(values.get(key) ?? [])].filter((line) => line !== '');
+      const lines =
+        pair?.lines ?? [...new Set(values.get(key) ?? [])].filter((line) => line !== '');
       if (lines.length === 0) continue;
       groups.push({
         id: key,
         label: TABLE_COLUMN_LABEL[key],
+        pairedWith: (pair?.dateKey ?? null) as AffectedProductFieldGroup['pairedWith'],
+        pairs: pair?.pairs ?? null,
         lines,
         collapsedLines: lines.slice(0, CARD_FIELD_INLINE_VALUES),
         disclosure:
@@ -2384,7 +2476,7 @@ export function cardCategoryId(productCategories: unknown): FoodCategoryId | nul
 }
 
 /** The Detail header's category: the card's own id and label, or null. */
-function detailCategory(productCategories: unknown): DetailModel['category'] {
+export function detailCategory(productCategories: unknown): DetailModel['category'] {
   const id = cardCategoryId(productCategories);
   return id === null ? null : { id, label: foodCategoryLabel(id) };
 }
@@ -2661,6 +2753,100 @@ export interface DetailModel {
 export interface DetailContext {
   today: string;
   affectsYou: boolean;
+  /**
+   * Stores that publicly listed THIS case on their own recall pages
+   * (lib/store-listings.ts). They join the existing store row, named once;
+   * their own states never become the agency's distribution and never reach
+   * the alert verdict, which reads the feed row alone.
+   */
+  listedStores?: readonly string[];
+}
+
+/** The shared evidence the narrative, illness and health steps read. */
+export interface NarrativeEvidence {
+  title: string;
+  noticeType: string;
+  reasonText: string | null;
+  hazardCategory: string;
+  pathogenOrAllergen: string | null;
+  firmDisplayName: string | null;
+  /** Source prose: the agency announcement, or the retailer's own letter text. */
+  summaryText: string | null;
+  productDescription: string | null;
+  consumerBrand: string | null;
+  retracted: boolean;
+}
+
+/**
+ * What Happened, the illness notice and Health Risk, decided ONCE for every
+ * source. An agency case and an approved retailer notice both reach the
+ * screen through here, so the same structured reason yields the same cause
+ * sentence, the same illness status and the same hazard guidance, and the
+ * hazard is interpreted in exactly one place.
+ */
+export function recallNarrative(evidence: NarrativeEvidence) {
+  const happened = buildWhatHappened(evidence);
+  // The standardized health guide (P1B) is selected from the SAME typed
+  // reason What Happened rendered — `interpretReason` is pure, so the hazard
+  // is interpreted in exactly one place. The guide's own organism lookup then
+  // reads only the canonical structured reason (never the source prose).
+  const hazardGuides: HazardGuidance[] = selectHazardGuides(
+    interpretReason({
+      reasonText: evidence.reasonText,
+      hazardCategory: evidence.hazardCategory,
+      pathogenOrAllergen: evidence.pathogenOrAllergen,
+      summaryText: evidence.summaryText,
+      title: evidence.title,
+    }),
+    { pathogenOrAllergen: evidence.pathogenOrAllergen, reasonText: evidence.reasonText },
+  );
+  const standardizedRisk = healthRiskSummary(
+    evidence.hazardCategory,
+    evidence.pathogenOrAllergen,
+    evidence.reasonText,
+  );
+  // Derived once and used twice: the notice renders it, and the What Happened
+  // narrative is de-duplicated against the very sentences it came from. A
+  // qualified statement ("no serious adverse effects requiring medical care")
+  // is not an illness status and derives none.
+  const illnessStatus = deriveIllnessStatus(evidence.summaryText);
+  return {
+    happened,
+    illnessStatus,
+    illnessNotice: illnessNoticeCopy(illnessStatus),
+    standardizedRisk,
+    healthRiskSection: healthRiskSection(hazardGuides, standardizedRisk, {
+      retracted: evidence.retracted,
+    }),
+  };
+}
+
+/**
+ * The distribution with listed stores added to the stated retailers, each
+ * named once. A store already named (alone or inside a run the source kept
+ * whole, "Costco and Sam's Club") is not repeated. States are untouched.
+ */
+export function withListedStores(
+  distribution: ConsumerDistribution,
+  stores: readonly string[],
+): ConsumerDistribution {
+  const key = (name: string) =>
+    name.toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').trim();
+  const named = new Set(
+    distribution.statedRetailers.flatMap((name) => [
+      key(name),
+      ...name.split(/\s*,\s*|\s+and\s+|\s*&\s*/i).map(key),
+    ]),
+  );
+  const added: string[] = [];
+  for (const store of stores) {
+    if (named.has(key(store))) continue;
+    named.add(key(store));
+    added.push(store);
+  }
+  return added.length === 0
+    ? distribution
+    : { ...distribution, statedRetailers: [...distribution.statedRetailers, ...added] };
 }
 
 export function buildDetailModel(detail: CaseDetail, context: DetailContext): DetailModel {
@@ -2678,7 +2864,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     displayedBrands: brand.brands,
     packageEvidence: affectedProducts.map((product) => product.name),
   });
-  const happened = buildWhatHappened({
+  const narrative = recallNarrative({
     title: projection.title,
     noticeType: projection.noticeType,
     reasonText: projection.reasonText,
@@ -2688,12 +2874,16 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     summaryText: projection.summaryText,
     productDescription: projection.productDescription ?? null,
     consumerBrand: identity.whatHappenedSubject,
+    retracted: projection.state === 'retracted',
   });
+  const happened = narrative.happened;
 
   // Official label renders join the photo evidence exactly as before.
   const labelVisuals: ProductPhoto[] = detail.visuals.map((visual, index) => ({
     url: visual.url,
-    alt: OFFICIAL_LABEL_ALT,
+    // The page's own printed caption is row-matching evidence; a page
+    // without one has no alt and can never be assigned to a row.
+    alt: visual.caption ?? null,
     order: consumer.photos.length + index,
     role: visual.role as ProductPhoto['role'],
     width: visual.width,
@@ -2740,36 +2930,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
   // deduplicates nothing of its own.
   const productImages = detailImageSet(productImagery(images), productName);
   const productsSection = affectedProductsSection(affectedProductsView, images.rowImages);
-  const sold = whereSoldModel(consumer.distribution);
-  // The standardized health guide (P1B) is selected from the SAME typed
-  // reason What Happened rendered — `interpretReason` is pure, so calling it
-  // with Detail's identical evidence cannot produce a different family, and
-  // the hazard is interpreted in exactly one place. The guide's own organism
-  // lookup then reads only the canonical structured reason (never the
-  // announcement body), so the same hazard yields the same copy everywhere.
-  const hazardGuides: HazardGuidance[] = selectHazardGuides(
-    interpretReason({
-      reasonText: projection.reasonText,
-      hazardCategory: projection.hazardCategory,
-      pathogenOrAllergen: projection.pathogenOrAllergen,
-      summaryText: projection.summaryText,
-      title: projection.title,
-    }),
-    {
-      pathogenOrAllergen: projection.pathogenOrAllergen,
-      reasonText: projection.reasonText,
-    },
-  );
-  const standardizedRisk = healthRiskSummary(
-    projection.hazardCategory,
-    projection.pathogenOrAllergen,
-    projection.reasonText,
-  );
-
-  // Derived once and used twice: the notice renders it, and the What Happened
-  // narrative is de-duplicated against the very sentences it came from.
-  const illnessStatus = deriveIllnessStatus(projection.summaryText);
-
+  const sold = whereSoldModel(withListedStores(consumer.distribution, context.listedStores ?? []));
   // Decided once: the community block nests under this section, so both
   // read the same verdict rather than recomputing it.
   const whereSoldDecision = whereSoldSection(sold);
@@ -2782,7 +2943,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
   const combinedNarrative = [happened.text, happened.scope]
     .filter((part) => part !== null)
     .join(' ');
-  const narrative = detailNarrative(
+  const paragraphs = detailNarrative(
     happened.text,
     happened.scope,
     recallQuantitySentence(projection.sourceAgency, consumer.quantityText, combinedNarrative),
@@ -2808,7 +2969,7 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     affectsYou: context.affectsYou,
     affectsYouBanner: 'Warning: This recall affects you.',
     whatHappened: {
-      ...narrative,
+      ...paragraphs,
       // The illness sentence is removed from the CAUSE paragraph only when
       // the notice completely represents it (P2B7K). The scope paragraph is
       // never a candidate: it is one derived sentence about how much was
@@ -2828,20 +2989,18 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
       // to a narrative that was never going to carry them. Injuries and
       // adverse reactions still have no status anywhere — see
       // docs/recall-illness-status.md §1.2.
-      text: narrativeWithoutIllness(narrative.text, illnessStatus),
+      text: narrativeWithoutIllness(paragraphs.text, narrative.illnessStatus),
     },
-    illnessNotice: illnessNoticeCopy(illnessStatus),
+    illnessNotice: narrative.illnessNotice,
     whereSold: sold,
     affectedProducts: affectedProductsView,
     sections: {
       whereSold: whereSoldDecision,
       communityReports: communityReportsSection(detail.id, projection),
-      healthRisk: healthRiskSection(hazardGuides, standardizedRisk, {
-        retracted: projection.state === 'retracted',
-      }),
+      healthRisk: narrative.healthRiskSection,
       affectedProducts: productsSection,
     },
-    healthRisk: standardizedRisk,
+    healthRisk: narrative.standardizedRisk,
     attachments: extractAttachmentLinks(projection.summaryHtml),
     images,
     officialTitle: productName !== projection.title ? projection.title : null,

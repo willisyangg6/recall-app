@@ -1,5 +1,6 @@
 /**
- * Read one retailer member letter into stated facts.
+ * Read one retailer notice document (a Costco member letter, an ALDI recall
+ * notice) into stated facts.
  *
  * Every value is either stated in the letter or null/[] — the parser never
  * infers. Evidence strings are verbatim excerpts of the letter's text with
@@ -18,6 +19,8 @@
 import { upcDigitsIn } from '../duplicates';
 import { POSTAL_TO_STATE, statesInText } from '../../domain/us-geography';
 
+import { RETAILER_SOURCES } from './sources';
+
 import type {
   DocumentExtraction,
   FoodStatus,
@@ -27,12 +30,6 @@ import type {
   RetailerIndexEntry,
   StateClaim,
 } from './types';
-
-export const LETTER_PARSER_VERSION = 'costco-letter/1';
-
-const RETAILER_DISPLAY_NAME: Record<RetailerIndexEntry['publisher'], string> = {
-  costco: 'Costco',
-};
 
 const MONTHS = [
   'january',
@@ -104,6 +101,26 @@ export function statedLetterDate(text: string): { iso: string | null; text: stri
   return { iso: null, text: null };
 }
 
+/**
+ * An explicitly labelled publication date in a press-style notice: the
+ * dateline "Batavia, Ill. (May 9, 2024) –" or "Effective: February 23,
+ * 2026". Only these two shapes; a bare date line in a product table (a Best
+ * By "10/30/26") is never one.
+ */
+export function statedDateline(text: string): { iso: string | null; text: string | null } {
+  const flat = text.replace(/\s+/g, ' ');
+  const patterns = [
+    /\(\s*([A-Za-z]+\.?\s+\d{1,2},\s+\d{4})\s*\)\s*[–—-]/,
+    /\bEffective:\s*([A-Za-z]+\.?\s+\d{1,2},\s+\d{4})/,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(flat);
+    const iso = match ? parseDateLine(match[1]) : null;
+    if (match && iso) return { iso, text: match[0].trim() };
+  }
+  return { iso: null, text: null };
+}
+
 /** Code/scope dates in any of the forms member letters and agencies print. */
 export function codeDatesIn(text: string): string[] {
   const found = new Set<string>();
@@ -165,11 +182,20 @@ function recallingFirm(sentences: string[]): { firm: string | null; evidence: st
     if (last) subject = subject.slice(last.index! + last[0].length);
     // The clause nearest the verb is the subject; earlier clauses are
     // preamble ("Costco records indicate that you, …, Bodum, is recalling").
-    const segment = subject
+    const parts = subject
       .split(',')
       .map((part) => part.trim())
-      .filter((part) => part && !SUBJECT_FILLER.test(part))
-      .at(-1);
+      .filter((part) => part && !SUBJECT_FILLER.test(part));
+    // "ALDI of Batavia, IL, is recalling", "Rosina Food Products, Inc. is
+    // recalling": a trailing state code or corporate suffix belongs to the
+    // clause before it, never the firm on its own.
+    const nearest = parts.at(-1);
+    const attached =
+      nearest !== undefined &&
+      parts.length > 1 &&
+      ((/^[A-Z]{2}$/.test(nearest) && POSTAL_TO_STATE[nearest] !== undefined) ||
+        /^(?:Inc|LLC|L\.L\.C|Corp|Co|Ltd|LP|L\.P)\.?$/i.test(nearest));
+    const segment = attached ? `${parts.at(-2)}, ${nearest}` : nearest;
     const firm =
       segment
         ?.replace(AGENCY_TAIL, '')
@@ -228,10 +254,21 @@ function retailerItemNumbers(entry: RetailerIndexEntry, text: string): string[] 
   return found;
 }
 
+/** A table whose column header is "UPC" / "UPC Code" (ALDI's product tables). */
+const UPC_COLUMN = /\bUPC(?:\s+Codes?)?\b(?=\s+[A-Za-z])/;
+
 function upcs(flat: string, itemNumbers: string[]): string[] {
   const found = new Set<string>();
   for (const m of flat.matchAll(/\bUPC\b[^A-Za-z]{0,40}/gi)) {
     for (const digits of upcDigitsIn(m[0])) if (!itemNumbers.includes(digits)) found.add(digits);
+  }
+  // Under a UPC column, the rows' standalone 12- or 13-digit codes are that
+  // column's values. Still label-gated: with no "UPC" header nothing is read.
+  const column = UPC_COLUMN.exec(flat);
+  if (column) {
+    for (const m of flat.slice(column.index).matchAll(/(?<![\d-])(\d{12,13})(?![\d-])/g)) {
+      if (!itemNumbers.includes(m[1])) found.add(m[1]);
+    }
   }
   return [...found];
 }
@@ -318,7 +355,7 @@ export function parseLetter(
   extraction: DocumentExtraction,
   text: string,
 ): ParsedNotice {
-  const retailer = RETAILER_DISPLAY_NAME[entry.publisher];
+  const retailer = RETAILER_SOURCES[entry.publisher].displayName;
   const empty: ParsedNotice = {
     extraction,
     statedNoticeDate: null,
@@ -342,7 +379,18 @@ export function parseLetter(
 
   const flat = text.replace(/\s+/g, ' ').trim();
   const sentences = sentencesOf(flat);
-  const date = statedLetterDate(text);
+  // A retailer that dates every entry on its own index (ALDI) is dated by
+  // the document's explicit dateline when it prints one, else by that index
+  // date: its documents carry code-date lines ("10/30/26" under Best By) that
+  // a letterhead rule would misread. A retailer whose index carries no date
+  // (Costco) is dated by the letter's own letterhead line. Never a filename,
+  // a code date or our own fetch time.
+  const dateline = entry.indexDate ? statedDateline(text) : null;
+  const date = !entry.indexDate
+    ? statedLetterDate(text)
+    : dateline?.iso
+      ? dateline
+      : { iso: entry.indexDate, text: entry.indexDateText ?? null };
   const firm = recallingFirm(sentences);
   const kind = noticeKind(sentences);
   // The index title names the product ("… Cleaners") even when the letter doesn't.

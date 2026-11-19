@@ -9,6 +9,17 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { readRetailerNoticeFields } from '../../lib/retailer-notice-fields';
+import { readRetailerNoticeRows } from '../../lib/retailer-notices';
+import {
+  retailerAttribution,
+  retailerCaseProjection,
+  type RetailerMatchEvidence,
+  type RetailerNoticeSubject,
+} from '../retailer/notice-events';
+import { SupabaseRetailerNoticeStore } from '../retailer/store';
+import type { AgencyCaseView, RetailerIndexEntry } from '../retailer/types';
+
 import type { CaseProjection, LifecycleState } from '../../domain/recall-types';
 import type { SubscriptionEntitlement } from './entitlement';
 import type {
@@ -21,6 +32,8 @@ import type {
   InstallationPreferences,
   PushStore,
   PushSubscription,
+  RetailerAlertRecipients,
+  RetailerNoticeLink,
 } from './types';
 
 const UNIQUE_VIOLATION = '23505';
@@ -44,6 +57,20 @@ const DELIVERY_STATUSES: DeliveryStatus[] = [
 const EVENT_SELECT =
   'id, recall_case_id, kind, trigger_rule_id, material_change_ref, payload_summary, created_at, ' +
   'recall_cases (projection, state, merged_into)';
+
+/** A retailer-notice event (20261119000000): no case join; the notice is read separately. */
+const RETAILER_EVENT_SELECT =
+  'id, retailer_notice_id, kind, trigger_rule_id, material_change_ref, payload_summary, created_at';
+
+interface RetailerEventRow {
+  id: string;
+  retailer_notice_id: string;
+  kind: DeliverableEvent['kind'];
+  trigger_rule_id: string;
+  material_change_ref: string | null;
+  payload_summary: string;
+  created_at: string;
+}
 
 const CASE_SELECT = 'id, projection, state, merged_into';
 
@@ -69,7 +96,7 @@ interface EventRow {
 const ENTITLEMENT_COLUMNS =
   'entitlement_status, entitlement_expires_at, entitlement_checked_at, entitled_since';
 /** A subscription as the worker reads it: never the purchase id. */
-const SUBSCRIPTION_COLUMNS = `id, installation_id, expo_push_token, platform, enabled, enabled_at, ${ENTITLEMENT_COLUMNS}`;
+const SUBSCRIPTION_COLUMNS = `id, installation_id, expo_push_token, platform, app_version, enabled, enabled_at, ${ENTITLEMENT_COLUMNS}`;
 
 function toEntitlement(row: Record<string, unknown>): SubscriptionEntitlement {
   const status = row.entitlement_status;
@@ -82,7 +109,14 @@ function toEntitlement(row: Record<string, unknown>): SubscriptionEntitlement {
 }
 
 export class SupabasePushStore implements PushStore {
-  constructor(private readonly client: SupabaseClient) {}
+  constructor(
+    private readonly client: SupabaseClient,
+    /** The project URL the client read path builds photo URLs from (retailer notices). */
+    private readonly projectUrl: string | undefined = process.env.SUPABASE_URL,
+  ) {}
+
+  /** The ids `consumer_retailer_notices()` returns, read once per worker run. */
+  private visibleRetailerIds: Promise<Set<string>> | null = null;
 
   private fail(operation: string, error: { message: string } | null): never {
     throw new Error(`SupabasePushStore.${operation} failed: ${error?.message ?? 'unknown error'}`);
@@ -128,6 +162,7 @@ export class SupabasePushStore implements PushStore {
       enabled: row.enabled as boolean,
       enabledAt: row.enabled_at as string,
       entitlement: toEntitlement(row),
+      appVersion: (row.app_version as string | null) ?? null,
     };
   }
 
@@ -284,6 +319,7 @@ export class SupabasePushStore implements PushStore {
       .from('notification_events')
       .select(EVENT_SELECT)
       .is('suppressed', null)
+      .is('retailer_notice_id', null)
       .gte('created_at', sinceIso)
       .order('created_at', { ascending: true })
       .limit(limit);
@@ -402,10 +438,173 @@ export class SupabasePushStore implements PushStore {
   async getEvent(eventId: string): Promise<DeliverableEvent | null> {
     const { data, error } = await this.client
       .from('notification_events')
-      .select(EVENT_SELECT)
+      .select(`${EVENT_SELECT}, retailer_notice_id`)
       .eq('id', eventId)
       .maybeSingle();
     if (error) this.fail('getEvent', error);
-    return data ? this.toEvent(data as unknown as EventRow) : null;
+    if (!data) return null;
+    const row = data as unknown as EventRow & { retailer_notice_id: string | null };
+    if (row.retailer_notice_id) {
+      return this.toRetailerEvent({ ...row, retailer_notice_id: row.retailer_notice_id });
+    }
+    return this.toEvent(row);
+  }
+
+  // ── Retailer-only notices (notice-events.ts) ──────────────────────────────
+
+  private async retailerVisible(): Promise<Set<string>> {
+    this.visibleRetailerIds ??= (async () => {
+      // EXACTLY the app's read path: the same RPC, read by the same parser,
+      // so an alert can never name a notice the Feed would not show.
+      const { data, error } = await this.client.rpc('consumer_retailer_notices');
+      if (error) this.fail('consumer_retailer_notices', error);
+      return new Set(readRetailerNoticeRows(data, this.projectUrl).map((notice) => notice.id));
+    })();
+    return this.visibleRetailerIds;
+  }
+
+  /** The latest approval's subject (live first); null when the notice was never approved. */
+  private async latestSubject(
+    noticeId: string,
+    liveOnly: boolean,
+  ): Promise<RetailerNoticeSubject | null> {
+    let query = this.client
+      .from('retailer_notice_approvals')
+      .select(
+        'fields, withdrawn_at, approved_at, retailer_notices (document_url, stated_notice_date)',
+      )
+      .eq('notice_id', noticeId)
+      .order('approved_at', { ascending: false })
+      .limit(1);
+    if (liveOnly) query = query.is('withdrawn_at', null);
+    const { data, error } = await query;
+    if (error) this.fail('latestSubject', error);
+    type NoticeEmbed = { document_url: string; stated_notice_date: string | null };
+    const raw = (data ?? [])[0] as unknown as
+      { fields: unknown; retailer_notices: NoticeEmbed | NoticeEmbed[] | null } | undefined;
+    // A many-to-one embed: one object at runtime (typed as a list by the client).
+    const embed = Array.isArray(raw?.retailer_notices)
+      ? (raw.retailer_notices[0] ?? null)
+      : (raw?.retailer_notices ?? null);
+    const row = raw ? { fields: raw.fields, retailer_notices: embed } : undefined;
+    const fields = row ? readRetailerNoticeFields(row.fields) : null;
+    if (!row || !fields || !row.retailer_notices?.stated_notice_date) return null;
+    return {
+      noticeId,
+      documentUrl: row.retailer_notices.document_url,
+      statedNoticeDate: row.retailer_notices.stated_notice_date,
+      fields,
+    };
+  }
+
+  private async toRetailerEvent(row: RetailerEventRow): Promise<DeliverableEvent | null> {
+    // Copy is built from the CURRENT approval; with none live, the last one
+    // stands in only so the event can be decided (and skipped) — never sent.
+    const subject =
+      (await this.latestSubject(row.retailer_notice_id, true)) ??
+      (await this.latestSubject(row.retailer_notice_id, false));
+    if (!subject) return null;
+    return {
+      id: row.id,
+      recallCaseId: '',
+      retailerNoticeId: row.retailer_notice_id,
+      attribution: retailerAttribution(subject.fields),
+      kind: row.kind,
+      triggerRuleId: row.trigger_rule_id,
+      materialChangeRef: row.material_change_ref ?? null,
+      payloadSummary: row.payload_summary,
+      createdAt: row.created_at,
+      caseState: 'active',
+      mergedInto: null,
+      projection: retailerCaseProjection(subject),
+    };
+  }
+
+  async listDeliverableRetailerEventsSince(
+    sinceIso: string,
+    limit: number,
+  ): Promise<DeliverableEvent[]> {
+    const { data, error } = await this.client
+      .from('notification_events')
+      .select(RETAILER_EVENT_SELECT)
+      .is('suppressed', null)
+      .not('retailer_notice_id', 'is', null)
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+    if (error || !data) this.fail('listDeliverableRetailerEventsSince', error);
+    const events = await Promise.all(
+      (data as unknown as RetailerEventRow[]).map((row) => this.toRetailerEvent(row)),
+    );
+    return events.filter((event): event is DeliverableEvent => event !== null);
+  }
+
+  async getRetailerNotice(noticeId: string): Promise<RetailerNoticeLink> {
+    const [visible, subject, notice] = await Promise.all([
+      this.retailerVisible(),
+      this.latestSubject(noticeId, true),
+      this.client
+        .from('retailer_notices')
+        .select('document_content_hash, stated_notice_date')
+        .eq('id', noticeId)
+        .maybeSingle(),
+    ]);
+    if (notice.error) this.fail('getRetailerNotice', notice.error);
+    const stored = notice.data as {
+      document_content_hash: string;
+      stated_notice_date: string | null;
+    } | null;
+    let matchEvidence: RetailerMatchEvidence | null = null;
+    if (stored?.stated_notice_date) {
+      const { data, error } = await this.client
+        .from('retailer_notice_documents')
+        .select('index_entry, extracted_text')
+        .eq('notice_id', noticeId)
+        .eq('content_hash', stored.document_content_hash)
+        .maybeSingle();
+      if (error) this.fail('getRetailerNotice', error);
+      const doc = data as { index_entry: RetailerIndexEntry; extracted_text: string | null } | null;
+      if (doc?.extracted_text) {
+        matchEvidence = {
+          indexEntry: doc.index_entry,
+          statedNoticeDate: stored.stated_notice_date,
+          text: doc.extracted_text,
+        };
+      }
+    }
+    return { noticeId, visible: visible.has(noticeId), subject, matchEvidence };
+  }
+
+  async listAgencyCaseViews(fromIso: string): Promise<AgencyCaseView[]> {
+    return new SupabaseRetailerNoticeStore(this.client).listAgencyCases(fromIso);
+  }
+
+  async listRetailerAlertRecipients(sinceIso: string): Promise<RetailerAlertRecipients[]> {
+    const { data: events, error } = await this.client
+      .from('notification_events')
+      .select('id, retailer_notice_id')
+      .not('retailer_notice_id', 'is', null)
+      .gte('created_at', sinceIso);
+    if (error) this.fail('listRetailerAlertRecipients', error);
+    const noticeByEvent = new Map(
+      ((events ?? []) as { id: string; retailer_notice_id: string }[]).map((e) => [
+        e.id,
+        e.retailer_notice_id,
+      ]),
+    );
+    if (noticeByEvent.size === 0) return [];
+    const { data: deliveries, error: deliveryError } = await this.client
+      .from('notification_deliveries')
+      .select('event_id, subscription_id, status')
+      .in('event_id', [...noticeByEvent.keys()])
+      .neq('status', 'permanent_failure');
+    if (deliveryError) this.fail('listRetailerAlertRecipients', deliveryError);
+    const byNotice = new Map<string, Set<string>>();
+    for (const row of (deliveries ?? []) as { event_id: string; subscription_id: string }[]) {
+      const noticeId = noticeByEvent.get(row.event_id)!;
+      if (!byNotice.has(noticeId)) byNotice.set(noticeId, new Set());
+      byNotice.get(noticeId)!.add(row.subscription_id);
+    }
+    return [...byNotice].map(([noticeId, ids]) => ({ noticeId, subscriptionIds: [...ids] }));
   }
 }

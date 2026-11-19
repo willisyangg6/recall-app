@@ -10,12 +10,14 @@
  *   npm run jobs:enforcement               # openFDA reconcile (weekly-gated)
  *   npm run jobs:push                      # push delivery + receipt processing
  *   npm run jobs:retailer-costco           # Costco notices → private tables only
+ *   npm run jobs:retailer-aldi             # ALDI notices → private tables only
  *
  * Flags:
  *   --dry-run   fda/fsis: full pipeline in memory, nothing persisted.
  *               labels/enforcement/push/retailer-costco: read the live DB,
  *               write nothing (push additionally sends nothing to Expo).
- *   --force     ignore the unchanged-source skip gate.
+ *   --force     ignore the unchanged-source skip gate (fda/fsis/enforcement)
+ *               or the retailer monitors' minimum interval.
  *
  * Persistent modes need SUPABASE_URL and SUPABASE_SECRET_KEY in .env locally,
  * or in the environment (GitHub Actions repo secrets in production). Secrets
@@ -29,19 +31,30 @@ import { runFdaJob } from '../src/server/jobs/fda-job';
 import { runFsisJob } from '../src/server/jobs/fsis-job';
 import { runLabelsJob } from '../src/server/jobs/labels-job';
 import { runPushJob } from '../src/server/jobs/push-job';
-import { runRetailerCostcoJob } from '../src/server/jobs/retailer-costco-job';
+import { runRetailerAldiJob, runRetailerCostcoJob } from '../src/server/jobs/retailer-costco-job';
 import type { JobContext, JobReport } from '../src/server/jobs/runner';
 import { SupabaseLabelStore } from '../src/server/fsis/label-store';
+import { SupabaseAttachmentStore } from '../src/server/fsis/attachment-store';
 import { ExpoPushTransport } from '../src/server/push/expo-transport';
 import { entitlementSourceFromEnv } from '../src/server/push/revenuecat-entitlement';
 import { SupabasePushStore } from '../src/server/push/push-store';
-import { liveCostcoSource } from '../src/server/retailer/costco-monitor';
+import { sendingHoldScopeFromEnv } from '../src/server/push/sending-hold';
+import { liveCostcoSource, liveRetailerSource } from '../src/server/retailer/costco-monitor';
+import { ALDI_SOURCE } from '../src/server/retailer/sources';
 import { SupabaseRetailerNoticeStore } from '../src/server/retailer/store';
 import { MemoryStore } from '../src/server/store/memory-store';
 import { withReadRetry } from '../src/server/store/read-retry';
 import { createSupabaseServerClient, SupabaseStore } from '../src/server/store/supabase-store';
 
-const JOB_NAMES = ['fda', 'fsis', 'labels', 'enforcement', 'push', 'retailer-costco'] as const;
+const JOB_NAMES = [
+  'fda',
+  'fsis',
+  'labels',
+  'enforcement',
+  'push',
+  'retailer-costco',
+  'retailer-aldi',
+] as const;
 type JobArg = (typeof JOB_NAMES)[number];
 
 function loadDotEnv(): void {
@@ -124,30 +137,44 @@ async function main(): Promise<void> {
             mode: labelsMode,
             dryRun,
             labelStore: new SupabaseLabelStore(client),
+            attachmentStore: new SupabaseAttachmentStore(client),
           })
         : job === 'retailer-costco'
           ? await runRetailerCostcoJob(ctx, {
               dryRun,
               store: new SupabaseRetailerNoticeStore(client),
               source: liveCostcoSource(),
+              force,
             })
-          : job === 'push'
-            ? await runPushJob(ctx, {
+          : job === 'retailer-aldi'
+            ? await runRetailerAldiJob(ctx, {
                 dryRun,
-                pushStore: new SupabasePushStore(client),
-                // EXPO_ACCESS_TOKEN is optional (enhanced push security);
-                // server-only, never printed, never in the app bundle.
-                transport: new ExpoPushTransport({ accessToken: process.env.EXPO_ACCESS_TOKEN }),
-                // The alert entitlement gate's RevenueCat read (server-only,
-                // read-only key, never printed). Unconfigured holds every alert.
-                entitlements: entitlementSourceFromEnv(process.env),
-              })
-            : await runEnforcementJob(ctx, {
-                dryRun,
+                store: new SupabaseRetailerNoticeStore(client),
+                source: liveRetailerSource(ALDI_SOURCE),
                 force,
-                client,
-                dataStore: supabaseStore,
-              });
+              })
+            : job === 'push'
+              ? await runPushJob(ctx, {
+                  dryRun,
+                  pushStore: new SupabasePushStore(client),
+                  // EXPO_ACCESS_TOKEN is required (enhanced push security is on;
+                  // a missing token fails the run before any send). Server-only,
+                  // never printed, never in the app bundle.
+                  transport: new ExpoPushTransport({ accessToken: process.env.EXPO_ACCESS_TOKEN }),
+                  // The alert entitlement gate's RevenueCat read (server-only,
+                  // read-only key, never printed). Unconfigured holds every alert.
+                  entitlements: entitlementSourceFromEnv(process.env),
+                  // Which alerts the overnight hold covers: the repository
+                  // variable PUSH_OVERNIGHT_HOLD (not a secret). Unset or
+                  // unrecognized keeps the founder-approved D1 rule, all.
+                  sendingHoldScope: sendingHoldScopeFromEnv(process.env),
+                })
+              : await runEnforcementJob(ctx, {
+                  dryRun,
+                  force,
+                  client,
+                  dataStore: supabaseStore,
+                });
   }
 
   console.log(

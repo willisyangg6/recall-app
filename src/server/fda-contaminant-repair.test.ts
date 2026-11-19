@@ -269,20 +269,21 @@ test('an apply with no authorized count writes nothing', async () => {
   assert.deepEqual(snapshotState(store), before);
 });
 
-test('the approved transition tables are exactly the reviewed P3B set', () => {
+test('the approved transition tables are exactly the reviewed set', () => {
   assert.deepEqual(
     ALLOWED_TRANSITIONS.map(([from, to]) => `${from} → ${to}`),
     ['foreign_material → chemical_contamination'],
   );
   assert.deepEqual(
     ALLOWED_AGENT_TRANSITIONS.map(([from, to]) => `${from ?? '(null)'} → ${to ?? '(null)'}`),
-    ['(null) → asbestos', '(null) → Cesium-137'],
+    ['(null) → asbestos', '(null) → Cesium-137', '(null) → thallium'],
   );
 });
 
 test('any agent transition outside the reviewed set is not in the allowlist', () => {
-  // The only two writable agent moves are `null → asbestos` (Dynarex) and
-  // `null → Cesium-137` (both AquaStar shrimp notices) — nothing else,
+  // The only writable agent moves are `null → asbestos` (Dynarex),
+  // `null → Cesium-137` (both AquaStar shrimp notices) and `null → thallium`
+  // (Brad's Raw Chips, reviewed 2026-11-17) — nothing else,
   // including `null → null` (no longer approved now that Dynarex's own
   // source names a real agent) and any move that would REPLACE a stored
   // agent.
@@ -290,6 +291,8 @@ test('any agent transition outside the reviewed set is not in the allowlist', ()
     ALLOWED_AGENT_TRANSITIONS.some(([a, b]) => a === from && b === to);
   assert.equal(isAllowed(null, 'asbestos'), true);
   assert.equal(isAllowed(null, 'Cesium-137'), true);
+  assert.equal(isAllowed(null, 'thallium'), true);
+  assert.equal(isAllowed('thallium', null), false);
   assert.equal(isAllowed(null, null), false);
   assert.equal(isAllowed(null, 'lead'), false);
   assert.equal(isAllowed('lead', 'asbestos'), false);
@@ -308,12 +311,65 @@ test('scope is decided by the archived official category alone', () => {
   assert.equal(inGovernedCategory(null), false);
 });
 
-test('the population guard admits only the reviewed set', () => {
-  assert.equal(classifyPopulation(3, 3), 'approved');
+test('the population guard admits only a reviewed round, exactly', () => {
+  assert.equal(classifyPopulation(3, 3), 'approved'); // P3B
+  assert.equal(classifyPopulation(1, 1, ['thallium']), 'approved'); // thallium (2026-11-17)
+  assert.equal(classifyPopulation(1, 1, ['asbestos']), 'needs-review'); // a P3B leftover
+  assert.equal(classifyPopulation(3, 3, ['asbestos', 'thallium', 'Cesium-137']), 'needs-review');
   assert.equal(classifyPopulation(0, 0), 'settled');
-  assert.equal(classifyPopulation(4, 4), 'needs-review');
+  assert.equal(classifyPopulation(4, 4), 'needs-review'); // both rounds at once
+  assert.equal(classifyPopulation(2, 2), 'needs-review');
   assert.equal(classifyPopulation(3, 2), 'needs-review');
   assert.equal(classifyPopulation(2, 3), 'needs-review');
+  assert.equal(classifyPopulation(1, 0), 'needs-review');
+});
+
+test("Brad's: the stored metal-pieces hazard is corrected to thallium, silently", async () => {
+  // As production stores it: the background sentence "Thallium (Tl) is a
+  // naturally occurring metal found in the soil" read as metal pieces.
+  const recorded = JSON.parse(
+    readFileSync(
+      'src/server/fda/fixtures/announcement-brads-raw-chips-kale-veggie-chips.json',
+      'utf8',
+    ),
+  ) as { path: string; listing: FdaListingItem; mainHtml: string };
+  const rawPayload = {
+    path: recorded.path,
+    listing: recorded.listing,
+    rssTitle: null,
+    detailMainHtml: recorded.mainHtml,
+  };
+  const reparsed = parseFdaAnnouncement({
+    listing: recorded.listing,
+    detailMainHtml: recorded.mainHtml,
+    path: recorded.path,
+  });
+  const stored: NormalizedSourceRecord = {
+    ...reparsed,
+    hazardCategory: 'foreign_material',
+    pathogenOrAllergen: null,
+  };
+  const store = new MemoryStore();
+  await seedCase(store, [{ stored, rawPayload }], { state: 'active' });
+
+  const plan = await repairFdaContaminants(writeProofStore(store), dryRun);
+  assert.equal(plan.recordWouldChange, 1);
+  assert.equal(plan.caseWouldChange, 1);
+  assert.equal(plan.population, 'approved');
+  assert.equal(plan.applyBlockedReason, null);
+
+  const report = await applyPlanned(store);
+  assert.equal(report.sourceRecordWrites, 1);
+  assert.equal(report.caseWrites, 1);
+  assert.equal(report.notificationEvents, 0);
+  const [record] = store.sourceRecords.values();
+  assert.equal(record.normalized.hazardCategory, 'chemical_contamination');
+  assert.equal(record.normalized.pathogenOrAllergen, 'thallium');
+  const [row] = store.cases.values();
+  assert.equal(row.projection.hazardCategory, 'chemical_contamination');
+  assert.equal(row.projection.pathogenOrAllergen, 'thallium');
+  assert.equal(row.lastChangedAt, '2026-02-02T00:00:00.000Z');
+  assert.equal(store.notifications.size, 0);
 });
 
 // ── Dry-run behavior ─────────────────────────────────────────────────────────
@@ -462,7 +518,7 @@ test('an interrupted repair resumes: the remaining rows are corrected', async ()
   // remaining work is still fully described in the ledger.
   assert.equal(partial.recordWouldChange, 2);
   assert.equal(partial.population, 'needs-review');
-  assert.match(partial.applyBlockedReason!, /approved exactly 3 record/);
+  assert.match(partial.applyBlockedReason!, /reviewed populations are P3B: 3 record/);
 });
 
 // ── Scope ────────────────────────────────────────────────────────────────────
@@ -626,7 +682,9 @@ test('a population that is not the reviewed one refuses the entire apply', async
   const report = await applyPlanned(writeProofStore(store));
   assert.equal(report.recordWouldChange, 1);
   assert.equal(report.population, 'needs-review');
-  assert.match(report.applyBlockedReason!, /approved exactly 3 record and 3 case corrections/);
+  // One record is the thallium round's SIZE, but its agent is asbestos: it is
+  // not that round, so it is never admitted as it.
+  assert.match(report.applyBlockedReason!, /reviewed populations are P3B: 3 record/);
   assert.deepEqual(snapshotState(store), before);
 });
 

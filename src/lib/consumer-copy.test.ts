@@ -601,7 +601,7 @@ test('frozen and protected copy is still present, word for word', () => {
   assert.equal(OLDER_NOTICES_EXPLANATION_ALL, 'No announcement or update in the last 60 days.');
   assert.equal(
     OLDER_NOTICES_EXPLANATION_AFFECTS,
-    'These match your choices but have had no announcement or update in the last 60 days, and the agency hasn’t confirmed they’re still open.',
+    'These match your choices but have had no announcement or update in the last 60 days, and their source hasn’t confirmed they’re still open.',
   );
   for (const text of [
     OLDER_NOTICES_TITLE,

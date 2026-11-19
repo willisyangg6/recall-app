@@ -14,15 +14,44 @@
  * break or empty the agency feed beside it.
  */
 
-import { readRetailerNoticeFields, type RetailerNoticeFields } from './retailer-notice-fields';
+import { readStoredProductCategories } from '@/domain/product-categories-stored';
+import type { FoodCategoryId } from '@/domain/food-category';
+
+import {
+  readRetailerNoticeFields,
+  type RetailerNoticeFields,
+  type RetailerNoticePublisherName,
+} from './retailer-notice-fields';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
+export type RetailerNoticePublisher = 'costco' | 'aldi';
+
+/**
+ * Each publisher, the name its notices must carry, and the only hosts its
+ * document may be linked on. A row whose publisher, name and link host do not
+ * all agree is dropped whole.
+ */
+const PUBLISHERS: Record<
+  RetailerNoticePublisher,
+  { name: RetailerNoticePublisherName; hostOk: (hostname: string) => boolean }
+> = {
+  costco: {
+    name: 'Costco',
+    hostOk: (hostname) => hostname === 'costco.com' || hostname.endsWith('.costco.com'),
+  },
+  aldi: { name: 'ALDI', hostOk: (hostname) => hostname === 'dm.cms.aldi.cx' },
+};
+
+function isPublisher(value: unknown): value is RetailerNoticePublisher {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(PUBLISHERS, value);
+}
+
 export interface RetailerNotice {
   id: string;
-  publisher: 'costco';
-  /** The retailer's own letter (https on costco.com only). */
+  publisher: RetailerNoticePublisher;
+  /** The retailer's own document (https, on that retailer's own host only). */
   documentUrl: string;
   /** The date printed on the letter, YYYY-MM-DD. */
   noticeDate: string;
@@ -33,6 +62,11 @@ export interface RetailerNotice {
    * approved or the backend is not configured.
    */
   imageUrl: string | null;
+  /**
+   * The shared server-side classifier's answer for the approved product,
+   * stored with the approval; undefined when none is stored (never `other`).
+   */
+  productCategories?: FoodCategoryId[];
 }
 
 /** The public product-visuals URL for an approved image path. */
@@ -44,15 +78,15 @@ export function retailerImageUrl(baseUrl: string | undefined, path: string): str
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Only an https letter on Costco's own domain is ever linked. */
-export function isRetailerDocumentUrl(value: unknown): value is string {
+/** Only an https document on the publisher's own host is ever linked. */
+export function isRetailerDocumentUrl(
+  value: unknown,
+  publisher: RetailerNoticePublisher = 'costco',
+): value is string {
   if (typeof value !== 'string') return false;
   try {
     const url = new URL(value);
-    return (
-      url.protocol === 'https:' &&
-      (url.hostname === 'costco.com' || url.hostname.endsWith('.costco.com'))
-    );
+    return url.protocol === 'https:' && PUBLISHERS[publisher].hostOk(url.hostname);
   } catch {
     return false;
   }
@@ -74,8 +108,9 @@ export function readRetailerNoticeRows(
       typeof row.id !== 'string' ||
       !UUID.test(row.id) ||
       seen.has(row.id) ||
-      row.publisher !== 'costco' ||
-      !isRetailerDocumentUrl(row.document_url) ||
+      !isPublisher(row.publisher) ||
+      fields?.retailer !== PUBLISHERS[row.publisher].name ||
+      !isRetailerDocumentUrl(row.document_url, row.publisher) ||
       typeof row.notice_date !== 'string' ||
       !DAY.test(row.notice_date) ||
       fields === null
@@ -85,11 +120,12 @@ export function readRetailerNoticeRows(
     seen.add(row.id);
     out.push({
       id: row.id,
-      publisher: 'costco',
+      publisher: row.publisher,
       documentUrl: row.document_url,
       noticeDate: row.notice_date,
       fields,
       imageUrl: fields.image ? retailerImageUrl(baseUrl, fields.image.path) : null,
+      productCategories: readStoredProductCategories(row.product_categories) ?? undefined,
     });
   }
   return out;
@@ -101,7 +137,7 @@ export async function fetchRetailerNotices(): Promise<RetailerNotice[]> {
   try {
     const response = await fetch(
       `${supabaseUrl}/rest/v1/rpc/consumer_retailer_notices` +
-        '?select=id,publisher,document_url,notice_date,fields',
+        '?select=id,publisher,document_url,notice_date,fields,product_categories',
       {
         headers: {
           apikey: publishableKey,

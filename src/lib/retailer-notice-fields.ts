@@ -17,7 +17,9 @@
 
 export const RETAILER_NOTICE_FIELDS_VERSION = 1;
 
-export type RetailerNoticePublisherName = 'Costco';
+/** The retailers a notice can be attributed to, as each writes its own name. */
+export const RETAILER_NOTICE_PUBLISHER_NAMES = ['Costco', 'ALDI'] as const;
+export type RetailerNoticePublisherName = (typeof RETAILER_NOTICE_PUBLISHER_NAMES)[number];
 
 /** The agency hazard categories (domain/recall-types.ts `HazardCategory`), mirrored for this leaf. */
 export const RETAILER_HAZARD_CATEGORIES = [
@@ -171,13 +173,16 @@ const TOP_KEYS = [
  * The strict reader: the exact version-1 shape or null. Unknown keys, empty
  * strings, padded strings, duplicate list entries and missing keys are all
  * rejected, so a malformed or tampered row is dropped whole rather than shown
- * in part. A notice with no retailer item number has no package to check, so
- * it is rejected too.
+ * in part. A notice with no package identifier at all (no item number,
+ * supplier code, lot, best-by date, can timestamp or UPC) has no package to
+ * check, so it is rejected too. Costco identifies packages by its own item
+ * number; ALDI's notices print lots and dates instead.
  */
 export function readRetailerNoticeFields(value: unknown): RetailerNoticeFields | null {
   const top = record(value);
   if (!top || !exactKeys(top, TOP_KEYS)) return null;
-  if (top.retailer !== 'Costco') return null;
+  const retailer = top.retailer;
+  if (!(RETAILER_NOTICE_PUBLISHER_NAMES as readonly unknown[]).includes(retailer)) return null;
   const reasonRecord = record(top.reason);
   if (!reasonRecord || !exactKeys(reasonRecord, ['hazardCategory', 'agent'])) return null;
   const hazardCategory = reasonRecord.hazardCategory;
@@ -200,7 +205,7 @@ export function readRetailerNoticeFields(value: unknown): RetailerNoticeFields |
   const purchaseWindow = optionalText(where.purchaseWindow);
   const instructions = list(top.instructions, { nonEmpty: true });
   const contact = optionalText(top.contact);
-  const retailerItemNumbers = list(checks.retailerItemNumbers, { nonEmpty: true });
+  const retailerItemNumbers = list(checks.retailerItemNumbers, { nonEmpty: false });
   const rest = PACKAGE_CHECK_KEYS.slice(1).map((key) => list(checks[key], { nonEmpty: false }));
   if (
     productName === null ||
@@ -218,8 +223,15 @@ export function readRetailerNoticeFields(value: unknown): RetailerNoticeFields |
     return null;
   }
   const [supplierCodes, lotCodes, bestByDates, canTimestamps, upcs] = rest as string[][];
+  if (
+    [retailerItemNumbers, supplierCodes, lotCodes, bestByDates, canTimestamps, upcs].every(
+      (values) => values.length === 0,
+    )
+  ) {
+    return null;
+  }
   return {
-    retailer: 'Costco',
+    retailer: retailer as RetailerNoticePublisherName,
     productName,
     size,
     image,

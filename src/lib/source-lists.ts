@@ -115,6 +115,7 @@ export function classifyListRole(lead: string, items: string[]): ListRole {
   const identifierItems = items.filter((item) => IDENTIFIER_ITEM.test(item.trim())).length;
   if (identifierItems * 2 >= items.length && identifierItems > 0) return 'identifiers';
   if (LEAD_IN_IDENTIFIERS.test(lead)) return 'identifiers';
+  if (SCOPED_LOT_HANDOFF.test(owningSentence(lead))) return 'identifiers';
   const propertyItems = items.filter(isPropertyItem).length;
   if (propertyItems * 2 >= items.length && propertyItems > 0) return 'properties';
   return 'affected_products';
@@ -133,11 +134,14 @@ const LEAD_IN_SIZE = /\bfollowing\s+(\d+[\s-]?(?:count|ct|pack|pk))\b/i;
 
 /**
  * Boundaries after which an item stops being the product's name. "with" cuts
- * only when an identifier label follows — "Mushroom Spinach & Salsa with Two
+ * only when an identifier label follows, and so does a comma: "Brad's Crunchy
+ * Kale, Original, 2 oz (57g) bag, UPC 813104021679, Lots …" is a name plus its
+ * markings, and read whole the closed identity gate rejects it as a raw row,
+ * pooling four products' codes into one — "Mushroom Spinach & Salsa with Two
  * Cheeses" is a name, "… with lot code 088594-2-1" is a name plus its code.
  */
 const NAME_BOUNDARY =
-  /(?:,\s*|\s+)(?:containing|sold|available|distributed|packaged|produced|with\s+(?:lot|batch|UPC|a\s+lot|best[-\s]|use[-\s]|sell[-\s]|expiration))\b|\.\s|\s+The\s+affected\b/i;
+  /(?:,\s*|\s+)(?:containing|sold|available|distributed|packaged|produced|with\s+(?:lot|batch|UPC|a\s+lot|best[-\s]|use[-\s]|sell[-\s]|expiration))\b|,\s*(?:UPC|U\.P\.C\.?|Lots?|Best[-\s]|Use[-\s]|Sell[-\s]|Exp(?:iration|iry)?\b|Item\s+(?:No|Number|Code))|\.\s|\s+The\s+affected\b/i;
 
 /**
  * A stated net weight closing a name: "… EZ Peel Shrimp net wt. 2lbs.",
@@ -175,9 +179,25 @@ const PACKAGE_PREFIX =
  * the product. The captured phrase must itself pass the closed packaging
  * vocabulary, so a product name that merely ends in a container word ("Gift
  * Baskets containing …") never loses its head.
+ *
+ * The count may also be stated as an adjective on the product itself:
+ * "Clear vacuum-packed packages of 6-piece “Bami Rolls” …" (recorded FSIS
+ * PHA-11062026-01). There the container takes "of", and "6-piece" is that
+ * item's own package size: each item keeps the count its own bullet states.
+ * An adjectival count is read only when the source's quoted product name
+ * follows it directly, so ordinary prose ("packages of 2-piece and 4-piece
+ * …") never yields a size. A container with no count ("Plastic trays of
+ * “Plain Pierogi” …") likewise yields to the quoted name after "of".
  */
 const CONTAINER_PREFIX =
-  /^\s*((?:[A-Za-z]+\s+){0,2}?(?:box(?:es)?|bags?|jars?|cartons?|cases?|containers?|tubs?|bottles?|cans?|pouch(?:es)?|trays?|packages?|packs?|sleeves?|wrappers?))\s+(?:containing|holding)\s+(?:(\d[\d,]*)[\s-]*(pieces?|units?|bars?|packets?|pouches?|links?|patties?|count|ct)\s+of\s+)?/i;
+  /^\s*((?:[A-Za-z][A-Za-z-]*\s+){0,2}?(?:box(?:es)?|bags?|jars?|cartons?|cases?|containers?|tubs?|bottles?|cans?|pouch(?:es)?|trays?|packages?|packs?|sleeves?|wrappers?))\s+(?:(?:containing|holding|of)\s+(\d[\d,]*)[\s-](pieces?|pcs?|count|ct)\s+(?=[“"])|(?:containing|holding)\s+(?:(\d[\d,]*)[\s-]*(pieces?|units?|bars?|packets?|pouches?|links?|patties?|count|ct)\s+of\s+)?|of\s+(?=[“"]))/i;
+
+/** An adjectival count's unit, as a package size reads it: "6-piece" → "6 pieces". */
+function countSize(count: string, unit: string): string {
+  const lower = unit.toLowerCase();
+  if (/^(?:pieces?|pcs?)$/.test(lower)) return `${count} ${count === '1' ? 'piece' : 'pieces'}`;
+  return `${count} ${lower}`;
+}
 
 function fact(
   concept: SemanticFact['concept'],
@@ -227,7 +247,9 @@ function itemName(text: string): {
     if (container && packagingOnlyName(container[1])) {
       packaging = container[1].trim();
       if (container[2] && container[3]) {
-        size = `${container[2]} ${container[3].toLowerCase()}`;
+        size = countSize(container[2], container[3]);
+      } else if (container[4] && container[5]) {
+        size = `${container[4]} ${container[5].toLowerCase()}`;
       }
       working = working.slice(container[0].length);
     }
@@ -267,6 +289,9 @@ function itemName(text: string): {
 /** One declared list: its lead-in sentence tail and its items' text. */
 interface DeclaredList {
   lead: string;
+  /** All announcement text since the previous list (or the start), untrimmed —
+   * the segment a scoped lot list can draw its owner from. */
+  segment: string;
   items: string[];
   role: ListRole;
   /** Per item, the product name the source set in bold — present only for
@@ -322,13 +347,14 @@ function declaredLists(summaryHtml: string | null): DeclaredList[] {
 
     // The declaring lead-in, from the text directly before the list. The
     // "[view labels]" link FSIS inserts is dropped before testing the tail.
-    const lead = stripHtml(before)
+    const segment = stripHtml(before)
       .replace(/\[[^\]]{0,80}\]/g, ' ')
       .replace(/\s+/g, ' ')
-      .trim()
-      .slice(-240);
+      .trim();
+    const lead = segment.slice(-240);
     const rawItems = [...match[1].matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)].map((item) => item[1]);
-    const declared = /[:]\s*$/.test(lead) && LEAD_IN_WORDS.test(lead);
+    const scopedLots = SCOPED_LOT_HANDOFF.test(owningSentence(lead));
+    const declared = (/[:]\s*$/.test(lead) && LEAD_IN_WORDS.test(lead)) || scopedLots;
     const headed = !declared && isItemDescriptionList(lead, rawItems);
     if (!declared && !headed) continue;
 
@@ -346,9 +372,11 @@ function declaredLists(summaryHtml: string | null): DeclaredList[] {
       }))
       .filter(({ text }) => text.length >= 2 && text.length <= 400);
     const items = kept.map(({ text }) => text);
-    if (items.length < 2) continue;
+    // One recalled lot is still a list when the hand-off scopes it as lots.
+    if (items.length < (scopedLots ? 1 : 2)) continue;
     out.push({
       lead,
+      segment,
       items,
       role: classifyListRole(lead, items),
       ...(headed ? { boldNames: kept.map(({ bold }) => bold) } : {}),
@@ -496,4 +524,128 @@ export function extractIdentifierListOwners(summaryHtml: string | null): ListVar
     out.push({ facts, scope });
   }
   return out;
+}
+
+/**
+ * A product-less hand-off to a list of lot or batch codes: "The recalled lots
+ * are:", "Affected lot numbers include:". The sentence scopes the list as
+ * recalled markings but names no product, so the list's owner — if any — has
+ * to come from the prose that describes the product directly above it.
+ */
+const SCOPED_LOT_HANDOFF =
+  /^(?:the\s+)?(?:recalled|affected|impacted)\s+(?:product\s+)?(?:lots?|lot\s+(?:codes?|numbers?)|batch(?:es)?|batch\s+(?:codes?|numbers?))\s+(?:are|include)\s*:$/i;
+
+/**
+ * A sentence describing ONE product's package: "Herb To Body Yellow Dock Root
+ * C/S 4oz comes in a 4 oz pouch, with the lot number printed below …". The
+ * singular verb is the evidence that one product is described; a plural
+ * subject ("… and … come in 4 oz pouches") describes several and owns nothing.
+ */
+const PRODUCT_DESCRIPTION =
+  /^(.{4,140}?)\s+(?:comes|is\s+(?:sold|packaged|packed|supplied))\s+in\s+(?:a|an|one)\s+([^,;]{2,80}?)(?=,|;|\.(?:\s|$)|\s+(?:with|that|which|and|where)\b|$)/i;
+const PLURAL_PRODUCT_DESCRIPTION =
+  /^.{4,140}?\s+(?:come|are\s+(?:sold|packaged|packed|supplied))\s+in\b/i;
+
+/** "4 oz pouch" → size and container, each only when the source stated it. */
+const DESCRIBED_PACKAGE =
+  /^(?:((\d[\d./]*)\s*-?\s*(oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|fl\.?\s*oz)\b\.?)\s*)?(.*)$/i;
+
+/** A trailing measurement on a name ("… C/S 4oz"). */
+const NAME_TRAILING_MEASURE =
+  /\s+(\d[\d./]*)\s*-?\s*(oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|fl\.?\s*oz)\.?$/i;
+
+/** An item holding nothing but codes ("HB02223", "HB02223, HB02474"). */
+const BARE_CODE_ITEM = /^(?=[^\s]*\d)[A-Z0-9][A-Z0-9-]*(?:\s*[,;/]\s*[A-Z0-9][A-Z0-9-]*)*$/i;
+
+const normalizedMeasure = (amount: string, unit: string) =>
+  `${amount} ${unit
+    .toLowerCase()
+    .replace(/\.$/, '')
+    .replace(/^ounces?$/, 'oz')}`;
+
+/** One product described in a sentence, read through the shared name rules. */
+function describedProduct(
+  sentence: string,
+): { name: string; size: string | null; packaging: string | null } | null {
+  const match = sentence.match(PRODUCT_DESCRIPTION);
+  if (!match) return null;
+  const pkg = match[2].trim().match(DESCRIBED_PACKAGE);
+  const size = pkg?.[1] ? normalizedMeasure(pkg[2], pkg[3]) : null;
+  const container = pkg?.[4]?.trim() ?? '';
+  // Packaging only under the existing closed vocabulary.
+  const packaging = container !== '' && packagingOnlyName(container) ? container : null;
+  let { name } = itemName(match[1].trim());
+  // A trailing measurement that restates the described size is the size, not
+  // part of the name; any other trailing measurement is left exactly as written.
+  const trailing = name.match(NAME_TRAILING_MEASURE);
+  if (trailing && size !== null && normalizedMeasure(trailing[1], trailing[2]) === size) {
+    name = name.slice(0, trailing.index).trim();
+  }
+  if (name.length < 3 || variantIdentityRejection(name) !== null) return null;
+  return { name, size, packaging };
+}
+
+/**
+ * Lot lists scoped by a product described in prose (source-shape C, verified
+ * on FDA 2026-11-17 Larbi / Herb To Body Yellow Dock Root C/S):
+ *
+ *   <p>Herb To Body Yellow Dock Root C/S 4oz comes in a 4 oz pouch, …</p>
+ *   <p>The recalled lots are:</p>
+ *   <ul><li>HB02223</li><li>HB02474</li><li>HB02848</li></ul>
+ *
+ * The hand-off names no product and the list holds bare codes, so neither the
+ * product-list nor the named-lead-in owner path reads it, and the prose path
+ * never crosses the list's line breaks — before this, all three lots were lost.
+ *
+ * A list is OWNED only when the sentence directly before its hand-off
+ * describes exactly one product, and no other sentence in the same stretch of
+ * text (since the previous list) describes a product. Anything less is
+ * ambiguous: the codes are still the source's recalled lots, so they are
+ * returned recall-wide, never assigned to a guessed product. Codes are
+ * validated by the same label-driven rules as every other lot value.
+ */
+export function extractDescribedLotLists(summaryHtml: string | null): {
+  owned: ListVariant[];
+  recallWide: SemanticFact[];
+  /** The item text of every list read here, so the prose path never reads it twice. */
+  consumedItems: string[];
+} {
+  const owned: ListVariant[] = [];
+  const recallWide: SemanticFact[] = [];
+  const consumedItems: string[] = [];
+  let listIndex = 0;
+  for (const list of declaredLists(summaryHtml)) {
+    const index = listIndex++;
+    if (list.role !== 'identifiers') continue;
+    const sentences = list.segment.split(/(?<=[.!?])\s+(?=[A-Z“"'])/);
+    if (!SCOPED_LOT_HANDOFF.test(sentences[sentences.length - 1] ?? '')) continue;
+    if (!list.items.every((item) => BARE_CODE_ITEM.test(item.trim()))) continue;
+    const codes = list.items.flatMap(
+      (item) => extractProseIdentifiers(`Lot code: ${item.trim()}`).facts,
+    );
+    if (codes.length === 0) continue;
+    consumedItems.push(...list.items.map((item) => item.trim()));
+
+    const describing = sentences.slice(0, -1);
+    const described = describing.filter(
+      (sentence) => PRODUCT_DESCRIPTION.test(sentence) || PLURAL_PRODUCT_DESCRIPTION.test(sentence),
+    );
+    const owner =
+      described.length === 1 && described[0] === describing[describing.length - 1]
+        ? describedProduct(described[0])
+        : null;
+    if (!owner) {
+      recallWide.push(...codes);
+      continue;
+    }
+    const scope = `lotlist${index}`;
+    const facts: SemanticFact[] = [fact('variant', 'affected product list', owner.name, scope)];
+    if (owner.size) facts.push(fact('package_size', 'affected product list', owner.size, scope));
+    if (owner.packaging) {
+      facts.push(fact('packaging', 'affected product list', owner.packaging, scope));
+    }
+    for (const code of codes) facts.push({ ...code, scope });
+    owned.push({ facts, scope });
+  }
+  return { owned, recallWide, consumedItems };
 }

@@ -250,6 +250,34 @@ test('"including" without the allergen governor never interprets a list', () => 
 // ── Grammatical-alias deduplication (P2d-A follow-up, from the first P2d-B
 // production dry run's "undeclared peanut and peanuts" values) ───────────────
 
+test('a parenthetical qualifies its allergen and never ends the list (2026-11-19 audit)', () => {
+  // Before: a non-vocabulary word in parentheses stopped the walk, and every
+  // allergen after it was lost — an allergen-only mismatch then EXCLUDED a
+  // shopper the recall names (Costco's Madeleines agent; FSIS-style wording).
+  const cases: [string, string[]][] = [
+    ['undeclared milk (casein) and egg', ['milk', 'egg']],
+    ['undeclared fish (anchovy) and soy', ['fish', 'soy']],
+    ['undeclared Tree Nuts (Hazelnut/Filbert) and soy', ['tree nuts', 'hazelnut', 'soy']],
+    [
+      'The product contains milk (casein) and egg, known allergens, which are not declared on the label.',
+      ['milk', 'egg'],
+    ],
+    // Unchanged: vocabulary in parentheses still counts; the run still ends at prose.
+    ['undeclared wheat (gluten), soy and milk', ['wheat', 'gluten', 'soy', 'milk']],
+    ['undeclared milk (casein) in the frosting and peanuts in the topping', ['milk']],
+    // A negated parenthetical names nothing.
+    ['undeclared milk (does not contain egg) and soy', ['milk', 'soy']],
+    ['The product contains no milk (casein free), a known allergen.', []],
+  ];
+  for (const [text, expected] of cases) {
+    assert.deepEqual(extractAllergenEvidence(text), expected, text);
+  }
+  assert.deepEqual(
+    normalizedAllergenTokens(extractPathogenOrAllergen('undeclared milk (casein) and egg')),
+    ['egg', 'milk'],
+  );
+});
+
 test('singular/plural aliases of one allergen collapse to the first-seen form', () => {
   // Two constructions naming the same allergen in different number.
   assert.equal(
@@ -436,5 +464,19 @@ test('asbestos is never invented from a mention that does not state contaminatio
   assert.equal(
     extractChemicalAgent('See the appendix for general information about asbestos.'),
     null,
+  );
+});
+
+test('a material that modifies "foreign material" names the contaminant (construction H)', () => {
+  assert.deepEqual(
+    extractForeignMaterialEvidence(
+      'due to the possible presence of plastic foreign material in the salad dressing of the items.',
+    ),
+    { stated: true, material: 'plastic' },
+  );
+  // Packaging is still not evidence.
+  assert.deepEqual(
+    extractForeignMaterialEvidence('Sold in 10-oz. plastic bowl packages. Foreign matter found.'),
+    { stated: true, material: null },
   );
 });

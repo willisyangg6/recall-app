@@ -69,6 +69,7 @@ import {
   buildRetailerHomeCardModel,
   homeRowKey,
   mergeSectionRows,
+  retailerNoticesForAffects,
   retailerNoticesForAll,
   type HomeRow,
 } from '@/lib/retailer-notice-presentation';
@@ -242,9 +243,6 @@ interface HomeSection {
    */
   data: HomeRow[];
 }
-
-const agencyRows = (items: FeedItem[]): HomeRow[] =>
-  items.map((item) => ({ kind: 'agency', item }));
 
 export default function HomeScreen() {
   // After onboarding the session has already served the complete corpus
@@ -486,12 +484,21 @@ export default function HomeScreen() {
     const ranked = buildAffectsMeSections(state.items, (item) => relevanceById.get(item.id)!, {
       now,
     });
-    // Agency rows only: Affects you never includes a retailer notice.
-    const affects = agencyRows(
+    // Approved retailer notices join by the SAME verdict (relevance.ts, via
+    // retailerRelevanceInput), interleaved by the same recency key the
+    // Affects you order already is; hidden under a browsing filter exactly as
+    // in All recalls.
+    const notices = retailerNoticesForAffects(retailer.notices, now, prefs, {
+      filtersActive: hasActiveFilters(filters),
+      query,
+    });
+    const affects = mergeSectionRows(
       filterBySearch(applyFeedFilters(ranked.affects, filters), query, entryOf),
+      notices.recent,
     );
-    const older = agencyRows(
+    const older = mergeSectionRows(
       filterBySearch(applyFeedFilters(ranked.older, filters), query, entryOf),
+      notices.older,
     );
     affectsCounts = { affects: affects.length, older: older.length };
     sections = [
@@ -638,7 +645,7 @@ export default function HomeScreen() {
           // An approved retailer notice: the SAME card, from the retailer
           // adapter (lib/retailer-notice-presentation.ts).
           if (row.kind === 'retailer') {
-            return <RecallCard model={buildRetailerHomeCardModel(row.notice, today)} />;
+            return <RecallCard model={buildRetailerHomeCardModel(row.notice, today, prefs)} />;
           }
           // Agency rows: the exact shared call Saved makes (feed-saved parity).
           const { item } = row;

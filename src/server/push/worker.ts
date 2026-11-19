@@ -49,7 +49,9 @@
  * - Overnight sending hold (D1, 2026-10-14; sending-hold.ts): no send while it
  *   is 22:00–09:59 in America/New_York. Deliveries are still created and
  *   judged as before; due rows wait in the queue for the first run after
- *   10:00, and are judged again at that send.
+ *   10:00, and are judged again at that send. The opt-in scope
+ *   `except_new_recalls` (PUSH_OVERNIGHT_HOLD) exempts only fresh new-recall
+ *   alerts (sendsDuringHold); the default scope exempts nothing.
  * - A ticket is Expo ACCEPTING the request; only a receipt marks the handoff
  *   to APNs/FCM successful (receipt_ok). The two are never conflated.
  *
@@ -67,10 +69,27 @@ import { refreshEntitlements } from './entitlement-refresh';
 import type { EntitlementSource } from './revenuecat-entitlement';
 import { pushEligible, type RelevanceInput } from '../../lib/relevance';
 import type { JobRunOutcome } from '../store/types';
-import { decideDelivery, type DeliveryDecision } from './event-eligibility';
+import { decideDelivery, decideRetailerDelivery, type DeliveryDecision } from './event-eligibility';
+import {
+  appVersionAtLeast,
+  RETAILER_ALERTS_MIN_APP_VERSION,
+  sameRecallAgencyCases,
+} from '../retailer/notice-events';
+import type { AgencyCaseView } from '../retailer/types';
 import { buildPushMessage } from './format';
-import { HOLD_TIME_ZONE, isSendingHeld } from './sending-hold';
-import { MAX_MESSAGES_PER_REQUEST, MAX_RECEIPT_IDS_PER_REQUEST } from './expo-transport';
+import {
+  HOLD_TIME_ZONE,
+  isSendingHeld,
+  sendsDuringHold,
+  type SendingHoldScope,
+} from './sending-hold';
+import {
+  ExpoAuthMissingError,
+  ExpoRequestError,
+  MAX_MESSAGES_PER_REQUEST,
+  MAX_RECEIPT_IDS_PER_REQUEST,
+  redactPushTokens,
+} from './expo-transport';
 import type {
   CaseLink,
   DeliverableEvent,
@@ -158,11 +177,53 @@ export async function resolveCanonicalCase(
  * store: the canonical destination, and — for an event on an absorbed case —
  * whether the survivor already carries the same change.
  */
+/** How far back an agency case can be the same recall as a retailer notice. */
+const SAME_RECALL_LOOKBACK_DAYS = 180;
+
+/**
+ * Per-run reads the retailer rule needs, cached: each notice's current state
+ * and the agency cases it could be the same recall as (the retailer
+ * monitor's own view and matcher, notice-events.ts).
+ */
+export class RetailerRunContext {
+  private agencyViews: Promise<AgencyCaseView[]> | null = null;
+  private readonly notices = new Map<string, ReturnType<PushStore['getRetailerNotice']>>();
+
+  constructor(
+    private readonly store: Pick<PushStore, 'getRetailerNotice' | 'listAgencyCaseViews'>,
+    private readonly nowIso: string,
+  ) {}
+
+  notice(noticeId: string) {
+    if (!this.notices.has(noticeId))
+      this.notices.set(noticeId, this.store.getRetailerNotice(noticeId));
+    return this.notices.get(noticeId)!;
+  }
+
+  agencyCases(): Promise<AgencyCaseView[]> {
+    this.agencyViews ??= this.store.listAgencyCaseViews(
+      new Date(Date.parse(this.nowIso) - SAME_RECALL_LOOKBACK_DAYS * 86_400_000).toISOString(),
+    );
+    return this.agencyViews;
+  }
+}
+
 export async function resolveDeliverableEvent(
   store: Pick<PushStore, 'getCase' | 'hasDeliverableEvent'>,
   event: DeliverableEvent,
   cache: Map<string, CaseLink | null>,
+  retailer?: RetailerRunContext,
 ): Promise<DeliveryDecision> {
+  if (event.retailerNoticeId) {
+    // A retailer event is never decided by the case rule. Without the
+    // context (a caller that predates retailer events) it fails closed.
+    if (!retailer) return { kind: 'skip', reason: 'retailer_not_visible' };
+    const notice = await retailer.notice(event.retailerNoticeId);
+    const sameRecallCaseIds = notice.matchEvidence
+      ? sameRecallAgencyCases(notice.matchEvidence, await retailer.agencyCases()).map((c) => c.id)
+      : [];
+    return decideRetailerDelivery(event, { notice, sameRecallCaseIds });
+  }
   const destination = await resolveCanonicalCase(store, event, cache);
   const merged = destination !== null && destination.id !== event.recallCaseId;
   const survivorHasTwin =
@@ -221,6 +282,10 @@ export interface EventEligibility {
   preferenceHorizonSkipped: number;
   /** Excluded by personalized matching (state / allergen / retailer). */
   preferenceSkipped: number;
+  /** A retailer-notice alert, for an app version that cannot open one. */
+  clientUnsupportedSkipped: number;
+  /** An agency new-recall alert for a recall this subscription was already alerted to. */
+  duplicateAlertSkipped: number;
 }
 
 /**
@@ -248,11 +313,18 @@ export interface EventEligibility {
  *    is delivered (2026-10-04 — formerly deliver-all).
  */
 export function classifySubscriptionsForEvent(
-  event: Pick<DeliverableEvent, 'createdAt' | 'projection'>,
+  event: Pick<DeliverableEvent, 'createdAt' | 'projection' | 'retailerNoticeId'>,
   subscriptions: PushSubscription[],
   pushEnabledAt: string,
   preferences: Map<string, InstallationPreferences>,
   nowIso: string,
+  options: {
+    /**
+     * Subscriptions already alerted to this same recall through a retailer
+     * notice: an agency `initial` for it would be a second new-recall alert.
+     */
+    alreadyAlerted?: ReadonlySet<string>;
+  } = {},
 ): EventEligibility {
   const result: EventEligibility = {
     eligible: [],
@@ -261,10 +333,24 @@ export function classifySubscriptionsForEvent(
     entitlementUnverified: 0,
     preferenceHorizonSkipped: 0,
     preferenceSkipped: 0,
+    clientUnsupportedSkipped: 0,
+    duplicateAlertSkipped: 0,
   };
   const input = relevanceInput(event);
   for (const subscription of subscriptions) {
     if (!subscription.enabled) continue;
+    // A retailer notice opens only in an app that can show it.
+    if (
+      event.retailerNoticeId &&
+      !appVersionAtLeast(subscription.appVersion, RETAILER_ALERTS_MIN_APP_VERSION)
+    ) {
+      result.clientUnsupportedSkipped += 1;
+      continue;
+    }
+    if (options.alreadyAlerted?.has(subscription.id)) {
+      result.duplicateAlertSkipped += 1;
+      continue;
+    }
     const prefs = preferences.get(subscription.installationId) ?? null;
     const c2Horizon =
       subscription.enabledAt > pushEnabledAt ? subscription.enabledAt : pushEnabledAt;
@@ -353,6 +439,12 @@ export interface PushWorkerOptions {
    * that is never held.
    */
   sendingHold?: (instant: Date) => boolean;
+  /**
+   * Which due deliveries the hold covers (sending-hold.ts). Default `all`,
+   * the D1 rule. `except_new_recalls` sends fresh new-recall alerts during the
+   * hold hours; production reads it from PUSH_OVERNIGHT_HOLD.
+   */
+  sendingHoldScope?: SendingHoldScope;
   dryRun: boolean;
   now: () => Date;
   maxEventsPerRun?: number;
@@ -427,6 +519,14 @@ export async function runPushDelivery(
     lifecycleSkipped: 0,
     mergedDuplicateSkipped: 0,
     destinationUnresolved: 0,
+    /** Retailer-notice events no longer shown by the app (withdrawn, revised, matched). */
+    retailerNotVisibleSkipped: 0,
+    /** Retailer-notice events an agency case now announces as the same recall. */
+    agencyDuplicateSkipped: 0,
+    /** Per pair: retailer alerts not created for app versions that cannot open them. */
+    clientUnsupportedSkipped: 0,
+    /** Per pair: agency new-recall alerts a retailer alert already announced. */
+    duplicateAlertSkipped: 0,
     reroutedToSurvivor: 0,
     deliveriesCreated: 0,
     sent: 0,
@@ -444,8 +544,32 @@ export async function runPushDelivery(
     sendingHeld: false,
     /** Due deliveries left queued by the hold (in a dry run: would be left queued). */
     sendingHoldDeferred: 0,
+    /**
+     * Due deliveries sent despite the hold hours because the hold scope
+     * exempts them (sendsDuringHold: a fresh new-recall alert). Always 0
+     * under the default scope, `all`.
+     */
+    sendingHoldExempted: 0,
+    /** Messages handed to the provider this run (each one attempt). */
+    sendAttempted: 0,
+    /** Whole requests the provider rejected or that never completed. */
+    requestFailures: 0,
+    /**
+     * Due deliveries and receipt checks NOT attempted because the transport
+     * cannot authenticate (no access token). Their attempts are not spent.
+     */
+    authBlocked: 0,
   };
   const errors: string[] = [...refresh.errors];
+  // A failure no retry of the same request can fix (no credential, an
+  // authentication refusal). Any such failure makes the run FAILED, so the
+  // workflow fails visibly instead of recording a routine partial.
+  let systemicFailure: string | null = null;
+  const authProblem = transport.authProblem?.() ?? null;
+  // Per-recipient ticket/receipt errors other than DeviceNotRegistered (a
+  // normal uninstall outcome). Decides whether a run with sends but no
+  // accepted ticket failed.
+  let recipientFailures = 0;
   if (options.entitlements === null)
     errors.push('entitlement check not configured: all alerts held');
   const subscriptionById = new Map(subscriptions.map((s) => [s.id, s]));
@@ -460,6 +584,10 @@ export async function runPushDelivery(
   );
   if (dryRun) {
     metrics.receiptsQueried = receiptDue.length;
+  } else if (authProblem !== null && receiptDue.length > 0) {
+    // Receipts wait as ticket_accepted; the run fails below.
+    metrics.authBlocked += receiptDue.length;
+    systemicFailure = authProblem;
   } else {
     for (let i = 0; i < receiptDue.length; i += MAX_RECEIPT_IDS_PER_REQUEST) {
       const chunk = receiptDue.slice(i, i + MAX_RECEIPT_IDS_PER_REQUEST);
@@ -467,9 +595,13 @@ export async function runPushDelivery(
       try {
         receipts = await transport.getReceipts(chunk.map((d) => d.ticketId as string));
       } catch (error) {
-        errors.push(
-          `receipt fetch failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`receipt fetch failed: ${message}`);
+        metrics.requestFailures += 1;
+        if (isSystemic(error)) {
+          systemicFailure = message;
+          break; // the same credential fails every chunk
+        }
         continue; // tickets stay ticket_accepted; retried next run.
       }
       metrics.receiptsQueried += chunk.length;
@@ -507,7 +639,7 @@ export async function runPushDelivery(
           await store.updateDelivery(delivery.id, {
             status: 'permanent_failure',
             failureCode: code,
-            lastError: receipt.message.slice(0, 200),
+            lastError: redactPushTokens(receipt.message).slice(0, 200),
             receiptCheckedAt: nowIso(),
             updatedAt: nowIso(),
           });
@@ -521,7 +653,7 @@ export async function runPushDelivery(
           await store.updateDelivery(delivery.id, {
             status: 'permanent_failure',
             failureCode: code ?? 'unknown',
-            lastError: receipt.message.slice(0, 200),
+            lastError: redactPushTokens(receipt.message).slice(0, 200),
             receiptCheckedAt: nowIso(),
             updatedAt: nowIso(),
           });
@@ -530,7 +662,7 @@ export async function runPushDelivery(
           await store.updateDelivery(delivery.id, {
             status: 'retryable_failure',
             failureCode: code ?? 'unknown',
-            lastError: receipt.message.slice(0, 200),
+            lastError: redactPushTokens(receipt.message).slice(0, 200),
             receiptCheckedAt: nowIso(),
             updatedAt: nowIso(),
           });
@@ -542,8 +674,14 @@ export async function runPushDelivery(
   // ── New deliveries from the ledger (bounded window, oldest first) ──────────
   const lookbackFloor = new Date(now().getTime() - LOOKBACK_DAYS * 86_400_000).toISOString();
   const sinceIso = pushEnabledAt > lookbackFloor ? pushEnabledAt : lookbackFloor;
-  const events = await store.listDeliverableEventsSince(sinceIso, maxEvents);
+  const events = [
+    ...(await store.listDeliverableEventsSince(sinceIso, maxEvents)),
+    ...(await store.listDeliverableRetailerEventsSince(sinceIso, maxEvents)),
+  ]
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .slice(0, maxEvents);
   metrics.eventsExamined = events.length;
+  const retailerRun = new RetailerRunContext(store, nowIso());
   metrics.skippedPreActivation = await store.countDeliverableEventsBefore(pushEnabledAt);
   metrics.suppressedSkipped = await store.countSuppressedEventsSince(sinceIso);
 
@@ -574,11 +712,13 @@ export async function runPushDelivery(
     lifecycle: 'lifecycleSkipped',
     merged_duplicate: 'mergedDuplicateSkipped',
     unresolved: 'destinationUnresolved',
+    retailer_not_visible: 'retailerNotVisibleSkipped',
+    agency_duplicate: 'agencyDuplicateSkipped',
   } as const;
   const eventById = new Map<string, DeliverableEvent>();
   const deliverable: DeliverableEvent[] = [];
   for (const event of events) {
-    const decision = await resolveDeliverableEvent(store, event, caseCache);
+    const decision = await resolveDeliverableEvent(store, event, caseCache, retailerRun);
     if (decision.kind === 'skip') {
       metrics[skipReasons[decision.reason]] += 1;
       continue;
@@ -587,6 +727,30 @@ export async function runPushDelivery(
     eventById.set(decision.event.id, decision.event);
     deliverable.push(decision.event);
   }
+  // One recall, one new-recall alert: a subscription already alerted through
+  // a retailer notice is not alerted again by the agency case for the same
+  // recall (the monitor's own matcher decides "same").
+  let retailerRecipients: Awaited<ReturnType<PushStore['listRetailerAlertRecipients']>> | null =
+    null;
+  const alreadyAlertedFor = async (event: DeliverableEvent): Promise<Set<string>> => {
+    if (event.retailerNoticeId || event.kind !== 'initial') return new Set();
+    retailerRecipients ??= await store.listRetailerAlertRecipients(
+      new Date(now().getTime() - SAME_RECALL_LOOKBACK_DAYS * 86_400_000).toISOString(),
+    );
+    const view = (await retailerRun.agencyCases()).find((c) => c.id === event.recallCaseId);
+    const alerted = new Set<string>();
+    if (!view) return alerted;
+    for (const { noticeId, subscriptionIds } of retailerRecipients) {
+      const notice = await retailerRun.notice(noticeId);
+      if (!notice.matchEvidence) continue;
+      if (sameRecallAgencyCases(notice.matchEvidence, [view]).length === 0) continue;
+      for (const id of subscriptionIds) alerted.add(id);
+    }
+    return alerted;
+  };
+
+  // Dry runs create no rows, so the hold scope reads would-create pairs here.
+  const dryRunCreatedByEvent = new Map<string, number>();
   for (const event of deliverable) {
     const classified = classifySubscriptionsForEvent(
       event,
@@ -594,7 +758,10 @@ export async function runPushDelivery(
       pushEnabledAt,
       preferencesByInstallation,
       nowIso(),
+      { alreadyAlerted: await alreadyAlertedFor(event) },
     );
+    metrics.clientUnsupportedSkipped += classified.clientUnsupportedSkipped;
+    metrics.duplicateAlertSkipped += classified.duplicateAlertSkipped;
     metrics.subscriptionHorizonSkipped += classified.horizonSkipped;
     metrics.entitlementSkipped += classified.entitlementSkipped;
     metrics.entitlementUnverified += classified.entitlementUnverified;
@@ -602,7 +769,10 @@ export async function runPushDelivery(
     metrics.preferenceSkipped += classified.preferenceSkipped;
     for (const subscription of classified.eligible) {
       if (dryRun) {
-        if (!existingPairs.has(`${event.id}:${subscription.id}`)) metrics.deliveriesCreated += 1;
+        if (!existingPairs.has(`${event.id}:${subscription.id}`)) {
+          metrics.deliveriesCreated += 1;
+          dryRunCreatedByEvent.set(event.id, (dryRunCreatedByEvent.get(event.id) ?? 0) + 1);
+        }
       } else if (await store.createDeliveryIfAbsent(event.id, subscription.id, nowIso())) {
         metrics.deliveriesCreated += 1;
       }
@@ -707,13 +877,34 @@ export async function runPushDelivery(
   // Every row above was judged exactly as before; the hold only decides WHEN
   // the due ones are handed to Expo. Held rows stay queued and are judged
   // again at the next run's send, entitlement and clock gates included.
+  // The hold scope (sending-hold.ts) may exempt fresh new-recall alerts; under
+  // the default scope, `all`, nothing is exempt and this is the D1 rule.
+  let dryRunDueCreated = dryRun ? metrics.deliveriesCreated : 0;
   if ((options.sendingHold ?? isSendingHeld)(now())) {
+    const scope = options.sendingHoldScope ?? 'all';
+    const sendAt = now();
+    const exempt = async (eventId: string): Promise<boolean> => {
+      const event = eventById.get(eventId) ?? (await readLedgered(eventId));
+      return event !== null && sendsDuringHold(scope, event, sendAt);
+    };
+    const released: DeliveryRow[] = [];
+    for (const delivery of sendPool) if (await exempt(delivery.eventId)) released.push(delivery);
+    let releasedCreated = 0;
+    for (const [eventId, count] of dryRunCreatedByEvent) {
+      if (await exempt(eventId)) releasedCreated += count;
+    }
     metrics.sendingHeld = true;
-    metrics.sendingHoldDeferred = sendPool.length + (dryRun ? metrics.deliveriesCreated : 0);
+    metrics.sendingHoldExempted = released.length + releasedCreated;
+    metrics.sendingHoldDeferred =
+      sendPool.length - released.length + (dryRunDueCreated - releasedCreated);
     console.log(
-      `  overnight hold (22:00–10:00 ${HOLD_TIME_ZONE}): ${metrics.sendingHoldDeferred} deliveries wait for 10:00.`,
+      `  overnight hold (22:00–10:00 ${HOLD_TIME_ZONE}, scope ${scope}): ` +
+        `${metrics.sendingHoldDeferred} deliveries wait for 10:00` +
+        (scope === 'all' ? '.' : `, ${metrics.sendingHoldExempted} new-recall alerts send now.`),
     );
     sendPool.length = 0;
+    sendPool.push(...released);
+    dryRunDueCreated = releasedCreated;
   }
   if (sendPool.length > maxSends) {
     metrics.cappedSends = sendPool.length - maxSends;
@@ -721,10 +912,23 @@ export async function runPushDelivery(
     sendPool.length = maxSends;
   }
 
+  // ── Authentication preflight: never spend an attempt on a request the
+  //    provider must refuse. The due rows stay exactly as they are. ─────────
+  if (authProblem !== null) {
+    const due = sendPool.length + dryRunDueCreated;
+    if (due > 0) {
+      metrics.authBlocked += due;
+      systemicFailure = authProblem;
+      console.log(`  push transport cannot authenticate: ${due} due deliveries left queued.`);
+      if (!dryRun) sendPool.length = 0;
+    }
+  }
+
   if (dryRun) {
     // Would-send = new pairs this run would create + the existing pool
     // (pending / elapsed retryable / crashed-sending rows) already due.
-    metrics.sent = metrics.sendingHeld ? 0 : metrics.deliveriesCreated + sendPool.length;
+    // Held rows are already out of the pool; exempt would-create pairs stay due.
+    metrics.sent = dryRunDueCreated + sendPool.length;
   }
 
   if (!dryRun) {
@@ -755,7 +959,7 @@ export async function runPushDelivery(
           // created, so the same per-event decision is made again now.
           const ledgered = await readLedgered(delivery.eventId);
           const decision = ledgered
-            ? await resolveDeliverableEvent(store, ledgered, caseCache)
+            ? await resolveDeliverableEvent(store, ledgered, caseCache, retailerRun)
             : null;
           if (decision?.kind === 'deliver') {
             event = decision.event;
@@ -809,19 +1013,27 @@ export async function runPushDelivery(
       }
 
       let tickets: PushTicket[];
+      metrics.sendAttempted += prepared.length;
       try {
         tickets = await transport.send(prepared.map((item) => item.message));
       } catch (error) {
         const message = (error instanceof Error ? error.message : String(error)).slice(0, 200);
         errors.push(`push send failed: ${message}`);
+        metrics.requestFailures += 1;
         for (const item of prepared) {
           metrics.retryableFailures += 1;
           await store.updateDelivery(item.delivery.id, {
             status: 'retryable_failure',
-            failureCode: 'network',
+            failureCode: requestFailureCode(error),
             lastError: message,
             updatedAt: nowIso(),
           });
+        }
+        if (isSystemic(error)) {
+          // Every later chunk carries the same credential: stop here, and
+          // leave the remaining due rows queued with their attempts unspent.
+          systemicFailure = message;
+          break;
         }
         continue;
       }
@@ -849,7 +1061,7 @@ export async function runPushDelivery(
           await store.updateDelivery(delivery.id, {
             status: 'permanent_failure',
             failureCode: code,
-            lastError: ticket.message.slice(0, 200),
+            lastError: redactPushTokens(ticket.message).slice(0, 200),
             updatedAt: nowIso(),
           });
           const subscription = subscriptionById.get(delivery.subscriptionId);
@@ -858,19 +1070,21 @@ export async function runPushDelivery(
             await store.disableSubscription(subscription.id, 'device_not_registered', nowIso());
           }
         } else if (isPermanentPushError(code)) {
+          recipientFailures += 1;
           metrics.permanentFailures += 1;
           await store.updateDelivery(delivery.id, {
             status: 'permanent_failure',
             failureCode: code ?? 'unknown',
-            lastError: ticket.message.slice(0, 200),
+            lastError: redactPushTokens(ticket.message).slice(0, 200),
             updatedAt: nowIso(),
           });
         } else {
+          recipientFailures += 1;
           metrics.retryableFailures += 1;
           await store.updateDelivery(delivery.id, {
             status: 'retryable_failure',
             failureCode: code ?? 'unknown',
-            lastError: ticket.message.slice(0, 200),
+            lastError: redactPushTokens(ticket.message).slice(0, 200),
             updatedAt: nowIso(),
           });
         }
@@ -905,9 +1119,37 @@ export async function runPushDelivery(
       `${metrics.preferenceHorizonSkipped} preference-horizon exclusion(s).`,
   );
 
+  // FAILED when delivery is broken as a whole: a systemic failure, or this
+  // run handed messages to Expo and not one was accepted (DeviceNotRegistered
+  // alone is a normal outcome, not a failure). A run with nothing to send
+  // stays succeeded; isolated failures beside accepted sends stay partial.
+  const nothingAccepted =
+    metrics.sendAttempted > 0 &&
+    metrics.ticketsAccepted === 0 &&
+    (metrics.requestFailures > 0 || recipientFailures > 0);
+  if (systemicFailure !== null && !errors.some((e) => e.includes(systemicFailure as string))) {
+    errors.unshift(`push delivery blocked: ${systemicFailure}`);
+  } else if (nothingAccepted && systemicFailure === null) {
+    errors.unshift(`push delivery failed: 0 of ${metrics.sendAttempted} message(s) accepted`);
+  }
+  const failed = systemicFailure !== null || nothingAccepted;
   return {
-    outcome: errors.length > 0 ? 'partial' : 'succeeded',
+    outcome: failed ? 'failed' : errors.length > 0 ? 'partial' : 'succeeded',
     metrics,
     error: errors.length > 0 ? errors.join('; ').slice(0, 400) : undefined,
   };
+}
+
+/** A provider failure no retry of the same request can fix (see expo-transport.ts). */
+function isSystemic(error: unknown): boolean {
+  return (
+    (error instanceof ExpoRequestError || error instanceof ExpoAuthMissingError) && error.systemic
+  );
+}
+
+/** A delivery row's code for a whole-request failure: Expo's sanitized code where known. */
+function requestFailureCode(error: unknown): string {
+  if (error instanceof ExpoRequestError) return error.failureCode;
+  if (error instanceof ExpoAuthMissingError) return 'auth_missing';
+  return 'network';
 }

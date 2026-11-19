@@ -11,8 +11,13 @@
 # A separate workflow on purpose: FDA/FSIS ingestion (scheduled-ingest.yml) is
 # unchanged, a Costco failure can never fail or delay an agency tick, and the
 # scheduler watchdog neither watches nor dispatches this file. The schedule is
-# best-effort like every GitHub cron (scheduled-ingest.yml has the measured
-# delivery rates); a missed tick is picked up by the next one.
+# best-effort like every GitHub cron: 12 of about 48 ticks were delivered over
+# 2026-11-15/18 (median gap 8 h). With the repository variable
+# RETAILER_ON_INGEST set to "true", scheduled-ingest.yml also runs both
+# monitors on every watchdog-backed agency tick, and this cron becomes a free
+# extra chance. Both paths take the same lease and the jobs' due gate (100
+# minutes since the last success; `--force` bypasses it on a laptop), so a
+# run is never doubled. docs/recall-alert-timing.md has the evidence.
 #
 # Failures are visible: a failed run exits non-zero, so the workflow goes red
 # (GitHub emails on scheduled-workflow failure) and ops:health reports it. A
@@ -82,6 +87,40 @@ jobs:
       - run: npm ci
       - name: Costco notices (private tables only)
         run: npm run jobs:retailer-costco
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+
+  aldi:
+    # Off until rollout: set the repository variable RETAILER_ALDI_ENABLED to
+    # "true" only after 20261118000000_retailer_notice_publishers.sql is
+    # applied (an ALDI row is refused by the publisher check before that).
+    if: vars.RETAILER_ALDI_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    # No job-level `env:` on purpose (hardening note 1).
+    steps:
+      # Tripwire, NOT the security boundary (hardening note 3). The ref
+      # reaches the shell only through `env:`.
+      - name: Assert production ref
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          echo "event=$GITHUB_EVENT_NAME ref=$WORKFLOW_REF"
+          if [ "$WORKFLOW_REF" != "refs/heads/master" ]; then
+            echo "::error::Refusing to run the ALDI monitor from $WORKFLOW_REF"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      # Receives NO secret: this step runs third-party lifecycle scripts.
+      - run: npm ci
+      - name: ALDI notices (private tables only)
+        run: npm run jobs:retailer-aldi
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}

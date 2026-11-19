@@ -34,7 +34,7 @@ import {
 import type { SemanticFact } from './source-tables';
 
 /** Label vocabulary → concept. Longest alternatives first so "best if used by" wins. */
-const LABEL_PATTERNS: [string, ConsumerConcept, 'explicit'?][] = [
+const LABEL_PATTERNS: [string, ConsumerConcept, ('explicit' | 'colon')?][] = [
   ['best[- ]?if[- ]?used[- ]?by(?:[- ]?date)?', 'best_by'],
   ['best[- ]?before(?:[- ]?date)?', 'best_by'],
   ['best[- ]?by(?:[- ]?date)?', 'best_by'],
@@ -53,16 +53,32 @@ const LABEL_PATTERNS: [string, ConsumerConcept, 'explicit'?][] = [
   ['lot[- ]?(?:codes?|numbers?|#)', 'lot'],
   ['batch[- ]?(?:codes?|numbers?|#)', 'lot'],
   ['lot', 'lot', 'explicit'],
+  // The plural is the same noun ("The recalled lots are:"), and only a COLON
+  // hands it off: "No other lots or products" and "the lots … are contained
+  // in 127 boxes" are sentences about lots, never a list of them.
+  ['lots', 'lot', 'colon'],
   ['batch', 'lot', 'explicit'],
   ['case[- ]?codes?', 'case_code'],
   ['item[- ]?(?:numbers?|codes?)', 'item_number'],
 ];
 
-/** Connectors between a label and its value, including the observed "is-". */
-const CONNECTOR = String.raw`(?:[”"’']?\s*(?:date)?\s*(?::|=|#|–|—)\s*|[”"’']?\s+(?:date\s+)?(?:of|is|are|is-|:-)\s*|\s+)`;
+/**
+ * Connectors between a label and its value, including the observed "is-".
+ * A label the source set in quotes may hand off with nothing but its closing
+ * quote: `with “BEST BY” October 2027 and lot code …` (recorded FSIS
+ * PHA-11062026-01). The closing quote counts only when the same label opened
+ * with a quote, so a stray quote after an unquoted word never makes a label,
+ * and only when a date starts directly after it. A quoted label followed by
+ * words ("“Sell By” dates from … to …") or by another quoted value stays with
+ * the range and quoted-value rules that already own those shapes.
+ */
+const CONNECTOR = String.raw`(?:[”"’']?\s*(?:date)?\s*(?::|=|#|–|—)\s*|[”"’']?\s+(?:date\s+)?(?:of|is|are|is-|:-)\s*|(?<=[“"][^“”"\n]{2,30})[”"]\s+(?=(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d|\d)|\s+)`;
 
 /** Connector for labels that are also ordinary words: punctuation or a verb. */
 const EXPLICIT_CONNECTOR = String.raw`(?:[”"’']?\s*(?::|=|#|–|—)\s*|[”"’']?\s+(?:is|are|is-|:-)\s+)`;
+
+/** Connector for a label that hands off ONLY with a colon ("lots:", "lots are:"). */
+const COLON_CONNECTOR = String.raw`(?:[”"’']?\s*:\s*|[”"’']?\s+(?:is|are)\s*:\s*)`;
 
 /** Optional filler the source puts between label and value. */
 const FILLER = String.raw`(?:(?:the|a|any|all|following|these|listed|with|dates?|codes?|numbers?)\s+){0,4}`;
@@ -75,7 +91,7 @@ const FILLER = String.raw`(?:(?:the|a|any|all|following|these|listed|with|dates?
  * which is exactly how an expiration range once rendered as "between
  * November 2028 through".
  */
-const VALUE = String.raw`([^;():\n]{1,90}?)(?=\s*[;():\n]|\.\s|\.$|,?\s+(?:and\s+)?(?:the\s+)?(?:UPC|Lot|Batch|Best|Use|Sell|Expiration|Item|Case)\b|,?\s+(?:which|that|can be|may\s+(?:be|contain|have|include|not)|located|printed|stamped|marked|found|on the|because|due|after|with|are|is)\b|\s*$)`;
+const VALUE = String.raw`([^;():\n]{1,90}?)(?=\s*[;():\n]|\.\s|\.$|,?\s+(?:and\s+)?(?:the\s+)?(?:UPC|Lots?|Batch|Best|Use|Sell|Expiration|Item|Case)\b|,?\s+(?:which|that|can be|may\s+(?:be|contain|have|include|not)|located|printed|stamped|marked|found|on the|because|due|after|with|are|is)\b|\s*$)`;
 
 /**
  * A label separated from its values by a subordinate clause, which real
@@ -121,6 +137,14 @@ const UNSPECIFIED_CODES_STATEMENT =
  * and not the source's own wording; anything else is kept verbatim.
  */
 function withoutTrailingDateWord(value: string): string {
+  // A quoted date followed by its cutoff — `“2024 JL 11” or later` (Al'Fez
+  // Tahini) — leaves the closing quote between the two; the quote is the
+  // source's punctuation, the cutoff is its meaning.
+  const unquoted = value.replace(
+    /["“”'’]\s+(?=(?:and|or|&)\s+(?:prior|earlier|before|older|sooner|after|later|newer)\b)/i,
+    ' ',
+  );
+  if (unquoted !== value) return withoutTrailingDateWord(unquoted);
   const trimmed = value.replace(/[\s,]+dates?$/i, '').trim();
   if (trimmed === value || trimmed === '') return value;
   return normalizeDateValue(trimmed).canonical !== undefined ? trimmed : value;
@@ -466,6 +490,18 @@ const CORRESPONDING_LISTS = new RegExp(
   'gi',
 );
 
+/**
+ * Brad's Raw Chips (2026-11-03): "Lots 33525-1, 33525-2 and 33525-3 (Best By
+ * February 1, 2027), Lot 34525-1 (Best By February 11, 2027) and …". The
+ * parenthetical is the source's own binding: it closes ONE "Lot(s)" clause and
+ * dates exactly the codes that clause lists — never a code from another
+ * clause, and never by position across separate lists.
+ */
+const GROUPED_LOT_DATE = new RegExp(
+  String.raw`\b(Lots?|Batch(?:es)?)\s*(?:#|No\.?|Numbers?|Codes?)?\s*:?\s*(${PAIR_CODE.slice(1, -1)}(?:\s*(?:,|&|\band\b)\s*${PAIR_CODE.slice(1, -1)})*)\s*\(\s*(Best\s+If\s+Used\s+By|Best\s+By|Best\s+Before|Use\s+By|Sell\s+By|Exp(?:iration)?(?:\s+Date)?)\s*:?\s*${PAIR_DATE}\s*\)`,
+  'gi',
+);
+
 /** Each explicitly bound code with its date, in source order. */
 function extractExplicitPairs(
   summaryText: string,
@@ -485,6 +521,19 @@ function extractExplicitPairs(
         date: match[clause.date].trim(),
         label: match[clause.label].replace(/\s+/g, ' ').trim(),
         codeLabel: 'Lot',
+        raw: match[0],
+        at: match.index,
+      });
+    }
+  }
+  for (const match of summaryText.matchAll(GROUPED_LOT_DATE)) {
+    const codes = match[2].split(/\s*(?:,|&|\band\b)\s*/i).filter((code) => /\d/.test(code));
+    for (const code of codes) {
+      out.push({
+        code: code.trim(),
+        date: match[4].trim(),
+        label: match[3].replace(/\s+/g, ' ').trim(),
+        codeLabel: /batch/i.test(match[1]) ? 'Batch' : 'Lot',
         raw: match[0],
         at: match.index,
       });
@@ -566,6 +615,76 @@ function continueAcrossSemicolons(text: string, match: RegExpMatchArray): string
   }
 }
 
+/** One printed code alone on its line: no lowercase word, at most three tokens. */
+function isColumnCodeLine(line: string): boolean {
+  const trimmed = line.trim();
+  const tokens = trimmed.split(/\s+/);
+  return (
+    COLUMN_CODE_LINE.test(trimmed) &&
+    tokens.length <= 3 &&
+    tokens.some((token) => /\d/.test(token)) &&
+    tokens.every((token) => /\d/.test(token) || token.length <= 3) &&
+    !SEGMENT_STARTS_A_LABEL.test(trimmed) &&
+    !isTimeOrPhoneFragment(trimmed)
+  );
+}
+
+/**
+ * How many heading-led code columns the notice holds: a line naming lots,
+ * batches or codes that ends in its colon, over a code line. With two or more
+ * ("Basil … Lot codes:" over its codes, then "Thyme … Lot codes:" over its
+ * own), each column belongs to a different product, and reading them all into
+ * one recall-wide value would give every product every code — so columns are
+ * read on only when there is exactly one.
+ */
+function headedCodeColumns(text: string): number {
+  const lines = text.split('\n');
+  let count = 0;
+  for (let index = 0; index + 1 < lines.length; index++) {
+    if (
+      /\b(?:lots?|batch(?:es)?|codes?|numbers?)\b[^:\n]*:\s*$/i.test(lines[index]) &&
+      isColumnCodeLine(lines[index + 1])
+    ) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+const COLUMN_CODE_LINE = /^[A-Z0-9][A-Z0-9 ./-]{0,38}$/;
+
+/**
+ * Extend a value down the column a heading hands off to.
+ *
+ * A heading that ends in its colon at a line break ("The recalled lots are:",
+ * "Lot codes:") hands off a column, one code per line — an HTML list
+ * flattened into `summaryText` (Larbi's Yellow Dock Root, 2026-11-17: three
+ * lots under "The recalled lots are:"). The value grammar stops at the line
+ * break, which kept only the FIRST code of every such column.
+ *
+ * Only a heading-led column qualifies (the colon and the line break both sit
+ * between the label and its first value), and a line is taken only while it
+ * is a bare code: digits present, no lowercase word, no label, not a time or
+ * a phone number. The first line that is anything else ("No other lots or
+ * products are affected.") ends the column.
+ */
+function continueDownColumn(text: string, match: RegExpMatchArray, value: string): string {
+  const handOff = match[0].slice(match[1].length, match[0].length - match[2].length);
+  if (!/:[^\n]*\n/.test(handOff) || /\n/.test(match[2])) return value;
+  let result = value;
+  let cursor = (match.index ?? 0) + match[0].length;
+  for (;;) {
+    const line = text.slice(cursor).match(/^[ \t]*\n[ \t]*([^\n]*)/);
+    if (!line) return result;
+    const trimmed = line[1].trim();
+    // Every word is code-shaped: it carries a digit, or it is a short printed
+    // prefix ("EX 0225"). "90 CAPSULES" is a count and a noun, not a code.
+    if (!isColumnCodeLine(trimmed)) return result;
+    result = `${result}; ${trimmed}`;
+    cursor += line[0].length;
+  }
+}
+
 /**
  * Extract label-driven identifiers from announcement prose.
  * Multi-value lists ("Lot numbers: 1472, 1481, 1531") are split into one fact
@@ -580,6 +699,7 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
     NO_CODES_STATEMENT.test(summaryText) || UNSPECIFIED_CODES_STATEMENT.test(summaryText);
   const facts: SemanticFact[] = [];
   const seen = new Set<string>();
+  const singleColumn = headedCodeColumns(summaryText) === 1;
 
   // Alternating "LOT <code> Expiration <date>" runs, each code keeping its
   // own date.
@@ -662,14 +782,30 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
   }
 
   for (const [labelPattern, concept, strictness] of LABEL_PATTERNS) {
-    const connector = strictness === 'explicit' ? EXPLICIT_CONNECTOR : CONNECTOR;
+    const connector =
+      strictness === 'explicit'
+        ? EXPLICIT_CONNECTOR
+        : strictness === 'colon'
+          ? COLON_CONNECTOR
+          : CONNECTOR;
+    // A colon-only label never reaches across a clause to a later colon:
+    // "Additional lots of … that have already been recalled include: …" names
+    // other products' lots, and "Affected lots include …, or codes: …" hands
+    // the colon to "codes".
     const patterns = [
       new RegExp(String.raw`\b(${labelPattern})\b${connector}${FILLER}${VALUE}`, 'gi'),
-      new RegExp(String.raw`\b(${labelPattern})\b${CLAUSE_THEN_COLON}${VALUE}`, 'gi'),
+      ...(strictness === 'colon'
+        ? []
+        : [new RegExp(String.raw`\b(${labelPattern})\b${CLAUSE_THEN_COLON}${VALUE}`, 'gi')]),
     ];
     for (const match of patterns.flatMap((pattern) => [...summaryText.matchAll(pattern)])) {
       const sourceLabel = match[1].replace(/\s+/g, ' ').trim();
-      const rawValue = cleanValue(continueAcrossSemicolons(summaryText, match));
+      const listed = continueAcrossSemicolons(summaryText, match);
+      const rawValue = cleanValue(
+        CODE_CONCEPTS.has(concept) && listed === match[2] && singleColumn
+          ? continueDownColumn(summaryText, match, listed)
+          : listed,
+      );
       if (rawValue === '') continue;
       // A label the sentence only REFERS to ("questions about these lot codes
       // can be communicated to … M-F from 8:00am-5:00pm") states no value:
@@ -741,7 +877,7 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
         // ("…lot codes Lot HGLC-102125") — the Hampton Grocer's notice. Only a
         // single digit-bearing token loses it, so prose is never trimmed.
         const value = isDateList
-          ? withoutTrailingDateWord(cleaned.replace(/^on\s+/i, ''))
+          ? withoutTrailingDateWord(cleaned.replace(/^on\s+(?!or\s+(?:before|after)\b)/i, ''))
           : concept === 'lot'
             ? cleaned.replace(/^Lot\s+(?=[A-Z0-9-]*\d[A-Z0-9-]*$)/i, '')
             : cleaned;

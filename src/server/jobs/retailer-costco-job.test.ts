@@ -10,7 +10,7 @@ import {
 } from '../retailer/fixtures/costco-fixtures';
 import { MemoryRetailerNoticeStore } from '../retailer/store';
 import { MemoryStore } from '../store/memory-store';
-import { runRetailerCostcoJob } from './retailer-costco-job';
+import { RETAILER_MIN_INTERVAL_MINUTES, runRetailerCostcoJob } from './retailer-costco-job';
 import type { JobContext } from './runner';
 
 const agencyCases = fixtureAgencyCases();
@@ -122,4 +122,94 @@ test('a dry run writes no notice and no document', async () => {
   assert.equal(report.metrics.written, null);
   assert.equal(notices.notices.size, 0);
   assert.equal(notices.documents.length, 0);
+});
+
+// ── Due gate (alert timing, 2026-11-19) ─────────────────────────────────────
+// The monitors also ride the ~45-minute agency tick, so the job itself keeps
+// the two-hour cadence: a run within RETAILER_MIN_INTERVAL_MINUTES of the last
+// success stands down before fetching anything.
+
+const minutesAfter = (iso: string, minutes: number) =>
+  new Date(new Date(iso).getTime() + minutes * 60_000).toISOString();
+const T0 = '2026-11-19T10:07:00.000Z';
+
+test('a tick inside the minimum interval stands down: no fetch, no run row, lease released', async () => {
+  const ops = new MemoryStore();
+  const notices = new MemoryRetailerNoticeStore(agencyCases);
+  const options = { dryRun: false, store: notices, extract: fixtureExtract };
+  await runRetailerCostcoJob(context(ops, T0), { ...options, source: fixtureSource() });
+
+  const source = fixtureSource();
+  const tick = minutesAfter(T0, RETAILER_MIN_INTERVAL_MINUTES - 1);
+  const report = await runRetailerCostcoJob(context(ops, tick), { ...options, source });
+  assert.equal(report.outcome, 'skipped_not_due');
+  assert.deepEqual(source.requests, [], 'nothing is fetched');
+  assert.equal((await ops.listRecentJobRuns('retailer_costco', 10)).length, 1);
+  assert.equal(ops.leases.has('retailer_costco'), false, 'the lease is released');
+});
+
+test('the first tick at or after the interval runs, and --force runs inside it', async () => {
+  const ops = new MemoryStore();
+  const notices = new MemoryRetailerNoticeStore(agencyCases);
+  const options = { dryRun: false, store: notices, extract: fixtureExtract };
+  await runRetailerCostcoJob(context(ops, T0), { ...options, source: fixtureSource() });
+
+  const due = await runRetailerCostcoJob(
+    context(ops, minutesAfter(T0, RETAILER_MIN_INTERVAL_MINUTES)),
+    { ...options, source: fixtureSource() },
+  );
+  assert.equal(due.outcome, 'succeeded');
+
+  const forced = await runRetailerCostcoJob(
+    context(ops, minutesAfter(T0, RETAILER_MIN_INTERVAL_MINUTES + 5)),
+    { ...options, source: fixtureSource(), force: true },
+  );
+  assert.equal(forced.outcome, 'succeeded');
+  assert.equal((await ops.listRecentJobRuns('retailer_costco', 10)).length, 3);
+});
+
+test('a failed run never counts as recent: the next tick retries at once', async () => {
+  const ops = new MemoryStore();
+  const notices = new MemoryRetailerNoticeStore(agencyCases);
+  const failing = {
+    fetchIndexHtml: async () => '<html></html>',
+    fetchDocument: async () => {
+      throw new Error('not reached');
+    },
+  };
+  const failed = await runRetailerCostcoJob(context(ops, T0), {
+    dryRun: false,
+    store: notices,
+    source: failing,
+    extract: fixtureExtract,
+  });
+  assert.equal(failed.outcome, 'failed');
+  const retry = await runRetailerCostcoJob(context(ops, minutesAfter(T0, 45)), {
+    dryRun: false,
+    store: notices,
+    source: fixtureSource(),
+    extract: fixtureExtract,
+  });
+  assert.equal(retry.outcome, 'succeeded');
+});
+
+test('two triggers at once (agency tick + retailer cron) process the index exactly once', async () => {
+  const ops = new MemoryStore();
+  const notices = new MemoryRetailerNoticeStore(agencyCases);
+  const [a, b] = [fixtureSource(), fixtureSource()];
+  const run = (source: ReturnType<typeof fixtureSource>, holder: string) =>
+    runRetailerCostcoJob(
+      { ...context(ops, T0), holder },
+      { dryRun: false, store: notices, source, extract: fixtureExtract },
+    );
+  const reports = await Promise.all([run(a, 'tick:1'), run(b, 'cron:2')]);
+  assert.deepEqual(reports.map((report) => report.outcome).sort(), ['skipped_lease', 'succeeded']);
+  assert.equal([a, b].filter((source) => source.requests.length > 0).length, 1, 'one fetch');
+  // And a third trigger moments later finds the fresh success and stands down.
+  const later = await runRetailerCostcoJob(
+    { ...context(ops, minutesAfter(T0, 3)), holder: 'tick:3' },
+    { dryRun: false, store: notices, source: fixtureSource(), extract: fixtureExtract },
+  );
+  assert.equal(later.outcome, 'skipped_not_due');
+  assert.equal(notices.documents.length, 21, 'no document archived twice');
 });

@@ -244,16 +244,38 @@ const TITLE_DECLARES_EXPANSION =
 const EXPANSION_VOICE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function projectCase(records: NormalizedSourceRecord[]): CaseProjection {
-  const projection = projectCaseFields(records);
+  const fields = projectCaseFields(records);
+  // Verified attachment product tables (FSIS), newest record first. The key
+  // is set ONLY when a table exists, so every other projection stays
+  // byte-identical to what it was before attachments were read.
+  const attachmentTables = newestFirst(
+    records.filter((r) => r.sourceSystem !== 'openfda_enforcement'),
+  ).flatMap((r) => r.attachmentTables ?? []);
+  const projection: CaseProjection =
+    attachmentTables.length > 0 ? { ...fields, attachmentTables } : fields;
   // Categories are derived from the case's OWN projected consumer text, for
   // the same reason geography and retailerNames are: a parser improvement then
   // reaches a case whose source page has not changed, and the persisted field
   // agrees with what a fresh derivation would produce. Computed last, from the
   // finished projection, so there is exactly one input construction shared by
   // ingestion, the historical backfill and QA.
+  //
+  // A product name supplied by an FSIS attachment PDF is NOT category input:
+  // categories stay exactly what the notice itself supports. (Measured on
+  // PHA-11142026: "Biscuit & Sausage Gravy" would move a meat-and-poultry
+  // alert to pantry staples, because the lexicon reads "gravy" as a
+  // condiment.) Changing that is a category decision with its own launch
+  // gate, not a side effect of reading attachments.
+  const attachmentDescription = records.some(
+    (r) =>
+      r.attachmentEnrichment?.productDescription != null &&
+      r.attachmentEnrichment.productDescription === projection.productDescription,
+  );
   return {
     ...projection,
-    productCategories: deriveProductCategories(projection),
+    productCategories: deriveProductCategories(
+      attachmentDescription ? { ...projection, productDescription: null } : projection,
+    ),
   };
 }
 

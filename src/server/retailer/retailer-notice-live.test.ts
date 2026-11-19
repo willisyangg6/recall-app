@@ -195,7 +195,11 @@ test(
     // 2. Approved: exactly one notice, display-safe columns only.
     const approve = await planApproval(approvals, request(), now, extractPdfPageTexts);
     assert.deepEqual(approve.problems, []);
-    assert.equal(await applyApprovalPlan(approvals, approve), 2);
+    // The approval also ledgers the notice's one alert (notice-events.ts) —
+    // unless an earlier run of this test already did (one initial per notice).
+    const ledgered = approve.writes.filter((write) => write.kind === 'notification_event').length;
+    assert.ok(ledgered <= 1);
+    assert.equal(await applyApprovalPlan(approvals, approve), 2 + ledgered);
     const shown = await visible();
     assert.equal(shown.length, 1);
     // The photo is served from the existing public product-visuals bucket,
@@ -217,6 +221,7 @@ test(
       'fields',
       'id',
       'notice_date',
+      'product_categories',
       'publisher',
     ]);
     assert.equal(shown[0].document_url, WHIPPED_URL.replace(/ /g, '%20'));
@@ -274,9 +279,20 @@ test(
     assert.equal(await applyApprovalPlan(approvals, match), 1);
     assert.deepEqual(await visible(), []);
 
-    // 5. The agency feed, its manifest and every case/ledger table are unchanged.
+    // 5. The agency feed, its manifest and every case table are unchanged; the
+    // ledger gained only the notice's own alert row, which names no case.
     const after = await agencySnapshot();
-    assert.deepEqual(after.counts, before.counts);
+    assert.deepEqual(after.counts, {
+      ...before.counts,
+      notification_events: before.counts.notification_events + ledgered,
+    });
+    const { count: caseless, error: caselessError } = await client
+      .from('notification_events')
+      .select('*', { count: 'exact', head: true })
+      .not('retailer_notice_id', 'is', null)
+      .not('recall_case_id', 'is', null);
+    assert.equal(caselessError, null);
+    assert.equal(caseless, 0);
     assert.deepEqual(after.manifest, before.manifest);
     assert.deepEqual(after.feed, before.feed);
   },

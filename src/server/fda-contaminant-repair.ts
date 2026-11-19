@@ -118,22 +118,49 @@ export const ALLOWED_TRANSITIONS: readonly (readonly [string, HazardCategory])[]
  * radiological shrimp notices. Any other move — including one that would
  * REPLACE a stored agent — is refused, because losing or overwriting a
  * stored agent was never reviewed.
+ *
+ * `null → thallium` (2026-11-17) is Brad's Raw Chips: its reason states
+ * "Product may contain thallium", and the background sentence "Thallium (Tl)
+ * is a naturally occurring metal found in the soil" had been misread as
+ * metal pieces, storing `foreign_material` / null. Reviewed against the
+ * official notice; the category move is the existing approved one.
  */
 export const ALLOWED_AGENT_TRANSITIONS: readonly (readonly [string | null, string | null])[] = [
   [null, 'asbestos'],
   [null, 'Cesium-137'],
+  [null, 'thallium'],
 ];
 
 /**
- * The reviewed production population: 3 source records. The case count is
- * expected to be 3 as well and is asserted here, but it is SUBJECT TO
- * VERIFICATION by the first production dry run — if the three records turn
- * out to share a case (as one P2e-B pair did), the run reports
- * `needs-review` and refuses rather than guessing, and the constant below is
- * corrected against that reviewed evidence before any apply.
+ * Each reviewed production population, by round. An apply is admitted only
+ * when the planned set is EXACTLY one round's reviewed size; anything larger,
+ * smaller or mixed is `needs-review` and refused, so a population nobody
+ * source-reviewed can never be written.
+ *
+ * - P3B (applied and verified 2026-09-04): 3 records across 3 cases — the
+ *   asbestos talc notice and the two Cesium-137 shrimp notices.
+ * - Thallium (reviewed 2026-11-17, NOT applied): 1 record, 1 case — Brad's
+ *   Raw Chips, confirmed by a read-only production dry run (14 governed
+ *   records, 1 refused only for its then-unreviewed agent move).
  */
-export const APPROVED_RECORD_CORRECTIONS = 3;
-export const APPROVED_CASE_CORRECTIONS = 3;
+export const APPROVED_POPULATIONS: readonly {
+  round: string;
+  records: number;
+  cases: number;
+  /** The corrected agents this round reviewed; a plan naming any other
+   * agent is not this round, whatever its size. */
+  agents: readonly (string | null)[];
+}[] = [
+  { round: 'P3B', records: 3, cases: 3, agents: ['asbestos', 'Cesium-137'] },
+  { round: 'thallium (2026-11-17)', records: 1, cases: 1, agents: ['thallium'] },
+];
+
+/** The reviewed populations as one line, for refusal messages. */
+export function approvedPopulationsText(): string {
+  return APPROVED_POPULATIONS.map(
+    (p) => `${p.round}: ${p.records} record(s) / ${p.cases} case(s)`,
+  ).join('; ');
+}
 
 function transitionAllowed(from: string, to: HazardCategory): boolean {
   return ALLOWED_TRANSITIONS.some(([a, b]) => a === from && b === to);
@@ -160,9 +187,23 @@ export type PopulationVerdict =
  * An empty set is `settled`, not a failure — that is exactly what the
  * post-apply verification dry run reports, and what a second apply would find.
  */
-export function classifyPopulation(records: number, cases: number): PopulationVerdict {
+export function classifyPopulation(
+  records: number,
+  cases: number,
+  /** The corrected agent of every planned record update. */
+  agents: readonly (string | null)[] = [],
+): PopulationVerdict {
   if (records === 0 && cases === 0) return 'settled';
-  if (records === APPROVED_RECORD_CORRECTIONS && cases === APPROVED_CASE_CORRECTIONS) {
+  // Size AND content: one leftover P3B record is size 1, like the thallium
+  // round, but it is not that round and must not be admitted as it.
+  if (
+    APPROVED_POPULATIONS.some(
+      (p) =>
+        p.records === records &&
+        p.cases === cases &&
+        agents.every((agent) => p.agents.includes(agent)),
+    )
+  ) {
     return 'approved';
   }
   return 'needs-review';
@@ -519,7 +560,7 @@ export function applyBlocker(report: ContaminantRepairReport): string | null {
     return `${report.failures.length} case(s) could not be planned.`;
   }
   if (report.population === 'needs-review') {
-    return `P3B approved exactly ${APPROVED_RECORD_CORRECTIONS} record and ${APPROVED_CASE_CORRECTIONS} case corrections; this run plans ${report.recordWouldChange} and ${report.caseWouldChange}.`;
+    return `The reviewed populations are ${approvedPopulationsText()}; this run plans ${report.recordWouldChange} record(s) and ${report.caseWouldChange} case(s).`;
   }
   return null;
 }
@@ -566,6 +607,7 @@ export async function repairFdaContaminants(
   };
 
   // ── Phase 1: plan every FDA record, deciding scope from archived data ─────
+  const plannedAgents: (string | null)[] = [];
   const fdaPlans = new Map<string, ContaminantRecordPlan>();
   const orderedFda = [...fda].sort((a, b) => a.nativeId.localeCompare(b.nativeId));
   let done = 0;
@@ -612,6 +654,7 @@ export async function repairFdaContaminants(
     }
     if (plan.outcome !== 'update') continue;
     report.recordWouldChange += 1;
+    plannedAgents.push(plan.correctedPathogenOrAllergen);
     tally(
       report.transitionCounts,
       `${plan.storedHazardCategory} → ${plan.correctedHazardCategory}`,
@@ -708,7 +751,11 @@ export async function repairFdaContaminants(
 
   report.transitionCounts = sortedCounts(report.transitionCounts);
   report.agentTransitionCounts = sortedCounts(report.agentTransitionCounts);
-  report.population = classifyPopulation(report.recordWouldChange, report.caseWouldChange);
+  report.population = classifyPopulation(
+    report.recordWouldChange,
+    report.caseWouldChange,
+    plannedAgents,
+  );
   report.applyBlockedReason = applyBlocker(report);
 
   // ── PLANNING IS COMPLETE. The whole corpus has been examined and not one

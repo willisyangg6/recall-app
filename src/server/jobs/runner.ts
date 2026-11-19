@@ -31,7 +31,9 @@ export type JobName =
   | 'fda_enforcement'
   | 'push_delivery'
   // Private Costco notice monitor: writes only the retailer_notices tables.
-  | 'retailer_costco';
+  | 'retailer_costco'
+  // Private ALDI notice monitor: the same tables, the same boundary.
+  | 'retailer_aldi';
 
 export interface JobSpec {
   jobName: JobName;
@@ -42,6 +44,16 @@ export interface JobSpec {
    * intervals, so a crashed run recovers within one missed tick.
    */
   leaseTtlSeconds: number;
+  /**
+   * Due gate (alert timing, 2026-11-19): when set, a run that finds a
+   * succeeded or partial run of this job STARTED less than this many minutes
+   * ago stands down without doing any work. It lets a job ride a frequent,
+   * reliable trigger (the watchdog-backed agency tick) while keeping its own
+   * nominal cadence. Checked inside the lease, so two triggers arriving
+   * together cannot both pass it. A failed run never counts, so a failure is
+   * retried on the next trigger.
+   */
+  minSuccessIntervalMinutes?: number;
 }
 
 export interface JobContext {
@@ -70,7 +82,7 @@ export interface JobBodyResult {
 
 export interface JobReport {
   jobName: JobName;
-  outcome: JobRunOutcome | 'skipped_lease';
+  outcome: JobRunOutcome | 'skipped_lease' | 'skipped_not_due';
   metrics: Record<string, unknown>;
   error: string | null;
 }
@@ -113,6 +125,17 @@ export async function runJob(
 
   const startedAt = ctx.now().toISOString();
   try {
+    const lastSuccess = await recentSuccessStart(spec, ctx);
+    if (lastSuccess !== null) {
+      // Deliberately no ingest_runs row: a not-due stand-down by definition
+      // follows a recent success, so it can never hide a stall, and a row
+      // every agency tick would bury the job's real history.
+      console.log(
+        `[${spec.jobName}] not due — last success started ${lastSuccess}, ` +
+          `minimum interval ${spec.minSuccessIntervalMinutes} min. Nothing done.`,
+      );
+      return { jobName: spec.jobName, outcome: 'skipped_not_due', metrics: {}, error: null };
+    }
     const result = await body();
     await recordRun(spec, ctx, startedAt, result);
     return {
@@ -141,6 +164,30 @@ export async function runJob(
     } catch {
       // The lease expires on its own; a failed release is not a job failure.
     }
+  }
+}
+
+/**
+ * The due gate's read: the start of a succeeded or partial run inside the
+ * job's minimum interval, or null when the job is due (or has no gate).
+ * Fails OPEN: if the history cannot be read, the job runs. Every gated job is
+ * idempotent under its lease, so an extra run costs a fetch, while a wrongly
+ * skipped one costs freshness.
+ */
+async function recentSuccessStart(spec: JobSpec, ctx: JobContext): Promise<string | null> {
+  const minutes = spec.minSuccessIntervalMinutes;
+  if (minutes === undefined || minutes <= 0) return null;
+  try {
+    const floor = ctx.now().getTime() - minutes * 60_000;
+    for (const run of await ctx.store.listRecentJobRuns(spec.jobName, 25)) {
+      if (run.outcome !== 'succeeded' && run.outcome !== 'partial') continue;
+      return new Date(run.startedAt).getTime() > floor ? run.startedAt : null;
+    }
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[${spec.jobName}] due check failed, running anyway: ${message}`);
+    return null;
   }
 }
 

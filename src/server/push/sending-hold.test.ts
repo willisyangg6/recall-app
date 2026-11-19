@@ -10,7 +10,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { MemoryPushStore } from './memory-push-store';
-import { isSendingHeld, newYorkHour } from './sending-hold';
+import {
+  isSendingHeld,
+  newYorkHour,
+  OVERNIGHT_FRESH_HOURS,
+  sendingHoldScopeFromEnv,
+  sendsDuringHold,
+} from './sending-hold';
 import { ACTIVE_SOURCE, FAR_FUTURE, registerEntitled } from './test-entitlement';
 import type { PushMessage, PushReceipt, PushTicket, PushTransport } from './types';
 import { runPushDelivery } from './worker';
@@ -239,4 +245,111 @@ test('late-alert dating (D4) is judged at the send: a recall held overnight past
   await runAt('2026-10-14T14:07:00.000Z');
   assert.equal(transport.sent.length, 1);
   assert.match(transport.sent[0].body, /FDA announced this Oct 11\. Check your package/);
+});
+
+// ── Hold scope `except_new_recalls` (alert timing, 2026-11-19) ──────────────
+
+test('the scope comes from PUSH_OVERNIGHT_HOLD, and anything unrecognized keeps the D1 rule', () => {
+  assert.equal(sendingHoldScopeFromEnv({}), 'all');
+  assert.equal(sendingHoldScopeFromEnv({ PUSH_OVERNIGHT_HOLD: '' }), 'all');
+  assert.equal(sendingHoldScopeFromEnv({ PUSH_OVERNIGHT_HOLD: 'all' }), 'all');
+  assert.equal(sendingHoldScopeFromEnv({ PUSH_OVERNIGHT_HOLD: 'off' }), 'all');
+  assert.equal(sendingHoldScopeFromEnv({ PUSH_OVERNIGHT_HOLD: 'except-new-recalls' }), 'all');
+  assert.equal(
+    sendingHoldScopeFromEnv({ PUSH_OVERNIGHT_HOLD: 'except_new_recalls' }),
+    'except_new_recalls',
+  );
+});
+
+function scoped(dryRun = false) {
+  const base = setup();
+  const runAt = (utc: string) =>
+    runPushDelivery(base.store, {
+      transport: base.transport,
+      entitlements: ACTIVE_SOURCE,
+      sendingHoldScope: 'except_new_recalls',
+      dryRun,
+      now: () => new Date(utc),
+    });
+  return { ...base, runAt };
+}
+
+test('scoped: a new recall ledgered at 23:00 is sent at once, with no late dating', async () => {
+  const { store, transport, runAt } = scoped();
+  addEvent(store, '2026-10-14T03:00:00.000Z'); // 23:00 EDT, announced Oct 13
+  const night = await runAt('2026-10-14T03:07:00.000Z');
+  assert.equal(night.metrics.sendingHeld, true);
+  assert.equal(night.metrics.sendingHoldExempted, 1);
+  assert.equal(night.metrics.sendingHoldDeferred, 0);
+  assert.equal(transport.sent.length, 1);
+  assert.doesNotMatch(transport.sent[0].body, /announced this/);
+  // Nothing is sent twice in the morning.
+  await runAt('2026-10-14T14:07:00.000Z');
+  assert.equal(transport.sent.length, 1);
+});
+
+test('scoped: updates and retractions stay held until 10:00', async () => {
+  const { store, transport, runAt } = scoped();
+  addEvent(store, '2026-10-14T03:00:00.000Z', true);
+  const night = await runAt('2026-10-14T03:07:00.000Z');
+  assert.equal(night.metrics.sendingHoldExempted, 0);
+  assert.equal(night.metrics.sendingHoldDeferred, 1);
+  assert.equal(transport.sent.length, 0);
+  await runAt('2026-10-14T14:07:00.000Z');
+  assert.equal(transport.sent.length, 1);
+});
+
+test('scoped: a recall announced 3+ days ago waits for the morning and is dated', async () => {
+  const { store, transport, runAt } = scoped();
+  addEvent(store, '2026-10-14T03:00:00.000Z', false, '2026-10-10');
+  await runAt('2026-10-14T03:07:00.000Z');
+  assert.equal(transport.sent.length, 0);
+  await runAt('2026-10-14T14:07:00.000Z');
+  assert.equal(transport.sent.length, 1);
+  assert.match(transport.sent[0].body, /FDA announced this Oct 10/);
+});
+
+test('scoped: a backlog older than OVERNIGHT_FRESH_HOURS is never released at night', async () => {
+  const { store, transport, runAt } = scoped();
+  // Ledgered at 10:30 EDT; push was down all day and first runs at 23:07 EDT.
+  addEvent(store, '2026-10-13T14:30:00.000Z');
+  const night = await runAt('2026-10-14T03:07:00.000Z');
+  assert.ok(
+    (Date.parse('2026-10-14T03:07:00Z') - Date.parse('2026-10-13T14:30:00Z')) / 3.6e6 >
+      OVERNIGHT_FRESH_HOURS,
+  );
+  assert.equal(night.metrics.sendingHoldDeferred, 1);
+  assert.equal(transport.sent.length, 0);
+  await runAt('2026-10-14T14:07:00.000Z');
+  assert.equal(transport.sent.length, 1);
+});
+
+test('scoped: an unreadable announcement date holds (fail closed)', () => {
+  const event = {
+    kind: 'initial',
+    createdAt: '2026-10-14T03:00:00.000Z',
+    projection: { publishedAt: '' },
+  };
+  assert.equal(sendsDuringHold('except_new_recalls', event, at('2026-10-14T03:07:00Z')), false);
+  assert.equal(
+    sendsDuringHold(
+      'all',
+      { ...event, projection: { publishedAt: '2026-10-13' } },
+      at('2026-10-14T03:07:00Z'),
+    ),
+    false,
+    'the default scope exempts nothing',
+  );
+});
+
+test('scoped dry run reports the new recall as would-send and holds nothing else', async () => {
+  const { store, transport, runAt } = scoped(true);
+  addEvent(store, '2026-10-14T03:00:00.000Z');
+  addEvent(store, '2026-10-14T03:00:00.000Z', true);
+  const dry = await runAt('2026-10-14T03:07:00.000Z');
+  assert.equal(dry.metrics.sendingHoldExempted, 1);
+  assert.equal(dry.metrics.sendingHoldDeferred, 1);
+  assert.equal(dry.metrics.sent, 1);
+  assert.equal(store.deliveries.size, 0);
+  assert.equal(transport.sent.length, 0);
 });

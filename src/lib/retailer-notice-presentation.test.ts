@@ -1,17 +1,20 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { BASELINE_RECALLS } from './baseline-recalls';
 import { buildFeedSections } from './feed-relevance';
+import type { FeedItem } from './recall-feed';
 import { recallCardAccessibilityLabel } from './recall-card-accessibility';
 import { cardReasonText } from './recall-card-reason';
 import {
   affectedProductCards,
   buildHomeCardModel,
   UNSPECIFIED_DISTRIBUTION,
+  withListedStores,
 } from './recall-presentation';
+import { retailerProductCategories } from '../server/retailer/approval';
 import { readRetailerNoticeFields } from './retailer-notice-fields';
 import {
   buildRetailerDetailModel,
@@ -128,19 +131,64 @@ test('Recall Details uses only its existing sections, with the letter as the sou
     label: 'View Costco’s letter',
     url: ROW.document_url,
   });
-  assert.equal(detail.whatHappened.text, (APPROVED as { whatHappened: string }).whatHappened);
-  assert.equal(detail.whatHappened.scope, null);
-  assert.equal(detail.illnessNotice, null);
   // No backend configured in this test: no URL, so no image anywhere.
   assert.equal(detail.productImages, null);
   // Where It Was Sold: the states, then Costco as the stated retailer.
   assert.equal(detail.sections.whereSold.retailersNamed, 'Costco');
   assert.deepEqual(detail.sections.whereSold.states.length, 12);
-  // No agency-only sections.
-  assert.equal(detail.sections.healthRisk, null);
   assert.equal(detail.sections.communityReports, null);
   // No attribution sentence or retailer badge anywhere in the model.
   assert.doesNotMatch(JSON.stringify(detail), /Costco notice|not a government recall/i);
+});
+
+// ── One presentation path: the shared narrative, illness and category ──────
+
+test('Kirkland: the shared cause sentence names the chemical; no illness or timestamp line', () => {
+  const detail = buildRetailerDetailModel(notice(), TODAY);
+  const fields = notice().fields;
+  // The agency structure: who recalled what, and the actual hazard.
+  assert.equal(
+    detail.whatHappened.text,
+    'Alamance Foods recalled Kirkland Signature Real Heavy Whipped Cream because the products ' +
+      'may be contaminated with a cleaning chemical.',
+  );
+  assert.equal(detail.whatHappened.scope, null);
+  // The letter's qualified statement is not an illness status: no badge, and
+  // never turned into "No illnesses reported".
+  assert.match(fields.whatHappened, /No serious adverse effects requiring medical care/);
+  assert.equal(detail.illnessNotice, null);
+  assert.doesNotMatch(JSON.stringify(detail), /No illnesses|timestamp|00:35|02:45/i);
+  // The can timestamps stay in the approved fields, privately.
+  assert.deepEqual(fields.packageChecks.canTimestamps, ['00:35 – 02:45']);
+});
+
+test('the category is the shared classifier answer, through the shared display gate', () => {
+  const plain = notice();
+  assert.equal(buildRetailerHomeCardModel(plain, TODAY).categoryLabel, null);
+  const [stored] = readRetailerNoticeRows([{ ...ROW, product_categories: ['dairy_eggs'] }]);
+  const card = buildRetailerHomeCardModel(stored, TODAY);
+  const detail = buildRetailerDetailModel(stored, TODAY);
+  assert.equal(card.categoryId, 'dairy_eggs');
+  assert.equal(detail.category?.id, 'dairy_eggs');
+  assert.equal(detail.category?.label, card.categoryLabel);
+  // An unknown id is dropped exactly as for an agency case; missing is not Other.
+  const [junk] = readRetailerNoticeRows([{ ...ROW, product_categories: ['not-a-category'] }]);
+  assert.equal(junk.productCategories, undefined);
+});
+
+test('an exact "No illnesses" statement gets the shared badge and leaves the paragraph', () => {
+  const [priano] = readRetailerNoticeRows([aldiRow('aldi-priano-tortelloni.json', '2026-11-16')]);
+  const detail = buildRetailerDetailModel(priano, TODAY);
+  assert.equal(detail.illnessNotice?.spoken, 'No illnesses reported.');
+  assert.doesNotMatch(detail.whatHappened.text, /illness/i);
+  // The hazard and the temperature lapse the notice states, in the shared sentence.
+  assert.equal(
+    detail.whatHappened.text,
+    'Aldi recalled Priano Protein Carbonara Tortelloni and Priano Protein Herb & Cheese ' +
+      'Tortelloni because the products may not have been stored at appropriate temperatures, ' +
+      'which may allow the growth of Clostridium botulinum.',
+  );
+  assert.ok(detail.sections.healthRisk, 'the shared botulism guidance applies');
 });
 
 test('the approved photo fills the existing image slot on the card and the detail', () => {
@@ -313,11 +361,11 @@ test('a letter that states no state renders the shared "Distribution not specifi
   // section is omitted exactly as for any notice with nothing to check.
   assert.equal(detail.sections.affectedProducts, null);
   assert.deepEqual(detail.officialSource, { label: 'View Costco’s letter', url: CAESAR_URL });
-  assert.equal(detail.whatHappened.text, caesar.fields.whatHappened);
-  // One letter, two items: the detail names both, and keeps the Sell By range.
-  assert.match(detail.whatHappened.text, /Item# 19927 Caesar Salad/);
-  assert.match(detail.whatHappened.text, /Item# 11444 Chicken Sandwich w\/ Caesar Salad/);
-  assert.match(detail.whatHappened.text, /Sell By Dates between 10\/17\/25 and 11\/9\/25/);
+  // The shared cause sentence names the material the letter states.
+  assert.equal(
+    detail.whatHappened.text,
+    'Costco and Ventura foods recalled Caesar Salad because the products may contain pieces of plastic.',
+  );
 });
 
 test('a notice with stated states keeps its state list (Madeleines)', () => {
@@ -334,4 +382,195 @@ test('a notice with stated states keeps its state list (Madeleines)', () => {
   assert.equal(sold.retailersNamed, 'Costco');
   // The whipped cream fixture is unchanged by the empty-list rule.
   assert.equal(buildRetailerHomeCardModel(notice(), TODAY).locationSummary, 'AL, FL +10');
+});
+
+// ── A second retailer: ALDI ─────────────────────────────────────────────────
+
+const PRIANO_URL =
+  'https://dm.cms.aldi.cx/is/content/prod1amer/ALDI%20Recalls%20Priano%20Protein%20Carbonara%20Tortelloni%20and%20Priano%20Protein%20Herb%20Cheese%20Tortelloni%20Because%20Of%20Possible%20Health%20Riskpdf';
+
+function aldiRow(file: string, noticeDate: string) {
+  return {
+    ...ROW,
+    id: '1f0c2a9e-5b7d-4e1a-9c3f-2d6b8e4a7c10',
+    publisher: 'aldi',
+    document_url: PRIANO_URL,
+    notice_date: noticeDate,
+    fields: JSON.parse(
+      readFileSync(
+        join(__dirname, '..', 'server', 'retailer', 'fixtures', 'approvals', file),
+        'utf8',
+      ),
+    ).fields as unknown,
+  };
+}
+
+test('an ALDI notice renders through the same card and detail, named for ALDI', () => {
+  const [priano] = readRetailerNoticeRows([aldiRow('aldi-priano-tortelloni.json', '2026-11-16')]);
+  assert.ok(priano, 'an approved ALDI row reads');
+  assert.equal(priano.publisher, 'aldi');
+
+  const card = buildRetailerHomeCardModel(priano, TODAY);
+  assert.equal(
+    card.productName,
+    'Priano Protein Carbonara Tortelloni and Priano Protein Herb & Cheese Tortelloni',
+  );
+  assert.equal(card.risk.tier, 'unknown');
+  assert.equal(card.affectsYou, false);
+
+  const detail = buildRetailerDetailModel(priano, TODAY);
+  assert.equal(detail.sections.whereSold.retailersNamed, 'ALDI');
+  assert.deepEqual(detail.officialSource, { label: 'View ALDI’s recall notice', url: PRIANO_URL });
+  // Lot and Best if Used By are package identifiers, so a notice with no
+  // store item number still has a package to check.
+  assert.ok(detail.sections.affectedProducts, 'Affected Products shows the lot and date');
+  assert.doesNotMatch(JSON.stringify(detail), /Costco/);
+});
+
+test('publisher, name and document host must all agree, or the row is dropped', () => {
+  const good = aldiRow('aldi-priano-tortelloni.json', '2026-11-16');
+  assert.equal(readRetailerNoticeRows([good]).length, 1);
+  // An ALDI-named notice under Costco, a Costco notice under ALDI, and an
+  // ALDI notice linking off ALDI's host are each dropped whole.
+  assert.deepEqual(readRetailerNoticeRows([{ ...good, publisher: 'costco' }]), []);
+  assert.deepEqual(readRetailerNoticeRows([{ ...ROW, publisher: 'aldi' }]), []);
+  assert.deepEqual(readRetailerNoticeRows([{ ...good, document_url: ROW.document_url }]), []);
+  assert.deepEqual(
+    readRetailerNoticeRows([{ ...good, document_url: 'https://dm.cms.aldi.cx.example.com/x.pdf' }]),
+    [],
+  );
+  assert.deepEqual(readRetailerNoticeRows([{ ...good, publisher: 'walmart' }]), []);
+});
+
+test('a notice with no package identifier at all is still refused', () => {
+  const fields = JSON.parse(
+    JSON.stringify(aldiRow('aldi-priano-tortelloni.json', '2026-11-16').fields),
+  );
+  fields.packageChecks.lotCodes = [];
+  fields.packageChecks.bestByDates = [];
+  assert.equal(readRetailerNoticeFields(fields), null);
+});
+
+// ── Every approved candidate through the one presentation path ────────────
+
+const FIXTURES = join(__dirname, '..', 'server', 'retailer', 'fixtures', 'approvals');
+
+/** Each approved fixture, read exactly as the client reads a returned row. */
+function approvedCandidates(): { file: string; notice: RetailerNotice }[] {
+  return readdirSync(FIXTURES).map((file) => {
+    const request = JSON.parse(readFileSync(join(FIXTURES, file), 'utf8'));
+    const [read] = readRetailerNoticeRows(
+      [
+        {
+          ...ROW,
+          publisher: request.publisher,
+          document_url:
+            request.publisher === 'aldi'
+              ? PRIANO_URL
+              : 'https://gdx-assets.costco.com/adobe/assets/x/original/as/letter.pdf',
+          fields: request.fields,
+          product_categories: retailerProductCategories(request.fields),
+        },
+      ],
+      STAGING,
+    );
+    assert.ok(read, `${file} reads`);
+    return { file, notice: read };
+  });
+}
+
+test('every approved candidate follows the agency What Happened structure, hazard included', () => {
+  const candidates = approvedCandidates();
+  // Different hazards, missing fields, several products, image and no image.
+  assert.deepEqual(
+    [...new Set(candidates.map(({ notice: n }) => n.fields.reason.hazardCategory))].sort(),
+    ['allergen', 'chemical_contamination', 'foreign_material', 'microbial_contamination'],
+  );
+  assert.ok(candidates.some(({ notice: n }) => n.fields.whereSold.states.length === 0));
+  assert.ok(candidates.some(({ notice: n }) => n.fields.image !== null));
+  assert.ok(candidates.some(({ notice: n }) => n.fields.image === null));
+  for (const { file, notice: n } of candidates) {
+    const detail = buildRetailerDetailModel(n, TODAY);
+    const card = buildRetailerHomeCardModel(n, TODAY);
+    const text = detail.whatHappened.text;
+    // "<company> recalled <product> because <hazard>." — the shared frame.
+    assert.match(text, / recalled .+ because .+\.$/, file);
+    assert.ok(text.includes(n.fields.productName), `${file}: names the approved product(s)`);
+    // The actual hazard: the stated agent or material, never only a family.
+    const agent = n.fields.reason.agent ?? '';
+    const named = agent.replace(/^undeclared\s+/i, '').replace(/\s+foreign material$/i, '');
+    assert.ok(
+      text.toLowerCase().includes(named.toLowerCase()),
+      `${file}: "${text}" names "${named}"`,
+    );
+    // The letter's prose is evidence, never the paragraph: no illness or
+    // adverse-effect sentence, no timestamps, no purchase window.
+    assert.doesNotMatch(text, /illness|adverse|medical|timestamp|\d{1,2}:\d{2}|bought between/i);
+    // An illness badge only where the letter states exactly that.
+    const exact = /\bno illnesses have been reported\b/i.test(n.fields.whatHappened);
+    assert.equal(detail.illnessNotice !== null, exact, `${file}: illness badge`);
+    if (/adverse effects/i.test(n.fields.whatHappened)) {
+      assert.equal(detail.illnessNotice, null, `${file}: a qualified statement is not a status`);
+    }
+    // The stored shared-classifier answer, through the shared display gate.
+    assert.equal(card.categoryLabel, detail.category?.label ?? null, file);
+    // The approved photo, or the no-image shape.
+    assert.equal(card.heroImageUrl !== null, n.fields.image !== null, file);
+    // The publishing retailer is named once, in the existing store row.
+    assert.equal(detail.sections.whereSold.retailersNamed, n.fields.retailer, file);
+  }
+});
+
+test('listed stores join the existing store row once, and never the agency distribution', () => {
+  const distribution = {
+    scopeType: 'nationwide' as const,
+    areaText: 'Nationwide',
+    states: [],
+    areas: [],
+    coverage: [],
+    retailers: ['Walmart'],
+    statedRetailers: ['Walmart', "Costco and Sam's Club"],
+    retailersShown: ['Walmart'],
+    retailersHidden: 0,
+    retailLocations: [],
+    onlinePlatforms: [],
+    channels: [],
+    unspecified: false,
+  };
+  const merged = withListedStores(distribution, [
+    'Target',
+    'Walmart',
+    "Sam's Club",
+    'Whole Foods Market',
+    'Target',
+  ]);
+  assert.deepEqual(merged.statedRetailers, [
+    'Walmart',
+    "Costco and Sam's Club",
+    'Target',
+    'Whole Foods Market',
+  ]);
+  // States, scope and the evidence lists are untouched.
+  assert.deepEqual(
+    { ...merged, statedRetailers: distribution.statedRetailers },
+    distribution,
+    'only the named-store list changes',
+  );
+  assert.equal(withListedStores(distribution, []), distribution);
+});
+
+test('a notice linked to an agency case leaves one card; listings add none', () => {
+  const agency = [...BASELINE_RECALLS];
+  // While standalone, the notice is one row beside the agency rows.
+  const standalone = mergeSectionRows(agency, [notice()]);
+  assert.equal(standalone.length, agency.length + 1);
+  // Once the monitor re-decides it as a link candidate, or a reviewer confirms
+  // the match, consumer_retailer_notices() no longer returns it: the feed is
+  // exactly the agency list, so the agency case is the only card.
+  const linked = mergeSectionRows(agency, []);
+  assert.deepEqual(
+    linked.map((row) => homeRowKey(row)),
+    agency.map((item: FeedItem) => item.id),
+  );
+  assert.equal(new Set(standalone.map(homeRowKey)).size, standalone.length, 'keys are unique');
 });

@@ -1,12 +1,13 @@
 /**
- * The Costco notice monitor: fetch the public index and each linked letter,
- * archive changed documents, read them, and record a decision per notice in
- * the private retailer tables.
+ * The retailer notice monitor: fetch a retailer's public index and each linked
+ * document, archive changed documents, read them, and record a decision per
+ * notice in the private retailer tables. Costco was the first source; every
+ * source runs this same pipeline from its spec ([sources.ts](./sources.ts)).
  *
- * TWO PHASES. `planCostcoRun` reads everything (Costco + the store) and
- * returns the complete set of writes without performing any; the CLI gates
- * that count (`--apply --confirm --expect <n>`); `applyCostcoPlan` then
- * writes exactly the plan. A dry run is the plan, printed.
+ * TWO PHASES. `planRetailerRun` reads everything (the retailer + the store)
+ * and returns the complete set of writes without performing any; the CLI
+ * gates that count (`--apply --confirm --expect <n>`); `applyRetailerPlan`
+ * then writes exactly the plan. A dry run is the plan, printed.
  *
  * IDEMPOTENT. Notices upsert on (publisher, native_id); documents are
  * hash-gated per notice; `first_seen_at` is never moved once recorded. A
@@ -23,10 +24,10 @@ import { createHash } from 'node:crypto';
 
 import { safeFetchBinary } from '../safe-fetch';
 
-import { COSTCO_INDEX_URL, parseCostcoIndex } from './costco-index';
 import { decideNotice, MATCH_WINDOW_DAYS } from './decide';
-import { LETTER_PARSER_VERSION, parseLetter } from './letter';
+import { parseLetter } from './letter';
 import { extractPdfText, MAX_NOTICE_PDF_BYTES } from './pdf-text';
+import { COSTCO_SOURCE, type RetailerSourceSpec } from './sources';
 import type { RetailerNoticeStore, StoredNotice } from './store';
 import type {
   ParsedNotice,
@@ -37,8 +38,6 @@ import type {
 
 /** Same honest client identity as the FDA adapter (recall-source-contract §3.1). */
 export const RETAILER_USER_AGENT = 'lotly-recall-ingest/1.0';
-const INDEX_HOSTS = ['www.costco.com'];
-const DOCUMENT_HOSTS = ['gdx-assets.costco.com'];
 const MAX_INDEX_BYTES = 8 * 1024 * 1024;
 const TIMEOUT_MS = 30_000;
 /** With no dated notice to anchor the window, look this far back. */
@@ -49,20 +48,26 @@ export interface FetchedDocument {
   contentType: string | null;
 }
 
-export interface CostcoSource {
+export interface RetailerSource {
   fetchIndexHtml(): Promise<string>;
   fetchDocument(url: string): Promise<FetchedDocument>;
 }
 
-export function liveCostcoSource(fetchImpl: typeof fetch = fetch): CostcoSource {
+/** The Costco name for the same interface (kept for the job and the tests). */
+export type CostcoSource = RetailerSource;
+
+export function liveRetailerSource(
+  spec: RetailerSourceSpec,
+  fetchImpl: typeof fetch = fetch,
+): RetailerSource {
   return {
     async fetchIndexHtml() {
-      const response = await fetchImpl(COSTCO_INDEX_URL, {
+      const response = await fetchImpl(spec.indexUrl, {
         headers: { 'User-Agent': RETAILER_USER_AGENT, Accept: 'text/html' },
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-      const host = new URL(response.url || COSTCO_INDEX_URL).hostname;
-      if (!INDEX_HOSTS.includes(host)) throw new Error(`index redirected off-site to ${host}`);
+      const host = new URL(response.url || spec.indexUrl).hostname;
+      if (!spec.indexHosts.includes(host)) throw new Error(`index redirected off-site to ${host}`);
       if (!response.ok) throw new Error(`index HTTP ${response.status}`);
       const type = response.headers.get('content-type') ?? '';
       if (!type.includes('text/html')) throw new Error(`index content-type ${type || 'missing'}`);
@@ -72,7 +77,7 @@ export function liveCostcoSource(fetchImpl: typeof fetch = fetch): CostcoSource 
     },
     async fetchDocument(url: string) {
       const result = await safeFetchBinary(url, {
-        approvedHosts: DOCUMENT_HOSTS,
+        approvedHosts: [...spec.documentHosts],
         kind: 'pdf',
         maxBytes: MAX_NOTICE_PDF_BYTES,
         timeoutMs: TIMEOUT_MS,
@@ -82,6 +87,10 @@ export function liveCostcoSource(fetchImpl: typeof fetch = fetch): CostcoSource 
       return { bytes: result.bytes, contentType: result.contentType };
     },
   };
+}
+
+export function liveCostcoSource(fetchImpl: typeof fetch = fetch): RetailerSource {
+  return liveRetailerSource(COSTCO_SOURCE, fetchImpl);
 }
 
 export type PlannedChange = 'insert' | 'update' | 'touch';
@@ -95,7 +104,8 @@ export interface PlannedNotice {
   document: RetailerNoticeDocument | null;
 }
 
-export interface CostcoPlan {
+export interface RetailerPlan {
+  publisher: RetailerSourceSpec['publisher'];
   fetchedAt: string;
   indexEntries: number;
   planned: PlannedNotice[];
@@ -107,6 +117,9 @@ export interface CostcoPlan {
   /** Rows upserted + documents archived: the count `--expect` must match. */
   plannedWrites: number;
 }
+
+/** The Costco name for the same plan (kept for the job and the tests). */
+export type CostcoPlan = RetailerPlan;
 
 function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
@@ -143,18 +156,21 @@ function daysBefore(iso: string, days: number): string {
 
 export type TextExtractor = typeof extractPdfText;
 
-export async function planCostcoRun(
+export async function planRetailerRun(
+  spec: RetailerSourceSpec,
   store: RetailerNoticeStore,
-  source: CostcoSource,
+  source: RetailerSource,
   now: () => Date,
   extract: TextExtractor = extractPdfText,
-): Promise<CostcoPlan> {
+): Promise<RetailerPlan> {
   const fetchedAt = now().toISOString();
-  const entries = parseCostcoIndex(await source.fetchIndexHtml());
+  const entries = spec.parseIndex(await source.fetchIndexHtml());
   if (entries.length === 0) {
-    throw new Error('Costco index parsed to zero notices: page shape changed; nothing was written');
+    throw new Error(
+      `${spec.displayName} index parsed to zero notices: page shape changed; nothing was written`,
+    );
   }
-  const existing = await store.listNotices('costco');
+  const existing = await store.listNotices(spec.publisher);
 
   // Fetch + read every document first (sequential: a handful of small PDFs).
   const read: {
@@ -164,7 +180,7 @@ export async function planCostcoRun(
     text: string;
     parsed: ParsedNotice;
   }[] = [];
-  const failures: CostcoPlan['failures'] = [];
+  const failures: RetailerPlan['failures'] = [];
   for (const entry of entries) {
     try {
       const fetched = await source.fetchDocument(entry.documentUrl);
@@ -199,11 +215,11 @@ export async function planCostcoRun(
     const stored: StoredNotice | undefined = existing.get(entry.nativeId);
     const { result, packageClaims } = decideNotice(entry, parsed, text, agencyCases);
     const row: RetailerNoticeRow = {
-      publisher: 'costco',
+      publisher: spec.publisher,
       nativeId: entry.nativeId,
       indexLabel: entry.indexLabel,
       indexTitle: entry.indexTitle,
-      indexUrl: COSTCO_INDEX_URL,
+      indexUrl: spec.indexUrl,
       documentUrl: entry.documentUrl,
       firstSeenAt: stored?.row.firstSeenAt ?? fetchedAt,
       lastSeenOnIndexAt: fetchedAt,
@@ -233,7 +249,7 @@ export async function planCostcoRun(
       candidateCaseIds: result.candidateCaseIds,
       agencyLagDays: result.agencyLagDays,
       decidedAt: fetchedAt,
-      parserVersion: LETTER_PARSER_VERSION,
+      parserVersion: spec.parserVersion,
     };
     if (stored && decisionKey(stored.row) === decisionKey(row))
       row.decidedAt = stored.row.decidedAt;
@@ -246,7 +262,7 @@ export async function planCostcoRun(
     const document: RetailerNoticeDocument | null = stored?.archivedHashes.has(hash)
       ? null
       : {
-          publisher: 'costco',
+          publisher: spec.publisher,
           nativeId: entry.nativeId,
           fetchedAt,
           documentUrl: entry.documentUrl,
@@ -261,6 +277,7 @@ export async function planCostcoRun(
 
   const onIndex = new Set(entries.map((entry) => entry.nativeId));
   return {
+    publisher: spec.publisher,
     fetchedAt,
     indexEntries: entries.length,
     planned,
@@ -271,10 +288,19 @@ export async function planCostcoRun(
   };
 }
 
-/** Write exactly the plan: one upsert per notice, then its new document. */
-export async function applyCostcoPlan(
+export function planCostcoRun(
   store: RetailerNoticeStore,
-  plan: CostcoPlan,
+  source: RetailerSource,
+  now: () => Date,
+  extract: TextExtractor = extractPdfText,
+): Promise<RetailerPlan> {
+  return planRetailerRun(COSTCO_SOURCE, store, source, now, extract);
+}
+
+/** Write exactly the plan: one upsert per notice, then its new document. */
+export async function applyRetailerPlan(
+  store: RetailerNoticeStore,
+  plan: RetailerPlan,
 ): Promise<number> {
   let writes = 0;
   for (const item of plan.planned) {
@@ -287,3 +313,5 @@ export async function applyCostcoPlan(
   }
   return writes;
 }
+
+export const applyCostcoPlan = applyRetailerPlan;

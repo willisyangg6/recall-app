@@ -686,9 +686,32 @@ read in the IANA zone, so daylight saving comes from the zone database.
 **Worst delay:** about 12 h 53 min, for an alert due just after 22:00. That's
 12 hours of hold plus the worst measured run gap.
 
-**Metrics** (job run): `sendingHeld` (the hold applied to this run's sends)
-and `sendingHoldDeferred` (due deliveries left queued; in a dry run, would be
-left queued).
+**Metrics** (job run): `sendingHeld` (the hold applied to this run's sends),
+`sendingHoldDeferred` (due deliveries left queued; in a dry run, would be
+left queued) and `sendingHoldExempted` (sent despite the hold hours under the
+scope below; always 0 under `all`).
+
+### Hold scope (proposed 2026-11-19; off until the founder sets it)
+
+The repository variable `PUSH_OVERNIGHT_HOLD` sets which due deliveries the
+hold covers. Both push steps (`scheduled-ingest.yml`, `daily-maintenance.yml`)
+pass it. `sendingHoldScopeFromEnv` and `sendsDuringHold` in
+`src/server/push/sending-hold.ts` implement it.
+
+- **Unset, empty or any unrecognized value: `all`.** That is the D1 rule
+  above, unchanged. A typo can never widen overnight sending.
+- **`except_new_recalls`:** during the hold hours, a due delivery is sent at
+  once only if it is a new-recall alert (`initial`), the agency announced it
+  fewer than `LATE_ALERT_DAYS` (3) New York calendar days before the send
+  (with a readable date), and its alert was created within
+  `OVERNIGHT_FRESH_HOURS` (12). Everything else waits for 10:00 exactly as
+  above.
+
+Why each condition exists, and the production evidence behind them (the
+weekly classification batch, the absence of any per-user time zone, how a
+backlog is kept out of the night), is in
+[recall-alert-timing.md](recall-alert-timing.md#decision-2-the-overnight-hold-covers-updates-not-new-recalls-proposed-switched-off).
+Rollback: delete the variable.
 
 **Tests:** `sending-hold.test.ts` uses the real rule.
 
@@ -696,6 +719,10 @@ left queued).
   clock-change nights.
 - It covers the worker holding overnight and sending after 10:00, unchanged
   eligibility, an overnight expiry, retractions, and the dry run.
+- Under `except_new_recalls`: a fresh new recall sends at night, while an
+  update, a retraction, a recall announced 3+ days ago, a backlog older than
+  12 hours and an unreadable date are all held. It also covers the variable's
+  parsing and the dry run's counts.
 - Tests about other behavior switch the hold off (`NEVER_HELD`), because
   their fixed UTC clocks would fall inside it.
 
@@ -949,6 +976,63 @@ a real recall after expiry. The clock gate that stops it is proven by
   migration as a rollback.
 - **Public release** waits until P1–P6 pass.
 
+## Retailer-only notices (prepared 2026-11-19; migration `20261119000000` NOT applied)
+
+An approved, standalone retailer notice (Costco, ALDI; `consumer_retailer_notices()`) alerts the
+same shoppers its Affects You shows, through the same worker, seam, entitlement gate, horizons,
+overnight hold and idempotency. Code: [notice-events.ts](../src/server/retailer/notice-events.ts)
+(the rules), [event-eligibility.ts](../src/server/push/event-eligibility.ts)
+(`decideRetailerDelivery`), [worker.ts](../src/server/push/worker.ts).
+
+**Ledger.** `notification_events` names exactly one subject: an agency case (`recall_case_id`)
+or a retailer notice (`retailer_notice_id`, check `notification_events_one_subject`). The
+approval step (`retailer:review approve`) writes the event in the same plan as the approval
+(`--expect` counts it):
+
+| Approval                                  | Event                                                                                                                                                                                                 |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| first approval of a notice                | `initial`, dedup `retailer_notice:<id>` (one per notice, ever — withdraw and re-approve never re-alerts)                                                                                              |
+| letter dated more than 30 days ago        | the same `initial`, suppressed `backfill`: publishing old intake alerts nobody (the agency horizon)                                                                                                   |
+| re-approval of a revised letter           | the shared `detectChanges` over the approved fields as a projection: only a material change (products, geography, illness, instructions) is a `material_update`, coalesced to one per notice per 24 h |
+| re-approval, nothing material changed     | nothing                                                                                                                                                                                               |
+| an agency case is already the same recall | refused: confirm the agency match instead (the monitor's own matcher, `agencyCandidates`)                                                                                                             |
+
+**Delivery** (`decideRetailerDelivery`, decided when the event is read AND again for every
+queued row at send):
+
+| Notice now                                                                             | Decision                                                                            |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| returned by `consumer_retailer_notices()` (approved, letter current, standalone)       | deliver, formatted from the CURRENT approval                                        |
+| withdrawn, letter revised since approval, agency match confirmed, no longer standalone | `retailer_not_visible`: never sends; a queued row fails `case_retailer_not_visible` |
+| an agency case the matcher calls the same recall (before the monitor re-decides)       | `agency_duplicate`: the agency's alert is the one alert                             |
+
+Per subscription, in the seam: the shared `pushEligible` over `retailerRelevanceInput`
+(docs/recall-personalization.md, "Retailer-only notices"); and only app versions ≥ `1.2.0`
+(`RETAILER_ALERTS_MIN_APP_VERSION`) — 1.0.0 and 1.1.0 cannot show a retailer notice. Build 14
+also reports 1.2.0; it was never released and ignores the payload kind (no navigation).
+
+**One recall, one new-recall alert, both orders.** Retailer first, agency later: the agency
+`initial` is not delivered to a subscription that already has a sent or queued delivery for a
+retailer notice the matcher calls the same recall (`duplicateAlertSkipped`); everyone else gets
+it. Agency first: the approval is refused, and a retailer event whose agency twin appears before
+it sends is skipped (`agency_duplicate`). A material update on the agency case follows the agency
+policy unchanged.
+
+**Copy and tap.** The same formatter: "Recall alert: <product>", the shared reason line, and the
+retailer as announcer ("Costco announced this Nov 7."), never an agency. Payload
+`{ kind: 'retailer_notice', retailerNoticeId, notificationEventId }`; the app opens
+`/recall/retailer:<uuid>` (lib/push-payload.ts, UUID-validated).
+
+**Rollout constraint.** The scheduled worker before this change requires a joined case for every
+event, so: apply `20261119000000` → merge this worker → only then approve a retailer notice. The
+new worker queries `retailer_notice_id`, so it must not be merged before the migration.
+
+**Privacy export (approved 2026-11-19).** `export_installation_data` lists every alert row with
+`recall_id` (the agency case) and `retailer_notice_id` (the retailer notice): exactly one is set,
+as in the ledger. Every earlier field is unchanged. `20261119000000` re-bodies the function with
+that one key, and `EXPORT_FIELDS` (src/lib/privacy-requests.ts) mirrors it; the migration tests
+hold the two equal and pin the single difference.
+
 ## Secrets and privacy
 
 Server env (GitHub `production` environment secrets, declared per step):
@@ -962,15 +1046,20 @@ on, Expo refuses any push request without a valid access token
 (`UNAUTHORIZED`).
 
 - **How it's passed:** `ExpoPushTransport` sends `Authorization: Bearer`
-  whenever `EXPO_ACCESS_TOKEN` is set. The workflows pass it to the
+  with `EXPO_ACCESS_TOKEN`. The workflows pass it to the
   `jobs:push` steps only (`workflow-schedule.test.ts` pins that).
-- **Before the secret exists:** it is empty and no header is sent, which works
-  until the switch is on.
-- **If a token is missing or revoked once the switch is on:** every send
-  fails retryably and nothing is lost silently. But nothing is sent either.
+- **Required (2026-11-18).** The switch is on, so a request without the token
+  cannot succeed. A blank or absent `EXPO_ACCESS_TOKEN` makes the transport
+  refuse before any network call (`authProblem`). See "Delivery failure
+  visibility" below.
+- **If the token is revoked or wrong:** Expo refuses the request (HTTP 401
+  or 403, `UNAUTHORIZED`). The run stops sending and fails.
 - **Never** in EAS or the app (`release-exposure.test.ts`).
 
-Founder steps, each a separate go-ahead, none done yet:
+Founder steps, each a separate go-ahead. All four were done 2026-10-15, but
+step 2's secret was saved under a doubled name
+(`EXPO_ACCESS_TOKENEXPO_ACCESS_TOKEN`), so the workflows read an empty token
+from activation until it was corrected on 2026-11-18:
 
 1. Create a **robot** access token on the Expo account, with the smallest role
    that can send. Not a personal token.
@@ -983,6 +1072,40 @@ Founder steps, each a separate go-ahead, none done yet:
 Rotate by adding the new token before revoking the old one. ExpoPushTokens are private operational data: no
 policy exposes them to clients, jobs never print them, `push:test` lists ids
 only. No analytics, ad identifiers, or fingerprinting.
+
+## Delivery failure visibility (2026-11-18)
+
+**What happened.** From activation (2026-10-16) to 2026-11-18 the `jobs:push`
+steps ran with an empty `EXPO_ACCESS_TOKEN` (the misnamed secret above). Expo
+refused every send with HTTP 403, so no alert was ever accepted. Each run
+recorded only `partial`, the workflow concluded success, and the transport
+discarded Expo's response body, so the cause was invisible.
+
+**Now:**
+
+- **Missing credential.** The worker asks the transport `authProblem()` before
+  contacting Expo. With receipts or sends due, it contacts nothing, leaves those
+  rows exactly as they were (no attempt spent), counts them in `authBlocked`,
+  and the run is **failed**. A run with nothing due stays succeeded.
+- **Provider codes.** A whole-request failure throws `ExpoRequestError` with
+  the HTTP status and Expo's `errors[0].code`, accepted only as an upper-case
+  identifier. The delivery row's `failure_code` is that code (for example
+  `UNAUTHORIZED`), else `http_<status>`; `network` now means the request never
+  completed. Expo's free-text messages are not kept for request failures, and
+  ticket or receipt messages are stored with push tokens redacted.
+- **Systemic failures** (401, 403, `UNAUTHORIZED`, or no token) stop the run's
+  sending at once: later chunks keep their attempts. The run is **failed**.
+- **Nothing accepted.** A run that handed messages to Expo and had none
+  accepted is **failed** (`push delivery failed: 0 of N message(s) accepted`).
+  `DeviceNotRegistered` alone does not count: an uninstall is a normal outcome.
+- **Unchanged:** isolated failures beside accepted sends stay `partial` or
+  succeeded, with each row's own code; retry backoff and the 5-attempt cap are
+  unchanged, so rows refused by a revoked token still spend attempts.
+
+A failed run exits non-zero, so the workflow step fails and GitHub reports it.
+New metrics: `sendAttempted`, `requestFailures`, `authBlocked`. Tests: the
+"Delivery failure visibility" block in `worker.test.ts` and
+`expo-transport.test.ts`.
 
 ## Activation (founder steps — see also the ops doc)
 
