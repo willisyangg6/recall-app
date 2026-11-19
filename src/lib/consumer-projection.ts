@@ -2434,6 +2434,44 @@ function codeLocationFrom(facts: SemanticFact[], projectionText: string): CodeLo
   return best;
 }
 
+/**
+ * The source's own sentence that the product comes in one sized container:
+ * "Herb To Body Yellow Dock Root C/S 4oz comes in a 4 oz pouch" (Larbi,
+ * 2026-11-17). Closed vocabularies on both sides — a measurement unit, then a
+ * container noun — so "comes in a variety of flavors" or "packed in a
+ * facility" never qualifies. Every such statement must agree: two different
+ * sizes name different packages, and then the notice has not said which one a
+ * shopper holds, so nothing is stated.
+ */
+const CONTAINER_SIZE_STATEMENT =
+  /\b(?:comes?|is|are)\s+(?:also\s+)?(?:(?:packaged|packed|sold|supplied|bottled|offered)\s+)?in\s+(?:an?|one)\s+(\d[\d./]*\s*-?\s*(?:oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|fl\.?\s*oz))\.?\s+(?:[a-z-]+\s+){0,2}?(?:pouch(?:es)?|bags?|jars?|bottles?|boxe?s?|cans?|cartons?|tubs?|containers?|packages?|packets?|tins?|trays?|cups?|pails?|sachets?)\b/gi;
+
+/** Any package measurement, for the agreement check below. */
+const ANY_MEASUREMENT =
+  /\b(\d[\d./]*\s*-?\s*(?:oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|fl\.?\s*oz))\b/gi;
+
+function statedContainerSize(summaryText: string, headline: string): SemanticFact | null {
+  const statements = [...summaryText.matchAll(CONTAINER_SIZE_STATEMENT)];
+  if (statements.length === 0) return null;
+  const sizes = new Set(statements.map((match) => measurementKey(match[1])));
+  if (sizes.size !== 1) return null;
+  // The headline and product description name the recalled packages. A
+  // measurement there that differs ("35 LB Bulk … and 10 oz Organic …") means
+  // the recall covers other sizes, and one container sentence cannot speak for
+  // all of them.
+  for (const match of headline.matchAll(ANY_MEASUREMENT)) {
+    if (!sizes.has(measurementKey(match[1]))) return null;
+  }
+  const [first] = statements;
+  return {
+    concept: 'package_size',
+    sourceLabel: 'Package statement',
+    value: first[1].replace(/\s+/g, ' ').trim(),
+    raw: first[0],
+    evidence: 'prose',
+  };
+}
+
 function buildPackageCheck(
   projection: CaseProjection,
   affectedProducts: AffectedProduct[],
@@ -2477,6 +2515,14 @@ function buildPackageCheck(
         evidence: named.evidence,
         scope: named.scope,
       });
+    } else if (!splitTrailingMeasurements(projection.productDescription ?? '')) {
+      // Last, and only when the description states no size of its own: the
+      // source's sentence that the product comes in one sized container.
+      const stated = statedContainerSize(
+        summary,
+        `${projection.title ?? ''} ${projection.productDescription ?? ''}`,
+      );
+      if (stated) proseFacts.push(stated);
     }
   }
 
