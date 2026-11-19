@@ -1027,9 +1027,11 @@ retailer as announcer ("Costco announced this Nov 7."), never an agency. Payload
 event, so: apply `20261119000000` → merge this worker → only then approve a retailer notice. The
 new worker queries `retailer_notice_id`, so it must not be merged before the migration.
 
-**Privacy export (finding, unchanged).** `export_installation_data` lists every alert row; a
-retailer alert appears with `recall_id: null` (kind, times and status are complete). Adding the
-notice id to the export is a privacy-contract change left for a separate decision.
+**Privacy export (approved 2026-11-19).** `export_installation_data` lists every alert row with
+`recall_id` (the agency case) and `retailer_notice_id` (the retailer notice): exactly one is set,
+as in the ledger. Every earlier field is unchanged. `20261119000000` re-bodies the function with
+that one key, and `EXPORT_FIELDS` (src/lib/privacy-requests.ts) mirrors it; the migration tests
+hold the two equal and pin the single difference.
 
 ## Secrets and privacy
 

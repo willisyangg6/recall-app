@@ -428,7 +428,15 @@ export const EXPORT_FIELDS = {
     'entitled_since',
   ],
   alert_order: ['last_sequence', 'last_operation', 'updated_at'],
-  alerts_sent: ['recall_id', 'kind', 'created_at', 'sent_at', 'status', 'failure_code'],
+  alerts_sent: [
+    'recall_id',
+    'retailer_notice_id',
+    'kind',
+    'created_at',
+    'sent_at',
+    'status',
+    'failure_code',
+  ],
   shopper_reports: [
     'recall_id',
     'state_code',
