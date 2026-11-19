@@ -279,8 +279,15 @@ schedule never runs the human-gated `retailer:costco` CLI.
 
 It is a separate workflow so agency ingestion is unaffected: `scheduled-ingest.yml` and
 `daily-maintenance.yml` are unchanged, a Costco failure cannot fail or delay an agency tick, and
-the scheduler watchdog neither watches nor dispatches it. GitHub cron is best-effort, so a missed
-tick is simply picked up by the next one.
+the scheduler watchdog neither watches nor dispatches it. GitHub cron is best-effort: a dropped
+tick is not queued, and nothing re-dispatches it, so the next run is simply whichever later tick
+GitHub does deliver.
+
+Observed delivery, production `retailer_costco` runs 2026-11-15 to 2026-11-18: 11 runs against
+about 42 scheduled ticks; median gap between runs 8.1 hours, longest 11.6 hours. Those are
+observations, not a bound: there is **no maximum gap**, because a dropped or failed run is not
+retried before the next delivered tick. ALDI's job is in the same workflow and has the same
+behavior.
 
 How a failure shows:
 
@@ -289,8 +296,16 @@ How a failure shows:
   removed.
 - **partial**: a letter could not be fetched. That notice is skipped this run and retried on the
   next; a warning annotation names it on the run page.
-- `npm run ops:health` lists the job as "Costco notices (private)". It warns after 12 hours and is
-  stale after 24 hours without a successful run.
+- `npm run ops:health` lists "Costco notices (private)" and "ALDI notices (private)" with the same
+  thresholds (`RETAILER_FRESHNESS` in
+  [health.ts](../src/server/jobs/health.ts)): healthy within 12 hours of a successful run,
+  degraded after 12 hours, UNHEALTHY (non-zero exit) after 24 hours or when there has never been a
+  success. A late run is visible **only** here: GitHub emails a failed run, never a missed one.
+- ALDI is behind the repository variable `RETAILER_ALDI_ENABLED`, which `ops:health` (database
+  only) cannot read, so the workflow existing never makes it healthy. With no ALDI notices and no
+  run it reports "not enabled" (degraded). Once ALDI notices are stored (the rollout's first
+  manual apply, immediately before enabling) it expects runs: degraded until its first success,
+  UNHEALTHY if none succeeds within 24 hours of the first stored notice.
 - New or changed notices and the manual-review queue appear as notice annotations on the run page
   and in the run's `ingest_runs.metrics` (`newOrChanged`, `reviewQueue`).
 
@@ -745,10 +760,12 @@ identical.
 4. ALDI: `npm run retailer:monitor -- --publisher aldi` dry run, apply with its count. Do not
    approve Priano: FDA now publishes it (`f06111ba…`), so the run should decide it
    `link_candidate`; confirm with `retailer:review -- confirm-agency-match … --publisher aldi
---case f06111ba-84ba-41aa-a3fc-8da900b770a5`. Bunny Luv carrots is decided `new_candidate` but
-   is FDA's Grimmway Farms recall; confirm that match too rather than approving it. Merge this
-   branch, set the repository variable `RETAILER_ALDI_ENABLED=true`, and add
-   ALDI to `ops:health` once its first scheduled run succeeds.
+--case f06111ba-84ba-41aa-a3fc-8da900b770a5`. Bunny Luv carrots is decided `new_candidate` and
+   is probably FDA's Grimmway Farms recall, but neither stored Grimmway case states the letter's
+   UPCs, so it stays **unconfirmed and unapproved** until its exact identifiers support one case
+   (unapproved, it is never shown). Merge this branch and set the repository variable
+   `RETAILER_ALDI_ENABLED=true`; `ops:health` then expects its first scheduled success within 24
+   hours.
 5. Listings: `npm run retailer:listings -- --publisher <p>` dry run then apply, for walmart,
    target and wholefoods. Publix is not ready ([Publix gap](#publix-gap)). Confirm the Walmart Tractor Wheels listing by hand. Scheduling
    listings is a later job.
@@ -761,9 +778,20 @@ non-Costco notices and has no listing read path.
 
 A notice that becomes an agency recall leaves one card. The monitor re-decides every notice on
 each run, a consistent single match becomes `link_candidate`, and the read path returns only
-`new_candidate` notices. Between FDA's publication and the next monitor run (at most one schedule
-interval) both can show; the reviewer's confirmation then makes the link permanent. No retailer
+`new_candidate` notices. The reviewer's confirmation then makes the link permanent. No retailer
 step writes the notification ledger, so the agency case's own alert is the only one.
+
+Until then both cards can show. That window has no fixed maximum; it is the sum of:
+
+1. agency publication → Lotly case: the next agency ingest (watchdog-backed; 45-minute median,
+   87-minute longest gap over 14 days to 2026-11-18);
+2. → the retailer's next **successful** monitor run (see [Scheduled runs](#scheduled-runs): 8.1
+   hours median, 11.6 hours longest observed, unbounded when ticks are dropped or runs fail);
+3. → the shopper's next notice load (app launch or Feed refresh);
+4. if the matcher misses the agency case (a firm-name variant), until a reviewer confirms it.
+
+A late or failing monitor shows in `ops:health` and as a red workflow; a missed match (4) shows
+nowhere automatically, so check approved notices against new agency cases after each approval.
 
 ### Linked notices (later)
 

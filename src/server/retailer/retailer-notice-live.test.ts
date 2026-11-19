@@ -217,6 +217,7 @@ test(
       'fields',
       'id',
       'notice_date',
+      'product_categories',
       'publisher',
     ]);
     assert.equal(shown[0].document_url, WHIPPED_URL.replace(/ /g, '%20'));

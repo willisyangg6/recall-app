@@ -33,6 +33,8 @@ import { summarizeOpenEvidenceAge } from '../src/server/fda-enforcement/open-evi
 import { OPEN_EVIDENCE_MAX_AGE_DAYS } from '../src/lib/open-evidence';
 import {
   describeEnforcementExport,
+  RETAILER_FRESHNESS,
+  summarizeGatedJobRuns,
   summarizeJobRuns,
   type HealthRun,
 } from '../src/server/jobs/health';
@@ -57,6 +59,11 @@ interface JobHealthSpec {
    * this command contacts openFDA.
    */
   exportStaleDays?: number;
+  /**
+   * A retailer job behind a repository variable: its first stored notice is
+   * the database evidence that it is expected to run (summarizeGatedJobRuns).
+   */
+  gatedPublisher?: string;
 }
 
 /**
@@ -93,8 +100,16 @@ const JOBS: JobHealthSpec[] = [
     // a full day without a run.
     jobName: 'retailer_costco',
     label: 'Costco notices (private)',
-    staleAfterHours: 24,
-    warnAfterHours: 12,
+    ...RETAILER_FRESHNESS,
+  },
+  {
+    // Private ALDI monitor: the same schedule, but its job only runs when the
+    // repository variable RETAILER_ALDI_ENABLED is "true", which this
+    // database-only report cannot see. Never healthy by default.
+    jobName: 'retailer_aldi',
+    label: 'ALDI notices (private)',
+    ...RETAILER_FRESHNESS,
+    gatedPublisher: 'aldi',
   },
 ];
 
@@ -158,19 +173,40 @@ async function main(): Promise<void> {
     }
 
     const runs = (data ?? []) as RunRow[];
-    const summary = summarizeJobRuns(
-      runs.map((run): HealthRun => ({
-        startedAt: run.started_at,
-        outcome: run.outcome,
-        metrics: run.metrics,
-        error: run.error,
-      })),
-      {
-        staleAfterHours: spec.staleAfterHours,
-        ...(spec.warnAfterHours !== undefined ? { warnAfterHours: spec.warnAfterHours } : {}),
-      },
-      Date.now(),
-    );
+    const healthRuns = runs.map((run): HealthRun => ({
+      startedAt: run.started_at,
+      outcome: run.outcome,
+      metrics: run.metrics,
+      error: run.error,
+    }));
+    const thresholds = {
+      staleAfterHours: spec.staleAfterHours,
+      ...(spec.warnAfterHours !== undefined ? { warnAfterHours: spec.warnAfterHours } : {}),
+    };
+    let expectedSince: string | null = null;
+    if (spec.gatedPublisher) {
+      const first = await client
+        .from('retailer_notices')
+        .select('first_seen_at')
+        .eq('publisher', spec.gatedPublisher)
+        .order('first_seen_at', { ascending: true })
+        .limit(1);
+      if (first.error) {
+        console.error(`${spec.label}: retailer_notices query failed: ${first.error.message}`);
+        process.exit(1);
+      }
+      expectedSince = (first.data?.[0]?.first_seen_at as string | undefined) ?? null;
+    }
+    const summary = spec.gatedPublisher
+      ? summarizeGatedJobRuns(
+          healthRuns,
+          thresholds,
+          Date.now(),
+          expectedSince,
+          'confirm the repository variable RETAILER_ALDI_ENABLED is "true" and the ' +
+            'retailer-notices workflow is enabled',
+        )
+      : summarizeJobRuns(healthRuns, thresholds, Date.now());
     const lastRun = runs[0] ?? null;
     const lastSuccess =
       runs.find((run) => run.outcome === 'succeeded' || run.outcome === 'partial') ?? null;

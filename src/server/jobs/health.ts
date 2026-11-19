@@ -285,3 +285,56 @@ export function summarizeJobRuns(
     thresholds: { staleAfterHours, ...(warnAfterHours !== undefined ? { warnAfterHours } : {}) },
   };
 }
+
+// ── Retailer monitors (docs/recall-retailer-notices.md, "Scheduled runs") ────
+//
+// Both run from `retailer-notices.yml` every two hours on best-effort GitHub
+// cron with no watchdog. Production's Costco job, 2026-11-15→18: 11 runs
+// against ~42 scheduled, median gap 8.1h, longest 11.6h. A run is therefore
+// "late" (degraded) after 12h and a fault (UNHEALTHY) after 24h; neither
+// threshold is a promise about how soon the next run starts.
+
+export const RETAILER_FRESHNESS: FreshnessThresholds = { staleAfterHours: 24, warnAfterHours: 12 };
+
+/**
+ * A job switched on by a repository variable this database-only report cannot
+ * read (ALDI: `RETAILER_ALDI_ENABLED`). The workflow existing proves nothing,
+ * so the job is never healthy by default. The database evidence that it is
+ * EXPECTED to run is `expectedSince`: the moment its first notice was stored,
+ * which the rollout's manual first apply does immediately before enabling it.
+ *
+ *   - no evidence, no runs ⇒ `degraded`, "not enabled"; never healthy;
+ *   - expected, never successfully run ⇒ `degraded` while within the stale
+ *     window of `expectedSince`, then UNHEALTHY;
+ *   - any run ⇒ the ordinary freshness rules.
+ */
+export function summarizeGatedJobRuns(
+  runs: HealthRun[],
+  thresholds: FreshnessThresholds,
+  nowMs: number,
+  expectedSince: string | null,
+  enableHint: string,
+): JobRunsSummary {
+  const summary = summarizeJobRuns(runs, thresholds, nowMs);
+  if (summary.lastSuccess) return summary;
+  if (runs.length === 0 && expectedSince === null) {
+    return {
+      ...summary,
+      status: 'degraded',
+      notes: [`not enabled: no notices stored and no run recorded (${enableHint})`],
+    };
+  }
+  if (expectedSince === null) return summary;
+  const hours = (nowMs - Date.parse(expectedSince)) / 3_600_000;
+  const late = hours > thresholds.staleAfterHours;
+  return {
+    ...summary,
+    status: late ? 'UNHEALTHY' : 'degraded',
+    notes: [
+      ...summary.notes,
+      `expected since ${expectedSince} (first notice stored, ${hours.toFixed(1)}h ago) but ` +
+        `never successfully run${late ? ` past the ${thresholds.staleAfterHours}h threshold` : ''} — ` +
+        enableHint,
+    ],
+  };
+}
