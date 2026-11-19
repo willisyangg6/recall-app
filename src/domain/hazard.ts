@@ -196,6 +196,32 @@ function collectWord(word: string, collected: string[]): void {
 }
 
 /**
+ * The allergens a parenthetical names. A parenthetical QUALIFIES the word
+ * before it ("milk (casein)", "tree nuts (hazelnut/filbert)", "fish
+ * (anchovy)"), so a word outside the vocabulary inside it never ends the
+ * list: before 2026-11-19 it did, and every allergen after it was lost
+ * ("undeclared milk (casein) and egg" read as milk only, so an egg-allergic
+ * shopper was told the recall did not match). Vocabulary inside still counts
+ * ("wheat (gluten)", "almonds (tree nuts)"), each half of a slash pair is
+ * read, and a negated parenthetical ("(does not contain egg)") names nothing.
+ */
+function parentheticalAllergens(inner: string[]): string[] {
+  if (inner.some((token) => ['no', 'not', 'without', 'free'].includes(token))) return [];
+  const words = inner.flatMap((token) => token.split('/'));
+  const found: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const pair = i + 1 < words.length ? `${words[i]} ${words[i + 1]}` : null;
+    if (pair && ALLERGEN_EVIDENCE_WORDS.includes(pair)) {
+      found.push(pair);
+      i++;
+    } else if (ALLERGEN_EVIDENCE_WORDS.includes(words[i])) {
+      found.push(words[i]);
+    }
+  }
+  return found;
+}
+
+/**
  * Walk tokens collecting vocabulary words (with two-token lookahead for
  * "crustacean shellfish" / "tree nuts") until a word that is neither
  * vocabulary, connector, nor glue ends the list. "including" bridges only an
@@ -207,6 +233,15 @@ function collectWord(word: string, collected: string[]): void {
 function collectAllergenRun(tokens: string[], collected: string[]): void {
   let allergenGoverned = false;
   for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === '(') {
+      const close = tokens.indexOf(')', i + 1);
+      const end = close < 0 ? tokens.length : close;
+      for (const word of parentheticalAllergens(tokens.slice(i + 1, end))) {
+        collectWord(word, collected);
+      }
+      i = end;
+      continue;
+    }
     const pair = i + 1 < tokens.length ? `${tokens[i]} ${tokens[i + 1]}` : null;
     if (pair && ALLERGEN_EVIDENCE_WORDS.includes(pair)) {
       collectWord(pair, collected);
@@ -234,6 +269,13 @@ function collectAllergenRun(tokens: string[], collected: string[]): void {
 function collectAllergenRunBackward(tokens: string[], collected: string[]): void {
   const found: string[] = [];
   for (let i = tokens.length - 1; i >= 0; i--) {
+    if (tokens[i] === ')') {
+      const open = tokens.lastIndexOf('(', i - 1);
+      const start = open < 0 ? 0 : open;
+      found.push(...parentheticalAllergens(tokens.slice(start + 1, i)).reverse());
+      i = start;
+      continue;
+    }
     const pair = i > 0 ? `${tokens[i - 1]} ${tokens[i]}` : null;
     if (pair && ALLERGEN_EVIDENCE_WORDS.includes(pair)) {
       found.push(pair);
