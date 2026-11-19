@@ -112,6 +112,9 @@ const SHOPPERS: [
 ];
 
 const tokenOf = (installation: string) => `ExponentPushToken[staging-${installation}]`;
+/** A stored installation id of the real shape (16–64 characters, export RPC). */
+const installationOf = (id: string) => `staging-${id}`.padEnd(24, '0');
+const shopperOfInstallation = (installation: string) => installation.replace(/0+$/, '');
 const shoppersOf = (messages: PushMessage[]) =>
   messages.map((m) => /staging-([^\]]+)/.exec(m.to)![1]).sort();
 
@@ -140,7 +143,7 @@ test(
       ok(
         await client.from('push_subscriptions').upsert(
           {
-            installation_id: `staging-${id}`,
+            installation_id: installationOf(id),
             expo_push_token: tokenOf(id),
             platform: 'ios',
             app_version: appVersion,
@@ -161,7 +164,7 @@ test(
       ok(
         await client.from('installation_preferences').upsert(
           {
-            installation_id: `staging-${id}`,
+            installation_id: installationOf(id),
             state_codes: prefs.states,
             allergens: prefs.allergens ?? [],
             retailer_ids: prefs.retailers ?? [],
@@ -240,8 +243,10 @@ test(
       .select('status, push_subscriptions(installation_id)')
       .eq('status', 'pending');
     const pendingFor = (pending ?? [])
-      .map(
-        (row) => (row.push_subscriptions as unknown as { installation_id: string }).installation_id,
+      .map((row) =>
+        shopperOfInstallation(
+          (row.push_subscriptions as unknown as { installation_id: string }).installation_id,
+        ),
       )
       .sort();
     // Kirkland's letter states AL, FL, GA, IA, IL, IN, MO, MS, NC, SC, TN, WI.
@@ -279,7 +284,7 @@ test(
     const prianoEvent = prianoPlan.writes.find((w) => w.kind === 'notification_event');
     assert.ok(prianoEvent && prianoEvent.kind === 'notification_event');
     const { data: exported, error: exportError } = await client.rpc('export_installation_data', {
-      p_installation_id: 'staging-al',
+      p_installation_id: installationOf('al'),
     });
     assert.equal(exportError, null, String(exportError?.message));
     const sent = (exported as { alerts_sent: Record<string, unknown>[] }).alerts_sent;
