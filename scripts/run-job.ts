@@ -16,7 +16,8 @@
  *   --dry-run   fda/fsis: full pipeline in memory, nothing persisted.
  *               labels/enforcement/push/retailer-costco: read the live DB,
  *               write nothing (push additionally sends nothing to Expo).
- *   --force     ignore the unchanged-source skip gate.
+ *   --force     ignore the unchanged-source skip gate (fda/fsis/enforcement)
+ *               or the retailer monitors' minimum interval.
  *
  * Persistent modes need SUPABASE_URL and SUPABASE_SECRET_KEY in .env locally,
  * or in the environment (GitHub Actions repo secrets in production). Secrets
@@ -37,6 +38,7 @@ import { SupabaseAttachmentStore } from '../src/server/fsis/attachment-store';
 import { ExpoPushTransport } from '../src/server/push/expo-transport';
 import { entitlementSourceFromEnv } from '../src/server/push/revenuecat-entitlement';
 import { SupabasePushStore } from '../src/server/push/push-store';
+import { sendingHoldScopeFromEnv } from '../src/server/push/sending-hold';
 import { liveCostcoSource, liveRetailerSource } from '../src/server/retailer/costco-monitor';
 import { ALDI_SOURCE } from '../src/server/retailer/sources';
 import { SupabaseRetailerNoticeStore } from '../src/server/retailer/store';
@@ -142,12 +144,14 @@ async function main(): Promise<void> {
               dryRun,
               store: new SupabaseRetailerNoticeStore(client),
               source: liveCostcoSource(),
+              force,
             })
           : job === 'retailer-aldi'
             ? await runRetailerAldiJob(ctx, {
                 dryRun,
                 store: new SupabaseRetailerNoticeStore(client),
                 source: liveRetailerSource(ALDI_SOURCE),
+                force,
               })
             : job === 'push'
               ? await runPushJob(ctx, {
@@ -160,6 +164,10 @@ async function main(): Promise<void> {
                   // The alert entitlement gate's RevenueCat read (server-only,
                   // read-only key, never printed). Unconfigured holds every alert.
                   entitlements: entitlementSourceFromEnv(process.env),
+                  // Which alerts the overnight hold covers: the repository
+                  // variable PUSH_OVERNIGHT_HOLD (not a secret). Unset or
+                  // unrecognized keeps the founder-approved D1 rule, all.
+                  sendingHoldScope: sendingHoldScopeFromEnv(process.env),
                 })
               : await runEnforcementJob(ctx, {
                   dryRun,

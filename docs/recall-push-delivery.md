@@ -686,9 +686,32 @@ read in the IANA zone, so daylight saving comes from the zone database.
 **Worst delay:** about 12 h 53 min, for an alert due just after 22:00. That's
 12 hours of hold plus the worst measured run gap.
 
-**Metrics** (job run): `sendingHeld` (the hold applied to this run's sends)
-and `sendingHoldDeferred` (due deliveries left queued; in a dry run, would be
-left queued).
+**Metrics** (job run): `sendingHeld` (the hold applied to this run's sends),
+`sendingHoldDeferred` (due deliveries left queued; in a dry run, would be
+left queued) and `sendingHoldExempted` (sent despite the hold hours under the
+scope below; always 0 under `all`).
+
+### Hold scope (proposed 2026-11-19; off until the founder sets it)
+
+The repository variable `PUSH_OVERNIGHT_HOLD` sets which due deliveries the
+hold covers. Both push steps (`scheduled-ingest.yml`, `daily-maintenance.yml`)
+pass it. `sendingHoldScopeFromEnv` and `sendsDuringHold` in
+`src/server/push/sending-hold.ts` implement it.
+
+- **Unset, empty or any unrecognized value: `all`.** That is the D1 rule
+  above, unchanged. A typo can never widen overnight sending.
+- **`except_new_recalls`:** during the hold hours, a due delivery is sent at
+  once only if it is a new-recall alert (`initial`), the agency announced it
+  fewer than `LATE_ALERT_DAYS` (3) New York calendar days before the send
+  (with a readable date), and its alert was created within
+  `OVERNIGHT_FRESH_HOURS` (12). Everything else waits for 10:00 exactly as
+  above.
+
+Why each condition exists, and the production evidence behind them (the
+weekly classification batch, the absence of any per-user time zone, how a
+backlog is kept out of the night), is in
+[recall-alert-timing.md](recall-alert-timing.md#decision-2-the-overnight-hold-covers-updates-not-new-recalls-proposed-switched-off).
+Rollback: delete the variable.
 
 **Tests:** `sending-hold.test.ts` uses the real rule.
 
@@ -696,6 +719,10 @@ left queued).
   clock-change nights.
 - It covers the worker holding overnight and sending after 10:00, unchanged
   eligibility, an overnight expiry, retractions, and the dry run.
+- Under `except_new_recalls`: a fresh new recall sends at night, while an
+  update, a retraction, a recall announced 3+ days ago, a backlog older than
+  12 hours and an unreadable date are all held. It also covers the variable's
+  parsing and the dry run's counts.
 - Tests about other behavior switch the hold off (`NEVER_HELD`), because
   their fixed UTC clocks would fall inside it.
 

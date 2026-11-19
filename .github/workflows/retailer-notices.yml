@@ -11,8 +11,13 @@
 # A separate workflow on purpose: FDA/FSIS ingestion (scheduled-ingest.yml) is
 # unchanged, a Costco failure can never fail or delay an agency tick, and the
 # scheduler watchdog neither watches nor dispatches this file. The schedule is
-# best-effort like every GitHub cron (scheduled-ingest.yml has the measured
-# delivery rates); a missed tick is picked up by the next one.
+# best-effort like every GitHub cron: 12 of about 48 ticks were delivered over
+# 2026-11-15/18 (median gap 8 h). With the repository variable
+# RETAILER_ON_INGEST set to "true", scheduled-ingest.yml also runs both
+# monitors on every watchdog-backed agency tick, and this cron becomes a free
+# extra chance. Both paths take the same lease and the jobs' due gate (100
+# minutes since the last success; `--force` bypasses it on a laptop), so a
+# run is never doubled. docs/recall-alert-timing.md has the evidence.
 #
 # Failures are visible: a failed run exits non-zero, so the workflow goes red
 # (GitHub emails on scheduled-workflow failure) and ops:health reports it. A

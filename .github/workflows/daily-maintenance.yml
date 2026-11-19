@@ -137,3 +137,8 @@ jobs:
           # be exactly EXPO_ACCESS_TOKEN in the `production` environment. This
           # step only.
           EXPO_ACCESS_TOKEN: ${{ secrets.EXPO_ACCESS_TOKEN }}
+          # Overnight hold scope (alert timing, 2026-11-19): the repository
+          # VARIABLE PUSH_OVERNIGHT_HOLD, not a secret. Unset = `all`, the D1
+          # rule; `except_new_recalls` sends fresh new-recall alerts at night.
+          # docs/recall-push-delivery.md owns the rule.
+          PUSH_OVERNIGHT_HOLD: ${{ vars.PUSH_OVERNIGHT_HOLD }}
