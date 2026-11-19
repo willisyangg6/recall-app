@@ -188,7 +188,10 @@ async function main(): Promise<void> {
     return;
   }
   const written = await applyApprovalPlan(store, plan);
-  console.log(`\n  Applied: ${written} writes to retailer_notice_approvals.`);
+  const ledgered = plan.writes.filter((write) => write.kind === 'notification_event').length;
+  console.log(
+    `\n  Applied: ${written} writes (retailer_notice_approvals${ledgered > 0 ? `, ${ledgered} notification_events row naming the notice` : ''}).`,
+  );
 }
 
 main().catch((error) => {
