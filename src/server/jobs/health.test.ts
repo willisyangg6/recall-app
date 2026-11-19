@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { attemptKind, describeEnforcementExport, summarizeJobRuns, type HealthRun } from './health';
+import {
+  attemptKind,
+  describeEnforcementExport,
+  RETAILER_FRESHNESS,
+  summarizeGatedJobRuns,
+  summarizeJobRuns,
+  type HealthRun,
+} from './health';
 import { SKIPPED_LEASE_METRIC } from './runner';
 
 const NOW = Date.parse('2026-08-27T20:30:00Z');
@@ -322,4 +329,60 @@ test('a checked export older than the applied one does not displace it', () => {
   );
   assert.equal(report.seenNotApplied, null);
   assert.doesNotMatch(report.notes.join(' '), /seen but NOT applied/);
+});
+
+// ── Retailer monitors: Costco (always on) and ALDI (behind a variable) ──────
+
+const hoursBefore = (hours: number) => new Date(NOW - hours * 3_600_000).toISOString();
+const ALDI_HINT = 'confirm RETAILER_ALDI_ENABLED';
+const aldi = (runs: HealthRun[], expectedSince: string | null) =>
+  summarizeGatedJobRuns(runs, RETAILER_FRESHNESS, NOW, expectedSince, ALDI_HINT);
+
+test('Costco: the longest production gap (11.6h) is still healthy; 12h warns; 24h is a fault', () => {
+  const costco = (hours: number) =>
+    summarizeJobRuns([run(hoursBefore(hours), 'succeeded')], RETAILER_FRESHNESS, NOW);
+  assert.equal(costco(11.6).status, 'healthy');
+  assert.equal(costco(13).status, 'degraded');
+  assert.equal(costco(13).freshness, 'warning');
+  assert.equal(costco(25).status, 'UNHEALTHY');
+  assert.equal(costco(25).freshness, 'stale');
+  // A delayed schedule shows as scheduler silence, not as a lease problem.
+  assert.ok(costco(25).notes.some((note) => /scheduler silence/.test(note)));
+});
+
+test('Costco: never run, or only failing, is never healthy', () => {
+  assert.equal(summarizeJobRuns([], RETAILER_FRESHNESS, NOW).status, 'UNHEALTHY');
+  const failing = summarizeJobRuns(
+    [run(hoursBefore(1), 'failed', { error: 'index fetch failed' })],
+    RETAILER_FRESHNESS,
+    NOW,
+  );
+  assert.equal(failing.status, 'UNHEALTHY');
+  assert.ok(failing.notes.some((note) => /latest run FAILED: index fetch failed/.test(note)));
+});
+
+test('ALDI: with no notices and no runs it reports "not enabled", never healthy', () => {
+  const summary = aldi([], null);
+  assert.equal(summary.status, 'degraded');
+  assert.match(summary.notes[0], /not enabled/);
+});
+
+test('ALDI: enabled (notices stored) but never successfully run is late, then a fault', () => {
+  const early = aldi([], hoursBefore(3));
+  assert.equal(early.status, 'degraded');
+  assert.ok(
+    early.notes.some((note) => /never successfully run — confirm RETAILER_ALDI_ENABLED/.test(note)),
+  );
+  const late = aldi([], hoursBefore(30));
+  assert.equal(late.status, 'UNHEALTHY');
+  assert.ok(late.notes.some((note) => /past the 24h threshold/.test(note)));
+  // Runs that only fail never count as a success.
+  const failing = aldi([run(hoursBefore(2), 'failed', { error: 'x' })], hoursBefore(30));
+  assert.equal(failing.status, 'UNHEALTHY');
+});
+
+test('ALDI: once it runs, the ordinary retailer freshness rules apply', () => {
+  assert.equal(aldi([run(hoursBefore(2), 'succeeded')], hoursBefore(30)).status, 'healthy');
+  assert.equal(aldi([run(hoursBefore(13), 'succeeded')], hoursBefore(30)).status, 'degraded');
+  assert.equal(aldi([run(hoursBefore(25), 'succeeded')], hoursBefore(30)).status, 'UNHEALTHY');
 });
