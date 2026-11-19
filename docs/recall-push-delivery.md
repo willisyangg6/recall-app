@@ -962,15 +962,20 @@ on, Expo refuses any push request without a valid access token
 (`UNAUTHORIZED`).
 
 - **How it's passed:** `ExpoPushTransport` sends `Authorization: Bearer`
-  whenever `EXPO_ACCESS_TOKEN` is set. The workflows pass it to the
+  with `EXPO_ACCESS_TOKEN`. The workflows pass it to the
   `jobs:push` steps only (`workflow-schedule.test.ts` pins that).
-- **Before the secret exists:** it is empty and no header is sent, which works
-  until the switch is on.
-- **If a token is missing or revoked once the switch is on:** every send
-  fails retryably and nothing is lost silently. But nothing is sent either.
+- **Required (2026-11-18).** The switch is on, so a request without the token
+  cannot succeed. A blank or absent `EXPO_ACCESS_TOKEN` makes the transport
+  refuse before any network call (`authProblem`). See "Delivery failure
+  visibility" below.
+- **If the token is revoked or wrong:** Expo refuses the request (HTTP 401
+  or 403, `UNAUTHORIZED`). The run stops sending and fails.
 - **Never** in EAS or the app (`release-exposure.test.ts`).
 
-Founder steps, each a separate go-ahead, none done yet:
+Founder steps, each a separate go-ahead. All four were done 2026-10-15, but
+step 2's secret was saved under a doubled name
+(`EXPO_ACCESS_TOKENEXPO_ACCESS_TOKEN`), so the workflows read an empty token
+from activation until it was corrected on 2026-11-18:
 
 1. Create a **robot** access token on the Expo account, with the smallest role
    that can send. Not a personal token.
@@ -983,6 +988,40 @@ Founder steps, each a separate go-ahead, none done yet:
 Rotate by adding the new token before revoking the old one. ExpoPushTokens are private operational data: no
 policy exposes them to clients, jobs never print them, `push:test` lists ids
 only. No analytics, ad identifiers, or fingerprinting.
+
+## Delivery failure visibility (2026-11-18)
+
+**What happened.** From activation (2026-10-16) to 2026-11-18 the `jobs:push`
+steps ran with an empty `EXPO_ACCESS_TOKEN` (the misnamed secret above). Expo
+refused every send with HTTP 403, so no alert was ever accepted. Each run
+recorded only `partial`, the workflow concluded success, and the transport
+discarded Expo's response body, so the cause was invisible.
+
+**Now:**
+
+- **Missing credential.** The worker asks the transport `authProblem()` before
+  contacting Expo. With receipts or sends due, it contacts nothing, leaves those
+  rows exactly as they were (no attempt spent), counts them in `authBlocked`,
+  and the run is **failed**. A run with nothing due stays succeeded.
+- **Provider codes.** A whole-request failure throws `ExpoRequestError` with
+  the HTTP status and Expo's `errors[0].code`, accepted only as an upper-case
+  identifier. The delivery row's `failure_code` is that code (for example
+  `UNAUTHORIZED`), else `http_<status>`; `network` now means the request never
+  completed. Expo's free-text messages are not kept for request failures, and
+  ticket or receipt messages are stored with push tokens redacted.
+- **Systemic failures** (401, 403, `UNAUTHORIZED`, or no token) stop the run's
+  sending at once: later chunks keep their attempts. The run is **failed**.
+- **Nothing accepted.** A run that handed messages to Expo and had none
+  accepted is **failed** (`push delivery failed: 0 of N message(s) accepted`).
+  `DeviceNotRegistered` alone does not count: an uninstall is a normal outcome.
+- **Unchanged:** isolated failures beside accepted sends stay `partial` or
+  succeeded, with each row's own code; retry backoff and the 5-attempt cap are
+  unchanged, so rows refused by a revoked token still spend attempts.
+
+A failed run exits non-zero, so the workflow step fails and GitHub reports it.
+New metrics: `sendAttempted`, `requestFailures`, `authBlocked`. Tests: the
+"Delivery failure visibility" block in `worker.test.ts` and
+`expo-transport.test.ts`.
 
 ## Activation (founder steps — see also the ops doc)
 

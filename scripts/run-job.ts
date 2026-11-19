@@ -153,8 +153,9 @@ async function main(): Promise<void> {
               ? await runPushJob(ctx, {
                   dryRun,
                   pushStore: new SupabasePushStore(client),
-                  // EXPO_ACCESS_TOKEN is optional (enhanced push security);
-                  // server-only, never printed, never in the app bundle.
+                  // EXPO_ACCESS_TOKEN is required (enhanced push security is on;
+                  // a missing token fails the run before any send). Server-only,
+                  // never printed, never in the app bundle.
                   transport: new ExpoPushTransport({ accessToken: process.env.EXPO_ACCESS_TOKEN }),
                   // The alert entitlement gate's RevenueCat read (server-only,
                   // read-only key, never printed). Unconfigured holds every alert.
