@@ -32,13 +32,24 @@ import { ALDI_SOURCE, COSTCO_SOURCE, type RetailerSourceSpec } from '../retailer
 import type { RetailerNoticeStore } from '../retailer/store';
 import { runJob, type JobContext, type JobReport, type JobSpec } from './runner';
 
+/**
+ * The retailer monitors' nominal cadence: run when the last success STARTED
+ * at least this long ago. The monitors ride every agency tick (about every
+ * 45 minutes, watchdog-backed) as well as their own best-effort cron, so this
+ * gate is what holds them near two hours: in production the first tick at or
+ * after 100 minutes runs, typically about 2 h 15 min after the last success
+ * and, on the measured tick grid, at most about 2 h 45 min. See
+ * docs/recall-alert-timing.md.
+ */
+export const RETAILER_MIN_INTERVAL_MINUTES = 100;
+
 export const RETAILER_COSTCO_JOB: JobSpec = {
   jobName: 'retailer_costco',
   sourceSystem: 'retailer_costco',
-  // A healthy run is ~1 minute (one index + ~21 letters, sequential). The
-  // schedule is every two hours, so a crashed run's lease is long gone by
-  // the next tick.
+  // A healthy run is ~15 seconds (one index + ~21 letters, sequential). A
+  // crashed run's lease expires after 30 minutes, within one or two ticks.
   leaseTtlSeconds: 1800,
+  minSuccessIntervalMinutes: RETAILER_MIN_INTERVAL_MINUTES,
 };
 
 export interface RetailerCostcoJobOptions {
@@ -46,6 +57,8 @@ export interface RetailerCostcoJobOptions {
   store: RetailerNoticeStore;
   source: CostcoSource;
   extract?: TextExtractor;
+  /** Run now even if the last success is inside the minimum interval (`--force`). */
+  force?: boolean;
 }
 
 /** Compact, display-safe facts for ingest_runs.metrics and the run log. */
@@ -94,6 +107,7 @@ export const RETAILER_ALDI_JOB: JobSpec = {
   jobName: 'retailer_aldi',
   sourceSystem: 'retailer_aldi',
   leaseTtlSeconds: 1800,
+  minSuccessIntervalMinutes: RETAILER_MIN_INTERVAL_MINUTES,
 };
 
 /** One retailer's monitor as a scheduled job (Costco, ALDI). */
@@ -103,7 +117,8 @@ export async function runRetailerNoticeJob(
   ctx: JobContext,
   options: RetailerCostcoJobOptions,
 ): Promise<JobReport> {
-  return runJob(job, ctx, async () => {
+  const jobSpec = options.force ? { ...job, minSuccessIntervalMinutes: undefined } : job;
+  return runJob(jobSpec, ctx, async () => {
     const plan = await planRetailerRun(
       spec,
       options.store,

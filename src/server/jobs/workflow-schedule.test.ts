@@ -139,7 +139,7 @@ test('scheduled execution shares the canonical runner with manual execution', ()
     string
   >;
   const yaml = workflow('scheduled-ingest.yml');
-  const invoked = [...yaml.matchAll(/^\s*run:\s*(npm run [\w:]+)/gm)].map((match) => match[1]);
+  const invoked = [...yaml.matchAll(/^\s*run:\s*(npm run [\w:-]+)/gm)].map((match) => match[1]);
 
   assert.deepEqual(invoked, [
     'npm run jobs:fda',
@@ -149,6 +149,10 @@ test('scheduled execution shares the canonical runner with manual execution', ()
     // P2B7S: the dead-man heartbeat, LAST so it observes the freshness this
     // run actually produced.
     'npm run ops:heartbeat',
+    // Alert timing (2026-11-19): the retailer monitors' own jobs, after the
+    // ingest job and gated by RETAILER_ON_INGEST (asserted below).
+    'npm run jobs:retailer-costco',
+    'npm run jobs:retailer-aldi',
   ]);
   // Not a job script, so it is exempt from the run-job.ts assertion below.
   assert.equal(scripts['ops:heartbeat'], 'tsx scripts/ops-heartbeat.ts');
@@ -189,12 +193,66 @@ test('the retailer monitors run every two hours, off the congested slots, in the
   const aldi = yaml.slice(yaml.indexOf('\n  aldi:'));
   assert.match(aldi, /^\s*if: vars\.RETAILER_ALDI_ENABLED == 'true'$/m);
   assert.doesNotMatch(yaml.slice(0, yaml.indexOf('\n  aldi:')), /RETAILER_ALDI_ENABLED/);
-  // Agency ingestion is untouched: neither agency workflow runs the monitor.
-  for (const name of ['scheduled-ingest.yml', 'daily-maintenance.yml']) {
-    assert.ok(!/retailer/.test(workflow(name)), `${name} gained a retailer step`);
-  }
-  // And the watchdog never dispatches it.
+  // The daily slow channel never runs a monitor.
+  assert.ok(!/retailer/.test(workflow('daily-maintenance.yml')), 'daily-maintenance gained one');
+  // And the watchdog never dispatches this file (it dispatches the agency tick).
   assert.notEqual(WATCHDOG_TARGET.workflow, 'retailer-notices.yml');
+});
+
+test('the agency tick carries the retailer monitors only as separate, switched-off jobs', () => {
+  // Alert timing (2026-11-19): the monitors ride the watchdog-backed agency
+  // tick in their OWN jobs, so a retailer failure can never stop or delay an
+  // agency step, and only once the founder sets RETAILER_ON_INGEST.
+  const yaml = workflow('scheduled-ingest.yml');
+  const jobs = parseJobs(yaml);
+  assert.deepEqual(
+    jobs.map((job) => job.id),
+    ['ingest', 'retailer-costco', 'retailer-aldi'],
+  );
+  const [ingest, costco, aldi] = jobs;
+  assert.ok(
+    parseSteps(ingest.body).every((step) => !/retailer/.test(step.run ?? '')),
+    'the agency ingest job gained a retailer step',
+  );
+  assert.match(costco.body, /^ {4}if: vars\.RETAILER_ON_INGEST == 'true'$/m);
+  assert.match(
+    aldi.body,
+    /^ {4}if: vars\.RETAILER_ON_INGEST == 'true' && vars\.RETAILER_ALDI_ENABLED == 'true'$/m,
+  );
+  for (const [job, command] of [
+    [costco, 'npm run jobs:retailer-costco'],
+    [aldi, 'npm run jobs:retailer-aldi'],
+  ] as const) {
+    assert.doesNotMatch(job.body, /^ {4}needs:/m, `${job.id} must not wait on (or block) ingest`);
+    const timeout = Number(job.body.match(/^ {4}timeout-minutes:\s*(\d+)$/m)?.[1]);
+    assert.ok(
+      timeout > 0 && timeout <= 10,
+      `${job.id}: a short timeout bounds how long it holds the run`,
+    );
+    const steps = parseSteps(job.body);
+    assert.equal(steps[0]?.label, REF_TRIPWIRE, `${job.id}: the ref tripwire is not first`);
+    const runs = steps.map((step) => step.run).filter((run): run is string => run !== null);
+    assert.ok(runs.includes(command), `${job.id} must run ${command}`);
+  }
+});
+
+test('the overnight hold scope reaches the push steps as a variable, never a secret', () => {
+  for (const name of ['scheduled-ingest.yml', 'daily-maintenance.yml']) {
+    const yaml = workflow(name);
+    const lines = yaml.split('\n').filter((line) => /PUSH_OVERNIGHT_HOLD:/.test(line));
+    assert.deepEqual(
+      lines.map((line) => line.trim()),
+      ['PUSH_OVERNIGHT_HOLD: ${{ vars.PUSH_OVERNIGHT_HOLD }}'],
+      name,
+    );
+    const push = parseJobs(yaml)[0].body;
+    const pushStep = push.slice(push.indexOf('run: npm run jobs:push'));
+    assert.ok(
+      pushStep.indexOf('PUSH_OVERNIGHT_HOLD:') > 0 &&
+        pushStep.indexOf('PUSH_OVERNIGHT_HOLD:') < pushStep.indexOf('\n      - ') >>> 0,
+      `${name}: the variable belongs to the push step`,
+    );
+  }
 });
 
 test('the scheduled label steps are the job runner, never the manual backfill', () => {

@@ -277,17 +277,30 @@ manual command, under a `retailer_costco` lease, recording one `ingest_runs` row
 the decision tally, the notices that are new or changed this run, and the review queue. The
 schedule never runs the human-gated `retailer:costco` CLI.
 
-It is a separate workflow so agency ingestion is unaffected: `scheduled-ingest.yml` and
-`daily-maintenance.yml` are unchanged, a Costco failure cannot fail or delay an agency tick, and
-the scheduler watchdog neither watches nor dispatches it. GitHub cron is best-effort: a dropped
-tick is not queued, and nothing re-dispatches it, so the next run is simply whichever later tick
-GitHub does deliver.
+It is a separate workflow so agency ingestion is unaffected: a Costco failure cannot fail or
+delay an agency tick, and the scheduler watchdog neither watches nor dispatches it. GitHub cron is
+best-effort: a dropped tick is not queued, and nothing re-dispatches it.
 
-Observed delivery, production `retailer_costco` runs 2026-11-15 to 2026-11-18: 11 runs against
-about 42 scheduled ticks; median gap between runs 8.1 hours, longest 11.6 hours. Those are
-observations, not a bound: there is **no maximum gap**, because a dropped or failed run is not
-retried before the next delivered tick. ALDI's job is in the same workflow and has the same
-behavior.
+Observed delivery, production `retailer_costco` runs 2026-11-15 to 2026-11-19: GitHub delivered 12
+of about 48 ticks. Every delivered run succeeded, and none was cancelled, queued or lease-skipped.
+The median gap between runs was 8.0 hours and the longest 11.6 hours. On cron alone there is **no
+maximum gap**. [recall-alert-timing.md](recall-alert-timing.md#why-costco-ran-812-hours-apart) has
+the full check.
+
+**On the agency tick (2026-11-19; off until the founder sets it).** With the repository variable
+`RETAILER_ON_INGEST=true`, `scheduled-ingest.yml` also runs both monitors, as separate jobs with no
+`needs:` and an 8-minute timeout. That workflow runs about every 45 minutes because the watchdog
+dispatches it, so a dropped retailer tick no longer matters. ALDI additionally needs
+`RETAILER_ALDI_ENABLED`.
+
+**Due gate.** Every trigger first takes the job lease, then checks for a succeeded or partial run
+that started less than `RETAILER_MIN_INTERVAL_MINUTES` (100) minutes ago.
+
+- If it finds one, it stands down: it fetches nothing and writes no `ingest_runs` row.
+- A failed run never counts, so a failure is retried on the next tick.
+- The result is a run about every 2¼ hours, and at most about 2¾ hours on the measured tick grid.
+- The cron and manual dispatch here obey the same gate. `npm run jobs:retailer-costco -- --force`
+  bypasses it from a laptop.
 
 How a failure shows:
 
@@ -813,8 +826,9 @@ Until then both cards can show. That window has no fixed maximum; it is the sum 
 
 1. agency publication → Lotly case: the next agency ingest (watchdog-backed; 45-minute median,
    87-minute longest gap over 14 days to 2026-11-18);
-2. → the retailer's next **successful** monitor run (see [Scheduled runs](#scheduled-runs): 8.1
-   hours median, 11.6 hours longest observed, unbounded when ticks are dropped or runs fail);
+2. → the retailer's next **successful** monitor run (see [Scheduled runs](#scheduled-runs): on cron
+   alone 8.0 hours median, 11.6 hours longest observed, unbounded when ticks are dropped; on the
+   agency tick about 2¼ hours typical, 2¾ hours worst measured);
 3. → the shopper's next notice load (app launch or Feed refresh);
 4. if the matcher misses the agency case (a firm-name variant), until a reviewer confirms it.
 

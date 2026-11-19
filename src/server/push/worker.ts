@@ -49,7 +49,9 @@
  * - Overnight sending hold (D1, 2026-10-14; sending-hold.ts): no send while it
  *   is 22:00–09:59 in America/New_York. Deliveries are still created and
  *   judged as before; due rows wait in the queue for the first run after
- *   10:00, and are judged again at that send.
+ *   10:00, and are judged again at that send. The opt-in scope
+ *   `except_new_recalls` (PUSH_OVERNIGHT_HOLD) exempts only fresh new-recall
+ *   alerts (sendsDuringHold); the default scope exempts nothing.
  * - A ticket is Expo ACCEPTING the request; only a receipt marks the handoff
  *   to APNs/FCM successful (receipt_ok). The two are never conflated.
  *
@@ -75,7 +77,12 @@ import {
 } from '../retailer/notice-events';
 import type { AgencyCaseView } from '../retailer/types';
 import { buildPushMessage } from './format';
-import { HOLD_TIME_ZONE, isSendingHeld } from './sending-hold';
+import {
+  HOLD_TIME_ZONE,
+  isSendingHeld,
+  sendsDuringHold,
+  type SendingHoldScope,
+} from './sending-hold';
 import {
   ExpoAuthMissingError,
   ExpoRequestError,
@@ -432,6 +439,12 @@ export interface PushWorkerOptions {
    * that is never held.
    */
   sendingHold?: (instant: Date) => boolean;
+  /**
+   * Which due deliveries the hold covers (sending-hold.ts). Default `all`,
+   * the D1 rule. `except_new_recalls` sends fresh new-recall alerts during the
+   * hold hours; production reads it from PUSH_OVERNIGHT_HOLD.
+   */
+  sendingHoldScope?: SendingHoldScope;
   dryRun: boolean;
   now: () => Date;
   maxEventsPerRun?: number;
@@ -531,6 +544,12 @@ export async function runPushDelivery(
     sendingHeld: false,
     /** Due deliveries left queued by the hold (in a dry run: would be left queued). */
     sendingHoldDeferred: 0,
+    /**
+     * Due deliveries sent despite the hold hours because the hold scope
+     * exempts them (sendsDuringHold: a fresh new-recall alert). Always 0
+     * under the default scope, `all`.
+     */
+    sendingHoldExempted: 0,
     /** Messages handed to the provider this run (each one attempt). */
     sendAttempted: 0,
     /** Whole requests the provider rejected or that never completed. */
@@ -729,6 +748,9 @@ export async function runPushDelivery(
     }
     return alerted;
   };
+
+  // Dry runs create no rows, so the hold scope reads would-create pairs here.
+  const dryRunCreatedByEvent = new Map<string, number>();
   for (const event of deliverable) {
     const classified = classifySubscriptionsForEvent(
       event,
@@ -747,7 +769,10 @@ export async function runPushDelivery(
     metrics.preferenceSkipped += classified.preferenceSkipped;
     for (const subscription of classified.eligible) {
       if (dryRun) {
-        if (!existingPairs.has(`${event.id}:${subscription.id}`)) metrics.deliveriesCreated += 1;
+        if (!existingPairs.has(`${event.id}:${subscription.id}`)) {
+          metrics.deliveriesCreated += 1;
+          dryRunCreatedByEvent.set(event.id, (dryRunCreatedByEvent.get(event.id) ?? 0) + 1);
+        }
       } else if (await store.createDeliveryIfAbsent(event.id, subscription.id, nowIso())) {
         metrics.deliveriesCreated += 1;
       }
@@ -852,13 +877,34 @@ export async function runPushDelivery(
   // Every row above was judged exactly as before; the hold only decides WHEN
   // the due ones are handed to Expo. Held rows stay queued and are judged
   // again at the next run's send, entitlement and clock gates included.
+  // The hold scope (sending-hold.ts) may exempt fresh new-recall alerts; under
+  // the default scope, `all`, nothing is exempt and this is the D1 rule.
+  let dryRunDueCreated = dryRun ? metrics.deliveriesCreated : 0;
   if ((options.sendingHold ?? isSendingHeld)(now())) {
+    const scope = options.sendingHoldScope ?? 'all';
+    const sendAt = now();
+    const exempt = async (eventId: string): Promise<boolean> => {
+      const event = eventById.get(eventId) ?? (await readLedgered(eventId));
+      return event !== null && sendsDuringHold(scope, event, sendAt);
+    };
+    const released: DeliveryRow[] = [];
+    for (const delivery of sendPool) if (await exempt(delivery.eventId)) released.push(delivery);
+    let releasedCreated = 0;
+    for (const [eventId, count] of dryRunCreatedByEvent) {
+      if (await exempt(eventId)) releasedCreated += count;
+    }
     metrics.sendingHeld = true;
-    metrics.sendingHoldDeferred = sendPool.length + (dryRun ? metrics.deliveriesCreated : 0);
+    metrics.sendingHoldExempted = released.length + releasedCreated;
+    metrics.sendingHoldDeferred =
+      sendPool.length - released.length + (dryRunDueCreated - releasedCreated);
     console.log(
-      `  overnight hold (22:00–10:00 ${HOLD_TIME_ZONE}): ${metrics.sendingHoldDeferred} deliveries wait for 10:00.`,
+      `  overnight hold (22:00–10:00 ${HOLD_TIME_ZONE}, scope ${scope}): ` +
+        `${metrics.sendingHoldDeferred} deliveries wait for 10:00` +
+        (scope === 'all' ? '.' : `, ${metrics.sendingHoldExempted} new-recall alerts send now.`),
     );
     sendPool.length = 0;
+    sendPool.push(...released);
+    dryRunDueCreated = releasedCreated;
   }
   if (sendPool.length > maxSends) {
     metrics.cappedSends = sendPool.length - maxSends;
@@ -869,7 +915,7 @@ export async function runPushDelivery(
   // ── Authentication preflight: never spend an attempt on a request the
   //    provider must refuse. The due rows stay exactly as they are. ─────────
   if (authProblem !== null) {
-    const due = sendPool.length + (dryRun && !metrics.sendingHeld ? metrics.deliveriesCreated : 0);
+    const due = sendPool.length + dryRunDueCreated;
     if (due > 0) {
       metrics.authBlocked += due;
       systemicFailure = authProblem;
@@ -881,7 +927,8 @@ export async function runPushDelivery(
   if (dryRun) {
     // Would-send = new pairs this run would create + the existing pool
     // (pending / elapsed retryable / crashed-sending rows) already due.
-    metrics.sent = metrics.sendingHeld ? 0 : metrics.deliveriesCreated + sendPool.length;
+    // Held rows are already out of the pool; exempt would-create pairs stay due.
+    metrics.sent = dryRunDueCreated + sendPool.length;
   }
 
   if (!dryRun) {
