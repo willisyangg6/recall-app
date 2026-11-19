@@ -117,11 +117,13 @@ export const OLDER_NOTICES_TITLE = 'Older notices';
 export const OLDER_NOTICES_EXPLANATION_ALL = 'No announcement or update in the last 60 days.';
 
 /**
- * Affects you: the matches outside the window that no agency currently
- * confirms are still open — confirmed-open older matches are in the main list.
+ * Affects you: the matches outside the window that their source does not
+ * currently confirm are still open — confirmed-open older matches are in the
+ * main list. Source-neutral (2026-11-19): the section holds agency recalls and
+ * approved retailer notices alike, so it never says "the agency".
  */
 export const OLDER_NOTICES_EXPLANATION_AFFECTS =
-  'These match your choices but have had no announcement or update in the last 60 days, and the agency hasn’t confirmed they’re still open.';
+  'These match your choices but have had no announcement or update in the last 60 days, and their source hasn’t confirmed they’re still open.';
 
 /**
  * The invitation to personalize. The screen is Feed, never Home (DESIGN.md,

@@ -473,7 +473,8 @@ within 60 days, **or** that an agency confirms is still open
   Push eligibility is unchanged (`pushEligible` never reads evidence).
 - **Copy.** The second section is "Older notices". In Affects me it explains:
   "These match your choices but have had no announcement or update in the last
-  60 days, and the agency hasn’t confirmed they’re still open." In All Recalls:
+  60 days, and their source hasn’t confirmed they’re still open." (source-neutral
+  since 2026-11-19: the section also holds approved retailer notices). In All Recalls:
   "No announcement or update in the last 60 days." (it names no source, because the section also
   holds approved retailer notices). Neither
   calls a notice active or closed.
