@@ -455,10 +455,11 @@ test('Yellow Dock Root: the 4 oz pouch and all three recalled lots, from the sou
   const source = yellowDock();
   assert.match(source.summaryText, /comes in a 4 oz pouch/);
   assert.match(source.summaryText, /The recalled lots are:\nHB02223\nHB02474\nHB02848\n/);
-  assert.deepEqual(
-    renderedRows(source).map((row) => row.cells),
-    [{ 'Package Size': '4 oz', 'Lot codes': 'HB02223, HB02474, HB02848' }],
-  );
+  const rows = renderedRows(source);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].name, 'Herb To Body Yellow Dock Root C/S');
+  assert.equal(rows[0].cells['Package Size'], '4 oz');
+  assert.equal(rows[0].cells['Lot codes'], 'HB02223, HB02474, HB02848');
 });
 
 test('a heading-led column keeps every code and stops at the first line that is not one', () => {
@@ -486,7 +487,7 @@ test('the plural "lots" is a label only when a colon hands it off', () => {
 
 test('a container sentence states the size only when nothing names another size', () => {
   const sized = (text: string, title = 'Acme Recalls Cheese') => {
-    const source = { ...projection(`<p>${text}</p>`, text), title };
+    const source = { ...projection(`<p>${text}</p>`, text), title, productDescription: 'Cheese' };
     const consumer = buildConsumerCase(source, source.affectedProducts);
     return affectedProductsModel(consumer.packageCheck, 'Cheese')
       .items.flatMap((item) => item.fields)
@@ -509,4 +510,67 @@ test('a container sentence states the size only when nothing names another size'
   );
   // Not a container: no size.
   assert.deepEqual(sized('The cheese comes in a variety of flavors. Lot code: AB1234.'), []);
+});
+
+// ── Ownership: a size or a lot list never spreads to another product ───────
+
+/** The summaryText FDA's flattener produces: one line per paragraph or list item. */
+function htmlCase(html: string, title: string, productDescription: string | null): CaseProjection {
+  const text = html
+    .replace(/<\/(p|li)>/g, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n+/g, '\n');
+  return { ...projection(html, text), title, productDescription };
+}
+
+test('two described products each keep their own size and lots', () => {
+  const rows = renderedRows(
+    htmlCase(
+      '<p>Acme Basil comes in a 2 oz jar.</p><p>The recalled lots are:</p><ul><li>AB100</li><li>AB101</li></ul>' +
+        '<p>Acme Thyme comes in a 3 oz jar.</p><p>The recalled lots are:</p><ul><li>TH200</li></ul>',
+      'Acme Recalls Basil and Thyme',
+      'Basil and Thyme',
+    ),
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.name, row.cells['Package Size'], row.cells['Lot codes']]),
+    [
+      ['Acme Basil', '2 oz', 'AB100, AB101'],
+      ['Acme Thyme', '3 oz', 'TH200'],
+    ],
+  );
+});
+
+test('one container sentence never sizes a notice that covers several products', () => {
+  const rows = renderedRows(
+    htmlCase(
+      '<p>Acme is recalling Basil and Thyme. The basil comes in a 4 oz pouch.</p><p>Lot code: AB100</p>',
+      'Acme Recalls Basil and Thyme',
+      'Basil and Thyme',
+    ),
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].cells['Package Size'], undefined);
+});
+
+test('several headed lot columns are not pooled into one product', () => {
+  const rows = renderedRows(
+    htmlCase(
+      '<p>Acme Basil 2 oz jar. Lot codes:</p><ul><li>AB100</li><li>AB101</li></ul>' +
+        '<p>Acme Thyme 3 oz jar. Lot codes:</p><ul><li>TH200</li><li>TH201</li></ul>',
+      'Acme Recalls Spices',
+      'Spices',
+    ),
+  );
+  // Each column belongs to a different product; neither is read down past its
+  // first line (the shipped behaviour), so no product gains the other's codes.
+  assert.ok(!(rows[0]?.cells['Lot codes'] ?? '').includes('AB101'));
+  assert.ok(!(rows[0]?.cells['Lot codes'] ?? '').includes('TH201'));
+});
+
+test('a lot list read by the list reader is never read again by the prose reader', () => {
+  const rows = renderedRows(yellowDock());
+  const lots = (rows[0].cells['Lot codes'] ?? '').split(', ');
+  assert.deepEqual(lots, [...new Set(lots)]);
+  assert.equal(rows.length, 1);
 });

@@ -616,6 +616,41 @@ function continueAcrossSemicolons(text: string, match: RegExpMatchArray): string
 }
 
 /** One printed code alone on its line: no lowercase word, at most three tokens. */
+function isColumnCodeLine(line: string): boolean {
+  const trimmed = line.trim();
+  const tokens = trimmed.split(/\s+/);
+  return (
+    COLUMN_CODE_LINE.test(trimmed) &&
+    tokens.length <= 3 &&
+    tokens.some((token) => /\d/.test(token)) &&
+    tokens.every((token) => /\d/.test(token) || token.length <= 3) &&
+    !SEGMENT_STARTS_A_LABEL.test(trimmed) &&
+    !isTimeOrPhoneFragment(trimmed)
+  );
+}
+
+/**
+ * How many heading-led code columns the notice holds: a line naming lots,
+ * batches or codes that ends in its colon, over a code line. With two or more
+ * ("Basil … Lot codes:" over its codes, then "Thyme … Lot codes:" over its
+ * own), each column belongs to a different product, and reading them all into
+ * one recall-wide value would give every product every code — so columns are
+ * read on only when there is exactly one.
+ */
+function headedCodeColumns(text: string): number {
+  const lines = text.split('\n');
+  let count = 0;
+  for (let index = 0; index + 1 < lines.length; index++) {
+    if (
+      /\b(?:lots?|batch(?:es)?|codes?|numbers?)\b[^:\n]*:\s*$/i.test(lines[index]) &&
+      isColumnCodeLine(lines[index + 1])
+    ) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 const COLUMN_CODE_LINE = /^[A-Z0-9][A-Z0-9 ./-]{0,38}$/;
 
 /**
@@ -644,17 +679,7 @@ function continueDownColumn(text: string, match: RegExpMatchArray, value: string
     const trimmed = line[1].trim();
     // Every word is code-shaped: it carries a digit, or it is a short printed
     // prefix ("EX 0225"). "90 CAPSULES" is a count and a noun, not a code.
-    const tokens = trimmed.split(/\s+/);
-    if (
-      !COLUMN_CODE_LINE.test(trimmed) ||
-      tokens.length > 3 ||
-      !tokens.some((token) => /\d/.test(token)) ||
-      tokens.some((token) => !/\d/.test(token) && token.length > 3) ||
-      SEGMENT_STARTS_A_LABEL.test(trimmed) ||
-      isTimeOrPhoneFragment(trimmed)
-    ) {
-      return result;
-    }
+    if (!isColumnCodeLine(trimmed)) return result;
     result = `${result}; ${trimmed}`;
     cursor += line[0].length;
   }
@@ -674,6 +699,7 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
     NO_CODES_STATEMENT.test(summaryText) || UNSPECIFIED_CODES_STATEMENT.test(summaryText);
   const facts: SemanticFact[] = [];
   const seen = new Set<string>();
+  const singleColumn = headedCodeColumns(summaryText) === 1;
 
   // Alternating "LOT <code> Expiration <date>" runs, each code keeping its
   // own date.
@@ -776,7 +802,7 @@ export function extractProseIdentifiers(rawSummaryText: string | null): ProseIde
       const sourceLabel = match[1].replace(/\s+/g, ' ').trim();
       const listed = continueAcrossSemicolons(summaryText, match);
       const rawValue = cleanValue(
-        CODE_CONCEPTS.has(concept) && listed === match[2]
+        CODE_CONCEPTS.has(concept) && listed === match[2] && singleColumn
           ? continueDownColumn(summaryText, match, listed)
           : listed,
       );
