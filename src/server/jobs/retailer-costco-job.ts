@@ -138,8 +138,13 @@ export async function runRetailerNoticeJob(
     }
     const newOrChanged = (metrics.newOrChanged as unknown[]).length;
     const review = (metrics.reviewQueue as unknown[]).length;
+    // Collected is not published: nothing here reaches a shopper until it is
+    // approved (ops:health lists the review queue).
     if (newOrChanged > 0) {
-      console.log(`::notice::${name} notices new or changed this run: ${newOrChanged}`);
+      console.log(
+        `::notice::${name} notices collected new or changed this run: ${newOrChanged} ` +
+          '(stored privately; none is published until approved — see ops:health)',
+      );
     }
     if (review > 0) console.log(`::notice::${name} notices awaiting manual review: ${review}`);
 

@@ -267,6 +267,24 @@ Rollout, each step a separate approval (all done):
    PDF. The branch was never merged and **has been deleted**, locally and on GitHub.
 4. Schedule it. **Done 2026-11-14:** see [Scheduled runs](#scheduled-runs).
 
+### Review queue (2026-11-19)
+
+Collecting a letter publishes nothing. `npm run ops:health` prints the **Retailer review queue**
+([review-queue.ts](../src/server/retailer/review-queue.ts)) with three separate numbers: notices
+**collected** (stored privately), notices **published** (shoppers see them; the same conditions as
+`consumer_retailer_notices()`), and notices needing **action**:
+
+- **revised letter**: approved, but the letter's hash changed. Hidden until approved again.
+- **approved, now matches an agency case**: confirm the agency match or withdraw.
+- **standalone food recall, not approved**: approve or leave. `[alerts]` marks a letter inside the
+  30-day horizon, whose approval would alert matching shoppers. An older letter is published with
+  no alert.
+- **monitor could not decide**: a human decides.
+
+A notice whose approval was withdrawn is never re-queued. The section is informational and never
+changes the exit code. The monitors' run annotations say "collected … none is published until
+approved".
+
 ## Scheduled runs
 
 `.github/workflows/retailer-notices.yml` runs `npm run jobs:retailer-costco` every two hours at

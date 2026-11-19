@@ -39,6 +39,11 @@ import {
   type HealthRun,
 } from '../src/server/jobs/health';
 import {
+  formatRetailerReviewQueue,
+  summarizeRetailerReviewQueue,
+  type QueueNotice,
+} from '../src/server/retailer/review-queue';
+import {
   asWatchdogQueryClient,
   formatWatchdogSection,
   loadWatchdogReport,
@@ -266,6 +271,51 @@ async function main(): Promise<void> {
     for (const note of notes) console.log(`    · ${note}`);
     console.log('');
   }
+
+  // ── Retailer review queue (2026-11-19) ────────────────────────────────────
+  // What an operator must act on, apart from what the monitors collected:
+  // a stored letter is NOT published; only an approval the client read path
+  // still honours is. Informational: never changes the exit code.
+  const queueNotices = await client
+    .from('retailer_notices')
+    .select(
+      'id, publisher, native_id, index_title, decision, notice_kind, food_status, ' +
+        'document_extraction, stated_notice_date, document_content_hash, first_seen_at',
+    );
+  const queueApprovals = await client
+    .from('retailer_notice_approvals')
+    .select('notice_id, document_content_hash, withdrawn_at, agency_case_id');
+  if (queueNotices.error || queueApprovals.error) {
+    console.error(
+      `retailer review queue query failed: ${(queueNotices.error ?? queueApprovals.error)!.message}`,
+    );
+    process.exit(1);
+  }
+  const queue = summarizeRetailerReviewQueue(
+    ((queueNotices.data ?? []) as unknown as Record<string, string | null>[]).map((row) => ({
+      id: row.id!,
+      publisher: row.publisher!,
+      nativeId: row.native_id!,
+      indexTitle: row.index_title!,
+      decision: row.decision as QueueNotice['decision'],
+      noticeKind: row.notice_kind!,
+      foodStatus: row.food_status!,
+      documentExtraction: row.document_extraction!,
+      statedNoticeDate: row.stated_notice_date,
+      documentContentHash: row.document_content_hash!,
+      firstSeenAt: row.first_seen_at!,
+    })),
+    ((queueApprovals.data ?? []) as Record<string, string | null>[]).map((row) => ({
+      noticeId: row.notice_id!,
+      documentContentHash: row.document_content_hash!,
+      withdrawnAt: row.withdrawn_at,
+      agencyCaseId: row.agency_case_id,
+    })),
+    new Date(),
+  );
+  console.log('Retailer review queue (private; approval publishes, collection does not)');
+  for (const line of formatRetailerReviewQueue(queue)) console.log(line);
+  console.log('');
 
   // Product-visual failure backlog (label PDFs that keep failing).
   const failures = await client
