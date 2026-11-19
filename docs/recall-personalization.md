@@ -215,6 +215,50 @@ The last four rows are the P2B7U set semantics: any one jurisdiction in common
 qualifies, an exclusion needs the source to name none of them, and dropping a
 jurisdiction removes only the recalls that rested on it.
 
+### Retailer-only notices: the same verdict (proposed 2026-11-19, before any code change)
+
+An approved, standalone retailer notice (Costco, ALDI; `consumer_retailer_notices()`) is judged
+by **the same `evaluatePersonalRelevance`**, through one adapter
+(`retailerRelevanceInput`, `src/lib/retailer-notice-presentation.ts`) that maps the reviewer's
+approved fields onto the facts an agency case supplies:
+
+| Relevance input      | Agency case                      | Retailer notice                                                 |
+| -------------------- | -------------------------------- | --------------------------------------------------------------- |
+| `geography`          | projection geography (tri-state) | approved `whereSold.states` → `states`; none stated → `unknown` |
+| `retailerNames`      | stated retailers                 | the publishing retailer only (`Costco`, `ALDI`)                 |
+| `pathogenOrAllergen` | projection agent                 | the approved structured agent (`canonicalAgent`)                |
+| `hazardCategory`     | projection hazard                | the approved `reason.hazardCategory`                            |
+| `reasonText`         | agency reason                    | the approved `whyRecalled`                                      |
+
+No shared rule changes. The audit of `evaluatePersonalRelevance` (2026-11-19) found the order
+already correct for retailer notices: a stated state list that names none of the user's
+jurisdictions is `does_not_match` and is final **before** the retailer signal is read, so
+selecting the retailer can never override an explicit exclusion; `unknown` stays `unknown` (it
+is never widened to nationwide), and needs a personal signal to qualify. Costco's region names
+("Select Locations in the Midwest") are never mapped to states, so such a letter is `unknown`.
+
+| User                 | Retailer-only notice                                    | Affects You / alert |
+| -------------------- | ------------------------------------------------------- | ------------------: |
+| AL                   | Costco letter stating AL, FL, GA                        |             **Yes** |
+| AL + Costco          | Costco letter stating AL, FL, GA                        |             **Yes** |
+| CA + Costco          | Costco letter stating AL, FL, GA (explicit exclusion)   |                  No |
+| CA + ALDI + Milk     | ALDI milk-only letter stating AL, GA                    |                  No |
+| CA + Costco          | Costco letter stating no state (unknown distribution)   |             **Yes** |
+| CA                   | Costco letter stating no state, no store selected       |                  No |
+| (no state) + Costco  | Costco letter stating AL, FL, GA                        |             **Yes** |
+| (no state) + Target  | Costco letter stating AL, FL, GA                        |                  No |
+| CA + Peanut + Costco | Costco milk-only letter stating no state                |                  No |
+| CA + Milk            | Costco milk-only letter stating no state                |             **Yes** |
+| CA + Milk            | Costco milk-only letter stating CA                      |             **Yes** |
+| nothing chosen       | any                                                     |                  No |
+| any                  | notice withdrawn, revised, or matched to an agency case |   No (not eligible) |
+
+Unknown distribution is never "nationwide": the CA + Costco row qualifies on the store signal
+alone, and the CA row without one does not. Store listings (Walmart, Sam's Club, Target, Whole
+Foods, Publix) are not retailer-only notices: they attach to an agency case and do **not** feed
+its verdict — neither their stores nor their per-store states change an agency case's Affects
+You or alert eligibility (unchanged by this work).
+
 ### Known allergen-only mismatch
 
 A milk-only recall is not information a peanut-allergic shopper needs, however
