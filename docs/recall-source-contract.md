@@ -283,6 +283,22 @@ reader (`src/server/fsis/attachments.ts`):
   product name and every run of text falls inside a column. Its per-row
   states must also agree with the notice's `field_states`; anything else is
   `needs_review`.
+- **A list may continue onto a page without its header [VERIFIED
+  2026-11-22].** FSIS's 2026-11-19 revision of the PHA-11142026 list added
+  four Granna's meals and runs the table onto page 2, repeating only the
+  running title ("PHA 11142026 Products List", "Last Updated – …"). Such a
+  page continues the previous page's columns: the running text printed above
+  the last header is set aside, and every check above still applies to what
+  remains. Before this rule, that page sent the whole list to review, and the
+  case lost its verified product rows.
+- **Label documents hold placed product photographs** (verified on 10
+  current documents, 2026-11-22): one per page (Betterballen), several per
+  page under one page title (Grace), a per-photo "SKU… NAME…" block
+  (Kayem), or nutrition-facts and ingredient panels whose only text is an
+  OCR layer inside the image (Imperio, Ukrop's). Links are worded "view
+  labels", "Labels", "Product Labels", "Product label photos", "Larger
+  images"; older notices link `.jpg` files or embed `<img>` directly.
+  [recall-imagery.md](recall-imagery.md) §16 has the rules.
 - **Label pages carry a printed caption in the text layer** ("Bitterballen
   (Beef)") above the photograph. Older label PDFs are often scans with no
   text, and those pages get no caption. Page order does NOT follow the

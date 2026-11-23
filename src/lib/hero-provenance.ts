@@ -1,12 +1,12 @@
 /**
  * Hero-image provenance classification (C9).
  *
- * `projection.heroImageUrl` may legitimately hold exactly one thing today:
- * an official agency-hosted photograph, derived by `projectCase` from the
- * announcement's own preserved HTML. FSIS label renders live in
- * product_visuals as detail-screen evidence and are deliberately NOT card
- * heroes (C9 frozen policy: an ordinary regulatory label sheet is not
- * card imagery; professional-quality hero sourcing is C9.1's milestone).
+ * `projection.heroImageUrl` may legitimately hold two things: an official
+ * agency-hosted photograph, derived by `projectCase` from the announcement's
+ * own preserved HTML, or (since 2026-11-22, docs/recall-imagery.md §16) a
+ * product PHOTOGRAPH cropped from an FSIS label document by the label-photo
+ * sync. A whole rendered label PAGE is still never a card hero: a letter-size
+ * sheet shrinks the package to a third of the tile.
  *
  * This module answers the audit question "where did this stored hero URL
  * come from?" — nothing here selects or writes imagery. Host matching
@@ -20,9 +20,12 @@ import { FDA_HOSTS, resolveOfficialUrl } from './official-urls';
 export type HeroProvenance =
   /** Official agency-hosted photo (fda.gov files). */
   | 'agency_photo'
-  /** Our rendered label page (product-visuals storage bucket) — under the
-   *  frozen policy nothing writes these as heroes; one appearing is a
-   *  contradiction the QA gates on. */
+  /** A product photograph cropped from an FSIS label document
+   *  (`fsis-label-photos/` in the product-visuals bucket) — the label-photo
+   *  sync's card image. */
+  | 'label_photo'
+  /** Any other object in our bucket: a whole rendered label page. Nothing
+   *  writes these as heroes; one appearing is a contradiction QA gates on. */
   | 'label_render'
   /** Anything else: not a URL this system ever writes. */
   | 'unknown';
@@ -36,7 +39,9 @@ export function classifyHeroUrl(
   visualUrlPrefix: string,
 ): HeroProvenance | null {
   if (url === null) return null;
-  if (visualUrlPrefix !== '' && url.startsWith(visualUrlPrefix)) return 'label_render';
+  if (visualUrlPrefix !== '' && url.startsWith(visualUrlPrefix)) {
+    return url.startsWith(`${visualUrlPrefix}fsis-label-photos/`) ? 'label_photo' : 'label_render';
+  }
   const resolved = resolveOfficialUrl(url, { approvedHosts: FDA_HOSTS });
   if (resolved !== null && resolved.url === url) return 'agency_photo';
   return 'unknown';

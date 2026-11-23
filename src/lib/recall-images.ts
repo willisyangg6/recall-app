@@ -43,7 +43,14 @@ import {
 
 // ── Model ───────────────────────────────────────────────────────────────────
 
-export type RecallImageSource = 'fda_announcement' | 'fsis_label_render';
+export type RecallImageSource = 'fda_announcement' | 'fsis_label_render' | 'fsis_label_photo';
+
+/**
+ * A product photograph cropped from an FSIS label document (§16). `alt` is
+ * the printed text that names it in its document, or null. `kind: 'detail'`
+ * is a strip or close-up: carousel only, after the products.
+ */
+export type LabelPhotoInput = ProductPhoto & { kind: 'product' | 'detail' };
 
 /** One normalized official image, with enough provenance to explain itself. */
 export interface RecallImage {
@@ -76,7 +83,12 @@ export type RowImageEvidence =
   /** An official caption contains this row's product identity AND states this
    * row's exact package size — the strongest caption pairing, used when
    * sibling rows share a name and only the size tells them apart. */
-  | 'caption_name_size';
+  | 'caption_name_size'
+  /** FSIS label photographs only (§16): every product word of the photo's
+   * printed caption — boilerplate, numbers, weights and the firm's name set
+   * aside — appears among the row's own words, and no other unclaimed row's.
+   * More specific captions claim first. */
+  | 'caption_words';
 
 export interface RowImageAssignment {
   image: RecallImage;
@@ -102,6 +114,14 @@ export interface RecallImageAllocation {
    * supplementary images) — preserved for the package-comparison surface,
    * never rendered as product imagery. */
   supporting: RecallImage[];
+  /**
+   * The FSIS label photographs for the Details carousel (§16), product
+   * photos in document order, then detail strips; the hero excluded (it
+   * leads the carousel already). Unlike announcement photos, a label photo
+   * that also backs its product row stays here: the carousel shows the
+   * recall's products, the row shows which one is which.
+   */
+  labelPhotos: RecallImage[];
 }
 
 /** What the allocator needs to know about one affected-product row. */
@@ -127,6 +147,13 @@ export interface RowImageCandidate {
   /** URL of the photo the projection's source-established matching attached
    * to this row, when it did. */
   sourcePhotoUrl: string | null;
+  /**
+   * The row's own words for label-photo caption matching (§16): its name and
+   * field values — and, when the model has ONE row, the case's affected
+   * product source text (that row is the only product, so the notice's
+   * quoted package name is its own). Absent = the name alone.
+   */
+  identityText?: string | null;
 }
 
 /**
@@ -145,9 +172,9 @@ function fromProductPhoto(photo: ProductPhoto, source: RecallImageSource): Recal
   return {
     url: photo.url,
     source,
-    // A label render's alt is our own wording; only announcement alt text is
-    // an official caption.
-    caption: source === 'fda_announcement' ? photo.alt : null,
+    // A label render's alt is our own wording; announcement alt text and a
+    // label photo's printed caption are the source's own words.
+    caption: source === 'fsis_label_render' ? null : photo.alt,
     classification: photo.role,
     width: photo.width,
     height: photo.height,
@@ -165,6 +192,88 @@ function captionContainsName(caption: string, nameKey: string): boolean {
   return measurementKey(caption).includes(nameKey);
 }
 
+// ── Label-photo caption words (§16) ─────────────────────────────────────────
+
+/** Caption words that name the document, not the product. */
+const CAPTION_BOILERPLATE = new Set([
+  'recall',
+  'pha',
+  'fsis',
+  'usda',
+  'public',
+  'health',
+  'alert',
+  'product',
+  'products',
+  'label',
+  'labels',
+  'photo',
+  'photos',
+  'image',
+  'images',
+  'last',
+  'updated',
+  'all',
+  'best',
+  'by',
+  'use',
+  'date',
+  'dates',
+  'lot',
+  'lots',
+  'code',
+  'codes',
+  'est',
+  'establishment',
+  'number',
+  'net',
+  'wt',
+  'weight',
+  'upc',
+  'sku',
+  'name',
+  'item',
+  'oz',
+  'lb',
+  'lbs',
+  'g',
+  'kg',
+  'ct',
+  'pk',
+  'and',
+  'with',
+  'of',
+  'the',
+  'a',
+  'in',
+  'for',
+  'or',
+]);
+
+/** Lowercased, accent-free, apostrophe-joined words; numbers and codes dropped. */
+export function identityWords(text: string): string[] {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word !== '' && !/\d/.test(word));
+}
+
+/** A label caption's product words: boilerplate and the firm's own words set aside. */
+export function captionProductWords(caption: string, firmName: string | null): string[] {
+  const firm = new Set(firmName ? identityWords(firmName) : []);
+  return [
+    ...new Set(
+      identityWords(caption).filter((word) => !CAPTION_BOILERPLATE.has(word) && !firm.has(word)),
+    ),
+  ];
+}
+
+/** Two product words at least: one word names a category, not a product. */
+const MIN_CAPTION_WORDS = 2;
+
 // ── Allocation ──────────────────────────────────────────────────────────────
 
 export function allocateRecallImages(input: {
@@ -175,6 +284,13 @@ export function allocateRecallImages(input: {
   /** Official FSIS label-PDF renders. `alt` is the page's own printed
    * caption, or null when the page has none. */
   labelVisuals: ProductPhoto[];
+  /** Product photographs cropped from FSIS label documents (§16), in
+   * document order. When present they replace the page renders as row
+   * imagery. */
+  labelPhotos?: LabelPhotoInput[];
+  /** The recalling firm's display name: its words are set aside from label
+   * captions ("Recall 028-2026 – Brett Anthony Foods Wow Bao…"). */
+  firmName?: string | null;
   /** The affected-product rows, in presentation order. */
   rows: RowImageCandidate[];
 }): RecallImageAllocation {
@@ -189,6 +305,10 @@ export function allocateRecallImages(input: {
   for (const visual of input.labelVisuals) {
     if (!byUrl.has(visual.url))
       byUrl.set(visual.url, fromProductPhoto(visual, 'fsis_label_render'));
+  }
+  const labelPhotos = input.labelPhotos ?? [];
+  for (const photo of labelPhotos) {
+    if (!byUrl.has(photo.url)) byUrl.set(photo.url, fromProductPhoto(photo, 'fsis_label_photo'));
   }
 
   // The hero is the stored authoritative selection, never re-ranked here. A
@@ -216,13 +336,35 @@ export function allocateRecallImages(input: {
   // single-row table it stays hero-only: repeating the same image
   // immediately below the title adds nothing.
   const heroRowEligible = input.rows.length >= 2;
+  // Label photographs (§16), when the documents gave any, replace the page
+  // renders as row imagery: a page is the sheet, the photo is the product.
+  // One per printed caption joins the pool — the largest product photo of
+  // that caption (a can photographed from four sides is one product, not
+  // four ambiguous candidates); detail strips never do.
+  const labelRepresentatives: LabelPhotoInput[] = [];
+  for (const photo of labelPhotos) {
+    if (photo.kind !== 'product' || photo.alt === null) continue;
+    const key = measurementKey(photo.alt);
+    const current = labelRepresentatives.findIndex((p) => measurementKey(p.alt!) === key);
+    const area = (p: ProductPhoto) => (p.width ?? 0) * (p.height ?? 0);
+    if (current < 0) labelRepresentatives.push(photo);
+    else if (area(photo) > area(labelRepresentatives[current]))
+      labelRepresentatives[current] = photo;
+  }
+  const labelPhotoUrls = new Set(labelRepresentatives.map((photo) => photo.url));
   // A label render joins the pool only with its OWN printed caption (read
   // from the PDF's text layer at ingestion, `alt` here): then the same
   // caption passes below decide which row, if any, it depicts — by name,
   // never by page order. An uncaptioned render never decorates a row.
-  const captionedLabels = input.labelVisuals.filter((visual) => visual.alt !== null);
-  const pool = [...input.photos, ...captionedLabels].filter(
-    (photo) => RECOGNITION_ROLES.has(photo.role) && (heroRowEligible || photo.url !== hero?.url),
+  const captionedLabels =
+    labelPhotos.length > 0 ? [] : input.labelVisuals.filter((visual) => visual.alt !== null);
+  // A label photo may back its row even when it is also the hero of a
+  // single-row model: the founder asked for each product's picture beside
+  // the product (2026-11-22), and the row shows WHICH product it is.
+  const pool = [...input.photos, ...captionedLabels, ...labelRepresentatives].filter(
+    (photo) =>
+      RECOGNITION_ROLES.has(photo.role) &&
+      (heroRowEligible || photo.url !== hero?.url || labelPhotoUrls.has(photo.url)),
   );
   const used = new Set<string>();
   const rowImages = new Map<string, RowImageAssignment>();
@@ -269,12 +411,15 @@ export function allocateRecallImages(input: {
   // (PHA-11142026 — a full label page is too small to identify a product on
   // the card, so it lives on its product row instead).
   const captionedLabelUrls = new Set(captionedLabels.map((label) => label.url));
+  // Single-row models: a label photo's caption naming the row is the same
+  // evidence the multi-row passes require, hero or not (§16).
   const matchPool =
     input.rows.length >= 2
       ? pool
-      : hero === null
-        ? pool.filter((photo) => captionedLabelUrls.has(photo.url))
-        : [];
+      : pool.filter(
+          (photo) =>
+            labelPhotoUrls.has(photo.url) || (hero === null && captionedLabelUrls.has(photo.url)),
+        );
   const matchable = input.rows.filter((row) => !rowImages.has(row.rowId));
   if (matchPool.length > 0) {
     // Pass 2 — caption name + exact size: for sibling rows that share a name
@@ -359,6 +504,33 @@ export function allocateRecallImages(input: {
     }
   }
 
+  // Pass 4 — label-photo caption words (§16): a label photo whose printed
+  // caption's product words all appear among one unclaimed row's own words.
+  // Captions naming more product words claim first ("Chicken Cobbler –
+  // Bulk" before "Chicken Cobbler"); a caption fitting two rows assigns
+  // nothing; the caption's stated size or barcode still vetoes.
+  const wordReps = labelRepresentatives
+    .filter((photo) => matchPool.some((p) => p.url === photo.url) && !used.has(photo.url))
+    .map((photo) => ({ photo, words: captionProductWords(photo.alt!, input.firmName ?? null) }))
+    .filter((entry) => entry.words.length >= MIN_CAPTION_WORDS)
+    .sort((a, b) => b.words.length - a.words.length);
+  const rowWords = new Map(
+    input.rows.map((row) => [
+      row.rowId,
+      new Set(identityWords(`${row.name ?? ''} ${row.identityText ?? ''}`)),
+    ]),
+  );
+  for (const { photo, words } of wordReps) {
+    if (used.has(photo.url)) continue;
+    const fits = input.rows.filter(
+      (row) =>
+        !rowImages.has(row.rowId) &&
+        words.every((word) => rowWords.get(row.rowId)!.has(word)) &&
+        !captionContradictsPackage(photo.alt!, vetoIdentity(row)),
+    );
+    if (fits.length === 1) assign(fits[0], photo, 'caption_words');
+  }
+
   // Gallery: the recognizable announcement images (with the extraction
   // layer's honest only-close-ups fallback), in source order, then label
   // renders — minus every image already holding a visible role. The hero
@@ -371,11 +543,22 @@ export function allocateRecallImages(input: {
     .filter((url, index, urls) => !taken.has(url) && urls.indexOf(url) === index)
     .map((url) => byUrl.get(url)!);
 
+  // The label-photo carousel: products in document order, then details;
+  // the hero is already first in the carousel, so it is not repeated.
+  const labelCarousel = [
+    ...labelPhotos.filter((photo) => photo.kind === 'product'),
+    ...labelPhotos.filter((photo) => photo.kind === 'detail'),
+  ]
+    .map((photo) => photo.url)
+    .filter((url, index, urls) => url !== hero?.url && urls.indexOf(url) === index)
+    .map((url) => byUrl.get(url)!);
+
   // Everything else stays retained but non-visible.
   const galleryUrls = new Set(gallery.map((image) => image.url));
+  const carouselUrls = new Set(labelCarousel.map((image) => image.url));
   const supporting = [...byUrl.values()].filter(
-    (image) => !taken.has(image.url) && !galleryUrls.has(image.url),
+    (image) => !taken.has(image.url) && !galleryUrls.has(image.url) && !carouselUrls.has(image.url),
   );
 
-  return { hero, rowImages, gallery, supporting };
+  return { hero, rowImages, gallery, supporting, labelPhotos: labelCarousel };
 }

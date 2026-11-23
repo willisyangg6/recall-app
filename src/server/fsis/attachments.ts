@@ -28,7 +28,7 @@ import { normalizeStateToken } from '../../domain/us-geography';
 import type { AttachmentTable, Geography } from '../../domain/recall-types';
 import type { AttachmentEnrichment, AttachmentSource } from '../../domain/source-record';
 import { decodeEntities, stripHtml } from '../../domain/text';
-import { MULTIPLE_PRODUCTS_AND_BRANDS, PRODUCT_SOFT_LIMIT } from '../push/product-name';
+import { PRODUCT_SOFT_LIMIT } from '../push/product-name';
 
 // ── Discovery ───────────────────────────────────────────────────────────────
 
@@ -262,27 +262,49 @@ export function parseProductList(layout: PdfLayout): ProductListParse {
   const reasons: string[] = [];
   let headers: string[] | null = null;
   const rows: AttachmentTable['rows'] = [];
+  // The last header page's columns and the running page text printed above
+  // its header ("PHA 11142026 Products List", "Last Updated – …"), for a
+  // continuation page that does not repeat the header (2026-11-20 revision).
+  let lastColumns: Column[] | null = null;
+  let runningText = new Set<string>();
 
   for (const { page, items } of layout.pages) {
     const headerItems = items.filter((item) => isHeaderLine(item.text));
+    let columns: Column[];
+    let body: PdfTextItem[];
     if (headerItems.length === 0) {
-      if (items.length > 0 && headers !== null) reasons.push(`page ${page}: no table header`);
-      continue;
+      if (items.length === 0 || headers === null) continue;
+      if (lastColumns === null) {
+        reasons.push(`page ${page}: no table header`);
+        continue;
+      }
+      // A continuation page: the previous header's columns, minus the
+      // running page text. Every check below still applies — a run between
+      // columns or above the first product row refuses it as before.
+      columns = lastColumns;
+      body = items.filter((item) => !runningText.has(item.text));
+    } else {
+      columns = columnsFromHeader(headerItems);
+      const pageHeaders = columns.map((column) => column.heading);
+      if (!pageHeaders.some((heading) => PRODUCT_HEADING.test(heading))) {
+        reasons.push(
+          `page ${page}: header has no product-name column (${pageHeaders.join(' | ')})`,
+        );
+        continue;
+      }
+      if (headers === null) headers = pageHeaders;
+      else if (headers.join('|') !== pageHeaders.join('|')) {
+        reasons.push(`page ${page}: header differs from page 1`);
+        continue;
+      }
+      const headerTop = Math.max(...headerItems.map((item) => item.y));
+      const headerBottom = Math.min(...headerItems.map((item) => item.y));
+      lastColumns = columns;
+      runningText = new Set(
+        items.filter((item) => item.y > headerTop + 2).map((item) => item.text),
+      );
+      body = items.filter((item) => item.y < headerBottom - 2 && !isHeaderLine(item.text));
     }
-    const columns = columnsFromHeader(headerItems);
-    const pageHeaders = columns.map((column) => column.heading);
-    if (!pageHeaders.some((heading) => PRODUCT_HEADING.test(heading))) {
-      reasons.push(`page ${page}: header has no product-name column (${pageHeaders.join(' | ')})`);
-      continue;
-    }
-    if (headers === null) headers = pageHeaders;
-    else if (headers.join('|') !== pageHeaders.join('|')) {
-      reasons.push(`page ${page}: header differs from page 1`);
-      continue;
-    }
-
-    const headerBottom = Math.min(...headerItems.map((item) => item.y));
-    const body = items.filter((item) => item.y < headerBottom - 2 && !isHeaderLine(item.text));
     const productColumn = columns.findIndex((column) => PRODUCT_HEADING.test(column.heading));
     const placed: { item: PdfTextItem; column: number }[] = [];
     for (const item of body) {
@@ -584,7 +606,16 @@ function statesDisagreement(products: TableProduct[], geography: Geography): str
  * product-name limit; otherwise the push shortener's grouping —
  * `{Brand} products` for one brand, `Multiple products and brands` for more.
  */
-export function productDescriptionFor(products: { name: string; brand: string | null }[]): string {
+/**
+ * The product description a verified list supports, or null when its
+ * products cannot be named briefly. Null leaves the notice's own wording in
+ * place: an upstream-ingredient alert keeps "…Products Containing Recalled
+ * Biscuits" (docs/recall-domain-architecture.md) rather than a generic
+ * "Multiple products and brands" title (2026-11-22, PHA-11142026 revision).
+ */
+export function productDescriptionFor(
+  products: { name: string; brand: string | null }[],
+): string | null {
   // Cased like the brand, so prose that quotes the name verbatim ("…issued
   // for Biscuit & Sausage Gravy from…") never shouts. The printed cell stays
   // verbatim in the stored table.
@@ -593,7 +624,7 @@ export function productDescriptionFor(products: { name: string; brand: string | 
   const joined = `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
   if ([...joined].length <= PRODUCT_SOFT_LIMIT) return joined;
   const brands = [...new Set(products.flatMap((p) => (p.brand ? [p.brand] : [])))];
-  return brands.length === 1 ? `${brands[0]} products` : MULTIPLE_PRODUCTS_AND_BRANDS;
+  return brands.length === 1 ? `${brands[0]} products` : null;
 }
 
 /**

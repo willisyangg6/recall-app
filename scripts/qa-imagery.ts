@@ -14,8 +14,8 @@
  *  - PROFESSIONAL PACKSHOT coverage: NOT YET MEASURED. Defining and
  *    sourcing professional-quality card imagery is C9.1.
  *
- * Frozen interim policy (C9): an ordinary FSIS label render is never a
- * card hero — a gate below fails if one ever appears. Live network use is
+ * A whole FSIS label PAGE is never a card hero — a gate below fails if one
+ * ever appears; a photograph cropped from it is (docs/recall-imagery.md §16). Live network use is
  * bounded: a fixed-size sample of hero URLs and the (≤ a dozen) recorded
  * failure URLs get probes — never the full image corpus.
  *
@@ -176,7 +176,7 @@ async function main(): Promise<void> {
   console.log(`  cases:                          ${cases.length} (${active.length} active)`);
   console.log('\nCOVERAGE (three distinct concepts — never conflated)');
   console.log(
-    `  card heroes:                    ${withHero(cases).length} total, ${withHero(active).length} active (official FDA photographs, historical selection)`,
+    `  card heroes:                    ${withHero(cases).length} total, ${withHero(active).length} active (official FDA photographs and FSIS label photographs)`,
   );
   console.log(
     `  detail visual evidence:         ${cases.filter(hasDetailImagery).length} total, ${active.filter(hasDetailImagery).length} active (hero and/or rendered label pages)`,
@@ -187,6 +187,7 @@ async function main(): Promise<void> {
 
   // ── Provenance breakdown + contradictions ──────────────────────────────
   let agencyPhoto = 0;
+  let labelPhotoHero = 0;
   let labelRenderHero = 0;
   let unknownProvenance = 0;
   let insecureHero = 0;
@@ -197,9 +198,10 @@ async function main(): Promise<void> {
     if (hero.startsWith('http://')) insecureHero += 1;
     const provenance = classifyHeroUrl(hero, visualUrlPrefix);
     if (provenance === 'agency_photo') agencyPhoto += 1;
+    else if (provenance === 'label_photo') labelPhotoHero += 1;
     else if (provenance === 'label_render') {
-      // Frozen policy: label renders are detail evidence, never card
-      // heroes. One appearing means a promotion path exists somewhere.
+      // A whole label PAGE is never a card hero (a crop of the photograph
+      // on it is, §16). One appearing means a promotion path exists.
       labelRenderHero += 1;
       if (conflictSamples.length < 5) conflictSamples.push(`${row.id}: ${hero}`);
     } else {
@@ -209,7 +211,8 @@ async function main(): Promise<void> {
   }
   console.log('\nHERO PROVENANCE');
   console.log(`  official agency photograph:     ${agencyPhoto}`);
-  console.log(`  label render as hero:           ${labelRenderHero}  (gate: 0 — frozen policy)`);
+  console.log(`  FSIS label photograph (§16):    ${labelPhotoHero}`);
+  console.log(`  whole label page as hero:       ${labelRenderHero}  (gate: 0)`);
   console.log(`  unknown (contradiction):        ${unknownProvenance}  (gate: 0)`);
   console.log(`  non-https heroes:               ${insecureHero}  (gate: 0)`);
   for (const sample of conflictSamples) console.log(`    · ${sample}`);

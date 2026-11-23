@@ -120,6 +120,20 @@ export interface CaseVisual {
   caption: string | null;
 }
 
+/**
+ * A product photograph cropped from an FSIS label document
+ * (docs/recall-imagery.md §16), in the documents' own order.
+ */
+export interface CaseLabelPhoto {
+  url: string;
+  width: number;
+  height: number;
+  /** product: a package photo. detail: a strip or close-up (carousel only). */
+  kind: 'product' | 'detail';
+  /** The printed text that names this photo in its document, or null. */
+  caption: string | null;
+}
+
 export interface CaseDetail {
   id: string;
   projection: CaseProjection;
@@ -127,6 +141,8 @@ export interface CaseDetail {
   affectedProducts: AffectedProduct[];
   /** Rendered official-document visuals; [] until the backend generates them. */
   visuals: CaseVisual[];
+  /** FSIS label photographs; [] on a backend without them (§16). */
+  labelPhotos?: CaseLabelPhoto[];
 }
 
 async function restGet<T>(pathAndQuery: string): Promise<T> {
@@ -394,6 +410,32 @@ async function fetchCaseVisuals(id: string): Promise<CaseVisual[]> {
   }
 }
 
+/**
+ * FSIS label photographs for a case (§16). Separate and fault-tolerant like
+ * the visuals read: a backend without the table yet degrades to none.
+ */
+async function fetchCaseLabelPhotos(id: string): Promise<CaseLabelPhoto[]> {
+  try {
+    const rows = await restGet<
+      { url: string; width: number; height: number; kind: string; caption: string | null }[]
+    >(
+      `fsis_label_photos?select=url,width,height,kind,caption` +
+        `&recall_case_id=eq.${encodeURIComponent(id)}&order=position.asc`,
+    );
+    return rows
+      .filter((row) => row.kind === 'product' || row.kind === 'detail')
+      .map((row) => ({
+        url: row.url,
+        width: row.width,
+        height: row.height,
+        kind: row.kind as CaseLabelPhoto['kind'],
+        caption: row.caption ?? null,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchCaseDetail(id: string): Promise<CaseDetail | null> {
   const rows = await restGet<DetailRow[]>(
     `recall_cases?select=id,projection,timeline,affected_products(*)` +
@@ -414,5 +456,6 @@ export async function fetchCaseDetail(id: string): Promise<CaseDetail | null> {
         extractionConfidence: p.extraction_confidence,
       })),
     visuals: await fetchCaseVisuals(id),
+    labelPhotos: await fetchCaseLabelPhotos(id),
   };
 }

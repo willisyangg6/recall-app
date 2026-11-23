@@ -51,6 +51,8 @@ import {
   displayProductTitle,
   extractAttachmentLinks,
   humanizeAllCaps,
+  listedLabelNames,
+  listedProductIdentity,
   productDisplayName,
   type OfficialAttachment,
 } from './consumer-summary';
@@ -58,6 +60,7 @@ import type { CodeLocation } from './fact-types';
 import type { ProductPhoto } from './product-photos';
 import {
   allocateRecallImages,
+  type LabelPhotoInput,
   type RecallImage,
   type RecallImageAllocation,
   type RowImageAssignment,
@@ -80,7 +83,7 @@ import {
   splitTrailingMeasurements,
   statesOneSize,
 } from './variant-identity';
-import { buildWhatHappened } from './what-happened';
+import { buildWhatHappened, labelMismatch } from './what-happened';
 
 // ── Activity date ───────────────────────────────────────────────────────────
 
@@ -277,6 +280,39 @@ export function caseIdentity(
   };
 }
 
+/**
+ * The one product-identity decision every surface shares (Feed and Saved
+ * cards, Details, What Happened): the stored identity, completed by the
+ * notice's own product list where `listedProductIdentity` allows. A brand
+ * from the list is used only when nothing stored names one. Pure over the
+ * case's stored fields, so the card and Details cannot disagree.
+ */
+export function caseProductIdentity(input: {
+  title: string;
+  productDescription: string | null;
+  brands: string[] | undefined;
+  firmName: string | null;
+  productLines: string[];
+}): { identity: CaseIdentity; productName: string; listedName: string | null } {
+  const listed = listedProductIdentity({
+    title: input.title,
+    productDescription: input.productDescription,
+    productLines: input.productLines,
+    firmName: input.firmName,
+  });
+  const stored = input.brands ?? [];
+  const brands = stored.length === 0 && listed?.brand ? [listed.brand] : stored;
+  const identity = caseIdentity(brands, input.firmName, input.title);
+  const productName = cleanProductName({
+    title: input.title,
+    productDescription: input.productDescription,
+    listedName: listed?.name ?? null,
+    displayedBrands: identity.brand.brands,
+    packageEvidence: input.productLines,
+  });
+  return { identity, productName, listedName: listed?.name ?? null };
+}
+
 // ── Product name ────────────────────────────────────────────────────────────
 
 /**
@@ -327,6 +363,13 @@ export interface ProductNameInput {
   displayedBrands: string[];
   /** Affected-product lines — the evidence a removed measurement must survive in. */
   packageEvidence: string[];
+  /**
+   * The notice's own listed product name, when `listedProductIdentity` says
+   * it names the product better than the headline. Ranks after a structured
+   * description and before the headline; never gets the description's
+   * trailing-size privilege.
+   */
+  listedName?: string | null;
 }
 
 /**
@@ -344,7 +387,7 @@ export interface ProductNameInput {
  * strict line-evidence gate.
  */
 export function cleanProductName(input: ProductNameInput): string {
-  let name = productDisplayName(input.productDescription, input.title);
+  let name = productDisplayName(input.productDescription ?? input.listedName, input.title);
   const described = (input.productDescription ?? '').replace(/[\s.]+$/, '').trim();
   const fromDescription = described.length >= 3 && name === described;
   const evidence = fromDescription
@@ -2041,9 +2084,23 @@ export function detailImageSet(
  *    is only ever an image matched to that exact product row).
  */
 export function productImagery(allocation: RecallImageAllocation): RecallImage[] {
-  const ordered = [...(allocation.hero ? [allocation.hero] : []), ...allocation.gallery];
-  return ordered.filter((image) => image.source === 'fda_announcement');
+  const ordered = [
+    ...(allocation.hero ? [allocation.hero] : []),
+    ...allocation.gallery,
+    ...allocation.labelPhotos.slice(0, MAX_HEADER_LABEL_PHOTOS),
+  ];
+  return ordered.filter(
+    (image) => image.source === 'fda_announcement' || image.source === 'fsis_label_photo',
+  );
 }
+
+/**
+ * Label photographs shown in the Details carousel after the hero. A label
+ * document can hold dozens (Kayem's 27-page sheet); the carousel shows the
+ * first ones in document order, and the rest stay one tap away in the
+ * official document.
+ */
+export const MAX_HEADER_LABEL_PHOTOS = 12;
 
 // ── Optional section visibility (P3A) ───────────────────────────────────────
 
@@ -2612,7 +2669,16 @@ export interface HomeCardContext {
 }
 
 export function buildHomeCardModel(item: FeedItem, context: HomeCardContext): HomeCardModel {
-  const { brand } = caseIdentity(item.brands, item.firmName, item.title);
+  const {
+    identity: { brand },
+    productName,
+  } = caseProductIdentity({
+    title: item.title,
+    productDescription: item.productDescription,
+    brands: item.brands,
+    firmName: item.firmName,
+    productLines: item.productNames,
+  });
   return {
     id: item.id,
     noticeLabel: noticeLabel(item.noticeType),
@@ -2623,12 +2689,7 @@ export function buildHomeCardModel(item: FeedItem, context: HomeCardContext): Ho
     // whole — no surface re-lists the facts relevance reads, and none can
     // omit one (P2B7N.1).
     affectsYou: affectsYouVerdict(item, context.prefs),
-    productName: cleanProductName({
-      title: item.title,
-      productDescription: item.productDescription,
-      displayedBrands: brand.brands,
-      packageEvidence: item.productNames,
-    }),
+    productName,
     brand,
     // The SAME typed interpretation Detail renders, over the canonical
     // evidence a feed row carries (P3A). Home never names a material,
@@ -2849,21 +2910,43 @@ export function withListedStores(
     : { ...distribution, statedRetailers: [...distribution.statedRetailers, ...added] };
 }
 
+/**
+ * A mislabeled product's package, as the notice lists it. When the notice
+ * states that packages "labeled as X may contain Y" and lists exactly one
+ * package whose quoted label name says X, the product's row carries that
+ * label name — what a shopper holds — while the header keeps the notice's
+ * own product name and What Happened states both. Neither identity replaces
+ * the other. Null otherwise.
+ */
+function labeledPackageName(
+  summaryText: string | null,
+  affectedProducts: { name: string }[],
+): string | null {
+  const mismatch = labelMismatch(summaryText);
+  if (mismatch === null) return null;
+  const names = listedLabelNames(affectedProducts.map((product) => product.name));
+  if (names.length !== 1 || names[0] === null) return null;
+  const label = names[0].toLowerCase();
+  const said = mismatch.labeled
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter((word) => word.length >= 4)
+    .map((word) => word.replace(/s$/, ''));
+  if (said.length === 0 || !said.every((word) => label.includes(word))) return null;
+  return displayProductTitle(humanizeAllCaps(names[0]));
+}
+
 export function buildDetailModel(detail: CaseDetail, context: DetailContext): DetailModel {
   const { projection, affectedProducts } = detail;
   const consumer = buildConsumerCase(projection, affectedProducts);
-  const identity = caseIdentity(
-    projection.brands ?? [],
-    projection.recallingFirm.displayName,
-    projection.title,
-  );
-  const brand = identity.brand;
-  const productName = cleanProductName({
+  const { identity, productName, listedName } = caseProductIdentity({
     title: projection.title,
     productDescription: projection.productDescription ?? null,
-    displayedBrands: brand.brands,
-    packageEvidence: affectedProducts.map((product) => product.name),
+    brands: projection.brands,
+    firmName: projection.recallingFirm.displayName,
+    productLines: affectedProducts.map((product) => product.name),
   });
+  const brand = identity.brand;
   const narrative = recallNarrative({
     title: projection.title,
     noticeType: projection.noticeType,
@@ -2872,7 +2955,9 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     pathogenOrAllergen: projection.pathogenOrAllergen,
     firmDisplayName: projection.recallingFirm.displayName,
     summaryText: projection.summaryText,
-    productDescription: projection.productDescription ?? null,
+    // What Happened names the product as the header does: the structured
+    // description, else the notice's listed name, else the headline.
+    productDescription: projection.productDescription ?? listedName,
     consumerBrand: identity.whatHappenedSubject,
     retracted: projection.state === 'retracted',
   });
@@ -2893,7 +2978,22 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
         ? visual.width / visual.height
         : null,
   }));
-  const affectedProductsView = affectedProductsModel(consumer.packageCheck, productName);
+  // FSIS label photographs (§16): the products' own pictures, cropped from
+  // the label documents, each named by its printed caption.
+  const labelPhotos: LabelPhotoInput[] = (detail.labelPhotos ?? []).map((photo, index) => ({
+    url: photo.url,
+    alt: photo.caption,
+    order: consumer.photos.length + labelVisuals.length + index,
+    role: photo.kind === 'product' ? 'package_front' : 'other_supporting',
+    width: photo.width,
+    height: photo.height,
+    aspectRatio: photo.height > 0 ? photo.width / photo.height : null,
+    kind: photo.kind,
+  }));
+  const affectedProductsView = affectedProductsModel(
+    consumer.packageCheck,
+    labeledPackageName(projection.summaryText, affectedProducts) ?? productName,
+  );
   // The one image-role allocation (P2c): the stored hero resolved, row images
   // assigned only on official evidence, the gallery deduplicated — and no
   // asset ever holding two visible roles. Screens consume the verdicts.
@@ -2901,11 +3001,21 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     heroImageUrl: projection.heroImageUrl ?? null,
     photos: consumer.officialPhotos,
     labelVisuals,
+    labelPhotos,
+    firmName: projection.recallingFirm.displayName,
     rows: affectedProductsView.items.map((item): RowImageCandidate => {
       const sizeField = item.fields.find((field) => field.key === 'size') ?? null;
       return {
         rowId: item.rowId,
         name: item.name,
+        // Label-photo caption matching (§16): the row's own words, and for
+        // the ONLY row of a model, the notice's own product text.
+        identityText: [
+          ...item.fields.map((field) => field.value),
+          ...(affectedProductsView.items.length === 1
+            ? affectedProducts.map((product) => product.rawText)
+            : []),
+        ].join(' '),
         // A merged multi-size cell is not one matchable size. Decided from
         // the structured values and the sizes they state, never from
         // punctuation: two sizes join as "10 oz and 48 oz" with no comma (and

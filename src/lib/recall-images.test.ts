@@ -9,7 +9,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { ProductPhoto } from './product-photos';
-import { allocateRecallImages, type RowImageCandidate } from './recall-images';
+import {
+  allocateRecallImages,
+  captionProductWords,
+  type LabelPhotoInput,
+  type RowImageCandidate,
+} from './recall-images';
 
 function photo(overrides: Partial<ProductPhoto> & { url: string }): ProductPhoto {
   return {
@@ -508,4 +513,182 @@ test('the name-only pass cannot hand a multi-size row a photo of a size it does 
     ],
   });
   assert.equal(allocation.rowImages.get('r0'), undefined);
+});
+
+// ── FSIS label photographs (docs/recall-imagery.md §16) ─────────────────────
+
+const LP =
+  'https://project.supabase.co/storage/v1/object/public/product-visuals/fsis-label-photos/x/';
+function labelPhoto(
+  name: string,
+  caption: string | null,
+  overrides: Partial<LabelPhotoInput> = {},
+): LabelPhotoInput {
+  return {
+    url: `${LP}${name}.webp`,
+    alt: caption,
+    order: 0,
+    role: 'package_front',
+    width: 800,
+    height: 800,
+    aspectRatio: 1,
+    kind: 'product',
+    ...overrides,
+  };
+}
+
+test('each variety gets its own label photo by its printed caption — never page order', () => {
+  // Betterballen: pages are printed in the REVERSE of the notice's list.
+  const photos = [
+    labelPhoto('p1', 'Bitterballen (Beef)'),
+    labelPhoto('p2', 'Saté Kroketten (Chicken)'),
+    labelPhoto('p3', 'Bami Rolls (Pork)'),
+  ];
+  const allocation = allocateRecallImages({
+    heroImageUrl: photos[0].url,
+    photos: [],
+    labelVisuals: [],
+    labelPhotos: photos,
+    rows: [
+      row({ rowId: 'bami', name: 'Bami Rolls' }),
+      row({ rowId: 'sate', name: 'Saté Kroketten' }),
+      row({ rowId: 'bitter', name: 'Bitterballen' }),
+    ],
+  });
+  assert.equal(allocation.rowImages.get('bami')?.image.url, photos[2].url);
+  assert.equal(allocation.rowImages.get('sate')?.image.url, photos[1].url);
+  assert.equal(allocation.rowImages.get('bitter')?.image.url, photos[0].url);
+  // The carousel shows every product once; the hero leads it, so it is not repeated.
+  assert.deepEqual(
+    allocation.labelPhotos.map((image) => image.url),
+    [photos[1].url, photos[2].url],
+  );
+  assert.ok(allocation.labelPhotos.every((image) => image.source === 'fsis_label_photo'));
+});
+
+test('caption words: boilerplate, codes and the firm set aside; specific captions claim first; size vetoes', () => {
+  assert.deepEqual(
+    captionProductWords(
+      'Recall 028-2026 – Brett Anthony Foods Wow Bao Cheeseburger BAO Buns',
+      'Brett Anthony Foods',
+    ),
+    ['wow', 'bao', 'cheeseburger', 'buns'],
+  );
+  // Ukrop's: "Bulk" and the size tell the two cobblers apart.
+  const bulk = labelPhoto('bulk', 'Chicken Cobbler – Bulk - Net Wt. 48oz UPC 72251529457');
+  const tray = labelPhoto('tray', 'Chicken Cobbler – Net Wt. 11.6oz UPC 72251528457');
+  const allocation = allocateRecallImages({
+    heroImageUrl: null,
+    photos: [],
+    labelVisuals: [],
+    labelPhotos: [tray, bulk],
+    firmName: "Ukrop's Homestyle Foods",
+    rows: [
+      row({
+        rowId: 'b',
+        name: "Ukrop's Chicken Cobbler - Bulk",
+        size: '48 oz',
+        statedSizes: '48 oz',
+      }),
+      row({ rowId: 't', name: "Ukrop's Chicken Cobbler", size: '11.6 oz', statedSizes: '11.6 oz' }),
+    ],
+  });
+  assert.equal(allocation.rowImages.get('b')?.image.url, bulk.url);
+  assert.equal(allocation.rowImages.get('t')?.image.url, tray.url);
+  assert.equal(allocation.rowImages.get('b')?.evidence, 'caption_words');
+});
+
+test('a caption fitting two rows equally assigns nothing', () => {
+  const allocation = allocateRecallImages({
+    heroImageUrl: null,
+    photos: [],
+    labelVisuals: [],
+    labelPhotos: [labelPhoto('one', 'Product Labels: Acme Chicken Sausages')],
+    rows: [
+      row({ rowId: 'a', name: 'Acme Ready Chicken Sausages' }),
+      row({ rowId: 'b', name: 'Acme Smoked Chicken Sausages' }),
+    ],
+  });
+  assert.equal(allocation.rowImages.size, 0);
+});
+
+test('one row: the label photo sits beside it when the notice’s own words name it, hero or not', () => {
+  const box = labelPhoto(
+    'box',
+    'Recall 028-2026 – Brett Anthony Foods Wow Bao Cheeseburger BAO Buns',
+  );
+  const allocation = allocateRecallImages({
+    heroImageUrl: box.url,
+    photos: [],
+    labelVisuals: [],
+    labelPhotos: [box],
+    firmName: 'Brett Anthony Foods',
+    rows: [
+      row({
+        rowId: 'only',
+        name: 'Frozen Fully Cooked Chinese-Style BBQ Pork',
+        identityText:
+          '10-oz. cardboard boxes containing four “WOW BAO CHEESEBURGER BAO BUNS PACKED WITH ALL-NATURAL BEEF”',
+      }),
+    ],
+  });
+  assert.equal(allocation.rowImages.get('only')?.image.url, box.url);
+  assert.equal(allocation.rowImages.get('only')?.evidence, 'caption_words');
+});
+
+test('one photo per caption joins the row pool — the largest — and details never do', () => {
+  const sides = [
+    labelPhoto('side', 'Grace Chicken Vienna Sausages Hot & Spicy', { width: 400, height: 400 }),
+    labelPhoto('front', 'Grace Chicken Vienna Sausages Hot & Spicy', { width: 500, height: 600 }),
+    labelPhoto('band', 'Grace Chicken Vienna Sausages Hot & Spicy', {
+      width: 1400,
+      height: 400,
+      kind: 'detail',
+    }),
+  ];
+  const allocation = allocateRecallImages({
+    heroImageUrl: null,
+    photos: [],
+    labelVisuals: [],
+    labelPhotos: sides,
+    rows: [
+      row({ rowId: 'plain', name: 'Grace Ready To Eat Chicken Vienna Sausages' }),
+      row({ rowId: 'hot', name: 'Grace Ready To Eat Chicken Vienna Sausages Hot & Spicy' }),
+    ],
+  });
+  assert.equal(allocation.rowImages.get('hot')?.image.url, sides[1].url);
+  assert.equal(allocation.rowImages.has('plain'), false);
+  // Carousel: products in document order, then the detail strip.
+  assert.deepEqual(
+    allocation.labelPhotos.map((image) => image.url),
+    [sides[0].url, sides[1].url, sides[2].url],
+  );
+});
+
+test('label photos replace whole label pages as row images', () => {
+  const page = photo({
+    url: 'https://project.supabase.co/storage/v1/object/public/product-visuals/fsis-labels/x/p1.webp',
+    alt: 'Bami Rolls (Pork)',
+    role: 'package_label',
+  });
+  const crop = labelPhoto('crop', 'Bami Rolls (Pork)');
+  const rows = [
+    row({ rowId: 'bami', name: 'Bami Rolls' }),
+    row({ rowId: 'x', name: 'Other Thing' }),
+  ];
+  const before = allocateRecallImages({
+    heroImageUrl: null,
+    photos: [],
+    labelVisuals: [page],
+    rows,
+  });
+  assert.equal(before.rowImages.get('bami')?.image.url, page.url);
+  const after = allocateRecallImages({
+    heroImageUrl: null,
+    photos: [],
+    labelVisuals: [page],
+    labelPhotos: [crop],
+    rows,
+  });
+  assert.equal(after.rowImages.get('bami')?.image.url, crop.url);
 });

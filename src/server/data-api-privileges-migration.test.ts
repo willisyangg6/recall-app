@@ -27,13 +27,20 @@ function stripComments(sql: string): string {
 
 const SQL = stripComments(readFileSync(join(MIGRATIONS_DIR, MIGRATION_FILE), 'utf8'));
 
-/** The relations the app reads with the publishable key, and nothing else. */
-const FEED_RELATIONS = [
+/** The relations 20261010000000 itself asserts are still readable. */
+const LEAST_PRIVILEGE_RELATIONS = [
   'affected_products',
   'consumer_feed_manifest',
   'product_visuals',
   'recall_cases',
 ];
+
+/**
+ * The relations the app reads with the publishable key, and nothing else.
+ * 2026-11-22: fsis_label_photos (docs/recall-imagery.md §16), asserted by its
+ * own migration.
+ */
+const FEED_RELATIONS = [...LEAST_PRIVILEGE_RELATIONS, 'fsis_label_photos'].sort();
 
 test('revokes the four privileges from the Data API roles on every relation in public', () => {
   assert.match(
@@ -75,7 +82,7 @@ test('fails closed on a leftover privilege, a leftover default, or a lost feed r
   assert.match(SQL, /raise exception 'Deliberate SELECT grant lost: %'/);
   // Views, materialized views, partitions and foreign tables count, not just tables.
   assert.match(SQL, /c\.relkind in \('r', 'v', 'm', 'p', 'f'\)/);
-  for (const relation of FEED_RELATIONS) {
+  for (const relation of LEAST_PRIVILEGE_RELATIONS) {
     assert.match(SQL, new RegExp(`\\('${relation}'\\)`), `${relation} read is not asserted`);
   }
 });

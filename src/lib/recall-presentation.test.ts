@@ -32,6 +32,7 @@ import {
   imageUnavailableLabel,
   IMAGE_COUNTER_MIN,
   IMAGE_DOTS_WINDOW,
+  MAX_HEADER_LABEL_PHOTOS,
   productImagery,
   caseIdentity,
   buildHomeCardModel,
@@ -1136,6 +1137,24 @@ test('zero images is a null set; one image is a set of one', () => {
   assert.equal(one.images[0].url, 'https://www.fda.gov/files/a.jpg');
 });
 
+test('the header takes label PHOTOGRAPHS after the hero, capped — never a whole label page (§16)', () => {
+  const hero = officialImage('https://cdn.example/fsis-label-photos/hero.webp', 'fsis_label_photo');
+  const page = officialImage('https://cdn.example/fsis-labels/p1.webp', 'fsis_label_render');
+  const crops = Array.from({ length: MAX_HEADER_LABEL_PHOTOS + 3 }, (_, i) =>
+    officialImage(`https://cdn.example/fsis-label-photos/${i}.webp`, 'fsis_label_photo'),
+  );
+  const urls = productImagery({
+    hero,
+    rowImages: new Map(),
+    gallery: [page],
+    supporting: [],
+    labelPhotos: crops,
+  }).map((image) => image.url);
+  assert.equal(urls[0], hero.url);
+  assert.equal(urls.length, 1 + MAX_HEADER_LABEL_PHOTOS);
+  assert.ok(!urls.includes(page.url));
+});
+
 test('the header takes FDA photography only — a label render can never enter it', () => {
   const hero = officialImage('https://www.fda.gov/files/hero.jpg');
   const photo = officialImage('https://www.fda.gov/files/second.jpg');
@@ -1143,9 +1162,13 @@ test('the header takes FDA photography only — a label render can never enter i
   // The hero leads, then the gallery in its own order; the label render is
   // filtered out by SOURCE, not by position.
   assert.deepEqual(
-    productImagery({ hero, rowImages: new Map(), gallery: [photo, label], supporting: [] }).map(
-      (image) => image.url,
-    ),
+    productImagery({
+      hero,
+      rowImages: new Map(),
+      gallery: [photo, label],
+      supporting: [],
+      labelPhotos: [],
+    }).map((image) => image.url),
     [hero.url, photo.url],
   );
   // Even a stored hero that somehow pointed at a label render (the frozen
@@ -1157,6 +1180,7 @@ test('the header takes FDA photography only — a label render can never enter i
       rowImages: new Map(),
       gallery: [photo],
       supporting: [],
+      labelPhotos: [],
     }).map((image) => image.url),
     [photo.url],
   );
@@ -3364,5 +3388,104 @@ test('a 1.5 lb caption never matches a 15 lb row; an equivalent spelling still d
     {
       t0r0: 'caption_name_size',
     },
+  );
+});
+
+// ── Product identity from the notice's own list (Grace / Brett, 2026-11) ────
+
+const GRACE = {
+  title:
+    'FSIS Issues Public Health Alert for Ineligible Chicken Vienna-Style Sausage Products Illegally Imported From Jamaica',
+  lines: [
+    '•\t140-g. cans of “GRACE READY TO EAT CHICKEN VIENNA SAUSAGES.”',
+    '•\t140-g. cans of “GRACE READY TO EAT CHICKEN VIENNA SAUSAGES HOT & SPICY.”',
+  ],
+  summary:
+    'The U.S. Department of Agriculture’s Food Safety and Inspection Service (FSIS) is issuing a public health alert for canned chicken Vienna-style sausages that were illegally imported from Jamaica, a country that is not eligible to export meat or poultry products to the United States.',
+};
+
+test('Grace: Feed, Details and What Happened share the listed product and brand', () => {
+  const card = buildHomeCardModel(
+    feedItem({
+      sourceAgency: 'FSIS',
+      noticeType: 'public_health_alert',
+      title: GRACE.title,
+      firmName: null,
+      reasonText: 'Import Violation',
+      hazardCategory: 'other_regulatory',
+      productNames: GRACE.lines,
+    }),
+    { today: TODAY, prefs: null },
+  );
+  const model = buildDetailModel(
+    detail(
+      {
+        sourceAgency: 'FSIS',
+        noticeType: 'public_health_alert',
+        title: GRACE.title,
+        recallingFirm: { displayName: null, rawVariants: [] },
+        reasonText: 'Import Violation',
+        hazardCategory: 'other_regulatory',
+        summaryText: GRACE.summary,
+      },
+      {
+        affectedProducts: GRACE.lines.map((line) => ({
+          name: line,
+          rawText: line,
+          sourceNativeId: 'PHA-10062026-01',
+          extractionConfidence: 'stated' as const,
+        })),
+      },
+    ),
+    { today: TODAY, affectsYou: false },
+  );
+  for (const name of [card.productName, model.productName]) {
+    assert.doesNotMatch(name, /Ineligible|Illegally/);
+    assert.match(name, /Chicken Vienna Sausages/);
+  }
+  assert.equal(card.productName, model.productName);
+  assert.equal(card.brand.text, 'Grace');
+  assert.equal(model.brand.text, 'Grace');
+  // The status stays a PHA and the reason stays the import violation.
+  assert.equal(card.noticeLabel, 'Public Health Alert');
+  assert.match(
+    model.whatHappened.text,
+    /^A public health alert was issued for Grace Ready To Eat Chicken Vienna Sausages because the products may have been illegally imported from Jamaica\./,
+  );
+});
+
+test('Brett Anthony: the header keeps the notice’s contents, the row the package', () => {
+  const title =
+    'Brett Anthony Foods Recalls Frozen Fully Cooked Chinese-Style BBQ Pork Products Due to Misbranding and Undeclared Allergens';
+  const line =
+    '10-oz. cardboard boxes containing four “WOW BAO CHEESEBURGER BAO BUNS PACKED WITH ALL-NATURAL BEEF” with “USE BY 10. 01. 27 LOT #26243 EST 40001” printed on the side of the box.';
+  const model = buildDetailModel(
+    detail(
+      {
+        sourceAgency: 'FSIS',
+        title,
+        recallingFirm: { displayName: 'Brett Anthony Foods', rawVariants: [] },
+        reasonText: 'Unreported Allergens',
+        hazardCategory: 'allergen',
+        pathogenOrAllergen: 'sesame, soy',
+        summaryText:
+          'The product labeled as cheeseburger BAO buns may actually contain Chinese-style BBQ pork product, which contains sesame and soy, known allergens, that are not declared on the product label. The following product is subject to recall: 10-oz. cardboard boxes containing four “WOW BAO CHEESEBURGER BAO BUNS PACKED WITH ALL-NATURAL BEEF” with “USE BY 10. 01. 27 LOT #26243 EST 40001” printed on the side of the box.',
+      },
+      {
+        affectedProducts: [
+          { name: line, rawText: line, sourceNativeId: '028-2026', extractionConfidence: 'stated' },
+        ],
+      },
+    ),
+    { today: TODAY, affectsYou: false },
+  );
+  assert.equal(model.productName, 'Frozen Fully Cooked Chinese-Style BBQ Pork');
+  assert.deepEqual(
+    model.affectedProducts.items.map((item) => item.name),
+    ['Wow Bao Cheeseburger Bao Buns Packed With All-Natural Beef'],
+  );
+  assert.match(
+    model.whatHappened.text,
+    /Packages labeled as cheeseburger BAO buns may contain Chinese-style BBQ pork\./,
   );
 });

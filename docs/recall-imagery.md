@@ -35,7 +35,8 @@ Two governing principles:
 
 ## 2. Architecture
 
-Two official image sources exist, and only two:
+Two official image sources exist, and only two (the FSIS one has two forms
+since 2026-11-22: page renders and the photographs cropped from them, §16):
 
 - **FDA announcement photographs** — extracted from the announcement's own
   preserved HTML by `src/lib/product-photos.ts` (roles, dedup, page-furniture
@@ -55,21 +56,24 @@ Two official image sources exist, and only two:
   image of the affected-product row its caption names (§15). It is never a
   card hero and never enters the Detail header.
 
-### Frozen interim policy (unchanged by C9.1; item 2 amended 2026-11-16, §15)
+### Frozen interim policy (item 2 amended 2026-11-16, §15; items 3 and 8 amended 2026-11-22, §16)
 
 1. Existing FDA `heroImageUrl` behavior stays byte-identical.
 2. FSIS rendered label pages remain in `product_visuals`. An uncaptioned
    page stays unrendered on every consumer surface (§14); a captioned page
    appears only on the product row its caption names (§15).
-3. An FSIS label page is not automatically a card hero. No pipeline,
-   job, or repair path promotes one; `src/server/imagery-guards.test.ts`
-   keeps every such path removed, and `qa:imagery` gates on zero
-   label-render heroes in production.
+3. A whole FSIS label PAGE is never a card hero. No pipeline, job, or
+   repair path promotes one; `src/server/imagery-guards.test.ts` keeps every
+   such path removed, and `qa:imagery` gates on zero label-render heroes in
+   production. A product PHOTOGRAPH cropped from a label document is the
+   card image of an FSIS case with no other hero (§16).
 4. Documentary FDA photos already selected historically are not changed.
 5. No existing production hero is removed.
 6. No new hero backfill is planned.
 7. No external catalog provider is integrated.
-8. No title-based or fuzzy image matching exists anywhere.
+8. No title-based or fuzzy image matching exists anywhere. (§16's
+   caption-word rule is exact: every product word of a printed caption must
+   be one of the row's own words.)
 
 ### Hero provenance (`src/lib/hero-provenance.ts`)
 
@@ -554,12 +558,12 @@ through the same guard.
 
 ### Where official imagery appears — the complete list
 
-| Surface                         | What renders                                            |
-| ------------------------------- | ------------------------------------------------------- |
-| Feed / Saved card               | the stored hero, one image (unchanged since C9)         |
-| Detail header                   | the FDA product-photo set, hero first, paged            |
-| Affected Products, inside a row | the image the allocator matched to that exact row (§13) |
-| anywhere else                   | **nothing**                                             |
+| Surface                         | What renders                                                                |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| Feed / Saved card               | the stored hero, one image (an FSIS label photograph since 2026-11-22, §16) |
+| Detail header                   | the FDA product-photo set, hero first, then FSIS label photographs (§16)    |
+| Affected Products, inside a row | the image the allocator matched to that exact row (§13; label photos §16)   |
+| anywhere else                   | **nothing**                                                                 |
 
 Since 2026-11-16 (§15) a label page whose printed caption names a product
 row is that row's image. **Every other FSIS label render is rendered
@@ -796,7 +800,8 @@ never evidence.
   exception: in a one-row table with no stored hero, a captioned label page
   may back that row when its caption names it (PHA-11142026). Announcement
   photos never use the exception.
-- **Never the card, never the header.** Checked on 2026-11-16 at the card's
+- **Never the card, never the header** (superseded 2026-11-22 for the
+  photographs inside the page — §16; a whole page still never is). Checked on 2026-11-16 at the card's
   112 pt tile: a full letter-size label page shrinks the package photo to
   about a third of the tile, so it cannot identify a product. Ingestion
   never writes a label page as `heroImageUrl`, and the header stays
@@ -809,3 +814,92 @@ never evidence.
 Pinned by `src/server/fsis/attachments.test.ts` against the recorded PDFs.
 Source behavior and the product-list side are in
 [recall-source-contract.md](recall-source-contract.md) §4.3.
+
+## 16. FSIS label photographs: Feed, Details carousel and product rows (2026-11-22)
+
+**Founder decision (2026-11-22).** FSIS product images appear on the Feed, in
+the Details carousel, and beside the matching affected product, through
+shared rules for every announcement. The §15 finding still holds — a whole
+label page is too small on a 112 pt card — so the images are the product
+PHOTOGRAPHS placed on the label documents, not the pages.
+
+**Sources** (`discoverLabelPhotoSources`, src/server/fsis/label-photos.ts).
+A link is a picture source when its own words say so ("view labels",
+"Labels", "Product Labels", "Photos", "Product label photos", "Larger
+images", "Pictures"), when its file name does, or when it sits in FSIS's
+`food_label_pdf/` folder; an `<img>` in the announcement is one too.
+Targets may be PDFs, image files or linked pages (a page's own `<img>`,
+furniture skipped). Distribution and store lists never qualify; a product
+list in the label folder is read but yields nothing unless it carries
+photographs. Only approved FSIS hosts, through the canonical resolver.
+Corpus (2026-11-22): 946 announcements, every one the old PDF rule found.
+
+**Photographs** (`extractLabelPhotos`). Each image drawn on a page is
+located from the page's own drawing operations, cropped from a
+high-resolution render (every encoding pdfjs draws, including JPEG2000 and
+JBIG2 scans), and trimmed of paper margins. Dropped, by rule and counted:
+
+- a **panel**: the text inside the image (an OCR layer) reads as
+  nutrition-facts or ingredient copy — two distinct panel terms;
+- a sliver: under 2% of the page or 140 px on its short side;
+- a **duplicate**: the same photograph, exact or re-encoded (64-bit
+  difference hash within 6 bits), in any of the case's documents.
+
+A strip or sliver (aspect beyond 2.4:1) is kept as a **detail** image —
+carousel only, after the products, never a card or row image.
+
+**Naming.** A photo's caption is the printed text beside it (text outside
+every image, nearest to it), else the page title printed above every image,
+else null. Text inside an image is evidence for classifying it, never a
+caption. Page position is never evidence.
+
+**Card image** (`selectCardPhoto`). The largest product photograph on the
+earliest page that has one — the agency's lead label. The label-photo sync
+(labels job, every tick) writes it through `updateCaseHeroImage`: a
+compare-and-set that changes no timeline, date or alert, only on FSIS cases,
+only over an empty hero or its own earlier crop. It re-asserts every run, so
+a re-projection that clears it is repaired the same tick. `classifyHeroUrl`
+calls it `label_photo`; `qa:imagery` counts it and still gates on zero whole
+pages.
+
+**Details carousel.** Hero first, then the FDA gallery, then the label
+photographs: products in document order, then details, at most 12
+(`MAX_HEADER_LABEL_PHOTOS`; Kayem's sheet holds 40). Unlike announcement
+photos, a label photo that backs its row stays in the carousel: the
+carousel shows the recall's products, the row shows which one is which.
+No photo repeats in the carousel.
+
+**Rows.** When a case has label photos they replace page renders as row
+imagery. One photo per printed caption joins the row pool — the largest
+product photo of that caption (a can shot from four sides is one product).
+It then goes through the §13 passes and their contradiction veto, plus one
+pass for label photos only:
+
+- **caption_words** — every product word of the caption (recall numbers,
+  "Product Labels", weights, UPC/SKU, "Best by"-style boilerplate and the
+  firm's own name set aside) is one of the row's own words, for exactly one
+  unclaimed row. Captions with more product words claim first (Ukrop's
+  "Chicken Cobbler – Bulk" before "Chicken Cobbler"); a tie assigns nothing.
+  A row's words are its name and field values; a ONE-row model also reads
+  the notice's own product text, since that row is the only product (Brett
+  Anthony's row is titled "Chinese-Style BBQ Pork", and its notice quotes
+  the box: "WOW BAO CHEESEBURGER BAO BUNS").
+- In a one-row model a label photo may back the row even when it is also
+  the hero — the row shows the product beside its facts.
+
+**Verified against production data (2026-11-22, read-only, photos from the
+current documents):** Betterballen (each of three rows its own page, in the
+reverse of print order); Biscuit & Sausage Gravy after the 2026-11-19
+revision (five rows, each its own label, including the two Granna's 400
+meals the captions tell apart); Brett Anthony (the Wow Bao box); Grace (plain
+and Hot & Spicy cans); Ukrop's (four rows by "Bulk" and size).
+
+**Storage.** `fsis_label_photos` (public read, like `product_visuals`;
+shipped builds before this change never read it, so nothing they show
+changes except the card image) and the private `fsis_label_photo_sources`
+ledger (a document is read once per revision; an empty one is remembered;
+failures back off like label renders). Migration `20261122000000`.
+
+Pinned by `src/server/fsis/label-photos.test.ts` (recorded documents),
+`label-photo-sync.test.ts`, `src/lib/recall-images.test.ts` and the
+amended `src/server/imagery-guards.test.ts`.

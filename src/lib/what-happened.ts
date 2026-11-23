@@ -104,14 +104,11 @@ function productPhrase(title: string, productDescription?: string | null): strin
   // A source-structured product description beats title parsing (FDA).
   const described = (productDescription ?? '').replace(/[\s.]+$/, '').trim();
   if (described.length >= 3) return described;
+  // The shared headline grammar already reads report parentheticals and cuts
+  // status tails ("… Unfit for Human Consumption"; "… Illegally Imported").
   let phrase = productSummaryFromTitle(title);
   if (!phrase) return null;
-  // "Notification Report 054-2018 (Ham Products)" → the parenthetical product.
-  const report = phrase.match(/^notification report[^(]*\(([^)]+)\)/i);
-  if (report) phrase = report[1].trim();
-  phrase = phrase
-    .replace(/^an?\s+/i, '') // "for A Ready-To-Eat Beef Jerky" reads broken
-    .replace(/\s+unfit for human consumption$/i, ''); // clause states this
+  phrase = phrase.replace(/^an?\s+/i, ''); // "for A Ready-To-Eat Beef Jerky" reads broken
   if (phrase.length < 3) return null;
   if (
     !/products?$/i.test(phrase) &&
@@ -361,6 +358,48 @@ function frame(input: WhatHappenedInput, product: string): string {
 
 const MAX_WORDS = 70;
 
+/**
+ * A mislabeled product, in the notice's own words: "The product labeled as
+ * cheeseburger BAO buns may actually contain Chinese-style BBQ pork product,
+ * which contains sesame and soy". Both sides are kept — the package a shopper
+ * holds and what the notice says is inside — so neither silently replaces the
+ * other wherever the product is named. Requires the notice's "may / actually
+ * contain"; a "labeled as … produced on …" sentence states no contents.
+ */
+const LABELED_AS_CONTAINS =
+  /\b(?:labeled|labelled)\s+as\s+(?:an?\s+)?(.{3,80}?)\s+(?:(?:that|which|but)\s+)?(?:may\s+(?:actually\s+)?|actually\s+)contain(?:s|ed)?\s+(?:an?\s+)?(.{3,100}?)(?=[,.;]|\s+(?:which|that|and\s+(?:was|were|is|are))\b)/i;
+
+export interface LabelMismatch {
+  /** What the package says, in the notice's words. */
+  labeled: string;
+  /** What the notice says may be inside. */
+  inside: string;
+}
+
+export function labelMismatch(summaryText: string | null): LabelMismatch | null {
+  const match = (summaryText ?? '').match(LABELED_AS_CONTAINS);
+  if (!match) return null;
+  const tidy = (text: string) =>
+    text
+      .replace(/[“”"]/g, '')
+      .replace(/[\s,;:]+$/, '')
+      .replace(/\s+with the USDA mark of inspection$/i, '')
+      .replace(/\s+(?:inside|in)\s+the\s+packages?$/i, '')
+      .replace(/\s+products?$/i, '')
+      .trim();
+  const labeled = tidy(match[1]);
+  const inside = tidy(match[2]);
+  if (labeled.length < 3 || inside.length < 3) return null;
+  return { labeled, inside };
+}
+
+export function labelMismatchSentence(summaryText: string | null): string | null {
+  const mismatch = labelMismatch(summaryText);
+  return mismatch
+    ? `Packages labeled as ${mismatch.labeled} may contain ${mismatch.inside}.`
+    : null;
+}
+
 function wordCount(text: string): number {
   return text.split(/\s+/).filter((w) => w !== '').length;
 }
@@ -391,8 +430,11 @@ export function buildWhatHappened(input: WhatHappenedInput): WhatHappened {
 
   if (product) {
     const reason = reasonClause(input, product);
+    // A mislabeled product's two identities are stated, never budgeted away.
+    const mismatch = labelMismatchSentence(input.summaryText);
     if (reason) {
       let text = `${frame(input, product)} ${reason.clause}.`;
+      if (mismatch) text = `${text} ${mismatch}`;
       // The word budget guards the CAUSE paragraph alone. It never decides
       // whether the scope sentence renders: that sentence is no longer
       // competing for room inside this paragraph, so a long import clause
@@ -410,7 +452,8 @@ export function buildWhatHappened(input: WhatHappenedInput): WhatHappened {
     // gate rejected): the event is still stateable, and stating it without a
     // reason beats gluing an ungrammatical clause on. The full source reason
     // stays preserved in the projection.
-    return { text: cleanDisplayText(`${frame(input, product)}.`), scope, source: 'generic' };
+    const text = `${frame(input, product)}.${mismatch ? ` ${mismatch}` : ''}`;
+    return { text: cleanDisplayText(text), scope, source: 'generic' };
   }
 
   // Last resort: the authoritative headline, cleaned — never an empty section.

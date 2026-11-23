@@ -1,13 +1,15 @@
 /**
- * C9 frozen-policy guards: an ordinary FSIS label render is detail-screen
- * evidence and must NEVER automatically become a card hero.
+ * C9 imagery guards, as amended 2026-11-22 (docs/recall-imagery.md §16): a
+ * whole rendered FSIS label PAGE is detail-screen evidence and must NEVER
+ * become a card hero. A product PHOTOGRAPH cropped from a label document
+ * may, through exactly one path — the label-photo sync — which fills only an
+ * empty hero or its own earlier choice.
  *
- * The promotion paths C9 briefly introduced (pipeline enrichment, the
- * labels job's same-tick hero fill, the blanket repair command) are gone;
+ * The page-promotion paths C9 briefly introduced (pipeline enrichment, the
+ * labels job's same-tick hero fill, the blanket repair command) stay gone;
  * these tests keep them gone. Also pinned here: the failure-ledger
  * dispositions for the eight recorded failures, and the semantics of the
- * RESERVED narrow-write infrastructure (`updateCaseHeroImage`,
- * `listCaseVisuals`) that C9.1's professional hero sourcing will inherit.
+ * narrow-write infrastructure (`updateCaseHeroImage`, `listCaseVisuals`).
  */
 
 import assert from 'node:assert/strict';
@@ -189,15 +191,27 @@ test('an existing FDA hero passes through re-projection byte-identical', async (
   );
 });
 
-test('the labels sync has no path to a case: its storage port cannot touch heroes', () => {
-  // Structural guard: the LabelSyncStore port exposes label/failure/page
-  // operations only. If a hero hook or case accessor is ever reintroduced,
-  // this membership list breaks and the frozen policy gets re-litigated
-  // deliberately, not by accident.
+test('page renders have no path to a hero; the photo sync is the only hero writer', () => {
+  // Structural guard: the page-render sync's port exposes label/failure/page
+  // operations only. If a hero hook is ever added there, this breaks and the
+  // policy gets re-litigated deliberately, not by accident.
   const labelSync = readFileSync(join(__dirname, 'fsis', 'label-sync.ts'), 'utf8');
   assert.doesNotMatch(labelSync, /applyHero|hero-fill|heroImageUrl|updateCase/i);
+  // The labels job reaches heroes only through the label-photo sync.
   const labelsJob = readFileSync(join(__dirname, 'jobs', 'labels-job.ts'), 'utf8');
-  assert.doesNotMatch(labelsJob, /applyHero|hero-fill|heroImageUrl|RecallStore/i);
+  assert.doesNotMatch(labelsJob, /applyHero|hero-fill|heroImageUrl|RecallStore|setCaseHero/i);
+  assert.match(labelsJob, /syncFsisLabelPhotos/);
+  // …and that sync writes only its own selection (a stored crop), only over
+  // an empty hero or one of its own crops.
+  const photoSync = readFileSync(join(__dirname, 'fsis', 'label-photo-sync.ts'), 'utf8');
+  const writes = [...photoSync.matchAll(/store\.setCaseHero\(/g)];
+  assert.equal(writes.length, 1, 'one hero write');
+  assert.match(photoSync, /const next = choice\?\.url \?\? null;/);
+  assert.match(
+    photoSync,
+    /if \(hero\.heroImageUrl !== null && !isLabelPhotoUrl\(hero\.heroImageUrl\)\) continue;/,
+  );
+  assert.match(photoSync, /if \(!hero \|\| hero\.sourceAgency !== 'FSIS'\) continue;/);
 });
 
 test('no blanket hero-repair command exists', () => {
