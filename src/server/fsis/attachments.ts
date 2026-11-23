@@ -28,7 +28,7 @@ import { normalizeStateToken } from '../../domain/us-geography';
 import type { AttachmentTable, Geography } from '../../domain/recall-types';
 import type { AttachmentEnrichment, AttachmentSource } from '../../domain/source-record';
 import { decodeEntities, stripHtml } from '../../domain/text';
-import { MULTIPLE_PRODUCTS_AND_BRANDS, PRODUCT_SOFT_LIMIT } from '../push/product-name';
+import { PRODUCT_SOFT_LIMIT } from '../push/product-name';
 
 // ── Discovery ───────────────────────────────────────────────────────────────
 
@@ -606,7 +606,16 @@ function statesDisagreement(products: TableProduct[], geography: Geography): str
  * product-name limit; otherwise the push shortener's grouping —
  * `{Brand} products` for one brand, `Multiple products and brands` for more.
  */
-export function productDescriptionFor(products: { name: string; brand: string | null }[]): string {
+/**
+ * The product description a verified list supports, or null when its
+ * products cannot be named briefly. Null leaves the notice's own wording in
+ * place: an upstream-ingredient alert keeps "…Products Containing Recalled
+ * Biscuits" (docs/recall-domain-architecture.md) rather than a generic
+ * "Multiple products and brands" title (2026-11-22, PHA-11142026 revision).
+ */
+export function productDescriptionFor(
+  products: { name: string; brand: string | null }[],
+): string | null {
   // Cased like the brand, so prose that quotes the name verbatim ("…issued
   // for Biscuit & Sausage Gravy from…") never shouts. The printed cell stays
   // verbatim in the stored table.
@@ -615,7 +624,7 @@ export function productDescriptionFor(products: { name: string; brand: string | 
   const joined = `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
   if ([...joined].length <= PRODUCT_SOFT_LIMIT) return joined;
   const brands = [...new Set(products.flatMap((p) => (p.brand ? [p.brand] : [])))];
-  return brands.length === 1 ? `${brands[0]} products` : MULTIPLE_PRODUCTS_AND_BRANDS;
+  return brands.length === 1 ? `${brands[0]} products` : null;
 }
 
 /**

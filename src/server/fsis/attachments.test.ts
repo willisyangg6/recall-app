@@ -420,6 +420,29 @@ test('PHA-11142026 revised: a continuation page without a repeated header contin
   );
 });
 
+test('PHA-11142026 revised: five products of two brands add brands, never a generic title', async () => {
+  const parse = parseProductList(
+    await readPdfLayout(pdf('PHA-11142026-Product-List_0.revised-2026-11-19.pdf')),
+  );
+  const enrichment = buildEnrichment({
+    noticeProductNames: ['Biscuit & Sausage Gravy'],
+    geography: {
+      scope: 'states',
+      states: ['Arkansas', 'Louisiana', 'Mississippi', 'Oklahoma', 'Tennessee', 'Texas'],
+      confidence: 'stated',
+      sourceText: null,
+    },
+    readings: [
+      { kind: 'product_list', url: 'list', linkText: 'list', sha256: 'a'.repeat(64), parse },
+    ],
+  });
+  assert.equal(enrichment.sources[0].status, 'verified');
+  // The notice's own "…Containing Recalled Biscuits" stands.
+  assert.equal(enrichment.productDescription, null);
+  assert.deepEqual(enrichment.brands, ['Mmm! Meals Made in Minutes', 'Granna’s']);
+  assert.equal(enrichment.tables[0].rows.length, 5);
+});
+
 test('a headerless page is a continuation only when it fits the previous columns', () => {
   const header = (y: number) => [
     { text: 'Size', x: 30, y, width: 20 },
