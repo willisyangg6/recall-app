@@ -90,6 +90,39 @@ same canonical inputs on both screens:
 
 The stored title is never mutated; titles are never generatively rewritten.
 
+**FSIS headlines that describe a status, and the notice's own product list
+(2026-11-22).** FSIS stores no product description or brand, so the name is
+parsed from the headline (`productSummaryFromTitle`, shared by the card,
+Detail, What Happened and push). That grammar cuts regulatory tails as reason
+text — "…Illegally Imported From…", "…Distributed/Packaged/Produced Without
+(the) Benefit of (Import) Inspection", "…Produced in…", "…(Deemed) Unfit
+for…", "…Served at…", "…Misbranded With…", "…For Foreign/Possible…" — drops a
+leading "Ineligible" (the import finding, which the reason line and What
+Happened state), and reads "Notification Report … (Ham Products)" as its
+parenthetical. Before this, Grace's PHA read "Ineligible Chicken Vienna-Style
+Sausage Products Illegally" on every surface.
+
+A headline whose product region still describes a status, or names no product
+(`titleDescribesStatus`), may take its name from the notice's product list
+(`listedProductIdentity`): the quoted label name every listed line shares
+(`sharedListedName`; a quoted date or code is a marking, never a name). It is
+used only when it contains every product word the headline states (a quoted
+store or company never qualifies) and adds what the headline lacks: the brand
+its listed products repeat — only when the notice names no company — or a
+name where the headline has none. Grace: "Ready To Eat Chicken Vienna
+Sausages" under the brand "Grace", where it previously read "Company not
+specified". `caseProductIdentity` makes this one decision for the card and
+Detail, and What Happened names the product the same way.
+
+**A mislabeled product keeps both identities.** When the notice states that
+packages "labeled as X may (actually) contain Y" (`labelMismatch` in
+`lib/what-happened.ts`), the header keeps the notice's own product name, the
+single Affected Products row shows the package's listed label name when it says
+X, and What Happened adds "Packages labeled as X may contain Y." Brett Anthony
+(028-2026): header "Frozen Fully Cooked Chinese-Style BBQ Pork", row "Wow Bao
+Cheeseburger Bao Buns Packed With All-Natural Beef". The Feed card cannot
+state the mismatch: its row carries no notice text.
+
 ### Brand and identity roles (P2a)
 
 One presentation-level identity decision (`caseIdentity`) assigns three roles,

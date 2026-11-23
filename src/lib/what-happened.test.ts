@@ -123,7 +123,7 @@ test('ineligible-country import PHA (Ecuador shape)', () => {
   );
   assert.equal(
     result.text,
-    'A public health alert was issued for Ineligible Pork products because the products may have been illegally imported from Ecuador. Ecuador is not eligible to export these products to the United States.',
+    'A public health alert was issued for Pork products because the products may have been illegally imported from Ecuador. Ecuador is not eligible to export these products to the United States.',
   );
 });
 
@@ -278,4 +278,35 @@ test('a count-noun chemical agent takes its article; a mass noun never does', ()
   assert.match(chemical('cleaning chemical'), /contaminated with a cleaning chemical\.$/);
   assert.match(chemical('lead'), /contaminated with lead\.$/);
   assert.match(chemical('inorganic arsenic'), /contaminated with inorganic arsenic\.$/);
+});
+
+test('a mislabeled product keeps both identities: the package and what may be inside', () => {
+  const result = buildWhatHappened(
+    input({
+      title:
+        'Brett Anthony Foods Recalls Frozen Fully Cooked Chinese-Style BBQ Pork Products Due to Misbranding and Undeclared Allergens',
+      reasonText: 'Unreported Allergens',
+      hazardCategory: 'allergen',
+      pathogenOrAllergen: 'sesame, soy',
+      firmDisplayName: 'Brett Anthony Foods',
+      // Verbatim from FSIS 028-2026 (2026-11-22).
+      summaryText:
+        'Brett Anthony Foods, an Elk Grove Village, Ill. establishment, is recalling approximately 1,935 pounds of a frozen BBQ pork product labeled as a cheeseburger BAO bun due to misbranding and undeclared allergens. The product labeled as cheeseburger BAO buns may actually contain Chinese-style BBQ pork product, which contains sesame and soy, known allergens, that are not declared on the product label.',
+    }),
+  );
+  assert.match(result.text, /Frozen Fully Cooked Chinese-Style BBQ Pork/);
+  assert.match(
+    result.text,
+    /Packages labeled as cheeseburger BAO buns may contain Chinese-style BBQ pork\.$/,
+  );
+  // "labeled as … produced on …" states no contents: no mismatch sentence.
+  assert.doesNotMatch(
+    buildWhatHappened(
+      input({
+        summaryText:
+          'The product labeled as pizza sauce was produced on January 25, 2026, and contains milk.',
+      }),
+    ).text,
+    /Packages labeled/,
+  );
 });

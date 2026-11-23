@@ -32,7 +32,46 @@ const TITLE_PRODUCT_PATTERNS = [
  * ingredient in the consumer summary.
  */
 const TITLE_TAIL =
-  /\s+(?:due to\b|because\b|that (?:have|has|may|were|was)\b|imported (?:from|without)\b|produced without\b|for possible\b|after\b|linked to\b).*$/i;
+  /\s+(?:due to\b|because\b|that (?:have|has|may|were|was)\b|(?:[a-z]+ly\s+)?imported (?:from|without|into)\b|(?:distributed|packaged|produced|processed|shipped|sold|manufactured|imported) without\b|produced in\b|(?:deemed\s+)?unfit for\b|served at\b|misbranded with\b|for (?:possible|foreign|extraneous)\b|after\b|linked to\b).*$/i;
+
+/**
+ * A regulatory STATUS, not a product: "Ineligible Pork Cracklings" names pork
+ * cracklings whose import was not allowed. The status is the notice's reason
+ * (rendered by the reason line and What Happened); it never leads the name.
+ */
+const STATUS_LEAD = /^ineligible\s+/i;
+
+/**
+ * Words that make a headline's product phrase a description of the notice's
+ * regulatory finding rather than of the product ("Ineligible … Products
+ * Illegally Imported From Jamaica"; "… Distributed Without Benefit of
+ * Inspection"). Read only from the product region, never from its reason
+ * tail ("… Due to Misbranding").
+ */
+const STATUS_WORDS =
+  /\b(?:ineligible|illegally|unlawfully|without\s+(?:the\s+)?(?:benefit|opportunity)|unfit\s+for|misbranded)\b/i;
+
+/** The headline's product region, as the source wrote it (null if none). */
+function titleProductRegion(title: string): string | null {
+  for (const pattern of TITLE_PRODUCT_PATTERNS) {
+    const match = title.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+/**
+ * True when the official headline does not NAME its product: its product
+ * region describes a regulatory status, or the shared grammar finds no
+ * product phrase in it at all. Such a headline is still the official title
+ * (preserved everywhere it is shown as such); it is only a weak source for a
+ * product NAME, and the notice's own product list may name it instead.
+ */
+export function titleDescribesStatus(title: string): boolean {
+  const region = titleProductRegion(title);
+  if (region === null || productSummaryFromTitle(title) === null) return true;
+  return STATUS_WORDS.test(region.replace(/\s+(?:due to|because)\b.*$/i, ''));
+}
 
 /**
  * Upstream-ingredient pattern: "<products> containing <ingredient> that
@@ -71,7 +110,12 @@ export function productSummaryFromTitle(title: string): string | null {
       if (trailing) phrase = `${trailing[1]}Recalled ${trailing[2]}`;
       else phrase = phrase.replace(/\s+recalled[\s.]*$/i, '');
     }
+    // "Notification Report 054-2018 (Ham Products)": the parenthetical names
+    // the product; the report number never does.
+    const report = phrase.match(/^notification report[^(]*\(([^)]+)\)/i);
+    if (report) phrase = report[1].trim();
     const summary = phrase
+      .replace(STATUS_LEAD, '')
       .replace(/(^|\s+)products?$/i, '')
       .replace(/[\s,.;:]+$/, '')
       .trim();
@@ -93,6 +137,193 @@ export function productDisplayName(
   const described = (productDescription ?? '').replace(/[\s.]+$/, '').trim();
   if (described.length >= 3) return described;
   return productSummaryFromTitle(title) ?? title;
+}
+
+// ── The notice's own product list ───────────────────────────────────────────
+
+/**
+ * FSIS lists each affected product with the words printed on its package in
+ * quotation marks: `140-g. cans of "GRACE READY TO EAT CHICKEN VIENNA
+ * SAUSAGES."`. A quoted date or code ("USE BY 10. 01. 27 LOT #26243") is a
+ * marking, never a name.
+ */
+const LISTED_QUOTE = /[“"]([^”"]{3,160})[”"]/g;
+const MARKING_QUOTE =
+  /^(?:use\s+by|best\s+(?:by|if|before)|sell\s+by|packed|pack\s+date|lot\b|est\b|est\.|exp|p-?\d|\d)/i;
+
+function listedLabelName(line: string): string | null {
+  for (const match of line.matchAll(LISTED_QUOTE)) {
+    const name = match[1]
+      .replace(/&amp;/gi, '&')
+      .replace(/&#0?39;|&apos;/gi, "'")
+      .replace(/\s+/g, ' ')
+      .replace(/[\s.,;:]+$/, '')
+      .trim();
+    if (MARKING_QUOTE.test(name) || !/\p{L}{3}/u.test(name)) continue;
+    return name;
+  }
+  return null;
+}
+
+/**
+ * The one product identity the notice's list states for EVERY line: the
+ * single label name all lines share, or the leading words all of them share
+ * (`… VIENNA SAUSAGES` and `… VIENNA SAUSAGES HOT & SPICY`). Null when any
+ * line names no product, or when the lines share fewer than two words — a
+ * list of different products has no one name.
+ */
+export function sharedListedName(lines: readonly string[]): string | null {
+  if (lines.length === 0) return null;
+  const names: string[] = [];
+  for (const line of lines) {
+    const name = listedLabelName(line);
+    if (name === null) return null;
+    names.push(name);
+  }
+  const split = names.map((name) => name.split(' '));
+  const shared: string[] = [];
+  for (let i = 0; i < split[0].length; i++) {
+    const word = split[0][i];
+    if (!split.every((words) => words[i]?.toLowerCase() === word.toLowerCase())) break;
+    shared.push(word);
+  }
+  // A shared prefix never ends on a joining word or mark.
+  while (shared.length > 0 && /^(?:&|and|with|in|of|or|-|–|,)$/i.test(shared[shared.length - 1])) {
+    shared.pop();
+  }
+  if (shared.length < 2) return null;
+  return shared.join(' ').replace(/[\s,;:–-]+$/, '');
+}
+
+/**
+ * Words that describe HOW a product is sold, not WHAT or WHOSE it is — never
+ * evidence that a list and a headline name the same product, and never part
+ * of a brand.
+ */
+const DESCRIPTOR_WORDS = new Set([
+  'a',
+  'all',
+  'an',
+  'and',
+  'brand',
+  'cooked',
+  'eat',
+  'for',
+  'fresh',
+  'frozen',
+  'fully',
+  'in',
+  'natural',
+  'of',
+  'organic',
+  'premium',
+  'product',
+  'raw',
+  'ready',
+  'smoked',
+  'style',
+  'the',
+  'to',
+  'uncooked',
+  'with',
+]);
+
+function contentKey(word: string): string | null {
+  const key = word.toLowerCase().replace(/[^a-z]/g, '');
+  if (key.length < 3 || DESCRIPTOR_WORDS.has(key)) return null;
+  return key.length > 4 && key.endsWith('s') && !key.endsWith('ss') ? key.slice(0, -1) : key;
+}
+
+function contentKeys(text: string): string[] {
+  return text
+    .split(/[\s/–-]+/)
+    .map(contentKey)
+    .filter((key): key is string => key !== null);
+}
+
+/**
+ * The brand a listed label name leads with: the words before the first word
+ * it shares with the notice's own product phrase, less any trailing
+ * descriptor (`GRACE READY TO EAT | CHICKEN …` → `Grace`). Evidence for a
+ * brand is REPETITION: the same leading words on two or more listed products.
+ * One listed name cannot tell a brand from a product word ("OvaEasy Plain
+ * Whole | Egg"), so it yields none, and neither does a lead of over two words.
+ */
+function listedBrand(listed: string, phrase: string, listedCount: number): string | null {
+  if (listedCount < 2) return null;
+  const phraseKeys = new Set(contentKeys(phrase));
+  const words = listed.split(' ');
+  const first = words.findIndex((word) =>
+    word
+      .split(/[/–-]+/)
+      .map(contentKey)
+      .some((key) => key !== null && phraseKeys.has(key)),
+  );
+  if (first <= 0) return null;
+  const lead = words.slice(0, first);
+  while (lead.length > 0 && DESCRIPTOR_WORDS.has(lead[lead.length - 1].toLowerCase())) lead.pop();
+  if (lead.length === 0 || lead.length > 2 || !lead.every((word) => /\p{L}{2}/u.test(word))) {
+    return null;
+  }
+  return humanizeAllCaps(lead.join(' '));
+}
+
+/** Each line's listed label name, or null where a line quotes none. */
+export function listedLabelNames(lines: readonly string[]): (string | null)[] {
+  return lines.map(listedLabelName);
+}
+
+export interface ListedProductIdentity {
+  /** The product's name as the notice lists it, un-shouted. */
+  name: string;
+  /** The brand that name leads with, when the evidence isolates one. */
+  brand: string | null;
+}
+
+/**
+ * When the notice's product list names the product better than its headline
+ * (docs/recall-feed-usability.md, "Product name"). Only for a case with no
+ * structured product description, whose headline describes a regulatory
+ * STATUS rather than naming a product ("Ineligible Chicken Vienna-Style
+ * Sausage Products Illegally Imported From Jamaica"), or names none at all.
+ *
+ * The list's shared name is used only when it names the SAME product, more
+ * specifically: it contains every product word the headline states
+ * (`GRACE READY TO EAT CHICKEN VIENNA SAUSAGES` ⊇ chicken, vienna, sausage).
+ * A quoted store or company ("Hempstead Foodservice" under "Pork") never
+ * qualifies, and the list is used only when it adds what the headline lacks:
+ * the brand its products repeat (only when the notice names no company), or
+ * a name where the headline has none.
+ * Everything else keeps the headline-derived name.
+ */
+export function listedProductIdentity(input: {
+  title: string;
+  productDescription: string | null | undefined;
+  productLines: readonly string[];
+  /** The recalling company the notice names, if any. */
+  firmName: string | null;
+}): ListedProductIdentity | null {
+  if ((input.productDescription ?? '').trim().length >= 3) return null;
+  if (!titleDescribesStatus(input.title)) return null;
+  const listed = sharedListedName(input.productLines);
+  if (listed === null) return null;
+  const phrase = productSummaryFromTitle(input.title);
+  if (phrase !== null) {
+    const listedKeys = new Set(contentKeys(listed));
+    const stated = contentKeys(phrase);
+    if (stated.length === 0 || !stated.every((key) => listedKeys.has(key))) return null;
+  }
+  // The list replaces the headline's name only when it adds evidence the
+  // headline lacks: a brand its listed products repeat, or a product name
+  // where the headline states none. Otherwise the cleaned headline already
+  // names this product, in the agency's own consumer wording.
+  const brand = phrase === null ? null : listedBrand(listed, phrase, input.productLines.length);
+  if (phrase !== null && brand === null) return null;
+  // A listed brand fills an identity GAP — a notice that names no company
+  // (an import alert's "Company not specified"). Where the notice names the
+  // recalling company, that established identity stands.
+  if (brand !== null && (input.firmName ?? '').trim() !== '') return null;
+  return { name: humanizeAllCaps(listed), brand };
 }
 
 /**

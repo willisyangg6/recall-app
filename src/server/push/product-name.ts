@@ -39,7 +39,7 @@
  * nothing here promises a number of lines.
  */
 
-import { parseProductLine } from '../../lib/consumer-summary';
+import { listedProductIdentity, parseProductLine } from '../../lib/consumer-summary';
 import { cleanProductName, displayBrand } from '../../lib/recall-presentation';
 import {
   measurementOnlyName,
@@ -215,6 +215,14 @@ export function notificationProductName(source: NameSource): string {
   const full = cleanProductName({
     title: source.title,
     productDescription: source.productDescription ?? null,
+    // The same listed-name rule the app's card and Details use.
+    listedName:
+      listedProductIdentity({
+        title: source.title,
+        productDescription: source.productDescription ?? null,
+        productLines: (source.affectedProducts ?? []).map((product) => product.name ?? ''),
+        firmName: source.recallingFirm?.displayName ?? null,
+      })?.name ?? null,
     displayedBrands: [],
     packageEvidence: evidence,
   });

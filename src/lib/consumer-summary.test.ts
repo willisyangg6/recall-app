@@ -9,10 +9,13 @@ import {
   extractAttachmentLinks,
   headlineCaseShopperTitle,
   humanizeAllCaps,
+  listedProductIdentity,
   normalizeUnitSpacing,
   parseProductLine,
   productSummaryFromTitle,
   reasonClauseCasing,
+  sharedListedName,
+  titleDescribesStatus,
 } from './consumer-summary';
 
 // Title and product-line strings below are verbatim from the recorded real
@@ -30,7 +33,8 @@ test('product summary from a standard recall headline', () => {
     productSummaryFromTitle(
       'Asian America Trading, Inc. Recalls Ineligible Siluriformes Fish Products Imported From the People’s Republic of China',
     ),
-    'Ineligible Siluriformes Fish',
+    // "Ineligible" is the notice's regulatory finding, not part of the name.
+    'Siluriformes Fish',
   );
   assert.equal(
     productSummaryFromTitle(
@@ -710,4 +714,101 @@ test('reasonClauseCasing is casing-only and idempotent over every covered shape'
     assert.equal(once.toLowerCase(), input.toLowerCase(), `not casing-only: ${input}`);
     assert.equal(reasonClauseCasing(once), once, `not idempotent: ${input}`);
   }
+});
+
+// ── Status headlines and the notice's own product list (Grace, 2026-11) ─────
+
+const GRACE_TITLE =
+  'FSIS Issues Public Health Alert for Ineligible Chicken Vienna-Style Sausage Products Illegally Imported From Jamaica';
+// The two product lines exactly as stored in affected_products (PHA-10062026-01).
+const GRACE_LINES = [
+  '•\t140-g. cans of “GRACE READY TO EAT CHICKEN VIENNA SAUSAGES.”',
+  '•\t140-g. cans of “GRACE READY TO EAT CHICKEN VIENNA SAUSAGES HOT & SPICY.”',
+];
+
+test('a status headline never leaves its regulatory words in the product name', () => {
+  // The recorded failure: "…Sausage Products Illegally" on the card.
+  assert.equal(productSummaryFromTitle(GRACE_TITLE), 'Chicken Vienna-Style Sausage');
+  assert.equal(
+    productSummaryFromTitle(
+      'RFG Canada Recalls Meat and Poultry Pizza Products Distributed Without Benefit of Import Inspection',
+    ),
+    'Meat and Poultry Pizza',
+  );
+  assert.equal(
+    productSummaryFromTitle(
+      'American Beef Packers Recalls Raw Beef Products Deemed Unfit for Human Consumption',
+    ),
+    'Raw Beef',
+  );
+  assert.equal(
+    productSummaryFromTitle('Land O’Frost Recalls Notification Report 054-2018 (Ham Products)'),
+    'Ham',
+  );
+  assert.equal(titleDescribesStatus(GRACE_TITLE), true);
+  // A reason tail is not the product region: misbranding there is no status.
+  assert.equal(
+    titleDescribesStatus(
+      'Brett Anthony Foods Recalls Frozen Fully Cooked Chinese-Style BBQ Pork Products Due to Misbranding and Undeclared Allergens',
+    ),
+    false,
+  );
+});
+
+test('the listed name all product lines share, never a marking', () => {
+  assert.equal(sharedListedName(GRACE_LINES), 'GRACE READY TO EAT CHICKEN VIENNA SAUSAGES');
+  assert.equal(
+    sharedListedName([
+      '10-oz. cardboard boxes containing four “WOW BAO CHEESEBURGER BAO BUNS PACKED WITH ALL-NATURAL BEEF” with “USE BY 10. 01. 27 LOT #26243 EST 40001” printed on the side of the box.',
+    ]),
+    'WOW BAO CHEESEBURGER BAO BUNS PACKED WITH ALL-NATURAL BEEF',
+  );
+  assert.equal(sharedListedName(['“De Todito NATURAL”', '“Takis Fuego”']), null);
+  assert.equal(sharedListedName(['12-oz. bags of pork rinds']), null);
+});
+
+test('a status headline takes the product and brand its list states (Grace)', () => {
+  assert.deepEqual(
+    listedProductIdentity({
+      title: GRACE_TITLE,
+      productDescription: null,
+      productLines: GRACE_LINES,
+      firmName: null,
+    }),
+    { name: 'Grace Ready To Eat Chicken Vienna Sausages', brand: 'Grace' },
+  );
+});
+
+test('the list never overrides a stated description, a named company, or a different product', () => {
+  const base = { title: GRACE_TITLE, productLines: GRACE_LINES };
+  assert.equal(
+    listedProductIdentity({ ...base, productDescription: 'Vienna sausages', firmName: null }),
+    null,
+  );
+  // A named company is the established identity; the list adds no brand there.
+  assert.equal(
+    listedProductIdentity({ ...base, productDescription: null, firmName: 'Pure Caribbean' }),
+    null,
+  );
+  // A quoted store does not name the headline's product.
+  assert.equal(
+    listedProductIdentity({
+      title: 'Hempstead Foodservice Recalls Pork Products Produced Without Benefit of Inspection',
+      productDescription: null,
+      productLines: ['“Hempstead Foodservice” boxes', '“Hempstead Foodservice” bags'],
+      firmName: null,
+    }),
+    null,
+  );
+  // A headline that names its product is never replaced.
+  assert.equal(
+    listedProductIdentity({
+      title:
+        'Brett Anthony Foods Recalls Frozen Fully Cooked Chinese-Style BBQ Pork Products Due to Misbranding and Undeclared Allergens',
+      productDescription: null,
+      productLines: ['boxes of “WOW BAO CHEESEBURGER BAO BUNS”'],
+      firmName: 'Brett Anthony Foods',
+    }),
+    null,
+  );
 });
