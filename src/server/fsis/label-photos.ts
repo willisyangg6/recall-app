@@ -497,6 +497,11 @@ export async function extractLabelPhotos(pdfBytes: Uint8Array): Promise<LabelPho
 export async function extractImageFilePhoto(bytes: Uint8Array): Promise<LabelPhotoExtraction> {
   const canvasModule = await import('@napi-rs/canvas');
   const image = await canvasModule.loadImage(Buffer.from(bytes));
+  // A few hundred bytes can declare a vast image: decode no further than the
+  // render bound the PDF path uses.
+  if (image.width * image.height > MAX_CANVAS_PIXELS) {
+    throw new Error(`image is ${image.width}×${image.height} px (cap ${MAX_CANVAS_PIXELS} px)`);
+  }
   const source = canvasModule.createCanvas(image.width, image.height) as unknown as CanvasLike;
   const sourceContext = source.getContext('2d');
   sourceContext.fillStyle = '#ffffff';
