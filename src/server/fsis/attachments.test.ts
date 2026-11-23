@@ -399,6 +399,65 @@ test('a product list naming states the notice does not is flagged, not adopted',
   assert.deepEqual(enrichment.tables, []);
 });
 
+test('PHA-11142026 revised: a continuation page without a repeated header continues the table', async () => {
+  // FSIS's 2026-11-19 revision added four Granna's meals; the table runs onto
+  // page 2 with the running page title but no header. Before 2026-11-22 that
+  // page sent the whole list to review and withdrew the verified enrichment.
+  const parse = parseProductList(
+    await readPdfLayout(pdf('PHA-11142026-Product-List_0.revised-2026-11-19.pdf')),
+  );
+  assert.equal(parse.status, 'verified');
+  assert.ok(parse.status === 'verified');
+  assert.deepEqual(
+    parse.table.rows.map((row) => [row.page, row.cells[2]]),
+    [
+      [1, 'BISCUIT & SAUSAGE GRAVY'],
+      [1, '400 Chicken Pot Pie, Green Beans and Pineapples'],
+      [1, '400 chicken pot pie, green beans & pineapples'],
+      [2, '505 Biscuit and Gravy with Sausage, Hashbrowns, and Flavored Applesauce'],
+      [2, '505 biscuit & gravy with meat crumbles flavored applesauce and peaches'],
+    ],
+  );
+});
+
+test('a headerless page is a continuation only when it fits the previous columns', () => {
+  const header = (y: number) => [
+    { text: 'Size', x: 30, y, width: 20 },
+    { text: 'Product Name', x: 150, y, width: 60 },
+    { text: 'Dates', x: 300, y, width: 30 },
+  ];
+  const row = (y: number, name: string) => [
+    { text: '9 oz', x: 30, y, width: 20 },
+    { text: name, x: 150, y, width: 80 },
+    { text: '1/1/27', x: 300, y, width: 30 },
+  ];
+  const title = { text: 'Products List', x: 500, y: 760, width: 80 };
+  const verified = parseProductList({
+    numPages: 2,
+    pages: [
+      { page: 1, items: [title, ...header(700), ...row(680, 'Beef Stew')] },
+      { page: 2, items: [title, ...row(740, 'Chicken Stew')] },
+    ],
+  });
+  assert.equal(verified.status, 'verified');
+  // Prose on the continuation page that sits above every product row is not
+  // a table row: the page is refused, exactly as a header page would be.
+  const refused = parseProductList({
+    numPages: 2,
+    pages: [
+      { page: 1, items: [title, ...header(700), ...row(680, 'Beef Stew')] },
+      {
+        page: 2,
+        items: [
+          { text: 'Thank you for your cooperation.', x: 150, y: 760, width: 200 },
+          ...row(740, 'Chicken Stew'),
+        ],
+      },
+    ],
+  });
+  assert.equal(refused.status, 'needs_review');
+});
+
 test('an unrecognized table layout is needs_review, with nothing kept', () => {
   const layout: PdfLayout = {
     numPages: 1,

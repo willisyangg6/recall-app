@@ -262,27 +262,49 @@ export function parseProductList(layout: PdfLayout): ProductListParse {
   const reasons: string[] = [];
   let headers: string[] | null = null;
   const rows: AttachmentTable['rows'] = [];
+  // The last header page's columns and the running page text printed above
+  // its header ("PHA 11142026 Products List", "Last Updated – …"), for a
+  // continuation page that does not repeat the header (2026-11-20 revision).
+  let lastColumns: Column[] | null = null;
+  let runningText = new Set<string>();
 
   for (const { page, items } of layout.pages) {
     const headerItems = items.filter((item) => isHeaderLine(item.text));
+    let columns: Column[];
+    let body: PdfTextItem[];
     if (headerItems.length === 0) {
-      if (items.length > 0 && headers !== null) reasons.push(`page ${page}: no table header`);
-      continue;
+      if (items.length === 0 || headers === null) continue;
+      if (lastColumns === null) {
+        reasons.push(`page ${page}: no table header`);
+        continue;
+      }
+      // A continuation page: the previous header's columns, minus the
+      // running page text. Every check below still applies — a run between
+      // columns or above the first product row refuses it as before.
+      columns = lastColumns;
+      body = items.filter((item) => !runningText.has(item.text));
+    } else {
+      columns = columnsFromHeader(headerItems);
+      const pageHeaders = columns.map((column) => column.heading);
+      if (!pageHeaders.some((heading) => PRODUCT_HEADING.test(heading))) {
+        reasons.push(
+          `page ${page}: header has no product-name column (${pageHeaders.join(' | ')})`,
+        );
+        continue;
+      }
+      if (headers === null) headers = pageHeaders;
+      else if (headers.join('|') !== pageHeaders.join('|')) {
+        reasons.push(`page ${page}: header differs from page 1`);
+        continue;
+      }
+      const headerTop = Math.max(...headerItems.map((item) => item.y));
+      const headerBottom = Math.min(...headerItems.map((item) => item.y));
+      lastColumns = columns;
+      runningText = new Set(
+        items.filter((item) => item.y > headerTop + 2).map((item) => item.text),
+      );
+      body = items.filter((item) => item.y < headerBottom - 2 && !isHeaderLine(item.text));
     }
-    const columns = columnsFromHeader(headerItems);
-    const pageHeaders = columns.map((column) => column.heading);
-    if (!pageHeaders.some((heading) => PRODUCT_HEADING.test(heading))) {
-      reasons.push(`page ${page}: header has no product-name column (${pageHeaders.join(' | ')})`);
-      continue;
-    }
-    if (headers === null) headers = pageHeaders;
-    else if (headers.join('|') !== pageHeaders.join('|')) {
-      reasons.push(`page ${page}: header differs from page 1`);
-      continue;
-    }
-
-    const headerBottom = Math.min(...headerItems.map((item) => item.y));
-    const body = items.filter((item) => item.y < headerBottom - 2 && !isHeaderLine(item.text));
     const productColumn = columns.findIndex((column) => PRODUCT_HEADING.test(column.heading));
     const placed: { item: PdfTextItem; column: number }[] = [];
     for (const item of body) {
