@@ -58,6 +58,7 @@ import type { CodeLocation } from './fact-types';
 import type { ProductPhoto } from './product-photos';
 import {
   allocateRecallImages,
+  type LabelPhotoInput,
   type RecallImage,
   type RecallImageAllocation,
   type RowImageAssignment,
@@ -2041,9 +2042,23 @@ export function detailImageSet(
  *    is only ever an image matched to that exact product row).
  */
 export function productImagery(allocation: RecallImageAllocation): RecallImage[] {
-  const ordered = [...(allocation.hero ? [allocation.hero] : []), ...allocation.gallery];
-  return ordered.filter((image) => image.source === 'fda_announcement');
+  const ordered = [
+    ...(allocation.hero ? [allocation.hero] : []),
+    ...allocation.gallery,
+    ...allocation.labelPhotos.slice(0, MAX_HEADER_LABEL_PHOTOS),
+  ];
+  return ordered.filter(
+    (image) => image.source === 'fda_announcement' || image.source === 'fsis_label_photo',
+  );
 }
+
+/**
+ * Label photographs shown in the Details carousel after the hero. A label
+ * document can hold dozens (Kayem's 27-page sheet); the carousel shows the
+ * first ones in document order, and the rest stay one tap away in the
+ * official document.
+ */
+export const MAX_HEADER_LABEL_PHOTOS = 12;
 
 // ── Optional section visibility (P3A) ───────────────────────────────────────
 
@@ -2893,6 +2908,18 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
         ? visual.width / visual.height
         : null,
   }));
+  // FSIS label photographs (§16): the products' own pictures, cropped from
+  // the label documents, each named by its printed caption.
+  const labelPhotos: LabelPhotoInput[] = (detail.labelPhotos ?? []).map((photo, index) => ({
+    url: photo.url,
+    alt: photo.caption,
+    order: consumer.photos.length + labelVisuals.length + index,
+    role: photo.kind === 'product' ? 'package_front' : 'other_supporting',
+    width: photo.width,
+    height: photo.height,
+    aspectRatio: photo.height > 0 ? photo.width / photo.height : null,
+    kind: photo.kind,
+  }));
   const affectedProductsView = affectedProductsModel(consumer.packageCheck, productName);
   // The one image-role allocation (P2c): the stored hero resolved, row images
   // assigned only on official evidence, the gallery deduplicated — and no
@@ -2901,11 +2928,21 @@ export function buildDetailModel(detail: CaseDetail, context: DetailContext): De
     heroImageUrl: projection.heroImageUrl ?? null,
     photos: consumer.officialPhotos,
     labelVisuals,
+    labelPhotos,
+    firmName: projection.recallingFirm.displayName,
     rows: affectedProductsView.items.map((item): RowImageCandidate => {
       const sizeField = item.fields.find((field) => field.key === 'size') ?? null;
       return {
         rowId: item.rowId,
         name: item.name,
+        // Label-photo caption matching (§16): the row's own words, and for
+        // the ONLY row of a model, the notice's own product text.
+        identityText: [
+          ...item.fields.map((field) => field.value),
+          ...(affectedProductsView.items.length === 1
+            ? affectedProducts.map((product) => product.rawText)
+            : []),
+        ].join(' '),
         // A merged multi-size cell is not one matchable size. Decided from
         // the structured values and the sizes they state, never from
         // punctuation: two sizes join as "10 oz and 48 oz" with no comma (and

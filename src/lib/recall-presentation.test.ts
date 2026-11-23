@@ -32,6 +32,7 @@ import {
   imageUnavailableLabel,
   IMAGE_COUNTER_MIN,
   IMAGE_DOTS_WINDOW,
+  MAX_HEADER_LABEL_PHOTOS,
   productImagery,
   caseIdentity,
   buildHomeCardModel,
@@ -1136,6 +1137,24 @@ test('zero images is a null set; one image is a set of one', () => {
   assert.equal(one.images[0].url, 'https://www.fda.gov/files/a.jpg');
 });
 
+test('the header takes label PHOTOGRAPHS after the hero, capped — never a whole label page (§16)', () => {
+  const hero = officialImage('https://cdn.example/fsis-label-photos/hero.webp', 'fsis_label_photo');
+  const page = officialImage('https://cdn.example/fsis-labels/p1.webp', 'fsis_label_render');
+  const crops = Array.from({ length: MAX_HEADER_LABEL_PHOTOS + 3 }, (_, i) =>
+    officialImage(`https://cdn.example/fsis-label-photos/${i}.webp`, 'fsis_label_photo'),
+  );
+  const urls = productImagery({
+    hero,
+    rowImages: new Map(),
+    gallery: [page],
+    supporting: [],
+    labelPhotos: crops,
+  }).map((image) => image.url);
+  assert.equal(urls[0], hero.url);
+  assert.equal(urls.length, 1 + MAX_HEADER_LABEL_PHOTOS);
+  assert.ok(!urls.includes(page.url));
+});
+
 test('the header takes FDA photography only — a label render can never enter it', () => {
   const hero = officialImage('https://www.fda.gov/files/hero.jpg');
   const photo = officialImage('https://www.fda.gov/files/second.jpg');
@@ -1143,9 +1162,13 @@ test('the header takes FDA photography only — a label render can never enter i
   // The hero leads, then the gallery in its own order; the label render is
   // filtered out by SOURCE, not by position.
   assert.deepEqual(
-    productImagery({ hero, rowImages: new Map(), gallery: [photo, label], supporting: [] }).map(
-      (image) => image.url,
-    ),
+    productImagery({
+      hero,
+      rowImages: new Map(),
+      gallery: [photo, label],
+      supporting: [],
+      labelPhotos: [],
+    }).map((image) => image.url),
     [hero.url, photo.url],
   );
   // Even a stored hero that somehow pointed at a label render (the frozen
@@ -1157,6 +1180,7 @@ test('the header takes FDA photography only — a label render can never enter i
       rowImages: new Map(),
       gallery: [photo],
       supporting: [],
+      labelPhotos: [],
     }).map((image) => image.url),
     [photo.url],
   );
