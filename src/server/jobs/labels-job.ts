@@ -16,6 +16,7 @@
 import type { LabelSyncOptions, LabelSyncStore } from '../fsis/label-sync';
 import { syncFsisLabels } from '../fsis/label-sync';
 import { syncFsisAttachments, type AttachmentSyncStore } from '../fsis/attachment-sync';
+import { syncFsisLabelPhotos, type LabelPhotoSyncStore } from '../fsis/label-photo-sync';
 import { runJob, type JobContext, type JobReport, type JobSpec } from './runner';
 
 export function labelsJobSpec(mode: 'recent' | 'full'): JobSpec {
@@ -31,6 +32,8 @@ export interface LabelsJobOptions extends Omit<LabelSyncOptions, 'now'> {
   labelStore: LabelSyncStore;
   /** Absent = attachments are not read this run (tests of the label sync alone). */
   attachmentStore?: AttachmentSyncStore;
+  /** Absent = label photos are not read this run (docs/recall-imagery.md §16). */
+  photoStore?: LabelPhotoSyncStore;
 }
 
 export async function runLabelsJob(ctx: JobContext, options: LabelsJobOptions): Promise<JobReport> {
@@ -62,15 +65,35 @@ export async function runLabelsJob(ctx: JobContext, options: LabelsJobOptions): 
           `${attachments.needsReview} need review, ${attachments.unreadable} unreadable.`,
       );
     }
+    // Photos last: they read every label source the notice links (PDFs,
+    // image files, label pages) and set each case's card image.
+    const { photoStore } = options;
+    const photos = photoStore
+      ? await syncFsisLabelPhotos(photoStore, {
+          mode: options.mode,
+          dryRun: options.dryRun,
+          now: ctx.now,
+        })
+      : null;
+    if (photos) {
+      console.log(
+        `  label photos: ${photos.cases} case(s), ${photos.pending} source(s) pending, ` +
+          `${photos.read} read, ${photos.photosStored} photo(s) stored, ` +
+          `${photos.droppedPanels} panel(s) dropped, ${photos.failures} failed; ` +
+          `card images ${photos.heroesSet} set, ${photos.heroesUnchanged} unchanged, ` +
+          `${photos.heroConflicts} conflict(s).`,
+      );
+    }
     const { plan: _plan, ...attachmentMetrics } = attachments ?? { plan: [] };
     void _plan;
     return {
       pipelineRunId: null,
-      outcome: metrics.failures > 0 ? 'partial' : 'succeeded',
+      outcome: metrics.failures > 0 || (photos?.failures ?? 0) > 0 ? 'partial' : 'succeeded',
       metrics: {
         ...metrics,
         itemsSeen: metrics.candidateUrls,
         ...(attachments ? { attachments: attachmentMetrics } : {}),
+        ...(photos ? { labelPhotos: photos } : {}),
       },
     };
   });

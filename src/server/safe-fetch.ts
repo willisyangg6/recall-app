@@ -18,7 +18,8 @@
  * strings (which can carry signed tokens on storage hosts).
  */
 
-export type SafeFetchKind = 'pdf' | 'image';
+/** 'html': a linked label PAGE whose <img> tags are read (FSIS photo sources). */
+export type SafeFetchKind = 'pdf' | 'image' | 'html';
 
 export interface SafeFetchOptions {
   /** Exact hostnames this fetch may touch (initial URL and every redirect). */
@@ -72,6 +73,12 @@ function matchesMagic(kind: SafeFetchKind, bytes: Uint8Array): boolean {
   const startsWith = (prefix: number[]) =>
     bytes.length >= prefix.length && prefix.every((byte, i) => bytes[i] === byte);
   if (kind === 'pdf') return startsWith([0x25, 0x50, 0x44, 0x46, 0x2d]); // %PDF-
+  if (kind === 'html') {
+    // Markup: the first non-whitespace byte is "<" (a BOM may precede it).
+    let i = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0;
+    while (i < bytes.length && [0x20, 0x09, 0x0a, 0x0d].includes(bytes[i])) i += 1;
+    return bytes[i] === 0x3c;
+  }
   return (
     startsWith([0xff, 0xd8, 0xff]) || // JPEG
     startsWith([0x89, 0x50, 0x4e, 0x47]) || // PNG
@@ -88,6 +95,7 @@ function matchesMagic(kind: SafeFetchKind, bytes: Uint8Array): boolean {
 function contentTypeAcceptable(kind: SafeFetchKind, contentType: string | null): boolean {
   if (contentType === null) return true; // magic bytes still decide
   const media = contentType.split(';')[0].trim().toLowerCase();
+  if (kind === 'html') return media === 'text/html' || media === 'application/xhtml+xml';
   // An HTML or JSON body is an error page whatever the caller expected.
   if (media === 'text/html' || media === 'application/json' || media === 'text/plain') {
     return false;

@@ -20,6 +20,7 @@ test('provenance classification: agency photo, our render, or unknown — nothin
     'agency_photo',
   );
   assert.equal(classifyHeroUrl(`${PREFIX}fsis-labels/x/p1.webp`, PREFIX), 'label_render');
+  assert.equal(classifyHeroUrl(`${PREFIX}fsis-label-photos/x/p1-0.webp`, PREFIX), 'label_photo');
   assert.equal(classifyHeroUrl('https://cdn.example.com/stock-food.jpg', PREFIX), 'unknown');
   assert.equal(classifyHeroUrl('https://notfda.gov/files/x.jpg', PREFIX), 'unknown');
   assert.equal(classifyHeroUrl('https://images.notfda.gov.evil.net/x.jpg', PREFIX), 'unknown');

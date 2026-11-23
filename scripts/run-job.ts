@@ -35,6 +35,7 @@ import { runRetailerAldiJob, runRetailerCostcoJob } from '../src/server/jobs/ret
 import type { JobContext, JobReport } from '../src/server/jobs/runner';
 import { SupabaseLabelStore } from '../src/server/fsis/label-store';
 import { SupabaseAttachmentStore } from '../src/server/fsis/attachment-store';
+import { SupabaseLabelPhotoStore } from '../src/server/fsis/label-photo-store';
 import { ExpoPushTransport } from '../src/server/push/expo-transport';
 import { entitlementSourceFromEnv } from '../src/server/push/revenuecat-entitlement';
 import { SupabasePushStore } from '../src/server/push/push-store';
@@ -138,6 +139,7 @@ async function main(): Promise<void> {
             dryRun,
             labelStore: new SupabaseLabelStore(client),
             attachmentStore: new SupabaseAttachmentStore(client),
+            photoStore: new SupabaseLabelPhotoStore(client),
           })
         : job === 'retailer-costco'
           ? await runRetailerCostcoJob(ctx, {
