@@ -194,7 +194,17 @@ export async function syncFsisLabelPhotos(
     }
     byCase.set(record.recallCaseId, list);
   }
-  const caseIds = [...byCase.keys()].filter((id) => (byCase.get(id) ?? []).length > 0);
+  // Newest case first: the capped daily sweep reaches the recalls shoppers
+  // see first, and the historical tail last (Grace, 2026-10-06, was last of
+  // ~1,000 pending sources in oldest-first order).
+  const newest = new Map<string, string>();
+  for (const record of candidates) {
+    const seen = newest.get(record.recallCaseId) ?? '';
+    if (record.publishedAt > seen) newest.set(record.recallCaseId, record.publishedAt);
+  }
+  const caseIds = [...byCase.keys()]
+    .filter((id) => (byCase.get(id) ?? []).length > 0)
+    .sort((a, b) => (newest.get(b) ?? '').localeCompare(newest.get(a) ?? ''));
   const states = new Map(
     (await store.listSourceStates(caseIds)).map((s) => [`${s.recallCaseId}|${s.sourceUrl}`, s]),
   );

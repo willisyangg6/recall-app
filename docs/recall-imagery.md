@@ -898,7 +898,10 @@ and Hot & Spicy cans); Ukrop's (four rows by "Bulk" and size).
 shipped builds before this change never read it, so nothing they show
 changes except the card image) and the private `fsis_label_photo_sources`
 ledger (a document is read once per revision; an empty one is remembered;
-failures back off like label renders). Migration `20261122000000`.
+failures back off like label renders). Migration `20261122000000`. The
+daily `--full` sweep reads at most 120 documents per run, newest case first,
+so current recalls are covered in the first sweep and the historical tail
+follows (≈ 1,000 pending documents on 2026-11-23).
 
 Pinned by `src/server/fsis/label-photos.test.ts` (recorded documents),
 `label-photo-sync.test.ts`, `src/lib/recall-images.test.ts` and the

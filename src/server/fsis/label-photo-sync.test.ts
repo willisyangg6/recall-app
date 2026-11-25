@@ -269,3 +269,36 @@ test('card image rule: largest product photo on the earliest page; details never
   assert.equal(selectCardPhoto([stored({ kind: 'detail' })]), null);
   assert.equal(selectCardPhoto([]), null);
 });
+
+test('the capped full sweep reads the newest case first, then advances through the backlog', async () => {
+  const store = new MemoryPhotoStore();
+  for (const [id, publishedAt] of [
+    ['old', '2015-10-30'],
+    ['grace', '2026-10-06'],
+    ['mid', '2021-03-01'],
+  ] as const) {
+    fsisCase(store, id, `<a href="${PDF.replace('Recall_028', id)}">view labels</a>`);
+    store.candidates[store.candidates.length - 1].publishedAt = publishedAt;
+  }
+  const reads: string[] = [];
+  const sweep = () =>
+    syncFsisLabelPhotos(store, {
+      mode: 'full',
+      now: () => NOW,
+      maxSources: 2,
+      readSource: async (source) => {
+        reads.push(source.url);
+        return { sourceSha: 'a'.repeat(64), extraction: extraction([]) };
+      },
+    });
+  const names = () => reads.map((url) => url.match(/(old|grace|mid)/)![1]);
+  await sweep();
+  assert.deepEqual(names(), ['grace', 'mid']);
+  // A finished document is skipped before the cap, so the next run reads the
+  // rest of the backlog, not the newest documents again; then nothing.
+  const second = await sweep();
+  assert.deepEqual(names(), ['grace', 'mid', 'old']);
+  assert.equal(second.capped, 0);
+  await sweep();
+  assert.deepEqual(names(), ['grace', 'mid', 'old']);
+});

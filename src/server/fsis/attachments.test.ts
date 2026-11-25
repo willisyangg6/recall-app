@@ -42,6 +42,7 @@ import {
   matchLabelPages,
   noticeProductNames,
   parseProductList,
+  PRODUCT_LIST_PARSER_VERSION,
   readPdfLayout,
   type AttachmentReading,
   type PdfLayout,
@@ -700,6 +701,96 @@ test('sync: rerunning writes nothing; a same-URL revision updates the ONE row, n
   assert.deepEqual(detectChanges(original, store.projection).material, []);
   assert.deepEqual(store.projection.affectedProducts, original.affectedProducts);
   assert.deepEqual(store.projection.geography, original.geography);
+});
+
+test('sync: a list an older parser refused is read again by the daily sweep, though its bytes did not change', async () => {
+  // Production, 2026-11-23: PHA-11142026's list stayed "page 2: no table
+  // header" after the continuation-page fix shipped, because unchanged bytes
+  // returned the stored verdict.
+  const store = biscuitStore();
+  const original = store.projection;
+  const originalRecord = store.normalized;
+  const source = agency({
+    [BISCUIT_LIST]: pdf(BISCUIT_LIST),
+    [BISCUIT_LABELS]: pdf(BISCUIT_LABELS),
+  });
+  const options = { now: NOW, fetchPdf: source.fetchPdf, fetchDelayMs: 0, log: () => {} };
+  await syncFsisAttachments(store, { mode: 'recent', ...options });
+  const key = [...store.attachments.keys()].find((k) => k.endsWith(BISCUIT_LIST))!;
+  const verified = store.attachments.get(key)!;
+  // What an older (unversioned) parser stored for the same bytes; enrichment
+  // withdrawn.
+  const olderParse = { ...verified.extraction! } as Record<string, unknown>;
+  delete olderParse.parserVersion;
+  store.attachments.set(key, {
+    ...verified,
+    status: 'needs_review',
+    reviewReasons: ['page 2: no table header'],
+    extraction: olderParse as unknown as typeof verified.extraction,
+  });
+  store.projection = original;
+  store.normalized = originalRecord;
+
+  // The dry run reads it too, so the plan shows the repair; it writes nothing.
+  const upsertsBefore = store.upserts;
+  const dry = await syncFsisAttachments(store, { mode: 'full', dryRun: true, ...options });
+  assert.equal(store.upserts, upsertsBefore);
+  assert.equal(store.attachments.get(key)!.status, 'needs_review');
+  assert.equal(dry.plan.find((entry) => entry.nativeId === 'PHA-11142026')?.write, true);
+
+  await syncFsisAttachments(store, { mode: 'full', ...options });
+  assert.equal(store.attachments.get(key)!.status, 'verified');
+  assert.deepEqual(store.attachments.get(key)!.reviewReasons, []);
+  assert.equal(store.projection.productDescription, 'Biscuit & Sausage Gravy');
+  assert.deepEqual(detectChanges(original, store.projection).material, []);
+
+  // A verified reading of unchanged bytes is still kept as is.
+  const upserts = store.upserts;
+  await syncFsisAttachments(store, { mode: 'full', ...options });
+  assert.equal(store.upserts, upserts);
+});
+
+test('sync: a reading stored by another parser version is read again once, then kept', async () => {
+  // The documented refresh for a future parser change: bump
+  // PRODUCT_LIST_PARSER_VERSION and every stored list is read again, in any
+  // mode, even with unchanged bytes. A refusal by the CURRENT parser is kept.
+  const store = biscuitStore();
+  const source = agency({
+    [BISCUIT_LIST]: pdf(BISCUIT_LIST),
+    [BISCUIT_LABELS]: pdf(BISCUIT_LABELS),
+  });
+  const options = { now: NOW, fetchPdf: source.fetchPdf, fetchDelayMs: 0, log: () => {} };
+  await syncFsisAttachments(store, { mode: 'recent', ...options });
+  const key = [...store.attachments.keys()].find((k) => k.endsWith(BISCUIT_LIST))!;
+  const current = store.attachments.get(key)!;
+  assert.equal(
+    current.extraction?.kind === 'product_list' && current.extraction.parserVersion,
+    PRODUCT_LIST_PARSER_VERSION,
+  );
+
+  store.attachments.set(key, {
+    ...current,
+    fetchedAt: '2026-01-01T00:00:00.000Z',
+    extraction: {
+      ...(current.extraction as object),
+      parserVersion: 0,
+    } as typeof current.extraction,
+  });
+  const fetchedBefore = source.calls.length;
+  await syncFsisAttachments(store, { mode: 'recent', ...options });
+  assert.ok(source.calls.slice(fetchedBefore).some((url) => url.endsWith(BISCUIT_LIST)));
+  const reread = store.attachments.get(key)!;
+  assert.equal(
+    reread.extraction?.kind === 'product_list' && reread.extraction.parserVersion,
+    PRODUCT_LIST_PARSER_VERSION,
+  );
+
+  // Current version, refused: the recent sync does not fetch it again.
+  store.attachments.set(key, { ...reread, status: 'needs_review', reviewReasons: ['x'] });
+  const fetchedAgain = source.calls.length;
+  await syncFsisAttachments(store, { mode: 'recent', ...options });
+  assert.ok(!source.calls.slice(fetchedAgain).some((url) => url.endsWith(BISCUIT_LIST)));
+  assert.equal(store.attachments.get(key)!.status, 'needs_review');
 });
 
 test('the projection patch copies only attachment-owned keys, so it cannot widen a case', () => {
