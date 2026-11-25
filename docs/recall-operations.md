@@ -1073,6 +1073,19 @@ Per-attachment state lives in `fsis_attachments`: one row per (record,
 URL), with sha256, previous sha256, verdict and reasons. Rows marked
 `needs_review` or `unreadable` contribute nothing, and the notice itself is
 unaffected. Fetch failures share `product_visual_failures` and its backoff.
+Every product-list reading stores the parser version that made it
+(`extraction.parserVersion`, `PRODUCT_LIST_PARSER_VERSION` in
+`src/server/fsis/attachments.ts`). Unchanged bytes keep a reading only when
+the current version made it, whatever its verdict; a reading by another
+version, or one made before versioning, is read again in any mode, dry runs
+included. **To refresh cached readings after a parser change, bump
+`PRODUCT_LIST_PARSER_VERSION` in the same change.** The next ticks and daily
+`--full` sweep then re-read every list in their window (within their fetch
+budgets), and `npm run backfill:fsis-attachments:dry -- --native-id <ids>`
+(or `--all-history`) shows what the current parser reads before any apply.
+This is why PHA-11142026's list stayed "no table header" after the
+continuation-page fix shipped (2026-11-23): unchanged bytes returned the old
+verdict.
 The run metrics carry `attachments.needsReview` and `attachments.unreadable`.
 
 ### Server rollout order

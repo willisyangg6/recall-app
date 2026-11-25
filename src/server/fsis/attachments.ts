@@ -251,6 +251,15 @@ const PRODUCT_HEADING = /^product(?: name)?$/i;
 const ROW_GAP = 18;
 
 /**
+ * The product-list parser's version, stored with every reading. A stored
+ * reading made by another version is read again even when its bytes are
+ * unchanged, so a parser fix reaches lists it already read. Bump it with any
+ * change to `parseProductList` that should re-read stored lists. Readings
+ * made before versioning carry none, and count as outdated.
+ */
+export const PRODUCT_LIST_PARSER_VERSION = 1;
+
+/**
  * Read a product-list PDF's table. Columns are found from the printed
  * header (multi-line headings merge by horizontal overlap); each body run
  * joins the column whose span contains its center; rows begin where the

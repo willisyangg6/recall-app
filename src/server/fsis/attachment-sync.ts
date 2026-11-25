@@ -34,6 +34,7 @@ import {
   labelPageCaptions,
   noticeProductNames,
   parseProductList,
+  PRODUCT_LIST_PARSER_VERSION,
   readPdfLayout,
   type AttachmentReading,
   type PdfLayout,
@@ -66,7 +67,7 @@ export interface StoredAttachment {
   reviewReasons: string[];
   /** product_list: the parse; labels: the page captions. */
   extraction:
-    | { kind: 'product_list'; parse: ProductListParse }
+    | { kind: 'product_list'; parse: ProductListParse; parserVersion?: number }
     | { kind: 'labels'; captions: { page: number; caption: string | null }[] }
     | null;
   fetchedAt: string;
@@ -263,13 +264,18 @@ export async function syncFsisAttachments(
         // Fetch a list we have never read, one previously unreadable once
         // its backoff allows, and — in the daily sweep — re-verify the bytes
         // so a revision under the same URL is caught.
+        // A reading by another parser version is read again in any mode,
+        // dry runs included, so the plan shows what the current parser reads.
+        const outdated =
+          previous !== null && previous.status !== 'unreadable' && !isCurrentReading(previous);
         const needsFetch =
           previous === null ||
           previous.status === 'unreadable' ||
+          outdated ||
           (options.mode === 'full' && !options.dryRun);
         let row = previous;
         if (needsFetch && backedOff) metrics.deferredByBackoff += 1;
-        else if (needsFetch && options.dryRun && previous !== null) {
+        else if (needsFetch && options.dryRun && previous !== null && !outdated) {
           // dry run: plan from what is stored
         } else if (needsFetch && fetchBudget <= 0) metrics.capped += 1;
         else if (needsFetch) {
@@ -285,8 +291,13 @@ export async function syncFsisAttachments(
               lastError: row.reviewReasons.join('; ').slice(0, 300),
             });
           } else if (failure) await store.clearFailure(attachment.url);
+          // A re-read with a new parser version is a change even when the
+          // verdict is not, so the version is recorded and not read again.
           const changed =
-            previous === null || previous.sha256 !== row.sha256 || previous.status !== row.status;
+            previous === null ||
+            previous.sha256 !== row.sha256 ||
+            previous.status !== row.status ||
+            canonicalJson(previous.extraction) !== canonicalJson(row.extraction);
           if (
             previous !== null &&
             previous.sha256 !== null &&
@@ -455,6 +466,14 @@ export async function syncFsisAttachments(
   return metrics;
 }
 
+/** A product-list reading the current parser made (either verdict). */
+function isCurrentReading(row: StoredAttachment): boolean {
+  return (
+    row.extraction?.kind === 'product_list' &&
+    row.extraction.parserVersion === PRODUCT_LIST_PARSER_VERSION
+  );
+}
+
 async function readProductList(
   attachment: { url: string; linkText: string },
   candidate: AttachmentCandidate,
@@ -488,8 +507,11 @@ async function readProductList(
   }
   const sha = sha256(bytes);
   const revised = previous !== null && previous.sha256 !== null && previous.sha256 !== sha;
-  if (previous !== null && previous.sha256 === sha && previous.extraction !== null) {
-    return previous; // unchanged bytes: nothing to re-read
+  // Unchanged bytes keep a reading only when the current parser made it: a
+  // parser fix must reach lists already read (PHA-11142026 stayed "no table
+  // header" after the continuation-page fix shipped, its bytes unchanged).
+  if (previous !== null && previous.sha256 === sha && isCurrentReading(previous)) {
+    return previous;
   }
   const revision = {
     sha256: sha,
@@ -503,7 +525,7 @@ async function readProductList(
       ...revision,
       status: parse.status === 'verified' ? 'verified' : 'needs_review',
       reviewReasons: parse.status === 'verified' ? [] : parse.reasons,
-      extraction: { kind: 'product_list', parse },
+      extraction: { kind: 'product_list', parse, parserVersion: PRODUCT_LIST_PARSER_VERSION },
     };
   } catch (error) {
     return {
