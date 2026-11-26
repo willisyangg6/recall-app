@@ -10,7 +10,10 @@
  * push-api.ts / recall-feed.ts / installation-reset*.ts, the Supabase
  * migrations (RLS + RPCs + delete_installation_data), and the dependency
  * lock (no analytics/advertising/crash SDK exists — pinned by
- * trust-documents tests against package.json). Reconciled again on
+ * trust-documents tests against package.json). Since 2026-11-25 the app
+ * posts a fixed set of usage events to PostHog over plain HTTP
+ * (src/lib/analytics, docs/recall-analytics.md); "Usage analytics" below
+ * describes exactly that catalog. Reconciled again on
  * 2026-10-10 with the website data-practices audit: RevenueCat, the
  * always-on preference mirror, the onboarding and subscription caches, the
  * absence of automatic server expiry, and what the reset does not reach.
@@ -129,13 +132,26 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
       ],
     },
     {
+      title: 'Usage analytics',
+      blocks: [
+        bullets([
+          'Lotly sends a small set of usage events to PostHog, an analytics service, to count how many people open the app and see where setup and the purchase screen lose them. The events are: the app opened, each setup screen shown, setup finished, the purchase screen shown, a purchase or restore started and how it ended (completed, cancelled, nothing to restore, or failed), and the Feed opened.',
+          'Each event carries a random analytics identifier made on this iPhone, which groups that iPhone’s events together, the app version and build, the iOS version, whether this copy came from the App Store or TestFlight, and the time. The analytics identifier is separate from the installation identifier and from the purchase identifier.',
+          'Events never include your states, stores, allergens or other choices, which recalls you view or search for, your alert settings or push token, receipts or prices, or anything you type. Lotly collects limited usage events, such as onboarding progress, paywall views and purchase outcomes. It does not make screen recordings or capture individual taps. PostHog discards your connection’s IP address instead of storing it, and does not look up a location from it.',
+          'PostHog keeps usage events for one year, then deletes them.',
+          'If Apple reports that you are 13 to 17, the app sends no usage analytics.',
+          `“${RESET_ACTION_LABEL}” removes the analytics identifier and any events not yet sent from this iPhone. Later events use a new identifier. Events already sent stay with PostHog under the earlier identifier until the one-year retention period ends.`,
+        ]),
+      ],
+    },
+    {
       title: 'What Lotly does not collect',
       blocks: [
         bullets([
           'No account, name, email address, phone number, contacts, or photos.',
           'No device location: Lotly never uses location services. The states you shop in are a manual choice.',
           'No advertising identifier, no advertising, and no tracking across apps or websites.',
-          'No analytics, advertising, or crash-reporting SDKs are included in the app.',
+          'No advertising, analytics, or crash-reporting SDKs are included in the app, and the app makes no screen recordings and does not capture individual taps. The only usage data is the usage events listed under Usage analytics.',
           'No record of what you search for, which recalls you read, or what you share. None of that is stored by the app or tied to your installation identifier.',
         ]),
         paragraph(
@@ -153,7 +169,8 @@ export const PRIVACY_DATA_CONTROLS: TrustDocument = {
         paragraph(
           'Lotly’s database and image storage are hosted on Supabase. Recall alerts are delivered ' +
             'through Expo’s push service and then Apple’s notification service to your iPhone. ' +
-            'Subscriptions are sold by Apple and checked through RevenueCat. If you email Lotly, ' +
+            'Subscriptions are sold by Apple and checked through RevenueCat. Anonymous usage ' +
+            'events go to PostHog. If you email Lotly, ' +
             `Google hosts its support mailbox (${SUPPORT_EMAIL}) and so holds your email address, ` +
             'your messages and any request code you send; the app itself sends Google nothing. ' +
             'These providers process the data described above to provide those services; none ' +

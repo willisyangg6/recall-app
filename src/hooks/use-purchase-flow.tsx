@@ -32,11 +32,20 @@
  * on the next launch.
  */
 
-import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { AccessibilityInfo, Linking } from 'react-native';
 
 import type { PurchaseProps } from '@/components/paywall/paywall-panel';
 import { useAccess } from '@/hooks/use-access';
+import { track } from '@/lib/analytics/analytics';
+import type { PaywallPlacement } from '@/lib/analytics/analytics-events';
 import {
   DESTINATION_UNCONFIGURED,
   initialPaywallView,
@@ -95,8 +104,20 @@ export interface PurchaseFlow {
   developmentControls: ReactNode;
 }
 
-export function usePurchaseFlow(): PurchaseFlow {
+/**
+ * Analytics (lib/analytics): one `paywall_viewed` per mount — the paywall
+ * shown — and the start and observed outcome of every purchase and restore.
+ * A restore is never reported as a purchase. RevenueCat stays the authority
+ * on access; these record only what this screen saw.
+ */
+export function usePurchaseFlow(placement: PaywallPlacement): PurchaseFlow {
   const access = useAccess();
+  const viewed = useRef(false);
+  useEffect(() => {
+    if (viewed.current) return;
+    viewed.current = true;
+    track({ name: 'paywall_viewed', props: { placement } });
+  }, [placement]);
   const unconfirmed =
     access.entitlement.kind === 'inactive' && access.entitlement.reason === 'unconfirmed';
   const [view, setView] = useState<PaywallView>(() => initialPaywallView(unconfirmed));
@@ -126,6 +147,7 @@ export function usePurchaseFlow(): PurchaseFlow {
     if (view.offerings.kind !== 'ready' || view.operation !== 'idle') return;
     const pkg = view.offerings.offering.lifetime;
     setView((prior) => ({ ...prior, operation: 'purchasing', notice: null }));
+    track({ name: 'purchase_started', props: { placement } });
     // Under the store guard: a return to the foreground (the StoreKit sheet
     // backgrounds the app) cannot start a refresh until the purchase AND its
     // apply have settled, whatever the outcome.
@@ -137,7 +159,17 @@ export function usePurchaseFlow(): PurchaseFlow {
       }
       return outcome;
     });
-    if (outcome.kind === 'success') return;
+    if (outcome.kind === 'success') {
+      track({ name: 'purchase_completed', props: { placement } });
+      return;
+    }
+    if (outcome.kind === 'cancelled') track({ name: 'purchase_cancelled', props: { placement } });
+    else {
+      track({
+        name: 'purchase_failed',
+        props: { placement, reason: outcome.kind === 'error' ? 'error' : 'unavailable' },
+      });
+    }
     const notice: PaywallNoticeKind =
       outcome.kind === 'cancelled'
         ? 'cancelled'
@@ -151,6 +183,7 @@ export function usePurchaseFlow(): PurchaseFlow {
   const restore = async () => {
     if (view.operation !== 'idle') return;
     setView((prior) => ({ ...prior, operation: 'restoring', notice: null }));
+    track({ name: 'restore_started', props: { placement } });
     const outcome = await access.runStoreOperation(async () => {
       const outcome = await access.provider.restore();
       if (outcome.kind === 'restored') {
@@ -160,7 +193,18 @@ export function usePurchaseFlow(): PurchaseFlow {
       }
       return outcome;
     });
-    if (outcome.kind === 'restored') return;
+    if (outcome.kind === 'restored') {
+      track({ name: 'restore_completed', props: { placement } });
+      return;
+    }
+    if (outcome.kind === 'nothing_to_restore') {
+      track({ name: 'restore_nothing_found', props: { placement } });
+    } else {
+      track({
+        name: 'restore_failed',
+        props: { placement, reason: outcome.kind === 'error' ? 'error' : 'unavailable' },
+      });
+    }
     const notice: PaywallNoticeKind =
       outcome.kind === 'nothing_to_restore'
         ? 'restore_nothing'

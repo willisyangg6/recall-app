@@ -81,6 +81,8 @@ export interface InstallationResetDeps {
    * installation.
    */
   clearLocalOnboardingState(): Promise<void>;
+  /** Discard the anonymous analytics id and queue. Optional; never fails the reset. */
+  clearLocalAnalytics?(): Promise<void>;
   /** Discard the old installation id. */
   clearInstallationId(): Promise<void>;
   /** Mint the fresh id through the canonical getOrCreate path. */
@@ -125,6 +127,9 @@ export function resetInstallationData(
     await deps.clearLocalAlertState();
     await deps.clearLocalSavedRecalls();
     await deps.clearLocalOnboardingState();
+    // The anonymous analytics id and unsent events (lib/analytics): the next
+    // launch is a new analytics installation, unlinked to this one.
+    await deps.clearLocalAnalytics?.().catch(() => {});
     await deps.clearInstallationId();
     await deps.createFreshInstallationId();
     return { status: 'deleted' };

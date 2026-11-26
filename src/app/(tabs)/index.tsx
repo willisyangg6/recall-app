@@ -36,6 +36,7 @@ import { useFeed } from '@/hooks/use-feed';
 import { usePreferences } from '@/hooks/use-preferences';
 import { useRetailerNotices } from '@/hooks/use-retailer-notices';
 import { buildAffectsMeSections } from '@/lib/affects-me-ranking';
+import { trackFeedViewed } from '@/lib/analytics/analytics';
 import {
   FEED_EMPTY_CORPUS,
   FEED_EMPTY_FILTERS,
@@ -245,6 +246,10 @@ interface HomeSection {
 }
 
 export default function HomeScreen() {
+  // Analytics: the Feed reached, once per launch (the tab stays mounted).
+  useEffect(() => {
+    trackFeedViewed();
+  }, []);
   // After onboarding the session has already served the complete corpus
   // Building and Ready showed; the Feed starts from it rather than from
   // `Loading recalls…`, and revalidates on mount as it always did.

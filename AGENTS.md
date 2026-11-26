@@ -45,6 +45,7 @@ it in the same change rather than describing the new behavior somewhere else.
 | Design system: tokens, semantics, Figma mapping    | [DESIGN.md](DESIGN.md)                                                                               |
 | Push delivery                                      | [docs/recall-push-delivery.md](docs/recall-push-delivery.md)                                         |
 | Onboarding, hard paywall, purchase boundary        | [docs/recall-onboarding-and-paywall.md](docs/recall-onboarding-and-paywall.md)                       |
+| Product analytics (PostHog funnel, privacy limits) | [docs/recall-analytics.md](docs/recall-analytics.md)                                                 |
 | Imagery                                            | [docs/recall-imagery.md](docs/recall-imagery.md)                                                     |
 | Data-flow audit                                    | [docs/recall-data-flow-audit.md](docs/recall-data-flow-audit.md)                                     |
 | App Store readiness                                | [docs/recall-app-store-readiness.md](docs/recall-app-store-readiness.md)                             |

@@ -151,7 +151,12 @@ test('the no-advertising/no-tracking claim is proven by the dependency graph', (
   const privacy = documentBySlug('privacy-data-controls');
   assert.ok(privacy);
   const text = documentPlainText(privacy);
-  assert.match(text, /No analytics, advertising, or crash-reporting SDKs/i);
+  assert.match(text, /No advertising, analytics, or crash-reporting SDKs/i);
+  // The one analytics flow (src/lib/analytics) is disclosed, with its limits.
+  assert.match(text, /usage events to PostHog/i);
+  assert.match(text, /does not make screen recordings or capture individual taps/i);
+  assert.match(text, /until the one-year retention period ends/i);
+  assert.doesNotMatch(text, /contain nothing that identifies you/i);
   assert.match(text, /no tracking across apps/i);
 
   // The claim is only makeable while the FULL dependency lock stays free of

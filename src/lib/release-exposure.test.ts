@@ -80,6 +80,12 @@ const REQUIRED_PUBLIC_ENV = [
   // P2B7X.2 (2026-10-04): the RevenueCat public iOS SDK key. Public by
   // design (it identifies the app to the store, grants nothing), set on EAS
   // `production`; a build without it runs the fail-closed provider.
+  // Product analytics (2026-11-25, docs/recall-analytics.md): the PostHog
+  // project key is public by design (write-only ingestion), set per EAS
+  // environment; absent = analytics off. Host and environment label.
+  'EXPO_PUBLIC_ANALYTICS_ENV',
+  'EXPO_PUBLIC_POSTHOG_HOST',
+  'EXPO_PUBLIC_POSTHOG_KEY',
   'EXPO_PUBLIC_REVENUECAT_IOS_KEY',
   'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
   'EXPO_PUBLIC_SUPABASE_URL',

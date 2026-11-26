@@ -70,7 +70,8 @@ This policy covers the Lotly iPhone app and the Lotly website
 - Subscriptions are sold by **Apple**. We use **RevenueCat** to check that
   your subscription is active, under a purchase identifier that the app never
   sends to our server.
-- We use **no analytics, advertising, or tracking**, we do not sell or share
+- The app sends a few **usage events** to PostHog (see "Usage
+  analytics"). We use **no advertising or cross-app tracking**, we do not sell or share
   personal information for advertising, and the website sets no cookies.
 - You can delete your data in the app at any time. If you stop using the app,
   we delete what our server holds automatically after 12 months.
@@ -146,7 +147,32 @@ last edit).⟧
 - Which recalls you open, save, or share. Saved recalls stay on your iPhone,
   and sharing goes through the iPhone share sheet.
 - Your payment details. Apple handles payment.
-- Any analytics, crash-reporting, or advertising data.
+- Any crash-reporting or advertising data, screen recordings, individual
+  taps, or usage data beyond the events under "Usage analytics".
+
+## Usage analytics
+
+The app sends a small, fixed set of usage events to **PostHog**, an
+analytics service, so we can count app opens and see where setup and the
+purchase screen lose people: the app opened, each setup screen shown, setup
+finished, the purchase screen shown, a purchase or restore started and how it
+ended, and the Feed opened. Each event carries a random analytics identifier
+made on your iPhone, which groups that iPhone's events together (it is
+separate from the installation and purchase identifiers), the app version and build, the iOS version, whether the app came
+from the App Store or TestFlight, and the time.
+
+Events never include your choices (states, stores, allergens), which recalls
+you view or search for, alert settings, push tokens, receipts, prices, or
+anything you type. Lotly collects limited usage events, such as onboarding progress, paywall views and purchase outcomes. It does not make screen recordings or capture individual taps.
+PostHog discards your connection's IP address instead of storing it, and does
+not derive a location from it. If Apple reports that you are 13 to 17, the app
+sends no usage analytics.
+
+PostHog stores usage events in the United States and keeps them for one year,
+then deletes them. Resetting the app ("Reset app and delete my data") removes
+the analytics identifier and any events not yet sent from your iPhone; later
+events use a new identifier. Events already sent stay with PostHog under the
+earlier identifier until the one-year retention period ends.
 
 ## Information stored only on your iPhone
 
@@ -248,6 +274,7 @@ Review Guideline 5.1.1(i)).⟧
 | Supabase (database and image hosting) | Installation identifier, choices, alert registration, delivery records, last-opened date, request logs (below) | Storing and serving Lotly's data       |
 | RevenueCat                            | Purchase identifier, App Store purchase records, device type and iOS version                                   | Checking and restoring subscriptions   |
 | Expo (push service)                   | Push token and alert text                                                                                      | Delivering alerts                      |
+| PostHog (product analytics)           | The usage events under "Usage analytics" (the connection's IP address is discarded, not stored)                | Counting app use and drop-off          |
 | Apple                                 | Payment (as seller), push token and alert text (as Push Notification service)                                  | App Store purchases; delivering alerts |
 | Vercel (website hosting)              | Website request logs (below)                                                                                   | Serving the website                    |
 | Google (Gmail)                        | Emails you send to lotlysupport@gmail.com                                                                      | Receiving and answering your messages  |

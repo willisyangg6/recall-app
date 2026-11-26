@@ -38,7 +38,7 @@ import { STANDALONE_BENEFIT_LIFT } from '@/lib/onboarding-paywall-presentation';
 
 export default function PaywallScreen() {
   const access = useAccess();
-  const { purchase, developmentControls } = usePurchaseFlow();
+  const { purchase, developmentControls } = usePurchaseFlow('standalone');
   return (
     <OnboardingPaywallPanel
       purchase={purchase}

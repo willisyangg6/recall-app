@@ -176,8 +176,22 @@ test('no route or document disappeared: the registry and every route file are in
   assert.ok(!/title="Help"|>Help</.test(PROFILE));
   assert.match(
     PROFILE,
-    /<ValueRow\s+label=\{APP_VERSION_LABEL\}\s+value=\{versionLine\(version, build\)\}\s+icon=\{APP_VERSION_ICON\}\s+\/>/,
+    /<ValueRow\s+label=\{APP_VERSION_LABEL\}\s+value=\{versionLine\(version, build\)\}\s+icon=\{APP_VERSION_ICON\}\s+onLongPress=\{confirmTeamDevice\}\s+\/>/,
   );
+  // The one exception on the hub (2026-11-25): the version line's hidden
+  // long press marks a TEAM device for analytics (docs/recall-analytics.md).
+  // It is not destructive and not a row of its own; its prompt lives in
+  // components/profile/team-device.ts, which can reach analytics and nothing else.
+  const teamDevice = read('components', 'profile', 'team-device.ts');
+  for (const forbidden of [
+    'runInstallationReset',
+    'InstallationReset',
+    'delete',
+    'router',
+    'Linking',
+  ]) {
+    assert.ok(!teamDevice.includes(forbidden), `the team-device prompt reaches ${forbidden}`);
+  }
   assert.equal(count(PROFILE, '<ValueRow'), 1);
 });
 

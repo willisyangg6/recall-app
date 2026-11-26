@@ -14,6 +14,7 @@ import {
 import { enqueueInstallationMutation } from './installation-lifecycle';
 import { resetInstallationData, type InstallationResetResult } from './installation-reset';
 import { deleteLocalAllergenConsent } from './allergen-consent-store';
+import { resetAnalytics } from './analytics/analytics';
 import { deleteLocalOnboardingState } from './onboarding-store';
 import { purchaseIdentity } from './purchases/provider';
 import { deleteLocalPreferenceState, settlePreferenceMirror } from './preferences-store';
@@ -40,6 +41,7 @@ export function runInstallationReset(): Promise<InstallationResetResult> {
     clearLocalAllergenConsent: deleteLocalAllergenConsent,
     clearLocalSavedRecalls: deleteLocalSavedRecalls,
     clearLocalOnboardingState: deleteLocalOnboardingState,
+    clearLocalAnalytics: resetAnalytics,
     clearInstallationId,
     createFreshInstallationId: getOrCreateInstallationId,
   });
