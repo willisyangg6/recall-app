@@ -66,6 +66,7 @@ import { DevelopmentEntry } from '@/components/profile/development-entry';
 import { NavigationRow } from '@/components/profile/navigation-row';
 import { PersonalizationCard } from '@/components/profile/personalization-card';
 import { ProfileSection } from '@/components/profile/profile-section';
+import { confirmTeamDevice } from '@/components/profile/team-device';
 import { ValueRow } from '@/components/profile/value-row';
 import { Surface } from '@/components/ui/surface';
 import { layout, spacing } from '@/constants/design-tokens';
@@ -168,6 +169,7 @@ export default function ProfileScreen() {
             label={APP_VERSION_LABEL}
             value={versionLine(version, build)}
             icon={APP_VERSION_ICON}
+            onLongPress={confirmTeamDevice}
           />
         </ProfileSection>
 

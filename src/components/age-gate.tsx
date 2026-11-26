@@ -49,6 +49,7 @@ import {
   AGE_UNDER13_TITLE,
 } from '@/lib/age-gate-copy';
 import { createAgeCheckPorts } from '@/lib/age-range-service';
+import { recordLaunchAgeDecision } from '@/lib/launch-age-decision';
 import { disableAlertsAfterAgeStop } from '@/lib/push-registration';
 
 type DevelopmentScenario = typeof import('@/lib/development-age-scenario');
@@ -93,6 +94,8 @@ export function AgeGate({
         setState((prior) => (prior.kind === 'pending' ? { ...prior, explain: true } : prior));
     }, SPLASH_HOLD_MS);
     void decide().then((decision) => {
+      // Held for analytics, which stays off until a decision exists.
+      recordLaunchAgeDecision(decision);
       if (current) setState(decision);
     });
     return () => {

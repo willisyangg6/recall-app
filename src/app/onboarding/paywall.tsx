@@ -61,7 +61,7 @@ export default function OnboardingPaywallScreen() {
  * something to buy; the entitled branch never talks to the store.
  */
 function PurchasePaywall({ onBack }: { onBack: () => void }) {
-  const { purchase, developmentControls } = usePurchaseFlow();
+  const { purchase, developmentControls } = usePurchaseFlow('onboarding');
   return (
     <OnboardingPaywallPanel purchase={purchase} onBack={onBack}>
       {developmentControls}

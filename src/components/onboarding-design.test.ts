@@ -1851,7 +1851,7 @@ test('the standalone paywall composes the one paywall panel: no second compositi
       codeOnly(ROUTES.paywall),
     ),
   );
-  assert.ok(codeOnly(ROUTES.paywall).includes('usePurchaseFlow()'));
+  assert.ok(codeOnly(ROUTES.paywall).includes("usePurchaseFlow('standalone')"));
   assert.ok(!codeOnly(ROUTES.paywall).includes('router.'), 'the standalone route navigates');
   // The retired composition is gone from the shared pieces, not merely unused.
   for (const gone of [
@@ -2201,7 +2201,7 @@ test('the onboarding paywall route: the shared flow, its resume point, Back to R
   assert.ok(route.includes('onContinue={() => void access.completePersonalization()}'));
   // Otherwise: the one shared purchase flow, controls included, drawn by the
   // grocery-watch panel (2026-10-01), never the standalone one.
-  assert.ok(route.includes('usePurchaseFlow()'));
+  assert.ok(route.includes("usePurchaseFlow('onboarding')"));
   assert.ok(route.includes('<OnboardingPaywallPanel purchase={purchase} onBack={onBack}>'));
   assert.ok(route.includes('{developmentControls}'));
   assert.ok(!/<PaywallPanel\b/.test(route));
@@ -2280,7 +2280,8 @@ test('the purchase handlers exist once: in the purchase flow, and nowhere else',
   // Both paywall routes take it; neither re-implements it, and Ready does
   // not touch it at all.
   for (const route of [ROUTES.onboardingPaywall, ROUTES.paywall]) {
-    assert.ok(codeOnly(route).includes('usePurchaseFlow()'));
+    // Each passes its analytics placement (lib/analytics).
+    assert.ok(/usePurchaseFlow\('(onboarding|standalone)'\)/.test(codeOnly(route)));
     assert.ok(!codeOnly(route).includes('useState'), 'a route holds purchase state');
   }
   assert.ok(!codeOnly(ROUTES.preview).includes('usePurchaseFlow'));

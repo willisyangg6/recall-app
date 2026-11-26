@@ -440,7 +440,7 @@ test('no route navigates across a phase: transitions are state changes the gate 
   assert.ok(!ready.includes('usePurchaseFlow'), 'Ready grew purchase machinery back');
   assert.ok(!ready.includes('applyEntitlement'), 'Ready applies entitlements');
   const onboardingPaywall = codeOnly(read('onboarding', 'paywall.tsx'));
-  assert.ok(onboardingPaywall.includes('usePurchaseFlow()'));
+  assert.ok(onboardingPaywall.includes("usePurchaseFlow('onboarding')"));
   assert.ok(onboardingPaywall.includes('access.completePersonalization()'));
   const flow = codeOnly(readFileSync(join(APP, '..', 'hooks', 'use-purchase-flow.tsx'), 'utf8'));
   assert.equal(
@@ -450,7 +450,7 @@ test('no route navigates across a phase: transitions are state changes the gate 
   );
   assert.ok(!flow.includes('router.'), 'the purchase flow holds no router');
   const paywall = codeOnly(read('paywall.tsx'));
-  assert.ok(paywall.includes('usePurchaseFlow()'));
+  assert.ok(paywall.includes("usePurchaseFlow('standalone')"));
   assert.ok(paywall.includes('onBack={access.reviewPreview}'));
   assert.ok(!paywall.includes('router.'), 'the paywall route holds no router');
   const education = codeOnly(read('onboarding', 'notifications.tsx'));

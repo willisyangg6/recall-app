@@ -60,6 +60,8 @@ import {
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { onboardingEntryStep, resolveAccessPhase, type AccessPhase } from '@/lib/access-gate';
+import { track } from '@/lib/analytics/analytics';
+import { stepIndex } from '@/lib/analytics/analytics-events';
 import { isEntitled, type ActiveEntitlement, type EntitlementStatus } from '@/lib/entitlement';
 import { createEntitlementSession, type EntitlementSession } from '@/lib/entitlement-session';
 import { loadCachedEntitlement, saveCachedEntitlement } from '@/lib/entitlement-store';
@@ -227,15 +229,27 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
+  // Analytics (lib/analytics): one view per step per launch — a step
+  // re-focused by Back is not a second view — and onboarding completes once,
+  // when the watch is first built.
+  const stepsViewed = useRef(new Set<OnboardingStep>());
   const recordShownStep = useCallback(
-    (step: OnboardingStep) => writeOnboarding((record) => recordShownStepRecord(record, step)),
+    (step: OnboardingStep) => {
+      if (!stepsViewed.current.has(step)) {
+        stepsViewed.current.add(step);
+        track({ name: 'onboarding_step_viewed', props: { step, step_index: stepIndex(step) } });
+      }
+      return writeOnboarding((record) => recordShownStepRecord(record, step));
+    },
     [writeOnboarding],
   );
 
-  const completeWatchBuild = useCallback(
-    () => writeOnboarding(completeWatchBuildRecord),
-    [writeOnboarding],
-  );
+  const completeWatchBuild = useCallback(() => {
+    if (loadedRef.current?.onboarding.watchBuilt === false) {
+      track({ name: 'onboarding_completed', props: {} });
+    }
+    return writeOnboarding(completeWatchBuildRecord);
+  }, [writeOnboarding]);
 
   const completePersonalization = useCallback(async () => {
     setReviewingPreview(false);

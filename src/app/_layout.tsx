@@ -10,6 +10,7 @@ import { useFonts } from 'expo-font';
 import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { AppState } from 'react-native';
 
 import { AgeGate } from '@/components/age-gate';
 import { AppErrorBoundary } from '@/components/app-error-boundary';
@@ -19,6 +20,7 @@ import { useInstallationCheckin } from '@/hooks/use-installation-checkin';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
 import { onboardingDeclarationOrder } from '@/lib/access-gate';
+import { analyticsAppState, startAnalytics } from '@/lib/analytics/analytics';
 import { EDIT_PREFERENCES_ROUTE } from '@/lib/onboarding-routes';
 import { flushPreferencesSync } from '@/lib/preferences-store';
 
@@ -92,6 +94,15 @@ function LaunchedApp({ fontsSettled }: { fontsSettled: boolean }) {
   // The daily foreground check-in (inactivity retention): records that the
   // app was used today and repairs server rows a purge removed. Silent.
   useInstallationCheckin();
+  // Anonymous product analytics (lib/analytics): starts only past the age
+  // gate, counts this launch and later returns, and never blocks anything.
+  useEffect(() => {
+    startAnalytics();
+    const subscription = AppState.addEventListener('change', (status) =>
+      analyticsAppState(status === 'active'),
+    );
+    return () => subscription.remove();
+  }, []);
 
   // The access gate reads in parallel with the fonts (P2B7X.1); the
   // navigator below renders nothing, and the splash stays, until both have

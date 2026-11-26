@@ -7,7 +7,7 @@
  * a navigation row, so the version line keeps the hub's icon column.
  */
 
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Icon, type IconName } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
@@ -18,15 +18,23 @@ export function ValueRow({
   label,
   value,
   icon,
+  onLongPress,
 }: {
   label: string;
   value: string;
   /** The decorative leading glyph, from the approved icon set. */
   icon?: IconName;
+  /** A hidden team control (the version line's analytics marking). Not announced. */
+  onLongPress?: () => void;
 }) {
   const { fontScale } = useWindowDimensions();
+  const Container = onLongPress ? Pressable : View;
   return (
-    <View accessible accessibilityLabel={`${label}, ${value}`} style={styles.row}>
+    <Container
+      accessible
+      accessibilityLabel={`${label}, ${value}`}
+      style={styles.row}
+      {...(onLongPress ? { onLongPress, delayLongPress: 1200 } : {})}>
       <View style={styles.label}>
         {icon && showsRowGlyph(fontScale) ? (
           <Icon name={icon} size={20} color="icon/primary" />
@@ -36,7 +44,7 @@ export function ValueRow({
       <Text variant="body-small" color="text/secondary" style={styles.value}>
         {value}
       </Text>
-    </View>
+    </Container>
   );
 }
 

@@ -118,7 +118,8 @@
     "repair:fda-contaminants:dry": "tsx scripts/repair-fda-contaminants.ts",
     "repair:fda-contaminants": "tsx scripts/repair-fda-contaminants.ts",
     "labels:fsis:dry": "tsx scripts/render-fsis-labels.ts",
-    "labels:fsis": "tsx scripts/render-fsis-labels.ts"
+    "labels:fsis": "tsx scripts/render-fsis-labels.ts",
+    "analytics:dashboard": "tsx scripts/posthog-dashboard.ts"
   },
   "expo": {
     "autolinking": {
